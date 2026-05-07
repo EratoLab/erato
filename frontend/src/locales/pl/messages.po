@@ -1627,6 +1627,34 @@ msgstr "Dołącz plik"
 msgid "Attachments"
 msgstr "Załączniki"
 
+#: src/hooks/audio/useAudioDictationRecorder.ts
+msgid "Audio dictation connection closed."
+msgstr ""
+
+#: src/hooks/audio/useAudioDictationRecorder.ts
+msgid "Audio dictation connection failed."
+msgstr ""
+
+#: src/hooks/audio/useAudioDictationRecorder.ts
+msgid "Audio dictation connection timed out."
+msgstr ""
+
+#: src/hooks/audio/useAudioDictationRecorder.ts
+msgid "Audio dictation did not start."
+msgstr ""
+
+#: src/hooks/audio/useAudioDictationRecorder.ts
+msgid "Audio dictation failed."
+msgstr ""
+
+#: src/hooks/audio/useAudioDictationRecorder.ts
+msgid "Audio dictation is not available in this environment."
+msgstr ""
+
+#: src/hooks/audio/useAudioDictationRecorder.ts
+msgid "Audio dictation response timed out."
+msgstr ""
+
 #: src/components/ui/Chat/ChatInput.tsx
 #~ msgid "Audio file: {0} · Status: {1}"
 #~ msgstr ""
@@ -1643,6 +1671,7 @@ msgstr "Wybór urządzenia wejściowego audio nie jest obsługiwany w tej przegl
 msgid "Audio recording - Status: {displayStatus}"
 msgstr "Nagranie audio - Status: {displayStatus}"
 
+#: src/hooks/audio/useAudioDictationRecorder.ts
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Audio recording is not supported in this browser."
 msgstr "Nagrywanie audio nie jest obsługiwane w tej przeglądarce."
@@ -1832,6 +1861,10 @@ msgstr ""
 msgid "Copy"
 msgstr ""
 
+#: src/hooks/audio/useAudioDictationRecorder.ts
+msgid "Could not complete audio dictation."
+msgstr ""
+
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Could not complete audio recording."
 msgstr ""
@@ -1844,9 +1877,17 @@ msgstr "Nie udało się załadować urządzeń wejściowych audio."
 #~ msgid "Could not prepare audio recording for transcription."
 #~ msgstr ""
 
+#: src/hooks/audio/useAudioDictationRecorder.ts
+msgid "Could not read audio dictation response."
+msgstr ""
+
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Could not read audio transcription response."
 msgstr "Nie można odczytać odpowiedzi transkrypcji audio."
+
+#: src/hooks/audio/useAudioDictationRecorder.ts
+msgid "Could not start audio dictation."
+msgstr ""
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Could not start audio recording."
@@ -1906,6 +1947,14 @@ msgstr "szczegóły dla"
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Detected Locale:"
 msgstr "Wykryty język:"
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Dictating audio"
+msgstr ""
+
+#: src/hooks/audio/useAudioDictationRecorder.ts
+msgid "Dictation stopped automatically after the configured maximum duration."
+msgstr ""
 
 #: src/components/ui/Feedback/Alert.tsx
 msgid "Dismiss"
@@ -2000,6 +2049,10 @@ msgstr "nie udało się"
 msgid "Failed"
 msgstr ""
 
+#: src/hooks/audio/useAudioDictationRecorder.ts
+msgid "Failed to complete audio dictation."
+msgstr ""
+
 #: src/pages/AssistantCreatePage.tsx
 msgid "Failed to create assistant. Please try again."
 msgstr ""
@@ -2027,6 +2080,10 @@ msgstr "Plik"
 
 #: src/pages/AssistantsListPage.tsx
 msgid "Filter assistants"
+msgstr ""
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Finishing dictation"
 msgstr ""
 
 #: src/components/ui/Message/MessageContent.tsx
@@ -2155,6 +2212,7 @@ msgstr "Nowy czat"
 msgid "No assistants yet"
 msgstr ""
 
+#: src/hooks/audio/useAudioDictationRecorder.ts
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "No audio was captured. Please try recording again."
 msgstr ""
@@ -2242,16 +2300,16 @@ msgstr "Ostatnie czaty"
 #~ msgstr ""
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Record audio"
-msgstr "Nagraj audio"
+#~ msgid "Record audio"
+#~ msgstr "Nagraj audio"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Recording"
 msgstr "Nagrywanie"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Recording audio"
-msgstr "Nagrywanie audio"
+#~ msgid "Recording audio"
+#~ msgstr "Nagrywanie audio"
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Recording audio is disabled while uploads are not available."
@@ -2399,6 +2457,10 @@ msgstr "Coś poszło nie tak"
 msgid "Something went wrong while loading the chat interface."
 msgstr "Coś poszło nie tak podczas ładowania interfejsu czatu."
 
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Start dictation"
+msgstr ""
+
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "Start typing below to begin a new conversation"
 msgstr "Zacznij pisać poniżej, aby rozpocząć nową rozmowę"
@@ -2414,12 +2476,20 @@ msgid "starter_prompts.<starter-prompt-id>.title"
 msgstr ""
 
 #: src/components/ui/Chat/ChatInput.tsx
+msgid "Starting dictation"
+msgstr ""
+
+#: src/components/ui/Chat/ChatInput.tsx
 msgid "Stop"
 msgstr "Zatrzymaj"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Stop recording"
-msgstr "Zatrzymaj nagrywanie"
+msgid "Stop dictation"
+msgstr ""
+
+#: src/components/ui/Chat/ChatInput.tsx
+#~ msgid "Stop recording"
+#~ msgstr "Zatrzymaj nagrywanie"
 
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Success"
