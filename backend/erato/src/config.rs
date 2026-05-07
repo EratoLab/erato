@@ -2568,6 +2568,11 @@ pub struct LangfuseConfig {
     // Defaults to `false`.
     #[serde(default)]
     pub enable_feedback: bool,
+
+    // Whether Langfuse tracing data should be sent via OTLP/HTTP instead of
+    // the legacy ingestion endpoint. Defaults to `false`.
+    #[serde(default)]
+    pub use_otel: bool,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]

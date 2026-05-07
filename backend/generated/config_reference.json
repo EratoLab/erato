@@ -197,6 +197,7 @@
   "integrations.langfuse.secret_key": {},
   "integrations.langfuse.summary_tracing_enabled": {},
   "integrations.langfuse.tracing_enabled": {},
+  "integrations.langfuse.use_otel": {},
   "integrations.ms_office.addin.enabled": {},
   "integrations.ms_office.addin.frontend_bundle_path": {},
   "integrations.ms_office.addin.msal_authority": {},
