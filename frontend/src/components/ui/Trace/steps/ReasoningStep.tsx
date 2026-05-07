@@ -1,44 +1,42 @@
 import { t } from "@lingui/core/macro";
 
 import { TraceStep } from "../TraceStep";
-import { useReasoningSplit } from "../hooks/useReasoningSummary";
 import { railIconFor } from "../icons";
 
+import type { ReasoningSegment } from "../hooks/useReasoningSegments";
 import type { BaseStepProps } from "../types";
-import type { ContentPartReasoning } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 interface ReasoningStepProps extends BaseStepProps {
-  part: ContentPartReasoning & { content_type: "reasoning" };
-  /** Whether this is the last visible step (rail line should not continue). */
-  isLastStep: boolean;
+  segment: ReasoningSegment;
+  /** Pre-built markdown renderer from the parent. */
+  renderMarkdown: (text: string) => React.ReactNode;
 }
 
 const STREAMING_CARET = "▊";
 
 export const ReasoningStep = ({
-  part,
-  index,
+  segment,
   status,
   isStreaming,
   isCollapsed,
   isLastStep,
   renderMarkdown,
 }: ReasoningStepProps) => {
-  const { summary, body } = useReasoningSplit(part.text);
   const fallbackTitle = t`Thinking`;
-
   const isRunning = status === "running" && isStreaming;
+
+  // The streaming caret only sits on the body when there IS a body to anchor
+  // to. A header-only segment (body not arrived yet) just shows the title.
   const displayBody =
-    isRunning && body.length > 0 && !body.endsWith("\n")
-      ? body + STREAMING_CARET
-      : body;
+    isRunning && segment.body.length > 0 && !segment.body.endsWith("\n")
+      ? segment.body + STREAMING_CARET
+      : segment.body;
 
   return (
     <TraceStep
-      key={`reasoning-${index}`}
-      railIcon={railIconFor(part.content_type, status)}
+      railIcon={railIconFor("reasoning", status)}
       hasTrailingRailLine={!isLastStep}
-      title={summary || fallbackTitle}
+      title={segment.title || fallbackTitle}
       defaultOpen={isRunning}
       autoCollapse={isCollapsed}
       isActive={isRunning}

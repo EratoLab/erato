@@ -1,24 +1,23 @@
-import type { TraceStepStatus, TraceablePart } from "../types";
+import type { LogicalStep, TraceStepStatus } from "../types";
 
 /**
- * Compute the visual status of a single step based on its position in the
- * trace, the part itself, and whether the message is still streaming.
+ * Compute the visual status of a logical step given its position in the
+ * timeline and whether the trace cluster is the active writer.
  *
- * The "running" status only ever applies to the LAST step of a still-streaming
- * message — earlier steps are already past, so they are `done` (or `error`
- * for failed tool calls).
+ * "running" only ever applies to the LAST step of an active trace — earlier
+ * steps are by definition past, so they are `done` (or `error` for failed
+ * tool calls).
  */
 export const stepStatus = (
-  part: TraceablePart,
+  step: LogicalStep,
   isLastStep: boolean,
-  isStreaming: boolean,
+  isTraceActive: boolean,
 ): TraceStepStatus => {
-  if (part.content_type === "tool_use") {
-    if (part.status === "error") return "error";
-    if (part.status === "success") return "done";
-    return isLastStep && isStreaming ? "running" : "done";
+  if (step.kind === "tool_use") {
+    if (step.part.status === "error") return "error";
+    if (step.part.status === "success") return "done";
+    return isLastStep && isTraceActive ? "running" : "done";
   }
-
   // reasoning
-  return isLastStep && isStreaming ? "running" : "done";
+  return isLastStep && isTraceActive ? "running" : "done";
 };
