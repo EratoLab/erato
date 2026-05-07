@@ -1,3 +1,7 @@
+import { useState } from "react";
+
+import { TraceClusterHeader } from "./TraceClusterHeader";
+import { TraceCollapse } from "./TraceCollapse";
 import { TraceConnector } from "./TraceConnector";
 import { TraceDoneMarker } from "./TraceDoneMarker";
 import { parseReasoningSegments } from "./hooks/useReasoningSegments";
@@ -24,6 +28,14 @@ interface TraceProps {
   hasLaterContent: boolean;
   /** Markdown renderer reused from the parent (handles erato-file: links etc). */
   renderMarkdown: (text: string) => ReactNode;
+  /**
+   * Total assistant-turn duration in ms (parent message `updated_at -
+   * created_at`). Used to label the cold-load summary pill. `null` when
+   * unknown (e.g. mid-stream or missing `updated_at`).
+   */
+  durationMs?: number | null;
+  /** When true, the cold-load pill flips to a "Stopped after Xs" label. */
+  hasError?: boolean;
 }
 
 /**
@@ -31,61 +43,139 @@ interface TraceProps {
  * pattern from the "Steps" UI: a fixed 20px icon rail plus a fluid body, with
  * an unbroken connector line between adjacent steps.
  *
- * Reasoning parts may expand into multiple `**Header**`-bounded segments —
- * each rendered as its own step. Tool calls are always 1:1.
+ * Two modes:
+ *
+ * - **Streaming**: render the timeline directly with the running step as the
+ *   active writer at the bottom. No header pill.
+ * - **Cold load** (parent message complete): render a "Thought for X" header
+ *   pill above a collapsible body. The body contains the same timeline. The
+ *   trailing Done marker is dropped — the pill is the closing summary.
  */
 export const Trace = ({
   parts,
   isStreaming,
   hasLaterContent,
   renderMarkdown,
+  durationMs = null,
+  hasError = false,
 }: TraceProps) => {
   const logicalSteps = flattenToLogicalSteps(parts);
   if (logicalSteps.length === 0) return null;
 
-  // The trace cluster is the "active writer" only while the parent is still
-  // streaming AND no later content (text/images) has begun. Once text starts,
-  // the trace is done — even if the parent stream itself is still going.
-  const isTraceActive = isStreaming && !hasLaterContent;
-  const showDoneMarker = !isTraceActive;
+  // Mid-stream the timeline is rendered directly. Once text starts (the
+  // trace is no longer the active writer), the Done marker drops in to mark
+  // the trace's logical end. The cold-load pill only appears after the
+  // entire message stream is complete.
+  if (isStreaming) {
+    const isTraceActive = !hasLaterContent;
+    return (
+      <TraceTimeline
+        logicalSteps={logicalSteps}
+        isTraceActive={isTraceActive}
+        hasLaterContent={hasLaterContent}
+        renderMarkdown={renderMarkdown}
+        showDoneMarker={!isTraceActive}
+      />
+    );
+  }
 
   return (
-    <div className="min-w-0 py-1.5">
-      <TraceConnector hasLine={false} />
-      {logicalSteps.map((step, index) => {
-        const isLastStep = index === logicalSteps.length - 1;
-        // The rail line continues to the Done marker when one is rendered.
-        const isLastNodeInTimeline = isLastStep && !showDoneMarker;
-        const status = stepStatus(step, isLastStep, isTraceActive);
-        // Earlier steps collapse once a later step (or non-trace content)
-        // begins. The active writer stays open.
-        const isCollapsed = !isLastStep || hasLaterContent;
+    <ColdLoadTrace
+      logicalSteps={logicalSteps}
+      hasLaterContent={hasLaterContent}
+      renderMarkdown={renderMarkdown}
+      durationMs={durationMs}
+      hasError={hasError}
+    />
+  );
+};
 
-        const stepNode = renderStep({
-          step,
-          status,
-          isStreaming: isTraceActive,
-          isCollapsed,
-          isLastStep: isLastNodeInTimeline,
-          renderMarkdown,
-        });
+interface ColdLoadTraceProps {
+  logicalSteps: LogicalStep[];
+  hasLaterContent: boolean;
+  renderMarkdown: (text: string) => ReactNode;
+  durationMs: number | null;
+  hasError: boolean;
+}
 
-        return (
-          <div key={step.key}>
-            {stepNode}
-            <TraceConnector hasLine={!isLastNodeInTimeline} />
-          </div>
-        );
-      })}
-      {showDoneMarker && (
-        <>
-          <TraceDoneMarker />
-          <TraceConnector hasLine={false} />
-        </>
-      )}
+const ColdLoadTrace = ({
+  logicalSteps,
+  hasLaterContent,
+  renderMarkdown,
+  durationMs,
+  hasError,
+}: ColdLoadTraceProps) => {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className="my-2 min-w-0">
+      <TraceClusterHeader
+        durationMs={durationMs}
+        hasError={hasError}
+        isOpen={isOpen}
+        onToggle={() => setIsOpen((prev) => !prev)}
+      />
+      <TraceCollapse isOpen={isOpen}>
+        <TraceTimeline
+          logicalSteps={logicalSteps}
+          isTraceActive={false}
+          hasLaterContent={hasLaterContent}
+          renderMarkdown={renderMarkdown}
+          showDoneMarker={false}
+        />
+      </TraceCollapse>
     </div>
   );
 };
+
+interface TraceTimelineProps {
+  logicalSteps: LogicalStep[];
+  isTraceActive: boolean;
+  hasLaterContent: boolean;
+  renderMarkdown: (text: string) => ReactNode;
+  /** Whether to render the Done marker at the bottom (streaming only today). */
+  showDoneMarker: boolean;
+}
+
+const TraceTimeline = ({
+  logicalSteps,
+  isTraceActive,
+  hasLaterContent,
+  renderMarkdown,
+  showDoneMarker,
+}: TraceTimelineProps) => (
+  <div className="min-w-0 py-1.5">
+    <TraceConnector hasLine={false} />
+    {logicalSteps.map((step, index) => {
+      const isLastStep = index === logicalSteps.length - 1;
+      const isLastNodeInTimeline = isLastStep && !showDoneMarker;
+      const status = stepStatus(step, isLastStep, isTraceActive);
+      const isCollapsed = !isLastStep || hasLaterContent;
+
+      const stepNode = renderStep({
+        step,
+        status,
+        isStreaming: isTraceActive,
+        isCollapsed,
+        isLastStep: isLastNodeInTimeline,
+        renderMarkdown,
+      });
+
+      return (
+        <div key={step.key}>
+          {stepNode}
+          <TraceConnector hasLine={!isLastNodeInTimeline} />
+        </div>
+      );
+    })}
+    {showDoneMarker && (
+      <>
+        <TraceDoneMarker />
+        <TraceConnector hasLine={false} />
+      </>
+    )}
+  </div>
+);
 
 /**
  * Expand a contiguous run of trace-eligible parts into a flat list of logical

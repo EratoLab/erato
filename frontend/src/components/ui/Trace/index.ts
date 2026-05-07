@@ -12,3 +12,8 @@ export {
   useReasoningSegments,
 } from "./hooks/useReasoningSegments";
 export type { ReasoningSegment } from "./hooks/useReasoningSegments";
+export {
+  durationBetween,
+  formatThinkingDuration,
+  useDurationBetween,
+} from "./hooks/useThinkingDuration";

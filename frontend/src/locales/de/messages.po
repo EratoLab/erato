@@ -2127,6 +2127,10 @@ msgstr "Ungültiges Datum für MessageTimestamp bereitgestellt, aktuelles Datum 
 msgid "Largest file context contributors:"
 msgstr "Größte Kontextbeiträge von Dateien:"
 
+#: src/components/ui/Trace/hooks/useThinkingDuration.ts
+msgid "less than a second"
+msgstr ""
+
 #: src/components/ui/Controls/UserProfileDropdown.tsx
 #~ msgid "Light mode"
 #~ msgstr "Heller Modus"
@@ -2500,6 +2504,14 @@ msgstr "Audiodiktat stoppen"
 #~ msgid "Stop recording"
 #~ msgstr "Aufnahme stoppen"
 
+#: src/components/ui/Trace/TraceClusterHeader.tsx
+msgid "Stopped"
+msgstr ""
+
+#: src/components/ui/Trace/TraceClusterHeader.tsx
+msgid "Stopped after {formatted}"
+msgstr ""
+
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Success"
 msgstr "Erfolgreich"
@@ -2545,6 +2557,14 @@ msgstr "Diese Nachricht überschreitet das Token-Limit von {maxTokensFormatted}.
 #: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
 msgid "This message is using {percentUsed}% of the available token limit ({totalTokensFormatted} of {maxTokensFormatted})."
 msgstr "Diese Nachricht verwendet {percentUsed}% des verfügbaren Token-Limits ({totalTokensFormatted} von {maxTokensFormatted})."
+
+#: src/components/ui/Trace/TraceClusterHeader.tsx
+msgid "Thought"
+msgstr ""
+
+#: src/components/ui/Trace/TraceClusterHeader.tsx
+msgid "Thought for {formatted}"
+msgstr ""
 
 #: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
 msgid "Token Limit Exceeded"

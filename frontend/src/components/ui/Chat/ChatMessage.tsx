@@ -199,6 +199,9 @@ export const ChatMessage = memo(function ChatMessage({
             onImageClick={lightbox.openLightbox}
             onFileLinkPreview={onFilePreview}
             preserveSoftLineBreaks={isUser}
+            createdAt={message.createdAt}
+            updatedAt={message.updatedAt}
+            hasError={!!message.error}
           />
 
           {/* Display attached files if any */}

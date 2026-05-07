@@ -6,7 +6,11 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import remarkGfm from "remark-gfm";
 
 import { useTheme } from "@/components/providers/ThemeProvider";
-import { Trace, groupIntoTraceClusters } from "@/components/ui/Trace";
+import {
+  Trace,
+  durationBetween,
+  groupIntoTraceClusters,
+} from "@/components/ui/Trace";
 import {
   DEFAULT_DARK_CODE_HIGHLIGHT_PRESET,
   DEFAULT_LIGHT_CODE_HIGHLIGHT_PRESET,
@@ -35,6 +39,14 @@ interface MessageContentProps {
   onFileLinkPreview?: (file: FileUploadItem) => void;
   /** Preserve soft markdown line breaks as visual line breaks. */
   preserveSoftLineBreaks?: boolean;
+  /**
+   * Message-level timestamps used to compute the trace cluster's "Thought
+   * for X" cold-load summary. Both should be ISO-8601; either may be missing.
+   */
+  createdAt?: string;
+  updatedAt?: string;
+  /** When true, the cold-load trace pill flips to "Stopped after X". */
+  hasError?: boolean;
 }
 
 const INLINE_CODE_CLASS_NAME =
@@ -248,6 +260,9 @@ export const MessageContent = memo(function MessageContent({
   filesById = {},
   onFileLinkPreview,
   preserveSoftLineBreaks = false,
+  createdAt,
+  updatedAt,
+  hasError = false,
 }: MessageContentProps) {
   const imageAdvisory = useOptionalTranslation("chat.message.image_advisory");
 
@@ -588,6 +603,11 @@ export const MessageContent = memo(function MessageContent({
     [content],
   );
 
+  const traceDurationMs = React.useMemo(
+    () => durationBetween(createdAt, updatedAt),
+    [createdAt, updatedAt],
+  );
+
   // If showing raw, just show text-like content without rendering markdown.
   if (showRaw) {
     const rawText = content
@@ -631,6 +651,8 @@ export const MessageContent = memo(function MessageContent({
               isStreaming={!!isStreaming}
               hasLaterContent={hasLaterContent}
               renderMarkdown={renderMarkdown}
+              durationMs={traceDurationMs}
+              hasError={hasError}
             />
           );
         }

@@ -49,6 +49,7 @@ export function mapApiMessageToUiMessage(
     sender: apiMessage.role,
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     createdAt: apiMessage.created_at ?? new Date().toISOString(),
+    updatedAt: apiMessage.updated_at,
     authorId: apiMessage.role === "user" ? "user_id" : "assistant_id",
     // map active thread flag
     is_message_in_active_thread: apiMessage.is_message_in_active_thread,
