@@ -1,7 +1,6 @@
 import { insertProposedToolUse } from "./toolUsePartHelpers";
 import { useMessagingStore } from "../store/messagingStore";
 
-
 import type { MessageSubmitStreamingResponseToolCallProposed } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 /**

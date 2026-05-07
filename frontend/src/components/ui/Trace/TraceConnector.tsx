@@ -17,10 +17,7 @@ export const TraceConnector = ({ hasLine = true }: TraceConnectorProps) => (
   <div className="flex h-2 flex-row">
     <div className="flex w-5 justify-center">
       <div
-        className={clsx(
-          "h-full w-px",
-          hasLine ? "bg-theme-border" : undefined,
-        )}
+        className={clsx("h-full w-px", hasLine ? "bg-theme-border" : undefined)}
       />
     </div>
   </div>

@@ -1,11 +1,7 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 
-import {
-  ToolsIcon,
-  TimerIcon,
-  BrainIcon,
-} from "@/components/ui/icons";
+import { ToolsIcon, TimerIcon, BrainIcon } from "@/components/ui/icons";
 
 import type { ReactNode } from "react";
 

@@ -24,10 +24,7 @@ export const TraceRailIcon = ({
     <div className="flex flex-col items-center pt-1">
       <span
         aria-hidden="true"
-        className={clsx(
-          "text-theme-fg-secondary",
-          isActive && "animate-pulse",
-        )}
+        className={clsx("text-theme-fg-secondary", isActive && "animate-pulse")}
       >
         {icon}
       </span>

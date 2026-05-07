@@ -1,7 +1,6 @@
 import { applyToolUseUpdate } from "./toolUsePartHelpers";
 import { useMessagingStore } from "../store/messagingStore";
 
-
 import type { MessageSubmitStreamingResponseToolCallUpdate } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 /**
