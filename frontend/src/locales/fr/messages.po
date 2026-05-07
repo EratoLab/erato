@@ -1962,7 +1962,7 @@ msgstr "Fermer"
 
 #: src/components/ui/Trace/TraceDoneMarker.tsx
 msgid "Done"
-msgstr ""
+msgstr "Terminé"
 
 #: src/components/ui/Modal/FilePreviewModal.tsx
 msgid "Download File"
@@ -2052,7 +2052,7 @@ msgstr "facets.<facet-id>.displayName"
 #: src/components/ui/Chat/ChatInput.tsx
 #: src/components/ui/Trace/steps/ToolUseStep.tsx
 msgid "Failed"
-msgstr ""
+msgstr "Échec"
 
 #: src/hooks/audio/useAudioDictationRecorder.ts
 msgid "Failed to complete audio dictation."
@@ -2364,7 +2364,7 @@ msgstr "Nouvelle tentative..."
 
 #: src/components/ui/Trace/steps/ToolUseStep.tsx
 msgid "Running"
-msgstr ""
+msgstr "En cours"
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 #~ msgid "sample rate: {0} Hz"
