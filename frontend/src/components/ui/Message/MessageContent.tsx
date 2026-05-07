@@ -6,12 +6,14 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import remarkGfm from "remark-gfm";
 
 import { useTheme } from "@/components/providers/ThemeProvider";
+import { ToolCallItem } from "@/components/ui/ToolCall";
 import {
   DEFAULT_DARK_CODE_HIGHLIGHT_PRESET,
   DEFAULT_LIGHT_CODE_HIGHLIGHT_PRESET,
   resolvePrismCodeTheme,
 } from "@/config/codeHighlightThemes";
 import { useOptionalTranslation } from "@/hooks/i18n";
+
 
 import { ChevronRightIcon } from "../icons";
 import { EratoEmailSuggestion } from "./EratoEmailSuggestion";
@@ -20,8 +22,10 @@ import { ImageContentDisplay } from "./ImageContentDisplay";
 import type {
   ContentPart,
   FileUploadItem,
+  ToolUse,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { UiImagePart } from "@/utils/adapters/contentPartAdapter";
+import type { UiToolCall } from "@/utils/adapters/toolCallAdapter";
 import type { Components } from "react-markdown";
 
 interface MessageContentProps {
@@ -214,8 +218,23 @@ const isRenderableContentPart = (part: ContentPart): boolean =>
   part.content_type === "image" ||
   part.content_type === "image_file_pointer";
 
+// Used to decide whether a ReasoningSection should auto-collapse: when later
+// non-reasoning content (text, images, OR tool calls) appears below it.
 const isNonReasoningRenderableContentPart = (part: ContentPart): boolean =>
-  isRenderableContentPart(part) && part.content_type !== "reasoning";
+  (isRenderableContentPart(part) || part.content_type === "tool_use") &&
+  part.content_type !== "reasoning";
+
+const toolUsePartToUiToolCall = (
+  part: ToolUse & { content_type: "tool_use" },
+): UiToolCall => ({
+  id: part.tool_call_id,
+  name: part.tool_name,
+  status: part.status,
+  input: part.input,
+  output: part.output,
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/prefer-nullish-coalescing
+  progressMessage: part.progress_message || undefined,
+});
 
 const contentPartToImage = (
   part: ContentPart,
@@ -692,6 +711,14 @@ export const MessageContent = memo(function MessageContent({
               hasLaterNonReasoningContent={hasLaterNonReasoningContent}
               renderMarkdown={renderMarkdown}
             />
+          );
+        }
+
+        if (part.content_type === "tool_use") {
+          return (
+            <div key={`tool-${part.tool_call_id}`} className="my-3">
+              <ToolCallItem toolCall={toolUsePartToUiToolCall(part)} />
+            </div>
           );
         }
 

@@ -5,11 +5,10 @@ import { memo, useCallback, useState } from "react";
 
 import { InteractiveContainer } from "@/components/ui/Container/InteractiveContainer";
 import { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton";
-import { ToolCallDisplay } from "@/components/ui/ToolCall";
-import { useMessagingStore } from "@/hooks/chat/store/messagingStore";
 import { useImageLightbox } from "@/hooks/ui/useImageLightbox";
 import { useGetFile } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useMessageFeedbackFeature } from "@/providers/FeatureConfigProvider";
+import { hasToolCalls as messageHasToolCalls } from "@/utils/adapters/toolCallAdapter";
 import { isImageFile } from "@/utils/file/fileTypeUtils";
 
 import { Alert } from "../Feedback/Alert";
@@ -104,15 +103,10 @@ export const ChatMessage = memo(function ChatMessage({
       t({ id: "branding.user_form_of_address", message: "You" }))
     : t({ id: "branding.assistant_name", message: "Assistant" });
 
-  // Get streaming state to check for tool calls
-  const { streaming } = useMessagingStore();
-  const hasToolCalls = Object.keys(streaming.toolCalls).length > 0;
-  const isStreamingMessage =
-    streaming.isStreaming && streaming.currentMessageId === message.id;
-
-  // Check if message has completed tool calls
-  const hasCompletedToolCalls =
-    message.toolCalls && message.toolCalls.length > 0;
+  // Tool calls live inline in the content array now. The MessageContent
+  // renderer surfaces them at their content_index, so the loader does not
+  // need to repeat them.
+  const hasCompletedToolCalls = messageHasToolCalls(message.content);
 
   // Get message feedback feature config
   const messageFeedbackConfig = useMessageFeedbackFeature();
@@ -220,26 +214,11 @@ export const ChatMessage = memo(function ChatMessage({
             </div>
           )}
 
-          {/* Display completed tool calls - always shown if they exist */}
-          {message.toolCalls && message.toolCalls.length > 0 && (
-            <ToolCallDisplay
-              toolCalls={message.toolCalls}
-              defaultExpanded={false}
-              allowToggle={true}
-            />
-          )}
-
           {message.loading && (
             <div className="mt-2">
               <LoadingIndicator
                 state={message.loading.state}
                 context={message.loading.context}
-                // Pass tool calls if this is the streaming assistant message
-                toolCalls={
-                  !isUser && isStreamingMessage && hasToolCalls
-                    ? streaming.toolCalls
-                    : undefined
-                }
               />
             </div>
           )}
@@ -256,7 +235,7 @@ export const ChatMessage = memo(function ChatMessage({
                 isUserMessage={isUser}
                 showRawMarkdown={showRawMarkdown}
                 onToggleRawMarkdown={handleToggleRawMarkdown}
-                hasToolCalls={!!hasCompletedToolCalls}
+                hasToolCalls={hasCompletedToolCalls}
                 showFeedbackButtons={messageFeedbackConfig.enabled}
                 showFeedbackComments={messageFeedbackConfig.commentsEnabled}
                 initialFeedback={message.feedback}

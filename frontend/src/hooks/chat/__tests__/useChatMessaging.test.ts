@@ -509,7 +509,6 @@ describe("useChatMessaging", () => {
       previous_message_id: undefined,
       sender: "user",
       authorId: "user_id",
-      toolCalls: undefined,
       is_message_in_active_thread: true,
     });
 
@@ -523,7 +522,6 @@ describe("useChatMessaging", () => {
       previous_message_id: undefined,
       sender: "assistant",
       authorId: "assistant_id",
-      toolCalls: undefined,
       is_message_in_active_thread: true,
     });
   });
@@ -1178,7 +1176,6 @@ describe("useChatMessaging", () => {
           isStreaming: false,
           content: [],
           createdAt: "2026-02-18T12:00:00.000Z",
-          toolCalls: {},
           isFinalizing: false,
         },
         "chat-anchor-repair-1",

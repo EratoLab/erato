@@ -5,11 +5,7 @@ import { devtools } from "zustand/middleware";
 import { mergeDisplayMessages } from "@/utils/chat/messageUtils";
 import { createLogger } from "@/utils/debugLogger";
 
-import type {
-  Value,
-  ToolCallStatus,
-  ContentPart,
-} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
 
 const logger = createLogger("STATE", "messagingStore");
@@ -20,16 +16,6 @@ export const getStreamKey = (chatId: string | null | undefined): string => {
   return chatId ?? NEW_CHAT_STREAM_KEY;
 };
 
-// Tool call tracking types
-export interface ToolCall {
-  id: string;
-  name: string;
-  status: "proposed" | ToolCallStatus;
-  input?: Value | null;
-  output?: Value | null;
-  progressMessage?: string | null;
-}
-
 // Streaming state
 export interface StreamingState {
   isStreaming: boolean;
@@ -37,8 +23,6 @@ export interface StreamingState {
   currentMessageId: string | null;
   content: ContentPart[];
   createdAt: string | null; // Timestamp for message ordering
-  // Add tool call tracking
-  toolCalls: Record<string, ToolCall>; // keyed by tool_call_id
 }
 
 // Add user messages to the store
@@ -101,7 +85,6 @@ export const initialStreamingState: StreamingState = {
   currentMessageId: null,
   content: [],
   createdAt: null,
-  toolCalls: {},
 };
 
 // Create a store for messaging state
