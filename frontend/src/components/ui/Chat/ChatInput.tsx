@@ -1517,10 +1517,9 @@ export const ChatInput = ({
                         {dictationBars.map((height, barIndex) => (
                           <span
                             key={barIndex}
-                            className="dictation-wave-bar w-1 rounded-full bg-current transition-[height] duration-100"
+                            className="w-1 rounded-full bg-current transition-[height] duration-75"
                             style={{
                               height: `${Math.max(height, 2) * 2}px`,
-                              animationDelay: `${barIndex * 90}ms`,
                             }}
                           />
                         ))}

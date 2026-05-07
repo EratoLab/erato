@@ -960,7 +960,7 @@ describe("ChatInput", () => {
     );
   });
 
-  it("shows a moving dictation waveform that swaps to stop affordance", async () => {
+  it("shows an audio-level dictation waveform that swaps to stop affordance", async () => {
     const queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false },
@@ -998,7 +998,11 @@ describe("ChatInput", () => {
       "group-hover:opacity-0",
       "group-focus-visible:opacity-0",
     );
-    expect(waveform.children[2]).toHaveClass("dictation-wave-bar");
+    expect(waveform.children[2]).toHaveClass(
+      "transition-[height]",
+      "duration-75",
+    );
+    expect(waveform.children[2]).not.toHaveClass("dictation-wave-bar");
     expect(waveform.children[2]).toHaveStyle({ height: "16px" });
     expect(stopIcon).toHaveClass(
       "group-hover:opacity-100",
