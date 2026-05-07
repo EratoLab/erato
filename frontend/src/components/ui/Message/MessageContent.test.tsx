@@ -245,9 +245,11 @@ describe("MessageContent", () => {
     expect(screen.getByText("Two").tagName).toBe("LI");
   });
 
-  it("renders persisted reasoning collapsed, expandable on click", () => {
+  it("renders cold-load reasoning behind a 'Thought for' pill that toggles the timeline", () => {
     renderWithTheme(
       <MessageContent
+        createdAt="2026-05-07T12:00:00Z"
+        updatedAt="2026-05-07T12:00:23Z"
         content={[
           reasoningContent("I checked the input and compared options."),
           { content_type: "text", text: "Final answer." },
@@ -255,15 +257,37 @@ describe("MessageContent", () => {
       />,
     );
 
-    const toggle = screen.getByRole("button", {
-      name: "I checked the input and compared options.",
-    });
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    const pill = screen.getByRole("button", { name: /Thought for 23s/ });
+    expect(pill).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByText("Final answer.")).toBeInTheDocument();
 
-    fireEvent.click(toggle);
+    fireEvent.click(pill);
+    expect(pill).toHaveAttribute("aria-expanded", "true");
+  });
 
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
+  it("labels the cold-load pill 'Stopped after X' when the message has an error", () => {
+    renderWithTheme(
+      <MessageContent
+        createdAt="2026-05-07T12:00:00Z"
+        updatedAt="2026-05-07T12:00:05Z"
+        hasError
+        content={[reasoningContent("Tried to think about it.")]}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /Stopped after 5s/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the cold-load pill without a duration when timestamps are missing", () => {
+    renderWithTheme(
+      <MessageContent content={[reasoningContent("I checked the input.")]} />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /^Thought$/ }),
+    ).toBeInTheDocument();
   });
 
   it("streams reasoning expanded and collapses it once answer text arrives", () => {

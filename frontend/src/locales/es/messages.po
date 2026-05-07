@@ -2127,6 +2127,10 @@ msgstr "Fecha inválida proporcionada a MessageTimestamp, usando fecha actual"
 msgid "Largest file context contributors:"
 msgstr "Mayores contribuciones de contexto de archivos:"
 
+#: src/components/ui/Trace/hooks/useThinkingDuration.ts
+msgid "less than a second"
+msgstr "menos de un segundo"
+
 #: src/components/ui/Controls/UserProfileDropdown.tsx
 #~ msgid "Light mode"
 #~ msgstr "Modo claro"
@@ -2500,6 +2504,14 @@ msgstr "Detener dictado"
 #~ msgid "Stop recording"
 #~ msgstr "Detener grabación"
 
+#: src/components/ui/Trace/TraceClusterHeader.tsx
+msgid "Stopped"
+msgstr "Detenido"
+
+#: src/components/ui/Trace/TraceClusterHeader.tsx
+msgid "Stopped after {formatted}"
+msgstr "Detenido tras {formatted}"
+
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Success"
 msgstr "Éxito"
@@ -2538,6 +2550,10 @@ msgstr "Los siguientes archivos no pueden ser procesados y no se subieron: {file
 msgid "Thinking"
 msgstr "Pensando"
 
+#: src/components/ui/Trace/TraceThinkingPlaceholder.tsx
+msgid "Thinking…"
+msgstr "Pensando…"
+
 #: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
 msgid "This message exceeds the token limit of {maxTokensFormatted}. Please reduce the message length or remove attached files."
 msgstr "Este mensaje excede el límite de tokens de {maxTokensFormatted}. Por favor, reduzca la longitud del mensaje o elimine archivos adjuntos."
@@ -2545,6 +2561,14 @@ msgstr "Este mensaje excede el límite de tokens de {maxTokensFormatted}. Por fa
 #: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
 msgid "This message is using {percentUsed}% of the available token limit ({totalTokensFormatted} of {maxTokensFormatted})."
 msgstr "Este mensaje está usando {percentUsed}% del límite de tokens disponible ({totalTokensFormatted} de {maxTokensFormatted})."
+
+#: src/components/ui/Trace/TraceClusterHeader.tsx
+msgid "Thought"
+msgstr "Pensado"
+
+#: src/components/ui/Trace/TraceClusterHeader.tsx
+msgid "Thought for {formatted}"
+msgstr "Pensado durante {formatted}"
 
 #: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
 msgid "Token Limit Exceeded"

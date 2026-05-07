@@ -32,6 +32,11 @@ export interface Message {
   content: ContentPart[];
   role: "user" | "assistant" | "system";
   createdAt: string;
+  /**
+   * Last-modified timestamp from the backend (ISO-8601). Set on persisted
+   * messages; missing on optimistic placeholders pre-stream.
+   */
+  updatedAt?: string;
   input_files_ids?: string[];
   status?: "sending" | "complete" | "error";
   error?: MessageError;

@@ -147,6 +147,9 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({
               showRaw={showRawMarkdown}
               onImageClick={lightbox.openLightbox}
               onFileLinkPreview={onFilePreview}
+              createdAt={message.createdAt}
+              updatedAt={message.updatedAt}
+              hasError={!!message.error}
             />
 
             {message.input_files_ids && message.input_files_ids.length > 0 && (
@@ -245,6 +248,9 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({
           showRaw={showRawMarkdown}
           onImageClick={lightbox.openLightbox}
           onFileLinkPreview={onFilePreview}
+          createdAt={message.createdAt}
+          updatedAt={message.updatedAt}
+          hasError={!!message.error}
         />
 
         {message.input_files_ids && message.input_files_ids.length > 0 && (

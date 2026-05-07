@@ -2127,6 +2127,10 @@ msgstr "Invalid date provided to MessageTimestamp, using current date"
 msgid "Largest file context contributors:"
 msgstr "Largest file context contributors:"
 
+#: src/components/ui/Trace/hooks/useThinkingDuration.ts
+msgid "less than a second"
+msgstr "less than a second"
+
 #: src/components/ui/Controls/UserProfileDropdown.tsx
 #~ msgid "Light mode"
 #~ msgstr "Light mode"
@@ -2500,6 +2504,14 @@ msgstr "Stop dictation"
 #~ msgid "Stop recording"
 #~ msgstr "Stop recording"
 
+#: src/components/ui/Trace/TraceClusterHeader.tsx
+msgid "Stopped"
+msgstr "Stopped"
+
+#: src/components/ui/Trace/TraceClusterHeader.tsx
+msgid "Stopped after {formatted}"
+msgstr "Stopped after {formatted}"
+
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Success"
 msgstr "Success"
@@ -2538,6 +2550,10 @@ msgstr "The following files cannot be processed and were not uploaded: {filename
 msgid "Thinking"
 msgstr "Thinking"
 
+#: src/components/ui/Trace/TraceThinkingPlaceholder.tsx
+msgid "Thinking…"
+msgstr "Thinking…"
+
 #: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
 msgid "This message exceeds the token limit of {maxTokensFormatted}. Please reduce the message length or remove attached files."
 msgstr "This message exceeds the token limit of {maxTokensFormatted}. Please reduce the message length or remove attached files."
@@ -2545,6 +2561,14 @@ msgstr "This message exceeds the token limit of {maxTokensFormatted}. Please red
 #: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
 msgid "This message is using {percentUsed}% of the available token limit ({totalTokensFormatted} of {maxTokensFormatted})."
 msgstr "This message is using {percentUsed}% of the available token limit ({totalTokensFormatted} of {maxTokensFormatted})."
+
+#: src/components/ui/Trace/TraceClusterHeader.tsx
+msgid "Thought"
+msgstr "Thought"
+
+#: src/components/ui/Trace/TraceClusterHeader.tsx
+msgid "Thought for {formatted}"
+msgstr "Thought for {formatted}"
 
 #: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
 msgid "Token Limit Exceeded"
