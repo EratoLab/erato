@@ -1629,31 +1629,31 @@ msgstr "Pièces jointes"
 
 #: src/hooks/audio/useAudioDictationRecorder.ts
 msgid "Audio dictation connection closed."
-msgstr ""
+msgstr "La connexion de dictée audio a été fermée."
 
 #: src/hooks/audio/useAudioDictationRecorder.ts
 msgid "Audio dictation connection failed."
-msgstr ""
+msgstr "La connexion de dictée audio a échoué."
 
 #: src/hooks/audio/useAudioDictationRecorder.ts
 msgid "Audio dictation connection timed out."
-msgstr ""
+msgstr "La connexion de dictée audio a expiré."
 
 #: src/hooks/audio/useAudioDictationRecorder.ts
 msgid "Audio dictation did not start."
-msgstr ""
+msgstr "La dictée audio n’a pas démarré."
 
 #: src/hooks/audio/useAudioDictationRecorder.ts
 msgid "Audio dictation failed."
-msgstr ""
+msgstr "La dictée audio a échoué."
 
 #: src/hooks/audio/useAudioDictationRecorder.ts
 msgid "Audio dictation is not available in this environment."
-msgstr ""
+msgstr "La dictée audio n’est pas disponible dans cet environnement."
 
 #: src/hooks/audio/useAudioDictationRecorder.ts
 msgid "Audio dictation response timed out."
-msgstr ""
+msgstr "La réponse de la dictée audio a expiré."
 
 #: src/components/ui/Chat/ChatInput.tsx
 #~ msgid "Audio file: {0} · Status: {1}"
@@ -1863,7 +1863,7 @@ msgstr ""
 
 #: src/hooks/audio/useAudioDictationRecorder.ts
 msgid "Could not complete audio dictation."
-msgstr ""
+msgstr "Impossible de terminer la dictée audio."
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Could not complete audio recording."
@@ -1879,7 +1879,7 @@ msgstr "Impossible de charger les périphériques d'entrée audio."
 
 #: src/hooks/audio/useAudioDictationRecorder.ts
 msgid "Could not read audio dictation response."
-msgstr ""
+msgstr "Impossible de lire la réponse de la dictée audio."
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Could not read audio transcription response."
@@ -1887,7 +1887,7 @@ msgstr "Impossible de lire la réponse de transcription audio."
 
 #: src/hooks/audio/useAudioDictationRecorder.ts
 msgid "Could not start audio dictation."
-msgstr ""
+msgstr "Impossible de démarrer la dictée audio."
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Could not start audio recording."
@@ -1950,11 +1950,11 @@ msgstr ""
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Dictating audio"
-msgstr ""
+msgstr "Dictée audio en cours"
 
 #: src/hooks/audio/useAudioDictationRecorder.ts
 msgid "Dictation stopped automatically after the configured maximum duration."
-msgstr ""
+msgstr "La dictée s’est arrêtée automatiquement après la durée maximale configurée."
 
 #: src/components/ui/Feedback/Alert.tsx
 msgid "Dismiss"
@@ -2051,7 +2051,7 @@ msgstr ""
 
 #: src/hooks/audio/useAudioDictationRecorder.ts
 msgid "Failed to complete audio dictation."
-msgstr ""
+msgstr "Impossible de terminer la dictée audio."
 
 #: src/pages/AssistantCreatePage.tsx
 msgid "Failed to create assistant. Please try again."
@@ -2084,7 +2084,7 @@ msgstr ""
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Finishing dictation"
-msgstr ""
+msgstr "Finalisation de la dictée"
 
 #: src/components/ui/Message/MessageContent.tsx
 msgid "Footnotes"
@@ -2459,7 +2459,7 @@ msgstr "Une erreur s'est produite lors du chargement de l'interface de chat."
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Start dictation"
-msgstr ""
+msgstr "Démarrer la dictée"
 
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "Start typing below to begin a new conversation"
@@ -2477,7 +2477,7 @@ msgstr ""
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Starting dictation"
-msgstr ""
+msgstr "Démarrage de la dictée"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Stop"
@@ -2485,7 +2485,7 @@ msgstr "Arrêter"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Stop dictation"
-msgstr ""
+msgstr "Arrêter la dictée"
 
 #: src/components/ui/Chat/ChatInput.tsx
 #~ msgid "Stop recording"
