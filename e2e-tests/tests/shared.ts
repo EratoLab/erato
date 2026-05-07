@@ -126,7 +126,12 @@ export const chatIsReadyToChat = async (
       await expect(page.getByTestId("message-assistant")).toBeVisible();
     }
     await expect(textbox).toBeVisible();
-    await expect(textbox).toBeEnabled();
+    // The "Loading" text disappears as soon as any content has streamed in
+    // (the loader is suppressed once content is present), but the textbox
+    // stays disabled until the entire stream has finished. Use the same
+    // loadingTimeoutMs for the textbox-enabled wait so we cover the full
+    // streaming window, not just the pre-content phase.
+    await expect(textbox).toBeEnabled(loadingOpts);
   });
 };
 
