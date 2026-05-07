@@ -116,6 +116,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
             "/files/audio-transcriptions/socket",
             get(audio_transcription::audio_transcription_socket),
         )
+        .route(
+            "/audio-dictation/socket",
+            get(audio_transcription::audio_dictation_socket),
+        )
         .route("/models", get(available_models))
         .route("/mcp_servers", get(list_mcp_servers))
         .route(

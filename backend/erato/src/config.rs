@@ -400,6 +400,10 @@ pub struct AppConfig {
     #[serde(default)]
     pub audio_transcription: AudioTranscriptionConfig,
 
+    // Audio dictation feature configuration.
+    #[serde(default)]
+    pub audio_dictation: AudioTranscriptionConfig,
+
     // If true, enables the cleanup worker that periodically deletes old data.
     // Defaults to `false`.
     pub cleanup_enabled: bool,
@@ -476,6 +480,18 @@ impl AppConfig {
             .set_default("audio_transcription.tokens_per_word", 1.5)?
             .set_default("audio_transcription.output_token_buffer_factor", 2.0)?
             .set_default("audio_transcription.fixed_output_token_budget", 500)?
+            .set_default("audio_dictation.enabled", false)?
+            .set_default("audio_dictation.max_recording_duration_seconds", 1200)?
+            .set_default("audio_dictation.chunk_duration_seconds", 30)?
+            .set_default("audio_dictation.max_attempts", 3)?
+            .set_default("audio_dictation.initial_backoff_ms", 250)?
+            .set_default("audio_dictation.max_backoff_ms", 4000)?
+            .set_default("audio_dictation.min_words_for_loop_check", 80)?
+            .set_default("audio_dictation.min_unique_word_ratio", 0.25)?
+            .set_default("audio_dictation.max_words_per_minute", 200)?
+            .set_default("audio_dictation.tokens_per_word", 1.5)?
+            .set_default("audio_dictation.output_token_buffer_factor", 2.0)?
+            .set_default("audio_dictation.fixed_output_token_budget", 500)?
             .set_default("prompt_optimizer.enabled", false)?
             .set_default("prompt_optimizer.prompt", DEFAULT_PROMPT_OPTIMIZER_PROMPT)?;
 
@@ -681,81 +697,8 @@ impl AppConfig {
             }
         }
 
-        // Validate audio transcription requires at least one model with audio-input support.
-        if config.audio_transcription.enabled {
-            if config.audio_transcription.max_recording_duration_seconds == 0 {
-                panic!(
-                    "Invalid `audio_transcription.max_recording_duration_seconds`: value must be greater than 0."
-                );
-            }
-            if config.audio_transcription.chunk_duration_seconds == 0 {
-                panic!(
-                    "Invalid `audio_transcription.chunk_duration_seconds`: value must be greater than 0."
-                );
-            }
-            if config.audio_transcription.chunk_duration_seconds
-                > config.audio_transcription.max_recording_duration_seconds
-            {
-                panic!(
-                    "Invalid `audio_transcription.chunk_duration_seconds`: value must be less than or equal to `audio_transcription.max_recording_duration_seconds`."
-                );
-            }
-            if config.audio_transcription.max_attempts == 0 {
-                panic!("Invalid `audio_transcription.max_attempts`: value must be greater than 0.");
-            }
-            if !(0.0..=1.0).contains(&config.audio_transcription.min_unique_word_ratio) {
-                panic!(
-                    "Invalid `audio_transcription.min_unique_word_ratio`: value must be between 0.0 and 1.0."
-                );
-            }
-            if config.audio_transcription.tokens_per_word <= 0.0
-                || config.audio_transcription.output_token_buffer_factor <= 0.0
-            {
-                panic!(
-                    "Invalid audio transcription token sizing config: `tokens_per_word` and `output_token_buffer_factor` must be greater than 0."
-                );
-            }
-            if let (Some(min_output_tokens), Some(max_output_tokens)) = (
-                config.audio_transcription.min_output_tokens,
-                config.audio_transcription.max_output_tokens,
-            ) && min_output_tokens > max_output_tokens
-            {
-                panic!(
-                    "Invalid audio transcription token sizing config: `min_output_tokens` must be less than or equal to `max_output_tokens`."
-                );
-            }
-
-            let configured_audio_provider = if let Some(provider_id) =
-                config.audio_transcription.chat_provider_id.as_deref()
-            {
-                let provider = config.get_chat_provider(provider_id);
-                if !provider.model_capabilities.supports_audio_input {
-                    panic!(
-                        "audio_transcription.chat_provider_id '{}' does not have `model_capabilities.supports_audio_input = true`.",
-                        provider_id
-                    );
-                }
-                Some(provider)
-            } else if let Some(chat_providers) = &config.chat_providers {
-                chat_providers
-                    .priority_order
-                    .iter()
-                    .filter_map(|provider_id| chat_providers.providers.get(provider_id))
-                    .find(|provider| provider.model_capabilities.supports_audio_input)
-            } else {
-                config
-                    .chat_provider
-                    .as_ref()
-                    .filter(|provider| provider.model_capabilities.supports_audio_input)
-            };
-
-            if configured_audio_provider.is_none() {
-                panic!(
-                    "audio_transcription is enabled, but no chat provider has `model_capabilities.supports_audio_input = true`.\n\n\
-Enable audio transcription with at least one provider setting `supports_audio_input = true` in `chat_providers.providers.<provider_id>.model_capabilities`."
-                );
-            }
-        }
+        validate_audio_feature_config(&config, "audio_transcription", &config.audio_transcription);
+        validate_audio_feature_config(&config, "audio_dictation", &config.audio_dictation);
 
         // Validate that Langfuse is configured if any chat provider uses it
         if config.any_prompt_source_uses_langfuse() && !config.integrations.langfuse.enabled {
@@ -1148,6 +1091,111 @@ Enable audio transcription with at least one provider setting `supports_audio_in
             .sentry_dsn
             .as_ref()
             .or(self.sentry_dsn.as_ref())
+    }
+}
+
+fn validate_audio_feature_config(
+    app_config: &AppConfig,
+    config_key: &str,
+    audio_config: &AudioTranscriptionConfig,
+) {
+    if !audio_config.enabled {
+        return;
+    }
+
+    if audio_config.max_recording_duration_seconds == 0 {
+        panic!(
+            "Invalid `{config_key}.max_recording_duration_seconds`: value must be greater than 0."
+        );
+    }
+    if audio_config.chunk_duration_seconds == 0 {
+        panic!("Invalid `{config_key}.chunk_duration_seconds`: value must be greater than 0.");
+    }
+    if audio_config.chunk_duration_seconds > audio_config.max_recording_duration_seconds {
+        panic!(
+            "Invalid `{config_key}.chunk_duration_seconds`: value must be less than or equal to `{config_key}.max_recording_duration_seconds`."
+        );
+    }
+    if audio_config.max_attempts == 0 {
+        panic!("Invalid `{config_key}.max_attempts`: value must be greater than 0.");
+    }
+    if !(0.0..=1.0).contains(&audio_config.min_unique_word_ratio) {
+        panic!("Invalid `{config_key}.min_unique_word_ratio`: value must be between 0.0 and 1.0.");
+    }
+    if audio_config.tokens_per_word <= 0.0 || audio_config.output_token_buffer_factor <= 0.0 {
+        panic!(
+            "Invalid {config_key} token sizing config: `tokens_per_word` and `output_token_buffer_factor` must be greater than 0."
+        );
+    }
+    if let (Some(min_output_tokens), Some(max_output_tokens)) = (
+        audio_config.min_output_tokens,
+        audio_config.max_output_tokens,
+    ) && min_output_tokens > max_output_tokens
+    {
+        panic!(
+            "Invalid {config_key} token sizing config: `min_output_tokens` must be less than or equal to `max_output_tokens`."
+        );
+    }
+
+    let configured_audio_provider = if let Some(provider_id) =
+        audio_config.chat_provider_id.as_deref()
+    {
+        let provider = app_config.get_chat_provider(provider_id);
+        if !provider.model_capabilities.supports_audio_input {
+            panic!(
+                "{config_key}.chat_provider_id '{}' does not have `model_capabilities.supports_audio_input = true`.",
+                provider_id
+            );
+        }
+        if !audio_provider_kind_supports_binary_audio(&provider.provider_kind) {
+            panic!(
+                "{config_key}.chat_provider_id '{}' uses provider_kind '{}', which does not support audio input through the current adapter.",
+                provider_id, provider.provider_kind
+            );
+        }
+        Some(provider)
+    } else if let Some(chat_providers) = &app_config.chat_providers {
+        chat_providers
+            .priority_order
+            .iter()
+            .filter_map(|provider_id| chat_providers.providers.get(provider_id))
+            .find(|provider| {
+                provider.model_capabilities.supports_audio_input
+                    && audio_provider_kind_supports_binary_audio(&provider.provider_kind)
+            })
+    } else {
+        app_config.chat_provider.as_ref().filter(|provider| {
+            provider.model_capabilities.supports_audio_input
+                && audio_provider_kind_supports_binary_audio(&provider.provider_kind)
+        })
+    };
+
+    if configured_audio_provider.is_none() {
+        panic!(
+            "{config_key} is enabled, but no chat provider has `model_capabilities.supports_audio_input = true`.\n\n\
+Enable {config_key} with at least one provider setting `supports_audio_input = true` in `chat_providers.providers.<provider_id>.model_capabilities`."
+        );
+    }
+}
+
+fn audio_provider_kind_supports_binary_audio(provider_kind: &str) -> bool {
+    !matches!(provider_kind, "openai_responses" | "azure_openai_responses")
+}
+
+#[cfg(test)]
+mod audio_config_tests {
+    use super::*;
+
+    #[test]
+    fn audio_config_rejects_openai_responses_provider_kinds() {
+        assert!(!audio_provider_kind_supports_binary_audio(
+            "openai_responses"
+        ));
+        assert!(!audio_provider_kind_supports_binary_audio(
+            "azure_openai_responses"
+        ));
+        assert!(audio_provider_kind_supports_binary_audio("openai"));
+        assert!(audio_provider_kind_supports_binary_audio("gemini"));
     }
 }
 

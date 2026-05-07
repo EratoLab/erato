@@ -1,7 +1,13 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   ThemeProvider,
@@ -17,6 +23,7 @@ import type React from "react";
 import type { ReactNode } from "react";
 
 const mockNavigate = vi.fn();
+const localStorageValues = new Map<string, string>();
 
 vi.mock("react-router-dom", async () => {
   const actual =
@@ -155,11 +162,31 @@ function renderDialog({
   );
 }
 
+beforeEach(() => {
+  localStorageValues.clear();
+  vi.stubGlobal("localStorage", {
+    getItem: vi.fn((key: string) => localStorageValues.get(key) ?? null),
+    setItem: vi.fn((key: string, value: string) => {
+      localStorageValues.set(key, value);
+    }),
+    removeItem: vi.fn((key: string) => {
+      localStorageValues.delete(key);
+    }),
+    clear: vi.fn(() => {
+      localStorageValues.clear();
+    }),
+  });
+});
+
 afterEach(() => {
+  cleanup();
   vi.restoreAllMocks();
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
   vi.useRealTimers();
-  localStorage.clear();
+  if (typeof localStorage.clear === "function") {
+    localStorage.clear();
+  }
 });
 
 describe("UserPreferencesDialog", () => {

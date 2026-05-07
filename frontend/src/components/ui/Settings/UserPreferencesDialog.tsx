@@ -16,6 +16,7 @@ import {
   useStartMcpServerOauth,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import {
+  useAudioDictationFeature,
   useAudioTranscriptionFeature,
   useUserPreferencesFeature,
 } from "@/providers/FeatureConfigProvider";
@@ -80,6 +81,9 @@ export function UserPreferencesDialog({
   const { enabled: personalizationEnabled, mcpServersTabEnabled } =
     useUserPreferencesFeature();
   const { enabled: audioTranscriptionEnabled } = useAudioTranscriptionFeature();
+  const { enabled: audioDictationEnabled } = useAudioDictationFeature();
+  const audioInputSettingsEnabled =
+    audioTranscriptionEnabled || audioDictationEnabled;
   const {
     audioInputDeviceError,
     audioInputDevices,
@@ -130,7 +134,7 @@ export function UserPreferencesDialog({
         ? [
             "personalization",
             "appearance",
-            ...(audioTranscriptionEnabled ? (["audio"] as const) : []),
+            ...(audioInputSettingsEnabled ? (["audio"] as const) : []),
             ...(mcpServersTabEnabled
               ? // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal preferences tab id
                 (["mcpServers"] as const)
@@ -139,14 +143,14 @@ export function UserPreferencesDialog({
           ]
         : [
             "appearance",
-            ...(audioTranscriptionEnabled ? (["audio"] as const) : []),
+            ...(audioInputSettingsEnabled ? (["audio"] as const) : []),
             ...(mcpServersTabEnabled
               ? // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal preferences tab id
                 (["mcpServers"] as const)
               : []),
             "data",
           ]) satisfies PreferencesTab[],
-    [audioTranscriptionEnabled, mcpServersTabEnabled, personalizationEnabled],
+    [audioInputSettingsEnabled, mcpServersTabEnabled, personalizationEnabled],
   );
   const handledOauthCallbackKeyRef = useRef<string | null>(null);
   const requestedDefaultTab =
@@ -655,7 +659,7 @@ export function UserPreferencesDialog({
               <AppearanceTabContent />
             </section>
 
-            {audioTranscriptionEnabled ? (
+            {audioInputSettingsEnabled ? (
               <section
                 id={panelIds.audio}
                 role="tabpanel"

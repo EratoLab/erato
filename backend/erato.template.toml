@@ -171,6 +171,24 @@ chat_provider_ids = ["test-token-limit"]
 # min_output_tokens = 32
 # max_output_tokens = 2048
 
+# Audio dictation feature configuration
+# Controls the microphone dictation flow that populates the chat input without creating an attachment.
+# [audio_dictation]
+# enabled = false
+# chat_provider_id = "mock-llm-openai" # Optional: defaults to first audio-capable provider by priority
+# max_recording_duration_seconds = 1200
+# chunk_duration_seconds = 30
+# max_attempts = 3
+# initial_backoff_ms = 250
+# max_backoff_ms = 4000
+# min_words_for_loop_check = 80
+# min_unique_word_ratio = 0.25
+# max_words_per_minute = 200
+# tokens_per_word = 1.5
+# output_token_buffer_factor = 2.0
+# min_output_tokens = 32
+# max_output_tokens = 2048
+
 # Experimental assistants feature configuration
 # [experimental_assistants]
 # # Whether to enable the experimental assistants feature in the frontend (default: false)
