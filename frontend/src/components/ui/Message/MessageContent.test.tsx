@@ -245,7 +245,7 @@ describe("MessageContent", () => {
     expect(screen.getByText("Two").tagName).toBe("LI");
   });
 
-  it("renders persisted reasoning in a collapsed section", () => {
+  it("renders persisted reasoning collapsed, expandable on click", () => {
     renderWithTheme(
       <MessageContent
         content={[
@@ -255,19 +255,15 @@ describe("MessageContent", () => {
       />,
     );
 
-    const toggle = screen.getByRole("button", { name: "Reasoning" });
+    const toggle = screen.getByRole("button", {
+      name: "I checked the input and compared options.",
+    });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(
-      screen.queryByText("I checked the input and compared options."),
-    ).not.toBeInTheDocument();
     expect(screen.getByText("Final answer.")).toBeInTheDocument();
 
     fireEvent.click(toggle);
 
     expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(
-      screen.getByText("I checked the input and compared options."),
-    ).toBeInTheDocument();
   });
 
   it("streams reasoning expanded and collapses it once answer text arrives", () => {
@@ -278,11 +274,9 @@ describe("MessageContent", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Reasoning" })).toHaveAttribute(
-      "aria-expanded",
-      "true",
-    );
-    expect(screen.getByText(/Inspecting context/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Inspecting context" }),
+    ).toHaveAttribute("aria-expanded", "true");
 
     rerender(
       <ThemeProvider>
@@ -296,11 +290,9 @@ describe("MessageContent", () => {
       </ThemeProvider>,
     );
 
-    expect(screen.getByRole("button", { name: "Reasoning" })).toHaveAttribute(
-      "aria-expanded",
-      "false",
-    );
-    expect(screen.queryByText("Inspecting context")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Inspecting context" }),
+    ).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByText(/Final answer/)).toBeInTheDocument();
   });
 
@@ -317,9 +309,9 @@ describe("MessageContent", () => {
 
     const articleText = container.querySelector("article")?.textContent ?? "";
     expect(articleText.indexOf("First answer part.")).toBeLessThan(
-      articleText.indexOf("Reasoning"),
+      articleText.indexOf("Second reasoning part."),
     );
-    expect(articleText.indexOf("Reasoning")).toBeLessThan(
+    expect(articleText.indexOf("Second reasoning part.")).toBeLessThan(
       articleText.indexOf("Third answer part."),
     );
   });
