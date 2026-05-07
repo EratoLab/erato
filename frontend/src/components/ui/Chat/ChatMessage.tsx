@@ -204,6 +204,7 @@ export const ChatMessage = memo(function ChatMessage({
             showRaw={showRawMarkdown}
             onImageClick={lightbox.openLightbox}
             onFileLinkPreview={onFilePreview}
+            preserveSoftLineBreaks={isUser}
           />
 
           {/* Display attached files if any */}
