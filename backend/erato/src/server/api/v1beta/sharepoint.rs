@@ -18,6 +18,7 @@ use utoipa::ToSchema;
 
 const GRAPH_API_BASE_URL: &str = "https://graph.microsoft.com/v1.0";
 const FILTERED_DRIVE_NAMES: &[&str] = &["PersonalCacheLibrary"];
+const DEFAULT_GROUP_DISCOVERY_LIMIT: usize = 20;
 
 /// A drive accessible to the user (OneDrive, Sharepoint, etc.)
 #[derive(Debug, Serialize, ToSchema)]
@@ -762,14 +763,43 @@ async fn fetch_me_drives(
 async fn fetch_joined_teams(
     http_client: &reqwest_012::Client,
     access_token: &str,
+    limit: usize,
+    include_public_groups: bool,
 ) -> DriveDiscoveryResult {
     let mut result = DriveDiscoveryResult::default();
+    let path = format!("/me/joinedTeams?$select=id&$top={limit}");
 
-    match fetch_graph_collection(http_client, access_token, "/me/joinedTeams?$select=id").await {
-        Ok(joined_teams) => {
-            for team in joined_teams {
-                if let Some(group_id) = team.get("id").and_then(|value| value.as_str()) {
-                    result.discovered_group_ids.insert(group_id.to_string());
+    match fetch_graph_json(
+        http_client,
+        access_token,
+        &format!("{GRAPH_API_BASE_URL}{path}"),
+    )
+    .await
+    {
+        Ok(body) => {
+            let joined_teams = body
+                .get("value")
+                .and_then(|value| value.as_array())
+                .cloned()
+                .unwrap_or_default();
+            let group_metadata_futures = joined_teams
+                .iter()
+                .filter_map(|team| team.get("id").and_then(|value| value.as_str()))
+                .map(|group_id| async move {
+                    let group_metadata =
+                        fetch_group_name(http_client, access_token, group_id).await;
+                    (group_id.to_string(), group_metadata)
+                });
+
+            for (group_id, group_metadata) in join_all(group_metadata_futures).await {
+                if let Some(group_metadata) = group_metadata {
+                    let is_public_group = group_metadata.visibility.as_deref() == Some("Public");
+                    if include_public_groups || !is_public_group {
+                        result.discovered_group_ids.insert(group_id.clone());
+                        result.group_metadata_by_id.insert(group_id, group_metadata);
+                    }
+                } else if include_public_groups {
+                    result.discovered_group_ids.insert(group_id);
                 }
             }
         }
@@ -783,6 +813,8 @@ async fn fetch_joined_teams(
     tracing::trace!(
         discovery_source = "joined_teams",
         group_count = discovered_groups,
+        group_limit = limit,
+        include_public_groups,
         "Finished processing joined_teams source"
     );
 
@@ -1272,7 +1304,13 @@ pub async fn all_drives(
         },
         async {
             if enabled_sources.contains(&SharepointAllDrivesSource::JoinedTeams) {
-                fetch_joined_teams(&http_client, access_token).await
+                fetch_joined_teams(
+                    &http_client,
+                    access_token,
+                    DEFAULT_GROUP_DISCOVERY_LIMIT,
+                    has_search_query,
+                )
+                .await
             } else {
                 DriveDiscoveryResult::default()
             }

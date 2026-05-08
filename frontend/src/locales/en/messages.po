@@ -599,6 +599,21 @@ msgstr "View in Sharepoint"
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+msgid "cloudDriveList.visibility.hiddenMembership"
+msgstr "Hidden membership"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+msgid "cloudDriveList.visibility.private"
+msgstr "Private"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+msgid "cloudDriveList.visibility.public"
+msgstr "Public"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
 msgid "cloudDriveList.visibilityLabel"
 msgstr "Visibility"
 

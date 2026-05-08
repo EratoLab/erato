@@ -77,6 +77,28 @@ function getDriveKindLabel(kind: string): string {
   }
 }
 
+function getDriveVisibilityLabel(visibility: string): string {
+  switch (visibility) {
+    case "Public":
+      return t({
+        id: "cloudDriveList.visibility.public",
+        message: "Public",
+      });
+    case "Private":
+      return t({
+        id: "cloudDriveList.visibility.private",
+        message: "Private",
+      });
+    case "HiddenMembership":
+      return t({
+        id: "cloudDriveList.visibility.hiddenMembership",
+        message: "Hidden membership",
+      });
+    default:
+      return visibility;
+  }
+}
+
 function getDriveDetailLines(drive: CloudDrive): string[] {
   const lines: string[] = [];
   const siteLabel = t({ id: "cloudDriveList.siteLabel", message: "Site" });
@@ -95,7 +117,9 @@ function getDriveDetailLines(drive: CloudDrive): string[] {
   }
 
   if (drive.group_visibility) {
-    lines.push(`${visibilityLabel}: ${drive.group_visibility}`);
+    lines.push(
+      `${visibilityLabel}: ${getDriveVisibilityLabel(drive.group_visibility)}`,
+    );
   }
 
   return lines;
