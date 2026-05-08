@@ -1827,6 +1827,33 @@ mod tests {
             .map(ToString::to_string)
     }
 
+    fn otel_string_array_attr(body: &serde_json::Value, key: &str) -> Vec<String> {
+        fn collect_strings(value: &serde_json::Value, strings: &mut Vec<String>) {
+            match value {
+                serde_json::Value::Object(map) => {
+                    if let Some(value) = map.get("stringValue").and_then(|value| value.as_str()) {
+                        strings.push(value.to_string());
+                    }
+                    for value in map.values() {
+                        collect_strings(value, strings);
+                    }
+                }
+                serde_json::Value::Array(values) => {
+                    for value in values {
+                        collect_strings(value, strings);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        let mut strings = Vec::new();
+        if let Some(value) = otel_attr(body, key) {
+            collect_strings(value, &mut strings);
+        }
+        strings
+    }
+
     #[test]
     fn test_langfuse_client_disabled() {
         let config = LangfuseConfig {
@@ -1890,7 +1917,10 @@ mod tests {
             body["batch"][0]["body"]["metadata"]["assistant_id"],
             "assistant-1"
         );
-        assert_eq!(body["batch"][0]["body"]["tags"][0], "model-gpt-4");
+        assert_eq!(
+            body["batch"][0]["body"]["tags"],
+            json!(["model-gpt-4", "chat"])
+        );
     }
 
     #[tokio::test]
@@ -1947,7 +1977,10 @@ mod tests {
                     metadata_body["batch"][0]["body"]["metadata"]["assistant_id"],
                     "assistant-1"
                 );
-                assert_eq!(tags_body["batch"][0]["body"]["tags"][0], "model-gpt-4");
+                assert_eq!(
+                    tags_body["batch"][0]["body"]["tags"],
+                    json!(["model-gpt-4"])
+                );
             }
         }
     }
@@ -2056,6 +2089,10 @@ mod tests {
                     "Test trace"
                 );
                 assert_eq!(
+                    otel_string_array_attr(&body, LANGFUSE_TRACE_TAGS),
+                    vec!["model-gpt-4".to_string(), "chat".to_string()]
+                );
+                assert_eq!(
                     otel_string_attr(
                         &body,
                         &(LANGFUSE_TRACE_METADATA_PREFIX.to_owned() + ".assistant_id")
@@ -2068,6 +2105,10 @@ mod tests {
                 assert_eq!(body["batch"].as_array().unwrap().len(), 2);
                 assert_eq!(body["batch"][0]["type"], "trace-create");
                 assert_eq!(body["batch"][1]["type"], "generation-create");
+                assert_eq!(
+                    body["batch"][0]["body"]["tags"],
+                    json!(["model-gpt-4", "chat"])
+                );
             }
         }
     }
