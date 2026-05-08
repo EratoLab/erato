@@ -593,6 +593,11 @@ msgid "cloudDriveList.viewInSharepoint"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+msgid "cloudDriveList.visibilityLabel"
+msgstr "Visibilité"
+
+#. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
 msgid "cloudFilePicker.actions.cancel"
 msgstr "Annuler"

@@ -506,7 +506,7 @@ describe("ChatInput", () => {
           operations: ["extract_text"],
         },
       },
-    ] satisfies FileUploadItem[];
+    ] as unknown as FileUploadItem[];
 
     mockUseChatInputHandlers.mockReturnValue({
       attachedFiles,
@@ -556,7 +556,7 @@ describe("ChatInput", () => {
           operations: ["analyze_image"],
         },
       },
-    ] satisfies FileUploadItem[];
+    ] as unknown as FileUploadItem[];
 
     mockUseChatInputHandlers.mockReturnValue({
       attachedFiles,
@@ -675,7 +675,7 @@ describe("ChatInput", () => {
             status: "processing",
           },
         },
-      ] satisfies FileUploadItem[],
+      ] as unknown as FileUploadItem[],
       fileError: null,
       setFileError: vi.fn(),
       handleFilesUploaded: vi.fn(),
@@ -728,7 +728,7 @@ describe("ChatInput", () => {
             transcript: "Hello team, this is the transcribed text for testing.",
           },
         },
-      ] satisfies FileUploadItem[],
+      ] as unknown as FileUploadItem[],
       fileError: null,
       setFileError: vi.fn(),
       handleFilesUploaded: vi.fn(),
@@ -781,7 +781,7 @@ describe("ChatInput", () => {
         status: "processing",
         progress: 0.2,
       },
-    } satisfies FileUploadItem;
+    } as unknown as FileUploadItem;
     const completedFile = {
       ...processingFile,
       audio_transcription: {
@@ -789,7 +789,7 @@ describe("ChatInput", () => {
         progress: 1,
         transcript: "Refreshed transcript.",
       },
-    } satisfies FileUploadItem;
+    } as unknown as FileUploadItem;
 
     mockUseChatInputHandlers.mockReturnValue({
       attachedFiles: [processingFile],
@@ -850,7 +850,7 @@ describe("ChatInput", () => {
             error: "Chunk transcription failed after all retries.",
           },
         },
-      ] satisfies FileUploadItem[],
+      ] as unknown as FileUploadItem[],
       fileError: null,
       setFileError: vi.fn(),
       handleFilesUploaded: vi.fn(),
@@ -906,7 +906,7 @@ describe("ChatInput", () => {
             status: "processing",
           },
         },
-      ] satisfies FileUploadItem[],
+      ] as unknown as FileUploadItem[],
       fileError: null,
       setFileError: vi.fn(),
       handleFilesUploaded: vi.fn(),
@@ -1144,7 +1144,7 @@ describe("ChatInput", () => {
           transcript: "Transcript ready.",
         },
       },
-    ] satisfies FileUploadItem[];
+    ] as unknown as FileUploadItem[];
 
     mockUseChatInputHandlers.mockReturnValue({
       attachedFiles,
@@ -1200,7 +1200,7 @@ describe("ChatInput", () => {
           transcript: "Transcript ready.",
         },
       },
-    ] satisfies FileUploadItem[];
+    ] as unknown as FileUploadItem[];
 
     mockUseChatInputHandlers.mockReturnValue({
       attachedFiles,

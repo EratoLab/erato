@@ -879,6 +879,14 @@ export type AllDrivesVariables = {
  * - `GET /me/drive/sharedWithMe()`: https://learn.microsoft.com/graph/api/drive-sharedwithme
  * - `GET /me/joinedTeams`: https://learn.microsoft.com/graph/api/user-list-joinedteams
  * - `GET /sites?search=*`: https://learn.microsoft.com/graph/api/site-search
+ * - Group-backed library metadata uses the Microsoft Graph group `visibility`
+ *   and `resourceProvisioningOptions` properties:
+ *   https://learn.microsoft.com/graph/api/resources/group
+ *   https://learn.microsoft.com/graph/group-set-options
+ * - Search requests discover matching group-backed libraries with
+ *   `GET /groups?$search="displayName:..."&$top=20` plus
+ *   `ConsistencyLevel: eventual` before fetching `GET /groups/{id}/drives`:
+ *   https://learn.microsoft.com/graph/search-query-parameter
  */
 export const fetchAllDrives = (
   variables: AllDrivesVariables,
@@ -907,6 +915,14 @@ export const fetchAllDrives = (
  * - `GET /me/drive/sharedWithMe()`: https://learn.microsoft.com/graph/api/drive-sharedwithme
  * - `GET /me/joinedTeams`: https://learn.microsoft.com/graph/api/user-list-joinedteams
  * - `GET /sites?search=*`: https://learn.microsoft.com/graph/api/site-search
+ * - Group-backed library metadata uses the Microsoft Graph group `visibility`
+ *   and `resourceProvisioningOptions` properties:
+ *   https://learn.microsoft.com/graph/api/resources/group
+ *   https://learn.microsoft.com/graph/group-set-options
+ * - Search requests discover matching group-backed libraries with
+ *   `GET /groups?$search="displayName:..."&$top=20` plus
+ *   `ConsistencyLevel: eventual` before fetching `GET /groups/{id}/drives`:
+ *   https://learn.microsoft.com/graph/search-query-parameter
  */
 export function allDrivesQuery(variables: AllDrivesVariables): {
   queryKey: reactQuery.QueryKey;
@@ -947,6 +963,14 @@ export function allDrivesQuery(
  * - `GET /me/drive/sharedWithMe()`: https://learn.microsoft.com/graph/api/drive-sharedwithme
  * - `GET /me/joinedTeams`: https://learn.microsoft.com/graph/api/user-list-joinedteams
  * - `GET /sites?search=*`: https://learn.microsoft.com/graph/api/site-search
+ * - Group-backed library metadata uses the Microsoft Graph group `visibility`
+ *   and `resourceProvisioningOptions` properties:
+ *   https://learn.microsoft.com/graph/api/resources/group
+ *   https://learn.microsoft.com/graph/group-set-options
+ * - Search requests discover matching group-backed libraries with
+ *   `GET /groups?$search="displayName:..."&$top=20` plus
+ *   `ConsistencyLevel: eventual` before fetching `GET /groups/{id}/drives`:
+ *   https://learn.microsoft.com/graph/search-query-parameter
  */
 export const useSuspenseAllDrives = <TData = Schemas.AllDrivesResponse,>(
   variables: AllDrivesVariables,
@@ -980,6 +1004,14 @@ export const useSuspenseAllDrives = <TData = Schemas.AllDrivesResponse,>(
  * - `GET /me/drive/sharedWithMe()`: https://learn.microsoft.com/graph/api/drive-sharedwithme
  * - `GET /me/joinedTeams`: https://learn.microsoft.com/graph/api/user-list-joinedteams
  * - `GET /sites?search=*`: https://learn.microsoft.com/graph/api/site-search
+ * - Group-backed library metadata uses the Microsoft Graph group `visibility`
+ *   and `resourceProvisioningOptions` properties:
+ *   https://learn.microsoft.com/graph/api/resources/group
+ *   https://learn.microsoft.com/graph/group-set-options
+ * - Search requests discover matching group-backed libraries with
+ *   `GET /groups?$search="displayName:..."&$top=20` plus
+ *   `ConsistencyLevel: eventual` before fetching `GET /groups/{id}/drives`:
+ *   https://learn.microsoft.com/graph/search-query-parameter
  */
 export const useAllDrives = <TData = Schemas.AllDrivesResponse,>(
   variables: AllDrivesVariables | reactQuery.SkipToken,
