@@ -2390,6 +2390,8 @@ async fn stream_generate_chat_completion<
                             let trace_model_tags = all_model_tags.clone();
                             let trace_mcp_servers_unavailable =
                                 mcp_servers_unavailable.clone();
+                            let trace_tags =
+                                trace_enrichment.all_tags(&trace_model_tags, &trace_tool_names);
                             tokio::spawn(async move {
                                 let result = if current_turn == 1 {
                                     create_trace_with_generation_from_chat(
@@ -2406,6 +2408,7 @@ async fn stream_generate_chat_completion<
                                         assistant_id_for_langfuse,
                                         &accumulated_tool_names,
                                         Some(&trace_enrichment.platform),
+                                        Some(trace_tags.clone()),
                                         None, // parent_observation_id
                                     )
                                     .await
@@ -2744,6 +2747,9 @@ async fn stream_generate_chat_completion<
                 let content = turn_content.to_vec();
                 let usage = turn_usage.cloned();
                 let trace_platform = langfuse_trace_enrichment.platform.clone();
+                let turn_tool_name_set: HashSet<String> = turn_tool_names.iter().cloned().collect();
+                let trace_tags =
+                    langfuse_trace_enrichment.all_tags(&all_model_tags, &turn_tool_name_set);
 
                 // Send trace/observation asynchronously
                 let assistant_id_for_langfuse = assistant_id;
@@ -2764,6 +2770,7 @@ async fn stream_generate_chat_completion<
                             assistant_id_for_langfuse,
                             &turn_tool_names,
                             Some(&trace_platform),
+                            Some(trace_tags),
                             None,
                         )
                         .await
@@ -3336,6 +3343,7 @@ pub async fn generate_chat_summary(
                     assistant_id_for_langfuse,
                     &Vec::new(),
                     Some(&platform),
+                    Some(trace_tags.clone()),
                     None,
                 )
                 .await;

@@ -604,6 +604,7 @@ pub async fn create_trace_with_generation_from_chat(
     assistant_id: Option<Uuid>,
     tool_names: &[String],
     platform: Option<&str>,
+    trace_tags: Option<Vec<String>>,
     parent_observation_id: Option<String>,
 ) -> Result<()> {
     // Generate a name for the trace from the first user message
@@ -636,7 +637,7 @@ pub async fn create_trace_with_generation_from_chat(
             trace_name,
             Some(input_json.clone()),
             metadata.clone(), // trace_metadata
-            None,             // trace_tags
+            trace_tags,
             observation_id,
             generation_name,
             start_time_str,
