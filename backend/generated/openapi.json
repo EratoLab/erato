@@ -4109,6 +4109,26 @@
           },
           {
             "type": "object",
+            "description": "Generation was aborted because a hallucination loop was detected.",
+            "required": [
+              "error_description",
+              "error_type"
+            ],
+            "properties": {
+              "error_description": {
+                "type": "string",
+                "description": "Description of why generation was aborted."
+              },
+              "error_type": {
+                "type": "string",
+                "enum": [
+                  "hallucination_loop"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
             "description": "Internal server error.",
             "required": [
               "error_description",

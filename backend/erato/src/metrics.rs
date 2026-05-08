@@ -225,6 +225,7 @@ fn generation_error_type_label(error: &GenerationErrorType) -> &'static str {
         GenerationErrorType::ModelUnavailable { .. } => "model_unavailable",
         GenerationErrorType::InvalidRequest { .. } => "invalid_request",
         GenerationErrorType::ProviderError { .. } => "provider_error",
+        GenerationErrorType::HallucinationLoop { .. } => "hallucination_loop",
         GenerationErrorType::InternalError { .. } => "internal_error",
     }
 }
@@ -348,6 +349,12 @@ mod tests {
                 status_code: None,
             }),
             "provider_error"
+        );
+        assert_eq!(
+            generation_error_type_label(&GenerationErrorType::HallucinationLoop {
+                error_description: "x".to_string(),
+            }),
+            "hallucination_loop"
         );
         assert_eq!(
             generation_error_type_label(&GenerationErrorType::InternalError {

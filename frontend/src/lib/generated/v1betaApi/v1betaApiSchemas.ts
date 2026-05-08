@@ -1023,6 +1023,13 @@ export type GenerationErrorType =
     }
   | {
       /**
+       * Description of why generation was aborted.
+       */
+      error_description: string;
+      error_type: "hallucination_loop";
+    }
+  | {
+      /**
        * Description of the internal error.
        */
       error_description: string;

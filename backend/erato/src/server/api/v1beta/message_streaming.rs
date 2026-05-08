@@ -1,4 +1,4 @@
-use crate::config::ExperimentalFacetsConfig;
+use crate::config::{ExperimentalFacetsConfig, HallucinationSuppressionConfig};
 use crate::db::entity_ext::{chats, messages};
 use crate::metrics::{
     report_chat_provider_generation_error, report_chat_provider_time_to_first_token,
@@ -76,6 +76,9 @@ use tokio_stream::StreamExt as _;
 use tracing;
 use tracing::{Instrument, instrument};
 use utoipa::ToSchema;
+
+const HALLUCINATION_LOOP_ERROR_DESCRIPTION: &str =
+    "Generation aborted. Hallucination loop detected. Please regenerate the message.";
 
 fn is_openai_responses_provider_kind(provider_kind: &str) -> bool {
     matches!(provider_kind, "openai_responses" | "azure_openai_responses")
@@ -1855,6 +1858,45 @@ fn insert_reasoning_part_before_text(content: &mut Vec<ContentPart>, text: Strin
     insertion_index
 }
 
+struct HallucinationSuppressionState {
+    enabled: bool,
+    whitespace_delta_threshold: usize,
+    successive_whitespace_text_deltas: usize,
+}
+
+impl HallucinationSuppressionState {
+    fn new(config: HallucinationSuppressionConfig) -> Self {
+        Self {
+            enabled: config.enabled,
+            whitespace_delta_threshold: config.whitespace_delta_threshold,
+            successive_whitespace_text_deltas: 0,
+        }
+    }
+
+    fn observe_text_delta(&mut self, content: &str) -> bool {
+        if !self.enabled || content.is_empty() {
+            return false;
+        }
+
+        if content.chars().all(char::is_whitespace) {
+            self.successive_whitespace_text_deltas += 1;
+        } else {
+            self.successive_whitespace_text_deltas = 0;
+        }
+
+        self.successive_whitespace_text_deltas >= self.whitespace_delta_threshold
+    }
+}
+
+fn hallucination_loop_error_event(message_id: Uuid) -> MessageSubmitStreamingResponseError {
+    MessageSubmitStreamingResponseError {
+        message_id: Some(message_id),
+        error: GenerationErrorType::HallucinationLoop {
+            error_description: HALLUCINATION_LOOP_ERROR_DESCRIPTION.to_string(),
+        },
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]
 async fn stream_generate_chat_completion<
@@ -1925,6 +1967,18 @@ async fn stream_generate_chat_completion<
 
     let mut current_message_content: Vec<ContentPart> = vec![];
     let mut current_turn_chat_request = chat_request.clone();
+    let hallucination_suppression_config = chat_provider_id
+        .or_else(|| app_state.config.determine_chat_provider(None, None).ok())
+        .map(|provider_id| {
+            app_state
+                .config
+                .get_chat_provider(provider_id)
+                .hallucination_suppression
+                .clone()
+        })
+        .unwrap_or_default();
+    let mut hallucination_suppression =
+        HallucinationSuppressionState::new(hallucination_suppression_config);
     let available_mcp_tools_by_name: HashMap<
         String,
         crate::services::mcp_session_manager::ManagedTool,
@@ -2496,6 +2550,53 @@ async fn stream_generate_chat_completion<
                     ChatStreamEvent::Chunk(StreamChunk { content }) => {
                         let elapsed = provider_request_start.elapsed();
                         first_response_elapsed.get_or_insert(elapsed);
+                        if hallucination_suppression.observe_text_delta(&content) {
+                            let error_event = hallucination_loop_error_event(assistant_message_id);
+                            report_chat_provider_generation_error(
+                                chat_provider_metric_label,
+                                &error_event.error,
+                            );
+                            if let Some(elapsed) = first_response_elapsed {
+                                report_chat_provider_time_to_first_token(
+                                    chat_provider_metric_label,
+                                    elapsed,
+                                );
+                            }
+                            let error_payload = Some(error_event.error.clone());
+
+                            if let Some(task) = streaming_task
+                                && let Ok(error_json) = serde_json::to_value(
+                                    MessageSubmitStreamingResponseMessage::Error(
+                                        error_event.clone(),
+                                    ),
+                                )
+                            {
+                                let _ = task
+                                    .send_event(StreamingEvent::Error {
+                                        error: Some(error_json),
+                                    })
+                                    .await;
+                            }
+
+                            let message: MSG = error_event.into();
+                            message.send_event(tx.clone()).await?;
+                            let generation_metadata = build_generation_metadata(
+                                total_prompt_tokens,
+                                total_completion_tokens,
+                                total_total_tokens,
+                                total_reasoning_tokens,
+                                langfuse_trace_id.clone(),
+                                true,
+                                error_payload,
+                                non_empty_string(&captured_reasoning_summary),
+                                non_empty_vec(&captured_reasoning_items),
+                                non_empty_vec(&captured_reasoning_item_encrypted_content),
+                            );
+                            break 'loop_call_turns Ok((
+                                current_message_content,
+                                generation_metadata,
+                            ));
+                        }
                         current_turn_streamed_text.push_str(&content);
                         let content_index =
                             append_text_delta_part(&mut current_message_content, content.clone());
@@ -4625,6 +4726,31 @@ mod reasoning_replay_tests {
                 }),
             ]
         );
+    }
+
+    #[test]
+    fn hallucination_suppression_triggers_after_successive_whitespace_text_deltas() {
+        let mut suppression = HallucinationSuppressionState::new(HallucinationSuppressionConfig {
+            enabled: true,
+            whitespace_delta_threshold: 3,
+        });
+
+        assert!(!suppression.observe_text_delta(" "));
+        assert!(!suppression.observe_text_delta("\n"));
+        assert!(suppression.observe_text_delta("\t"));
+    }
+
+    #[test]
+    fn hallucination_suppression_resets_on_non_whitespace_text_delta() {
+        let mut suppression = HallucinationSuppressionState::new(HallucinationSuppressionConfig {
+            enabled: true,
+            whitespace_delta_threshold: 2,
+        });
+
+        assert!(!suppression.observe_text_delta(" "));
+        assert!(!suppression.observe_text_delta("answer"));
+        assert!(!suppression.observe_text_delta("\n"));
+        assert!(suppression.observe_text_delta("\t"));
     }
 }
 

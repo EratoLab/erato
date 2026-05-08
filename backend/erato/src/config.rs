@@ -1349,6 +1349,34 @@ pub struct ChatProviderConfig {
     // Model settings configuration for this chat provider.
     #[serde(default)]
     pub model_settings: ModelSettings,
+    // Hallucination suppression configuration for this chat provider.
+    #[serde(default, alias = "hallucination_supression")]
+    pub hallucination_suppression: HallucinationSuppressionConfig,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct HallucinationSuppressionConfig {
+    // Whether hallucination suppression is enabled.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub enabled: bool,
+    // Abort the generation after this many successive whitespace-only text deltas.
+    #[serde(default = "default_hallucination_suppression_whitespace_delta_threshold")]
+    pub whitespace_delta_threshold: usize,
+}
+
+impl Default for HallucinationSuppressionConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            whitespace_delta_threshold:
+                default_hallucination_suppression_whitespace_delta_threshold(),
+        }
+    }
+}
+
+fn default_hallucination_suppression_whitespace_delta_threshold() -> usize {
+    20
 }
 
 impl ChatProviderConfig {
@@ -1453,6 +1481,7 @@ impl ChatProviderConfig {
             system_prompt_langfuse: self.system_prompt_langfuse,
             model_capabilities: self.model_capabilities,
             model_settings: self.model_settings,
+            hallucination_suppression: self.hallucination_suppression,
         })
     }
 
@@ -1483,6 +1512,11 @@ impl ChatProviderConfig {
         if self.system_prompt.is_some() && self.system_prompt_langfuse.is_some() {
             return Err(eyre!(
                 "Cannot specify both system_prompt and system_prompt_langfuse. They are mutually exclusive."
+            ));
+        }
+        if self.hallucination_suppression.whitespace_delta_threshold == 0 {
+            return Err(eyre!(
+                "hallucination_suppression.whitespace_delta_threshold must be greater than 0"
             ));
         }
         Ok(())

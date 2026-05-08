@@ -43,6 +43,13 @@ fn build_lorem_word_chunks(total_words: usize) -> Vec<String> {
         .collect()
 }
 
+fn build_whitespace_hallucination_chunks() -> Vec<String> {
+    let mut chunks = Vec::with_capacity(201);
+    chunks.push("Starting hallucination loop simulation.".to_string());
+    chunks.extend((0..200).map(|_| " ".to_string()));
+    chunks
+}
+
 /// Get the default set of configured mocks
 pub fn get_default_mocks() -> Vec<Mock> {
     vec![
@@ -103,6 +110,22 @@ pub fn get_default_mocks() -> Vec<Mock> {
                     " today".to_string(),
                     "?".to_string(),
                 ],
+                delay_ms: 50,
+                ..Default::default()
+            }),
+        },
+        Mock {
+            name: "WhitespaceHallucination".to_string(),
+            description:
+                "Streams successive whitespace-only chunks to simulate a hallucination loop"
+                    .to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: "hallucination loop".to_string(),
+                },
+            )],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: build_whitespace_hallucination_chunks(),
                 delay_ms: 50,
                 ..Default::default()
             }),

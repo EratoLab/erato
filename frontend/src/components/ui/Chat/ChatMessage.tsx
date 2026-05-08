@@ -326,6 +326,14 @@ const getErrorDescription = (errorType: string) => {
     });
   }
 
+  if (errorType === "hallucination_loop") {
+    return t({
+      id: "chat.message.error.variant.hallucination_loop",
+      message:
+        "Generation aborted. Hallucination loop detected. Please regenerate the message.",
+    });
+  }
+
   return t({
     id: "chat.message.error.variant.default",
     message: "The assistant was unable to respond.",

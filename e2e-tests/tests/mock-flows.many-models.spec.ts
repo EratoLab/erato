@@ -49,6 +49,32 @@ const messageIsNotPresent = async (page: Page, messageId: string) => {
 };
 
 test(
+  "Mock-LLM hallucination loop is aborted with a user-facing error",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    await page.goto("/");
+    await chatIsReadyToChat(page);
+    await selectMockModel(page);
+
+    const textbox = page.getByRole("textbox", { name: "Type a message..." });
+    await expect(textbox).toBeVisible();
+
+    await textbox.fill("hallucination loop");
+    await textbox.press("Enter");
+
+    await expect(page.getByTestId("chat-message-error").last()).toContainText(
+      "Generation aborted. Hallucination loop detected. Please regenerate the message.",
+      { timeout: 30000 },
+    );
+
+    await chatIsReadyToChat(page, {
+      expectAssistantResponse: true,
+      loadingTimeoutMs: 30000,
+    });
+  },
+);
+
+test(
   "Mock-LLM long-running streams continue independently across two chats",
   { tag: TAG_CI },
   async ({ page }) => {
