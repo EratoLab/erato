@@ -206,6 +206,117 @@ export type AssistantWithFiles = Assistant & {
   files: AssistantFile[];
 };
 
+export type AudioTranscriptSegment = {
+  /**
+   * Zero-based chunk index for this segment.
+   *
+   * @minimum 0
+   */
+  chunk_index?: number;
+  /**
+   * Segment end offset in milliseconds.
+   *
+   * @format int64
+   * @minimum 0
+   */
+  end_ms?: number;
+  /**
+   * Segment start offset in milliseconds.
+   *
+   * @format int64
+   * @minimum 0
+   */
+  start_ms?: number;
+  /**
+   * Transcribed text for this segment.
+   */
+  text?: string;
+};
+
+export type AudioTranscriptionChunk = {
+  /**
+   * Number of attempts made for this chunk.
+   *
+   * @minimum 0
+   */
+  attempts?: number;
+  /**
+   * Optional byte range end in the stored canonical audio object.
+   *
+   * @format int64
+   * @minimum 0
+   */
+  byte_end?: null | undefined;
+  /**
+   * Optional byte range start in the stored canonical audio object.
+   *
+   * @format int64
+   * @minimum 0
+   */
+  byte_start?: null | undefined;
+  /**
+   * Optional end offset in milliseconds for the chunk.
+   *
+   * @format int64
+   * @minimum 0
+   */
+  end_ms?: null | undefined;
+  /**
+   * Optional sanitized error for this chunk.
+   */
+  error?: null | undefined;
+  /**
+   * Stable zero-based chunk index.
+   *
+   * @minimum 0
+   */
+  index?: number;
+  /**
+   * Optional start offset in milliseconds for the chunk.
+   *
+   * @format int64
+   * @minimum 0
+   */
+  start_ms?: null | undefined;
+  /**
+   * Per-chunk transcription status.
+   */
+  status?: string;
+  /**
+   * Per-chunk transcript text.
+   */
+  transcript?: null | undefined;
+};
+
+export type AudioTranscriptionMetadata = {
+  /**
+   * Per-chunk progress and state for future timeline alignment.
+   */
+  chunks?: null | undefined;
+  /**
+   * Optional error message if status indicates failure.
+   */
+  error?: null | undefined;
+  /**
+   * Optional aggregate progress value in `[0, 1]`.
+   *
+   * @format double
+   */
+  progress?: null | undefined;
+  /**
+   * Current transcription state.
+   */
+  status?: string;
+  /**
+   * Optional transcript text once transcription completes.
+   */
+  transcript?: null | undefined;
+  /**
+   * Transcript segments derived from completed chunks for timeline-aware UI surfaces.
+   */
+  transcript_segments?: null | undefined;
+};
+
 export type BudgetCurrency = "EUR" | "USD";
 
 /**
@@ -586,6 +697,10 @@ export type Drive = {
    */
   drive_type: string;
   /**
+   * The Microsoft 365 group visibility for group-backed libraries, if available
+   */
+  group_visibility?: string;
+  /**
    * The unique ID of the drive
    */
   id: string;
@@ -784,100 +899,6 @@ export type FileCapability = {
 export type FileOperation = "extract_text" | "analyze_image";
 
 /**
- * Metadata for audio transcription.
- */
-export type AudioTranscriptionChunk = {
-  /**
-   * Stable zero-based chunk index.
-   */
-  index: number;
-  /**
-   * Optional start offset in milliseconds for the chunk.
-   */
-  start_ms: null | number;
-  /**
-   * Optional end offset in milliseconds for the chunk.
-   */
-  end_ms: null | number;
-  /**
-   * Optional byte range start in the stored canonical audio object.
-   */
-  byte_start: null | number;
-  /**
-   * Optional byte range end in the stored canonical audio object.
-   */
-  byte_end: null | number;
-  /**
-   * Per-chunk transcription status.
-   */
-  status: string;
-  /**
-   * Per-chunk transcript text.
-   */
-  transcript: null | string;
-  /**
-   * Number of attempts made for this chunk.
-   */
-  attempts: number;
-  /**
-   * Optional sanitized error for this chunk.
-   */
-  error: null | string;
-};
-
-/**
- * Transcript segment derived from an individual chunk.
- */
-export type AudioTranscriptSegment = {
-  /**
-   * Zero-based chunk index for this segment.
-   */
-  chunk_index: number;
-  /**
-   * Segment start offset in milliseconds.
-   */
-  start_ms: number;
-  /**
-   * Segment end offset in milliseconds.
-   */
-  end_ms: number;
-  /**
-   * Transcribed text for this segment.
-   */
-  text: string;
-};
-
-/**
- * Metadata for audio transcription.
- */
-export type AudioTranscriptionMetadata = {
-  /**
-   * Current status of the transcription job.
-   */
-  status: string;
-  /**
-   * Completed transcript text, when available.
-   */
-  transcript?: null | string;
-  /**
-   * Error details when transcription fails.
-   */
-  error?: null | string;
-  /**
-   * Optional aggregate progress value in [0, 1].
-   */
-  progress?: null | number;
-  /**
-   * Per-chunk progress and state for future timeline alignment.
-   */
-  chunks?: null | AudioTranscriptionChunk[];
-  /**
-   * Transcript segments derived from completed chunks for timeline-aware UI surfaces.
-   */
-  transcript_segments?: null | AudioTranscriptSegment[];
-};
-
-/**
  * Minimal file reference containing only the file ID
  */
 export type FileReference = {
@@ -891,6 +912,10 @@ export type FileReference = {
  * Response for file upload
  */
 export type FileUploadItem = {
+  /**
+   * Optional audio transcription metadata for supported audio uploads.
+   */
+  audio_transcription?: AudioTranscriptionMetadata;
   /**
    * Pre-signed URL for downloading the file directly from storage
    */
@@ -907,10 +932,6 @@ export type FileUploadItem = {
    * The original filename of the uploaded file
    */
   filename: string;
-  /**
-   * Optional metadata about the audio transcription workflow.
-   */
-  audio_transcription?: null | AudioTranscriptionMetadata;
   /**
    * The unique ID of the uploaded file
    */

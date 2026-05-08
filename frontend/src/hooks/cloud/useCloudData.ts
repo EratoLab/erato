@@ -105,6 +105,7 @@ export function useCloudData({
     return drivesData.drives.map((drive) => {
       const cloudDrive = drive as Drive & {
         kind?: string;
+        group_visibility?: string;
         site_name?: string;
         web_url?: string;
       };

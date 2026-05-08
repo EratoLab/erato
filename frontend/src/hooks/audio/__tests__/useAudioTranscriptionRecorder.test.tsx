@@ -42,7 +42,7 @@ const audioFileUpload = {
     progress: 0,
     chunks: [],
   },
-} satisfies FileUploadItem;
+} as unknown as FileUploadItem;
 
 function readCanonicalWavSamples(): Float32Array {
   const wavBytes = readFileSync(fixturePath);

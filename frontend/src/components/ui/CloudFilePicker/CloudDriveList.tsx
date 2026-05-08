@@ -81,6 +81,10 @@ function getDriveDetailLines(drive: CloudDrive): string[] {
   const lines: string[] = [];
   const siteLabel = t({ id: "cloudDriveList.siteLabel", message: "Site" });
   const ownerLabel = t({ id: "cloudDriveList.ownerLabel", message: "Owner" });
+  const visibilityLabel = t({
+    id: "cloudDriveList.visibilityLabel",
+    message: "Visibility",
+  });
 
   if (drive.site_name) {
     lines.push(`${siteLabel}: ${drive.site_name}`);
@@ -88,6 +92,10 @@ function getDriveDetailLines(drive: CloudDrive): string[] {
 
   if (drive.owner_name) {
     lines.push(`${ownerLabel}: ${drive.owner_name}`);
+  }
+
+  if (drive.group_visibility) {
+    lines.push(`${visibilityLabel}: ${drive.group_visibility}`);
   }
 
   return lines;

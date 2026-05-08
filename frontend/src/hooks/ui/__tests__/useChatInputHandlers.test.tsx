@@ -12,7 +12,7 @@ describe("useChatInputHandlers", () => {
       id: "file-1",
       filename: "sample-report-compressed.pdf",
       download_url: "https://files.example.com/sample-report-compressed.pdf",
-    } as FileUploadItem;
+    } as unknown as FileUploadItem;
 
     const { result } = renderHook(() =>
       useChatInputHandlers(5, onAttachmentsChanged),
@@ -37,13 +37,13 @@ describe("useChatInputHandlers", () => {
       filename: "notes.txt",
       download_url: "https://files.example.com/notes.txt",
       audio_transcription: null,
-    } as FileUploadItem;
+    } as unknown as FileUploadItem;
     const existingAudio = {
       id: "audio-1",
       filename: "memo-1.webm",
       download_url: "https://files.example.com/memo-1.webm",
       audio_transcription: { status: "completed", transcript: "first capture" },
-    } as FileUploadItem;
+    } as unknown as FileUploadItem;
     const nextAudio = {
       id: "audio-2",
       filename: "memo-2.webm",
@@ -52,7 +52,7 @@ describe("useChatInputHandlers", () => {
         status: "completed",
         transcript: "latest capture",
       },
-    } as FileUploadItem;
+    } as unknown as FileUploadItem;
 
     const { result } = renderHook(() =>
       useChatInputHandlers(5, onAttachmentsChanged, [
@@ -79,13 +79,13 @@ describe("useChatInputHandlers", () => {
       filename: "batch-a.webm",
       download_url: "https://files.example.com/batch-a.webm",
       audio_transcription: { status: "completed" },
-    } as FileUploadItem;
+    } as unknown as FileUploadItem;
     const incomingAudioB = {
       id: "audio-b",
       filename: "batch-b.webm",
       download_url: "https://files.example.com/batch-b.webm",
       audio_transcription: { status: "completed" },
-    } as FileUploadItem;
+    } as unknown as FileUploadItem;
 
     const { result } = renderHook(() =>
       useChatInputHandlers(5, onAttachmentsChanged),

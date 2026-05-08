@@ -34,6 +34,10 @@ pub struct Drive {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub owner_name: Option<String>,
+    /// The Microsoft 365 group visibility for group-backed libraries, if available
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub group_visibility: Option<String>,
     /// The SharePoint site name for document libraries, if available
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
@@ -192,6 +196,7 @@ struct GroupMetadata {
     display_name: String,
     is_unified_group: bool,
     has_team: bool,
+    visibility: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -206,6 +211,7 @@ struct DriveDiscoveryResult {
     discovered_drive_ids: HashSet<String>,
     discovered_group_ids: HashSet<String>,
     discovered_site_ids: HashSet<String>,
+    group_metadata_by_id: HashMap<String, GroupMetadata>,
     site_metadata_by_id: HashMap<String, SiteMetadata>,
 }
 
@@ -403,6 +409,7 @@ fn parse_drive(drive: &serde_json::Value, enrichment: &DriveEnrichmentContext) -
         });
 
     let site_name = site_metadata.map(|site_metadata| site_metadata.display_name.clone());
+    let group_visibility = group_metadata.and_then(|metadata| metadata.visibility.clone());
 
     let web_url = drive
         .get("webUrl")
@@ -422,6 +429,7 @@ fn parse_drive(drive: &serde_json::Value, enrichment: &DriveEnrichmentContext) -
         drive_type,
         kind,
         owner_name,
+        group_visibility,
         site_name,
         web_url,
     })
@@ -545,6 +553,23 @@ async fn fetch_graph_json(
         .await
 }
 
+async fn fetch_graph_json_with_consistency_level(
+    http_client: &reqwest_012::Client,
+    access_token: &str,
+    url: &str,
+    consistency_level: &str,
+) -> Result<serde_json::Value, reqwest_012::Error> {
+    http_client
+        .get(url)
+        .bearer_auth(access_token)
+        .header("ConsistencyLevel", consistency_level)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await
+}
+
 async fn fetch_graph_collection(
     http_client: &reqwest_012::Client,
     access_token: &str,
@@ -618,7 +643,9 @@ async fn fetch_group_name(
     access_token: &str,
     group_id: &str,
 ) -> Option<GroupMetadata> {
-    let path = format!("/groups/{group_id}");
+    let path = format!(
+        "/groups/{group_id}?$select=id,displayName,groupTypes,resourceProvisioningOptions,visibility"
+    );
     match fetch_graph_drive(http_client, access_token, &path).await {
         Ok(group) => {
             let group_types = group
@@ -644,6 +671,10 @@ async fn fetch_group_name(
                 has_team: resource_provisioning_options
                     .iter()
                     .any(|value| value.as_str() == Some("Team")),
+                visibility: group
+                    .get("visibility")
+                    .and_then(|value| value.as_str())
+                    .map(String::from),
             })
         }
         Err(e) => {
@@ -753,6 +784,106 @@ async fn fetch_joined_teams(
         discovery_source = "joined_teams",
         group_count = discovered_groups,
         "Finished processing joined_teams source"
+    );
+
+    result
+}
+
+#[tracing::instrument(
+    name = "sharepoint.all_drives.fetch_group_search",
+    skip(http_client, access_token),
+    fields(
+        discovery_source = "group_search",
+        group_count = tracing::field::Empty
+    )
+)]
+async fn fetch_group_search(
+    http_client: &reqwest_012::Client,
+    access_token: &str,
+    query: &str,
+) -> DriveDiscoveryResult {
+    let mut result = DriveDiscoveryResult::default();
+    let sanitized_query = query.trim();
+    if sanitized_query.is_empty() {
+        tracing::Span::current().record("group_count", 0usize);
+        return result;
+    }
+
+    let escaped_query = sanitized_query.replace('\\', "\\\\").replace('"', "\\\"");
+    let search = format!("\"displayName:{escaped_query}\"");
+    let query_string = url::form_urlencoded::Serializer::new(String::new())
+        .append_pair("$search", &search)
+        .append_pair(
+            "$select",
+            "id,displayName,groupTypes,resourceProvisioningOptions,visibility",
+        )
+        .append_pair("$top", "20")
+        .finish();
+    let search_url = format!("{GRAPH_API_BASE_URL}/groups?{query_string}");
+
+    match fetch_graph_json_with_consistency_level(
+        http_client,
+        access_token,
+        &search_url,
+        "eventual",
+    )
+    .await
+    {
+        Ok(body) => {
+            if let Some(groups) = body.get("value").and_then(|value| value.as_array()) {
+                for group in groups {
+                    if let Some(group_id) = group.get("id").and_then(|value| value.as_str()) {
+                        result.discovered_group_ids.insert(group_id.to_string());
+
+                        let group_types = group
+                            .get("groupTypes")
+                            .and_then(|value| value.as_array())
+                            .cloned()
+                            .unwrap_or_default();
+                        let resource_provisioning_options = group
+                            .get("resourceProvisioningOptions")
+                            .and_then(|value| value.as_array())
+                            .cloned()
+                            .unwrap_or_default();
+
+                        result.group_metadata_by_id.insert(
+                            group_id.to_string(),
+                            GroupMetadata {
+                                display_name: group
+                                    .get("displayName")
+                                    .and_then(|value| value.as_str())
+                                    .map(String::from)
+                                    .unwrap_or_else(|| group_id.to_string()),
+                                is_unified_group: group_types
+                                    .iter()
+                                    .any(|value| value.as_str() == Some("Unified")),
+                                has_team: resource_provisioning_options
+                                    .iter()
+                                    .any(|value| value.as_str() == Some("Team")),
+                                visibility: group
+                                    .get("visibility")
+                                    .and_then(|value| value.as_str())
+                                    .map(String::from),
+                            },
+                        );
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            tracing::warn!(
+                discovery_source = "group_search",
+                error = ?e,
+                "Failed to search /groups by displayName"
+            );
+        }
+    }
+
+    tracing::Span::current().record("group_count", result.discovered_group_ids.len());
+    tracing::trace!(
+        discovery_source = "group_search",
+        group_count = result.discovered_group_ids.len(),
+        "Finished processing group_search source"
     );
 
     result
@@ -1057,6 +1188,14 @@ async fn fetch_shared_drive_details(
 /// - `GET /me/drive/sharedWithMe()`: https://learn.microsoft.com/graph/api/drive-sharedwithme
 /// - `GET /me/joinedTeams`: https://learn.microsoft.com/graph/api/user-list-joinedteams
 /// - `GET /sites?search=*`: https://learn.microsoft.com/graph/api/site-search
+/// - Group-backed library metadata uses the Microsoft Graph group `visibility`
+///   and `resourceProvisioningOptions` properties:
+///   https://learn.microsoft.com/graph/api/resources/group
+///   https://learn.microsoft.com/graph/group-set-options
+/// - Search requests discover matching group-backed libraries with
+///   `GET /groups?$search="displayName:..."&$top=20` plus
+///   `ConsistencyLevel: eventual` before fetching `GET /groups/{id}/drives`:
+///   https://learn.microsoft.com/graph/search-query-parameter
 #[utoipa::path(
     get,
     path = "/integrations/sharepoint/all-drives",
@@ -1114,6 +1253,7 @@ pub async fn all_drives(
         me_drives_result,
         joined_teams_result,
         site_search_result,
+        group_search_result,
         shared_with_me_result,
     ) = tokio::join!(
         async {
@@ -1145,6 +1285,14 @@ pub async fn all_drives(
             }
         },
         async {
+            if has_search_query && enabled_sources.contains(&SharepointAllDrivesSource::GroupDrives)
+            {
+                fetch_group_search(&http_client, access_token, &normalized_query).await
+            } else {
+                DriveDiscoveryResult::default()
+            }
+        },
+        async {
             if enabled_sources.contains(&SharepointAllDrivesSource::SharedWithMe) {
                 fetch_shared_with_me(&http_client, access_token).await
             } else {
@@ -1163,12 +1311,19 @@ pub async fn all_drives(
         &me_drives_result,
         &joined_teams_result,
         &site_search_result,
+        &group_search_result,
         &shared_with_me_result,
     ] {
         discovered_group_ids_for_group_drives.extend(result.discovered_group_ids.iter().cloned());
         discovered_site_ids_for_site_drives.extend(result.discovered_site_ids.iter().cloned());
         discovered_drive_ids_for_shared_details.extend(result.discovered_drive_ids.iter().cloned());
         cached_site_metadata_by_id.extend(result.site_metadata_by_id.clone());
+        for (group_id, group_metadata) in result.group_metadata_by_id.clone() {
+            enrichment
+                .group_metadata_by_id
+                .entry(group_id)
+                .or_insert(group_metadata);
+        }
     }
 
     let mut discovery_results = HashMap::new();
@@ -1556,6 +1711,7 @@ mod tests {
                 display_name: "Team".into(),
                 is_unified_group: true,
                 has_team: true,
+                visibility: Some("Private".into()),
             },
         );
         enrichment.site_metadata_by_id.insert(
@@ -1572,6 +1728,7 @@ mod tests {
         let parsed = parse_drive(&drive, &enrichment).expect("drive should parse");
 
         assert_eq!(parsed.owner_name.as_deref(), Some("Team"));
+        assert_eq!(parsed.group_visibility.as_deref(), Some("Private"));
         assert_eq!(parsed.site_name.as_deref(), Some("Team Site"));
         assert_eq!(parsed.kind, "teams_group_library");
         assert_eq!(

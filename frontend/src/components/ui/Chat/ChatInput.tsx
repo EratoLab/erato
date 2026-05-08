@@ -931,7 +931,7 @@ export const ChatInput = ({
           {
             fileId: file.id,
             filename: file.filename,
-            status: audioTranscription.status,
+            status: audioTranscription.status ?? "unknown",
             transcript: getDisplayTranscript(
               audioTranscription.transcript,
               audioTranscription.chunks,

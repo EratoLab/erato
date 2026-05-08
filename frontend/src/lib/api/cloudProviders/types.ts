@@ -22,6 +22,7 @@ export type CloudProvider = "sharepoint" | "googledrive";
  */
 export type CloudDrive = Drive & {
   kind: string;
+  group_visibility?: string;
   provider: CloudProvider;
   site_name?: string;
   web_url?: string;
