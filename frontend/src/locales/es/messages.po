@@ -594,6 +594,21 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+msgid "cloudDriveList.visibility.hiddenMembership"
+msgstr "Pertenencia oculta"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+msgid "cloudDriveList.visibility.private"
+msgstr "Privado"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+msgid "cloudDriveList.visibility.public"
+msgstr "Público"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
 msgid "cloudDriveList.visibilityLabel"
 msgstr "Visibilidad"
 
