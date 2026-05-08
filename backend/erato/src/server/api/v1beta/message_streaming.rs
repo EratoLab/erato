@@ -3162,7 +3162,7 @@ pub async fn generate_chat_summary(
     policy: &PolicyEngine,
     me_user: &MeProfile,
     chat: &chats::Model,
-    first_message: &messages::Model,
+    generation_input_messages: &GenerationInputMessages,
 ) -> Result<(), Report> {
     tracing::info!(
         "[SUMMARY] Starting generation for chat_id={}, user_id={}, has_assistant={}",
@@ -3171,25 +3171,26 @@ pub async fn generate_chat_summary(
         chat.assistant_configuration.is_some()
     );
 
-    let first_message_content = MessageSchema::validate(&first_message.raw_message)?;
-    let first_message_content_text = first_message_content.full_text();
+    let Some(first_user_message_text) =
+        summary_user_message_text_from_generation_input(generation_input_messages)
+    else {
+        tracing::info!(
+            "[SUMMARY] Skipping summary generation for chat_id={} because the composed input has no user text message",
+            chat.id
+        );
+        return Ok(());
+    };
 
     tracing::debug!(
         "[SUMMARY] First message content (chat_id={}): '{}'",
         chat.id,
-        first_message_content_text
+        first_user_message_text
             .chars()
             .take(100)
             .collect::<String>()
     );
 
-    let prompt = format!(
-        "Generate a summary for the topic of the following chat, based on the first message to the chat. The summary should be a short single sentence description like e.g. `Regex Search-and-Replace with Ripgrep` or `Explain a customer support flow`. Only return that sentence and nothing else. The chat message : {}",
-        first_message_content_text
-    );
-
-    let mut chat_request: ChatRequest = Default::default();
-    chat_request = chat_request.append_message(GenAiChatMessage::user(prompt));
+    let chat_request = build_chat_summary_request(first_user_message_text);
     let max_tokens = app_state.max_tokens_for_summary();
 
     // HACK: Hacky way to recognize reasoning models right now. Shouldbe replaced with capabilities mechanism in the future.
@@ -3405,6 +3406,41 @@ pub async fn generate_chat_summary(
     );
 
     Ok(())
+}
+
+fn summary_user_message_text_from_generation_input(
+    generation_input_messages: &GenerationInputMessages,
+) -> Option<&str> {
+    generation_input_messages
+        .messages
+        .iter()
+        .rev()
+        .find_map(|message| {
+            if !matches!(message.role, MessageRole::User) {
+                return None;
+            }
+
+            match &message.content {
+                ContentPart::Text(ContentPartText { text }) => {
+                    let text = text.trim();
+                    (!text.is_empty()).then_some(text)
+                }
+                ContentPart::Reasoning(_)
+                | ContentPart::ToolUse(_)
+                | ContentPart::TextFilePointer(_)
+                | ContentPart::ImageFilePointer(_)
+                | ContentPart::Image(_)
+                | ContentPart::ActionFacetMarker(_) => None,
+            }
+        })
+}
+
+fn build_chat_summary_request(first_user_message_text: &str) -> ChatRequest {
+    let instruction = "Generate a summary for the topic of the following chat, based on the first message to the chat. The summary should be a short single sentence description like e.g. `Regex Search-and-Replace with Ripgrep` or `Explain a customer support flow`. Only return that sentence and nothing else.";
+
+    ChatRequest::default()
+        .append_message(GenAiChatMessage::user(instruction))
+        .append_message(GenAiChatMessage::user(first_user_message_text))
 }
 
 #[derive(Debug, Clone)]
@@ -4584,6 +4620,91 @@ mod reasoning_replay_tests {
     }
 }
 
+#[cfg(test)]
+mod summary_generation_tests {
+    use super::*;
+
+    #[test]
+    fn summary_input_uses_last_composed_user_text_message() {
+        let generation_input_messages = GenerationInputMessages {
+            messages: vec![
+                crate::models::message::InputMessage {
+                    role: MessageRole::System,
+                    content: ContentPart::Text(ContentPartText {
+                        text: "assistant-provided context".to_string(),
+                    }),
+                },
+                crate::models::message::InputMessage {
+                    role: MessageRole::User,
+                    content: ContentPart::TextFilePointer(
+                        crate::models::message::ContentPartTextFilePointer {
+                            file_upload_id: Uuid::new_v4(),
+                        },
+                    ),
+                },
+                crate::models::message::InputMessage {
+                    role: MessageRole::User,
+                    content: ContentPart::Text(ContentPartText {
+                        text: "Explain our customer support handoff".to_string(),
+                    }),
+                },
+            ],
+        };
+
+        assert_eq!(
+            summary_user_message_text_from_generation_input(&generation_input_messages),
+            Some("Explain our customer support handoff")
+        );
+    }
+
+    #[test]
+    fn summary_input_ignores_blank_and_non_text_user_parts() {
+        let generation_input_messages = GenerationInputMessages {
+            messages: vec![
+                crate::models::message::InputMessage {
+                    role: MessageRole::User,
+                    content: ContentPart::Text(ContentPartText {
+                        text: " \n\t ".to_string(),
+                    }),
+                },
+                crate::models::message::InputMessage {
+                    role: MessageRole::User,
+                    content: ContentPart::ActionFacetMarker(
+                        crate::models::message::ContentPartActionFacetMarker {
+                            facet_id: "reply_compose".to_string(),
+                            args: HashMap::new(),
+                        },
+                    ),
+                },
+            ],
+        };
+
+        assert_eq!(
+            summary_user_message_text_from_generation_input(&generation_input_messages),
+            None
+        );
+    }
+
+    #[test]
+    fn summary_request_separates_instruction_from_user_message() {
+        let chat_request = build_chat_summary_request("Explain our customer support handoff");
+
+        assert_eq!(chat_request.messages.len(), 2);
+        assert_eq!(chat_request.messages[0].role, ChatRole::User);
+        assert_eq!(chat_request.messages[1].role, ChatRole::User);
+        assert!(
+            chat_request.messages[0]
+                .content
+                .first_text()
+                .is_some_and(|text| text.contains("Generate a summary"))
+        );
+        assert_eq!(
+            chat_request.messages[1].content.first_text(),
+            Some("Explain our customer support handoff")
+        );
+    }
+}
+
 /// Run the message submission task in the background
 #[allow(clippy::too_many_arguments)]
 async fn run_message_submit_task(
@@ -4670,33 +4791,6 @@ async fn run_message_submit_task(
 
     tracing::info!("User message saved, id: {}", saved_user_message.id);
 
-    // Spawn chat summary generation if needed
-    if chat_was_created || request.previous_message_id.is_none() {
-        let app_state_clone = app_state.clone();
-        let policy_clone = policy.clone();
-        let me_user_clone = me_user.clone();
-        let chat_clone = chat.clone();
-        let saved_user_message_clone = saved_user_message.clone();
-        let chat_summary_span = tracing::info_span!("Generating chat summary");
-        tokio::spawn(
-            async move {
-                let summary_res = generate_chat_summary(
-                    &app_state_clone,
-                    &policy_clone,
-                    &me_user_clone,
-                    &chat_clone,
-                    &saved_user_message_clone,
-                )
-                .await;
-                if let Err(ref summary) = summary_res {
-                    capture_report(summary);
-                }
-                Ok::<(), Report>(())
-            }
-            .instrument(chat_summary_span),
-        );
-    }
-
     // Prepare chat request
     let me_profile_input = MeProfileChatRequestInput::from_me_profile(me_user);
     let user_input = PromptCompositionUserInput {
@@ -4729,6 +4823,35 @@ async fn run_message_submit_task(
     )
     .await
     .map_err(|e| format!("Failed to prepare chat request: {}", e))?;
+
+    // Spawn chat summary generation if needed. Use the composed prompt input
+    // so summary generation sees the same first-turn structure as chat
+    // completion, then extracts only the actual user text from it.
+    if chat_was_created || request.previous_message_id.is_none() {
+        let app_state_clone = app_state.clone();
+        let policy_clone = policy.clone();
+        let me_user_clone = me_user.clone();
+        let chat_clone = chat.clone();
+        let summary_generation_input_messages = generation_input_messages.clone();
+        let chat_summary_span = tracing::info_span!("Generating chat summary");
+        tokio::spawn(
+            async move {
+                let summary_res = generate_chat_summary(
+                    &app_state_clone,
+                    &policy_clone,
+                    &me_user_clone,
+                    &chat_clone,
+                    &summary_generation_input_messages,
+                )
+                .await;
+                if let Err(ref summary) = summary_res {
+                    capture_report(summary);
+                }
+                Ok::<(), Report>(())
+            }
+            .instrument(chat_summary_span),
+        );
+    }
 
     let langfuse_trace_enrichment = match build_langfuse_trace_enrichment(
         app_state,
