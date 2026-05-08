@@ -321,6 +321,7 @@ mod test_cases {
             system_prompt_langfuse: None,
             model_capabilities: crate::config::ModelCapabilities::default(),
             model_settings: crate::config::ModelSettings::default(),
+            hallucination_suppression: crate::config::HallucinationSuppressionConfig::default(),
         }
     }
 

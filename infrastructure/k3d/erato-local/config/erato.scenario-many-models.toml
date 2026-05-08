@@ -10,6 +10,10 @@ base_url = "http://erato-local-mock-llm-server:44320/base-openai/v1/placeholder"
 [chat_providers.providers.mock-llm-openai.model_capabilities]
 supports_audio_input = true
 
+[chat_providers.providers.mock-llm-openai.hallucination_suppression]
+enabled = true
+whitespace_delta_threshold = 3
+
 [audio_transcription]
 enabled = true
 chat_provider_id = "mock-llm-openai"

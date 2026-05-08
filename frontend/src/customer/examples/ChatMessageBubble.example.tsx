@@ -360,6 +360,10 @@ const getErrorDescription = (errorType: string) => {
     return "Rate limit or quota exceeded. This can also happen if your input is too large.";
   }
 
+  if (errorType === "hallucination_loop") {
+    return "Generation aborted. Hallucination loop detected. Please regenerate the message.";
+  }
+
   return "The assistant was unable to respond.";
 };
 

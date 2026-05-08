@@ -393,6 +393,11 @@ msgstr "The assistant was unable to respond."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.message.error.variant.hallucination_loop"
+msgstr "Generation aborted. Hallucination loop detected. Please regenerate the message."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
 msgid "chat.message.error.variant.rate_limit"
 msgstr "Rate limit or quota exceeded. This can also happen if your input is too large."
 

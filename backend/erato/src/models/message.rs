@@ -102,6 +102,12 @@ pub enum GenerationErrorType {
         #[serde(skip_serializing_if = "Option::is_none")]
         status_code: Option<u16>,
     },
+    /// Generation was aborted because a hallucination loop was detected.
+    #[serde(rename = "hallucination_loop")]
+    HallucinationLoop {
+        /// Description of why generation was aborted.
+        error_description: String,
+    },
     /// Internal server error.
     #[serde(rename = "internal_error")]
     InternalError {

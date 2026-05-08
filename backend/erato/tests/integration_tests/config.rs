@@ -93,6 +93,57 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
 }
 
 #[test]
+fn test_chat_provider_hallucination_suppression_config() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+[chat_providers]
+priority_order = ["mock"]
+
+[chat_providers.providers.mock]
+provider_kind = "openai"
+model_name = "mock-model"
+
+[chat_providers.providers.mock.hallucination_supression]
+enabled = true
+whitespace_delta_threshold = 3
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let temp_path = temp_file.path().to_str().unwrap();
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let config: AppConfig = config_schema
+        .try_deserialize::<AppConfig>()
+        .expect("Failed to deserialize config")
+        .migrate();
+
+    let provider = config.get_chat_provider("mock");
+    assert!(provider.hallucination_suppression.enabled);
+    assert_eq!(
+        provider
+            .hallucination_suppression
+            .whitespace_delta_threshold,
+        3
+    );
+}
+
+#[test]
 fn test_deprecated_frontend_bundle_path_migrates_to_web_frontend_bundle_path() {
     let mut temp_file = Builder::new()
         .suffix(".toml")
