@@ -34,8 +34,7 @@ export function useSyntheticBars({
         Array.from({ length: barCount }, (_, barIndex) => {
           const phase = barIndex * 0.6;
           return (
-            2 +
-            Math.round(Math.abs(Math.sin(tick * speed + phase)) * amplitude)
+            2 + Math.round(Math.abs(Math.sin(tick * speed + phase)) * amplitude)
           );
         }),
       );

@@ -4,7 +4,6 @@ import {
   audioLevelsToBarHeights,
 } from "../components/ui/Chat/Waveform";
 
-
 import type { Meta, StoryObj } from "@storybook/react";
 
 const meta: Meta<typeof Waveform> = {

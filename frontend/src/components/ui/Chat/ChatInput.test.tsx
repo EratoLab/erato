@@ -1307,9 +1307,7 @@ describe("ChatInput", () => {
       const textarea = screen.getByPlaceholderText("Type a message...");
       fireEvent.change(textarea, { target: { value: "hi" } });
 
-      expect(
-        screen.getByTestId("chat-input-send-message"),
-      ).toBeInTheDocument();
+      expect(screen.getByTestId("chat-input-send-message")).toBeInTheDocument();
       expect(
         screen.queryByTestId("chat-input-audio-mode-start"),
       ).not.toBeInTheDocument();
@@ -1344,9 +1342,7 @@ describe("ChatInput", () => {
       expect(
         screen.queryByTestId("chat-input-audio-mode-start"),
       ).not.toBeInTheDocument();
-      expect(
-        screen.getByTestId("chat-input-send-message"),
-      ).toBeInTheDocument();
+      expect(screen.getByTestId("chat-input-send-message")).toBeInTheDocument();
     });
 
     it("does not show the audio-mode button in edit mode", async () => {
@@ -1540,9 +1536,7 @@ describe("ChatInput", () => {
       expect(
         screen.queryByTestId("chat-input-audio-mode-start"),
       ).not.toBeInTheDocument();
-      expect(
-        screen.getByTestId("chat-input-send-message"),
-      ).toBeInTheDocument();
+      expect(screen.getByTestId("chat-input-send-message")).toBeInTheDocument();
     });
 
     it("disables the audio-mode button while dictation is active", async () => {

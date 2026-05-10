@@ -3,7 +3,6 @@ import { action } from "@storybook/addon-actions";
 import { useSyntheticBars } from "./helpers/useSyntheticBars";
 import { ChatInputAudioModeButton } from "../components/ui/Chat/ChatInputAudioModeButton";
 
-
 import type { Meta, StoryObj } from "@storybook/react";
 
 // Loose typing because the component's props are a discriminated union and
@@ -35,10 +34,7 @@ type Story = StoryObj;
 
 export const Idle: Story = {
   render: () => (
-    <ChatInputAudioModeButton
-      isRecording={false}
-      onToggle={action("toggle")}
-    />
+    <ChatInputAudioModeButton isRecording={false} onToggle={action("toggle")} />
   ),
 };
 

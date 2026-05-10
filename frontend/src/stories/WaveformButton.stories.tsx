@@ -3,7 +3,6 @@ import { action } from "@storybook/addon-actions";
 import { useSyntheticBars } from "./helpers/useSyntheticBars";
 import { WaveformButton } from "../components/ui/Chat/WaveformButton";
 
-
 import type { Meta, StoryObj } from "@storybook/react";
 
 const meta: Meta<typeof WaveformButton> = {
