@@ -32,6 +32,7 @@ const mockUseCreateChat = vi.fn();
 const mockFetchGetFile = vi.fn();
 const mockModelSelector = vi.fn();
 const mockUseAudioDictationRecorder = vi.fn();
+const mockUseAudioTranscriptionRecorder = vi.fn();
 
 vi.mock("@/providers/ChatProvider", () => ({
   useChatContext: () => mockUseChatContext(),
@@ -61,6 +62,11 @@ vi.mock("@/hooks/ui", () => ({
 vi.mock("@/hooks/audio/useAudioDictationRecorder", () => ({
   useAudioDictationRecorder: (...args: unknown[]) =>
     mockUseAudioDictationRecorder(...args),
+}));
+
+vi.mock("@/hooks/audio/useAudioTranscriptionRecorder", () => ({
+  useAudioTranscriptionRecorder: (...args: unknown[]) =>
+    mockUseAudioTranscriptionRecorder(...args),
 }));
 
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
@@ -232,6 +238,19 @@ describe("ChatInput", () => {
       setDictationError: vi.fn(),
       dictationBars: [2, 2, 2, 2, 2],
       toggleDictation: vi.fn(),
+    });
+    mockUseAudioTranscriptionRecorder.mockReturnValue({
+      isRecording: false,
+      isRecordingUpload: false,
+      recordingError: null,
+      setRecordingError: vi.fn(),
+      recordingBars: [2, 2, 2, 2, 2],
+      retryingAudioFileId: null,
+      retryAudioTranscription: vi.fn(),
+      removeRecordedAudioFile: vi.fn(),
+      clearRecordedAudioFiles: vi.fn(),
+      hasRecordedAudioFile: () => false,
+      toggleAudioRecording: vi.fn(),
     });
   });
 
@@ -1227,5 +1246,382 @@ describe("ChatInput", () => {
     fireEvent.click(screen.getByTestId("remove-file-audio-file-4"));
     expect(removeFile).toHaveBeenCalledWith("audio-file-4");
     confirmSpy.mockRestore();
+  });
+
+  describe("audio mode button (transcription)", () => {
+    it("shows the audio-mode button instead of send when input is empty", async () => {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      mockUseAudioTranscriptionFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
+
+      const { i18n } = await import("@lingui/core");
+      render(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={vi.fn()} />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+
+      expect(
+        screen.getByTestId("chat-input-audio-mode-start"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("chat-input-send-message"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("flips to the send button when the user types and back when cleared", async () => {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      mockUseAudioTranscriptionFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
+
+      const { i18n } = await import("@lingui/core");
+      render(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={vi.fn()} />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      fireEvent.change(textarea, { target: { value: "hi" } });
+
+      expect(
+        screen.getByTestId("chat-input-send-message"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("chat-input-audio-mode-start"),
+      ).not.toBeInTheDocument();
+
+      fireEvent.change(textarea, { target: { value: "" } });
+
+      expect(
+        screen.getByTestId("chat-input-audio-mode-start"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("chat-input-send-message"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("does not show the audio-mode button when transcription is disabled", async () => {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+
+      const { i18n } = await import("@lingui/core");
+      render(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={vi.fn()} />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+
+      expect(
+        screen.queryByTestId("chat-input-audio-mode-start"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByTestId("chat-input-send-message"),
+      ).toBeInTheDocument();
+    });
+
+    it("does not show the audio-mode button in edit mode", async () => {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      mockUseAudioTranscriptionFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
+
+      const { i18n } = await import("@lingui/core");
+      render(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput
+              onSendMessage={vi.fn()}
+              mode="edit"
+              editMessageId="m-1"
+              onCancelEdit={vi.fn()}
+            />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+
+      expect(
+        screen.queryByTestId("chat-input-audio-mode-start"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("chat-input-save-edit")).toBeInTheDocument();
+    });
+
+    it("invokes toggleAudioRecording when the audio-mode button is clicked", async () => {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      const toggleAudioRecording = vi.fn();
+      mockUseAudioTranscriptionFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
+      mockUseAudioTranscriptionRecorder.mockReturnValue({
+        isRecording: false,
+        isRecordingUpload: false,
+        recordingError: null,
+        setRecordingError: vi.fn(),
+        recordingBars: [2, 2, 2, 2, 2],
+        retryingAudioFileId: null,
+        retryAudioTranscription: vi.fn(),
+        removeRecordedAudioFile: vi.fn(),
+        clearRecordedAudioFiles: vi.fn(),
+        hasRecordedAudioFile: () => false,
+        toggleAudioRecording,
+      });
+
+      const { i18n } = await import("@lingui/core");
+      render(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={vi.fn()} />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+
+      fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
+      expect(toggleAudioRecording).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps the audio-mode button (in stop state) while recording", async () => {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      mockUseAudioTranscriptionFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
+      mockUseAudioTranscriptionRecorder.mockReturnValue({
+        isRecording: true,
+        isRecordingUpload: false,
+        recordingError: null,
+        setRecordingError: vi.fn(),
+        recordingBars: [3, 6, 9, 6, 3],
+        retryingAudioFileId: null,
+        retryAudioTranscription: vi.fn(),
+        removeRecordedAudioFile: vi.fn(),
+        clearRecordedAudioFiles: vi.fn(),
+        hasRecordedAudioFile: () => false,
+        toggleAudioRecording: vi.fn(),
+      });
+
+      const { i18n } = await import("@lingui/core");
+      render(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={vi.fn()} />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+
+      const stopButton = screen.getByTestId("chat-input-audio-mode-stop");
+      expect(stopButton).toBeInTheDocument();
+      expect(stopButton).toHaveAccessibleName("Stop audio recording");
+      expect(
+        screen.getByTestId("chat-input-audio-mode-recording-waveform"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("chat-input-audio-mode-stop-icon"),
+      ).toBeInTheDocument();
+    });
+
+    it("shows the cancel-generation button (not audio-mode) while a response is pending", async () => {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      mockUseAudioTranscriptionFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
+      mockUseChatContext.mockReturnValue({
+        isPendingResponse: true,
+        isMessagingLoading: false,
+        isUploading: false,
+        cancelMessage: vi.fn(),
+      });
+
+      const { i18n } = await import("@lingui/core");
+      render(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={vi.fn()} />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+
+      expect(
+        screen.getByTestId("chat-input-stop-generation"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("chat-input-audio-mode-start"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("hides the audio-mode button when only an attachment is present", async () => {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      mockUseAudioTranscriptionFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
+      mockUseChatInputHandlers.mockReturnValue({
+        attachedFiles: [
+          {
+            id: "f-1",
+            filename: "notes.pdf",
+            download_url: "/files/f-1",
+          },
+        ] as unknown as FileUploadItem[],
+        fileError: null,
+        setFileError: vi.fn(),
+        handleFilesUploaded: vi.fn(),
+        handleRemoveFile: vi.fn(),
+        handleRemoveAllFiles: vi.fn(),
+        setAttachedFiles: vi.fn(),
+        createSubmitHandler: () => (event: FormEvent) => event.preventDefault(),
+      });
+
+      const { i18n } = await import("@lingui/core");
+      render(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={vi.fn()} />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+
+      expect(
+        screen.queryByTestId("chat-input-audio-mode-start"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByTestId("chat-input-send-message"),
+      ).toBeInTheDocument();
+    });
+
+    it("disables the audio-mode button while dictation is active", async () => {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      mockUseAudioTranscriptionFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
+      mockUseAudioDictationFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
+      mockUseAudioDictationRecorder.mockReturnValue({
+        isDictating: true,
+        isDictationStarting: false,
+        isDictationCompleting: false,
+        dictationError: null,
+        setDictationError: vi.fn(),
+        dictationBars: [2, 5, 8, 5, 2],
+        toggleDictation: vi.fn(),
+      });
+
+      const { i18n } = await import("@lingui/core");
+      render(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={vi.fn()} />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+
+      expect(screen.getByTestId("chat-input-audio-mode-start")).toBeDisabled();
+    });
+
+    it("disables the audio-mode button while an attachment is still transcribing", async () => {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      mockUseAudioTranscriptionFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
+      mockUseChatInputHandlers.mockReturnValue({
+        attachedFiles: [
+          {
+            id: "audio-in-progress",
+            filename: "voice-memo.wav",
+            download_url: "/files/audio-in-progress",
+            audio_transcription: { status: "transcribing" },
+          },
+        ] as unknown as FileUploadItem[],
+        fileError: null,
+        setFileError: vi.fn(),
+        handleFilesUploaded: vi.fn(),
+        handleRemoveFile: vi.fn(),
+        handleRemoveAllFiles: vi.fn(),
+        setAttachedFiles: vi.fn(),
+        createSubmitHandler: () => (event: FormEvent) => event.preventDefault(),
+      });
+
+      const { i18n } = await import("@lingui/core");
+      render(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={vi.fn()} />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+
+      // An in-progress transcription counts as an attachment, so the slot
+      // shows the send button (also disabled). The audio-mode button is not
+      // available while another transcription is still running.
+      expect(
+        screen.queryByTestId("chat-input-audio-mode-start"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("chat-input-send-message")).toBeDisabled();
+    });
   });
 });

@@ -2,6 +2,7 @@ import { action } from "@storybook/addon-actions";
 
 import { ChatInput } from "../components/ui/Chat/ChatInput";
 import { ChatProvider } from "../providers/ChatProvider";
+import { StaticFeatureConfigProvider } from "../providers/FeatureConfigProvider";
 import { FileCapabilitiesProvider } from "../providers/FileCapabilitiesProvider";
 
 import type {
@@ -196,4 +197,89 @@ export const Tablet: Story = {
       defaultViewport: "tablet",
     },
   },
+};
+
+/**
+ * Audio-mode story — overrides the global FeatureConfig so the empty input
+ * shows the new static-waveform audio-mode button. Type into the textarea
+ * to flip the slot back to the regular send button; clear it to flip back.
+ *
+ * The recording flow itself can't be exercised here because the backend
+ * WebSocket isn't reachable from Storybook — see the standalone
+ * `ChatInput/AudioModeButton` stories for the recording visual.
+ */
+export const AudioModeEnabled: Story = {
+  args: {
+    onSendMessage: action("message sent"),
+    showControls: true,
+    handleFileAttachments: action("handle file attachments"),
+    onRegenerate: action("regenerate"),
+    showFileTypes: true,
+    initialFiles: [] as FileUploadItem[],
+  },
+  decorators: [
+    (Story) => (
+      <StaticFeatureConfigProvider
+        config={{
+          upload: { enabled: true },
+          chatInput: { autofocus: false, showUsageAdvisory: false },
+          audioTranscription: {
+            enabled: true,
+            maxRecordingDurationSeconds: 1200,
+          },
+          audioDictation: {
+            enabled: false,
+            maxRecordingDurationSeconds: 1200,
+          },
+        }}
+      >
+        <Story />
+      </StaticFeatureConfigProvider>
+    ),
+  ],
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Compose mode with audio transcription enabled. Empty input shows the static-waveform 'audio mode' button in the send slot; typing flips it back to the send button.",
+      },
+    },
+  },
+};
+
+/**
+ * Both audio features enabled — the dictation microphone button and the
+ * audio-mode waveform button live side by side. They are mutually
+ * exclusive at runtime: starting dictation disables the audio-mode button
+ * and vice versa.
+ */
+export const AudioModeAndDictationEnabled: Story = {
+  args: {
+    onSendMessage: action("message sent"),
+    showControls: true,
+    handleFileAttachments: action("handle file attachments"),
+    onRegenerate: action("regenerate"),
+    showFileTypes: true,
+    initialFiles: [] as FileUploadItem[],
+  },
+  decorators: [
+    (Story) => (
+      <StaticFeatureConfigProvider
+        config={{
+          upload: { enabled: true },
+          chatInput: { autofocus: false, showUsageAdvisory: false },
+          audioTranscription: {
+            enabled: true,
+            maxRecordingDurationSeconds: 1200,
+          },
+          audioDictation: {
+            enabled: true,
+            maxRecordingDurationSeconds: 1200,
+          },
+        }}
+      >
+        <Story />
+      </StaticFeatureConfigProvider>
+    ),
+  ],
 };

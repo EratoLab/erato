@@ -37,9 +37,11 @@ import { resolveChatSendErrorMessage } from "@/utils/chatSendErrorMessage";
 import { createLogger } from "@/utils/debugLogger";
 
 import { ArrowUpIcon, LoadingIcon, StopIcon, VoiceIcon } from "../icons";
+import { ChatInputAudioModeButton } from "./ChatInputAudioModeButton";
 import { ChatInputTokenUsage } from "./ChatInputTokenUsage";
 import { FacetSelector } from "./FacetSelector";
 import { ModelSelector } from "./ModelSelector";
+import { WaveformButton } from "./WaveformButton";
 import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";
 import { BudgetWarning } from "../Feedback/ChatWarnings/BudgetWarning";
@@ -56,7 +58,6 @@ import type { ClipboardEvent as ReactClipboardEvent, Ref } from "react";
 
 const logger = createLogger("UI", "ChatInput");
 const AUDIO_TRANSCRIPTION_STATUS_POLL_INTERVAL_MS = 1000;
-const DICTATION_WAVEFORM_MAX_BAR_HEIGHT_PX = 14;
 
 type AudioTranscriptionAttachment = {
   fileId: string;
@@ -419,11 +420,13 @@ export const ChatInput = ({
     isRecordingUpload,
     recordingError,
     setRecordingError,
+    recordingBars,
     retryingAudioFileId,
     retryAudioTranscription,
     removeRecordedAudioFile,
     clearRecordedAudioFiles,
     hasRecordedAudioFile,
+    toggleAudioRecording,
   } = useAudioTranscriptionRecorder({
     audioTranscriptionEnabled,
     uploadEnabled,
@@ -1160,6 +1163,28 @@ export const ChatInput = ({
     !hasIncompleteAudioTranscription &&
     !isDictationCompleting;
 
+  // The send button slot becomes a dedicated audio-mode button when the
+  // input is empty in compose mode and audio transcription is enabled.
+  // While recording, the same slot keeps the audio-mode button (now in its
+  // stop-on-hover state) so the toggle stays in one place.
+  const hasComposeContent =
+    message.trim().length > 0 || attachedFiles.length > 0;
+  const showAudioModeButton =
+    audioTranscriptionEnabled &&
+    mode === "compose" &&
+    (isRecording || (!hasComposeContent && !isRecordingUpload));
+  const isAudioModeButtonDisabled =
+    !isRecording &&
+    (disabled ||
+      isLoading ||
+      isUploading ||
+      isFileButtonProcessing ||
+      isAnyTokenLimitExceeded ||
+      hasIncompleteAudioTranscription ||
+      isDictating ||
+      isDictationStarting ||
+      isDictationCompleting);
+
   // Log just before rendering the component and its preview section
   logger.log(
     "Rendering component. Preview should render if attachedFiles > 0. attachedFiles:",
@@ -1489,78 +1514,60 @@ export const ChatInput = ({
                   disabled={!isSelectionReady}
                 />
               )}
-              {audioDictationEnabled && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  className={clsx(
-                    isDictating && "group relative overflow-hidden",
-                  )}
-                  icon={
-                    isDictating ? undefined : isDictationStarting ||
-                      isDictationCompleting ? (
-                      <LoadingIcon
-                        className="size-4 animate-spin text-[var(--theme-fg-primary)]"
-                        data-testid="chat-input-dictation-loading-icon"
-                      />
-                    ) : (
-                      <VoiceIcon className="text-[var(--theme-fg-primary)]" />
-                    )
-                  }
-                  onClick={toggleDictationForCurrentTarget}
-                  disabled={
-                    disabled ||
-                    isLoading ||
-                    isPendingResponse ||
-                    isUploading ||
-                    isFileButtonProcessing ||
-                    isDictationStarting ||
-                    isDictationCompleting ||
-                    isAnyTokenLimitExceeded
-                  }
-                  data-testid="chat-input-record-audio"
-                  aria-label={
-                    isDictating
-                      ? t`Stop dictation`
-                      : isDictationStarting
+              {audioDictationEnabled &&
+                (isDictating ? (
+                  <WaveformButton
+                    onClick={toggleDictationForCurrentTarget}
+                    bars={dictationBars}
+                    disabled={
+                      disabled ||
+                      isLoading ||
+                      isPendingResponse ||
+                      isUploading ||
+                      isFileButtonProcessing ||
+                      isAnyTokenLimitExceeded
+                    }
+                    ariaLabel={t`Stop dictation`}
+                    testId="chat-input-record-audio"
+                    waveformTestId="chat-input-dictation-waveform"
+                    stopIconTestId="chat-input-dictation-stop-icon"
+                  />
+                ) : (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    icon={
+                      isDictationStarting || isDictationCompleting ? (
+                        <LoadingIcon
+                          className="size-4 animate-spin text-[var(--theme-fg-primary)]"
+                          data-testid="chat-input-dictation-loading-icon"
+                        />
+                      ) : (
+                        <VoiceIcon className="text-[var(--theme-fg-primary)]" />
+                      )
+                    }
+                    onClick={toggleDictationForCurrentTarget}
+                    disabled={
+                      disabled ||
+                      isLoading ||
+                      isPendingResponse ||
+                      isUploading ||
+                      isFileButtonProcessing ||
+                      isDictationStarting ||
+                      isDictationCompleting ||
+                      isAnyTokenLimitExceeded
+                    }
+                    data-testid="chat-input-record-audio"
+                    aria-label={
+                      isDictationStarting
                         ? t`Starting dictation`
                         : isDictationCompleting
                           ? t`Finishing dictation`
                           : t`Start dictation`
-                  }
-                >
-                  {isDictating ? (
-                    <>
-                      <span
-                        aria-label={t`Dictating audio`}
-                        className="flex h-4 items-center gap-0.5 transition-opacity duration-150 group-hover:opacity-0 group-focus-visible:opacity-0"
-                        data-testid="chat-input-dictation-waveform"
-                      >
-                        {dictationBars.map((height, barIndex) => (
-                          <span
-                            key={barIndex}
-                            className="w-1 rounded-full bg-current transition-[height] duration-75"
-                            style={{
-                              height: `${Math.min(
-                                Math.max(height, 2) * 2,
-                                DICTATION_WAVEFORM_MAX_BAR_HEIGHT_PX,
-                              )}px`,
-                            }}
-                          />
-                        ))}
-                      </span>
-                      <span
-                        aria-hidden="true"
-                        className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
-                        data-testid="chat-input-dictation-stop-icon"
-                      >
-                        <StopIcon className="size-4" />
-                      </span>
-                    </>
-                  ) : null}
-                </Button>
-              )}
+                    }
+                  />
+                ))}
               {isPendingResponse ? (
                 <Button
                   type="button"
@@ -1570,6 +1577,13 @@ export const ChatInput = ({
                   onClick={cancelMessage}
                   data-testid="chat-input-stop-generation"
                   aria-label={t`Stop`}
+                />
+              ) : showAudioModeButton ? (
+                <ChatInputAudioModeButton
+                  onClick={toggleAudioRecording}
+                  isRecording={isRecording}
+                  recordingBars={recordingBars}
+                  disabled={isAudioModeButtonDisabled}
                 />
               ) : (
                 <Button
