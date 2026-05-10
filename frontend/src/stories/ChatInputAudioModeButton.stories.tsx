@@ -36,7 +36,7 @@ export const Idle: Story = {
   render: () => (
     <ChatInputAudioModeButton
       isRecording={false}
-      onClick={action("toggle")}
+      onToggle={action("toggle")}
     />
   ),
 };
@@ -45,7 +45,7 @@ export const IdleDisabled: Story = {
   render: () => (
     <ChatInputAudioModeButton
       isRecording={false}
-      onClick={action("toggle")}
+      onToggle={action("toggle")}
       disabled
     />
   ),
@@ -57,7 +57,7 @@ export const RecordingStaticBars: Story = {
     <ChatInputAudioModeButton
       isRecording
       recordingBars={[3, 5, 7, 5, 3]}
-      onClick={action("toggle")}
+      onToggle={action("toggle")}
     />
   ),
   parameters: {
@@ -97,7 +97,7 @@ function AnimatedRecordingButton({ disabled }: { disabled?: boolean }) {
     <ChatInputAudioModeButton
       isRecording
       recordingBars={bars}
-      onClick={action("toggle")}
+      onToggle={action("toggle")}
       disabled={disabled}
     />
   );

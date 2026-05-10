@@ -1586,13 +1586,13 @@ export const ChatInput = ({
                   <ChatInputAudioModeButton
                     isRecording
                     recordingBars={recordingBars}
-                    onClick={toggleAudioRecording}
+                    onToggle={toggleAudioRecording}
                     disabled={isAudioModeButtonDisabled}
                   />
                 ) : (
                   <ChatInputAudioModeButton
                     isRecording={false}
-                    onClick={toggleAudioRecording}
+                    onToggle={toggleAudioRecording}
                     disabled={isAudioModeButtonDisabled}
                   />
                 )

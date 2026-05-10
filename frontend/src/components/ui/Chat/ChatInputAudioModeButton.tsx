@@ -10,8 +10,8 @@ import { Button } from "../Controls/Button";
 export const AUDIO_MODE_STATIC_BAR_PATTERN: readonly number[] = [3, 5, 7, 5, 3];
 
 type ChatInputAudioModeButtonCommonProps = {
-  /** Click handler — starts a recording when idle, stops one when active. */
-  onClick: () => void;
+  /** Toggle handler — starts a recording when idle, stops one when active. */
+  onToggle: () => void;
   disabled?: boolean;
 };
 
@@ -42,7 +42,7 @@ export function ChatInputAudioModeButton(props: ChatInputAudioModeButtonProps) {
   if (props.isRecording) {
     return (
       <WaveformButton
-        onClick={props.onClick}
+        onClick={props.onToggle}
         bars={props.recordingBars}
         disabled={props.disabled}
         ariaLabel={t`Stop audio recording`}
@@ -63,7 +63,7 @@ export function ChatInputAudioModeButton(props: ChatInputAudioModeButtonProps) {
       type="button"
       variant="secondary"
       size="sm"
-      onClick={props.onClick}
+      onClick={props.onToggle}
       disabled={props.disabled}
       aria-label={t`Start audio mode`}
       data-testid="chat-input-audio-mode-start"
