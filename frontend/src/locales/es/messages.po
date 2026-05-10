@@ -2341,9 +2341,9 @@ msgstr "Chats recientes"
 msgid "Recording"
 msgstr "Grabando"
 
-#: src/components/ui/Chat/ChatInput.tsx
-#~ msgid "Recording audio"
-#~ msgstr "Grabando audio"
+#: src/components/ui/Chat/ChatInputAudioModeButton.tsx
+msgid "Recording audio"
+msgstr "Grabando audio"
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Recording audio is disabled while uploads are not available."
@@ -2495,6 +2495,10 @@ msgstr "Algo salió mal"
 msgid "Something went wrong while loading the chat interface."
 msgstr "Algo salió mal al cargar la interfaz de chat."
 
+#: src/components/ui/Chat/ChatInputAudioModeButton.tsx
+msgid "Start audio mode"
+msgstr ""
+
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Start dictation"
 msgstr "Iniciar dictado"
@@ -2520,6 +2524,10 @@ msgstr "Iniciando dictado"
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Stop"
 msgstr "Detener"
+
+#: src/components/ui/Chat/ChatInputAudioModeButton.tsx
+msgid "Stop audio recording"
+msgstr ""
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Stop dictation"
