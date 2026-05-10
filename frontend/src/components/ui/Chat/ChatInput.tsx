@@ -1580,12 +1580,20 @@ export const ChatInput = ({
                   aria-label={t`Stop`}
                 />
               ) : showAudioModeButton ? (
-                <ChatInputAudioModeButton
-                  onClick={toggleAudioRecording}
-                  isRecording={isRecording}
-                  recordingBars={recordingBars}
-                  disabled={isAudioModeButtonDisabled}
-                />
+                isRecording ? (
+                  <ChatInputAudioModeButton
+                    isRecording
+                    recordingBars={recordingBars}
+                    onClick={toggleAudioRecording}
+                    disabled={isAudioModeButtonDisabled}
+                  />
+                ) : (
+                  <ChatInputAudioModeButton
+                    isRecording={false}
+                    onClick={toggleAudioRecording}
+                    disabled={isAudioModeButtonDisabled}
+                  />
+                )
               ) : (
                 <Button
                   type="submit"

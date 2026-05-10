@@ -5,7 +5,9 @@ import { ChatInputAudioModeButton } from "../components/ui/Chat/ChatInputAudioMo
 
 import type { Meta, StoryObj } from "@storybook/react";
 
-const meta: Meta<typeof ChatInputAudioModeButton> = {
+// Loose typing because the component's props are a discriminated union and
+// Storybook's `args` inference collapses to `never` for unions.
+const meta: Meta = {
   title: "UI/ChatInput/AudioModeButton",
   component: ChatInputAudioModeButton,
   parameters: {
@@ -18,11 +20,6 @@ const meta: Meta<typeof ChatInputAudioModeButton> = {
     },
   },
   tags: ["autodocs"],
-  argTypes: {
-    onClick: { action: "audio-mode toggled" },
-    isRecording: { control: "boolean" },
-    disabled: { control: "boolean" },
-  },
   decorators: [
     (Story) => (
       <div className="flex items-center justify-center bg-theme-bg-primary p-8">
@@ -33,36 +30,41 @@ const meta: Meta<typeof ChatInputAudioModeButton> = {
 };
 
 export default meta;
-type Story = StoryObj<typeof meta>;
+type Story = StoryObj;
 
 export const Idle: Story = {
-  args: {
-    onClick: action("toggle"),
-    isRecording: false,
-    disabled: false,
-  },
+  render: () => (
+    <ChatInputAudioModeButton
+      isRecording={false}
+      onClick={action("toggle")}
+    />
+  ),
 };
 
 export const IdleDisabled: Story = {
-  args: {
-    onClick: action("toggle"),
-    isRecording: false,
-    disabled: true,
-  },
+  render: () => (
+    <ChatInputAudioModeButton
+      isRecording={false}
+      onClick={action("toggle")}
+      disabled
+    />
+  ),
 };
 
 export const RecordingStaticBars: Story = {
-  name: "Recording (no live bars)",
-  args: {
-    onClick: action("toggle"),
-    isRecording: true,
-    disabled: false,
-  },
+  name: "Recording (frozen bars)",
+  render: () => (
+    <ChatInputAudioModeButton
+      isRecording
+      recordingBars={[3, 5, 7, 5, 3]}
+      onClick={action("toggle")}
+    />
+  ),
   parameters: {
     docs: {
       description: {
         story:
-          "Recording state without `recordingBars` provided — falls back to the static pattern. Hover or focus the button to reveal the StopIcon.",
+          "Recording state with a fixed bar snapshot — useful for visual review. Hover or focus the button to reveal the StopIcon.",
       },
     },
   },
@@ -72,13 +74,7 @@ export const RecordingStaticBars: Story = {
  * Drives `recordingBars` with a synthetic, deterministic waveform so the
  * recording state can be inspected in Storybook without microphone access.
  */
-function AnimatedRecordingButton({
-  onClick,
-  disabled,
-}: {
-  onClick: () => void;
-  disabled?: boolean;
-}) {
+function AnimatedRecordingButton({ disabled }: { disabled?: boolean }) {
   const [bars, setBars] = useState<number[]>([2, 4, 6, 4, 2]);
   const tickRef = useRef(0);
 
@@ -99,9 +95,9 @@ function AnimatedRecordingButton({
 
   return (
     <ChatInputAudioModeButton
-      onClick={onClick}
       isRecording
       recordingBars={bars}
+      onClick={action("toggle")}
       disabled={disabled}
     />
   );
@@ -109,17 +105,7 @@ function AnimatedRecordingButton({
 
 export const RecordingAnimated: Story = {
   name: "Recording (live waveform)",
-  render: (args) => (
-    <AnimatedRecordingButton
-      onClick={() => args.onClick()}
-      disabled={args.disabled}
-    />
-  ),
-  args: {
-    onClick: action("toggle"),
-    isRecording: true,
-    disabled: false,
-  },
+  render: () => <AnimatedRecordingButton />,
   parameters: {
     docs: {
       description: {

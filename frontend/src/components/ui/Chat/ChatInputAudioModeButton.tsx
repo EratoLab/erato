@@ -9,17 +9,28 @@ import { Button } from "../Controls/Button";
 // so these map to {6px, 10px, 14px, 10px, 6px}.
 export const AUDIO_MODE_STATIC_BAR_PATTERN: readonly number[] = [3, 5, 7, 5, 3];
 
-interface ChatInputAudioModeButtonProps {
+type ChatInputAudioModeButtonCommonProps = {
   /** Click handler — starts a recording when idle, stops one when active. */
   onClick: () => void;
-  /** True while a transcription recording is active. */
-  isRecording: boolean;
-  /** Live bar heights from `useAudioTranscriptionRecorder.recordingBars`. */
-  recordingBars?: readonly number[];
+  disabled?: boolean;
+};
+
+type ChatInputAudioModeButtonIdleProps = ChatInputAudioModeButtonCommonProps & {
+  isRecording: false;
   /** Optional override for the resting-state pattern. */
   staticBars?: readonly number[];
-  disabled?: boolean;
-}
+};
+
+type ChatInputAudioModeButtonRecordingProps =
+  ChatInputAudioModeButtonCommonProps & {
+    isRecording: true;
+    /** Live bar heights from `useAudioTranscriptionRecorder.recordingBars`. */
+    recordingBars: readonly number[];
+  };
+
+type ChatInputAudioModeButtonProps =
+  | ChatInputAudioModeButtonIdleProps
+  | ChatInputAudioModeButtonRecordingProps;
 
 /**
  * Replaces the send button when the chat input is empty and audio
@@ -27,19 +38,13 @@ interface ChatInputAudioModeButtonProps {
  * state delegates to `WaveformButton` so it shares the active-audio
  * interaction with the dictation feature.
  */
-export function ChatInputAudioModeButton({
-  onClick,
-  isRecording,
-  recordingBars,
-  staticBars = AUDIO_MODE_STATIC_BAR_PATTERN,
-  disabled,
-}: ChatInputAudioModeButtonProps) {
-  if (isRecording) {
+export function ChatInputAudioModeButton(props: ChatInputAudioModeButtonProps) {
+  if (props.isRecording) {
     return (
       <WaveformButton
-        onClick={onClick}
-        bars={recordingBars ?? staticBars}
-        disabled={disabled}
+        onClick={props.onClick}
+        bars={props.recordingBars}
+        disabled={props.disabled}
         ariaLabel={t`Stop audio recording`}
         statusLabel={t`Recording audio`}
         testId="chat-input-audio-mode-stop"
@@ -49,13 +54,15 @@ export function ChatInputAudioModeButton({
     );
   }
 
+  const staticBars = props.staticBars ?? AUDIO_MODE_STATIC_BAR_PATTERN;
+
   return (
     <Button
       type="button"
       variant="secondary"
       size="sm"
-      onClick={onClick}
-      disabled={disabled}
+      onClick={props.onClick}
+      disabled={props.disabled}
       aria-label={t`Start audio mode`}
       data-testid="chat-input-audio-mode-start"
       icon={
