@@ -68,7 +68,8 @@ export function Waveform({
             className={clsx(
               "rounded-full bg-current",
               barWidthClassName,
-              animated && "transition-[height] duration-75",
+              animated &&
+                "motion-safe:transition-[height] motion-safe:duration-75",
             )}
             style={{ height: `${clampBarHeightPx(rawHeight, maxHeightPx)}px` }}
           />

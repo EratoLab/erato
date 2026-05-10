@@ -42,6 +42,7 @@ export const StaticBars: Story = {
     onClick: action("stop"),
     bars: [3, 5, 7, 5, 3],
     ariaLabel: "Stop audio recording",
+    statusLabel: "Recording audio",
   },
   parameters: {
     docs: {
@@ -58,6 +59,7 @@ export const Disabled: Story = {
     onClick: action("stop"),
     bars: [3, 5, 7, 5, 3],
     ariaLabel: "Stop audio recording",
+    statusLabel: "Recording audio",
     disabled: true,
   },
 };
@@ -65,10 +67,12 @@ export const Disabled: Story = {
 function AnimatedBars({
   onClick,
   ariaLabel,
+  statusLabel,
   disabled,
 }: {
   onClick: () => void;
   ariaLabel: string;
+  statusLabel: string;
   disabled?: boolean;
 }) {
   const [bars, setBars] = useState<number[]>([2, 4, 6, 4, 2]);
@@ -93,6 +97,7 @@ function AnimatedBars({
       onClick={onClick}
       bars={bars}
       ariaLabel={ariaLabel}
+      statusLabel={statusLabel}
       disabled={disabled}
     />
   );
@@ -104,6 +109,7 @@ export const Animated: Story = {
     <AnimatedBars
       onClick={() => args.onClick()}
       ariaLabel={args.ariaLabel}
+      statusLabel={args.statusLabel}
       disabled={args.disabled}
     />
   ),
@@ -111,6 +117,7 @@ export const Animated: Story = {
     onClick: action("stop"),
     bars: [3, 5, 7, 5, 3],
     ariaLabel: "Stop audio recording",
+    statusLabel: "Recording audio",
   },
   parameters: {
     docs: {

@@ -1528,6 +1528,7 @@ export const ChatInput = ({
                       isAnyTokenLimitExceeded
                     }
                     ariaLabel={t`Stop dictation`}
+                    statusLabel={t`Dictating audio`}
                     testId="chat-input-record-audio"
                     waveformTestId="chat-input-dictation-waveform"
                     stopIconTestId="chat-input-dictation-stop-icon"

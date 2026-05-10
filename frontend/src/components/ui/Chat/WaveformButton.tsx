@@ -8,7 +8,14 @@ interface WaveformButtonProps {
   /** Live bar values driven by an audio level analyser. */
   bars: readonly number[];
   disabled?: boolean;
+  /** Action name on the button itself (e.g. "Stop dictation"). */
   ariaLabel: string;
+  /**
+   * State announcement for screen readers (e.g. "Dictating", "Recording").
+   * Rendered as `role="status"` so assistive tech is told the audio session
+   * has begun without the user having to focus the button.
+   */
+  statusLabel: string;
   /** data-testid forwarded to the button itself. */
   testId?: string;
   /** data-testid forwarded to the inner waveform. */
@@ -31,37 +38,42 @@ export function WaveformButton({
   bars,
   disabled,
   ariaLabel,
+  statusLabel,
   testId,
   waveformTestId,
   stopIconTestId,
 }: WaveformButtonProps) {
   return (
-    <Button
-      type="button"
-      variant="secondary"
-      size="sm"
-      onClick={onClick}
-      disabled={disabled}
-      className="group relative overflow-hidden"
-      aria-label={ariaLabel}
-      aria-pressed
-      data-testid={testId}
-      icon={
-        <span className="relative flex size-5 items-center justify-center text-[var(--theme-fg-primary)]">
-          <Waveform
-            bars={bars}
-            animated
-            testId={waveformTestId}
-            className="transition-opacity duration-150 group-hover:opacity-0 group-focus-visible:opacity-0"
-          />
-          <span
-            data-testid={stopIconTestId}
-            className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
-          >
-            <StopIcon className="size-4" />
+    <>
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        onClick={onClick}
+        disabled={disabled}
+        className="group relative overflow-hidden"
+        aria-label={ariaLabel}
+        data-testid={testId}
+        icon={
+          <span className="relative flex size-5 items-center justify-center text-[var(--theme-fg-primary)]">
+            <Waveform
+              bars={bars}
+              animated
+              testId={waveformTestId}
+              className="group-hover:opacity-0 group-focus-visible:opacity-0 motion-safe:transition-opacity motion-safe:duration-150"
+            />
+            <span
+              data-testid={stopIconTestId}
+              className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 motion-safe:transition-opacity motion-safe:duration-150"
+            >
+              <StopIcon className="size-4" />
+            </span>
           </span>
-        </span>
-      }
-    />
+        }
+      />
+      <span role="status" className="sr-only">
+        {statusLabel}
+      </span>
+    </>
   );
 }

@@ -1023,8 +1023,8 @@ describe("ChatInput", () => {
       "group-focus-visible:opacity-0",
     );
     expect(waveform.children[2]).toHaveClass(
-      "transition-[height]",
-      "duration-75",
+      "motion-safe:transition-[height]",
+      "motion-safe:duration-75",
     );
     expect(waveform.children[2]).not.toHaveClass("dictation-wave-bar");
     expect(waveform.children[2]).toHaveStyle({ height: "14px" });
@@ -1033,6 +1033,11 @@ describe("ChatInput", () => {
       "group-focus-visible:opacity-100",
     );
     expect(stopIcon).toHaveTextContent("stop");
+
+    const statusNodes = screen
+      .getAllByRole("status", { hidden: true })
+      .map((node) => node.textContent);
+    expect(statusNodes).toContain("Dictating audio");
   });
 
   it("shows a loading indicator while dictation is finishing", async () => {

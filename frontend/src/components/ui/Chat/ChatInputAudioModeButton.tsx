@@ -41,6 +41,7 @@ export function ChatInputAudioModeButton({
         bars={recordingBars ?? staticBars}
         disabled={disabled}
         ariaLabel={t`Stop audio recording`}
+        statusLabel={t`Recording audio`}
         testId="chat-input-audio-mode-stop"
         waveformTestId="chat-input-audio-mode-recording-waveform"
         stopIconTestId="chat-input-audio-mode-stop-icon"
