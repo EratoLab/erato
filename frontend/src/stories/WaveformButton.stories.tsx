@@ -1,7 +1,8 @@
 import { action } from "@storybook/addon-actions";
-import { useEffect, useState } from "react";
 
+import { useSyntheticBars } from "./helpers/useSyntheticBars";
 import { WaveformButton } from "../components/ui/Chat/WaveformButton";
+
 
 import type { Meta, StoryObj } from "@storybook/react";
 
@@ -75,23 +76,7 @@ function AnimatedBars({
   statusLabel: string;
   disabled?: boolean;
 }) {
-  const [bars, setBars] = useState<number[]>([2, 4, 6, 4, 2]);
-
-  useEffect(() => {
-    let tick = 0;
-    const intervalId = window.setInterval(() => {
-      tick += 1;
-      setBars([
-        2 + Math.round(Math.abs(Math.sin(tick * 0.6)) * 6),
-        2 + Math.round(Math.abs(Math.sin(tick * 0.6 + 0.6)) * 6),
-        2 + Math.round(Math.abs(Math.sin(tick * 0.6 + 1.2)) * 6),
-        2 + Math.round(Math.abs(Math.sin(tick * 0.6 + 1.8)) * 6),
-        2 + Math.round(Math.abs(Math.sin(tick * 0.6 + 2.4)) * 6),
-      ]);
-    }, 90);
-    return () => window.clearInterval(intervalId);
-  }, []);
-
+  const bars = useSyntheticBars();
   return (
     <WaveformButton
       onClick={onClick}

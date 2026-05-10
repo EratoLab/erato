@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
-
+import { useSyntheticBars } from "./helpers/useSyntheticBars";
 import {
   Waveform,
   audioLevelsToBarHeights,
 } from "../components/ui/Chat/Waveform";
+
 
 import type { Meta, StoryObj } from "@storybook/react";
 
@@ -99,23 +99,7 @@ export const RawPixelHeights: Story = {
 };
 
 function AnimatedWaveform() {
-  const [bars, setBars] = useState<number[]>([2, 4, 6, 4, 2]);
-
-  useEffect(() => {
-    let tick = 0;
-    const intervalId = window.setInterval(() => {
-      tick += 1;
-      setBars([
-        2 + Math.round(Math.abs(Math.sin(tick * 0.6)) * 6),
-        2 + Math.round(Math.abs(Math.sin(tick * 0.6 + 0.6)) * 6),
-        2 + Math.round(Math.abs(Math.sin(tick * 0.6 + 1.2)) * 6),
-        2 + Math.round(Math.abs(Math.sin(tick * 0.6 + 1.8)) * 6),
-        2 + Math.round(Math.abs(Math.sin(tick * 0.6 + 2.4)) * 6),
-      ]);
-    }, 90);
-    return () => window.clearInterval(intervalId);
-  }, []);
-
+  const bars = useSyntheticBars();
   return <Waveform heights={audioLevelsToBarHeights(bars)} animated />;
 }
 
