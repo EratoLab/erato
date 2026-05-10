@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 
-import { Waveform } from "../components/ui/Chat/Waveform";
+import {
+  Waveform,
+  audioLevelsToBarHeights,
+} from "../components/ui/Chat/Waveform";
 
 import type { Meta, StoryObj } from "@storybook/react";
 
@@ -12,15 +15,14 @@ const meta: Meta<typeof Waveform> = {
     docs: {
       description: {
         component:
-          "Pure visual primitive: N rounded bars with heights driven by the `bars` array. No audio knowledge — feed it any numeric series. Used by `WaveformButton` for live audio levels and by the audio-mode button for its resting pattern.",
+          "Pure visual primitive: N rounded bars at the heights given. No audio knowledge — feed it any pre-computed pixel array. Audio-aware consumers should run their raw analyser values through `audioLevelsToBarHeights` first.",
       },
     },
   },
   tags: ["autodocs"],
   argTypes: {
-    bars: { control: "object" },
+    heights: { control: "object" },
     barCount: { control: { type: "number", min: 1, max: 12, step: 1 } },
-    maxHeightPx: { control: { type: "number", min: 4, max: 64, step: 1 } },
     containerHeightClassName: { control: "text" },
     barWidthClassName: { control: "text" },
     gapClassName: { control: "text" },
@@ -40,25 +42,25 @@ type Story = StoryObj<typeof meta>;
 
 export const StaticPeak: Story = {
   args: {
-    bars: [3, 5, 7, 5, 3],
+    heights: audioLevelsToBarHeights([3, 5, 7, 5, 3]),
   },
 };
 
 export const Flat: Story = {
   args: {
-    bars: [2, 2, 2, 2, 2],
+    heights: audioLevelsToBarHeights([2, 2, 2, 2, 2]),
   },
 };
 
 export const Asymmetric: Story = {
   args: {
-    bars: [2, 3, 5, 7, 4],
+    heights: audioLevelsToBarHeights([2, 3, 5, 7, 4]),
   },
 };
 
 export const Bolder: Story = {
   args: {
-    bars: [3, 5, 7, 5, 3],
+    heights: audioLevelsToBarHeights([3, 5, 7, 5, 3]),
     barWidthClassName: "w-1",
     gapClassName: "gap-1",
   },
@@ -74,10 +76,25 @@ export const Bolder: Story = {
 
 export const SevenBarsTaller: Story = {
   args: {
-    bars: [2, 4, 6, 8, 6, 4, 2],
+    heights: audioLevelsToBarHeights([2, 4, 6, 8, 6, 4, 2], 24),
     barCount: 7,
-    maxHeightPx: 24,
     containerHeightClassName: "h-7",
+  },
+};
+
+export const RawPixelHeights: Story = {
+  args: {
+    heights: [4, 8, 12, 16, 12, 8, 4],
+    barCount: 7,
+    containerHeightClassName: "h-5",
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Demonstrates the primitive's intent: feed it pixel heights directly. Non-audio consumers can synthesize any visual without going through `audioLevelsToBarHeights`.",
+      },
+    },
   },
 };
 
@@ -99,7 +116,7 @@ function AnimatedWaveform() {
     return () => window.clearInterval(intervalId);
   }, []);
 
-  return <Waveform bars={bars} animated />;
+  return <Waveform heights={audioLevelsToBarHeights(bars)} animated />;
 }
 
 export const Animated: Story = {
@@ -108,7 +125,7 @@ export const Animated: Story = {
     docs: {
       description: {
         story:
-          "Synthetic sine-wave drive of the `bars` prop with `animated` enabled — what live audio levels look like.",
+          "Synthetic sine-wave drive of raw audio levels passed through `audioLevelsToBarHeights` — what live audio levels look like.",
       },
     },
   },

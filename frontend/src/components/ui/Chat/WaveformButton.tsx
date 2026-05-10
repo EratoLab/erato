@@ -1,6 +1,6 @@
 import { Button } from "../Controls/Button";
 import { StopIcon } from "../icons";
-import { Waveform } from "./Waveform";
+import { Waveform, audioLevelsToBarHeights } from "./Waveform";
 
 interface WaveformButtonProps {
   /** Click handler — typically stops the active audio session. */
@@ -61,7 +61,7 @@ export function WaveformButton({
         icon={
           <span className="relative flex size-5 items-center justify-center text-[var(--theme-fg-primary)]">
             <Waveform
-              bars={bars}
+              heights={audioLevelsToBarHeights(bars)}
               animated
               testId={testIds?.waveform}
               className="group-hover:opacity-0 group-focus-visible:opacity-0 motion-safe:transition-opacity motion-safe:duration-150"

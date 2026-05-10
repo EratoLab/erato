@@ -1,6 +1,6 @@
 import { t } from "@lingui/core/macro";
 
-import { Waveform } from "./Waveform";
+import { Waveform, audioLevelsToBarHeights } from "./Waveform";
 import { WaveformButton } from "./WaveformButton";
 import { Button } from "../Controls/Button";
 
@@ -69,7 +69,7 @@ export function ChatInputAudioModeButton(props: ChatInputAudioModeButtonProps) {
       data-testid="chat-input-audio-mode-start"
       icon={
         <Waveform
-          bars={staticBars}
+          heights={audioLevelsToBarHeights(staticBars)}
           testId="chat-input-audio-mode-static-waveform"
           className="text-[var(--theme-fg-primary)]"
         />
