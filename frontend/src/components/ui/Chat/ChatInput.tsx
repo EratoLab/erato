@@ -1529,9 +1529,11 @@ export const ChatInput = ({
                     }
                     ariaLabel={t`Stop dictation`}
                     statusLabel={t`Dictating audio`}
-                    testId="chat-input-record-audio"
-                    waveformTestId="chat-input-dictation-waveform"
-                    stopIconTestId="chat-input-dictation-stop-icon"
+                    testIds={{
+                      root: "chat-input-record-audio",
+                      waveform: "chat-input-dictation-waveform",
+                      stopIcon: "chat-input-dictation-stop-icon",
+                    }}
                   />
                 ) : (
                   <Button

@@ -47,9 +47,11 @@ export function ChatInputAudioModeButton(props: ChatInputAudioModeButtonProps) {
         disabled={props.disabled}
         ariaLabel={t`Stop audio recording`}
         statusLabel={t`Recording audio`}
-        testId="chat-input-audio-mode-stop"
-        waveformTestId="chat-input-audio-mode-recording-waveform"
-        stopIconTestId="chat-input-audio-mode-stop-icon"
+        testIds={{
+          root: "chat-input-audio-mode-stop",
+          waveform: "chat-input-audio-mode-recording-waveform",
+          stopIcon: "chat-input-audio-mode-stop-icon",
+        }}
       />
     );
   }

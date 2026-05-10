@@ -16,12 +16,18 @@ interface WaveformButtonProps {
    * has begun without the user having to focus the button.
    */
   statusLabel: string;
-  /** data-testid forwarded to the button itself. */
-  testId?: string;
-  /** data-testid forwarded to the inner waveform. */
-  waveformTestId?: string;
-  /** data-testid forwarded to the absolute stop-icon overlay. */
-  stopIconTestId?: string;
+  /**
+   * Optional test-ids for the three rendered nodes. Existing tests keep
+   * the legacy strings; new consumers should pick stable names per node.
+   */
+  testIds?: {
+    /** data-testid forwarded to the button itself. */
+    root?: string;
+    /** data-testid forwarded to the inner waveform. */
+    waveform?: string;
+    /** data-testid forwarded to the absolute stop-icon overlay. */
+    stopIcon?: string;
+  };
 }
 
 /**
@@ -39,9 +45,7 @@ export function WaveformButton({
   disabled,
   ariaLabel,
   statusLabel,
-  testId,
-  waveformTestId,
-  stopIconTestId,
+  testIds,
 }: WaveformButtonProps) {
   return (
     <>
@@ -53,17 +57,17 @@ export function WaveformButton({
         disabled={disabled}
         className="group relative overflow-hidden"
         aria-label={ariaLabel}
-        data-testid={testId}
+        data-testid={testIds?.root}
         icon={
           <span className="relative flex size-5 items-center justify-center text-[var(--theme-fg-primary)]">
             <Waveform
               bars={bars}
               animated
-              testId={waveformTestId}
+              testId={testIds?.waveform}
               className="group-hover:opacity-0 group-focus-visible:opacity-0 motion-safe:transition-opacity motion-safe:duration-150"
             />
             <span
-              data-testid={stopIconTestId}
+              data-testid={testIds?.stopIcon}
               className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 motion-safe:transition-opacity motion-safe:duration-150"
             >
               <StopIcon className="size-4" />
