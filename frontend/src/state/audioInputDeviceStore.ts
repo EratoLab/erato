@@ -8,35 +8,10 @@
  */
 /* eslint-disable lingui/no-unlocalized-strings */
 import { create } from "zustand";
-import { devtools, persist, type PersistStorage } from "zustand/middleware";
+import { createJSONStorage, devtools, persist } from "zustand/middleware";
 
 const STORE_KEY = "audio-input-device-store";
 const LEGACY_LOCAL_STORAGE_KEY = "erato.audioTranscription.audioInputDeviceId";
-
-const lazyLocalStorage: PersistStorage<{ selectedDeviceId: string }> = {
-  getItem(name) {
-    try {
-      const raw = localStorage.getItem(name);
-      return raw === null ? null : JSON.parse(raw);
-    } catch {
-      return null;
-    }
-  },
-  setItem(name, value) {
-    try {
-      localStorage.setItem(name, JSON.stringify(value));
-    } catch {
-      // Persistence is best-effort.
-    }
-  },
-  removeItem(name) {
-    try {
-      localStorage.removeItem(name);
-    } catch {
-      // Persistence is best-effort.
-    }
-  },
-};
 
 function migrateLegacyAudioInputDeviceId() {
   if (typeof localStorage === "undefined") {
@@ -87,7 +62,36 @@ export const useAudioInputDeviceStore = create<AudioInputDeviceState>()(
       }),
       {
         name: STORE_KEY,
-        storage: lazyLocalStorage,
+        // Wrap localStorage in fresh methods that re-resolve the
+        // global on every call. `createJSONStorage` caches the result
+        // of its factory once at create time, so handing it
+        // `localStorage` directly would freeze a reference that
+        // `vi.stubGlobal` can't replace in tests. The closures here
+        // re-look-up `localStorage` per operation, picking up the
+        // stub. `createJSONStorage` still handles the JSON wrapping.
+        storage: createJSONStorage(() => ({
+          getItem: (key) => {
+            try {
+              return localStorage.getItem(key);
+            } catch {
+              return null;
+            }
+          },
+          setItem: (key, value) => {
+            try {
+              localStorage.setItem(key, value);
+            } catch {
+              // Persistence is best-effort.
+            }
+          },
+          removeItem: (key) => {
+            try {
+              localStorage.removeItem(key);
+            } catch {
+              // Persistence is best-effort.
+            }
+          },
+        })),
         partialize: (state) => ({ selectedDeviceId: state.selectedDeviceId }),
       },
     ),
