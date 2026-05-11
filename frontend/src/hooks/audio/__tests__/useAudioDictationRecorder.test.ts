@@ -304,6 +304,52 @@ describe("useAudioDictationRecorder", () => {
     );
   });
 
+  it("buffers samples emitted before session_state and replays them into the first chunk", async () => {
+    const { result } = renderDictationHook();
+
+    await act(async () => {
+      result.current.toggleDictation();
+    });
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+    // The audio pipeline is built before the socket handshake awaits, so the
+    // script processor exists even though the session isn't ready yet.
+    await waitFor(() => expect(mockProcessors).toHaveLength(1));
+
+    // Pre-handshake: feed samples into the pre-session buffer. Nothing
+    // should be transmitted because the session isn't constructed yet.
+    act(() => {
+      emitAudioSamples(new Float32Array(1600).fill(0.2));
+    });
+    expect(MockWebSocket.instances[0].sentBinaryFrames).toHaveLength(0);
+
+    act(() => {
+      MockWebSocket.instances[0].emit("open");
+    });
+    await waitFor(() =>
+      expect(MockWebSocket.instances[0].sentJsonFrames).toContainEqual({
+        type: "start",
+      }),
+    );
+    act(() => {
+      MockWebSocket.instances[0].emitJson({
+        type: "session_state",
+        next_chunk_index: 0,
+        chunk_duration_ms: 100,
+      });
+    });
+
+    // The drain + flush in startDictation should produce a first chunk
+    // containing the samples captured before session_state arrived.
+    await waitFor(() =>
+      expect(
+        MockWebSocket.instances[0].sentBinaryFrames.length,
+      ).toBeGreaterThan(0),
+    );
+    expect(MockWebSocket.instances[0].sentJsonFrames).toContainEqual(
+      expect.objectContaining({ type: "chunk_metadata", chunk_index: 0 }),
+    );
+  });
+
   it("clears completing state when the socket closes before completion", async () => {
     const { result } = renderDictationHook();
 
