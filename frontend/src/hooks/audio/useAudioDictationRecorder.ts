@@ -1,6 +1,7 @@
 import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMountedState } from "react-use";
+import { useThrottledCallback } from "use-debounce";
 /* eslint-disable lingui/no-unlocalized-strings */
 
 // `?worker&url` routes the worklet through Vite's worker bundling
@@ -360,6 +361,17 @@ export function useAudioDictationRecorder({
   const [dictationBars, setDictationBars] = useState<number[]>(
     Array.from({ length: AUDIO_BARS_COUNT }, () => 2),
   );
+  /**
+   * The analyser RAF tick fires at ~60 Hz. Throttle setDictationBars to
+   * ~30 Hz (33 ms): halves consumer re-renders, no perceptible UX
+   * difference, leaves the analyser sampling at full rate for accurate
+   * bar values. Used inside the RAF tick only; resets and idle states
+   * still go through the raw setter so they apply immediately.
+   */
+  const setDictationBarsThrottled = useThrottledCallback(
+    setDictationBars,
+    33,
+  );
   const [dictationDiagnostics, setDictationDiagnostics] =
     useState<AudioDictationDiagnostics | null>(null);
 
@@ -455,6 +467,10 @@ export function useAudioDictationRecorder({
       audioProcessorRef.current = null;
     }
     audioLevelDataRef.current = null;
+    // Discard any pending throttled bar update queued from the final
+    // RAF tick — otherwise it can fire after the reset below and
+    // briefly flash old levels in the idle button.
+    setDictationBarsThrottled.cancel();
 
     // Suspend rather than close: each dictation gets fresh source /
     // analyser / worklet nodes (so per-session state can't leak), but
@@ -472,7 +488,7 @@ export function useAudioDictationRecorder({
     if (resetBars && isMounted()) {
       setDictationBars(Array.from({ length: AUDIO_BARS_COUNT }, () => 2));
     }
-  }, [isMounted]);
+  }, [isMounted, setDictationBarsThrottled]);
 
   const stopMediaRecordingStream = useCallback(() => {
     clearRecordingDurationTimer();
@@ -951,7 +967,7 @@ export function useAudioDictationRecorder({
             audioLevelDataRef.current,
           );
 
-          setDictationBars(
+          setDictationBarsThrottled(
             getAudioLevelBarsFromTimeDomainData(audioLevelDataRef.current),
           );
           audioFrameRef.current = window.requestAnimationFrame(analyzeLevel);
@@ -1033,6 +1049,7 @@ export function useAudioDictationRecorder({
     isMounted,
     maxRecordingDurationSeconds,
     selectedAudioInputDeviceId,
+    setDictationBarsThrottled,
     startLiveDictationSession,
     stopDictation,
     stopMediaRecordingStream,
