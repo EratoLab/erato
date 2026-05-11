@@ -14,6 +14,13 @@ import { useThrottledCallback } from "use-debounce";
 // `audioWorklet.addModule()`. AudioWorklet and Web Worker modules
 // share the same ESM contract on the file format side, so the worker
 // pipeline output is valid as an AudioWorklet module.
+import {
+  createAudioDictationWebSocketUrl,
+  sendAudioDictationControlFrame,
+  waitForAudioDictationFrame,
+  waitForSocketOpen,
+  type AudioDictationSocketFrame,
+} from "./audio-dictation-protocol";
 import audioDictationWorkletUrl from "./audio-dictation-worklet.ts?worker&url";
 import {
   AUDIO_BARS_COUNT,
@@ -54,31 +61,6 @@ const PRE_SPEECH_SILENCE_PRIMER_MS = 300;
 const MIN_AUDIO_CAPTURE_DELAY_MS = 150;
 
 const DEFAULT_AUDIO_DICTATION_CHUNK_DURATION_MS = 30_000;
-const AUDIO_DICTATION_SOCKET_OPEN_TIMEOUT_MS = 15_000;
-const AUDIO_DICTATION_SOCKET_FRAME_TIMEOUT_MS = 5 * 60_000;
-
-type AudioDictationSocketFrame =
-  | {
-      type: "session_state";
-      next_chunk_index?: number;
-      chunk_duration_ms?: number;
-    }
-  | {
-      type: "chunk_ack";
-      chunk_index: number;
-    }
-  | {
-      type: "chunk_transcribed";
-      chunk_index: number;
-      transcript?: string | null;
-    }
-  | {
-      type: "completed";
-    }
-  | {
-      type: "error";
-      error?: string | null;
-    };
 
 type LiveAudioDictationSession = {
   socket: WebSocket;
@@ -100,117 +82,6 @@ type UseAudioDictationRecorderOptions = {
   maxRecordingDurationSeconds: number;
   onTranscriptChunk: (chunk: AudioDictationTranscriptChunk) => void;
 };
-
-function createAudioDictationWebSocketUrl(): string {
-  const url = new URL(
-    "/api/v1beta/me/audio-dictation/socket",
-    window.location.href,
-  );
-  url.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return url.toString();
-}
-
-function sendAudioDictationControlFrame(
-  socket: WebSocket,
-  frame: Record<string, unknown>,
-) {
-  socket.send(JSON.stringify(frame));
-}
-
-function waitForSocketOpen(
-  socket: WebSocket,
-  timeoutMs = AUDIO_DICTATION_SOCKET_OPEN_TIMEOUT_MS,
-): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    const timeoutId = window.setTimeout(() => {
-      cleanup();
-      reject(new Error(t`Audio dictation connection timed out.`));
-    }, timeoutMs);
-    const handleOpen = () => {
-      cleanup();
-      resolve();
-    };
-    const handleError = () => {
-      cleanup();
-      reject(new Error(t`Audio dictation connection failed.`));
-    };
-    const handleClose = () => {
-      cleanup();
-      reject(new Error(t`Audio dictation connection closed.`));
-    };
-    const cleanup = () => {
-      window.clearTimeout(timeoutId);
-      socket.removeEventListener("open", handleOpen);
-      socket.removeEventListener("error", handleError);
-      socket.removeEventListener("close", handleClose);
-    };
-
-    socket.addEventListener("open", handleOpen, { once: true });
-    socket.addEventListener("error", handleError, { once: true });
-    socket.addEventListener("close", handleClose, { once: true });
-  });
-}
-
-function waitForAudioDictationFrame(
-  socket: WebSocket,
-  predicate: (frame: AudioDictationSocketFrame) => boolean,
-  timeoutMs = AUDIO_DICTATION_SOCKET_FRAME_TIMEOUT_MS,
-): Promise<AudioDictationSocketFrame> {
-  return new Promise<AudioDictationSocketFrame>((resolve, reject) => {
-    const timeoutId = window.setTimeout(() => {
-      cleanup();
-      reject(new Error(t`Audio dictation response timed out.`));
-    }, timeoutMs);
-
-    const handleMessage = (event: MessageEvent) => {
-      if (typeof event.data !== "string") {
-        return;
-      }
-
-      try {
-        const frame = JSON.parse(event.data) as AudioDictationSocketFrame;
-        if (frame.type === "error") {
-          cleanup();
-          reject(new Error(frame.error ?? t`Audio dictation failed.`));
-          return;
-        }
-
-        if (predicate(frame)) {
-          cleanup();
-          resolve(frame);
-        }
-      } catch (error) {
-        cleanup();
-        reject(
-          error instanceof Error
-            ? error
-            : new Error(t`Could not read audio dictation response.`),
-        );
-      }
-    };
-
-    const handleError = () => {
-      cleanup();
-      reject(new Error(t`Audio dictation connection failed.`));
-    };
-
-    const handleClose = () => {
-      cleanup();
-      reject(new Error(t`Audio dictation connection closed.`));
-    };
-
-    const cleanup = () => {
-      window.clearTimeout(timeoutId);
-      socket.removeEventListener("message", handleMessage);
-      socket.removeEventListener("error", handleError);
-      socket.removeEventListener("close", handleClose);
-    };
-
-    socket.addEventListener("message", handleMessage);
-    socket.addEventListener("error", handleError);
-    socket.addEventListener("close", handleClose);
-  });
-}
 
 export function useAudioDictationRecorder({
   enabled,
