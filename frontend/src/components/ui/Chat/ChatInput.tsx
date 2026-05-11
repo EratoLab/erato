@@ -504,6 +504,7 @@ export const ChatInput = ({
     isDictating,
     isDictationStarting,
     isDictationCompleting,
+    isCapturingAudio,
     dictationError,
     setDictationError,
     dictationBars,
@@ -1515,11 +1516,11 @@ export const ChatInput = ({
                 />
               )}
               {audioDictationEnabled &&
-                (isDictating || isDictationStarting ? (
+                (isCapturingAudio || isDictating ? (
                   <WaveformButton
                     onClick={toggleDictationForCurrentTarget}
                     bars={dictationBars}
-                    isBuffering={isDictationStarting && !isDictating}
+                    isBuffering={!isDictating}
                     disabled={
                       disabled ||
                       isLoading ||
@@ -1529,14 +1530,14 @@ export const ChatInput = ({
                       isAnyTokenLimitExceeded
                     }
                     ariaLabel={
-                      isDictationStarting && !isDictating
-                        ? t`Cancel starting dictation`
-                        : t`Stop dictation`
+                      isDictating
+                        ? t`Stop dictation`
+                        : t`Cancel starting dictation`
                     }
                     statusLabel={
-                      isDictationStarting && !isDictating
-                        ? t`Starting dictation — capturing audio`
-                        : t`Dictating audio`
+                      isDictating
+                        ? t`Dictating audio`
+                        : t`Capturing audio — waiting for transcription to start`
                     }
                     testIds={{
                       root: "chat-input-record-audio",
@@ -1550,7 +1551,7 @@ export const ChatInput = ({
                     variant="secondary"
                     size="sm"
                     icon={
-                      isDictationCompleting ? (
+                      isDictationStarting || isDictationCompleting ? (
                         <LoadingIcon
                           className="size-4 animate-spin text-[var(--theme-fg-primary)]"
                           data-testid="chat-input-dictation-loading-icon"
@@ -1571,9 +1572,11 @@ export const ChatInput = ({
                     }
                     data-testid="chat-input-record-audio"
                     aria-label={
-                      isDictationCompleting
-                        ? t`Finishing dictation`
-                        : t`Start dictation`
+                      isDictationStarting
+                        ? t`Starting dictation`
+                        : isDictationCompleting
+                          ? t`Finishing dictation`
+                          : t`Start dictation`
                     }
                   />
                 ))}

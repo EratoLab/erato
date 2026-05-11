@@ -317,6 +317,16 @@ export function useAudioDictationRecorder({
   const [isDictating, setIsDictating] = useState(false);
   const [isDictationStarting, setIsDictationStarting] = useState(false);
   const [isDictationCompleting, setIsDictationCompleting] = useState(false);
+  /**
+   * True once the audio worklet is connected and the microphone tap is
+   * really in the audio graph. Distinct from `isDictationStarting`, which
+   * flips at the click and stays true through `getUserMedia` +
+   * `addModule` waits during which the pipeline is not yet capturing.
+   * Drives whether the UI shows the live waveform vs. a loading spinner —
+   * showing bars before this is true would invite users to start speaking
+   * into a mic the audio graph hasn't tapped yet.
+   */
+  const [isCapturingAudio, setIsCapturingAudio] = useState(false);
   const [dictationError, setDictationError] = useState<string | null>(null);
   const [dictationBars, setDictationBars] = useState<number[]>(
     Array.from({ length: AUDIO_BARS_COUNT }, () => 2),
@@ -389,6 +399,9 @@ export function useAudioDictationRecorder({
     }
     audioContextRef.current = null;
     preSessionSamplesRef.current = [];
+    if (isMountedRef.current) {
+      setIsCapturingAudio(false);
+    }
     if (resetBars && isMountedRef.current) {
       setDictationBars(Array.from({ length: AUDIO_BARS_COUNT }, () => 2));
     }
@@ -698,6 +711,10 @@ export function useAudioDictationRecorder({
         source.connect(analyser);
         source.connect(processor);
         audioFrameRef.current = window.requestAnimationFrame(analyzeLevel);
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isMountedRef.current may flip false across the preceding awaits; the linter can't see refs change across awaits.
+        if (isMountedRef.current) {
+          setIsCapturingAudio(true);
+        }
       } else {
         setDictationBars((existingBars) =>
           existingBars.length === AUDIO_BARS_COUNT
@@ -881,6 +898,7 @@ export function useAudioDictationRecorder({
     isDictating,
     isDictationStarting,
     isDictationCompleting,
+    isCapturingAudio,
     dictationError,
     setDictationError,
     dictationBars,
