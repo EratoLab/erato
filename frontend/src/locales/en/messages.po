@@ -2108,6 +2108,10 @@ msgstr "Error:"
 msgid "Estimating token usage..."
 msgstr "Estimating token usage..."
 
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Exit audio mode"
+msgstr "Exit audio mode"
+
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
 msgid "Expand {title}"
 msgstr "Expand {title}"

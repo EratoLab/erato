@@ -312,6 +312,7 @@ export const ChatInput = ({
   ref,
 }: ChatInputPropsWithRef) => {
   const [message, setMessage] = useState("");
+  const [isAudioMode, setIsAudioMode] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const previousModeRef = useRef<"compose" | "edit">(mode);
   const previousEditMessageIdRef = useRef<string | undefined>(undefined);
@@ -992,6 +993,10 @@ export const ChatInput = ({
           selectedFacetIds,
         );
       }
+
+      // Sending closes audio mode so the user lands back in text input on
+      // the next compose turn. Re-entering is one click away.
+      setIsAudioMode(false);
     },
     isLoading ||
       isPendingResponse ||
@@ -1185,6 +1190,29 @@ export const ChatInput = ({
       isDictating ||
       isDictationStarting ||
       isDictationCompleting);
+
+  // Audio chat mode swaps the typing surfaces (textarea + dictation button)
+  // for a recording-first flow. Entering it both flips the mode and starts
+  // recording, so the user lands directly in the active waveform state.
+  const handleAudioModeButtonToggle = useCallback(() => {
+    if (!isAudioMode) {
+      setIsAudioMode(true);
+    }
+    toggleAudioRecording();
+  }, [isAudioMode, toggleAudioRecording]);
+
+  const exitAudioMode = useCallback(() => {
+    if (isRecording) {
+      toggleAudioRecording();
+    }
+    setIsAudioMode(false);
+  }, [isRecording, toggleAudioRecording]);
+
+  useEffect(() => {
+    if (mode !== "compose" && isAudioMode) {
+      setIsAudioMode(false);
+    }
+  }, [mode, isAudioMode]);
 
   // Log just before rendering the component and its preview section
   logger.log(
@@ -1397,42 +1425,46 @@ export const ChatInput = ({
             />
           )}
 
-          <textarea
-            ref={textareaRef}
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            onPaste={handleTextareaPaste}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSubmit(e);
+          {!isAudioMode && (
+            <textarea
+              ref={textareaRef}
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              onPaste={handleTextareaPaste}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSubmit(e);
+                }
+              }}
+              placeholder={
+                isAnyTokenLimitExceeded
+                  ? t`Message exceeds token limit. Please reduce length or remove files.`
+                  : mode === "edit"
+                    ? t`Edit your message...`
+                    : placeholder
               }
-            }}
-            placeholder={
-              isAnyTokenLimitExceeded
-                ? t`Message exceeds token limit. Please reduce length or remove files.`
-                : mode === "edit"
-                  ? t`Edit your message...`
-                  : placeholder
-            }
-            rows={1}
-            disabled={isLoading || isPendingResponse || disabled || isUploading}
-            tabIndex={0}
-            autoFocus={shouldAutofocus} // eslint-disable-line jsx-a11y/no-autofocus -- Controlled by feature config to prevent unwanted scrolling
-            className={clsx(
-              "w-full resize-none overflow-y-auto",
-              "chat-input-textarea-geometry",
-              "bg-transparent",
-              "text-[var(--theme-fg-primary)] placeholder:text-[var(--theme-fg-muted)]",
-              "focus:outline-none",
-              "disabled:cursor-not-allowed disabled:opacity-50",
-              "max-h-[200px]",
-              "text-base",
-              "scrollbar-auto-hide",
-              isAnyTokenLimitExceeded &&
-                "border-[var(--theme-error)] placeholder:text-[var(--theme-error-fg)]",
-            )}
-          />
+              rows={1}
+              disabled={
+                isLoading || isPendingResponse || disabled || isUploading
+              }
+              tabIndex={0}
+              autoFocus={shouldAutofocus} // eslint-disable-line jsx-a11y/no-autofocus -- Controlled by feature config to prevent unwanted scrolling
+              className={clsx(
+                "w-full resize-none overflow-y-auto",
+                "chat-input-textarea-geometry",
+                "bg-transparent",
+                "text-[var(--theme-fg-primary)] placeholder:text-[var(--theme-fg-muted)]",
+                "focus:outline-none",
+                "disabled:cursor-not-allowed disabled:opacity-50",
+                "max-h-[200px]",
+                "text-base",
+                "scrollbar-auto-hide",
+                isAnyTokenLimitExceeded &&
+                  "border-[var(--theme-error)] placeholder:text-[var(--theme-error-fg)]",
+              )}
+            />
+          )}
 
           <div
             className="flex flex-wrap items-center justify-between gap-[calc(var(--theme-spacing-control-gap)/2)]"
@@ -1507,6 +1539,19 @@ export const ChatInput = ({
                   {t`Cancel`}
                 </Button>
               )}
+              {isAudioMode && mode === "compose" && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={exitAudioMode}
+                  disabled={disabled || isLoading || isPendingResponse}
+                  data-testid="chat-input-exit-audio-mode"
+                  aria-label={t`Exit audio mode`}
+                >
+                  {t`Exit audio mode`}
+                </Button>
+              )}
               {!hasTopLeftAccessoryOverride && (
                 <ModelSelector
                   availableModels={availableModels}
@@ -1516,6 +1561,7 @@ export const ChatInput = ({
                 />
               )}
               {audioDictationEnabled &&
+                !isAudioMode &&
                 (isCapturingAudio || isDictating ? (
                   <WaveformButton
                     onClick={toggleDictationForCurrentTarget}
@@ -1595,13 +1641,13 @@ export const ChatInput = ({
                   <ChatInputAudioModeButton
                     isRecording
                     recordingBars={recordingBars}
-                    onToggle={toggleAudioRecording}
+                    onToggle={handleAudioModeButtonToggle}
                     disabled={isAudioModeButtonDisabled}
                   />
                 ) : (
                   <ChatInputAudioModeButton
                     isRecording={false}
-                    onToggle={toggleAudioRecording}
+                    onToggle={handleAudioModeButtonToggle}
                     disabled={isAudioModeButtonDisabled}
                   />
                 )
