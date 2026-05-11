@@ -112,26 +112,6 @@ class MockAudioContext {
   });
 }
 
-class MockMediaRecorder {
-  static instances: MockMediaRecorder[] = [];
-  state: "inactive" | "recording" = "inactive";
-  onstop: (() => void) | null = null;
-  onerror: ((event: Event) => void) | null = null;
-
-  constructor() {
-    MockMediaRecorder.instances.push(this);
-  }
-
-  start = vi.fn(() => {
-    this.state = "recording";
-  });
-
-  stop = vi.fn(() => {
-    this.state = "inactive";
-    this.onstop?.();
-  });
-}
-
 type MockWebSocketEvent = {
   data?: string | ArrayBuffer | Uint8Array;
 };
@@ -251,7 +231,6 @@ describe("getAudioLevelBarsFromTimeDomainData", () => {
 describe("useAudioDictationRecorder", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    MockMediaRecorder.instances.length = 0;
     MockWebSocket.instances.length = 0;
     MockAudioWorkletNode.instances.length = 0;
 
@@ -264,7 +243,6 @@ describe("useAudioDictationRecorder", () => {
 
     vi.stubGlobal("AudioContext", MockAudioContext);
     vi.stubGlobal("AudioWorkletNode", MockAudioWorkletNode);
-    vi.stubGlobal("MediaRecorder", MockMediaRecorder);
     vi.stubGlobal("WebSocket", MockWebSocket);
     vi.spyOn(window, "requestAnimationFrame").mockReturnValue(1);
     vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
@@ -440,7 +418,10 @@ describe("useAudioDictationRecorder", () => {
 
     unmount();
 
-    expect(MockMediaRecorder.instances[0].stop).toHaveBeenCalled();
+    // Unmount must close the socket without going through the completion
+    // flow — no "finish" control frame should be sent. The dictation hook
+    // no longer instantiates a MediaRecorder, so there is no recorder to
+    // assert against; the WebSocket frame list is the source of truth.
     expect(MockWebSocket.instances[0].sentJsonFrames).not.toContainEqual(
       expect.objectContaining({ type: "finish" }),
     );

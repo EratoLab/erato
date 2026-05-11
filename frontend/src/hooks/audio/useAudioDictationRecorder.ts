@@ -358,7 +358,6 @@ export function useAudioDictationRecorder({
   const [dictationDiagnostics, setDictationDiagnostics] =
     useState<AudioDictationDiagnostics | null>(null);
 
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const liveSessionRef = useRef<LiveAudioDictationSession | null>(null);
   /**
@@ -598,9 +597,59 @@ export function useAudioDictationRecorder({
     [enabled],
   );
 
+  const completeDictation = useCallback(async () => {
+    const session = liveSessionRef.current;
+    try {
+      if (!session) {
+        return;
+      }
+
+      flushLiveAudioSamples(true);
+      await session.sendQueue;
+
+      if (session.sentPcmBytes === 0) {
+        setDictationError(
+          t`No audio was captured. Please try recording again.`,
+        );
+        return;
+      }
+
+      const completedFramePromise = waitForAudioDictationFrame(
+        session.socket,
+        (frame) => frame.type === "completed",
+      );
+      sendAudioDictationControlFrame(session.socket, {
+        type: "finish",
+      });
+      await completedFramePromise;
+    } catch (error) {
+      setDictationError(
+        error instanceof Error
+          ? error.message
+          : t`Failed to complete audio dictation.`,
+      );
+    } finally {
+      liveSessionRef.current = null;
+      session?.socket.close();
+      if (isMountedRef.current) {
+        setIsDictationCompleting(false);
+      }
+    }
+  }, [flushLiveAudioSamples]);
+
   const stopDictation = useCallback(() => {
-    if (mediaRecorderRef.current?.state === "recording") {
-      mediaRecorderRef.current.stop();
+    // Active dictation: liveSessionRef is set the instant the session
+    // resolves, before `setIsDictating(true)`, so this is the precise
+    // "we are recording right now" signal — more reliable than the
+    // React `isDictating` state across the same tick.
+    if (liveSessionRef.current) {
+      clearRecordingDurationTimer();
+      if (isMountedRef.current) {
+        setIsDictating(false);
+        setIsDictationCompleting(true);
+      }
+      stopMediaRecordingStream();
+      void completeDictation();
       return;
     }
 
@@ -616,7 +665,11 @@ export function useAudioDictationRecorder({
 
     setIsDictating(false);
     stopMediaRecordingStream();
-  }, [stopMediaRecordingStream]);
+  }, [
+    clearRecordingDurationTimer,
+    completeDictation,
+    stopMediaRecordingStream,
+  ]);
 
   const startDictation = useCallback(async () => {
     if (
@@ -852,76 +905,6 @@ export function useAudioDictationRecorder({
       liveSessionRef.current = liveSession;
       flushLiveAudioSamples(false);
 
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-
-      mediaRecorder.onstop = () => {
-        clearRecordingDurationTimer();
-        if (isMountedRef.current) {
-          setIsDictating(false);
-          setIsDictationCompleting(true);
-        }
-        stopMediaRecordingStream();
-
-        void (async () => {
-          const session = liveSessionRef.current;
-          try {
-            if (!session) {
-              return;
-            }
-
-            flushLiveAudioSamples(true);
-            await session.sendQueue;
-
-            if (session.sentPcmBytes === 0) {
-              setDictationError(
-                t`No audio was captured. Please try recording again.`,
-              );
-              return;
-            }
-
-            const completedFramePromise = waitForAudioDictationFrame(
-              session.socket,
-              (frame) => frame.type === "completed",
-            );
-            sendAudioDictationControlFrame(session.socket, {
-              type: "finish",
-            });
-            await completedFramePromise;
-          } catch (error) {
-            setDictationError(
-              error instanceof Error
-                ? error.message
-                : t`Failed to complete audio dictation.`,
-            );
-          } finally {
-            liveSessionRef.current = null;
-            session?.socket.close();
-            if (isMountedRef.current) {
-              setIsDictationCompleting(false);
-            }
-          }
-        })();
-      };
-
-      mediaRecorder.onerror = (event: Event) => {
-        const error = (event as ErrorEvent).error;
-        liveSessionRef.current?.socket.close();
-        liveSessionRef.current = null;
-        stopMediaRecordingStream();
-        if (isMountedRef.current) {
-          setIsDictating(false);
-          setIsDictationStarting(false);
-          setIsDictationCompleting(false);
-        }
-        setDictationError(
-          error instanceof Error
-            ? error.message
-            : t`Could not complete audio dictation.`,
-        );
-      };
-
-      mediaRecorder.start();
       clearRecordingDurationTimer();
       const recordingLimitMs = Math.max(
         1,
@@ -982,15 +965,6 @@ export function useAudioDictationRecorder({
     return () => {
       isMountedRef.current = false;
       startInFlightRef.current = false;
-      const mediaRecorder = mediaRecorderRef.current;
-      if (mediaRecorder) {
-        mediaRecorder.onstop = null;
-        mediaRecorder.onerror = null;
-        if (mediaRecorder.state === "recording") {
-          mediaRecorder.stop();
-        }
-        mediaRecorderRef.current = null;
-      }
 
       liveSessionRef.current?.socket.close();
       liveSessionRef.current = null;
