@@ -26,6 +26,17 @@ const AUDIO_DICTATION_WORKLET_PROCESSOR_NAME = "audio-dictation-processor";
  */
 const PRE_SPEECH_SILENCE_PRIMER_MS = 300;
 
+/**
+ * Floor between `source.connect(processor)` and the visible
+ * `isCapturingAudio` flip. Belt-and-braces alongside the primer: on a
+ * fully-warm audio device the worklet's first non-zero frame can arrive
+ * in tens of milliseconds, fast enough that the spinner feels like a
+ * blink and the user starts speaking before they've finished the priming
+ * breath. Holding the spinner for at least this long gives them a
+ * consistent visual rhythm across cold and warm dictations.
+ */
+const MIN_AUDIO_CAPTURE_DELAY_MS = 150;
+
 const CANONICAL_AUDIO_SAMPLE_RATE_HZ = 16_000;
 const CANONICAL_AUDIO_WAV_HEADER_BYTES = 44;
 const CANONICAL_AUDIO_BYTES_PER_SAMPLE = 2;
@@ -371,6 +382,13 @@ export function useAudioDictationRecorder({
   const audioProcessorRef = useRef<AudioWorkletNode | null>(null);
   const audioLevelDataRef = useRef<Uint8Array | null>(null);
   const audioFrameRef = useRef<number | null>(null);
+  /**
+   * Timer that defers the `isCapturingAudio` flip when the first non-zero
+   * frame arrives sooner than `MIN_AUDIO_CAPTURE_DELAY_MS` after the
+   * pipeline was wired. Cleared on any teardown so the deferred flip
+   * doesn't fire after the user has already cancelled the session.
+   */
+  const capturingFlipTimerRef = useRef<number | null>(null);
   const recordingDurationTimerRef = useRef<number | null>(null);
   const onTranscriptChunkRef = useRef(onTranscriptChunk);
   const isMountedRef = useRef(true);
@@ -391,6 +409,10 @@ export function useAudioDictationRecorder({
   }, []);
 
   const stopRecordingVisualizer = useCallback((resetBars = true) => {
+    if (capturingFlipTimerRef.current !== null) {
+      window.clearTimeout(capturingFlipTimerRef.current);
+      capturingFlipTimerRef.current = null;
+    }
     if (audioFrameRef.current !== null) {
       window.cancelAnimationFrame(audioFrameRef.current);
       audioFrameRef.current = null;
@@ -732,14 +754,34 @@ export function useAudioDictationRecorder({
         // https://developers.openai.com/api/docs/guides/realtime-vad
         // (`prefix_padding_ms`, default 300 ms).
         let audioFlowing = false;
+        const pipelineReadyAt = Date.now();
+        const flipCapturingAudio = () => {
+          // Guard against late firings: if the pipeline was torn down
+          // between scheduling and execution, the processor ref will be
+          // null or point at a different node — don't flip stale state.
+          if (
+            !isMountedRef.current ||
+            audioProcessorRef.current !== processor
+          ) {
+            return;
+          }
+          setIsCapturingAudio(true);
+        };
         processor.port.onmessage = (event: MessageEvent<Float32Array>) => {
           const input = event.data;
           if (!audioFlowing) {
             for (let index = 0; index < input.length; index += 1) {
               if (input[index] !== 0) {
                 audioFlowing = true;
-                if (isMountedRef.current) {
-                  setIsCapturingAudio(true);
+                const elapsed = Date.now() - pipelineReadyAt;
+                const remaining = MIN_AUDIO_CAPTURE_DELAY_MS - elapsed;
+                if (remaining > 0) {
+                  capturingFlipTimerRef.current = window.setTimeout(() => {
+                    capturingFlipTimerRef.current = null;
+                    flipCapturingAudio();
+                  }, remaining);
+                } else {
+                  flipCapturingAudio();
                 }
                 break;
               }
