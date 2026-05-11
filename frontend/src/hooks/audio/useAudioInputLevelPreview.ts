@@ -5,7 +5,7 @@ import { useMountedState } from "react-use";
 import {
   AUDIO_BARS_COUNT,
   getAudioLevelBarsFromTimeDomainData,
-} from "./useAudioDictationRecorder";
+} from "./audio-pcm-codec";
 
 const PREVIEW_SAMPLE_RATE_HZ = 16_000;
 
