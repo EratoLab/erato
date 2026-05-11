@@ -1,5 +1,5 @@
 import { t } from "@lingui/core/macro";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useMountedState } from "react-use";
 import { useThrottledCallback } from "use-debounce";
 /* eslint-disable lingui/no-unlocalized-strings */
@@ -83,14 +83,69 @@ type UseAudioDictationRecorderOptions = {
   onTranscriptChunk: (chunk: AudioDictationTranscriptChunk) => void;
 };
 
+/**
+ * Session lifecycle as a discriminated union — replaces the previous
+ * isDictating / isDictationStarting / isDictationCompleting booleans
+ * (which permitted impossible combinations like
+ * "starting && completing"). One source of truth, statically
+ * mutually-exclusive. The three booleans are still exposed on the
+ * hook's return for backward compatibility, derived from this.
+ *
+ *   idle ──start──▶ starting ──session_ready──▶ dictating
+ *    ▲                │                            │
+ *    │                │ user_stop (cancel)         │ user_stop
+ *    │                ▼                            ▼
+ *    └────────────── idle              completing ──complete──▶ idle
+ *
+ * `abort` resets to idle from any state and is used by error paths.
+ * `isCapturingAudio` is orthogonal (audio-graph signal, not session
+ * lifecycle) and stays as its own useState.
+ */
+type DictationSessionStatus =
+  | "idle"
+  | "starting"
+  | "dictating"
+  | "completing";
+
+type DictationSessionAction =
+  | { type: "start" }
+  | { type: "session_ready" }
+  | { type: "user_stop" }
+  | { type: "complete" }
+  | { type: "abort" };
+
+function dictationSessionReducer(
+  status: DictationSessionStatus,
+  action: DictationSessionAction,
+): DictationSessionStatus {
+  switch (action.type) {
+    case "start":
+      return status === "idle" ? "starting" : status;
+    case "session_ready":
+      return status === "starting" ? "dictating" : status;
+    case "user_stop":
+      if (status === "dictating") return "completing";
+      if (status === "starting") return "idle";
+      return status;
+    case "complete":
+      return status === "completing" ? "idle" : status;
+    case "abort":
+      return "idle";
+  }
+}
+
 export function useAudioDictationRecorder({
   enabled,
   maxRecordingDurationSeconds,
   onTranscriptChunk,
 }: UseAudioDictationRecorderOptions) {
-  const [isDictating, setIsDictating] = useState(false);
-  const [isDictationStarting, setIsDictationStarting] = useState(false);
-  const [isDictationCompleting, setIsDictationCompleting] = useState(false);
+  const [sessionStatus, dispatchSession] = useReducer(
+    dictationSessionReducer,
+    "idle",
+  );
+  const isDictating = sessionStatus === "dictating";
+  const isDictationStarting = sessionStatus === "starting";
+  const isDictationCompleting = sessionStatus === "completing";
   /**
    * True once the audio worklet is connected and the microphone tap is
    * really in the audio graph. Distinct from `isDictationStarting`, which
@@ -391,8 +446,12 @@ export function useAudioDictationRecorder({
         );
       }
 
+      // status is already "starting" when this protocol helper runs;
+      // dispatching "start" again is a no-op in the reducer if we're
+      // already in starting, but the explicit call documents the
+      // invariant for readers.
       if (isMounted()) {
-        setIsDictationStarting(true);
+        dispatchSession({ type: "start" });
       }
       setDictationError(null);
 
@@ -494,21 +553,20 @@ export function useAudioDictationRecorder({
       liveSessionRef.current = null;
       session?.socket.close();
       if (isMounted()) {
-        setIsDictationCompleting(false);
+        dispatchSession({ type: "complete" });
       }
     }
   }, [flushLiveAudioSamples, isMounted]);
 
   const stopDictation = useCallback(() => {
     // Active dictation: liveSessionRef is set the instant the session
-    // resolves, before `setIsDictating(true)`, so this is the precise
-    // "we are recording right now" signal — more reliable than the
-    // React `isDictating` state across the same tick.
+    // resolves, before the reducer transitions to "dictating", so this
+    // is the precise "we are recording right now" signal — more
+    // reliable than reading the React status across the same tick.
     if (liveSessionRef.current) {
       clearRecordingDurationTimer();
       if (isMounted()) {
-        setIsDictating(false);
-        setIsDictationCompleting(true);
+        dispatchSession({ type: "user_stop" });
       }
       tearDownCaptureGraph();
       void completeDictation();
@@ -525,7 +583,7 @@ export function useAudioDictationRecorder({
       return;
     }
 
-    setIsDictating(false);
+    dispatchSession({ type: "abort" });
     tearDownCaptureGraph();
   }, [
     clearRecordingDurationTimer,
@@ -552,7 +610,7 @@ export function useAudioDictationRecorder({
     }
 
     startInFlightRef.current = true;
-    setIsDictationStarting(true);
+    dispatchSession({ type: "start" });
 
     const mediaDevices =
       typeof navigator === "undefined"
@@ -562,7 +620,7 @@ export function useAudioDictationRecorder({
 
     if (typeof mediaDevices?.getUserMedia !== "function") {
       setDictationError(t`Audio recording is not supported in this browser.`);
-      setIsDictationStarting(false);
+      dispatchSession({ type: "abort" });
       startInFlightRef.current = false;
       return;
     }
@@ -762,17 +820,14 @@ export function useAudioDictationRecorder({
           t`Dictation stopped automatically after the configured maximum duration.`,
         );
       }, recordingLimitMs * 1000);
-      setIsDictating(true);
-      setIsDictationStarting(false);
+      dispatchSession({ type: "session_ready" });
       setDictationError(null);
     } catch (error) {
       liveSessionRef.current?.socket.close();
       liveSessionRef.current = null;
       tearDownCaptureGraph();
       if (isMounted()) {
-        setIsDictating(false);
-        setIsDictationStarting(false);
-        setIsDictationCompleting(false);
+        dispatchSession({ type: "abort" });
         setDictationError(
           error instanceof Error
             ? error.message
