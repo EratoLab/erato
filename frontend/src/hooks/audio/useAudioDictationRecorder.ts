@@ -547,11 +547,24 @@ export function useAudioDictationRecorder({
    * module registered and the context in the `running` state. Reuses
    * the existing context across sessions (resume) and falls back to
    * creating a fresh one only when the previous one was closed.
+   *
+   * `preferredSampleRate` is the MediaStreamTrack's reported sample
+   * rate. Passing it to the constructor prevents
+   * `createMediaStreamSource` from inserting an internal resampler at
+   * the graph level — the worklet's PCM resampler still handles the
+   * canonical 16 kHz conversion. Only honored on first creation; a
+   * persisted context keeps its original rate even if a subsequent
+   * track reports a different one, which is the right tradeoff:
+   * the audio thread stays warm and the resampler kicks in only when
+   * the device actually changes between sessions.
+   *
    * Returns `null` when the host browser doesn't support Web Audio /
    * AudioWorkletNode at all.
    */
-  const ensureAudioContextReady =
-    useCallback(async (): Promise<AudioContext | null> => {
+  const ensureAudioContextReady = useCallback(
+    async (
+      preferredSampleRate?: number,
+    ): Promise<AudioContext | null> => {
       if (
         typeof AudioContext === "undefined" ||
         typeof AudioWorkletNode === "undefined"
@@ -561,7 +574,18 @@ export function useAudioDictationRecorder({
 
       let audioContext = audioContextRef.current;
       if (!audioContext || audioContext.state === "closed") {
-        audioContext = new AudioContext();
+        try {
+          audioContext = preferredSampleRate
+            ? new AudioContext({ sampleRate: preferredSampleRate })
+            : new AudioContext();
+        } catch {
+          // Browser refused the requested sample rate (e.g. outside
+          // its supported range). Fall back to the default rate; the
+          // worklet's PCM resampler handles the 16 kHz conversion
+          // either way, and an internal Web Audio resampler is
+          // tolerable when the only alternative is failing start.
+          audioContext = new AudioContext();
+        }
         audioContextRef.current = audioContext;
         workletModuleLoadedRef.current = false;
       }
@@ -790,8 +814,9 @@ export function useAudioDictationRecorder({
 
       mediaStreamRef.current = stream;
       const audioTrack = stream.getAudioTracks()[0];
+      const trackSettings = audioTrack.getSettings();
       setDictationDiagnostics(
-        mediaTrackSettingsToDiagnostics(audioTrack.getSettings()),
+        mediaTrackSettingsToDiagnostics(trackSettings),
       );
 
       // Build the audio pipeline BEFORE awaiting the socket handshake. Once
@@ -801,8 +826,16 @@ export function useAudioDictationRecorder({
       // socket + session_state handshake. Sample extraction runs on the
       // audio rendering thread via `AudioWorkletNode`, isolated from
       // main-thread contention.
+      //
+      // Passing the track's sampleRate to the AudioContext constructor
+      // (when known and supported) prevents createMediaStreamSource from
+      // inserting an internal Web Audio resampler — one fewer documented
+      // source of startup latency between getUserMedia and the first
+      // sample reaching the worklet.
       let sourceSampleRate = CANONICAL_AUDIO_SAMPLE_RATE_HZ;
-      const audioContext = await ensureAudioContextReady();
+      const audioContext = await ensureAudioContextReady(
+        trackSettings.sampleRate,
+      );
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- The await may yield to the component's unmount cleanup, which flips isMountedRef.current to false; the linter can't see refs change across awaits.
       if (!isMountedRef.current) {
         stream.getTracks().forEach((track) => track.stop());
