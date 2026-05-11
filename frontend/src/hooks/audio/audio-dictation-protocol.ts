@@ -13,6 +13,17 @@ import { t } from "@lingui/core/macro";
 const AUDIO_DICTATION_SOCKET_OPEN_TIMEOUT_MS = 15_000;
 const AUDIO_DICTATION_SOCKET_FRAME_TIMEOUT_MS = 5 * 60_000;
 
+function abortRejection(signal: AbortSignal | undefined): unknown {
+  if (signal && signal.reason !== undefined) {
+    return signal.reason;
+  }
+  // The DOMException name / message are programmatic identifiers, not
+  // user-facing strings — they match what `AbortSignal` and `fetch`
+  // throw when aborted.
+  // eslint-disable-next-line lingui/no-unlocalized-strings
+  return new DOMException("Aborted", "AbortError");
+}
+
 export type AudioDictationSocketFrame =
   | {
       type: "session_state";
@@ -55,9 +66,15 @@ export function sendAudioDictationControlFrame(
 
 export function waitForSocketOpen(
   socket: WebSocket,
-  timeoutMs = AUDIO_DICTATION_SOCKET_OPEN_TIMEOUT_MS,
+  options: { signal?: AbortSignal; timeoutMs?: number } = {},
 ): Promise<void> {
+  const timeoutMs = options.timeoutMs ?? AUDIO_DICTATION_SOCKET_OPEN_TIMEOUT_MS;
+  const { signal } = options;
   return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortRejection(signal));
+      return;
+    }
     const timeoutId = window.setTimeout(() => {
       cleanup();
       reject(new Error(t`Audio dictation connection timed out.`));
@@ -74,25 +91,37 @@ export function waitForSocketOpen(
       cleanup();
       reject(new Error(t`Audio dictation connection closed.`));
     };
+    const handleAbort = () => {
+      cleanup();
+      reject(abortRejection(signal));
+    };
     const cleanup = () => {
       window.clearTimeout(timeoutId);
       socket.removeEventListener("open", handleOpen);
       socket.removeEventListener("error", handleError);
       socket.removeEventListener("close", handleClose);
+      signal?.removeEventListener("abort", handleAbort);
     };
 
     socket.addEventListener("open", handleOpen, { once: true });
     socket.addEventListener("error", handleError, { once: true });
     socket.addEventListener("close", handleClose, { once: true });
+    signal?.addEventListener("abort", handleAbort, { once: true });
   });
 }
 
 export function waitForAudioDictationFrame(
   socket: WebSocket,
   predicate: (frame: AudioDictationSocketFrame) => boolean,
-  timeoutMs = AUDIO_DICTATION_SOCKET_FRAME_TIMEOUT_MS,
+  options: { signal?: AbortSignal; timeoutMs?: number } = {},
 ): Promise<AudioDictationSocketFrame> {
+  const timeoutMs = options.timeoutMs ?? AUDIO_DICTATION_SOCKET_FRAME_TIMEOUT_MS;
+  const { signal } = options;
   return new Promise<AudioDictationSocketFrame>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortRejection(signal));
+      return;
+    }
     const timeoutId = window.setTimeout(() => {
       cleanup();
       reject(new Error(t`Audio dictation response timed out.`));
@@ -135,15 +164,22 @@ export function waitForAudioDictationFrame(
       reject(new Error(t`Audio dictation connection closed.`));
     };
 
+    const handleAbort = () => {
+      cleanup();
+      reject(abortRejection(signal));
+    };
+
     const cleanup = () => {
       window.clearTimeout(timeoutId);
       socket.removeEventListener("message", handleMessage);
       socket.removeEventListener("error", handleError);
       socket.removeEventListener("close", handleClose);
+      signal?.removeEventListener("abort", handleAbort);
     };
 
     socket.addEventListener("message", handleMessage);
     socket.addEventListener("error", handleError);
     socket.addEventListener("close", handleClose);
+    signal?.addEventListener("abort", handleAbort, { once: true });
   });
 }

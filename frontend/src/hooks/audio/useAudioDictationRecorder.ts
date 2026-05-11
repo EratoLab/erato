@@ -184,6 +184,15 @@ export function useAudioDictationRecorder({
    */
   const pendingSocketRef = useRef<WebSocket | null>(null);
   /**
+   * Per-session AbortController. Created at the start of every
+   * dictation; aborted on user-stop-during-starting, on error, and on
+   * hook unmount. The signal is plumbed through `waitForSocketOpen`
+   * and `waitForAudioDictationFrame` so they reject promptly without
+   * leaving listeners attached. Replaces the manual close-the-socket
+   * dance for cancellation paths.
+   */
+  const sessionAbortRef = useRef<AbortController | null>(null);
+  /**
    * Pre-session sample buffer: holds Float32 samples captured between
    * `processor.onaudioprocess` first firing and the live session being
    * ready. Drained into `session.pendingSourceSamples` once the session
@@ -439,7 +448,10 @@ export function useAudioDictationRecorder({
     }, []);
 
   const startLiveDictationSession = useCallback(
-    async (sourceSampleRate: number): Promise<LiveAudioDictationSession> => {
+    async (
+      sourceSampleRate: number,
+      signal: AbortSignal,
+    ): Promise<LiveAudioDictationSession> => {
       if (!enabled) {
         throw new Error(
           t`Audio dictation is not available in this environment.`,
@@ -458,6 +470,17 @@ export function useAudioDictationRecorder({
       const socket = new WebSocket(createAudioDictationWebSocketUrl());
       socket.binaryType = "arraybuffer";
       pendingSocketRef.current = socket;
+      // Abort during the handshake → close the socket so the protocol
+      // helpers' close listeners (or signal listeners) fire promptly
+      // and the awaits unwind.
+      const handleAbortDuringStartup = () => {
+        if (socket.readyState !== WebSocket.CLOSED) {
+          socket.close();
+        }
+      };
+      signal.addEventListener("abort", handleAbortDuringStartup, {
+        once: true,
+      });
 
       socket.addEventListener("message", (event) => {
         if (typeof event.data !== "string") {
@@ -485,10 +508,11 @@ export function useAudioDictationRecorder({
       });
 
       try {
-        await waitForSocketOpen(socket);
+        await waitForSocketOpen(socket, { signal });
         const sessionStatePromise = waitForAudioDictationFrame(
           socket,
           (frame) => frame.type === "session_state",
+          { signal },
         );
 
         sendAudioDictationControlFrame(socket, {
@@ -512,6 +536,7 @@ export function useAudioDictationRecorder({
           sourceSampleRate,
         };
       } finally {
+        signal.removeEventListener("abort", handleAbortDuringStartup);
         pendingSocketRef.current = null;
       }
     },
@@ -573,13 +598,14 @@ export function useAudioDictationRecorder({
       return;
     }
 
-    // Cancel an in-flight startup: closing the pending socket rejects the
-    // await inside `startLiveDictationSession`, which propagates to the
-    // catch block in `startDictation` and runs the full teardown there.
-    const pendingSocket = pendingSocketRef.current;
-    if (pendingSocket) {
-      pendingSocketRef.current = null;
-      pendingSocket.close();
+    // Cancel an in-flight startup: aborting the per-session signal
+    // rejects the awaits inside `startLiveDictationSession`, which
+    // propagates to the catch block in `startDictation` and runs the
+    // full teardown there. The signal listener inside the startup
+    // helper also closes the WebSocket as a belt-and-braces.
+    if (sessionAbortRef.current) {
+      sessionAbortRef.current.abort();
+      sessionAbortRef.current = null;
       return;
     }
 
@@ -611,6 +637,8 @@ export function useAudioDictationRecorder({
 
     startInFlightRef.current = true;
     dispatchSession({ type: "start" });
+    const sessionAbort = new AbortController();
+    sessionAbortRef.current = sessionAbort;
 
     const mediaDevices =
       typeof navigator === "undefined"
@@ -791,7 +819,10 @@ export function useAudioDictationRecorder({
         );
       }
 
-      const liveSession = await startLiveDictationSession(sourceSampleRate);
+      const liveSession = await startLiveDictationSession(
+        sourceSampleRate,
+        sessionAbort.signal,
+      );
 
       // Drain pre-buffered samples into the new session in their original
       // order, THEN publish the session ref. Order matters: until
@@ -828,14 +859,23 @@ export function useAudioDictationRecorder({
       tearDownCaptureGraph();
       if (isMounted()) {
         dispatchSession({ type: "abort" });
-        setDictationError(
-          error instanceof Error
-            ? error.message
-            : t`Could not start audio dictation.`,
-        );
+        // AbortError is the expected outcome of a user-cancel during
+        // starting; don't surface it as a "could not start" message.
+        const isAbort =
+          error instanceof DOMException && error.name === "AbortError";
+        if (!isAbort) {
+          setDictationError(
+            error instanceof Error
+              ? error.message
+              : t`Could not start audio dictation.`,
+          );
+        }
       }
     } finally {
       startInFlightRef.current = false;
+      if (sessionAbortRef.current === sessionAbort) {
+        sessionAbortRef.current = null;
+      }
     }
   }, [
     clearRecordingDurationTimer,
@@ -867,9 +907,12 @@ export function useAudioDictationRecorder({
     return () => {
       startInFlightRef.current = false;
 
+      // Abort any in-flight startup; its signal listener closes the
+      // pending socket as part of teardown.
+      sessionAbortRef.current?.abort();
+      sessionAbortRef.current = null;
       liveSessionRef.current?.socket.close();
       liveSessionRef.current = null;
-      pendingSocketRef.current?.close();
       pendingSocketRef.current = null;
       stopRecordingVisualizer(false);
       // stopRecordingVisualizer suspends the AudioContext between
