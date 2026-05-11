@@ -13,6 +13,19 @@ import { useAudioInputDevicePreference } from "./useAudioInputDevicePreference";
 
 const AUDIO_DICTATION_WORKLET_PROCESSOR_NAME = "audio-dictation-processor";
 
+/**
+ * Synthetic silence prefix prepended to every dictation session before the
+ * captured audio. Mirrors what production streaming-STT VADs require for
+ * speech-onset calibration (OpenAI Realtime `prefix_padding_ms` defaults
+ * to 300 ms; Silero `speech_pad_ms`, sherpa-onnx pre-speech padding all
+ * land in the same range). Without it, the first dictation after browser
+ * startup happens to ship hundreds of milliseconds of OS warm-up zeros
+ * which double as the VAD calibration window — but a second dictation
+ * back-to-back finds the OS audio device still hot, ships near-zero
+ * leading silence, and the server's VAD trims the first word.
+ */
+const PRE_SPEECH_SILENCE_PRIMER_MS = 300;
+
 const CANONICAL_AUDIO_SAMPLE_RATE_HZ = 16_000;
 const CANONICAL_AUDIO_WAV_HEADER_BYTES = 44;
 const CANONICAL_AUDIO_BYTES_PER_SAMPLE = 2;
@@ -689,15 +702,33 @@ export function useAudioDictationRecorder({
         analyser.fftSize = 256;
         analyser.smoothingTimeConstant = 0.65;
         sourceSampleRate = audioContext.sampleRate;
-        preSessionSamplesRef.current = [];
+        // Synthetic silence primer: seeds the pre-session buffer with a
+        // fixed amount of zero samples so the audio sent to the server
+        // always starts with the same calibration window for its VAD,
+        // regardless of how warm the OS audio device is. Cold first
+        // dictation: hundreds of ms of natural OS warm-up zeros arrive
+        // first anyway. Warm second dictation: the OS device stays hot
+        // between sessions and real audio arrives nearly instantly — the
+        // primer is what prevents the server from clipping the first
+        // word in that case.
+        const primerSampleCount = Math.max(
+          0,
+          Math.floor(
+            (audioContext.sampleRate * PRE_SPEECH_SILENCE_PRIMER_MS) / 1000,
+          ),
+        );
+        const primer: number[] = [];
+        primer.length = primerSampleCount;
+        primer.fill(0);
+        preSessionSamplesRef.current = primer;
         // The worklet posts every render quantum, including zero-filled
         // OS warm-up frames — we want those in the stream sent to the
-        // server so its VAD has a calibration window. The "speak now" UI
-        // cue should still wait for real audio though, so scan each
-        // incoming frame for a non-zero sample and flip the
-        // `isCapturingAudio` signal on the first one we see. Production
-        // STT clients (Deepgram, AssemblyAI, OpenAI Realtime) send the
-        // full stream and rely on server-side prefix padding — see
+        // server too. The "speak now" UI cue should still wait for real
+        // audio though, so scan each incoming frame for a non-zero
+        // sample and flip the `isCapturingAudio` signal on the first one
+        // we see. Production STT clients (Deepgram, AssemblyAI, OpenAI
+        // Realtime) send the full stream and rely on server-side prefix
+        // padding — see
         // https://developers.openai.com/api/docs/guides/realtime-vad
         // (`prefix_padding_ms`, default 300 ms).
         let audioFlowing = false;
