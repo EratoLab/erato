@@ -663,8 +663,23 @@ export function useAudioDictationRecorder({
         // The user gesture that started dictation may have lapsed across
         // the `getUserMedia` + `addModule` awaits, in which case the new
         // AudioContext starts suspended and no audio flows through the
-        // graph. Resuming is a no-op when already running.
-        void audioContext.resume();
+        // graph. `resume()` is no-op when already running. Awaiting it
+        // matters — Mozilla bug 1629478 measured ~70 empty AudioWorklet
+        // render quanta of warm-up without an explicit resume, vs ~10
+        // with one, so the first real samples arrive much sooner.
+        try {
+          await audioContext.resume();
+        } catch {
+          // Resume can reject if user activation has fully expired; the
+          // context still works, and the worklet will start producing
+          // frames once the source becomes active, so don't fail start.
+        }
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isMountedRef.current may flip false across the preceding awaits; the linter can't see refs change across awaits.
+        if (!isMountedRef.current) {
+          void audioContext.close();
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
         const source = audioContext.createMediaStreamSource(stream);
         const analyser = audioContext.createAnalyser();
         const processor = new AudioWorkletNode(
