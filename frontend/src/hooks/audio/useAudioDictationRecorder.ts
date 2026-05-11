@@ -490,7 +490,7 @@ export function useAudioDictationRecorder({
     }
   }, [isMounted, setDictationBarsThrottled]);
 
-  const stopMediaRecordingStream = useCallback(() => {
+  const tearDownCaptureGraph = useCallback(() => {
     clearRecordingDurationTimer();
 
     if (mediaStreamRef.current) {
@@ -766,7 +766,7 @@ export function useAudioDictationRecorder({
         setIsDictating(false);
         setIsDictationCompleting(true);
       }
-      stopMediaRecordingStream();
+      tearDownCaptureGraph();
       void completeDictation();
       return;
     }
@@ -782,12 +782,12 @@ export function useAudioDictationRecorder({
     }
 
     setIsDictating(false);
-    stopMediaRecordingStream();
+    tearDownCaptureGraph();
   }, [
     clearRecordingDurationTimer,
     completeDictation,
     isMounted,
-    stopMediaRecordingStream,
+    tearDownCaptureGraph,
   ]);
 
   const startDictation = useCallback(async () => {
@@ -1024,7 +1024,7 @@ export function useAudioDictationRecorder({
     } catch (error) {
       liveSessionRef.current?.socket.close();
       liveSessionRef.current = null;
-      stopMediaRecordingStream();
+      tearDownCaptureGraph();
       if (isMounted()) {
         setIsDictating(false);
         setIsDictationStarting(false);
@@ -1052,7 +1052,7 @@ export function useAudioDictationRecorder({
     setDictationBarsThrottled,
     startLiveDictationSession,
     stopDictation,
-    stopMediaRecordingStream,
+    tearDownCaptureGraph,
   ]);
 
   const toggleDictation = useCallback(() => {
