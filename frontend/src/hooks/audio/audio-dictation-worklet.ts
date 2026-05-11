@@ -30,18 +30,6 @@ const FRAME_SIZE = 4096;
 class AudioDictationProcessor extends AudioWorkletProcessor {
   private readonly buffer = new Float32Array(FRAME_SIZE);
   private writeIndex = 0;
-  /**
-   * Stays `false` until the worklet receives a sample that isn't exactly
-   * zero. The MediaStream source emits zero-filled render quanta during
-   * OS / driver warm-up — empirically up to ~70 quanta on Firefox per
-   * Mozilla bug 1629478, and 100+ ms on Bluetooth / Safari / external
-   * mics. Posting those frames to the main thread would let the UI flip
-   * to "ready" while no real audio is yet flowing, and the user's first
-   * spoken words would land before the visual cue. The same pattern
-   * gates audio in OpenAI's wavtools and underpins LiveKit's silence
-   * detection — see https://github.com/keithwhor/wavtools/blob/main/lib/worklets/audio_processor.js
-   */
-  private foundAudio = false;
 
   process(inputs: Float32Array[][]): boolean {
     const channel: Float32Array | undefined = inputs[0]?.[0];
@@ -54,25 +42,14 @@ class AudioDictationProcessor extends AudioWorkletProcessor {
       return true;
     }
 
-    let startIndex = 0;
-    if (!this.foundAudio) {
-      // Scan for the first non-zero sample. Pure digital silence is
-      // exactly 0; once the OS audio device produces real samples, even
-      // ambient noise is non-zero in floating point.
-      startIndex = channel.length;
-      for (let i = 0; i < channel.length; i += 1) {
-        if (channel[i] !== 0) {
-          startIndex = i;
-          this.foundAudio = true;
-          break;
-        }
-      }
-      if (!this.foundAudio) {
-        return true;
-      }
-    }
-
-    let sourceIndex = startIndex;
+    // Always batch and post every render quantum — including the
+    // zero-filled samples the MediaStream source emits during OS warm-up.
+    // Server-side VAD needs that leading-silence calibration window to
+    // detect speech onset cleanly; trimming it client-side (as we tried
+    // previously) makes streaming STT engines drop the first word.
+    // Non-zero detection for the UI "speak now" signal lives in the main
+    // thread's `port.onmessage` handler instead.
+    let sourceIndex = 0;
     while (sourceIndex < channel.length) {
       const remaining = FRAME_SIZE - this.writeIndex;
       const copyCount = Math.min(remaining, channel.length - sourceIndex);

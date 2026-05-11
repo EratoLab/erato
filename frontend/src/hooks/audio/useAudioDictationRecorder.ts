@@ -690,19 +690,28 @@ export function useAudioDictationRecorder({
         analyser.smoothingTimeConstant = 0.65;
         sourceSampleRate = audioContext.sampleRate;
         preSessionSamplesRef.current = [];
-        // First-frame signal: the worklet only posts after accumulating
-        // 4096 samples from the source. If `source.connect(processor)` has
-        // succeeded but the mic stream isn't producing samples yet (OS
-        // warm-up on Bluetooth / Safari / external mics), no message
-        // arrives and the spinner stays. Once a frame lands we know audio
-        // is really flowing, so the bars can appear honestly.
-        let firstFrameSeen = false;
+        // The worklet posts every render quantum, including zero-filled
+        // OS warm-up frames — we want those in the stream sent to the
+        // server so its VAD has a calibration window. The "speak now" UI
+        // cue should still wait for real audio though, so scan each
+        // incoming frame for a non-zero sample and flip the
+        // `isCapturingAudio` signal on the first one we see. Production
+        // STT clients (Deepgram, AssemblyAI, OpenAI Realtime) send the
+        // full stream and rely on server-side prefix padding — see
+        // https://developers.openai.com/api/docs/guides/realtime-vad
+        // (`prefix_padding_ms`, default 300 ms).
+        let audioFlowing = false;
         processor.port.onmessage = (event: MessageEvent<Float32Array>) => {
           const input = event.data;
-          if (!firstFrameSeen) {
-            firstFrameSeen = true;
-            if (isMountedRef.current) {
-              setIsCapturingAudio(true);
+          if (!audioFlowing) {
+            for (let index = 0; index < input.length; index += 1) {
+              if (input[index] !== 0) {
+                audioFlowing = true;
+                if (isMountedRef.current) {
+                  setIsCapturingAudio(true);
+                }
+                break;
+              }
             }
           }
           const session = liveSessionRef.current;
