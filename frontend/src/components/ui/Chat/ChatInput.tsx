@@ -1434,10 +1434,10 @@ export const ChatInput = ({
           />
 
           <div
-            className="flex items-center justify-between"
+            className="flex flex-wrap items-center justify-between gap-[calc(var(--theme-spacing-control-gap)/2)]"
             data-ui="chat-input-controls"
           >
-            <div className="chat-input-controls-geometry flex items-center">
+            <div className="chat-input-controls-geometry flex min-w-0 flex-wrap items-center">
               {showControls && (
                 <>
                   {/* File Upload Button with Token Check */}
@@ -1494,7 +1494,7 @@ export const ChatInput = ({
               )}
             </div>
 
-            <div className="flex items-center gap-[var(--theme-spacing-control-gap)]">
+            <div className="flex min-w-0 flex-wrap items-center gap-[var(--theme-spacing-control-gap)]">
               {mode === "edit" && onCancelEdit && (
                 <Button
                   type="button"

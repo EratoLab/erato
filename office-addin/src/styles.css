@@ -50,16 +50,6 @@ body {
   display: none;
 }
 
-.office-shell [data-ui="chat-input-controls"] {
-  flex-wrap: wrap;
-  gap: calc(var(--theme-spacing-control-gap) / 2);
-}
-
-.office-shell [data-ui="chat-input-controls"] > div {
-  flex-wrap: wrap;
-  min-width: 0;
-}
-
 .office-status {
   margin: 0;
   color: #475569;
