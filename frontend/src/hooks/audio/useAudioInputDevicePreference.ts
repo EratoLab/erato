@@ -79,6 +79,27 @@ export function useAudioInputDevicePreference({
     }
 
     void refreshAudioInputDevices();
+
+    // Re-enumerate when the user plugs in / unplugs a microphone mid
+    // session. Without this, the dropdown stays stale until the user
+    // manually clicks "Refresh devices". `devicechange` only fires for
+    // device add/remove — not for label availability after permission
+    // grant, which is still what the manual refresh button is for.
+    const mediaDevices =
+      typeof navigator === "undefined"
+        ? undefined
+        : (navigator as Navigator & { mediaDevices?: MediaDevices })
+            .mediaDevices;
+    if (typeof mediaDevices?.addEventListener !== "function") {
+      return;
+    }
+    const onDeviceChange = () => {
+      void refreshAudioInputDevices();
+    };
+    mediaDevices.addEventListener("devicechange", onDeviceChange);
+    return () => {
+      mediaDevices.removeEventListener("devicechange", onDeviceChange);
+    };
   }, [enabled, refreshAudioInputDevices]);
 
   const selectedAudioInputDevice = useMemo(
