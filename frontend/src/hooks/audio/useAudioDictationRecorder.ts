@@ -2,12 +2,16 @@ import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useRef, useState } from "react";
 /* eslint-disable lingui/no-unlocalized-strings */
 
-// `?worker&url` makes Vite bundle the worklet as a standalone ESM asset and
-// return its URL. Plain `?url` on a `.ts` file in build mode inlines the
-// source as a `data:video/mp2t` URL, which the browser refuses to load via
-// `audioWorklet.addModule()`. The bundle output is still loadable in any
-// worklet-supporting browser — AudioWorklet and Web Worker modules share
-// the same ESM contract on the file format side.
+// `?worker&url` routes the worklet through Vite's worker bundling
+// pipeline, which emits it as a hashed JS asset alongside the main
+// bundle and returns its URL. The platform-canonical
+// `new URL("./worklet.ts", import.meta.url)` pattern does NOT work for
+// TS worklets: Vite inlines `.ts` files referenced that way as a
+// `data:video/mp2t;base64,…` URL (the `.ts` MIME being MPEG Transport
+// Stream video, not TypeScript), which the browser refuses to load via
+// `audioWorklet.addModule()`. AudioWorklet and Web Worker modules
+// share the same ESM contract on the file format side, so the worker
+// pipeline output is valid as an AudioWorklet module.
 import audioDictationWorkletUrl from "./audio-dictation-worklet.ts?worker&url";
 import { useAudioInputDevicePreference } from "./useAudioInputDevicePreference";
 
