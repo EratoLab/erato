@@ -318,6 +318,21 @@ export function useAudioDictationRecorder({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const liveSessionRef = useRef<LiveAudioDictationSession | null>(null);
+  /**
+   * In-flight WebSocket during the start handshake, before the
+   * `LiveAudioDictationSession` is fully constructed. Tracked separately so
+   * `stopDictation` can cancel a startup that's still waiting on the socket
+   * to open or the server to reply with `session_state`.
+   */
+  const pendingSocketRef = useRef<WebSocket | null>(null);
+  /**
+   * Pre-session sample buffer: holds Float32 samples captured between
+   * `processor.onaudioprocess` first firing and the live session being
+   * ready. Drained into `session.pendingSourceSamples` once the session
+   * resolves, so the user's first words aren't dropped during the socket
+   * handshake.
+   */
+  const preSessionSamplesRef = useRef<number[]>([]);
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioAnalyserRef = useRef<AnalyserNode | null>(null);
   const audioSourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
@@ -364,6 +379,7 @@ export function useAudioDictationRecorder({
       void audioContextRef.current.close();
     }
     audioContextRef.current = null;
+    preSessionSamplesRef.current = [];
     if (resetBars && isMountedRef.current) {
       setDictationBars(Array.from({ length: AUDIO_BARS_COUNT }, () => 2));
     }
@@ -449,8 +465,8 @@ export function useAudioDictationRecorder({
     [sendLivePcmChunk],
   );
 
-  const startLiveDictationSession =
-    useCallback(async (): Promise<LiveAudioDictationSession> => {
+  const startLiveDictationSession = useCallback(
+    async (sourceSampleRate: number): Promise<LiveAudioDictationSession> => {
       if (!enabled) {
         throw new Error(
           t`Audio dictation is not available in this environment.`,
@@ -464,6 +480,7 @@ export function useAudioDictationRecorder({
 
       const socket = new WebSocket(createAudioDictationWebSocketUrl());
       socket.binaryType = "arraybuffer";
+      pendingSocketRef.current = socket;
 
       socket.addEventListener("message", (event) => {
         if (typeof event.data !== "string") {
@@ -490,39 +507,53 @@ export function useAudioDictationRecorder({
         setDictationError(t`Audio dictation connection failed.`);
       });
 
-      await waitForSocketOpen(socket);
-      const sessionStatePromise = waitForAudioDictationFrame(
-        socket,
-        (frame) => frame.type === "session_state",
-      );
+      try {
+        await waitForSocketOpen(socket);
+        const sessionStatePromise = waitForAudioDictationFrame(
+          socket,
+          (frame) => frame.type === "session_state",
+        );
 
-      sendAudioDictationControlFrame(socket, {
-        type: "start",
-      });
+        sendAudioDictationControlFrame(socket, {
+          type: "start",
+        });
 
-      const sessionFrame = await sessionStatePromise;
-      if (sessionFrame.type !== "session_state") {
-        throw new Error(t`Audio dictation did not start.`);
+        const sessionFrame = await sessionStatePromise;
+        if (sessionFrame.type !== "session_state") {
+          throw new Error(t`Audio dictation did not start.`);
+        }
+
+        return {
+          socket,
+          chunkDurationMs:
+            sessionFrame.chunk_duration_ms ??
+            DEFAULT_AUDIO_DICTATION_CHUNK_DURATION_MS,
+          nextChunkIndex: sessionFrame.next_chunk_index ?? 0,
+          sendQueue: Promise.resolve(),
+          sentPcmBytes: 0,
+          pendingSourceSamples: [],
+          sourceSampleRate,
+        };
+      } finally {
+        pendingSocketRef.current = null;
       }
-
-      const session: LiveAudioDictationSession = {
-        socket,
-        chunkDurationMs:
-          sessionFrame.chunk_duration_ms ??
-          DEFAULT_AUDIO_DICTATION_CHUNK_DURATION_MS,
-        nextChunkIndex: sessionFrame.next_chunk_index ?? 0,
-        sendQueue: Promise.resolve(),
-        sentPcmBytes: 0,
-        pendingSourceSamples: [],
-        sourceSampleRate: CANONICAL_AUDIO_SAMPLE_RATE_HZ,
-      };
-      liveSessionRef.current = session;
-      return session;
-    }, [enabled]);
+    },
+    [enabled],
+  );
 
   const stopDictation = useCallback(() => {
     if (mediaRecorderRef.current?.state === "recording") {
       mediaRecorderRef.current.stop();
+      return;
+    }
+
+    // Cancel an in-flight startup: closing the pending socket rejects the
+    // await inside `startLiveDictationSession`, which propagates to the
+    // catch block in `startDictation` and runs the full teardown there.
+    const pendingSocket = pendingSocketRef.current;
+    if (pendingSocket) {
+      pendingSocketRef.current = null;
+      pendingSocket.close();
       return;
     }
 
@@ -587,8 +618,12 @@ export function useAudioDictationRecorder({
         mediaTrackSettingsToDiagnostics(audioTrack.getSettings()),
       );
 
-      const liveSession = await startLiveDictationSession();
-
+      // Build the audio pipeline BEFORE awaiting the socket handshake. Once
+      // `source.connect(processor)` is called, `processor.onaudioprocess`
+      // starts firing — samples land in `preSessionSamplesRef` until the
+      // live session is constructed, so the user's first words aren't
+      // dropped during the (~250 ms–1 s) socket + session_state handshake.
+      let sourceSampleRate = CANONICAL_AUDIO_SAMPLE_RATE_HZ;
       if (typeof AudioContext !== "undefined") {
         const audioContext = new AudioContext();
         const source = audioContext.createMediaStreamSource(stream);
@@ -598,22 +633,22 @@ export function useAudioDictationRecorder({
         analyser.fftSize = 256;
         analyser.smoothingTimeConstant = 0.65;
         processorSink.gain.value = 0;
-        source.connect(analyser);
-        source.connect(processor);
-        processor.connect(processorSink);
-        processorSink.connect(audioContext.destination);
-        liveSession.sourceSampleRate = audioContext.sampleRate;
+        sourceSampleRate = audioContext.sampleRate;
+        preSessionSamplesRef.current = [];
         processor.onaudioprocess = (event) => {
+          const input = event.inputBuffer.getChannelData(0);
           const session = liveSessionRef.current;
-          if (!session) {
+          if (session) {
+            for (let index = 0; index < input.length; index += 1) {
+              session.pendingSourceSamples.push(input[index]);
+            }
+            flushLiveAudioSamples(false);
             return;
           }
-
-          const input = event.inputBuffer.getChannelData(0);
+          const preBuffer = preSessionSamplesRef.current;
           for (let index = 0; index < input.length; index += 1) {
-            session.pendingSourceSamples.push(input[index]);
+            preBuffer.push(input[index]);
           }
-          flushLiveAudioSamples(false);
         };
 
         const levelData = new Uint8Array(analyser.fftSize);
@@ -639,6 +674,10 @@ export function useAudioDictationRecorder({
         audioProcessorRef.current = processor;
         audioProcessorSinkRef.current = processorSink;
         audioLevelDataRef.current = levelData;
+        source.connect(analyser);
+        source.connect(processor);
+        processor.connect(processorSink);
+        processorSink.connect(audioContext.destination);
         audioFrameRef.current = window.requestAnimationFrame(analyzeLevel);
       } else {
         setDictationBars((existingBars) =>
@@ -647,6 +686,24 @@ export function useAudioDictationRecorder({
             : Array.from({ length: AUDIO_BARS_COUNT }, () => 2),
         );
       }
+
+      const liveSession = await startLiveDictationSession(sourceSampleRate);
+
+      // Drain pre-buffered samples into the new session in their original
+      // order, THEN publish the session ref. Order matters: until
+      // `liveSessionRef.current` is set, `processor.onaudioprocess` keeps
+      // pushing to `preSessionSamplesRef`. The drain → ref-assign → flush
+      // sequence is one synchronous block, so no audio frame can interleave
+      // and split samples across the two buffers.
+      const preBuffer = preSessionSamplesRef.current;
+      if (preBuffer.length > 0) {
+        for (let index = 0; index < preBuffer.length; index += 1) {
+          liveSession.pendingSourceSamples.push(preBuffer[index]);
+        }
+        preSessionSamplesRef.current = [];
+      }
+      liveSessionRef.current = liveSession;
+      flushLiveAudioSamples(false);
 
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
@@ -764,13 +821,13 @@ export function useAudioDictationRecorder({
   ]);
 
   const toggleDictation = useCallback(() => {
-    if (isDictating) {
+    if (isDictating || isDictationStarting) {
       stopDictation();
       return;
     }
 
     void startDictation();
-  }, [isDictating, startDictation, stopDictation]);
+  }, [isDictating, isDictationStarting, startDictation, stopDictation]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -790,6 +847,8 @@ export function useAudioDictationRecorder({
 
       liveSessionRef.current?.socket.close();
       liveSessionRef.current = null;
+      pendingSocketRef.current?.close();
+      pendingSocketRef.current = null;
       stopRecordingVisualizer(false);
       clearRecordingDurationTimer();
       if (mediaStreamRef.current) {

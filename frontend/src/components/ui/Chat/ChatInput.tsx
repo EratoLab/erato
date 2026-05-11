@@ -1515,10 +1515,11 @@ export const ChatInput = ({
                 />
               )}
               {audioDictationEnabled &&
-                (isDictating ? (
+                (isDictating || isDictationStarting ? (
                   <WaveformButton
                     onClick={toggleDictationForCurrentTarget}
                     bars={dictationBars}
+                    isBuffering={isDictationStarting && !isDictating}
                     disabled={
                       disabled ||
                       isLoading ||
@@ -1527,8 +1528,16 @@ export const ChatInput = ({
                       isFileButtonProcessing ||
                       isAnyTokenLimitExceeded
                     }
-                    ariaLabel={t`Stop dictation`}
-                    statusLabel={t`Dictating audio`}
+                    ariaLabel={
+                      isDictationStarting && !isDictating
+                        ? t`Cancel starting dictation`
+                        : t`Stop dictation`
+                    }
+                    statusLabel={
+                      isDictationStarting && !isDictating
+                        ? t`Starting dictation — capturing audio`
+                        : t`Dictating audio`
+                    }
                     testIds={{
                       root: "chat-input-record-audio",
                       waveform: "chat-input-dictation-waveform",
@@ -1541,7 +1550,7 @@ export const ChatInput = ({
                     variant="secondary"
                     size="sm"
                     icon={
-                      isDictationStarting || isDictationCompleting ? (
+                      isDictationCompleting ? (
                         <LoadingIcon
                           className="size-4 animate-spin text-[var(--theme-fg-primary)]"
                           data-testid="chat-input-dictation-loading-icon"
@@ -1557,17 +1566,14 @@ export const ChatInput = ({
                       isPendingResponse ||
                       isUploading ||
                       isFileButtonProcessing ||
-                      isDictationStarting ||
                       isDictationCompleting ||
                       isAnyTokenLimitExceeded
                     }
                     data-testid="chat-input-record-audio"
                     aria-label={
-                      isDictationStarting
-                        ? t`Starting dictation`
-                        : isDictationCompleting
-                          ? t`Finishing dictation`
-                          : t`Start dictation`
+                      isDictationCompleting
+                        ? t`Finishing dictation`
+                        : t`Start dictation`
                     }
                   />
                 ))}
