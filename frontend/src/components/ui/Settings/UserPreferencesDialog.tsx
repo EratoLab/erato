@@ -31,6 +31,7 @@ import { Alert } from "../Feedback/Alert";
 import { FormField, Input, Textarea } from "../Input";
 import { ModalBase } from "../Modal/ModalBase";
 import {
+  ChevronDownIcon,
   ErrorIcon,
   LockIcon,
   LinkIcon,
@@ -749,23 +750,13 @@ export function UserPreferencesDialog({
                       >
                         {selectedAudioInputLabel}
                       </span>
-                      <svg
+                      <ChevronDownIcon
                         className={clsx(
-                          "size-3 shrink-0 text-theme-fg-secondary transition-transform duration-200",
+                          "size-4 shrink-0 text-theme-fg-secondary transition-transform duration-200",
                           isAudioInputDropdownOpen && "rotate-180",
                         )}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
                         aria-hidden="true"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M19 9l-7 7-7-7"
-                        />
-                      </svg>
+                      />
                     </div>
                   }
                 />

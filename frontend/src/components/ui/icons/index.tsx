@@ -34,6 +34,7 @@ import {
   MediaVideo,
   MultiplePages,
   Search,
+  NavArrowDown,
   NavArrowRight,
   Folder,
   ShareIos,
@@ -262,6 +263,10 @@ export const ArrowLeftIcon = ({ className, ...props }: IconProps) => (
 
 export const ChevronRightIcon = ({ className, ...props }: IconProps) => (
   <NavArrowRight className={className} {...props} />
+);
+
+export const ChevronDownIcon = ({ className, ...props }: IconProps) => (
+  <NavArrowDown className={className} {...props} />
 );
 
 export const OpenNewWindowIcon = ({ className, ...props }: IconProps) => (
