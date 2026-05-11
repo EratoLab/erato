@@ -10,6 +10,10 @@ vi.mock("../useAudioInputDevicePreference", () => ({
   useAudioInputDevicePreference: () => ({ selectedAudioInputDeviceId: "" }),
 }));
 
+vi.mock("../audio-dictation-worklet.ts?worker&url", () => ({
+  default: "blob:mock-audio-dictation-worklet",
+}));
+
 class MockMediaStreamTrack {
   stop = vi.fn();
 
@@ -58,18 +62,34 @@ class MockMediaStreamAudioSourceNode {
   disconnect = vi.fn();
 }
 
-class MockScriptProcessorNode {
-  onaudioprocess: ((event: AudioProcessingEvent) => void) | null = null;
-  connect = vi.fn();
-  disconnect = vi.fn();
+class MockMessagePort {
+  onmessage: ((event: MessageEvent<Float32Array>) => void) | null = null;
+  postMessage = vi.fn();
 }
 
-const mockProcessors: MockScriptProcessorNode[] = [];
+class MockAudioWorkletNode {
+  static instances: MockAudioWorkletNode[] = [];
+  port = new MockMessagePort();
+  connect = vi.fn();
+  disconnect = vi.fn();
+
+  constructor(
+    public readonly context: unknown,
+    public readonly name: string,
+  ) {
+    MockAudioWorkletNode.instances.push(this);
+  }
+}
+
+class MockAudioWorklet {
+  addModule = vi.fn(async () => undefined);
+}
 
 class MockAudioContext {
   sampleRate = 16000;
   state = "running";
   destination = {};
+  audioWorklet = new MockAudioWorklet();
 
   createMediaStreamSource() {
     return new MockMediaStreamAudioSourceNode();
@@ -77,12 +97,6 @@ class MockAudioContext {
 
   createAnalyser() {
     return new MockAnalyserNode();
-  }
-
-  createScriptProcessor() {
-    const processor = new MockScriptProcessorNode();
-    mockProcessors.push(processor);
-    return processor;
   }
 
   createGain() {
@@ -200,16 +214,12 @@ function renderDictationHook(onTranscriptChunk = vi.fn()) {
 }
 
 function emitAudioSamples(samples: Float32Array) {
-  const processor = mockProcessors.at(-1);
-  if (!processor?.onaudioprocess) {
-    throw new Error("Script processor was not initialized");
+  const processor = MockAudioWorkletNode.instances.at(-1);
+  if (!processor?.port.onmessage) {
+    throw new Error("Audio worklet node was not initialized");
   }
 
-  processor.onaudioprocess({
-    inputBuffer: {
-      getChannelData: () => samples,
-    },
-  } as unknown as AudioProcessingEvent);
+  processor.port.onmessage({ data: samples } as MessageEvent<Float32Array>);
 }
 
 describe("getAudioLevelBarsFromTimeDomainData", () => {
@@ -239,7 +249,7 @@ describe("useAudioDictationRecorder", () => {
     vi.restoreAllMocks();
     MockMediaRecorder.instances.length = 0;
     MockWebSocket.instances.length = 0;
-    mockProcessors.length = 0;
+    MockAudioWorkletNode.instances.length = 0;
 
     Object.defineProperty(navigator, "mediaDevices", {
       configurable: true,
@@ -249,6 +259,7 @@ describe("useAudioDictationRecorder", () => {
     });
 
     vi.stubGlobal("AudioContext", MockAudioContext);
+    vi.stubGlobal("AudioWorkletNode", MockAudioWorkletNode);
     vi.stubGlobal("MediaRecorder", MockMediaRecorder);
     vi.stubGlobal("WebSocket", MockWebSocket);
     vi.spyOn(window, "requestAnimationFrame").mockReturnValue(1);
@@ -313,7 +324,9 @@ describe("useAudioDictationRecorder", () => {
     await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
     // The audio pipeline is built before the socket handshake awaits, so the
     // script processor exists even though the session isn't ready yet.
-    await waitFor(() => expect(mockProcessors).toHaveLength(1));
+    await waitFor(() =>
+      expect(MockAudioWorkletNode.instances).toHaveLength(1),
+    );
 
     // Pre-handshake: feed samples into the pre-session buffer. Nothing
     // should be transmitted because the session isn't constructed yet.

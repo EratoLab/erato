@@ -2,7 +2,16 @@ import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useRef, useState } from "react";
 /* eslint-disable lingui/no-unlocalized-strings */
 
+// `?worker&url` makes Vite bundle the worklet as a standalone ESM asset and
+// return its URL. Plain `?url` on a `.ts` file in build mode inlines the
+// source as a `data:video/mp2t` URL, which the browser refuses to load via
+// `audioWorklet.addModule()`. The bundle output is still loadable in any
+// worklet-supporting browser — AudioWorklet and Web Worker modules share
+// the same ESM contract on the file format side.
+import audioDictationWorkletUrl from "./audio-dictation-worklet.ts?worker&url";
 import { useAudioInputDevicePreference } from "./useAudioInputDevicePreference";
+
+const AUDIO_DICTATION_WORKLET_PROCESSOR_NAME = "audio-dictation-processor";
 
 const CANONICAL_AUDIO_SAMPLE_RATE_HZ = 16_000;
 const CANONICAL_AUDIO_WAV_HEADER_BYTES = 44;
@@ -336,8 +345,7 @@ export function useAudioDictationRecorder({
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioAnalyserRef = useRef<AnalyserNode | null>(null);
   const audioSourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const audioProcessorRef = useRef<ScriptProcessorNode | null>(null);
-  const audioProcessorSinkRef = useRef<GainNode | null>(null);
+  const audioProcessorRef = useRef<AudioWorkletNode | null>(null);
   const audioLevelDataRef = useRef<Uint8Array | null>(null);
   const audioFrameRef = useRef<number | null>(null);
   const recordingDurationTimerRef = useRef<number | null>(null);
@@ -369,10 +377,11 @@ export function useAudioDictationRecorder({
     audioAnalyserRef.current = null;
     audioSourceNodeRef.current?.disconnect();
     audioSourceNodeRef.current = null;
-    audioProcessorRef.current?.disconnect();
-    audioProcessorRef.current = null;
-    audioProcessorSinkRef.current?.disconnect();
-    audioProcessorSinkRef.current = null;
+    if (audioProcessorRef.current) {
+      audioProcessorRef.current.port.onmessage = null;
+      audioProcessorRef.current.disconnect();
+      audioProcessorRef.current = null;
+    }
     audioLevelDataRef.current = null;
 
     if (audioContextRef.current && audioContextRef.current.state !== "closed") {
@@ -619,24 +628,37 @@ export function useAudioDictationRecorder({
       );
 
       // Build the audio pipeline BEFORE awaiting the socket handshake. Once
-      // `source.connect(processor)` is called, `processor.onaudioprocess`
-      // starts firing — samples land in `preSessionSamplesRef` until the
-      // live session is constructed, so the user's first words aren't
-      // dropped during the (~250 ms–1 s) socket + session_state handshake.
+      // the worklet node is connected, samples land in
+      // `preSessionSamplesRef` until the live session is constructed, so
+      // the user's first words aren't dropped during the (~250 ms–1 s)
+      // socket + session_state handshake. Sample extraction runs on the
+      // audio rendering thread via `AudioWorkletNode`, isolated from
+      // main-thread contention.
       let sourceSampleRate = CANONICAL_AUDIO_SAMPLE_RATE_HZ;
-      if (typeof AudioContext !== "undefined") {
+      if (
+        typeof AudioContext !== "undefined" &&
+        typeof AudioWorkletNode !== "undefined"
+      ) {
         const audioContext = new AudioContext();
+        await audioContext.audioWorklet.addModule(audioDictationWorkletUrl);
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- The await may yield to the component's unmount cleanup, which flips isMountedRef.current to false; the linter can't see refs change across awaits.
+        if (!isMountedRef.current) {
+          void audioContext.close();
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
         const source = audioContext.createMediaStreamSource(stream);
         const analyser = audioContext.createAnalyser();
-        const processor = audioContext.createScriptProcessor(4096, 1, 1);
-        const processorSink = audioContext.createGain();
+        const processor = new AudioWorkletNode(
+          audioContext,
+          AUDIO_DICTATION_WORKLET_PROCESSOR_NAME,
+        );
         analyser.fftSize = 256;
         analyser.smoothingTimeConstant = 0.65;
-        processorSink.gain.value = 0;
         sourceSampleRate = audioContext.sampleRate;
         preSessionSamplesRef.current = [];
-        processor.onaudioprocess = (event) => {
-          const input = event.inputBuffer.getChannelData(0);
+        processor.port.onmessage = (event: MessageEvent<Float32Array>) => {
+          const input = event.data;
           const session = liveSessionRef.current;
           if (session) {
             for (let index = 0; index < input.length; index += 1) {
@@ -672,12 +694,9 @@ export function useAudioDictationRecorder({
         audioAnalyserRef.current = analyser;
         audioSourceNodeRef.current = source;
         audioProcessorRef.current = processor;
-        audioProcessorSinkRef.current = processorSink;
         audioLevelDataRef.current = levelData;
         source.connect(analyser);
         source.connect(processor);
-        processor.connect(processorSink);
-        processorSink.connect(audioContext.destination);
         audioFrameRef.current = window.requestAnimationFrame(analyzeLevel);
       } else {
         setDictationBars((existingBars) =>
