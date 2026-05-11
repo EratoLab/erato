@@ -119,7 +119,7 @@ export function useAudioInputLevelPreview({
               .mediaDevices;
 
       if (typeof mediaDevices?.getUserMedia !== "function") {
-        setError(t`Audio input is not supported in this browser.`);
+        setError(t`Audio recording is not supported in this browser.`);
         return;
       }
 
