@@ -107,6 +107,10 @@ class MockAudioContext {
     this.state = "running";
   });
 
+  suspend = vi.fn(async () => {
+    this.state = "suspended";
+  });
+
   close = vi.fn(async () => {
     this.state = "closed";
   });

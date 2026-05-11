@@ -375,7 +375,23 @@ export function useAudioDictationRecorder({
    * handshake.
    */
   const preSessionSamplesRef = useRef<number[]>([]);
+  /**
+   * AudioContext persists across dictation sessions. Each session creates
+   * fresh source / analyser / worklet nodes (so leftover per-session
+   * state can't leak), but the context itself, its audio rendering
+   * thread, and the registered worklet processor stay warm. Closing and
+   * re-creating the context on every stop pays an audio-thread spin-up
+   * cost on every restart — which is most likely what was eating the
+   * first word on a "warm" second dictation.
+   */
   const audioContextRef = useRef<AudioContext | null>(null);
+  /**
+   * Tracks whether `audioWorklet.addModule(audioDictationWorkletUrl)`
+   * has been called on the current AudioContext, so we don't re-fetch
+   * or re-register on every session start. Reset whenever a fresh
+   * AudioContext is created.
+   */
+  const workletModuleLoadedRef = useRef(false);
   const audioAnalyserRef = useRef<AnalyserNode | null>(null);
   const audioSourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const audioProcessorRef = useRef<AudioWorkletNode | null>(null);
@@ -428,10 +444,15 @@ export function useAudioDictationRecorder({
     }
     audioLevelDataRef.current = null;
 
-    if (audioContextRef.current && audioContextRef.current.state !== "closed") {
-      void audioContextRef.current.close();
+    // Suspend rather than close: each dictation gets fresh source /
+    // analyser / worklet nodes (so per-session state can't leak), but
+    // the AudioContext itself stays warm. Closing + re-creating pays an
+    // audio-thread spin-up cost on every restart which is most likely
+    // what was eating the first word on a warm second session. Close
+    // only happens on the hook's unmount cleanup.
+    if (audioContextRef.current && audioContextRef.current.state === "running") {
+      void audioContextRef.current.suspend();
     }
-    audioContextRef.current = null;
     preSessionSamplesRef.current = [];
     if (isMountedRef.current) {
       setIsCapturingAudio(false);
@@ -520,6 +541,51 @@ export function useAudioDictationRecorder({
     },
     [sendLivePcmChunk],
   );
+
+  /**
+   * Returns a ready-to-use AudioContext with the dictation worklet
+   * module registered and the context in the `running` state. Reuses
+   * the existing context across sessions (resume) and falls back to
+   * creating a fresh one only when the previous one was closed.
+   * Returns `null` when the host browser doesn't support Web Audio /
+   * AudioWorkletNode at all.
+   */
+  const ensureAudioContextReady =
+    useCallback(async (): Promise<AudioContext | null> => {
+      if (
+        typeof AudioContext === "undefined" ||
+        typeof AudioWorkletNode === "undefined"
+      ) {
+        return null;
+      }
+
+      let audioContext = audioContextRef.current;
+      if (!audioContext || audioContext.state === "closed") {
+        audioContext = new AudioContext();
+        audioContextRef.current = audioContext;
+        workletModuleLoadedRef.current = false;
+      }
+
+      if (!workletModuleLoadedRef.current) {
+        await audioContext.audioWorklet.addModule(audioDictationWorkletUrl);
+        workletModuleLoadedRef.current = true;
+      }
+
+      // resume() is a no-op when the context is already running; it
+      // matters when we're reusing a session-2 context that was
+      // suspended at the end of session 1, and on browsers where a
+      // freshly-created context starts suspended after user activation
+      // has lapsed across the preceding awaits (Mozilla bug 1629478).
+      try {
+        await audioContext.resume();
+      } catch {
+        // Resume can reject if user activation has fully expired; the
+        // context still works, and the worklet starts producing frames
+        // once the source is connected.
+      }
+
+      return audioContext;
+    }, []);
 
   const startLiveDictationSession = useCallback(
     async (sourceSampleRate: number): Promise<LiveAudioDictationSession> => {
@@ -736,38 +802,13 @@ export function useAudioDictationRecorder({
       // audio rendering thread via `AudioWorkletNode`, isolated from
       // main-thread contention.
       let sourceSampleRate = CANONICAL_AUDIO_SAMPLE_RATE_HZ;
-      if (
-        typeof AudioContext !== "undefined" &&
-        typeof AudioWorkletNode !== "undefined"
-      ) {
-        const audioContext = new AudioContext();
-        await audioContext.audioWorklet.addModule(audioDictationWorkletUrl);
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- The await may yield to the component's unmount cleanup, which flips isMountedRef.current to false; the linter can't see refs change across awaits.
-        if (!isMountedRef.current) {
-          void audioContext.close();
-          stream.getTracks().forEach((track) => track.stop());
-          return;
-        }
-        // The user gesture that started dictation may have lapsed across
-        // the `getUserMedia` + `addModule` awaits, in which case the new
-        // AudioContext starts suspended and no audio flows through the
-        // graph. `resume()` is no-op when already running. Awaiting it
-        // matters — Mozilla bug 1629478 measured ~70 empty AudioWorklet
-        // render quanta of warm-up without an explicit resume, vs ~10
-        // with one, so the first real samples arrive much sooner.
-        try {
-          await audioContext.resume();
-        } catch {
-          // Resume can reject if user activation has fully expired; the
-          // context still works, and the worklet will start producing
-          // frames once the source becomes active, so don't fail start.
-        }
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isMountedRef.current may flip false across the preceding awaits; the linter can't see refs change across awaits.
-        if (!isMountedRef.current) {
-          void audioContext.close();
-          stream.getTracks().forEach((track) => track.stop());
-          return;
-        }
+      const audioContext = await ensureAudioContextReady();
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- The await may yield to the component's unmount cleanup, which flips isMountedRef.current to false; the linter can't see refs change across awaits.
+      if (!isMountedRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      if (audioContext) {
         const source = audioContext.createMediaStreamSource(stream);
         const analyser = audioContext.createAnalyser();
         const processor = new AudioWorkletNode(
@@ -939,6 +980,7 @@ export function useAudioDictationRecorder({
   }, [
     clearRecordingDurationTimer,
     enabled,
+    ensureAudioContextReady,
     flushLiveAudioSamples,
     isDictating,
     isDictationCompleting,
@@ -971,6 +1013,17 @@ export function useAudioDictationRecorder({
       pendingSocketRef.current?.close();
       pendingSocketRef.current = null;
       stopRecordingVisualizer(false);
+      // stopRecordingVisualizer suspends the AudioContext between
+      // sessions; close it for real on unmount so the audio rendering
+      // thread and the registered worklet are released.
+      if (
+        audioContextRef.current &&
+        audioContextRef.current.state !== "closed"
+      ) {
+        void audioContextRef.current.close();
+      }
+      audioContextRef.current = null;
+      workletModuleLoadedRef.current = false;
       clearRecordingDurationTimer();
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach((track) => track.stop());
