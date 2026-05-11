@@ -1,43 +1,23 @@
 import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-export const AUDIO_INPUT_DEVICE_ID_LOCAL_STORAGE_KEY =
-  "erato.audioTranscription.audioInputDeviceId";
+import { useAudioInputDeviceStore } from "@/state/audioInputDeviceStore";
 
 export type AudioInputDeviceOption = {
   deviceId: string;
   label: string;
 };
 
-function readStoredAudioInputDeviceId(): string {
-  try {
-    return (
-      localStorage.getItem(AUDIO_INPUT_DEVICE_ID_LOCAL_STORAGE_KEY) ?? ""
-    ).trim();
-  } catch {
-    return "";
-  }
-}
-
-function writeStoredAudioInputDeviceId(deviceId: string) {
-  try {
-    if (deviceId) {
-      localStorage.setItem(AUDIO_INPUT_DEVICE_ID_LOCAL_STORAGE_KEY, deviceId);
-      return;
-    }
-
-    localStorage.removeItem(AUDIO_INPUT_DEVICE_ID_LOCAL_STORAGE_KEY);
-  } catch {
-    // Local storage is best-effort; recording should still work with the
-    // browser default input when persistence is unavailable.
-  }
-}
-
 export function useAudioInputDevicePreference({
   enabled = true,
 }: { enabled?: boolean } = {}) {
-  const [selectedAudioInputDeviceId, setSelectedAudioInputDeviceIdState] =
-    useState(readStoredAudioInputDeviceId);
+  const selectedAudioInputDeviceId = useAudioInputDeviceStore(
+    (state) => state.selectedDeviceId,
+  );
+  const setSelectedDeviceIdInStore = useAudioInputDeviceStore(
+    (state) => state.setSelectedDeviceId,
+  );
+
   const [audioInputDevices, setAudioInputDevices] = useState<
     AudioInputDeviceOption[]
   >([]);
@@ -47,10 +27,12 @@ export function useAudioInputDevicePreference({
     string | null
   >(null);
 
-  const setSelectedAudioInputDeviceId = useCallback((deviceId: string) => {
-    setSelectedAudioInputDeviceIdState(deviceId);
-    writeStoredAudioInputDeviceId(deviceId);
-  }, []);
+  const setSelectedAudioInputDeviceId = useCallback(
+    (deviceId: string) => {
+      setSelectedDeviceIdInStore(deviceId);
+    },
+    [setSelectedDeviceIdInStore],
+  );
 
   const refreshAudioInputDevices = useCallback(async () => {
     const mediaDevices =

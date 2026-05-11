@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,6 +16,7 @@ import {
 } from "@/components/providers/ThemeProvider";
 import { profileQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
+import { useAudioInputDeviceStore } from "@/state/audioInputDeviceStore";
 
 import { UserPreferencesDialog } from "./UserPreferencesDialog";
 
@@ -163,6 +165,7 @@ function renderDialog({
 }
 
 beforeEach(() => {
+  useAudioInputDeviceStore.setState({ selectedDeviceId: "" });
   localStorageValues.clear();
   vi.stubGlobal("localStorage", {
     getItem: vi.fn((key: string) => localStorageValues.get(key) ?? null),
@@ -333,15 +336,24 @@ describe("UserPreferencesDialog", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "Audio" }));
 
-    const select = await screen.findByLabelText("Audio input");
-    expect(select).toHaveTextContent("System default microphone");
-    expect(select).toHaveTextContent("Built-in Microphone");
+    const audioPanel = await screen.findByRole("tabpanel", { name: "Audio" });
+    const trigger = await within(audioPanel).findByTestId(
+      "audio-input-dropdown-trigger",
+    );
+    expect(trigger).toHaveTextContent("System default microphone");
 
-    fireEvent.change(select, { target: { value: "mic-built-in" } });
+    fireEvent.click(trigger);
 
-    expect(
-      localStorage.getItem("erato.audioTranscription.audioInputDeviceId"),
-    ).toBe("mic-built-in");
+    const builtInItem = await screen.findByRole("menuitem", {
+      name: "Built-in Microphone",
+    });
+    fireEvent.click(builtInItem);
+
+    await waitFor(() => {
+      expect(useAudioInputDeviceStore.getState().selectedDeviceId).toBe(
+        "mic-built-in",
+      );
+    });
   });
 
   it("updates the selected theme mode from the appearance pane", () => {
