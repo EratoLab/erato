@@ -660,6 +660,11 @@ export function useAudioDictationRecorder({
           stream.getTracks().forEach((track) => track.stop());
           return;
         }
+        // The user gesture that started dictation may have lapsed across
+        // the `getUserMedia` + `addModule` awaits, in which case the new
+        // AudioContext starts suspended and no audio flows through the
+        // graph. Resuming is a no-op when already running.
+        void audioContext.resume();
         const source = audioContext.createMediaStreamSource(stream);
         const analyser = audioContext.createAnalyser();
         const processor = new AudioWorkletNode(
@@ -670,8 +675,21 @@ export function useAudioDictationRecorder({
         analyser.smoothingTimeConstant = 0.65;
         sourceSampleRate = audioContext.sampleRate;
         preSessionSamplesRef.current = [];
+        // First-frame signal: the worklet only posts after accumulating
+        // 4096 samples from the source. If `source.connect(processor)` has
+        // succeeded but the mic stream isn't producing samples yet (OS
+        // warm-up on Bluetooth / Safari / external mics), no message
+        // arrives and the spinner stays. Once a frame lands we know audio
+        // is really flowing, so the bars can appear honestly.
+        let firstFrameSeen = false;
         processor.port.onmessage = (event: MessageEvent<Float32Array>) => {
           const input = event.data;
+          if (!firstFrameSeen) {
+            firstFrameSeen = true;
+            if (isMountedRef.current) {
+              setIsCapturingAudio(true);
+            }
+          }
           const session = liveSessionRef.current;
           if (session) {
             for (let index = 0; index < input.length; index += 1) {
@@ -711,10 +729,6 @@ export function useAudioDictationRecorder({
         source.connect(analyser);
         source.connect(processor);
         audioFrameRef.current = window.requestAnimationFrame(analyzeLevel);
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isMountedRef.current may flip false across the preceding awaits; the linter can't see refs change across awaits.
-        if (isMountedRef.current) {
-          setIsCapturingAudio(true);
-        }
       } else {
         setDictationBars((existingBars) =>
           existingBars.length === AUDIO_BARS_COUNT

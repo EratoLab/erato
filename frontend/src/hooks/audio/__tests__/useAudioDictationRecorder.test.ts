@@ -103,6 +103,10 @@ class MockAudioContext {
     return new MockGainNode();
   }
 
+  resume = vi.fn(async () => {
+    this.state = "running";
+  });
+
   close = vi.fn(async () => {
     this.state = "closed";
   });
