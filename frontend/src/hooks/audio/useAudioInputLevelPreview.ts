@@ -1,5 +1,6 @@
 import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useMountedState } from "react-use";
 
 import {
   AUDIO_BARS_COUNT,
@@ -60,7 +61,7 @@ export function useAudioInputLevelPreview({
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const levelDataRef = useRef<Uint8Array | null>(null);
   const rafRef = useRef<number | null>(null);
-  const isMountedRef = useRef(true);
+  const isMounted = useMountedState();
 
   const stop = useCallback(({ resetBars }: { resetBars: boolean }) => {
     if (rafRef.current !== null) {
@@ -80,7 +81,7 @@ export function useAudioInputLevelPreview({
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
-    if (!isMountedRef.current) {
+    if (!isMounted()) {
       return;
     }
     setIsActive(false);
@@ -89,12 +90,10 @@ export function useAudioInputLevelPreview({
     if (resetBars) {
       setBars(createIdleBars());
     }
-  }, []);
+  }, [isMounted]);
 
   useEffect(() => {
-    isMountedRef.current = true;
     return () => {
-      isMountedRef.current = false;
       stop({ resetBars: false });
     };
   }, [stop]);
@@ -141,7 +140,7 @@ export function useAudioInputLevelPreview({
           },
         });
       } catch (err) {
-        if (cancelled || !isMountedRef.current) {
+        if (cancelled || !isMounted()) {
           return;
         }
         const name = err instanceof DOMException ? err.name : undefined;
@@ -166,7 +165,7 @@ export function useAudioInputLevelPreview({
         return;
       }
 
-      if (cancelled || !isMountedRef.current) {
+      if (cancelled || !isMounted()) {
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
@@ -199,7 +198,7 @@ export function useAudioInputLevelPreview({
       const tick = () => {
         const analyserNode = analyserRef.current;
         const levelData = levelDataRef.current;
-        if (!analyserNode || !levelData || !isMountedRef.current) {
+        if (!analyserNode || !levelData || !isMounted()) {
           return;
         }
         analyserNode.getByteTimeDomainData(levelData);
@@ -215,7 +214,7 @@ export function useAudioInputLevelPreview({
       cancelled = true;
       stop({ resetBars: true });
     };
-  }, [enabled, deviceId, stop]);
+  }, [enabled, deviceId, isMounted, stop]);
 
   const deviceIdMismatch =
     enabled &&

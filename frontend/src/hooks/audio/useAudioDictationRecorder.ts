@@ -1,5 +1,6 @@
 import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useMountedState } from "react-use";
 /* eslint-disable lingui/no-unlocalized-strings */
 
 // `?worker&url` routes the worklet through Vite's worker bundling
@@ -410,7 +411,14 @@ export function useAudioDictationRecorder({
   const capturingFlipTimerRef = useRef<number | null>(null);
   const recordingDurationTimerRef = useRef<number | null>(null);
   const onTranscriptChunkRef = useRef(onTranscriptChunk);
-  const isMountedRef = useRef(true);
+  /**
+   * `react-use`'s `useMountedState` returns a getter that's `true` while
+   * the component is mounted and flips to `false` exactly once during
+   * unmount cleanup. Replaces a manual `isMounted() = true/false`
+   * pattern; matters across awaits in this hook where the component may
+   * unmount between yields and we must avoid `setState` afterwards.
+   */
+  const isMounted = useMountedState();
   const startInFlightRef = useRef(false);
   const { selectedAudioInputDeviceId } = useAudioInputDevicePreference({
     enabled,
@@ -458,13 +466,13 @@ export function useAudioDictationRecorder({
       void audioContextRef.current.suspend();
     }
     preSessionSamplesRef.current = [];
-    if (isMountedRef.current) {
+    if (isMounted()) {
       setIsCapturingAudio(false);
     }
-    if (resetBars && isMountedRef.current) {
+    if (resetBars && isMounted()) {
       setDictationBars(Array.from({ length: AUDIO_BARS_COUNT }, () => 2));
     }
-  }, []);
+  }, [isMounted]);
 
   const stopMediaRecordingStream = useCallback(() => {
     clearRecordingDurationTimer();
@@ -623,7 +631,7 @@ export function useAudioDictationRecorder({
         );
       }
 
-      if (isMountedRef.current) {
+      if (isMounted()) {
         setIsDictationStarting(true);
       }
       setDictationError(null);
@@ -688,7 +696,7 @@ export function useAudioDictationRecorder({
         pendingSocketRef.current = null;
       }
     },
-    [enabled],
+    [enabled, isMounted],
   );
 
   const completeDictation = useCallback(async () => {
@@ -725,11 +733,11 @@ export function useAudioDictationRecorder({
     } finally {
       liveSessionRef.current = null;
       session?.socket.close();
-      if (isMountedRef.current) {
+      if (isMounted()) {
         setIsDictationCompleting(false);
       }
     }
-  }, [flushLiveAudioSamples]);
+  }, [flushLiveAudioSamples, isMounted]);
 
   const stopDictation = useCallback(() => {
     // Active dictation: liveSessionRef is set the instant the session
@@ -738,7 +746,7 @@ export function useAudioDictationRecorder({
     // React `isDictating` state across the same tick.
     if (liveSessionRef.current) {
       clearRecordingDurationTimer();
-      if (isMountedRef.current) {
+      if (isMounted()) {
         setIsDictating(false);
         setIsDictationCompleting(true);
       }
@@ -762,6 +770,7 @@ export function useAudioDictationRecorder({
   }, [
     clearRecordingDurationTimer,
     completeDictation,
+    isMounted,
     stopMediaRecordingStream,
   ]);
 
@@ -811,7 +820,7 @@ export function useAudioDictationRecorder({
           sampleRate: { ideal: CANONICAL_AUDIO_SAMPLE_RATE_HZ },
         },
       });
-      if (!isMountedRef.current) {
+      if (!isMounted()) {
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
@@ -840,8 +849,7 @@ export function useAudioDictationRecorder({
       const audioContext = await ensureAudioContextReady(
         trackSettings.sampleRate,
       );
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- The await may yield to the component's unmount cleanup, which flips isMountedRef.current to false; the linter can't see refs change across awaits.
-      if (!isMountedRef.current) {
+      if (!isMounted()) {
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
@@ -891,7 +899,7 @@ export function useAudioDictationRecorder({
           // between scheduling and execution, the processor ref will be
           // null or point at a different node — don't flip stale state.
           if (
-            !isMountedRef.current ||
+            !isMounted() ||
             audioProcessorRef.current !== processor
           ) {
             return;
@@ -1001,7 +1009,7 @@ export function useAudioDictationRecorder({
       liveSessionRef.current?.socket.close();
       liveSessionRef.current = null;
       stopMediaRecordingStream();
-      if (isMountedRef.current) {
+      if (isMounted()) {
         setIsDictating(false);
         setIsDictationStarting(false);
         setIsDictationCompleting(false);
@@ -1022,6 +1030,7 @@ export function useAudioDictationRecorder({
     isDictating,
     isDictationCompleting,
     isDictationStarting,
+    isMounted,
     maxRecordingDurationSeconds,
     selectedAudioInputDeviceId,
     startLiveDictationSession,
@@ -1039,10 +1048,7 @@ export function useAudioDictationRecorder({
   }, [isDictating, isDictationStarting, startDictation, stopDictation]);
 
   useEffect(() => {
-    isMountedRef.current = true;
-
     return () => {
-      isMountedRef.current = false;
       startInFlightRef.current = false;
 
       liveSessionRef.current?.socket.close();
