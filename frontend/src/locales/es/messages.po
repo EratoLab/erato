@@ -1686,15 +1686,16 @@ msgstr "Adjuntos"
 msgid "Audio analysis is not supported in this browser."
 msgstr "El análisis de audio no es compatible con este navegador."
 
-#: src/hooks/audio/useAudioDictationRecorder.ts
+#: src/hooks/audio/audio-dictation-protocol.ts
 msgid "Audio dictation connection closed."
 msgstr "La conexión de dictado de audio se cerró."
 
+#: src/hooks/audio/audio-dictation-protocol.ts
 #: src/hooks/audio/useAudioDictationRecorder.ts
 msgid "Audio dictation connection failed."
 msgstr "La conexión de dictado de audio falló."
 
-#: src/hooks/audio/useAudioDictationRecorder.ts
+#: src/hooks/audio/audio-dictation-protocol.ts
 msgid "Audio dictation connection timed out."
 msgstr "Se agotó el tiempo de espera de la conexión de dictado de audio."
 
@@ -1702,6 +1703,7 @@ msgstr "Se agotó el tiempo de espera de la conexión de dictado de audio."
 msgid "Audio dictation did not start."
 msgstr "El dictado de audio no se inició."
 
+#: src/hooks/audio/audio-dictation-protocol.ts
 #: src/hooks/audio/useAudioDictationRecorder.ts
 msgid "Audio dictation failed."
 msgstr "El dictado de audio falló."
@@ -1710,7 +1712,7 @@ msgstr "El dictado de audio falló."
 msgid "Audio dictation is not available in this environment."
 msgstr "El dictado de audio no está disponible en este entorno."
 
-#: src/hooks/audio/useAudioDictationRecorder.ts
+#: src/hooks/audio/audio-dictation-protocol.ts
 msgid "Audio dictation response timed out."
 msgstr "Se agotó el tiempo de espera de la respuesta del dictado de audio."
 
@@ -1934,8 +1936,8 @@ msgid "Copy"
 msgstr ""
 
 #: src/hooks/audio/useAudioDictationRecorder.ts
-msgid "Could not complete audio dictation."
-msgstr "No se pudo completar el dictado de audio."
+#~ msgid "Could not complete audio dictation."
+#~ msgstr "No se pudo completar el dictado de audio."
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Could not complete audio recording."
@@ -1949,6 +1951,7 @@ msgstr "No se pudieron cargar los dispositivos de entrada de audio."
 #~ msgid "Could not prepare audio recording for transcription."
 #~ msgstr ""
 
+#: src/hooks/audio/audio-dictation-protocol.ts
 #: src/hooks/audio/useAudioDictationRecorder.ts
 msgid "Could not read audio dictation response."
 msgstr "No se pudo leer la respuesta del dictado de audio."
