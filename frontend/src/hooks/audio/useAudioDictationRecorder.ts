@@ -585,17 +585,11 @@ export function useAudioDictationRecorder({
   }, [flushLiveAudioSamples, isMounted]);
 
   const stopDictation = useCallback(() => {
-    console.log("[dictation] stopDictation called", {
-      hasLiveSession: !!liveSessionRef.current,
-      hasSessionAbort: !!sessionAbortRef.current,
-      stack: new Error().stack,
-    });
     // Active dictation: liveSessionRef is set the instant the session
     // resolves, before the reducer transitions to "dictating", so this
     // is the precise "we are recording right now" signal — more
     // reliable than reading the React status across the same tick.
     if (liveSessionRef.current) {
-      console.log("[dictation] stopDictation → user_stop (active session)");
       clearRecordingDurationTimer();
       if (isMounted()) {
         dispatchSession({ type: "user_stop" });
@@ -611,13 +605,11 @@ export function useAudioDictationRecorder({
     // full teardown there. The signal listener inside the startup
     // helper also closes the WebSocket as a belt-and-braces.
     if (sessionAbortRef.current) {
-      console.log("[dictation] stopDictation → abort (in-flight startup)");
       sessionAbortRef.current.abort();
       sessionAbortRef.current = null;
       return;
     }
 
-    console.log("[dictation] stopDictation → abort (fall-through)");
     dispatchSession({ type: "abort" });
     tearDownCaptureGraph();
   }, [
@@ -628,26 +620,16 @@ export function useAudioDictationRecorder({
   ]);
 
   const startDictation = useCallback(async () => {
-    console.log("[dictation] startDictation called", {
-      startInFlight: startInFlightRef.current,
-      isDictating,
-      isDictationStarting,
-      isDictationCompleting,
-      enabled,
-      isMounted: isMounted(),
-    });
     if (
       startInFlightRef.current ||
       isDictating ||
       isDictationStarting ||
       isDictationCompleting
     ) {
-      console.log("[dictation] startDictation early-return (guard tripped)");
       return;
     }
 
     if (!enabled) {
-      console.log("[dictation] startDictation early-return (disabled)");
       setDictationError(
         t`Audio dictation is not available in this environment.`,
       );
@@ -658,9 +640,6 @@ export function useAudioDictationRecorder({
     dispatchSession({ type: "start" });
     const sessionAbort = new AbortController();
     sessionAbortRef.current = sessionAbort;
-    console.log("[dictation] startDictation entered start phase", {
-      signalAborted: sessionAbort.signal.aborted,
-    });
 
     const mediaDevices =
       typeof navigator === "undefined"
@@ -707,9 +686,6 @@ export function useAudioDictationRecorder({
           firstError instanceof DOMException &&
           firstError.name === "OverconstrainedError"
         ) {
-          console.log(
-            "[dictation] OverconstrainedError → retrying without deviceId",
-          );
           stream = await mediaDevices.getUserMedia({
             audio: baseAudioConstraints,
           });
@@ -718,12 +694,7 @@ export function useAudioDictationRecorder({
           throw firstError;
         }
       }
-      console.log("[dictation] getUserMedia resolved", {
-        isMounted: isMounted(),
-        signalAborted: sessionAbort.signal.aborted,
-      });
       if (!isMounted()) {
-        console.log("[dictation] bail after getUserMedia (not mounted)");
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
@@ -752,14 +723,7 @@ export function useAudioDictationRecorder({
       const audioContext = await ensureAudioContextReady(
         trackSettings.sampleRate,
       );
-      console.log("[dictation] ensureAudioContextReady resolved", {
-        haveContext: !!audioContext,
-        contextState: audioContext?.state,
-        isMounted: isMounted(),
-        signalAborted: sessionAbort.signal.aborted,
-      });
       if (!isMounted()) {
-        console.log("[dictation] bail after ensureAudioContextReady (not mounted)");
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
@@ -915,19 +879,9 @@ export function useAudioDictationRecorder({
           t`Dictation stopped automatically after the configured maximum duration.`,
         );
       }, recordingLimitMs * 1000);
-      console.log("[dictation] startDictation success → session_ready");
       dispatchSession({ type: "session_ready" });
       setDictationError(null);
     } catch (error) {
-      const errName = error instanceof Error ? error.name : "(non-Error)";
-      const errMessage = error instanceof Error ? error.message : String(error);
-      console.log("[dictation] startDictation CAUGHT error", {
-        name: errName,
-        message: errMessage,
-        signalAborted: sessionAbort.signal.aborted,
-        isMounted: isMounted(),
-        stack: error instanceof Error ? error.stack : undefined,
-      });
       liveSessionRef.current?.socket.close();
       liveSessionRef.current = null;
       tearDownCaptureGraph();
@@ -970,10 +924,6 @@ export function useAudioDictationRecorder({
   ]);
 
   const toggleDictation = useCallback(() => {
-    console.log("[dictation] toggleDictation called", {
-      isDictating,
-      isDictationStarting,
-    });
     if (isDictating || isDictationStarting) {
       stopDictation();
       return;
@@ -983,13 +933,7 @@ export function useAudioDictationRecorder({
   }, [isDictating, isDictationStarting, startDictation, stopDictation]);
 
   useEffect(() => {
-    console.log("[dictation] unmount-effect SETUP");
     return () => {
-      console.log("[dictation] unmount-effect CLEANUP", {
-        hasSessionAbort: !!sessionAbortRef.current,
-        hasLiveSession: !!liveSessionRef.current,
-        startInFlight: startInFlightRef.current,
-      });
       startInFlightRef.current = false;
 
       // Abort any in-flight startup; its signal listener closes the
