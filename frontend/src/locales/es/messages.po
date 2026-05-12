@@ -1017,8 +1017,8 @@ msgstr "Micrófono"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.audio.input.label"
-msgstr "Entrada de audio"
+#~ msgid "preferences.dialog.audio.input.label"
+#~ msgstr "Entrada de audio"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -1034,6 +1034,36 @@ msgstr "Actualizar dispositivos"
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.audio.input.refreshing"
 msgstr "Actualizando..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.audio.test.description"
+msgstr "Inicia la prueba y habla — las barras deberían moverse y el dispositivo activo debería coincidir con tu selección."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.audio.test.heading"
+msgstr "Probar micrófono"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/MicTestPanel.tsx
+msgid "preferences.dialog.audio.test.listening"
+msgstr "Escuchando en {activeDeviceLabel}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/MicTestPanel.tsx
+msgid "preferences.dialog.audio.test.mismatch"
+msgstr "El navegador está grabando desde un micrófono distinto al seleccionado."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/MicTestPanel.tsx
+msgid "preferences.dialog.audio.test.start"
+msgstr "Probar micrófono"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/MicTestPanel.tsx
+msgid "preferences.dialog.audio.test.stop"
+msgstr "Detener prueba"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -1652,15 +1682,20 @@ msgstr "Adjuntar archivo"
 msgid "Attachments"
 msgstr "Adjuntos"
 
-#: src/hooks/audio/useAudioDictationRecorder.ts
+#: src/hooks/audio/useAudioInputLevelPreview.ts
+msgid "Audio analysis is not supported in this browser."
+msgstr "El análisis de audio no es compatible con este navegador."
+
+#: src/hooks/audio/audio-dictation-protocol.ts
 msgid "Audio dictation connection closed."
 msgstr "La conexión de dictado de audio se cerró."
 
+#: src/hooks/audio/audio-dictation-protocol.ts
 #: src/hooks/audio/useAudioDictationRecorder.ts
 msgid "Audio dictation connection failed."
 msgstr "La conexión de dictado de audio falló."
 
-#: src/hooks/audio/useAudioDictationRecorder.ts
+#: src/hooks/audio/audio-dictation-protocol.ts
 msgid "Audio dictation connection timed out."
 msgstr "Se agotó el tiempo de espera de la conexión de dictado de audio."
 
@@ -1668,6 +1703,7 @@ msgstr "Se agotó el tiempo de espera de la conexión de dictado de audio."
 msgid "Audio dictation did not start."
 msgstr "El dictado de audio no se inició."
 
+#: src/hooks/audio/audio-dictation-protocol.ts
 #: src/hooks/audio/useAudioDictationRecorder.ts
 msgid "Audio dictation failed."
 msgstr "El dictado de audio falló."
@@ -1676,7 +1712,7 @@ msgstr "El dictado de audio falló."
 msgid "Audio dictation is not available in this environment."
 msgstr "El dictado de audio no está disponible en este entorno."
 
-#: src/hooks/audio/useAudioDictationRecorder.ts
+#: src/hooks/audio/audio-dictation-protocol.ts
 msgid "Audio dictation response timed out."
 msgstr "Se agotó el tiempo de espera de la respuesta del dictado de audio."
 
@@ -1688,6 +1724,10 @@ msgstr "Se agotó el tiempo de espera de la respuesta del dictado de audio."
 msgid "Audio input device selection is not supported in this browser."
 msgstr "La selección del dispositivo de entrada de audio no es compatible con este navegador."
 
+#: src/hooks/audio/useAudioInputLevelPreview.ts
+#~ msgid "Audio input is not supported in this browser."
+#~ msgstr ""
+
 #: src/components/ui/Chat/ChatInput.tsx
 #~ msgid "Audio recording - Status: {0}"
 #~ msgstr "Grabación de audio - Estado: {0}"
@@ -1697,6 +1737,7 @@ msgid "Audio recording - Status: {displayStatus}"
 msgstr "Grabación de audio - Estado: {displayStatus}"
 
 #: src/hooks/audio/useAudioDictationRecorder.ts
+#: src/hooks/audio/useAudioInputLevelPreview.ts
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Audio recording is not supported in this browser."
 msgstr "La grabación de audio no es compatible con este navegador."
@@ -1778,6 +1819,10 @@ msgid "Cancel action"
 msgstr "Cancelar acción"
 
 #: src/components/ui/Chat/ChatInput.tsx
+msgid "Cancel starting dictation"
+msgstr "Cancelar inicio del dictado"
+
+#: src/components/ui/Chat/ChatInput.tsx
 msgid "Canceled"
 msgstr ""
 
@@ -1788,6 +1833,10 @@ msgstr ""
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Cannot send: Token limit exceeded"
 msgstr "No se puede enviar: Límite de tokens excedido"
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Capturing audio — waiting for transcription to start"
+msgstr "Capturando audio — esperando a que comience la transcripción"
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 #~ msgid "channels: {0}"
@@ -1887,8 +1936,8 @@ msgid "Copy"
 msgstr ""
 
 #: src/hooks/audio/useAudioDictationRecorder.ts
-msgid "Could not complete audio dictation."
-msgstr "No se pudo completar el dictado de audio."
+#~ msgid "Could not complete audio dictation."
+#~ msgstr "No se pudo completar el dictado de audio."
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Could not complete audio recording."
@@ -1902,6 +1951,7 @@ msgstr "No se pudieron cargar los dispositivos de entrada de audio."
 #~ msgid "Could not prepare audio recording for transcription."
 #~ msgstr ""
 
+#: src/hooks/audio/audio-dictation-protocol.ts
 #: src/hooks/audio/useAudioDictationRecorder.ts
 msgid "Could not read audio dictation response."
 msgstr "No se pudo leer la respuesta del dictado de audio."
@@ -1917,6 +1967,10 @@ msgstr "No se pudo iniciar el dictado de audio."
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Could not start audio recording."
 msgstr ""
+
+#: src/hooks/audio/useAudioInputLevelPreview.ts
+msgid "Could not start the microphone test."
+msgstr "No se pudo iniciar la prueba del micrófono."
 
 #: src/pages/AssistantsListPage.tsx
 msgid "Create and manage custom assistants with specific instructions and capabilities"
@@ -2219,6 +2273,10 @@ msgstr "mensajes"
 #: src/hooks/audio/useAudioInputDevicePreference.ts
 msgid "Microphone {microphoneIndex}"
 msgstr "Micrófono {microphoneIndex}"
+
+#: src/hooks/audio/useAudioInputLevelPreview.ts
+msgid "Microphone permission denied. Allow access to test the microphone."
+msgstr "Permiso de micrófono denegado. Permite el acceso para probar el micrófono."
 
 #: src/components/ui/Chat/ChatInput.tsx
 #~ msgid "Microphone settings:"
@@ -2577,6 +2635,14 @@ msgstr "El archivo \"{filename}\" no puede ser procesado por la IA y no se subi�
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "The following files cannot be processed and were not uploaded: {filenames}"
 msgstr "Los siguientes archivos no pueden ser procesados y no se subieron: {filenames}"
+
+#: src/hooks/audio/useAudioInputLevelPreview.ts
+msgid "The microphone is already in use by another application or recording."
+msgstr "El micrófono ya está siendo usado por otra aplicación o grabación."
+
+#: src/hooks/audio/useAudioInputLevelPreview.ts
+msgid "The selected microphone is not available. Refresh the device list and try again."
+msgstr "El micrófono seleccionado no está disponible. Actualiza la lista de dispositivos e inténtalo de nuevo."
 
 #: src/components/ui/Feedback/LoadingIndicator.tsx
 #: src/components/ui/Trace/steps/ReasoningStep.tsx

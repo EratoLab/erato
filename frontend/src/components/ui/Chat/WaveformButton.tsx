@@ -1,3 +1,5 @@
+import clsx from "clsx";
+
 import { Button } from "../Controls/Button";
 import { StopIcon } from "../icons";
 import { Waveform, audioLevelsToBarHeights } from "./Waveform";
@@ -16,6 +18,12 @@ interface WaveformButtonProps {
    * has begun without the user having to focus the button.
    */
   statusLabel: string;
+  /**
+   * When true, the bars are dimmed to signal that the session is still
+   * being established — audio is captured locally but not yet transmitted.
+   * Pressing the button still cancels the in-flight startup.
+   */
+  isBuffering?: boolean;
   /**
    * Optional test-ids for the three rendered nodes. Existing tests keep
    * the legacy strings; new consumers should pick stable names per node.
@@ -45,6 +53,7 @@ export function WaveformButton({
   disabled,
   ariaLabel,
   statusLabel,
+  isBuffering = false,
   testIds,
 }: WaveformButtonProps) {
   return (
@@ -64,7 +73,10 @@ export function WaveformButton({
               heights={audioLevelsToBarHeights(bars)}
               animated
               testId={testIds?.waveform}
-              className="group-hover:opacity-0 group-focus-visible:opacity-0 motion-safe:transition-opacity motion-safe:duration-150"
+              className={clsx(
+                "group-hover:opacity-0 group-focus-visible:opacity-0 motion-safe:transition-opacity motion-safe:duration-150",
+                isBuffering && "opacity-50",
+              )}
             />
             <span
               data-testid={testIds?.stopIcon}

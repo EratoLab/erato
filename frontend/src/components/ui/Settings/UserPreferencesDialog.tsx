@@ -21,11 +21,14 @@ import {
   useUserPreferencesFeature,
 } from "@/providers/FeatureConfigProvider";
 
+import { MicTestPanel } from "./MicTestPanel";
 import { Button } from "../Controls/Button";
+import { DropdownMenu, type DropdownMenuItem } from "../Controls/DropdownMenu";
 import { Alert } from "../Feedback/Alert";
 import { FormField, Input, Textarea } from "../Input";
 import { ModalBase } from "../Modal/ModalBase";
 import {
+  ChevronDownIcon,
   ErrorIcon,
   LockIcon,
   LinkIcon,
@@ -92,6 +95,44 @@ export function UserPreferencesDialog({
     selectedAudioInputDeviceId,
     setSelectedAudioInputDeviceId,
   } = useAudioInputDevicePreference();
+  const [isAudioInputDropdownOpen, setIsAudioInputDropdownOpen] =
+    useState(false);
+  const audioInputDefaultLabel = t({
+    id: "preferences.dialog.audio.input.default",
+    message: "System default microphone",
+  });
+  const audioInputItems = useMemo<DropdownMenuItem[]>(
+    () => [
+      {
+        id: "audio-input-default",
+        label: audioInputDefaultLabel,
+        checked: selectedAudioInputDeviceId === "",
+        onClick: () => setSelectedAudioInputDeviceId(""),
+      },
+      ...audioInputDevices.map((device) => ({
+        id: `audio-input-${device.deviceId}`,
+        label: device.label,
+        checked: device.deviceId === selectedAudioInputDeviceId,
+        onClick: () => setSelectedAudioInputDeviceId(device.deviceId),
+      })),
+    ],
+    [
+      audioInputDefaultLabel,
+      audioInputDevices,
+      selectedAudioInputDeviceId,
+      setSelectedAudioInputDeviceId,
+    ],
+  );
+  const selectedAudioInputLabel = useMemo(() => {
+    if (!selectedAudioInputDeviceId) {
+      return audioInputDefaultLabel;
+    }
+    return (
+      audioInputDevices.find(
+        (device) => device.deviceId === selectedAudioInputDeviceId,
+      )?.label ?? audioInputDefaultLabel
+    );
+  }, [audioInputDefaultLabel, audioInputDevices, selectedAudioInputDeviceId]);
   const defaultTab: PreferencesTab = personalizationEnabled
     ? "personalization"
     : "appearance";
@@ -687,41 +728,35 @@ export function UserPreferencesDialog({
                   <Alert type="error">{audioInputDeviceError}</Alert>
                 ) : null}
 
-                <FormField
-                  label={t({
-                    id: "preferences.dialog.audio.input.label",
-                    message: "Audio input",
-                  })}
-                  htmlFor="preferences-audio-input-device"
-                >
-                  <select
-                    id="preferences-audio-input-device"
-                    value={selectedAudioInputDeviceId}
-                    onChange={(event) =>
-                      setSelectedAudioInputDeviceId(event.target.value)
-                    }
-                    className={clsx(
-                      "w-full",
-                      "[border-radius:var(--theme-radius-input)]",
-                      "[padding:var(--theme-spacing-input-padding-y)_var(--theme-spacing-input-padding-x)]",
-                      "border border-[var(--theme-border-field)] bg-theme-bg-secondary",
-                      "text-base text-theme-fg-primary",
-                      "theme-transition focus:border-[var(--theme-border-field-focus)] focus:outline-none focus:ring-2 focus:ring-theme-focus",
-                    )}
-                  >
-                    <option value="">
-                      {t({
-                        id: "preferences.dialog.audio.input.default",
-                        message: "System default microphone",
-                      })}
-                    </option>
-                    {audioInputDevices.map((device) => (
-                      <option key={device.deviceId} value={device.deviceId}>
-                        {device.label}
-                      </option>
-                    ))}
-                  </select>
-                </FormField>
+                <DropdownMenu
+                  id="preferences-audio-input-device"
+                  items={audioInputItems}
+                  align="left"
+                  triggerButtonVariant="secondary"
+                  triggerButtonClassName="w-full justify-between gap-2 rounded-[var(--theme-radius-input)] px-3 py-2 shadow-sm"
+                  matchContentWidth={false}
+                  onOpenChange={setIsAudioInputDropdownOpen}
+                  triggerIcon={
+                    <div
+                      className="flex min-w-0 flex-1 items-center gap-2"
+                      data-testid="audio-input-dropdown-trigger"
+                    >
+                      <span
+                        className="min-w-0 flex-1 truncate text-left text-sm text-theme-fg-primary"
+                        title={selectedAudioInputLabel}
+                      >
+                        {selectedAudioInputLabel}
+                      </span>
+                      <ChevronDownIcon
+                        className={clsx(
+                          "size-4 shrink-0 text-theme-fg-secondary transition-transform duration-200",
+                          isAudioInputDropdownOpen && "rotate-180",
+                        )}
+                        aria-hidden="true"
+                      />
+                    </div>
+                  }
+                />
 
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm text-theme-fg-muted">
@@ -757,6 +792,26 @@ export function UserPreferencesDialog({
                         })}
                   </Button>
                 </div>
+
+                <div className="space-y-1">
+                  <h3 className="text-sm font-medium text-theme-fg-primary">
+                    {t({
+                      id: "preferences.dialog.audio.test.heading",
+                      message: "Test microphone",
+                    })}
+                  </h3>
+                  <p className="text-sm text-theme-fg-secondary">
+                    {t({
+                      id: "preferences.dialog.audio.test.description",
+                      message:
+                        "Start the test and speak — the bars should move and the active device label should match your selection.",
+                    })}
+                  </p>
+                </div>
+                <MicTestPanel
+                  deviceId={selectedAudioInputDeviceId}
+                  isAvailable={isOpen && activeTab === "audio"}
+                />
               </section>
             ) : null}
 

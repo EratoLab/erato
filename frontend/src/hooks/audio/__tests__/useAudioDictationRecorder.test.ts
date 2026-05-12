@@ -1,13 +1,15 @@
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  getAudioLevelBarsFromTimeDomainData,
-  useAudioDictationRecorder,
-} from "../useAudioDictationRecorder";
+import { getAudioLevelBarsFromTimeDomainData } from "../audio-pcm-codec";
+import { useAudioDictationRecorder } from "../useAudioDictationRecorder";
 
 vi.mock("../useAudioInputDevicePreference", () => ({
   useAudioInputDevicePreference: () => ({ selectedAudioInputDeviceId: "" }),
+}));
+
+vi.mock("../audio-dictation-worklet.ts?worker&url", () => ({
+  default: "blob:mock-audio-dictation-worklet",
 }));
 
 class MockMediaStreamTrack {
@@ -58,18 +60,34 @@ class MockMediaStreamAudioSourceNode {
   disconnect = vi.fn();
 }
 
-class MockScriptProcessorNode {
-  onaudioprocess: ((event: AudioProcessingEvent) => void) | null = null;
-  connect = vi.fn();
-  disconnect = vi.fn();
+class MockMessagePort {
+  onmessage: ((event: MessageEvent<Float32Array>) => void) | null = null;
+  postMessage = vi.fn();
 }
 
-const mockProcessors: MockScriptProcessorNode[] = [];
+class MockAudioWorkletNode {
+  static instances: MockAudioWorkletNode[] = [];
+  port = new MockMessagePort();
+  connect = vi.fn();
+  disconnect = vi.fn();
+
+  constructor(
+    public readonly context: unknown,
+    public readonly name: string,
+  ) {
+    MockAudioWorkletNode.instances.push(this);
+  }
+}
+
+class MockAudioWorklet {
+  addModule = vi.fn(async () => undefined);
+}
 
 class MockAudioContext {
   sampleRate = 16000;
   state = "running";
   destination = {};
+  audioWorklet = new MockAudioWorklet();
 
   createMediaStreamSource() {
     return new MockMediaStreamAudioSourceNode();
@@ -79,38 +97,20 @@ class MockAudioContext {
     return new MockAnalyserNode();
   }
 
-  createScriptProcessor() {
-    const processor = new MockScriptProcessorNode();
-    mockProcessors.push(processor);
-    return processor;
-  }
-
   createGain() {
     return new MockGainNode();
   }
 
+  resume = vi.fn(async () => {
+    this.state = "running";
+  });
+
+  suspend = vi.fn(async () => {
+    this.state = "suspended";
+  });
+
   close = vi.fn(async () => {
     this.state = "closed";
-  });
-}
-
-class MockMediaRecorder {
-  static instances: MockMediaRecorder[] = [];
-  state: "inactive" | "recording" = "inactive";
-  onstop: (() => void) | null = null;
-  onerror: ((event: Event) => void) | null = null;
-
-  constructor() {
-    MockMediaRecorder.instances.push(this);
-  }
-
-  start = vi.fn(() => {
-    this.state = "recording";
-  });
-
-  stop = vi.fn(() => {
-    this.state = "inactive";
-    this.onstop?.();
   });
 }
 
@@ -200,16 +200,12 @@ function renderDictationHook(onTranscriptChunk = vi.fn()) {
 }
 
 function emitAudioSamples(samples: Float32Array) {
-  const processor = mockProcessors.at(-1);
-  if (!processor?.onaudioprocess) {
-    throw new Error("Script processor was not initialized");
+  const processor = MockAudioWorkletNode.instances.at(-1);
+  if (!processor?.port.onmessage) {
+    throw new Error("Audio worklet node was not initialized");
   }
 
-  processor.onaudioprocess({
-    inputBuffer: {
-      getChannelData: () => samples,
-    },
-  } as unknown as AudioProcessingEvent);
+  processor.port.onmessage({ data: samples } as MessageEvent<Float32Array>);
 }
 
 describe("getAudioLevelBarsFromTimeDomainData", () => {
@@ -237,9 +233,8 @@ describe("getAudioLevelBarsFromTimeDomainData", () => {
 describe("useAudioDictationRecorder", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    MockMediaRecorder.instances.length = 0;
     MockWebSocket.instances.length = 0;
-    mockProcessors.length = 0;
+    MockAudioWorkletNode.instances.length = 0;
 
     Object.defineProperty(navigator, "mediaDevices", {
       configurable: true,
@@ -249,7 +244,7 @@ describe("useAudioDictationRecorder", () => {
     });
 
     vi.stubGlobal("AudioContext", MockAudioContext);
-    vi.stubGlobal("MediaRecorder", MockMediaRecorder);
+    vi.stubGlobal("AudioWorkletNode", MockAudioWorkletNode);
     vi.stubGlobal("WebSocket", MockWebSocket);
     vi.spyOn(window, "requestAnimationFrame").mockReturnValue(1);
     vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
@@ -301,6 +296,52 @@ describe("useAudioDictationRecorder", () => {
     await waitFor(() => expect(result.current.isDictationStarting).toBe(false));
     expect(result.current.dictationError).toBe(
       "Audio dictation connection closed.",
+    );
+  });
+
+  it("buffers samples emitted before session_state and replays them into the first chunk", async () => {
+    const { result } = renderDictationHook();
+
+    await act(async () => {
+      result.current.toggleDictation();
+    });
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+    // The audio pipeline is built before the socket handshake awaits, so the
+    // script processor exists even though the session isn't ready yet.
+    await waitFor(() => expect(MockAudioWorkletNode.instances).toHaveLength(1));
+
+    // Pre-handshake: feed samples into the pre-session buffer. Nothing
+    // should be transmitted because the session isn't constructed yet.
+    act(() => {
+      emitAudioSamples(new Float32Array(1600).fill(0.2));
+    });
+    expect(MockWebSocket.instances[0].sentBinaryFrames).toHaveLength(0);
+
+    act(() => {
+      MockWebSocket.instances[0].emit("open");
+    });
+    await waitFor(() =>
+      expect(MockWebSocket.instances[0].sentJsonFrames).toContainEqual({
+        type: "start",
+      }),
+    );
+    act(() => {
+      MockWebSocket.instances[0].emitJson({
+        type: "session_state",
+        next_chunk_index: 0,
+        chunk_duration_ms: 100,
+      });
+    });
+
+    // The drain + flush in startDictation should produce a first chunk
+    // containing the samples captured before session_state arrived.
+    await waitFor(() =>
+      expect(
+        MockWebSocket.instances[0].sentBinaryFrames.length,
+      ).toBeGreaterThan(0),
+    );
+    expect(MockWebSocket.instances[0].sentJsonFrames).toContainEqual(
+      expect.objectContaining({ type: "chunk_metadata", chunk_index: 0 }),
     );
   });
 
@@ -377,7 +418,10 @@ describe("useAudioDictationRecorder", () => {
 
     unmount();
 
-    expect(MockMediaRecorder.instances[0].stop).toHaveBeenCalled();
+    // Unmount must close the socket without going through the completion
+    // flow — no "finish" control frame should be sent. The dictation hook
+    // no longer instantiates a MediaRecorder, so there is no recorder to
+    // assert against; the WebSocket frame list is the source of truth.
     expect(MockWebSocket.instances[0].sentJsonFrames).not.toContainEqual(
       expect.objectContaining({ type: "finish" }),
     );

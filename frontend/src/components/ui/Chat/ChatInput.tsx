@@ -504,6 +504,7 @@ export const ChatInput = ({
     isDictating,
     isDictationStarting,
     isDictationCompleting,
+    isCapturingAudio,
     dictationError,
     setDictationError,
     dictationBars,
@@ -1515,10 +1516,11 @@ export const ChatInput = ({
                 />
               )}
               {audioDictationEnabled &&
-                (isDictating ? (
+                (isCapturingAudio || isDictating ? (
                   <WaveformButton
                     onClick={toggleDictationForCurrentTarget}
                     bars={dictationBars}
+                    isBuffering={!isDictating}
                     disabled={
                       disabled ||
                       isLoading ||
@@ -1527,8 +1529,16 @@ export const ChatInput = ({
                       isFileButtonProcessing ||
                       isAnyTokenLimitExceeded
                     }
-                    ariaLabel={t`Stop dictation`}
-                    statusLabel={t`Dictating audio`}
+                    ariaLabel={
+                      isDictating
+                        ? t`Stop dictation`
+                        : t`Cancel starting dictation`
+                    }
+                    statusLabel={
+                      isDictating
+                        ? t`Dictating audio`
+                        : t`Capturing audio — waiting for transcription to start`
+                    }
                     testIds={{
                       root: "chat-input-record-audio",
                       waveform: "chat-input-dictation-waveform",
@@ -1557,7 +1567,6 @@ export const ChatInput = ({
                       isPendingResponse ||
                       isUploading ||
                       isFileButtonProcessing ||
-                      isDictationStarting ||
                       isDictationCompleting ||
                       isAnyTokenLimitExceeded
                     }
