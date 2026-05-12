@@ -102,6 +102,31 @@ export function useAudioInputDevicePreference({
     };
   }, [enabled, refreshAudioInputDevices]);
 
+  // Auto-clear a stale stored deviceId. Whenever a fresh enumeration
+  // produces a non-empty device list (initial load, devicechange,
+  // manual refresh) and our persisted `selectedAudioInputDeviceId`
+  // isn't in it, drop the selection so the next `getUserMedia` call
+  // falls back to the system default instead of throwing
+  // `OverconstrainedError`. Triggers on Bluetooth disconnect, USB
+  // unplug, browser-side deviceId rotation, profile changes, etc.
+  // We guard on `audioInputDevices.length > 0` so a pre-permission
+  // enumeration (which returns an empty list on some browsers)
+  // doesn't wipe a still-valid selection.
+  useEffect(() => {
+    if (!selectedAudioInputDeviceId) return;
+    if (audioInputDevices.length === 0) return;
+    const stillAvailable = audioInputDevices.some(
+      (device) => device.deviceId === selectedAudioInputDeviceId,
+    );
+    if (!stillAvailable) {
+      setSelectedAudioInputDeviceId("");
+    }
+  }, [
+    audioInputDevices,
+    selectedAudioInputDeviceId,
+    setSelectedAudioInputDeviceId,
+  ]);
+
   const selectedAudioInputDevice = useMemo(
     () =>
       audioInputDevices.find(
