@@ -63,34 +63,37 @@ export function useAudioInputLevelPreview({
   const rafRef = useRef<number | null>(null);
   const isMounted = useMountedState();
 
-  const stop = useCallback(({ resetBars }: { resetBars: boolean }) => {
-    if (rafRef.current !== null) {
-      window.cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    }
-    analyserRef.current?.disconnect();
-    sourceRef.current?.disconnect();
-    if (audioContextRef.current) {
-      void audioContextRef.current.close();
-      audioContextRef.current = null;
-    }
-    analyserRef.current = null;
-    sourceRef.current = null;
-    levelDataRef.current = null;
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-    if (!isMounted()) {
-      return;
-    }
-    setIsActive(false);
-    setActiveDeviceId(null);
-    setActiveDeviceLabel(null);
-    if (resetBars) {
-      setBars(createIdleBars());
-    }
-  }, [isMounted]);
+  const stop = useCallback(
+    ({ resetBars }: { resetBars: boolean }) => {
+      if (rafRef.current !== null) {
+        window.cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      analyserRef.current?.disconnect();
+      sourceRef.current?.disconnect();
+      if (audioContextRef.current) {
+        void audioContextRef.current.close();
+        audioContextRef.current = null;
+      }
+      analyserRef.current = null;
+      sourceRef.current = null;
+      levelDataRef.current = null;
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+      }
+      if (!isMounted()) {
+        return;
+      }
+      setIsActive(false);
+      setActiveDeviceId(null);
+      setActiveDeviceLabel(null);
+      if (resetBars) {
+        setBars(createIdleBars());
+      }
+    },
+    [isMounted],
+  );
 
   useEffect(() => {
     return () => {

@@ -101,11 +101,7 @@ type UseAudioDictationRecorderOptions = {
  * `isCapturingAudio` is orthogonal (audio-graph signal, not session
  * lifecycle) and stays as its own useState.
  */
-type DictationSessionStatus =
-  | "idle"
-  | "starting"
-  | "dictating"
-  | "completing";
+type DictationSessionStatus = "idle" | "starting" | "dictating" | "completing";
 
 type DictationSessionAction =
   | { type: "start" }
@@ -167,10 +163,7 @@ export function useAudioDictationRecorder({
    * bar values. Used inside the RAF tick only; resets and idle states
    * still go through the raw setter so they apply immediately.
    */
-  const setDictationBarsThrottled = useThrottledCallback(
-    setDictationBars,
-    33,
-  );
+  const setDictationBarsThrottled = useThrottledCallback(setDictationBars, 33);
   const [dictationDiagnostics, setDictationDiagnostics] =
     useState<AudioDictationDiagnostics | null>(null);
 
@@ -256,48 +249,54 @@ export function useAudioDictationRecorder({
     }
   }, []);
 
-  const stopRecordingVisualizer = useCallback((resetBars = true) => {
-    if (capturingFlipTimerRef.current !== null) {
-      window.clearTimeout(capturingFlipTimerRef.current);
-      capturingFlipTimerRef.current = null;
-    }
-    if (audioFrameRef.current !== null) {
-      window.cancelAnimationFrame(audioFrameRef.current);
-      audioFrameRef.current = null;
-    }
+  const stopRecordingVisualizer = useCallback(
+    (resetBars = true) => {
+      if (capturingFlipTimerRef.current !== null) {
+        window.clearTimeout(capturingFlipTimerRef.current);
+        capturingFlipTimerRef.current = null;
+      }
+      if (audioFrameRef.current !== null) {
+        window.cancelAnimationFrame(audioFrameRef.current);
+        audioFrameRef.current = null;
+      }
 
-    audioAnalyserRef.current?.disconnect();
-    audioAnalyserRef.current = null;
-    audioSourceNodeRef.current?.disconnect();
-    audioSourceNodeRef.current = null;
-    if (audioProcessorRef.current) {
-      audioProcessorRef.current.port.onmessage = null;
-      audioProcessorRef.current.disconnect();
-      audioProcessorRef.current = null;
-    }
-    audioLevelDataRef.current = null;
-    // Discard any pending throttled bar update queued from the final
-    // RAF tick — otherwise it can fire after the reset below and
-    // briefly flash old levels in the idle button.
-    setDictationBarsThrottled.cancel();
+      audioAnalyserRef.current?.disconnect();
+      audioAnalyserRef.current = null;
+      audioSourceNodeRef.current?.disconnect();
+      audioSourceNodeRef.current = null;
+      if (audioProcessorRef.current) {
+        audioProcessorRef.current.port.onmessage = null;
+        audioProcessorRef.current.disconnect();
+        audioProcessorRef.current = null;
+      }
+      audioLevelDataRef.current = null;
+      // Discard any pending throttled bar update queued from the final
+      // RAF tick — otherwise it can fire after the reset below and
+      // briefly flash old levels in the idle button.
+      setDictationBarsThrottled.cancel();
 
-    // Suspend rather than close: each dictation gets fresh source /
-    // analyser / worklet nodes (so per-session state can't leak), but
-    // the AudioContext itself stays warm. Closing + re-creating pays an
-    // audio-thread spin-up cost on every restart which is most likely
-    // what was eating the first word on a warm second session. Close
-    // only happens on the hook's unmount cleanup.
-    if (audioContextRef.current && audioContextRef.current.state === "running") {
-      void audioContextRef.current.suspend();
-    }
-    preSessionSamplesRef.current = [];
-    if (isMounted()) {
-      setIsCapturingAudio(false);
-    }
-    if (resetBars && isMounted()) {
-      setDictationBars(Array.from({ length: AUDIO_BARS_COUNT }, () => 2));
-    }
-  }, [isMounted, setDictationBarsThrottled]);
+      // Suspend rather than close: each dictation gets fresh source /
+      // analyser / worklet nodes (so per-session state can't leak), but
+      // the AudioContext itself stays warm. Closing + re-creating pays an
+      // audio-thread spin-up cost on every restart which is most likely
+      // what was eating the first word on a warm second session. Close
+      // only happens on the hook's unmount cleanup.
+      if (
+        audioContextRef.current &&
+        audioContextRef.current.state === "running"
+      ) {
+        void audioContextRef.current.suspend();
+      }
+      preSessionSamplesRef.current = [];
+      if (isMounted()) {
+        setIsCapturingAudio(false);
+      }
+      if (resetBars && isMounted()) {
+        setDictationBars(Array.from({ length: AUDIO_BARS_COUNT }, () => 2));
+      }
+    },
+    [isMounted, setDictationBarsThrottled],
+  );
 
   const tearDownCaptureGraph = useCallback(() => {
     clearRecordingDurationTimer();
@@ -399,9 +398,7 @@ export function useAudioDictationRecorder({
    * AudioWorkletNode at all.
    */
   const ensureAudioContextReady = useCallback(
-    async (
-      preferredSampleRate?: number,
-    ): Promise<AudioContext | null> => {
+    async (preferredSampleRate?: number): Promise<AudioContext | null> => {
       if (
         typeof AudioContext === "undefined" ||
         typeof AudioWorkletNode === "undefined"
@@ -446,7 +443,9 @@ export function useAudioDictationRecorder({
       }
 
       return audioContext;
-    }, []);
+    },
+    [],
+  );
 
   const startLiveDictationSession = useCallback(
     async (
@@ -702,9 +701,7 @@ export function useAudioDictationRecorder({
       mediaStreamRef.current = stream;
       const audioTrack = stream.getAudioTracks()[0];
       const trackSettings = audioTrack.getSettings();
-      setDictationDiagnostics(
-        mediaTrackSettingsToDiagnostics(trackSettings),
-      );
+      setDictationDiagnostics(mediaTrackSettingsToDiagnostics(trackSettings));
 
       // Build the audio pipeline BEFORE awaiting the socket handshake. Once
       // the worklet node is connected, samples land in
@@ -772,10 +769,7 @@ export function useAudioDictationRecorder({
           // Guard against late firings: if the pipeline was torn down
           // between scheduling and execution, the processor ref will be
           // null or point at a different node — don't flip stale state.
-          if (
-            !isMounted() ||
-            audioProcessorRef.current !== processor
-          ) {
+          if (!isMounted() || audioProcessorRef.current !== processor) {
             return;
           }
           setIsCapturingAudio(true);

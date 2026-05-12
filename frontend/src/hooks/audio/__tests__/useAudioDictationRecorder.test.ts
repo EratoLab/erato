@@ -308,9 +308,7 @@ describe("useAudioDictationRecorder", () => {
     await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
     // The audio pipeline is built before the socket handshake awaits, so the
     // script processor exists even though the session isn't ready yet.
-    await waitFor(() =>
-      expect(MockAudioWorkletNode.instances).toHaveLength(1),
-    );
+    await waitFor(() => expect(MockAudioWorkletNode.instances).toHaveLength(1));
 
     // Pre-handshake: feed samples into the pre-session buffer. Nothing
     // should be transmitted because the session isn't constructed yet.

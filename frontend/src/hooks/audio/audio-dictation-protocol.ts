@@ -115,7 +115,8 @@ export function waitForAudioDictationFrame(
   predicate: (frame: AudioDictationSocketFrame) => boolean,
   options: { signal?: AbortSignal; timeoutMs?: number } = {},
 ): Promise<AudioDictationSocketFrame> {
-  const timeoutMs = options.timeoutMs ?? AUDIO_DICTATION_SOCKET_FRAME_TIMEOUT_MS;
+  const timeoutMs =
+    options.timeoutMs ?? AUDIO_DICTATION_SOCKET_FRAME_TIMEOUT_MS;
   const { signal } = options;
   return new Promise<AudioDictationSocketFrame>((resolve, reject) => {
     if (signal?.aborted) {
