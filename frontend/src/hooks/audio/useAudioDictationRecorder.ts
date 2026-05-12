@@ -240,9 +240,10 @@ export function useAudioDictationRecorder({
    */
   const isMounted = useMountedState();
   const startInFlightRef = useRef(false);
-  const { selectedAudioInputDeviceId } = useAudioInputDevicePreference({
-    enabled,
-  });
+  const { selectedAudioInputDeviceId, setSelectedAudioInputDeviceId } =
+    useAudioInputDevicePreference({
+      enabled,
+    });
 
   useEffect(() => {
     onTranscriptChunkRef.current = onTranscriptChunk;
@@ -674,19 +675,49 @@ export function useAudioDictationRecorder({
       return;
     }
 
+    const baseAudioConstraints: MediaTrackConstraints = {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+      channelCount: { ideal: 1 },
+      sampleRate: { ideal: CANONICAL_AUDIO_SAMPLE_RATE_HZ },
+    };
+
     try {
-      const stream = await mediaDevices.getUserMedia({
-        audio: {
-          ...(selectedAudioInputDeviceId
-            ? { deviceId: { exact: selectedAudioInputDeviceId } }
-            : {}),
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-          channelCount: { ideal: 1 },
-          sampleRate: { ideal: CANONICAL_AUDIO_SAMPLE_RATE_HZ },
-        },
-      });
+      let stream: MediaStream;
+      try {
+        stream = await mediaDevices.getUserMedia({
+          audio: selectedAudioInputDeviceId
+            ? {
+                deviceId: { exact: selectedAudioInputDeviceId },
+                ...baseAudioConstraints,
+              }
+            : baseAudioConstraints,
+        });
+      } catch (firstError) {
+        // Belt-and-braces alongside the auto-clear-on-enumerate logic:
+        // even after we've validated the stored deviceId against the
+        // enumerated list, a Bluetooth disconnect (or any other device
+        // change) can race between enumeration and `getUserMedia`. On
+        // OverconstrainedError, retry once with the system-default mic
+        // and clear the stale stored id so the dropdown reflects
+        // reality and subsequent sessions don't keep hitting it.
+        if (
+          selectedAudioInputDeviceId &&
+          firstError instanceof DOMException &&
+          firstError.name === "OverconstrainedError"
+        ) {
+          console.log(
+            "[dictation] OverconstrainedError → retrying without deviceId",
+          );
+          stream = await mediaDevices.getUserMedia({
+            audio: baseAudioConstraints,
+          });
+          setSelectedAudioInputDeviceId("");
+        } else {
+          throw firstError;
+        }
+      }
       console.log("[dictation] getUserMedia resolved", {
         isMounted: isMounted(),
         signalAborted: sessionAbort.signal.aborted,
@@ -932,6 +963,7 @@ export function useAudioDictationRecorder({
     maxRecordingDurationSeconds,
     selectedAudioInputDeviceId,
     setDictationBarsThrottled,
+    setSelectedAudioInputDeviceId,
     startLiveDictationSession,
     stopDictation,
     tearDownCaptureGraph,
