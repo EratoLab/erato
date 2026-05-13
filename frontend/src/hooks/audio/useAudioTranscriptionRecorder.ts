@@ -1,5 +1,6 @@
 import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useThrottledCallback } from "use-debounce";
 /* eslint-disable lingui/no-unlocalized-strings */
 
 import {
@@ -8,6 +9,10 @@ import {
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext";
 
+import {
+  AUDIO_BARS_COUNT,
+  getAudioLevelBarsFromTimeDomainData,
+} from "./audio-pcm-codec";
 import { useAudioInputDevicePreference } from "./useAudioInputDevicePreference";
 
 import type {
@@ -20,7 +25,6 @@ const CANONICAL_AUDIO_SAMPLE_RATE_HZ = 16_000;
 const CANONICAL_AUDIO_WAV_HEADER_BYTES = 44;
 const CANONICAL_AUDIO_BYTES_PER_SAMPLE = 2;
 const DEFAULT_AUDIO_TRANSCRIPTION_CHUNK_DURATION_MS = 30_000;
-const AUDIO_BARS_COUNT = 5;
 
 function formatAudioRecordingFilename(date: Date): string {
   const year = date.getFullYear().toString();
@@ -406,6 +410,14 @@ export function useAudioTranscriptionRecorder({
   const [recordingBars, setRecordingBars] = useState<number[]>(
     Array.from({ length: AUDIO_BARS_COUNT }, () => 2),
   );
+  // The analyser RAF tick fires at ~60 Hz. Throttle setRecordingBars to
+  // ~30 Hz (33 ms) so consumer re-renders halve without a perceptible
+  // change in the waveform animation. Resets and idle states still go
+  // through the raw setter so they apply immediately.
+  const setRecordingBarsThrottled = useThrottledCallback(
+    setRecordingBars,
+    33,
+  );
   const [recordingDiagnostics, setRecordingDiagnostics] =
     useState<AudioRecordingDiagnostics | null>(null);
 
@@ -508,8 +520,11 @@ export function useAudioTranscriptionRecorder({
       void audioContextRef.current.close();
     }
     audioContextRef.current = null;
+    // Drop any pending throttled bar updates before resetting to the idle
+    // pattern, so a stale RAF frame can't overwrite the reset.
+    setRecordingBarsThrottled.cancel();
     setRecordingBars(Array.from({ length: AUDIO_BARS_COUNT }, () => 2));
-  }, []);
+  }, [setRecordingBarsThrottled]);
 
   const clearRecordingDurationTimer = useCallback(() => {
     if (recordingDurationTimerRef.current !== null) {
@@ -1019,7 +1034,12 @@ export function useAudioTranscriptionRecorder({
         const analyser = audioContext.createAnalyser();
         const processor = audioContext.createScriptProcessor(4096, 1, 1);
         const processorSink = audioContext.createGain();
-        analyser.fftSize = 64;
+        // Match the dictation recorder: time-domain sampling with a
+        // 256-sample FFT and a touch of smoothing reads voice energy
+        // across the whole window instead of bucketing it into one
+        // low-frequency bin, so all five bars react to speech.
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.65;
         processorSink.gain.value = 0;
         source.connect(analyser);
         source.connect(processor);
@@ -1039,43 +1059,20 @@ export function useAudioTranscriptionRecorder({
           flushLiveAudioSamples(false);
         };
 
-        const levelData = new Uint8Array(analyser.frequencyBinCount);
+        const levelData = new Uint8Array(analyser.fftSize);
 
         const analyzeLevel = () => {
           if (!audioAnalyserRef.current || !audioLevelDataRef.current) {
             return;
           }
 
-          audioAnalyserRef.current.getByteFrequencyData(
+          audioAnalyserRef.current.getByteTimeDomainData(
             audioLevelDataRef.current,
           );
 
-          const audioLevelData = audioLevelDataRef.current;
-          const binsPerBar = Math.max(
-            1,
-            Math.floor(audioLevelData.length / AUDIO_BARS_COUNT),
+          setRecordingBarsThrottled(
+            getAudioLevelBarsFromTimeDomainData(audioLevelDataRef.current),
           );
-
-          const nextBars = Array.from(
-            { length: AUDIO_BARS_COUNT },
-            (_, barIndex) => {
-              const startBin = barIndex * binsPerBar;
-              const endBin =
-                barIndex + 1 === AUDIO_BARS_COUNT
-                  ? audioLevelData.length
-                  : (barIndex + 1) * binsPerBar;
-              let total = 0;
-
-              for (let index = startBin; index < endBin; index++) {
-                total += audioLevelData[index];
-              }
-
-              const average = total / (endBin - startBin);
-              return Math.max(2, Math.round((average / 255) * 16));
-            },
-          );
-
-          setRecordingBars(nextBars);
           audioFrameRef.current = window.requestAnimationFrame(analyzeLevel);
         };
 
@@ -1211,6 +1208,7 @@ export function useAudioTranscriptionRecorder({
     flushLiveAudioSamples,
     removeAudioTranscriptionAttachment,
     selectedAudioInputDeviceId,
+    setRecordingBarsThrottled,
   ]);
 
   const toggleAudioRecording = useCallback(() => {

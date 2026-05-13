@@ -1783,5 +1783,324 @@ describe("ChatInput", () => {
       ).not.toBeInTheDocument();
       expect(screen.getByTestId("chat-input-send-message")).toBeDisabled();
     });
+
+    it("hides the model selector in audio mode by default", async () => {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      mockUseAudioTranscriptionFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+        showModelSelectorInAudioMode: false,
+      });
+
+      const { i18n } = await import("@lingui/core");
+      render(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={vi.fn()} />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+
+      expect(screen.getByTestId("model-selector")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
+
+      expect(screen.queryByTestId("model-selector")).not.toBeInTheDocument();
+    });
+
+    it("keeps the model selector in audio mode when the override flag is on", async () => {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      mockUseAudioTranscriptionFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+        showModelSelectorInAudioMode: true,
+      });
+
+      const { i18n } = await import("@lingui/core");
+      render(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={vi.fn()} />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+
+      fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
+
+      expect(screen.getByTestId("model-selector")).toBeInTheDocument();
+    });
+
+    it("auto-submits when transcription completes after a stop in audio mode and stays in audio mode", async () => {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      const toggleAudioRecording = vi.fn();
+      const onSendMessage = vi.fn();
+      const requestSubmitSpy = vi.spyOn(
+        HTMLFormElement.prototype,
+        "requestSubmit",
+      );
+      // Use a faithful createSubmitHandler mock that actually invokes the
+      // inner submit callback — that is the path that would have flipped
+      // audio mode off if the implicit reset were still in place.
+      const createSubmitHandler =
+        (
+          message: string,
+          attachedFiles: FileUploadItem[],
+          innerOnSendMessage: (
+            message: string,
+            inputFileIds?: string[],
+          ) => void,
+          isLoading: boolean,
+          disabled: boolean,
+          resetMessage: () => void,
+        ) =>
+        (event: FormEvent) => {
+          event.preventDefault();
+          if (isLoading || disabled) return;
+          const trimmed = message.trim();
+          const fileIds = attachedFiles.map((file) => file.id);
+          if (trimmed || fileIds.length > 0) {
+            innerOnSendMessage(
+              trimmed,
+              fileIds.length > 0 ? fileIds : undefined,
+            );
+            resetMessage();
+          }
+        };
+      mockUseAudioTranscriptionFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+        showModelSelectorInAudioMode: false,
+      });
+      mockUseAudioTranscriptionRecorder.mockReturnValue({
+        isRecording: true,
+        isRecordingUpload: false,
+        recordingError: null,
+        setRecordingError: vi.fn(),
+        recordingBars: [3, 6, 9, 6, 3],
+        retryingAudioFileId: null,
+        retryAudioTranscription: vi.fn(),
+        removeRecordedAudioFile: vi.fn(),
+        clearRecordedAudioFiles: vi.fn(),
+        hasRecordedAudioFile: () => false,
+        toggleAudioRecording,
+      });
+      mockUseChatInputHandlers.mockReturnValue({
+        attachedFiles: [],
+        fileError: null,
+        setFileError: vi.fn(),
+        handleFilesUploaded: vi.fn(),
+        handleRemoveFile: vi.fn(),
+        handleRemoveAllFiles: vi.fn(),
+        setAttachedFiles: vi.fn(),
+        createSubmitHandler,
+      });
+
+      const { i18n } = await import("@lingui/core");
+      const { rerender } = render(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={onSendMessage} />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+
+      // Click stop while recording — arms the auto-send latch.
+      fireEvent.click(screen.getByTestId("chat-input-audio-mode-stop"));
+      expect(toggleAudioRecording).toHaveBeenCalledTimes(1);
+      expect(requestSubmitSpy).not.toHaveBeenCalled();
+
+      // Simulate the recorder finishing: no longer recording, no upload
+      // pending, and a completed transcription attachment is present.
+      mockUseAudioTranscriptionRecorder.mockReturnValue({
+        isRecording: false,
+        isRecordingUpload: false,
+        recordingError: null,
+        setRecordingError: vi.fn(),
+        recordingBars: [2, 2, 2, 2, 2],
+        retryingAudioFileId: null,
+        retryAudioTranscription: vi.fn(),
+        removeRecordedAudioFile: vi.fn(),
+        clearRecordedAudioFiles: vi.fn(),
+        hasRecordedAudioFile: () => false,
+        toggleAudioRecording,
+      });
+      mockUseChatInputHandlers.mockReturnValue({
+        attachedFiles: [
+          {
+            id: "audio-completed",
+            filename: "voice-memo.wav",
+            download_url: "/files/audio-completed",
+            audio_transcription: {
+              status: "completed",
+              transcript: "hello world",
+            },
+          },
+        ] as unknown as FileUploadItem[],
+        fileError: null,
+        setFileError: vi.fn(),
+        handleFilesUploaded: vi.fn(),
+        handleRemoveFile: vi.fn(),
+        handleRemoveAllFiles: vi.fn(),
+        setAttachedFiles: vi.fn(),
+        createSubmitHandler,
+      });
+
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={onSendMessage} />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+
+      expect(requestSubmitSpy).toHaveBeenCalledTimes(1);
+      expect(onSendMessage).toHaveBeenCalledTimes(1);
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "",
+        ["audio-completed"],
+        undefined,
+        [],
+      );
+
+      // After the auto-send completes, the next compose turn must still
+      // be in audio mode: textarea hidden, exit button visible.
+      expect(
+        screen.queryByPlaceholderText("Type a message..."),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByTestId("chat-input-exit-audio-mode"),
+      ).toBeInTheDocument();
+      requestSubmitSpy.mockRestore();
+    });
+
+    it("clears the auto-send latch when the user exits audio mode mid-transcription", async () => {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      const toggleAudioRecording = vi.fn();
+      const requestSubmitSpy = vi.spyOn(
+        HTMLFormElement.prototype,
+        "requestSubmit",
+      );
+      mockUseAudioTranscriptionFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+        showModelSelectorInAudioMode: false,
+      });
+      mockUseAudioTranscriptionRecorder.mockReturnValue({
+        isRecording: true,
+        isRecordingUpload: false,
+        recordingError: null,
+        setRecordingError: vi.fn(),
+        recordingBars: [3, 6, 9, 6, 3],
+        retryingAudioFileId: null,
+        retryAudioTranscription: vi.fn(),
+        removeRecordedAudioFile: vi.fn(),
+        clearRecordedAudioFiles: vi.fn(),
+        hasRecordedAudioFile: () => false,
+        toggleAudioRecording,
+      });
+
+      const { i18n } = await import("@lingui/core");
+      const { rerender } = render(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={vi.fn()} />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+
+      // Stop arms the latch.
+      fireEvent.click(screen.getByTestId("chat-input-audio-mode-stop"));
+
+      // User exits audio mode before transcription completes.
+      mockUseAudioTranscriptionRecorder.mockReturnValue({
+        isRecording: false,
+        isRecordingUpload: true,
+        recordingError: null,
+        setRecordingError: vi.fn(),
+        recordingBars: [2, 2, 2, 2, 2],
+        retryingAudioFileId: null,
+        retryAudioTranscription: vi.fn(),
+        removeRecordedAudioFile: vi.fn(),
+        clearRecordedAudioFiles: vi.fn(),
+        hasRecordedAudioFile: () => false,
+        toggleAudioRecording,
+      });
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={vi.fn()} />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+
+      fireEvent.click(screen.getByTestId("chat-input-exit-audio-mode"));
+
+      // Transcription then completes after exit — latch must be cleared, so
+      // requestSubmit must NOT fire.
+      mockUseChatInputHandlers.mockReturnValue({
+        attachedFiles: [
+          {
+            id: "audio-completed",
+            filename: "voice-memo.wav",
+            download_url: "/files/audio-completed",
+            audio_transcription: {
+              status: "completed",
+              transcript: "hello world",
+            },
+          },
+        ] as unknown as FileUploadItem[],
+        fileError: null,
+        setFileError: vi.fn(),
+        handleFilesUploaded: vi.fn(),
+        handleRemoveFile: vi.fn(),
+        handleRemoveAllFiles: vi.fn(),
+        setAttachedFiles: vi.fn(),
+        createSubmitHandler: () => (event: FormEvent) => event.preventDefault(),
+      });
+      mockUseAudioTranscriptionRecorder.mockReturnValue({
+        isRecording: false,
+        isRecordingUpload: false,
+        recordingError: null,
+        setRecordingError: vi.fn(),
+        recordingBars: [2, 2, 2, 2, 2],
+        retryingAudioFileId: null,
+        retryAudioTranscription: vi.fn(),
+        removeRecordedAudioFile: vi.fn(),
+        clearRecordedAudioFiles: vi.fn(),
+        hasRecordedAudioFile: () => false,
+        toggleAudioRecording,
+      });
+
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={vi.fn()} />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+
+      expect(requestSubmitSpy).not.toHaveBeenCalled();
+      requestSubmitSpy.mockRestore();
+    });
   });
 });
