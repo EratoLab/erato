@@ -1,3 +1,5 @@
+"use client";
+
 import { I18nProvider as LinguiI18nProvider } from "@lingui/react";
 import { useEffect } from "react";
 
@@ -11,6 +13,10 @@ import {
   getValidLocale,
   i18n,
 } from "@/lib/i18n";
+import {
+  VoiceRuntimeProvider,
+  type VoiceRuntimeAssetOverrides,
+} from "@/lib/voice-runtime";
 import {
   StaticFeatureConfigProvider,
   type FeatureConfig,
@@ -29,6 +35,7 @@ export interface EratoUiProviderProps extends PropsWithChildren {
   locale?: string;
   themeMode?: ThemeMode;
   featureConfig?: Partial<FeatureConfig>;
+  voiceRuntimeAssets?: VoiceRuntimeAssetOverrides | string;
 }
 
 export function EratoUiProvider({
@@ -36,6 +43,7 @@ export function EratoUiProvider({
   locale = defaultLocale,
   themeMode = "light",
   featureConfig,
+  voiceRuntimeAssets,
 }: EratoUiProviderProps) {
   useEffect(() => {
     void dynamicActivate(getValidLocale(locale));
@@ -44,13 +52,15 @@ export function EratoUiProvider({
   return (
     <LinguiI18nProvider i18n={i18n}>
       <StaticFeatureConfigProvider config={featureConfig}>
-        <ThemeProvider
-          enableCustomTheme={false}
-          initialThemeMode={themeMode}
-          persistThemeMode={false}
-        >
-          {children}
-        </ThemeProvider>
+        <VoiceRuntimeProvider voiceRuntimeAssets={voiceRuntimeAssets}>
+          <ThemeProvider
+            enableCustomTheme={false}
+            initialThemeMode={themeMode}
+            persistThemeMode={false}
+          >
+            {children}
+          </ThemeProvider>
+        </VoiceRuntimeProvider>
       </StaticFeatureConfigProvider>
     </LinguiI18nProvider>
   );

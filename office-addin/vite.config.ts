@@ -3,7 +3,9 @@ import path from "node:path";
 
 import { lingui } from "@lingui/vite-plugin";
 import react from "@vitejs/plugin-react";
-import { defineConfig, loadEnv, type ViteDevServer } from "vite";
+import { defineConfig, loadEnv, type Plugin, type ViteDevServer } from "vite";
+
+import type { ServerResponse } from "node:http";
 
 const loadOfficeAddinEnv = (mode: string) => {
   const developmentEnv =
@@ -27,6 +29,176 @@ const copy404Plugin = () => {
       if (fs.existsSync(indexPath)) {
         fs.copyFileSync(indexPath, notFoundPath);
         console.log("✓ Copied index.html to 404.html");
+      }
+    },
+  };
+};
+
+const contentTypeForPath = (filePath: string): string => {
+  const extension = path.extname(filePath).toLowerCase();
+  switch (extension) {
+    case ".css":
+      return "text/css; charset=utf-8";
+    case ".js":
+    case ".mjs":
+      return "text/javascript; charset=utf-8";
+    case ".json":
+      return "application/json; charset=utf-8";
+    case ".onnx":
+      return "application/octet-stream";
+    case ".wasm":
+      return "application/wasm";
+    default:
+      return "application/octet-stream";
+  }
+};
+
+const walkFiles = (directory: string): string[] => {
+  if (!fs.existsSync(directory)) {
+    return [];
+  }
+
+  const files: string[] = [];
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    if (entry.name.startsWith(".")) {
+      continue;
+    }
+
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...walkFiles(entryPath));
+    } else if (entry.isFile()) {
+      files.push(entryPath);
+    }
+  }
+
+  return files;
+};
+
+const resolveFrontendVoiceRuntimeDir = (): string | null => {
+  const candidates = [
+    path.resolve(__dirname, "../frontend/dist-library/voice-runtime"),
+    path.resolve(
+      __dirname,
+      "node_modules",
+      "@erato",
+      "frontend",
+      "dist-library",
+      "voice-runtime",
+    ),
+  ];
+
+  return (
+    candidates.find(
+      (candidate) =>
+        fs.existsSync(candidate) && fs.statSync(candidate).isDirectory(),
+    ) ?? null
+  );
+};
+
+const sendVoiceRuntimeFile = (
+  sourceDir: string,
+  requestPath: string,
+  response: ServerResponse,
+): boolean => {
+  if (requestPath.includes("\0") || requestPath.includes("\\")) {
+    return false;
+  }
+
+  const normalizedPath = requestPath.split("?")[0].split("#")[0];
+  const requestPrefixes = [
+    "/public/platform-office-addin/voice-runtime/",
+    "/office-addin/voice-runtime/",
+  ];
+  const matchedPrefix = requestPrefixes.find((prefix) =>
+    normalizedPath.startsWith(prefix),
+  );
+  if (!matchedPrefix) {
+    return false;
+  }
+
+  let relativePath: string;
+  try {
+    relativePath = decodeURIComponent(
+      normalizedPath.slice(matchedPrefix.length),
+    );
+  } catch {
+    return false;
+  }
+  if (
+    relativePath.includes("\0") ||
+    relativePath.includes("\\") ||
+    path.isAbsolute(relativePath)
+  ) {
+    return false;
+  }
+  const resolvedPath = path.resolve(sourceDir, relativePath);
+  const resolvedSourceDir = path.resolve(sourceDir);
+  if (
+    resolvedPath !== resolvedSourceDir &&
+    !resolvedPath.startsWith(`${resolvedSourceDir}${path.sep}`)
+  ) {
+    return false;
+  }
+  if (!fs.existsSync(resolvedPath) || fs.statSync(resolvedPath).isDirectory()) {
+    return false;
+  }
+
+  response.statusCode = 200;
+  response.setHeader("Content-Type", contentTypeForPath(resolvedPath));
+  response.setHeader("X-Content-Type-Options", "nosniff");
+  fs.createReadStream(resolvedPath).pipe(response);
+  return true;
+};
+
+const stageFrontendVoiceRuntimeAssetsPlugin = (): Plugin => {
+  return {
+    name: "stage-frontend-voice-runtime-assets",
+    configureServer(server: ViteDevServer) {
+      if (!resolveFrontendVoiceRuntimeDir()) {
+        server.config.logger.warn(
+          "[stage-frontend-voice-runtime-assets] @erato/frontend voice-runtime assets not found. " +
+            "Run `pnpm --filter @erato/frontend build:lib` before starting the office-addin dev server, " +
+            "otherwise VAD asset requests will 404 with no further warning.",
+        );
+      }
+
+      server.middlewares.use((request, response, next) => {
+        if (!request.url) {
+          next();
+          return;
+        }
+
+        const sourceDir = resolveFrontendVoiceRuntimeDir();
+        if (
+          sourceDir &&
+          sendVoiceRuntimeFile(sourceDir, request.url, response)
+        ) {
+          return;
+        }
+
+        next();
+      });
+    },
+    generateBundle() {
+      const sourceDir = resolveFrontendVoiceRuntimeDir();
+      if (!sourceDir) {
+        this.warn(
+          "Could not find @erato/frontend voice-runtime assets; skipping Office add-in voice-runtime staging.",
+        );
+        return;
+      }
+
+      for (const filePath of walkFiles(sourceDir)) {
+        const relativePath = path
+          .relative(sourceDir, filePath)
+          .split(path.sep)
+          .join("/");
+        this.emitFile({
+          type: "asset",
+          fileName: `voice-runtime/${relativePath}`,
+          source: fs.readFileSync(filePath),
+        });
       }
     },
   };
@@ -155,6 +327,7 @@ export default defineConfig(({ mode }) => {
       }),
       lingui(),
       stagePlatformLocalesPlugin(),
+      stageFrontendVoiceRuntimeAssetsPlugin(),
       watchLinkedFrontendPublicOutputPlugin(linkedFrontend),
       copy404Plugin(),
     ],
