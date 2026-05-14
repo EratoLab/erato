@@ -2,13 +2,14 @@
  * Hook to integrate token usage estimation with file uploads
  */
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDebounce } from "use-debounce";
 
 import {
   useTokenUsageEstimation,
   getTokenEstimationQueryKey,
   digestVirtualFiles,
+  digestVirtualFilesContent,
 } from "./useTokenUsageEstimation";
 
 import type { TokenUsageEstimationResult } from "./useTokenUsageEstimation";
@@ -23,9 +24,9 @@ interface UseTokenUsageWithFilesOptions {
    * Inline `File`s that should count toward the estimate without being
    * persisted to the upload pipeline. The Outlook add-in passes its
    * previewed email body here so the user sees an accurate token total
-   * before clicking Send. Pass a memoized array — the React Query cache
-   * key derives a digest from each file's `(name, type, size,
-   * lastModified)`, so an unstable reference will thrash the cache.
+   * before clicking Send. Pass a memoized array; the React Query cache key
+   * derives a digest from the file content, so an unstable reference will
+   * repeat digest work.
    */
   virtualFiles?: File[];
   /** Current chat ID */
@@ -84,19 +85,47 @@ export function useTokenUsageWithFiles({
   const [debouncedMessage] = useDebounce(message, debounceDelay);
 
   // Extract file IDs for query
-  const fileIds = attachedFiles.map((file) => file.id);
-  // Stable digest so the React Query cache key only changes when the
-  // virtual file's metadata genuinely changes — passing a fresh array of
-  // identical Files on every render must not refetch.
-  const virtualFilesDigest = useMemo(
-    () => digestVirtualFiles(virtualFiles),
-    [virtualFiles],
+  const fileIds = useMemo(
+    () => attachedFiles.map((file) => file.id),
+    [attachedFiles],
   );
+  const hasVirtualFiles = (virtualFiles?.length ?? 0) > 0;
+  const [virtualFilesDigest, setVirtualFilesDigest] = useState<string | null>(
+    hasVirtualFiles ? null : "",
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!virtualFiles || virtualFiles.length === 0) {
+      setVirtualFilesDigest("");
+      return;
+    }
+
+    setVirtualFilesDigest(null);
+    void digestVirtualFilesContent(virtualFiles)
+      .then((digest) => {
+        if (!cancelled) {
+          setVirtualFilesDigest(digest);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setVirtualFilesDigest(digestVirtualFiles(virtualFiles));
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [virtualFiles]);
+
+  const isVirtualFilesDigestReady = virtualFilesDigest !== null;
   const shouldEstimate =
     !disabled &&
     (debouncedMessage.length >= estimateThreshold ||
       fileIds.length > 0 ||
-      (virtualFiles?.length ?? 0) > 0);
+      hasVirtualFiles);
 
   // Use React Query to handle estimation with proper caching
   const { data: queryEstimation, isLoading: queryLoading } = useQuery({
@@ -107,7 +136,7 @@ export function useTokenUsageWithFiles({
       assistantId,
       previousMessageId,
       chatProviderId,
-      virtualFilesDigest,
+      virtualFilesDigest ?? "",
     ),
     queryFn: async () => {
       if (!shouldEstimate) {
@@ -124,13 +153,16 @@ export function useTokenUsageWithFiles({
         virtualFiles && virtualFiles.length > 0 ? virtualFiles : undefined,
       );
     },
-    enabled: shouldEstimate,
+    enabled: shouldEstimate && isVirtualFilesDigestReady,
     staleTime: 2000, // Match the settings from useTokenUsageEstimation
     gcTime: 30000,
   });
 
   // Combined loading state
-  const isEstimating = estimationLoading || queryLoading;
+  const isEstimating =
+    estimationLoading ||
+    queryLoading ||
+    (shouldEstimate && !isVirtualFilesDigestReady);
 
   // Function to manually trigger a token usage check
   const checkTokenUsage = useCallback(async () => {

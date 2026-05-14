@@ -45,7 +45,6 @@ export function useChatShareLink(chatId: string | null) {
     queryKey: chatId
       ? shareLinkQueryKey(chatId)
       : [CHAT_SHARE_LINK_QUERY_KEY, "idle"],
-    enabled: !!chatId,
     queryFn: chatId
       ? async () => {
           const response = await v1betaApiFetch<
@@ -126,7 +125,6 @@ export function useChatShareLink(chatId: string | null) {
 export function useResolveChatShareLink(shareLinkId: string | null) {
   return useQuery({
     queryKey: [RESOLVE_CHAT_SHARE_LINK_QUERY_KEY, "v2", shareLinkId],
-    enabled: !!shareLinkId,
     queryFn: shareLinkId
       ? async () => {
           const response = await v1betaApiFetch<
