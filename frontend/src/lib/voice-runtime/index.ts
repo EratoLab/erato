@@ -15,6 +15,11 @@ export {
   type Ricky0123VadAssetOptions,
 } from "./ricky0123Vad";
 export {
+  Ricky0123VadEngine,
+  createRicky0123VadEngine,
+  type Ricky0123VadEngineOptions,
+} from "./ricky0123VadEngine";
+export {
   type VoiceVadEngine,
   type VoiceVadEngineOptions,
   type VoiceVadEvent,

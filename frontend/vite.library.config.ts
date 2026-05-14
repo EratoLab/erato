@@ -49,6 +49,9 @@ export default defineConfig(({ mode }) => {
           "@tanstack/query-core",
           "@tanstack/react-query",
           "@tanstack/react-query-devtools",
+          "@ricky0123/vad-web",
+          "onnxruntime-web",
+          "onnxruntime-web/wasm",
         ],
         output: {
           inlineDynamicImports: true,
