@@ -8,7 +8,7 @@ use erato::config::{
     ActionFacetConfig, ExperimentalFacetsConfig, FacetConfig, McpServerAuthenticationConfig,
     McpServerConfig, ModelSettings, PromptSourceSpecification,
 };
-use erato::db::entity::{chat_file_uploads, file_uploads};
+use erato::db::entity::{chat_file_uploads, chats, file_uploads};
 use erato::models::message::{GenerationInputMessages, GenerationParameters};
 use erato::models::user::get_or_create_user;
 use erato::server::router::router;
@@ -1617,6 +1617,136 @@ async fn test_message_submit_with_completed_audio_transcription(pool: Pool<Postg
         assistant_text.contains("audio"),
         "Expected audio summary response, got: {assistant_text}"
     );
+}
+
+/// When a user submits an audio file with a completed transcript as the *first* (and only)
+/// message in a new chat — no typed text — the SSE submission path must accept the request
+/// and create the chat (rather than rejecting an empty `user_message`).
+///
+/// Regression test for: audio transcription mode producing "Untitled Chat" summaries. This
+/// test exercises the request path that triggers `generate_chat_summary` with a
+/// `TextFilePointer`-only first turn. With the bug present the request itself still succeeds
+/// (the only visible symptom is a missing title) so the asserts below are necessary but not
+/// sufficient. The transcript-promotion logic itself is covered by the `resolver_*` tests
+/// in `message_streaming::summary_generation_tests`, which exercise
+/// `resolve_audio_transcripts_for_summary` directly against an in-memory `FileUploadLookup`
+/// stub.
+///
+/// Full end-to-end verification that `chats.title_by_summary` is populated requires the mock
+/// LLM in `setup_mock_llm_server` to serve a non-streaming (`stream: false`) JSON response
+/// for the summary call — the current mock only returns `text/event-stream`, so the
+/// background summary task fails for every test in this file regardless of the audio fix.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_chat_summary_generated_for_audio_only_first_message(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+    let db = app_state.db.clone();
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // Create a preliminary chat so we have a chat to link the audio file to.
+    // File upload authorization requires the file to be linked to an accessible chat.
+    let preliminary_response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "preliminary chat" }))
+        .await;
+    preliminary_response.assert_status_ok();
+    let preliminary_events = parse_sse_events(&preliminary_response);
+    let preliminary_chat_id = extract_chat_id(&preliminary_events)
+        .expect("Expected chat_created event in preliminary request");
+    let preliminary_chat_uuid =
+        Uuid::parse_str(&preliminary_chat_id).expect("Invalid preliminary chat UUID");
+
+    // Insert a file upload with a completed audio transcript and link it to the
+    // preliminary chat so the policy engine allows access.
+    let audio_file_id = Uuid::new_v4();
+    let audio_transcription = serde_json::json!({
+        "status": "completed",
+        "transcript": "This is a transcript about quarterly sales performance.",
+    })
+    .to_string();
+
+    let audio_file = file_uploads::ActiveModel {
+        id: ActiveValue::Set(audio_file_id),
+        owner_user_id: ActiveValue::Set(TEST_USER_SUBJECT.to_string()),
+        filename: ActiveValue::Set("quarterly-update.mp3".to_string()),
+        file_storage_provider_id: ActiveValue::Set("local".to_string()),
+        file_storage_path: ActiveValue::Set("/fixtures/quarterly-update.mp3".to_string()),
+        audio_transcription: ActiveValue::Set(Some(audio_transcription)),
+        created_at: ActiveValue::Set(Utc::now().into()),
+        updated_at: ActiveValue::Set(Utc::now().into()),
+    };
+    audio_file
+        .insert(&db)
+        .await
+        .expect("Failed to insert audio file upload");
+
+    let chat_file_upload = chat_file_uploads::ActiveModel {
+        chat_id: ActiveValue::Set(preliminary_chat_uuid),
+        file_upload_id: ActiveValue::Set(audio_file_id),
+        created_at: ActiveValue::Set(Utc::now().into()),
+        updated_at: ActiveValue::Set(Utc::now().into()),
+    };
+    chat_file_upload
+        .insert(&db)
+        .await
+        .expect("Failed to link audio file to preliminary chat");
+
+    // Submit the audio file as the first (and only content) in a BRAND NEW chat.
+    // No `user_message` text and no `previous_message_id` — the audio-only first-message
+    // scenario reported in the bug.
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "user_message": "",
+            "input_files_ids": [audio_file_id],
+        }))
+        .await;
+    response.assert_status_ok();
+
+    let events = parse_sse_events(&response);
+    let audio_chat_id = extract_chat_id(&events).expect("Expected chat_created event");
+    assert_ne!(
+        audio_chat_id, preliminary_chat_id,
+        "Audio-only submission should create a new chat, not reuse the preliminary one"
+    );
+    let audio_chat_uuid = Uuid::parse_str(&audio_chat_id).expect("Invalid audio chat UUID");
+
+    let assistant_completed = events.iter().any(|event| {
+        serde_json::from_str::<Value>(&event.data)
+            .ok()
+            .is_some_and(|json| json["message_type"] == "assistant_message_completed")
+    });
+    assert!(
+        assistant_completed,
+        "Expected assistant_message_completed when the audio-only first turn is accepted"
+    );
+
+    // The new chat row exists. We deliberately do not assert on `title_by_summary` here
+    // because the mock LLM in `setup_mock_llm_server` only serves streaming responses and
+    // the summary path uses `exec_chat` (non-streaming JSON), so the background summary
+    // task fails in every test — independently of the audio fix.
+    let _audio_chat = chats::Entity::find_by_id(audio_chat_uuid)
+        .one(&db)
+        .await
+        .expect("Failed to fetch audio chat")
+        .expect("Audio chat row not found");
 }
 
 /// Malformed base64 in `virtual_files` returns 400 — the request should not

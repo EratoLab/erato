@@ -3279,8 +3279,14 @@ pub async fn generate_chat_summary(
         chat.assistant_configuration.is_some()
     );
 
+    // Resolve TextFilePointer entries that have completed audio transcripts so that
+    // audio-only first messages are not silently skipped during summary extraction.
+    let resolved_input_messages =
+        resolve_audio_transcripts_for_summary(&app_state.db, generation_input_messages.clone())
+            .await;
+
     let Some(first_user_message_text) =
-        summary_user_message_text_from_generation_input(generation_input_messages)
+        summary_user_message_text_from_generation_input(&resolved_input_messages)
     else {
         tracing::info!(
             "[SUMMARY] Skipping summary generation for chat_id={} because the composed input has no user text message",
@@ -3542,6 +3548,61 @@ fn summary_user_message_text_from_generation_input(
                 | ContentPart::ActionFacetMarker(_) => None,
             }
         })
+}
+
+/// Resolves `TextFilePointer` content parts to their completed audio transcript text so that
+/// the summary generation path can extract meaningful text even when the first user turn
+/// contains only an audio attachment (no typed text).
+///
+/// Only entries with a *completed* audio transcript are replaced in place; all other content
+/// parts (including file pointers whose transcript is not yet ready, missing uploads, or DB
+/// errors) are left untouched. Parametrized over `FileUploadLookup` so this can be unit-tested
+/// against an in-memory stub.
+async fn resolve_audio_transcripts_for_summary(
+    file_lookup: &impl crate::models::file_upload::FileUploadLookup,
+    mut generation_input_messages: GenerationInputMessages,
+) -> GenerationInputMessages {
+    for message in &mut generation_input_messages.messages {
+        let ContentPart::TextFilePointer(ptr) = &message.content else {
+            continue;
+        };
+        let file_upload_id = ptr.file_upload_id;
+
+        let promoted_text = match file_lookup.find_file_upload(file_upload_id).await {
+            Ok(Some(file)) => crate::models::file_upload::get_audio_transcript_if_ready(&file)
+                .map(|transcript| (file.filename, transcript)),
+            Ok(None) => {
+                tracing::debug!(
+                    "[SUMMARY] File upload {} not found, keeping TextFilePointer unchanged",
+                    file_upload_id
+                );
+                None
+            }
+            Err(err) => {
+                tracing::error!(
+                    "[SUMMARY] DB error fetching file upload {} for summary resolution: {}",
+                    file_upload_id,
+                    err
+                );
+                None
+            }
+        };
+
+        if let Some((filename, transcript)) = promoted_text {
+            tracing::info!(
+                "[SUMMARY] Resolved audio transcript for file_upload_id={} to use in summary extraction",
+                file_upload_id
+            );
+            let text = crate::server::api::v1beta::file_resolution::format_successful_file_content(
+                &filename,
+                file_upload_id,
+                &transcript,
+            );
+            message.content = ContentPart::Text(ContentPartText { text });
+        }
+    }
+
+    generation_input_messages
 }
 
 fn build_chat_summary_request(first_user_message_text: &str) -> ChatRequest {
@@ -4817,6 +4878,180 @@ mod summary_generation_tests {
             summary_user_message_text_from_generation_input(&generation_input_messages),
             None
         );
+    }
+
+    /// Stub `FileUploadLookup` for testing the audio-transcript resolver without a DB.
+    /// Returns whatever was inserted via `insert`, and `Ok(None)` for unknown ids.
+    struct StubFileUploadLookup {
+        entries: std::collections::HashMap<Uuid, crate::db::entity::file_uploads::Model>,
+        error_for: Option<Uuid>,
+    }
+
+    impl StubFileUploadLookup {
+        fn new() -> Self {
+            Self {
+                entries: std::collections::HashMap::new(),
+                error_for: None,
+            }
+        }
+
+        fn with(mut self, file: crate::db::entity::file_uploads::Model) -> Self {
+            self.entries.insert(file.id, file);
+            self
+        }
+
+        fn with_error(mut self, id: Uuid) -> Self {
+            self.error_for = Some(id);
+            self
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl crate::models::file_upload::FileUploadLookup for StubFileUploadLookup {
+        async fn find_file_upload(
+            &self,
+            id: Uuid,
+        ) -> Result<Option<crate::db::entity::file_uploads::Model>, eyre::Report> {
+            if self.error_for == Some(id) {
+                return Err(eyre::eyre!("stub DB error"));
+            }
+            Ok(self.entries.get(&id).cloned())
+        }
+    }
+
+    fn stub_audio_file(
+        id: Uuid,
+        filename: &str,
+        audio_transcription: Option<&str>,
+    ) -> crate::db::entity::file_uploads::Model {
+        crate::db::entity::file_uploads::Model {
+            id,
+            owner_user_id: "test-user".to_string(),
+            filename: filename.to_string(),
+            file_storage_provider_id: "local".to_string(),
+            file_storage_path: format!("/fixtures/{filename}"),
+            audio_transcription: audio_transcription.map(str::to_string),
+            created_at: chrono::Utc::now().into(),
+            updated_at: chrono::Utc::now().into(),
+        }
+    }
+
+    fn user_pointer(file_upload_id: Uuid) -> crate::models::message::InputMessage {
+        crate::models::message::InputMessage {
+            role: MessageRole::User,
+            content: ContentPart::TextFilePointer(
+                crate::models::message::ContentPartTextFilePointer { file_upload_id },
+            ),
+        }
+    }
+
+    #[tokio::test]
+    async fn resolver_promotes_completed_audio_transcript_to_text() {
+        let file_id = Uuid::new_v4();
+        let lookup = StubFileUploadLookup::new().with(stub_audio_file(
+            file_id,
+            "quarterly-update.mp3",
+            Some(
+                r#"{"status":"completed","transcript":"Quarterly results exceeded expectations."}"#,
+            ),
+        ));
+        let input = GenerationInputMessages {
+            messages: vec![user_pointer(file_id)],
+        };
+
+        let resolved = resolve_audio_transcripts_for_summary(&lookup, input).await;
+
+        assert_eq!(resolved.messages.len(), 1);
+        let ContentPart::Text(ContentPartText { text }) = &resolved.messages[0].content else {
+            panic!(
+                "expected promoted Text, got {:?}",
+                resolved.messages[0].content
+            );
+        };
+        assert!(
+            text.contains("Quarterly results exceeded expectations."),
+            "promoted text should contain the transcript body, got: {text}"
+        );
+        assert!(
+            text.contains("quarterly-update.mp3"),
+            "promoted text should include the filename envelope, got: {text}"
+        );
+        // The summary extractor must now find user text and not skip.
+        assert!(
+            summary_user_message_text_from_generation_input(&resolved).is_some(),
+            "extractor should return text for the resolved input"
+        );
+    }
+
+    #[tokio::test]
+    async fn resolver_leaves_pending_transcript_pointer_untouched() {
+        let file_id = Uuid::new_v4();
+        let lookup = StubFileUploadLookup::new().with(stub_audio_file(
+            file_id,
+            "pending.mp3",
+            Some(r#"{"status":"pending"}"#),
+        ));
+        let input = GenerationInputMessages {
+            messages: vec![user_pointer(file_id)],
+        };
+
+        let resolved = resolve_audio_transcripts_for_summary(&lookup, input).await;
+
+        assert!(matches!(
+            resolved.messages[0].content,
+            ContentPart::TextFilePointer(_)
+        ));
+        assert!(
+            summary_user_message_text_from_generation_input(&resolved).is_none(),
+            "pending transcript must not produce summary text"
+        );
+    }
+
+    #[tokio::test]
+    async fn resolver_leaves_unknown_and_errored_uploads_untouched() {
+        let unknown_id = Uuid::new_v4();
+        let error_id = Uuid::new_v4();
+        let lookup = StubFileUploadLookup::new().with_error(error_id);
+        let input = GenerationInputMessages {
+            messages: vec![user_pointer(unknown_id), user_pointer(error_id)],
+        };
+
+        let resolved = resolve_audio_transcripts_for_summary(&lookup, input).await;
+
+        for message in &resolved.messages {
+            assert!(matches!(message.content, ContentPart::TextFilePointer(_)));
+        }
+    }
+
+    #[tokio::test]
+    async fn resolver_passes_through_non_pointer_content() {
+        let file_id = Uuid::new_v4();
+        let lookup = StubFileUploadLookup::new().with(stub_audio_file(
+            file_id,
+            "ready.mp3",
+            Some(r#"{"status":"completed","transcript":"hello"}"#),
+        ));
+        let input = GenerationInputMessages {
+            messages: vec![
+                crate::models::message::InputMessage {
+                    role: MessageRole::User,
+                    content: ContentPart::Text(ContentPartText {
+                        text: "typed by user".to_string(),
+                    }),
+                },
+                user_pointer(file_id),
+            ],
+        };
+
+        let resolved = resolve_audio_transcripts_for_summary(&lookup, input).await;
+
+        // Typed user text is unchanged; the file pointer is promoted to Text in place.
+        let ContentPart::Text(ContentPartText { text: typed }) = &resolved.messages[0].content
+        else {
+            panic!("typed user text should pass through unchanged");
+        };
+        assert_eq!(typed, "typed by user");
+        assert!(matches!(resolved.messages[1].content, ContentPart::Text(_)));
     }
 
     #[test]
