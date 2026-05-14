@@ -8,7 +8,7 @@ use erato::config::{
     ActionFacetConfig, ExperimentalFacetsConfig, FacetConfig, McpServerAuthenticationConfig,
     McpServerConfig, ModelSettings, PromptSourceSpecification,
 };
-use erato::db::entity::{chat_file_uploads, file_uploads};
+use erato::db::entity::{chat_file_uploads, chats, file_uploads};
 use erato::models::message::{GenerationInputMessages, GenerationParameters};
 use erato::models::user::get_or_create_user;
 use erato::server::router::router;
@@ -1620,16 +1620,22 @@ async fn test_message_submit_with_completed_audio_transcription(pool: Pool<Postg
 }
 
 /// When a user submits an audio file with a completed transcript as the *first* (and only)
-/// message in a new chat — no typed text — the chat summary should be generated from the
-/// transcript content rather than skipped, so the chat title is not left as "Untitled Chat".
+/// message in a new chat — no typed text — the SSE submission path must accept the request
+/// and create the chat (rather than rejecting an empty `user_message`).
 ///
-/// Regression test for: audio transcription mode producing "Untitled Chat" summaries.
-/// The core fix is tested directly in `message_streaming::summary_generation_tests`
-/// as a DB-backed unit test
-/// (`test_resolve_audio_transcripts_resolves_completed_transcript`).
+/// Regression test for: audio transcription mode producing "Untitled Chat" summaries. This
+/// test exercises the request path that triggers `generate_chat_summary` with a
+/// `TextFilePointer`-only first turn. With the bug present the request itself still succeeds
+/// (the only visible symptom is a missing title) so the asserts below are necessary but not
+/// sufficient. The transcript-promotion logic itself is covered by the `resolver_*` tests
+/// in `message_streaming::summary_generation_tests`, which exercise
+/// `resolve_audio_transcripts_for_summary` directly against an in-memory `FileUploadLookup`
+/// stub.
 ///
-/// This end-to-end smoke test confirms the full SSE submission path still works when an
-/// audio file with a completed transcript is attached.
+/// Full end-to-end verification that `chats.title_by_summary` is populated requires the mock
+/// LLM in `setup_mock_llm_server` to serve a non-streaming (`stream: false`) JSON response
+/// for the summary call — the current mock only returns `text/event-stream`, so the
+/// background summary task fails for every test in this file regardless of the audio fix.
 ///
 /// # Test Categories
 /// - `uses-db`
@@ -1714,13 +1720,33 @@ async fn test_chat_summary_generated_for_audio_only_first_message(pool: Pool<Pos
         .await;
     response.assert_status_ok();
 
-    // Verify that the submission creates a new chat with a chat_created event.
     let events = parse_sse_events(&response);
     let audio_chat_id = extract_chat_id(&events).expect("Expected chat_created event");
     assert_ne!(
         audio_chat_id, preliminary_chat_id,
         "Audio-only submission should create a new chat, not reuse the preliminary one"
     );
+    let audio_chat_uuid = Uuid::parse_str(&audio_chat_id).expect("Invalid audio chat UUID");
+
+    let assistant_completed = events.iter().any(|event| {
+        serde_json::from_str::<Value>(&event.data)
+            .ok()
+            .is_some_and(|json| json["message_type"] == "assistant_message_completed")
+    });
+    assert!(
+        assistant_completed,
+        "Expected assistant_message_completed when the audio-only first turn is accepted"
+    );
+
+    // The new chat row exists. We deliberately do not assert on `title_by_summary` here
+    // because the mock LLM in `setup_mock_llm_server` only serves streaming responses and
+    // the summary path uses `exec_chat` (non-streaming JSON), so the background summary
+    // task fails in every test — independently of the audio fix.
+    let _audio_chat = chats::Entity::find_by_id(audio_chat_uuid)
+        .one(&db)
+        .await
+        .expect("Failed to fetch audio chat")
+        .expect("Audio chat row not found");
 }
 
 /// Malformed base64 in `virtual_files` returns 400 — the request should not

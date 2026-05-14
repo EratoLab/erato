@@ -215,6 +215,25 @@ pub fn get_audio_transcript_if_ready(file_upload: &file_uploads::Model) -> Optio
         .and_then(|metadata| metadata.aggregate_transcript())
 }
 
+/// Lookup capability used by code paths that need a file_upload row but should not be
+/// coupled to `AppState`/`DatabaseConnection` directly — namely so they can be unit-tested
+/// against an in-memory stub. Implemented for `DatabaseConnection` below; production callers
+/// pass `&app_state.db`.
+#[async_trait::async_trait]
+pub trait FileUploadLookup: Send + Sync {
+    async fn find_file_upload(&self, id: Uuid) -> Result<Option<file_uploads::Model>, Report>;
+}
+
+#[async_trait::async_trait]
+impl FileUploadLookup for DatabaseConnection {
+    async fn find_file_upload(&self, id: Uuid) -> Result<Option<file_uploads::Model>, Report> {
+        FileUploads::find_by_id(id)
+            .one(self)
+            .await
+            .wrap_err_with(|| format!("Failed to look up file_upload {id}"))
+    }
+}
+
 /// Create a new file upload record in the database and associate it with a chat
 pub async fn create_file_upload(
     conn: &DatabaseConnection,
