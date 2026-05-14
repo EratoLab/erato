@@ -348,6 +348,8 @@ export const ChatInput = ({
   // below is the only reader; cancellation paths (exit audio mode, start
   // a new recording, transcription error) flip this back to false.
   const pendingAutoSendRef = useRef(false);
+  const shouldRestartAudioModeAfterResponseRef = useRef(false);
+  const audioModeRestartSawPendingResponseRef = useRef(false);
   const previousModeRef = useRef<"compose" | "edit">(mode);
   const previousEditMessageIdRef = useRef<string | undefined>(undefined);
   const composeDraftKey = chatId ?? NEW_CHAT_DRAFT_KEY;
@@ -1262,6 +1264,8 @@ export const ChatInput = ({
 
   const exitAudioMode = useCallback(() => {
     pendingAutoSendRef.current = false;
+    shouldRestartAudioModeAfterResponseRef.current = false;
+    audioModeRestartSawPendingResponseRef.current = false;
     if (isRecording) {
       toggleAudioRecording();
     }
@@ -1271,6 +1275,8 @@ export const ChatInput = ({
   useEffect(() => {
     if (mode !== "compose" && isAudioMode) {
       pendingAutoSendRef.current = false;
+      shouldRestartAudioModeAfterResponseRef.current = false;
+      audioModeRestartSawPendingResponseRef.current = false;
       setIsAudioMode(false);
     }
   }, [mode, isAudioMode, setIsAudioMode]);
@@ -1282,6 +1288,8 @@ export const ChatInput = ({
   useEffect(() => {
     if (recordingError) {
       pendingAutoSendRef.current = false;
+      shouldRestartAudioModeAfterResponseRef.current = false;
+      audioModeRestartSawPendingResponseRef.current = false;
     }
   }, [recordingError]);
 
@@ -1306,6 +1314,8 @@ export const ChatInput = ({
       return;
     }
     pendingAutoSendRef.current = false;
+    shouldRestartAudioModeAfterResponseRef.current = true;
+    audioModeRestartSawPendingResponseRef.current = false;
     formRef.current?.requestSubmit();
   }, [
     isAudioMode,
@@ -1313,6 +1323,61 @@ export const ChatInput = ({
     isRecordingUpload,
     hasIncompleteAudioTranscription,
     attachedFiles.length,
+  ]);
+
+  useEffect(() => {
+    if (shouldRestartAudioModeAfterResponseRef.current && isPendingResponse) {
+      audioModeRestartSawPendingResponseRef.current = true;
+    }
+  }, [isPendingResponse]);
+
+  useEffect(() => {
+    if (!shouldRestartAudioModeAfterResponseRef.current) {
+      return;
+    }
+    if (!audioModeRestartSawPendingResponseRef.current) {
+      return;
+    }
+    if (!isAudioMode || mode !== "compose" || isPendingResponse) {
+      return;
+    }
+    if (
+      disabled ||
+      isLoading ||
+      isUploading ||
+      isFileButtonProcessing ||
+      isAnyTokenLimitExceeded ||
+      isRecording ||
+      isRecordingUpload ||
+      hasIncompleteAudioTranscription ||
+      attachedFiles.length > 0 ||
+      isDictating ||
+      isDictationStarting ||
+      isDictationCompleting
+    ) {
+      return;
+    }
+
+    shouldRestartAudioModeAfterResponseRef.current = false;
+    audioModeRestartSawPendingResponseRef.current = false;
+    toggleAudioRecording();
+  }, [
+    attachedFiles.length,
+    disabled,
+    hasIncompleteAudioTranscription,
+    isAnyTokenLimitExceeded,
+    isAudioMode,
+    isDictating,
+    isDictationCompleting,
+    isDictationStarting,
+    isFileButtonProcessing,
+    isLoading,
+    isPendingResponse,
+    isRecording,
+    isRecordingUpload,
+    isUploading,
+    mode,
+    toggleAudioRecording,
   ]);
 
   // Log just before rendering the component and its preview section
