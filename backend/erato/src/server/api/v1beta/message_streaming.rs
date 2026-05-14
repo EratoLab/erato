@@ -3279,8 +3279,13 @@ pub async fn generate_chat_summary(
         chat.assistant_configuration.is_some()
     );
 
+    // Resolve TextFilePointer entries that have completed audio transcripts so that
+    // audio-only first messages are not silently skipped during summary extraction.
+    let resolved_input_messages =
+        resolve_audio_transcripts_for_summary(app_state, generation_input_messages).await;
+
     let Some(first_user_message_text) =
-        summary_user_message_text_from_generation_input(generation_input_messages)
+        summary_user_message_text_from_generation_input(&resolved_input_messages)
     else {
         tracing::info!(
             "[SUMMARY] Skipping summary generation for chat_id={} because the composed input has no user text message",
@@ -3298,7 +3303,7 @@ pub async fn generate_chat_summary(
             .collect::<String>()
     );
 
-    let chat_request = build_chat_summary_request(first_user_message_text);
+    let chat_request = build_chat_summary_request(&first_user_message_text);
     let max_tokens = app_state.max_tokens_for_summary();
 
     // HACK: Hacky way to recognize reasoning models right now. Shouldbe replaced with capabilities mechanism in the future.
@@ -3517,9 +3522,9 @@ pub async fn generate_chat_summary(
     Ok(())
 }
 
-fn summary_user_message_text_from_generation_input(
+pub fn summary_user_message_text_from_generation_input(
     generation_input_messages: &GenerationInputMessages,
-) -> Option<&str> {
+) -> Option<String> {
     generation_input_messages
         .messages
         .iter()
@@ -3532,7 +3537,7 @@ fn summary_user_message_text_from_generation_input(
             match &message.content {
                 ContentPart::Text(ContentPartText { text }) => {
                     let text = text.trim();
-                    (!text.is_empty()).then_some(text)
+                    (!text.is_empty()).then(|| text.to_string())
                 }
                 ContentPart::Reasoning(_)
                 | ContentPart::ToolUse(_)
@@ -3542,6 +3547,78 @@ fn summary_user_message_text_from_generation_input(
                 | ContentPart::ActionFacetMarker(_) => None,
             }
         })
+}
+
+/// Resolves `TextFilePointer` content parts to their completed audio transcript text so that
+/// the summary generation path can extract meaningful text even when the first user turn
+/// contains only an audio attachment (no typed text).
+///
+/// Only entries with a *completed* audio transcript are replaced; all other content parts
+/// (including file pointers whose transcript is not yet ready) are passed through unchanged.
+pub async fn resolve_audio_transcripts_for_summary(
+    app_state: &AppState,
+    generation_input_messages: &GenerationInputMessages,
+) -> GenerationInputMessages {
+    use crate::db::entity::prelude::FileUploads;
+    use sea_orm::EntityTrait as _;
+
+    let mut resolved_messages =
+        Vec::with_capacity(generation_input_messages.messages.len());
+
+    for message in &generation_input_messages.messages {
+        let resolved_content = if let ContentPart::TextFilePointer(ref ptr) = message.content {
+            let file_upload_result = FileUploads::find_by_id(ptr.file_upload_id)
+                .one(&app_state.db)
+                .await;
+
+            match file_upload_result {
+                Ok(Some(ref file)) => {
+                    if let Some(transcript) =
+                        crate::models::file_upload::get_audio_transcript_if_ready(file)
+                    {
+                        tracing::info!(
+                            "[SUMMARY] Resolved audio transcript for file_upload_id={} to use in summary extraction",
+                            ptr.file_upload_id
+                        );
+                        let text = crate::server::api::v1beta::file_resolution::format_successful_file_content(
+                            &file.filename,
+                            ptr.file_upload_id,
+                            &transcript,
+                        );
+                        ContentPart::Text(ContentPartText { text })
+                    } else {
+                        message.content.clone()
+                    }
+                }
+                Ok(None) => {
+                    tracing::debug!(
+                        "[SUMMARY] File upload {} not found, keeping TextFilePointer unchanged",
+                        ptr.file_upload_id
+                    );
+                    message.content.clone()
+                }
+                Err(err) => {
+                    tracing::warn!(
+                        "[SUMMARY] DB error fetching file upload {} for summary resolution: {}",
+                        ptr.file_upload_id,
+                        err
+                    );
+                    message.content.clone()
+                }
+            }
+        } else {
+            message.content.clone()
+        };
+
+        resolved_messages.push(crate::models::message::InputMessage {
+            role: message.role.clone(),
+            content: resolved_content,
+        });
+    }
+
+    GenerationInputMessages {
+        messages: resolved_messages,
+    }
 }
 
 fn build_chat_summary_request(first_user_message_text: &str) -> ChatRequest {
@@ -4787,7 +4864,7 @@ mod summary_generation_tests {
 
         assert_eq!(
             summary_user_message_text_from_generation_input(&generation_input_messages),
-            Some("Explain our customer support handoff")
+            Some("Explain our customer support handoff".to_string())
         );
     }
 
@@ -4820,6 +4897,29 @@ mod summary_generation_tests {
     }
 
     #[test]
+    fn summary_input_returns_none_for_audio_file_pointer_only() {
+        // Audio-only first messages arrive as TextFilePointer before resolution.
+        // The sync extractor should return None; the async resolver in
+        // resolve_audio_transcripts_for_summary promotes completed transcripts
+        // to ContentPart::Text before this function is called.
+        let generation_input_messages = GenerationInputMessages {
+            messages: vec![crate::models::message::InputMessage {
+                role: MessageRole::User,
+                content: ContentPart::TextFilePointer(
+                    crate::models::message::ContentPartTextFilePointer {
+                        file_upload_id: Uuid::new_v4(),
+                    },
+                ),
+            }],
+        };
+
+        assert_eq!(
+            summary_user_message_text_from_generation_input(&generation_input_messages),
+            None
+        );
+    }
+
+    #[test]
     fn summary_request_separates_instruction_from_user_message() {
         let chat_request = build_chat_summary_request("Explain our customer support handoff");
 
@@ -4837,6 +4937,7 @@ mod summary_generation_tests {
             Some("Explain our customer support handoff")
         );
     }
+
 }
 
 /// Run the message submission task in the background
