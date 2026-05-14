@@ -2156,6 +2156,157 @@ describe("ChatInput", () => {
       requestSubmitSpy.mockRestore();
     });
 
+    it("keeps audio-mode auto-send armed while a response is pending", async () => {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      const toggleAudioRecording = vi.fn();
+      const onSendMessage = vi.fn();
+      const requestSubmitSpy = vi.spyOn(
+        HTMLFormElement.prototype,
+        "requestSubmit",
+      );
+      let isPendingResponse = false;
+      mockUseChatContext.mockImplementation(() => ({
+        isPendingResponse,
+        isMessagingLoading: false,
+        isUploading: false,
+        cancelMessage: vi.fn(),
+        messagingError: null,
+      }));
+      const createSubmitHandler =
+        (
+          message: string,
+          attachedFiles: FileUploadItem[],
+          innerOnSendMessage: (
+            message: string,
+            inputFileIds?: string[],
+          ) => void,
+          isLoading: boolean,
+          disabled: boolean,
+          resetMessage: () => void,
+        ) =>
+        (event: FormEvent) => {
+          event.preventDefault();
+          if (isLoading || disabled) return;
+          const trimmed = message.trim();
+          const fileIds = attachedFiles.map((file) => file.id);
+          if (trimmed || fileIds.length > 0) {
+            innerOnSendMessage(
+              trimmed,
+              fileIds.length > 0 ? fileIds : undefined,
+            );
+            resetMessage();
+          }
+        };
+      mockUseAudioTranscriptionFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+        showModelSelectorInAudioMode: false,
+      });
+      mockUseAudioTranscriptionRecorder.mockReturnValue({
+        isRecording: true,
+        isRecordingUpload: false,
+        recordingError: null,
+        setRecordingError: vi.fn(),
+        recordingBars: [3, 6, 9, 6, 3],
+        retryingAudioFileId: null,
+        retryAudioTranscription: vi.fn(),
+        removeRecordedAudioFile: vi.fn(),
+        clearRecordedAudioFiles: vi.fn(),
+        hasRecordedAudioFile: () => false,
+        toggleAudioRecording,
+      });
+      mockUseChatInputHandlers.mockReturnValue({
+        attachedFiles: [],
+        fileError: null,
+        setFileError: vi.fn(),
+        handleFilesUploaded: vi.fn(),
+        handleRemoveFile: vi.fn(),
+        handleRemoveAllFiles: vi.fn(),
+        setAttachedFiles: vi.fn(),
+        createSubmitHandler,
+      });
+
+      const { i18n } = await import("@lingui/core");
+      const { rerender } = render(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={onSendMessage} />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+
+      fireEvent.click(screen.getByTestId("chat-input-audio-mode-stop"));
+      expect(toggleAudioRecording).toHaveBeenCalledTimes(1);
+
+      mockUseAudioTranscriptionRecorder.mockReturnValue({
+        isRecording: false,
+        isRecordingUpload: false,
+        recordingError: null,
+        setRecordingError: vi.fn(),
+        recordingBars: [2, 2, 2, 2, 2],
+        retryingAudioFileId: null,
+        retryAudioTranscription: vi.fn(),
+        removeRecordedAudioFile: vi.fn(),
+        clearRecordedAudioFiles: vi.fn(),
+        hasRecordedAudioFile: () => false,
+        toggleAudioRecording,
+      });
+      mockUseChatInputHandlers.mockReturnValue({
+        attachedFiles: [
+          {
+            id: "queued-audio",
+            filename: "queued.wav",
+            download_url: "/files/queued-audio",
+            audio_transcription: {
+              status: "completed",
+              transcript: "queued message",
+            },
+          },
+        ] as unknown as FileUploadItem[],
+        fileError: null,
+        setFileError: vi.fn(),
+        handleFilesUploaded: vi.fn(),
+        handleRemoveFile: vi.fn(),
+        handleRemoveAllFiles: vi.fn(),
+        setAttachedFiles: vi.fn(),
+        createSubmitHandler,
+      });
+      isPendingResponse = true;
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={onSendMessage} />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+
+      expect(requestSubmitSpy).not.toHaveBeenCalled();
+      expect(onSendMessage).not.toHaveBeenCalled();
+
+      isPendingResponse = false;
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={onSendMessage} />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => expect(requestSubmitSpy).toHaveBeenCalledTimes(1));
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "",
+        ["queued-audio"],
+        undefined,
+        [],
+      );
+      requestSubmitSpy.mockRestore();
+    });
+
     it("clears the auto-send latch when the user exits audio mode mid-transcription", async () => {
       const queryClient = new QueryClient({
         defaultOptions: {

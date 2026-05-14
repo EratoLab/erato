@@ -1310,6 +1310,9 @@ export const ChatInput = ({
     if (isRecording || isRecordingUpload || hasIncompleteAudioTranscription) {
       return;
     }
+    if (isPendingResponse) {
+      return;
+    }
     if (attachedFiles.length === 0) {
       return;
     }
@@ -1321,6 +1324,7 @@ export const ChatInput = ({
     isAudioMode,
     isRecording,
     isRecordingUpload,
+    isPendingResponse,
     hasIncompleteAudioTranscription,
     attachedFiles.length,
   ]);
