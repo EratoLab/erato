@@ -414,10 +414,7 @@ export function useAudioTranscriptionRecorder({
   // ~30 Hz (33 ms) so consumer re-renders halve without a perceptible
   // change in the waveform animation. Resets and idle states still go
   // through the raw setter so they apply immediately.
-  const setRecordingBarsThrottled = useThrottledCallback(
-    setRecordingBars,
-    33,
-  );
+  const setRecordingBarsThrottled = useThrottledCallback(setRecordingBars, 33);
   const [recordingDiagnostics, setRecordingDiagnostics] =
     useState<AudioRecordingDiagnostics | null>(null);
 

@@ -263,7 +263,8 @@ function createFeatureConfig(
       maxRecordingDurationSeconds:
         environment.audioTranscriptionMaxRecordingDurationSeconds,
       showModelSelectorInAudioMode:
-        defaultStaticFeatureConfig.audioTranscription.showModelSelectorInAudioMode,
+        defaultStaticFeatureConfig.audioTranscription
+          .showModelSelectorInAudioMode,
     },
     audioDictation: {
       enabled: Boolean(environment.audioDictationEnabled),
