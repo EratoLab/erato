@@ -19,3 +19,16 @@ export {
   useVoiceRuntimeAssets,
   type VoiceRuntimeProviderProps,
 } from "./VoiceRuntimeProvider";
+export {
+  createRicky0123VadAssetOptions,
+  type Ricky0123VadAssetOptions,
+} from "./ricky0123Vad";
+export {
+  type VoiceVadEngine,
+  type VoiceVadEngineOptions,
+  type VoiceVadEvent,
+  type VoiceVadEventListener,
+  type VoiceVadFrame,
+  type VoiceVadFrameResult,
+  type VoiceVadModel,
+} from "./vadEngine";
