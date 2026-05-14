@@ -23,20 +23,22 @@ type DebugCategory =
 function isDebugEnabled(category: DebugCategory): boolean {
   // Check if we're in the browser environment
   if (typeof window === "undefined") return false;
+  const storage = window.localStorage;
+  if (typeof storage?.getItem !== "function") return false;
 
   // Only log in development by default
   if (process.env.NODE_ENV !== "development") {
     // Allow explicit override in production with localStorage.DEBUG_FORCE
-    if (localStorage.getItem("DEBUG_FORCE") !== "true") {
+    if (storage.getItem("DEBUG_FORCE") !== "true") {
       return false;
     }
   }
 
-  const isDebugModeOn = localStorage.getItem("DEBUG") === "true";
+  const isDebugModeOn = storage.getItem("DEBUG") === "true";
   if (!isDebugModeOn) return false;
 
   // Check for category filtering
-  const debugCategories = localStorage.getItem("DEBUG_CATEGORIES");
+  const debugCategories = storage.getItem("DEBUG_CATEGORIES");
   if (!debugCategories) return true; // If no categories specified, log all
 
   const categories = debugCategories.split(",");
