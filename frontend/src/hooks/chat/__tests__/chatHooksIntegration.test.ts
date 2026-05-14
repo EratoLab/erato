@@ -41,6 +41,8 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   useRecentChats: vi.fn(),
   useArchiveChatEndpoint: vi.fn(),
   useUpdateChat: vi.fn(),
+  chatMessagesQuery: vi.fn(() => ({ queryKey: [] })),
+  recentChatsQuery: vi.fn(() => ({ queryKey: [] })),
 }));
 
 vi.mock("@tanstack/react-query", () => ({
