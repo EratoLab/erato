@@ -381,6 +381,9 @@ export const ChatInput = ({
     [messagingError],
   );
   const wasPendingResponseRef = useRef(isPendingResponse);
+  const handleVadAutoStop = useCallback(() => {
+    pendingAutoSendRef.current = true;
+  }, []);
 
   // Combine loading states
   const isLoading = propIsLoading ?? isMessagingLoading;
@@ -453,6 +456,12 @@ export const ChatInput = ({
     createSubmitHandler,
   } = useChatInputHandlers(maxFiles, handleFileAttachments, initialFiles);
 
+  const hasComposeContent =
+    message.trim().length > 0 || attachedFiles.length > 0;
+  const shouldUseVadAutoStop =
+    isAudioMode ||
+    (audioTranscriptionEnabled && mode === "compose" && !hasComposeContent);
+
   const {
     isRecording,
     isRecordingUpload,
@@ -469,6 +478,8 @@ export const ChatInput = ({
     audioTranscriptionEnabled,
     uploadEnabled,
     maxRecordingDurationSeconds,
+    vadAutoStopEnabled: shouldUseVadAutoStop,
+    onVadAutoStop: handleVadAutoStop,
     chatId,
     silentChatId,
     setSilentChatId,
@@ -1214,8 +1225,6 @@ export const ChatInput = ({
   // input is empty in compose mode and audio transcription is enabled.
   // While recording, the same slot keeps the audio-mode button (now in its
   // stop-on-hover state) so the toggle stays in one place.
-  const hasComposeContent =
-    message.trim().length > 0 || attachedFiles.length > 0;
   const showAudioModeButton =
     audioTranscriptionEnabled &&
     mode === "compose" &&

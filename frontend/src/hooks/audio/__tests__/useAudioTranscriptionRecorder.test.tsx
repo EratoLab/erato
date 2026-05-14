@@ -10,6 +10,30 @@ import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas"
 
 const mockFetchGetFile = vi.fn();
 const mockUseCreateChat = vi.fn();
+const mockCreateRicky0123VadEngine = vi.fn();
+
+type MockVoiceVadListener = (event: {
+  type: string;
+  timestampMs?: number;
+  audio?: Float32Array;
+}) => void;
+
+const mockVadListeners: MockVoiceVadListener[] = [];
+const mockVadEngine = {
+  start: vi.fn(async () => {}),
+  stop: vi.fn(),
+  destroy: vi.fn(),
+  acceptFrame: vi.fn(async () => {}),
+  subscribe: vi.fn((listener: MockVoiceVadListener) => {
+    mockVadListeners.push(listener);
+    return () => {
+      const index = mockVadListeners.indexOf(listener);
+      if (index >= 0) {
+        mockVadListeners.splice(index, 1);
+      }
+    };
+  }),
+};
 
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   fetchGetFile: (...args: unknown[]) => mockFetchGetFile(...args),
@@ -18,6 +42,11 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
 
 vi.mock("@/lib/generated/v1betaApi/v1betaApiContext", () => ({
   useV1betaApiContext: () => ({ fetcherOptions: {} }),
+}));
+
+vi.mock("@/lib/voice-runtime", () => ({
+  createRicky0123VadEngine: (...args: unknown[]) =>
+    mockCreateRicky0123VadEngine(...args),
 }));
 
 const fixturePath = join(
@@ -337,6 +366,14 @@ describe("useAudioTranscriptionRecorder", () => {
     mockProcessors.length = 0;
     MockMediaRecorder.instances.length = 0;
     MockWebSocket.instances.length = 0;
+    mockVadListeners.length = 0;
+    mockVadEngine.start.mockClear();
+    mockVadEngine.stop.mockClear();
+    mockVadEngine.destroy.mockClear();
+    mockVadEngine.acceptFrame.mockClear();
+    mockVadEngine.subscribe.mockClear();
+    mockCreateRicky0123VadEngine.mockReset();
+    mockCreateRicky0123VadEngine.mockReturnValue(mockVadEngine);
 
     mockUseCreateChat.mockReturnValue({
       mutateAsync: vi.fn(async () => ({ chat_id: "chat-created-for-audio" })),
@@ -451,5 +488,96 @@ describe("useAudioTranscriptionRecorder", () => {
         }),
       ]),
     );
+  });
+
+  it("auto-stops a live recording when VAD detects speech end", async () => {
+    let attachedFiles: FileUploadItem[] = [];
+    const setSilentChatId = vi.fn();
+    const onVadAutoStop = vi.fn();
+    let rerenderHook = () => {};
+    const setAttachedFiles = vi.fn((nextAttachedFiles: FileUploadItem[]) => {
+      attachedFiles = nextAttachedFiles;
+      rerenderHook();
+    });
+    const { result, rerender } = renderHook(() =>
+      useAudioTranscriptionRecorder({
+        audioTranscriptionEnabled: true,
+        uploadEnabled: true,
+        maxRecordingDurationSeconds: 1200,
+        vadAutoStopEnabled: true,
+        onVadAutoStop,
+        chatId: "chat-1",
+        silentChatId: null,
+        setSilentChatId,
+        attachedFiles,
+        setAttachedFiles,
+      }),
+    );
+    rerenderHook = rerender;
+
+    await act(async () => {
+      result.current.toggleAudioRecording();
+    });
+
+    await waitFor(() => expect(result.current.isRecording).toBe(true));
+    expect(mockCreateRicky0123VadEngine).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "silero-v5",
+      }),
+    );
+    expect(mockVadEngine.start).toHaveBeenCalled();
+    expect(result.current.isVadListening).toBe(true);
+
+    act(() => {
+      emitAudioSamples(new Float32Array(16_000).fill(0.1));
+    });
+
+    await waitFor(() => expect(mockVadEngine.acceptFrame).toHaveBeenCalled());
+
+    act(() => {
+      mockVadListeners.forEach((listener) =>
+        listener({
+          type: "speech_end",
+          timestampMs: 1000,
+          audio: new Float32Array([0.1, 0.2]),
+        }),
+      );
+    });
+
+    expect(onVadAutoStop).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(result.current.isRecording).toBe(false));
+    await waitFor(() =>
+      expect(MockWebSocket.instances[0].sentJsonFrames).toContainEqual(
+        expect.objectContaining({ type: "finish" }),
+      ),
+    );
+    expect(mockVadEngine.destroy).toHaveBeenCalled();
+  });
+
+  it("does not start VAD when auto-stop is disabled", async () => {
+    let attachedFiles: FileUploadItem[] = [];
+    const setAttachedFiles = vi.fn((nextAttachedFiles: FileUploadItem[]) => {
+      attachedFiles = nextAttachedFiles;
+    });
+    const { result } = renderHook(() =>
+      useAudioTranscriptionRecorder({
+        audioTranscriptionEnabled: true,
+        uploadEnabled: true,
+        maxRecordingDurationSeconds: 1200,
+        vadAutoStopEnabled: false,
+        chatId: "chat-1",
+        silentChatId: null,
+        setSilentChatId: vi.fn(),
+        attachedFiles,
+        setAttachedFiles,
+      }),
+    );
+
+    await act(async () => {
+      result.current.toggleAudioRecording();
+    });
+
+    await waitFor(() => expect(result.current.isRecording).toBe(true));
+    expect(mockCreateRicky0123VadEngine).not.toHaveBeenCalled();
   });
 });
