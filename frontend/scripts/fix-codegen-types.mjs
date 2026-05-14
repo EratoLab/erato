@@ -57,6 +57,23 @@ const errorHandlingFix = `} catch (e) {
         };
       }`;
 
+// --- Inline removed `Enabled` type in v1betaApiContext.ts ---
+// `@tanstack/react-query` stopped exporting `Enabled` in 5.100. The codegen
+// template still imports it, so we swap the import for `Query` and inline
+// the type definition verbatim from `@tanstack/query-core`.
+const contextFile = path.join(targetDir, "v1betaApiContext.ts");
+const enabledLocalType = `// Inlined from @tanstack/query-core (no longer exported publicly in @tanstack/react-query 5.100+).
+type Enabled<
+  TQueryFnData = unknown,
+  TError = DefaultError,
+  TData = TQueryFnData,
+  TQueryKey extends QueryKey = QueryKey,
+> =
+  | boolean
+  | ((query: Query<TQueryFnData, TError, TData, TQueryKey>) => boolean);
+
+`;
+
 // --- Fix nullable string fields that the generator incorrectly narrows to null | undefined ---
 const schemaFile = path.join(targetDir, "v1betaApiSchemas.ts");
 const schemaStringFieldFixes = [
@@ -208,6 +225,37 @@ async function fixFetcherErrorHandling(filePath) {
   return false; // Indicate no change
 }
 
+async function fixEnabledImport(filePath) {
+  try {
+    let content = await fs.readFile(filePath, "utf8");
+    const relativeFilePath = path.relative(process.cwd(), filePath);
+
+    if (!content.includes("type Enabled,")) {
+      console.log(`No Enabled import fix needed in: ${relativeFilePath}`);
+      return false;
+    }
+
+    console.log(`Found Enabled import in: ${relativeFilePath}`);
+    content = content.replace("type Enabled,", "type Query,");
+
+    const marker = "export type V1betaApiContext";
+    const markerIdx = content.indexOf(marker);
+    if (markerIdx === -1) {
+      console.error(`Could not find marker '${marker}' in ${relativeFilePath}`);
+      return false;
+    }
+    content =
+      content.slice(0, markerIdx) + enabledLocalType + content.slice(markerIdx);
+
+    await fs.writeFile(filePath, content, "utf8");
+    console.log(`Inlined Enabled type in: ${relativeFilePath}`);
+    return true;
+  } catch (error) {
+    console.error(`Error fixing Enabled import in ${filePath}:`, error);
+  }
+  return false;
+}
+
 async function fixSchemaStringFields(filePath) {
   try {
     let content = await fs.readFile(filePath, "utf8");
@@ -273,6 +321,10 @@ async function run() {
     }
 
     if (await fixSchemaStringFields(schemaFile)) {
+      changesMade = true;
+    }
+
+    if (await fixEnabledImport(contextFile)) {
       changesMade = true;
     }
 

@@ -1,12 +1,22 @@
 import {
   skipToken,
   type DefaultError,
-  type Enabled,
+  type Query,
   type QueryKey,
   type UseQueryOptions,
 } from "@tanstack/react-query";
 import { QueryOperation } from "./v1betaApiComponents";
 import { getIdToken } from "@/auth/tokenStore";
+
+// Inlined from @tanstack/query-core (no longer exported publicly in @tanstack/react-query 5.100+).
+type Enabled<
+  TQueryFnData = unknown,
+  TError = DefaultError,
+  TData = TQueryFnData,
+  TQueryKey extends QueryKey = QueryKey,
+> =
+  | boolean
+  | ((query: Query<TQueryFnData, TError, TData, TQueryKey>) => boolean);
 
 export type V1betaApiContext<
   TQueryFnData = unknown,

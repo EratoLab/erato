@@ -16,6 +16,7 @@ import {
   useArchiveChatEndpoint,
   useUpdateChat,
   recentChatsQuery,
+  chatMessagesQuery,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 // Import context and merge utility
 // import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext";
@@ -126,7 +127,10 @@ export function useChatHistory() {
           `navigateToChat: Marking chat ${currentChatId} as stale before navigating to ${chatId}`,
         );
         void queryClient.invalidateQueries({
-          queryKey: ["chatMessages", { chatId: currentChatId }],
+          queryKey: chatMessagesQuery({
+            pathParams: { chatId: currentChatId },
+          }).queryKey,
+          refetchType: "none",
         });
       }
 

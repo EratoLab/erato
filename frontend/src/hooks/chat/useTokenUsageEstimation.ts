@@ -88,11 +88,8 @@ const emptyEstimationResult: Omit<TokenUsageEstimationResult, "isLoading"> = {
 };
 
 /**
- * Cheap, stable digest for a list of virtual `File`s used in the React Query
- * cache key. We avoid hashing bytes — `name|type|size|lastModified` collides
- * only across two genuinely-distinct uploads with identical metadata, which
- * is vanishingly rare in our use case (each opened Outlook email yields a
- * fresh `File` whose `lastModified` reflects the time of construction).
+ * Stable metadata digest for cheap comparisons. Use `digestVirtualFilesContent`
+ * when the digest will be used as a TanStack Query cache key.
  */
 export const digestVirtualFiles = (files: File[] | undefined): string => {
   if (!files || files.length === 0) {
@@ -117,20 +114,33 @@ export const getTokenEstimationQueryKey = (
   previousMessageId?: string | null,
   chatProviderId?: string,
   virtualFilesDigest?: string,
-): string[] => {
+): readonly [
+  "tokenEstimation",
+  {
+    message: string;
+    inputFileIds: string[];
+    chatId: string | null;
+    assistantId: string | null;
+    previousMessageId: string | null;
+    chatProviderId: string | null;
+    virtualFilesDigest: string;
+  },
+] => {
   // Normalize inputs for consistent key generation
   const normalizedMessage = message.trim();
-  const sortedFileIds = inputFileIds ? [...inputFileIds].sort().join(",") : "";
+  const sortedFileIds = inputFileIds ? [...inputFileIds].sort() : [];
 
   return [
     "tokenEstimation",
-    normalizedMessage,
-    sortedFileIds,
-    chatId ?? "",
-    assistantId ?? "",
-    previousMessageId ?? "",
-    chatProviderId ?? "",
-    virtualFilesDigest ?? "",
+    {
+      message: normalizedMessage,
+      inputFileIds: sortedFileIds,
+      chatId: chatId ?? null,
+      assistantId: assistantId ?? null,
+      previousMessageId: previousMessageId ?? null,
+      chatProviderId: chatProviderId ?? null,
+      virtualFilesDigest: virtualFilesDigest ?? "",
+    },
   ];
 };
 
@@ -163,9 +173,26 @@ async function buildVirtualFilesPayload(
   );
 }
 
+export async function digestVirtualFilesContent(
+  files: File[] | undefined,
+): Promise<string> {
+  if (!files || files.length === 0) {
+    return "";
+  }
+
+  const parts = await Promise.all(
+    files.map(async (file) => {
+      const base64 = await fileToBase64(file);
+      return `${file.name}|${file.type}|${file.size}|${file.lastModified}|${base64}`;
+    }),
+  );
+
+  return parts.sort().join(";");
+}
+
 const getTokenEstimationQueryKeyFromParts = (
   requestBody: Record<string, unknown>,
-): string[] => ["tokenEstimation", "parts", JSON.stringify(requestBody)];
+) => ["tokenEstimation", "parts", requestBody] as const;
 
 /**
  * Hook for estimating token usage for messages and files
@@ -231,25 +258,6 @@ export function useTokenUsageEstimation(): UseTokenUsageEstimationReturn {
       virtualFiles?: File[],
     ): Promise<TokenUsageEstimationResult> => {
       try {
-        // Generate a proper query key
-        const queryKey = getTokenEstimationQueryKey(
-          message,
-          inputFileIds,
-          chatId,
-          assistantId,
-          previousMessageId,
-          chatProviderId,
-          digestVirtualFiles(virtualFiles),
-        );
-
-        // Check if we already have cached data
-        const cachedData =
-          queryClient.getQueryData<TokenUsageResponse>(queryKey);
-
-        if (cachedData) {
-          return processTokenUsageResponse(cachedData);
-        }
-
         // Prepare request body
         const requestBody: TokenUsageRequest = {
           user_message: message,
@@ -280,6 +288,27 @@ export function useTokenUsageEstimation(): UseTokenUsageEstimationReturn {
         if (previousMessageId) {
           (requestBody as Record<string, unknown>).previous_message_id =
             previousMessageId;
+        }
+
+        // Generate a key after building virtual file payloads so the cache
+        // reflects the actual request body, not only File metadata.
+        const queryKey = getTokenEstimationQueryKey(
+          message,
+          inputFileIds,
+          chatId,
+          assistantId,
+          previousMessageId,
+          chatProviderId,
+          requestBody.virtual_files
+            ? JSON.stringify(requestBody.virtual_files)
+            : undefined,
+        );
+
+        const cachedData =
+          queryClient.getQueryData<TokenUsageResponse>(queryKey);
+
+        if (cachedData) {
+          return processTokenUsageResponse(cachedData);
         }
 
         // Call the mutation directly - the outer useQuery will handle caching
@@ -372,8 +401,8 @@ export function useTokenUsageEstimation(): UseTokenUsageEstimationReturn {
     // Clear the state
     setLastEstimation(null);
 
-    // Invalidate all token estimation queries to force refetching
-    void queryClient.invalidateQueries({
+    // Drop manually cached estimates so a subsequent check cannot reuse them.
+    queryClient.removeQueries({
       queryKey: ["tokenEstimation"],
     });
   }, [queryClient]);

@@ -9,6 +9,7 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
 
 import {
   digestVirtualFiles,
+  digestVirtualFilesContent,
   getTokenEstimationQueryKey,
   useTokenUsageEstimation,
 } from "@/hooks/chat/useTokenUsageEstimation";
@@ -46,9 +47,10 @@ describe("digestVirtualFiles", () => {
     expect(digestVirtualFiles([])).toBe("");
   });
 
-  it("is stable across two arrays of files with the same metadata", () => {
-    const a = [makeFile("preview.eml", "body", "message/rfc822")];
-    const b = [makeFile("preview.eml", "body", "message/rfc822")];
+  it("is stable across two arrays with the same file reference", () => {
+    const file = makeFile("preview.eml", "body", "message/rfc822");
+    const a = [file];
+    const b = [file];
     expect(digestVirtualFiles(a)).toBe(digestVirtualFiles(b));
   });
 
@@ -64,10 +66,38 @@ describe("digestVirtualFiles", () => {
     expect(digestVirtualFiles(a)).not.toBe(digestVirtualFiles(b));
   });
 
-  it("is order-insensitive (sorted internally)", () => {
-    const a = [makeFile("a.eml", "x"), makeFile("b.eml", "y")];
-    const b = [makeFile("b.eml", "y"), makeFile("a.eml", "x")];
+  it("does not include content bytes", () => {
+    const a = [makeFile("preview.eml", "body-a")];
+    const b = [makeFile("preview.eml", "body-b")];
     expect(digestVirtualFiles(a)).toBe(digestVirtualFiles(b));
+  });
+
+  it("is order-insensitive (sorted internally)", () => {
+    const fileA = makeFile("a.eml", "x");
+    const fileB = makeFile("b.eml", "y");
+    const a = [fileA, fileB];
+    const b = [fileB, fileA];
+    expect(digestVirtualFiles(a)).toBe(digestVirtualFiles(b));
+  });
+});
+
+describe("digestVirtualFilesContent", () => {
+  it("differs for same-metadata files with different content", async () => {
+    const a = [makeFile("preview.eml", "body-a")];
+    const b = [makeFile("preview.eml", "body-b")];
+    const aDigest = await digestVirtualFilesContent(a);
+    const bDigest = await digestVirtualFilesContent(b);
+
+    expect(aDigest).not.toBe(bDigest);
+  });
+
+  it("is order-insensitive for file content digests", async () => {
+    const fileA = makeFile("a.eml", "x");
+    const fileB = makeFile("b.eml", "y");
+    const firstDigest = await digestVirtualFilesContent([fileA, fileB]);
+    const secondDigest = await digestVirtualFilesContent([fileB, fileA]);
+
+    expect(firstDigest).toBe(secondDigest);
   });
 });
 
@@ -221,6 +251,52 @@ describe("useTokenUsageEstimation with virtual files", () => {
 
     // Different virtual files must each hit the network — the cache key
     // includes the digest, so neither short-circuits the other.
+    expect(mutateAsync).toHaveBeenCalledTimes(2);
+  });
+
+  it("differentiates same-metadata virtual files by encoded content", async () => {
+    const { result } = renderHook(() => useTokenUsageEstimation(), {
+      wrapper,
+    });
+
+    const a = makeFile("preview.eml", "body-a");
+    const b = makeFile("preview.eml", "body-b");
+
+    await act(async () => {
+      await result.current.estimateTokenUsage(
+        "msg",
+        null,
+        undefined,
+        null,
+        undefined,
+        undefined,
+        [a],
+      );
+      await result.current.estimateTokenUsage(
+        "msg",
+        null,
+        undefined,
+        null,
+        undefined,
+        undefined,
+        [b],
+      );
+    });
+
+    expect(mutateAsync).toHaveBeenCalledTimes(2);
+  });
+
+  it("clearLastEstimation removes cached token estimation results", async () => {
+    const { result } = renderHook(() => useTokenUsageEstimation(), {
+      wrapper,
+    });
+
+    await act(async () => {
+      await result.current.estimateTokenUsage("msg");
+      result.current.clearLastEstimation();
+      await result.current.estimateTokenUsage("msg");
+    });
+
     expect(mutateAsync).toHaveBeenCalledTimes(2);
   });
 });
