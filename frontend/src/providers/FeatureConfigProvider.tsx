@@ -36,6 +36,12 @@ interface AudioTranscriptionFeatureConfig {
   enabled: boolean;
   /** Maximum recording duration in seconds for audio transcription captures */
   maxRecordingDurationSeconds: number;
+  /**
+   * When the chat input is in dedicated audio mode, the model selector
+   * is hidden by default to keep the surface uncluttered. Flip this to
+   * `true` if a deployment needs the selector visible while recording.
+   */
+  showModelSelectorInAudioMode: boolean;
 }
 
 /** Configuration for audio dictation features */
@@ -177,6 +183,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
   audioTranscription: {
     enabled: false,
     maxRecordingDurationSeconds: 20 * 60,
+    showModelSelectorInAudioMode: false,
   },
   audioDictation: {
     enabled: false,
@@ -255,6 +262,9 @@ function createFeatureConfig(
       enabled: Boolean(environment.audioTranscriptionEnabled),
       maxRecordingDurationSeconds:
         environment.audioTranscriptionMaxRecordingDurationSeconds,
+      showModelSelectorInAudioMode:
+        defaultStaticFeatureConfig.audioTranscription
+          .showModelSelectorInAudioMode,
     },
     audioDictation: {
       enabled: Boolean(environment.audioDictationEnabled),

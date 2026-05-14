@@ -455,6 +455,10 @@ export const Chat = ({
     null,
   );
   const [isUpdatingChatTitle, setIsUpdatingChatTitle] = useState(false);
+  // ChatInput's audio-mode lives here so it survives the empty-state ↔
+  // messages layout flip below, which renders ChatInput in two different
+  // JSX positions and would otherwise unmount it on the first send.
+  const [isAudioMode, setIsAudioMode] = useState(false);
 
   const handleEditTitleSession = useCallback((sessionId: string) => {
     setTitleDialogChatId(sessionId);
@@ -687,6 +691,8 @@ export const Chat = ({
       onFacetSelectionChange={setActiveSelectedFacetIds}
       uploadFiles={uploadFiles}
       uploadError={uploadError}
+      controlledIsAudioMode={isAudioMode}
+      onControlledIsAudioModeChange={setIsAudioMode}
     />
   );
 

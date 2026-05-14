@@ -122,6 +122,7 @@ describe("FeatureConfigProvider", () => {
         audioTranscription: {
           enabled: false,
           maxRecordingDurationSeconds: 1200,
+          showModelSelectorInAudioMode: false,
         },
         audioDictation: {
           enabled: false,
@@ -491,6 +492,7 @@ describe("FeatureConfigProvider", () => {
       expect(result.current).toEqual({
         enabled: false,
         maxRecordingDurationSeconds: 1200,
+        showModelSelectorInAudioMode: false,
       });
     });
 

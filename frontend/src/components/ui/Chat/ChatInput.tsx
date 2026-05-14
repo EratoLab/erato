@@ -232,6 +232,14 @@ interface ChatInputProps {
   controlledSelectedModel?: ChatModel | null;
   onControlledSelectedModelChange?: (model: ChatModel) => void;
   controlledIsModelSelectionReady?: boolean;
+  /**
+   * Controlled `isAudioMode`. When the parent owns the state (e.g. to
+   * survive `Chat`'s empty-state ↔ messages layout flip that otherwise
+   * unmounts `ChatInput`), pass both this and
+   * `onControlledIsAudioModeChange`. Omit both to use internal state.
+   */
+  controlledIsAudioMode?: boolean;
+  onControlledIsAudioModeChange?: (isAudioMode: boolean) => void;
 }
 
 interface ComposeDraftState {
@@ -309,10 +317,37 @@ export const ChatInput = ({
   controlledSelectedModel,
   onControlledSelectedModelChange,
   controlledIsModelSelectionReady,
+  controlledIsAudioMode,
+  onControlledIsAudioModeChange,
   ref,
 }: ChatInputPropsWithRef) => {
   const [message, setMessage] = useState("");
+  const [internalIsAudioMode, setInternalIsAudioMode] = useState(false);
+  const isAudioMode = controlledIsAudioMode ?? internalIsAudioMode;
+  // Audio mode is the only piece of ChatInput state that needs to survive
+  // the layout flip in `Chat` (empty-state shell → messages shell), which
+  // tears down ChatInput because of position-based reconciliation. When
+  // the parent passes the controlled props, writes go up to the parent
+  // and the internal state stays dormant — same pattern used for the
+  // controlled model selection above.
+  const setIsAudioMode = useCallback(
+    (next: boolean) => {
+      if (onControlledIsAudioModeChange) {
+        onControlledIsAudioModeChange(next);
+        return;
+      }
+      setInternalIsAudioMode(next);
+    },
+    [onControlledIsAudioModeChange],
+  );
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  // Latched intent for "the user pressed stop and wants the resulting
+  // transcript to be sent automatically." Using a ref instead of state
+  // keeps flipping the intent out of the render cycle. The single effect
+  // below is the only reader; cancellation paths (exit audio mode, start
+  // a new recording, transcription error) flip this back to false.
+  const pendingAutoSendRef = useRef(false);
   const previousModeRef = useRef<"compose" | "edit">(mode);
   const previousEditMessageIdRef = useRef<string | undefined>(undefined);
   const composeDraftKey = chatId ?? NEW_CHAT_DRAFT_KEY;
@@ -352,8 +387,11 @@ export const ChatInput = ({
 
   // Get feature configurations
   const { enabled: uploadEnabled } = useUploadFeature();
-  const { enabled: audioTranscriptionEnabled, maxRecordingDurationSeconds } =
-    useAudioTranscriptionFeature();
+  const {
+    enabled: audioTranscriptionEnabled,
+    maxRecordingDurationSeconds,
+    showModelSelectorInAudioMode,
+  } = useAudioTranscriptionFeature();
   const {
     enabled: audioDictationEnabled,
     maxRecordingDurationSeconds: maxDictationDurationSeconds,
@@ -951,6 +989,14 @@ export const ChatInput = ({
 
   // Create the submit handler
   // Use isPendingResponse instead of isStreaming to block submission immediately when send is clicked
+  //
+  // Important: do NOT wrap this in useCallback/useMemo with narrow deps.
+  // `createSubmitHandler` captures `message`, `attachedFiles`, the
+  // disabled flag, and the inner submit callback at call time. The
+  // audio-mode auto-send relies on `handleSubmit` being rebuilt with
+  // fresh values every render so that `formRef.current?.requestSubmit()`
+  // (fired from a post-commit effect) sees the just-committed state.
+  // Memoizing this silently breaks auto-send.
   const handleSubmit = createSubmitHandler(
     message,
     attachedFiles,
@@ -1186,6 +1232,80 @@ export const ChatInput = ({
       isDictationStarting ||
       isDictationCompleting);
 
+  // Audio chat mode swaps the typing surfaces (textarea + dictation button)
+  // for a recording-first flow. Entering it both flips the mode and starts
+  // recording, so the user lands directly in the active waveform state.
+  // Stopping a recording in audio mode arms `pendingAutoSendRef` so the
+  // message is dispatched the moment transcription completes; starting a
+  // *new* recording clears that intent because the prior recording is now
+  // being replaced.
+  const handleAudioModeButtonToggle = useCallback(() => {
+    if (!isAudioMode) {
+      setIsAudioMode(true);
+    }
+    if (isRecording) {
+      pendingAutoSendRef.current = true;
+    } else {
+      pendingAutoSendRef.current = false;
+    }
+    toggleAudioRecording();
+  }, [isAudioMode, isRecording, setIsAudioMode, toggleAudioRecording]);
+
+  const exitAudioMode = useCallback(() => {
+    pendingAutoSendRef.current = false;
+    if (isRecording) {
+      toggleAudioRecording();
+    }
+    setIsAudioMode(false);
+  }, [isRecording, setIsAudioMode, toggleAudioRecording]);
+
+  useEffect(() => {
+    if (mode !== "compose" && isAudioMode) {
+      pendingAutoSendRef.current = false;
+      setIsAudioMode(false);
+    }
+  }, [mode, isAudioMode, setIsAudioMode]);
+
+  // Surface any transcription error as a "drop the pending auto-send"
+  // signal so the user has to consciously retry — otherwise a silent
+  // failure would still trigger a stale submit when the next attachment
+  // resolves.
+  useEffect(() => {
+    if (recordingError) {
+      pendingAutoSendRef.current = false;
+    }
+  }, [recordingError]);
+
+  // Auto-send latch: when stop was pressed in audio mode and the resulting
+  // transcription has finished resolving, programmatically submit the form
+  // so the user doesn't have to click send a second time. Gated on
+  // `isAudioMode` belt-and-suspenders against a race where Exit lands in
+  // the same commit batch as transcription completion. Single source of
+  // truth (one ref, one effect) so adding VAD later just means a new
+  // writer to the same ref.
+  useEffect(() => {
+    if (!pendingAutoSendRef.current) {
+      return;
+    }
+    if (!isAudioMode) {
+      return;
+    }
+    if (isRecording || isRecordingUpload || hasIncompleteAudioTranscription) {
+      return;
+    }
+    if (attachedFiles.length === 0) {
+      return;
+    }
+    pendingAutoSendRef.current = false;
+    formRef.current?.requestSubmit();
+  }, [
+    isAudioMode,
+    isRecording,
+    isRecordingUpload,
+    hasIncompleteAudioTranscription,
+    attachedFiles.length,
+  ]);
+
   // Log just before rendering the component and its preview section
   logger.log(
     "Rendering component. Preview should render if attachedFiles > 0. attachedFiles:",
@@ -1223,6 +1343,7 @@ export const ChatInput = ({
   return (
     <div className="mx-auto w-full" style={shellWrapperStyle}>
       <form
+        ref={formRef}
         className={clsx("w-full ", className, {
           "pb-0 sm:pb-0": aiUsageAdvisory,
         })}
@@ -1397,42 +1518,46 @@ export const ChatInput = ({
             />
           )}
 
-          <textarea
-            ref={textareaRef}
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            onPaste={handleTextareaPaste}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSubmit(e);
+          {!isAudioMode && (
+            <textarea
+              ref={textareaRef}
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              onPaste={handleTextareaPaste}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSubmit(e);
+                }
+              }}
+              placeholder={
+                isAnyTokenLimitExceeded
+                  ? t`Message exceeds token limit. Please reduce length or remove files.`
+                  : mode === "edit"
+                    ? t`Edit your message...`
+                    : placeholder
               }
-            }}
-            placeholder={
-              isAnyTokenLimitExceeded
-                ? t`Message exceeds token limit. Please reduce length or remove files.`
-                : mode === "edit"
-                  ? t`Edit your message...`
-                  : placeholder
-            }
-            rows={1}
-            disabled={isLoading || isPendingResponse || disabled || isUploading}
-            tabIndex={0}
-            autoFocus={shouldAutofocus} // eslint-disable-line jsx-a11y/no-autofocus -- Controlled by feature config to prevent unwanted scrolling
-            className={clsx(
-              "w-full resize-none overflow-y-auto",
-              "chat-input-textarea-geometry",
-              "bg-transparent",
-              "text-[var(--theme-fg-primary)] placeholder:text-[var(--theme-fg-muted)]",
-              "focus:outline-none",
-              "disabled:cursor-not-allowed disabled:opacity-50",
-              "max-h-[200px]",
-              "text-base",
-              "scrollbar-auto-hide",
-              isAnyTokenLimitExceeded &&
-                "border-[var(--theme-error)] placeholder:text-[var(--theme-error-fg)]",
-            )}
-          />
+              rows={1}
+              disabled={
+                isLoading || isPendingResponse || disabled || isUploading
+              }
+              tabIndex={0}
+              autoFocus={shouldAutofocus} // eslint-disable-line jsx-a11y/no-autofocus -- Controlled by feature config to prevent unwanted scrolling
+              className={clsx(
+                "w-full resize-none overflow-y-auto",
+                "chat-input-textarea-geometry",
+                "bg-transparent",
+                "text-[var(--theme-fg-primary)] placeholder:text-[var(--theme-fg-muted)]",
+                "focus:outline-none",
+                "disabled:cursor-not-allowed disabled:opacity-50",
+                "max-h-[200px]",
+                "text-base",
+                "scrollbar-auto-hide",
+                isAnyTokenLimitExceeded &&
+                  "border-[var(--theme-error)] placeholder:text-[var(--theme-error-fg)]",
+              )}
+            />
+          )}
 
           <div
             className="flex flex-wrap items-center justify-between gap-[calc(var(--theme-spacing-control-gap)/2)]"
@@ -1507,15 +1632,30 @@ export const ChatInput = ({
                   {t`Cancel`}
                 </Button>
               )}
-              {!hasTopLeftAccessoryOverride && (
-                <ModelSelector
-                  availableModels={availableModels}
-                  selectedModel={selectedModel}
-                  onModelChange={setSelectedModel}
-                  disabled={!isSelectionReady}
-                />
+              {isAudioMode && mode === "compose" && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={exitAudioMode}
+                  disabled={disabled || isLoading || isPendingResponse}
+                  data-testid="chat-input-exit-audio-mode"
+                  aria-label={t`Exit audio mode`}
+                >
+                  {t`Exit audio mode`}
+                </Button>
               )}
+              {!hasTopLeftAccessoryOverride &&
+                !(isAudioMode && !showModelSelectorInAudioMode) && (
+                  <ModelSelector
+                    availableModels={availableModels}
+                    selectedModel={selectedModel}
+                    onModelChange={setSelectedModel}
+                    disabled={!isSelectionReady}
+                  />
+                )}
               {audioDictationEnabled &&
+                !isAudioMode &&
                 (isCapturingAudio || isDictating ? (
                   <WaveformButton
                     onClick={toggleDictationForCurrentTarget}
@@ -1595,13 +1735,13 @@ export const ChatInput = ({
                   <ChatInputAudioModeButton
                     isRecording
                     recordingBars={recordingBars}
-                    onToggle={toggleAudioRecording}
+                    onToggle={handleAudioModeButtonToggle}
                     disabled={isAudioModeButtonDisabled}
                   />
                 ) : (
                   <ChatInputAudioModeButton
                     isRecording={false}
-                    onToggle={toggleAudioRecording}
+                    onToggle={handleAudioModeButtonToggle}
                     disabled={isAudioModeButtonDisabled}
                   />
                 )
