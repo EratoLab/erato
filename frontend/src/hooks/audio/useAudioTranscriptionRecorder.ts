@@ -1064,9 +1064,9 @@ export function useAudioTranscriptionRecorder({
       if (vadAutoStopEnabled) {
         const vadOptions = {
           model: "silero-v5" as const,
-          redemptionMs: 900,
-          preSpeechPadMs: 300,
-          minSpeechMs: 250,
+          redemptionMs: 1800,
+          preSpeechPadMs: 500,
+          minSpeechMs: 400,
         };
         try {
           logger.log("VAD auto-stop enabled; starting engine", vadOptions);
