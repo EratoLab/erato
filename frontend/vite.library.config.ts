@@ -43,8 +43,6 @@ export default defineConfig(({ mode }) => {
           "@tanstack/query-core",
           "@tanstack/react-query",
           "@tanstack/react-query-devtools",
-          "@tanstack/react-query-persist-client",
-          "@tanstack/query-sync-storage-persister",
         ],
         output: {
           inlineDynamicImports: true,

@@ -16,7 +16,7 @@ importers:
         version: 16.2.0
       '@erato/frontend':
         specifier: file:../frontend/dist-package/erato-frontend.tgz
-        version: file:../frontend/dist-package/erato-frontend.tgz(@lingui/core@5.9.4(@lingui/babel-plugin-lingui-macro@5.9.5(typescript@5.9.3)))(@lingui/react@5.9.4(@lingui/babel-plugin-lingui-macro@5.9.5(typescript@5.9.3))(react@19.0.0))(@tanstack/query-core@5.100.10)(@tanstack/query-sync-storage-persister@5.100.10)(@tanstack/react-query-devtools@5.100.10(@tanstack/react-query@5.100.10(react@19.0.0))(react@19.0.0))(@tanstack/react-query-persist-client@5.100.10(@tanstack/react-query@5.100.10(react@19.0.0))(react@19.0.0))(@tanstack/react-query@5.100.10(react@19.0.0))(@types/react@19.0.8)(react-dom@19.0.0(react@19.0.0))(react-router-dom@6.30.3(react-dom@19.0.0(react@19.0.0))(react@19.0.0))(react-router@6.30.3(react@19.0.0))(react@19.0.0)(tailwindcss@3.4.19)(typescript@5.9.3)
+        version: file:../frontend/dist-package/erato-frontend.tgz(@lingui/core@5.9.4(@lingui/babel-plugin-lingui-macro@5.9.5(typescript@5.9.3)))(@lingui/react@5.9.4(@lingui/babel-plugin-lingui-macro@5.9.5(typescript@5.9.3))(react@19.0.0))(@tanstack/query-core@5.100.10)(@tanstack/react-query-devtools@5.100.10(@tanstack/react-query@5.100.10(react@19.0.0))(react@19.0.0))(@tanstack/react-query@5.100.10(react@19.0.0))(@types/react@19.0.8)(react-dom@19.0.0(react@19.0.0))(react-router-dom@6.30.3(react-dom@19.0.0(react@19.0.0))(react@19.0.0))(react-router@6.30.3(react@19.0.0))(react@19.0.0)(tailwindcss@3.4.19)(typescript@5.9.3)
       '@lingui/core':
         specifier: 5.9.4
         version: 5.9.4(@lingui/babel-plugin-lingui-macro@5.9.5(typescript@5.9.3))
@@ -29,16 +29,10 @@ importers:
       '@tanstack/query-core':
         specifier: 5.100.10
         version: 5.100.10
-      '@tanstack/query-sync-storage-persister':
-        specifier: 5.100.10
-        version: 5.100.10
       '@tanstack/react-query':
         specifier: 5.100.10
         version: 5.100.10(react@19.0.0)
       '@tanstack/react-query-devtools':
-        specifier: 5.100.10
-        version: 5.100.10(@tanstack/react-query@5.100.10(react@19.0.0))(react@19.0.0)
-      '@tanstack/react-query-persist-client':
         specifier: 5.100.10
         version: 5.100.10(@tanstack/react-query@5.100.10(react@19.0.0))(react@19.0.0)
       cfb:
@@ -317,16 +311,14 @@ packages:
     resolution: {integrity: sha512-N10dEJNSsUx41Z6pZsXU8FjPjpBEplgH24sfkmITrBED1/U2Esum9F3lfLrMjKHHjmi557zQn7kR9R+XWXu5Rg==}
 
   '@erato/frontend@file:../frontend/dist-package/erato-frontend.tgz':
-    resolution: {integrity: sha512-u53Fq1WwFcJ+xalLsRJLSFRzRI6hn0hqRPRxn9KV7aj7Bp2ywBweqN7Xsk6fauwKhO+JhiCJLpymBwHkvsEeTg==, tarball: file:../frontend/dist-package/erato-frontend.tgz}
+    resolution: {integrity: sha512-xRg+QyhJl+QdC/rIwRI7tbUexMvs0qqwQ15FiCcpCpV9SvhV5/GY/IahLPnlYcSDV0bpoHMd8VQoFip8b1Ez1w==, tarball: file:../frontend/dist-package/erato-frontend.tgz}
     version: 0.1.0
     peerDependencies:
       '@lingui/core': ^5.9.4
       '@lingui/react': ^5.9.4
       '@tanstack/query-core': 5.100.10
-      '@tanstack/query-sync-storage-persister': 5.100.10
       '@tanstack/react-query': 5.100.10
       '@tanstack/react-query-devtools': 5.100.10
-      '@tanstack/react-query-persist-client': 5.100.10
       react: ^19.0.0
       react-dom: ^19.0.0
       react-router: 6.30.3
@@ -851,20 +843,8 @@ packages:
   '@tanstack/query-devtools@5.100.10':
     resolution: {integrity: sha512-3DmJf25hDPus5IpVvp6ujXv6bKV2zPzI9vpbAmpJigsL/H6DPvPjmf7/Q9yVKEke//8fgeQ45abjgnLuyYxAiw==}
 
-  '@tanstack/query-persist-client-core@5.100.10':
-    resolution: {integrity: sha512-O9Pey40DhTTDBABS0bHr+KNL5/VMf6PrqjexS8WoDDtnkaoWM+y0MSe0V9E5W+BwvkjM33mB3aYcCxa175gZTQ==}
-
-  '@tanstack/query-sync-storage-persister@5.100.10':
-    resolution: {integrity: sha512-DKEQkz7S7gtJ7KFvfAhZOd8p8SKSIgg/jGWzKzEgE8L2ienGx5/qMuTr8S/Al21TC6M9/uOmFOeFJl4J71RZnA==}
-
   '@tanstack/react-query-devtools@5.100.10':
     resolution: {integrity: sha512-zes0+o9ef5rAZXJ9f/SeaLs2nufJaeVkZkl/Or9NGrWVF41kL9Od9ED9nCwtQlgiF2VGtrzhEw5AU/igAO+aAg==}
-    peerDependencies:
-      '@tanstack/react-query': ^5.100.10
-      react: ^18 || ^19
-
-  '@tanstack/react-query-persist-client@5.100.10':
-    resolution: {integrity: sha512-EImacngLXYEtzlrIPf8IAqKN3foS7cmSj4GWqsHJvc7K+8fy2c3s7mdV8oTJeii/TvrzO4X9fcnXi6tUHMIOHA==}
     peerDependencies:
       '@tanstack/react-query': ^5.100.10
       react: ^18 || ^19
@@ -3907,7 +3887,7 @@ snapshots:
       tslib: 2.8.1
     optional: true
 
-  '@erato/frontend@file:../frontend/dist-package/erato-frontend.tgz(@lingui/core@5.9.4(@lingui/babel-plugin-lingui-macro@5.9.5(typescript@5.9.3)))(@lingui/react@5.9.4(@lingui/babel-plugin-lingui-macro@5.9.5(typescript@5.9.3))(react@19.0.0))(@tanstack/query-core@5.100.10)(@tanstack/query-sync-storage-persister@5.100.10)(@tanstack/react-query-devtools@5.100.10(@tanstack/react-query@5.100.10(react@19.0.0))(react@19.0.0))(@tanstack/react-query-persist-client@5.100.10(@tanstack/react-query@5.100.10(react@19.0.0))(react@19.0.0))(@tanstack/react-query@5.100.10(react@19.0.0))(@types/react@19.0.8)(react-dom@19.0.0(react@19.0.0))(react-router-dom@6.30.3(react-dom@19.0.0(react@19.0.0))(react@19.0.0))(react-router@6.30.3(react@19.0.0))(react@19.0.0)(tailwindcss@3.4.19)(typescript@5.9.3)':
+  '@erato/frontend@file:../frontend/dist-package/erato-frontend.tgz(@lingui/core@5.9.4(@lingui/babel-plugin-lingui-macro@5.9.5(typescript@5.9.3)))(@lingui/react@5.9.4(@lingui/babel-plugin-lingui-macro@5.9.5(typescript@5.9.3))(react@19.0.0))(@tanstack/query-core@5.100.10)(@tanstack/react-query-devtools@5.100.10(@tanstack/react-query@5.100.10(react@19.0.0))(react@19.0.0))(@tanstack/react-query@5.100.10(react@19.0.0))(@types/react@19.0.8)(react-dom@19.0.0(react@19.0.0))(react-router-dom@6.30.3(react-dom@19.0.0(react@19.0.0))(react@19.0.0))(react-router@6.30.3(react@19.0.0))(react@19.0.0)(tailwindcss@3.4.19)(typescript@5.9.3)':
     dependencies:
       '@lingui/core': 5.9.4(@lingui/babel-plugin-lingui-macro@5.9.5(typescript@5.9.3))
       '@lingui/detect-locale': 5.9.4
@@ -3915,10 +3895,8 @@ snapshots:
       '@lingui/react': 5.9.4(@lingui/babel-plugin-lingui-macro@5.9.5(typescript@5.9.3))(react@19.0.0)
       '@react-hook/resize-observer': 2.0.2(react@19.0.0)
       '@tanstack/query-core': 5.100.10
-      '@tanstack/query-sync-storage-persister': 5.100.10
       '@tanstack/react-query': 5.100.10(react@19.0.0)
       '@tanstack/react-query-devtools': 5.100.10(@tanstack/react-query@5.100.10(react@19.0.0))(react@19.0.0)
-      '@tanstack/react-query-persist-client': 5.100.10(@tanstack/react-query@5.100.10(react@19.0.0))(react@19.0.0)
       '@types/react-syntax-highlighter': 15.5.13
       clsx: 2.1.1
       date-fns: 4.1.0
@@ -4389,24 +4367,9 @@ snapshots:
 
   '@tanstack/query-devtools@5.100.10': {}
 
-  '@tanstack/query-persist-client-core@5.100.10':
-    dependencies:
-      '@tanstack/query-core': 5.100.10
-
-  '@tanstack/query-sync-storage-persister@5.100.10':
-    dependencies:
-      '@tanstack/query-core': 5.100.10
-      '@tanstack/query-persist-client-core': 5.100.10
-
   '@tanstack/react-query-devtools@5.100.10(@tanstack/react-query@5.100.10(react@19.0.0))(react@19.0.0)':
     dependencies:
       '@tanstack/query-devtools': 5.100.10
-      '@tanstack/react-query': 5.100.10(react@19.0.0)
-      react: 19.0.0
-
-  '@tanstack/react-query-persist-client@5.100.10(@tanstack/react-query@5.100.10(react@19.0.0))(react@19.0.0)':
-    dependencies:
-      '@tanstack/query-persist-client-core': 5.100.10
       '@tanstack/react-query': 5.100.10(react@19.0.0)
       react: 19.0.0
 
