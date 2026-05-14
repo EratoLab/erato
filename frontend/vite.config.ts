@@ -59,10 +59,15 @@ const contentTypeForPath = (filePath: string): string => {
   switch (extension) {
     case ".css":
       return "text/css; charset=utf-8";
+    case ".js":
+    case ".mjs":
+      return "text/javascript; charset=utf-8";
     case ".ico":
       return "image/x-icon";
     case ".json":
       return "application/json; charset=utf-8";
+    case ".onnx":
+      return "application/octet-stream";
     case ".otf":
       return "font/otf";
     case ".png":
@@ -75,6 +80,8 @@ const contentTypeForPath = (filePath: string): string => {
       return "font/woff";
     case ".woff2":
       return "font/woff2";
+    case ".wasm":
+      return "application/wasm";
     default:
       return "application/octet-stream";
   }

@@ -79,10 +79,12 @@ export {
   joinVoiceRuntimePath,
   normalizeVoiceRuntimeBasePath,
   resolveVoiceRuntimeAssets,
+  type Ricky0123VadRuntimeManifest,
   useVoiceRuntimeAssets,
   type Ricky0123VadRuntimeAssets,
   type VoiceRuntimeAssetOverrides,
   type VoiceRuntimeAssets,
+  type VoiceRuntimeManifest,
   type VoiceRuntimeProviderProps,
 } from "@/lib/voice-runtime";
 export { env, type Env } from "@/app/env";

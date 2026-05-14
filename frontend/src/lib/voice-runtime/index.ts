@@ -8,9 +8,11 @@ export {
   joinVoiceRuntimePath,
   normalizeVoiceRuntimeBasePath,
   resolveVoiceRuntimeAssets,
+  type Ricky0123VadRuntimeManifest,
   type Ricky0123VadRuntimeAssets,
   type VoiceRuntimeAssetOverrides,
   type VoiceRuntimeAssets,
+  type VoiceRuntimeManifest,
 } from "./assets";
 export {
   VoiceRuntimeProvider,

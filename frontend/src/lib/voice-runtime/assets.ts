@@ -13,6 +13,21 @@ export type VoiceRuntimeAssetOverrides = {
   ricky0123Vad?: Partial<Ricky0123VadRuntimeAssets>;
 };
 
+export type Ricky0123VadRuntimeManifest = {
+  baseAssetPath: string;
+  onnxWASMBasePath: string;
+  worklet: string;
+  sileroVadLegacyModel: string;
+  sileroVadV5Model: string;
+};
+
+export type VoiceRuntimeManifest = {
+  version: 1;
+  engines: {
+    ricky0123Vad: Ricky0123VadRuntimeManifest;
+  };
+};
+
 export type Ricky0123VadRuntimeAssets = {
   /**
    * Passed to `@ricky0123/vad-web` as `baseAssetPath`.
