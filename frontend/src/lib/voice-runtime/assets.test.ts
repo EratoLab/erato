@@ -159,7 +159,9 @@ describe("resolveVoiceRuntimeAssets", () => {
     });
 
     expect(partial.ricky0123Vad.onnxWASMBasePath).toBe("/custom/ort/");
-    expect(partial.ricky0123Vad.baseAssetPath).toBe("/voice/ricky0123-vad-web/");
+    expect(partial.ricky0123Vad.baseAssetPath).toBe(
+      "/voice/ricky0123-vad-web/",
+    );
     expect(partial.ricky0123Vad.workletUrl).toBe(
       "/voice/ricky0123-vad-web/vad.worklet.bundle.min.js",
     );

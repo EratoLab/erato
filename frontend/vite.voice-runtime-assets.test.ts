@@ -366,7 +366,9 @@ describe("voice runtime package asset staging", () => {
           `${runtimeBasePath}/onnxruntime-web/${filename}`,
           runtimeBasePath,
         ),
-      ).toBe(path.join(rootDir, `node_modules/onnxruntime-web/dist/${filename}`));
+      ).toBe(
+        path.join(rootDir, `node_modules/onnxruntime-web/dist/${filename}`),
+      );
     }
   });
 
