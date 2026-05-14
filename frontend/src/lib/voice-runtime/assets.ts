@@ -36,7 +36,7 @@ export type Ricky0123VadRuntimeAssets = {
   baseAssetPath: string;
   /**
    * Passed to `@ricky0123/vad-web` as `onnxWASMBasePath`.
-   * Hosts the onnxruntime-web WASM/MJS runtime files.
+   * Hosts the onnxruntime-web WASM runtime files.
    */
   onnxWASMBasePath: string;
   workletUrl: string;

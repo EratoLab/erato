@@ -13,6 +13,12 @@ import {
   type ViteDevServer,
 } from "vite";
 
+import {
+  cleanVoiceRuntimePackageAssetOutput,
+  emitVoiceRuntimePackageAssets,
+  resolveVoiceRuntimePackageAssetFile,
+} from "./vite.voice-runtime-assets";
+
 // Custom plugin to copy index.html as 404.html for SPA routing
 const copy404Plugin = ({ silent = false }: { silent?: boolean } = {}) => {
   return {
@@ -134,6 +140,16 @@ const resolveStructuredPublicFile = (
     const relativePath = normalizedPath.replace("/public/common/locales/", "");
     return path.join(sourceLocalesDir, relativePath);
   }
+  if (normalizedPath.startsWith("/public/common/voice-runtime/")) {
+    const runtimePackageAssetPath = resolveVoiceRuntimePackageAssetFile(
+      projectRootDir,
+      normalizedPath,
+      "/public/common/voice-runtime",
+    );
+    if (runtimePackageAssetPath) {
+      return runtimePackageAssetPath;
+    }
+  }
   if (normalizedPath.startsWith("/public/common/custom-theme/")) {
     const relativePath = normalizedPath.replace(
       "/public/common/custom-theme/",
@@ -196,12 +212,13 @@ const stagePublicLayoutPlugin = (): Plugin => {
         next();
       });
     },
-    generateBundle() {
+    generateBundle(outputOptions) {
       for (const filePath of walkFiles(publicDir)) {
         const relativePath = path.relative(publicDir, filePath);
         if (
           relativePath.startsWith(`common${path.sep}`) ||
-          relativePath.startsWith(`public${path.sep}`)
+          relativePath.startsWith(`public${path.sep}`) ||
+          relativePath.startsWith(`voice-runtime${path.sep}`)
         ) {
           continue;
         }
@@ -221,6 +238,13 @@ const stagePublicLayoutPlugin = (): Plugin => {
           source: fs.readFileSync(filePath),
         });
       }
+
+      const voiceRuntimeOutputBasePath = "public/common/voice-runtime";
+      cleanVoiceRuntimePackageAssetOutput(
+        outputOptions.dir,
+        voiceRuntimeOutputBasePath,
+      );
+      emitVoiceRuntimePackageAssets(this, rootDir, voiceRuntimeOutputBasePath);
 
       for (const filePath of walkFiles(sourceLocalesDir)) {
         if (!filePath.endsWith(`${path.sep}messages.json`)) {
