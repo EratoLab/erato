@@ -11,6 +11,7 @@ const vadMock = vi.hoisted(() => {
   const fakeVad = {
     processFrame: vi.fn(async (_frame: Float32Array) => {}),
     frameProcessor: {
+      resume: vi.fn(),
       reset: vi.fn(),
     },
     model: {
@@ -48,6 +49,7 @@ beforeEach(() => {
   vadMock.fakeVad.processFrame.mockImplementation(
     async (_frame: Float32Array) => {},
   );
+  vadMock.fakeVad.frameProcessor.resume.mockClear();
   vadMock.fakeVad.frameProcessor.reset.mockClear();
   vadMock.fakeVad.model.reset_state.mockClear();
   vadMock.fakeVad.model.release.mockClear();
@@ -67,6 +69,7 @@ describe("Ricky0123VadEngine", () => {
     await engine.start();
 
     expect(vadMock.newMock).toHaveBeenCalledTimes(1);
+    expect(vadMock.fakeVad.frameProcessor.resume).toHaveBeenCalledTimes(1);
     expect(vadMock.state.options).toEqual(
       expect.objectContaining({
         baseAssetPath: "/public/common/voice-runtime/ricky0123-vad-web/",

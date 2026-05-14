@@ -25,6 +25,7 @@ type Ricky0123VadEngineState = "idle" | "started" | "stopped" | "destroyed";
 
 type Ricky0123VadPrivateInternals = {
   frameProcessor?: {
+    resume?: () => void;
     reset?: () => void;
   };
   model?: {
@@ -152,6 +153,7 @@ export class Ricky0123VadEngine implements VoiceVadEngine {
 
     this.state = "started";
     this.resetFrameBuffers();
+    this.resumeUnderlyingFrameProcessor();
   }
 
   stop(): void {
@@ -299,6 +301,11 @@ export class Ricky0123VadEngine implements VoiceVadEngine {
     const internals = this.vad as Ricky0123VadPrivateInternals | null;
     internals?.frameProcessor?.reset?.();
     internals?.model?.reset_state?.();
+  }
+
+  private resumeUnderlyingFrameProcessor(): void {
+    const internals = this.vad as Ricky0123VadPrivateInternals | null;
+    internals?.frameProcessor?.resume?.();
   }
 
   private emit(event: VoiceVadEvent): void {
