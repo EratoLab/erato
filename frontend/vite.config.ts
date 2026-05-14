@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import type { ServerResponse } from "node:http";
 import path from "node:path";
-import { Readable } from "node:stream";
 
 import { lingui } from "@lingui/vite-plugin";
 import react from "@vitejs/plugin-react";
@@ -187,7 +186,8 @@ const sendStructuredPublicFile = (
 
   response.statusCode = 200;
   response.setHeader("Content-Type", contentTypeForPath(resolvedPath));
-  Readable.from(fs.readFileSync(resolvedPath)).pipe(response);
+  response.setHeader("X-Content-Type-Options", "nosniff");
+  fs.createReadStream(resolvedPath).pipe(response);
   return true;
 };
 

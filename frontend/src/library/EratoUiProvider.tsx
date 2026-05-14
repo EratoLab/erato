@@ -1,3 +1,5 @@
+"use client";
+
 import { I18nProvider as LinguiI18nProvider } from "@lingui/react";
 import { useEffect } from "react";
 
@@ -12,13 +14,13 @@ import {
   i18n,
 } from "@/lib/i18n";
 import {
-  StaticFeatureConfigProvider,
-  type FeatureConfig,
-} from "@/providers/FeatureConfigProvider";
-import {
   VoiceRuntimeProvider,
   type VoiceRuntimeAssetOverrides,
 } from "@/lib/voice-runtime";
+import {
+  StaticFeatureConfigProvider,
+  type FeatureConfig,
+} from "@/providers/FeatureConfigProvider";
 
 import type { PropsWithChildren } from "react";
 

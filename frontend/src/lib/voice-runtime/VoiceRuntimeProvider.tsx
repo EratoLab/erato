@@ -1,9 +1,6 @@
-import {
-  createContext,
-  useContext,
-  useMemo,
-  type PropsWithChildren,
-} from "react";
+"use client";
+
+import { createContext, use, useMemo, type PropsWithChildren } from "react";
 
 import {
   resolveVoiceRuntimeAssets,
@@ -19,14 +16,29 @@ const VoiceRuntimeAssetsContext = createContext<VoiceRuntimeAssets | null>(
   null,
 );
 
+let cachedDefaultAssets: VoiceRuntimeAssets | null = null;
+function getDefaultVoiceRuntimeAssets(): VoiceRuntimeAssets {
+  if (typeof window === "undefined") {
+    return resolveVoiceRuntimeAssets();
+  }
+  cachedDefaultAssets ??= resolveVoiceRuntimeAssets();
+  return cachedDefaultAssets;
+}
+
+export function __resetDefaultVoiceRuntimeAssetsForTests(): void {
+  cachedDefaultAssets = null;
+}
+
 export function VoiceRuntimeProvider({
   children,
   voiceRuntimeAssets,
 }: VoiceRuntimeProviderProps) {
-  const resolvedAssets = useMemo(
-    () => resolveVoiceRuntimeAssets(voiceRuntimeAssets),
-    [voiceRuntimeAssets],
-  );
+  const resolvedAssets = useMemo(() => {
+    if (voiceRuntimeAssets === undefined) {
+      return getDefaultVoiceRuntimeAssets();
+    }
+    return resolveVoiceRuntimeAssets(voiceRuntimeAssets);
+  }, [voiceRuntimeAssets]);
 
   return (
     <VoiceRuntimeAssetsContext.Provider value={resolvedAssets}>
@@ -36,5 +48,5 @@ export function VoiceRuntimeProvider({
 }
 
 export function useVoiceRuntimeAssets(): VoiceRuntimeAssets {
-  return useContext(VoiceRuntimeAssetsContext) ?? resolveVoiceRuntimeAssets();
+  return use(VoiceRuntimeAssetsContext) ?? getDefaultVoiceRuntimeAssets();
 }

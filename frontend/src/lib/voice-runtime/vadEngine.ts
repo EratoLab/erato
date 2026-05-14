@@ -6,24 +6,32 @@ export type VoiceVadFrame = {
   timestampMs: number;
 };
 
-export type VoiceVadFrameResult = {
-  speechProbability: number;
-  isSpeech: boolean;
+export type VoiceVadFrameProbabilities = {
+  isSpeech: number;
+  notSpeech: number;
 };
 
 export type VoiceVadEvent =
   | {
       type: "frame";
       frame: VoiceVadFrame;
-      result: VoiceVadFrameResult;
+      probabilities: VoiceVadFrameProbabilities;
     }
   | {
       type: "speech_start";
       timestampMs: number;
-      speechProbability: number;
+    }
+  | {
+      type: "speech_real_start";
+      timestampMs: number;
     }
   | {
       type: "speech_end";
+      timestampMs: number;
+      audio: Float32Array;
+    }
+  | {
+      type: "vad_misfire";
       timestampMs: number;
     }
   | {
@@ -46,6 +54,6 @@ export interface VoiceVadEngine {
   start(): Promise<void>;
   stop(): void;
   destroy(): void;
-  acceptFrame(frame: VoiceVadFrame): Promise<VoiceVadFrameResult>;
+  acceptFrame(frame: VoiceVadFrame): Promise<void>;
   subscribe(listener: VoiceVadEventListener): () => void;
 }

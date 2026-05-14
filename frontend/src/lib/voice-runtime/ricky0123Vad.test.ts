@@ -12,7 +12,18 @@ describe("createRicky0123VadAssetOptions", () => {
     });
   });
 
-  it("accepts already-resolved runtime assets", () => {
+  it("uses base path overrides", () => {
+    expect(
+      createRicky0123VadAssetOptions({
+        basePath: "/voice",
+      }),
+    ).toEqual({
+      baseAssetPath: "/voice/ricky0123-vad-web/",
+      onnxWASMBasePath: "/voice/onnxruntime-web/",
+    });
+  });
+
+  it("uses fully-populated overrides", () => {
     expect(
       createRicky0123VadAssetOptions({
         basePath: "/voice",
@@ -28,6 +39,20 @@ describe("createRicky0123VadAssetOptions", () => {
     ).toEqual({
       baseAssetPath: "/voice/vad/",
       onnxWASMBasePath: "/voice/ort/",
+    });
+  });
+
+  it("treats partial ricky0123Vad overrides as overrides, not as resolved", () => {
+    expect(
+      createRicky0123VadAssetOptions({
+        basePath: "/voice",
+        ricky0123Vad: {
+          onnxWASMBasePath: "/custom/ort/",
+        },
+      }),
+    ).toEqual({
+      baseAssetPath: "/voice/ricky0123-vad-web/",
+      onnxWASMBasePath: "/custom/ort/",
     });
   });
 });

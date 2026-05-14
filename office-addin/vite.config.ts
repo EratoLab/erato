@@ -1,11 +1,11 @@
 import fs from "node:fs";
-import type { ServerResponse } from "node:http";
 import path from "node:path";
-import { Readable } from "node:stream";
 
 import { lingui } from "@lingui/vite-plugin";
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv, type Plugin, type ViteDevServer } from "vite";
+
+import type { ServerResponse } from "node:http";
 
 const loadOfficeAddinEnv = (mode: string) => {
   const developmentEnv =
@@ -101,7 +101,11 @@ const sendVoiceRuntimeFile = (
   requestPath: string,
   response: ServerResponse,
 ): boolean => {
-  const normalizedPath = requestPath.split("?")[0];
+  if (requestPath.includes("\0") || requestPath.includes("\\")) {
+    return false;
+  }
+
+  const normalizedPath = requestPath.split("?")[0].split("#")[0];
   const requestPrefixes = [
     "/public/platform-office-addin/voice-runtime/",
     "/office-addin/voice-runtime/",
@@ -121,6 +125,13 @@ const sendVoiceRuntimeFile = (
   } catch {
     return false;
   }
+  if (
+    relativePath.includes("\0") ||
+    relativePath.includes("\\") ||
+    path.isAbsolute(relativePath)
+  ) {
+    return false;
+  }
   const resolvedPath = path.resolve(sourceDir, relativePath);
   const resolvedSourceDir = path.resolve(sourceDir);
   if (
@@ -135,7 +146,8 @@ const sendVoiceRuntimeFile = (
 
   response.statusCode = 200;
   response.setHeader("Content-Type", contentTypeForPath(resolvedPath));
-  Readable.from(fs.readFileSync(resolvedPath)).pipe(response);
+  response.setHeader("X-Content-Type-Options", "nosniff");
+  fs.createReadStream(resolvedPath).pipe(response);
   return true;
 };
 
@@ -143,6 +155,14 @@ const stageFrontendVoiceRuntimeAssetsPlugin = (): Plugin => {
   return {
     name: "stage-frontend-voice-runtime-assets",
     configureServer(server: ViteDevServer) {
+      if (!resolveFrontendVoiceRuntimeDir()) {
+        server.config.logger.warn(
+          "[stage-frontend-voice-runtime-assets] @erato/frontend voice-runtime assets not found. " +
+            "Run `pnpm --filter @erato/frontend build:lib` before starting the office-addin dev server, " +
+            "otherwise VAD asset requests will 404 with no further warning.",
+        );
+      }
+
       server.middlewares.use((request, response, next) => {
         if (!request.url) {
           next();

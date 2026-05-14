@@ -3,15 +3,26 @@ import path from "node:path";
 
 import type { Plugin } from "vite";
 
-const RICKY0123_VAD_ASSET_DIRECTORY = "ricky0123-vad-web";
-const ONNX_RUNTIME_WEB_ASSET_DIRECTORY = "onnxruntime-web";
-const RICKY0123_VAD_DIST_FILES = [
-  "vad.worklet.bundle.min.js",
-  "silero_vad_legacy.onnx",
-  "silero_vad_v5.onnx",
-];
-const VOICE_RUNTIME_SOURCE_FILES = ["manifest.json"];
-const ONNX_RUNTIME_WEB_DIST_EXTENSIONS = new Set([".wasm"]);
+import {
+  ONNX_RUNTIME_WEB_ASSET_DIRECTORY,
+  RICKY0123_VAD_ASSET_DIRECTORY,
+  RICKY0123_VAD_DIST_FILES,
+  VOICE_RUNTIME_DIRECTORY,
+  VOICE_RUNTIME_MANIFEST_FILENAME,
+} from "./src/lib/voice-runtime/assets";
+
+const VOICE_RUNTIME_SOURCE_FILES = [VOICE_RUNTIME_MANIFEST_FILENAME];
+const ONNX_RUNTIME_WEB_DIST_EXTENSIONS = new Set([".wasm", ".mjs"]);
+const ONNX_RUNTIME_WEB_DIST_PREFIX = "ort-wasm-";
+
+const isOnnxRuntimeWebRuntimeFile = (basename: string): boolean =>
+  basename.startsWith(ONNX_RUNTIME_WEB_DIST_PREFIX) &&
+  ONNX_RUNTIME_WEB_DIST_EXTENSIONS.has(path.extname(basename));
+
+const isRicky0123VadDistFile = (
+  filename: string,
+): filename is (typeof RICKY0123_VAD_DIST_FILES)[number] =>
+  (RICKY0123_VAD_DIST_FILES as readonly string[]).includes(filename);
 
 type AssetEmitter = {
   emitFile(file: { type: "asset"; fileName: string; source: Buffer }): string;
@@ -78,7 +89,7 @@ export const emitVoiceRuntimePackageAssets = (
   for (const filename of VOICE_RUNTIME_SOURCE_FILES) {
     emitAssetFile(
       emitter,
-      path.join(rootDir, "public", "voice-runtime", filename),
+      path.join(rootDir, "public", VOICE_RUNTIME_DIRECTORY, filename),
       `${outputBasePath}/${filename}`,
     );
   }
@@ -104,7 +115,7 @@ export const emitVoiceRuntimePackageAssets = (
   }
 
   for (const filePath of walkFiles(onnxRuntimeDistDir)) {
-    if (!ONNX_RUNTIME_WEB_DIST_EXTENSIONS.has(path.extname(filePath))) {
+    if (!isOnnxRuntimeWebRuntimeFile(path.basename(filePath))) {
       continue;
     }
 
@@ -151,7 +162,16 @@ export const cleanVoiceRuntimePackageAssetOutput = (
     throw new Error(`Refusing to clean unsafe output path: ${outputBasePath}`);
   }
 
-  fs.rmSync(path.join(outputDir, ...pathSegments), {
+  const targetPath = path.resolve(outputDir, ...pathSegments);
+  const resolvedOutputDir = path.resolve(outputDir);
+  if (
+    targetPath !== resolvedOutputDir &&
+    !targetPath.startsWith(resolvedOutputDir + path.sep)
+  ) {
+    throw new Error(`Refusing to clean unsafe output path: ${outputBasePath}`);
+  }
+
+  fs.rmSync(targetPath, {
     recursive: true,
     force: true,
   });
@@ -162,7 +182,11 @@ export const resolveVoiceRuntimePackageAssetFile = (
   requestPath: string,
   runtimeBasePath: string,
 ): string | null => {
-  const normalizedPath = requestPath.split("?")[0];
+  if (requestPath.includes("\0") || requestPath.includes("\\")) {
+    return null;
+  }
+
+  const normalizedPath = requestPath.split("?")[0].split("#")[0];
   const normalizedRuntimeBasePath = runtimeBasePath.replace(/\/+$/, "");
   const vadPrefix = `${normalizedRuntimeBasePath}/${RICKY0123_VAD_ASSET_DIRECTORY}/`;
   const onnxPrefix = `${normalizedRuntimeBasePath}/${ONNX_RUNTIME_WEB_ASSET_DIRECTORY}/`;
@@ -172,7 +196,12 @@ export const resolveVoiceRuntimePackageAssetFile = (
       const filename = decodeURIComponent(
         normalizedPath.slice(vadPrefix.length),
       );
-      if (!RICKY0123_VAD_DIST_FILES.includes(filename)) {
+      if (
+        filename.includes("/") ||
+        filename.includes("\\") ||
+        filename.includes("\0") ||
+        !isRicky0123VadDistFile(filename)
+      ) {
         return null;
       }
       return path.join(
@@ -187,16 +216,23 @@ export const resolveVoiceRuntimePackageAssetFile = (
         normalizedPath.slice(onnxPrefix.length),
       );
       if (
-        relativePath.includes("..") ||
-        !ONNX_RUNTIME_WEB_DIST_EXTENSIONS.has(path.extname(relativePath))
+        relativePath.includes("\0") ||
+        relativePath.includes("\\") ||
+        path.isAbsolute(relativePath) ||
+        !isOnnxRuntimeWebRuntimeFile(path.basename(relativePath))
       ) {
         return null;
       }
-      return path.join(
-        packageDir(rootDir, "onnxruntime-web"),
-        "dist",
-        relativePath,
-      );
+      const distDir = path.join(packageDir(rootDir, "onnxruntime-web"), "dist");
+      const resolvedDistDir = path.resolve(distDir);
+      const joinedPath = path.resolve(resolvedDistDir, relativePath);
+      if (
+        joinedPath !== resolvedDistDir &&
+        !joinedPath.startsWith(resolvedDistDir + path.sep)
+      ) {
+        return null;
+      }
+      return joinedPath;
     }
   } catch {
     return null;

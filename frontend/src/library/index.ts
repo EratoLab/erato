@@ -75,11 +75,7 @@ export {
 export {
   VoiceRuntimeProvider,
   getDefaultVoiceRuntimeBasePath,
-  joinVoiceRuntimeDirectory,
-  joinVoiceRuntimePath,
-  normalizeVoiceRuntimeBasePath,
   resolveVoiceRuntimeAssets,
-  type Ricky0123VadRuntimeManifest,
   createRicky0123VadAssetOptions,
   useVoiceRuntimeAssets,
   type Ricky0123VadAssetOptions,
@@ -89,11 +85,10 @@ export {
   type VoiceVadEvent,
   type VoiceVadEventListener,
   type VoiceVadFrame,
-  type VoiceVadFrameResult,
+  type VoiceVadFrameProbabilities,
   type VoiceVadModel,
   type VoiceRuntimeAssetOverrides,
   type VoiceRuntimeAssets,
-  type VoiceRuntimeManifest,
   type VoiceRuntimeProviderProps,
 } from "@/lib/voice-runtime";
 export { env, type Env } from "@/app/env";
