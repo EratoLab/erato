@@ -1,3 +1,5 @@
+/* eslint-disable lingui/no-unlocalized-strings -- this module is path/URL plumbing only; no user-facing text */
+
 export const VOICE_RUNTIME_DIRECTORY = "voice-runtime";
 export const VOICE_RUNTIME_MANIFEST_FILENAME = "manifest.json";
 export const RICKY0123_VAD_ASSET_DIRECTORY = "ricky0123-vad-web";
@@ -66,13 +68,33 @@ function maybeValue(value: unknown): string | undefined {
     : undefined;
 }
 
+function stripTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) {
+    end--;
+  }
+  return end === value.length ? value : value.slice(0, end);
+}
+
+function stripSurroundingSlashes(value: string): string {
+  let start = 0;
+  let end = value.length;
+  while (start < end && value.charCodeAt(start) === 47) {
+    start++;
+  }
+  while (end > start && value.charCodeAt(end - 1) === 47) {
+    end--;
+  }
+  return start === 0 && end === value.length ? value : value.slice(start, end);
+}
+
 export function normalizeVoiceRuntimeBasePath(basePath: string): string {
   const trimmed = basePath.trim();
   if (!trimmed || trimmed === "/") {
     return "";
   }
 
-  return trimmed.replace(/\/+$/, "");
+  return stripTrailingSlashes(trimmed);
 }
 
 export function joinVoiceRuntimePath(
@@ -81,7 +103,7 @@ export function joinVoiceRuntimePath(
 ): string {
   const normalizedBasePath = normalizeVoiceRuntimeBasePath(basePath);
   const normalizedSegments = segments
-    .map((segment) => segment.trim().replace(/^\/+|\/+$/g, ""))
+    .map((segment) => stripSurroundingSlashes(segment.trim()))
     .filter(Boolean)
     .join("/");
 
