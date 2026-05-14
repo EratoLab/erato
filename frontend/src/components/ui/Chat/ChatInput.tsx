@@ -1339,6 +1339,53 @@ export const ChatInput = ({
     if (!shouldRestartAudioModeAfterResponseRef.current) {
       return;
     }
+    if (!isPendingResponse) {
+      return;
+    }
+    if (
+      !isAudioMode ||
+      mode !== "compose" ||
+      disabled ||
+      isLoading ||
+      isUploading ||
+      isFileButtonProcessing ||
+      isAnyTokenLimitExceeded ||
+      isRecording ||
+      isRecordingUpload ||
+      hasIncompleteAudioTranscription ||
+      attachedFiles.length > 0 ||
+      isDictating ||
+      isDictationStarting ||
+      isDictationCompleting
+    ) {
+      return;
+    }
+
+    shouldRestartAudioModeAfterResponseRef.current = false;
+    toggleAudioRecording();
+  }, [
+    attachedFiles.length,
+    disabled,
+    hasIncompleteAudioTranscription,
+    isAnyTokenLimitExceeded,
+    isAudioMode,
+    isDictating,
+    isDictationCompleting,
+    isDictationStarting,
+    isFileButtonProcessing,
+    isLoading,
+    isPendingResponse,
+    isRecording,
+    isRecordingUpload,
+    isUploading,
+    mode,
+    toggleAudioRecording,
+  ]);
+
+  useEffect(() => {
+    if (!shouldRestartAudioModeAfterResponseRef.current) {
+      return;
+    }
     if (!audioModeRestartSawPendingResponseRef.current) {
       return;
     }
@@ -1732,6 +1779,22 @@ export const ChatInput = ({
                     disabled={!isSelectionReady}
                   />
                 )}
+              {isAudioMode && isPendingResponse && isRecording && (
+                <WaveformButton
+                  onClick={handleAudioModeButtonToggle}
+                  bars={recordingBars}
+                  disabled={disabled || isLoading || isRecordingUpload}
+                  ariaLabel={t`Stop audio recording`}
+                  statusLabel={t`Listening for your next message`}
+                  testIds={{
+                    root: "chat-input-audio-mode-pending-recording",
+                    waveform:
+                      "chat-input-audio-mode-pending-recording-waveform",
+                    stopIcon:
+                      "chat-input-audio-mode-pending-recording-stop-icon",
+                  }}
+                />
+              )}
               {audioDictationEnabled &&
                 !isAudioMode &&
                 (isCapturingAudio || isDictating ? (

@@ -1496,6 +1496,67 @@ describe("ChatInput", () => {
       ).not.toBeInTheDocument();
     });
 
+    it("shows a listening control in audio mode while a response is pending", async () => {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      const toggleAudioRecording = vi.fn();
+      mockUseAudioTranscriptionFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
+      mockUseChatContext.mockReturnValue({
+        isPendingResponse: true,
+        isMessagingLoading: false,
+        isUploading: false,
+        cancelMessage: vi.fn(),
+      });
+      mockUseAudioTranscriptionRecorder.mockReturnValue({
+        isRecording: true,
+        isRecordingUpload: false,
+        recordingError: null,
+        setRecordingError: vi.fn(),
+        recordingBars: [3, 6, 9, 6, 3],
+        retryingAudioFileId: null,
+        retryAudioTranscription: vi.fn(),
+        removeRecordedAudioFile: vi.fn(),
+        clearRecordedAudioFiles: vi.fn(),
+        hasRecordedAudioFile: () => false,
+        toggleAudioRecording,
+      });
+
+      const { i18n } = await import("@lingui/core");
+      render(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput
+              onSendMessage={vi.fn()}
+              controlledIsAudioMode={true}
+              onControlledIsAudioModeChange={vi.fn()}
+            />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+
+      const listeningControl = screen.getByTestId(
+        "chat-input-audio-mode-pending-recording",
+      );
+      expect(listeningControl).toBeInTheDocument();
+      expect(listeningControl).toHaveAccessibleName("Stop audio recording");
+      expect(
+        screen.getByTestId("chat-input-audio-mode-pending-recording-waveform"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("chat-input-stop-generation"),
+      ).toBeInTheDocument();
+
+      fireEvent.click(listeningControl);
+      expect(toggleAudioRecording).toHaveBeenCalledTimes(1);
+    });
+
     it("hides the audio-mode button when only an attachment is present", async () => {
       const queryClient = new QueryClient({
         defaultOptions: {
@@ -1988,7 +2049,7 @@ describe("ChatInput", () => {
       requestSubmitSpy.mockRestore();
     });
 
-    it("restarts audio mode recording after the auto-sent response completes", async () => {
+    it("restarts audio mode recording when the auto-sent response starts", async () => {
       const queryClient = new QueryClient({
         defaultOptions: {
           queries: { retry: false },
@@ -2139,7 +2200,9 @@ describe("ChatInput", () => {
           </I18nProvider>
         </QueryClientProvider>,
       );
-      expect(toggleAudioRecording).toHaveBeenCalledTimes(1);
+      await waitFor(() =>
+        expect(toggleAudioRecording).toHaveBeenCalledTimes(2),
+      );
 
       isPendingResponse = false;
       rerender(
@@ -2150,9 +2213,7 @@ describe("ChatInput", () => {
         </QueryClientProvider>,
       );
 
-      await waitFor(() =>
-        expect(toggleAudioRecording).toHaveBeenCalledTimes(2),
-      );
+      expect(toggleAudioRecording).toHaveBeenCalledTimes(2);
       requestSubmitSpy.mockRestore();
     });
 
