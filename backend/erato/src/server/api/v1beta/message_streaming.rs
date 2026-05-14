@@ -3562,8 +3562,7 @@ pub async fn resolve_audio_transcripts_for_summary(
     use crate::db::entity::prelude::FileUploads;
     use sea_orm::EntityTrait as _;
 
-    let mut resolved_messages =
-        Vec::with_capacity(generation_input_messages.messages.len());
+    let mut resolved_messages = Vec::with_capacity(generation_input_messages.messages.len());
 
     for message in &generation_input_messages.messages {
         let resolved_content = if let ContentPart::TextFilePointer(ref ptr) = message.content {
@@ -4937,7 +4936,6 @@ mod summary_generation_tests {
             Some("Explain our customer support handoff")
         );
     }
-
 }
 
 /// Run the message submission task in the background
