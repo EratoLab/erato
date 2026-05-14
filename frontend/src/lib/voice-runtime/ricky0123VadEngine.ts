@@ -238,7 +238,7 @@ export class Ricky0123VadEngine implements VoiceVadEngine {
   }
 
   private createMicVadOptions(): Partial<RealTimeVADOptions> {
-    return {
+    const options: Partial<RealTimeVADOptions> = {
       ...this.assetOptions,
       model: this.model,
       startOnLoad: false,
@@ -281,12 +281,25 @@ export class Ricky0123VadEngine implements VoiceVadEngine {
           timestampMs: this.currentFrameTimestampMs,
         });
       },
-      positiveSpeechThreshold: this.options.positiveSpeechThreshold,
-      negativeSpeechThreshold: this.options.negativeSpeechThreshold,
-      redemptionMs: this.options.redemptionMs,
-      preSpeechPadMs: this.options.preSpeechPadMs,
-      minSpeechMs: this.options.minSpeechMs,
     };
+
+    if (this.options.positiveSpeechThreshold !== undefined) {
+      options.positiveSpeechThreshold = this.options.positiveSpeechThreshold;
+    }
+    if (this.options.negativeSpeechThreshold !== undefined) {
+      options.negativeSpeechThreshold = this.options.negativeSpeechThreshold;
+    }
+    if (this.options.redemptionMs !== undefined) {
+      options.redemptionMs = this.options.redemptionMs;
+    }
+    if (this.options.preSpeechPadMs !== undefined) {
+      options.preSpeechPadMs = this.options.preSpeechPadMs;
+    }
+    if (this.options.minSpeechMs !== undefined) {
+      options.minSpeechMs = this.options.minSpeechMs;
+    }
+
+    return options;
   }
 
   private resetFrameBuffers(): void {

@@ -105,6 +105,23 @@ describe("Ricky0123VadEngine", () => {
     );
   });
 
+  it("omits undefined tuning options so Ricky's defaults remain active", async () => {
+    const engine = createRicky0123VadEngine({
+      assetOptions: {
+        baseAssetPath: "/vad/",
+        onnxWASMBasePath: "/ort/",
+      },
+    });
+
+    await engine.start();
+
+    expect(vadMock.state.options).not.toHaveProperty("positiveSpeechThreshold");
+    expect(vadMock.state.options).not.toHaveProperty("negativeSpeechThreshold");
+    expect(vadMock.state.options).not.toHaveProperty("redemptionMs");
+    expect(vadMock.state.options).not.toHaveProperty("preSpeechPadMs");
+    expect(vadMock.state.options).not.toHaveProperty("minSpeechMs");
+  });
+
   it("feeds canonical V5 frames into MicVAD and emits frame probabilities", async () => {
     const engine = createRicky0123VadEngine({
       assetOptions: {
