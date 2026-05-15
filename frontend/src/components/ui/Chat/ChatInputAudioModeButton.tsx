@@ -10,7 +10,7 @@ import { Button } from "../Controls/Button";
 export const AUDIO_MODE_STATIC_BAR_PATTERN: readonly number[] = [3, 5, 7, 5, 3];
 
 type ChatInputAudioModeButtonCommonProps = {
-  /** Toggle handler — starts a recording when idle, stops one when active. */
+  /** Toggle handler - starts listening when idle, stops when active. */
   onToggle: () => void;
   disabled?: boolean;
 };
@@ -24,7 +24,7 @@ type ChatInputAudioModeButtonIdleProps = ChatInputAudioModeButtonCommonProps & {
 type ChatInputAudioModeButtonRecordingProps =
   ChatInputAudioModeButtonCommonProps & {
     isRecording: true;
-    /** Live bar heights from `useAudioTranscriptionRecorder.recordingBars`. */
+    /** Live bar heights from the active conversational dictation session. */
     recordingBars: readonly number[];
   };
 
@@ -33,10 +33,9 @@ type ChatInputAudioModeButtonProps =
   | ChatInputAudioModeButtonRecordingProps;
 
 /**
- * Replaces the send button when the chat input is empty and audio
- * transcription is enabled. Idle state shows a static waveform; recording
- * state delegates to `WaveformButton` so it shares the active-audio
- * interaction with the dictation feature.
+ * Replaces the send button when the chat input is empty and conversational
+ * audio mode is available. Idle state shows a static waveform; listening
+ * state delegates to `WaveformButton` for the shared waveform-stop affordance.
  */
 export function ChatInputAudioModeButton(props: ChatInputAudioModeButtonProps) {
   if (props.isRecording) {
@@ -45,8 +44,8 @@ export function ChatInputAudioModeButton(props: ChatInputAudioModeButtonProps) {
         onClick={props.onToggle}
         bars={props.recordingBars}
         disabled={props.disabled}
-        ariaLabel={t`Stop audio recording`}
-        statusLabel={t`Recording audio`}
+        ariaLabel={t`Stop audio mode`}
+        statusLabel={t`Listening`}
         testIds={{
           root: "chat-input-audio-mode-stop",
           waveform: "chat-input-audio-mode-recording-waveform",

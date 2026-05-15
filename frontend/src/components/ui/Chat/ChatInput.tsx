@@ -323,6 +323,8 @@ export const ChatInput = ({
 }: ChatInputPropsWithRef) => {
   const [message, setMessage] = useState("");
   const [internalIsAudioMode, setInternalIsAudioMode] = useState(false);
+  const [conversationAutoSendSignal, setConversationAutoSendSignal] =
+    useState(0);
   const isAudioMode = controlledIsAudioMode ?? internalIsAudioMode;
   // Audio mode is the only piece of ChatInput state that needs to survive
   // the layout flip in `Chat` (empty-state shell → messages shell), which
@@ -342,11 +344,9 @@ export const ChatInput = ({
   );
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
-  // Latched intent for "the user pressed stop and wants the resulting
-  // transcript to be sent automatically." Using a ref instead of state
-  // keeps flipping the intent out of the render cycle. The single effect
-  // below is the only reader; cancellation paths (exit audio mode, start
-  // a new recording, transcription error) flip this back to false.
+  // Latched intent for conversational audio mode: VAD decided the user's
+  // turn ended, and the dictated text should be submitted after the final
+  // dictation chunk lands.
   const pendingAutoSendRef = useRef(false);
   const shouldRestartAudioModeAfterResponseRef = useRef(false);
   const audioModeRestartSawPendingResponseRef = useRef(false);
@@ -383,8 +383,9 @@ export const ChatInput = ({
     [messagingError],
   );
   const wasPendingResponseRef = useRef(isPendingResponse);
-  const handleVadAutoStop = useCallback(() => {
+  const handleConversationVadAutoStop = useCallback(() => {
     pendingAutoSendRef.current = true;
+    setConversationAutoSendSignal((signal) => signal + 1);
   }, []);
 
   // Combine loading states
@@ -460,9 +461,6 @@ export const ChatInput = ({
 
   const hasComposeContent =
     message.trim().length > 0 || attachedFiles.length > 0;
-  const shouldUseVadAutoStop =
-    isAudioMode ||
-    (audioTranscriptionEnabled && mode === "compose" && !hasComposeContent);
 
   const {
     isRecording,
@@ -480,8 +478,7 @@ export const ChatInput = ({
     audioTranscriptionEnabled,
     uploadEnabled,
     maxRecordingDurationSeconds,
-    vadAutoStopEnabled: shouldUseVadAutoStop,
-    onVadAutoStop: handleVadAutoStop,
+    vadAutoStopEnabled: false,
     chatId,
     silentChatId,
     setSilentChatId,
@@ -564,6 +561,9 @@ export const ChatInput = ({
     enabled: audioDictationEnabled,
     maxRecordingDurationSeconds: maxDictationDurationSeconds,
     onTranscriptChunk: appendDictationTranscript,
+    vadAutoStopEnabled:
+      audioDictationEnabled && isAudioMode && mode === "compose",
+    onVadAutoStop: handleConversationVadAutoStop,
   });
 
   const toggleDictationForCurrentTarget = useCallback(() => {
@@ -1055,6 +1055,8 @@ export const ChatInput = ({
     isLoading ||
       isPendingResponse ||
       hasIncompleteAudioTranscription ||
+      isDictating ||
+      isDictationStarting ||
       isDictationCompleting,
     disabled,
     () => setMessage(""),
@@ -1223,83 +1225,116 @@ export const ChatInput = ({
     !hasIncompleteAudioTranscription &&
     !isDictationCompleting;
 
-  // The send button slot becomes a dedicated audio-mode button when the
-  // input is empty in compose mode and audio transcription is enabled.
-  // While recording, the same slot keeps the audio-mode button (now in its
-  // stop-on-hover state) so the toggle stays in one place.
-  const showAudioModeButton =
-    audioTranscriptionEnabled &&
-    mode === "compose" &&
-    (isRecording || (!hasComposeContent && !isRecordingUpload));
-  const isAudioModeButtonDisabled =
-    !isRecording &&
-    (disabled ||
-      isLoading ||
-      isUploading ||
-      isFileButtonProcessing ||
-      isAnyTokenLimitExceeded ||
-      hasIncompleteAudioTranscription ||
+  const isConversationalAudioActive =
+    isAudioMode &&
+    (isCapturingAudio ||
       isDictating ||
       isDictationStarting ||
       isDictationCompleting);
 
-  // Audio chat mode swaps the typing surfaces (textarea + dictation button)
-  // for a recording-first flow. Entering it both flips the mode and starts
-  // recording, so the user lands directly in the active waveform state.
-  // Stopping a recording in audio mode arms `pendingAutoSendRef` so the
-  // message is dispatched the moment transcription completes; starting a
-  // *new* recording clears that intent because the prior recording is now
-  // being replaced.
+  // The send button slot becomes a conversational audio button when the
+  // compose input is clean and dictation is available. Attachment-based
+  // transcript recording has its own control in the toolbar and never
+  // auto-sends.
+  const showAudioModeButton =
+    audioDictationEnabled &&
+    mode === "compose" &&
+    (isAudioMode ||
+      (!hasComposeContent &&
+        !isRecording &&
+        !isRecordingUpload &&
+        !isCapturingAudio &&
+        !isDictating &&
+        !isDictationStarting &&
+        !isDictationCompleting));
+  const isAudioModeButtonDisabled =
+    disabled ||
+    isLoading ||
+    isUploading ||
+    isFileButtonProcessing ||
+    isAnyTokenLimitExceeded ||
+    hasIncompleteAudioTranscription ||
+    isRecording ||
+    isRecordingUpload ||
+    isDictationCompleting;
+
+  // Conversational audio mode swaps the typing surface for dictation +
+  // VAD. VAD owns auto-send; a manual stop cancels the conversational
+  // session and returns to the normal composer so the dictated text can be
+  // reviewed or sent explicitly.
   const handleAudioModeButtonToggle = useCallback(() => {
+    if (isConversationalAudioActive) {
+      pendingAutoSendRef.current = false;
+      toggleDictationForCurrentTarget();
+      setIsAudioMode(false);
+      return;
+    }
+
     if (!isAudioMode) {
       setIsAudioMode(true);
     }
-    if (isRecording) {
-      pendingAutoSendRef.current = true;
-    } else {
-      pendingAutoSendRef.current = false;
-    }
-    toggleAudioRecording();
-  }, [isAudioMode, isRecording, setIsAudioMode, toggleAudioRecording]);
+    pendingAutoSendRef.current = false;
+    toggleDictationForCurrentTarget();
+  }, [
+    isAudioMode,
+    isConversationalAudioActive,
+    setIsAudioMode,
+    toggleDictationForCurrentTarget,
+  ]);
 
   const exitAudioMode = useCallback(() => {
     pendingAutoSendRef.current = false;
     shouldRestartAudioModeAfterResponseRef.current = false;
     audioModeRestartSawPendingResponseRef.current = false;
+    if (isDictating || isDictationStarting) {
+      toggleDictationForCurrentTarget();
+    }
     if (isRecording) {
       toggleAudioRecording();
     }
     setIsAudioMode(false);
-  }, [isRecording, setIsAudioMode, toggleAudioRecording]);
+  }, [
+    isDictating,
+    isDictationStarting,
+    isRecording,
+    setIsAudioMode,
+    toggleAudioRecording,
+    toggleDictationForCurrentTarget,
+  ]);
 
   useEffect(() => {
     if (mode !== "compose" && isAudioMode) {
       pendingAutoSendRef.current = false;
       shouldRestartAudioModeAfterResponseRef.current = false;
       audioModeRestartSawPendingResponseRef.current = false;
+      if (isDictating || isDictationStarting) {
+        toggleDictationForCurrentTarget();
+      }
       setIsAudioMode(false);
     }
-  }, [mode, isAudioMode, setIsAudioMode]);
+  }, [
+    mode,
+    isAudioMode,
+    isDictating,
+    isDictationStarting,
+    setIsAudioMode,
+    toggleDictationForCurrentTarget,
+  ]);
 
-  // Surface any transcription error as a "drop the pending auto-send"
+  // Surface any audio error as a "drop the pending auto-send"
   // signal so the user has to consciously retry — otherwise a silent
-  // failure would still trigger a stale submit when the next attachment
-  // resolves.
+  // failure would still trigger a stale submit when the next transcript
+  // chunk resolves.
   useEffect(() => {
-    if (recordingError) {
+    if (recordingError || dictationError) {
       pendingAutoSendRef.current = false;
       shouldRestartAudioModeAfterResponseRef.current = false;
       audioModeRestartSawPendingResponseRef.current = false;
     }
-  }, [recordingError]);
+  }, [dictationError, recordingError]);
 
-  // Auto-send latch: when stop was pressed in audio mode and the resulting
-  // transcription has finished resolving, programmatically submit the form
-  // so the user doesn't have to click send a second time. Gated on
-  // `isAudioMode` belt-and-suspenders against a race where Exit lands in
-  // the same commit batch as transcription completion. Single source of
-  // truth (one ref, one effect) so adding VAD later just means a new
-  // writer to the same ref.
+  // Auto-send latch: VAD marks the spoken turn complete, then dictation
+  // finishes its final chunk. Only then do we submit the text draft.
   useEffect(() => {
     if (!pendingAutoSendRef.current) {
       return;
@@ -1307,13 +1342,31 @@ export const ChatInput = ({
     if (!isAudioMode) {
       return;
     }
-    if (isRecording || isRecordingUpload || hasIncompleteAudioTranscription) {
+    if (
+      isDictating ||
+      isDictationStarting ||
+      isDictationCompleting ||
+      hasIncompleteAudioTranscription
+    ) {
       return;
     }
     if (isPendingResponse) {
       return;
     }
-    if (attachedFiles.length === 0) {
+    if (
+      disabled ||
+      isLoading ||
+      isUploading ||
+      isFileButtonProcessing ||
+      isAnyTokenLimitExceeded
+    ) {
+      return;
+    }
+    if (attachedFiles.length > 0) {
+      return;
+    }
+    if (!message.trim()) {
+      pendingAutoSendRef.current = false;
       return;
     }
     pendingAutoSendRef.current = false;
@@ -1321,12 +1374,20 @@ export const ChatInput = ({
     audioModeRestartSawPendingResponseRef.current = false;
     formRef.current?.requestSubmit();
   }, [
+    message,
     isAudioMode,
-    isRecording,
-    isRecordingUpload,
+    isDictating,
+    isDictationStarting,
+    isDictationCompleting,
     isPendingResponse,
+    disabled,
+    isLoading,
+    isUploading,
+    isFileButtonProcessing,
+    isAnyTokenLimitExceeded,
     hasIncompleteAudioTranscription,
     attachedFiles.length,
+    conversationAutoSendSignal,
   ]);
 
   useEffect(() => {
@@ -1353,7 +1414,9 @@ export const ChatInput = ({
       isRecording ||
       isRecordingUpload ||
       hasIncompleteAudioTranscription ||
+      message.trim().length > 0 ||
       attachedFiles.length > 0 ||
+      isCapturingAudio ||
       isDictating ||
       isDictationStarting ||
       isDictationCompleting
@@ -1362,13 +1425,14 @@ export const ChatInput = ({
     }
 
     shouldRestartAudioModeAfterResponseRef.current = false;
-    toggleAudioRecording();
+    toggleDictationForCurrentTarget();
   }, [
     attachedFiles.length,
     disabled,
     hasIncompleteAudioTranscription,
     isAnyTokenLimitExceeded,
     isAudioMode,
+    isCapturingAudio,
     isDictating,
     isDictationCompleting,
     isDictationStarting,
@@ -1378,8 +1442,9 @@ export const ChatInput = ({
     isRecording,
     isRecordingUpload,
     isUploading,
+    message,
     mode,
-    toggleAudioRecording,
+    toggleDictationForCurrentTarget,
   ]);
 
   useEffect(() => {
@@ -1401,7 +1466,9 @@ export const ChatInput = ({
       isRecording ||
       isRecordingUpload ||
       hasIncompleteAudioTranscription ||
+      message.trim().length > 0 ||
       attachedFiles.length > 0 ||
+      isCapturingAudio ||
       isDictating ||
       isDictationStarting ||
       isDictationCompleting
@@ -1411,13 +1478,14 @@ export const ChatInput = ({
 
     shouldRestartAudioModeAfterResponseRef.current = false;
     audioModeRestartSawPendingResponseRef.current = false;
-    toggleAudioRecording();
+    toggleDictationForCurrentTarget();
   }, [
     attachedFiles.length,
     disabled,
     hasIncompleteAudioTranscription,
     isAnyTokenLimitExceeded,
     isAudioMode,
+    isCapturingAudio,
     isDictating,
     isDictationCompleting,
     isDictationStarting,
@@ -1427,8 +1495,9 @@ export const ChatInput = ({
     isRecording,
     isRecordingUpload,
     isUploading,
+    message,
     mode,
-    toggleAudioRecording,
+    toggleDictationForCurrentTarget,
   ]);
 
   // Log just before rendering the component and its preview section
@@ -1779,24 +1848,84 @@ export const ChatInput = ({
                     disabled={!isSelectionReady}
                   />
                 )}
-              {isAudioMode && isPendingResponse && isRecording && (
-                <WaveformButton
-                  onClick={handleAudioModeButtonToggle}
-                  bars={recordingBars}
-                  disabled={disabled || isLoading || isRecordingUpload}
-                  ariaLabel={t`Stop audio recording`}
-                  statusLabel={t`Listening for your next message`}
-                  testIds={{
-                    root: "chat-input-audio-mode-pending-recording",
-                    waveform:
-                      "chat-input-audio-mode-pending-recording-waveform",
-                    stopIcon:
-                      "chat-input-audio-mode-pending-recording-stop-icon",
-                  }}
-                />
-              )}
+              {isAudioMode &&
+                isPendingResponse &&
+                isConversationalAudioActive && (
+                  <WaveformButton
+                    onClick={handleAudioModeButtonToggle}
+                    bars={dictationBars}
+                    isBuffering={!isCapturingAudio || !isDictating}
+                    disabled={disabled || isLoading || isDictationCompleting}
+                    ariaLabel={t`Stop audio mode`}
+                    statusLabel={t`Listening for your next message`}
+                    testIds={{
+                      root: "chat-input-audio-mode-pending-recording",
+                      waveform:
+                        "chat-input-audio-mode-pending-recording-waveform",
+                      stopIcon:
+                        "chat-input-audio-mode-pending-recording-stop-icon",
+                    }}
+                  />
+                )}
+              {audioTranscriptionEnabled &&
+                !isAudioMode &&
+                (isRecording ? (
+                  <WaveformButton
+                    onClick={toggleAudioRecording}
+                    bars={recordingBars}
+                    disabled={disabled || isLoading}
+                    ariaLabel={t`Stop audio transcript recording`}
+                    statusLabel={t`Recording audio transcript`}
+                    testIds={{
+                      root: "chat-input-record-audio-transcript",
+                      waveform: "chat-input-record-audio-transcript-waveform",
+                      stopIcon: "chat-input-record-audio-transcript-stop-icon",
+                    }}
+                  />
+                ) : isRecordingUpload ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    icon={
+                      <LoadingIcon
+                        className="size-4 animate-spin text-[var(--theme-fg-primary)]"
+                        data-testid="chat-input-record-audio-transcript-loading-icon"
+                      />
+                    }
+                    disabled
+                    data-testid="chat-input-record-audio-transcript"
+                    aria-label={t`Finishing audio transcript`}
+                  />
+                ) : (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    icon={
+                      <VoiceIcon className="text-[var(--theme-fg-primary)]" />
+                    }
+                    onClick={toggleAudioRecording}
+                    disabled={
+                      disabled ||
+                      isLoading ||
+                      isPendingResponse ||
+                      isUploading ||
+                      isFileButtonProcessing ||
+                      isAnyTokenLimitExceeded ||
+                      hasIncompleteAudioTranscription ||
+                      isDictating ||
+                      isDictationStarting ||
+                      isDictationCompleting
+                    }
+                    data-testid="chat-input-record-audio-transcript"
+                    aria-label={t`Record audio transcript`}
+                  />
+                ))}
               {audioDictationEnabled &&
                 !isAudioMode &&
+                !isRecording &&
+                !isRecordingUpload &&
                 (isCapturingAudio || isDictating ? (
                   <WaveformButton
                     onClick={toggleDictationForCurrentTarget}
@@ -1808,6 +1937,8 @@ export const ChatInput = ({
                       isPendingResponse ||
                       isUploading ||
                       isFileButtonProcessing ||
+                      isRecording ||
+                      isRecordingUpload ||
                       isAnyTokenLimitExceeded
                     }
                     ariaLabel={
@@ -1848,6 +1979,8 @@ export const ChatInput = ({
                       isPendingResponse ||
                       isUploading ||
                       isFileButtonProcessing ||
+                      isRecording ||
+                      isRecordingUpload ||
                       isDictationCompleting ||
                       isAnyTokenLimitExceeded
                     }
@@ -1872,10 +2005,10 @@ export const ChatInput = ({
                   aria-label={t`Stop`}
                 />
               ) : showAudioModeButton ? (
-                isRecording ? (
+                isConversationalAudioActive ? (
                   <ChatInputAudioModeButton
                     isRecording
-                    recordingBars={recordingBars}
+                    recordingBars={dictationBars}
                     onToggle={handleAudioModeButtonToggle}
                     disabled={isAudioModeButtonDisabled}
                   />
