@@ -7,6 +7,7 @@ import {
   useCallback,
   useMemo,
   useImperativeHandle,
+  useId,
 } from "react";
 
 import { FileAttachmentsPreview } from "@/components/ui/FileUpload";
@@ -36,15 +37,23 @@ import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 import { resolveChatSendErrorMessage } from "@/utils/chatSendErrorMessage";
 import { createLogger } from "@/utils/debugLogger";
 
-import { ArrowUpIcon, LoadingIcon, StopIcon, VoiceIcon } from "../icons";
+import {
+  ArrowUpIcon,
+  LoadingIcon,
+  PageIcon,
+  StopIcon,
+  VoiceIcon,
+} from "../icons";
 import { ChatInputAudioModeButton } from "./ChatInputAudioModeButton";
 import { ChatInputTokenUsage } from "./ChatInputTokenUsage";
 import { FacetSelector } from "./FacetSelector";
 import { ModelSelector } from "./ModelSelector";
 import { WaveformButton } from "./WaveformButton";
 import { Button } from "../Controls/Button";
+import { RadioCard } from "../Controls/RadioCard";
 import { Alert } from "../Feedback/Alert";
 import { BudgetWarning } from "../Feedback/ChatWarnings/BudgetWarning";
+import { ModalBase } from "../Modal/ModalBase";
 
 import type { ChatInputControlsHandle } from "./ChatInputControlsContext";
 import type { AudioDictationTranscriptChunk } from "@/hooks/audio/useAudioDictationRecorder";
@@ -323,8 +332,10 @@ export const ChatInput = ({
 }: ChatInputPropsWithRef) => {
   const [message, setMessage] = useState("");
   const [internalIsAudioMode, setInternalIsAudioMode] = useState(false);
+  const [isAudioModeSelectorOpen, setIsAudioModeSelectorOpen] = useState(false);
   const [conversationAutoSendSignal, setConversationAutoSendSignal] =
     useState(0);
+  const audioModeChoiceGroupName = useId();
   const isAudioMode = controlledIsAudioMode ?? internalIsAudioMode;
   // Audio mode is the only piece of ChatInput state that needs to survive
   // the layout flip in `Chat` (empty-state shell → messages shell), which
@@ -1232,12 +1243,14 @@ export const ChatInput = ({
       isDictationStarting ||
       isDictationCompleting);
 
-  // The send button slot becomes a conversational audio button when the
-  // compose input is clean and dictation is available. Attachment-based
-  // transcript recording has its own control in the toolbar and never
-  // auto-sends.
+  const shouldShowAudioModeSelector =
+    audioDictationEnabled && audioTranscriptionEnabled && mode === "compose";
+
+  // The send button slot becomes the audio entry point when the compose
+  // input is clean. If both audio paths are enabled, it asks the user which
+  // mode to start; otherwise it starts the one available audio flow.
   const showAudioModeButton =
-    audioDictationEnabled &&
+    (audioDictationEnabled || audioTranscriptionEnabled) &&
     mode === "compose" &&
     (isAudioMode ||
       (!hasComposeContent &&
@@ -1258,6 +1271,45 @@ export const ChatInput = ({
     isRecordingUpload ||
     isDictationCompleting;
 
+  const closeAudioModeSelector = useCallback(() => {
+    setIsAudioModeSelectorOpen(false);
+  }, []);
+
+  const startConversationalAudioMode = useCallback(() => {
+    if (!audioDictationEnabled) {
+      return;
+    }
+
+    if (!isAudioMode) {
+      setIsAudioMode(true);
+    }
+    pendingAutoSendRef.current = false;
+    setIsAudioModeSelectorOpen(false);
+    toggleDictationForCurrentTarget();
+  }, [
+    audioDictationEnabled,
+    isAudioMode,
+    setIsAudioMode,
+    toggleDictationForCurrentTarget,
+  ]);
+
+  const startTranscriptAudioMode = useCallback(() => {
+    if (!audioTranscriptionEnabled || isRecording || isRecordingUpload) {
+      return;
+    }
+
+    pendingAutoSendRef.current = false;
+    setIsAudioMode(false);
+    setIsAudioModeSelectorOpen(false);
+    toggleAudioRecording();
+  }, [
+    audioTranscriptionEnabled,
+    isRecording,
+    isRecordingUpload,
+    setIsAudioMode,
+    toggleAudioRecording,
+  ]);
+
   // Conversational audio mode swaps the typing surface for dictation +
   // VAD. VAD owns auto-send; a manual stop cancels the conversational
   // session and returns to the normal composer so the dictated text can be
@@ -1270,20 +1322,31 @@ export const ChatInput = ({
       return;
     }
 
-    if (!isAudioMode) {
-      setIsAudioMode(true);
+    if (shouldShowAudioModeSelector && !isAudioMode) {
+      setIsAudioModeSelectorOpen(true);
+      return;
     }
-    pendingAutoSendRef.current = false;
-    toggleDictationForCurrentTarget();
+
+    if (audioDictationEnabled) {
+      startConversationalAudioMode();
+      return;
+    }
+
+    startTranscriptAudioMode();
   }, [
-    isAudioMode,
+    audioDictationEnabled,
     isConversationalAudioActive,
+    isAudioMode,
     setIsAudioMode,
+    shouldShowAudioModeSelector,
+    startConversationalAudioMode,
+    startTranscriptAudioMode,
     toggleDictationForCurrentTarget,
   ]);
 
   const exitAudioMode = useCallback(() => {
     pendingAutoSendRef.current = false;
+    setIsAudioModeSelectorOpen(false);
     shouldRestartAudioModeAfterResponseRef.current = false;
     audioModeRestartSawPendingResponseRef.current = false;
     if (isDictating || isDictationStarting) {
@@ -1303,6 +1366,10 @@ export const ChatInput = ({
   ]);
 
   useEffect(() => {
+    if (mode !== "compose") {
+      setIsAudioModeSelectorOpen(false);
+    }
+
     if (mode !== "compose" && isAudioMode) {
       pendingAutoSendRef.current = false;
       shouldRestartAudioModeAfterResponseRef.current = false;
@@ -1867,22 +1934,23 @@ export const ChatInput = ({
                     }}
                   />
                 )}
+              {audioTranscriptionEnabled && !isAudioMode && isRecording && (
+                <WaveformButton
+                  onClick={toggleAudioRecording}
+                  bars={recordingBars}
+                  disabled={disabled || isLoading}
+                  ariaLabel={t`Stop audio transcript recording`}
+                  statusLabel={t`Recording audio transcript`}
+                  testIds={{
+                    root: "chat-input-record-audio-transcript",
+                    waveform: "chat-input-record-audio-transcript-waveform",
+                    stopIcon: "chat-input-record-audio-transcript-stop-icon",
+                  }}
+                />
+              )}
               {audioTranscriptionEnabled &&
                 !isAudioMode &&
-                (isRecording ? (
-                  <WaveformButton
-                    onClick={toggleAudioRecording}
-                    bars={recordingBars}
-                    disabled={disabled || isLoading}
-                    ariaLabel={t`Stop audio transcript recording`}
-                    statusLabel={t`Recording audio transcript`}
-                    testIds={{
-                      root: "chat-input-record-audio-transcript",
-                      waveform: "chat-input-record-audio-transcript-waveform",
-                      stopIcon: "chat-input-record-audio-transcript-stop-icon",
-                    }}
-                  />
-                ) : isRecordingUpload ? (
+                isRecordingUpload && (
                   <Button
                     type="button"
                     variant="secondary"
@@ -1897,33 +1965,10 @@ export const ChatInput = ({
                     data-testid="chat-input-record-audio-transcript"
                     aria-label={t`Finishing audio transcript`}
                   />
-                ) : (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    icon={
-                      <VoiceIcon className="text-[var(--theme-fg-primary)]" />
-                    }
-                    onClick={toggleAudioRecording}
-                    disabled={
-                      disabled ||
-                      isLoading ||
-                      isPendingResponse ||
-                      isUploading ||
-                      isFileButtonProcessing ||
-                      isAnyTokenLimitExceeded ||
-                      hasIncompleteAudioTranscription ||
-                      isDictating ||
-                      isDictationStarting ||
-                      isDictationCompleting
-                    }
-                    data-testid="chat-input-record-audio-transcript"
-                    aria-label={t`Record audio transcript`}
-                  />
-                ))}
+                )}
               {audioDictationEnabled &&
                 !isAudioMode &&
+                !showAudioModeButton &&
                 !isRecording &&
                 !isRecordingUpload &&
                 (isCapturingAudio || isDictating ? (
@@ -1937,8 +1982,6 @@ export const ChatInput = ({
                       isPendingResponse ||
                       isUploading ||
                       isFileButtonProcessing ||
-                      isRecording ||
-                      isRecordingUpload ||
                       isAnyTokenLimitExceeded
                     }
                     ariaLabel={
@@ -1979,8 +2022,6 @@ export const ChatInput = ({
                       isPendingResponse ||
                       isUploading ||
                       isFileButtonProcessing ||
-                      isRecording ||
-                      isRecordingUpload ||
                       isDictationCompleting ||
                       isAnyTokenLimitExceeded
                     }
@@ -2052,6 +2093,44 @@ export const ChatInput = ({
           )}
         </div>
       </form>
+      <ModalBase
+        isOpen={isAudioModeSelectorOpen}
+        onClose={closeAudioModeSelector}
+        title={t`Choose audio mode`}
+        contentClassName="max-w-md"
+      >
+        <fieldset className="space-y-3">
+          <legend className="text-sm font-medium text-theme-fg-primary">
+            {t`How should audio be handled?`}
+          </legend>
+          <div className="space-y-2">
+            {audioDictationEnabled && (
+              <RadioCard
+                name={audioModeChoiceGroupName}
+                value="conversation"
+                checked={isAudioMode}
+                onChange={startConversationalAudioMode}
+                label={t`Conversational mode`}
+                helper={t`Dictate into the message and send automatically after a natural pause.`}
+                icon={<VoiceIcon className="size-5" aria-hidden="true" />}
+                size="md"
+              />
+            )}
+            {audioTranscriptionEnabled && (
+              <RadioCard
+                name={audioModeChoiceGroupName}
+                value="transcript"
+                checked={isRecording || isRecordingUpload}
+                onChange={startTranscriptAudioMode}
+                label={t`Transcript mode`}
+                helper={t`Record an audio attachment, stop manually, then review and send.`}
+                icon={<PageIcon className="size-5" aria-hidden="true" />}
+                size="md"
+              />
+            )}
+          </div>
+        </fieldset>
+      </ModalBase>
       {showUsageAdvisory && aiUsageAdvisory && (
         <div className="relative h-10">
           <p className="absolute inset-0 flex items-center justify-center text-center text-xs text-theme-fg-muted">
