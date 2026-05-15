@@ -7,7 +7,6 @@ import {
   useCallback,
   useMemo,
   useImperativeHandle,
-  useId,
 } from "react";
 
 import { FileAttachmentsPreview } from "@/components/ui/FileUpload";
@@ -37,25 +36,19 @@ import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 import { resolveChatSendErrorMessage } from "@/utils/chatSendErrorMessage";
 import { createLogger } from "@/utils/debugLogger";
 
-import {
-  ArrowUpIcon,
-  LoadingIcon,
-  PageIcon,
-  StopIcon,
-  VoiceIcon,
-} from "../icons";
+import { ArrowUpIcon, LoadingIcon, StopIcon, VoiceIcon } from "../icons";
 import { ChatInputAudioModeButton } from "./ChatInputAudioModeButton";
 import { ChatInputTokenUsage } from "./ChatInputTokenUsage";
 import { FacetSelector } from "./FacetSelector";
 import { ModelSelector } from "./ModelSelector";
 import { WaveformButton } from "./WaveformButton";
 import { Button } from "../Controls/Button";
-import { RadioCard } from "../Controls/RadioCard";
 import { Alert } from "../Feedback/Alert";
 import { BudgetWarning } from "../Feedback/ChatWarnings/BudgetWarning";
-import { ModalBase } from "../Modal/ModalBase";
+import { toast } from "../Toast/toast";
 
 import type { ChatInputControlsHandle } from "./ChatInputControlsContext";
+import type { ToastAction } from "../Toast/types";
 import type { AudioDictationTranscriptChunk } from "@/hooks/audio/useAudioDictationRecorder";
 import type {
   FileUploadItem,
@@ -67,6 +60,8 @@ import type { ClipboardEvent as ReactClipboardEvent, Ref } from "react";
 
 const logger = createLogger("UI", "ChatInput");
 const AUDIO_TRANSCRIPTION_STATUS_POLL_INTERVAL_MS = 1000;
+const AUDIO_MODE_SELECTOR_TOAST_ID = "chat-input-audio-mode-selector-toast";
+const AUDIO_MODE_SELECTOR_DEDUPE_KEY = "chat-input-audio-mode-selector";
 
 type AudioTranscriptionAttachment = {
   fileId: string;
@@ -332,10 +327,8 @@ export const ChatInput = ({
 }: ChatInputPropsWithRef) => {
   const [message, setMessage] = useState("");
   const [internalIsAudioMode, setInternalIsAudioMode] = useState(false);
-  const [isAudioModeSelectorOpen, setIsAudioModeSelectorOpen] = useState(false);
   const [conversationAutoSendSignal, setConversationAutoSendSignal] =
     useState(0);
-  const audioModeChoiceGroupName = useId();
   const isAudioMode = controlledIsAudioMode ?? internalIsAudioMode;
   // Audio mode is the only piece of ChatInput state that needs to survive
   // the layout flip in `Chat` (empty-state shell → messages shell), which
@@ -1271,20 +1264,16 @@ export const ChatInput = ({
     isRecordingUpload ||
     isDictationCompleting;
 
-  const closeAudioModeSelector = useCallback(() => {
-    setIsAudioModeSelectorOpen(false);
-  }, []);
-
   const startConversationalAudioMode = useCallback(() => {
     if (!audioDictationEnabled) {
       return;
     }
 
+    toast.dismiss(AUDIO_MODE_SELECTOR_TOAST_ID);
     if (!isAudioMode) {
       setIsAudioMode(true);
     }
     pendingAutoSendRef.current = false;
-    setIsAudioModeSelectorOpen(false);
     toggleDictationForCurrentTarget();
   }, [
     audioDictationEnabled,
@@ -1298,9 +1287,9 @@ export const ChatInput = ({
       return;
     }
 
+    toast.dismiss(AUDIO_MODE_SELECTOR_TOAST_ID);
     pendingAutoSendRef.current = false;
     setIsAudioMode(false);
-    setIsAudioModeSelectorOpen(false);
     toggleAudioRecording();
   }, [
     audioTranscriptionEnabled,
@@ -1308,6 +1297,47 @@ export const ChatInput = ({
     isRecordingUpload,
     setIsAudioMode,
     toggleAudioRecording,
+  ]);
+
+  const showAudioModeChoiceToast = useCallback(() => {
+    const actions: ToastAction[] = [];
+
+    if (audioDictationEnabled) {
+      actions.push({
+        id: "conversation",
+        label: t`Conversational`,
+        variant: "primary",
+        onClick: startConversationalAudioMode,
+      });
+    }
+
+    if (audioTranscriptionEnabled) {
+      actions.push({
+        id: "transcript",
+        label: t`Transcript`,
+        variant: audioDictationEnabled ? "secondary" : "primary",
+        onClick: startTranscriptAudioMode,
+      });
+    }
+
+    if (actions.length === 0) {
+      return;
+    }
+
+    toast.custom({
+      id: AUDIO_MODE_SELECTOR_TOAST_ID,
+      variant: "info",
+      hideIcon: true,
+      dedupeKey: AUDIO_MODE_SELECTOR_DEDUPE_KEY,
+      title: t`Choose audio mode`,
+      description: t`Use conversational mode for auto-send after a pause, or transcript mode for a manual audio attachment.`,
+      actions,
+    });
+  }, [
+    audioDictationEnabled,
+    audioTranscriptionEnabled,
+    startConversationalAudioMode,
+    startTranscriptAudioMode,
   ]);
 
   // Conversational audio mode swaps the typing surface for dictation +
@@ -1323,7 +1353,7 @@ export const ChatInput = ({
     }
 
     if (shouldShowAudioModeSelector && !isAudioMode) {
-      setIsAudioModeSelectorOpen(true);
+      showAudioModeChoiceToast();
       return;
     }
 
@@ -1338,6 +1368,7 @@ export const ChatInput = ({
     isConversationalAudioActive,
     isAudioMode,
     setIsAudioMode,
+    showAudioModeChoiceToast,
     shouldShowAudioModeSelector,
     startConversationalAudioMode,
     startTranscriptAudioMode,
@@ -1346,7 +1377,7 @@ export const ChatInput = ({
 
   const exitAudioMode = useCallback(() => {
     pendingAutoSendRef.current = false;
-    setIsAudioModeSelectorOpen(false);
+    toast.dismiss(AUDIO_MODE_SELECTOR_TOAST_ID);
     shouldRestartAudioModeAfterResponseRef.current = false;
     audioModeRestartSawPendingResponseRef.current = false;
     if (isDictating || isDictationStarting) {
@@ -1367,7 +1398,7 @@ export const ChatInput = ({
 
   useEffect(() => {
     if (mode !== "compose") {
-      setIsAudioModeSelectorOpen(false);
+      toast.dismiss(AUDIO_MODE_SELECTOR_TOAST_ID);
     }
 
     if (mode !== "compose" && isAudioMode) {
@@ -1968,7 +1999,6 @@ export const ChatInput = ({
                 )}
               {audioDictationEnabled &&
                 !isAudioMode &&
-                !showAudioModeButton &&
                 !isRecording &&
                 !isRecordingUpload &&
                 (isCapturingAudio || isDictating ? (
@@ -2093,44 +2123,6 @@ export const ChatInput = ({
           )}
         </div>
       </form>
-      <ModalBase
-        isOpen={isAudioModeSelectorOpen}
-        onClose={closeAudioModeSelector}
-        title={t`Choose audio mode`}
-        contentClassName="max-w-md"
-      >
-        <fieldset className="space-y-3">
-          <legend className="text-sm font-medium text-theme-fg-primary">
-            {t`How should audio be handled?`}
-          </legend>
-          <div className="space-y-2">
-            {audioDictationEnabled && (
-              <RadioCard
-                name={audioModeChoiceGroupName}
-                value="conversation"
-                checked={isAudioMode}
-                onChange={startConversationalAudioMode}
-                label={t`Conversational mode`}
-                helper={t`Dictate into the message and send automatically after a natural pause.`}
-                icon={<VoiceIcon className="size-5" aria-hidden="true" />}
-                size="md"
-              />
-            )}
-            {audioTranscriptionEnabled && (
-              <RadioCard
-                name={audioModeChoiceGroupName}
-                value="transcript"
-                checked={isRecording || isRecordingUpload}
-                onChange={startTranscriptAudioMode}
-                label={t`Transcript mode`}
-                helper={t`Record an audio attachment, stop manually, then review and send.`}
-                icon={<PageIcon className="size-5" aria-hidden="true" />}
-                size="md"
-              />
-            )}
-          </div>
-        </fieldset>
-      </ModalBase>
       {showUsageAdvisory && aiUsageAdvisory && (
         <div className="relative h-10">
           <p className="absolute inset-0 flex items-center justify-center text-center text-xs text-theme-fg-muted">

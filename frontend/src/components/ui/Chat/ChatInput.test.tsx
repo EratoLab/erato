@@ -8,6 +8,7 @@ import { componentRegistry } from "@/config/componentRegistry";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
 import { ChatInput } from "./ChatInput";
+import { useToastStore } from "../Toast/toastStore";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Messages } from "@lingui/core";
@@ -161,11 +162,9 @@ vi.mock("../Feedback/ChatWarnings/BudgetWarning", () => ({
 
 vi.mock("../icons", () => ({
   ArrowUpIcon: () => <span>send</span>,
-  CloseIcon: () => <span>close</span>,
   LoadingIcon: (props: HTMLAttributes<HTMLSpanElement>) => (
     <span {...props}>loading</span>
   ),
-  PageIcon: () => <span>page</span>,
   StopIcon: () => <span>stop</span>,
   VoiceIcon: () => <span>record</span>,
 }));
@@ -181,6 +180,7 @@ describe("ChatInput", () => {
       removeItem: vi.fn(),
       clear: vi.fn(),
     });
+    useToastStore.setState({ toasts: [] });
 
     const { i18n } = await import("@lingui/core");
     i18n.load("en", enMessages as unknown as Messages);
@@ -955,7 +955,7 @@ describe("ChatInput", () => {
     expect(screen.getByTestId("chat-input-save-edit")).toBeDisabled();
   });
 
-  it("shows the dictation button for adding audio to an existing text draft", async () => {
+  it("shows the dictation button when audio dictation is enabled", async () => {
     const queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false },
@@ -975,10 +975,6 @@ describe("ChatInput", () => {
         </I18nProvider>
       </QueryClientProvider>,
     );
-
-    fireEvent.change(screen.getByPlaceholderText("Type a message..."), {
-      target: { value: "Existing draft" },
-    });
 
     expect(screen.getByTestId("chat-input-record-audio")).toBeInTheDocument();
     expect(screen.getByTestId("chat-input-record-audio")).toHaveAccessibleName(
@@ -1474,20 +1470,32 @@ describe("ChatInput", () => {
         </QueryClientProvider>,
       );
 
-      expect(
-        screen.queryByTestId("chat-input-record-audio"),
-      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("chat-input-record-audio")).toBeInTheDocument();
       expect(
         screen.queryByTestId("chat-input-record-audio-transcript"),
       ).not.toBeInTheDocument();
 
       fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
 
-      expect(screen.getByRole("dialog")).toHaveTextContent("Choose audio mode");
-      expect(screen.getByLabelText(/Conversational mode/)).toBeInTheDocument();
-      expect(screen.getByLabelText(/Transcript mode/)).toBeInTheDocument();
+      const audioModeToast = useToastStore
+        .getState()
+        .toasts.find(
+          (toast) => toast.id === "chat-input-audio-mode-selector-toast",
+        );
+      expect(audioModeToast).toMatchObject({
+        variant: "info",
+        hideIcon: true,
+        dedupeKey: "chat-input-audio-mode-selector",
+        title: "Choose audio mode",
+      });
+      expect(audioModeToast?.actions?.map((action) => action.label)).toEqual([
+        "Conversational",
+        "Transcript",
+      ]);
 
-      fireEvent.click(screen.getByLabelText(/Conversational mode/));
+      act(() => {
+        audioModeToast?.actions?.[0]?.onClick();
+      });
 
       expect(toggleDictation).toHaveBeenCalledTimes(1);
       expect(toggleAudioRecording).not.toHaveBeenCalled();
@@ -1545,7 +1553,14 @@ describe("ChatInput", () => {
       );
 
       fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
-      fireEvent.click(screen.getByLabelText(/Transcript mode/));
+      const audioModeToast = useToastStore
+        .getState()
+        .toasts.find(
+          (toast) => toast.id === "chat-input-audio-mode-selector-toast",
+        );
+      act(() => {
+        audioModeToast?.actions?.[1]?.onClick();
+      });
 
       expect(toggleAudioRecording).toHaveBeenCalledTimes(1);
       expect(toggleDictation).not.toHaveBeenCalled();
@@ -1840,9 +1855,7 @@ describe("ChatInput", () => {
         </QueryClientProvider>,
       );
 
-      expect(
-        screen.queryByTestId("chat-input-record-audio"),
-      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("chat-input-record-audio")).toBeInTheDocument();
 
       fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
 
@@ -2000,7 +2013,14 @@ describe("ChatInput", () => {
       expect(screen.getByTestId("model-selector")).toBeInTheDocument();
 
       fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
-      fireEvent.click(screen.getByLabelText(/Conversational mode/));
+      const audioModeToast = useToastStore
+        .getState()
+        .toasts.find(
+          (toast) => toast.id === "chat-input-audio-mode-selector-toast",
+        );
+      act(() => {
+        audioModeToast?.actions?.[0]?.onClick();
+      });
 
       expect(screen.queryByTestId("model-selector")).not.toBeInTheDocument();
     });
@@ -2032,7 +2052,14 @@ describe("ChatInput", () => {
       );
 
       fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
-      fireEvent.click(screen.getByLabelText(/Conversational mode/));
+      const audioModeToast = useToastStore
+        .getState()
+        .toasts.find(
+          (toast) => toast.id === "chat-input-audio-mode-selector-toast",
+        );
+      act(() => {
+        audioModeToast?.actions?.[0]?.onClick();
+      });
 
       expect(screen.getByTestId("model-selector")).toBeInTheDocument();
     });
