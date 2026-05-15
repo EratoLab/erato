@@ -1256,6 +1256,26 @@ describe("ChatInput", () => {
   });
 
   describe("audio mode button (conversational dictation)", () => {
+    const createSubmitHandlerThatSends =
+      (
+        message: string,
+        attachedFiles: FileUploadItem[],
+        innerOnSendMessage: (message: string, inputFileIds?: string[]) => void,
+        isLoading: boolean,
+        disabled: boolean,
+        resetMessage: () => void,
+      ) =>
+      (event: FormEvent) => {
+        event.preventDefault();
+        if (isLoading || disabled) return;
+        const trimmed = message.trim();
+        const fileIds = attachedFiles.map((file) => file.id);
+        if (trimmed || fileIds.length > 0) {
+          innerOnSendMessage(trimmed, fileIds.length > 0 ? fileIds : undefined);
+          resetMessage();
+        }
+      };
+
     it("shows the audio-mode button instead of send when input is empty", async () => {
       const queryClient = new QueryClient({
         defaultOptions: {
@@ -1379,7 +1399,7 @@ describe("ChatInput", () => {
       expect(screen.getByTestId("chat-input-save-edit")).toBeInTheDocument();
     });
 
-    it("invokes toggleDictation when the audio-mode button is clicked", async () => {
+    it("starts conversational dictation only after audio mode is rendered", async () => {
       const queryClient = new QueryClient({
         defaultOptions: {
           queries: { retry: false },
@@ -1387,6 +1407,7 @@ describe("ChatInput", () => {
         },
       });
       const toggleDictation = vi.fn();
+      const onAudioModeChange = vi.fn();
       mockUseAudioDictationFeature.mockReturnValue({
         enabled: true,
         maxRecordingDurationSeconds: 1200,
@@ -1403,20 +1424,45 @@ describe("ChatInput", () => {
       });
 
       const { i18n } = await import("@lingui/core");
-      render(
+      const { rerender } = render(
         <QueryClientProvider client={queryClient}>
           <I18nProvider i18n={i18n}>
             <ChatInput
               onSendMessage={vi.fn()}
               controlledIsAudioMode={false}
-              onControlledIsAudioModeChange={vi.fn()}
+              onControlledIsAudioModeChange={onAudioModeChange}
             />
           </I18nProvider>
         </QueryClientProvider>,
       );
 
       fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
-      expect(toggleDictation).toHaveBeenCalledTimes(1);
+      expect(onAudioModeChange).toHaveBeenCalledWith(true);
+      expect(toggleDictation).not.toHaveBeenCalled();
+      expect(
+        mockUseAudioDictationRecorder.mock.calls.at(-1)?.[0],
+      ).toMatchObject({
+        vadAutoStopEnabled: false,
+      });
+
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput
+              onSendMessage={vi.fn()}
+              controlledIsAudioMode={true}
+              onControlledIsAudioModeChange={onAudioModeChange}
+            />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(1));
+      expect(
+        mockUseAudioDictationRecorder.mock.calls.at(-1)?.[0],
+      ).toMatchObject({
+        vadAutoStopEnabled: true,
+      });
     });
 
     it("asks which audio mode to start when transcript and conversational modes are available", async () => {
@@ -1426,7 +1472,12 @@ describe("ChatInput", () => {
           mutations: { retry: false },
         },
       });
-      const toggleDictation = vi.fn();
+      let vadAutoStopEnabledAtToggle: boolean | undefined;
+      const toggleDictation = vi.fn(() => {
+        vadAutoStopEnabledAtToggle =
+          mockUseAudioDictationRecorder.mock.calls.at(-1)?.[0]
+            ?.vadAutoStopEnabled;
+      });
       const toggleAudioRecording = vi.fn();
       mockUseAudioTranscriptionFeature.mockReturnValue({
         enabled: true,
@@ -1497,7 +1548,8 @@ describe("ChatInput", () => {
         audioModeToast?.actions?.[0]?.onClick();
       });
 
-      expect(toggleDictation).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(1));
+      expect(vadAutoStopEnabledAtToggle).toBe(true);
       expect(toggleAudioRecording).not.toHaveBeenCalled();
     });
 
@@ -1825,7 +1877,7 @@ describe("ChatInput", () => {
 
       fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
 
-      expect(toggleDictation).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(1));
       expect(
         screen.queryByPlaceholderText("Type a message..."),
       ).not.toBeInTheDocument();
@@ -2076,31 +2128,7 @@ describe("ChatInput", () => {
         HTMLFormElement.prototype,
         "requestSubmit",
       );
-      const createSubmitHandler =
-        (
-          message: string,
-          attachedFiles: FileUploadItem[],
-          innerOnSendMessage: (
-            message: string,
-            inputFileIds?: string[],
-          ) => void,
-          isLoading: boolean,
-          disabled: boolean,
-          resetMessage: () => void,
-        ) =>
-        (event: FormEvent) => {
-          event.preventDefault();
-          if (isLoading || disabled) return;
-          const trimmed = message.trim();
-          const fileIds = attachedFiles.map((file) => file.id);
-          if (trimmed || fileIds.length > 0) {
-            innerOnSendMessage(
-              trimmed,
-              fileIds.length > 0 ? fileIds : undefined,
-            );
-            resetMessage();
-          }
-        };
+      const createSubmitHandler = createSubmitHandlerThatSends;
       mockUseAudioDictationFeature.mockReturnValue({
         enabled: true,
         maxRecordingDurationSeconds: 1200,
@@ -2169,6 +2197,194 @@ describe("ChatInput", () => {
         vadAutoStopEnabled: true,
       });
       requestSubmitSpy.mockRestore();
+    });
+
+    it("waits for the final dictation text after conversational VAD stops", async () => {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      const toggleDictation = vi.fn();
+      const onSendMessage = vi.fn();
+      const requestSubmitSpy = vi.spyOn(
+        HTMLFormElement.prototype,
+        "requestSubmit",
+      );
+      const createSubmitHandler = createSubmitHandlerThatSends;
+      let isDictationCompleting = false;
+      let latestDictationOptions:
+        | {
+            vadAutoStopEnabled?: boolean;
+            onVadAutoStop?: () => void;
+            onTranscriptChunk?: (chunk: {
+              chunkIndex: number;
+              transcript: string;
+            }) => void;
+          }
+        | undefined;
+      mockUseAudioDictationFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
+      mockUseAudioDictationRecorder.mockImplementation((options) => {
+        latestDictationOptions = options as typeof latestDictationOptions;
+        return {
+          isDictating: false,
+          isDictationStarting: false,
+          isDictationCompleting,
+          isCapturingAudio: false,
+          dictationError: null,
+          setDictationError: vi.fn(),
+          dictationBars: [2, 2, 2, 2, 2],
+          toggleDictation,
+        };
+      });
+      mockUseChatInputHandlers.mockReturnValue({
+        attachedFiles: [],
+        fileError: null,
+        setFileError: vi.fn(),
+        handleFilesUploaded: vi.fn(),
+        handleRemoveFile: vi.fn(),
+        handleRemoveAllFiles: vi.fn(),
+        setAttachedFiles: vi.fn(),
+        createSubmitHandler,
+      });
+
+      const { i18n } = await import("@lingui/core");
+      const { rerender } = render(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={onSendMessage} />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+
+      fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
+      await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(1));
+      expect(latestDictationOptions).toMatchObject({
+        vadAutoStopEnabled: true,
+      });
+
+      isDictationCompleting = true;
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={onSendMessage} />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+
+      await act(async () => {
+        latestDictationOptions?.onVadAutoStop?.();
+      });
+      expect(requestSubmitSpy).not.toHaveBeenCalled();
+
+      await act(async () => {
+        latestDictationOptions?.onTranscriptChunk?.({
+          chunkIndex: 0,
+          transcript: "hello after pause",
+        });
+      });
+      expect(requestSubmitSpy).not.toHaveBeenCalled();
+
+      isDictationCompleting = false;
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={onSendMessage} />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => expect(requestSubmitSpy).toHaveBeenCalledTimes(1));
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "hello after pause",
+        undefined,
+        undefined,
+        [],
+      );
+      requestSubmitSpy.mockRestore();
+    });
+
+    it("drops stale conversational auto-send when no final dictation text arrives", async () => {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      const toggleDictation = vi.fn();
+      const onSendMessage = vi.fn();
+      const requestSubmitSpy = vi.spyOn(
+        HTMLFormElement.prototype,
+        "requestSubmit",
+      );
+      const createSubmitHandler = createSubmitHandlerThatSends;
+      mockUseAudioDictationFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
+      mockUseAudioDictationRecorder.mockReturnValue({
+        isDictating: false,
+        isDictationStarting: false,
+        isDictationCompleting: false,
+        isCapturingAudio: false,
+        dictationError: null,
+        setDictationError: vi.fn(),
+        dictationBars: [2, 2, 2, 2, 2],
+        toggleDictation,
+      });
+      mockUseChatInputHandlers.mockReturnValue({
+        attachedFiles: [],
+        fileError: null,
+        setFileError: vi.fn(),
+        handleFilesUploaded: vi.fn(),
+        handleRemoveFile: vi.fn(),
+        handleRemoveAllFiles: vi.fn(),
+        setAttachedFiles: vi.fn(),
+        createSubmitHandler,
+      });
+
+      const { i18n } = await import("@lingui/core");
+      render(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={onSendMessage} />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+
+      fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
+      await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(1));
+      const dictationOptions =
+        mockUseAudioDictationRecorder.mock.calls.at(-1)?.[0];
+
+      vi.useFakeTimers();
+      try {
+        await act(async () => {
+          dictationOptions.onVadAutoStop();
+        });
+        expect(requestSubmitSpy).not.toHaveBeenCalled();
+
+        act(() => {
+          vi.advanceTimersByTime(8000);
+        });
+
+        await act(async () => {
+          dictationOptions.onTranscriptChunk({
+            chunkIndex: 0,
+            transcript: "late transcript",
+          });
+        });
+
+        expect(requestSubmitSpy).not.toHaveBeenCalled();
+        expect(onSendMessage).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+        requestSubmitSpy.mockRestore();
+      }
     });
 
     it("does not auto-submit transcript attachments after manual transcript stop", async () => {

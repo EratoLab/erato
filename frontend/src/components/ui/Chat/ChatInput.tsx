@@ -62,6 +62,7 @@ const logger = createLogger("UI", "ChatInput");
 const AUDIO_TRANSCRIPTION_STATUS_POLL_INTERVAL_MS = 1000;
 const AUDIO_MODE_SELECTOR_TOAST_ID = "chat-input-audio-mode-selector-toast";
 const AUDIO_MODE_SELECTOR_DEDUPE_KEY = "chat-input-audio-mode-selector";
+const CONVERSATIONAL_AUTO_SEND_EMPTY_TRANSCRIPT_TIMEOUT_MS = 8000;
 
 type AudioTranscriptionAttachment = {
   fileId: string;
@@ -327,6 +328,7 @@ export const ChatInput = ({
 }: ChatInputPropsWithRef) => {
   const [message, setMessage] = useState("");
   const [internalIsAudioMode, setInternalIsAudioMode] = useState(false);
+  const [conversationStartSignal, setConversationStartSignal] = useState(0);
   const [conversationAutoSendSignal, setConversationAutoSendSignal] =
     useState(0);
   const isAudioMode = controlledIsAudioMode ?? internalIsAudioMode;
@@ -352,6 +354,10 @@ export const ChatInput = ({
   // turn ended, and the dictated text should be submitted after the final
   // dictation chunk lands.
   const pendingAutoSendRef = useRef(false);
+  const pendingAutoSendTimeoutRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
+  const pendingConversationalStartRef = useRef(false);
   const shouldRestartAudioModeAfterResponseRef = useRef(false);
   const audioModeRestartSawPendingResponseRef = useRef(false);
   const previousModeRef = useRef<"compose" | "edit">(mode);
@@ -387,10 +393,21 @@ export const ChatInput = ({
     [messagingError],
   );
   const wasPendingResponseRef = useRef(isPendingResponse);
+
+  const clearPendingAutoSendTimeout = useCallback(() => {
+    if (pendingAutoSendTimeoutRef.current === null) {
+      return;
+    }
+
+    clearTimeout(pendingAutoSendTimeoutRef.current);
+    pendingAutoSendTimeoutRef.current = null;
+  }, []);
+
   const handleConversationVadAutoStop = useCallback(() => {
+    clearPendingAutoSendTimeout();
     pendingAutoSendRef.current = true;
     setConversationAutoSendSignal((signal) => signal + 1);
-  }, []);
+  }, [clearPendingAutoSendTimeout]);
 
   // Combine loading states
   const isLoading = propIsLoading ?? isMessagingLoading;
@@ -1270,15 +1287,72 @@ export const ChatInput = ({
     }
 
     toast.dismiss(AUDIO_MODE_SELECTOR_TOAST_ID);
+    clearPendingAutoSendTimeout();
+    pendingAutoSendRef.current = false;
+    pendingConversationalStartRef.current = true;
+    setConversationStartSignal((signal) => signal + 1);
     if (!isAudioMode) {
       setIsAudioMode(true);
     }
-    pendingAutoSendRef.current = false;
-    toggleDictationForCurrentTarget();
   }, [
     audioDictationEnabled,
+    clearPendingAutoSendTimeout,
     isAudioMode,
     setIsAudioMode,
+  ]);
+
+  useEffect(() => {
+    if (!pendingConversationalStartRef.current) {
+      return;
+    }
+    if (!audioDictationEnabled || mode !== "compose") {
+      pendingConversationalStartRef.current = false;
+      return;
+    }
+    if (!isAudioMode) {
+      return;
+    }
+    if (
+      disabled ||
+      isLoading ||
+      isUploading ||
+      isFileButtonProcessing ||
+      isAnyTokenLimitExceeded ||
+      isRecording ||
+      isRecordingUpload ||
+      hasIncompleteAudioTranscription ||
+      attachedFiles.length > 0 ||
+      message.trim().length > 0 ||
+      isCapturingAudio ||
+      isDictating ||
+      isDictationStarting ||
+      isDictationCompleting
+    ) {
+      pendingConversationalStartRef.current = false;
+      return;
+    }
+
+    pendingConversationalStartRef.current = false;
+    toggleDictationForCurrentTarget();
+  }, [
+    attachedFiles.length,
+    audioDictationEnabled,
+    conversationStartSignal,
+    disabled,
+    hasIncompleteAudioTranscription,
+    isAnyTokenLimitExceeded,
+    isAudioMode,
+    isCapturingAudio,
+    isDictating,
+    isDictationCompleting,
+    isDictationStarting,
+    isFileButtonProcessing,
+    isLoading,
+    isRecording,
+    isRecordingUpload,
+    isUploading,
+    message,
+    mode,
     toggleDictationForCurrentTarget,
   ]);
 
@@ -1288,11 +1362,14 @@ export const ChatInput = ({
     }
 
     toast.dismiss(AUDIO_MODE_SELECTOR_TOAST_ID);
+    clearPendingAutoSendTimeout();
     pendingAutoSendRef.current = false;
+    pendingConversationalStartRef.current = false;
     setIsAudioMode(false);
     toggleAudioRecording();
   }, [
     audioTranscriptionEnabled,
+    clearPendingAutoSendTimeout,
     isRecording,
     isRecordingUpload,
     setIsAudioMode,
@@ -1346,7 +1423,9 @@ export const ChatInput = ({
   // reviewed or sent explicitly.
   const handleAudioModeButtonToggle = useCallback(() => {
     if (isConversationalAudioActive) {
+      clearPendingAutoSendTimeout();
       pendingAutoSendRef.current = false;
+      pendingConversationalStartRef.current = false;
       toggleDictationForCurrentTarget();
       setIsAudioMode(false);
       return;
@@ -1365,6 +1444,7 @@ export const ChatInput = ({
     startTranscriptAudioMode();
   }, [
     audioDictationEnabled,
+    clearPendingAutoSendTimeout,
     isConversationalAudioActive,
     isAudioMode,
     setIsAudioMode,
@@ -1376,7 +1456,9 @@ export const ChatInput = ({
   ]);
 
   const exitAudioMode = useCallback(() => {
+    clearPendingAutoSendTimeout();
     pendingAutoSendRef.current = false;
+    pendingConversationalStartRef.current = false;
     toast.dismiss(AUDIO_MODE_SELECTOR_TOAST_ID);
     shouldRestartAudioModeAfterResponseRef.current = false;
     audioModeRestartSawPendingResponseRef.current = false;
@@ -1388,6 +1470,7 @@ export const ChatInput = ({
     }
     setIsAudioMode(false);
   }, [
+    clearPendingAutoSendTimeout,
     isDictating,
     isDictationStarting,
     isRecording,
@@ -1402,7 +1485,9 @@ export const ChatInput = ({
     }
 
     if (mode !== "compose" && isAudioMode) {
+      clearPendingAutoSendTimeout();
       pendingAutoSendRef.current = false;
+      pendingConversationalStartRef.current = false;
       shouldRestartAudioModeAfterResponseRef.current = false;
       audioModeRestartSawPendingResponseRef.current = false;
       if (isDictating || isDictationStarting) {
@@ -1415,6 +1500,7 @@ export const ChatInput = ({
     isAudioMode,
     isDictating,
     isDictationStarting,
+    clearPendingAutoSendTimeout,
     setIsAudioMode,
     toggleDictationForCurrentTarget,
   ]);
@@ -1425,11 +1511,19 @@ export const ChatInput = ({
   // chunk resolves.
   useEffect(() => {
     if (recordingError || dictationError) {
+      clearPendingAutoSendTimeout();
       pendingAutoSendRef.current = false;
+      pendingConversationalStartRef.current = false;
       shouldRestartAudioModeAfterResponseRef.current = false;
       audioModeRestartSawPendingResponseRef.current = false;
     }
-  }, [dictationError, recordingError]);
+  }, [clearPendingAutoSendTimeout, dictationError, recordingError]);
+
+  useEffect(() => {
+    return () => {
+      clearPendingAutoSendTimeout();
+    };
+  }, [clearPendingAutoSendTimeout]);
 
   // Auto-send latch: VAD marks the spoken turn complete, then dictation
   // finishes its final chunk. Only then do we submit the text draft.
@@ -1438,6 +1532,8 @@ export const ChatInput = ({
       return;
     }
     if (!isAudioMode) {
+      clearPendingAutoSendTimeout();
+      pendingAutoSendRef.current = false;
       return;
     }
     if (
@@ -1461,12 +1557,22 @@ export const ChatInput = ({
       return;
     }
     if (attachedFiles.length > 0) {
-      return;
-    }
-    if (!message.trim()) {
+      clearPendingAutoSendTimeout();
       pendingAutoSendRef.current = false;
       return;
     }
+    if (!message.trim()) {
+      // Dictation final text can arrive just after VAD stops. Keep the latch
+      // briefly, but do not let a stale speech_end auto-submit future typing.
+      if (pendingAutoSendTimeoutRef.current === null) {
+        pendingAutoSendTimeoutRef.current = setTimeout(() => {
+          pendingAutoSendTimeoutRef.current = null;
+          pendingAutoSendRef.current = false;
+        }, CONVERSATIONAL_AUTO_SEND_EMPTY_TRANSCRIPT_TIMEOUT_MS);
+      }
+      return;
+    }
+    clearPendingAutoSendTimeout();
     pendingAutoSendRef.current = false;
     shouldRestartAudioModeAfterResponseRef.current = true;
     audioModeRestartSawPendingResponseRef.current = false;
@@ -1486,6 +1592,7 @@ export const ChatInput = ({
     hasIncompleteAudioTranscription,
     attachedFiles.length,
     conversationAutoSendSignal,
+    clearPendingAutoSendTimeout,
   ]);
 
   useEffect(() => {
