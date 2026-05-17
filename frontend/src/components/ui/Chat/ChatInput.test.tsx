@@ -322,6 +322,62 @@ describe("ChatInput", () => {
     otherButton.remove();
   });
 
+  it("does not leak the previous chat's draft into a newly opened chat", async () => {
+    // Regression: switching chatId caused the persist effect to write the
+    // outgoing message under the *new* session id before the switch effect
+    // loaded the incoming draft, polluting the destination chat with the
+    // previous chat's text. The persist effect now writes through a ref
+    // that the switch effect advances atomically with the swap.
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const onSendMessage = vi.fn();
+    const { i18n } = await import("@lingui/core");
+
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput onSendMessage={onSendMessage} chatId="chat-a" />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    const textarea =
+      screen.getByPlaceholderText<HTMLTextAreaElement>("Type a message...");
+
+    await act(async () => {
+      fireEvent.change(textarea, { target: { value: "chat-a draft text" } });
+    });
+    expect(textarea.value).toBe("chat-a draft text");
+
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput onSendMessage={onSendMessage} chatId="chat-b" />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(textarea.value).toBe("");
+    });
+
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput onSendMessage={onSendMessage} chatId="chat-a" />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(textarea.value).toBe("chat-a draft text");
+    });
+  });
+
   it("renders the AI usage advisory when enabled", async () => {
     const queryClient = new QueryClient({
       defaultOptions: {
