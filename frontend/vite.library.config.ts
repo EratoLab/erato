@@ -3,6 +3,8 @@ import react from "@vitejs/plugin-react";
 import { lingui } from "@lingui/vite-plugin";
 import path from "node:path";
 
+import { createVoiceRuntimePackageAssetsPlugin } from "./vite.voice-runtime-assets";
+
 export default defineConfig(({ mode }) => {
   const isLibraryDevBuild = mode === "library-dev";
 
@@ -14,6 +16,10 @@ export default defineConfig(({ mode }) => {
         },
       }),
       lingui(),
+      createVoiceRuntimePackageAssetsPlugin({
+        rootDir: __dirname,
+        outputBasePath: "voice-runtime",
+      }),
     ],
     resolve: {
       alias: {

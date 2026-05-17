@@ -20,6 +20,7 @@ The main web frontend is served from:
 - `/public/common/assets`
 - `/public/common/locales/<lang>/messages.json`
 - `/public/common/custom-theme/<theme>/...`
+- `/public/common/voice-runtime/...`
 - `/public/favicon.ico`
 - `/public/favicon.svg`
 
@@ -36,6 +37,7 @@ Each additional frontend platform uses its own namespace:
 - `/public/<platform>/assets`
 - `/public/<platform>/locales/<lang>/messages.json`
 - `/public/<platform>/custom-theme/<theme>/...`
+- `/public/<platform>/voice-runtime/...`
 
 For the Office add-in, this is currently:
 
@@ -58,6 +60,7 @@ During build:
 - general static files from `frontend/public` are emitted under `out/public/common/...`
 - compiled Lingui catalogs from `frontend/src/locales` are emitted under `out/public/common/locales/...`
 - theme files from `frontend/public/custom-theme/<theme>` are emitted under `out/public/common/custom-theme/<theme>/...`
+- voice runtime files from `frontend/public/voice-runtime` are emitted under `out/public/common/voice-runtime/...`
 
 This means the authored source tree stays simple, while the built output matches the runtime `/public/common/...` structure.
 
@@ -73,6 +76,7 @@ During build:
 - add-in assets are emitted under `dist/assets`
 - the bundle base path is `/public/platform-office-addin/` in production
 - compiled Lingui catalogs are emitted so they are available at `/public/platform-office-addin/locales/<lang>/messages.json`
+- shared `@erato/frontend` voice runtime files are emitted under `/public/platform-office-addin/voice-runtime/...`
 
 ## i18n Model
 

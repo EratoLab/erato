@@ -72,6 +72,25 @@ export {
   getValidLocale,
   i18n,
 } from "@/lib/i18n";
+export {
+  VoiceRuntimeProvider,
+  getDefaultVoiceRuntimeBasePath,
+  resolveVoiceRuntimeAssets,
+  createRicky0123VadAssetOptions,
+  useVoiceRuntimeAssets,
+  type Ricky0123VadAssetOptions,
+  type Ricky0123VadRuntimeAssets,
+  type VoiceVadEngine,
+  type VoiceVadEngineOptions,
+  type VoiceVadEvent,
+  type VoiceVadEventListener,
+  type VoiceVadFrame,
+  type VoiceVadFrameProbabilities,
+  type VoiceVadModel,
+  type VoiceRuntimeAssetOverrides,
+  type VoiceRuntimeAssets,
+  type VoiceRuntimeProviderProps,
+} from "@/lib/voice-runtime";
 export { env, type Env } from "@/app/env";
 export {
   useChat,

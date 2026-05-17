@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "engines": {
+    "ricky0123Vad": {
+      "baseAssetPath": "ricky0123-vad-web/",
+      "onnxWASMBasePath": "onnxruntime-web/",
+      "worklet": "ricky0123-vad-web/vad.worklet.bundle.min.js",
+      "sileroVadLegacyModel": "ricky0123-vad-web/silero_vad_legacy.onnx",
+      "sileroVadV5Model": "ricky0123-vad-web/silero_vad_v5.onnx"
+    }
+  }
+}

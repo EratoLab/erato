@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import type { ServerResponse } from "node:http";
 import path from "node:path";
-import { Readable } from "node:stream";
 
 import { lingui } from "@lingui/vite-plugin";
 import react from "@vitejs/plugin-react";
@@ -12,6 +11,12 @@ import {
   type Plugin,
   type ViteDevServer,
 } from "vite";
+
+import {
+  cleanVoiceRuntimePackageAssetOutput,
+  emitVoiceRuntimePackageAssets,
+  resolveVoiceRuntimePackageAssetFile,
+} from "./vite.voice-runtime-assets";
 
 // Custom plugin to copy index.html as 404.html for SPA routing
 const copy404Plugin = ({ silent = false }: { silent?: boolean } = {}) => {
@@ -59,10 +64,15 @@ const contentTypeForPath = (filePath: string): string => {
   switch (extension) {
     case ".css":
       return "text/css; charset=utf-8";
+    case ".js":
+    case ".mjs":
+      return "text/javascript; charset=utf-8";
     case ".ico":
       return "image/x-icon";
     case ".json":
       return "application/json; charset=utf-8";
+    case ".onnx":
+      return "application/octet-stream";
     case ".otf":
       return "font/otf";
     case ".png":
@@ -75,6 +85,8 @@ const contentTypeForPath = (filePath: string): string => {
       return "font/woff";
     case ".woff2":
       return "font/woff2";
+    case ".wasm":
+      return "application/wasm";
     default:
       return "application/octet-stream";
   }
@@ -127,6 +139,16 @@ const resolveStructuredPublicFile = (
     const relativePath = normalizedPath.replace("/public/common/locales/", "");
     return path.join(sourceLocalesDir, relativePath);
   }
+  if (normalizedPath.startsWith("/public/common/voice-runtime/")) {
+    const runtimePackageAssetPath = resolveVoiceRuntimePackageAssetFile(
+      projectRootDir,
+      normalizedPath,
+      "/public/common/voice-runtime",
+    );
+    if (runtimePackageAssetPath) {
+      return runtimePackageAssetPath;
+    }
+  }
   if (normalizedPath.startsWith("/public/common/custom-theme/")) {
     const relativePath = normalizedPath.replace(
       "/public/common/custom-theme/",
@@ -164,7 +186,8 @@ const sendStructuredPublicFile = (
 
   response.statusCode = 200;
   response.setHeader("Content-Type", contentTypeForPath(resolvedPath));
-  Readable.from(fs.readFileSync(resolvedPath)).pipe(response);
+  response.setHeader("X-Content-Type-Options", "nosniff");
+  fs.createReadStream(resolvedPath).pipe(response);
   return true;
 };
 
@@ -189,12 +212,13 @@ const stagePublicLayoutPlugin = (): Plugin => {
         next();
       });
     },
-    generateBundle() {
+    generateBundle(outputOptions) {
       for (const filePath of walkFiles(publicDir)) {
         const relativePath = path.relative(publicDir, filePath);
         if (
           relativePath.startsWith(`common${path.sep}`) ||
-          relativePath.startsWith(`public${path.sep}`)
+          relativePath.startsWith(`public${path.sep}`) ||
+          relativePath.startsWith(`voice-runtime${path.sep}`)
         ) {
           continue;
         }
@@ -214,6 +238,13 @@ const stagePublicLayoutPlugin = (): Plugin => {
           source: fs.readFileSync(filePath),
         });
       }
+
+      const voiceRuntimeOutputBasePath = "public/common/voice-runtime";
+      cleanVoiceRuntimePackageAssetOutput(
+        outputOptions.dir,
+        voiceRuntimeOutputBasePath,
+      );
+      emitVoiceRuntimePackageAssets(this, rootDir, voiceRuntimeOutputBasePath);
 
       for (const filePath of walkFiles(sourceLocalesDir)) {
         if (!filePath.endsWith(`${path.sep}messages.json`)) {
