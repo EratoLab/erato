@@ -503,7 +503,6 @@ export const ChatInput = ({
     setAttachedFiles,
   });
 
-
   const appendDictationTranscript = useCallback(
     ({ chunkIndex, transcript }: AudioDictationTranscriptChunk) => {
       const target = dictationTargetRef.current;
@@ -520,10 +519,7 @@ export const ChatInput = ({
         target.nextChunkIndex += 1;
 
         if (target.mode === "compose") {
-          if (
-            mode === "compose" &&
-            target.sessionId === getActiveSessionId()
-          ) {
+          if (mode === "compose" && target.sessionId === getActiveSessionId()) {
             setMessage((current) =>
               appendDictationText(current, nextTranscript),
             );

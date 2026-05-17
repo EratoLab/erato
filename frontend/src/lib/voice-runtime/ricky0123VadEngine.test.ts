@@ -182,9 +182,7 @@ describe("Ricky0123VadEngine", () => {
     });
 
     expect(vadMock.fakeVad.processFrame).toHaveBeenCalledTimes(1);
-    expect(
-      (vadMock.fakeVad.processFrame.mock.calls[0][0]).length,
-    ).toBe(512);
+    expect(vadMock.fakeVad.processFrame.mock.calls[0][0].length).toBe(512);
   });
 
   it("emits speech lifecycle events from MicVAD callbacks", async () => {

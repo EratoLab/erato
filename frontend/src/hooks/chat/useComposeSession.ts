@@ -37,7 +37,9 @@ export function useComposeSession({
   chatId: string | null | undefined;
 }) {
   const sessionIdByChatKeyRef = useRef<Map<string, string>>(new Map());
-  const draftsBySessionIdRef = useRef<Map<string, ComposeDraftState>>(new Map());
+  const draftsBySessionIdRef = useRef<Map<string, ComposeDraftState>>(
+    new Map(),
+  );
 
   const resolveActiveSessionId = useCallback((): string => {
     const key = chatIdKey(chatId);
@@ -68,8 +70,7 @@ export function useComposeSession({
     // follows the chat into its real identity. The session id itself
     // stays the same; only the lookup key changes.
     if (previousKey === NEW_CHAT_KEY && nextKey !== NEW_CHAT_KEY) {
-      const sentinelSessionId =
-        sessionIdByChatKeyRef.current.get(NEW_CHAT_KEY);
+      const sentinelSessionId = sessionIdByChatKeyRef.current.get(NEW_CHAT_KEY);
       if (sentinelSessionId !== undefined) {
         sessionIdByChatKeyRef.current.delete(NEW_CHAT_KEY);
         sessionIdByChatKeyRef.current.set(nextKey, sentinelSessionId);
@@ -86,7 +87,10 @@ export function useComposeSession({
     );
   }, [chatId]);
 
-  const getActiveSessionId = useCallback(() => activeSessionId, [activeSessionId]);
+  const getActiveSessionId = useCallback(
+    () => activeSessionId,
+    [activeSessionId],
+  );
 
   const getDraft = useCallback((sessionId: string): ComposeDraftState => {
     return draftsBySessionIdRef.current.get(sessionId) ?? EMPTY_DRAFT;
