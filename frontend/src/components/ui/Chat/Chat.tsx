@@ -789,9 +789,6 @@ export const Chat = ({
               >
                 <div className="flex w-full flex-col items-center justify-center gap-4">
                   {centeredEmptyStateContent}
-                  {!readOnly ? (
-                    <div className="w-full shrink-0">{chatInputElement}</div>
-                  ) : null}
                 </div>
               </div>
             ) : (
@@ -848,10 +845,13 @@ export const Chat = ({
                   emptyStateComponent={emptyStateComponent}
                   assistantFiles={assistantFiles}
                 />
-
-                {!readOnly ? chatInputElement : null}
               </>
             )}
+            {/* ChatInput lives in a stable JSX position so React doesn't
+                unmount it during the empty-state ↔ messages layout flip.
+                Anything previously hoisted to survive that unmount (audio
+                mode, voice-session refs) can stay where it naturally lives. */}
+            {!readOnly ? chatInputElement : null}
           </div>
         </ChatErrorBoundary>
 
