@@ -765,39 +765,43 @@ export const ChatInput = ({
     onSelectedChatProviderIdChange?.(selectedModel?.chat_provider_id ?? null);
   }, [onSelectedChatProviderIdChange, selectedModel?.chat_provider_id]);
 
+  // Tracks the session whose draft is currently mirrored into local
+  // `message` / `attachedFiles`. The chat-switch effect below advances this
+  // ref atomically with the swap, which means the per-change persist effect
+  // always writes under the OLD session id during a switch render —
+  // preventing it from polluting the incoming session's draft before the
+  // swap reads it.
+  const activeComposeSessionIdRef = useRef(composeSessionId);
+
   // Persist compose-mode draft state for the currently active session.
   useEffect(() => {
     if (mode !== "compose") {
       return;
     }
-    saveComposeDraftBySessionId(composeSessionId, { message, attachedFiles });
-  }, [
-    mode,
-    message,
-    attachedFiles,
-    composeSessionId,
-    saveComposeDraftBySessionId,
-  ]);
+    saveComposeDraftBySessionId(activeComposeSessionIdRef.current, {
+      message,
+      attachedFiles,
+    });
+  }, [mode, message, attachedFiles, saveComposeDraftBySessionId]);
 
   // On chat switch, persist outgoing draft against the previous session and
   // restore the incoming draft for the new session. Because the session id
   // *follows* the chat across a sentinel → real-chatId rename, that
   // transition does NOT trigger a switch here — the session stays the same.
-  const previousComposeSessionIdRef = useRef(composeSessionId);
   useEffect(() => {
     if (mode !== "compose") {
-      previousComposeSessionIdRef.current = composeSessionId;
+      activeComposeSessionIdRef.current = composeSessionId;
       return;
     }
 
-    const previousSessionId = previousComposeSessionIdRef.current;
+    const previousSessionId = activeComposeSessionIdRef.current;
     if (previousSessionId === composeSessionId) {
       return;
     }
 
     saveComposeDraftBySessionId(previousSessionId, { message, attachedFiles });
     const incoming = getComposeDraftBySessionId(composeSessionId);
-    previousComposeSessionIdRef.current = composeSessionId;
+    activeComposeSessionIdRef.current = composeSessionId;
     setMessage(incoming.message);
     setAttachedFiles(incoming.attachedFiles);
   }, [
