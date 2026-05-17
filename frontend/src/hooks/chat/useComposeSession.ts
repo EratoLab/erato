@@ -20,10 +20,7 @@ function chatIdKey(chatId: string | null | undefined): string {
 }
 
 function generateSessionId(): string {
-  if (typeof globalThis.crypto.randomUUID === "function") {
-    return globalThis.crypto.randomUUID();
-  }
-  return `cs-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
+  return globalThis.crypto.randomUUID();
 }
 
 /**
