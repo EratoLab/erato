@@ -12,6 +12,7 @@ const EMPTY_DRAFT: ComposeDraftState = Object.freeze({
   attachedFiles: [],
 });
 
+// eslint-disable-next-line lingui/no-unlocalized-strings -- internal sentinel key, never user-facing
 const NEW_CHAT_KEY = "__new-chat__";
 
 function chatIdKey(chatId: string | null | undefined): string {
@@ -19,8 +20,8 @@ function chatIdKey(chatId: string | null | undefined): string {
 }
 
 function generateSessionId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
+  if (typeof globalThis.crypto.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
   }
   return `cs-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
 }
