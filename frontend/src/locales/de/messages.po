@@ -1862,6 +1862,10 @@ msgstr "Chat-Nachrichten"
 msgid "chat_models.<chat-provider-id>.description"
 msgstr ""
 
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Choose audio mode"
+msgstr ""
+
 #: src/components/ui/FileUpload/FileUpload.tsx
 msgid "Clear All"
 msgstr "Alle löschen"
@@ -1926,6 +1930,10 @@ msgstr "Kontextnutzung"
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Context usage exceeds model capacity. The assistant can't be created like this."
 msgstr "Die Kontextnutzung überschreitet die Modellkapazität. Der Assistent kann so nicht erstellt werden."
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Conversational"
+msgstr ""
 
 #: src/components/ui/Message/EratoEmailSuggestion.tsx
 msgid "Copied!"
@@ -2171,6 +2179,10 @@ msgid "Filter assistants"
 msgstr ""
 
 #: src/components/ui/Chat/ChatInput.tsx
+msgid "Finishing audio transcript"
+msgstr ""
+
+#: src/components/ui/Chat/ChatInput.tsx
 msgid "Finishing dictation"
 msgstr "Audiodiktat wird abgeschlossen"
 
@@ -2220,6 +2232,14 @@ msgstr "weniger als eine Sekunde"
 
 #: src/components/ui/Message/MessageContent.tsx
 msgid "Link"
+msgstr ""
+
+#: src/components/ui/Chat/ChatInputAudioModeButton.tsx
+msgid "Listening"
+msgstr ""
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Listening for your next message"
 msgstr ""
 
 #: src/components/ui/Message/LoadMoreButton.tsx
@@ -2404,12 +2424,16 @@ msgid "Recording"
 msgstr "Aufnahme läuft"
 
 #: src/components/ui/Chat/ChatInputAudioModeButton.tsx
-msgid "Recording audio"
-msgstr "Audio wird aufgenommen"
+#~ msgid "Recording audio"
+#~ msgstr "Audio wird aufgenommen"
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Recording audio is disabled while uploads are not available."
 msgstr "Audioaufnahme ist deaktiviert, solange Uploads nicht verfügbar sind."
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Recording audio transcript"
+msgstr ""
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Recording stopped automatically after the configured maximum duration."
@@ -2587,8 +2611,17 @@ msgstr "Audiodiktat wird gestartet"
 msgid "Stop"
 msgstr "Stopp"
 
+#: src/components/ui/Chat/ChatInput.tsx
 #: src/components/ui/Chat/ChatInputAudioModeButton.tsx
-msgid "Stop audio recording"
+msgid "Stop audio mode"
+msgstr ""
+
+#: src/components/ui/Chat/ChatInputAudioModeButton.tsx
+#~ msgid "Stop audio recording"
+#~ msgstr ""
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Stop audio transcript recording"
 msgstr ""
 
 #: src/components/ui/Chat/ChatInput.tsx
@@ -2713,6 +2746,10 @@ msgstr ""
 msgid "Transcribing"
 msgstr "Transkribieren"
 
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Transcript"
+msgstr ""
+
 #: src/components/ui/Feedback/ChatErrorBoundary.tsx
 msgid "Try Again"
 msgstr "Erneut versuchen"
@@ -2760,6 +2797,10 @@ msgstr "Hochladen"
 #: src/components/ui/FileUpload/FileUploadStates.tsx
 msgid "Uploading file"
 msgstr "Datei wird hochgeladen"
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Use conversational mode for auto-send after a pause, or transcript mode for a manual audio attachment."
+msgstr ""
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Used context: {usedContextPercentage}%"
