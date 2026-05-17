@@ -15,6 +15,7 @@ import { componentRegistry } from "@/config/componentRegistry";
 import { useAudioDictationRecorder } from "@/hooks/audio/useAudioDictationRecorder";
 import { useAudioTranscriptionRecorder } from "@/hooks/audio/useAudioTranscriptionRecorder";
 import { useTokenManagement, useActiveModelSelection } from "@/hooks/chat";
+import { useComposeSession } from "@/hooks/chat/useComposeSession";
 import { useMessagingStore } from "@/hooks/chat/store/messagingStore";
 import { UnsupportedFileTypeError } from "@/hooks/files/errors";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
@@ -247,15 +248,10 @@ interface ChatInputProps {
   onControlledIsAudioModeChange?: (isAudioMode: boolean) => void;
 }
 
-interface ComposeDraftState {
-  message: string;
-  attachedFiles: FileUploadItem[];
-}
-
 type DictationTarget =
   | {
       mode: "compose";
-      draftKey: string;
+      sessionId: string;
       nextChunkIndex: number;
       chunkTranscripts: Map<number, string>;
     }
@@ -276,9 +272,6 @@ function appendDictationText(current: string, transcript: string): string {
   }
   return /\s$/.test(current) ? `${current}${text}` : `${current} ${text}`;
 }
-
-// eslint-disable-next-line lingui/no-unlocalized-strings -- internal key used only for local draft state
-const NEW_CHAT_DRAFT_KEY = "__new-chat__";
 
 /**
  * ChatInput component with file attachment capabilities
@@ -362,11 +355,12 @@ export const ChatInput = ({
   const audioModeRestartSawPendingResponseRef = useRef(false);
   const previousModeRef = useRef<"compose" | "edit">(mode);
   const previousEditMessageIdRef = useRef<string | undefined>(undefined);
-  const composeDraftKey = chatId ?? NEW_CHAT_DRAFT_KEY;
-  const composeDraftsRef = useRef<
-    Record<string, ComposeDraftState | undefined>
-  >({});
-  const activeComposeDraftKeyRef = useRef(composeDraftKey);
+  const {
+    sessionId: composeSessionId,
+    getActiveSessionId,
+    getDraft: getComposeDraftBySessionId,
+    saveDraft: saveComposeDraftBySessionId,
+  } = useComposeSession({ chatId });
   const dictationTargetRef = useRef<DictationTarget | null>(null);
   // Add state for file button processing
   const [isFileButtonProcessing, setIsFileButtonProcessing] = useState(false);
@@ -509,19 +503,6 @@ export const ChatInput = ({
     setAttachedFiles,
   });
 
-  const getComposeDraft = useCallback((draftKey: string): ComposeDraftState => {
-    const existingDraft = composeDraftsRef.current[draftKey];
-    if (existingDraft) {
-      return existingDraft;
-    }
-
-    const emptyDraft = {
-      message: "",
-      attachedFiles: [],
-    };
-    composeDraftsRef.current[draftKey] = emptyDraft;
-    return emptyDraft;
-  }, []);
 
   const appendDictationTranscript = useCallback(
     ({ chunkIndex, transcript }: AudioDictationTranscriptChunk) => {
@@ -541,7 +522,7 @@ export const ChatInput = ({
         if (target.mode === "compose") {
           if (
             mode === "compose" &&
-            target.draftKey === activeComposeDraftKeyRef.current
+            target.sessionId === getActiveSessionId()
           ) {
             setMessage((current) =>
               appendDictationText(current, nextTranscript),
@@ -549,11 +530,11 @@ export const ChatInput = ({
             continue;
           }
 
-          const draft = getComposeDraft(target.draftKey);
-          composeDraftsRef.current[target.draftKey] = {
+          const draft = getComposeDraftBySessionId(target.sessionId);
+          saveComposeDraftBySessionId(target.sessionId, {
             ...draft,
             message: appendDictationText(draft.message, nextTranscript),
-          };
+          });
           continue;
         }
 
@@ -566,7 +547,13 @@ export const ChatInput = ({
         }
       }
     },
-    [editMessageId, getComposeDraft, mode],
+    [
+      editMessageId,
+      getActiveSessionId,
+      getComposeDraftBySessionId,
+      mode,
+      saveComposeDraftBySessionId,
+    ],
   );
 
   const {
@@ -593,7 +580,7 @@ export const ChatInput = ({
         mode === "compose"
           ? {
               mode: "compose",
-              draftKey: composeDraftKey,
+              sessionId: getActiveSessionId(),
               nextChunkIndex: 0,
               chunkTranscripts: new Map(),
             }
@@ -606,7 +593,7 @@ export const ChatInput = ({
     }
 
     toggleDictation();
-  }, [composeDraftKey, editMessageId, isDictating, mode, toggleDictation]);
+  }, [editMessageId, getActiveSessionId, isDictating, mode, toggleDictation]);
 
   const { data: facetsData, error: facetsError } = useFacets({});
   const { fetcherOptions: fileFetchOptions } = useV1betaApiContext();
@@ -782,43 +769,48 @@ export const ChatInput = ({
     onSelectedChatProviderIdChange?.(selectedModel?.chat_provider_id ?? null);
   }, [onSelectedChatProviderIdChange, selectedModel?.chat_provider_id]);
 
-  // Persist compose-mode draft state for the currently active chat key.
+  // Persist compose-mode draft state for the currently active session.
   useEffect(() => {
     if (mode !== "compose") {
       return;
     }
-
-    composeDraftsRef.current[activeComposeDraftKeyRef.current] = {
-      message,
-      attachedFiles,
-    };
-  }, [mode, message, attachedFiles]);
-
-  // Persist outgoing compose draft and restore incoming compose draft on chat switch.
-  useEffect(() => {
-    if (mode !== "compose") {
-      activeComposeDraftKeyRef.current = composeDraftKey;
-      return;
-    }
-
-    const previousComposeDraftKey = activeComposeDraftKeyRef.current;
-    if (previousComposeDraftKey !== composeDraftKey) {
-      composeDraftsRef.current[previousComposeDraftKey] = {
-        message,
-        attachedFiles,
-      };
-    }
-
-    const composeDraft = getComposeDraft(composeDraftKey);
-    activeComposeDraftKeyRef.current = composeDraftKey;
-    setMessage(composeDraft.message);
-    setAttachedFiles(composeDraft.attachedFiles);
+    saveComposeDraftBySessionId(composeSessionId, { message, attachedFiles });
   }, [
     mode,
-    composeDraftKey,
     message,
     attachedFiles,
-    getComposeDraft,
+    composeSessionId,
+    saveComposeDraftBySessionId,
+  ]);
+
+  // On chat switch, persist outgoing draft against the previous session and
+  // restore the incoming draft for the new session. Because the session id
+  // *follows* the chat across a sentinel → real-chatId rename, that
+  // transition does NOT trigger a switch here — the session stays the same.
+  const previousComposeSessionIdRef = useRef(composeSessionId);
+  useEffect(() => {
+    if (mode !== "compose") {
+      previousComposeSessionIdRef.current = composeSessionId;
+      return;
+    }
+
+    const previousSessionId = previousComposeSessionIdRef.current;
+    if (previousSessionId === composeSessionId) {
+      return;
+    }
+
+    saveComposeDraftBySessionId(previousSessionId, { message, attachedFiles });
+    const incoming = getComposeDraftBySessionId(composeSessionId);
+    previousComposeSessionIdRef.current = composeSessionId;
+    setMessage(incoming.message);
+    setAttachedFiles(incoming.attachedFiles);
+  }, [
+    mode,
+    composeSessionId,
+    message,
+    attachedFiles,
+    getComposeDraftBySessionId,
+    saveComposeDraftBySessionId,
     setAttachedFiles,
   ]);
 
@@ -885,7 +877,7 @@ export const ChatInput = ({
     }
 
     if (enteringCompose) {
-      const composeDraft = getComposeDraft(composeDraftKey);
+      const composeDraft = getComposeDraftBySessionId(composeSessionId);
       setMessage(composeDraft.message);
       setAttachedFiles(composeDraft.attachedFiles);
       previousEditMessageIdRef.current = undefined;
@@ -897,8 +889,8 @@ export const ChatInput = ({
     editMessageId,
     editInitialContent,
     initialFiles,
-    composeDraftKey,
-    getComposeDraft,
+    composeSessionId,
+    getComposeDraftBySessionId,
     setAttachedFiles,
   ]);
 
