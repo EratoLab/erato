@@ -183,7 +183,7 @@ describe("Ricky0123VadEngine", () => {
 
     expect(vadMock.fakeVad.processFrame).toHaveBeenCalledTimes(1);
     expect(
-      (vadMock.fakeVad.processFrame.mock.calls[0][0] as Float32Array).length,
+      (vadMock.fakeVad.processFrame.mock.calls[0][0]).length,
     ).toBe(512);
   });
 

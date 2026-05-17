@@ -1117,9 +1117,6 @@ export function useAudioTranscriptionRecorder({
               setIsVadSpeechActive(false);
               return;
             }
-            if (event.type !== "speech_end") {
-              return;
-            }
 
             setIsVadSpeechActive(false);
             if (vadAutoStopTriggeredRef.current) {

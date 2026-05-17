@@ -24,7 +24,7 @@ function isDebugEnabled(category: DebugCategory): boolean {
   // Check if we're in the browser environment
   if (typeof window === "undefined") return false;
   const storage = window.localStorage;
-  if (typeof storage?.getItem !== "function") return false;
+  if (typeof storage.getItem !== "function") return false;
 
   // Only log in development by default
   if (process.env.NODE_ENV !== "development") {

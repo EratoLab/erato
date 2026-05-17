@@ -14,6 +14,8 @@ import { useThrottledCallback } from "use-debounce";
 // `audioWorklet.addModule()`. AudioWorklet and Web Worker modules
 // share the same ESM contract on the file format side, so the worker
 // pipeline output is valid as an AudioWorklet module.
+import { createRicky0123VadEngine } from "@/lib/voice-runtime";
+
 import {
   createAudioDictationWebSocketUrl,
   sendAudioDictationControlFrame,
@@ -33,7 +35,6 @@ import {
   type AudioDictationDiagnostics,
 } from "./audio-pcm-codec";
 import { useAudioInputDevicePreference } from "./useAudioInputDevicePreference";
-import { createRicky0123VadEngine } from "@/lib/voice-runtime";
 
 import type { VoiceVadEngine } from "@/lib/voice-runtime";
 

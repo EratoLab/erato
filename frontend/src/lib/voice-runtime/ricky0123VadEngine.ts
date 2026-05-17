@@ -1,3 +1,4 @@
+/* eslint-disable lingui/no-unlocalized-strings -- internal event-type discriminators and package imports, never user-facing */
 import {
   createRicky0123VadAssetOptions,
   type Ricky0123VadAssetOptions,
@@ -12,8 +13,8 @@ import {
   type VoiceVadModel,
 } from "./vadEngine";
 
-import type { MicVAD, RealTimeVADOptions } from "@ricky0123/vad-web";
 import type { VoiceRuntimeAssetOverrides } from "./assets";
+import type { MicVAD, RealTimeVADOptions } from "@ricky0123/vad-web";
 
 const SILERO_SAMPLE_RATE_HZ = 16_000;
 const SILERO_V5_FRAME_SAMPLES = 512;
