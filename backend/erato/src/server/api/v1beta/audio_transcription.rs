@@ -36,20 +36,52 @@ const CANONICAL_BITS_PER_SAMPLE: u16 = 16;
 enum AudioFeature {
     Transcription,
     Dictation,
+    Conversational,
 }
 
 impl AudioFeature {
-    fn config<'a>(&self, app_state: &'a AppState) -> &'a crate::config::AudioTranscriptionConfig {
+    fn config_from_app_config<'a>(
+        &self,
+        config: &'a crate::config::AppConfig,
+    ) -> &'a crate::config::AudioTranscriptionConfig {
         match self {
-            Self::Transcription => &app_state.config.audio_transcription,
-            Self::Dictation => &app_state.config.audio_dictation,
+            Self::Transcription => &config.audio_transcription,
+            Self::Dictation => &config.audio_dictation,
+            Self::Conversational => &config.audio_conversational,
         }
+    }
+
+    fn config<'a>(&self, app_state: &'a AppState) -> &'a crate::config::AudioTranscriptionConfig {
+        self.config_from_app_config(&app_state.config)
     }
 
     fn config_key(&self) -> &'static str {
         match self {
             Self::Transcription => "audio_transcription",
             Self::Dictation => "audio_dictation",
+            Self::Conversational => "audio_conversational",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum DictationMode {
+    Dictation,
+    Conversational,
+}
+
+impl Default for DictationMode {
+    fn default() -> Self {
+        Self::Dictation
+    }
+}
+
+impl DictationMode {
+    fn audio_feature(self) -> AudioFeature {
+        match self {
+            Self::Dictation => AudioFeature::Dictation,
+            Self::Conversational => AudioFeature::Conversational,
         }
     }
 }
@@ -122,6 +154,8 @@ enum ServerControlFrame {
 enum DictationClientControlFrame {
     Start {
         chunk_duration_ms: Option<u64>,
+        #[serde(default)]
+        mode: DictationMode,
     },
     ChunkMetadata {
         chunk_index: usize,
@@ -275,6 +309,7 @@ async fn send_frame(
 async fn handle_dictation_socket(app_state: AppState, socket: WebSocket) {
     let (mut sender, mut receiver) = socket.split();
     let mut chunk_duration_ms: Option<u64> = None;
+    let mut audio_feature: Option<AudioFeature> = None;
     let mut next_chunk_index = 0usize;
     let mut pending_chunk: Option<PendingChunk> = None;
 
@@ -292,6 +327,7 @@ async fn handle_dictation_socket(app_state: AppState, socket: WebSocket) {
             {
                 Ok(control_frame) => handle_dictation_control_frame(
                     &app_state,
+                    &mut audio_feature,
                     &mut chunk_duration_ms,
                     &mut next_chunk_index,
                     &mut pending_chunk,
@@ -307,6 +343,7 @@ async fn handle_dictation_socket(app_state: AppState, socket: WebSocket) {
             Message::Binary(bytes) => {
                 handle_dictation_audio_bytes(
                     &app_state,
+                    audio_feature,
                     chunk_duration_ms,
                     &mut next_chunk_index,
                     &mut pending_chunk,
@@ -342,6 +379,7 @@ async fn handle_dictation_socket(app_state: AppState, socket: WebSocket) {
 
 async fn handle_dictation_control_frame(
     app_state: &AppState,
+    audio_feature: &mut Option<AudioFeature>,
     chunk_duration_ms: &mut Option<u64>,
     next_chunk_index: &mut usize,
     pending_chunk: &mut Option<PendingChunk>,
@@ -350,10 +388,17 @@ async fn handle_dictation_control_frame(
     match control_frame {
         DictationClientControlFrame::Start {
             chunk_duration_ms: requested_chunk_duration_ms,
+            mode,
         } => {
-            ensure_audio_dictation_enabled(app_state)?;
-            let resolved_chunk_duration_ms = requested_chunk_duration_ms
-                .unwrap_or_else(|| app_state.config.audio_dictation.chunk_duration_seconds * 1000);
+            let selected_audio_feature = mode.audio_feature();
+            ensure_audio_feature_enabled(app_state, selected_audio_feature)?;
+            let resolved_chunk_duration_ms = requested_chunk_duration_ms.unwrap_or_else(|| {
+                selected_audio_feature
+                    .config(app_state)
+                    .chunk_duration_seconds
+                    * 1000
+            });
+            *audio_feature = Some(selected_audio_feature);
             *chunk_duration_ms = Some(resolved_chunk_duration_ms);
             *next_chunk_index = 0;
             *pending_chunk = None;
@@ -370,9 +415,11 @@ async fn handle_dictation_control_frame(
         } => {
             let chunk_duration_ms =
                 (*chunk_duration_ms).ok_or_eyre("Start audio dictation before sending chunks")?;
+            let audio_feature =
+                (*audio_feature).ok_or_eyre("Start audio dictation before sending chunks")?;
             validate_chunk_metadata(
                 app_state,
-                AudioFeature::Dictation,
+                audio_feature,
                 chunk_index,
                 start_ms,
                 end_ms,
@@ -397,12 +444,15 @@ async fn handle_dictation_control_frame(
 
 async fn handle_dictation_audio_bytes(
     app_state: &AppState,
+    audio_feature: Option<AudioFeature>,
     chunk_duration_ms: Option<u64>,
     next_chunk_index: &mut usize,
     pending_chunk: &mut Option<PendingChunk>,
     bytes: Vec<u8>,
 ) -> Result<Vec<DictationServerControlFrame>, Report> {
     chunk_duration_ms.ok_or_eyre("Start audio dictation before sending audio bytes")?;
+    let audio_feature =
+        audio_feature.ok_or_eyre("Start audio dictation before sending audio bytes")?;
     let pending = pending_chunk
         .take()
         .ok_or_eyre("Send chunk_metadata before binary audio bytes")?;
@@ -418,7 +468,7 @@ async fn handle_dictation_audio_bytes(
     );
     enforce_audio_byte_limit(
         app_state,
-        AudioFeature::Dictation,
+        audio_feature,
         validated_chunk.append_bytes.len() as u64,
     )?;
 
@@ -427,7 +477,7 @@ async fn handle_dictation_audio_bytes(
     };
     let transcribed_chunk = transcribe_audio_chunk_with_retry(
         app_state,
-        AudioFeature::Dictation,
+        audio_feature,
         &pending,
         validated_chunk.provider_audio_bytes,
     )
@@ -849,11 +899,14 @@ fn ensure_audio_transcription_enabled(app_state: &AppState) -> Result<(), Report
     }
 }
 
-fn ensure_audio_dictation_enabled(app_state: &AppState) -> Result<(), Report> {
-    if app_state.config.audio_dictation.enabled {
+fn ensure_audio_feature_enabled(
+    app_state: &AppState,
+    audio_feature: AudioFeature,
+) -> Result<(), Report> {
+    if audio_feature.config(app_state).enabled {
         Ok(())
     } else {
-        Err(eyre::eyre!("Audio dictation is not enabled"))
+        Err(eyre::eyre!("{} is not enabled", audio_feature.config_key()))
     }
 }
 
@@ -1723,11 +1776,66 @@ mod tests {
                 .expect("dictation start should parse");
 
         match frame {
-            DictationClientControlFrame::Start { chunk_duration_ms } => {
+            DictationClientControlFrame::Start {
+                chunk_duration_ms,
+                mode,
+            } => {
                 assert_eq!(chunk_duration_ms, Some(5000));
+                assert!(matches!(mode, DictationMode::Dictation));
             }
             _ => panic!("expected dictation start frame"),
         }
+    }
+
+    #[test]
+    fn parses_audio_dictation_start_with_conversational_mode() {
+        let frame: DictationClientControlFrame = serde_json::from_str(
+            r#"{"type":"start","chunk_duration_ms":5000,"mode":"conversational"}"#,
+        )
+        .expect("dictation start should parse");
+
+        match frame {
+            DictationClientControlFrame::Start {
+                chunk_duration_ms,
+                mode,
+            } => {
+                assert_eq!(chunk_duration_ms, Some(5000));
+                assert!(matches!(mode, DictationMode::Conversational));
+            }
+            _ => panic!("expected dictation start frame"),
+        }
+    }
+
+    #[test]
+    fn conversational_dictation_mode_selects_audio_conversational_config() {
+        let config = crate::config::AppConfig {
+            audio_dictation: crate::config::AudioTranscriptionConfig {
+                enabled: true,
+                chunk_duration_seconds: 10,
+                max_attempts: 2,
+                max_recording_duration_seconds: 5,
+                ..Default::default()
+            },
+            audio_conversational: crate::config::AudioTranscriptionConfig {
+                enabled: true,
+                chunk_duration_seconds: 30,
+                max_attempts: 4,
+                max_recording_duration_seconds: 20,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let selected_config = DictationMode::Conversational
+            .audio_feature()
+            .config_from_app_config(&config);
+
+        assert_eq!(selected_config.chunk_duration_seconds, 30);
+        assert_eq!(selected_config.max_attempts, 4);
+        assert!(
+            canonical_audio_max_bytes_for_config(selected_config)
+                > canonical_audio_max_bytes_for_config(&config.audio_dictation)
+        );
     }
 
     #[test]
