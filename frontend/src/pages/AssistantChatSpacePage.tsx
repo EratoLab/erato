@@ -44,6 +44,7 @@ const toFileUploadItems = (files: AssistantFile[]): FileUploadItem[] =>
             download_url: downloadUrl ?? "",
             ...(previewUrl ? { preview_url: previewUrl } : {}),
             file_capability: file.file_capability,
+            is_sharepoint_file: file.is_sharepoint_file,
           } as FileUploadItem,
         ]
       : [];

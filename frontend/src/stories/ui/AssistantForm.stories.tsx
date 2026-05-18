@@ -92,6 +92,7 @@ const mockFiles: FileUploadItem[] = [
     filename: "documentation.pdf",
     download_url: "#",
     file_contents_unavailable_missing_permissions: false,
+    is_sharepoint_file: false,
     file_capability: FileTypeUtil.createMockFileCapability("documentation.pdf"),
   },
   {
@@ -99,6 +100,7 @@ const mockFiles: FileUploadItem[] = [
     filename: "guidelines.txt",
     download_url: "#",
     file_contents_unavailable_missing_permissions: false,
+    is_sharepoint_file: false,
     file_capability: FileTypeUtil.createMockFileCapability("guidelines.txt"),
   },
 ];

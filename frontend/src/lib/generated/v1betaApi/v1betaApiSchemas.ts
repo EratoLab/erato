@@ -154,6 +154,10 @@ export type Assistant = {
    */
   name: string;
   /**
+   * Optional email of the assistant owner
+   */
+  owner_email?: string;
+  /**
    * The system prompt used by the assistant
    */
   prompt: string;
@@ -190,6 +194,10 @@ export type AssistantFile = {
    * The unique ID of the file
    */
   id: string;
+  /**
+   * True when this file is stored in Sharepoint
+   */
+  is_sharepoint_file: boolean;
   /**
    * Pre-signed URL for inline preview without forcing download when available.
    */
@@ -936,6 +944,10 @@ export type FileUploadItem = {
    * The unique ID of the uploaded file
    */
   id: string;
+  /**
+   * Indicates the file is stored in Sharepoint
+   */
+  is_sharepoint_file: boolean;
   /**
    * Pre-signed URL for inline preview without forcing download when available
    */

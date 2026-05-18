@@ -399,4 +399,41 @@ describe("AssistantForm", () => {
       }),
     );
   });
+
+  it("shows a warning when Sharepoint files are attached", () => {
+    render(
+      <StaticFeatureConfigProvider
+        config={{
+          assistants: {
+            enabled: false,
+            showRecentItems: false,
+            contextWarningThreshold: 0.5,
+            contextFileContributorThreshold: 0.05,
+          },
+        }}
+      >
+        <AssistantForm
+          onSubmit={vi.fn()}
+          initialData={{
+            files: [
+              {
+                id: "sharepoint-file",
+                filename: "sharepoint-report.pdf",
+                download_url: "https://example.com/sharepoint-report.pdf",
+                file_contents_unavailable_missing_permissions: false,
+                file_capability: pdfFileCapability,
+                is_sharepoint_file: true,
+              } as FileUploadItem,
+            ],
+          }}
+        />
+      </StaticFeatureConfigProvider>,
+    );
+
+    expect(
+      screen.getByText(
+        "Some files are linked from Sharepoint. If you share this assistant, ensure those files are also shared with recipients.",
+      ),
+    ).toBeInTheDocument();
+  });
 });

@@ -1,3 +1,4 @@
+use crate::db::entity::prelude::Users;
 use crate::models::file_capability::{
     FileCapability, find_file_capability_by_filename, get_file_capabilities,
 };
@@ -11,6 +12,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::{Extension, Json};
 use chrono::{DateTime, FixedOffset};
+use sea_orm::EntityTrait;
 use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid;
 use std::collections::HashSet;
@@ -29,6 +31,10 @@ pub struct Assistant {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub description: Option<String>,
+    /// Optional email of the assistant owner
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub owner_email: Option<String>,
     /// The system prompt used by the assistant
     pub prompt: String,
     /// List of MCP server IDs available to this assistant
@@ -86,6 +92,8 @@ pub struct AssistantFile {
     pub preview_url: Option<String>,
     /// Indicates that file contents are unavailable for the current user due to missing permissions.
     pub file_contents_unavailable_missing_permissions: bool,
+    /// True when this file is stored in Sharepoint
+    pub is_sharepoint_file: bool,
     /// The file capability that was evaluated for this file
     #[serde(rename = "file_capability")]
     pub file_capability: FileCapability,
@@ -302,8 +310,33 @@ async fn file_info_to_assistant_file(
         download_url,
         preview_url,
         file_contents_unavailable_missing_permissions,
+        is_sharepoint_file: file_storage_provider.is_sharepoint(),
         file_capability,
     })
+}
+
+async fn owner_email_for_user_id(
+    app_state: &AppState,
+    owner_user_id: &sqlx::types::Uuid,
+) -> Option<String> {
+    match Users::find_by_id(*owner_user_id).one(&app_state.db).await {
+        Ok(Some(user)) => user.email,
+        Ok(None) => {
+            tracing::warn!(
+                owner_user_id = %owner_user_id,
+                "Assistant owner profile not found"
+            );
+            None
+        }
+        Err(err) => {
+            tracing::error!(
+                owner_email_user_id = %owner_user_id,
+                error = %err,
+                "Failed to load assistant owner profile"
+            );
+            None
+        }
+    }
 }
 
 async fn validate_assistant_config_permissions(
@@ -533,6 +566,9 @@ pub async fn create_assistant(
         api_files.push(assistant_file);
     }
 
+    let owner_email =
+        owner_email_for_user_id(&app_state, &assistant_with_files.owner_user_id).await;
+
     Ok((
         StatusCode::CREATED,
         Json(CreateAssistantResponse {
@@ -541,6 +577,7 @@ pub async fn create_assistant(
                     id: assistant_with_files.id.to_string(),
                     name: assistant_with_files.name,
                     description: assistant_with_files.description,
+                    owner_email,
                     prompt: assistant_with_files.prompt,
                     mcp_server_ids: assistant_with_files.mcp_server_ids,
                     facet_ids: assistant_with_files.facet_ids,
@@ -605,12 +642,14 @@ pub async fn list_assistants(
 
     // Convert to API format
     let current_user_id = &me_user.id;
-    let api_assistants = assistants
-        .into_iter()
-        .map(|assistant| Assistant {
+    let mut api_assistants = Vec::with_capacity(assistants.len());
+    for assistant in assistants {
+        let owner_email = owner_email_for_user_id(&app_state, &assistant.owner_user_id).await;
+        api_assistants.push(Assistant {
             id: assistant.id.to_string(),
             name: assistant.name,
             description: assistant.description,
+            owner_email,
             prompt: assistant.prompt,
             mcp_server_ids: assistant.mcp_server_ids,
             facet_ids: assistant.facet_ids,
@@ -623,8 +662,8 @@ pub async fn list_assistants(
                 current_user_id,
                 &assistant.owner_user_id.to_string(),
             ),
-        })
-        .collect();
+        });
+    }
 
     Ok(Json(api_assistants))
 }
@@ -709,11 +748,15 @@ pub async fn get_assistant(
         api_files.push(assistant_file);
     }
 
+    let owner_email =
+        owner_email_for_user_id(&app_state, &assistant_with_files.owner_user_id).await;
+
     Ok(Json(AssistantWithFiles {
         assistant: Assistant {
             id: assistant_with_files.id.to_string(),
             name: assistant_with_files.name,
             description: assistant_with_files.description,
+            owner_email,
             prompt: assistant_with_files.prompt,
             mcp_server_ids: assistant_with_files.mcp_server_ids,
             facet_ids: assistant_with_files.facet_ids,
@@ -934,12 +977,16 @@ pub async fn update_assistant(
         api_files.push(assistant_file);
     }
 
+    let owner_email =
+        owner_email_for_user_id(&app_state, &assistant_with_files.owner_user_id).await;
+
     Ok(Json(UpdateAssistantResponse {
         assistant: AssistantWithFiles {
             assistant: Assistant {
                 id: assistant_with_files.id.to_string(),
                 name: assistant_with_files.name,
                 description: assistant_with_files.description,
+                owner_email,
                 prompt: assistant_with_files.prompt,
                 mcp_server_ids: assistant_with_files.mcp_server_ids,
                 facet_ids: assistant_with_files.facet_ids,

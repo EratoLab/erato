@@ -46,6 +46,7 @@ const toFileUploadItems = (files: AssistantFile[]): FileUploadItem[] =>
             download_url: downloadUrl ?? "",
             ...(previewUrl ? { preview_url: previewUrl } : {}),
             file_capability: file.file_capability,
+            is_sharepoint_file: file.is_sharepoint_file,
           } as FileUploadItem,
         ]
       : [];
@@ -238,6 +239,9 @@ export default function AssistantEditPage() {
             <AssistantForm
               mode="edit"
               assistantId={id}
+              hasInitialSharepointFiles={assistant.files.some(
+                (file) => file.is_sharepoint_file,
+              )}
               initialData={initialData}
               availableModels={availableModels}
               isSubmitting={isPending}
@@ -259,6 +263,9 @@ export default function AssistantEditPage() {
             resourceType="assistant"
             resourceId={id}
             resourceName={assistant.name}
+            hasSharepointFiles={assistant.files.some(
+              (file) => file.is_sharepoint_file,
+            )}
           />
         </SharingErrorBoundary>
       )}

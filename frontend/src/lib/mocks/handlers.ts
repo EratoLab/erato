@@ -59,6 +59,7 @@ export const handlers = [
       // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
       download_url: `http://localhost/download/${fileId}`,
       file_contents_unavailable_missing_permissions: false,
+      is_sharepoint_file: false,
       file_capability: FileTypeUtil.createMockFileCapability("test-file.txt"),
     };
     return HttpResponse.json(response);
@@ -149,6 +150,7 @@ export const handlers = [
           filename: file.name,
           download_url: `http://localhost/download/uploaded-file-${chatId}-${index}`,
           file_contents_unavailable_missing_permissions: false,
+          is_sharepoint_file: false,
           file_capability: FileTypeUtil.createMockFileCapability(file.name),
         }),
       );
@@ -209,6 +211,7 @@ export const handlers = [
           filename,
           download_url: `http://localhost/download/linked-file-${Date.now()}`,
           file_contents_unavailable_missing_permissions: false,
+          is_sharepoint_file: false,
           file_capability: FileTypeUtil.createMockFileCapability(filename),
         },
       ],

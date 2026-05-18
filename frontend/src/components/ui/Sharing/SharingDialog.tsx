@@ -20,6 +20,7 @@ interface SharingDialogProps {
   resourceType: "assistant";
   resourceId: string;
   resourceName: string;
+  hasSharepointFiles?: boolean;
 }
 
 /**
@@ -33,6 +34,7 @@ export function SharingDialog({
   resourceType,
   resourceId,
   resourceName,
+  hasSharepointFiles = false,
 }: SharingDialogProps) {
   const { _ } = useLingui();
 
@@ -186,6 +188,15 @@ export function SharingDialog({
         {/* Success/Error alerts */}
         {successMessage ? <Alert type="success">{successMessage}</Alert> : null}
         {errorMessage ? <Alert type="error">{errorMessage}</Alert> : null}
+        {hasSharepointFiles ? (
+          <Alert type="warning">
+            {t({
+              id: "sharing.assistant.sharepoint.warning",
+              message:
+                "This assistant has Sharepoint files attached. Share them with recipients as well so they can access the same files.",
+            })}
+          </Alert>
+        ) : null}
         {grantsError ? (
           <Alert type="error">
             {t({

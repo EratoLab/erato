@@ -81,6 +81,7 @@ const longFilenameInitialFiles: FileUploadItem[] = [
       "FY2026-enterprise-rollout-supporting-documentation-and-implementation-notes-final-review-v12.pdf",
     download_url: "https://example.com/file-1",
     file_contents_unavailable_missing_permissions: false,
+    is_sharepoint_file: false,
     file_capability: documentCapability,
   },
   {
@@ -88,6 +89,7 @@ const longFilenameInitialFiles: FileUploadItem[] = [
     filename: "quarterly-summary.xlsx",
     download_url: "https://example.com/file-2",
     file_contents_unavailable_missing_permissions: false,
+    is_sharepoint_file: false,
     file_capability: documentCapability,
   },
 ];

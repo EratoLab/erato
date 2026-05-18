@@ -4,7 +4,9 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
+import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { messages as enMessages } from "@/locales/en/messages.json";
+import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { AssistantWelcomeScreen } from "./AssistantWelcomeScreen";
 
@@ -45,11 +47,13 @@ describe("AssistantWelcomeScreen", () => {
     };
 
     render(
-      <I18nProvider i18n={i18n}>
-        <MemoryRouter>
-          <AssistantWelcomeScreen assistant={assistant} />
-        </MemoryRouter>
-      </I18nProvider>,
+      <ThemeProvider>
+        <I18nProvider i18n={i18n}>
+          <MemoryRouter>
+            <AssistantWelcomeScreen assistant={assistant} />
+          </MemoryRouter>
+        </I18nProvider>
+      </ThemeProvider>,
     );
 
     expect(
@@ -79,11 +83,13 @@ describe("AssistantWelcomeScreen", () => {
     };
 
     render(
-      <I18nProvider i18n={i18n}>
-        <MemoryRouter>
-          <AssistantWelcomeScreen assistant={assistant} />
-        </MemoryRouter>
-      </I18nProvider>,
+      <ThemeProvider>
+        <I18nProvider i18n={i18n}>
+          <MemoryRouter>
+            <AssistantWelcomeScreen assistant={assistant} />
+          </MemoryRouter>
+        </I18nProvider>
+      </ThemeProvider>,
     );
 
     expect(
@@ -94,5 +100,51 @@ describe("AssistantWelcomeScreen", () => {
       "border-theme-border",
       "text-theme-fg-secondary",
     );
+  });
+
+  it("warns when assistant files are inaccessible and includes creator email", () => {
+    const assistant: AssistantWithFiles = {
+      id: "assistant-1",
+      name: "Budget Assistant",
+      description: "Helps with finance questions",
+      prompt: "Use the supplied policy docs to answer questions.",
+      created_at: "2026-03-23T08:00:00.000Z",
+      facet_ids: [],
+      enforce_facet_settings: false,
+      mcp_server_ids: [],
+      updated_at: "2026-03-23T09:00:00.000Z",
+      owner_email: "owner@example.com",
+      can_edit: false,
+      files: [
+        {
+          id: "file-1",
+          filename: "restricted.pdf",
+          download_url: null,
+          preview_url: null,
+          file_contents_unavailable_missing_permissions: true,
+          file_capability:
+            FileTypeUtil.createMockFileCapability("restricted.pdf"),
+          is_sharepoint_file: false,
+        },
+      ],
+    };
+
+    render(
+      <ThemeProvider>
+        <I18nProvider i18n={i18n}>
+          <MemoryRouter>
+            <AssistantWelcomeScreen assistant={assistant} />
+          </MemoryRouter>
+        </I18nProvider>
+      </ThemeProvider>,
+    );
+
+    const warning = screen.getByRole("alert");
+    expect(warning).toHaveTextContent(
+      "Some default files are inaccessible due to missing permissions.",
+    );
+    expect(
+      screen.getByRole("link", { name: "owner@example.com" }),
+    ).toHaveAttribute("href", "mailto:owner@example.com");
   });
 });

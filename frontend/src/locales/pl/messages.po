@@ -64,6 +64,11 @@ msgstr "Opcjonalnie: Prześlij pliki z komputera lub Sharepoint, które będą d
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.files.sharepoint.warning"
+msgstr "Niektóre pliki są połączone z Sharepoint. Jeśli udostępniasz tego asystenta, upewnij się, że te same pliki są również udostępnione odbiorcom."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
 msgid "assistant.form.model.helpText"
 msgstr "Opcjonalnie: Wybierz, który model ten asystent powinien domyślnie używać"
 
@@ -111,6 +116,16 @@ msgstr "Prompt systemowy musi mieć mniej niż 5000 znaków"
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "assistant.form.validation.prompt.tooShort"
 msgstr "Prompt systemowy musi mieć co najmniej 10 znaków"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "assistant.welcome.files.inaccessible"
+msgstr "Niektóre pliki domyślne są niedostępne z powodu braku uprawnień."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "assistant.welcome.files.inaccessible.contact"
+msgstr "Skontaktuj się z tym twórcą i poproś go o udostępnienie plików:"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsListPage.tsx
@@ -1361,6 +1376,11 @@ msgid "sharing.addPeople.title"
 msgstr "Dodaj osoby"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Sharing/SharingDialog.tsx
+msgid "sharing.assistant.sharepoint.warning"
+msgstr "Ten asystent ma dołączone pliki z Sharepoint. Udostępnij je również odbiorcom, aby mieli dostęp do tych samych plików."
+
+#. js-lingui-explicit-id
 #: src/pages/AssistantEditPage.tsx
 msgid "sharing.button.share"
 msgstr "Udostępnij"
@@ -2568,6 +2588,10 @@ msgstr ""
 #: src/components/ui/Controls/UserProfileDropdown.tsx
 msgid "Sign out"
 msgstr "Wyloguj"
+
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+#~ msgid "Some default files are inaccessible due to missing permissions."
+#~ msgstr ""
 
 #: src/components/ui/FileUpload/FileUpload.tsx
 msgid "Some files won't be accepted..."

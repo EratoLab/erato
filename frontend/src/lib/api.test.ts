@@ -148,6 +148,7 @@ describe("API Client Tests", () => {
             filename: mockFileName,
             download_url: "http://mock.download/mock-id-123",
             file_contents_unavailable_missing_permissions: false,
+            is_sharepoint_file: false,
             file_capability:
               FileTypeUtil.createMockFileCapability(mockFileName),
           },
@@ -214,6 +215,7 @@ describe("API Client Tests", () => {
           filename: "file1.txt",
           download_url: "http://mock.download/mock-multi-id-1",
           file_contents_unavailable_missing_permissions: false,
+          is_sharepoint_file: false,
           file_capability: FileTypeUtil.createMockFileCapability("file1.txt"),
         },
         {
@@ -221,6 +223,7 @@ describe("API Client Tests", () => {
           filename: "file2.png",
           download_url: "http://mock.download/mock-multi-id-2",
           file_contents_unavailable_missing_permissions: false,
+          is_sharepoint_file: false,
           file_capability: FileTypeUtil.createMockFileCapability("file2.png"),
         },
       ],
