@@ -30,6 +30,8 @@ export type Env = {
   audioTranscriptionMaxRecordingDurationSeconds: number;
   audioDictationEnabled: boolean;
   audioDictationMaxRecordingDurationSeconds: number;
+  audioConversationalEnabled: boolean;
+  audioConversationalMaxRecordingDurationSeconds: number;
   maxUploadSizeBytes: number;
   sidebarCollapsedMode: "hidden" | "slim";
   sidebarLogoPath: string | null;
@@ -75,6 +77,8 @@ declare global {
     AUDIO_TRANSCRIPTION_MAX_RECORDING_DURATION_SECONDS?: number;
     AUDIO_DICTATION_ENABLED?: boolean;
     AUDIO_DICTATION_MAX_RECORDING_DURATION_SECONDS?: number;
+    AUDIO_CONVERSATIONAL_ENABLED?: boolean;
+    AUDIO_CONVERSATIONAL_MAX_RECORDING_DURATION_SECONDS?: number;
     SIDEBAR_LOGO_PATH?: string;
     SIDEBAR_LOGO_DARK_PATH?: string;
     SIDEBAR_CHAT_HISTORY_SHOW_METADATA?: boolean;
@@ -247,6 +251,17 @@ export const env = (): Env => {
         import.meta.env.VITE_AUDIO_DICTATION_MAX_RECORDING_DURATION_SECONDS,
       )
     : (window.AUDIO_DICTATION_MAX_RECORDING_DURATION_SECONDS ?? 20 * 60);
+  const audioConversationalEnabled =
+    import.meta.env.VITE_AUDIO_CONVERSATIONAL_ENABLED === "true"
+      ? true
+      : (window.AUDIO_CONVERSATIONAL_ENABLED ?? false);
+  const audioConversationalMaxRecordingDurationSeconds = import.meta.env
+    .VITE_AUDIO_CONVERSATIONAL_MAX_RECORDING_DURATION_SECONDS
+    ? Number(
+        import.meta.env
+          .VITE_AUDIO_CONVERSATIONAL_MAX_RECORDING_DURATION_SECONDS,
+      )
+    : (window.AUDIO_CONVERSATIONAL_MAX_RECORDING_DURATION_SECONDS ?? 20 * 60);
 
   const sidebarCollapsedMode =
     import.meta.env.VITE_SIDEBAR_COLLAPSED_MODE ??
@@ -308,6 +323,8 @@ export const env = (): Env => {
     audioTranscriptionMaxRecordingDurationSeconds,
     audioDictationEnabled,
     audioDictationMaxRecordingDurationSeconds,
+    audioConversationalEnabled,
+    audioConversationalMaxRecordingDurationSeconds,
     maxUploadSizeBytes,
     sidebarCollapsedMode: sidebarCollapsedMode as "hidden" | "slim",
     sidebarLogoPath,

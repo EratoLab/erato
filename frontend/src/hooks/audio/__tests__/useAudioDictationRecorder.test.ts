@@ -349,6 +349,7 @@ describe("useAudioDictationRecorder", () => {
     });
     await waitFor(() =>
       expect(MockWebSocket.instances[0].sentJsonFrames).toContainEqual({
+        mode: "dictation",
         type: "start",
       }),
     );
@@ -385,6 +386,7 @@ describe("useAudioDictationRecorder", () => {
     });
     await waitFor(() =>
       expect(MockWebSocket.instances[0].sentJsonFrames).toContainEqual({
+        mode: "dictation",
         type: "start",
       }),
     );
@@ -421,6 +423,7 @@ describe("useAudioDictationRecorder", () => {
     });
     await waitFor(() =>
       expect(MockWebSocket.instances[0].sentJsonFrames).toContainEqual({
+        mode: "dictation",
         type: "start",
       }),
     );
@@ -467,6 +470,7 @@ describe("useAudioDictationRecorder", () => {
     });
     await waitFor(() =>
       expect(MockWebSocket.instances[0].sentJsonFrames).toContainEqual({
+        mode: "dictation",
         type: "start",
       }),
     );
@@ -508,6 +512,7 @@ describe("useAudioDictationRecorder", () => {
     });
     await waitFor(() =>
       expect(MockWebSocket.instances[0].sentJsonFrames).toContainEqual({
+        mode: "dictation",
         type: "start",
       }),
     );

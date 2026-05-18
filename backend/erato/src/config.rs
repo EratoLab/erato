@@ -404,6 +404,10 @@ pub struct AppConfig {
     #[serde(default)]
     pub audio_dictation: AudioTranscriptionConfig,
 
+    // Audio conversational feature configuration.
+    #[serde(default)]
+    pub audio_conversational: AudioTranscriptionConfig,
+
     // If true, enables the cleanup worker that periodically deletes old data.
     // Defaults to `false`.
     pub cleanup_enabled: bool,
@@ -492,6 +496,18 @@ impl AppConfig {
             .set_default("audio_dictation.tokens_per_word", 1.5)?
             .set_default("audio_dictation.output_token_buffer_factor", 2.0)?
             .set_default("audio_dictation.fixed_output_token_budget", 500)?
+            .set_default("audio_conversational.enabled", false)?
+            .set_default("audio_conversational.max_recording_duration_seconds", 1200)?
+            .set_default("audio_conversational.chunk_duration_seconds", 30)?
+            .set_default("audio_conversational.max_attempts", 3)?
+            .set_default("audio_conversational.initial_backoff_ms", 250)?
+            .set_default("audio_conversational.max_backoff_ms", 4000)?
+            .set_default("audio_conversational.min_words_for_loop_check", 80)?
+            .set_default("audio_conversational.min_unique_word_ratio", 0.25)?
+            .set_default("audio_conversational.max_words_per_minute", 200)?
+            .set_default("audio_conversational.tokens_per_word", 1.5)?
+            .set_default("audio_conversational.output_token_buffer_factor", 2.0)?
+            .set_default("audio_conversational.fixed_output_token_budget", 500)?
             .set_default("prompt_optimizer.enabled", false)?
             .set_default("prompt_optimizer.prompt", DEFAULT_PROMPT_OPTIMIZER_PROMPT)?;
 
@@ -699,6 +715,11 @@ impl AppConfig {
 
         validate_audio_feature_config(&config, "audio_transcription", &config.audio_transcription);
         validate_audio_feature_config(&config, "audio_dictation", &config.audio_dictation);
+        validate_audio_feature_config(
+            &config,
+            "audio_conversational",
+            &config.audio_conversational,
+        );
 
         // Validate that Langfuse is configured if any chat provider uses it
         if config.any_prompt_source_uses_langfuse() && !config.integrations.langfuse.enabled {

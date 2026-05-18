@@ -24,6 +24,7 @@ const mockUseUploadFeature = vi.fn();
 const mockUseChatInputFeature = vi.fn();
 const mockUseAudioTranscriptionFeature = vi.fn();
 const mockUseAudioDictationFeature = vi.fn();
+const mockUseAudioConversationalFeature = vi.fn();
 const mockUseOptionalTranslation = vi.fn();
 const mockUseActiveModelSelection = vi.fn();
 const mockUseTokenManagement = vi.fn();
@@ -44,6 +45,7 @@ vi.mock("@/providers/FeatureConfigProvider", () => ({
   useChatInputFeature: () => mockUseChatInputFeature(),
   useAudioTranscriptionFeature: () => mockUseAudioTranscriptionFeature(),
   useAudioDictationFeature: () => mockUseAudioDictationFeature(),
+  useAudioConversationalFeature: () => mockUseAudioConversationalFeature(),
 }));
 
 vi.mock("@/hooks/i18n", () => ({
@@ -196,6 +198,7 @@ describe("ChatInput", () => {
     mockUseUploadFeature.mockReturnValue({ enabled: false });
     mockUseAudioTranscriptionFeature.mockReturnValue({ enabled: false });
     mockUseAudioDictationFeature.mockReturnValue({ enabled: false });
+    mockUseAudioConversationalFeature.mockReturnValue({ enabled: false });
     mockUseChatInputFeature.mockReturnValue({
       autofocus: false,
       showUsageAdvisory: true,
@@ -1339,7 +1342,7 @@ describe("ChatInput", () => {
           mutations: { retry: false },
         },
       });
-      mockUseAudioDictationFeature.mockReturnValue({
+      mockUseAudioConversationalFeature.mockReturnValue({
         enabled: true,
         maxRecordingDurationSeconds: 1200,
       });
@@ -1368,7 +1371,7 @@ describe("ChatInput", () => {
           mutations: { retry: false },
         },
       });
-      mockUseAudioDictationFeature.mockReturnValue({
+      mockUseAudioConversationalFeature.mockReturnValue({
         enabled: true,
         maxRecordingDurationSeconds: 1200,
       });
@@ -1400,7 +1403,7 @@ describe("ChatInput", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("does not show the audio-mode button when dictation is disabled", async () => {
+    it("does not show the audio-mode button when conversational audio is disabled", async () => {
       const queryClient = new QueryClient({
         defaultOptions: {
           queries: { retry: false },
@@ -1430,7 +1433,7 @@ describe("ChatInput", () => {
           mutations: { retry: false },
         },
       });
-      mockUseAudioDictationFeature.mockReturnValue({
+      mockUseAudioConversationalFeature.mockReturnValue({
         enabled: true,
         maxRecordingDurationSeconds: 1200,
       });
@@ -1465,6 +1468,10 @@ describe("ChatInput", () => {
       const toggleDictation = vi.fn();
       const onAudioModeChange = vi.fn();
       mockUseAudioDictationFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
+      mockUseAudioConversationalFeature.mockReturnValue({
         enabled: true,
         maxRecordingDurationSeconds: 1200,
       });
@@ -1544,6 +1551,10 @@ describe("ChatInput", () => {
         enabled: true,
         maxRecordingDurationSeconds: 1200,
       });
+      mockUseAudioConversationalFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
       mockUseAudioDictationRecorder.mockReturnValue({
         isDictating: false,
         isDictationStarting: false,
@@ -1609,6 +1620,62 @@ describe("ChatInput", () => {
       expect(toggleAudioRecording).not.toHaveBeenCalled();
     });
 
+    it("starts transcript directly when transcription is the only audio mode option", async () => {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      const toggleAudioRecording = vi.fn();
+      mockUseAudioTranscriptionFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+        showModelSelectorInAudioMode: false,
+      });
+      mockUseAudioDictationFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
+      mockUseAudioConversationalFeature.mockReturnValue({
+        enabled: false,
+        maxRecordingDurationSeconds: 1200,
+      });
+      mockUseAudioTranscriptionRecorder.mockReturnValue({
+        isRecording: false,
+        isRecordingUpload: false,
+        recordingError: null,
+        setRecordingError: vi.fn(),
+        recordingBars: [2, 2, 2, 2, 2],
+        retryingAudioFileId: null,
+        retryAudioTranscription: vi.fn(),
+        removeRecordedAudioFile: vi.fn(),
+        clearRecordedAudioFiles: vi.fn(),
+        hasRecordedAudioFile: () => false,
+        toggleAudioRecording,
+      });
+
+      const { i18n } = await import("@lingui/core");
+      render(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={vi.fn()} />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+
+      fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
+
+      expect(
+        useToastStore
+          .getState()
+          .toasts.some(
+            (toast) => toast.id === "chat-input-audio-mode-selector-toast",
+          ),
+      ).toBe(false);
+      expect(toggleAudioRecording).toHaveBeenCalledTimes(1);
+    });
+
     it("starts transcript recording from the audio-mode selector", async () => {
       const queryClient = new QueryClient({
         defaultOptions: {
@@ -1624,6 +1691,10 @@ describe("ChatInput", () => {
         showModelSelectorInAudioMode: false,
       });
       mockUseAudioDictationFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
+      mockUseAudioConversationalFeature.mockReturnValue({
         enabled: true,
         maxRecordingDurationSeconds: 1200,
       });
@@ -1685,6 +1756,10 @@ describe("ChatInput", () => {
         },
       });
       mockUseAudioDictationFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
+      mockUseAudioConversationalFeature.mockReturnValue({
         enabled: true,
         maxRecordingDurationSeconds: 1200,
       });
@@ -1770,6 +1845,10 @@ describe("ChatInput", () => {
         enabled: true,
         maxRecordingDurationSeconds: 1200,
       });
+      mockUseAudioConversationalFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
       mockUseChatContext.mockReturnValue({
         isPendingResponse: true,
         isMessagingLoading: false,
@@ -1827,6 +1906,10 @@ describe("ChatInput", () => {
         enabled: true,
         maxRecordingDurationSeconds: 1200,
       });
+      mockUseAudioConversationalFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
       mockUseChatInputHandlers.mockReturnValue({
         attachedFiles: [
           {
@@ -1870,6 +1953,10 @@ describe("ChatInput", () => {
         enabled: true,
         maxRecordingDurationSeconds: 1200,
       });
+      mockUseAudioConversationalFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
       mockUseAudioDictationRecorder.mockReturnValue({
         isDictating: true,
         isDictationStarting: false,
@@ -1904,6 +1991,10 @@ describe("ChatInput", () => {
       });
       const toggleDictation = vi.fn();
       mockUseAudioDictationFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
+      mockUseAudioConversationalFeature.mockReturnValue({
         enabled: true,
         maxRecordingDurationSeconds: 1200,
       });
@@ -1953,6 +2044,10 @@ describe("ChatInput", () => {
         enabled: true,
         maxRecordingDurationSeconds: 1200,
       });
+      mockUseAudioConversationalFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
 
       const { i18n } = await import("@lingui/core");
       render(
@@ -1981,6 +2076,10 @@ describe("ChatInput", () => {
       });
       const toggleDictation = vi.fn();
       mockUseAudioDictationFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
+      mockUseAudioConversationalFeature.mockReturnValue({
         enabled: true,
         maxRecordingDurationSeconds: 1200,
       });
@@ -2108,6 +2207,10 @@ describe("ChatInput", () => {
         enabled: true,
         maxRecordingDurationSeconds: 1200,
       });
+      mockUseAudioConversationalFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
 
       const { i18n } = await import("@lingui/core");
       render(
@@ -2149,6 +2252,10 @@ describe("ChatInput", () => {
         enabled: true,
         maxRecordingDurationSeconds: 1200,
       });
+      mockUseAudioConversationalFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
 
       const { i18n } = await import("@lingui/core");
       render(
@@ -2186,6 +2293,10 @@ describe("ChatInput", () => {
       );
       const createSubmitHandler = createSubmitHandlerThatSends;
       mockUseAudioDictationFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
+      mockUseAudioConversationalFeature.mockReturnValue({
         enabled: true,
         maxRecordingDurationSeconds: 1200,
       });
@@ -2284,6 +2395,10 @@ describe("ChatInput", () => {
         enabled: true,
         maxRecordingDurationSeconds: 1200,
       });
+      mockUseAudioConversationalFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
       mockUseAudioDictationRecorder.mockImplementation((options) => {
         latestDictationOptions = options as typeof latestDictationOptions;
         return {
@@ -2379,6 +2494,10 @@ describe("ChatInput", () => {
       );
       const createSubmitHandler = createSubmitHandlerThatSends;
       mockUseAudioDictationFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
+      mockUseAudioConversationalFeature.mockReturnValue({
         enabled: true,
         maxRecordingDurationSeconds: 1200,
       });

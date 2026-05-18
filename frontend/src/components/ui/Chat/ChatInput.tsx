@@ -32,6 +32,7 @@ import {
   useChatInputFeature,
   useAudioTranscriptionFeature,
   useAudioDictationFeature,
+  useAudioConversationalFeature,
 } from "@/providers/FeatureConfigProvider";
 import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 import { resolveChatSendErrorMessage } from "@/utils/chatSendErrorMessage";
@@ -417,6 +418,10 @@ export const ChatInput = ({
     enabled: audioDictationEnabled,
     maxRecordingDurationSeconds: maxDictationDurationSeconds,
   } = useAudioDictationFeature();
+  const {
+    enabled: audioConversationalEnabled,
+    maxRecordingDurationSeconds: maxConversationalDurationSeconds,
+  } = useAudioConversationalFeature();
   const { autofocus: shouldAutofocus, showUsageAdvisory = true } =
     useChatInputFeature();
   // Dummy for i18n:extract
@@ -562,11 +567,14 @@ export const ChatInput = ({
     dictationBars,
     toggleDictation,
   } = useAudioDictationRecorder({
-    enabled: audioDictationEnabled,
-    maxRecordingDurationSeconds: maxDictationDurationSeconds,
+    enabled: audioDictationEnabled || audioConversationalEnabled,
+    mode: isAudioMode ? "conversational" : "dictation",
+    maxRecordingDurationSeconds: isAudioMode
+      ? maxConversationalDurationSeconds
+      : maxDictationDurationSeconds,
     onTranscriptChunk: appendDictationTranscript,
     vadAutoStopEnabled:
-      audioDictationEnabled && isAudioMode && mode === "compose",
+      audioConversationalEnabled && isAudioMode && mode === "compose",
     onVadAutoStop: handleConversationVadAutoStop,
   });
 
@@ -1246,13 +1254,15 @@ export const ChatInput = ({
       isDictationCompleting);
 
   const shouldShowAudioModeSelector =
-    audioDictationEnabled && audioTranscriptionEnabled && mode === "compose";
+    audioConversationalEnabled &&
+    audioTranscriptionEnabled &&
+    mode === "compose";
 
   // The send button slot becomes the audio entry point when the compose
   // input is clean. If both audio paths are enabled, it asks the user which
   // mode to start; otherwise it starts the one available audio flow.
   const showAudioModeButton =
-    (audioDictationEnabled || audioTranscriptionEnabled) &&
+    (audioConversationalEnabled || audioTranscriptionEnabled) &&
     mode === "compose" &&
     (isAudioMode ||
       (!hasComposeContent &&
@@ -1274,7 +1284,7 @@ export const ChatInput = ({
     isDictationCompleting;
 
   const startConversationalAudioMode = useCallback(() => {
-    if (!audioDictationEnabled) {
+    if (!audioConversationalEnabled) {
       return;
     }
 
@@ -1287,7 +1297,7 @@ export const ChatInput = ({
       setIsAudioMode(true);
     }
   }, [
-    audioDictationEnabled,
+    audioConversationalEnabled,
     clearPendingAutoSendTimeout,
     isAudioMode,
     setIsAudioMode,
@@ -1297,7 +1307,7 @@ export const ChatInput = ({
     if (!pendingConversationalStartRef.current) {
       return;
     }
-    if (!audioDictationEnabled || mode !== "compose") {
+    if (!audioConversationalEnabled || mode !== "compose") {
       pendingConversationalStartRef.current = false;
       return;
     }
@@ -1328,7 +1338,7 @@ export const ChatInput = ({
     toggleDictationForCurrentTarget();
   }, [
     attachedFiles.length,
-    audioDictationEnabled,
+    audioConversationalEnabled,
     conversationStartSignal,
     disabled,
     hasIncompleteAudioTranscription,
@@ -1371,7 +1381,7 @@ export const ChatInput = ({
   const showAudioModeChoiceToast = useCallback(() => {
     const actions: ToastAction[] = [];
 
-    if (audioDictationEnabled) {
+    if (audioConversationalEnabled) {
       actions.push({
         id: "conversation",
         label: t`Conversational`,
@@ -1384,7 +1394,7 @@ export const ChatInput = ({
       actions.push({
         id: "transcript",
         label: t`Transcript`,
-        variant: audioDictationEnabled ? "secondary" : "primary",
+        variant: audioConversationalEnabled ? "secondary" : "primary",
         onClick: startTranscriptAudioMode,
       });
     }
@@ -1403,7 +1413,7 @@ export const ChatInput = ({
       actions,
     });
   }, [
-    audioDictationEnabled,
+    audioConversationalEnabled,
     audioTranscriptionEnabled,
     startConversationalAudioMode,
     startTranscriptAudioMode,
@@ -1428,14 +1438,14 @@ export const ChatInput = ({
       return;
     }
 
-    if (audioDictationEnabled) {
+    if (audioConversationalEnabled) {
       startConversationalAudioMode();
       return;
     }
 
     startTranscriptAudioMode();
   }, [
-    audioDictationEnabled,
+    audioConversationalEnabled,
     clearPendingAutoSendTimeout,
     isConversationalAudioActive,
     isAudioMode,

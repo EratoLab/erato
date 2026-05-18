@@ -14,6 +14,7 @@ import {
   useFeatureConfig,
   useUploadFeature,
   useAudioTranscriptionFeature,
+  useAudioConversationalFeature,
   useChatInputFeature,
   useAuthFeature,
   useAssistantsFeature,
@@ -73,6 +74,8 @@ describe("FeatureConfigProvider", () => {
       audioTranscriptionMaxRecordingDurationSeconds: 1200,
       audioDictationEnabled: false,
       audioDictationMaxRecordingDurationSeconds: 1200,
+      audioConversationalEnabled: false,
+      audioConversationalMaxRecordingDurationSeconds: 1200,
       sidebarCollapsedMode: "hidden",
       sidebarLogoPath: null,
       sidebarLogoDarkPath: null,
@@ -125,6 +128,10 @@ describe("FeatureConfigProvider", () => {
           showModelSelectorInAudioMode: false,
         },
         audioDictation: {
+          enabled: false,
+          maxRecordingDurationSeconds: 1200,
+        },
+        audioConversational: {
           enabled: false,
           maxRecordingDurationSeconds: 1200,
         },
@@ -541,6 +548,35 @@ describe("FeatureConfigProvider", () => {
       });
 
       expect(result.current.enabled).toBe(true);
+    });
+  });
+
+  describe("useAudioConversationalFeature", () => {
+    it("should disable audio conversational mode when env flag is false or missing", () => {
+      const { result } = renderHook(() => useAudioConversationalFeature(), {
+        wrapper: createWrapper(),
+      });
+
+      expect(result.current).toEqual({
+        enabled: false,
+        maxRecordingDurationSeconds: 1200,
+      });
+    });
+
+    it("should enable audio conversational mode when env flag is true", () => {
+      mockEnv.mockReturnValue({
+        audioConversationalEnabled: true,
+        audioConversationalMaxRecordingDurationSeconds: 600,
+      });
+
+      const { result } = renderHook(() => useAudioConversationalFeature(), {
+        wrapper: createWrapper(),
+      });
+
+      expect(result.current).toEqual({
+        enabled: true,
+        maxRecordingDurationSeconds: 600,
+      });
     });
   });
 
