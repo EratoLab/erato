@@ -27,6 +27,12 @@ export interface FetchOutlookMessageResult {
   internetMessageId: string | null;
 }
 
+export interface FetchOutlookMessageBytesResult {
+  bytes: ArrayBuffer;
+  subject: string;
+  internetMessageId: string | null;
+}
+
 export type AcquireGraphToken = () => Promise<string>;
 
 /**
@@ -38,14 +44,26 @@ export async function fetchOutlookMessageFilesViaGraph(
   ewsItemId: string,
   acquireToken: AcquireGraphToken,
 ): Promise<FetchOutlookMessageResult> {
+  const { bytes, subject, internetMessageId } =
+    await fetchOutlookMessageBytesViaGraph(ewsItemId, acquireToken);
+  return {
+    subject,
+    files: [buildEmlFile(bytes, subject)],
+    internetMessageId,
+  };
+}
+
+export async function fetchOutlookMessageBytesViaGraph(
+  ewsItemId: string,
+  acquireToken: AcquireGraphToken,
+): Promise<FetchOutlookMessageBytesResult> {
   const restId = convertEwsIdToGraphId(ewsItemId);
   const token = await acquireToken();
   const metadata = await fetchMessageMetadataById(restId, token);
   const bytes = await fetchMessageRawMimeById(restId, token);
-  const subject = metadata.subject ?? "";
   return {
-    subject,
-    files: [buildEmlFile(bytes, subject)],
+    bytes,
+    subject: metadata.subject ?? "",
     internetMessageId: metadata.internetMessageId ?? null,
   };
 }
@@ -144,16 +162,33 @@ export async function fetchOutlookMessageFilesByInternetMessageIdViaGraph(
   internetMessageId: string,
   acquireToken: AcquireGraphToken,
 ): Promise<FetchOutlookMessageResult | null> {
+  const result = await fetchOutlookMessageBytesByInternetMessageIdViaGraph(
+    internetMessageId,
+    acquireToken,
+  );
+  if (!result) {
+    return null;
+  }
+  return {
+    subject: result.subject,
+    files: [buildEmlFile(result.bytes, result.subject)],
+    internetMessageId: result.internetMessageId,
+  };
+}
+
+export async function fetchOutlookMessageBytesByInternetMessageIdViaGraph(
+  internetMessageId: string,
+  acquireToken: AcquireGraphToken,
+): Promise<FetchOutlookMessageBytesResult | null> {
   const token = await acquireToken();
   const match = await findMessageByInternetMessageId(internetMessageId, token);
   if (!match?.id) {
     return null;
   }
   const bytes = await fetchMessageRawMimeById(match.id, token);
-  const subject = match.subject ?? "";
   return {
-    subject,
-    files: [buildEmlFile(bytes, subject)],
+    bytes,
+    subject: match.subject ?? "",
     internetMessageId: match.internetMessageId ?? internetMessageId,
   };
 }

@@ -1,6 +1,11 @@
-import { fetchOutlookMessageFilesViaGraph } from "./fetchOutlookMessageGraph";
+import {
+  fetchOutlookMessageBytesViaGraph,
+  fetchOutlookMessageFilesViaGraph,
+} from "./fetchOutlookMessageGraph";
+import { parseEmlBytes } from "./parsedEmail";
 
 import type { AcquireGraphToken } from "./fetchOutlookMessageGraph";
+import type { ParsedEmail } from "./parsedEmail";
 
 /**
  * Fetches the currently-open Outlook message as a raw `.eml` File
@@ -42,4 +47,42 @@ export async function fetchCurrentEmailEml(
     );
     return null;
   }
+}
+
+export interface CurrentEmailParsedResult {
+  parsed: ParsedEmail;
+  /**
+   * Dedup key. Prefers postal-mime's parsed `Message-ID` (canonical RFC 5322
+   * source of truth) and falls back to Graph's `internetMessageId` field —
+   * which can differ in bracket presence for some legacy Exchange mailboxes.
+   */
+  messageId: string | null;
+}
+
+export async function fetchCurrentEmailParsed(
+  itemId: string,
+  acquireGraphToken: AcquireGraphToken,
+): Promise<CurrentEmailParsedResult | null> {
+  let bytesResult;
+  try {
+    bytesResult = await fetchOutlookMessageBytesViaGraph(
+      itemId,
+      acquireGraphToken,
+    );
+  } catch (error) {
+    console.warn(
+      "[fetchCurrentEmailParsed] Graph fetch failed for current email:",
+      error,
+    );
+    return null;
+  }
+
+  const parsed = await parseEmlBytes(bytesResult.bytes);
+  if (!parsed) {
+    return null;
+  }
+  return {
+    parsed,
+    messageId: parsed.messageId ?? bytesResult.internetMessageId,
+  };
 }

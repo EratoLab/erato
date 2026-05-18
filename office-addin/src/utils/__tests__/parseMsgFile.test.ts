@@ -6,7 +6,10 @@ import {
   msgFileFromBytes,
   utf16le,
 } from "../../test/fixtures/msg";
-import { parseMsgFileToFiles } from "../parseMsgFile";
+import {
+  parseMsgFileToFiles,
+  parseMsgFileToParsedEmail,
+} from "../parseMsgFile";
 
 // Both collaborators (`extractMsgInternetMessageId` and the Graph client) run
 // for real. Only the network boundary is stubbed, via `vi.stubGlobal("fetch")`
@@ -157,5 +160,102 @@ describe("parseMsgFileToFiles", () => {
     const result = await parseMsgFileToFiles(file, acquireToken);
 
     expect(result).toEqual({ files: [], messageId: "<abc@host>" });
+  });
+});
+
+describe("parseMsgFileToParsedEmail", () => {
+  beforeEach(() => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  const CRLF = "\r\n";
+
+  function buildEml(subject: string, messageId: string): string {
+    return (
+      `From: a@x${CRLF}` +
+      `To: b@x${CRLF}` +
+      `Subject: ${subject}${CRLF}` +
+      `Message-ID: ${messageId}${CRLF}` +
+      `MIME-Version: 1.0${CRLF}` +
+      `Content-Type: text/plain; charset=utf-8${CRLF}${CRLF}` +
+      `hi there`
+    );
+  }
+
+  it("resolves via Graph, parses the returned MIME, and returns a ParsedEmail", async () => {
+    const file = msgFileFromBytes(buildMsgWithInternetMessageId("<abc@host>"));
+    const acquireToken = vi.fn().mockResolvedValue("tok");
+    installFetchMock((url) => {
+      if (url.includes("$filter=")) {
+        return {
+          ok: true,
+          jsonValue: {
+            value: [
+              {
+                id: "matched-id",
+                subject: "Hi",
+                internetMessageId: "<abc@host>",
+              },
+            ],
+          },
+        };
+      }
+      return { ok: true, bytes: bytesFrom(buildEml("Hi", "<abc@host>")) };
+    });
+
+    const result = await parseMsgFileToParsedEmail(file, acquireToken);
+
+    expect(result.parsed).not.toBeNull();
+    expect(result.parsed?.subject).toBe("Hi");
+    expect(result.parsed?.text?.trim()).toBe("hi there");
+    expect(result.messageId).toBe("<abc@host>");
+  });
+
+  it("returns null parsed + null id when the CFB has no Message-ID", async () => {
+    const file = msgFileFromBytes(
+      buildCfbWith([
+        { name: "__substg1.0_0037001F", content: utf16le("Some subject") },
+      ]),
+      "no-id.msg",
+    );
+    const acquireToken = vi.fn();
+    const fetchMock = installFetchMock(() => ({ ok: true }));
+
+    const result = await parseMsgFileToParsedEmail(file, acquireToken);
+
+    expect(result).toEqual({ parsed: null, messageId: null });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(acquireToken).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      label: "Graph filter yields no match",
+      responder: (): MockResponse => ({
+        ok: true,
+        jsonValue: { value: [] },
+      }),
+    },
+    {
+      label: "Graph filter returns a non-OK status",
+      responder: (): MockResponse => ({
+        ok: false,
+        status: 500,
+        statusText: "Internal Server Error",
+      }),
+    },
+  ])("preserves the CFB Message-ID with null parsed when $label", async ({ responder }) => {
+    const file = msgFileFromBytes(buildMsgWithInternetMessageId("<abc@host>"));
+    const acquireToken = vi.fn().mockResolvedValue("tok");
+    installFetchMock(responder);
+
+    const result = await parseMsgFileToParsedEmail(file, acquireToken);
+
+    expect(result).toEqual({ parsed: null, messageId: "<abc@host>" });
   });
 });
