@@ -81,8 +81,11 @@ export type AudioDictationTranscriptChunk = {
   transcript: string;
 };
 
+export type AudioDictationMode = "dictation" | "conversational";
+
 type UseAudioDictationRecorderOptions = {
   enabled: boolean;
+  mode?: AudioDictationMode;
   maxRecordingDurationSeconds: number;
   onTranscriptChunk: (chunk: AudioDictationTranscriptChunk) => void;
   vadAutoStopEnabled?: boolean;
@@ -138,6 +141,7 @@ function dictationSessionReducer(
 
 export function useAudioDictationRecorder({
   enabled,
+  mode = "dictation",
   maxRecordingDurationSeconds,
   onTranscriptChunk,
   vadAutoStopEnabled = false,
@@ -545,6 +549,7 @@ export function useAudioDictationRecorder({
 
         sendAudioDictationControlFrame(socket, {
           type: "start",
+          mode,
         });
 
         const sessionFrame = await sessionStatePromise;
@@ -568,7 +573,7 @@ export function useAudioDictationRecorder({
         pendingSocketRef.current = null;
       }
     },
-    [enabled, isMounted],
+    [enabled, isMounted, mode],
   );
 
   const completeDictation = useCallback(async () => {

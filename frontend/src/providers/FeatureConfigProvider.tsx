@@ -52,6 +52,14 @@ interface AudioDictationFeatureConfig {
   maxRecordingDurationSeconds: number;
 }
 
+/** Configuration for conversational audio features */
+interface AudioConversationalFeatureConfig {
+  /** Whether conversational audio mode is enabled */
+  enabled: boolean;
+  /** Maximum recording duration in seconds for conversational audio captures */
+  maxRecordingDurationSeconds: number;
+}
+
 /**
  * Configuration for authentication/account features
  */
@@ -145,6 +153,8 @@ export interface FeatureConfig {
   audioTranscription: AudioTranscriptionFeatureConfig;
   /** Audio dictation feature flags */
   audioDictation: AudioDictationFeatureConfig;
+  /** Conversational audio feature flags */
+  audioConversational: AudioConversationalFeatureConfig;
   /** Authentication feature flags */
   auth: AuthFeatureConfig;
   /** Assistants feature flags */
@@ -186,6 +196,10 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
     showModelSelectorInAudioMode: false,
   },
   audioDictation: {
+    enabled: false,
+    maxRecordingDurationSeconds: 20 * 60,
+  },
+  audioConversational: {
     enabled: false,
     maxRecordingDurationSeconds: 20 * 60,
   },
@@ -271,6 +285,11 @@ function createFeatureConfig(
       maxRecordingDurationSeconds:
         environment.audioDictationMaxRecordingDurationSeconds,
     },
+    audioConversational: {
+      enabled: Boolean(environment.audioConversationalEnabled),
+      maxRecordingDurationSeconds:
+        environment.audioConversationalMaxRecordingDurationSeconds,
+    },
     auth: {
       showLogout: !environment.disableLogout,
     },
@@ -308,49 +327,56 @@ function createFeatureConfig(
   };
 }
 
-function mergeFeatureConfig(overrides?: FeatureConfigOverrides): FeatureConfig {
+function mergeFeatureConfig(
+  overrides?: FeatureConfigOverrides,
+  baseConfig = defaultStaticFeatureConfig,
+): FeatureConfig {
   if (!overrides) {
-    return defaultStaticFeatureConfig;
+    return baseConfig;
   }
 
   return {
-    upload: { ...defaultStaticFeatureConfig.upload, ...overrides.upload },
+    upload: { ...baseConfig.upload, ...overrides.upload },
     chatInput: {
-      ...defaultStaticFeatureConfig.chatInput,
+      ...baseConfig.chatInput,
       ...overrides.chatInput,
     },
     audioTranscription: {
-      ...defaultStaticFeatureConfig.audioTranscription,
+      ...baseConfig.audioTranscription,
       ...overrides.audioTranscription,
     },
     audioDictation: {
-      ...defaultStaticFeatureConfig.audioDictation,
+      ...baseConfig.audioDictation,
       ...overrides.audioDictation,
     },
-    auth: { ...defaultStaticFeatureConfig.auth, ...overrides.auth },
+    audioConversational: {
+      ...baseConfig.audioConversational,
+      ...overrides.audioConversational,
+    },
+    auth: { ...baseConfig.auth, ...overrides.auth },
     assistants: {
-      ...defaultStaticFeatureConfig.assistants,
+      ...baseConfig.assistants,
       ...overrides.assistants,
     },
     starterPrompts: {
-      ...defaultStaticFeatureConfig.starterPrompts,
+      ...baseConfig.starterPrompts,
       ...overrides.starterPrompts,
     },
     userPreferences: {
-      ...defaultStaticFeatureConfig.userPreferences,
+      ...baseConfig.userPreferences,
       ...overrides.userPreferences,
     },
     cloudProviders: {
-      ...defaultStaticFeatureConfig.cloudProviders,
+      ...baseConfig.cloudProviders,
       ...overrides.cloudProviders,
     },
     messageFeedback: {
-      ...defaultStaticFeatureConfig.messageFeedback,
+      ...baseConfig.messageFeedback,
       ...overrides.messageFeedback,
     },
-    sidebar: { ...defaultStaticFeatureConfig.sidebar, ...overrides.sidebar },
+    sidebar: { ...baseConfig.sidebar, ...overrides.sidebar },
     chatSharing: {
-      ...defaultStaticFeatureConfig.chatSharing,
+      ...baseConfig.chatSharing,
       ...overrides.chatSharing,
     },
   };
@@ -383,8 +409,10 @@ export function FeatureConfigProvider({
   children: ReactNode;
   config?: FeatureConfigOverrides;
 }) {
+  // Runtime providers use backend/VITE-derived feature flags as the base so
+  // app-specific partial overrides do not accidentally disable server config.
   const resolvedConfig = useMemo<FeatureConfig>(
-    () => (config ? mergeFeatureConfig(config) : createFeatureConfig(env())),
+    () => mergeFeatureConfig(config, createFeatureConfig(env())),
     [config],
   );
 
@@ -402,6 +430,8 @@ export function StaticFeatureConfigProvider({
   children: ReactNode;
   config?: FeatureConfigOverrides;
 }) {
+  // Library/static consumers do not have backend-injected environment config;
+  // their explicit overrides are layered over the static defaults.
   const mergedConfig = useMemo(() => mergeFeatureConfig(config), [config]);
 
   return (
@@ -488,6 +518,17 @@ export function useAudioTranscriptionFeature(): AudioTranscriptionFeatureConfig 
 export function useAudioDictationFeature(): AudioDictationFeatureConfig {
   const config = useFeatureConfig();
   return config.audioDictation;
+}
+
+/**
+ * Convenience hook for accessing conversational audio feature configuration.
+ *
+ * @returns Conversational audio feature configuration
+ * @throws {Error} If used outside of FeatureConfigProvider
+ */
+export function useAudioConversationalFeature(): AudioConversationalFeatureConfig {
+  const config = useFeatureConfig();
+  return config.audioConversational;
 }
 
 /**

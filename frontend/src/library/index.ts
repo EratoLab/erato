@@ -159,6 +159,7 @@ export {
   FeatureConfigProvider,
   StaticFeatureConfigProvider,
   defaultStaticFeatureConfig,
+  useAudioConversationalFeature,
   useFeatureConfig,
   useMessageFeedbackFeature,
   type FeatureConfig,

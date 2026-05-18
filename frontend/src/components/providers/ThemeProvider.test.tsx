@@ -49,6 +49,8 @@ const createMockEnv = (overrides: Partial<Env> = {}): Env => ({
   audioTranscriptionMaxRecordingDurationSeconds: 1200,
   audioDictationEnabled: false,
   audioDictationMaxRecordingDurationSeconds: 1200,
+  audioConversationalEnabled: false,
+  audioConversationalMaxRecordingDurationSeconds: 1200,
   sidebarCollapsedMode: "hidden",
   sidebarLogoPath: null,
   sidebarLogoDarkPath: null,
