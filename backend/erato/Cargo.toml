@@ -52,7 +52,8 @@ futures = "0.3"
 tokio-stream = { version = "0.1.17", features = ["sync"] }
 genai = { version = "0.6.0-beta.19-WIP", git = "https://github.com/EratoLab/rust-genai.git", rev = "eeb52ab1961dfd543564baa932ef3fffb1ee9ec2" }
 reqwest = { version = "0.13.1", features = ["multipart"] }
-reqwest_012 = { package = "reqwest", version = "0.12.28" }
+reqwest-middleware = "0.5.1"
+reqwest-tracing = { version = "0.7.0", features = ["opentelemetry_0_31"] }
 opendal = { version = "0.56.0", features = ["services-s3", "services-azblob"] }
 percent-encoding = "2.3.1"
 

@@ -12,7 +12,10 @@ use axum::{Extension, Json};
 use chrono::{DateTime, FixedOffset};
 use futures::future::join_all;
 use graph_rs_sdk::{GraphClient, GraphClientConfiguration};
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
+use reqwest_tracing::{SpanBackendWithUrl, TracingMiddleware};
 use serde::{Deserialize, Serialize};
+use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use utoipa::ToSchema;
 
@@ -190,6 +193,20 @@ struct DriveCandidate {
     raw_drive: serde_json::Value,
     discovery_order: usize,
     discovery_position: usize,
+    /// True only while every discovery path for this drive came from wildcard site search.
+    ///
+    /// If the same drive is also discovered through a direct user-scoped source such as `/me/drive`
+    /// or `/me/drives`, this is downgraded to false so no-query public-drive filtering does not hide
+    /// a drive the user reached through a more explicit source.
+    discovered_via_site_search: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct DriveDiscoveryContext<'a> {
+    order: usize,
+    position: usize,
+    source: &'a str,
+    discovered_via_site_search: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -212,6 +229,7 @@ struct DriveDiscoveryResult {
     discovered_drive_ids: HashSet<String>,
     discovered_group_ids: HashSet<String>,
     discovered_site_ids: HashSet<String>,
+    drive_ids_from_site_search: HashSet<String>,
     group_metadata_by_id: HashMap<String, GroupMetadata>,
     site_metadata_by_id: HashMap<String, SiteMetadata>,
 }
@@ -222,6 +240,17 @@ fn collect_discovered_drive_site_id(result: &mut DriveDiscoveryResult, drive: &s
     }
 }
 
+/// Merge one discovery source result into the accumulated all-drives state.
+///
+/// Drive discovery is split into multiple Microsoft Graph surfaces. Some surfaces return drive
+/// objects directly, while others only return IDs that become inputs for later fan-out calls. This
+/// helper centralizes the merge step so each enabled source contributes in the configured display
+/// order:
+/// - direct drive objects are de-duplicated by drive ID while preserving the first source/position;
+/// - IDs discovered for follow-up stages are added to the shared drive/site/group target sets;
+/// - site metadata discovered alongside sites is cached for later drive parsing/enrichment;
+/// - drives originating from wildcard site search are marked so the final no-query response can hide
+///   public group-backed libraries without affecting drives discovered through more explicit sources.
 fn apply_drive_discovery_result(
     drive_candidates_by_id: &mut HashMap<String, DriveCandidate>,
     enrichment: &mut DriveEnrichmentContext,
@@ -236,14 +265,21 @@ fn apply_drive_discovery_result(
 ) {
     let (discovered_drive_ids, discovered_site_ids, discovered_group_ids) = discovered_targets;
 
+    let drive_ids_from_site_search = result.drive_ids_from_site_search;
+
     for (position, drive) in result.drives.into_iter().enumerate() {
+        let discovered_via_site_search = extract_drive_id(&drive)
+            .is_some_and(|drive_id| drive_ids_from_site_search.contains(&drive_id));
         add_drive(
             drive_candidates_by_id,
             enrichment,
             discovered_site_ids,
-            discovery_order,
-            position,
-            discovery_source,
+            DriveDiscoveryContext {
+                order: discovery_order,
+                position,
+                source: discovery_source,
+                discovered_via_site_search,
+            },
             &drive,
         );
     }
@@ -288,6 +324,21 @@ fn drive_matches_search_query(drive: &Drive, query: &str) -> bool {
         .site_name
         .as_deref()
         .is_some_and(|site_name| site_name.to_lowercase().contains(&normalized_query))
+}
+
+fn is_public_group_drive(drive: &Drive) -> bool {
+    drive
+        .group_visibility
+        .as_deref()
+        .is_some_and(|visibility| visibility.eq_ignore_ascii_case("Public"))
+}
+
+fn should_filter_public_site_search_drive(
+    has_search_query: bool,
+    drive: &Drive,
+    candidate: &DriveCandidate,
+) -> bool {
+    !has_search_query && candidate.discovered_via_site_search && is_public_group_drive(drive)
 }
 
 fn extract_drive_id(drive: &serde_json::Value) -> Option<String> {
@@ -440,15 +491,13 @@ fn add_drive(
     drive_candidates_by_id: &mut HashMap<String, DriveCandidate>,
     enrichment: &mut DriveEnrichmentContext,
     discovered_site_ids: &mut HashSet<String>,
-    discovery_order: usize,
-    discovery_position: usize,
-    discovery_source: &str,
+    discovery: DriveDiscoveryContext<'_>,
     drive: &serde_json::Value,
 ) {
     let drive_name = extract_drive_name(drive);
 
     tracing::trace!(
-        discovery_source,
+        discovery_source = discovery.source,
         drive_id = drive.get("id").and_then(|v| v.as_str()),
         drive_name = drive_name.as_deref(),
         drive_type = drive.get("driveType").and_then(|v| v.as_str()),
@@ -483,7 +532,7 @@ fn add_drive(
         && should_filter_drive_name(name)
     {
         tracing::trace!(
-            discovery_source,
+            discovery_source = discovery.source,
             filtered_drive_name = name,
             drive_id = drive.get("id").and_then(|v| v.as_str()),
             "Filtered Microsoft Graph drive candidate by name"
@@ -499,13 +548,19 @@ fn add_drive(
     }
 
     if let Some(drive_id) = extract_drive_id(drive) {
-        drive_candidates_by_id
-            .entry(drive_id)
-            .or_insert_with(|| DriveCandidate {
-                raw_drive: drive.clone(),
-                discovery_order,
-                discovery_position,
-            });
+        match drive_candidates_by_id.entry(drive_id) {
+            Entry::Occupied(mut entry) => {
+                entry.get_mut().discovered_via_site_search &= discovery.discovered_via_site_search;
+            }
+            Entry::Vacant(entry) => {
+                entry.insert(DriveCandidate {
+                    raw_drive: drive.clone(),
+                    discovery_order: discovery.order,
+                    discovery_position: discovery.position,
+                    discovered_via_site_search: discovery.discovered_via_site_search,
+                });
+            }
+        }
     }
 }
 
@@ -540,27 +595,27 @@ fn collect_shared_item_references(
 }
 
 async fn fetch_graph_json(
-    http_client: &reqwest_012::Client,
+    http_client: &ClientWithMiddleware,
     access_token: &str,
     url: &str,
-) -> Result<serde_json::Value, reqwest_012::Error> {
-    http_client
+) -> reqwest_middleware::Result<serde_json::Value> {
+    Ok(http_client
         .get(url)
         .bearer_auth(access_token)
         .send()
         .await?
         .error_for_status()?
         .json()
-        .await
+        .await?)
 }
 
 async fn fetch_graph_json_with_consistency_level(
-    http_client: &reqwest_012::Client,
+    http_client: &ClientWithMiddleware,
     access_token: &str,
     url: &str,
     consistency_level: &str,
-) -> Result<serde_json::Value, reqwest_012::Error> {
-    http_client
+) -> reqwest_middleware::Result<serde_json::Value> {
+    Ok(http_client
         .get(url)
         .bearer_auth(access_token)
         .header("ConsistencyLevel", consistency_level)
@@ -568,14 +623,19 @@ async fn fetch_graph_json_with_consistency_level(
         .await?
         .error_for_status()?
         .json()
-        .await
+        .await?)
 }
 
+/// List a Microsoft Graph collection and follow `@odata.nextLink` until all pages are fetched.
+///
+/// Use this helper only for collection surfaces where exhaustive pagination is acceptable for the
+/// current request. For tenant-wide or otherwise high-cardinality surfaces, prefer a bounded helper
+/// that uses `$top` and avoids following `@odata.nextLink` unless the caller explicitly needs more.
 async fn fetch_graph_collection(
-    http_client: &reqwest_012::Client,
+    http_client: &ClientWithMiddleware,
     access_token: &str,
     path_or_url: &str,
-) -> Result<Vec<serde_json::Value>, reqwest_012::Error> {
+) -> reqwest_middleware::Result<Vec<serde_json::Value>> {
     let mut next_url = if path_or_url.starts_with("https://") {
         path_or_url.to_string()
     } else {
@@ -601,10 +661,10 @@ async fn fetch_graph_collection(
 }
 
 async fn fetch_graph_drive(
-    http_client: &reqwest_012::Client,
+    http_client: &ClientWithMiddleware,
     access_token: &str,
     path_or_url: &str,
-) -> Result<serde_json::Value, reqwest_012::Error> {
+) -> reqwest_middleware::Result<serde_json::Value> {
     let url = if path_or_url.starts_with("https://") {
         path_or_url.to_string()
     } else {
@@ -614,8 +674,15 @@ async fn fetch_graph_drive(
     fetch_graph_json(http_client, access_token, &url).await
 }
 
+/// Fetch SharePoint site metadata for a discovered site ID.
+///
+/// Endpoint: `GET /sites/{site-id}`.
+///
+/// This is used as enrichment for drives that only expose a `sharePointIds.siteId`. It provides the
+/// site display name shown in the picker and the `isPersonalSite` flag used to classify personal
+/// OneDrive-backed libraries.
 async fn fetch_site_name(
-    http_client: &reqwest_012::Client,
+    http_client: &ClientWithMiddleware,
     access_token: &str,
     site_id: &str,
 ) -> Option<SiteMetadata> {
@@ -639,8 +706,21 @@ async fn fetch_site_name(
     }
 }
 
+/// Fetch Microsoft 365 group metadata for a discovered group ID.
+///
+/// Endpoint: `GET /groups/{group-id}?$select=id,displayName,groupTypes,resourceProvisioningOptions,visibility`.
+///
+/// Relevant upstream docs:
+/// - Group resource: https://learn.microsoft.com/graph/api/resources/group
+/// - Teams-backed group differentiator: https://learn.microsoft.com/graph/group-set-options
+///
+/// The returned metadata is used to:
+/// - distinguish Teams-backed document libraries from generic Microsoft 365 group libraries via
+///   `resourceProvisioningOptions` containing `Team`;
+/// - expose `visibility` (`Public`, `Private`, `HiddenMembership`) to the frontend;
+/// - suppress public group-backed libraries on the default no-query discovery path.
 async fn fetch_group_name(
-    http_client: &reqwest_012::Client,
+    http_client: &ClientWithMiddleware,
     access_token: &str,
     group_id: &str,
 ) -> Option<GroupMetadata> {
@@ -685,6 +765,14 @@ async fn fetch_group_name(
     }
 }
 
+/// List the signed-in user's primary OneDrive.
+///
+/// Endpoint: `GET /me/drive`.
+/// Docs: https://learn.microsoft.com/graph/api/drive-get
+///
+/// This is the lowest-cardinality drive source and normally returns the user's personal or business
+/// OneDrive root drive. It is queried independently from broader SharePoint/group discovery because
+/// it is fast and stable.
 #[tracing::instrument(
     name = "sharepoint.all_drives.fetch_me_drive",
     skip(client),
@@ -717,6 +805,14 @@ async fn fetch_me_drive(client: &GraphClient) -> DriveDiscoveryResult {
     result
 }
 
+/// List drives directly associated with the signed-in user.
+///
+/// Endpoint: `GET /me/drives`.
+/// Docs: https://learn.microsoft.com/graph/api/drive-list
+///
+/// This can surface additional OneDrive drives available to the user. The collection is paginated
+/// exhaustively because this user-scoped endpoint is expected to be bounded compared with tenant
+/// group or site enumeration.
 #[tracing::instrument(
     name = "sharepoint.all_drives.fetch_me_drives",
     skip(http_client, access_token),
@@ -726,7 +822,7 @@ async fn fetch_me_drive(client: &GraphClient) -> DriveDiscoveryResult {
     )
 )]
 async fn fetch_me_drives(
-    http_client: &reqwest_012::Client,
+    http_client: &ClientWithMiddleware,
     access_token: &str,
 ) -> DriveDiscoveryResult {
     let mut result = DriveDiscoveryResult::default();
@@ -752,6 +848,19 @@ async fn fetch_me_drives(
     result
 }
 
+/// List a bounded set of Teams joined by the signed-in user and convert them into group IDs.
+///
+/// Endpoint: `GET /me/joinedTeams?$select=id&$top={limit}`.
+/// Docs: https://learn.microsoft.com/graph/api/user-list-joinedteams
+///
+/// Important behavior:
+/// - This function intentionally does not follow `@odata.nextLink`; the default no-query discovery
+///   path must stay predictable in tenants with many joined teams.
+/// - Each returned team ID is a Microsoft 365 group ID, so group metadata is fetched immediately to
+///   determine visibility and Teams provisioning state.
+/// - When `include_public_groups` is `false` (the default no-query path), public groups are skipped
+///   before `/groups/{id}/drives` is called. When the user explicitly searches, public groups are
+///   allowed because the query narrows intent.
 #[tracing::instrument(
     name = "sharepoint.all_drives.fetch_joined_teams",
     skip(http_client, access_token),
@@ -761,7 +870,7 @@ async fn fetch_me_drives(
     )
 )]
 async fn fetch_joined_teams(
-    http_client: &reqwest_012::Client,
+    http_client: &ClientWithMiddleware,
     access_token: &str,
     limit: usize,
     include_public_groups: bool,
@@ -821,6 +930,20 @@ async fn fetch_joined_teams(
     result
 }
 
+/// Search Microsoft 365 groups by display name and convert matching groups into group IDs.
+///
+/// Endpoint:
+/// `GET /groups?$search="displayName:{query}"&$select=id,displayName,groupTypes,resourceProvisioningOptions,visibility&$top=20`
+/// with `ConsistencyLevel: eventual`.
+///
+/// Docs:
+/// - Search query parameter: https://learn.microsoft.com/graph/search-query-parameter
+/// - Advanced directory queries: https://learn.microsoft.com/graph/aad-advanced-queries
+///
+/// This is used only when the user provides a search query. It is deliberately bounded with `$top`
+/// and does not page through every match. Unlike the default no-query path, public groups are
+/// retained here because an explicit search query is treated as user intent to find a matching
+/// library regardless of visibility.
 #[tracing::instrument(
     name = "sharepoint.all_drives.fetch_group_search",
     skip(http_client, access_token),
@@ -830,7 +953,7 @@ async fn fetch_joined_teams(
     )
 )]
 async fn fetch_group_search(
-    http_client: &reqwest_012::Client,
+    http_client: &ClientWithMiddleware,
     access_token: &str,
     query: &str,
 ) -> DriveDiscoveryResult {
@@ -921,6 +1044,14 @@ async fn fetch_group_search(
     result
 }
 
+/// List document libraries for already-discovered Microsoft 365 group IDs.
+///
+/// Endpoint: `GET /groups/{group-id}/drives`.
+/// Docs: https://learn.microsoft.com/graph/api/drive-list
+///
+/// This function never discovers group IDs on its own. Callers must provide a bounded, pre-filtered
+/// group ID set from `fetch_joined_teams` or `fetch_group_search`; otherwise this would become the
+/// expensive fan-out step that caused timeouts in larger tenants.
 #[tracing::instrument(
     name = "sharepoint.all_drives.fetch_group_drives",
     skip(http_client, access_token, discovered_group_ids),
@@ -930,7 +1061,7 @@ async fn fetch_group_search(
     )
 )]
 async fn fetch_group_drives(
-    http_client: &reqwest_012::Client,
+    http_client: &ClientWithMiddleware,
     access_token: &str,
     discovered_group_ids: &HashSet<String>,
 ) -> DriveDiscoveryResult {
@@ -977,6 +1108,14 @@ async fn fetch_group_drives(
     result
 }
 
+/// Search SharePoint sites and collect matching site IDs for a later drive lookup.
+///
+/// Endpoint: `GET /sites?search={query}&$top=20`.
+/// Docs: https://learn.microsoft.com/graph/api/site-search
+///
+/// The search is bounded with `$top=20`. For an explicit user query, the query string is forwarded
+/// to Graph and matching pages are followed. Without a query, the caller may pass `*`; that wildcard
+/// discovery path intentionally fetches only the first page because it is expensive in large tenants.
 #[tracing::instrument(
     name = "sharepoint.all_drives.fetch_site_search",
     skip(http_client, access_token),
@@ -986,17 +1125,39 @@ async fn fetch_group_drives(
     )
 )]
 async fn fetch_site_search(
-    http_client: &reqwest_012::Client,
+    http_client: &ClientWithMiddleware,
     access_token: &str,
     query: &str,
 ) -> DriveDiscoveryResult {
     let mut result = DriveDiscoveryResult::default();
-    let sanitized_query = if query.trim().is_empty() { "*" } else { query };
+    let trimmed_query = query.trim();
+    let sanitized_query = if trimmed_query.is_empty() {
+        "*"
+    } else {
+        trimmed_query
+    };
     let encoded_query =
         url::form_urlencoded::byte_serialize(sanitized_query.as_bytes()).collect::<String>();
     let search_path = format!("/sites?search={encoded_query}&$top=20");
 
-    match fetch_graph_collection(http_client, access_token, &search_path).await {
+    let sites_result = if sanitized_query == "*" {
+        fetch_graph_json(
+            http_client,
+            access_token,
+            &format!("{GRAPH_API_BASE_URL}{search_path}"),
+        )
+        .await
+        .map(|body| {
+            body.get("value")
+                .and_then(|value| value.as_array())
+                .cloned()
+                .unwrap_or_default()
+        })
+    } else {
+        fetch_graph_collection(http_client, access_token, &search_path).await
+    };
+
+    match sites_result {
         Ok(sites) => {
             for site in sites {
                 if let Some(site_id) = site.get("id").and_then(|value| value.as_str()) {
@@ -1040,6 +1201,14 @@ async fn fetch_site_search(
     result
 }
 
+/// List items shared with the signed-in user and collect referenced drive/site IDs.
+///
+/// Endpoint: `GET /me/drive/sharedWithMe()`.
+/// Docs: https://learn.microsoft.com/graph/api/drive-sharedwithme
+///
+/// The shared-with-me response contains drive item references rather than top-level drives. This
+/// function extracts `remoteItem.parentReference.driveId` and SharePoint site IDs so that later
+/// steps can fetch the referenced drive details or site drives.
 #[tracing::instrument(
     name = "sharepoint.all_drives.fetch_shared_with_me",
     skip(http_client, access_token),
@@ -1049,7 +1218,7 @@ async fn fetch_site_search(
     )
 )]
 async fn fetch_shared_with_me(
-    http_client: &reqwest_012::Client,
+    http_client: &ClientWithMiddleware,
     access_token: &str,
 ) -> DriveDiscoveryResult {
     let mut result = DriveDiscoveryResult::default();
@@ -1083,6 +1252,14 @@ async fn fetch_shared_with_me(
     result
 }
 
+/// List document libraries for already-discovered SharePoint site IDs.
+///
+/// Endpoint: `GET /sites/{site-id}/drives`.
+/// Docs: https://learn.microsoft.com/graph/api/drive-list
+///
+/// This is a fan-out step over site IDs discovered from lower-level sources such as site search,
+/// shared item references, or drive metadata. Site metadata is reused when available; otherwise it
+/// is fetched via `fetch_site_name` to improve frontend display and drive classification.
 #[tracing::instrument(
     name = "sharepoint.all_drives.fetch_site_drives",
     skip(
@@ -1097,9 +1274,10 @@ async fn fetch_shared_with_me(
     )
 )]
 async fn fetch_site_drives(
-    http_client: &reqwest_012::Client,
+    http_client: &ClientWithMiddleware,
     access_token: &str,
     discovered_site_ids: &HashSet<String>,
+    site_ids_from_site_search: &HashSet<String>,
     site_metadata_by_id: &HashMap<String, SiteMetadata>,
 ) -> DriveDiscoveryResult {
     let mut result = DriveDiscoveryResult::default();
@@ -1131,9 +1309,13 @@ async fn fetch_site_drives(
         }
         match site_drives {
             Ok(site_drives) => {
+                let discovered_via_site_search = site_ids_from_site_search.contains(&site_id);
                 for mut drive in site_drives {
                     set_sharepoint_site_id(&mut drive, &site_id);
                     collect_discovered_drive_site_id(&mut result, &drive);
+                    if discovered_via_site_search && let Some(drive_id) = extract_drive_id(&drive) {
+                        result.drive_ids_from_site_search.insert(drive_id);
+                    }
                     result.drives.push(drive);
                 }
             }
@@ -1156,6 +1338,14 @@ async fn fetch_site_drives(
     result
 }
 
+/// Fetch complete drive metadata for drive IDs discovered through shared item references.
+///
+/// Endpoint: `GET /drives/{drive-id}`.
+/// Docs: https://learn.microsoft.com/graph/api/drive-get
+///
+/// `sharedWithMe` often provides only enough information to identify the parent drive. This helper
+/// resolves those IDs into normal drive objects so they can be de-duplicated and rendered alongside
+/// OneDrive, Teams, group, and SharePoint site libraries.
 #[tracing::instrument(
     name = "sharepoint.all_drives.fetch_shared_drive_details",
     skip(http_client, access_token, discovered_drive_ids),
@@ -1165,7 +1355,7 @@ async fn fetch_site_drives(
     )
 )]
 async fn fetch_shared_drive_details(
-    http_client: &reqwest_012::Client,
+    http_client: &ClientWithMiddleware,
     access_token: &str,
     discovered_drive_ids: &HashSet<String>,
 ) -> DriveDiscoveryResult {
@@ -1260,7 +1450,10 @@ pub async fn all_drives(
         .collect();
     let access_token = get_access_token(&me_user)?;
     let client = create_graph_client(access_token);
-    let http_client = reqwest_012::Client::new();
+    let reqwest_client = reqwest::Client::new();
+    let http_client = ClientBuilder::new(reqwest_client)
+        .with(TracingMiddleware::<SpanBackendWithUrl>::new())
+        .build();
     let normalized_query = query
         .query
         .as_deref()
@@ -1343,6 +1536,7 @@ pub async fn all_drives(
     let mut discovered_site_ids_for_site_drives = HashSet::new();
     let mut discovered_drive_ids_for_shared_details = HashSet::new();
     let mut cached_site_metadata_by_id = HashMap::new();
+    let discovered_site_ids_from_site_search = site_search_result.discovered_site_ids.clone();
 
     for result in [
         &me_drive_result,
@@ -1393,6 +1587,7 @@ pub async fn all_drives(
                     &http_client,
                     access_token,
                     &discovered_site_ids_for_site_drives,
+                    &discovered_site_ids_from_site_search,
                     &cached_site_metadata_by_id,
                 )
                 .await
@@ -1468,6 +1663,10 @@ pub async fn all_drives(
         .collect();
     if has_search_query {
         drives.retain(|(drive, _)| drive_matches_search_query(drive, &normalized_query));
+    } else {
+        drives.retain(|(drive, candidate)| {
+            !should_filter_public_site_search_drive(has_search_query, drive, candidate)
+        });
     }
     drives.sort_by(
         |(left_drive, left_candidate), (right_drive, right_candidate)| {
@@ -1705,23 +1904,74 @@ mod tests {
             &mut drives_by_id,
             &mut enrichment,
             &mut site_ids,
-            0,
-            0,
-            "test",
+            DriveDiscoveryContext {
+                order: 0,
+                position: 0,
+                source: "test",
+                discovered_via_site_search: false,
+            },
             &drive,
         );
         add_drive(
             &mut drives_by_id,
             &mut enrichment,
             &mut site_ids,
-            0,
-            0,
-            "test",
+            DriveDiscoveryContext {
+                order: 0,
+                position: 0,
+                source: "test",
+                discovered_via_site_search: false,
+            },
             &drive,
         );
 
         assert_eq!(drives_by_id.len(), 1);
         assert!(site_ids.contains("site-1"));
+    }
+
+    #[test]
+    fn add_drive_keeps_duplicate_visible_when_seen_outside_site_search() {
+        let mut drives_by_id = HashMap::new();
+        let mut enrichment = DriveEnrichmentContext::default();
+        let mut site_ids = HashSet::new();
+        let drive = json!({
+            "id": "drive-1",
+            "name": "Documents",
+            "driveType": "business",
+            "sharePointIds": {
+                "siteId": "site-1"
+            }
+        });
+
+        add_drive(
+            &mut drives_by_id,
+            &mut enrichment,
+            &mut site_ids,
+            DriveDiscoveryContext {
+                order: 0,
+                position: 0,
+                source: "sites/{id}/drives",
+                discovered_via_site_search: true,
+            },
+            &drive,
+        );
+        add_drive(
+            &mut drives_by_id,
+            &mut enrichment,
+            &mut site_ids,
+            DriveDiscoveryContext {
+                order: 1,
+                position: 0,
+                source: "me/drive",
+                discovered_via_site_search: false,
+            },
+            &drive,
+        );
+
+        let candidate = drives_by_id
+            .get("drive-1")
+            .expect("drive candidate should be retained");
+        assert!(!candidate.discovered_via_site_search);
     }
 
     #[test]
@@ -1776,6 +2026,101 @@ mod tests {
     }
 
     #[test]
+    fn is_public_group_drive_detects_public_visibility_case_insensitively() {
+        let public_drive = Drive {
+            id: "drive-1".into(),
+            name: "Public Documents".into(),
+            drive_type: "documentLibrary".into(),
+            kind: "microsoft_365_group_library".into(),
+            owner_name: Some("Public Team".into()),
+            group_visibility: Some("public".into()),
+            site_name: None,
+            web_url: None,
+        };
+        let private_drive = Drive {
+            id: "drive-2".into(),
+            name: "Private Documents".into(),
+            drive_type: "documentLibrary".into(),
+            kind: "microsoft_365_group_library".into(),
+            owner_name: Some("Private Team".into()),
+            group_visibility: Some("Private".into()),
+            site_name: None,
+            web_url: None,
+        };
+        let unknown_drive = Drive {
+            id: "drive-3".into(),
+            name: "Site Documents".into(),
+            drive_type: "documentLibrary".into(),
+            kind: "sharepoint_site_library".into(),
+            owner_name: None,
+            group_visibility: None,
+            site_name: None,
+            web_url: None,
+        };
+
+        assert!(is_public_group_drive(&public_drive));
+        assert!(!is_public_group_drive(&private_drive));
+        assert!(!is_public_group_drive(&unknown_drive));
+    }
+
+    #[test]
+    fn public_group_filter_only_applies_to_no_query_site_search_candidates() {
+        let public_drive = Drive {
+            id: "drive-1".into(),
+            name: "Public Documents".into(),
+            drive_type: "documentLibrary".into(),
+            kind: "microsoft_365_group_library".into(),
+            owner_name: Some("Public Team".into()),
+            group_visibility: Some("Public".into()),
+            site_name: None,
+            web_url: None,
+        };
+        let private_drive = Drive {
+            id: "drive-2".into(),
+            name: "Private Documents".into(),
+            drive_type: "documentLibrary".into(),
+            kind: "microsoft_365_group_library".into(),
+            owner_name: Some("Private Team".into()),
+            group_visibility: Some("Private".into()),
+            site_name: None,
+            web_url: None,
+        };
+        let site_search_candidate = DriveCandidate {
+            raw_drive: serde_json::Value::Null,
+            discovery_order: 0,
+            discovery_position: 0,
+            discovered_via_site_search: true,
+        };
+        let other_candidate = DriveCandidate {
+            raw_drive: serde_json::Value::Null,
+            discovery_order: 0,
+            discovery_position: 0,
+            discovered_via_site_search: false,
+        };
+
+        assert!(should_filter_public_site_search_drive(
+            false,
+            &public_drive,
+            &site_search_candidate
+        ));
+        assert!(!should_filter_public_site_search_drive(
+            true,
+            &public_drive,
+            &site_search_candidate
+        ));
+        assert!(!should_filter_public_site_search_drive(
+            false,
+            &public_drive,
+            &other_candidate
+        ));
+        assert!(!should_filter_public_site_search_drive(
+            false,
+            &private_drive,
+            &site_search_candidate
+        ));
+    }
+
+    #[test]
     fn add_drive_filters_known_noise_drive_names() {
         let mut drives_by_id = HashMap::new();
         let mut enrichment = DriveEnrichmentContext::default();
@@ -1790,9 +2135,12 @@ mod tests {
             &mut drives_by_id,
             &mut enrichment,
             &mut site_ids,
-            0,
-            0,
-            "test",
+            DriveDiscoveryContext {
+                order: 0,
+                position: 0,
+                source: "test",
+                discovered_via_site_search: false,
+            },
             &drive,
         );
 
