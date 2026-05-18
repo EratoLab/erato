@@ -70,6 +70,15 @@ describe("useFileDropzone", () => {
   const mockCreateChatMutateAsync = vi.fn();
   const mockOnFilesUploaded = vi.fn();
 
+  const createMockUploadedFile = (id: string, filename: string) => ({
+    id,
+    filename,
+    download_url: `http://example.com/${filename}`,
+    file_contents_unavailable_missing_permissions: false,
+    is_sharepoint_file: false,
+    file_capability: FileTypeUtil.createMockFileCapability(filename),
+  });
+
   // Setup mocks for each test
   beforeEach(() => {
     vi.clearAllMocks();
@@ -83,20 +92,8 @@ describe("useFileDropzone", () => {
     const mockFetchUploadFile = vi.mocked(fetchUploadFile);
     mockFetchUploadFile.mockResolvedValue({
       files: [
-        {
-          id: "file1",
-          filename: "test1.pdf",
-          download_url: "http://example.com/file1.pdf",
-          file_contents_unavailable_missing_permissions: false,
-          file_capability: FileTypeUtil.createMockFileCapability("test1.pdf"),
-        },
-        {
-          id: "file2",
-          filename: "test2.jpg",
-          download_url: "http://example.com/file2.jpg",
-          file_contents_unavailable_missing_permissions: false,
-          file_capability: FileTypeUtil.createMockFileCapability("test2.jpg"),
-        },
+        createMockUploadedFile("file1", "test1.pdf"),
+        createMockUploadedFile("file2", "test2.jpg"),
       ],
     });
 
@@ -119,20 +116,8 @@ describe("useFileDropzone", () => {
     // Default successful upload response
     mockMutateAsync.mockResolvedValue({
       files: [
-        {
-          id: "file1",
-          filename: "test1.pdf",
-          download_url: "http://example.com/file1.pdf",
-          file_contents_unavailable_missing_permissions: false,
-          file_capability: FileTypeUtil.createMockFileCapability("test1.pdf"),
-        },
-        {
-          id: "file2",
-          filename: "test2.jpg",
-          download_url: "http://example.com/file2.jpg",
-          file_contents_unavailable_missing_permissions: false,
-          file_capability: FileTypeUtil.createMockFileCapability("test2.jpg"),
-        },
+        createMockUploadedFile("file1", "test1.pdf"),
+        createMockUploadedFile("file2", "test2.jpg"),
       ],
     });
 
@@ -160,20 +145,8 @@ describe("useFileDropzone", () => {
     const mockFetchUploadFile = vi.mocked(fetchUploadFile);
     mockFetchUploadFile.mockResolvedValue({
       files: [
-        {
-          id: "file1",
-          filename: "test1.pdf",
-          download_url: "http://example.com/file1.pdf",
-          file_contents_unavailable_missing_permissions: false,
-          file_capability: FileTypeUtil.createMockFileCapability("test1.pdf"),
-        },
-        {
-          id: "file2",
-          filename: "test2.jpg",
-          download_url: "http://example.com/file2.jpg",
-          file_contents_unavailable_missing_permissions: false,
-          file_capability: FileTypeUtil.createMockFileCapability("test2.jpg"),
-        },
+        createMockUploadedFile("file1", "test1.pdf"),
+        createMockUploadedFile("file2", "test2.jpg"),
       ],
     });
 
@@ -212,39 +185,15 @@ describe("useFileDropzone", () => {
     // Check state updates
     expect(result.current.isUploading).toBe(false);
     expect(result.current.uploadedFiles).toEqual([
-      {
-        id: "file1",
-        filename: "test1.pdf",
-        download_url: "http://example.com/file1.pdf",
-        file_contents_unavailable_missing_permissions: false,
-        file_capability: FileTypeUtil.createMockFileCapability("test1.pdf"),
-      },
-      {
-        id: "file2",
-        filename: "test2.jpg",
-        download_url: "http://example.com/file2.jpg",
-        file_contents_unavailable_missing_permissions: false,
-        file_capability: FileTypeUtil.createMockFileCapability("test2.jpg"),
-      },
+      createMockUploadedFile("file1", "test1.pdf"),
+      createMockUploadedFile("file2", "test2.jpg"),
     ]);
     expect(result.current.error).toBeNull();
 
     // Check callback
     expect(mockOnFilesUploaded).toHaveBeenCalledWith([
-      {
-        id: "file1",
-        filename: "test1.pdf",
-        download_url: "http://example.com/file1.pdf",
-        file_contents_unavailable_missing_permissions: false,
-        file_capability: FileTypeUtil.createMockFileCapability("test1.pdf"),
-      },
-      {
-        id: "file2",
-        filename: "test2.jpg",
-        download_url: "http://example.com/file2.jpg",
-        file_contents_unavailable_missing_permissions: false,
-        file_capability: FileTypeUtil.createMockFileCapability("test2.jpg"),
-      },
+      createMockUploadedFile("file1", "test1.pdf"),
+      createMockUploadedFile("file2", "test2.jpg"),
     ]);
   });
 
@@ -252,15 +201,7 @@ describe("useFileDropzone", () => {
     // Mock fetchUploadFile to return successful response for single file
     const mockFetchUploadFile = vi.mocked(fetchUploadFile);
     mockFetchUploadFile.mockResolvedValue({
-      files: [
-        {
-          id: "file1",
-          filename: "test1.pdf",
-          download_url: "http://example.com/file1.pdf",
-          file_contents_unavailable_missing_permissions: false,
-          file_capability: FileTypeUtil.createMockFileCapability("test1.pdf"),
-        },
-      ],
+      files: [createMockUploadedFile("file1", "test1.pdf")],
     });
 
     const { result } = renderHook(() =>

@@ -64,6 +64,11 @@ msgstr "Optional: Upload files from your computer or Sharepoint that will be ava
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.files.sharepoint.warning"
+msgstr "Some files are linked from Sharepoint. If you share this assistant, ensure those files are also shared with recipients."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
 msgid "assistant.form.model.helpText"
 msgstr "Optional: Choose which model this assistant should use by default"
 
@@ -111,6 +116,16 @@ msgstr "System prompt must be less than 5000 characters"
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "assistant.form.validation.prompt.tooShort"
 msgstr "System prompt must be at least 10 characters"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "assistant.welcome.files.inaccessible"
+msgstr "Some default files are inaccessible due to missing permissions."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "assistant.welcome.files.inaccessible.contact"
+msgstr "Contact this creator and ask them to share the files:"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsListPage.tsx
@@ -1361,6 +1376,11 @@ msgid "sharing.addPeople.title"
 msgstr "Add people"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Sharing/SharingDialog.tsx
+msgid "sharing.assistant.sharepoint.warning"
+msgstr "This assistant has Sharepoint files attached. Share them with recipients as well so they can access the same files."
+
+#. js-lingui-explicit-id
 #: src/pages/AssistantEditPage.tsx
 msgid "sharing.button.share"
 msgstr "Share"
@@ -2568,6 +2588,10 @@ msgstr "Showing {resultsCount} recent chats"
 #: src/components/ui/Controls/UserProfileDropdown.tsx
 msgid "Sign out"
 msgstr "Sign out"
+
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+#~ msgid "Some default files are inaccessible due to missing permissions."
+#~ msgstr "Some default files are inaccessible due to missing permissions."
 
 #: src/components/ui/FileUpload/FileUpload.tsx
 msgid "Some files won't be accepted..."

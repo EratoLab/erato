@@ -64,6 +64,11 @@ msgstr "Optionnel : Téléchargez des fichiers depuis votre ordinateur ou Sharep
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.files.sharepoint.warning"
+msgstr "Certains fichiers sont liés depuis Sharepoint. Si vous partagez cet assistant, assurez-vous de partager également ces fichiers avec les destinataires."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
 msgid "assistant.form.model.helpText"
 msgstr "Optionnel : Choisissez quel modèle cet assistant doit utiliser par défaut"
 
@@ -111,6 +116,16 @@ msgstr "Le prompt système doit contenir moins de 5000 caractères"
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "assistant.form.validation.prompt.tooShort"
 msgstr "Le prompt système doit contenir au moins 10 caractères"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "assistant.welcome.files.inaccessible"
+msgstr "Certains fichiers par défaut sont inaccessibles en raison de permissions insuffisantes."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "assistant.welcome.files.inaccessible.contact"
+msgstr "Contactez ce créateur et demandez-lui de partager les fichiers :"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsListPage.tsx
@@ -1361,6 +1376,11 @@ msgid "sharing.addPeople.title"
 msgstr "Ajouter des personnes"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Sharing/SharingDialog.tsx
+msgid "sharing.assistant.sharepoint.warning"
+msgstr "Cet assistant a des fichiers Sharepoint joints. Partagez-les également avec les destinataires afin qu'ils puissent accéder aux mêmes fichiers."
+
+#. js-lingui-explicit-id
 #: src/pages/AssistantEditPage.tsx
 msgid "sharing.button.share"
 msgstr "Partager"
@@ -2568,6 +2588,10 @@ msgstr ""
 #: src/components/ui/Controls/UserProfileDropdown.tsx
 msgid "Sign out"
 msgstr "Se déconnecter"
+
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+#~ msgid "Some default files are inaccessible due to missing permissions."
+#~ msgstr ""
 
 #: src/components/ui/FileUpload/FileUpload.tsx
 msgid "Some files won't be accepted..."

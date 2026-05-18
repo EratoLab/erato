@@ -120,6 +120,10 @@ export interface AssistantFormProps {
   /** Disable live token usage estimation requests (storybook/testing) */
   disableLiveTokenUsageEstimation?: boolean;
   /**
+   * Whether the assistant already has Sharepoint files attached
+   */
+  hasInitialSharepointFiles?: boolean;
+  /**
    * Additional CSS classes
    */
   className?: string;
@@ -157,6 +161,7 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
   assistantId,
   tokenUsageEstimationOverride = null,
   disableLiveTokenUsageEstimation = false,
+  hasInitialSharepointFiles = false,
   className,
 }) => {
   const initialFormData = useMemo(
@@ -473,6 +478,9 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
     100 - rawUsedContextPercentage,
   );
   const isContextExceeded = rawUsedContextPercentage > 100;
+  const hasSharepointFiles =
+    hasInitialSharepointFiles ||
+    formData.files.some((file) => file.is_sharepoint_file);
   const biggestFileContributors = useMemo(() => {
     const tokenUsage = effectiveEstimation?.tokenUsage;
     if (!tokenUsage) {
@@ -813,6 +821,15 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
         )}
 
         {/* File uploads */}
+        {hasSharepointFiles && (
+          <Alert type="warning">
+            {t({
+              id: "assistant.form.files.sharepoint.warning",
+              message:
+                "Some files are linked from Sharepoint. If you share this assistant, ensure those files are also shared with recipients.",
+            })}
+          </Alert>
+        )}
         <FormField
           label={t`Default Files`}
           helpText={t({

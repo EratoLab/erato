@@ -2513,6 +2513,10 @@
             "type": "string",
             "description": "The display name of the assistant"
           },
+          "owner_email": {
+            "type": "string",
+            "description": "Optional email of the assistant owner"
+          },
           "prompt": {
             "type": "string",
             "description": "The system prompt used by the assistant"
@@ -2531,6 +2535,7 @@
           "id",
           "filename",
           "file_contents_unavailable_missing_permissions",
+          "is_sharepoint_file",
           "file_capability"
         ],
         "properties": {
@@ -2556,6 +2561,10 @@
           "id": {
             "type": "string",
             "description": "The unique ID of the file"
+          },
+          "is_sharepoint_file": {
+            "type": "boolean",
+            "description": "True when this file is stored in Sharepoint"
           },
           "preview_url": {
             "type": [
@@ -3895,6 +3904,7 @@
           "filename",
           "download_url",
           "file_contents_unavailable_missing_permissions",
+          "is_sharepoint_file",
           "file_capability"
         ],
         "properties": {
@@ -3921,6 +3931,10 @@
           "id": {
             "type": "string",
             "description": "The unique ID of the uploaded file"
+          },
+          "is_sharepoint_file": {
+            "type": "boolean",
+            "description": "Indicates the file is stored in Sharepoint"
           },
           "preview_url": {
             "type": [

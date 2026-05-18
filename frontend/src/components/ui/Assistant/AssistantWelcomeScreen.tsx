@@ -3,6 +3,7 @@ import clsx from "clsx";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/Controls/Button";
+import { Alert } from "@/components/ui/Feedback/Alert";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 import { EditIcon } from "@/components/ui/icons";
 import { usePageAlignment } from "@/hooks/ui/usePageAlignment";
@@ -62,6 +63,10 @@ export function AssistantWelcomeScreen({
     navigate(`/assistants/${assistant.id}/edit`);
   };
 
+  const inaccessibleFiles = assistant.files.filter(
+    (file) => file.file_contents_unavailable_missing_permissions,
+  );
+
   return (
     <div
       className={clsx(
@@ -108,6 +113,37 @@ export function AssistantWelcomeScreen({
           className="mb-8 w-full rounded-[var(--theme-radius-shell)] border border-theme-border bg-theme-bg-primary p-6 text-left"
           data-ui="assistant-detail-card"
         >
+          {inaccessibleFiles.length > 0 ? (
+            <Alert type="warning" className="mb-4">
+              {assistant.owner_email ? (
+                <>
+                  {t({
+                    id: "assistant.welcome.files.inaccessible",
+                    message:
+                      "Some default files are inaccessible due to missing permissions.",
+                  })}{" "}
+                  {t({
+                    id: "assistant.welcome.files.inaccessible.contact",
+                    message:
+                      "Contact this creator and ask them to share the files:",
+                  })}{" "}
+                  <a
+                    href={`mailto:${assistant.owner_email}`}
+                    className="font-medium text-theme-fg-accent underline"
+                  >
+                    {assistant.owner_email}
+                  </a>
+                </>
+              ) : (
+                t({
+                  id: "assistant.welcome.files.inaccessible",
+                  message:
+                    "Some default files are inaccessible due to missing permissions.",
+                })
+              )}
+            </Alert>
+          ) : null}
+
           <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-theme-fg-muted">
             {t`Configuration`}
           </h2>

@@ -59,6 +59,7 @@ use crate::server::api::v1beta::share_links::{
     ShareLinkForResourceResponse, ShareLinkQuery, get_share_link_for_resource, resolve_share_link,
     set_share_link,
 };
+use crate::services::file_storage::SHAREPOINT_PROVIDER_ID;
 use crate::services::genai::build_chat_options_for_completion;
 use crate::services::sentry::log_internal_server_error;
 use crate::state::{AppState, ChatProviderConfigWithId};
@@ -1062,6 +1063,8 @@ pub struct FileUploadItem {
     preview_url: Option<String>,
     /// Indicates that file contents are unavailable for the current user due to missing permissions.
     file_contents_unavailable_missing_permissions: bool,
+    /// Indicates the file is stored in Sharepoint
+    is_sharepoint_file: bool,
     /// The file capability that was evaluated for this file
     #[serde(rename = "file_capability")]
     file_capability: FileCapability,
@@ -1331,6 +1334,7 @@ pub async fn upload_file(
             download_url,
             preview_url: Some(preview_url),
             file_contents_unavailable_missing_permissions: false,
+            is_sharepoint_file: false,
             file_capability,
             audio_transcription,
         });
@@ -1610,6 +1614,7 @@ async fn link_sharepoint_file_impl(
             preview_url: Some(format!("/api/v1beta/files/{}/preview", file_upload.id)),
             download_url,
             file_contents_unavailable_missing_permissions: false,
+            is_sharepoint_file: true,
             file_capability,
             audio_transcription,
         }],
@@ -1883,6 +1888,8 @@ pub async fn chat_messages(
                     preview_url: file_upload.preview_url,
                     file_contents_unavailable_missing_permissions: file_upload
                         .file_contents_unavailable_missing_permissions,
+                    is_sharepoint_file: file_upload.file_storage_provider_id
+                        == SHAREPOINT_PROVIDER_ID,
                     file_capability,
                     audio_transcription: file_upload.audio_transcription,
                 },
@@ -2214,6 +2221,7 @@ pub async fn frequent_assistants(
                         download_url: Some(format!("/api/v1beta/files/{}", file.id)),
                         preview_url: None,
                         file_contents_unavailable_missing_permissions: false,
+                        is_sharepoint_file: file.file_storage_provider_id == SHAREPOINT_PROVIDER_ID,
                         file_capability,
                     }
                 })
@@ -2225,6 +2233,7 @@ pub async fn frequent_assistants(
                     id: fa.assistant.id.to_string(),
                     name: fa.assistant.name,
                     description: fa.assistant.description,
+                    owner_email: None,
                     prompt: fa.assistant.prompt,
                     mcp_server_ids: fa.assistant.mcp_server_ids,
                     facet_ids: fa.assistant.facet_ids,
@@ -2526,6 +2535,7 @@ pub async fn get_file(
         preview_url: file_upload.preview_url,
         file_contents_unavailable_missing_permissions: file_upload
             .file_contents_unavailable_missing_permissions,
+        is_sharepoint_file: file_upload.file_storage_provider_id == SHAREPOINT_PROVIDER_ID,
         file_capability,
         audio_transcription: file_upload.audio_transcription,
     }))

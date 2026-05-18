@@ -194,6 +194,7 @@ export const AssistantFileUploadSelector: React.FC<
                   file_contents_unavailable_missing_permissions:
                     f.file_contents_unavailable_missing_permissions,
                   audio_transcription: f.audio_transcription,
+                  is_sharepoint_file: selectedCloudProvider === "sharepoint",
                   ...(previewUrl ? { preview_url: previewUrl } : {}),
                   file_capability: f.file_capability,
                 } as FileUploadItem;

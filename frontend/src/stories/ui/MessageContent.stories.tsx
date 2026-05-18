@@ -290,6 +290,7 @@ export const ResolvedFileLinksInMarkdown: Story = {
         download_url:
           "https://files.example.com/downloads/quarterly-report.pdf",
         file_contents_unavailable_missing_permissions: false,
+        is_sharepoint_file: false,
         file_capability: FileTypeUtil.createMockFileCapability(
           "quarterly-report.pdf",
         ),
@@ -299,6 +300,7 @@ export const ResolvedFileLinksInMarkdown: Story = {
         filename: "design-spec.pdf",
         download_url: "https://files.example.com/downloads/design-spec.pdf",
         file_contents_unavailable_missing_permissions: false,
+        is_sharepoint_file: false,
         file_capability:
           FileTypeUtil.createMockFileCapability("design-spec.pdf"),
       },

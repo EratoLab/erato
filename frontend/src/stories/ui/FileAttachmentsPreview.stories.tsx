@@ -23,6 +23,7 @@ const attachedFiles: FileUploadItem[] = [
     filename: longFilename,
     download_url: "https://example.com/file-1",
     file_contents_unavailable_missing_permissions: false,
+    is_sharepoint_file: false,
     file_capability: documentCapability,
   },
   {
@@ -30,6 +31,7 @@ const attachedFiles: FileUploadItem[] = [
     filename: "quarterly-summary.xlsx",
     download_url: "https://example.com/file-2",
     file_contents_unavailable_missing_permissions: false,
+    is_sharepoint_file: false,
     file_capability: documentCapability,
   },
 ];

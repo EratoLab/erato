@@ -38,6 +38,7 @@ const makeFile = (overrides: Partial<FileUploadItem> = {}): FileUploadItem => ({
   preview_url:
     "https://files.example.com/preview/sample-report-compressed.pdf" as never,
   file_contents_unavailable_missing_permissions: false,
+  is_sharepoint_file: false,
   file_capability: FileTypeUtil.createMockFileCapability(
     "sample-report-compressed.pdf",
   ),
