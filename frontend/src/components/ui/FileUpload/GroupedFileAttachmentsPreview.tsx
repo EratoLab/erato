@@ -14,6 +14,7 @@ import { FilePreviewLoading } from "./FilePreviewLoading";
 import { FILE_PREVIEW_STYLES } from "./fileUploadStyles";
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { Button } from "../Controls/Button";
+import { ChevronDownIcon, ChevronRightIcon } from "../icons";
 
 import type React from "react";
 
@@ -63,6 +64,14 @@ export interface FileAttachmentGroup {
   label: string;
   items: FileAttachmentGroupItem[];
   metaLabel?: string;
+  /**
+   * When true, the group renders a chevron toggle on its header and items
+   * are hidden until the user expands. Combined with `defaultCollapsed`
+   * (defaults to `true` when `collapsible` is set), keeps long lists of
+   * staged emails compact in tight task-pane layouts.
+   */
+  collapsible?: boolean;
+  defaultCollapsed?: boolean;
 }
 
 export interface GroupedFileAttachmentsPreviewProps {
@@ -163,6 +172,17 @@ const DefaultGroupedFileAttachmentsPreview: React.FC<
   defaultVisibleItems = 3,
 }) => {
   const [expandedGroupIds, setExpandedGroupIds] = useState<string[]>([]);
+  const [collapsedGroupIds, setCollapsedGroupIds] = useState<
+    Record<string, boolean>
+  >(() => {
+    const initial: Record<string, boolean> = {};
+    for (const group of groups) {
+      if (group.collapsible && group.defaultCollapsed !== false) {
+        initial[group.id] = true;
+      }
+    }
+    return initial;
+  });
 
   const setGroupExpanded = (groupId: string, expanded: boolean) => {
     setExpandedGroupIds((previous) => {
@@ -174,6 +194,13 @@ const DefaultGroupedFileAttachmentsPreview: React.FC<
     });
   };
 
+  const toggleGroupCollapsed = (groupId: string) => {
+    setCollapsedGroupIds((previous) => ({
+      ...previous,
+      [groupId]: !previous[groupId],
+    }));
+  };
+
   if (groups.length === 0) {
     return null;
   }
@@ -182,46 +209,80 @@ const DefaultGroupedFileAttachmentsPreview: React.FC<
     <div className={clsx("mb-3 flex flex-col gap-3", className)}>
       {groups.map((group) => {
         const itemCount = group.items.length;
+        const isCollapsed = group.collapsible && collapsedGroupIds[group.id];
         const isExpanded = expandedGroupIds.includes(group.id);
         const shouldCollapse = itemCount > defaultVisibleItems;
+        const baseItems = isCollapsed ? [] : group.items;
         const visibleItems =
-          shouldCollapse && !isExpanded
-            ? group.items.slice(0, defaultVisibleItems)
-            : group.items;
-        const hiddenCount = itemCount - visibleItems.length;
+          !isCollapsed && shouldCollapse && !isExpanded
+            ? baseItems.slice(0, defaultVisibleItems)
+            : baseItems;
+        const hiddenCount = isCollapsed ? 0 : itemCount - visibleItems.length;
+
+        const headerInner = (
+          <>
+            {group.collapsible && (
+              <span
+                className="mr-1 inline-flex shrink-0 items-center text-theme-fg-muted"
+                aria-hidden="true"
+              >
+                {isCollapsed ? (
+                  <ChevronRightIcon className="size-4" />
+                ) : (
+                  <ChevronDownIcon className="size-4" />
+                )}
+              </span>
+            )}
+            <div className="min-w-0 flex-1">
+              <h3
+                className={FILE_PREVIEW_STYLES.group.title}
+                title={group.label}
+              >
+                {group.label}
+              </h3>
+              {group.metaLabel !== "" && (
+                <p className={FILE_PREVIEW_STYLES.group.meta}>
+                  {group.metaLabel ??
+                    (itemCount === 1 ? t`1 item` : t`${itemCount} items`)}
+                </p>
+              )}
+            </div>
+          </>
+        );
 
         return (
           <section
             key={group.id}
             className={FILE_PREVIEW_STYLES.group.container}
           >
-            <div className={FILE_PREVIEW_STYLES.group.header}>
-              <div className="min-w-0">
-                <h3
-                  className={FILE_PREVIEW_STYLES.group.title}
-                  title={group.label}
-                >
-                  {group.label}
-                </h3>
-                {group.metaLabel !== "" && (
-                  <p className={FILE_PREVIEW_STYLES.group.meta}>
-                    {group.metaLabel ??
-                      (itemCount === 1 ? t`1 item` : t`${itemCount} items`)}
-                  </p>
+            {group.collapsible ? (
+              <button
+                type="button"
+                onClick={() => toggleGroupCollapsed(group.id)}
+                className={clsx(
+                  FILE_PREVIEW_STYLES.group.header,
+                  "flex w-full items-center text-left",
+                )}
+                aria-expanded={!isCollapsed}
+              >
+                {headerInner}
+              </button>
+            ) : (
+              <div className={FILE_PREVIEW_STYLES.group.header}>
+                {headerInner}
+                {shouldCollapse && isExpanded && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setGroupExpanded(group.id, false)}
+                    className={FILE_PREVIEW_STYLES.group.toggleButton}
+                  >
+                    {t`Show less`}
+                  </Button>
                 )}
               </div>
-              {shouldCollapse && isExpanded && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setGroupExpanded(group.id, false)}
-                  className={FILE_PREVIEW_STYLES.group.toggleButton}
-                >
-                  {t`Show less`}
-                </Button>
-              )}
-            </div>
+            )}
 
             <div className="flex flex-col gap-2">
               {visibleItems.map((item) => {

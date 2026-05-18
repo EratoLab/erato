@@ -276,6 +276,8 @@ export const AddinChatInput = forwardRef<
           }),
         metaLabel: metaParts.join(" • "),
         items,
+        collapsible: true,
+        defaultCollapsed: true,
       });
     }
 
@@ -485,14 +487,16 @@ export const AddinChatInput = forwardRef<
     >
       {shouldShowEmailSourcePreview && (
         <div className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4">
-          <GroupedFileAttachmentsPreview
-            groups={emailSourceGroups}
-            onRemoveFile={handleRemoveEmailSourceFile}
-            disabled={isUploadingEmail}
-            showFileTypes={true}
-            showFileSizes={true}
-            defaultVisibleItems={10}
-          />
+          <div className="max-h-[40vh] overflow-y-auto pr-1">
+            <GroupedFileAttachmentsPreview
+              groups={emailSourceGroups}
+              onRemoveFile={handleRemoveEmailSourceFile}
+              disabled={isUploadingEmail}
+              showFileTypes={true}
+              showFileSizes={true}
+              defaultVisibleItems={10}
+            />
+          </div>
         </div>
       )}
 
