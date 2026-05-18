@@ -4,7 +4,11 @@ import { useState } from "react";
 
 import { componentRegistry } from "@/config/componentRegistry";
 
-import { getFileName, type FileResource } from "./FilePreviewBase";
+import {
+  FilePreviewBase,
+  getFileName,
+  type FileResource,
+} from "./FilePreviewBase";
 import { FilePreviewButton } from "./FilePreviewButton";
 import { FilePreviewLoading } from "./FilePreviewLoading";
 import { FILE_PREVIEW_STYLES } from "./fileUploadStyles";
@@ -16,6 +20,9 @@ import type React from "react";
 /**
  * Discriminated union by `kind`:
  * - `attachment`: a normal managed attachment; renders as a removable chip.
+ * - `selectableAttachment`: a file row with a checkbox. Used for the email
+ *   grouped-preview where each attachment can be deselected pre-upload.
+ *   Drives toggle-via-callback rather than the destructive remove flow.
  * - `context`: a read-only context chip (e.g. the Outlook add-in's "Reply
  *   context"); renderers must suppress the remove affordance.
  * - `loading`: an in-flight placeholder; rendered as a spinner. Has no
@@ -30,6 +37,14 @@ export type FileAttachmentGroupItem =
       kind: "attachment";
       id: string;
       file: FileResource;
+      labelOverride?: string;
+    }
+  | {
+      kind: "selectableAttachment";
+      id: string;
+      file: FileResource;
+      selected: boolean;
+      onToggle: () => void;
       labelOverride?: string;
     }
   | {
@@ -62,9 +77,12 @@ export interface GroupedFileAttachmentsPreviewProps {
   defaultVisibleItems?: number;
 }
 
-function getFileKey(
-  item: Extract<FileAttachmentGroupItem, { kind: "attachment" | "context" }>,
-): string {
+type ItemWithFile = Extract<
+  FileAttachmentGroupItem,
+  { kind: "attachment" | "selectableAttachment" | "context" }
+>;
+
+function getFileKey(item: ItemWithFile): string {
   if ("id" in item.file) {
     return item.file.id;
   }
@@ -72,15 +90,64 @@ function getFileKey(
   return `${item.id}:${item.file.name}`;
 }
 
-function getFileId(
-  item: Extract<FileAttachmentGroupItem, { kind: "attachment" | "context" }>,
-): string {
+function getFileId(item: ItemWithFile): string {
   if ("id" in item.file) {
     return item.file.id;
   }
 
   return item.id;
 }
+
+interface SelectableAttachmentRowProps {
+  file: FileResource;
+  selected: boolean;
+  onToggle: () => void;
+  disabled: boolean;
+  showFileType: boolean;
+  showSize: boolean;
+  filenameTruncateLength: number;
+}
+
+const SelectableAttachmentRow: React.FC<SelectableAttachmentRowProps> = ({
+  file,
+  selected,
+  onToggle,
+  disabled,
+  showFileType,
+  showSize,
+  filenameTruncateLength,
+}) => {
+  const filename = getFileName(file);
+  return (
+    <label
+      className={clsx(
+        "flex w-full items-center gap-2",
+        !selected && "opacity-50",
+      )}
+    >
+      <input
+        type="checkbox"
+        checked={selected}
+        onChange={onToggle}
+        disabled={disabled}
+        className="size-4 shrink-0 rounded border-theme-border text-theme-fg-accent focus:ring-theme-focus disabled:cursor-not-allowed"
+        aria-label={`${t`Include`} ${filename}`}
+      />
+      <div className="min-w-0 flex-1">
+        <FilePreviewBase
+          file={file}
+          onRemove={() => onToggle()}
+          disabled={disabled}
+          showRemoveButton={false}
+          showSize={showSize}
+          showFileType={showFileType}
+          filenameTruncateLength={filenameTruncateLength}
+          filenameClassName="max-w-full"
+        />
+      </div>
+    </label>
+  );
+};
 
 const DefaultGroupedFileAttachmentsPreview: React.FC<
   GroupedFileAttachmentsPreviewProps
@@ -164,6 +231,21 @@ const DefaultGroupedFileAttachmentsPreview: React.FC<
                       key={item.id}
                       className="w-full"
                       label={t`Loading attachment...`}
+                    />
+                  );
+                }
+
+                if (item.kind === "selectableAttachment") {
+                  return (
+                    <SelectableAttachmentRow
+                      key={getFileKey(item)}
+                      file={item.file}
+                      selected={item.selected}
+                      onToggle={item.onToggle}
+                      disabled={disabled}
+                      showFileType={showFileTypes}
+                      showSize={showFileSizes}
+                      filenameTruncateLength={filenameTruncateLength}
                     />
                   );
                 }
