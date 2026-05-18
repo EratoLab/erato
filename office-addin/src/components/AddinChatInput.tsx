@@ -1,8 +1,10 @@
 import {
   ChatInput,
+  FileTypeUtil,
   GroupedFileAttachmentsPreview,
   fetchUploadFile,
   getIdToken,
+  useUploadFeature,
   type ChatInputControlsHandle,
   type ChatModel,
   type ContentPart,
@@ -20,6 +22,33 @@ import { useOffice } from "../providers/OfficeProvider";
 import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
 import { getComposeBodyType } from "../utils/outlookComposeWrite";
+
+function validateAttachment(
+  filename: string,
+  mimeType: string,
+  size: number,
+  globalMaxBytes: number,
+  globalMaxFormatted: string,
+): { ok: true } | { ok: false; reason: string } {
+  // Apply the backend's global cap first — per-type static caps in
+  // FileTypeUtil are typically more permissive, so the global is what
+  // most uploads will hit. Surfacing the actual server-side cap means
+  // the user sees the same message they'd get on a post-upload 413.
+  if (globalMaxBytes > 0 && size > globalMaxBytes) {
+    return {
+      ok: false,
+      reason: t({
+        id: "officeAddin.chatInput.validation.tooLarge",
+        message: `File exceeds the server limit of ${globalMaxFormatted}`,
+      }),
+    };
+  }
+  const result = FileTypeUtil.validateMetadata({ filename, mimeType, size });
+  if (!result.valid) {
+    return { ok: false, reason: result.error ?? "Invalid file" };
+  }
+  return { ok: true };
+}
 
 interface AddinChatInputProps {
   onSendMessage: (
@@ -127,6 +156,7 @@ export const AddinChatInput = forwardRef<
     dismissStagedEmailBody,
     restoreStagedEmailBody,
   } = useOutlookEmailSource();
+  const { maxSizeBytes: globalMaxSizeBytes, maxSizeFormatted } = useUploadFeature();
   // Drop-staged emails are always user-driven, so they bypass the
   // `showSuggestedEmailSource` gate (which is for the auto-suggest of the
   // currently-open email when the chat is still fresh). Without this the
@@ -238,6 +268,13 @@ export const AddinChatInput = forwardRef<
           continue;
         }
         const isDismissed = staged.dismissedAttachmentIds.has(attachment.id);
+        const validation = validateAttachment(
+          attachment.filename,
+          attachment.mimeType,
+          attachment.size,
+          globalMaxSizeBytes,
+          maxSizeFormatted,
+        );
         items.push({
           kind: "selectableAttachment",
           id: `${staged.key}:${attachment.id}`,
@@ -254,6 +291,7 @@ export const AddinChatInput = forwardRef<
               dismissStagedEmailAttachment(staged.key, attachment.id);
             }
           },
+          validation,
         });
       }
 
@@ -337,9 +375,11 @@ export const AddinChatInput = forwardRef<
     dismissStagedEmailBody,
     emailBodyFile,
     emailSubject,
+    globalMaxSizeBytes,
     isEmailBodyIncluded,
     isLoadingAttachments,
     isLoadingParentReplyContext,
+    maxSizeFormatted,
     parentReplyContext,
     restoreStagedEmailAttachment,
     restoreStagedEmailBody,

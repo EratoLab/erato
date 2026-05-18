@@ -47,6 +47,13 @@ export type FileAttachmentGroupItem =
       selected: boolean;
       onToggle: () => void;
       labelOverride?: string;
+      /**
+       * Pre-upload validation result. When `ok` is false, the row renders
+       * a red error badge with `reason` so the user sees the failure
+       * inline instead of after upload. Selection state is left up to the
+       * user — invalid rows can still be checked, but the user is warned.
+       */
+      validation?: { ok: boolean; reason?: string };
     }
   | {
       kind: "context";
@@ -115,6 +122,7 @@ interface SelectableAttachmentRowProps {
   showFileType: boolean;
   showSize: boolean;
   filenameTruncateLength: number;
+  validation?: { ok: boolean; reason?: string };
 }
 
 const SelectableAttachmentRow: React.FC<SelectableAttachmentRowProps> = ({
@@ -125,12 +133,14 @@ const SelectableAttachmentRow: React.FC<SelectableAttachmentRowProps> = ({
   showFileType,
   showSize,
   filenameTruncateLength,
+  validation,
 }) => {
   const filename = getFileName(file);
+  const invalid = validation?.ok === false;
   return (
     <label
       className={clsx(
-        "flex w-full items-center gap-2",
+        "flex w-full items-start gap-2",
         !selected && "opacity-50",
       )}
     >
@@ -139,7 +149,7 @@ const SelectableAttachmentRow: React.FC<SelectableAttachmentRowProps> = ({
         checked={selected}
         onChange={onToggle}
         disabled={disabled}
-        className="size-4 shrink-0 rounded border-theme-border text-theme-fg-accent focus:ring-theme-focus disabled:cursor-not-allowed"
+        className="mt-1 size-4 shrink-0 rounded border-theme-border text-theme-fg-accent focus:ring-theme-focus disabled:cursor-not-allowed"
         aria-label={`${t`Include`} ${filename}`}
       />
       <div className="min-w-0 flex-1">
@@ -153,6 +163,11 @@ const SelectableAttachmentRow: React.FC<SelectableAttachmentRowProps> = ({
           filenameTruncateLength={filenameTruncateLength}
           filenameClassName="max-w-full"
         />
+        {invalid && validation.reason && (
+          <p className="mt-0.5 text-xs text-[var(--theme-error-fg)]">
+            {validation.reason}
+          </p>
+        )}
       </div>
     </label>
   );
@@ -307,6 +322,7 @@ const DefaultGroupedFileAttachmentsPreview: React.FC<
                       showFileType={showFileTypes}
                       showSize={showFileSizes}
                       filenameTruncateLength={filenameTruncateLength}
+                      validation={item.validation}
                     />
                   );
                 }
