@@ -64,17 +64,12 @@ impl AudioFeature {
     }
 }
 
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum DictationMode {
+    #[default]
     Dictation,
     Conversational,
-}
-
-impl Default for DictationMode {
-    fn default() -> Self {
-        Self::Dictation
-    }
 }
 
 impl DictationMode {
