@@ -7,6 +7,7 @@
 
 import { t } from "@lingui/core/macro";
 import { memo, useCallback, useState } from "react";
+import { createPortal } from "react-dom";
 import { useDebounce } from "use-debounce";
 
 import { useCloudData } from "@/hooks/cloud/useCloudData";
@@ -194,7 +195,7 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
     const showDriveList = driveId === null;
     const showItemBrowser = driveId !== null;
 
-    return (
+    return createPortal(
       // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
       <div
         className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
@@ -360,7 +361,8 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
             </div>
           </div>
         </div>
-      </div>
+      </div>,
+      document.body,
     );
   },
 );
