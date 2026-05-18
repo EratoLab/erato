@@ -476,7 +476,9 @@ export function OutlookEmailSourceProvider({
       dismissedAttachmentIds,
       resolveSelectedFilesForSend,
       hasSelectedEmailSource:
-        isEmailBodyIncluded || selectedAttachmentItems.length > 0,
+        stagedEmails.length > 0 ||
+        isEmailBodyIncluded ||
+        selectedAttachmentItems.length > 0,
       parentReplyContext,
       isLoadingParentReplyContext,
     }),

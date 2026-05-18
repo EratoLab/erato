@@ -127,8 +127,17 @@ export const AddinChatInput = forwardRef<
     dismissStagedEmailBody,
     restoreStagedEmailBody,
   } = useOutlookEmailSource();
+  // Drop-staged emails are always user-driven, so they bypass the
+  // `showSuggestedEmailSource` gate (which is for the auto-suggest of the
+  // currently-open email when the chat is still fresh). Without this the
+  // preview region stays hidden after a drop into a chat that already has
+  // messages.
+  const hasDroppedStagedEmails = stagedEmails.some(
+    (staged) => staged.source === "drop",
+  );
   const shouldUseSuggestedEmailSource =
-    showSuggestedEmailSource && hasSelectedEmailSource;
+    (showSuggestedEmailSource && hasSelectedEmailSource) ||
+    hasDroppedStagedEmails;
   // Render the email-source preview whenever there is *something* to show:
   // a real attachment, an in-flight attachment fetch, or the reply-context
   // chip (resolved or still loading). Without this gate the preview region
@@ -136,11 +145,12 @@ export const AddinChatInput = forwardRef<
   // mode but Graph hasn't yet returned a parent message.
   const shouldShowEmailSourcePreview =
     host === "Outlook" &&
-    showSuggestedEmailSource &&
-    (hasSelectedEmailSource ||
-      isLoadingAttachments ||
-      parentReplyContext !== null ||
-      isLoadingParentReplyContext);
+    (hasDroppedStagedEmails ||
+      (showSuggestedEmailSource &&
+        (hasSelectedEmailSource ||
+          isLoadingAttachments ||
+          parentReplyContext !== null ||
+          isLoadingParentReplyContext)));
   const emailSourceGroups = useMemo<FileAttachmentGroup[]>(() => {
     const groups: FileAttachmentGroup[] = [];
 
