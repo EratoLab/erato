@@ -28,6 +28,12 @@ const OUTLOOK_CLOUD_ATTACHMENT_TYPE = "cloud";
 const GRAPH_MAIL_SCOPES = ["Mail.Read"];
 const CURRENT_EMAIL_FALLBACK_KEY = "current-email";
 
+let droppedKeyCounter = 0;
+function generateDroppedKey(): string {
+  droppedKeyCounter += 1;
+  return `drop-${Date.now()}-${droppedKeyCounter}`;
+}
+
 export type StagedEmailSource = "current" | "drop";
 
 export interface StagedEmail {
@@ -37,6 +43,11 @@ export interface StagedEmail {
   parsed: ParsedEmail;
   bodyDismissed: boolean;
   dismissedAttachmentIds: ReadonlySet<string>;
+}
+
+interface DroppedEmailEntry {
+  key: string;
+  parsed: ParsedEmail;
 }
 
 interface OutlookEmailSourceContextValue {
@@ -67,6 +78,14 @@ interface OutlookEmailSourceContextValue {
   restoreStagedEmailBody: (key: string) => void;
   dismissStagedEmailAttachment: (key: string, attachmentId: string) => void;
   restoreStagedEmailAttachment: (key: string, attachmentId: string) => void;
+  /**
+   * Add a parsed email (from a drop or an OWA mail-list drag) to the
+   * staged list. Returns the stable key under which it was filed so
+   * callers can reference it later (e.g. to remove it). Returns `null`
+   * when the email is already staged under the same Message-ID.
+   */
+  addDroppedEmail: (parsed: ParsedEmail) => string | null;
+  removeDroppedEmail: (key: string) => void;
   selectedAttachmentItems: LocalFilePreviewItem[];
   isLoadingAttachments: boolean;
   removeEmailBody: () => void;
@@ -101,6 +120,8 @@ const defaultValue: OutlookEmailSourceContextValue = {
   restoreStagedEmailBody: () => {},
   dismissStagedEmailAttachment: () => {},
   restoreStagedEmailAttachment: () => {},
+  addDroppedEmail: () => null,
+  removeDroppedEmail: () => {},
   selectedAttachmentItems: [],
   isLoadingAttachments: false,
   removeEmailBody: () => {},
@@ -148,6 +169,7 @@ export function OutlookEmailSourceProvider({
     useState(false);
   const [emailDismissals, setEmailDismissals] =
     useState<StagedEmailDismissalsMap>(() => new Map());
+  const [droppedEmails, setDroppedEmails] = useState<DroppedEmailEntry[]>([]);
 
   const acquireGraphToken = useCallback(
     () => acquireToken(GRAPH_MAIL_SCOPES),
@@ -243,21 +265,34 @@ export function OutlookEmailSourceProvider({
     currentEmailParsed?.messageId ?? CURRENT_EMAIL_FALLBACK_KEY;
 
   const stagedEmails = useMemo<StagedEmail[]>(() => {
-    if (!currentEmailParsed) {
-      return [];
-    }
-    const dismissals = emailDismissals.get(currentEmailKey);
-    return [
-      {
+    const list: StagedEmail[] = [];
+
+    if (currentEmailParsed) {
+      const dismissals = emailDismissals.get(currentEmailKey);
+      list.push({
         key: currentEmailKey,
         source: "current",
         parsed: currentEmailParsed,
         bodyDismissed: dismissals?.bodyDismissed ?? false,
         dismissedAttachmentIds:
           dismissals?.attachmentIds ?? new Set<string>(),
-      },
-    ];
-  }, [currentEmailKey, currentEmailParsed, emailDismissals]);
+      });
+    }
+
+    for (const entry of droppedEmails) {
+      const dismissals = emailDismissals.get(entry.key);
+      list.push({
+        key: entry.key,
+        source: "drop",
+        parsed: entry.parsed,
+        bodyDismissed: dismissals?.bodyDismissed ?? false,
+        dismissedAttachmentIds:
+          dismissals?.attachmentIds ?? new Set<string>(),
+      });
+    }
+
+    return list;
+  }, [currentEmailKey, currentEmailParsed, droppedEmails, emailDismissals]);
 
   const currentStagedEmail = stagedEmails[0] ?? null;
   const isEmailBodyDismissed = currentStagedEmail?.bodyDismissed ?? false;
@@ -304,6 +339,29 @@ export function OutlookEmailSourceProvider({
     [],
   );
 
+  const addDroppedEmail = useCallback((parsed: ParsedEmail): string | null => {
+    const key = parsed.messageId ?? generateDroppedKey();
+    let assigned: string | null = key;
+    setDroppedEmails((previous) => {
+      if (previous.some((entry) => entry.key === key)) {
+        assigned = null;
+        return previous;
+      }
+      return [...previous, { key, parsed }];
+    });
+    return assigned;
+  }, []);
+
+  const removeDroppedEmail = useCallback((key: string) => {
+    setDroppedEmails((previous) => previous.filter((entry) => entry.key !== key));
+    setEmailDismissals((previous) => {
+      if (!previous.has(key)) return previous;
+      const next = new Map(previous);
+      next.delete(key);
+      return next;
+    });
+  }, []);
+
   const removeEmailBody = useCallback(() => {
     if (!currentStagedEmail) return;
     dismissStagedEmailBody(currentStagedEmail.key);
@@ -329,44 +387,69 @@ export function OutlookEmailSourceProvider({
   const resolveSelectedFilesForSend = useCallback(async (): Promise<File[]> => {
     const filesToSend: File[] = [];
 
-    if (isEmailBodyIncluded && emailBodyFile) {
-      filesToSend.push(emailBodyFile);
-    }
-
-    const remainingAttachments = selectableAttachments.filter(
-      (attachment) => !dismissedAttachmentIds.includes(attachment.id),
-    );
-
-    for (const attachment of remainingAttachments) {
-      if (
-        String(attachment.attachmentType).toLowerCase() ===
-        OUTLOOK_CLOUD_ATTACHMENT_TYPE
-      ) {
-        console.warn(
-          "Skipping Outlook cloud attachment because file content cannot be resolved locally:",
-          attachment.name,
-        );
+    for (const staged of stagedEmails) {
+      if (!staged.bodyDismissed) {
+        filesToSend.push(staged.parsed.rawEmlFile);
+      }
+      // Phase 1 transitional sibling-upload for dropped emails. Phase 2
+      // surgical MIME removal will replace this branch — at that point
+      // deselected attachments are trimmed from the bytes and we ship a
+      // single `.eml` per staged email. For current-email reads we leave
+      // the .eml whole; in-eml attachment dismissals there are UX-only
+      // until Phase 2.
+      if (staged.source !== "drop") {
         continue;
       }
+      for (const attachment of staged.parsed.attachments) {
+        if (attachment.disposition === "inline" || attachment.related) {
+          continue;
+        }
+        if (staged.dismissedAttachmentIds.has(attachment.id)) {
+          continue;
+        }
+        filesToSend.push(attachment.toFile());
+      }
+    }
 
-      try {
-        const file = await getAttachmentFile(attachment.id);
-        filesToSend.push(file);
-      } catch (error) {
-        console.warn(
-          `Failed to resolve Outlook attachment "${attachment.name}" for send:`,
-          error,
-        );
+    // Office.js compose-mode attachments. When a current-email `.eml` is
+    // staged (read mode), these are duplicates of the in-eml attachments
+    // already inside the `.eml` and we skip them to avoid double-counting.
+    const hasReadModeCurrentStaged = stagedEmails.some(
+      (staged) => staged.source === "current",
+    );
+    if (!hasReadModeCurrentStaged) {
+      const remainingAttachments = selectableAttachments.filter(
+        (attachment) => !dismissedAttachmentIds.includes(attachment.id),
+      );
+      for (const attachment of remainingAttachments) {
+        if (
+          String(attachment.attachmentType).toLowerCase() ===
+          OUTLOOK_CLOUD_ATTACHMENT_TYPE
+        ) {
+          console.warn(
+            "Skipping Outlook cloud attachment because file content cannot be resolved locally:",
+            attachment.name,
+          );
+          continue;
+        }
+        try {
+          const file = await getAttachmentFile(attachment.id);
+          filesToSend.push(file);
+        } catch (error) {
+          console.warn(
+            `Failed to resolve Outlook attachment "${attachment.name}" for send:`,
+            error,
+          );
+        }
       }
     }
 
     return filesToSend;
   }, [
     dismissedAttachmentIds,
-    emailBodyFile,
     getAttachmentFile,
-    isEmailBodyIncluded,
     selectableAttachments,
+    stagedEmails,
   ]);
 
   const value = useMemo<OutlookEmailSourceContextValue>(
@@ -381,6 +464,8 @@ export function OutlookEmailSourceProvider({
       restoreStagedEmailBody,
       dismissStagedEmailAttachment,
       restoreStagedEmailAttachment,
+      addDroppedEmail,
+      removeDroppedEmail,
       selectedAttachmentItems,
       isLoadingAttachments,
       removeEmailBody,
@@ -396,6 +481,7 @@ export function OutlookEmailSourceProvider({
       isLoadingParentReplyContext,
     }),
     [
+      addDroppedEmail,
       currentEmailParsed,
       dismissStagedEmailAttachment,
       dismissStagedEmailBody,
@@ -409,6 +495,7 @@ export function OutlookEmailSourceProvider({
       mailItem?.subject,
       parentReplyContext,
       removeAttachment,
+      removeDroppedEmail,
       removeEmailBody,
       resolveSelectedFilesForSend,
       restoreAttachment,
