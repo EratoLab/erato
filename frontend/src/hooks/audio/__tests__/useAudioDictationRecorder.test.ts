@@ -12,6 +12,60 @@ vi.mock("../audio-dictation-worklet.ts?worker&url", () => ({
   default: "blob:mock-audio-dictation-worklet",
 }));
 
+const vadMock = vi.hoisted(() => {
+  type Listener = (event: {
+    type: string;
+    timestampMs?: number;
+    audio?: Float32Array;
+  }) => void;
+
+  const engines: {
+    listeners: Listener[];
+    acceptedFrames: unknown[];
+    start: ReturnType<typeof vi.fn>;
+    stop: ReturnType<typeof vi.fn>;
+    destroy: ReturnType<typeof vi.fn>;
+    acceptFrame: ReturnType<typeof vi.fn>;
+    subscribe: ReturnType<typeof vi.fn>;
+    emit: (event: Parameters<Listener>[0]) => void;
+  }[] = [];
+
+  const createRicky0123VadEngine = vi.fn(() => {
+    const engine = {
+      listeners: [] as Listener[],
+      acceptedFrames: [] as unknown[],
+      start: vi.fn(async () => undefined),
+      stop: vi.fn(),
+      destroy: vi.fn(),
+      acceptFrame: vi.fn(async (frame: unknown) => {
+        engine.acceptedFrames.push(frame);
+      }),
+      subscribe: vi.fn((listener: Listener) => {
+        engine.listeners.push(listener);
+        return () => {
+          engine.listeners = engine.listeners.filter(
+            (existingListener) => existingListener !== listener,
+          );
+        };
+      }),
+      emit: (event: Parameters<Listener>[0]) => {
+        engine.listeners.forEach((listener) => listener(event));
+      },
+    };
+    engines.push(engine);
+    return engine;
+  });
+
+  return {
+    engines,
+    createRicky0123VadEngine,
+  };
+});
+
+vi.mock("@/lib/voice-runtime", () => ({
+  createRicky0123VadEngine: vadMock.createRicky0123VadEngine,
+}));
+
 class MockMediaStreamTrack {
   stop = vi.fn();
 
@@ -189,12 +243,20 @@ function createDeferred<T>() {
   return { promise, resolve, reject };
 }
 
-function renderDictationHook(onTranscriptChunk = vi.fn()) {
+function renderDictationHook(
+  onTranscriptChunk = vi.fn(),
+  options?: {
+    vadAutoStopEnabled?: boolean;
+    onVadAutoStop?: () => void;
+  },
+) {
   return renderHook(() =>
     useAudioDictationRecorder({
       enabled: true,
       maxRecordingDurationSeconds: 1200,
       onTranscriptChunk,
+      vadAutoStopEnabled: options?.vadAutoStopEnabled,
+      onVadAutoStop: options?.onVadAutoStop,
     }),
   );
 }
@@ -235,6 +297,7 @@ describe("useAudioDictationRecorder", () => {
     vi.restoreAllMocks();
     MockWebSocket.instances.length = 0;
     MockAudioWorkletNode.instances.length = 0;
+    vadMock.engines.length = 0;
 
     Object.defineProperty(navigator, "mediaDevices", {
       configurable: true,
@@ -425,5 +488,64 @@ describe("useAudioDictationRecorder", () => {
     expect(MockWebSocket.instances[0].sentJsonFrames).not.toContainEqual(
       expect.objectContaining({ type: "finish" }),
     );
+  });
+
+  it("feeds audio frames to VAD and completes dictation on VAD speech_end", async () => {
+    const onVadAutoStop = vi.fn();
+    const { result } = renderDictationHook(vi.fn(), {
+      vadAutoStopEnabled: true,
+      onVadAutoStop,
+    });
+
+    await act(async () => {
+      result.current.toggleDictation();
+    });
+    await waitFor(() => expect(vadMock.engines).toHaveLength(1));
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+
+    act(() => {
+      MockWebSocket.instances[0].emit("open");
+    });
+    await waitFor(() =>
+      expect(MockWebSocket.instances[0].sentJsonFrames).toContainEqual({
+        type: "start",
+      }),
+    );
+    act(() => {
+      MockWebSocket.instances[0].emitJson({
+        type: "session_state",
+        next_chunk_index: 0,
+        chunk_duration_ms: 100,
+      });
+    });
+    await waitFor(() => expect(result.current.isDictating).toBe(true));
+
+    act(() => {
+      emitAudioSamples(new Float32Array(1600).fill(0.1));
+    });
+    await waitFor(() =>
+      expect(vadMock.engines[0].acceptFrame).toHaveBeenCalled(),
+    );
+
+    act(() => {
+      vadMock.engines[0].emit({
+        type: "speech_end",
+        timestampMs: Date.now(),
+        audio: new Float32Array(1600),
+      });
+    });
+
+    expect(onVadAutoStop).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(MockWebSocket.instances[0].sentJsonFrames).toContainEqual({
+        type: "finish",
+      }),
+    );
+
+    act(() => {
+      MockWebSocket.instances[0].emitJson({ type: "completed" });
+    });
+    await waitFor(() => expect(result.current.isDictating).toBe(false));
+    expect(vadMock.engines[0].destroy).toHaveBeenCalled();
   });
 });

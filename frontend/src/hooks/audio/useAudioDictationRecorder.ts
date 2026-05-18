@@ -14,6 +14,8 @@ import { useThrottledCallback } from "use-debounce";
 // `audioWorklet.addModule()`. AudioWorklet and Web Worker modules
 // share the same ESM contract on the file format side, so the worker
 // pipeline output is valid as an AudioWorklet module.
+import { createRicky0123VadEngine } from "@/lib/voice-runtime";
+
 import {
   createAudioDictationWebSocketUrl,
   sendAudioDictationControlFrame,
@@ -33,6 +35,8 @@ import {
   type AudioDictationDiagnostics,
 } from "./audio-pcm-codec";
 import { useAudioInputDevicePreference } from "./useAudioInputDevicePreference";
+
+import type { VoiceVadEngine } from "@/lib/voice-runtime";
 
 const AUDIO_DICTATION_WORKLET_PROCESSOR_NAME = "audio-dictation-processor";
 
@@ -81,6 +85,8 @@ type UseAudioDictationRecorderOptions = {
   enabled: boolean;
   maxRecordingDurationSeconds: number;
   onTranscriptChunk: (chunk: AudioDictationTranscriptChunk) => void;
+  vadAutoStopEnabled?: boolean;
+  onVadAutoStop?: () => void;
 };
 
 /**
@@ -134,6 +140,8 @@ export function useAudioDictationRecorder({
   enabled,
   maxRecordingDurationSeconds,
   onTranscriptChunk,
+  vadAutoStopEnabled = false,
+  onVadAutoStop,
 }: UseAudioDictationRecorderOptions) {
   const [sessionStatus, dispatchSession] = useReducer(
     dictationSessionReducer,
@@ -166,6 +174,8 @@ export function useAudioDictationRecorder({
   const setDictationBarsThrottled = useThrottledCallback(setDictationBars, 33);
   const [dictationDiagnostics, setDictationDiagnostics] =
     useState<AudioDictationDiagnostics | null>(null);
+  const [isVadListening, setIsVadListening] = useState(false);
+  const [isVadSpeechActive, setIsVadSpeechActive] = useState(false);
 
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const liveSessionRef = useRef<LiveAudioDictationSession | null>(null);
@@ -224,6 +234,9 @@ export function useAudioDictationRecorder({
   const capturingFlipTimerRef = useRef<number | null>(null);
   const recordingDurationTimerRef = useRef<number | null>(null);
   const onTranscriptChunkRef = useRef(onTranscriptChunk);
+  const vadEngineRef = useRef<VoiceVadEngine | null>(null);
+  const vadAutoStopTriggeredRef = useRef(false);
+  const onVadAutoStopRef = useRef(onVadAutoStop);
   /**
    * `react-use`'s `useMountedState` returns a getter that's `true` while
    * the component is mounted and flips to `false` exactly once during
@@ -242,12 +255,26 @@ export function useAudioDictationRecorder({
     onTranscriptChunkRef.current = onTranscriptChunk;
   }, [onTranscriptChunk]);
 
+  useEffect(() => {
+    onVadAutoStopRef.current = onVadAutoStop;
+  }, [onVadAutoStop]);
+
   const clearRecordingDurationTimer = useCallback(() => {
     if (recordingDurationTimerRef.current !== null) {
       window.clearTimeout(recordingDurationTimerRef.current);
       recordingDurationTimerRef.current = null;
     }
   }, []);
+
+  const stopVadEngine = useCallback(() => {
+    vadEngineRef.current?.destroy();
+    vadEngineRef.current = null;
+    vadAutoStopTriggeredRef.current = false;
+    if (isMounted()) {
+      setIsVadListening(false);
+      setIsVadSpeechActive(false);
+    }
+  }, [isMounted]);
 
   const stopRecordingVisualizer = useCallback(
     (resetBars = true) => {
@@ -300,13 +327,14 @@ export function useAudioDictationRecorder({
 
   const tearDownCaptureGraph = useCallback(() => {
     clearRecordingDurationTimer();
+    stopVadEngine();
 
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current = null;
     }
     stopRecordingVisualizer();
-  }, [clearRecordingDurationTimer, stopRecordingVisualizer]);
+  }, [clearRecordingDurationTimer, stopRecordingVisualizer, stopVadEngine]);
 
   const sendLivePcmChunk = useCallback((pcmBytes: Uint8Array) => {
     const session = liveSessionRef.current;
@@ -734,6 +762,63 @@ export function useAudioDictationRecorder({
         analyser.fftSize = 256;
         analyser.smoothingTimeConstant = 0.65;
         sourceSampleRate = audioContext.sampleRate;
+        if (vadAutoStopEnabled) {
+          let vadEngine: VoiceVadEngine | null = null;
+          try {
+            vadEngine = createRicky0123VadEngine({
+              model: "silero-v5",
+              redemptionMs: 1800,
+              preSpeechPadMs: 500,
+              minSpeechMs: 400,
+            });
+            vadEngine.subscribe((event) => {
+              if (event.type === "error") {
+                stopVadEngine();
+                return;
+              }
+              if (
+                event.type === "speech_start" ||
+                event.type === "speech_real_start"
+              ) {
+                if (isMounted()) {
+                  setIsVadSpeechActive(true);
+                }
+                return;
+              }
+              if (event.type === "vad_misfire") {
+                if (isMounted()) {
+                  setIsVadSpeechActive(false);
+                }
+                return;
+              }
+              if (event.type !== "speech_end") {
+                return;
+              }
+
+              if (isMounted()) {
+                setIsVadSpeechActive(false);
+              }
+              if (vadAutoStopTriggeredRef.current) {
+                return;
+              }
+              vadAutoStopTriggeredRef.current = true;
+              onVadAutoStopRef.current?.();
+              stopDictation();
+            });
+            await vadEngine.start();
+            vadEngineRef.current = vadEngine;
+            if (isMounted()) {
+              setIsVadListening(true);
+            }
+          } catch {
+            vadEngine?.destroy();
+            vadEngineRef.current = null;
+            if (isMounted()) {
+              setIsVadListening(false);
+              setIsVadSpeechActive(false);
+            }
+          }
+        }
         // Synthetic silence primer: seeds the pre-session buffer with a
         // fixed amount of zero samples so the audio sent to the server
         // always starts with the same calibration window for its VAD,
@@ -776,6 +861,9 @@ export function useAudioDictationRecorder({
         };
         processor.port.onmessage = (event: MessageEvent<Float32Array>) => {
           const input = event.data;
+          const vadFrame = vadEngineRef.current
+            ? new Float32Array(input)
+            : null;
           if (!audioFlowing) {
             for (let index = 0; index < input.length; index += 1) {
               if (input[index] !== 0) {
@@ -800,11 +888,20 @@ export function useAudioDictationRecorder({
               session.pendingSourceSamples.push(input[index]);
             }
             flushLiveAudioSamples(false);
-            return;
+          } else {
+            const preBuffer = preSessionSamplesRef.current;
+            for (let index = 0; index < input.length; index += 1) {
+              preBuffer.push(input[index]);
+            }
           }
-          const preBuffer = preSessionSamplesRef.current;
-          for (let index = 0; index < input.length; index += 1) {
-            preBuffer.push(input[index]);
+          if (vadFrame && vadEngineRef.current) {
+            void vadEngineRef.current
+              .acceptFrame({
+                samples: vadFrame,
+                sampleRate: audioContext.sampleRate,
+                timestampMs: Date.now(),
+              })
+              .catch(() => stopVadEngine());
           }
         };
 
@@ -914,7 +1011,9 @@ export function useAudioDictationRecorder({
     setSelectedAudioInputDeviceId,
     startLiveDictationSession,
     stopDictation,
+    stopVadEngine,
     tearDownCaptureGraph,
+    vadAutoStopEnabled,
   ]);
 
   const toggleDictation = useCallback(() => {
@@ -937,6 +1036,7 @@ export function useAudioDictationRecorder({
       liveSessionRef.current?.socket.close();
       liveSessionRef.current = null;
       pendingSocketRef.current = null;
+      stopVadEngine();
       stopRecordingVisualizer(false);
       // stopRecordingVisualizer suspends the AudioContext between
       // sessions; close it for real on unmount so the audio rendering
@@ -955,7 +1055,7 @@ export function useAudioDictationRecorder({
         mediaStreamRef.current = null;
       }
     };
-  }, [clearRecordingDurationTimer, stopRecordingVisualizer]);
+  }, [clearRecordingDurationTimer, stopRecordingVisualizer, stopVadEngine]);
 
   return {
     isDictating,
@@ -966,6 +1066,8 @@ export function useAudioDictationRecorder({
     setDictationError,
     dictationBars,
     dictationDiagnostics,
+    isVadListening,
+    isVadSpeechActive,
     toggleDictation,
   };
 }

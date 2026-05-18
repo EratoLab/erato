@@ -74,11 +74,14 @@ export {
 } from "@/lib/i18n";
 export {
   VoiceRuntimeProvider,
+  Ricky0123VadEngine,
   getDefaultVoiceRuntimeBasePath,
   resolveVoiceRuntimeAssets,
   createRicky0123VadAssetOptions,
+  createRicky0123VadEngine,
   useVoiceRuntimeAssets,
   type Ricky0123VadAssetOptions,
+  type Ricky0123VadEngineOptions,
   type Ricky0123VadRuntimeAssets,
   type VoiceVadEngine,
   type VoiceVadEngineOptions,

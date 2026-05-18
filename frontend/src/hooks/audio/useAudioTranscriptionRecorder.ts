@@ -8,6 +8,8 @@ import {
   useCreateChat,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext";
+import { createRicky0123VadEngine } from "@/lib/voice-runtime";
+import { createLogger } from "@/utils/debugLogger";
 
 import {
   AUDIO_BARS_COUNT,
@@ -20,11 +22,15 @@ import type {
   ChatModel,
   FileUploadItem,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { VoiceVadEngine } from "@/lib/voice-runtime";
 
 const CANONICAL_AUDIO_SAMPLE_RATE_HZ = 16_000;
 const CANONICAL_AUDIO_WAV_HEADER_BYTES = 44;
 const CANONICAL_AUDIO_BYTES_PER_SAMPLE = 2;
 const DEFAULT_AUDIO_TRANSCRIPTION_CHUNK_DURATION_MS = 30_000;
+const VAD_DEBUG_FRAME_LOG_INTERVAL_MS = 2_000;
+
+const logger = createLogger("HOOK", "useAudioTranscriptionRecorder");
 
 function formatAudioRecordingFilename(date: Date): string {
   const year = date.getFullYear().toString();
@@ -109,6 +115,8 @@ type UseAudioTranscriptionRecorderOptions = {
   audioTranscriptionEnabled: boolean;
   uploadEnabled: boolean;
   maxRecordingDurationSeconds: number;
+  vadAutoStopEnabled?: boolean;
+  onVadAutoStop?: () => void;
   chatId?: string | null;
   silentChatId?: string | null;
   setSilentChatId: (chatId: string) => void;
@@ -393,6 +401,8 @@ export function useAudioTranscriptionRecorder({
   audioTranscriptionEnabled,
   uploadEnabled,
   maxRecordingDurationSeconds,
+  vadAutoStopEnabled = false,
+  onVadAutoStop,
   chatId,
   silentChatId,
   setSilentChatId,
@@ -417,6 +427,8 @@ export function useAudioTranscriptionRecorder({
   const setRecordingBarsThrottled = useThrottledCallback(setRecordingBars, 33);
   const [recordingDiagnostics, setRecordingDiagnostics] =
     useState<AudioRecordingDiagnostics | null>(null);
+  const [isVadListening, setIsVadListening] = useState(false);
+  const [isVadSpeechActive, setIsVadSpeechActive] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -431,6 +443,11 @@ export function useAudioTranscriptionRecorder({
   const audioProcessorSinkRef = useRef<GainNode | null>(null);
   const audioLevelDataRef = useRef<Uint8Array | null>(null);
   const audioFrameRef = useRef<number | null>(null);
+  const vadEngineRef = useRef<VoiceVadEngine | null>(null);
+  const vadAutoStopTriggeredRef = useRef(false);
+  const vadDebugLastFrameLogAtRef = useRef(0);
+  const vadDebugProcessedFrameCountRef = useRef(0);
+  const onVadAutoStopRef = useRef(onVadAutoStop);
   const recordingDurationTimerRef = useRef<number | null>(null);
   const createChatMutation = useCreateChat();
   const { fetcherOptions: fileFetchOptions } = useV1betaApiContext();
@@ -440,6 +457,10 @@ export function useAudioTranscriptionRecorder({
   useEffect(() => {
     fileFetchOptionsRef.current = fileFetchOptions;
   }, [fileFetchOptions]);
+
+  useEffect(() => {
+    onVadAutoStopRef.current = onVadAutoStop;
+  }, [onVadAutoStop]);
 
   useEffect(() => {
     attachedFilesRef.current = attachedFiles;
@@ -530,15 +551,30 @@ export function useAudioTranscriptionRecorder({
     }
   }, []);
 
+  const stopVadEngine = useCallback(() => {
+    const hadVadEngine = Boolean(vadEngineRef.current);
+    vadEngineRef.current?.destroy();
+    vadEngineRef.current = null;
+    vadAutoStopTriggeredRef.current = false;
+    vadDebugLastFrameLogAtRef.current = 0;
+    vadDebugProcessedFrameCountRef.current = 0;
+    setIsVadListening(false);
+    setIsVadSpeechActive(false);
+    if (hadVadEngine) {
+      logger.log("VAD engine stopped");
+    }
+  }, []);
+
   const stopMediaRecordingStream = useCallback(() => {
     clearRecordingDurationTimer();
+    stopVadEngine();
 
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current = null;
     }
     stopRecordingVisualizer();
-  }, [clearRecordingDurationTimer, stopRecordingVisualizer]);
+  }, [clearRecordingDurationTimer, stopRecordingVisualizer, stopVadEngine]);
 
   const startLiveAudioTranscriptionSession = useCallback(
     async (filename: string): Promise<LiveAudioTranscriptionSession> => {
@@ -1024,6 +1060,92 @@ export function useAudioTranscriptionRecorder({
 
       const filename = formatAudioRecordingFilename(new Date());
       const liveSession = await startLiveAudioTranscriptionSession(filename);
+      let vadEngine: VoiceVadEngine | null = null;
+      if (vadAutoStopEnabled) {
+        const vadOptions = {
+          model: "silero-v5" as const,
+          redemptionMs: 1800,
+          preSpeechPadMs: 500,
+          minSpeechMs: 400,
+        };
+        try {
+          logger.log("VAD auto-stop enabled; starting engine", vadOptions);
+          vadEngine = createRicky0123VadEngine(vadOptions);
+          vadEngine.subscribe((event) => {
+            if (event.type === "frame") {
+              vadDebugProcessedFrameCountRef.current += 1;
+              const now = Date.now();
+              if (
+                now - vadDebugLastFrameLogAtRef.current >=
+                VAD_DEBUG_FRAME_LOG_INTERVAL_MS
+              ) {
+                vadDebugLastFrameLogAtRef.current = now;
+                logger.log("VAD frame probabilities", {
+                  framesProcessed: vadDebugProcessedFrameCountRef.current,
+                  frameSamples: event.frame.samples.length,
+                  sampleRate: event.frame.sampleRate,
+                  isSpeech:
+                    Math.round(event.probabilities.isSpeech * 1000) / 1000,
+                  notSpeech:
+                    Math.round(event.probabilities.notSpeech * 1000) / 1000,
+                });
+              }
+              return;
+            }
+            if (event.type === "error") {
+              logger.warn("VAD engine emitted an error", event.error);
+              return;
+            }
+            if (event.type === "speech_start") {
+              logger.log("VAD speech_start", {
+                timestampMs: event.timestampMs,
+              });
+              setIsVadSpeechActive(true);
+              return;
+            }
+            if (event.type === "speech_real_start") {
+              logger.log("VAD speech_real_start", {
+                timestampMs: event.timestampMs,
+              });
+              setIsVadSpeechActive(true);
+              return;
+            }
+            if (event.type === "vad_misfire") {
+              logger.log("VAD misfire; keeping recording open", {
+                timestampMs: event.timestampMs,
+              });
+              setIsVadSpeechActive(false);
+              return;
+            }
+
+            setIsVadSpeechActive(false);
+            if (vadAutoStopTriggeredRef.current) {
+              logger.log("VAD speech_end ignored; auto-stop already triggered");
+              return;
+            }
+            logger.log("VAD speech_end; stopping recording and auto-sending", {
+              timestampMs: event.timestampMs,
+              audioSamples: event.audio.length,
+            });
+            vadAutoStopTriggeredRef.current = true;
+            onVadAutoStopRef.current?.();
+            stopAudioRecording();
+          });
+          await vadEngine.start();
+          vadEngineRef.current = vadEngine;
+          setIsVadListening(true);
+          logger.log("VAD engine listening");
+        } catch (error) {
+          logger.warn(
+            "VAD engine failed to start; continuing without auto-stop",
+            error,
+          );
+          vadEngine?.destroy();
+          vadEngineRef.current = null;
+          setIsVadListening(false);
+          setIsVadSpeechActive(false);
+        }
+      }
 
       if (typeof AudioContext !== "undefined") {
         const audioContext = new AudioContext();
@@ -1043,6 +1165,11 @@ export function useAudioTranscriptionRecorder({
         processor.connect(processorSink);
         processorSink.connect(audioContext.destination);
         liveSession.sourceSampleRate = audioContext.sampleRate;
+        logger.log("Audio processor connected", {
+          sampleRate: audioContext.sampleRate,
+          bufferSize: 4096,
+          vadAutoStopEnabled: Boolean(vadEngineRef.current),
+        });
         processor.onaudioprocess = (event) => {
           const session = liveSessionRef.current;
           if (!session) {
@@ -1050,10 +1177,28 @@ export function useAudioTranscriptionRecorder({
           }
 
           const input = event.inputBuffer.getChannelData(0);
+          const vadFrame = vadEngineRef.current
+            ? new Float32Array(input)
+            : null;
           for (let index = 0; index < input.length; index += 1) {
             session.pendingSourceSamples.push(input[index]);
           }
           flushLiveAudioSamples(false);
+          if (vadFrame && vadEngineRef.current) {
+            void vadEngineRef.current
+              .acceptFrame({
+                samples: vadFrame,
+                sampleRate: audioContext.sampleRate,
+                timestampMs: Date.now(),
+              })
+              .catch((error) => {
+                logger.warn(
+                  "VAD frame processing failed; disabling VAD",
+                  error,
+                );
+                stopVadEngine();
+              });
+          }
         };
 
         const levelData = new Uint8Array(analyser.fftSize);
@@ -1206,6 +1351,8 @@ export function useAudioTranscriptionRecorder({
     removeAudioTranscriptionAttachment,
     selectedAudioInputDeviceId,
     setRecordingBarsThrottled,
+    stopVadEngine,
+    vadAutoStopEnabled,
   ]);
 
   const toggleAudioRecording = useCallback(() => {
@@ -1248,6 +1395,8 @@ export function useAudioTranscriptionRecorder({
     retryingAudioFileId,
     recordingBars,
     recordingDiagnostics,
+    isVadListening,
+    isVadSpeechActive,
     toggleAudioRecording,
     retryAudioTranscription,
     removeRecordedAudioFile,
