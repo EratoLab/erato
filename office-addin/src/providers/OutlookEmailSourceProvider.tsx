@@ -9,10 +9,11 @@ import {
 
 import { useMsalNaa } from "./MsalNaaProvider";
 import { useOutlookMailItem } from "./OutlookMailItemProvider";
-import { fetchCurrentEmailEml } from "../utils/fetchCurrentEmailEml";
+import { fetchCurrentEmailParsed } from "../utils/fetchCurrentEmailEml";
 import { fetchParentMessageInConversationViaGraph } from "../utils/fetchOutlookMessageGraph";
 
 import type { ParentMessageMetadata } from "../utils/fetchOutlookMessageGraph";
+import type { ParsedEmail } from "../utils/parsedEmail";
 import type { LocalFilePreviewItem } from "@erato/frontend/library";
 import type { ReactNode } from "react";
 
@@ -24,6 +25,13 @@ interface OutlookEmailSourceContextValue {
   isEmailBodyIncluded: boolean;
   emailBodyFile: File | null;
   isLoadingEmailBody: boolean;
+  /**
+   * Structured view of the currently-open email when fetched via Graph
+   * (read mode only). Powers the per-attachment selection UI and will feed
+   * surgical MIME removal in Phase 2. `null` when the email body comes from
+   * the synthesized-HTML compose-mode path or before Graph returns.
+   */
+  currentEmailParsed: ParsedEmail | null;
   selectedAttachmentItems: LocalFilePreviewItem[];
   isLoadingAttachments: boolean;
   removeEmailBody: () => void;
@@ -52,6 +60,7 @@ const defaultValue: OutlookEmailSourceContextValue = {
   isEmailBodyIncluded: false,
   emailBodyFile: null,
   isLoadingEmailBody: false,
+  currentEmailParsed: null,
   selectedAttachmentItems: [],
   isLoadingAttachments: false,
   removeEmailBody: () => {},
@@ -92,7 +101,9 @@ export function OutlookEmailSourceProvider({
   const [dismissedAttachmentIds, setDismissedAttachmentIds] = useState<
     string[]
   >([]);
-  const [emailBodyFile, setEmailBodyFile] = useState<File | null>(null);
+  const [currentEmailParsed, setCurrentEmailParsed] = useState<ParsedEmail | null>(
+    null,
+  );
   const [isLoadingEmailBody, setIsLoadingEmailBody] = useState(false);
   const [parentReplyContext, setParentReplyContext] =
     useState<ParentMessageMetadata | null>(null);
@@ -108,26 +119,26 @@ export function OutlookEmailSourceProvider({
   const conversationId = mailItem?.conversationId ?? null;
   const isComposeMode = mailItem?.isComposeMode ?? false;
 
-  // Fetch the raw `.eml` via Graph whenever the open email changes. Drafts
-  // and compose items have no itemId, so no accessory is produced — matches
-  // the Graph indexing contract (`/$value` 404s on unsent messages).
+  // Fetch and parse the raw `.eml` via Graph whenever the open email changes.
+  // Drafts and compose items have no itemId, so no accessory is produced —
+  // matches the Graph indexing contract (`/$value` 404s on unsent messages).
   useEffect(() => {
     if (!itemId) {
-      setEmailBodyFile(null);
+      setCurrentEmailParsed(null);
       setIsLoadingEmailBody(false);
       return;
     }
 
     let cancelled = false;
     setIsLoadingEmailBody(true);
-    setEmailBodyFile(null);
+    setCurrentEmailParsed(null);
 
-    void fetchCurrentEmailEml(itemId, acquireGraphToken)
+    void fetchCurrentEmailParsed(itemId, acquireGraphToken)
       .then((result) => {
         if (cancelled) {
           return;
         }
-        setEmailBodyFile(result?.file ?? null);
+        setCurrentEmailParsed(result?.parsed ?? null);
       })
       .finally(() => {
         if (cancelled) {
@@ -199,6 +210,7 @@ export function OutlookEmailSourceProvider({
   const isEmailBodyDismissed =
     !!itemIdentity && dismissedBodyMailIdentity === itemIdentity;
 
+  const emailBodyFile = currentEmailParsed?.rawEmlFile ?? null;
   const isEmailBodyIncluded = !!emailBodyFile && !isEmailBodyDismissed;
 
   const selectableAttachments = useMemo(() => {
@@ -288,6 +300,7 @@ export function OutlookEmailSourceProvider({
       isEmailBodyIncluded,
       emailBodyFile,
       isLoadingEmailBody,
+      currentEmailParsed,
       selectedAttachmentItems,
       isLoadingAttachments,
       removeEmailBody,
@@ -303,6 +316,7 @@ export function OutlookEmailSourceProvider({
       isLoadingParentReplyContext,
     }),
     [
+      currentEmailParsed,
       dismissedAttachmentIds,
       emailBodyFile,
       isEmailBodyDismissed,
