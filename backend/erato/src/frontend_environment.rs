@@ -411,6 +411,10 @@ fn matches_rewrite_rule(path: &str, rule: &RewriteRule) -> bool {
     true
 }
 
+fn is_i18n_messages_json(path: &str) -> bool {
+    path.ends_with("/messages.json") && path.contains("/locales/")
+}
+
 /// Rewrites HTML to inject a `<script>` tag (which contains global JS variables that act like environment variables)
 /// into the `<head>` tag.
 pub fn inject_environment_script_tag(
@@ -602,6 +606,12 @@ pub mod axum {
         } else {
             // Non-HTML files (theme files, locales, etc.): add cache headers based on deployment version
             let mut res = res.map(|body| body.map_err(Into::into).boxed_unsync());
+            let is_messages_json = is_i18n_messages_json(&request_path);
+            let cache_control = if is_messages_json {
+                "no-cache"
+            } else {
+                "public, max-age=3600, stale-while-revalidate=604800"
+            };
 
             if let Some(version) = &deployment_version.0 {
                 // We have a deployment version - use it for cache headers
@@ -615,10 +625,7 @@ pub mod axum {
                     let response = Response::builder()
                         .status(http::StatusCode::NOT_MODIFIED)
                         .header(http::header::ETAG, etag_value)
-                        .header(
-                            http::header::CACHE_CONTROL,
-                            "public, max-age=3600, stale-while-revalidate=604800",
-                        )
+                        .header(http::header::CACHE_CONTROL, cache_control)
                         .body(
                             http_body_util::Empty::new()
                                 .map_err(|never| match never {})
@@ -635,7 +642,7 @@ pub mod axum {
                 );
                 res.headers_mut().insert(
                     http::header::CACHE_CONTROL,
-                    HeaderValue::from_static("public, max-age=3600, stale-while-revalidate=604800"),
+                    HeaderValue::from_static(cache_control),
                 );
             } else {
                 // No deployment version - use no-cache as a safe fallback
@@ -705,5 +712,18 @@ mod tests {
         };
 
         assert!(registry.resolve("/office-addin").is_none());
+    }
+
+    #[test]
+    fn i18n_messages_json_is_detected_by_path() {
+        assert!(is_i18n_messages_json("/public/locales/en/messages.json"));
+        assert!(is_i18n_messages_json(
+            "/public/common/locales/de/messages.json"
+        ));
+        assert!(is_i18n_messages_json(
+            "/public/custom-theme/example/locales/fr/messages.json"
+        ));
+        assert!(!is_i18n_messages_json("/assets/app.js"));
+        assert!(!is_i18n_messages_json("/public/locales/en/readme.txt"));
     }
 }
