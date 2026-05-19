@@ -4,7 +4,7 @@ import {
   installMockMailbox,
   uninstallMockMailbox,
 } from "../../test/mocks/outlook/mailbox";
-import { fetchCurrentEmailEml } from "../fetchCurrentEmailEml";
+import { fetchCurrentEmailParsed } from "../fetchCurrentEmailEml";
 
 const EWS_ID = "AAkALgAAA-ews-id";
 const GRAPH_ID = "graph-id-converted";
@@ -52,7 +52,7 @@ function bytesFrom(text: string): ArrayBuffer {
   return buffer;
 }
 
-describe("fetchCurrentEmailEml", () => {
+describe("fetchCurrentEmailParsed", () => {
   beforeEach(() => {
     installOutlookMailboxMock();
     vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -64,27 +64,78 @@ describe("fetchCurrentEmailEml", () => {
     vi.restoreAllMocks();
   });
 
-  it("returns the raw .eml file and message id on success", async () => {
+  const CRLF = "\r\n";
+
+  function buildEml(
+    subject: string,
+    messageId: string,
+    body = "hello",
+  ): string {
+    return (
+      `From: Alice <alice@example.com>${CRLF}` +
+      `To: Bob <bob@example.com>${CRLF}` +
+      `Subject: ${subject}${CRLF}` +
+      `Message-ID: ${messageId}${CRLF}` +
+      `MIME-Version: 1.0${CRLF}` +
+      `Content-Type: text/plain; charset=utf-8${CRLF}` +
+      `${CRLF}` +
+      body
+    );
+  }
+
+  it("parses the Graph-returned MIME into a ParsedEmail and prefers the parsed Message-ID", async () => {
     const acquireToken = vi.fn().mockResolvedValue("tok");
+    const eml = buildEml("Hi parsed", "<parsed-id@example.com>");
     installFetchMock((url) =>
       url.endsWith("/$value")
-        ? { ok: true, bytes: bytesFrom("raw-mime") }
+        ? { ok: true, bytes: bytesFrom(eml) }
         : {
             ok: true,
-            jsonValue: { subject: "Hi", internetMessageId: "<abc@host>" },
+            jsonValue: {
+              subject: "Hi parsed",
+              internetMessageId: "<graph-id@example.com>",
+            },
           },
     );
 
-    const result = await fetchCurrentEmailEml(EWS_ID, acquireToken);
+    const result = await fetchCurrentEmailParsed(EWS_ID, acquireToken);
 
     expect(result).not.toBeNull();
-    expect(result?.file.type).toBe("message/rfc822");
-    expect(result?.file.name).toBe("Hi.eml");
-    expect(result?.messageId).toBe("<abc@host>");
-    expect(await result?.file.text()).toBe("raw-mime");
+    expect(result?.parsed.subject).toBe("Hi parsed");
+    expect(result?.parsed.from).toEqual({
+      name: "Alice",
+      address: "alice@example.com",
+    });
+    expect(result?.messageId).toBe("<parsed-id@example.com>");
+    expect(result?.parsed.rawEmlFile.type).toBe("message/rfc822");
   });
 
-  it("returns null and logs when the Graph fetch throws", async () => {
+  it("falls back to Graph's internetMessageId when the parsed bytes lack a Message-ID header", async () => {
+    const acquireToken = vi.fn().mockResolvedValue("tok");
+    const eml =
+      `From: a@x${CRLF}` +
+      `To: b@x${CRLF}` +
+      `Subject: No id${CRLF}` +
+      `MIME-Version: 1.0${CRLF}` +
+      `Content-Type: text/plain${CRLF}${CRLF}body`;
+    installFetchMock((url) =>
+      url.endsWith("/$value")
+        ? { ok: true, bytes: bytesFrom(eml) }
+        : {
+            ok: true,
+            jsonValue: {
+              subject: "No id",
+              internetMessageId: "<graph-id@example.com>",
+            },
+          },
+    );
+
+    const result = await fetchCurrentEmailParsed(EWS_ID, acquireToken);
+
+    expect(result?.messageId).toBe("<graph-id@example.com>");
+  });
+
+  it("returns null and logs when the Graph fetch fails", async () => {
     const acquireToken = vi.fn().mockResolvedValue("tok");
     installFetchMock(() => ({
       ok: false,
@@ -92,25 +143,8 @@ describe("fetchCurrentEmailEml", () => {
       statusText: "Not Found",
     }));
 
-    const result = await fetchCurrentEmailEml(EWS_ID, acquireToken);
+    const result = await fetchCurrentEmailParsed(EWS_ID, acquireToken);
 
     expect(result).toBeNull();
-  });
-
-  it("returns null when Graph returns no files (defensive)", async () => {
-    const acquireToken = vi.fn().mockResolvedValue("tok");
-    // Emulate a successful metadata fetch but a zero-length body; the helper
-    // still produces a File, so this mostly pins the defensive branch.
-    installFetchMock((url) =>
-      url.endsWith("/$value")
-        ? { ok: true, bytes: new ArrayBuffer(0) }
-        : { ok: true, jsonValue: { subject: "Empty" } },
-    );
-
-    const result = await fetchCurrentEmailEml(EWS_ID, acquireToken);
-
-    expect(result).not.toBeNull();
-    expect(result?.file.size).toBe(0);
-    expect(result?.file.type).toBe("message/rfc822");
   });
 });

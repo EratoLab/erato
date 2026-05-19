@@ -162,6 +162,7 @@ export {
   useAudioConversationalFeature,
   useFeatureConfig,
   useMessageFeedbackFeature,
+  useUploadFeature,
   type FeatureConfig,
   type MessageFeedbackFeatureConfig,
 } from "@/providers/FeatureConfigProvider";
@@ -200,7 +201,7 @@ export type {
   UpdateProfilePreferencesRequest,
   UserProfile,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
-export type { FileType } from "@/utils/fileTypes";
+export { FileTypeUtil, type FileType } from "@/utils/fileTypes";
 export type { LocalFilePreviewItem } from "@/components/ui/FileUpload/FilePreviewBase";
 export type {
   FileAttachmentGroup,

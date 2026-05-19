@@ -218,27 +218,7 @@ export class FileTypeUtil {
    * @returns The identified file type
    */
   static getFileType(file: File): FileType {
-    const extension = this.getExtension(file.name).toLowerCase();
-    const mimeType = file.type.toLowerCase();
-
-    // Check each file type for matching extension or mime type
-    for (const [type, config] of Object.entries(FILE_TYPES)) {
-      if (!config.enabled) continue;
-
-      // Check extensions
-      if (config.extensions.includes(extension)) {
-        return type as FileType;
-      }
-
-      // Check mime types (including wildcards like 'image/*')
-      for (const pattern of config.mimeTypes) {
-        if (this.matchesMimeType(mimeType, pattern)) {
-          return type as FileType;
-        }
-      }
-    }
-
-    return "other";
+    return this.getFileTypeFromMetadata(file.name, file.type);
   }
 
   /**
@@ -251,10 +231,33 @@ export class FileTypeUtil {
     error?: string;
     fileType: FileType;
   } {
-    const fileType = this.getFileType(file);
+    return this.validateMetadata({
+      filename: file.name,
+      mimeType: file.type,
+      size: file.size,
+    });
+  }
+
+  /**
+   * Metadata-only variant of `validateFile`. Lets callers run the same
+   * type/size checks without materialising the bytes — useful when
+   * validating parsed `.eml` attachments before the user confirms upload.
+   */
+  static validateMetadata(input: {
+    filename: string;
+    mimeType?: string;
+    size: number;
+  }): {
+    valid: boolean;
+    error?: string;
+    fileType: FileType;
+  } {
+    const fileType = this.getFileTypeFromMetadata(
+      input.filename,
+      input.mimeType ?? "",
+    );
     const config = FILE_TYPES[fileType];
 
-    // Check if file type is enabled
     if (!config.enabled) {
       return {
         valid: false,
@@ -263,8 +266,7 @@ export class FileTypeUtil {
       };
     }
 
-    // Check file size if max size is specified
-    if (config.maxSize && file.size > config.maxSize) {
+    if (config.maxSize && input.size > config.maxSize) {
       const maxSizeMB = Math.round(config.maxSize / (1024 * 1024));
       return {
         valid: false,
@@ -274,6 +276,23 @@ export class FileTypeUtil {
     }
 
     return { valid: true, fileType };
+  }
+
+  static getFileTypeFromMetadata(filename: string, mimeType: string): FileType {
+    const extension = this.getExtension(filename).toLowerCase();
+    const normalisedMime = mimeType.toLowerCase();
+    for (const [type, config] of Object.entries(FILE_TYPES)) {
+      if (!config.enabled) continue;
+      if (config.extensions.includes(extension)) {
+        return type as FileType;
+      }
+      for (const pattern of config.mimeTypes) {
+        if (this.matchesMimeType(normalisedMime, pattern)) {
+          return type as FileType;
+        }
+      }
+    }
+    return "other";
   }
 
   /**

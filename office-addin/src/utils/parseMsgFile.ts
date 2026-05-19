@@ -1,7 +1,12 @@
 import { extractMsgInternetMessageId } from "./extractMsgInternetMessageId";
-import { fetchOutlookMessageFilesByInternetMessageIdViaGraph } from "./fetchOutlookMessageGraph";
+import {
+  fetchOutlookMessageBytesByInternetMessageIdViaGraph,
+  fetchOutlookMessageFilesByInternetMessageIdViaGraph,
+} from "./fetchOutlookMessageGraph";
+import { parseEmlBytes } from "./parsedEmail";
 
 import type { AcquireGraphToken } from "./fetchOutlookMessageGraph";
+import type { ParsedEmail } from "./parsedEmail";
 
 /**
  * Resolves a dropped `.msg` file into the same body + attachment File[] shape
@@ -25,23 +30,8 @@ export async function parseMsgFileToFiles(
   file: File,
   acquireGraphToken: AcquireGraphToken,
 ): Promise<MsgParseResult> {
-  let internetMessageId: string | null;
-  try {
-    internetMessageId = await extractMsgInternetMessageId(file);
-  } catch (error) {
-    console.warn(
-      "[parseMsgFile] Failed to read CFB from dropped .msg:",
-      file.name,
-      error,
-    );
-    return { files: [], messageId: null };
-  }
-
+  const internetMessageId = await extractMessageIdSafely(file);
   if (!internetMessageId) {
-    console.warn(
-      "[parseMsgFile] Dropped .msg has no Internet Message-ID — cannot resolve via Graph:",
-      file.name,
-    );
     return { files: [], messageId: null };
   }
 
@@ -65,5 +55,62 @@ export async function parseMsgFileToFiles(
       error,
     );
     return { files: [], messageId: internetMessageId };
+  }
+}
+
+export interface MsgParsedResult {
+  parsed: ParsedEmail | null;
+  messageId: string | null;
+}
+
+export async function parseMsgFileToParsedEmail(
+  file: File,
+  acquireGraphToken: AcquireGraphToken,
+): Promise<MsgParsedResult> {
+  const internetMessageId = await extractMessageIdSafely(file);
+  if (!internetMessageId) {
+    return { parsed: null, messageId: null };
+  }
+
+  let bytesResult;
+  try {
+    bytesResult = await fetchOutlookMessageBytesByInternetMessageIdViaGraph(
+      internetMessageId,
+      acquireGraphToken,
+    );
+  } catch (error) {
+    console.warn(
+      "[parseMsgFile] Graph fetch failed for dropped .msg:",
+      file.name,
+      error,
+    );
+    return { parsed: null, messageId: internetMessageId };
+  }
+
+  if (!bytesResult) {
+    console.warn(
+      "[parseMsgFile] Graph lookup returned no match for Message-ID:",
+      internetMessageId,
+    );
+    return { parsed: null, messageId: internetMessageId };
+  }
+
+  const parsed = await parseEmlBytes(bytesResult.bytes);
+  return {
+    parsed,
+    messageId: parsed?.messageId ?? internetMessageId,
+  };
+}
+
+async function extractMessageIdSafely(file: File): Promise<string | null> {
+  try {
+    return await extractMsgInternetMessageId(file);
+  } catch (error) {
+    console.warn(
+      "[parseMsgFile] Failed to read CFB from dropped .msg:",
+      file.name,
+      error,
+    );
+    return null;
   }
 }

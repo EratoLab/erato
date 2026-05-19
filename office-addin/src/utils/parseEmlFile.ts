@@ -1,16 +1,6 @@
-import PostalMime from "postal-mime";
+import { parseEmlBytes } from "./parsedEmail";
 
-/**
- * Expands a dropped `.eml` file into the raw RFC822 message (uploaded as
- * `message/rfc822` so the backend can extract headers and body server-side)
- * plus one `File` per non-inline, non-related attachment. Attachments are
- * extracted client-side because the backend's `.eml` text extraction lists
- * attachment filenames only, not their contents.
- *
- * The RFC 5322 `Message-ID` header is returned alongside the files so the
- * caller can correlate this drop against other representations of the same
- * email (e.g. the currently-open email preview) and avoid duplicates.
- */
+import type { ParsedEmail } from "./parsedEmail";
 
 export interface EmlParseResult {
   files: File[];
@@ -24,57 +14,44 @@ export function isEmlFile(file: File): boolean {
   return /\.eml$/i.test(file.name);
 }
 
+/**
+ * Phase 1 transitional adapter — flattens a dropped `.eml` into the raw
+ * RFC822 file plus one sibling `File` per non-inline, non-related attachment.
+ *
+ * Branch A (ERMAIN-273) replaces this output with a trimmed single `.eml`
+ * via surgical MIME removal — that swap lands in Phase 2. Until then we
+ * keep the sibling-upload shape so the existing pipeline keeps working
+ * while the selection UI / pre-upload validation is built on top of the
+ * new `ParsedEmail` shape.
+ */
 export async function parseEmlFileToFiles(file: File): Promise<EmlParseResult> {
-  let buffer: ArrayBuffer;
-  let parsed;
-  try {
-    buffer = await file.arrayBuffer();
-    parsed = await PostalMime.parse(buffer);
-  } catch (error) {
-    console.warn("[parseEmlFile] failed to parse .eml file, skipping:", error);
+  const parsed = await parseEmlToParsedEmail(file);
+  if (!parsed) {
     return { files: [], messageId: null };
   }
 
-  const rawEmlFile = new File([buffer], file.name, {
-    type: "message/rfc822",
-  });
-
-  const attachmentFiles: File[] = [];
-  for (const attachment of parsed.attachments ?? []) {
-    if (attachment.disposition === "inline" || attachment.related === true) {
-      continue;
-    }
-    const blobPart = toBlobPart(attachment.content);
-    if (blobPart === null) {
-      continue;
-    }
-    const filename = attachment.filename?.trim() || "attachment";
-    const mimeType = attachment.mimeType || "application/octet-stream";
-    attachmentFiles.push(new File([blobPart], filename, { type: mimeType }));
-  }
+  const attachmentFiles = parsed.attachments
+    .filter(
+      (attachment) =>
+        attachment.disposition !== "inline" && !attachment.related,
+    )
+    .map((attachment) => attachment.toFile());
 
   return {
-    files: [rawEmlFile, ...attachmentFiles],
-    messageId: parsed.messageId ?? null,
+    files: [parsed.rawEmlFile, ...attachmentFiles],
+    messageId: parsed.messageId,
   };
 }
 
-function toBlobPart(
-  content: ArrayBuffer | Uint8Array | string,
-): BlobPart | null {
-  if (typeof content === "string") {
-    const encoded = new TextEncoder().encode(content);
-    const copy = new Uint8Array(encoded.byteLength);
-    copy.set(encoded);
-    return copy.buffer;
+export async function parseEmlToParsedEmail(
+  file: File,
+): Promise<ParsedEmail | null> {
+  let buffer: ArrayBuffer;
+  try {
+    buffer = await file.arrayBuffer();
+  } catch (error) {
+    console.warn("[parseEmlFile] failed to read .eml bytes, skipping:", error);
+    return null;
   }
-  if (content instanceof Uint8Array) {
-    const copy = new Uint8Array(content.byteLength);
-    copy.set(content);
-    return copy.buffer;
-  }
-  if (content instanceof ArrayBuffer) {
-    return content;
-  }
-  return null;
+  return parseEmlBytes(buffer, { filename: file.name });
 }

@@ -78,6 +78,11 @@ msgstr "Auswahl verwerfen"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.emailBody"
+msgstr "E-Mail-Inhalt"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.emailFallback"
 msgstr "E-Mail"
 
@@ -93,6 +98,11 @@ msgstr "Abgelegte E-Mails werden verarbeitet…"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.replyContext.groupLabel"
+msgstr "Antwortkontext"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.replyContext.label"
 msgstr "Antwortkontext"
 
@@ -100,6 +110,11 @@ msgstr "Antwortkontext"
 #: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.replyContext.untitled"
 msgstr "(kein Betreff)"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.validation.tooLarge"
+msgstr "Datei überschreitet das Serverlimit von {globalMaxFormatted}"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx

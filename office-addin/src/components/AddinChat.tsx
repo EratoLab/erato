@@ -44,10 +44,11 @@ import { useOutlookMailListDrag } from "../hooks/useOutlookMailListDrag";
 import { useMsalNaa } from "../providers/MsalNaaProvider";
 import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
-import { expandDroppedEmailFiles } from "../utils/expandDroppedEmailFiles";
-import { fetchOutlookMessageFiles } from "../utils/fetchOutlookMessage";
+import { fetchOutlookMessageBytesViaGraph } from "../utils/fetchOutlookMessageGraph";
+import { parseDroppedFiles } from "../utils/parseDroppedFiles";
+import { parseEmlBytes } from "../utils/parsedEmail";
 
-import type { FetchOutlookMessageResult } from "../utils/fetchOutlookMessage";
+import type { FetchOutlookMessageBytesResult } from "../utils/fetchOutlookMessageGraph";
 import type { OutlookMailListDragItem } from "../utils/outlookMailListDragParse";
 
 const GRAPH_MAIL_SCOPES = ["Mail.Read"];
@@ -145,8 +146,12 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
   );
 
   const { mailItem } = useOutlookMailItem();
-  const { hasSelectedEmailSource, isEmailBodyIncluded, emailBodyFile } =
-    useOutlookEmailSource();
+  const {
+    hasSelectedEmailSource,
+    isEmailBodyIncluded,
+    emailBodyFile,
+    addDroppedEmail,
+  } = useOutlookEmailSource();
   const previewEmailMessageIdRef = useRef<string | null>(null);
 
   // Tracks the RFC 5322 Message-IDs of emails already attached via any drop
@@ -177,10 +182,10 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
   // from locking the send button indefinitely — the coalesced promise
   // rejects and its entry is cleared so a later retry can start fresh.
   const pendingOutlookFetchesRef = useRef<
-    Map<string, Promise<FetchOutlookMessageResult>>
+    Map<string, Promise<FetchOutlookMessageBytesResult>>
   >(new Map());
-  const fetchOutlookMessageFilesCoalesced = useCallback(
-    (itemId: string): Promise<FetchOutlookMessageResult> => {
+  const fetchOutlookMessageBytesCoalesced = useCallback(
+    (itemId: string): Promise<FetchOutlookMessageBytesResult> => {
       const existing = pendingOutlookFetchesRef.current.get(itemId);
       if (existing) {
         return existing;
@@ -188,8 +193,8 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
       const fetchPromise = (async () => {
         try {
           return await Promise.race([
-            fetchOutlookMessageFiles(itemId, acquireGraphToken),
-            new Promise<FetchOutlookMessageResult>((_, reject) => {
+            fetchOutlookMessageBytesViaGraph(itemId, acquireGraphToken),
+            new Promise<FetchOutlookMessageBytesResult>((_, reject) => {
               setTimeout(
                 () =>
                   reject(
@@ -233,7 +238,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
     async (files: File[]) => {
       return trackExpansion(async () => {
         const claimedIds: string[] = [];
-        const expanded = await expandDroppedEmailFiles(files, {
+        const { emails, nonEmail } = await parseDroppedFiles(files, {
           acquireGraphToken,
           tryAttachEmail: (messageId) => {
             if (!tryClaimEmailAttachment(messageId)) {
@@ -243,10 +248,16 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
             return true;
           },
         });
-        if (expanded.length === 0) {
+        for (const parsed of emails) {
+          if (addDroppedEmail(parsed) === null && parsed.messageId) {
+            dedup.remove(parsed.messageId);
+            claimedIds.splice(claimedIds.indexOf(parsed.messageId), 1);
+          }
+        }
+        if (nonEmail.length === 0) {
           return undefined;
         }
-        const uploaded = await uploadFiles(expanded);
+        const uploaded = await uploadFiles(nonEmail);
         if (uploaded === undefined) {
           claimedIds.forEach((id) => dedup.remove(id));
         }
@@ -255,6 +266,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
     },
     [
       acquireGraphToken,
+      addDroppedEmail,
       dedup,
       trackExpansion,
       tryClaimEmailAttachment,
@@ -278,17 +290,15 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
   const handleOutlookMailListDrop = useCallback(
     async (items: OutlookMailListDragItem[]) => {
       return trackExpansion(async () => {
-        const collected: File[] = [];
         const claimedIds: string[] = [];
         for (const item of items) {
           try {
-            const { files, internetMessageId } =
-              await fetchOutlookMessageFilesCoalesced(item.itemId);
-            if (!internetMessageId || files.length === 0) {
-              collected.push(...files);
-              continue;
-            }
-            if (!tryClaimEmailAttachment(internetMessageId)) {
+            const { bytes, internetMessageId } =
+              await fetchOutlookMessageBytesCoalesced(item.itemId);
+            if (
+              internetMessageId &&
+              !tryClaimEmailAttachment(internetMessageId)
+            ) {
               console.log(
                 "[AddinChat] skipping dropped Outlook email already claimed:",
                 item.subject || item.itemId,
@@ -296,8 +306,21 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
               );
               continue;
             }
-            claimedIds.push(internetMessageId);
-            collected.push(...files);
+            if (internetMessageId) {
+              claimedIds.push(internetMessageId);
+            }
+            const parsed = await parseEmlBytes(bytes);
+            if (!parsed) {
+              if (internetMessageId) {
+                dedup.remove(internetMessageId);
+                claimedIds.splice(claimedIds.indexOf(internetMessageId), 1);
+              }
+              continue;
+            }
+            if (addDroppedEmail(parsed) === null && internetMessageId) {
+              dedup.remove(internetMessageId);
+              claimedIds.splice(claimedIds.indexOf(internetMessageId), 1);
+            }
           } catch (error) {
             console.warn(
               "Failed to fetch dropped Outlook email, skipping:",
@@ -306,25 +329,14 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
             );
           }
         }
-        if (collected.length === 0) {
-          return;
-        }
-        const uploaded = await uploadFiles(collected);
-        if (uploaded === undefined) {
-          claimedIds.forEach((id) => dedup.remove(id));
-          return;
-        }
-        if (uploaded.length > 0) {
-          chatInputControlsRef.current?.addUploadedFiles(uploaded);
-        }
       });
     },
     [
+      addDroppedEmail,
       dedup,
-      fetchOutlookMessageFilesCoalesced,
+      fetchOutlookMessageBytesCoalesced,
       trackExpansion,
       tryClaimEmailAttachment,
-      uploadFiles,
     ],
   );
 
@@ -339,7 +351,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
       }
       return trackExpansion(async () => {
         const claimedIds: string[] = [];
-        const expanded = await expandDroppedEmailFiles(files, {
+        const { emails, nonEmail } = await parseDroppedFiles(files, {
           acquireGraphToken,
           tryAttachEmail: (messageId) => {
             if (!tryClaimEmailAttachment(messageId)) {
@@ -349,10 +361,16 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
             return true;
           },
         });
-        if (expanded.length === 0) {
+        for (const parsed of emails) {
+          if (addDroppedEmail(parsed) === null && parsed.messageId) {
+            dedup.remove(parsed.messageId);
+            claimedIds.splice(claimedIds.indexOf(parsed.messageId), 1);
+          }
+        }
+        if (nonEmail.length === 0) {
           return;
         }
-        const uploaded = await uploadFiles(expanded);
+        const uploaded = await uploadFiles(nonEmail);
         if (uploaded === undefined) {
           claimedIds.forEach((id) => dedup.remove(id));
           return;
@@ -364,6 +382,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
     },
     [
       acquireGraphToken,
+      addDroppedEmail,
       dedup,
       trackExpansion,
       tryClaimEmailAttachment,
