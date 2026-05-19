@@ -1,8 +1,8 @@
 allowBuilds:
+  "@swc/core": true
   esbuild: true
+  msw: true
   protobufjs: true
   unrs-resolver: true
 # 5 days delay
 minimumReleaseAge: 7200
-minimumReleaseAgeExclude:
-  - "@erato/frontend"

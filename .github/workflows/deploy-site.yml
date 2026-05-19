@@ -30,7 +30,7 @@ jobs:
         uses: pnpm/action-setup@v4
         with:
           # Source of truth is at /site/package.json -> "packageManager" field.
-          version: 9.15.5
+          version: 11.1.3
 
       - name: "Setup Node.js"
         uses: actions/setup-node@v4
