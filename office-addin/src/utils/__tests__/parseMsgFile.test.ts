@@ -249,13 +249,18 @@ describe("parseMsgFileToParsedEmail", () => {
         statusText: "Internal Server Error",
       }),
     },
-  ])("preserves the CFB Message-ID with null parsed when $label", async ({ responder }) => {
-    const file = msgFileFromBytes(buildMsgWithInternetMessageId("<abc@host>"));
-    const acquireToken = vi.fn().mockResolvedValue("tok");
-    installFetchMock(responder);
+  ])(
+    "preserves the CFB Message-ID with null parsed when $label",
+    async ({ responder }) => {
+      const file = msgFileFromBytes(
+        buildMsgWithInternetMessageId("<abc@host>"),
+      );
+      const acquireToken = vi.fn().mockResolvedValue("tok");
+      installFetchMock(responder);
 
-    const result = await parseMsgFileToParsedEmail(file, acquireToken);
+      const result = await parseMsgFileToParsedEmail(file, acquireToken);
 
-    expect(result).toEqual({ parsed: null, messageId: "<abc@host>" });
-  });
+      expect(result).toEqual({ parsed: null, messageId: "<abc@host>" });
+    },
+  );
 });

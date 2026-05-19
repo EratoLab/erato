@@ -159,9 +159,8 @@ export function OutlookEmailSourceProvider({
   const [dismissedAttachmentIds, setDismissedAttachmentIds] = useState<
     string[]
   >([]);
-  const [currentEmailParsed, setCurrentEmailParsed] = useState<ParsedEmail | null>(
-    null,
-  );
+  const [currentEmailParsed, setCurrentEmailParsed] =
+    useState<ParsedEmail | null>(null);
   const [isLoadingEmailBody, setIsLoadingEmailBody] = useState(false);
   const [parentReplyContext, setParentReplyContext] =
     useState<ParentMessageMetadata | null>(null);
@@ -274,8 +273,7 @@ export function OutlookEmailSourceProvider({
         source: "current",
         parsed: currentEmailParsed,
         bodyDismissed: dismissals?.bodyDismissed ?? false,
-        dismissedAttachmentIds:
-          dismissals?.attachmentIds ?? new Set<string>(),
+        dismissedAttachmentIds: dismissals?.attachmentIds ?? new Set<string>(),
       });
     }
 
@@ -286,8 +284,7 @@ export function OutlookEmailSourceProvider({
         source: "drop",
         parsed: entry.parsed,
         bodyDismissed: dismissals?.bodyDismissed ?? false,
-        dismissedAttachmentIds:
-          dismissals?.attachmentIds ?? new Set<string>(),
+        dismissedAttachmentIds: dismissals?.attachmentIds ?? new Set<string>(),
       });
     }
 
@@ -353,7 +350,9 @@ export function OutlookEmailSourceProvider({
   }, []);
 
   const removeDroppedEmail = useCallback((key: string) => {
-    setDroppedEmails((previous) => previous.filter((entry) => entry.key !== key));
+    setDroppedEmails((previous) =>
+      previous.filter((entry) => entry.key !== key),
+    );
     setEmailDismissals((previous) => {
       if (!previous.has(key)) return previous;
       const next = new Map(previous);

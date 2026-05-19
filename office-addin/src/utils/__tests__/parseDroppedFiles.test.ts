@@ -70,7 +70,9 @@ describe("parseDroppedFiles", () => {
 
   it("skips .msg drops without a Graph token", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const msg = new File(["msg"], "x.msg", { type: "application/vnd.ms-outlook" });
+    const msg = new File(["msg"], "x.msg", {
+      type: "application/vnd.ms-outlook",
+    });
 
     const result = await parseDroppedFiles([msg]);
 

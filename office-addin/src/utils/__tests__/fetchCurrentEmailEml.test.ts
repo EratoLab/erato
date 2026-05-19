@@ -66,7 +66,11 @@ describe("fetchCurrentEmailParsed", () => {
 
   const CRLF = "\r\n";
 
-  function buildEml(subject: string, messageId: string, body = "hello"): string {
+  function buildEml(
+    subject: string,
+    messageId: string,
+    body = "hello",
+  ): string {
     return (
       `From: Alice <alice@example.com>${CRLF}` +
       `To: Bob <bob@example.com>${CRLF}` +
@@ -98,7 +102,10 @@ describe("fetchCurrentEmailParsed", () => {
 
     expect(result).not.toBeNull();
     expect(result?.parsed.subject).toBe("Hi parsed");
-    expect(result?.parsed.from).toEqual({ name: "Alice", address: "alice@example.com" });
+    expect(result?.parsed.from).toEqual({
+      name: "Alice",
+      address: "alice@example.com",
+    });
     expect(result?.messageId).toBe("<parsed-id@example.com>");
     expect(result?.parsed.rawEmlFile.type).toBe("message/rfc822");
   });
@@ -130,7 +137,11 @@ describe("fetchCurrentEmailParsed", () => {
 
   it("returns null and logs when the Graph fetch fails", async () => {
     const acquireToken = vi.fn().mockResolvedValue("tok");
-    installFetchMock(() => ({ ok: false, status: 404, statusText: "Not Found" }));
+    installFetchMock(() => ({
+      ok: false,
+      status: 404,
+      statusText: "Not Found",
+    }));
 
     const result = await fetchCurrentEmailParsed(EWS_ID, acquireToken);
 

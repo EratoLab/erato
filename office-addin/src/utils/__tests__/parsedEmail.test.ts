@@ -41,7 +41,10 @@ describe("parseEmlBytes", () => {
 
     expect(parsed.subject).toBe("Hi there");
     expect(parsed.messageId).toBe("<msg-1@example.com>");
-    expect(parsed.from).toEqual({ name: "Alice Example", address: "alice@example.com" });
+    expect(parsed.from).toEqual({
+      name: "Alice Example",
+      address: "alice@example.com",
+    });
     expect(parsed.to).toEqual([
       { name: "Bob", address: "bob@example.com" },
       { name: "Carol", address: "carol@example.com" },
@@ -77,7 +80,9 @@ describe("parseEmlBytes", () => {
       `MIME-Version: 1.0${CRLF}` +
       `Content-Type: text/plain${CRLF}${CRLF}body`;
 
-    const parsed = await parseEmlBytes(toArrayBuffer(eml), { filename: "drop.eml" });
+    const parsed = await parseEmlBytes(toArrayBuffer(eml), {
+      filename: "drop.eml",
+    });
     expect(parsed?.rawEmlFile.name).toBe("drop.eml");
   });
 

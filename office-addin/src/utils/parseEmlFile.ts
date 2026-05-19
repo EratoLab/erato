@@ -31,7 +31,10 @@ export async function parseEmlFileToFiles(file: File): Promise<EmlParseResult> {
   }
 
   const attachmentFiles = parsed.attachments
-    .filter((attachment) => attachment.disposition !== "inline" && !attachment.related)
+    .filter(
+      (attachment) =>
+        attachment.disposition !== "inline" && !attachment.related,
+    )
     .map((attachment) => attachment.toFile());
 
   return {
@@ -40,7 +43,9 @@ export async function parseEmlFileToFiles(file: File): Promise<EmlParseResult> {
   };
 }
 
-export async function parseEmlToParsedEmail(file: File): Promise<ParsedEmail | null> {
+export async function parseEmlToParsedEmail(
+  file: File,
+): Promise<ParsedEmail | null> {
   let buffer: ArrayBuffer;
   try {
     buffer = await file.arrayBuffer();

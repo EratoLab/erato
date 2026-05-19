@@ -3,7 +3,10 @@ export interface StagedEmailDismissals {
   attachmentIds: ReadonlySet<string>;
 }
 
-export type StagedEmailDismissalsMap = ReadonlyMap<string, StagedEmailDismissals>;
+export type StagedEmailDismissalsMap = ReadonlyMap<
+  string,
+  StagedEmailDismissals
+>;
 
 const EMPTY_ATTACHMENTS: ReadonlySet<string> = new Set();
 
@@ -11,7 +14,9 @@ export function getDismissals(
   state: StagedEmailDismissalsMap,
   key: string,
 ): StagedEmailDismissals {
-  return state.get(key) ?? { bodyDismissed: false, attachmentIds: EMPTY_ATTACHMENTS };
+  return (
+    state.get(key) ?? { bodyDismissed: false, attachmentIds: EMPTY_ATTACHMENTS }
+  );
 }
 
 export function dismissBody(

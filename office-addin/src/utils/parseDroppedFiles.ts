@@ -54,7 +54,10 @@ export async function parseDroppedFiles(
         );
         continue;
       }
-      const result = await parseMsgFileToParsedEmail(file, options.acquireGraphToken);
+      const result = await parseMsgFileToParsedEmail(
+        file,
+        options.acquireGraphToken,
+      );
       if (result.parsed && !claim(result.messageId, options.tryAttachEmail)) {
         logSkip(file.name, result.messageId);
         continue;

@@ -53,9 +53,13 @@ export async function parseEmlBytes(
     (attachment, index) => buildAttachment(attachment, index),
   );
 
-  const rawEmlFile = new File([bytes], options.filename ?? buildDefaultName(parsed.subject), {
-    type: "message/rfc822",
-  });
+  const rawEmlFile = new File(
+    [bytes],
+    options.filename ?? buildDefaultName(parsed.subject),
+    {
+      type: "message/rfc822",
+    },
+  );
 
   return {
     rawEmlFile,
@@ -72,7 +76,10 @@ export async function parseEmlBytes(
   };
 }
 
-function buildAttachment(attachment: Attachment, index: number): ParsedAttachment {
+function buildAttachment(
+  attachment: Attachment,
+  index: number,
+): ParsedAttachment {
   const filename = attachment.filename?.trim() || "attachment";
   const mimeType = attachment.mimeType || "application/octet-stream";
   const blobPart = toBlobPart(attachment.content);
@@ -117,7 +124,9 @@ function nullIfEmpty(value: string | undefined): string | null {
   return value.trim().length === 0 ? null : value;
 }
 
-function normalizeSingleAddress(addr: Address | undefined): ParsedEmailAddress | null {
+function normalizeSingleAddress(
+  addr: Address | undefined,
+): ParsedEmailAddress | null {
   if (!addr) return null;
   if (addr.address !== undefined) {
     return { name: addr.name, address: addr.address };
@@ -126,7 +135,9 @@ function normalizeSingleAddress(addr: Address | undefined): ParsedEmailAddress |
   return first ? { name: first.name, address: first.address } : null;
 }
 
-function normalizeAddressList(addrs: Address[] | undefined): ParsedEmailAddress[] {
+function normalizeAddressList(
+  addrs: Address[] | undefined,
+): ParsedEmailAddress[] {
   if (!addrs) return [];
   return addrs.flatMap((addr): ParsedEmailAddress[] => {
     if (addr.address !== undefined) {

@@ -295,7 +295,10 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
           try {
             const { bytes, internetMessageId } =
               await fetchOutlookMessageBytesCoalesced(item.itemId);
-            if (internetMessageId && !tryClaimEmailAttachment(internetMessageId)) {
+            if (
+              internetMessageId &&
+              !tryClaimEmailAttachment(internetMessageId)
+            ) {
               console.log(
                 "[AddinChat] skipping dropped Outlook email already claimed:",
                 item.subject || item.itemId,

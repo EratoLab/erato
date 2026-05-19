@@ -156,7 +156,8 @@ export const AddinChatInput = forwardRef<
     dismissStagedEmailBody,
     restoreStagedEmailBody,
   } = useOutlookEmailSource();
-  const { maxSizeBytes: globalMaxSizeBytes, maxSizeFormatted } = useUploadFeature();
+  const { maxSizeBytes: globalMaxSizeBytes, maxSizeFormatted } =
+    useUploadFeature();
   // Drop-staged emails are always user-driven, so they bypass the
   // `showSuggestedEmailSource` gate (which is for the auto-suggest of the
   // currently-open email when the chat is still fresh). Without this the
@@ -301,7 +302,9 @@ export const AddinChatInput = forwardRef<
       const dateLabel = staged.parsed.date
         ? new Date(staged.parsed.date).toLocaleDateString()
         : "";
-      const metaParts = [fromLabel, dateLabel].filter((part) => part.length > 0);
+      const metaParts = [fromLabel, dateLabel].filter(
+        (part) => part.length > 0,
+      );
 
       groups.push({
         id: `staged-email:${staged.key}`,

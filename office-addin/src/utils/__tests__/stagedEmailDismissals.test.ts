@@ -110,7 +110,9 @@ describe("stagedEmailDismissals", () => {
       const b = "<b@host>";
       let state: StagedEmailDismissalsMap = empty();
       state = dismissAttachment(state, a, "shared-id");
-      expect(getDismissals(state, b).attachmentIds.has("shared-id")).toBe(false);
+      expect(getDismissals(state, b).attachmentIds.has("shared-id")).toBe(
+        false,
+      );
     });
   });
 });
