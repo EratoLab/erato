@@ -1,0 +1,489 @@
+import { t } from "@lingui/core/macro";
+import { sanitize } from "lettersanitizer";
+import PostalMime from "postal-mime";
+import { useEffect, useMemo, useRef, useState } from "react";
+
+import { Alert } from "@/components/ui/Feedback/Alert";
+import { formatFileSize } from "@/components/ui/FileUpload/FilePreviewBase";
+import {
+  ArrowLeftIcon,
+  LoadingIcon,
+  MailIcon,
+  PageIcon,
+} from "@/components/ui/icons";
+import { createLogger } from "@/utils/debugLogger";
+
+import { FilePreviewContent } from "./FilePreviewContent";
+
+import type { Address, Attachment } from "postal-mime";
+
+const logger = createLogger("UI", "EmlPreview");
+
+interface ParsedAttachment {
+  filename: string;
+  mimeType: string;
+  size: number;
+  blobUrl: string;
+}
+
+interface ParsedEml {
+  subject: string | null;
+  from: string | null;
+  to: string | null;
+  cc: string | null;
+  date: string | null;
+  html: string;
+  text: string;
+  attachments: ParsedAttachment[];
+  cidToBlobUrl: Map<string, string>;
+}
+
+type LoadState =
+  | { kind: "loading" }
+  | { kind: "error"; partial: PartialHeaders }
+  | { kind: "ready"; parsed: ParsedEml };
+
+interface PartialHeaders {
+  subject: string | null;
+  date: string | null;
+}
+
+function formatMailbox(m: { name?: string; address?: string }): string | null {
+  const name = m.name?.trim();
+  const address = m.address?.trim();
+  if (name && address) return `${name} <${address}>`;
+  if (address) return address;
+  if (name) return name;
+  return null;
+}
+
+function formatAddress(addr: Address | undefined): string | null {
+  if (!addr) return null;
+  if (addr.address !== undefined) return formatMailbox(addr);
+  return (
+    addr.group
+      .map(formatMailbox)
+      .filter((s): s is string => Boolean(s))
+      .join(", ") || null
+  );
+}
+
+function formatAddressList(addrs: Address[] | undefined): string | null {
+  if (!addrs || addrs.length === 0) return null;
+  const parts = addrs.map(formatAddress).filter((s): s is string => Boolean(s));
+  return parts.length === 0 ? null : parts.join(", ");
+}
+
+// eslint-disable-next-line lingui/no-unlocalized-strings
+const OCTET_STREAM = "application/octet-stream";
+
+function attachmentBlob(attachment: Attachment): Blob {
+  const { content, mimeType } = attachment;
+  const type = mimeType.length > 0 ? mimeType : OCTET_STREAM;
+  if (content instanceof ArrayBuffer) return new Blob([content], { type });
+  if (content instanceof Uint8Array) {
+    const copy = new Uint8Array(content.byteLength);
+    copy.set(content);
+    return new Blob([copy.buffer], { type });
+  }
+  if (typeof content === "string") {
+    return new Blob([new TextEncoder().encode(content)], { type });
+  }
+  return new Blob([], { type });
+}
+
+function tryDecodeRaw(bytes: ArrayBuffer): PartialHeaders {
+  try {
+    const text = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+    const headerBlock = text.split(/\r?\n\r?\n/, 1)[0] ?? "";
+    const subject = matchHeader(headerBlock, "subject");
+    const date = matchHeader(headerBlock, "date");
+    return { subject, date };
+  } catch {
+    return { subject: null, date: null };
+  }
+}
+
+function matchHeader(headerBlock: string, name: string): string | null {
+  // eslint-disable-next-line lingui/no-unlocalized-strings
+  const re = new RegExp(`^${name}:\\s*(.+(?:\\r?\\n[\\t ].+)*)`, "im");
+  const match = re.exec(headerBlock);
+  if (!match) return null;
+  return match[1].replace(/\r?\n[\t ]+/g, " ").trim();
+}
+
+interface EmlPreviewProps {
+  filename: string;
+  url: string;
+}
+
+export const EmlPreview: React.FC<EmlPreviewProps> = ({ url }) => {
+  const [state, setState] = useState<LoadState>({ kind: "loading" });
+
+  useEffect(() => {
+    let aborted: boolean = false;
+    const blobUrls: string[] = [];
+
+    const load = async () => {
+      let bytes: ArrayBuffer;
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        bytes = await res.arrayBuffer();
+      } catch (err) {
+        logger.error("failed to fetch eml", err);
+        if (!aborted)
+          setState({ kind: "error", partial: { subject: null, date: null } });
+        return;
+      }
+
+      try {
+        const email = await PostalMime.parse(bytes);
+        if (aborted) return;
+
+        // Build attachments locally and only commit URLs into the shared
+        // cleanup list once we know we're going to setState. If the effect
+        // was torn down mid-parse, every URL we created here gets revoked
+        // before we bail out.
+        const localBlobUrls: string[] = [];
+        const attachments: ParsedAttachment[] = [];
+        const cidToBlobUrl = new Map<string, string>();
+        for (const att of email.attachments) {
+          // `aborted` is mutated by the effect cleanup, which TS flow can't
+          // see from inside this async closure.
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+          if (aborted) break;
+          const blob = attachmentBlob(att);
+          const objectUrl = URL.createObjectURL(blob);
+          localBlobUrls.push(objectUrl);
+          const trimmedName = att.filename?.trim();
+          attachments.push({
+            filename:
+              trimmedName && trimmedName.length > 0
+                ? trimmedName
+                : t`attachment`,
+            mimeType: att.mimeType.length > 0 ? att.mimeType : OCTET_STREAM,
+            size: blob.size,
+            blobUrl: objectUrl,
+          });
+          if (att.contentId !== undefined) {
+            const cid = att.contentId.replace(/^<|>$/g, "");
+            if (cid.length > 0) {
+              if (cidToBlobUrl.has(cid)) {
+                logger.log("duplicate Content-ID; last write wins", cid);
+              }
+              cidToBlobUrl.set(cid, objectUrl);
+            }
+          }
+        }
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        if (aborted) {
+          for (const u of localBlobUrls) URL.revokeObjectURL(u);
+          return;
+        }
+
+        const trimmedSubject = email.subject?.trim();
+        const subject =
+          trimmedSubject && trimmedSubject.length > 0 ? trimmedSubject : null;
+        const from = formatAddress(email.from);
+        const to = formatAddressList(email.to);
+        const cc = formatAddressList(email.cc);
+        const html = email.html ?? "";
+        const text = email.text ?? "";
+
+        // postal-mime is permissive: it returns an empty envelope rather than
+        // throwing on garbage bytes. If nothing of substance came out, drop
+        // into the malformed-MIME fallback so the user sees an explicit
+        // error instead of a blank preview.
+        const looksEmpty =
+          !subject &&
+          !from &&
+          to === null &&
+          cc === null &&
+          !html &&
+          !text &&
+          attachments.length === 0;
+        if (looksEmpty) {
+          for (const u of localBlobUrls) URL.revokeObjectURL(u);
+          setState({ kind: "error", partial: tryDecodeRaw(bytes) });
+          return;
+        }
+
+        blobUrls.push(...localBlobUrls);
+        setState({
+          kind: "ready",
+          parsed: {
+            subject,
+            from,
+            to,
+            cc,
+            date: email.date ?? null,
+            html,
+            text,
+            attachments,
+            cidToBlobUrl,
+          },
+        });
+      } catch (err) {
+        logger.warn("postal-mime failed; falling back to header-only", err);
+        if (!aborted) setState({ kind: "error", partial: tryDecodeRaw(bytes) });
+      }
+    };
+
+    void load();
+
+    return () => {
+      aborted = true;
+      for (const url of blobUrls) URL.revokeObjectURL(url);
+    };
+  }, [url]);
+
+  if (state.kind === "loading") {
+    return (
+      <div
+        className="flex items-center justify-center py-12"
+        aria-live="polite"
+        aria-busy="true"
+        data-testid="eml-preview-loading"
+      >
+        <LoadingIcon className="size-6 animate-spin text-[var(--theme-fg-muted)]" />
+      </div>
+    );
+  }
+
+  if (state.kind === "error") {
+    return (
+      <div data-testid="eml-preview-error">
+        <EmlHeader
+          subject={state.partial.subject}
+          from={null}
+          to={null}
+          cc={null}
+          date={state.partial.date}
+        />
+        <Alert type="warning" className="mt-4">
+          {t`Preview unavailable: this email could not be parsed.`}
+        </Alert>
+      </div>
+    );
+  }
+
+  return <EmlPreviewBody parsed={state.parsed} />;
+};
+
+const EmlPreviewBody: React.FC<{
+  parsed: ParsedEml;
+}> = ({ parsed }) => {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [selected, setSelected] = useState<ParsedAttachment | null>(null);
+
+  // Pre-sanitize the HTML body up here so the iframe's `srcDoc` is rendered
+  // with `sandbox` already set on the element in JSX — applying sandbox in a
+  // post-mount effect would leave a window where the unsandboxed iframe has
+  // already begun parsing/executing the email HTML.
+  const sanitizedHtml = useMemo(() => {
+    if (!parsed.html) return "";
+    return sanitize(parsed.html, parsed.text || undefined, {
+      rewriteExternalResources: (url) => {
+        if (!url.startsWith("cid:")) return url;
+        const cid = url.slice(4).replace(/^<|>$/g, "");
+        return parsed.cidToBlobUrl.get(cid) ?? url;
+      },
+    });
+  }, [parsed.html, parsed.text, parsed.cidToBlobUrl]);
+
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    let observer: ResizeObserver | null = null;
+
+    const resize = () => {
+      try {
+        const doc = iframe.contentDocument;
+        if (!doc) return;
+        const measured = Math.max(
+          doc.body.scrollHeight,
+          doc.documentElement.scrollHeight,
+        );
+        if (measured > 0) {
+          const cap = window.innerHeight * 0.7;
+          iframe.style.height = `${Math.min(measured + 8, cap)}px`;
+        }
+      } catch {
+        // Sandbox + same-origin should keep contentDocument accessible, but
+        // leave the iframe at its default height if anything goes wrong.
+      }
+    };
+
+    const onLoad = () => {
+      resize();
+      try {
+        const body = iframe.contentDocument?.body;
+        if (body && typeof ResizeObserver === "function") {
+          observer = new ResizeObserver(resize);
+          observer.observe(body);
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    iframe.addEventListener("load", onLoad);
+    if (iframe.contentDocument?.readyState === "complete") onLoad();
+    return () => {
+      iframe.removeEventListener("load", onLoad);
+      observer?.disconnect();
+    };
+  }, [sanitizedHtml]);
+
+  return (
+    <div data-testid="eml-preview" className="flex flex-col gap-4">
+      <EmlHeader
+        subject={parsed.subject}
+        from={parsed.from}
+        to={parsed.to}
+        cc={parsed.cc}
+        date={parsed.date}
+      />
+      {selected ? (
+        <div
+          data-testid="eml-attachment-preview"
+          className="flex flex-col gap-3"
+        >
+          <button
+            type="button"
+            onClick={() => setSelected(null)}
+            className="inline-flex w-fit items-center gap-1.5 rounded text-sm font-medium text-[var(--theme-fg-secondary)] hover:text-[var(--theme-fg-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-fg-accent)]"
+          >
+            <ArrowLeftIcon className="size-4" aria-hidden="true" />
+            {t`Back to email`}
+          </button>
+          <div className="truncate text-sm text-[var(--theme-fg-muted)]">
+            {selected.filename}
+          </div>
+          <FilePreviewContent
+            filename={selected.filename}
+            url={selected.blobUrl}
+            mimeType={selected.mimeType}
+          />
+        </div>
+      ) : (
+        <>
+          {parsed.html ? (
+            <iframe
+              ref={iframeRef}
+              data-testid="eml-preview-html"
+              title={parsed.subject ?? t`Email preview`}
+              sandbox="allow-same-origin"
+              srcDoc={sanitizedHtml}
+              className="w-full rounded border border-[var(--theme-border-attachment)] bg-white"
+            />
+          ) : (
+            <pre
+              data-testid="eml-preview-text"
+              className="max-h-[60vh] overflow-auto whitespace-pre-wrap rounded border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-accent)] p-3 text-sm text-[var(--theme-fg-primary)]"
+            >
+              {parsed.text || t`(no body)`}
+            </pre>
+          )}
+          {parsed.attachments.length > 0 && (
+            <EmlAttachmentList
+              attachments={parsed.attachments}
+              onSelect={setSelected}
+            />
+          )}
+        </>
+      )}
+    </div>
+  );
+};
+
+const EmlHeader: React.FC<{
+  subject: string | null;
+  from: string | null;
+  to: string | null;
+  cc: string | null;
+  date: string | null;
+}> = ({ subject, from, to, cc, date }) => {
+  return (
+    <div className="flex items-start gap-3 rounded border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-primary)] p-3">
+      <div className="mt-0.5 shrink-0 text-[var(--theme-fg-muted)]">
+        <MailIcon className="size-5" aria-hidden="true" />
+      </div>
+      <dl className="grid min-w-0 flex-1 grid-cols-[auto,1fr] gap-x-3 gap-y-1 text-sm">
+        {subject && (
+          <>
+            <dt className="font-medium text-[var(--theme-fg-muted)]">{t`Subject`}</dt>
+            <dd className="truncate font-medium text-[var(--theme-fg-primary)]">
+              {subject}
+            </dd>
+          </>
+        )}
+        {from && (
+          <>
+            <dt className="font-medium text-[var(--theme-fg-muted)]">{t`From`}</dt>
+            <dd className="truncate text-[var(--theme-fg-primary)]">{from}</dd>
+          </>
+        )}
+        {to && (
+          <>
+            <dt className="font-medium text-[var(--theme-fg-muted)]">{t`To`}</dt>
+            <dd className="truncate text-[var(--theme-fg-primary)]">{to}</dd>
+          </>
+        )}
+        {cc && (
+          <>
+            <dt className="font-medium text-[var(--theme-fg-muted)]">{t`Cc`}</dt>
+            <dd className="truncate text-[var(--theme-fg-primary)]">{cc}</dd>
+          </>
+        )}
+        {date && (
+          <>
+            <dt className="font-medium text-[var(--theme-fg-muted)]">{t`Date`}</dt>
+            <dd className="truncate text-[var(--theme-fg-primary)]">{date}</dd>
+          </>
+        )}
+      </dl>
+    </div>
+  );
+};
+
+const EmlAttachmentList: React.FC<{
+  attachments: ParsedAttachment[];
+  onSelect: (attachment: ParsedAttachment) => void;
+}> = ({ attachments, onSelect }) => {
+  return (
+    <ul
+      data-testid="eml-preview-attachments"
+      className="flex flex-wrap gap-2"
+      aria-label={t`Attachments`}
+    >
+      {attachments.map((att, index) => (
+        <li key={`${att.filename}-${index}`} className="min-w-0">
+          <button
+            type="button"
+            onClick={() => onSelect(att)}
+            title={att.filename}
+            className="flex min-w-0 items-center gap-2 rounded-xl border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-primary)] px-3 py-2 text-left shadow-sm transition-colors hover:bg-[var(--theme-bg-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-fg-accent)]"
+          >
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--theme-bg-accent)] text-[var(--theme-fg-secondary)]">
+              <PageIcon className="size-4" aria-hidden="true" />
+            </div>
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium text-[var(--theme-fg-primary)]">
+                {att.filename}
+              </div>
+              <div className="truncate text-xs text-[var(--theme-fg-muted)]">
+                {att.mimeType}
+                {att.size > 0 ? ` • ${formatFileSize(att.size)}` : ""}
+              </div>
+            </div>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+};
+
+// eslint-disable-next-line lingui/no-unlocalized-strings
+EmlPreview.displayName = "EmlPreview";

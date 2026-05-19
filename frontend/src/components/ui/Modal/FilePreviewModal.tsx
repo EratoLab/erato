@@ -1,18 +1,40 @@
-// import Image from "next/image"; // Removed Next.js Image import
 import { t } from "@lingui/core/macro";
 
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
+import { FilePreviewContent } from "@/components/ui/FilePreview/FilePreviewContent";
 
 import { ModalBase } from "./ModalBase";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type React from "react";
 
+const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp"];
+
+const getExtension = (filename: string): string =>
+  filename.split(".").pop()?.toLowerCase() ?? "";
+
 const getPreviewUrl = (
   file: Pick<FileUploadItem, "preview_url">,
 ): string | undefined =>
   typeof file.preview_url === "string" ? file.preview_url : undefined;
+
+const resolvePreviewSource = (
+  file: FileUploadItem,
+): { url: string; canPreview: boolean } => {
+  const extension = getExtension(file.filename);
+  const previewUrl = getPreviewUrl(file);
+  if (IMAGE_EXTENSIONS.includes(extension) || extension === "pdf") {
+    return { url: previewUrl ?? "", canPreview: Boolean(previewUrl) };
+  }
+  if (extension === "eml") {
+    return {
+      url: file.download_url,
+      canPreview: Boolean(file.download_url),
+    };
+  }
+  return { url: "", canPreview: false };
+};
 
 interface FilePreviewModalProps {
   isOpen: boolean;
@@ -32,19 +54,10 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
     return null;
   }
 
-  // Simplified type detection based on extension
-  const getExtension = (filename: string): string => {
-    return filename.split(".").pop()?.toLowerCase() ?? "";
-  };
-
-  const extension = getExtension(file.filename);
-  const imageExtensions = ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp"];
-  const isImage = imageExtensions.includes(extension);
-  const isPdf = extension === "pdf";
-  const previewUrl = getPreviewUrl(file);
   const isUnavailableMissingPermissions =
     file.file_contents_unavailable_missing_permissions;
-  const canPreview = (isImage || isPdf) && Boolean(previewUrl);
+  const { url, canPreview } = resolvePreviewSource(file);
+
   const actionButtons = (
     <div className="mt-4 flex flex-wrap justify-center gap-3">
       {!isUnavailableMissingPermissions && file.download_url && (
@@ -74,28 +87,10 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
       );
     }
 
-    if (isImage && previewUrl) {
+    if (canPreview) {
       return (
         <>
-          <img
-            src={previewUrl}
-            alt={`${t`Preview of`} ${file.filename}`}
-            className="mx-auto max-h-[75vh] max-w-full object-contain"
-          />
-          {actionButtons}
-        </>
-      );
-    }
-
-    if (isPdf && previewUrl) {
-      return (
-        <>
-          <iframe
-            src={previewUrl}
-            title={`${t`Preview of`} ${file.filename}`}
-            data-testid="file-preview-pdf"
-            className="h-[75vh] w-full border-0"
-          />
+          <FilePreviewContent filename={file.filename} url={url} />
           {actionButtons}
         </>
       );
@@ -116,7 +111,6 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title={`${t`Preview:`} ${file.filename}`}
-      // Adjust size for preview content
       contentClassName={canPreview ? "max-w-4xl" : "max-w-md"}
     >
       {renderPreview()}

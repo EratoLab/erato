@@ -1591,6 +1591,10 @@ msgstr " (plus disponibles)"
 msgid " File attachments account for {fileTokensFormatted} tokens."
 msgstr " Les pièces jointes représentent {fileTokensFormatted} tokens."
 
+#: src/components/ui/FilePreview/EmlPreview.tsx
+msgid "(no body)"
+msgstr ""
+
 #. placeholder {0}: session.metadata?.fileCount ?? 0
 #: src/components/ui/Chat/ChatHistoryList.tsx
 msgid "{0, plural, =0 {No files} one {# file} other {# files}}"
@@ -1698,6 +1702,11 @@ msgstr ""
 msgid "Attach File"
 msgstr "Joindre un fichier"
 
+#: src/components/ui/FilePreview/EmlPreview.tsx
+msgid "attachment"
+msgstr ""
+
+#: src/components/ui/FilePreview/EmlPreview.tsx
 #: src/components/ui/FileUpload/FileAttachmentsPreview.tsx
 msgid "Attachments"
 msgstr "Pièces jointes"
@@ -1814,6 +1823,10 @@ msgstr "gain automatique : {autoGainControl}"
 msgid "Back to Assistants"
 msgstr ""
 
+#: src/components/ui/FilePreview/EmlPreview.tsx
+msgid "Back to email"
+msgstr ""
+
 #: src/components/ui/Message/ConversationIndicator.tsx
 msgid "Beginning of conversation"
 msgstr "Début de la conversation"
@@ -1857,6 +1870,10 @@ msgstr "Impossible d'envoyer : limite de tokens dépassée"
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Capturing audio — waiting for transcription to start"
 msgstr "Capture audio en cours — en attente du démarrage de la transcription"
+
+#: src/components/ui/FilePreview/EmlPreview.tsx
+msgid "Cc"
+msgstr ""
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 #~ msgid "channels: {0}"
@@ -2022,6 +2039,10 @@ msgstr ""
 #~ msgid "Dark mode"
 #~ msgstr "Mode sombre"
 
+#: src/components/ui/FilePreview/EmlPreview.tsx
+msgid "Date"
+msgstr ""
+
 #: src/components/ui/Assistant/AssistantForm.tsx
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "Default Files"
@@ -2110,6 +2131,10 @@ msgstr ""
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Edit your message..."
+msgstr ""
+
+#: src/components/ui/FilePreview/EmlPreview.tsx
+msgid "Email preview"
 msgstr ""
 
 #: src/components/ui/Message/ConversationIndicator.tsx
@@ -2212,6 +2237,10 @@ msgstr "Notes de bas de page"
 
 #: src/pages/SearchPage.tsx
 msgid "Found {resultsCount} results"
+msgstr ""
+
+#: src/components/ui/FilePreview/EmlPreview.tsx
+msgid "From"
 msgstr ""
 
 #: src/components/ui/ToolCall/ToolCallItem.tsx
@@ -2407,13 +2436,22 @@ msgstr ""
 msgid "Preview attachment"
 msgstr "Aperçu de la pièce jointe"
 
+#: src/components/ui/FilePreview/FilePreviewContent.tsx
 #: src/components/ui/Modal/FilePreviewModal.tsx
 msgid "Preview is not available for this file type."
 msgstr "L'aperçu n'est pas disponible pour ce type de fichier."
 
 #: src/components/ui/Modal/FilePreviewModal.tsx
-msgid "Preview of"
-msgstr "Aperçu de"
+#~ msgid "Preview of"
+#~ msgstr "Aperçu de"
+
+#: src/components/ui/FilePreview/FilePreviewContent.tsx
+msgid "Preview of {filename}"
+msgstr ""
+
+#: src/components/ui/FilePreview/EmlPreview.tsx
+msgid "Preview unavailable: this email could not be parsed."
+msgstr ""
 
 #: src/components/ui/Modal/FilePreviewModal.tsx
 msgid "Preview:"
@@ -2668,6 +2706,10 @@ msgstr "Arrêté"
 msgid "Stopped after {formatted}"
 msgstr "Arrêté après {formatted}"
 
+#: src/components/ui/FilePreview/EmlPreview.tsx
+msgid "Subject"
+msgstr ""
+
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Success"
 msgstr "Succès"
@@ -2733,6 +2775,10 @@ msgstr "Réfléchi"
 #: src/components/ui/Trace/TraceClusterHeader.tsx
 msgid "Thought for {formatted}"
 msgstr "Réfléchi pendant {formatted}"
+
+#: src/components/ui/FilePreview/EmlPreview.tsx
+msgid "To"
+msgstr ""
 
 #: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
 msgid "Token Limit Exceeded"
