@@ -3,6 +3,7 @@ import { t } from "@lingui/core/macro";
 
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
+import { EmlPreview } from "@/components/ui/FilePreview/EmlPreview";
 
 import { ModalBase } from "./ModalBase";
 
@@ -41,10 +42,13 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
   const imageExtensions = ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp"];
   const isImage = imageExtensions.includes(extension);
   const isPdf = extension === "pdf";
+  const isEml = extension === "eml";
   const previewUrl = getPreviewUrl(file);
   const isUnavailableMissingPermissions =
     file.file_contents_unavailable_missing_permissions;
-  const canPreview = (isImage || isPdf) && Boolean(previewUrl);
+  const canPreview =
+    (isImage || isPdf) && Boolean(previewUrl) ||
+    (isEml && Boolean(file.download_url));
   const actionButtons = (
     <div className="mt-4 flex flex-wrap justify-center gap-3">
       {!isUnavailableMissingPermissions && file.download_url && (
@@ -96,6 +100,15 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
             data-testid="file-preview-pdf"
             className="h-[75vh] w-full border-0"
           />
+          {actionButtons}
+        </>
+      );
+    }
+
+    if (isEml && file.download_url) {
+      return (
+        <>
+          <EmlPreview file={file} />
           {actionButtons}
         </>
       );
