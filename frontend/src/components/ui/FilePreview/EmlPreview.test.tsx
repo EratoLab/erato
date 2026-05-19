@@ -132,18 +132,12 @@ describe("EmlPreview", () => {
     expect(screen.getByText(/Bob/)).toBeInTheDocument();
     expect(screen.getByText(/Carol/)).toBeInTheDocument();
 
-    await waitFor(() => {
-      const iframe = screen
-        .getByTestId("eml-preview-html")
-        .querySelector("iframe");
-      expect(iframe).not.toBeNull();
-      expect(iframe?.getAttribute("sandbox")).toBe("allow-same-origin");
-    });
-
-    const iframe = screen
-      .getByTestId("eml-preview-html")
-      .querySelector("iframe");
-    expect(iframe?.getAttribute("srcdoc") ?? "").toContain("Hello");
+    const iframe = await screen.findByTestId("eml-preview-html");
+    expect(iframe.tagName).toBe("IFRAME");
+    // sandbox must be set in JSX, not patched on post-mount — otherwise the
+    // first parse of `srcdoc` runs unsandboxed.
+    expect(iframe.getAttribute("sandbox")).toBe("allow-same-origin");
+    expect(iframe.getAttribute("srcdoc") ?? "").toContain("Hello");
   });
 
   it("falls back to text body when no HTML part is present", async () => {
@@ -174,7 +168,7 @@ describe("EmlPreview", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByTestId("eml-preview-html")).not.toBeInTheDocument();
 
-    const backButton = screen.getByRole("button", { name: "Back to email" });
+    const backButton = screen.getByRole("button", { name: /back to email/i });
     fireEvent.click(backButton);
 
     expect(
@@ -187,32 +181,44 @@ describe("EmlPreview", () => {
     mockFetchEml(INLINE_IMAGE_EML);
     renderEml(<EmlPreview filename={FILE.filename} url={FILE.url} />);
 
-    await waitFor(() =>
-      expect(screen.getByTestId("eml-preview-html")).toBeInTheDocument(),
-    );
-
-    const iframe = screen
-      .getByTestId("eml-preview-html")
-      .querySelector("iframe");
-    const srcdoc = iframe?.getAttribute("srcdoc") ?? "";
+    const iframe = await screen.findByTestId("eml-preview-html");
+    const srcdoc = iframe.getAttribute("srcdoc") ?? "";
     expect(createdBlobUrls.length).toBeGreaterThan(0);
     expect(srcdoc).toContain(createdBlobUrls[0]);
     expect(srcdoc).not.toContain("cid:logo@example.com");
   });
 
-  it("renders without crashing when fed a malformed MIME body", async () => {
+  it("falls back to the preview-unavailable state when MIME is malformed", async () => {
     const malformed = new Uint8Array([0xff, 0xfe, 0x00, 0x01, 0x02]).buffer;
     mockFetchEml(malformed);
     renderEml(<EmlPreview filename={FILE.filename} url={FILE.url} />);
 
-    // Either an explicit error fallback or a ready-but-empty preview is
-    // acceptable here; postal-mime is permissive enough that some garbage
-    // still parses as an empty envelope. The point is: no crash.
     await waitFor(() => {
-      const error = screen.queryByTestId("eml-preview-error");
-      const ready = screen.queryByTestId("eml-preview");
-      expect(error ?? ready).not.toBeNull();
+      expect(screen.getByTestId("eml-preview-error")).toBeInTheDocument();
     });
+  });
+
+  it("strips script tags and renders inside a no-allow-scripts sandbox", async () => {
+    const scriptEml = [
+      "From: a@example.com",
+      "To: b@example.com",
+      "Subject: with script",
+      "MIME-Version: 1.0",
+      'Content-Type: text/html; charset="utf-8"',
+      "",
+      "<html><body><p>Visible content</p><script>window.__pwned=true</script></body></html>",
+      "",
+    ].join("\r\n");
+    mockFetchEml(scriptEml);
+    renderEml(<EmlPreview filename={FILE.filename} url={FILE.url} />);
+
+    const iframe = await screen.findByTestId("eml-preview-html");
+    // sandbox must omit `allow-scripts`, and be present from the very first
+    // render so the browser never parses srcdoc unsandboxed.
+    expect(iframe.getAttribute("sandbox")).toBe("allow-same-origin");
+    const srcdoc = iframe.getAttribute("srcdoc") ?? "";
+    expect(srcdoc.toLowerCase()).not.toContain("<script");
+    expect((globalThis as Record<string, unknown>).__pwned).toBeUndefined();
   });
 
   it("shows a preview-unavailable fallback when fetch fails", async () => {

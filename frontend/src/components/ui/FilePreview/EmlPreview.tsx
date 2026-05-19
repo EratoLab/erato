@@ -1,7 +1,7 @@
 import { t } from "@lingui/core/macro";
+import { sanitize } from "lettersanitizer";
 import PostalMime from "postal-mime";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Letter } from "react-letter";
 
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { formatFileSize } from "@/components/ui/FileUpload/FilePreviewBase";
@@ -70,9 +70,7 @@ function formatAddress(addr: Address | undefined): string | null {
 
 function formatAddressList(addrs: Address[] | undefined): string | null {
   if (!addrs || addrs.length === 0) return null;
-  const parts = addrs
-    .map(formatAddress)
-    .filter((s): s is string => Boolean(s));
+  const parts = addrs.map(formatAddress).filter((s): s is string => Boolean(s));
   return parts.length === 0 ? null : parts.join(", ");
 }
 
@@ -123,7 +121,7 @@ export const EmlPreview: React.FC<EmlPreviewProps> = ({ url }) => {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
 
   useEffect(() => {
-    let aborted = false;
+    let aborted: boolean = false;
     const blobUrls: string[] = [];
 
     const load = async () => {
@@ -134,7 +132,8 @@ export const EmlPreview: React.FC<EmlPreviewProps> = ({ url }) => {
         bytes = await res.arrayBuffer();
       } catch (err) {
         logger.error("failed to fetch eml", err);
-        if (!aborted) setState({ kind: "error", partial: { subject: null, date: null } });
+        if (!aborted)
+          setState({ kind: "error", partial: { subject: null, date: null } });
         return;
       }
 
@@ -142,41 +141,85 @@ export const EmlPreview: React.FC<EmlPreviewProps> = ({ url }) => {
         const email = await PostalMime.parse(bytes);
         if (aborted) return;
 
+        // Build attachments locally and only commit URLs into the shared
+        // cleanup list once we know we're going to setState. If the effect
+        // was torn down mid-parse, every URL we created here gets revoked
+        // before we bail out.
+        const localBlobUrls: string[] = [];
         const attachments: ParsedAttachment[] = [];
         const cidToBlobUrl = new Map<string, string>();
         for (const att of email.attachments) {
+          // `aborted` is mutated by the effect cleanup, which TS flow can't
+          // see from inside this async closure.
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+          if (aborted) break;
           const blob = attachmentBlob(att);
-          const url = URL.createObjectURL(blob);
-          blobUrls.push(url);
+          const objectUrl = URL.createObjectURL(blob);
+          localBlobUrls.push(objectUrl);
           const trimmedName = att.filename?.trim();
           attachments.push({
-            filename: trimmedName && trimmedName.length > 0
-              ? trimmedName
-              : t`attachment`,
+            filename:
+              trimmedName && trimmedName.length > 0
+                ? trimmedName
+                : t`attachment`,
             mimeType: att.mimeType.length > 0 ? att.mimeType : OCTET_STREAM,
             size: blob.size,
-            blobUrl: url,
+            blobUrl: objectUrl,
           });
           if (att.contentId !== undefined) {
             const cid = att.contentId.replace(/^<|>$/g, "");
-            if (cid.length > 0) cidToBlobUrl.set(cid, url);
+            if (cid.length > 0) {
+              if (cidToBlobUrl.has(cid)) {
+                logger.log("duplicate Content-ID; last write wins", cid);
+              }
+              cidToBlobUrl.set(cid, objectUrl);
+            }
           }
+        }
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        if (aborted) {
+          for (const u of localBlobUrls) URL.revokeObjectURL(u);
+          return;
         }
 
         const trimmedSubject = email.subject?.trim();
+        const subject =
+          trimmedSubject && trimmedSubject.length > 0 ? trimmedSubject : null;
+        const from = formatAddress(email.from);
+        const to = formatAddressList(email.to);
+        const cc = formatAddressList(email.cc);
+        const html = email.html ?? "";
+        const text = email.text ?? "";
+
+        // postal-mime is permissive: it returns an empty envelope rather than
+        // throwing on garbage bytes. If nothing of substance came out, drop
+        // into the malformed-MIME fallback so the user sees an explicit
+        // error instead of a blank preview.
+        const looksEmpty =
+          !subject &&
+          !from &&
+          to === null &&
+          cc === null &&
+          !html &&
+          !text &&
+          attachments.length === 0;
+        if (looksEmpty) {
+          for (const u of localBlobUrls) URL.revokeObjectURL(u);
+          setState({ kind: "error", partial: tryDecodeRaw(bytes) });
+          return;
+        }
+
+        blobUrls.push(...localBlobUrls);
         setState({
           kind: "ready",
           parsed: {
-            subject:
-              trimmedSubject && trimmedSubject.length > 0
-                ? trimmedSubject
-                : null,
-            from: formatAddress(email.from),
-            to: formatAddressList(email.to),
-            cc: formatAddressList(email.cc),
+            subject,
+            from,
+            to,
+            cc,
             date: email.date ?? null,
-            html: email.html ?? "",
-            text: email.text ?? "",
+            html,
+            text,
             attachments,
             cidToBlobUrl,
           },
@@ -231,29 +274,28 @@ export const EmlPreview: React.FC<EmlPreviewProps> = ({ url }) => {
 const EmlPreviewBody: React.FC<{
   parsed: ParsedEml;
 }> = ({ parsed }) => {
-  const iframeWrapperRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const [selected, setSelected] = useState<ParsedAttachment | null>(null);
 
-  const rewriteResources = useMemo(
-    () => (url: string) => {
-      if (!url.startsWith("cid:")) return url;
-      const cid = url.slice(4).replace(/^<|>$/g, "");
-      return parsed.cidToBlobUrl.get(cid) ?? url;
-    },
-    [parsed.cidToBlobUrl],
-  );
+  // Pre-sanitize the HTML body up here so the iframe's `srcDoc` is rendered
+  // with `sandbox` already set on the element in JSX — applying sandbox in a
+  // post-mount effect would leave a window where the unsandboxed iframe has
+  // already begun parsing/executing the email HTML.
+  const sanitizedHtml = useMemo(() => {
+    if (!parsed.html) return "";
+    return sanitize(parsed.html, parsed.text || undefined, {
+      rewriteExternalResources: (url) => {
+        if (!url.startsWith("cid:")) return url;
+        const cid = url.slice(4).replace(/^<|>$/g, "");
+        return parsed.cidToBlobUrl.get(cid) ?? url;
+      },
+    });
+  }, [parsed.html, parsed.text, parsed.cidToBlobUrl]);
 
   useEffect(() => {
-    const iframe = iframeWrapperRef.current?.querySelector("iframe");
+    const iframe = iframeRef.current;
     if (!iframe) return;
-    iframe.setAttribute("sandbox", "allow-same-origin");
-    iframe.classList.add(
-      "w-full",
-      "rounded",
-      "border",
-      "border-[var(--theme-border-attachment)]",
-      "bg-white",
-    );
+    let observer: ResizeObserver | null = null;
 
     const resize = () => {
       try {
@@ -268,15 +310,31 @@ const EmlPreviewBody: React.FC<{
           iframe.style.height = `${Math.min(measured + 8, cap)}px`;
         }
       } catch {
-        // Same-origin should make contentDocument accessible; if anything
-        // goes sideways, leave the iframe at the browser default height.
+        // Sandbox + same-origin should keep contentDocument accessible, but
+        // leave the iframe at its default height if anything goes wrong.
       }
     };
 
-    iframe.addEventListener("load", resize);
-    if (iframe.contentDocument?.readyState === "complete") resize();
-    return () => iframe.removeEventListener("load", resize);
-  }, [parsed.html, parsed.text]);
+    const onLoad = () => {
+      resize();
+      try {
+        const body = iframe.contentDocument?.body;
+        if (body && typeof ResizeObserver === "function") {
+          observer = new ResizeObserver(resize);
+          observer.observe(body);
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    iframe.addEventListener("load", onLoad);
+    if (iframe.contentDocument?.readyState === "complete") onLoad();
+    return () => {
+      iframe.removeEventListener("load", onLoad);
+      observer?.disconnect();
+    };
+  }, [sanitizedHtml]);
 
   return (
     <div data-testid="eml-preview" className="flex flex-col gap-4">
@@ -297,26 +355,29 @@ const EmlPreviewBody: React.FC<{
             onClick={() => setSelected(null)}
             className="inline-flex w-fit items-center gap-1.5 rounded text-sm font-medium text-[var(--theme-fg-secondary)] hover:text-[var(--theme-fg-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-fg-accent)]"
           >
-            <ArrowLeftIcon className="size-4" />
+            <ArrowLeftIcon className="size-4" aria-hidden="true" />
             {t`Back to email`}
           </button>
           <div className="truncate text-sm text-[var(--theme-fg-muted)]">
             {selected.filename}
           </div>
-          <FilePreviewContent filename={selected.filename} url={selected.blobUrl} />
+          <FilePreviewContent
+            filename={selected.filename}
+            url={selected.blobUrl}
+            mimeType={selected.mimeType}
+          />
         </div>
       ) : (
         <>
           {parsed.html ? (
-            <div ref={iframeWrapperRef} data-testid="eml-preview-html">
-              <Letter
-                html={parsed.html}
-                text={parsed.text || undefined}
-                useIframe={true}
-                iframeTitle={parsed.subject ?? t`Email preview`}
-                rewriteExternalResources={rewriteResources}
-              />
-            </div>
+            <iframe
+              ref={iframeRef}
+              data-testid="eml-preview-html"
+              title={parsed.subject ?? t`Email preview`}
+              sandbox="allow-same-origin"
+              srcDoc={sanitizedHtml}
+              className="w-full rounded border border-[var(--theme-border-attachment)] bg-white"
+            />
           ) : (
             <pre
               data-testid="eml-preview-text"
@@ -347,7 +408,7 @@ const EmlHeader: React.FC<{
   return (
     <div className="flex items-start gap-3 rounded border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-primary)] p-3">
       <div className="mt-0.5 shrink-0 text-[var(--theme-fg-muted)]">
-        <MailIcon className="size-5" />
+        <MailIcon className="size-5" aria-hidden="true" />
       </div>
       <dl className="grid min-w-0 flex-1 grid-cols-[auto,1fr] gap-x-3 gap-y-1 text-sm">
         {subject && (
@@ -406,7 +467,7 @@ const EmlAttachmentList: React.FC<{
             className="flex min-w-0 items-center gap-2 rounded-xl border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-primary)] px-3 py-2 text-left shadow-sm transition-colors hover:bg-[var(--theme-bg-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-fg-accent)]"
           >
             <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--theme-bg-accent)] text-[var(--theme-fg-secondary)]">
-              <PageIcon className="size-4" />
+              <PageIcon className="size-4" aria-hidden="true" />
             </div>
             <div className="min-w-0">
               <div className="truncate text-sm font-medium text-[var(--theme-fg-primary)]">

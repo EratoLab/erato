@@ -20,46 +20,65 @@ function getExtension(filename: string): string {
   return filename.split(".").pop()?.toLowerCase() ?? "";
 }
 
+// eslint-disable-next-line lingui/no-unlocalized-strings
+const IMAGE_MIME_PREFIX = "image/";
+
+function isImageMime(mimeType: string | undefined): boolean {
+  return mimeType?.startsWith(IMAGE_MIME_PREFIX) ?? false;
+}
+
 export interface FilePreviewContentProps {
   filename: string;
   url: string;
+  /**
+   * Hints the renderer when the filename extension is missing or misleading
+   * (e.g. nested email attachments named `attached_message` with MIME type
+   * `message/rfc822`). When absent, routing falls back to extension alone.
+   */
+  mimeType?: string;
 }
 
 /**
  * Capability-routed renderer for a single previewable file. Picks the right
- * inline viewer (image, PDF, EML, …) from the filename. Used by the modal
- * for top-level files and by EmlPreview for nested email attachments — so
- * clicking a PDF inside an email opens the same PDF viewer as clicking a
- * PDF at the top level.
+ * inline viewer (image, PDF, EML, …) from the filename and optional mime
+ * type. Used by the modal for top-level files and by EmlPreview for nested
+ * email attachments — so clicking a PDF inside an email opens the same PDF
+ * viewer as clicking a PDF at the top level.
  */
 export const FilePreviewContent: React.FC<FilePreviewContentProps> = ({
   filename,
   url,
+  mimeType,
 }) => {
   const extension = getExtension(filename);
+  const isImage =
+    IMAGE_EXTENSIONS.includes(extension as (typeof IMAGE_EXTENSIONS)[number]) ||
+    isImageMime(mimeType);
+  const isPdf = extension === "pdf" || mimeType === "application/pdf";
+  const isEml = extension === "eml" || mimeType === "message/rfc822";
 
-  if (IMAGE_EXTENSIONS.includes(extension as (typeof IMAGE_EXTENSIONS)[number])) {
+  if (isImage) {
     return (
       <img
         src={url}
-        alt={`${t`Preview of`} ${filename}`}
+        alt={t`Preview of ${filename}`}
         className="mx-auto max-h-[75vh] max-w-full object-contain"
       />
     );
   }
 
-  if (extension === "pdf") {
+  if (isPdf) {
     return (
       <iframe
         src={url}
-        title={`${t`Preview of`} ${filename}`}
+        title={t`Preview of ${filename}`}
         data-testid="file-preview-pdf"
         className="h-[75vh] w-full border-0"
       />
     );
   }
 
-  if (extension === "eml") {
+  if (isEml) {
     return <EmlPreview filename={filename} url={url} />;
   }
 
