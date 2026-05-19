@@ -78,6 +78,11 @@ msgstr "Odrzuć zaznaczenie"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.emailBody"
+msgstr "Treść e-maila"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.emailFallback"
 msgstr "E-mail"
 
@@ -93,6 +98,11 @@ msgstr "Przetwarzanie upuszczonych e-maili…"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.replyContext.groupLabel"
+msgstr "Kontekst odpowiedzi"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.replyContext.label"
 msgstr "Kontekst odpowiedzi"
 
@@ -100,6 +110,11 @@ msgstr "Kontekst odpowiedzi"
 #: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.replyContext.untitled"
 msgstr "(brak tematu)"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.validation.tooLarge"
+msgstr "Plik przekracza limit serwera wynoszący {globalMaxFormatted}"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
