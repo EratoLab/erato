@@ -2210,6 +2210,10 @@ msgstr "So testen Sie:"
 msgid "In Progress"
 msgstr "In Bearbeitung"
 
+#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+msgid "Include"
+msgstr "Einbeziehen"
+
 #: src/components/ui/ToolCall/ToolCallInput.tsx
 msgid "Input Parameters"
 msgstr "Eingabeparameter"

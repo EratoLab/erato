@@ -2210,6 +2210,10 @@ msgstr ""
 msgid "In Progress"
 msgstr "En cours"
 
+#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+msgid "Include"
+msgstr "Inclure"
+
 #: src/components/ui/ToolCall/ToolCallInput.tsx
 msgid "Input Parameters"
 msgstr "Paramètres d'entrée"
