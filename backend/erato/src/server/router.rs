@@ -325,6 +325,10 @@ mod tests {
     use super::*;
     use tempfile::tempdir;
 
+    fn manifest_version_prefix() -> (u16, u16, u16) {
+        parse_manifest_version_prefix(env!("CARGO_PKG_VERSION"))
+    }
+
     #[test]
     fn render_office_addin_manifest_rewrites_taskpane_and_asset_urls() {
         let template = r#"
@@ -337,6 +341,8 @@ mod tests {
 
         let rendered =
             render_office_addin_manifest(template, "https://app.example.com/base", Some("42"));
+        let (major, minor, patch) = manifest_version_prefix();
+        let expected_version = format!("{major}.{minor}.{patch}.42");
 
         assert!(
             rendered.contains(
@@ -344,21 +350,24 @@ mod tests {
             )
         );
         assert!(rendered.contains("https://app.example.com/base/public/platform-office-addin/"));
-        assert!(rendered.contains("<Version>0.5.2.42</Version>"));
+        assert!(rendered.contains(&format!("<Version>{expected_version}</Version>")));
         assert!(!rendered.contains(OFFICE_ADDIN_MANIFEST_DEFAULT_BASE_URL));
     }
 
     #[test]
     fn office_addin_manifest_version_hashes_non_numeric_deployment_version() {
-        assert_eq!(
-            office_addin_manifest_version(Some("dev-build")),
-            "0.5.2.15030"
-        );
+        let (major, minor, patch) = manifest_version_prefix();
+        let expected = format!("{major}.{minor}.{patch}.15030");
+        assert_eq!(office_addin_manifest_version(Some("dev-build")), expected);
     }
 
     #[test]
     fn office_addin_manifest_version_defaults_deployment_component_to_zero() {
-        assert_eq!(office_addin_manifest_version(None), "0.5.2.0");
+        let (major, minor, patch) = manifest_version_prefix();
+        assert_eq!(
+            office_addin_manifest_version(None),
+            format!("{major}.{minor}.{patch}.0")
+        );
     }
 
     #[test]
