@@ -9,12 +9,13 @@ COPY . /app
 
 FROM base AS build
 WORKDIR /app/frontend
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --config.confirmModulesPurge=false
 RUN pnpm run build:lib
 RUN pnpm run build
 
 WORKDIR /app/office-addin
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --no-frozen-lockfile --lockfile=false
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm update @erato/frontend --config.confirmModulesPurge=false
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --config.confirmModulesPurge=false
 RUN pnpm run build
 
 # Final stage - empty image with just the static files for all served frontends

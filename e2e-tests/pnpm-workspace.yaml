@@ -1,0 +1,4 @@
+allowBuilds:
+  sharp: true
+# 5 days delay
+minimumReleaseAge: 7200

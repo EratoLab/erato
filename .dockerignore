@@ -1,3 +1,5 @@
+# This is a ignore file used with the frontend build (frontend + office-addin)
+
 # Version control
 .git/
 .gitignore
@@ -6,6 +8,15 @@
 # Environment variables
 .env
 .env.*
+
+# Dependencies (will be installed inside the Docker build)
+./frontend/node_modules
+./office-addin/node_modules
+
+# Irellevant projects for build
+./backend
+./e2e-tests
+./site
 
 # Requirements directory (managed via git submodules)
 .requirements/
