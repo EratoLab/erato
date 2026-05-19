@@ -17,6 +17,7 @@ import {
   restoreAttachment as applyRestoreAttachment,
   restoreBody as applyRestoreBody,
 } from "../utils/stagedEmailDismissals";
+import { trimEmlAttachments } from "../utils/trimEmlAttachments";
 
 import type { ParentMessageMetadata } from "../utils/fetchOutlookMessageGraph";
 import type { ParsedEmail } from "../utils/parsedEmail";
@@ -32,6 +33,39 @@ let droppedKeyCounter = 0;
 function generateDroppedKey(): string {
   droppedKeyCounter += 1;
   return `drop-${Date.now()}-${droppedKeyCounter}`;
+}
+
+function collectDismissedIndices(
+  attachments: { id: string }[],
+  dismissedIds: ReadonlySet<string>,
+): number[] {
+  const indices: number[] = [];
+  attachments.forEach((attachment, index) => {
+    if (dismissedIds.has(attachment.id)) {
+      indices.push(index);
+    }
+  });
+  return indices;
+}
+
+async function trimRawEmlBytes(
+  rawEmlFile: File,
+  indicesToRemove: number[],
+): Promise<File> {
+  const buffer = await rawEmlFile.arrayBuffer();
+  const trimmed = trimEmlAttachments(new Uint8Array(buffer), indicesToRemove);
+  if (!trimmed) {
+    // Trim couldn't safely identify a part — fall back to shipping the
+    // .eml untouched. Worse UX than honouring the deselection, but better
+    // than an upload that drops the wrong attachment or fails entirely.
+    console.warn(
+      "[OutlookEmailSourceProvider] surgical trim returned null; uploading the original .eml",
+    );
+    return rawEmlFile;
+  }
+  return new File([trimmed.slice()], rawEmlFile.name, {
+    type: rawEmlFile.type,
+  });
 }
 
 export type StagedEmailSource = "current" | "drop";
@@ -387,27 +421,22 @@ export function OutlookEmailSourceProvider({
     const filesToSend: File[] = [];
 
     for (const staged of stagedEmails) {
-      if (!staged.bodyDismissed) {
-        filesToSend.push(staged.parsed.rawEmlFile);
-      }
-      // Phase 1 transitional sibling-upload for dropped emails. Phase 2
-      // surgical MIME removal will replace this branch — at that point
-      // deselected attachments are trimmed from the bytes and we ship a
-      // single `.eml` per staged email. For current-email reads we leave
-      // the .eml whole; in-eml attachment dismissals there are UX-only
-      // until Phase 2.
-      if (staged.source !== "drop") {
+      if (staged.bodyDismissed) {
         continue;
       }
-      for (const attachment of staged.parsed.attachments) {
-        if (attachment.disposition === "inline" || attachment.related) {
-          continue;
-        }
-        if (staged.dismissedAttachmentIds.has(attachment.id)) {
-          continue;
-        }
-        filesToSend.push(attachment.toFile());
+      const indicesToRemove = collectDismissedIndices(
+        staged.parsed.attachments,
+        staged.dismissedAttachmentIds,
+      );
+      if (indicesToRemove.length === 0) {
+        filesToSend.push(staged.parsed.rawEmlFile);
+        continue;
       }
+      const trimmed = await trimRawEmlBytes(
+        staged.parsed.rawEmlFile,
+        indicesToRemove,
+      );
+      filesToSend.push(trimmed);
     }
 
     // Office.js compose-mode attachments. When a current-email `.eml` is
