@@ -1,6 +1,48 @@
 import { describe, expect, it } from "vitest";
 
-import { durationBetween, formatThinkingDuration } from "./useThinkingDuration";
+import {
+  durationBetween,
+  durationFromTraceParts,
+  durationFromTracePartsOrLegacyMessageTimestamps,
+  formatThinkingDuration,
+} from "./useThinkingDuration";
+
+import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+
+const reasoningPart = ({
+  text,
+  startedAt,
+  endedAt,
+}: {
+  text: string;
+  startedAt?: string | null;
+  endedAt?: string | null;
+}): ContentPart =>
+  ({
+    content_type: "reasoning",
+    text,
+    started_at: startedAt,
+    ended_at: endedAt,
+  }) as ContentPart;
+
+const toolUsePart = ({
+  startedAt,
+  endedAt,
+}: {
+  startedAt?: string | null;
+  endedAt?: string | null;
+}): ContentPart =>
+  ({
+    content_type: "tool_use",
+    status: "success",
+    tool_call_id: "tool-call-123",
+    tool_name: "search",
+    input: null,
+    output: null,
+    progress_message: null,
+    started_at: startedAt,
+    ended_at: endedAt,
+  }) as ContentPart;
 
 describe("formatThinkingDuration", () => {
   it("returns null for invalid or non-positive durations", () => {
@@ -71,5 +113,66 @@ describe("durationBetween", () => {
     expect(
       durationBetween("2026-05-07T12:00:00Z", "2026-05-07T12:03:23Z"),
     ).toBe(3 * 60_000 + 23_000);
+  });
+});
+
+describe("durationFromTraceParts", () => {
+  it("sums reasoning and tool-use durations", () => {
+    expect(
+      durationFromTraceParts([
+        reasoningPart({
+          text: "first thought",
+          startedAt: "2026-05-07T12:00:00Z",
+          endedAt: "2026-05-07T12:00:02Z",
+        }),
+        { content_type: "text", text: "answer" },
+        toolUsePart({
+          startedAt: "2026-05-07T12:00:03Z",
+          endedAt: "2026-05-07T12:00:05Z",
+        }),
+      ]),
+    ).toBe(4_000);
+  });
+
+  it("ignores trace parts without valid timestamps", () => {
+    expect(
+      durationFromTraceParts([
+        reasoningPart({
+          text: "no timing",
+        }),
+        toolUsePart({
+          startedAt: "not-a-date",
+          endedAt: "2026-05-07T12:00:05Z",
+        }),
+      ]),
+    ).toBeNull();
+  });
+});
+
+describe("durationFromTracePartsOrLegacyMessageTimestamps", () => {
+  it("prefers per-part timing over message timestamps", () => {
+    expect(
+      durationFromTracePartsOrLegacyMessageTimestamps(
+        [
+          reasoningPart({
+            text: "recent thought",
+            startedAt: "2026-05-07T12:00:00Z",
+            endedAt: "2026-05-07T12:00:01Z",
+          }),
+        ],
+        "2026-05-07T12:00:00Z",
+        "2026-05-07T12:00:20Z",
+      ),
+    ).toBe(1_000);
+  });
+
+  it("falls back to legacy message timestamps when no part timings exist", () => {
+    expect(
+      durationFromTracePartsOrLegacyMessageTimestamps(
+        [reasoningPart({ text: "legacy thought" })],
+        "2026-05-07T12:00:00Z",
+        "2026-05-07T12:00:20Z",
+      ),
+    ).toBe(20_000);
   });
 });

@@ -8,7 +8,7 @@ import remarkGfm from "remark-gfm";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import {
   Trace,
-  durationBetween,
+  durationFromTracePartsOrLegacyMessageTimestamps,
   groupIntoTraceClusters,
 } from "@/components/ui/Trace";
 import {
@@ -604,8 +604,13 @@ export const MessageContent = memo(function MessageContent({
   );
 
   const traceDurationMs = React.useMemo(
-    () => durationBetween(createdAt, updatedAt),
-    [createdAt, updatedAt],
+    () =>
+      durationFromTracePartsOrLegacyMessageTimestamps(
+        content,
+        createdAt,
+        updatedAt,
+      ),
+    [content, createdAt, updatedAt],
   );
 
   // If showing raw, just show text-like content without rendering markdown.

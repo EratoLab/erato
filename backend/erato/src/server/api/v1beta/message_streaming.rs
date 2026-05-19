@@ -56,6 +56,7 @@ use axum::http::HeaderMap;
 use axum::response::Sse;
 use axum::response::sse::Event;
 use axum::{Extension, Json};
+use chrono::Utc;
 use eyre::{OptionExt, WrapErr};
 use eyre::{Report, eyre};
 use futures::Stream;
@@ -94,6 +95,10 @@ fn non_empty_vec<T: Clone>(value: &[T]) -> Option<Vec<T>> {
 
 fn reasoning_summary_part(summary: Option<&str>) -> ReasoningSummaryText {
     ReasoningSummaryText::new(summary.unwrap_or_default())
+}
+
+fn now_timestamp() -> String {
+    Utc::now().to_rfc3339()
 }
 
 fn build_openai_responses_reasoning_replay_parts(
@@ -1948,6 +1953,7 @@ fn append_reasoning_delta_part(content: &mut Vec<ContentPart>, new_text: String)
         let content_index = content.len();
         content.push(ContentPart::Reasoning(ContentPartReasoning {
             text: new_text,
+            ..Default::default()
         }));
         content_index
     }
@@ -1961,7 +1967,10 @@ fn insert_reasoning_part_before_text(content: &mut Vec<ContentPart>, text: Strin
 
     content.insert(
         insertion_index,
-        ContentPart::Reasoning(ContentPartReasoning { text }),
+        ContentPart::Reasoning(ContentPartReasoning {
+            text,
+            ..Default::default()
+        }),
     );
     insertion_index
 }
@@ -2166,6 +2175,7 @@ async fn stream_generate_chat_completion<
     let mut all_tool_names: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut all_model_tags: HashSet<String> = HashSet::new();
     let mut tool_call_parent_observation_ids: HashMap<String, String> = HashMap::new();
+    let mut tool_call_started_at: HashMap<String, String> = HashMap::new();
 
     'loop_call_turns: loop {
         current_turn += 1;
@@ -2216,6 +2226,9 @@ async fn stream_generate_chat_completion<
             // Emit event for tool call proposed
             {
                 let unfinished_tool_call = unfinished_tool_call.clone();
+                let tool_call_start_time = now_timestamp();
+                tool_call_started_at
+                    .insert(unfinished_tool_call.call_id.clone(), tool_call_start_time);
                 let proposed_call = MessageSubmitStreamingResponseToolCallProposed {
                     message_id: assistant_message_id,
                     content_index: current_message_content.len(),
@@ -2240,6 +2253,7 @@ async fn stream_generate_chat_completion<
             }
 
             if !allowed_tool_names.contains(unfinished_tool_call.fn_name.as_str()) {
+                tool_call_started_at.remove(&unfinished_tool_call.call_id);
                 let _ = tx
                     .send(Err(eyre!(
                         "Proposed MCP tool call '{}' is not allowed for this request",
@@ -2254,6 +2268,7 @@ async fn stream_generate_chat_completion<
             {
                 Some(managed_tool) => managed_tool.clone(),
                 None => {
+                    tool_call_started_at.remove(&unfinished_tool_call.call_id);
                     let _ = tx
                         .send(Err(eyre!(
                             "Failed to resolve MCP tool call '{}': tool was not in the prepared MCP tool set",
@@ -2269,7 +2284,7 @@ async fn stream_generate_chat_completion<
                 tool: managed_tool.tool.clone(),
             };
             let output_schema = managed_tool_call.tool.output_schema.clone();
-            let tool_call_start_time = if langfuse_enabled {
+            let tool_call_span_start_time = if langfuse_enabled {
                 Some(SystemTime::now())
             } else {
                 None
@@ -2287,7 +2302,7 @@ async fn stream_generate_chat_completion<
             };
             if let (Some(client), Some(start_time), Some(end_time), Some(parent_observation_id)) = (
                 tracing_client.as_ref(),
-                tool_call_start_time,
+                tool_call_span_start_time,
                 tool_call_end_time,
                 tool_call_parent_observation_id,
             ) {
@@ -2320,6 +2335,16 @@ async fn stream_generate_chat_completion<
             }
             match tool_call_result {
                 Ok(tool_call_result) => {
+                    let tool_call_started = tool_call_started_at
+                        .remove(&unfinished_tool_call.call_id)
+                        .unwrap_or_else(|| {
+                            tracing::warn!(
+                                "Missing tool call start timestamp for {}",
+                                unfinished_tool_call.call_id
+                            );
+                            now_timestamp()
+                        });
+
                     if let Some(content_filter_error) =
                         parse_content_filter_error_from_mcp_tool_result(&tool_call_result)
                     {
@@ -2423,6 +2448,8 @@ async fn stream_generate_chat_completion<
                             input: Some(finished_tool_call.fn_arguments),
                             progress_message: None,
                             output: output_value.clone(),
+                            started_at: Some(tool_call_started.clone()),
+                            ended_at: Some(now_timestamp()),
                         }));
                         if !image_content_parts.is_empty() {
                             current_message_content.extend(image_content_parts);
@@ -2433,6 +2460,7 @@ async fn stream_generate_chat_completion<
                 }
                 Err(err) => {
                     // TODO: Send event and message_content
+                    tool_call_started_at.remove(&unfinished_tool_call.call_id);
                     let _ = tx.send(Err(err).wrap_err("Failed to call tool")).await;
                     return Err(());
                 }
@@ -2733,6 +2761,13 @@ async fn stream_generate_chat_completion<
                             &mut current_message_content,
                             content.clone(),
                         );
+                        if let Some(ContentPart::Reasoning(reasoning_part)) =
+                            current_message_content.get_mut(content_index)
+                        {
+                            let now = now_timestamp();
+                            reasoning_part.started_at.get_or_insert_with(|| now.clone());
+                            reasoning_part.ended_at = Some(now);
+                        }
                         let delta = MessageSubmitStreamingResponseMessageReasoningDelta {
                             message_id: assistant_message_id,
                             content_index,
@@ -2848,10 +2883,17 @@ async fn stream_generate_chat_completion<
             if current_turn_streamed_reasoning.is_empty()
                 && !current_turn_captured_reasoning_summary.is_empty()
             {
+                let now = now_timestamp();
                 let content_index = insert_reasoning_part_before_text(
                     &mut current_message_content,
                     current_turn_captured_reasoning_summary.clone(),
                 );
+                if let Some(ContentPart::Reasoning(reasoning_part)) =
+                    current_message_content.get_mut(content_index)
+                {
+                    reasoning_part.started_at = Some(now.clone());
+                    reasoning_part.ended_at = Some(now);
+                }
                 let delta = MessageSubmitStreamingResponseMessageReasoningDelta {
                     message_id: assistant_message_id,
                     content_index,
@@ -4841,6 +4883,7 @@ mod reasoning_replay_tests {
             role: MessageRole::Assistant,
             content: ContentPart::Reasoning(ContentPartReasoning {
                 text: text.to_string(),
+                ..Default::default()
             }),
         }
     }
@@ -5052,7 +5095,8 @@ mod reasoning_replay_tests {
             content,
             vec![
                 ContentPart::Reasoning(ContentPartReasoning {
-                    text: "think more".to_string()
+                    text: "think more".to_string(),
+                    ..Default::default()
                 }),
                 ContentPart::Text(ContentPartText {
                     text: "answer".to_string()
@@ -5076,7 +5120,8 @@ mod reasoning_replay_tests {
                     text: "hello".to_string()
                 }),
                 ContentPart::Reasoning(ContentPartReasoning {
-                    text: "think".to_string()
+                    text: "think".to_string(),
+                    ..Default::default()
                 }),
                 ContentPart::Text(ContentPartText {
                     text: " again".to_string()
@@ -5100,7 +5145,8 @@ mod reasoning_replay_tests {
             content,
             vec![
                 ContentPart::Reasoning(ContentPartReasoning {
-                    text: "summary".to_string()
+                    text: "summary".to_string(),
+                    ..Default::default()
                 }),
                 ContentPart::Text(ContentPartText {
                     text: "answer".to_string()

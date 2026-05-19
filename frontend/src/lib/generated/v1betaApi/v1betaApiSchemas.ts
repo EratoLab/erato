@@ -571,7 +571,18 @@ export type ContentPartImageFilePointer = {
 };
 
 export type ContentPartReasoning = {
-  text: string;
+  /**
+   * @default null
+   */
+  ended_at?: null | undefined;
+  /**
+   * @default null
+   */
+  started_at?: null | undefined;
+  /**
+   * @default
+   */
+  text?: string;
 };
 
 export type ContentPartText = {
@@ -1926,12 +1937,38 @@ export type TokenUsageVirtualFile = {
 export type ToolCallStatus = "in_progress" | "success" | "error";
 
 export type ToolUse = {
+  /**
+   * @default null
+   */
+  ended_at?: null | undefined;
+  /**
+   * @default null
+   */
   input?: null | Value;
+  /**
+   * @default null
+   */
   output?: null | Value;
+  /**
+   * @default null
+   */
   progress_message?: null | undefined;
-  status: ToolCallStatus;
-  tool_call_id: string;
-  tool_name: string;
+  /**
+   * @default null
+   */
+  started_at?: null | undefined;
+  /**
+   * @default in_progress
+   */
+  status?: ToolCallStatus;
+  /**
+   * @default
+   */
+  tool_call_id?: string;
+  /**
+   * @default
+   */
+  tool_name?: string;
 };
 
 /**

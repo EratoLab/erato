@@ -12,7 +12,10 @@ import { ReasoningStep } from "./steps/ReasoningStep";
 import { ToolUseStep } from "./steps/ToolUseStep";
 import { isTraceablePart, type LogicalStep, type TraceablePart } from "./types";
 
-import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  ContentPart,
+  ToolUse,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ReactNode } from "react";
 
 interface TraceProps {
@@ -220,7 +223,7 @@ export const flattenToLogicalSteps = (
   parts.forEach((part, partIndex) => {
     switch (part.content_type) {
       case "reasoning": {
-        const segments = parseReasoningSegments(part.text);
+        const segments = parseReasoningSegments(part.text ?? "");
         segments.forEach((segment, segmentIndex) => {
           out.push({
             kind: "reasoning",
@@ -231,11 +234,15 @@ export const flattenToLogicalSteps = (
         return;
       }
       case "tool_use":
+        if (!part.tool_call_id) {
+          return;
+        }
+
         out.push({
           // eslint-disable-next-line lingui/no-unlocalized-strings
           kind: "tool_use",
           key: `t-${part.tool_call_id}`,
-          part,
+          part: part as ToolUse & { content_type: "tool_use" },
         });
         return;
       default: {
