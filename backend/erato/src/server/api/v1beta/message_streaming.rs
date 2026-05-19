@@ -142,12 +142,92 @@ fn build_openai_responses_reasoning_replay_parts(
         .collect()
 }
 
+fn strip_persisted_reasoning_messages(chat_request: &mut ChatRequest) {
+    chat_request.messages.retain(|message| {
+        if message.role != ChatRole::Assistant {
+            return true;
+        }
+
+        let parts = message.content.parts();
+        let is_summary_only_reasoning_message = !parts.is_empty()
+            && parts
+                .iter()
+                .all(|part| matches!(part, GenAiContentPart::ReasoningContent(_)));
+
+        !is_summary_only_reasoning_message
+    });
+}
+
+async fn prior_assistant_chat_provider_changed(
+    message_repo: &impl MessageRepository,
+    just_submitted_user_message_id: &Uuid,
+    current_chat_provider_id: &str,
+) -> Result<bool, Report> {
+    let current_message = message_repo
+        .get_message_by_id(just_submitted_user_message_id)
+        .await?;
+
+    let Some(previous_message_id) = current_message.previous_message_id else {
+        return Ok(false);
+    };
+
+    let previous_message = message_repo.get_message_by_id(&previous_message_id).await?;
+    let parsed_message = MessageSchema::validate(&previous_message.raw_message)?;
+    if parsed_message.role != MessageRole::Assistant {
+        return Ok(false);
+    }
+
+    Ok(
+        get_generation_chat_provider_id_from_message(&previous_message)?
+            .as_deref()
+            .is_some_and(|previous_chat_provider_id| {
+                previous_chat_provider_id != current_chat_provider_id
+            }),
+    )
+}
+
+struct OpenAiResponsesReasoningReplayMessage {
+    assistant_text: String,
+    replay_message: GenAiChatMessage,
+}
+
+fn insert_openai_responses_reasoning_replay_messages(
+    chat_request: &mut ChatRequest,
+    reasoning_replay_messages: Vec<OpenAiResponsesReasoningReplayMessage>,
+) {
+    for replay in reasoning_replay_messages {
+        let insert_index = chat_request
+            .messages
+            .iter()
+            .position(|message| {
+                message.role == ChatRole::Assistant
+                    && message.content.first_text() == Some(replay.assistant_text.as_str())
+            })
+            .unwrap_or_else(|| chat_request.messages.len().saturating_sub(1));
+
+        chat_request
+            .messages
+            .insert(insert_index, replay.replay_message);
+    }
+}
+
+fn openai_responses_reasoning_replay_model_matches(
+    current_chat_provider_id: &str,
+    generation_parameters: Option<GenerationParameters>,
+) -> bool {
+    generation_parameters
+        .and_then(|parameters| parameters.generation_chat_provider_id)
+        .as_deref()
+        == Some(current_chat_provider_id)
+}
+
 async fn collect_reasoning_replay_messages(
     app_state: &AppState,
     policy: &PolicyEngine,
     subject: &Subject,
     just_submitted_user_message_id: &Uuid,
-) -> Result<Vec<GenAiChatMessage>, Report> {
+    current_chat_provider_id: &str,
+) -> Result<Vec<OpenAiResponsesReasoningReplayMessage>, Report> {
     let mut current_message = get_message_by_id(
         &app_state.db,
         policy,
@@ -178,9 +258,26 @@ async fn collect_reasoning_replay_messages(
 
         let replay_parts = build_openai_responses_reasoning_replay_parts(generation_metadata);
         if !replay_parts.is_empty() {
-            replay_messages.push(GenAiChatMessage::assistant(MessageContent::from_parts(
-                replay_parts,
-            )));
+            let generation_parameters =
+                current_message
+                    .generation_parameters
+                    .as_ref()
+                    .and_then(|parameters| {
+                        serde_json::from_value::<GenerationParameters>(parameters.clone()).ok()
+                    });
+            if !openai_responses_reasoning_replay_model_matches(
+                current_chat_provider_id,
+                generation_parameters,
+            ) {
+                return Ok(Vec::new());
+            }
+
+            replay_messages.push(OpenAiResponsesReasoningReplayMessage {
+                assistant_text: parsed_message.full_text(),
+                replay_message: GenAiChatMessage::assistant(MessageContent::from_parts(
+                    replay_parts,
+                )),
+            });
         }
     }
 
@@ -1762,6 +1859,15 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     let mut chat_request = resolved_generation_input_messages
         .clone()
         .into_chat_request();
+    let did_prior_assistant_chat_provider_change = prior_assistant_chat_provider_changed(
+        message_repo,
+        &user_input.just_submitted_user_message_id,
+        chat_provider_id.as_str(),
+    )
+    .await?;
+    if did_prior_assistant_chat_provider_change {
+        strip_persisted_reasoning_messages(&mut chat_request);
+    }
     let chat_request_tools = convert_mcp_tools_to_genai_tools(
         generation_mcp_tools.clone(),
         effective_model_settings.compat_omit_strict,
@@ -1773,19 +1879,21 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     }
     if is_openai_responses_provider_kind(&chat_provider_config.provider_kind) {
         chat_request = chat_request.with_store(false);
-        let reasoning_replay_messages = collect_reasoning_replay_messages(
-            app_state,
-            policy,
-            &me_profile_input.subject,
-            &user_input.just_submitted_user_message_id,
-        )
-        .await?;
-        if !reasoning_replay_messages.is_empty() {
-            let insert_index = chat_request.messages.len().saturating_sub(1);
-            for (offset, replay_message) in reasoning_replay_messages.into_iter().enumerate() {
-                chat_request
-                    .messages
-                    .insert(insert_index + offset, replay_message);
+        strip_persisted_reasoning_messages(&mut chat_request);
+        if !did_prior_assistant_chat_provider_change {
+            let reasoning_replay_messages = collect_reasoning_replay_messages(
+                app_state,
+                policy,
+                &me_profile_input.subject,
+                &user_input.just_submitted_user_message_id,
+                chat_provider_id.as_str(),
+            )
+            .await?;
+            if !reasoning_replay_messages.is_empty() {
+                insert_openai_responses_reasoning_replay_messages(
+                    &mut chat_request,
+                    reasoning_replay_messages,
+                );
             }
         }
     }
@@ -4655,6 +4763,50 @@ pub async fn message_submit_sse(
 mod reasoning_replay_tests {
     use super::*;
 
+    struct InMemoryResponsesChatProvider;
+
+    impl InMemoryResponsesChatProvider {
+        fn validate_reasoning_replay_request(chat_request: &ChatRequest) -> Result<(), String> {
+            let has_encrypted_reasoning_replay = chat_request.messages.iter().any(|message| {
+                message.content.parts().iter().any(|part| {
+                    matches!(
+                        part,
+                        GenAiContentPart::ReasoningItem(ReasoningItem {
+                            encrypted_content: Some(_),
+                            ..
+                        })
+                    )
+                })
+            });
+
+            if !has_encrypted_reasoning_replay {
+                return Ok(());
+            }
+
+            let summary_only_reasoning_indexes = chat_request
+                .messages
+                .iter()
+                .enumerate()
+                .filter_map(|(index, message)| {
+                    message
+                        .content
+                        .parts()
+                        .iter()
+                        .any(|part| matches!(part, GenAiContentPart::ReasoningContent(_)))
+                        .then_some(index)
+                })
+                .collect::<Vec<_>>();
+
+            if summary_only_reasoning_indexes.is_empty() {
+                Ok(())
+            } else {
+                Err(format!(
+                    "Responses request mixes summary-only reasoning messages with encrypted reasoning replay at message indexes {summary_only_reasoning_indexes:?}"
+                ))
+            }
+        }
+    }
+
     fn generation_metadata(
         reasoning_summary: Option<String>,
         reasoning_items: Option<Vec<ReasoningItem>>,
@@ -4673,6 +4825,174 @@ mod reasoning_replay_tests {
             error: None,
             mcp_servers_unavailable: None,
         }
+    }
+
+    fn input_text(role: MessageRole, text: &str) -> crate::models::message::InputMessage {
+        crate::models::message::InputMessage {
+            role,
+            content: ContentPart::Text(ContentPartText {
+                text: text.to_string(),
+            }),
+        }
+    }
+
+    fn input_reasoning(text: &str) -> crate::models::message::InputMessage {
+        crate::models::message::InputMessage {
+            role: MessageRole::Assistant,
+            content: ContentPart::Reasoning(ContentPartReasoning {
+                text: text.to_string(),
+            }),
+        }
+    }
+
+    fn reasoning_replay_message(
+        assistant_text: &str,
+        summary: &str,
+        encrypted_content: &str,
+    ) -> OpenAiResponsesReasoningReplayMessage {
+        OpenAiResponsesReasoningReplayMessage {
+            assistant_text: assistant_text.to_string(),
+            replay_message: GenAiChatMessage::assistant(MessageContent::from_parts(vec![
+                GenAiContentPart::ReasoningItem(ReasoningItem {
+                    summary: vec![ReasoningSummaryText::new(summary)],
+                    encrypted_content: Some(encrypted_content.to_string()),
+                    ..Default::default()
+                }),
+            ])),
+        }
+    }
+
+    #[test]
+    fn normal_composition_omits_persisted_reasoning_summaries_when_replaying_encrypted_reasoning() {
+        let generation_input = GenerationInputMessages {
+            messages: vec![
+                input_text(MessageRole::System, "Use extended thinking."),
+                input_text(MessageRole::User, "Solve the five-digit lock code."),
+                input_reasoning("Checking unique code possibilities."),
+                input_text(MessageRole::Assistant, "Code: 34512."),
+                input_text(MessageRole::User, "Please double-check the result."),
+                input_reasoning("Solving the digit constraints."),
+                input_text(MessageRole::Assistant, "Yes, 34512 is correct."),
+                input_text(MessageRole::User, "Can you please check the result?"),
+            ],
+        };
+        let mut chat_request = generation_input.into_chat_request().with_store(false);
+        strip_persisted_reasoning_messages(&mut chat_request);
+        insert_openai_responses_reasoning_replay_messages(
+            &mut chat_request,
+            vec![
+                reasoning_replay_message(
+                    "Code: 34512.",
+                    "Checking unique code possibilities.",
+                    "encrypted-1",
+                ),
+                reasoning_replay_message(
+                    "Yes, 34512 is correct.",
+                    "Solving the digit constraints.",
+                    "encrypted-2",
+                ),
+            ],
+        );
+
+        InMemoryResponsesChatProvider::validate_reasoning_replay_request(&chat_request)
+            .expect("normal Responses reasoning replay request should be well formed");
+
+        assert!(
+            chat_request.messages.iter().all(|message| {
+                !message
+                    .content
+                    .parts()
+                    .iter()
+                    .any(|part| matches!(part, GenAiContentPart::ReasoningContent(_)))
+            }),
+            "persisted reasoning summaries should not be sent alongside encrypted reasoning replay"
+        );
+
+        let reasoning_item_indexes = chat_request
+            .messages
+            .iter()
+            .enumerate()
+            .filter_map(|(index, message)| {
+                message
+                    .content
+                    .parts()
+                    .iter()
+                    .any(|part| matches!(part, GenAiContentPart::ReasoningItem(_)))
+                    .then_some(index)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(reasoning_item_indexes, vec![2, 5]);
+        assert_eq!(
+            chat_request.messages[3].content.first_text(),
+            Some("Code: 34512.")
+        );
+        assert_eq!(
+            chat_request.messages[6].content.first_text(),
+            Some("Yes, 34512 is correct.")
+        );
+    }
+
+    #[test]
+    fn changed_chat_provider_strips_persisted_reasoning_for_non_responses_requests() {
+        let generation_input = GenerationInputMessages {
+            messages: vec![
+                input_text(MessageRole::System, "Use extended thinking."),
+                input_text(MessageRole::User, "Solve the lock code."),
+                input_reasoning("Persisted reasoning from a previous model."),
+                input_text(MessageRole::Assistant, "Code: 34512."),
+                input_text(MessageRole::User, "Please validate again."),
+            ],
+        };
+        let mut chat_request = generation_input.into_chat_request();
+
+        strip_persisted_reasoning_messages(&mut chat_request);
+
+        assert!(
+            chat_request.messages.iter().all(|message| {
+                !message
+                    .content
+                    .parts()
+                    .iter()
+                    .any(|part| matches!(part, GenAiContentPart::ReasoningContent(_)))
+            }),
+            "changed provider requests must not replay persisted reasoning content"
+        );
+        assert_eq!(chat_request.messages.len(), 4);
+        assert_eq!(
+            chat_request.messages[2].content.first_text(),
+            Some("Code: 34512.")
+        );
+    }
+
+    #[test]
+    fn openai_responses_reasoning_replay_is_disabled_when_chat_provider_changes() {
+        let matching_parameters = GenerationParameters {
+            generation_chat_provider_id: Some("responses-opus".to_string()),
+            request_context: None,
+            selected_facets: HashMap::new(),
+            action_facet_id: None,
+            action_facet_args: None,
+        };
+        let changed_parameters = GenerationParameters {
+            generation_chat_provider_id: Some("responses-sonnet".to_string()),
+            request_context: None,
+            selected_facets: HashMap::new(),
+            action_facet_id: None,
+            action_facet_args: None,
+        };
+
+        assert!(openai_responses_reasoning_replay_model_matches(
+            "responses-opus",
+            Some(matching_parameters),
+        ));
+        assert!(!openai_responses_reasoning_replay_model_matches(
+            "responses-opus",
+            Some(changed_parameters),
+        ));
+        assert!(!openai_responses_reasoning_replay_model_matches(
+            "responses-opus",
+            None,
+        ));
     }
 
     #[test]
