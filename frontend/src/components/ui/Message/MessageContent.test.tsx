@@ -26,10 +26,36 @@ const textContent = (text: string): ContentPart[] => [
 const multipleTextContent = (...texts: string[]): ContentPart[] =>
   texts.map((text) => ({ content_type: "text", text }));
 
-const reasoningContent = (text: string): ContentPart => ({
-  content_type: "reasoning",
-  text,
-});
+const reasoningContent = (
+  text: string,
+  startedAt?: string | null,
+  endedAt?: string | null,
+): ContentPart =>
+  ({
+    content_type: "reasoning",
+    text,
+    started_at: startedAt,
+    ended_at: endedAt,
+  }) as ContentPart;
+
+const toolUseContent = ({
+  startedAt,
+  endedAt,
+}: {
+  startedAt?: string | null;
+  endedAt?: string | null;
+}): ContentPart =>
+  ({
+    content_type: "tool_use",
+    status: "success",
+    tool_call_id: "tool-call-123",
+    tool_name: "search",
+    input: null,
+    output: null,
+    progress_message: null,
+    started_at: startedAt,
+    ended_at: endedAt,
+  }) as ContentPart;
 
 const makeFile = (overrides: Partial<FileUploadItem> = {}): FileUploadItem => ({
   id: "file_123",
@@ -288,6 +314,31 @@ describe("MessageContent", () => {
 
     expect(
       screen.getByRole("button", { name: /^Thought$/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("prefers trace-part timing over message timestamps", () => {
+    renderWithTheme(
+      <MessageContent
+        createdAt="2026-05-07T12:00:00Z"
+        updatedAt="2026-05-07T12:00:30Z"
+        content={[
+          reasoningContent(
+            "I checked the input.",
+            "2026-05-07T12:00:00Z",
+            "2026-05-07T12:00:01Z",
+          ),
+          toolUseContent({
+            startedAt: "2026-05-07T12:00:10Z",
+            endedAt: "2026-05-07T12:00:15Z",
+          }),
+          { content_type: "text", text: "Final answer." },
+        ]}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /Thought for 6s/ }),
     ).toBeInTheDocument();
   });
 

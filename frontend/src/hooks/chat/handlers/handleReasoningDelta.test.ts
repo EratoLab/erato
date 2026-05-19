@@ -225,7 +225,7 @@ describe("reasoning delta streaming handlers", () => {
     );
     expect(reasoningParts).toHaveLength(2);
     for (const part of reasoningParts) {
-      expect(part.text.length).toBeGreaterThan(1);
+      expect((part.text ?? "").length).toBeGreaterThan(1);
     }
   });
 

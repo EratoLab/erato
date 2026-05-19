@@ -3208,12 +3208,24 @@
       },
       "ContentPartReasoning": {
         "type": "object",
-        "required": [
-          "text"
-        ],
         "properties": {
+          "ended_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "started_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
           "text": {
-            "type": "string"
+            "type": "string",
+            "default": ""
           }
         }
       },
@@ -5886,12 +5898,14 @@
       },
       "ToolUse": {
         "type": "object",
-        "required": [
-          "tool_call_id",
-          "status",
-          "tool_name"
-        ],
         "properties": {
+          "ended_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
           "input": {
             "oneOf": [
               {
@@ -5900,7 +5914,8 @@
               {
                 "$ref": "#/components/schemas/Value"
               }
-            ]
+            ],
+            "default": null
           },
           "output": {
             "oneOf": [
@@ -5910,22 +5925,38 @@
               {
                 "$ref": "#/components/schemas/Value"
               }
-            ]
+            ],
+            "default": null
           },
           "progress_message": {
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "default": null
+          },
+          "started_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
           },
           "status": {
-            "$ref": "#/components/schemas/ToolCallStatus"
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ToolCallStatus"
+              }
+            ],
+            "default": "in_progress"
           },
           "tool_call_id": {
-            "type": "string"
+            "type": "string",
+            "default": ""
           },
           "tool_name": {
-            "type": "string"
+            "type": "string",
+            "default": ""
           }
         }
       },

@@ -14,6 +14,8 @@ export {
 export type { ReasoningSegment } from "./hooks/useReasoningSegments";
 export {
   durationBetween,
+  durationFromTraceParts,
+  durationFromTracePartsOrLegacyMessageTimestamps,
   formatThinkingDuration,
   useDurationBetween,
 } from "./hooks/useThinkingDuration";

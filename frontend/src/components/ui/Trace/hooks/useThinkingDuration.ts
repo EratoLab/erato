@@ -1,6 +1,8 @@
 import { t } from "@lingui/core/macro";
 import { useMemo } from "react";
 
+import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+
 const MS_PER_SECOND = 1000;
 const MS_PER_MINUTE = 60 * MS_PER_SECOND;
 const MS_PER_HOUR = 60 * MS_PER_MINUTE;
@@ -41,8 +43,8 @@ export const formatThinkingDuration = (ms: number | null): string | null => {
  * `null` if either is missing or unparseable.
  */
 export const durationBetween = (
-  startIso: string | undefined,
-  endIso: string | undefined,
+  startIso: string | null | undefined,
+  endIso: string | null | undefined,
 ): number | null => {
   if (!startIso || !endIso) return null;
   const start = Date.parse(startIso);
@@ -56,7 +58,50 @@ export const durationBetween = (
  * Hook variant returning a memoized duration in ms between the two timestamps.
  */
 export const useDurationBetween = (
-  startIso: string | undefined,
-  endIso: string | undefined,
+  startIso: string | null | undefined,
+  endIso: string | null | undefined,
 ): number | null =>
   useMemo(() => durationBetween(startIso, endIso), [startIso, endIso]);
+
+/**
+ * Sum reasoning/tool-use part durations from per-part start/end timestamps.
+ */
+export const durationFromTraceParts = (
+  content: readonly ContentPart[],
+): number | null => {
+  let totalMs = 0;
+  let hasTracePart = false;
+
+  for (const part of content) {
+    if (part.content_type !== "reasoning" && part.content_type !== "tool_use") {
+      continue;
+    }
+
+    const duration = durationBetween(part.started_at, part.ended_at);
+    if (duration == null) {
+      continue;
+    }
+
+    hasTracePart = true;
+    totalMs += duration;
+  }
+
+  return hasTracePart && totalMs > 0 ? totalMs : null;
+};
+
+/**
+ * Compute display duration for a trace from per-part timestamps, with a
+ * created/updated message timestamp fallback for legacy content.
+ */
+export const durationFromTracePartsOrLegacyMessageTimestamps = (
+  content: readonly ContentPart[],
+  createdAt: string | undefined,
+  updatedAt: string | undefined,
+): number | null => {
+  const tracePartDurationMs = durationFromTraceParts(content);
+  if (tracePartDurationMs != null) {
+    return tracePartDurationMs;
+  }
+
+  return durationBetween(createdAt, updatedAt);
+};

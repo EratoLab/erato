@@ -175,15 +175,17 @@ impl fmt::Display for MessageRole {
     }
 }
 
-#[derive(Serialize, Deserialize, ToSchema, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, ToSchema, Clone, Debug, PartialEq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolCallStatus {
+    #[default]
     InProgress,
     Success,
     Error,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, Default)]
+#[serde(default)]
 pub struct ToolUse {
     pub tool_call_id: String,
     pub status: ToolCallStatus,
@@ -191,6 +193,10 @@ pub struct ToolUse {
     pub progress_message: Option<String>,
     pub input: Option<JsonValue>,
     pub output: Option<JsonValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ended_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
@@ -218,9 +224,14 @@ pub struct ContentPartText {
     pub text: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, Default)]
+#[serde(default)]
 pub struct ContentPartReasoning {
     pub text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ended_at: Option<String>,
 }
 
 impl From<ContentPartText> for String {
@@ -412,21 +423,21 @@ pub async fn submit_message(
         .await
         .map_err(|e| eyre!("Failed to begin transaction: {}", e))?;
 
-    // Step 1: Set is_message_in_active_thread to false for all messages in the chat
-    let update_all = messages::ActiveModel {
+    // Step 1: Set all existing thread messages as inactive by default.
+    let active_thread_update = messages::ActiveModel {
         is_message_in_active_thread: ActiveValue::Set(false),
         ..Default::default()
     };
 
     messages::Entity::update_many()
-        .set(update_all)
+        .set(active_thread_update)
         .filter(messages::Column::ChatId.eq(*chat_id))
         .exec(&txn)
         .await
-        .map_err(|e| eyre!("Failed to update all messages: {}", e))?;
+        .map_err(|e| eyre!("Failed to update active thread flags: {}", e))?;
 
-    // Step 2: If there's a previous message, recursively set is_message_in_active_thread to true
-    // for all messages in the lineage
+    // Step 2: Identify the lineage that should remain in the active thread.
+    let mut active_thread_ids = Vec::new();
     if let Some(prev_msg_id) = previous_message_id {
         let mut current_msg_id = *prev_msg_id;
 
@@ -435,19 +446,7 @@ pub async fn submit_message(
 
         while !visited_ids.contains(&current_msg_id) {
             visited_ids.insert(current_msg_id);
-
-            // Set the current message to active
-            let update = messages::ActiveModel {
-                id: ActiveValue::Set(current_msg_id),
-                is_message_in_active_thread: ActiveValue::Set(true),
-                ..Default::default()
-            };
-
-            messages::Entity::update(update)
-                .filter(messages::Column::Id.eq(current_msg_id))
-                .exec(&txn)
-                .await
-                .map_err(|e| eyre!("Failed to update message {}: {}", current_msg_id, e))?;
+            active_thread_ids.push(current_msg_id);
 
             // Get the previous message ID
             let message = Messages::find_by_id(current_msg_id)
@@ -488,6 +487,23 @@ pub async fn submit_message(
         .exec_with_returning(&txn)
         .await
         .map_err(|e| eyre!("Failed to insert new message: {}", e))?;
+
+    // Step 4: Reactivate this message and its active lineage.
+    active_thread_ids.push(created_message.id);
+
+    if !active_thread_ids.is_empty() {
+        let active_thread_update = messages::ActiveModel {
+            is_message_in_active_thread: ActiveValue::Set(true),
+            ..Default::default()
+        };
+
+        messages::Entity::update_many()
+            .set(active_thread_update)
+            .filter(messages::Column::Id.is_in(active_thread_ids))
+            .exec(&txn)
+            .await
+            .map_err(|e| eyre!("Failed to reactivate target active thread messages: {}", e))?;
+    }
 
     // Commit the transaction
     txn.commit()

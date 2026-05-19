@@ -6,7 +6,7 @@ import { ToolCallInput, ToolCallOutput } from "@/components/ui/ToolCall";
 import { TraceStep } from "../TraceStep";
 import { railIconFor } from "../icons";
 
-import type { BaseStepProps } from "../types";
+import type { BaseStepProps, TraceStepStatus } from "../types";
 import type { ToolUse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 interface ToolUseStepProps extends BaseStepProps {
@@ -27,7 +27,7 @@ const STATUS_LABEL = {
 } as const;
 
 type StatusWithPill = keyof typeof STATUS_PILL_CLASS;
-const hasPill = (status: string): status is StatusWithPill =>
+const hasPill = (status: TraceStepStatus): status is StatusWithPill =>
   status === "running" || status === "error";
 
 export const ToolUseStep = ({
@@ -37,7 +37,9 @@ export const ToolUseStep = ({
   isCollapsed,
   isLastStep,
 }: ToolUseStepProps) => {
+  const resolvedStatus = part.status;
   const isRunning = status === "running" && isStreaming;
+  const toolName = part.tool_name ?? "";
   const titleSlot = hasPill(status) ? (
     <span
       className={clsx(
@@ -57,13 +59,13 @@ export const ToolUseStep = ({
     // locators don't filter by visibility, only presence.
     <div
       data-testid="tool-call-item"
-      data-tool-name={part.tool_name}
-      data-tool-status={part.status}
+      data-tool-name={toolName}
+      data-tool-status={resolvedStatus}
     >
       <TraceStep
         railIcon={railIconFor(part.content_type, status)}
         hasTrailingRailLine={!isLastStep}
-        title={part.tool_name}
+        title={toolName}
         titleSlot={titleSlot}
         defaultOpen={false}
         autoCollapse={isCollapsed}

@@ -1785,6 +1785,7 @@ mod test_cases {
                             { "id": "doc-1", "citation": "[1]" }
                         ]
                     })),
+                    ..Default::default()
                 }),
                 ContentPart::Text(ContentPartText {
                     text: "Summary with citation [1]".to_string(),
@@ -1903,6 +1904,7 @@ mod test_cases {
                         progress_message: None,
                         input: Some(serde_json::json!({ "query": "source" })),
                         output: None,
+                        ..Default::default()
                     }),
                 },
                 InputMessage {
@@ -1914,6 +1916,7 @@ mod test_cases {
                         progress_message: None,
                         input: None,
                         output: Some(serde_json::json!({ "results": ["doc-1"] })),
+                        ..Default::default()
                     }),
                 },
                 InputMessage {
@@ -1951,6 +1954,7 @@ mod test_cases {
                         progress_message: None,
                         input: Some(serde_json::json!({ "query": "foo" })),
                         output: None,
+                        ..Default::default()
                     }),
                 },
                 InputMessage {
@@ -1962,6 +1966,7 @@ mod test_cases {
                         progress_message: None,
                         input: None,
                         output: Some(serde_json::json!({ "results": ["doc-1"] })),
+                        ..Default::default()
                     }),
                 },
                 InputMessage {
@@ -1973,6 +1978,7 @@ mod test_cases {
                         progress_message: None,
                         input: Some(serde_json::json!({ "id": "doc-1" })),
                         output: None,
+                        ..Default::default()
                     }),
                 },
                 InputMessage {
@@ -1984,6 +1990,7 @@ mod test_cases {
                         progress_message: None,
                         input: None,
                         output: Some(serde_json::json!({ "title": "Doc 1" })),
+                        ..Default::default()
                     }),
                 },
                 InputMessage {
@@ -2021,6 +2028,7 @@ mod test_cases {
                         progress_message: None,
                         input: Some(serde_json::json!({ "query": "foo" })),
                         output: None,
+                        ..Default::default()
                     }),
                 },
                 InputMessage {
@@ -2032,6 +2040,7 @@ mod test_cases {
                         progress_message: None,
                         input: None,
                         output: Some(serde_json::json!({ "results": ["doc-1"] })),
+                        ..Default::default()
                     }),
                 },
                 InputMessage {
@@ -2043,6 +2052,7 @@ mod test_cases {
                         progress_message: None,
                         input: Some(serde_json::json!({ "id": "doc-1" })),
                         output: None,
+                        ..Default::default()
                     }),
                 },
                 InputMessage {
@@ -2054,6 +2064,7 @@ mod test_cases {
                         progress_message: None,
                         input: None,
                         output: Some(serde_json::json!({ "summary": "done" })),
+                        ..Default::default()
                     }),
                 },
                 InputMessage {

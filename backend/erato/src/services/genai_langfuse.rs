@@ -685,6 +685,7 @@ mod tests {
                 progress_message: None,
                 input: Some(json!({"param": "value"})),
                 output: Some(json!({"result": "success"})),
+                ..Default::default()
             }),
         ];
 
