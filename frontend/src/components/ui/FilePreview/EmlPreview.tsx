@@ -5,10 +5,16 @@ import { Letter } from "react-letter";
 
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { formatFileSize } from "@/components/ui/FileUpload/FilePreviewBase";
-import { LoadingIcon, MailIcon, PageIcon } from "@/components/ui/icons";
+import {
+  ArrowLeftIcon,
+  LoadingIcon,
+  MailIcon,
+  PageIcon,
+} from "@/components/ui/icons";
 import { createLogger } from "@/utils/debugLogger";
 
-import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import { FilePreviewContent } from "./FilePreviewContent";
+
 import type { Address, Attachment } from "postal-mime";
 
 const logger = createLogger("UI", "EmlPreview");
@@ -109,12 +115,12 @@ function matchHeader(headerBlock: string, name: string): string | null {
 }
 
 interface EmlPreviewProps {
-  file: Pick<FileUploadItem, "id" | "filename" | "download_url">;
+  filename: string;
+  url: string;
 }
 
-export const EmlPreview: React.FC<EmlPreviewProps> = ({ file }) => {
+export const EmlPreview: React.FC<EmlPreviewProps> = ({ url }) => {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
-  const downloadUrl = file.download_url;
 
   useEffect(() => {
     let aborted = false;
@@ -123,7 +129,7 @@ export const EmlPreview: React.FC<EmlPreviewProps> = ({ file }) => {
     const load = async () => {
       let bytes: ArrayBuffer;
       try {
-        const res = await fetch(downloadUrl);
+        const res = await fetch(url);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         bytes = await res.arrayBuffer();
       } catch (err) {
@@ -187,7 +193,7 @@ export const EmlPreview: React.FC<EmlPreviewProps> = ({ file }) => {
       aborted = true;
       for (const url of blobUrls) URL.revokeObjectURL(url);
     };
-  }, [downloadUrl]);
+  }, [url]);
 
   if (state.kind === "loading") {
     return (
@@ -226,6 +232,7 @@ const EmlPreviewBody: React.FC<{
   parsed: ParsedEml;
 }> = ({ parsed }) => {
   const iframeWrapperRef = useRef<HTMLDivElement>(null);
+  const [selected, setSelected] = useState<ParsedAttachment | null>(null);
 
   const rewriteResources = useMemo(
     () => (url: string) => {
@@ -280,26 +287,51 @@ const EmlPreviewBody: React.FC<{
         cc={parsed.cc}
         date={parsed.date}
       />
-      {parsed.html ? (
-        <div ref={iframeWrapperRef} data-testid="eml-preview-html">
-          <Letter
-            html={parsed.html}
-            text={parsed.text || undefined}
-            useIframe={true}
-            iframeTitle={parsed.subject ?? t`Email preview`}
-            rewriteExternalResources={rewriteResources}
-          />
+      {selected ? (
+        <div
+          data-testid="eml-attachment-preview"
+          className="flex flex-col gap-3"
+        >
+          <button
+            type="button"
+            onClick={() => setSelected(null)}
+            className="inline-flex w-fit items-center gap-1.5 rounded text-sm font-medium text-[var(--theme-fg-secondary)] hover:text-[var(--theme-fg-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-fg-accent)]"
+          >
+            <ArrowLeftIcon className="size-4" />
+            {t`Back to email`}
+          </button>
+          <div className="truncate text-sm text-[var(--theme-fg-muted)]">
+            {selected.filename}
+          </div>
+          <FilePreviewContent filename={selected.filename} url={selected.blobUrl} />
         </div>
       ) : (
-        <pre
-          data-testid="eml-preview-text"
-          className="max-h-[60vh] overflow-auto whitespace-pre-wrap rounded border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-accent)] p-3 text-sm text-[var(--theme-fg-primary)]"
-        >
-          {parsed.text || t`(no body)`}
-        </pre>
-      )}
-      {parsed.attachments.length > 0 && (
-        <EmlAttachmentList attachments={parsed.attachments} />
+        <>
+          {parsed.html ? (
+            <div ref={iframeWrapperRef} data-testid="eml-preview-html">
+              <Letter
+                html={parsed.html}
+                text={parsed.text || undefined}
+                useIframe={true}
+                iframeTitle={parsed.subject ?? t`Email preview`}
+                rewriteExternalResources={rewriteResources}
+              />
+            </div>
+          ) : (
+            <pre
+              data-testid="eml-preview-text"
+              className="max-h-[60vh] overflow-auto whitespace-pre-wrap rounded border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-accent)] p-3 text-sm text-[var(--theme-fg-primary)]"
+            >
+              {parsed.text || t`(no body)`}
+            </pre>
+          )}
+          {parsed.attachments.length > 0 && (
+            <EmlAttachmentList
+              attachments={parsed.attachments}
+              onSelect={setSelected}
+            />
+          )}
+        </>
       )}
     </div>
   );
@@ -355,9 +387,10 @@ const EmlHeader: React.FC<{
   );
 };
 
-const EmlAttachmentList: React.FC<{ attachments: ParsedAttachment[] }> = ({
-  attachments,
-}) => {
+const EmlAttachmentList: React.FC<{
+  attachments: ParsedAttachment[];
+  onSelect: (attachment: ParsedAttachment) => void;
+}> = ({ attachments, onSelect }) => {
   return (
     <ul
       data-testid="eml-preview-attachments"
@@ -366,13 +399,11 @@ const EmlAttachmentList: React.FC<{ attachments: ParsedAttachment[] }> = ({
     >
       {attachments.map((att, index) => (
         <li key={`${att.filename}-${index}`} className="min-w-0">
-          <a
-            href={att.blobUrl}
-            download={att.filename}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            type="button"
+            onClick={() => onSelect(att)}
             title={att.filename}
-            className="flex min-w-0 items-center gap-2 rounded-xl border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-primary)] px-3 py-2 shadow-sm transition-colors hover:bg-[var(--theme-bg-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-fg-accent)]"
+            className="flex min-w-0 items-center gap-2 rounded-xl border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-primary)] px-3 py-2 text-left shadow-sm transition-colors hover:bg-[var(--theme-bg-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-fg-accent)]"
           >
             <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--theme-bg-accent)] text-[var(--theme-fg-secondary)]">
               <PageIcon className="size-4" />
@@ -386,7 +417,7 @@ const EmlAttachmentList: React.FC<{ attachments: ParsedAttachment[] }> = ({
                 {att.size > 0 ? ` • ${formatFileSize(att.size)}` : ""}
               </div>
             </div>
-          </a>
+          </button>
         </li>
       ))}
     </ul>

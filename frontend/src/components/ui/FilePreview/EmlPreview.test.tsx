@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
@@ -11,9 +11,8 @@ const renderEml = (ui: React.ReactElement) =>
   render(<ThemeProvider>{ui}</ThemeProvider>);
 
 const FILE = {
-  id: "file_eml_1",
   filename: "message.eml",
-  download_url: "https://files.example.com/message.eml",
+  url: "https://files.example.com/message.eml",
 };
 
 const stringToBuffer = (s: string): ArrayBuffer => {
@@ -122,7 +121,7 @@ const INLINE_IMAGE_EML = [
 describe("EmlPreview", () => {
   it("renders parsed headers and a sandboxed iframe for HTML body", async () => {
     mockFetchEml(HTML_EML);
-    renderEml(<EmlPreview file={FILE} />);
+    renderEml(<EmlPreview filename={FILE.filename} url={FILE.url} />);
 
     await waitFor(() =>
       expect(screen.getByTestId("eml-preview")).toBeInTheDocument(),
@@ -149,7 +148,7 @@ describe("EmlPreview", () => {
 
   it("falls back to text body when no HTML part is present", async () => {
     mockFetchEml(TEXT_EML);
-    renderEml(<EmlPreview file={FILE} />);
+    renderEml(<EmlPreview filename={FILE.filename} url={FILE.url} />);
 
     await waitFor(() =>
       expect(screen.getByTestId("eml-preview-text")).toBeInTheDocument(),
@@ -160,9 +159,33 @@ describe("EmlPreview", () => {
     expect(screen.queryByTestId("eml-preview-html")).not.toBeInTheDocument();
   });
 
+  it("opens a clicked attachment in the inline preview with a back button", async () => {
+    mockFetchEml(INLINE_IMAGE_EML);
+    renderEml(<EmlPreview filename={FILE.filename} url={FILE.url} />);
+
+    const attachmentButton = await screen.findByRole("button", {
+      name: /logo\.png/,
+    });
+    fireEvent.click(attachmentButton);
+
+    expect(screen.getByTestId("eml-attachment-preview")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("eml-preview-attachments"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("eml-preview-html")).not.toBeInTheDocument();
+
+    const backButton = screen.getByRole("button", { name: "Back to email" });
+    fireEvent.click(backButton);
+
+    expect(
+      screen.queryByTestId("eml-attachment-preview"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("eml-preview-attachments")).toBeInTheDocument();
+  });
+
   it("rewrites inline cid: image references to blob URLs", async () => {
     mockFetchEml(INLINE_IMAGE_EML);
-    renderEml(<EmlPreview file={FILE} />);
+    renderEml(<EmlPreview filename={FILE.filename} url={FILE.url} />);
 
     await waitFor(() =>
       expect(screen.getByTestId("eml-preview-html")).toBeInTheDocument(),
@@ -180,7 +203,7 @@ describe("EmlPreview", () => {
   it("renders without crashing when fed a malformed MIME body", async () => {
     const malformed = new Uint8Array([0xff, 0xfe, 0x00, 0x01, 0x02]).buffer;
     mockFetchEml(malformed);
-    renderEml(<EmlPreview file={FILE} />);
+    renderEml(<EmlPreview filename={FILE.filename} url={FILE.url} />);
 
     // Either an explicit error fallback or a ready-but-empty preview is
     // acceptable here; postal-mime is permissive enough that some garbage
@@ -194,7 +217,7 @@ describe("EmlPreview", () => {
 
   it("shows a preview-unavailable fallback when fetch fails", async () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 500 });
-    renderEml(<EmlPreview file={FILE} />);
+    renderEml(<EmlPreview filename={FILE.filename} url={FILE.url} />);
 
     await waitFor(() =>
       expect(screen.getByTestId("eml-preview-error")).toBeInTheDocument(),
