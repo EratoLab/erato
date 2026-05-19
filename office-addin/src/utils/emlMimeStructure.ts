@@ -91,16 +91,12 @@ function parsePart(
   const { value: contentType, params: contentTypeParams } = parseStructured(
     ctHeader?.value ?? "",
   );
-  const {
-    value: contentDispositionValue,
-    params: contentDispositionParams,
-  } = parseStructured(cdHeader?.value ?? "");
+  const { value: contentDispositionValue, params: contentDispositionParams } =
+    parseStructured(cdHeader?.value ?? "");
   const contentDisposition = contentDispositionValue || null;
   const lowerCt = contentType.toLowerCase();
   const isMultipart = lowerCt.startsWith("multipart/");
-  const boundary = isMultipart
-    ? contentTypeParams.boundary ?? null
-    : null;
+  const boundary = isMultipart ? (contentTypeParams.boundary ?? null) : null;
   const children: MimePart[] = [];
   if (isMultipart && boundary) {
     children.push(
@@ -128,7 +124,11 @@ interface HeaderEnd {
   bodyStart: number;
 }
 
-function findHeaderEnd(bytes: Uint8Array, start: number, end: number): HeaderEnd {
+function findHeaderEnd(
+  bytes: Uint8Array,
+  start: number,
+  end: number,
+): HeaderEnd {
   // Look for the first blank line: CRLFCRLF or LFLF.
   for (let i = start; i < end - 1; i++) {
     if (
@@ -147,13 +147,20 @@ function findHeaderEnd(bytes: Uint8Array, start: number, end: number): HeaderEnd
   return { headersEnd: end, bodyStart: end };
 }
 
-function parseHeaders(bytes: Uint8Array, start: number, end: number): MimeHeader[] {
+function parseHeaders(
+  bytes: Uint8Array,
+  start: number,
+  end: number,
+): MimeHeader[] {
   const text = decodeAscii(bytes, start, end);
   const lines = text.split(/\r?\n/);
   const unfolded: string[] = [];
   for (const line of lines) {
     if (line.length === 0) continue;
-    if ((line.startsWith(" ") || line.startsWith("\t")) && unfolded.length > 0) {
+    if (
+      (line.startsWith(" ") || line.startsWith("\t")) &&
+      unfolded.length > 0
+    ) {
       unfolded[unfolded.length - 1] += " " + line.trim();
     } else {
       unfolded.push(line);
@@ -170,7 +177,10 @@ function parseHeaders(bytes: Uint8Array, start: number, end: number): MimeHeader
   return result;
 }
 
-function findHeader(headers: MimeHeader[], name: string): MimeHeader | undefined {
+function findHeader(
+  headers: MimeHeader[],
+  name: string,
+): MimeHeader | undefined {
   return headers.find((header) => header.name === name);
 }
 
@@ -232,12 +242,7 @@ function splitMultipart(
   // ("--boundary\r\n" or "--boundary\n") or closes the multipart
   // ("--boundary--").
   const boundaryBytes = encodeAscii(boundary);
-  const delimiters = findDelimiters(
-    bytes,
-    bodyStart,
-    bodyEnd,
-    boundaryBytes,
-  );
+  const delimiters = findDelimiters(bytes, bodyStart, bodyEnd, boundaryBytes);
   const children: MimePart[] = [];
   for (let i = 0; i < delimiters.length - 1; i++) {
     const current = delimiters[i];

@@ -68,15 +68,23 @@ describe("parseMimeStructure", () => {
     // delimiterStart of each child points at the introducing "--X" line.
     const decoder = new TextDecoder();
     const bodyDelimiter = decoder.decode(
-      raw.subarray(body.delimiterStart!, body.delimiterStart! + boundary.length + 2),
+      raw.subarray(
+        body.delimiterStart!,
+        body.delimiterStart! + boundary.length + 2,
+      ),
     );
     expect(bodyDelimiter).toBe(`--${boundary}`);
     const pdfDelimiter = decoder.decode(
-      raw.subarray(pdf.delimiterStart!, pdf.delimiterStart! + boundary.length + 2),
+      raw.subarray(
+        pdf.delimiterStart!,
+        pdf.delimiterStart! + boundary.length + 2,
+      ),
     );
     expect(pdfDelimiter).toBe(`--${boundary}`);
     // pdf.end should point at the closing "--X--" delimiter (the next boundary).
-    const afterPdf = decoder.decode(raw.subarray(pdf.end, pdf.end + boundary.length + 4));
+    const afterPdf = decoder.decode(
+      raw.subarray(pdf.end, pdf.end + boundary.length + 4),
+    );
     expect(afterPdf).toBe(`--${boundary}--`);
   });
 
@@ -130,12 +138,9 @@ describe("parseMimeStructure", () => {
 
     const root = parseMimeStructure(bytes(eml));
     const leaves = listLeafParts(root!);
-    expect(leaves.map((p) => p.contentDispositionParams.filename ?? p.contentType)).toEqual([
-      "text/plain",
-      "text/html",
-      "a.pdf",
-      "b.pdf",
-    ]);
+    expect(
+      leaves.map((p) => p.contentDispositionParams.filename ?? p.contentType),
+    ).toEqual(["text/plain", "text/html", "a.pdf", "b.pdf"]);
   });
 
   it("unfolds RFC 5322 header continuation lines", () => {

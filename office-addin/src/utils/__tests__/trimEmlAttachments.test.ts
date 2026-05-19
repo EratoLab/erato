@@ -100,6 +100,46 @@ describe("trimEmlAttachments", () => {
     expect(reparsed.text?.trim()).toBe("please review");
   });
 
+  it("removes all attachments at once leaving only the body", async () => {
+    const input = bytesFromString(buildMultiAttachmentEml());
+    const trimmed = trimEmlAttachments(input, [0, 1, 2]);
+    expect(trimmed).not.toBeNull();
+    const reparsed = await PostalMime.parse(trimmed!);
+    expect(reparsed.attachments ?? []).toEqual([]);
+    expect(reparsed.text?.trim()).toBe("please review");
+  });
+
+  it("preserves mixed Content-Transfer-Encoding values byte-for-byte on kept parts", async () => {
+    const boundary = "Y";
+    const eml =
+      `From: a@x${CRLF}` +
+      `Content-Type: multipart/mixed; boundary="${boundary}"${CRLF}${CRLF}` +
+      `--${boundary}${CRLF}` +
+      `Content-Type: text/plain; charset=utf-8${CRLF}` +
+      `Content-Transfer-Encoding: quoted-printable${CRLF}${CRLF}` +
+      `caf=C3=A9${CRLF}` +
+      `--${boundary}${CRLF}` +
+      `Content-Type: application/pdf; name="a.pdf"${CRLF}` +
+      `Content-Disposition: attachment; filename="a.pdf"${CRLF}` +
+      `Content-Transfer-Encoding: base64${CRLF}${CRLF}` +
+      `${btoa("PDF-A")}${CRLF}` +
+      `--${boundary}${CRLF}` +
+      `Content-Type: application/pdf; name="b.pdf"${CRLF}` +
+      `Content-Disposition: attachment; filename="b.pdf"${CRLF}` +
+      `Content-Transfer-Encoding: base64${CRLF}${CRLF}` +
+      `${btoa("PDF-B")}${CRLF}` +
+      `--${boundary}--${CRLF}`;
+
+    const input = bytesFromString(eml);
+    const trimmed = trimEmlAttachments(input, [1]);
+    expect(trimmed).not.toBeNull();
+    const reparsed = await PostalMime.parse(trimmed!);
+    expect(reparsed.text?.trim()).toBe("café"); // quoted-printable still decodes
+    expect((reparsed.attachments ?? []).map((a) => a.filename)).toEqual([
+      "a.pdf",
+    ]);
+  });
+
   it("keeps multipart/related inline images when their index isn't dismissed", async () => {
     const outer = "OUTER";
     const inner = "INNER";
