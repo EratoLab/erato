@@ -65,6 +65,7 @@ export function ChatInputAudioModeButton(props: ChatInputAudioModeButtonProps) {
       onClick={props.onToggle}
       disabled={props.disabled}
       aria-label={t`Start audio mode`}
+      title={t`Start audio mode`}
       data-testid="chat-input-audio-mode-start"
       icon={
         <Waveform
