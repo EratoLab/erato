@@ -1,5 +1,5 @@
 use crate::actors::manager::ActorManager;
-use crate::config::{AppConfig, ChatProviderConfig, PromptSourceSpecification};
+use crate::config::{AppConfig, ChatProviderConfig, PromptSourceSpecification, SummaryConfig};
 use crate::policy::engine::PolicyEngine;
 use crate::policy::types::Subject;
 use crate::query_metrics::install_postgres_query_metrics;
@@ -34,6 +34,7 @@ use tokio::sync::{RwLock, Semaphore};
 use tracing::instrument;
 
 const ENCRYPTED_VALUE_PREFIX: &str = "enc-v1";
+const DEFAULT_SUMMARY_SYSTEM_PROMPT: &str = "Generate a summary for the topic of the following chat, based on the first message to the chat. The summary should be a short single sentence description like e.g. `Regex Search-and-Replace with Ripgrep` or `Explain a customer support handoff`. Only return that sentence and nothing else.";
 
 /// Wrapper around PolicyEngine that tracks when it was last rebuilt
 /// This is used for the global policy engine instance in AppState
@@ -740,6 +741,45 @@ impl AppState {
         // No system prompt configured
         tracing::debug!("No system prompt configured");
         Ok(None)
+    }
+
+    /// Get the system prompt for summary generation.
+    /// This resolves either a configured summary prompt or falls back to
+    /// the built-in summary instruction.
+    pub async fn get_summary_system_prompt(
+        &self,
+        config: Option<&SummaryConfig>,
+        preferred_language: Option<&str>,
+        user_preference_nickname: Option<&str>,
+        user_preference_job_title: Option<&str>,
+        user_preference_assistant_custom_instructions: Option<&str>,
+        user_preference_assistant_additional_information: Option<&str>,
+    ) -> Result<String, Report> {
+        let ctx = SystemPromptContext {
+            preferred_language,
+            user_preference_nickname,
+            user_preference_job_title,
+            user_preference_assistant_custom_instructions,
+            user_preference_assistant_additional_information,
+        };
+
+        let Some(config) = config else {
+            return Ok(DEFAULT_SUMMARY_SYSTEM_PROMPT.to_string());
+        };
+
+        let Some(summary_prompt) = &config.system_prompt else {
+            return Ok(DEFAULT_SUMMARY_SYSTEM_PROMPT.to_string());
+        };
+
+        let resolved_prompt = self.resolve_prompt_source(summary_prompt).await?;
+        let rendered_prompt = self.system_prompt_renderer.render(&resolved_prompt, &ctx);
+        tracing::debug!(
+            original_length = resolved_prompt.len(),
+            rendered_length = rendered_prompt.len(),
+            "Using summary system prompt (rendered)"
+        );
+
+        Ok(rendered_prompt)
     }
 
     /// Resolve a prompt source specification into a concrete prompt string.

@@ -1060,6 +1060,7 @@ impl AppConfig {
                 .providers
                 .values()
                 .any(|p| p.uses_langfuse_system_prompt())
+                || chat_providers.summary.uses_langfuse_system_prompt()
         } else if let Some(chat_provider) = &self.chat_provider {
             // Fallback to single provider for backward compatibility
             chat_provider.uses_langfuse_system_prompt()
@@ -1288,9 +1289,21 @@ pub struct SummaryConfig {
     // The chat provider ID to use for summary generation.
     // If not specified, uses the highest priority chat provider.
     pub summary_chat_provider_id: Option<String>,
+    // Optional prompt to use for summary generation.
+    // Accepts a prompt source specification (string or object).
+    pub system_prompt: Option<PromptSourceSpecification>,
     // Maximum output tokens for summary generation.
     // Defaults to 300 if not specified.
     pub max_tokens: Option<u32>,
+}
+
+impl SummaryConfig {
+    /// Returns true if this summary configuration uses Langfuse for the prompt.
+    pub fn uses_langfuse_system_prompt(&self) -> bool {
+        self.system_prompt
+            .as_ref()
+            .is_some_and(PromptSourceSpecification::uses_langfuse)
+    }
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
