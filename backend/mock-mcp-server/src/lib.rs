@@ -47,6 +47,7 @@ const FORWARDED_ACCESS_ALLOWED_GROUP: &str = "mcp-auth-forwarded-access";
 const FORWARDED_OIDC_ALLOWED_SUBJECTS: &[&str] =
     &["allowed-user", "08a8684b-db88-4b73-90a9-3cd166300004"];
 const FORWARDED_OIDC_ALLOWED_GROUP: &str = "mcp-auth-forwarded-oidc";
+const CAT_IMAGE_BASE64: &str = include_str!("../../mock-llm-server/image_data/cat_image.base64");
 
 #[derive(Debug, Clone, Serialize)]
 struct MechanismSummary {
@@ -64,6 +65,50 @@ struct ListFilesResult {
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 struct ReadFileParams {
     path: String,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+struct ImageGenerationParams {
+    /// Text prompt for image generation.
+    prompt: String,
+    /// Optional width of the generated image (default: 1024).
+    #[serde(default = "default_image_width")]
+    width: Option<u32>,
+    /// Optional height of the generated image (default: 1024).
+    #[serde(default = "default_image_height")]
+    height: Option<u32>,
+    /// Number of images to generate (default: 1).
+    #[serde(default = "default_num_images")]
+    num_images: Option<u32>,
+}
+
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+struct GeneratedImage {
+    #[schemars(extend(
+        "contentEncoding" = "base64",
+        "chat.erato/file_content_field" = true
+    ))]
+    data_base64: String,
+    width: u32,
+    height: u32,
+    mime_type: String,
+}
+
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+struct ImageGenerationResponse {
+    images: Vec<GeneratedImage>,
+}
+
+fn default_image_width() -> Option<u32> {
+    Some(1024)
+}
+
+fn default_image_height() -> Option<u32> {
+    Some(1024)
+}
+
+fn default_num_images() -> Option<u32> {
+    Some(1)
 }
 
 fn list_mock_files() -> Vec<String> {
@@ -346,6 +391,85 @@ impl ServerHandler for ContentFilterFileServer {
 
     fn get_info(&self) -> ServerInfo {
         server_info("Mock MCP content filter simulation server")
+    }
+}
+
+#[derive(Clone)]
+struct ImageGenerationServer {
+    #[allow(dead_code)]
+    tool_router: ToolRouter<Self>,
+}
+
+impl ImageGenerationServer {
+    fn new() -> Self {
+        Self {
+            tool_router: Self::tool_router(),
+        }
+    }
+}
+
+#[tool_router]
+impl ImageGenerationServer {
+    #[tool(
+        description = "Generate images from text prompts. Returns base64-encoded image data in the data_base64 field (no data URI prefix).",
+        output_schema = rmcp::handler::server::tool::schema_for_type::<ImageGenerationResponse>()
+    )]
+    fn generate_image(
+        &self,
+        Parameters(params): Parameters<ImageGenerationParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let _ = (params.width, params.height, params.num_images);
+        let data_base64 = CAT_IMAGE_BASE64.trim().to_string();
+        let response = ImageGenerationResponse {
+            images: vec![GeneratedImage {
+                data_base64,
+                width: 500,
+                height: 500,
+                mime_type: "image/png".to_string(),
+            }],
+        };
+        let structured_content = serde_json::to_value(&response).map_err(|err| {
+            McpError::internal_error(
+                format!("Failed to serialize image generation response: {err}"),
+                None,
+            )
+        })?;
+        let prompt_tokens = (params.prompt.len() as u64) * 4;
+        let meta = Meta(serde_json::Map::from_iter([(
+            "chat.erato/token_usage".to_string(),
+            json!({
+                "total_prompt_tokens": prompt_tokens,
+                "total_completion_tokens": 0,
+                "total_tokens": prompt_tokens,
+                "model_identifier": "mock/v1",
+            }),
+        )]));
+
+        Ok(CallToolResult::structured(structured_content).with_meta(Some(meta)))
+    }
+}
+
+impl ServerHandler for ImageGenerationServer {
+    fn call_tool(
+        &self,
+        request: CallToolRequestParams,
+        context: RequestContext<RoleServer>,
+    ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
+        call_tool_from_router(self, &self.tool_router, request, context)
+    }
+
+    fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
+        std::future::ready(Ok(list_tools_from_router(&self.tool_router)))
+    }
+
+    fn get_info(&self) -> ServerInfo {
+        server_info(
+            "Image Generation MCP Server - Generate images from text prompts using configurable backends",
+        )
     }
 }
 
@@ -787,6 +911,12 @@ fn builtin_mechanisms() -> Vec<MechanismSummary> {
             tools: &["trigger_content_filter"],
         },
         MechanismSummary {
+            name: "Image generation server",
+            description: "Provides generate_image and returns the shared cat image fixture",
+            endpoint: "Streamable HTTP /mcp/image-generation",
+            tools: &["generate_image"],
+        },
+        MechanismSummary {
             name: "500 simulation endpoint",
             description: "Always returns HTTP 500 to simulate an unavailable MCP server",
             endpoint: "HTTP /mcp/list-tools-500",
@@ -854,6 +984,11 @@ fn log_startup(addr: &str, mechanisms: &[MechanismSummary]) {
     );
     println!(
         "  {} {}",
+        "MCP HTTP".bright_cyan(),
+        "/mcp/image-generation".bright_yellow()
+    );
+    println!(
+        "  {} {}",
         "HTTP".bright_cyan(),
         "/mcp/list-tools-500".bright_yellow()
     );
@@ -900,6 +1035,8 @@ pub fn app() -> Router {
     let progress_service = create_streamable_http_service(|| Ok(ProgressFileServer::new()));
     let content_filter_service =
         create_streamable_http_service(|| Ok(ContentFilterFileServer::new()));
+    let image_generation_service =
+        create_streamable_http_service(|| Ok(ImageGenerationServer::new()));
 
     let none_auth_service = create_streamable_http_service(|| Ok(NoneAuthProbeServer::new()));
     let fixed_auth_service = create_streamable_http_service(|| Ok(FixedApiKeyProbeServer::new()));
@@ -923,6 +1060,7 @@ pub fn app() -> Router {
         .nest_service("/mcp/error", error_service)
         .nest_service("/mcp/progress", progress_service)
         .nest_service("/mcp/content-filter", content_filter_service)
+        .nest_service("/mcp/image-generation", image_generation_service)
         .route(
             "/mcp/auth-none",
             any(move |request| {

@@ -93,6 +93,14 @@ const schemaStringFieldFixes = [
     from: "content_type?: null | undefined;",
     to: "content_type?: string | null | undefined;",
   },
+  {
+    from: "download_url?: null | undefined;",
+    to: "download_url?: string | null | undefined;",
+  },
+  {
+    from: "preview_url?: null | undefined;",
+    to: "preview_url?: string | null | undefined;",
+  },
 ];
 
 async function patchVoidTypes(filePath) {

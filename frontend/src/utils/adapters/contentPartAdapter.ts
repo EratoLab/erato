@@ -71,7 +71,7 @@ export function extractImagesFromContent(
         };
         return {
           type: "image" as const,
-          src: pointerPart.download_url,
+          src: pointerPart.preview_url ?? pointerPart.download_url ?? "",
           id: pointerPart.file_upload_id,
           fileUploadId: pointerPart.file_upload_id,
         };
@@ -157,7 +157,7 @@ export function parseContent(content?: ContentPart[] | null): {
       };
       images.push({
         type: "image" as const,
-        src: pointerPart.download_url,
+        src: pointerPart.preview_url ?? pointerPart.download_url ?? "",
         id: pointerPart.file_upload_id,
         fileUploadId: pointerPart.file_upload_id,
       });

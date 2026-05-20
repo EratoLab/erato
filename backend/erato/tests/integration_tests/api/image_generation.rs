@@ -319,7 +319,7 @@ async fn test_image_generation(pool: Pool<Postgres>) {
         "Content should be an image_file_pointer"
     );
 
-    // Verify the ImageFilePointer has both file_upload_id and download_url
+    // Verify the ImageFilePointer has a stable file_upload_id plus hydrated URLs.
     assert!(
         image_content["file_upload_id"].is_string(),
         "ImageFilePointer should have file_upload_id"
@@ -328,14 +328,22 @@ async fn test_image_generation(pool: Pool<Postgres>) {
         image_content["download_url"].is_string(),
         "ImageFilePointer should have download_url"
     );
+    assert!(
+        image_content["preview_url"].is_string(),
+        "ImageFilePointer should have preview_url"
+    );
 
     let download_url = image_content["download_url"]
         .as_str()
         .expect("download_url should be a string");
     assert!(!download_url.is_empty(), "download_url should not be empty");
+    let preview_url = image_content["preview_url"]
+        .as_str()
+        .expect("preview_url should be a string");
+    assert!(!preview_url.is_empty(), "preview_url should not be empty");
 
     println!(
-        "Image generated successfully with download_url: {}",
-        download_url
+        "Image generated successfully with download_url: {}, preview_url: {}",
+        download_url, preview_url
     );
 }

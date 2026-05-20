@@ -560,7 +560,8 @@ pub async fn resolve_sequence(
                 let content = if is_image {
                     ContentPart::ImageFilePointer(ContentPartImageFilePointer {
                         file_upload_id: file_id,
-                        download_url: String::new(),
+                        download_url: None,
+                        preview_url: None,
                     })
                 } else {
                     ContentPart::TextFilePointer(ContentPartTextFilePointer {
