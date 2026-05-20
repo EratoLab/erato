@@ -534,6 +534,7 @@ supports_image_understanding = true
 supports_reasoning = false
 supports_reasoning_summary = true
 supports_encrypted_reasoning_content = true
+supports_audio_input = false
 supports_verbosity = false
 cost_input_tokens_per_1m = 5.0
 cost_output_tokens_per_1m = 15.0
@@ -543,6 +544,7 @@ cost_output_tokens_per_1m = 15.0
 
 - **`context_size_tokens`** _(default: 1000000)_ - Maximum number of tokens that may be provided to the model including input messages, system prompt, and files
 - **`supports_image_understanding`** _(default: false)_ - Whether the model supports being provided with images for understanding
+- **`supports_audio_input`** _(default: false)_ - Whether the model supports binary audio input for the audio transcription, dictation, and conversational audio modes
 - **`supports_reasoning`** _(default: false)_ - Whether the model supports reasoning mode (e.g., OpenAI o1 family)
 - **`supports_reasoning_summary`** _(default: true)_ - Whether the model supports returning reasoning summaries when reasoning is enabled
 - **`supports_encrypted_reasoning_content`** _(default: true)_ - Whether the model supports requesting encrypted reasoning content for stateless reasoning replay
@@ -1079,6 +1081,125 @@ cd e2e-tests
 ```
 
 This creates a PDF with 20 pages, each containing unique identifiers like `PAGE-001`, `PAGE-002`, etc.
+
+### Audio modes
+
+Erato has three independently configurable audio modes. All three use the same configuration fields, but they control different user workflows:
+
+- `audio_transcription` enables recording or uploading audio as a file attachment with transcription metadata.
+- `audio_dictation` enables microphone dictation that writes transcribed text into the chat input without creating an attachment.
+- `audio_conversational` enables hands-free conversational audio mode with voice activity detection, auto-send, and restart behavior.
+
+Each enabled audio mode needs an audio-capable chat provider. Either set `chat_provider_id` on the audio mode, or omit it to let Erato pick the first provider in `chat_providers.priority_order` with `model_capabilities.supports_audio_input = true`. Provider kinds using the OpenAI Responses adapters do not currently support binary audio input for these modes.
+
+**Type:** `object | None`
+
+**Default behavior:** All audio modes are disabled.
+
+#### `audio_transcription`
+
+Controls the audio attachment transcription flow.
+
+**Example:**
+
+```toml
+[audio_transcription]
+enabled = true
+chat_provider_id = "audio-model"
+max_recording_duration_seconds = 1200
+chunk_duration_seconds = 30
+max_attempts = 3
+initial_backoff_ms = 250
+max_backoff_ms = 4000
+min_words_for_loop_check = 80
+min_unique_word_ratio = 0.25
+max_words_per_minute = 200
+tokens_per_word = 1.5
+output_token_buffer_factor = 2.0
+fixed_output_token_budget = 500
+min_output_tokens = 32
+max_output_tokens = 2048
+```
+
+#### `audio_dictation`
+
+Controls the microphone dictation flow that populates the chat input without creating an attachment.
+
+**Example:**
+
+```toml
+[audio_dictation]
+enabled = true
+chat_provider_id = "audio-model"
+max_recording_duration_seconds = 1200
+chunk_duration_seconds = 30
+max_attempts = 3
+initial_backoff_ms = 250
+max_backoff_ms = 4000
+min_words_for_loop_check = 80
+min_unique_word_ratio = 0.25
+max_words_per_minute = 200
+tokens_per_word = 1.5
+output_token_buffer_factor = 2.0
+fixed_output_token_budget = 500
+min_output_tokens = 32
+max_output_tokens = 2048
+```
+
+#### `audio_conversational`
+
+Controls hands-free microphone dictation with voice activity detection, auto-send, and automatic restart after responses. This mode uses the dictation websocket protocol, but has independent provider, chunking, retry, and duration settings. Enable it separately from `audio_dictation`.
+
+**Example:**
+
+```toml
+[audio_conversational]
+enabled = true
+chat_provider_id = "audio-model"
+max_recording_duration_seconds = 1200
+chunk_duration_seconds = 30
+max_attempts = 3
+initial_backoff_ms = 250
+max_backoff_ms = 4000
+min_words_for_loop_check = 80
+min_unique_word_ratio = 0.25
+max_words_per_minute = 200
+tokens_per_word = 1.5
+output_token_buffer_factor = 2.0
+fixed_output_token_budget = 500
+min_output_tokens = 32
+max_output_tokens = 2048
+```
+
+#### Audio mode fields
+
+- **`enabled`** _(default: false)_ - Whether this audio mode is available.
+- **`chat_provider_id`** _(default: None)_ - Optional provider ID to use for this audio mode. If omitted, Erato uses the first compatible audio-capable provider from the configured provider priority order.
+- **`max_recording_duration_seconds`** _(default: 1200)_ - Maximum recording duration in seconds.
+- **`chunk_duration_seconds`** _(default: 30)_ - Audio chunk duration in seconds. This must be greater than 0 and no larger than `max_recording_duration_seconds`.
+- **`max_attempts`** _(default: 3)_ - Maximum provider attempts per chunk, including retry attempts for detected hallucination loops.
+- **`initial_backoff_ms`** _(default: 250)_ - Initial retry backoff in milliseconds.
+- **`max_backoff_ms`** _(default: 4000)_ - Maximum retry backoff in milliseconds.
+- **`min_words_for_loop_check`** _(default: 80)_ - Minimum transcript word count before loop detection runs.
+- **`min_unique_word_ratio`** _(default: 0.25)_ - Minimum unique-word ratio accepted for non-loop transcripts. Must be between `0.0` and `1.0`.
+- **`max_words_per_minute`** _(default: 200)_ - Assumed maximum speech rate used to derive per-chunk output token budgets.
+- **`tokens_per_word`** _(default: 1.5)_ - Token-per-word multiplier used to derive per-chunk output token budgets.
+- **`output_token_buffer_factor`** _(default: 2.0)_ - Safety multiplier used to derive per-chunk output token budgets.
+- **`fixed_output_token_budget`** _(default: 500)_ - Fixed output token budget added to the per-chunk heuristic.
+- **`min_output_tokens`** _(default: None)_ - Optional minimum output token budget for transcription chunks.
+- **`max_output_tokens`** _(default: None)_ - Optional maximum output token cap for transcription chunks. If both minimum and maximum are configured, `min_output_tokens` must be less than or equal to `max_output_tokens`.
+
+**Provider example:**
+
+```toml
+[chat_providers.providers.audio-model]
+provider_kind = "openai"
+model_name = "gpt-4o-audio-preview"
+api_key = "sk-..."
+
+[chat_providers.providers.audio-model.model_capabilities]
+supports_audio_input = true
+```
 
 ### `model_permissions`
 
