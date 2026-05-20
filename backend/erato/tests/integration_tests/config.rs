@@ -1375,6 +1375,7 @@ priority_order = ["primary", "summarizer"]
 [chat_providers.summary]
 summary_chat_provider_id = "summarizer"
 max_tokens = 150
+system_prompt = "Summarize this with title-case output and include locale {{erato_inject_preferred_language_code}}."
 
 [chat_providers.providers.primary]
 provider_kind = "openai"
@@ -1430,6 +1431,16 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
         Some("summarizer".to_string())
     );
     assert_eq!(chat_providers.summary.max_tokens, Some(150));
+    assert_eq!(
+        chat_providers
+            .summary
+            .system_prompt
+            .as_ref()
+            .and_then(|prompt| prompt.static_content()),
+        Some(
+            "Summarize this with title-case output and include locale {{erato_inject_preferred_language_code}}."
+        )
+    );
 
     // Verify the summarizer provider exists
     assert!(chat_providers.providers.contains_key("summarizer"));

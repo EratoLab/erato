@@ -23,6 +23,10 @@ config = { endpoint = "http://localhost:8333", bucket = "erato-storage", region 
 # Chat providers for e2e tests
 [chat_providers]
 priority_order = ["test-token-limit"]
+# Optional summary generation configuration.
+# [chat_providers.summary]
+# system_prompt = "Generate a summary for the topic of the following chat, based on the first message to the chat. The summary should be a short single sentence description."
+# max_tokens = 150
 
 # Test model with very low token limit for e2e testing token warnings
 # Only accessible to tokentest@example.com user (configured in Keycloak)

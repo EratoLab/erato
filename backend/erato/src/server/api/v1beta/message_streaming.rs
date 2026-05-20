@@ -3454,7 +3454,24 @@ pub async fn generate_chat_summary(
             .collect::<String>()
     );
 
-    let chat_request = build_chat_summary_request(first_user_message_text);
+    let summary_system_prompt = app_state
+        .get_summary_system_prompt(
+            app_state
+                .config
+                .chat_providers
+                .as_ref()
+                .map(|chat_providers| &chat_providers.summary),
+            Some(&me_user.preferred_language),
+            me_user.preference_nickname.as_deref(),
+            me_user.preference_job_title.as_deref(),
+            me_user.preference_assistant_custom_instructions.as_deref(),
+            me_user
+                .preference_assistant_additional_information
+                .as_deref(),
+        )
+        .await?;
+
+    let chat_request = build_chat_summary_request(&summary_system_prompt, first_user_message_text);
     let max_tokens = app_state.max_tokens_for_summary();
 
     // HACK: Hacky way to recognize reasoning models right now. Shouldbe replaced with capabilities mechanism in the future.
@@ -3755,11 +3772,12 @@ async fn resolve_audio_transcripts_for_summary(
     generation_input_messages
 }
 
-fn build_chat_summary_request(first_user_message_text: &str) -> ChatRequest {
-    let instruction = "Generate a summary for the topic of the following chat, based on the first message to the chat. The summary should be a short single sentence description like e.g. `Regex Search-and-Replace with Ripgrep` or `Explain a customer support flow`. Only return that sentence and nothing else.";
-
+fn build_chat_summary_request(
+    summary_system_prompt: &str,
+    first_user_message_text: &str,
+) -> ChatRequest {
     ChatRequest::default()
-        .append_message(GenAiChatMessage::user(instruction))
+        .append_message(GenAiChatMessage::system(summary_system_prompt))
         .append_message(GenAiChatMessage::user(first_user_message_text))
 }
 
@@ -5422,10 +5440,14 @@ mod summary_generation_tests {
 
     #[test]
     fn summary_request_separates_instruction_from_user_message() {
-        let chat_request = build_chat_summary_request("Explain our customer support handoff");
+        let summary_system_prompt = "Generate a summary for the topic of the following chat, based on the first message to the chat. The summary should be a short single sentence description like e.g. `Regex Search-and-Replace with Ripgrep` or `Explain a customer support flow`. Only return that sentence and nothing else.";
+        let chat_request = build_chat_summary_request(
+            summary_system_prompt,
+            "Explain our customer support handoff",
+        );
 
         assert_eq!(chat_request.messages.len(), 2);
-        assert_eq!(chat_request.messages[0].role, ChatRole::User);
+        assert_eq!(chat_request.messages[0].role, ChatRole::System);
         assert_eq!(chat_request.messages[1].role, ChatRole::User);
         assert!(
             chat_request.messages[0]

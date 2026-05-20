@@ -621,6 +621,7 @@ Configuration for chat summary generation. This allows you to specify which prov
 [chat_providers.summary]
 summary_chat_provider_id = "summarizer"
 max_tokens = 150
+system_prompt = "Generate a summary for the topic of the following chat, based on the first message to the chat. The summary should be a short single sentence description."
 ```
 
 ##### `chat_providers.summary.summary_chat_provider_id`
@@ -634,6 +635,28 @@ If not specified, Erato will use the highest priority provider from `priority_or
 **Default value:** `None` (uses highest priority provider)
 
 **Example:** `"summarizer"`
+
+##### `chat_providers.summary.system_prompt`
+
+Optional prompt source specification for summary generation.
+
+This prompt is used as the instruction prompt for generating chat summaries and supports prompt source formats (string or object), including template placeholders from our system prompt renderer.
+
+**Type:** `string | object | None`
+
+**Example (string):**
+
+```toml
+system_prompt = "Generate a short, one-sentence summary for the topic of the following chat, based on the first message."
+```
+
+**Example (Langfuse):**
+
+```toml
+system_prompt = { source = "langfuse", prompt_name = "summary-instructions", label = "production", fallback = "Generate a short, one-sentence summary..." }
+```
+
+**Default value:** Built-in hard-coded summary instruction from previous behavior.
 
 ##### `chat_providers.summary.max_tokens`
 
@@ -654,6 +677,7 @@ priority_order = ["main"]
 [chat_providers.summary]
 summary_chat_provider_id = "summarizer"
 max_tokens = 150
+system_prompt = "Generate a short, one-sentence summary for the topic of the following chat, based on the first message to the chat."
 
 [chat_providers.providers.main]
 provider_kind = "openai"
@@ -672,6 +696,7 @@ In this example:
 - Regular chat interactions use the "main" provider (GPT-4)
 - Chat summaries are generated using the "summarizer" provider (GPT-4o Mini)
 - Summary generation is limited to 150 output tokens
+- Summary prompts can be customized with `chat_providers.summary.system_prompt` and rendered with template variables
 - This allows using a faster, cheaper model for summaries while keeping a more powerful model for main interactions
 
 #### Migration from `chat_provider`
