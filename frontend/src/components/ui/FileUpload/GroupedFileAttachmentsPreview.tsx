@@ -276,14 +276,19 @@ const DefaultGroupedFileAttachmentsPreview: React.FC<
                 onClick={() => toggleGroupCollapsed(group.id)}
                 className={clsx(
                   FILE_PREVIEW_STYLES.group.header,
-                  "flex w-full items-center text-left",
+                  "w-full text-left",
                 )}
                 aria-expanded={!isCollapsed}
               >
                 {headerInner}
               </button>
             ) : (
-              <div className={FILE_PREVIEW_STYLES.group.header}>
+              <div
+                className={clsx(
+                  FILE_PREVIEW_STYLES.group.header,
+                  "justify-between",
+                )}
+              >
                 {headerInner}
                 {shouldCollapse && isExpanded && (
                   <Button
