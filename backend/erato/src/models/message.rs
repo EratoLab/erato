@@ -254,7 +254,10 @@ pub struct ContentPartTextFilePointer {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct ContentPartImageFilePointer {
     pub file_upload_id: Uuid,
-    pub download_url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub download_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
@@ -673,7 +676,7 @@ pub async fn update_message_content(
         ));
     }
 
-    parsed_raw_message.content = new_content_parts;
+    parsed_raw_message.content = strip_image_urls_from_content(new_content_parts);
     let updated_raw_message = parsed_raw_message.to_json()?;
 
     let active_model = messages::ActiveModel {
@@ -913,8 +916,8 @@ pub async fn get_generation_input_messages_by_previous_message_id(
         let content = if is_image_file(&file.filename) {
             ContentPart::ImageFilePointer(ContentPartImageFilePointer {
                 file_upload_id: file.id,
-                // Placeholder URL - will be resolved to base64 when sending to LLM
-                download_url: String::new(),
+                download_url: None,
+                preview_url: None,
             })
         } else {
             ContentPart::TextFilePointer(ContentPartTextFilePointer {
@@ -933,10 +936,27 @@ pub async fn get_generation_input_messages_by_previous_message_id(
     })
 }
 
-/// Regenerate presigned download URLs for ImageFilePointer content parts.
+/// Remove request-scoped URLs from image pointers before storing them.
+pub fn strip_image_urls_from_content(content: Vec<ContentPart>) -> Vec<ContentPart> {
+    content
+        .into_iter()
+        .map(|part| match part {
+            ContentPart::ImageFilePointer(pointer) => {
+                ContentPart::ImageFilePointer(ContentPartImageFilePointer {
+                    file_upload_id: pointer.file_upload_id,
+                    download_url: None,
+                    preview_url: None,
+                })
+            }
+            other => other,
+        })
+        .collect()
+}
+
+/// Regenerate presigned URLs for ImageFilePointer content parts.
 ///
-/// This function takes message content and regenerates fresh presigned URLs for any
-/// ImageFilePointer content parts, replacing the expired URLs that were stored in the database.
+/// This function takes message content and hydrates fresh presigned URLs for any
+/// ImageFilePointer content parts, without relying on URLs stored in the database.
 pub async fn regenerate_image_urls_in_content(
     conn: &DatabaseConnection,
     content: Vec<ContentPart>,
@@ -962,7 +982,6 @@ pub async fn regenerate_image_urls_in_content(
                     let file_storage = file_storage_providers.get(&file.file_storage_provider_id);
 
                     if let Some(storage) = file_storage {
-                        // Generate a fresh presigned download URL
                         let download_url = match storage
                             .generate_presigned_download_url_with_context(
                                 &file.file_storage_path,
@@ -984,10 +1003,20 @@ pub async fn regenerate_image_urls_in_content(
                                 format!("/api/v1beta/files/{}", file.id)
                             }
                         };
+                        let preview_url = storage
+                            .generate_presigned_preview_url_with_context(
+                                &file.file_storage_path,
+                                None,
+                                Some(&file.filename),
+                                None,
+                            )
+                            .await
+                            .ok();
 
                         ContentPart::ImageFilePointer(ContentPartImageFilePointer {
                             file_upload_id: pointer.file_upload_id,
-                            download_url,
+                            download_url: Some(download_url),
+                            preview_url,
                         })
                     } else {
                         tracing::warn!(
@@ -1018,7 +1047,11 @@ pub async fn regenerate_image_urls_in_content(
 #[cfg(test)]
 mod action_facet_filter_tests {
     use super::is_action_facet_system_message;
-    use super::{ContentPart, ContentPartText, InputMessage, MessageRole};
+    use super::{
+        ContentPart, ContentPartImageFilePointer, ContentPartText, InputMessage, MessageRole,
+        strip_image_urls_from_content,
+    };
+    use sqlx::types::Uuid;
 
     fn system_text(text: &str) -> InputMessage {
         InputMessage {
@@ -1072,5 +1105,26 @@ mod action_facet_filter_tests {
         assert!(!is_action_facet_system_message(&system_text(
             "Respond in plain text."
         )));
+    }
+
+    #[test]
+    fn strips_hydrated_urls_from_image_file_pointers() {
+        let file_upload_id = Uuid::new_v4();
+        let stripped = strip_image_urls_from_content(vec![ContentPart::ImageFilePointer(
+            ContentPartImageFilePointer {
+                file_upload_id,
+                download_url: Some("https://storage.example/download".to_string()),
+                preview_url: Some("https://storage.example/preview".to_string()),
+            },
+        )]);
+
+        assert_eq!(
+            stripped,
+            vec![ContentPart::ImageFilePointer(ContentPartImageFilePointer {
+                file_upload_id,
+                download_url: None,
+                preview_url: None,
+            })]
+        );
     }
 }

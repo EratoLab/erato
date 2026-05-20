@@ -1258,7 +1258,7 @@ async fn download_and_store_generated_image(
     subject: &crate::policy::types::Subject,
     chat_id: &Uuid,
     binary: genai::chat::Binary,
-) -> Result<(Uuid, String), Report> {
+) -> Result<Uuid, Report> {
     use crate::models::file_upload::create_file_upload;
 
     // Download or decode the image
@@ -1324,13 +1324,7 @@ async fn download_and_store_generated_image(
     )
     .await?;
 
-    // Generate presigned download URL
-    let download_url = file_storage
-        .generate_presigned_download_url(&file_storage_path, None, Some(&filename))
-        .await
-        .wrap_err("Failed to generate download URL for generated image")?;
-
-    Ok((file_upload.id, download_url))
+    Ok(file_upload.id)
 }
 
 pub struct PreparedChatRequest {
@@ -3342,10 +3336,19 @@ async fn bg_stream_update_assistant_message_completion(
     let updated_assistant_message_wrapped =
         ChatMessage::from_model(updated_assistant_message.clone())
             .map_err(|e| format!("Failed to convert updated assistant message: {}", e))?;
+    let hydrated_final_content_parts = crate::models::message::regenerate_image_urls_in_content(
+        &app_state.db,
+        final_content_parts.clone(),
+        &app_state.file_storage_providers,
+    )
+    .await
+    .map_err(|e| format!("Failed to hydrate image URLs: {}", e))?;
+    let mut updated_assistant_message_wrapped = updated_assistant_message_wrapped;
+    updated_assistant_message_wrapped.content = hydrated_final_content_parts.clone();
 
     task.send_event(StreamingEvent::AssistantMessageCompleted {
         message_id: updated_assistant_message.id,
-        content: final_content_parts.clone(),
+        content: hydrated_final_content_parts,
         message: updated_assistant_message_wrapped,
     })
     .await?;
@@ -3385,7 +3388,7 @@ async fn stream_update_assistant_message_completion<
         }
     };
 
-    let updated_assistant_message_wrapped =
+    let mut updated_assistant_message_wrapped =
         match ChatMessage::from_model(updated_assistant_message.clone()) {
             Ok(msg) => msg,
             Err(err) => {
@@ -3395,10 +3398,27 @@ async fn stream_update_assistant_message_completion<
                 return Err(());
             }
         };
+    let hydrated_final_content_parts =
+        match crate::models::message::regenerate_image_urls_in_content(
+            &app_state.db,
+            final_content_parts.clone(),
+            &app_state.file_storage_providers,
+        )
+        .await
+        {
+            Ok(content) => content,
+            Err(err) => {
+                let _ = tx
+                    .send(Err(err).wrap_err("Failed to hydrate image URLs"))
+                    .await;
+                return Err(());
+            }
+        };
+    updated_assistant_message_wrapped.content = hydrated_final_content_parts.clone();
 
     let message_completed_event: MSG = MessageSubmitStreamingResponseMessageComplete {
         message_id: updated_assistant_message.id, // This is assistant_message_id
-        content: final_content_parts.clone(),
+        content: hydrated_final_content_parts,
         message: updated_assistant_message_wrapped,
     }
     .into();
@@ -5748,7 +5768,7 @@ async fn run_message_submit_task(
         };
 
         // Download and store the image
-        let (file_upload_id, download_url) = download_and_store_generated_image(
+        let file_upload_id = download_and_store_generated_image(
             app_state,
             policy,
             &me_user.to_subject(),
@@ -5759,15 +5779,15 @@ async fn run_message_submit_task(
         .map_err(|e| format!("Failed to download and store generated image: {}", e))?;
 
         tracing::info!(
-            "Successfully generated and stored image: file_upload_id={}, download_url={}",
-            file_upload_id,
-            download_url
+            "Successfully generated and stored image: file_upload_id={}",
+            file_upload_id
         );
 
         // Create content with the image pointer
         let end_content = vec![ContentPart::ImageFilePointer(ContentPartImageFilePointer {
             file_upload_id,
-            download_url,
+            download_url: None,
+            preview_url: None,
         })];
 
         // Update assistant message with the image

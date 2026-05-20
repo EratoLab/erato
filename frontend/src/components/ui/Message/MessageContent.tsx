@@ -242,7 +242,7 @@ const contentPartToImage = (
   if (part.content_type === "image_file_pointer") {
     return {
       type: "image",
-      src: part.download_url,
+      src: part.preview_url ?? part.download_url ?? "",
       id: part.file_upload_id,
       fileUploadId: part.file_upload_id,
     };

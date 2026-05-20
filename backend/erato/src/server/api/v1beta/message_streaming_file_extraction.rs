@@ -317,11 +317,6 @@ async fn process_mcp_file_outputs(
         )
         .await?;
 
-        let download_url = file_storage
-            .generate_presigned_download_url(&file_storage_path, None, Some(&filename))
-            .await
-            .wrap_err("Failed to generate download URL for MCP generated image")?;
-
         replacements.push((
             extracted.json_pointer.as_str(),
             format!("erato-file://{}", file_upload.id),
@@ -329,7 +324,8 @@ async fn process_mcp_file_outputs(
 
         image_pointers.push(ContentPart::ImageFilePointer(ContentPartImageFilePointer {
             file_upload_id: file_upload.id,
-            download_url,
+            download_url: None,
+            preview_url: None,
         }));
     }
 

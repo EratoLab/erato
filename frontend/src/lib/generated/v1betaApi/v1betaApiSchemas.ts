@@ -177,7 +177,7 @@ export type AssistantFile = {
    * Pre-signed URL for downloading the file.
    * Null when file contents are unavailable for the current user due to missing permissions.
    */
-  download_url?: null | undefined;
+  download_url?: string | null | undefined;
   /**
    * The file capability that was evaluated for this file
    */
@@ -201,7 +201,7 @@ export type AssistantFile = {
   /**
    * Pre-signed URL for inline preview without forcing download when available.
    */
-  preview_url?: null | undefined;
+  preview_url?: string | null | undefined;
 };
 
 /**
@@ -563,11 +563,12 @@ export type ContentPartImage = {
 };
 
 export type ContentPartImageFilePointer = {
-  download_url: string;
+  download_url?: string | null | undefined;
   /**
    * @format uuid
    */
   file_upload_id: string;
+  preview_url?: string | null | undefined;
 };
 
 export type ContentPartReasoning = {
@@ -962,7 +963,7 @@ export type FileUploadItem = {
   /**
    * Pre-signed URL for inline preview without forcing download when available
    */
-  preview_url?: null | undefined;
+  preview_url?: string | null | undefined;
 };
 
 /**

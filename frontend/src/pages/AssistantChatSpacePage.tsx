@@ -30,7 +30,7 @@ const getPreviewUrl = (
 
 const toFileUploadItems = (files: AssistantFile[]): FileUploadItem[] =>
   files.flatMap((file) => {
-    const downloadUrl = file.download_url as string | null | undefined;
+    const downloadUrl = file.download_url;
     const previewUrl = getPreviewUrl(file);
 
     return downloadUrl || previewUrl
