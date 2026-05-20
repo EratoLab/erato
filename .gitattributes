@@ -1,3 +1,7 @@
+# RFC 5322 requires CRLF line endings; mark .eml as non-text so Git
+# never normalises a fixture down to LF and breaks MIME parsers.
+*.eml -text
+
 frontend/src/lib/generated/**/* linguist-generated
 infrastructure/charts/erato/tests_schema/helm-testsuite.json linguist-generated
 infrastructure/k3d/erato-local/tests_schema/helm-testsuite.json linguist-generated

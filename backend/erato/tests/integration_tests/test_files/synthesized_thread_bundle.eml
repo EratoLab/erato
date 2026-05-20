@@ -1,0 +1,45 @@
+From: thread-wrapper@example.com
+Subject: Thread bundle for nested-rfc822 test
+Date: Mon, 18 May 2026 10:00:00 +0000
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="OUTER"
+
+--OUTER
+Content-Type: message/rfc822
+Content-Disposition: attachment; filename="msg-1.eml"
+
+From: Alice Example <alice@example.com>
+To: Bob Example <bob@example.com>
+Subject: First message in thread
+Date: Mon, 18 May 2026 09:00:00 +0000
+Message-ID: <msg-1@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+FIRST_MESSAGE_UNIQUE_BODY_TOKEN_alpha — body sent by Alice.
+
+--OUTER
+Content-Type: message/rfc822
+Content-Disposition: attachment; filename="msg-2.eml"
+
+From: Bob Example <bob@example.com>
+To: Alice Example <alice@example.com>
+Subject: Re: First message in thread
+Date: Mon, 18 May 2026 10:00:00 +0000
+Message-ID: <msg-2@example.com>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="INNER"
+
+--INNER
+Content-Type: text/plain; charset=utf-8
+
+SECOND_MESSAGE_UNIQUE_BODY_TOKEN_beta — reply sent by Bob, please find the attached notes.
+
+--INNER
+Content-Type: text/plain; charset=utf-8; name="thread_notes.txt"
+Content-Disposition: attachment; filename="thread_notes.txt"
+
+INNER_ATTACHMENT_UNIQUE_TOKEN_gamma — notes attached inside the second thread message.
+--INNER--
+
+--OUTER--
