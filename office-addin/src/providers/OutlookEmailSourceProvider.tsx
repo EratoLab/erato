@@ -4,12 +4,13 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
 import { useMsalNaa } from "./MsalNaaProvider";
 import { useOutlookMailItem } from "./OutlookMailItemProvider";
-import { fetchCurrentEmailParsed } from "../utils/fetchCurrentEmailEml";
+import { useCurrentThread } from "../hooks/useCurrentThread";
 import { fetchParentMessageInConversationViaGraph } from "../utils/fetchOutlookMessageGraph";
 import {
   dismissAttachment as applyDismissAttachment,
@@ -17,22 +18,40 @@ import {
   restoreAttachment as applyRestoreAttachment,
   restoreBody as applyRestoreBody,
 } from "../utils/stagedEmailDismissals";
+import { synthesizeThreadEml } from "../utils/synthesizeThreadEml";
 import { trimEmlAttachments } from "../utils/trimEmlAttachments";
 
 import type { ParentMessageMetadata } from "../utils/fetchOutlookMessageGraph";
 import type { ParsedEmail } from "../utils/parsedEmail";
+import type {
+  ParsedThread,
+  ThreadAttachment,
+  ThreadMessage,
+} from "../utils/parsedThread";
 import type { StagedEmailDismissalsMap } from "../utils/stagedEmailDismissals";
+import type {
+  ThreadAttachmentInput,
+  ThreadMessageInput,
+} from "../utils/synthesizeThreadEml";
 import type { LocalFilePreviewItem } from "@erato/frontend/library";
 import type { ReactNode } from "react";
 
 const OUTLOOK_CLOUD_ATTACHMENT_TYPE = "cloud";
 const GRAPH_MAIL_SCOPES = ["Mail.Read"];
-const CURRENT_EMAIL_FALLBACK_KEY = "current-email";
 
-let droppedKeyCounter = 0;
 function generateDroppedKey(): string {
-  droppedKeyCounter += 1;
-  return `drop-${Date.now()}-${droppedKeyCounter}`;
+  return `drop-${crypto.randomUUID()}`;
+}
+
+/**
+ * UTF-8 byte length of whichever body wins (HTML preferred, text fallback).
+ * Used to seed the token-estimator placeholder. Cheap text-encoding, no
+ * base64 expansion — attachment bytes are added separately by the caller.
+ */
+function textByteLength(text: string | null, html: string | null): number {
+  const winning = html ?? text;
+  if (!winning) return 0;
+  return new TextEncoder().encode(winning).length;
 }
 
 function collectDismissedIndices(
@@ -55,9 +74,6 @@ async function trimRawEmlBytes(
   const buffer = await rawEmlFile.arrayBuffer();
   const trimmed = trimEmlAttachments(new Uint8Array(buffer), indicesToRemove);
   if (!trimmed) {
-    // Trim couldn't safely identify a part — fall back to shipping the
-    // .eml untouched. Worse UX than honouring the deselection, but better
-    // than an upload that drops the wrong attachment or fails entirely.
     console.warn(
       "[OutlookEmailSourceProvider] surgical trim returned null; uploading the original .eml",
     );
@@ -68,16 +84,39 @@ async function trimRawEmlBytes(
   });
 }
 
-export type StagedEmailSource = "current" | "drop";
+export type StagedEmailSource = "current-thread" | "drop";
 
-export interface StagedEmail {
-  /** Stable across renders; equal to RFC 5322 Message-ID when available. */
-  key: string;
-  source: StagedEmailSource;
-  parsed: ParsedEmail;
-  bodyDismissed: boolean;
-  dismissedAttachmentIds: ReadonlySet<string>;
-}
+/**
+ * Discriminated union driving the staged-input UI:
+ *
+ * - `current-thread` — the currently-open Outlook conversation, fetched via
+ *   Graph as a single `$filter=conversationId&$expand=attachments` call and
+ *   represented as a `ParsedThread`. Rendered as one nested card per thread
+ *   (sender/date sub-headers, per-message body + attachment checkboxes).
+ *
+ * - `drop` — a single `.eml` dragged onto the chat. Rendered as a flat card
+ *   matching the pre-thread behaviour. Each drop is independent.
+ *
+ * Dismissals for both variants share the same `emailDismissals` map keyed by
+ * RFC 5322 Message-ID — uniformly per-message-per-attachment.
+ */
+export type StagedEmail =
+  | {
+      key: string;
+      source: "current-thread";
+      thread: ParsedThread;
+      /** Set of thread-message ids whose body the user excluded. */
+      dismissedMessageIds: ReadonlySet<string>;
+      /** Set of `${messageId}:${attachmentId}` keys the user excluded. */
+      dismissedAttachmentIds: ReadonlySet<string>;
+    }
+  | {
+      key: string;
+      source: "drop";
+      parsed: ParsedEmail;
+      bodyDismissed: boolean;
+      dismissedAttachmentIds: ReadonlySet<string>;
+    };
 
 interface DroppedEmailEntry {
   key: string;
@@ -89,35 +128,12 @@ interface OutlookEmailSourceContextValue {
   isEmailBodyIncluded: boolean;
   emailBodyFile: File | null;
   isLoadingEmailBody: boolean;
-  /**
-   * Structured view of the currently-open email when fetched via Graph
-   * (read mode only). Powers the per-attachment selection UI and will feed
-   * surgical MIME removal in Phase 2. `null` when the email body comes from
-   * the synthesized-HTML compose-mode path or before Graph returns.
-   */
-  currentEmailParsed: ParsedEmail | null;
-  /**
-   * Unified list of emails staged for upload, currently-open and dropped
-   * alike. Drives the grouped-card UI for selection. Updates to dismissal
-   * state are applied via `dismissStagedEmailBody` and
-   * `dismissStagedEmailAttachment` (and their restore counterparts).
-   *
-   * Phase 1: the selection state captured here drives the UI only — the
-   * upload payload for the currently-open email path is still the raw
-   * `.eml`. Phase 2 wires surgical MIME removal so deselected attachments
-   * are stripped from the bytes before upload.
-   */
+  currentThread: ParsedThread | null;
   stagedEmails: StagedEmail[];
   dismissStagedEmailBody: (key: string) => void;
   restoreStagedEmailBody: (key: string) => void;
   dismissStagedEmailAttachment: (key: string, attachmentId: string) => void;
   restoreStagedEmailAttachment: (key: string, attachmentId: string) => void;
-  /**
-   * Add a parsed email (from a drop or an OWA mail-list drag) to the
-   * staged list. Returns the stable key under which it was filed so
-   * callers can reference it later (e.g. to remove it). Returns `null`
-   * when the email is already staged under the same Message-ID.
-   */
   addDroppedEmail: (parsed: ParsedEmail) => string | null;
   removeDroppedEmail: (key: string) => void;
   selectedAttachmentItems: LocalFilePreviewItem[];
@@ -130,15 +146,6 @@ interface OutlookEmailSourceContextValue {
   dismissedAttachmentIds: string[];
   resolveSelectedFilesForSend: () => Promise<File[]>;
   hasSelectedEmailSource: boolean;
-  /**
-   * Metadata of the most recent non-draft message in the same conversation
-   * thread, when the user is in Outlook compose mode replying / forwarding.
-   * Display-only — surfaces a "Reply context" chip in the chat input UI.
-   * Not part of `resolveSelectedFilesForSend`: the body is already in the
-   * draft via Outlook's auto-quote and reaches the LLM through the
-   * `outlook_review_draft.full_body` action facet, so re-sending it here
-   * would double the token cost.
-   */
   parentReplyContext: ParentMessageMetadata | null;
   isLoadingParentReplyContext: boolean;
 }
@@ -148,7 +155,7 @@ const defaultValue: OutlookEmailSourceContextValue = {
   isEmailBodyIncluded: false,
   emailBodyFile: null,
   isLoadingEmailBody: false,
-  currentEmailParsed: null,
+  currentThread: null,
   stagedEmails: [],
   dismissStagedEmailBody: () => {},
   restoreStagedEmailBody: () => {},
@@ -193,9 +200,6 @@ export function OutlookEmailSourceProvider({
   const [dismissedAttachmentIds, setDismissedAttachmentIds] = useState<
     string[]
   >([]);
-  const [currentEmailParsed, setCurrentEmailParsed] =
-    useState<ParsedEmail | null>(null);
-  const [isLoadingEmailBody, setIsLoadingEmailBody] = useState(false);
   const [parentReplyContext, setParentReplyContext] =
     useState<ParentMessageMetadata | null>(null);
   const [isLoadingParentReplyContext, setIsLoadingParentReplyContext] =
@@ -213,45 +217,14 @@ export function OutlookEmailSourceProvider({
   const conversationId = mailItem?.conversationId ?? null;
   const isComposeMode = mailItem?.isComposeMode ?? false;
 
-  // Fetch and parse the raw `.eml` via Graph whenever the open email changes.
-  // Drafts and compose items have no itemId, so no accessory is produced —
-  // matches the Graph indexing contract (`/$value` 404s on unsent messages).
-  useEffect(() => {
-    if (!itemId) {
-      setCurrentEmailParsed(null);
-      setIsLoadingEmailBody(false);
-      return;
-    }
+  // Conversation fetch lives in its own hook so it can be unit-tested in
+  // isolation against an injected Graph transport.
+  const { thread: currentThread, isLoading: isLoadingEmailBody } =
+    useCurrentThread(itemId, conversationId, acquireGraphToken);
 
-    let cancelled = false;
-    setIsLoadingEmailBody(true);
-    setCurrentEmailParsed(null);
-
-    void fetchCurrentEmailParsed(itemId, acquireGraphToken)
-      .then((result) => {
-        if (cancelled) {
-          return;
-        }
-        setCurrentEmailParsed(result?.parsed ?? null);
-      })
-      .finally(() => {
-        if (cancelled) {
-          return;
-        }
-        setIsLoadingEmailBody(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [acquireGraphToken, itemId]);
-
-  // Fetch the parent-thread metadata when the user is composing a reply or
-  // forward. Graph's `/me/messages/{itemId}` 404s on drafts (the very issue
-  // that gates the read-mode preview above), but the *parent* message is
-  // indexed and addressable by `conversationId`. We surface a display-only
-  // "Reply context" chip; the body itself reaches the LLM via the auto-quote
-  // already embedded in the draft, so re-fetching it here is unnecessary.
+  // Reply-context chip for compose mode (drafts have no itemId but do have a
+  // conversationId). Display-only — the parent body reaches the LLM via the
+  // draft's auto-quote + the `outlook_review_draft.full_body` action facet.
   useEffect(() => {
     if (!isComposeMode || !conversationId || itemId) {
       setParentReplyContext(null);
@@ -268,15 +241,11 @@ export function OutlookEmailSourceProvider({
       acquireGraphToken,
     )
       .then((result) => {
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
         setParentReplyContext(result);
       })
       .finally(() => {
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
         setIsLoadingParentReplyContext(false);
       });
 
@@ -285,30 +254,45 @@ export function OutlookEmailSourceProvider({
     };
   }, [acquireGraphToken, conversationId, isComposeMode, itemId]);
 
-  // Clear dismissals when the host mail item changes. Office.js attachment
-  // ids are per-item — so the dismissal set from a previous message would
-  // otherwise leak into the new one. Staged-email dismissals (`emailDismissals`)
-  // are keyed by RFC 5322 Message-ID, which is globally unique, so they don't
-  // need this scope-flush.
+  // Office.js attachment ids are per-item; flush the dismissal list when
+  // the host mail item changes so stale ids don't leak. Thread + drop
+  // dismissals (`emailDismissals`) are keyed by Message-ID and don't need
+  // this scope-flush.
   useEffect(() => {
     setDismissedAttachmentIds([]);
   }, [itemIdentity]);
 
-  const currentEmailKey =
-    currentEmailParsed?.messageId ?? CURRENT_EMAIL_FALLBACK_KEY;
+  const threadStaged = useMemo<Extract<
+    StagedEmail,
+    { source: "current-thread" }
+  > | null>(() => {
+    if (!currentThread) return null;
+    const messageDismissals = new Set<string>();
+    const attachmentDismissals = new Set<string>();
+    for (const message of currentThread.messages) {
+      const entry = emailDismissals.get(message.id);
+      if (!entry) continue;
+      if (entry.bodyDismissed) {
+        messageDismissals.add(message.id);
+      }
+      for (const attachmentId of entry.attachmentIds) {
+        attachmentDismissals.add(attachmentId);
+      }
+    }
+    return {
+      key: `current-thread:${currentThread.conversationId}`,
+      source: "current-thread",
+      thread: currentThread,
+      dismissedMessageIds: messageDismissals,
+      dismissedAttachmentIds: attachmentDismissals,
+    };
+  }, [currentThread, emailDismissals]);
 
   const stagedEmails = useMemo<StagedEmail[]>(() => {
     const list: StagedEmail[] = [];
 
-    if (currentEmailParsed) {
-      const dismissals = emailDismissals.get(currentEmailKey);
-      list.push({
-        key: currentEmailKey,
-        source: "current",
-        parsed: currentEmailParsed,
-        bodyDismissed: dismissals?.bodyDismissed ?? false,
-        dismissedAttachmentIds: dismissals?.attachmentIds ?? new Set<string>(),
-      });
+    if (threadStaged) {
+      list.push(threadStaged);
     }
 
     for (const entry of droppedEmails) {
@@ -323,11 +307,53 @@ export function OutlookEmailSourceProvider({
     }
 
     return list;
-  }, [currentEmailKey, currentEmailParsed, droppedEmails, emailDismissals]);
+  }, [droppedEmails, emailDismissals, threadStaged]);
 
-  const currentStagedEmail = stagedEmails[0] ?? null;
-  const isEmailBodyDismissed = currentStagedEmail?.bodyDismissed ?? false;
-  const emailBodyFile = currentEmailParsed?.rawEmlFile ?? null;
+  const includedThreadMessages = useMemo<ThreadMessage[]>(() => {
+    if (!currentThread || !threadStaged) return [];
+    return currentThread.messages.filter(
+      (message) => !threadStaged.dismissedMessageIds.has(message.id),
+    );
+  }, [currentThread, threadStaged]);
+
+  // Approximate size of the synthesised thread .eml without paying the
+  // base64 cost. Used to give the chat-input's token estimator a non-zero
+  // signal via `emailBodyFile.size` — the real synthesis only runs at send
+  // time inside `resolveSelectedFilesForSend`, so checkbox toggles don't
+  // re-encode tens of MB of attachment bytes.
+  const threadPreviewFile = useMemo<File | null>(() => {
+    if (!currentThread || !threadStaged) return null;
+    if (includedThreadMessages.length === 0) return null;
+    let estimatedBytes = 1024; // outer headers + boundaries fixed overhead
+    for (const message of includedThreadMessages) {
+      estimatedBytes += 512; // per-message header block
+      estimatedBytes += textByteLength(message.bodyText, message.bodyHtml);
+      for (const attachment of message.attachments) {
+        if (attachment.isInline) continue;
+        if (threadStaged.dismissedAttachmentIds.has(attachment.id)) continue;
+        // base64 expands content by ~4/3 and adds ~2 bytes per 76-char line.
+        estimatedBytes += Math.ceil(attachment.size * 1.37);
+      }
+    }
+    // The preview File only needs the right `.size`; its bytes are never
+    // read (consumers use it for token estimation). Allocate a zero-filled
+    // placeholder of the right length — far cheaper than base64-encoding
+    // the real attachments on every keystroke.
+    return new File([new Uint8Array(estimatedBytes)], "thread-preview.eml", {
+      type: "message/rfc822",
+    });
+  }, [currentThread, includedThreadMessages, threadStaged]);
+
+  const currentStagedDrop = stagedEmails.find(
+    (staged): staged is Extract<StagedEmail, { source: "drop" }> =>
+      staged.source === "drop",
+  );
+  const isEmailBodyDismissed = currentThread
+    ? includedThreadMessages.length === 0
+    : (currentStagedDrop?.bodyDismissed ?? false);
+  const emailBodyFile = currentThread
+    ? threadPreviewFile
+    : (currentStagedDrop?.parsed.rawEmlFile ?? null);
   const isEmailBodyIncluded = !!emailBodyFile && !isEmailBodyDismissed;
 
   const selectableAttachments = useMemo(() => {
@@ -370,20 +396,28 @@ export function OutlookEmailSourceProvider({
     [],
   );
 
+  // The dedup check has to be StrictMode-safe: returning a synchronous
+  // "did we accept this?" answer from inside the setState updater would
+  // misreport on the second invocation. Track known keys in a ref so the
+  // decision lives outside the updater entirely. The setState updater
+  // remains idempotent — re-running it sees the entry already present and
+  // returns `previous` unchanged.
+  const droppedKeysRef = useRef<Set<string>>(new Set());
+
   const addDroppedEmail = useCallback((parsed: ParsedEmail): string | null => {
     const key = parsed.messageId ?? generateDroppedKey();
-    let assigned: string | null = key;
-    setDroppedEmails((previous) => {
-      if (previous.some((entry) => entry.key === key)) {
-        assigned = null;
-        return previous;
-      }
-      return [...previous, { key, parsed }];
-    });
-    return assigned;
+    if (droppedKeysRef.current.has(key)) return null;
+    droppedKeysRef.current.add(key);
+    setDroppedEmails((previous) =>
+      previous.some((entry) => entry.key === key)
+        ? previous
+        : [...previous, { key, parsed }],
+    );
+    return key;
   }, []);
 
   const removeDroppedEmail = useCallback((key: string) => {
+    droppedKeysRef.current.delete(key);
     setDroppedEmails((previous) =>
       previous.filter((entry) => entry.key !== key),
     );
@@ -395,15 +429,26 @@ export function OutlookEmailSourceProvider({
     });
   }, []);
 
+  // Drop-only back-compat helpers. Their scope is intentionally narrow:
+  //   - `removeEmailBody` / `restoreEmailBody` only affect the most recent
+  //     drop; in thread mode the per-message checkboxes drive dismissal.
+  //   - `removeAttachment` / `restoreAttachment` only affect Office.js
+  //     compose-mode attachments (the fallback group rendered when there
+  //     is neither a thread nor a drop).
+  // Kept under the legacy names to avoid breaking the existing
+  // `handleRemoveEmailSourceFile` wiring inside `AddinChatInput`. If a
+  // future caller wants "remove the current email", reach for
+  // `dismissStagedEmailBody(messageId)` directly — these are silent
+  // no-ops outside their narrow scope.
   const removeEmailBody = useCallback(() => {
-    if (!currentStagedEmail) return;
-    dismissStagedEmailBody(currentStagedEmail.key);
-  }, [currentStagedEmail, dismissStagedEmailBody]);
+    if (!currentStagedDrop) return;
+    dismissStagedEmailBody(currentStagedDrop.key);
+  }, [currentStagedDrop, dismissStagedEmailBody]);
 
   const restoreEmailBody = useCallback(() => {
-    if (!currentStagedEmail) return;
-    restoreStagedEmailBody(currentStagedEmail.key);
-  }, [currentStagedEmail, restoreStagedEmailBody]);
+    if (!currentStagedDrop) return;
+    restoreStagedEmailBody(currentStagedDrop.key);
+  }, [currentStagedDrop, restoreStagedEmailBody]);
 
   const removeAttachment = useCallback((attachmentId: string) => {
     setDismissedAttachmentIds((previous) =>
@@ -420,10 +465,52 @@ export function OutlookEmailSourceProvider({
   const resolveSelectedFilesForSend = useCallback(async (): Promise<File[]> => {
     const filesToSend: File[] = [];
 
+    // Thread upload: one synthesized .eml carrying every non-dismissed
+    // message + their non-dismissed attachments. The structure preserves
+    // version provenance — three files named "Lastenheft.pdf" land as
+    // attachments inside three different nested message/rfc822 parts.
+    //
+    // We synthesize lazily here (not in a useMemo) so checkbox toggles in
+    // the staged-preview UI don't re-base64-encode every kept attachment
+    // on every click. The cost is paid once, at send time.
+    if (currentThread && threadStaged && includedThreadMessages.length > 0) {
+      const synthInputs = includedThreadMessages.map<ThreadMessageInput>(
+        (message) => ({
+          internetMessageId: message.internetMessageId,
+          subject: message.subject,
+          from: message.from
+            ? { name: message.from.name, address: message.from.address }
+            : null,
+          to: message.to.map((addr) => ({
+            name: addr.name,
+            address: addr.address,
+          })),
+          cc: message.cc.map((addr) => ({
+            name: addr.name,
+            address: addr.address,
+          })),
+          date: message.date,
+          bodyText: message.bodyText,
+          bodyHtml: message.bodyHtml,
+          attachments: filterAttachments(
+            message.attachments,
+            threadStaged.dismissedAttachmentIds,
+          ),
+        }),
+      );
+      filesToSend.push(
+        synthesizeThreadEml({
+          subject: currentThread.subject,
+          messages: synthInputs,
+        }),
+      );
+    }
+
+    // Drop uploads: keep the existing per-drop trim path. Each drop is
+    // independent of the open thread.
     for (const staged of stagedEmails) {
-      if (staged.bodyDismissed) {
-        continue;
-      }
+      if (staged.source !== "drop") continue;
+      if (staged.bodyDismissed) continue;
       const indicesToRemove = collectDismissedIndices(
         staged.parsed.attachments,
         staged.dismissedAttachmentIds,
@@ -439,13 +526,11 @@ export function OutlookEmailSourceProvider({
       filesToSend.push(trimmed);
     }
 
-    // Office.js compose-mode attachments. When a current-email `.eml` is
-    // staged (read mode), these are duplicates of the in-eml attachments
-    // already inside the `.eml` and we skip them to avoid double-counting.
-    const hasReadModeCurrentStaged = stagedEmails.some(
-      (staged) => staged.source === "current",
-    );
-    if (!hasReadModeCurrentStaged) {
+    // Office.js compose-mode fallback. Only invoked when there is no thread
+    // and no drops — in read mode the thread .eml already carries the
+    // attachments, in drop-only mode the drop .eml does. Cloud attachments
+    // skipped here because their content can't be resolved locally.
+    if (!currentThread && stagedEmails.every((s) => s.source !== "drop")) {
       const remainingAttachments = selectableAttachments.filter(
         (attachment) => !dismissedAttachmentIds.includes(attachment.id),
       );
@@ -474,10 +559,13 @@ export function OutlookEmailSourceProvider({
 
     return filesToSend;
   }, [
+    currentThread,
     dismissedAttachmentIds,
     getAttachmentFile,
+    includedThreadMessages,
     selectableAttachments,
     stagedEmails,
+    threadStaged,
   ]);
 
   const value = useMemo<OutlookEmailSourceContextValue>(
@@ -486,7 +574,7 @@ export function OutlookEmailSourceProvider({
       isEmailBodyIncluded,
       emailBodyFile,
       isLoadingEmailBody,
-      currentEmailParsed,
+      currentThread,
       stagedEmails,
       dismissStagedEmailBody,
       restoreStagedEmailBody,
@@ -512,7 +600,7 @@ export function OutlookEmailSourceProvider({
     }),
     [
       addDroppedEmail,
-      currentEmailParsed,
+      currentThread,
       dismissStagedEmailAttachment,
       dismissStagedEmailBody,
       dismissedAttachmentIds,
@@ -542,4 +630,22 @@ export function OutlookEmailSourceProvider({
       {children}
     </OutlookEmailSourceContext.Provider>
   );
+}
+
+function filterAttachments(
+  attachments: ThreadAttachment[],
+  dismissedAttachmentIds: ReadonlySet<string>,
+): ThreadAttachmentInput[] {
+  const output: ThreadAttachmentInput[] = [];
+  for (const attachment of attachments) {
+    if (attachment.isInline) continue;
+    if (attachment.contentBytes === null) continue;
+    if (dismissedAttachmentIds.has(attachment.id)) continue;
+    output.push({
+      filename: attachment.filename,
+      mimeType: attachment.mimeType,
+      contentBytes: attachment.contentBytes,
+    });
+  }
+  return output;
 }

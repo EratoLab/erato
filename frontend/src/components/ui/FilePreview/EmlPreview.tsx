@@ -1,12 +1,15 @@
 import { t } from "@lingui/core/macro";
 import { sanitize } from "lettersanitizer";
 import PostalMime from "postal-mime";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 
+import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { formatFileSize } from "@/components/ui/FileUpload/FilePreviewBase";
 import {
   ArrowLeftIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
   LoadingIcon,
   MailIcon,
   PageIcon,
@@ -234,7 +237,7 @@ export const EmlPreview: React.FC<EmlPreviewProps> = ({ url }) => {
 
     return () => {
       aborted = true;
-      for (const url of blobUrls) URL.revokeObjectURL(url);
+      for (const objectUrl of blobUrls) URL.revokeObjectURL(objectUrl);
     };
   }, [url]);
 
@@ -268,19 +271,40 @@ export const EmlPreview: React.FC<EmlPreviewProps> = ({ url }) => {
     );
   }
 
+  if (isThreadShape(state.parsed)) {
+    return <EmlThreadBody parsed={state.parsed} />;
+  }
   return <EmlPreviewBody parsed={state.parsed} />;
 };
+
+/**
+ * A `.eml` is a thread bundle (per `synthesizeThreadEml` in the office-addin)
+ * when the outer body is empty and at least one attachment is itself a
+ * `message/rfc822` part. Standalone forwards with an `.eml` attachment still
+ * have a non-empty outer body, so they fall through to the normal preview.
+ */
+function isThreadShape(parsed: ParsedEml): boolean {
+  if (parsed.html.length > 0 || parsed.text.length > 0) return false;
+  return parsed.attachments.some((attachment) =>
+    attachment.mimeType.toLowerCase().includes("message/rfc822"),
+  );
+}
 
 const EmlPreviewBody: React.FC<{
   parsed: ParsedEml;
 }> = ({ parsed }) => {
-  const iframeRef = useRef<HTMLIFrameElement>(null);
   const [selected, setSelected] = useState<ParsedAttachment | null>(null);
 
   // Pre-sanitize the HTML body up here so the iframe's `srcDoc` is rendered
   // with `sandbox` already set on the element in JSX — applying sandbox in a
   // post-mount effect would leave a window where the unsandboxed iframe has
   // already begun parsing/executing the email HTML.
+  //
+  // The iframe runs in a *null-origin* sandbox (`sandbox=""` — no flags).
+  // No scripts, no same-origin access to the parent, no form submission, no
+  // top-level navigation. A sanitizer bypass therefore cannot read cookies
+  // or LocalStorage. The cost: we can't measure `contentDocument` to
+  // auto-resize, so the iframe gets a fixed CSS height with internal scroll.
   const sanitizedHtml = useMemo(() => {
     if (!parsed.html) return "";
     return sanitize(parsed.html, parsed.text || undefined, {
@@ -291,50 +315,6 @@ const EmlPreviewBody: React.FC<{
       },
     });
   }, [parsed.html, parsed.text, parsed.cidToBlobUrl]);
-
-  useEffect(() => {
-    const iframe = iframeRef.current;
-    if (!iframe) return;
-    let observer: ResizeObserver | null = null;
-
-    const resize = () => {
-      try {
-        const doc = iframe.contentDocument;
-        if (!doc) return;
-        const measured = Math.max(
-          doc.body.scrollHeight,
-          doc.documentElement.scrollHeight,
-        );
-        if (measured > 0) {
-          const cap = window.innerHeight * 0.7;
-          iframe.style.height = `${Math.min(measured + 8, cap)}px`;
-        }
-      } catch {
-        // Sandbox + same-origin should keep contentDocument accessible, but
-        // leave the iframe at its default height if anything goes wrong.
-      }
-    };
-
-    const onLoad = () => {
-      resize();
-      try {
-        const body = iframe.contentDocument?.body;
-        if (body && typeof ResizeObserver === "function") {
-          observer = new ResizeObserver(resize);
-          observer.observe(body);
-        }
-      } catch {
-        // ignore
-      }
-    };
-
-    iframe.addEventListener("load", onLoad);
-    if (iframe.contentDocument?.readyState === "complete") onLoad();
-    return () => {
-      iframe.removeEventListener("load", onLoad);
-      observer?.disconnect();
-    };
-  }, [sanitizedHtml]);
 
   return (
     <div data-testid="eml-preview" className="flex flex-col gap-4">
@@ -350,14 +330,16 @@ const EmlPreviewBody: React.FC<{
           data-testid="eml-attachment-preview"
           className="flex flex-col gap-3"
         >
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
+            icon={<ArrowLeftIcon className="size-4" aria-hidden="true" />}
             onClick={() => setSelected(null)}
-            className="inline-flex w-fit items-center gap-1.5 rounded text-sm font-medium text-[var(--theme-fg-secondary)] hover:text-[var(--theme-fg-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-fg-accent)]"
+            className="w-fit"
           >
-            <ArrowLeftIcon className="size-4" aria-hidden="true" />
             {t`Back to email`}
-          </button>
+          </Button>
           <div className="truncate text-sm text-[var(--theme-fg-muted)]">
             {selected.filename}
           </div>
@@ -371,12 +353,11 @@ const EmlPreviewBody: React.FC<{
         <>
           {parsed.html ? (
             <iframe
-              ref={iframeRef}
               data-testid="eml-preview-html"
               title={parsed.subject ?? t`Email preview`}
-              sandbox="allow-same-origin"
+              sandbox=""
               srcDoc={sanitizedHtml}
-              className="w-full rounded border border-[var(--theme-border-attachment)] bg-white"
+              className="h-[60vh] w-full rounded border border-[var(--theme-border-attachment)] bg-white"
             />
           ) : (
             <pre
@@ -397,6 +378,248 @@ const EmlPreviewBody: React.FC<{
     </div>
   );
 };
+
+interface ThreadMessage {
+  /** Stable per-thread identifier: parsed Message-ID when available, else a content-derived fallback. */
+  id: string;
+  subject: string | null;
+  from: string | null;
+  date: string | null;
+  html: string;
+  text: string;
+  attachments: ParsedAttachment[];
+  cidToBlobUrl: Map<string, string>;
+}
+
+const EmlThreadBody: React.FC<{ parsed: ParsedEml }> = ({ parsed }) => {
+  const [messages, setMessages] = useState<ThreadMessage[] | null>(null);
+  const [selected, setSelected] = useState<ParsedAttachment | null>(null);
+
+  useEffect(() => {
+    let aborted = false;
+    const blobUrls: string[] = [];
+
+    const parseNested = async () => {
+      const out: ThreadMessage[] = [];
+      const nestedAttachments = parsed.attachments.filter((attachment) =>
+        attachment.mimeType.toLowerCase().includes("message/rfc822"),
+      );
+      for (const attachment of nestedAttachments) {
+        try {
+          const response = await fetch(attachment.blobUrl);
+          const bytes = await response.arrayBuffer();
+          const message = await PostalMime.parse(bytes);
+          if (aborted) return;
+          const cidToBlobUrl = new Map<string, string>();
+          const childAttachments: ParsedAttachment[] = [];
+          for (const child of message.attachments) {
+            const blob = attachmentBlob(child);
+            const childUrl = URL.createObjectURL(blob);
+            blobUrls.push(childUrl);
+            const trimmedName = child.filename?.trim();
+            childAttachments.push({
+              filename:
+                trimmedName && trimmedName.length > 0
+                  ? trimmedName
+                  : t`attachment`,
+              mimeType:
+                child.mimeType.length > 0 ? child.mimeType : OCTET_STREAM,
+              size: blob.size,
+              blobUrl: childUrl,
+            });
+            if (child.contentId !== undefined) {
+              const cid = child.contentId.replace(/^<|>$/g, "");
+              if (cid.length > 0) cidToBlobUrl.set(cid, childUrl);
+            }
+          }
+          const fallbackId = `thread-msg-${out.length}-${(message.subject ?? "").slice(0, 32)}`;
+          out.push({
+            id: message.messageId ?? fallbackId,
+            subject: nullIfEmpty(message.subject),
+            from: formatAddress(message.from),
+            date: message.date ?? null,
+            html: message.html ?? "",
+            text: message.text ?? "",
+            attachments: childAttachments,
+            cidToBlobUrl,
+          });
+        } catch (error) {
+          logger.warn("postal-mime failed to parse nested message", error);
+        }
+      }
+      if (aborted) return;
+      setMessages(out);
+    };
+
+    void parseNested();
+    return () => {
+      aborted = true;
+      for (const objectUrl of blobUrls) URL.revokeObjectURL(objectUrl);
+    };
+  }, [parsed.attachments]);
+
+  if (messages === null) {
+    return (
+      <div
+        className="flex items-center justify-center py-12"
+        aria-live="polite"
+        aria-busy="true"
+        data-testid="eml-thread-loading"
+      >
+        <LoadingIcon className="size-6 animate-spin text-[var(--theme-fg-muted)]" />
+      </div>
+    );
+  }
+
+  if (selected) {
+    return (
+      <div data-testid="eml-thread" className="flex flex-col gap-4">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          icon={<ArrowLeftIcon className="size-4" aria-hidden="true" />}
+          onClick={() => setSelected(null)}
+          className="w-fit"
+        >
+          {t`Back to thread`}
+        </Button>
+        <div className="truncate text-sm text-[var(--theme-fg-muted)]">
+          {selected.filename}
+        </div>
+        <FilePreviewContent
+          filename={selected.filename}
+          url={selected.blobUrl}
+          mimeType={selected.mimeType}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div data-testid="eml-thread" className="flex flex-col gap-3">
+      <EmlHeader
+        subject={parsed.subject}
+        from={null}
+        to={null}
+        cc={null}
+        date={null}
+      />
+      <div className="flex flex-col gap-2">
+        {messages.map((message, index) => (
+          <ThreadMessageSection
+            key={message.id}
+            message={message}
+            defaultExpanded={index === messages.length - 1}
+            onSelectAttachment={setSelected}
+            panelId={`eml-thread-panel-${message.id.replace(/[^a-zA-Z0-9_-]/g, "_")}`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const ThreadMessageSection: React.FC<{
+  message: ThreadMessage;
+  defaultExpanded: boolean;
+  onSelectAttachment: (attachment: ParsedAttachment) => void;
+  panelId: string;
+}> = ({ message, defaultExpanded, onSelectAttachment, panelId }) => {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+
+  // Sanitised HTML body for the iframe `srcDoc`. The iframe is rendered
+  // with `sandbox=""` (null origin, no scripts, no same-origin) — see the
+  // matching note on `EmlPreviewBody`.
+  const sanitizedHtml = useMemo(() => {
+    if (!message.html) return "";
+    return sanitize(message.html, message.text || undefined, {
+      rewriteExternalResources: (url) => {
+        if (!url.startsWith("cid:")) return url;
+        const cid = url.slice(4).replace(/^<|>$/g, "");
+        return message.cidToBlobUrl.get(cid) ?? url;
+      },
+    });
+  }, [message.html, message.text, message.cidToBlobUrl]);
+
+  return (
+    <div
+      data-testid="eml-thread-message"
+      className="rounded border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-primary)]"
+    >
+      <button
+        type="button"
+        onClick={() => setExpanded((value) => !value)}
+        className="flex w-full items-start gap-2 p-3 text-left"
+        aria-expanded={expanded}
+        aria-controls={panelId}
+      >
+        <span
+          className="mt-0.5 inline-flex shrink-0 items-center text-[var(--theme-fg-muted)]"
+          aria-hidden="true"
+        >
+          {expanded ? (
+            <ChevronDownIcon className="size-4" />
+          ) : (
+            <ChevronRightIcon className="size-4" />
+          )}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-[var(--theme-fg-primary)]">
+            {message.from ?? t`Unknown sender`}
+          </p>
+          <p className="truncate text-xs text-[var(--theme-fg-muted)]">
+            {[message.date, message.subject]
+              .filter((part): part is string => Boolean(part))
+              .join(" · ")}
+          </p>
+        </div>
+        {message.attachments.length > 0 && (
+          <span className="shrink-0 text-xs text-[var(--theme-fg-muted)]">
+            {message.attachments.length === 1
+              ? t`1 file`
+              : t`${message.attachments.length} files`}
+          </span>
+        )}
+      </button>
+      {expanded && (
+        <div
+          id={panelId}
+          role="region"
+          className="flex flex-col gap-3 px-3 pb-3"
+        >
+          {message.html ? (
+            <iframe
+              data-testid="eml-thread-message-html"
+              title={message.subject ?? t`Email`}
+              sandbox=""
+              srcDoc={sanitizedHtml}
+              className="h-[40vh] w-full rounded border border-[var(--theme-border-attachment)] bg-white"
+            />
+          ) : message.text ? (
+            <pre
+              data-testid="eml-thread-message-text"
+              className="max-h-[40vh] overflow-auto whitespace-pre-wrap rounded border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-accent)] p-3 text-sm text-[var(--theme-fg-primary)]"
+            >
+              {message.text}
+            </pre>
+          ) : null}
+          {message.attachments.length > 0 && (
+            <EmlAttachmentList
+              attachments={message.attachments}
+              onSelect={onSelectAttachment}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+function nullIfEmpty(value: string | undefined): string | null {
+  if (value === undefined) return null;
+  return value.trim().length === 0 ? null : value;
+}
 
 const EmlHeader: React.FC<{
   subject: string | null;

@@ -230,14 +230,100 @@ export const AddinChatInput = forwardRef<
       });
     }
 
-    // Staged emails (currently-open + future dropped). Each renders as its
-    // own grouped card with selectable rows for the .eml body and each
-    // in-eml attachment. Selection state is captured locally in Phase 1;
-    // surgical MIME removal in Phase 2 will honour deselections in the
-    // upload payload.
+    // Staged emails: the currently-open Outlook conversation renders as one
+    // card with each thread message nested inside (threadMessageGroup items);
+    // drag-dropped .eml files render as flat cards (one per drop).
     for (const staged of stagedEmails) {
-      const items: FileAttachmentGroupItem[] = [];
+      if (staged.source === "current-thread") {
+        const messageCount = staged.thread.messages.length;
+        const items: FileAttachmentGroupItem[] = staged.thread.messages.map(
+          (message) => {
+            const senderLabel =
+              message.from?.name?.trim() ||
+              message.from?.address?.trim() ||
+              t({
+                id: "officeAddin.chatInput.unknownSender",
+                message: "Unknown sender",
+              });
+            const dateLabel = message.date
+              ? new Date(message.date).toLocaleString()
+              : "";
+            const sublabel = [dateLabel, message.subject]
+              .filter((part) => part.trim().length > 0)
+              .join(" · ");
 
+            const attachmentItems = message.attachments
+              .filter((attachment) => !attachment.isInline)
+              .map((attachment) => {
+                const dismissed = staged.dismissedAttachmentIds.has(
+                  attachment.id,
+                );
+                const validation = validateAttachment(
+                  attachment.filename,
+                  attachment.mimeType,
+                  attachment.size,
+                  globalMaxSizeBytes,
+                  maxSizeFormatted,
+                );
+                return {
+                  id: attachment.id,
+                  file: {
+                    id: attachment.id,
+                    filename: attachment.filename,
+                    size: attachment.size,
+                  },
+                  selected: !dismissed,
+                  onToggle: () => {
+                    if (dismissed) {
+                      restoreStagedEmailAttachment(message.id, attachment.id);
+                    } else {
+                      dismissStagedEmailAttachment(message.id, attachment.id);
+                    }
+                  },
+                  validation,
+                };
+              });
+
+            const messageDismissed = staged.dismissedMessageIds.has(message.id);
+            return {
+              kind: "threadMessageGroup" as const,
+              id: message.id,
+              label: senderLabel,
+              sublabel,
+              selected: !messageDismissed,
+              onToggle: () => {
+                if (messageDismissed) {
+                  restoreStagedEmailBody(message.id);
+                } else {
+                  dismissStagedEmailBody(message.id);
+                }
+              },
+              defaultCollapsed: true,
+              attachments: attachmentItems,
+            };
+          },
+        );
+
+        groups.push({
+          id: `staged-email:${staged.key}`,
+          label:
+            staged.thread.subject ||
+            emailSubject ||
+            t({
+              id: "officeAddin.chatInput.emailFallback",
+              message: "Email",
+            }),
+          metaLabel:
+            messageCount === 1 ? t`1 message` : t`${messageCount} messages`,
+          items,
+          collapsible: true,
+          defaultCollapsed: true,
+        });
+        continue;
+      }
+
+      // source === "drop" — one .eml dragged onto the chat, flat layout.
+      const items: FileAttachmentGroupItem[] = [];
       items.push({
         kind: "selectableAttachment",
         id: `${staged.key}:body`,

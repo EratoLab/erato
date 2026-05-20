@@ -207,4 +207,5 @@ export type {
   FileAttachmentGroup,
   FileAttachmentGroupItem,
   GroupedFileAttachmentsPreviewProps,
+  ThreadMessageAttachmentItem,
 } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
