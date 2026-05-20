@@ -252,6 +252,7 @@ const ThreadMessageGroupSection: React.FC<ThreadMessageGroupSectionProps> = ({
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const panelId = useId();
   const hasAttachments = attachments.length > 0;
+  const attachmentCount = attachments.length;
   return (
     <div
       className={clsx(
@@ -292,9 +293,9 @@ const ThreadMessageGroupSection: React.FC<ThreadMessageGroupSectionProps> = ({
             </span>
             <ThreadMessageHeaderText label={label} sublabel={sublabel} />
             <span className="shrink-0 text-xs text-theme-fg-muted">
-              {attachments.length === 1
+              {attachmentCount === 1
                 ? t`1 file`
-                : t`${attachments.length} files`}
+                : t`${attachmentCount} files`}
             </span>
           </button>
         ) : (

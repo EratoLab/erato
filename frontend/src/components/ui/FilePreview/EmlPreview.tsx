@@ -1,7 +1,7 @@
 import { t } from "@lingui/core/macro";
 import { sanitize } from "lettersanitizer";
 import PostalMime from "postal-mime";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
@@ -79,6 +79,8 @@ function formatAddressList(addrs: Address[] | undefined): string | null {
 
 // eslint-disable-next-line lingui/no-unlocalized-strings
 const OCTET_STREAM = "application/octet-stream";
+// eslint-disable-next-line lingui/no-unlocalized-strings
+const MESSAGE_RFC822 = "message/rfc822";
 
 function attachmentBlob(attachment: Attachment): Blob {
   const { content, mimeType } = attachment;
@@ -286,7 +288,7 @@ export const EmlPreview: React.FC<EmlPreviewProps> = ({ url }) => {
 function isThreadShape(parsed: ParsedEml): boolean {
   if (parsed.html.length > 0 || parsed.text.length > 0) return false;
   return parsed.attachments.some((attachment) =>
-    attachment.mimeType.toLowerCase().includes("message/rfc822"),
+    attachment.mimeType.toLowerCase().includes(MESSAGE_RFC822),
   );
 }
 
@@ -402,7 +404,7 @@ const EmlThreadBody: React.FC<{ parsed: ParsedEml }> = ({ parsed }) => {
     const parseNested = async () => {
       const out: ThreadMessage[] = [];
       const nestedAttachments = parsed.attachments.filter((attachment) =>
-        attachment.mimeType.toLowerCase().includes("message/rfc822"),
+        attachment.mimeType.toLowerCase().includes(MESSAGE_RFC822),
       );
       for (const attachment of nestedAttachments) {
         try {
@@ -574,13 +576,15 @@ const ThreadMessageSection: React.FC<{
               .join(" · ")}
           </p>
         </div>
-        {message.attachments.length > 0 && (
-          <span className="shrink-0 text-xs text-[var(--theme-fg-muted)]">
-            {message.attachments.length === 1
-              ? t`1 file`
-              : t`${message.attachments.length} files`}
-          </span>
-        )}
+        {message.attachments.length > 0 &&
+          (() => {
+            const count = message.attachments.length;
+            return (
+              <span className="shrink-0 text-xs text-[var(--theme-fg-muted)]">
+                {count === 1 ? t`1 file` : t`${count} files`}
+              </span>
+            );
+          })()}
       </button>
       {expanded && (
         <div
