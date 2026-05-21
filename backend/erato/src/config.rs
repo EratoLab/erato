@@ -635,6 +635,11 @@ impl AppConfig {
             panic!("Invalid Entra ID configuration: {}", e);
         }
 
+        // Validate MS Office add-in configuration
+        if let Err(e) = config.integrations.ms_office.addin.validate() {
+            panic!("Invalid Microsoft Office add-in configuration: {}", e);
+        }
+
         // Validate Prometheus configuration
         if let Err(e) = config.integrations.prometheus.validate(config.http_port) {
             panic!("Invalid Prometheus configuration: {}", e);
@@ -2530,6 +2535,8 @@ pub struct MsOfficeConfig {
 pub struct MsOfficeAddinConfig {
     #[serde(default)]
     pub enabled: bool,
+    #[serde(default = "default_ms_office_addin_id")]
+    pub addin_id: String,
     pub msal_client_id: Option<String>,
     #[serde(default = "default_ms_office_addin_msal_authority")]
     pub msal_authority: String,
@@ -2543,6 +2550,7 @@ impl Default for MsOfficeAddinConfig {
     fn default() -> Self {
         Self {
             enabled: false,
+            addin_id: default_ms_office_addin_id(),
             msal_client_id: None,
             msal_authority: default_ms_office_addin_msal_authority(),
             serve_bundle_legacy_path: default_ms_office_addin_serve_bundle_legacy_path(),
@@ -2551,8 +2559,24 @@ impl Default for MsOfficeAddinConfig {
     }
 }
 
+impl MsOfficeAddinConfig {
+    pub fn validate(&self) -> Result<(), Report> {
+        if self.addin_id.trim().is_empty() {
+            return Err(eyre!(
+                "Microsoft Office add-in id cannot be empty when the add-in is configured."
+            ));
+        }
+
+        Ok(())
+    }
+}
+
 fn default_ms_office_addin_msal_authority() -> String {
     "https://login.microsoftonline.com/common".to_string()
+}
+
+fn default_ms_office_addin_id() -> String {
+    "ee94d041-bd77-446c-8854-421648f50e7c".to_string()
 }
 
 fn default_ms_office_addin_serve_bundle_legacy_path() -> bool {

@@ -31,6 +31,7 @@ async fn health() -> &'static str {
 
 const OFFICE_ADDIN_MANIFEST_DEFAULT_BASE_URL: &str = "https://localhost:3002";
 const OFFICE_ADDIN_MANIFEST_VERSION_PLACEHOLDER: &str = "{{OFFICE_ADDIN_MANIFEST_VERSION}}";
+const OFFICE_ADDIN_ID_PLACEHOLDER: &str = "{{OFFICE_ADDIN_ID}}";
 
 #[derive(Debug, Deserialize, IntoParams)]
 struct OfficeAddinManifestQuery {
@@ -110,6 +111,7 @@ fn office_addin_manifest_version(deployment_version: Option<&str>) -> String {
 fn render_office_addin_manifest(
     template: &str,
     base_url: &str,
+    addin_id: &str,
     deployment_version: Option<&str>,
 ) -> String {
     let office_addin_base_url = format!(
@@ -123,6 +125,7 @@ fn render_office_addin_manifest(
         .replace(OFFICE_ADDIN_MANIFEST_DEFAULT_BASE_URL, base_url)
         .replace("{{BASE_URL}}", base_url)
         .replace("{{OFFICE_ADDIN_BASE_URL}}", &office_addin_base_url)
+        .replace(OFFICE_ADDIN_ID_PLACEHOLDER, addin_id)
         .replace(OFFICE_ADDIN_MANIFEST_VERSION_PLACEHOLDER, &manifest_version)
         .replace(
             "{{OFFICE_ADDIN_ASSET_BASE_URL}}",
@@ -196,6 +199,7 @@ async fn office_addin_manifest(
     let rendered_manifest = render_office_addin_manifest(
         &manifest_template,
         &base_url,
+        &app_state.config.integrations.ms_office.addin.addin_id,
         deployment_version.0.as_deref(),
     );
     (
@@ -333,16 +337,24 @@ mod tests {
     fn render_office_addin_manifest_rewrites_taskpane_and_asset_urls() {
         let template = r#"
         <OfficeApp>
+          <Id>{{OFFICE_ADDIN_ID}}</Id>
           <Version>{{OFFICE_ADDIN_MANIFEST_VERSION}}</Version>
           <IconUrl DefaultValue="https://localhost:3002/public/platform-office-addin/assets/color-icon-192x192.png" />
           <SourceLocation DefaultValue="https://localhost:3002/public/platform-office-addin/" />
         </OfficeApp>
         "#;
 
-        let rendered =
-            render_office_addin_manifest(template, "https://app.example.com/base", Some("42"));
+        let rendered = render_office_addin_manifest(
+            template,
+            "https://app.example.com/base",
+            "custom-addin-id",
+            Some("42"),
+        );
         let (major, minor, patch) = manifest_version_prefix();
         let expected_version = format!("{major}.{minor}.{patch}.42");
+
+        assert!(rendered.contains("<Id>custom-addin-id</Id>"));
+        assert!(!rendered.contains(OFFICE_ADDIN_ID_PLACEHOLDER));
 
         assert!(
             rendered.contains(

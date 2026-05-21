@@ -83,6 +83,10 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
         "./public/platform-office-addin"
     );
     assert_eq!(
+        config.integrations.ms_office.addin.addin_id,
+        "ee94d041-bd77-446c-8854-421648f50e7c"
+    );
+    assert_eq!(
         config.integrations.ms_office.addin.msal_authority,
         "https://login.microsoftonline.com/common"
     );
@@ -90,6 +94,94 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
     assert_eq!(config.cleanup_archived_max_age_days, 30);
 
     // The temp file will be automatically cleaned up when temp_file goes out of scope
+}
+
+#[test]
+fn test_config_with_custom_ms_office_addin_id() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+
+[integrations.ms_office.addin]
+enabled = true
+addin_id = "f00ba5-1111-2222-3333-444444444444"
+msal_client_id = "00000000-0000-0000-0000-000000000000"
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let temp_path = temp_file.path().to_str().unwrap();
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let config: AppConfig = config_schema
+        .try_deserialize::<AppConfig>()
+        .expect("Failed to deserialize config")
+        .migrate();
+
+    assert_eq!(
+        config.integrations.ms_office.addin.addin_id,
+        "f00ba5-1111-2222-3333-444444444444"
+    );
+}
+
+#[test]
+#[should_panic(
+    expected = "Microsoft Office add-in id cannot be empty when the add-in is configured."
+)]
+fn test_config_with_empty_ms_office_addin_id_is_invalid() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+
+[integrations.ms_office.addin]
+enabled = true
+addin_id = ""
+msal_client_id = "00000000-0000-0000-0000-000000000000"
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let temp_path = temp_file.path().to_str().unwrap();
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let _ = config_schema
+        .try_deserialize::<AppConfig>()
+        .expect("Failed to deserialize config")
+        .migrate();
 }
 
 #[test]
