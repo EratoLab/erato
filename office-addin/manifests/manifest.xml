@@ -4,7 +4,7 @@
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
   xsi:type="MailApp">
-  <Id>ee94d041-bd77-446c-8854-421648f50e7c</Id>
+  <Id>{{OFFICE_ADDIN_ID}}</Id>
   <Version>{{OFFICE_ADDIN_MANIFEST_VERSION}}</Version>
   <ProviderName>Erato</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>

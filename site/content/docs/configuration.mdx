@@ -1584,6 +1584,78 @@ The service name to identify this application in traces.
 
 **Type:** `string`
 
+#### `integrations.ms_office`
+
+Configuration for the Microsoft Office add-in integration.
+
+##### `integrations.ms_office.addin.enabled`
+
+Whether the Office add-in frontend and manifest endpoint are enabled.
+
+When enabled, Erato serves the add-in frontend bundle and exposes `GET /office-addin/manifest.xml`.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+##### `integrations.ms_office.addin.msal_client_id`
+
+The Microsoft identity platform client (application) ID used by the Office add-in for OAuth-based authentication.
+
+**Required for add-in authentication flows:** Yes
+
+**Type:** `string | None`
+
+##### `integrations.ms_office.addin.addin_id`
+
+The Office add-in manifest ID used when rendering the add-in manifest.
+
+Override this ID to install multiple add-in instances in the same tenant.
+
+**Default value:** `"ee94d041-bd77-446c-8854-421648f50e7c"`
+
+**Type:** `string`
+
+##### `integrations.ms_office.addin.msal_authority`
+
+The Microsoft identity authority URL used for MSAL authentication.
+
+**Default value:** `"https://login.microsoftonline.com/common"`
+
+**Type:** `string`
+
+##### `integrations.ms_office.addin.serve_bundle_legacy_path`
+
+Whether to also serve the Office add-in bundle under `/office-addin` in addition to `/public/platform-office-addin`.
+
+This is useful for deployments that still reference legacy asset URLs.
+
+**Default value:** `true`
+
+**Type:** `boolean`
+
+##### `integrations.ms_office.addin.frontend_bundle_path`
+
+Filesystem path to the Office add-in frontend bundle.
+
+The path must contain the Office add-in frontend artifacts including `manifest.xml`.
+
+**Default value:** `"./public/platform-office-addin"`
+
+**Type:** `string`
+
+**Example:**
+
+```toml
+[integrations.ms_office.addin]
+enabled = true
+msal_client_id = "00000000-0000-0000-0000-000000000000"
+addin_id = "11111111-2222-3333-4444-555555555555"
+msal_authority = "https://login.microsoftonline.com/consumers"
+serve_bundle_legacy_path = true
+frontend_bundle_path = "./public/platform-office-addin"
+```
+
 #### `integrations.prometheus`
 
 Configuration for [Prometheus](./integrations/prometheus) metrics export.
