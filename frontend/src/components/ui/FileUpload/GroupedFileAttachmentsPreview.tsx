@@ -293,9 +293,7 @@ const ThreadMessageGroupSection: React.FC<ThreadMessageGroupSectionProps> = ({
             </span>
             <ThreadMessageHeaderText label={label} sublabel={sublabel} />
             <span className="shrink-0 text-xs text-theme-fg-muted">
-              {attachmentCount === 1
-                ? t`1 file`
-                : t`${attachmentCount} files`}
+              {attachmentCount === 1 ? t`1 file` : t`${attachmentCount} files`}
             </span>
           </button>
         ) : (

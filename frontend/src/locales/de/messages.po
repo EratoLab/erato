@@ -1604,6 +1604,14 @@ msgstr "{0, plural, =0 {Keine Dateien} one {# Datei} other {# Dateien}}"
 #~ msgid "{0} items"
 #~ msgstr ""
 
+#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+msgid "{attachmentCount} files"
+msgstr ""
+
+#: src/components/ui/FilePreview/EmlPreview.tsx
+msgid "{count} files"
+msgstr ""
+
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "{fileName}: {filePercentage}%"
 msgstr "{fileName}: {filePercentage}%"
@@ -1633,6 +1641,8 @@ msgid "• Use \"Reset to Browser Detection\" to test fresh detection"
 msgstr "• \"Auf Browsererkennung zurücksetzen\" verwenden, um die Erkennung neu zu testen"
 
 #: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/components/ui/FilePreview/EmlPreview.tsx
+#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "1 file"
 msgstr "1 Datei"
 
@@ -1825,6 +1835,10 @@ msgstr ""
 
 #: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "Back to email"
+msgstr ""
+
+#: src/components/ui/FilePreview/EmlPreview.tsx
+msgid "Back to thread"
 msgstr ""
 
 #: src/components/ui/Message/ConversationIndicator.tsx
@@ -2134,6 +2148,10 @@ msgid "Edit your message..."
 msgstr "Bearbeiten Sie Ihre Nachricht..."
 
 #: src/components/ui/FilePreview/EmlPreview.tsx
+msgid "Email"
+msgstr ""
+
+#: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "Email preview"
 msgstr ""
 
@@ -2262,6 +2280,10 @@ msgstr "In Bearbeitung"
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "Include"
 msgstr "Einbeziehen"
+
+#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+msgid "Include message"
+msgstr ""
 
 #: src/components/ui/ToolCall/ToolCallInput.tsx
 msgid "Input Parameters"
@@ -2838,6 +2860,10 @@ msgstr "Nachricht eingeben..."
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Unable to retry this transcription because the source audio is not available."
+msgstr ""
+
+#: src/components/ui/FilePreview/EmlPreview.tsx
+msgid "Unknown sender"
 msgstr ""
 
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx

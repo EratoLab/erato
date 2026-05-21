@@ -113,6 +113,11 @@ msgstr "(sin asunto)"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.unknownSender"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.validation.tooLarge"
 msgstr "El archivo supera el límite del servidor de {globalMaxFormatted}"
 
@@ -515,3 +520,14 @@ msgstr "Cargue el manifiesto generado"
 #: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.setup.uploadInstruction"
 msgstr "y cargue allí el archivo descargado."
+
+# ==============================
+# Unstable IDs
+# ==============================
+#: src/components/AddinChatInput.tsx
+msgid "{messageCount} messages"
+msgstr ""
+
+#: src/components/AddinChatInput.tsx
+msgid "1 message"
+msgstr ""
