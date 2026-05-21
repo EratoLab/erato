@@ -1,9 +1,18 @@
+import { I18nProvider } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { Trans } from "@lingui/react/macro";
 import { useCallback, useEffect, useState } from "react";
 
 const INTEGRATED_APPS_URL =
   "https://admin.cloud.microsoft/?#/Settings/IntegratedApps";
+
+export function AddinSetupRoute() {
+  return (
+    <I18nProvider>
+      <AddinSetupPage />
+    </I18nProvider>
+  );
+}
 
 function getManifestUrl(): string {
   return new URL("manifest.xml", window.location.href).toString();

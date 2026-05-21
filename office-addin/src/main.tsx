@@ -8,7 +8,7 @@ import App from "./App";
 import { injectFrontendEnv } from "./app/env";
 import { AddinFileSourceSelector } from "./components/AddinFileSourceSelector";
 import { OutlookEratoEmailRenderer } from "./components/OutlookEratoEmailRenderer";
-import { AddinSetupPage } from "./pages/AddinSetupPage";
+import { AddinSetupRoute } from "./pages/AddinSetupPage";
 
 injectFrontendEnv();
 
@@ -26,7 +26,7 @@ ReactDOM.createRoot(rootElement).render(
     <BrowserRouter basename="/office-addin">
       <Routes>
         <Route path="/" element={<App />} />
-        <Route path="/setup" element={<AddinSetupPage />} />
+        <Route path="/setup" element={<AddinSetupRoute />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
