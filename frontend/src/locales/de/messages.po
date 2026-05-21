@@ -2255,6 +2255,10 @@ msgstr "Details ausblenden"
 msgid "How to Test:"
 msgstr "So testen Sie:"
 
+#: src/components/ui/Message/MessageContent.tsx
+msgid "Image"
+msgstr ""
+
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "In Progress"
 msgstr "In Bearbeitung"

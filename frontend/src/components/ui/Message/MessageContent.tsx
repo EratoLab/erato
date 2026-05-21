@@ -17,6 +17,7 @@ import {
   resolvePrismCodeTheme,
 } from "@/config/codeHighlightThemes";
 import { useOptionalTranslation } from "@/hooks/i18n";
+import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { EratoEmailSuggestion } from "./EratoEmailSuggestion";
 import { ImageContentDisplay } from "./ImageContentDisplay";
@@ -174,6 +175,14 @@ const getPreviewUrl = (
 ): string | undefined =>
   typeof file.preview_url === "string" ? file.preview_url : undefined;
 
+const isImageFile = (file: FileUploadItem): boolean =>
+  // eslint-disable-next-line lingui/no-unlocalized-strings
+  file.file_capability.operations.includes("analyze_image") ||
+  FileTypeUtil.getFileTypeFromMetadata(
+    file.filename,
+    file.file_capability.mime_types[0] ?? "",
+  ) === "image";
+
 const autolinkEratoFiles = (text: string): string => {
   // eslint-disable-next-line lingui/no-unlocalized-strings
   if (!text.includes("erato-file://")) {
@@ -250,6 +259,12 @@ const contentPartToImage = (
 
   return null;
 };
+
+const MARKDOWN_IMAGE_STYLE = {
+  maxWidth: "var(--theme-layout-chat-image-preview-max-width)",
+  maxHeight: "var(--theme-layout-chat-image-preview-max-height)",
+} as const;
+const UNRESOLVED_IMAGE_ANCHOR = "#unresolved-link";
 
 export const MessageContent = memo(function MessageContent({
   content,
@@ -360,6 +375,103 @@ export const MessageContent = memo(function MessageContent({
           {children}
         </a>
       );
+    },
+    img({ src, alt, node: _node, ...props }) {
+      const resolvedEratoFile = src ? resolveEratoFileLink(src) : null;
+      const isEratoFileImageUrl =
+        // eslint-disable-next-line lingui/no-unlocalized-strings
+        typeof src === "string" ? src.startsWith("erato-file://") : false;
+      const isEratoFileImage =
+        resolvedEratoFile && isImageFile(resolvedEratoFile.previewFile);
+      const unresolvedSrc =
+        isEratoFileImageUrl && !resolvedEratoFile
+          ? `${src}${UNRESOLVED_IMAGE_ANCHOR}`
+          : src;
+      const resolvedSrc =
+        resolvedEratoFile?.resolvedHref ?? unresolvedSrc ?? "";
+
+      if (!isEratoFileImage) {
+        if (resolvedEratoFile) {
+          // Preserve link resolution for known non-image attachments.
+          return (
+            <a
+              href={resolvedSrc}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-theme-fg-accent underline hover:opacity-80"
+              onClick={(event) => {
+                if (!onFileLinkPreview) {
+                  return;
+                }
+
+                event.preventDefault();
+                onFileLinkPreview(resolvedEratoFile.previewFile);
+              }}
+            >
+              {typeof alt === "string" ? alt : t`Image`}
+            </a>
+          );
+        }
+
+        if (isEratoFileImageUrl) {
+          return (
+            <a
+              href={unresolvedSrc ?? UNRESOLVED_IMAGE_ANCHOR}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-theme-fg-accent underline hover:opacity-80"
+            >
+              {typeof alt === "string" ? alt : t`Image`}
+            </a>
+          );
+        }
+
+        return (
+          <img
+            src={resolvedSrc}
+            alt={typeof alt === "string" ? alt : ""}
+            loading="lazy"
+            {...props}
+          />
+        );
+      }
+
+      const imagePart: UiImagePart = {
+        type: "image" as const,
+        src: resolvedSrc,
+        id: resolvedEratoFile.previewFile.id,
+        fileUploadId: resolvedEratoFile.previewFile.id,
+      };
+
+      const imageElement = (
+        <img
+          src={resolvedSrc}
+          alt={typeof alt === "string" ? alt : ""}
+          loading="lazy"
+          className="w-full rounded-lg border object-contain [border-color:var(--theme-border-media)]"
+          style={MARKDOWN_IMAGE_STYLE}
+          {...props}
+        />
+      );
+
+      if (onImageClick) {
+        return (
+          <button
+            type="button"
+            className="my-4 block w-full cursor-pointer border-0 bg-transparent p-0"
+            onClick={() =>
+              onImageClick({
+                ...imagePart,
+                src: imagePart.src,
+              })
+            }
+          >
+            {imageElement}
+          </button>
+        );
+      }
+
+      return imageElement;
     },
     // Custom table styling
     table({ children, node: _node, ...props }) {

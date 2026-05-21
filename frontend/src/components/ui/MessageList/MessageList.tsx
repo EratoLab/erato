@@ -5,6 +5,7 @@ import { memo, useCallback, useMemo, useEffect, useRef } from "react";
 import { useMessageListVirtualization, useScrollEvents } from "@/hooks/ui";
 import { usePaginatedData } from "@/hooks/ui/usePaginatedData";
 import { useScrollToBottom } from "@/hooks/useScrollToBottom";
+import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { MessageListHeader } from "./MessageListHeader";
 import {
@@ -18,6 +19,7 @@ import { VirtualizedMessageList } from "./VirtualizedMessageList";
 import type { ChatMessageProps } from "../Chat/ChatMessage";
 import type {
   ChatMessagesResponse,
+  ContentPart,
   UserProfile,
   FileUploadItem,
   MessageFeedback,
@@ -176,6 +178,91 @@ export interface MessageListProps {
    */
   emptyStateComponent?: React.ReactNode;
 }
+
+const decodeRepeatedly = (value: string, maxIterations = 3): string => {
+  let decoded = value;
+  for (let i = 0; i < maxIterations; i += 1) {
+    try {
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) {
+        return decoded;
+      }
+      decoded = next;
+    } catch {
+      return decoded;
+    }
+  }
+
+  return decoded;
+};
+
+const getImageFilePointerFilename = (
+  url: string | null | undefined,
+  fallbackId: string,
+): string => {
+  const fallbackFilename = `file-${fallbackId}`;
+
+  if (!url) {
+    return fallbackFilename;
+  }
+
+  try {
+    const parsed = new URL(url);
+    const rawContentDisposition = parsed.searchParams.get("rscd");
+
+    if (rawContentDisposition) {
+      const contentDisposition = decodeRepeatedly(rawContentDisposition);
+      const filenameMatch = /filename\*?=(?:UTF-8''|")?([^;"]+)/i.exec(
+        contentDisposition,
+      );
+      if (filenameMatch?.[1]) {
+        const rawFilename = filenameMatch[1]
+          .replace(/^"(.*)"$/, "$1")
+          .replace(/^UTF-8''/i, "");
+        return decodeRepeatedly(rawFilename);
+      }
+    }
+
+    const pathSegments = parsed.pathname.split("/").filter(Boolean);
+    const filename = pathSegments.at(-1);
+    if (!filename) {
+      return fallbackFilename;
+    }
+
+    return decodeURIComponent(filename);
+  } catch {
+    return fallbackFilename;
+  }
+};
+
+const toMockImagePointerFile = (part: ContentPart): FileUploadItem | null => {
+  if (part.content_type === "image_file_pointer") {
+    const filename = getImageFilePointerFilename(
+      part.preview_url ?? part.download_url,
+      part.file_upload_id,
+    );
+    const fileCapability = FileTypeUtil.createMockFileCapability(filename);
+    const capability: FileUploadItem["file_capability"] = {
+      ...fileCapability,
+      // eslint-disable-next-line lingui/no-unlocalized-strings
+      operations: fileCapability.operations.includes("analyze_image")
+        ? fileCapability.operations
+        : // eslint-disable-next-line lingui/no-unlocalized-strings
+          [...fileCapability.operations, "analyze_image"],
+    };
+
+    return {
+      id: part.file_upload_id,
+      filename,
+      file_capability: capability,
+      file_contents_unavailable_missing_permissions: false,
+      is_sharepoint_file: false,
+      download_url: part.download_url ?? "",
+      preview_url: part.preview_url ?? part.download_url ?? undefined,
+    };
+  }
+  return null;
+};
 
 // Separate hook for managing message loading and streaming behavior
 function useMessageLoading({
@@ -444,6 +531,13 @@ export const MessageList = memo<MessageListProps>(
         const message = messages[messageId] as UiChatMessage;
         (message.files ?? []).forEach((file) => {
           fileMap[file.id] = file;
+        });
+
+        message.content.forEach((part) => {
+          const pointerFile = toMockImagePointerFile(part);
+          if (pointerFile) {
+            fileMap[pointerFile.id] = pointerFile;
+          }
         });
       });
       return fileMap;

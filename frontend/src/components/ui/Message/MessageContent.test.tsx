@@ -470,6 +470,57 @@ describe("MessageContent", () => {
     );
   });
 
+  it("renders inline markdown image links that point to erato-file URLs", () => {
+    const onImageClick = vi.fn();
+    const imageFile = makeFile({
+      id: "dog_123",
+      filename: "dog.png",
+      download_url: "https://files.example.com/downloads/dog.png",
+      preview_url: "https://files.example.com/preview/dog.png" as never,
+      file_capability: FileTypeUtil.createMockFileCapability("dog.png"),
+    });
+
+    renderWithTheme(
+      <MessageContent
+        content={textContent("![Generated dog](erato-file://dog_123)")}
+        filesById={{ [imageFile.id]: imageFile }}
+        onImageClick={onImageClick}
+      />,
+    );
+
+    const image = screen.getByRole("img", { name: "Generated dog" });
+
+    expect(image).toHaveAttribute(
+      "src",
+      "https://files.example.com/preview/dog.png",
+    );
+
+    fireEvent.click(image);
+    expect(onImageClick).toHaveBeenCalledTimes(1);
+    expect(onImageClick).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "dog_123",
+        fileUploadId: "dog_123",
+      }),
+    );
+  });
+
+  it("adds #unresolved-link when an inline erato-file markdown image cannot be resolved", () => {
+    renderWithTheme(
+      <MessageContent
+        content={textContent("![Missing](erato-file://missing_image)")}
+        filesById={{}}
+      />,
+    );
+
+    const unresolvedLink = screen.getByRole("link", { name: "Missing" });
+
+    expect(unresolvedLink).toHaveAttribute(
+      "href",
+      "erato-file://missing_image#unresolved-link",
+    );
+  });
+
   it("keeps external links opening in a new tab", () => {
     renderWithTheme(
       <MessageContent

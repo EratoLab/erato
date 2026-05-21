@@ -315,3 +315,31 @@ export const ResolvedFileLinksInMarkdown: Story = {
     },
   },
 };
+
+export const ResolvedImageFileInMarkdown: Story = {
+  args: {
+    content: textContent("![A generated image](erato-file://file_image)"),
+    filesById: {
+      file_image: {
+        id: "file_image",
+        filename: "generated-image.png",
+        download_url: "https://files.example.com/downloads/generated-image.png",
+        file_contents_unavailable_missing_permissions: false,
+        is_sharepoint_file: false,
+        preview_url:
+          "https://files.example.com/preview/generated-image.png" as never,
+        file_capability: FileTypeUtil.createMockFileCapability(
+          "generated-image.png",
+        ),
+      },
+    },
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Demonstrates markdown image syntax with an `erato-file://` URL.",
+      },
+    },
+  },
+};
