@@ -40,7 +40,7 @@ const OUTLOOK_CLOUD_ATTACHMENT_TYPE = "cloud";
 const GRAPH_MAIL_SCOPES = ["Mail.Read"];
 
 function generateDroppedKey(): string {
-  return `drop-${crypto.randomUUID()}`;
+  return `drop-${globalThis.crypto.randomUUID()}`;
 }
 
 /**

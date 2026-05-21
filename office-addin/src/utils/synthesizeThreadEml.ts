@@ -305,7 +305,7 @@ function latestDate(messages: ThreadMessageInput[]): string | null {
  */
 function generateBoundary(prefix: string): string {
   const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
+  globalThis.crypto.getRandomValues(bytes);
   let hex = "";
   for (const byte of bytes) hex += byte.toString(16).padStart(2, "0");
   return `--Erato-${prefix}-${hex}`;
