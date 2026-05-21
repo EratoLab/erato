@@ -1604,6 +1604,14 @@ msgstr "{0, plural, =0 {No files} one {# file} other {# files}}"
 #~ msgid "{0} items"
 #~ msgstr "{0} items"
 
+#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+msgid "{attachmentCount} files"
+msgstr "{attachmentCount} files"
+
+#: src/components/ui/FilePreview/EmlPreview.tsx
+msgid "{count} files"
+msgstr "{count} files"
+
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "{fileName}: {filePercentage}%"
 msgstr "{fileName}: {filePercentage}%"
@@ -1633,6 +1641,8 @@ msgid "• Use \"Reset to Browser Detection\" to test fresh detection"
 msgstr "• Use \"Reset to Browser Detection\" to test fresh detection"
 
 #: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/components/ui/FilePreview/EmlPreview.tsx
+#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "1 file"
 msgstr "1 file"
 
@@ -1826,6 +1836,10 @@ msgstr "Back to Assistants"
 #: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "Back to email"
 msgstr "Back to email"
+
+#: src/components/ui/FilePreview/EmlPreview.tsx
+msgid "Back to thread"
+msgstr "Back to thread"
 
 #: src/components/ui/Message/ConversationIndicator.tsx
 msgid "Beginning of conversation"
@@ -2134,6 +2148,10 @@ msgid "Edit your message..."
 msgstr "Edit your message..."
 
 #: src/components/ui/FilePreview/EmlPreview.tsx
+msgid "Email"
+msgstr "Email"
+
+#: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "Email preview"
 msgstr "Email preview"
 
@@ -2266,6 +2284,10 @@ msgstr "In Progress"
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "Include"
 msgstr "Include"
+
+#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+msgid "Include message"
+msgstr "Include message"
 
 #: src/components/ui/ToolCall/ToolCallInput.tsx
 msgid "Input Parameters"
@@ -2843,6 +2865,10 @@ msgstr "Type a message..."
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Unable to retry this transcription because the source audio is not available."
 msgstr "Unable to retry this transcription because the source audio is not available."
+
+#: src/components/ui/FilePreview/EmlPreview.tsx
+msgid "Unknown sender"
+msgstr "Unknown sender"
 
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "Untitled Chat"

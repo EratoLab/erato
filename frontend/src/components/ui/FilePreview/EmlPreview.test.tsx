@@ -24,19 +24,36 @@ const stringToBuffer = (s: string): ArrayBuffer => {
 
 const mockFetchEml = (bytes: ArrayBuffer | string) => {
   const buffer = typeof bytes === "string" ? stringToBuffer(bytes) : bytes;
-  global.fetch = vi.fn().mockResolvedValue({
-    ok: true,
-    status: 200,
-    arrayBuffer: async () => buffer,
+  global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+    const url = typeof input === "string" ? input : input.toString();
+    if (url.startsWith("blob:")) {
+      const blob = blobUrlContent.get(url);
+      if (!blob) throw new Error(`unmapped blob URL: ${url}`);
+      return {
+        ok: true,
+        status: 200,
+        arrayBuffer: async () => blob.arrayBuffer(),
+      } as Response;
+    }
+    return {
+      ok: true,
+      status: 200,
+      arrayBuffer: async () => buffer,
+    } as Response;
   });
 };
 
 let blobUrlCounter = 0;
 const createdBlobUrls: string[] = [];
+// Keyed by mocked blob URL; lets `mockFetchEml` route `fetch(blobUrl)`
+// requests (e.g. from `EmlThreadBody`'s nested-message parsing) back to
+// the original Blob bytes that `URL.createObjectURL` was called with.
+const blobUrlContent = new Map<string, Blob>();
 
 beforeEach(() => {
   blobUrlCounter = 0;
   createdBlobUrls.length = 0;
+  blobUrlContent.clear();
   if (typeof window.localStorage.getItem !== "function") {
     const store = new Map<string, string>();
     Object.defineProperty(window, "localStorage", {
@@ -55,9 +72,10 @@ beforeEach(() => {
   }
   Object.defineProperty(URL, "createObjectURL", {
     configurable: true,
-    value: () => {
+    value: (blob: Blob) => {
       const url = `blob:mock/${++blobUrlCounter}`;
       createdBlobUrls.push(url);
+      blobUrlContent.set(url, blob);
       return url;
     },
   });
@@ -134,9 +152,11 @@ describe("EmlPreview", () => {
 
     const iframe = await screen.findByTestId("eml-preview-html");
     expect(iframe.tagName).toBe("IFRAME");
-    // sandbox must be set in JSX, not patched on post-mount — otherwise the
-    // first parse of `srcdoc` runs unsandboxed.
-    expect(iframe.getAttribute("sandbox")).toBe("allow-same-origin");
+    // Sandbox must be set in JSX, not patched post-mount — otherwise the
+    // first parse of `srcdoc` runs unsandboxed. `sandbox=""` is the most
+    // restrictive value: no scripts, no same-origin, null-origin doc. A
+    // sanitizer bypass therefore cannot read parent cookies/localStorage.
+    expect(iframe.getAttribute("sandbox")).toBe("");
     expect(iframe.getAttribute("srcdoc") ?? "").toContain("Hello");
   });
 
@@ -213,12 +233,65 @@ describe("EmlPreview", () => {
     renderEml(<EmlPreview filename={FILE.filename} url={FILE.url} />);
 
     const iframe = await screen.findByTestId("eml-preview-html");
-    // sandbox must omit `allow-scripts`, and be present from the very first
-    // render so the browser never parses srcdoc unsandboxed.
-    expect(iframe.getAttribute("sandbox")).toBe("allow-same-origin");
+    // Sandbox is `""` (no flags) so the iframe doc is null-origin: no
+    // scripts, no parent-cookie access. Must be set on the JSX element so
+    // srcdoc is never parsed in an unsandboxed state.
+    expect(iframe.getAttribute("sandbox")).toBe("");
     const srcdoc = iframe.getAttribute("srcdoc") ?? "";
     expect(srcdoc.toLowerCase()).not.toContain("<script");
     expect((globalThis as Record<string, unknown>).__pwned).toBeUndefined();
+  });
+
+  it("routes to the thread view when the outer .eml has empty body + nested message/rfc822 parts", async () => {
+    const threadEml = [
+      "Subject: Re: Kickoff",
+      "Date: Mon, 18 May 2026 10:00:00 +0000",
+      "MIME-Version: 1.0",
+      'Content-Type: multipart/mixed; boundary="OUTER"',
+      "",
+      "--OUTER",
+      "Content-Type: message/rfc822",
+      'Content-Disposition: attachment; filename="msg-1.eml"',
+      "",
+      "From: Alice <alice@example.com>",
+      "Subject: Kickoff",
+      "Date: Mon, 11 May 2026 09:00:00 +0000",
+      "MIME-Version: 1.0",
+      'Content-Type: text/plain; charset="utf-8"',
+      "",
+      "First message body — alpha token.",
+      "",
+      "--OUTER",
+      "Content-Type: message/rfc822",
+      'Content-Disposition: attachment; filename="msg-2.eml"',
+      "",
+      "From: Bob <bob@example.com>",
+      "Subject: Re: Kickoff",
+      "Date: Mon, 18 May 2026 09:30:00 +0000",
+      "MIME-Version: 1.0",
+      'Content-Type: text/plain; charset="utf-8"',
+      "",
+      "Reply body — beta token.",
+      "",
+      "--OUTER--",
+      "",
+    ].join("\r\n");
+    mockFetchEml(threadEml);
+
+    renderEml(<EmlPreview filename={FILE.filename} url={FILE.url} />);
+
+    // Container with `data-testid="eml-thread"` proves `isThreadShape`
+    // detected the synthesized-thread shape and routed to `EmlThreadBody`.
+    // The exhaustive nested-section render is verified end-to-end by the
+    // office-addin's parseEmlBytes + synthesizeThreadEml round-trip tests
+    // and the backend's `test_kreuzberg_extracts_nested_rfc822_thread_bundle`
+    // — covering the same contract from both directions without depending
+    // on jsdom's blob-URL fetch shim.
+    await waitFor(() =>
+      expect(screen.getByTestId("eml-thread")).toBeInTheDocument(),
+    );
+    // The flat-attachment list must not appear for thread-shape emls.
+    expect(screen.queryByTestId("eml-preview-attachments")).toBeNull();
   });
 
   it("shows a preview-unavailable fallback when fetch fails", async () => {

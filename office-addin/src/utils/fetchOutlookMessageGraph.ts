@@ -153,6 +153,142 @@ export async function fetchParentMessageInConversationViaGraph(
 }
 
 /**
+ * Fetches every non-draft message in a conversation thread, with each
+ * message's attachments expanded inline. One Graph call covers the entire
+ * thread + attachment bytes within the Graph response envelope cap (~4 MB),
+ * avoiding the throttle hazard of N parallel `/$value` fetches.
+ *
+ * `uniqueBody` is included alongside `body`: the former contains only the
+ * portion of the body unique to that message (Graph strips prior quoted
+ * history), the latter contains the message as it would render in Outlook.
+ * Callers pick whichever they prefer; today we prefer `uniqueBody` for
+ * synthesized thread .emls so the LLM doesn't see N copies of the same
+ * quoted history.
+ *
+ * Attachments returned here are typed loosely: `fileAttachment` carries
+ * `contentBytes` (base64), but `itemAttachment` / `referenceAttachment`
+ * subtypes are pointers and won't have content inline. Callers must check
+ * the `@odata.type` discriminator.
+ */
+export interface GraphRecipient {
+  emailAddress?: { name?: string; address?: string };
+}
+
+export interface GraphBody {
+  contentType?: "html" | "text";
+  content?: string;
+}
+
+export interface GraphAttachment {
+  "@odata.type"?: string;
+  id?: string;
+  name?: string;
+  contentType?: string;
+  size?: number;
+  isInline?: boolean;
+  contentBytes?: string;
+  contentId?: string;
+}
+
+export interface GraphConversationMessage {
+  id?: string;
+  internetMessageId?: string;
+  subject?: string;
+  from?: GraphRecipient;
+  toRecipients?: GraphRecipient[];
+  ccRecipients?: GraphRecipient[];
+  sentDateTime?: string;
+  receivedDateTime?: string;
+  body?: GraphBody;
+  uniqueBody?: GraphBody;
+  isDraft?: boolean;
+  hasAttachments?: boolean;
+  attachments?: GraphAttachment[];
+}
+
+/**
+ * Optional transport — defaults to global `fetch`. Tests inject a stub so
+ * they don't have to `vi.stubGlobal` and assert on call ordering.
+ */
+export type GraphTransport = (
+  url: string,
+  init?: RequestInit,
+) => Promise<Response>;
+
+export interface FetchConversationOptions {
+  transport?: GraphTransport;
+}
+
+export async function fetchConversationMessagesViaGraph(
+  conversationId: string,
+  acquireToken: AcquireGraphToken,
+  options: FetchConversationOptions = {},
+): Promise<GraphConversationMessage[]> {
+  const transport = options.transport ?? globalThis.fetch.bind(globalThis);
+  try {
+    const token = await acquireToken();
+    const filter = `conversationId eq '${escapeODataString(conversationId)}'`;
+    const select = [
+      "id",
+      "internetMessageId",
+      "subject",
+      "from",
+      "toRecipients",
+      "ccRecipients",
+      "sentDateTime",
+      "receivedDateTime",
+      "body",
+      "uniqueBody",
+      "isDraft",
+      "hasAttachments",
+    ].join(",");
+    // Both `contentBytes` AND `contentId` live only on the
+    // `microsoft.graph.fileAttachment` subtype — the polymorphic
+    // `attachment` base type defines just `id`, `name`, `contentType`,
+    // `size`, `isInline`, and `lastModifiedDateTime`. Selecting either
+    // unqualified trips `BadRequest: Could not find a property named '…'
+    // on type 'microsoft.graph.attachment'`. OData's derived-type-property
+    // syntax `<namespace.subtype>/<property>` projects the field only when
+    // the row materializes as that subtype; itemAttachment and
+    // referenceAttachment items still come back (without those fields), so
+    // callers can discriminate on `@odata.type` and skip non-file rows.
+    // See microsoftgraph/microsoft-graph-explorer-v4#3916.
+    const attachmentSelect = [
+      "id",
+      "name",
+      "contentType",
+      "size",
+      "isInline",
+      "microsoft.graph.fileAttachment/contentId",
+      "microsoft.graph.fileAttachment/contentBytes",
+    ].join(",");
+    const expand = `attachments($select=${attachmentSelect})`;
+    const url = `${GRAPH_BASE}/me/messages?$filter=${encodeURIComponent(filter)}&$top=25&$select=${select}&$expand=${expand}`;
+    const response = await transport(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+    });
+    if (!response.ok) {
+      console.warn(
+        "[fetchConversationMessagesViaGraph] non-OK status:",
+        response.status,
+        response.statusText,
+      );
+      return [];
+    }
+    const payload = (await response.json()) as {
+      value?: GraphConversationMessage[];
+    };
+    return payload.value ?? [];
+  } catch (error) {
+    console.warn("[fetchConversationMessagesViaGraph] failed:", error);
+    return [];
+  }
+}
+
+/**
  * Looks up a message by its RFC 5322 `Message-ID` header, returning a single
  * `.eml` File if exactly one match is found. Returns `null` when Graph's
  * filter returns an empty result (e.g. for drafts that don't yet have an

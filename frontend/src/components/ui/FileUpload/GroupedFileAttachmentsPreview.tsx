@@ -1,6 +1,6 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import { componentRegistry } from "@/config/componentRegistry";
 
@@ -64,7 +64,39 @@ export type FileAttachmentGroupItem =
   | {
       kind: "loading";
       id: string;
+    }
+  | {
+      /**
+       * Nested sub-section for a single message inside an Outlook conversation
+       * thread. Renders as its own collapsible card *inside* the parent
+       * group — keeps per-message attachments visually attached to their
+       * message in the thread instead of flattening to siblings.
+       *
+       * The header checkbox toggles inclusion of the whole message (body +
+       * its attachments). Individual attachment checkboxes inside override
+       * the header for fine control.
+       */
+      kind: "threadMessageGroup";
+      id: string;
+      /** Primary label, typically sender display name. */
+      label: string;
+      /** Secondary line, typically date + subject. */
+      sublabel?: string;
+      /** Whether the whole message is included. Drives the header checkbox. */
+      selected: boolean;
+      onToggle: () => void;
+      /** Initially collapsed when true. Default: true. */
+      defaultCollapsed?: boolean;
+      attachments: ThreadMessageAttachmentItem[];
     };
+
+export interface ThreadMessageAttachmentItem {
+  id: string;
+  file: FileResource;
+  selected: boolean;
+  onToggle: () => void;
+  validation?: { ok: boolean; reason?: string };
+}
 
 export interface FileAttachmentGroup {
   id: string;
@@ -173,6 +205,128 @@ const SelectableAttachmentRow: React.FC<SelectableAttachmentRowProps> = ({
   );
 };
 
+interface ThreadMessageGroupSectionProps {
+  label: string;
+  sublabel?: string;
+  selected: boolean;
+  onToggle: () => void;
+  attachments: ThreadMessageAttachmentItem[];
+  defaultCollapsed?: boolean;
+  disabled: boolean;
+  showFileType: boolean;
+  showSize: boolean;
+  filenameTruncateLength: number;
+}
+
+const ThreadMessageHeaderText: React.FC<{
+  label: string;
+  sublabel?: string;
+}> = ({ label, sublabel }) => (
+  <div className="min-w-0 flex-1">
+    <p
+      className="truncate text-sm font-medium text-theme-fg-primary"
+      title={label}
+    >
+      {label}
+    </p>
+    {sublabel && (
+      <p className="truncate text-xs text-theme-fg-muted" title={sublabel}>
+        {sublabel}
+      </p>
+    )}
+  </div>
+);
+
+const ThreadMessageGroupSection: React.FC<ThreadMessageGroupSectionProps> = ({
+  label,
+  sublabel,
+  selected,
+  onToggle,
+  attachments,
+  defaultCollapsed = true,
+  disabled,
+  showFileType,
+  showSize,
+  filenameTruncateLength,
+}) => {
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
+  const panelId = useId();
+  const hasAttachments = attachments.length > 0;
+  const attachmentCount = attachments.length;
+  return (
+    <div
+      className={clsx(
+        "rounded-md border border-theme-border bg-theme-bg-secondary p-2",
+        !selected && "opacity-60",
+      )}
+    >
+      <div className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggle}
+          disabled={disabled}
+          className="size-4 shrink-0 rounded border-theme-border text-theme-fg-accent focus:ring-theme-focus disabled:cursor-not-allowed"
+          aria-label={`${t`Include message`} ${label}`}
+          onClick={(event) => event.stopPropagation()}
+        />
+        {hasAttachments ? (
+          // Only render the chevron when there's something to expand —
+          // an empty thread message has no attachments to show, so a
+          // disclosure toggle would dangle without any payload.
+          <button
+            type="button"
+            onClick={() => setCollapsed((value) => !value)}
+            className="flex min-w-0 flex-1 items-start gap-2 text-left"
+            aria-expanded={!collapsed}
+            aria-controls={panelId}
+          >
+            <span
+              className="mt-0.5 inline-flex shrink-0 items-center text-theme-fg-muted"
+              aria-hidden="true"
+            >
+              {collapsed ? (
+                <ChevronRightIcon className="size-4" />
+              ) : (
+                <ChevronDownIcon className="size-4" />
+              )}
+            </span>
+            <ThreadMessageHeaderText label={label} sublabel={sublabel} />
+            <span className="shrink-0 text-xs text-theme-fg-muted">
+              {attachmentCount === 1 ? t`1 file` : t`${attachmentCount} files`}
+            </span>
+          </button>
+        ) : (
+          <div className="flex min-w-0 flex-1 items-start gap-2">
+            <ThreadMessageHeaderText label={label} sublabel={sublabel} />
+          </div>
+        )}
+      </div>
+      {!collapsed && hasAttachments && (
+        <div
+          id={panelId}
+          role="region"
+          className="mt-2 flex flex-col gap-1 pl-6"
+        >
+          {attachments.map((attachment) => (
+            <SelectableAttachmentRow
+              key={attachment.id}
+              file={attachment.file}
+              selected={attachment.selected}
+              onToggle={attachment.onToggle}
+              disabled={disabled}
+              showFileType={showFileType}
+              showSize={showSize}
+              filenameTruncateLength={filenameTruncateLength}
+              validation={attachment.validation}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const DefaultGroupedFileAttachmentsPreview: React.FC<
   GroupedFileAttachmentsPreviewProps
 > = ({
@@ -276,14 +430,19 @@ const DefaultGroupedFileAttachmentsPreview: React.FC<
                 onClick={() => toggleGroupCollapsed(group.id)}
                 className={clsx(
                   FILE_PREVIEW_STYLES.group.header,
-                  "flex w-full items-center text-left",
+                  "w-full text-left",
                 )}
                 aria-expanded={!isCollapsed}
               >
                 {headerInner}
               </button>
             ) : (
-              <div className={FILE_PREVIEW_STYLES.group.header}>
+              <div
+                className={clsx(
+                  FILE_PREVIEW_STYLES.group.header,
+                  "justify-between",
+                )}
+              >
                 {headerInner}
                 {shouldCollapse && isExpanded && (
                   <Button
@@ -307,6 +466,24 @@ const DefaultGroupedFileAttachmentsPreview: React.FC<
                       key={item.id}
                       className="w-full"
                       label={t`Loading attachment...`}
+                    />
+                  );
+                }
+
+                if (item.kind === "threadMessageGroup") {
+                  return (
+                    <ThreadMessageGroupSection
+                      key={item.id}
+                      label={item.label}
+                      sublabel={item.sublabel}
+                      selected={item.selected}
+                      onToggle={item.onToggle}
+                      attachments={item.attachments}
+                      defaultCollapsed={item.defaultCollapsed}
+                      disabled={disabled}
+                      showFileType={showFileTypes}
+                      showSize={showFileSizes}
+                      filenameTruncateLength={filenameTruncateLength}
                     />
                   );
                 }

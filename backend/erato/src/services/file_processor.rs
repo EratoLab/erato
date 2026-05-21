@@ -291,6 +291,41 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_kreuzberg_extracts_nested_rfc822_thread_bundle() {
+        let eml_bytes = read_test_fixture("synthesized_thread_bundle.eml");
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(eml_bytes, Some("message/rfc822"))
+            .await
+            .expect("Failed to extract text from synthesized thread bundle");
+
+        // Both nested message bodies should appear — proves kreuzberg recurses
+        // into the message/rfc822 parts of a multipart/mixed wrapper. Mirrors
+        // the shape `synthesizeThreadEml` emits in the office add-in.
+        assert!(
+            extracted.contains("FIRST_MESSAGE_UNIQUE_BODY_TOKEN_alpha"),
+            "missing first nested-message body in:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("SECOND_MESSAGE_UNIQUE_BODY_TOKEN_beta"),
+            "missing second nested-message body in:\n{extracted}"
+        );
+
+        // The attachment lives inside the second nested message; its content
+        // and ## Attachment header should both appear. Confirms grandchild
+        // attachments survive the double recursion.
+        assert!(
+            extracted.contains("INNER_ATTACHMENT_UNIQUE_TOKEN_gamma"),
+            "missing inner-attachment content in:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("thread_notes.txt"),
+            "missing inner-attachment filename in:\n{extracted}"
+        );
+    }
+
+    #[tokio::test]
     async fn test_kreuzberg_extracts_structured_content_from_company_overview_pptx() {
         let pptx_bytes = read_test_fixture("Acme_Inc_Company_Overview.pptx");
 
