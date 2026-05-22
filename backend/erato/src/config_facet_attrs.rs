@@ -3,9 +3,25 @@ facet::define_attr_grammar! {
     crate_path $crate::config_facet_attrs;
 
     /// Erato-specific facet extension attributes for config documentation metadata.
-    pub enum Attr {
+pub enum Attr {
         /// Marks a config field as deprecated and provides transition metadata.
         Deprecated(Deprecated),
+        /// Marks a config field as hidden from generated docs.
+        HideInDocs(HideInDocs),
+        /// Marks a config field as requiring scoped replacement.
+        NeedsScopedReplacement(NeedsScopedReplacement),
+    }
+
+    /// Additional metadata for fields that should not appear in docs.
+    pub struct HideInDocs {
+        /// Whether this config field should be hidden from docs generation.
+        pub hidden: bool,
+    }
+
+    /// Additional metadata for fields that require scoped replacement.
+    pub struct NeedsScopedReplacement {
+        /// Whether this config field should be marked as requiring scoped replacement.
+        pub enabled: bool,
     }
 
     /// Additional metadata for deprecated config fields.

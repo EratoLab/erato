@@ -186,39 +186,83 @@ fn collect_field(field: &Field, path: &mut Vec<String>, entries: &mut BTreeMap<S
 }
 
 fn apply_field_metadata(field: &Field, path: &[String], entries: &mut BTreeMap<String, Value>) {
-    let Some(attr) = field.get_attr(Some("erato"), "deprecated") else {
-        return;
-    };
-    let Some(config_facet_attrs::Attr::Deprecated(deprecated)) =
-        attr.get_as::<config_facet_attrs::Attr>()
-    else {
-        return;
-    };
-
     let key = path.join(".");
+    let mut has_deprecation = None;
+    let mut should_hide = false;
+    let mut needs_scoped_replacement_flag = false;
+
+    if let Some(attr) = field.get_attr(Some("erato"), "deprecated")
+        && let Some(config_facet_attrs::Attr::Deprecated(deprecated)) =
+            attr.get_as::<config_facet_attrs::Attr>()
+    {
+        let mut deprecated_entry = Map::new();
+        deprecated_entry.insert(
+            "note".to_string(),
+            Value::String(deprecated.note.to_string()),
+        );
+        if let Some(replacement_key) = deprecated.replacement_key {
+            deprecated_entry.insert(
+                "replacement_key".to_string(),
+                Value::String(replacement_key.to_string()),
+            );
+        }
+        if let Some(planned_removal_version) = deprecated.planned_removal_version {
+            deprecated_entry.insert(
+                "planned_removal_version".to_string(),
+                Value::String(planned_removal_version.to_string()),
+            );
+        }
+
+        has_deprecation = Some(deprecated_entry);
+    }
+
+    if let Some(config_facet_attrs::Attr::HideInDocs(hide_in_docs)) = field
+        .get_attr(Some("erato"), "hide_in_docs")
+        .and_then(|attr| attr.get_as::<config_facet_attrs::Attr>())
+        && hide_in_docs.hidden
+    {
+        should_hide = true;
+    }
+
+    if let Some(config_facet_attrs::Attr::NeedsScopedReplacement(needs_scoped_replacement)) = field
+        .get_attr(Some("erato"), "needs_scoped_replacement")
+        .and_then(|attr| attr.get_as::<config_facet_attrs::Attr>())
+        && needs_scoped_replacement.enabled
+    {
+        needs_scoped_replacement_flag = true;
+    }
+
+    if should_hide {
+        mark_descendant_keys_hidden(entries, &key);
+    }
+
     let Some(Value::Object(entry)) = entries.get_mut(&key) else {
         return;
     };
 
-    let mut deprecated_entry = Map::new();
-    deprecated_entry.insert(
-        "note".to_string(),
-        Value::String(deprecated.note.to_string()),
-    );
-    if let Some(replacement_key) = deprecated.replacement_key {
-        deprecated_entry.insert(
-            "replacement_key".to_string(),
-            Value::String(replacement_key.to_string()),
-        );
-    }
-    if let Some(planned_removal_version) = deprecated.planned_removal_version {
-        deprecated_entry.insert(
-            "planned_removal_version".to_string(),
-            Value::String(planned_removal_version.to_string()),
-        );
+    if should_hide {
+        entry.insert("hide_in_docs".to_string(), Value::Bool(true));
     }
 
-    entry.insert("deprecated".to_string(), json!(deprecated_entry));
+    if let Some(deprecated_entry) = has_deprecation {
+        entry.insert("deprecated".to_string(), json!(deprecated_entry));
+    }
+
+    if needs_scoped_replacement_flag {
+        entry.insert("needs_scoped_replacement".to_string(), Value::Bool(true));
+    }
+}
+
+fn mark_descendant_keys_hidden(entries: &mut BTreeMap<String, Value>, key: &str) {
+    let prefix = format!("{key}.");
+
+    for (entry_key, entry) in entries.iter_mut() {
+        if (entry_key == key || entry_key.starts_with(&prefix))
+            && let Value::Object(entry_obj) = entry
+        {
+            entry_obj.insert("hide_in_docs".to_string(), Value::Bool(true));
+        }
+    }
 }
 
 fn ensure_entry(entries: &mut BTreeMap<String, Value>, key: String) {
@@ -299,5 +343,43 @@ mod tests {
     fn validates_replacement_keys() {
         let generated = generate_config_reference();
         validate_config_reference(&generated).expect("replacement keys should exist");
+    }
+
+    #[test]
+    fn includes_hide_in_docs_metadata() {
+        let generated = generate_config_reference();
+        let object = generated
+            .as_object()
+            .expect("config reference is a flat object");
+
+        assert_eq!(object["sentry_dsn"]["hide_in_docs"], true);
+    }
+
+    #[test]
+    fn hide_in_docs_markers_propagate_to_descendants() {
+        let generated = generate_config_reference();
+        let object = generated
+            .as_object()
+            .expect("config reference is a flat object");
+
+        assert_eq!(object["chat_provider.provider_kind"]["hide_in_docs"], true);
+        assert_eq!(
+            object["chat_provider.additional_request_headers.[]"]["hide_in_docs"],
+            true
+        );
+    }
+
+    #[test]
+    fn includes_needs_scoped_replacement_metadata() {
+        let generated = generate_config_reference();
+        let object = generated
+            .as_object()
+            .expect("config reference is a flat object");
+
+        assert_eq!(object["cleanup_enabled"]["needs_scoped_replacement"], true);
+        assert_eq!(
+            object["cleanup_archived_max_age_days"]["needs_scoped_replacement"],
+            true
+        );
     }
 }
