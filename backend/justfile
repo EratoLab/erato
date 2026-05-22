@@ -37,6 +37,9 @@ generate_open_api_check:
 generate_config_reference_check:
     cargo run --bin gen-config-reference -- --check
 
+check_config_reference_docs:
+    uv run ../site/scripts/check_config_reference_coverage.py
+
 test *args:
     RUST_MIN_STACK=8388608 cargo nextest run --retries 2 {{args}}
 

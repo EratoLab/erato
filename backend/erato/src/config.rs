@@ -304,12 +304,15 @@ impl PromptSourceSpecification {
 pub struct AppConfig {
     // A opaque marker to signify the environment. This may be forwarded to diagnostic/observability tools to signify the environment,
     // but is never parsed/interpreted by the application to trigger environment-specific behavior.
+    #[facet(erato_config::hide_in_docs(hidden = true))]
     pub environment: String,
     // The HTTP host to listen on.
     // Defaults to `127.0.0.1`.
+    #[facet(erato_config::hide_in_docs(hidden = true))]
     pub http_host: String,
     // The HTTP port to listen on.
     // Defaults to `3130`.
+    #[facet(erato_config::hide_in_docs(hidden = true))]
     pub http_port: i32,
     #[facet(sensitive)]
     pub database_url: SecretConfigString,
@@ -410,13 +413,16 @@ pub struct AppConfig {
 
     // If true, enables the cleanup worker that periodically deletes old data.
     // Defaults to `false`.
+    #[facet(erato_config::needs_scoped_replacement(enabled = true))]
     pub cleanup_enabled: bool,
     // Number of days after which archived chats should be deleted by the cleanup worker.
     // Only has an effect if `cleanup_enabled` is `true`.
     // Defaults to 30.
+    #[facet(erato_config::needs_scoped_replacement(enabled = true))]
     pub cleanup_archived_max_age_days: u32,
 
     // **Deprecated**: Please use `chat_providers` instead for multiple provider support and better flexibility.
+    #[facet(erato_config::hide_in_docs(hidden = true))]
     pub chat_provider: Option<ChatProviderConfig>,
     // **Deprecated**: Please use `integrations.sentry.sentry_dsn` instead.
     //
@@ -427,6 +433,7 @@ pub struct AppConfig {
         replacement_key = "integrations.sentry.sentry_dsn",
         planned_removal_version = "0.6.0"
     ))]
+    #[facet(erato_config::hide_in_docs(hidden = true))]
     #[facet(sensitive)]
     pub sentry_dsn: Option<SecretConfigString>,
     // **Deprecated**: Please use `frontend.additional_environment` instead.
@@ -440,6 +447,7 @@ pub struct AppConfig {
         replacement_key = "frontend.additional_environment",
         planned_removal_version = "0.6.0"
     ))]
+    #[facet(erato_config::hide_in_docs(hidden = true))]
     #[facet(opaque)]
     pub additional_frontend_environment: Option<HashMap<String, serde_json::Value>>,
     // **Deprecated**: Please use `frontend.web_frontend_bundle_path` instead.
@@ -450,6 +458,7 @@ pub struct AppConfig {
         replacement_key = "frontend.web_frontend_bundle_path",
         planned_removal_version = "0.6.0"
     ))]
+    #[facet(erato_config::hide_in_docs(hidden = true))]
     pub frontend_bundle_path: Option<String>,
 }
 

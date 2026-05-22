@@ -5,6 +5,7 @@
   "action_facets.facets.<facet-id>.platform": {},
   "action_facets.facets.<facet-id>.template": {},
   "additional_frontend_environment": {
+    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `frontend.additional_environment` instead.",
       "replacement_key": "frontend.additional_environment",
@@ -65,42 +66,114 @@
   "caches.file_contents_cache_mb": {},
   "caches.file_processing_parallelism": {},
   "caches.token_count_cache_mb": {},
-  "chat_provider.additional_request_headers.[]": {},
-  "chat_provider.additional_request_parameters.[]": {},
-  "chat_provider.api_key": {},
-  "chat_provider.api_version": {},
-  "chat_provider.base_url": {},
-  "chat_provider.hallucination_suppression.enabled": {},
-  "chat_provider.hallucination_suppression.whitespace_delta_threshold": {},
-  "chat_provider.model_capabilities.context_size_tokens": {},
-  "chat_provider.model_capabilities.cost_input_tokens_per_1m": {},
-  "chat_provider.model_capabilities.cost_output_tokens_per_1m": {},
-  "chat_provider.model_capabilities.supports_audio_input": {},
-  "chat_provider.model_capabilities.supports_encrypted_reasoning_content": {},
-  "chat_provider.model_capabilities.supports_image_understanding": {},
-  "chat_provider.model_capabilities.supports_reasoning": {},
-  "chat_provider.model_capabilities.supports_reasoning_summary": {},
-  "chat_provider.model_capabilities.supports_verbosity": {},
-  "chat_provider.model_description": {},
-  "chat_provider.model_display_name": {},
-  "chat_provider.model_icon": {},
-  "chat_provider.model_name": {},
-  "chat_provider.model_name_langfuse": {},
-  "chat_provider.model_settings.compat_omit_strict": {},
-  "chat_provider.model_settings.generate_images": {},
-  "chat_provider.model_settings.reasoning_effort": {},
-  "chat_provider.model_settings.temperature": {},
-  "chat_provider.model_settings.top_p": {},
-  "chat_provider.model_settings.verbosity": {},
-  "chat_provider.provider_kind": {},
-  "chat_provider.region": {},
-  "chat_provider.system_prompt": {},
-  "chat_provider.system_prompt.fallback": {},
-  "chat_provider.system_prompt.label": {},
-  "chat_provider.system_prompt.prompt": {},
-  "chat_provider.system_prompt.prompt_name": {},
-  "chat_provider.system_prompt.source": {},
-  "chat_provider.system_prompt_langfuse.prompt_name": {},
+  "chat_provider.additional_request_headers.[]": {
+    "hide_in_docs": true
+  },
+  "chat_provider.additional_request_parameters.[]": {
+    "hide_in_docs": true
+  },
+  "chat_provider.api_key": {
+    "hide_in_docs": true
+  },
+  "chat_provider.api_version": {
+    "hide_in_docs": true
+  },
+  "chat_provider.base_url": {
+    "hide_in_docs": true
+  },
+  "chat_provider.hallucination_suppression.enabled": {
+    "hide_in_docs": true
+  },
+  "chat_provider.hallucination_suppression.whitespace_delta_threshold": {
+    "hide_in_docs": true
+  },
+  "chat_provider.model_capabilities.context_size_tokens": {
+    "hide_in_docs": true
+  },
+  "chat_provider.model_capabilities.cost_input_tokens_per_1m": {
+    "hide_in_docs": true
+  },
+  "chat_provider.model_capabilities.cost_output_tokens_per_1m": {
+    "hide_in_docs": true
+  },
+  "chat_provider.model_capabilities.supports_audio_input": {
+    "hide_in_docs": true
+  },
+  "chat_provider.model_capabilities.supports_encrypted_reasoning_content": {
+    "hide_in_docs": true
+  },
+  "chat_provider.model_capabilities.supports_image_understanding": {
+    "hide_in_docs": true
+  },
+  "chat_provider.model_capabilities.supports_reasoning": {
+    "hide_in_docs": true
+  },
+  "chat_provider.model_capabilities.supports_reasoning_summary": {
+    "hide_in_docs": true
+  },
+  "chat_provider.model_capabilities.supports_verbosity": {
+    "hide_in_docs": true
+  },
+  "chat_provider.model_description": {
+    "hide_in_docs": true
+  },
+  "chat_provider.model_display_name": {
+    "hide_in_docs": true
+  },
+  "chat_provider.model_icon": {
+    "hide_in_docs": true
+  },
+  "chat_provider.model_name": {
+    "hide_in_docs": true
+  },
+  "chat_provider.model_name_langfuse": {
+    "hide_in_docs": true
+  },
+  "chat_provider.model_settings.compat_omit_strict": {
+    "hide_in_docs": true
+  },
+  "chat_provider.model_settings.generate_images": {
+    "hide_in_docs": true
+  },
+  "chat_provider.model_settings.reasoning_effort": {
+    "hide_in_docs": true
+  },
+  "chat_provider.model_settings.temperature": {
+    "hide_in_docs": true
+  },
+  "chat_provider.model_settings.top_p": {
+    "hide_in_docs": true
+  },
+  "chat_provider.model_settings.verbosity": {
+    "hide_in_docs": true
+  },
+  "chat_provider.provider_kind": {
+    "hide_in_docs": true
+  },
+  "chat_provider.region": {
+    "hide_in_docs": true
+  },
+  "chat_provider.system_prompt": {
+    "hide_in_docs": true
+  },
+  "chat_provider.system_prompt.fallback": {
+    "hide_in_docs": true
+  },
+  "chat_provider.system_prompt.label": {
+    "hide_in_docs": true
+  },
+  "chat_provider.system_prompt.prompt": {
+    "hide_in_docs": true
+  },
+  "chat_provider.system_prompt.prompt_name": {
+    "hide_in_docs": true
+  },
+  "chat_provider.system_prompt.source": {
+    "hide_in_docs": true
+  },
+  "chat_provider.system_prompt_langfuse.prompt_name": {
+    "hide_in_docs": true
+  },
   "chat_providers.priority_order.[]": {},
   "chat_providers.providers.<provider-id>.additional_request_headers.[]": {},
   "chat_providers.providers.<provider-id>.additional_request_parameters.[]": {},
@@ -147,11 +220,17 @@
   "chat_providers.summary.system_prompt.prompt_name": {},
   "chat_providers.summary.system_prompt.source": {},
   "chat_sharing.enabled": {},
-  "cleanup_archived_max_age_days": {},
-  "cleanup_enabled": {},
+  "cleanup_archived_max_age_days": {
+    "needs_scoped_replacement": true
+  },
+  "cleanup_enabled": {
+    "needs_scoped_replacement": true
+  },
   "database_url": {},
   "default_file_storage_provider": {},
-  "environment": {},
+  "environment": {
+    "hide_in_docs": true
+  },
   "experimental_assistants.context_file_contributor_threshold": {},
   "experimental_assistants.context_warning_threshold": {},
   "experimental_assistants.enabled": {},
@@ -214,14 +293,19 @@
   "frontend.theme": {},
   "frontend.web_frontend_bundle_path": {},
   "frontend_bundle_path": {
+    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `frontend.web_frontend_bundle_path` instead.",
       "replacement_key": "frontend.web_frontend_bundle_path",
       "planned_removal_version": "0.6.0"
     }
   },
-  "http_host": {},
-  "http_port": {},
+  "http_host": {
+    "hide_in_docs": true
+  },
+  "http_port": {
+    "hide_in_docs": true
+  },
   "i18n.language.default_language": {},
   "i18n.language.language_detection_priority.[]": {},
   "integrations.experimental_entra_id.auth_via_access_token": {},
@@ -285,6 +369,7 @@
   "prompt_optimizer.prompt.prompt_name": {},
   "prompt_optimizer.prompt.source": {},
   "sentry_dsn": {
+    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `integrations.sentry.sentry_dsn` instead.",
       "replacement_key": "integrations.sentry.sentry_dsn",

@@ -34,7 +34,11 @@ In that case, each nesting level is separated by double underscores (`__`). E.g.
 
 ### `server`
 
+{/* erato_toml_config_key: server */}
+
 #### `server.encryption_key`
+
+{/* erato_toml_config_key: server.encryption_key */}
 
 Optional encryption key used by the backend for encrypting application data before storing it in the database.
 
@@ -61,7 +65,11 @@ encryption_key = "replace-with-openssl-output"
 
 ### `frontend`
 
+{/* erato_toml_config_key: frontend */}
+
 #### `frontend.theme`
+
+{/* erato_toml_config_key: frontend.theme */}
 
 The name of the theme to use for the frontend.
 
@@ -85,6 +93,8 @@ theme = "my-theme"
 
 #### `frontend.disable_upload`
 
+{/* erato_toml_config_key: frontend.disable_upload */}
+
 Whether to disable file upload functionality in the UI. This is useful for embedded scenarios where file uploads should not be available.
 
 **Default value:** `false`
@@ -99,6 +109,8 @@ disable_upload = true
 ```
 
 #### `frontend.disable_chat_input_autofocus`
+
+{/* erato_toml_config_key: frontend.disable_chat_input_autofocus */}
 
 Whether to disable automatic focusing of the chat input field. This prevents unwanted scrolling behavior when navigating to pages with embedded chat widgets.
 
@@ -117,6 +129,8 @@ disable_chat_input_autofocus = true
 
 #### `frontend.disable_logout`
 
+{/* erato_toml_config_key: frontend.disable_logout */}
+
 Whether to hide logout functionality from the UI. This is useful for embedded scenarios where logout should be handled by the parent application.
 
 When enabled, the logout button/option will be hidden from the user interface.
@@ -134,6 +148,8 @@ disable_logout = true
 
 #### `frontend.enable_message_feedback`
 
+{/* erato_toml_config_key: frontend.enable_message_feedback */}
+
 Whether to enable message feedback functionality in the UI. When enabled, users can submit thumbs up/down ratings with optional comments for individual messages.
 
 This feature allows collecting user feedback on message quality, which can be useful for improving model performance and understanding user satisfaction.
@@ -150,6 +166,8 @@ enable_message_feedback = true
 ```
 
 #### `frontend.enable_message_feedback_comments`
+
+{/* erato_toml_config_key: frontend.enable_message_feedback_comments */}
 
 Whether to enable the comment text field in message feedback. When enabled, users can add optional text comments along with their thumbs up/down ratings.
 
@@ -169,6 +187,8 @@ enable_message_feedback_comments = true
 
 #### `frontend.message_feedback_edit_time_limit_seconds`
 
+{/* erato_toml_config_key: frontend.message_feedback_edit_time_limit_seconds */}
+
 Time limit in seconds for editing message feedback after creation. When set, feedback can only be edited within this time window after being submitted. When not set (default), feedback can be edited at any time.
 
 This setting only affects editing existing feedback - initial feedback submission is always allowed regardless of this setting. Attempts to edit feedback after the time limit will return a 403 Forbidden error.
@@ -186,6 +206,8 @@ message_feedback_edit_time_limit_seconds = 300  # 5 minutes
 ```
 
 #### `frontend.sidebar_collapsed_mode`
+
+{/* erato_toml_config_key: frontend.sidebar_collapsed_mode */}
 
 Controls the behavior of the collapsed sidebar state.
 
@@ -209,6 +231,8 @@ sidebar_collapsed_mode = "slim"
 
 #### `frontend.sidebar_logo_path`
 
+{/* erato_toml_config_key: frontend.sidebar_logo_path */}
+
 Optional path to a sidebar-specific logo file. When provided, this logo is displayed in the sidebar header instead of the theme logo. Useful for showing a compact logo variant in the sidebar.
 
 **Default value:** `None` (uses theme logo)
@@ -223,6 +247,8 @@ sidebar_logo_path = "/custom-theme/my-company/sidebar-logo.svg"
 ```
 
 #### `frontend.sidebar_logo_dark_path`
+
+{/* erato_toml_config_key: frontend.sidebar_logo_dark_path */}
 
 Optional path to a sidebar-specific logo file for dark mode. When provided along with `sidebar_logo_path`, this logo is displayed in the sidebar when dark mode is active.
 
@@ -239,6 +265,8 @@ sidebar_logo_dark_path = "/custom-theme/my-company/sidebar-logo-dark.svg"
 ```
 
 #### `frontend.additional_environment`
+
+{/* erato_toml_config_key: frontend.additional_environment */}
 
 Additional values to inject into the frontend environment as global variables.
 These will be made available to the frontend Javascript, and added to the `window` object.
@@ -266,13 +294,19 @@ window.FOO = "bar";
 
 ### `i18n`
 
+{/* erato_toml_config_key: i18n */}
+
 Internationalization-related settings used by the backend when determining user language preferences.
 
 ### `i18n.language`
 
+{/* erato_toml_config_key: i18n.language */}
+
 Configuration for language detection and defaulting.
 
 #### `i18n.language.language_detection_priority`
+
+{/* erato_toml_config_key: i18n.language.language_detection_priority */}
 
 Ordered list of language sources to evaluate when resolving a user's preferred language.
 
@@ -293,6 +327,8 @@ Any value omitted in the order is treated as unsupported for that source and det
 
 #### `i18n.language.default_language`
 
+{/* erato_toml_config_key: i18n.language.default_language */}
+
 Fallback language used after no configured sources match.
 
 **Type:** `string`
@@ -310,143 +346,21 @@ default_language = "de"
 
 ### `chat_provider` (deprecated)
 
-**⚠️ Deprecated:** Please use `chat_providers` instead for multiple provider support and better flexibility.
+{/* erato_toml_config_key: chat_provider */}
+
+**⚠️ Deprecated:** Please use [`chat_providers.providers.<provider-id>`](#chat_providersprovidersprovider-id) instead for multiple provider support and better flexibility.
 
 Configuration for a single chat provider (LLM) that Erato will use for generating responses. This is maintained for backward compatibility but will be automatically migrated to the new `chat_providers` format.
 
-#### `chat_provider.provider_kind`
-
-The type of chat provider to use.
-
-**Type:** `string`
-
-**Supported values:** `"openai"`, `"azure_openai"`
-
-**Example:** `"openai"`
-
-#### `chat_provider.model_name`
-
-The name of the model to use with the chat provider.
-
-**Type:** `string`
-
-**Example:** `"gpt-4o"`
-
-#### `chat_provider.model_display_name`
-
-The display name for the model shown to users. If not provided, falls back to `model_name`.
-
-**Type:** `string | None`
-
-**Example:** `"GPT-4 Omni (Production)"`
-
-#### `chat_provider.model_description`
-
-An optional description shown below the model display name in the frontend model selector.
-
-The frontend resolves this through a dynamic Lingui translation key using the chat provider id:
-`chat_models.<chat-provider-id>.description`. If no translation exists, the configured value is used as the fallback text.
-
-**Type:** `string | None`
-
-**Example:** `"Fast, lower-cost model for everyday questions"`
-
-#### `chat_provider.model_icon`
-
-An optional icon identifier shown next to the model in the frontend model selector.
-
-Supported formats:
-
-- `iconoir-*` for icons resolved from the `iconoir-react` library
-- `simpleicons-*` for icons resolved from the `simple-icons` library, for example `simpleicons-anthropic`
-- `builtin-chatgpt` for the built-in ChatGPT/OpenAI mark
-- `/path/to/icon.svg` for a custom SVG asset served by the frontend
-
-**Type:** `string | None`
-
-**Example:** `"builtin-chatgpt"`
-
-#### `chat_provider.model_name_langfuse`
-
-The model name to report to Langfuse for observability and tracing. If not provided, falls back to `model_name`.
-
-This is useful when the provider's model name differs from the standardized name used in Langfuse. For example, Azure OpenAI uses deployment names that may differ from the underlying model name, or you may want to use a consistent naming convention across different providers for better analytics in Langfuse.
-
-**Type:** `string | None`
-
-**Example:**
-
-```toml
-[chat_providers.providers.azure-gpt4]
-provider_kind = "azure_openai"
-model_name = "gpt-4-deployment-prod-v1"  # Azure deployment name
-model_name_langfuse = "gpt-4"            # Standardized name for Langfuse
-```
-
-#### `chat_provider.base_url`
-
-The base URL for the chat provider API. If not provided, will use the default for the provider.
-
-**Type:** `string | None`
-
-**Example:** `"https://api.openai.com/v1/"`, `"http://localhost:11434/v1/"`
-
-#### `chat_provider.api_key`
-
-The API key for the chat provider.
-
-**Type:** `string | None`
-
-**Example:** `"sk-..."`
-
-#### `chat_provider.system_prompt`
-
-A system prompt specification to use with the chat provider. This sets the behavior and personality of the AI assistant.
-
-**Type:** `string | object | None`
-
-**Note:** This option is mutually exclusive with `system_prompt_langfuse` (deprecated). Requires the [Langfuse integration](./integrations/langfuse) to be enabled when using `source = "langfuse"`.
-
-**Example:**
-
-```toml
-[chat_provider]
-provider_kind = "openai"
-model_name = "gpt-4"
-system_prompt = "You are a helpful assistant that provides concise and accurate answers."
-```
-
-Using Langfuse:
-
-```toml
-[chat_provider]
-provider_kind = "openai"
-model_name = "gpt-4"
-system_prompt = { source = "langfuse", prompt_name = "assistant-prompt-v1", label = "production", fallback = "You are a helpful assistant." }
-```
-
-Using a static object:
-
-```toml
-[chat_provider]
-provider_kind = "openai"
-model_name = "gpt-4"
-system_prompt = { source = "static", prompt = "You are a helpful assistant that provides concise and accurate answers." }
-```
-
-#### `chat_provider.system_prompt_langfuse`
-
-Configuration for using a system prompt from [Langfuse](./integrations/langfuse) prompt management instead of a static prompt.
-
-**Deprecated:** Use `chat_provider.system_prompt` with a prompt source specification instead.
-
-**Note:** This option is mutually exclusive with `system_prompt`. Requires the [Langfuse integration](./integrations/langfuse) to be enabled.
-
 ### `chat_providers`
+
+{/* erato_toml_config_key: chat_providers */}
 
 Configuration for multiple chat providers with priority ordering. This is the recommended way to configure chat providers as it supports multiple providers, fallback mechanisms, and better flexibility.
 
 #### `chat_providers.priority_order`
+
+{/* erato_toml_config_key: chat_providers.priority_order */}
 
 An ordered list of provider IDs that defines the priority for provider selection. The first provider in the list has the highest priority.
 
@@ -456,7 +370,9 @@ An ordered list of provider IDs that defines the priority for provider selection
 
 **Example:** `["primary", "backup", "local"]`
 
-#### `chat_providers.providers`
+#### `chat_providers.providers.<provider-id>`
+
+{/* erato_toml_config_key: chat_providers.providers.<provider-id> */}
 
 A map of provider configurations, where each key is a unique provider ID and the value is a provider configuration object.
 
@@ -519,7 +435,163 @@ Each provider in `chat_providers.providers` supports the following fields:
 - **`model_capabilities`** - Optional configuration for model capabilities and limitations
 - **`model_settings`** - Optional configuration for model behavior and generation settings
 
-##### `model_capabilities`
+##### `chat_providers.providers.<provider-id>.provider_kind`
+
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.provider_kind */}
+
+The type of chat provider to use.
+
+**Type:** `string`
+
+**Supported values:** `"openai"`, `"azure_openai"`
+
+**Example:** `"openai"`
+
+##### `chat_providers.providers.<provider-id>.model_name`
+
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_name */}
+
+The name of the model to use with the chat provider.
+
+**Type:** `string`
+
+**Example:** `"gpt-4o"`
+
+##### `chat_providers.providers.<provider-id>.model_display_name`
+
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_display_name */}
+
+The display name for the model shown to users. If not provided, falls back to `model_name`.
+
+**Type:** `string | None`
+
+**Example:** `"GPT-4 Omni (Production)"`
+
+##### `chat_providers.providers.<provider-id>.model_description`
+
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_description */}
+
+An optional description shown below the model display name in the frontend model selector.
+
+The frontend resolves this through a dynamic Lingui translation key using the chat provider id:
+`chat_models.<chat-provider-id>.description`. If no translation exists, the configured value is used as the fallback text.
+
+**Type:** `string | None`
+
+**Example:** `"Fast, lower-cost model for everyday questions"`
+
+##### `chat_providers.providers.<provider-id>.model_icon`
+
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_icon */}
+
+An optional icon identifier shown next to the model in the frontend model selector.
+
+Supported formats:
+
+- `iconoir-*` for icons resolved from the `iconoir-react` library
+- `simpleicons-*` for icons resolved from the `simple-icons` library, for example `simpleicons-anthropic`
+- `builtin-chatgpt` for the built-in ChatGPT/OpenAI mark
+- `/path/to/icon.svg` for a custom SVG asset served by the frontend
+
+**Type:** `string | None`
+
+**Example:** `"builtin-chatgpt"`
+
+##### `chat_providers.providers.<provider-id>.model_name_langfuse`
+
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_name_langfuse */}
+
+The model name to report to Langfuse for observability and tracing. If not provided, falls back to `model_name`.
+
+This is useful when the provider's model name differs from the standardized name used in Langfuse. For example, Azure OpenAI uses deployment names that may differ from the underlying model name, or you may want to use a consistent naming convention across different providers for better analytics in Langfuse.
+
+**Type:** `string | None`
+
+**Example:**
+
+```toml
+[chat_providers.providers.azure-gpt4]
+provider_kind = "azure_openai"
+model_name = "gpt-4-deployment-prod-v1"  # Azure deployment name
+model_name_langfuse = "gpt-4"            # Standardized name for Langfuse
+```
+
+##### `chat_providers.providers.<provider-id>.base_url`
+
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.base_url */}
+
+The base URL for the chat provider API. If not provided, will use the default for the provider.
+
+**Type:** `string | None`
+
+**Example:** `"https://api.openai.com/v1/"`, `"http://localhost:11434/v1/"`
+
+##### `chat_providers.providers.<provider-id>.api_key`
+
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.api_key */}
+
+The API key for the chat provider.
+
+**Type:** `string | None`
+
+**Example:** `"sk-..."`
+
+##### `chat_providers.providers.<provider-id>.system_prompt`
+
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.system_prompt */}
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.system_prompt.fallback */}
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.system_prompt.label */}
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.system_prompt.prompt */}
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.system_prompt.prompt_name */}
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.system_prompt.source */}
+
+A system prompt specification to use with the chat provider. This sets the behavior and personality of the AI assistant.
+
+**Type:** `string | object | None`
+
+**Note:** This option is mutually exclusive with `system_prompt_langfuse` (deprecated). Requires the [Langfuse integration](./integrations/langfuse) to be enabled when using `source = "langfuse"`.
+
+**Example:**
+
+```toml
+[chat_providers.providers.main]
+provider_kind = "openai"
+model_name = "gpt-4"
+system_prompt = "You are a helpful assistant that provides concise and accurate answers."
+```
+
+Using Langfuse:
+
+```toml
+[chat_providers.providers.main]
+provider_kind = "openai"
+model_name = "gpt-4"
+system_prompt = { source = "langfuse", prompt_name = "assistant-prompt-v1", label = "production", fallback = "You are a helpful assistant." }
+```
+
+Using a static object:
+
+```toml
+[chat_providers.providers.main]
+provider_kind = "openai"
+model_name = "gpt-4"
+system_prompt = { source = "static", prompt = "You are a helpful assistant that provides concise and accurate answers." }
+```
+
+##### `chat_providers.providers.<provider-id>.system_prompt_langfuse`
+
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.system_prompt_langfuse */}
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.system_prompt_langfuse.prompt_name */}
+
+Configuration for using a system prompt from [Langfuse](./integrations/langfuse) prompt management instead of a static prompt.
+
+**Deprecated:** Use `chat_providers.providers.<provider-id>.system_prompt` with a prompt source specification instead.
+
+**Note:** This option is mutually exclusive with `system_prompt`. Requires the [Langfuse integration](./integrations/langfuse) to be enabled.
+
+##### `chat_providers.providers.<provider-id>.model_capabilities`
+
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities */}
 
 The `model_capabilities` field allows you to configure the capabilities and limitations of each chat provider's model. This information is used for token usage estimation, cost calculation, and determining which features are available.
 
@@ -541,6 +613,15 @@ cost_output_tokens_per_1m = 15.0
 ```
 
 **Fields:**
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.context_size_tokens */}
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.supports_image_understanding */}
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.supports_audio_input */}
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.supports_reasoning */}
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.supports_reasoning_summary */}
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.supports_encrypted_reasoning_content */}
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.supports_verbosity */}
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.cost_input_tokens_per_1m */}
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.cost_output_tokens_per_1m */}
 
 - **`context_size_tokens`** _(default: 1000000)_ - Maximum number of tokens that may be provided to the model including input messages, system prompt, and files
 - **`supports_image_understanding`** _(default: false)_ - Whether the model supports being provided with images for understanding
@@ -554,7 +635,9 @@ cost_output_tokens_per_1m = 15.0
 
 If not explicitly configured, all capabilities default to conservative values (large context window, no special features, no cost tracking).
 
-##### `model_settings`
+##### `chat_providers.providers.<provider-id>.model_settings`
+
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_settings */}
 
 The `model_settings` field allows you to configure how the model should behave during generation. While `model_capabilities` describes what a model **can** do, `model_settings` controls what the model **should** do.
 
@@ -613,6 +696,8 @@ chat_provider_ids = ["image-gen"]
 
 #### `chat_providers.summary`
 
+{/* erato_toml_config_key: chat_providers.summary */}
+
 Configuration for chat summary generation. This allows you to specify which provider and settings to use when generating chat summaries.
 
 **Type:** `object | None`
@@ -628,6 +713,8 @@ system_prompt = "Generate a summary for the topic of the following chat, based o
 
 ##### `chat_providers.summary.summary_chat_provider_id`
 
+{/* erato_toml_config_key: chat_providers.summary.summary_chat_provider_id */}
+
 The ID of the chat provider to use specifically for generating chat summaries. This provider must exist in the `chat_providers.providers` map.
 
 If not specified, Erato will use the highest priority provider from `priority_order` for summary generation.
@@ -639,6 +726,8 @@ If not specified, Erato will use the highest priority provider from `priority_or
 **Example:** `"summarizer"`
 
 ##### `chat_providers.summary.system_prompt`
+
+{/* erato_toml_config_key: chat_providers.summary.system_prompt */}
 
 Optional prompt source specification for summary generation.
 
@@ -661,6 +750,8 @@ system_prompt = { source = "langfuse", prompt_name = "summary-instructions", lab
 **Default value:** Built-in hard-coded summary instruction from previous behavior.
 
 ##### `chat_providers.summary.max_tokens`
+
+{/* erato_toml_config_key: chat_providers.summary.max_tokens */}
 
 The maximum number of output tokens to allow when generating chat summaries. This helps control the length and cost of summary generation.
 
@@ -732,6 +823,8 @@ api_key = "sk-key"
 
 ### `file_storage_providers`
 
+{/* erato_toml_config_key: file_storage_providers */}
+
 Configuration for file storage providers that handle uploaded files and documents in Erato. You can configure multiple storage providers with different backends (S3-compatible or Azure Blob Storage) and designate one as the default.
 
 **Type:** `object<string, FileStorageProviderConfig>`
@@ -751,7 +844,9 @@ config = { bucket = "erato-files", region = "us-east-1", access_key_id = "AKIAIO
 default_file_storage_provider = "primary"
 ```
 
-#### `file_storage_providers.<provider_id>.provider_kind`
+#### `file_storage_providers.<provider-id>.provider_kind`
+
+{/* erato_toml_config_key: file_storage_providers.<provider-id>.provider_kind */}
 
 The type of file storage backend to use.
 
@@ -766,7 +861,9 @@ The type of file storage backend to use.
 
 **Example:** `"s3"` or `"azblob"`
 
-#### `file_storage_providers.<provider_id>.display_name`
+#### `file_storage_providers.<provider-id>.display_name`
+
+{/* erato_toml_config_key: file_storage_providers.<provider-id>.display_name */}
 
 A human-readable name to display in the UI for this storage provider.
 
@@ -776,7 +873,9 @@ A human-readable name to display in the UI for this storage provider.
 
 **Example:** `"Primary Storage"` or `"Azure Backup Storage"`
 
-#### `file_storage_providers.<provider_id>.max_upload_size_kb`
+#### `file_storage_providers.<provider-id>.max_upload_size_kb`
+
+{/* erato_toml_config_key: file_storage_providers.<provider-id>.max_upload_size_kb */}
 
 The maximum file size that may be uploaded in kilobytes. This limit is enforced by the backend.
 
@@ -786,7 +885,9 @@ The maximum file size that may be uploaded in kilobytes. This limit is enforced 
 
 **Example:** `102400` (100 MB), `10240` (10 MB)
 
-#### `file_storage_providers.<provider_id>.config`
+#### `file_storage_providers.<provider-id>.config`
+
+{/* erato_toml_config_key: file_storage_providers.<provider-id>.config */}
 
 Provider-specific configuration object. The available fields depend on the `provider_kind`.
 
@@ -942,6 +1043,8 @@ default_file_storage_provider = "azurite"
 
 ### `default_file_storage_provider`
 
+{/* erato_toml_config_key: default_file_storage_provider */}
+
 Specifies which file storage provider to use as the default for new file uploads. This must match one of the keys in the `file_storage_providers` map.
 
 When multiple file storage providers are configured, this setting is **required** and determines where new files will be written. All configured providers remain available for reading existing files, which is useful for migration scenarios.
@@ -1007,6 +1110,8 @@ default_file_storage_provider = "s3_primary"
 
 ### `file_processor`
 
+{/* erato_toml_config_key: file_processor */}
+
 Configuration for the file processing engine that extracts text content from uploaded documents. Erato supports multiple file processor backends with different capabilities.
 
 **Type:** `object | None`
@@ -1014,6 +1119,8 @@ Configuration for the file processing engine that extracts text content from upl
 **Default behavior:** If not configured, Erato uses the `kreuzberg` processor by default.
 
 #### `file_processor.processor`
+
+{/* erato_toml_config_key: file_processor.processor */}
 
 The file processor backend to use for extracting text from uploaded files.
 
@@ -1084,48 +1191,188 @@ This creates a PDF with 20 pages, each containing unique identifiers like `PAGE-
 
 ### Audio modes
 
-Erato has three independently configurable audio modes. All three use the same configuration fields, but they control different user workflows:
+Erato has three independently configurable audio modes:
 
-- `audio_transcription` enables recording or uploading audio as a file attachment with transcription metadata.
 - `audio_dictation` enables microphone dictation that writes transcribed text into the chat input without creating an attachment.
+- `audio_transcription` enables recording or uploading audio as a file attachment with transcription metadata.
 - `audio_conversational` enables hands-free conversational audio mode with voice activity detection, auto-send, and restart behavior.
 
 Each enabled audio mode needs an audio-capable chat provider. Either set `chat_provider_id` on the audio mode, or omit it to let Erato pick the first provider in `chat_providers.priority_order` with `model_capabilities.supports_audio_input = true`. Provider kinds using the OpenAI Responses adapters do not currently support binary audio input for these modes.
 
-**Type:** `object | None`
-
-**Default behavior:** All audio modes are disabled.
-
-#### `audio_transcription`
-
-Controls the audio attachment transcription flow.
-
-**Example:**
-
-```toml
-[audio_transcription]
-enabled = true
-chat_provider_id = "audio-model"
-max_recording_duration_seconds = 1200
-chunk_duration_seconds = 30
-max_attempts = 3
-initial_backoff_ms = 250
-max_backoff_ms = 4000
-min_words_for_loop_check = 80
-min_unique_word_ratio = 0.25
-max_words_per_minute = 200
-tokens_per_word = 1.5
-output_token_buffer_factor = 2.0
-fixed_output_token_budget = 500
-min_output_tokens = 32
-max_output_tokens = 2048
-```
-
 #### `audio_dictation`
+
+{/* erato_toml_config_key: audio_dictation */}
 
 Controls the microphone dictation flow that populates the chat input without creating an attachment.
 
-**Example:**
+**Type:** `object | None`
+
+**Default behavior:** `audio_dictation` is disabled.
+
+#### `audio_dictation.enabled`
+
+{/* erato_toml_config_key: audio_dictation.enabled */}
+
+Whether this audio mode is available.
+
+**Type:** `bool`
+
+**Default:** `false`
+
+#### `audio_dictation.chat_provider_id`
+
+{/* erato_toml_config_key: audio_dictation.chat_provider_id */}
+
+The provider ID to use for this audio mode. If omitted, Erato uses the first compatible audio-capable provider from the configured provider priority order.
+
+**Type:** `string | None`
+
+**Default:** `None`
+
+The corresponding provider needs to have the `supports_audio_input` capability:
+**Provider example:**
+
+```toml
+[chat_providers.providers.audio-model]
+provider_kind = "openai"
+model_name = "gpt-4o-audio-preview"
+api_key = "sk-..."
+
+[chat_providers.providers.audio-model.model_capabilities]
+supports_audio_input = true
+```
+
+#### `audio_dictation.max_recording_duration_seconds`
+
+{/* erato_toml_config_key: audio_dictation.max_recording_duration_seconds */}
+
+Maximum recording duration in seconds.
+
+**Type:** `number`
+
+**Default:** `1200`
+
+#### `audio_dictation.chunk_duration_seconds`
+
+{/* erato_toml_config_key: audio_dictation.chunk_duration_seconds */}
+
+Audio chunk duration in seconds. Must be greater than 0 and no larger than `max_recording_duration_seconds`.
+
+**Type:** `number`
+
+**Default:** `30`
+
+#### `audio_dictation.max_attempts`
+
+{/* erato_toml_config_key: audio_dictation.max_attempts */}
+
+Maximum provider attempts per chunk, including retries for loop-detection.
+
+**Type:** `number`
+
+**Default:** `3`
+
+#### `audio_dictation.initial_backoff_ms`
+
+{/* erato_toml_config_key: audio_dictation.initial_backoff_ms */}
+
+Initial retry backoff in milliseconds.
+
+**Type:** `number`
+
+**Default:** `250`
+
+#### `audio_dictation.max_backoff_ms`
+
+{/* erato_toml_config_key: audio_dictation.max_backoff_ms */}
+
+Maximum retry backoff in milliseconds.
+
+**Type:** `number`
+
+**Default:** `4000`
+
+#### `audio_dictation.min_words_for_loop_check`
+
+{/* erato_toml_config_key: audio_dictation.min_words_for_loop_check */}
+
+Minimum transcript word count before loop detection runs.
+
+**Type:** `number`
+
+**Default:** `80`
+
+#### `audio_dictation.min_unique_word_ratio`
+
+{/* erato_toml_config_key: audio_dictation.min_unique_word_ratio */}
+
+Minimum unique-word ratio accepted for non-loop transcripts.
+
+**Type:** `number`
+
+**Default:** `0.25`
+
+**Constraint:** Must be between `0.0` and `1.0`.
+
+#### `audio_dictation.max_words_per_minute`
+
+{/* erato_toml_config_key: audio_dictation.max_words_per_minute */}
+
+Assumed maximum speech rate used to derive per-chunk output token budgets.
+
+**Type:** `number`
+
+**Default:** `200`
+
+#### `audio_dictation.tokens_per_word`
+
+{/* erato_toml_config_key: audio_dictation.tokens_per_word */}
+
+Token-per-word multiplier used to derive per-chunk output token budgets.
+
+**Type:** `number`
+
+**Default:** `1.5`
+
+#### `audio_dictation.output_token_buffer_factor`
+
+{/* erato_toml_config_key: audio_dictation.output_token_buffer_factor */}
+
+Safety multiplier used to derive per-chunk output token budgets.
+
+**Type:** `number`
+
+**Default:** `2.0`
+
+#### `audio_dictation.fixed_output_token_budget`
+
+{/* erato_toml_config_key: audio_dictation.fixed_output_token_budget */}
+
+Fixed output token budget added to the per-chunk heuristic.
+
+**Type:** `number`
+
+**Default:** `500`
+
+#### `audio_dictation.min_output_tokens`
+
+{/* erato_toml_config_key: audio_dictation.min_output_tokens */}
+
+Optional minimum output token budget for transcription chunks.
+
+**Type:** `number | None`
+
+#### `audio_dictation.max_output_tokens`
+
+{/* erato_toml_config_key: audio_dictation.max_output_tokens */}
+
+Optional maximum output token cap for transcription chunks.
+
+**Type:** `number | None`
+
+If both minimum and maximum are configured, `min_output_tokens` must be less than or equal to `max_output_tokens`.
+
+#### `audio_dictation` example
 
 ```toml
 [audio_dictation]
@@ -1146,11 +1393,70 @@ min_output_tokens = 32
 max_output_tokens = 2048
 ```
 
+#### `audio_transcription`
+
+{/* erato_toml_config_key: audio_transcription */}
+
+Controls the recording or upload-to-attachment transcription flow.
+
+All subkeys share the same structure and meaning as [`audio_dictation`](#audio_dictation):
+{/* erato_toml_config_key: audio_transcription.enabled */}
+{/* erato_toml_config_key: audio_transcription.chat_provider_id */}
+{/* erato_toml_config_key: audio_transcription.max_recording_duration_seconds */}
+{/* erato_toml_config_key: audio_transcription.chunk_duration_seconds */}
+{/* erato_toml_config_key: audio_transcription.max_attempts */}
+{/* erato_toml_config_key: audio_transcription.initial_backoff_ms */}
+{/* erato_toml_config_key: audio_transcription.max_backoff_ms */}
+{/* erato_toml_config_key: audio_transcription.min_words_for_loop_check */}
+{/* erato_toml_config_key: audio_transcription.min_unique_word_ratio */}
+{/* erato_toml_config_key: audio_transcription.max_words_per_minute */}
+{/* erato_toml_config_key: audio_transcription.tokens_per_word */}
+{/* erato_toml_config_key: audio_transcription.output_token_buffer_factor */}
+{/* erato_toml_config_key: audio_transcription.fixed_output_token_budget */}
+{/* erato_toml_config_key: audio_transcription.min_output_tokens */}
+{/* erato_toml_config_key: audio_transcription.max_output_tokens */}
+
+```toml
+[audio_transcription]
+enabled = true
+chat_provider_id = "audio-model"
+max_recording_duration_seconds = 1200
+chunk_duration_seconds = 30
+max_attempts = 3
+initial_backoff_ms = 250
+max_backoff_ms = 4000
+min_words_for_loop_check = 80
+min_unique_word_ratio = 0.25
+max_words_per_minute = 200
+tokens_per_word = 1.5
+output_token_buffer_factor = 2.0
+fixed_output_token_budget = 500
+min_output_tokens = 32
+max_output_tokens = 2048
+```
+
 #### `audio_conversational`
 
-Controls hands-free microphone dictation with voice activity detection, auto-send, and automatic restart after responses. This mode uses the dictation websocket protocol, but has independent provider, chunking, retry, and duration settings. Enable it separately from `audio_dictation`.
+{/* erato_toml_config_key: audio_conversational */}
 
-**Example:**
+Controls hands-free conversational dictation with voice activity detection, auto-send, and automatic restart after responses.
+
+All subkeys share the same structure and meaning as [`audio_dictation`](#audio_dictation):
+{/* erato_toml_config_key: audio_conversational.enabled */}
+{/* erato_toml_config_key: audio_conversational.chat_provider_id */}
+{/* erato_toml_config_key: audio_conversational.max_recording_duration_seconds */}
+{/* erato_toml_config_key: audio_conversational.chunk_duration_seconds */}
+{/* erato_toml_config_key: audio_conversational.max_attempts */}
+{/* erato_toml_config_key: audio_conversational.initial_backoff_ms */}
+{/* erato_toml_config_key: audio_conversational.max_backoff_ms */}
+{/* erato_toml_config_key: audio_conversational.min_words_for_loop_check */}
+{/* erato_toml_config_key: audio_conversational.min_unique_word_ratio */}
+{/* erato_toml_config_key: audio_conversational.max_words_per_minute */}
+{/* erato_toml_config_key: audio_conversational.tokens_per_word */}
+{/* erato_toml_config_key: audio_conversational.output_token_buffer_factor */}
+{/* erato_toml_config_key: audio_conversational.fixed_output_token_budget */}
+{/* erato_toml_config_key: audio_conversational.min_output_tokens */}
+{/* erato_toml_config_key: audio_conversational.max_output_tokens */}
 
 ```toml
 [audio_conversational]
@@ -1171,37 +1477,9 @@ min_output_tokens = 32
 max_output_tokens = 2048
 ```
 
-#### Audio mode fields
-
-- **`enabled`** _(default: false)_ - Whether this audio mode is available.
-- **`chat_provider_id`** _(default: None)_ - Optional provider ID to use for this audio mode. If omitted, Erato uses the first compatible audio-capable provider from the configured provider priority order.
-- **`max_recording_duration_seconds`** _(default: 1200)_ - Maximum recording duration in seconds.
-- **`chunk_duration_seconds`** _(default: 30)_ - Audio chunk duration in seconds. This must be greater than 0 and no larger than `max_recording_duration_seconds`.
-- **`max_attempts`** _(default: 3)_ - Maximum provider attempts per chunk, including retry attempts for detected hallucination loops.
-- **`initial_backoff_ms`** _(default: 250)_ - Initial retry backoff in milliseconds.
-- **`max_backoff_ms`** _(default: 4000)_ - Maximum retry backoff in milliseconds.
-- **`min_words_for_loop_check`** _(default: 80)_ - Minimum transcript word count before loop detection runs.
-- **`min_unique_word_ratio`** _(default: 0.25)_ - Minimum unique-word ratio accepted for non-loop transcripts. Must be between `0.0` and `1.0`.
-- **`max_words_per_minute`** _(default: 200)_ - Assumed maximum speech rate used to derive per-chunk output token budgets.
-- **`tokens_per_word`** _(default: 1.5)_ - Token-per-word multiplier used to derive per-chunk output token budgets.
-- **`output_token_buffer_factor`** _(default: 2.0)_ - Safety multiplier used to derive per-chunk output token budgets.
-- **`fixed_output_token_budget`** _(default: 500)_ - Fixed output token budget added to the per-chunk heuristic.
-- **`min_output_tokens`** _(default: None)_ - Optional minimum output token budget for transcription chunks.
-- **`max_output_tokens`** _(default: None)_ - Optional maximum output token cap for transcription chunks. If both minimum and maximum are configured, `min_output_tokens` must be less than or equal to `max_output_tokens`.
-
-**Provider example:**
-
-```toml
-[chat_providers.providers.audio-model]
-provider_kind = "openai"
-model_name = "gpt-4o-audio-preview"
-api_key = "sk-..."
-
-[chat_providers.providers.audio-model.model_capabilities]
-supports_audio_input = true
-```
-
 ### `model_permissions`
+
+{/* erato_toml_config_key: model_permissions */}
 
 Configuration for controlling user access to chat providers based on user attributes like group membership. This allows you to implement fine-grained access control, such as restricting premium models to certain user groups or providing different models to different teams.
 
@@ -1210,6 +1488,8 @@ Configuration for controlling user access to chat providers based on user attrib
 **Default behavior:** If no model permissions are configured, all users have access to all configured chat providers.
 
 #### `model_permissions.rules`
+
+{/* erato_toml_config_key: model_permissions.rules */}
 
 A map of permission rules, where each key is a unique rule name and the value is a rule configuration object. Rules are evaluated independently, and if any rule grants access to a chat provider, the user is allowed to use it.
 
@@ -1343,6 +1623,8 @@ If no `groups` claim is present in the ID token, the user is treated as having n
 
 ### `mcp_server_permissions`
 
+{/* erato_toml_config_key: mcp_server_permissions */}
+
 Configuration for controlling user access to configured MCP servers based on group membership. This is evaluated through the same policy engine as `model_permissions`, and affects which MCP servers can be attached to assistants or used during generation.
 
 **Type:** `object | None`
@@ -1350,6 +1632,8 @@ Configuration for controlling user access to configured MCP servers based on gro
 **Default behavior:** If no MCP server permissions are configured, all users have access to all configured MCP servers.
 
 #### `mcp_server_permissions.rules`
+
+{/* erato_toml_config_key: mcp_server_permissions.rules */}
 
 A map of permission rules, where each key is a unique rule name and the value is a rule configuration object. Rules are evaluated independently, and if any rule grants access to an MCP server, the user is allowed to use it.
 
@@ -1390,6 +1674,8 @@ groups = ["security-reviewed-users"]
 
 ### `facet_permissions`
 
+{/* erato_toml_config_key: facet_permissions */}
+
 Configuration for controlling which facets are visible and usable for different users. This is evaluated through the same policy engine as `model_permissions`, and affects facet visibility in `/me/facets`, starter prompts, and message generation.
 
 **Type:** `object | None`
@@ -1397,6 +1683,8 @@ Configuration for controlling which facets are visible and usable for different 
 **Default behavior:** If no facet permissions are configured, all users have access to all configured facets.
 
 #### `facet_permissions.rules`
+
+{/* erato_toml_config_key: facet_permissions.rules */}
 
 A map of permission rules, where each key is a unique rule name and the value is a rule configuration object. Rules are evaluated independently, and if any rule grants access to a facet, the user is allowed to use it.
 
@@ -1441,13 +1729,19 @@ Like `model_permissions`, both `mcp_server_permissions` and `facet_permissions` 
 
 ### `integrations`
 
+{/* erato_toml_config_key: integrations */}
+
 Configuration for external service integrations.
 
 #### `integrations.langfuse`
 
+{/* erato_toml_config_key: integrations.langfuse */}
+
 Configuration for the [Langfuse](./integrations/langfuse) observability and prompt management integration.
 
 ##### `integrations.langfuse.enabled`
+
+{/* erato_toml_config_key: integrations.langfuse.enabled */}
 
 Whether the [Langfuse](./integrations/langfuse) integration is enabled.
 
@@ -1456,6 +1750,8 @@ Whether the [Langfuse](./integrations/langfuse) integration is enabled.
 **Type:** `boolean`
 
 ##### `integrations.langfuse.base_url`
+
+{/* erato_toml_config_key: integrations.langfuse.base_url */}
 
 The base URL for your [Langfuse](./integrations/langfuse) instance. Use `https://cloud.langfuse.com` for Langfuse Cloud or your self-hosted URL.
 
@@ -1467,6 +1763,8 @@ The base URL for your [Langfuse](./integrations/langfuse) instance. Use `https:/
 
 ##### `integrations.langfuse.public_key`
 
+{/* erato_toml_config_key: integrations.langfuse.public_key */}
+
 Your [Langfuse](./integrations/langfuse) project's public key. You can find this in your Langfuse project settings.
 
 **Required when enabled:** Yes
@@ -1476,6 +1774,8 @@ Your [Langfuse](./integrations/langfuse) project's public key. You can find this
 **Example:** `"pk-lf-1234567890abcdef"`
 
 ##### `integrations.langfuse.secret_key`
+
+{/* erato_toml_config_key: integrations.langfuse.secret_key */}
 
 Your [Langfuse](./integrations/langfuse) project's secret key. You can find this in your Langfuse project settings.
 
@@ -1487,6 +1787,8 @@ Your [Langfuse](./integrations/langfuse) project's secret key. You can find this
 
 ##### `integrations.langfuse.tracing_enabled`
 
+{/* erato_toml_config_key: integrations.langfuse.tracing_enabled */}
+
 Whether to enable detailed tracing of LLM interactions. When enabled, all chat completions will be logged to [Langfuse](./integrations/langfuse).
 
 **Default value:** `false`
@@ -1495,6 +1797,8 @@ Whether to enable detailed tracing of LLM interactions. When enabled, all chat c
 
 ##### `integrations.langfuse.summary_tracing_enabled`
 
+{/* erato_toml_config_key: integrations.langfuse.summary_tracing_enabled */}
+
 Whether to enable tracing of generated chat summaries. Set to `false` to skip Langfuse traces for summaries while keeping normal chat completion tracing unchanged.
 
 **Default value:** `true`
@@ -1502,6 +1806,8 @@ Whether to enable tracing of generated chat summaries. Set to `false` to skip La
 **Type:** `boolean`
 
 ##### `integrations.langfuse.enable_feedback`
+
+{/* erato_toml_config_key: integrations.langfuse.enable_feedback */}
 
 Whether to forward user feedback (thumbs up/down with optional comments) to Langfuse as scores. When enabled, feedback submitted by users will be sent to Langfuse and associated with the corresponding message trace for observability and quality tracking.
 
@@ -1512,6 +1818,8 @@ Whether to forward user feedback (thumbs up/down with optional comments) to Lang
 **Note:** This requires `frontend.enable_message_feedback` to be enabled for users to submit feedback through the UI.
 
 ##### `integrations.langfuse.use_otel`
+
+{/* erato_toml_config_key: integrations.langfuse.use_otel */}
 
 Whether to send Langfuse tracing data via Langfuse's OpenTelemetry ingestion endpoint instead of the legacy ingestion endpoint. When enabled, Erato sends trace and observation data to `${base_url}/api/public/otel/v1/traces` using OTLP over HTTP.
 
@@ -1525,9 +1833,13 @@ See the [Langfuse Integration](./integrations/langfuse) documentation for detail
 
 #### `integrations.sentry`
 
+{/* erato_toml_config_key: integrations.sentry */}
+
 Configuration for the [Sentry](./integrations/sentry) error reporting and performance monitoring integration.
 
 ##### `integrations.sentry.sentry_dsn`
+
+{/* erato_toml_config_key: integrations.sentry.sentry_dsn */}
 
 The Sentry DSN (Data Source Name) for your Sentry project. This enables error reporting and performance monitoring.
 
@@ -1546,9 +1858,13 @@ See the [Sentry Integration](./integrations/sentry) documentation for detailed s
 
 #### `integrations.otel`
 
+{/* erato_toml_config_key: integrations.otel */}
+
 Configuration for [OpenTelemetry](./integrations/opentelemetry) tracing.
 
 ##### `integrations.otel.enabled`
+
+{/* erato_toml_config_key: integrations.otel.enabled */}
 
 Whether OpenTelemetry tracing is enabled.
 
@@ -1557,6 +1873,8 @@ Whether OpenTelemetry tracing is enabled.
 **Type:** `boolean`
 
 ##### `integrations.otel.endpoint`
+
+{/* erato_toml_config_key: integrations.otel.endpoint */}
 
 The endpoint URL of the OpenTelemetry collector.
 
@@ -1568,6 +1886,8 @@ The endpoint URL of the OpenTelemetry collector.
 
 ##### `integrations.otel.protocol`
 
+{/* erato_toml_config_key: integrations.otel.protocol */}
+
 The protocol to use for exporting traces.
 
 **Default value:** `"http"`
@@ -1578,6 +1898,8 @@ The protocol to use for exporting traces.
 
 ##### `integrations.otel.service_name`
 
+{/* erato_toml_config_key: integrations.otel.service_name */}
+
 The service name to identify this application in traces.
 
 **Default value:** `"erato-backend"`
@@ -1586,9 +1908,13 @@ The service name to identify this application in traces.
 
 #### `integrations.ms_office`
 
+{/* erato_toml_config_key: integrations.ms_office */}
+
 Configuration for the Microsoft Office add-in integration.
 
 ##### `integrations.ms_office.addin.enabled`
+
+{/* erato_toml_config_key: integrations.ms_office.addin.enabled */}
 
 Whether the Office add-in frontend and manifest endpoint are enabled.
 
@@ -1600,6 +1926,8 @@ When enabled, Erato serves the add-in frontend bundle and exposes `GET /office-a
 
 ##### `integrations.ms_office.addin.msal_client_id`
 
+{/* erato_toml_config_key: integrations.ms_office.addin.msal_client_id */}
+
 The Microsoft identity platform client (application) ID used by the Office add-in for OAuth-based authentication.
 
 **Required for add-in authentication flows:** Yes
@@ -1607,6 +1935,8 @@ The Microsoft identity platform client (application) ID used by the Office add-i
 **Type:** `string | None`
 
 ##### `integrations.ms_office.addin.addin_id`
+
+{/* erato_toml_config_key: integrations.ms_office.addin.addin_id */}
 
 The Office add-in manifest ID used when rendering the add-in manifest.
 
@@ -1618,6 +1948,8 @@ Override this ID to install multiple add-in instances in the same tenant.
 
 ##### `integrations.ms_office.addin.msal_authority`
 
+{/* erato_toml_config_key: integrations.ms_office.addin.msal_authority */}
+
 The Microsoft identity authority URL used for MSAL authentication.
 
 **Default value:** `"https://login.microsoftonline.com/common"`
@@ -1625,6 +1957,8 @@ The Microsoft identity authority URL used for MSAL authentication.
 **Type:** `string`
 
 ##### `integrations.ms_office.addin.serve_bundle_legacy_path`
+
+{/* erato_toml_config_key: integrations.ms_office.addin.serve_bundle_legacy_path */}
 
 Whether to also serve the Office add-in bundle under `/office-addin` in addition to `/public/platform-office-addin`.
 
@@ -1635,6 +1969,8 @@ This is useful for deployments that still reference legacy asset URLs.
 **Type:** `boolean`
 
 ##### `integrations.ms_office.addin.frontend_bundle_path`
+
+{/* erato_toml_config_key: integrations.ms_office.addin.frontend_bundle_path */}
 
 Filesystem path to the Office add-in frontend bundle.
 
@@ -1658,9 +1994,13 @@ frontend_bundle_path = "./public/platform-office-addin"
 
 #### `integrations.prometheus`
 
+{/* erato_toml_config_key: integrations.prometheus */}
+
 Configuration for [Prometheus](./integrations/prometheus) metrics export.
 
 ##### `integrations.prometheus.enabled`
+
+{/* erato_toml_config_key: integrations.prometheus.enabled */}
 
 Whether the Prometheus metrics endpoint is enabled.
 
@@ -1670,6 +2010,8 @@ Whether the Prometheus metrics endpoint is enabled.
 
 ##### `integrations.prometheus.host`
 
+{/* erato_toml_config_key: integrations.prometheus.host */}
+
 Host interface for the Prometheus metrics listener.
 
 **Default value:** `"127.0.0.1"`
@@ -1677,6 +2019,8 @@ Host interface for the Prometheus metrics listener.
 **Type:** `string`
 
 ##### `integrations.prometheus.port`
+
+{/* erato_toml_config_key: integrations.prometheus.port */}
 
 Port for the Prometheus metrics listener. This must be different from `http_port`.
 
@@ -1686,11 +2030,15 @@ Port for the Prometheus metrics listener. This must be different from `http_port
 
 #### `integrations.experimental_sharepoint`
 
+{/* erato_toml_config_key: integrations.experimental_sharepoint */}
+
 Configuration for the experimental [SharePoint/OneDrive](./integrations/sharepoint) integration. This allows users to attach files from their Microsoft cloud storage directly to chats.
 
 **Note:** This is an experimental feature. The configuration key will be renamed to `integrations.sharepoint` once the feature has stabilized.
 
 ##### `integrations.experimental_sharepoint.enabled`
+
+{/* erato_toml_config_key: integrations.experimental_sharepoint.enabled */}
 
 Whether the SharePoint/OneDrive integration is enabled.
 
@@ -1700,6 +2048,8 @@ Whether the SharePoint/OneDrive integration is enabled.
 
 ##### `integrations.experimental_sharepoint.file_upload_enabled`
 
+{/* erato_toml_config_key: integrations.experimental_sharepoint.file_upload_enabled */}
+
 Whether file linking from SharePoint is enabled. When disabled, users can browse their drives but cannot link files to chats.
 
 **Default value:** `true`
@@ -1708,6 +2058,8 @@ Whether file linking from SharePoint is enabled. When disabled, users can browse
 
 ##### `integrations.experimental_sharepoint.auth_via_access_token`
 
+{/* erato_toml_config_key: integrations.experimental_sharepoint.auth_via_access_token */}
+
 Whether to use the user's forwarded access token for Microsoft Graph API authentication. Currently, this is the only supported authentication method.
 
 **Default value:** `true`
@@ -1715,6 +2067,8 @@ Whether to use the user's forwarded access token for Microsoft Graph API authent
 **Type:** `boolean`
 
 ##### `integrations.experimental_sharepoint.all_drives_sources`
+
+{/* erato_toml_config_key: integrations.experimental_sharepoint.all_drives_sources */}
 
 Which Microsoft Graph discovery surfaces Erato should query for `/integrations/sharepoint/all-drives`.
 
@@ -1754,11 +2108,15 @@ See the [SharePoint/OneDrive Integration](./integrations/sharepoint) documentati
 
 #### `integrations.experimental_entra_id`
 
+{/* erato_toml_config_key: integrations.experimental_entra_id */}
+
 Configuration for the experimental Entra ID integration. This allows exposing organization users and groups to the frontend for sharing features.
 
 **Note:** This is an experimental feature. The configuration key will be renamed to `integrations.entra_id` once the feature has stabilized.
 
 ##### `integrations.experimental_entra_id.enabled`
+
+{/* erato_toml_config_key: integrations.experimental_entra_id.enabled */}
 
 Whether the Entra ID integration is enabled. When enabled, the `/me/organization/users` and `/me/organization/groups` endpoints will query the Microsoft Graph API to list organization users and groups. When disabled, these endpoints will return empty lists.
 
@@ -1767,6 +2125,8 @@ Whether the Entra ID integration is enabled. When enabled, the `/me/organization
 **Type:** `boolean`
 
 ##### `integrations.experimental_entra_id.auth_via_access_token`
+
+{/* erato_toml_config_key: integrations.experimental_entra_id.auth_via_access_token */}
 
 Whether to use the user's forwarded access token for Microsoft Graph API authentication. Currently, this is the only supported authentication method.
 
@@ -1799,9 +2159,13 @@ These fields enable sharing assistants with organization groups via share grants
 
 ### `logging`
 
+{/* erato_toml_config_key: logging */}
+
 Configuration for backend log output formatting.
 
 #### `logging.format`
+
+{/* erato_toml_config_key: logging.format */}
 
 Controls how application logs are formatted on stdout/stderr.
 
@@ -1824,11 +2188,15 @@ format = "json"
 
 ### `mcp_servers`
 
+{/* erato_toml_config_key: mcp_servers */}
+
 Configuration for Model Context Protocol (MCP) servers that extend Erato's capabilities through custom tools and integrations.
 
 **Type:** `object<string, McpServerConfig>`
 
 ### `mcp_servers_global`
+
+{/* erato_toml_config_key: mcp_servers_global */}
 
 Global configuration for MCP server behavior across all configured servers.
 
@@ -1836,9 +2204,11 @@ Global configuration for MCP server behavior across all configured servers.
 
 #### `mcp_servers_global.max_session_idle_seconds`
 
+{/* erato_toml_config_key: mcp_servers_global.max_session_idle_seconds */}
+
 Global default maximum idle time for MCP sessions, in seconds. If a session is idle longer than this threshold, it is evicted by the backend cleanup task.
 
-Server-specific settings can override this value via `mcp_servers.<server_id>.max_session_idle_seconds`.
+Server-specific settings can override this value via `mcp_servers.<server-id>.max_session_idle_seconds`.
 
 **Type:** `integer | None`
 
@@ -1849,6 +2219,8 @@ Server-specific settings can override this value via `mcp_servers.<server_id>.ma
 **Operational note:** For MCP servers where each session allocates substantial resources (e.g. memory-heavy tools, expensive backend handles), use a lower idle timeout to reclaim server capacity faster.
 
 #### `mcp_servers_global.show_frontend_tab`
+
+{/* erato_toml_config_key: mcp_servers_global.show_frontend_tab */}
 
 Whether the MCP servers tab should be shown in the frontend preferences dialog.
 
@@ -1879,7 +2251,9 @@ prefix = "Bearer "
 max_session_idle_seconds = 1800
 ```
 
-#### `mcp_servers.<server_id>.transport_type`
+#### `mcp_servers.<server-id>.transport_type`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.transport_type */}
 
 The type of transport protocol used to communicate with the MCP server.
 
@@ -1892,7 +2266,9 @@ The type of transport protocol used to communicate with the MCP server.
 
 **Example:** `"sse"` or `"streamable_http"`
 
-#### `mcp_servers.<server_id>.url`
+#### `mcp_servers.<server-id>.url`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.url */}
 
 The URL endpoint for the MCP server.
 
@@ -1903,9 +2279,11 @@ The URL endpoint for the MCP server.
 
 **Example:** `"http://127.0.0.1:63490/sse"`, `"https://my-mcp-server.example.com/sse"`, `"https://api.example.com/mcp"`
 
-#### `mcp_servers.<server_id>.http_headers`
+#### `mcp_servers.<server-id>.http_headers`
 
-Optional static HTTP headers to include with every request to the MCP server. Use this for non-authentication headers. Prefer `mcp_servers.<server_id>.authentication` for credentials.
+{/* erato_toml_config_key: mcp_servers.<server-id>.http_headers */}
+
+Optional static HTTP headers to include with every request to the MCP server. Use this for non-authentication headers. Prefer `mcp_servers.<server-id>.authentication` for credentials.
 
 **Type:** `object<string, string> | None`
 
@@ -1918,7 +2296,9 @@ url = "https://mcp-server.example.com/sse"
 http_headers = { "X-Tenant-ID" = "tenant-123", "X-Environment" = "production" }
 ```
 
-#### `mcp_servers.<server_id>.authentication`
+#### `mcp_servers.<server-id>.authentication`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.authentication */}
 
 Authentication settings for the MCP server.
 
@@ -1959,7 +2339,9 @@ client_name = "Erato Jira MCP"
 scopes = ["read:jira-work"]
 ```
 
-#### `mcp_servers.<server_id>.authentication.forwarded.credential`
+#### `mcp_servers.<server-id>.authentication.forwarded.credential`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.authentication.forwarded.credential */}
 
 Selects which user credential to forward when `authentication.mode = "forwarded"`.
 
@@ -1970,13 +2352,17 @@ Selects which user credential to forward when `authentication.mode = "forwarded"
 - `"access_token"`
 - `"oidc_id_token"`
 
-#### `mcp_servers.<server_id>.authentication.fixed.api_key`
+#### `mcp_servers.<server-id>.authentication.fixed.api_key`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.authentication.fixed.api_key */}
 
 The fixed API key to attach when `authentication.mode = "fixed"`.
 
 **Type:** `string`
 
-#### `mcp_servers.<server_id>.authentication.fixed.header_name`
+#### `mcp_servers.<server-id>.authentication.fixed.header_name`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.authentication.fixed.header_name */}
 
 The HTTP header to use when `authentication.mode = "fixed"`.
 
@@ -1984,7 +2370,9 @@ The HTTP header to use when `authentication.mode = "fixed"`.
 
 **Default value:** `"Authorization"`
 
-#### `mcp_servers.<server_id>.authentication.fixed.prefix`
+#### `mcp_servers.<server-id>.authentication.fixed.prefix`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.authentication.fixed.prefix */}
 
 The prefix prepended to `authentication.fixed.api_key` when `authentication.mode = "fixed"`.
 
@@ -1994,7 +2382,9 @@ This defaults to bearer-token formatting, so the default fixed auth header is `A
 
 **Default value:** `"Bearer "`
 
-#### `mcp_servers.<server_id>.authentication.oauth2.client_id`
+#### `mcp_servers.<server-id>.authentication.oauth2.client_id`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.authentication.oauth2.client_id */}
 
 Optional statically configured OAuth client ID for `authentication.mode = "oauth2"`.
 
@@ -2002,7 +2392,9 @@ If omitted, Erato attempts dynamic client registration and persists the returned
 
 **Type:** `string | None`
 
-#### `mcp_servers.<server_id>.authentication.oauth2.client_secret`
+#### `mcp_servers.<server-id>.authentication.oauth2.client_secret`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.authentication.oauth2.client_secret */}
 
 Optional statically configured OAuth client secret for `authentication.mode = "oauth2"`.
 
@@ -2010,7 +2402,9 @@ Use this for confidential clients that are pre-registered with the MCP server's 
 
 **Type:** `string | None`
 
-#### `mcp_servers.<server_id>.authentication.oauth2.client_name`
+#### `mcp_servers.<server-id>.authentication.oauth2.client_name`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.authentication.oauth2.client_name */}
 
 Optional display name used during dynamic client registration when `authentication.mode = "oauth2"` and no static `client_id` is configured.
 
@@ -2018,7 +2412,9 @@ Optional display name used during dynamic client registration when `authenticati
 
 **Default behavior:** Falls back to `"Erato MCP OAuth Client"`
 
-#### `mcp_servers.<server_id>.authentication.oauth2.scopes`
+#### `mcp_servers.<server-id>.authentication.oauth2.scopes`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.authentication.oauth2.scopes */}
 
 Optional list of OAuth scopes requested during authorization for `authentication.mode = "oauth2"`.
 
@@ -2040,7 +2436,9 @@ scopes = ["read:jira-work", "offline_access"]
 
 **Operational note:** `oauth2` authentication requires `server.encryption_key` to be configured because Erato stores registered client secrets, authorization state, and user credentials encrypted at rest.
 
-#### `mcp_servers.<server_id>.max_session_idle_seconds`
+#### `mcp_servers.<server-id>.max_session_idle_seconds`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.max_session_idle_seconds */}
 
 Optional per-server override for maximum MCP session idle time, in seconds.
 
@@ -2058,9 +2456,13 @@ See the [MCP Servers](./features/mcp_servers) documentation for more information
 
 ### `prompt_optimizer`
 
+{/* erato_toml_config_key: prompt_optimizer */}
+
 Configuration for the prompt optimizer. When enabled, the backend exposes the `POST /prompt-optimizer` endpoint to optimize user prompts using a dedicated chat provider and system prompt.
 
 #### `prompt_optimizer.enabled`
+
+{/* erato_toml_config_key: prompt_optimizer.enabled */}
 
 Whether to enable the prompt optimizer feature.
 
@@ -2070,11 +2472,15 @@ Whether to enable the prompt optimizer feature.
 
 #### `prompt_optimizer.chat_provider_id`
 
+{/* erato_toml_config_key: prompt_optimizer.chat_provider_id */}
+
 The chat provider ID to use for prompt optimization. Must match a provider configured in `chat_providers`.
 
 **Type:** `string`
 
 #### `prompt_optimizer.prompt`
+
+{/* erato_toml_config_key: prompt_optimizer.prompt */}
 
 System prompt used by the prompt optimizer. If omitted, a built-in non-interactive default prompt is used.
 
@@ -2110,9 +2516,13 @@ prompt = { source = "static", prompt = "Rewrite the user's prompt to be clearer,
 
 ### `user_preferences`
 
+{/* erato_toml_config_key: user_preferences */}
+
 Configuration for the user preferences feature.
 
 #### `user_preferences.enabled`
+
+{/* erato_toml_config_key: user_preferences.enabled */}
 
 Whether to enable the user preferences feature.
 
@@ -2131,11 +2541,15 @@ enabled = false
 
 ### `experimental_assistants`
 
+{/* erato_toml_config_key: experimental_assistants */}
+
 Configuration for the experimental assistants feature. This allows enabling the assistants functionality in the frontend, which provides users with pre-configured chat assistants tuned for specific use-cases.
 
 **Note:** This is an experimental feature that will be replaced with a stable `[assistants]` configuration section once the feature has stabilized.
 
 #### `experimental_assistants.enabled`
+
+{/* erato_toml_config_key: experimental_assistants.enabled */}
 
 Whether to enable the experimental assistants feature in the frontend. When enabled, the frontend will expose assistant-related functionality and UI components to users.
 
@@ -2152,6 +2566,8 @@ enabled = true
 
 #### `experimental_assistants.show_recent_items`
 
+{/* erato_toml_config_key: experimental_assistants.show_recent_items */}
+
 Whether to show recent assistant items in the chat sidebar.
 
 **Default value:** `false`
@@ -2167,6 +2583,8 @@ show_recent_items = true
 
 #### `experimental_assistants.context_warning_threshold`
 
+{/* erato_toml_config_key: experimental_assistants.context_warning_threshold */}
+
 Threshold between `0.0` and `1.0` at or above which the assistant editor shows the overall context warning block.
 
 **Default value:** `0.5`
@@ -2181,6 +2599,8 @@ context_warning_threshold = 0.6
 ```
 
 #### `experimental_assistants.context_file_contributor_threshold`
+
+{/* erato_toml_config_key: experimental_assistants.context_file_contributor_threshold */}
 
 Threshold between `0.0` and `1.0` at or above which a file is included in the assistant editor's "largest file context contributors" list.
 
@@ -2206,6 +2626,8 @@ enabled = true  # Will default to true once stable
 
 ### `starter_prompts`
 
+{/* erato_toml_config_key: starter_prompts */}
+
 Configuration for welcome-screen starter prompts. Starter prompts prefill the chat input, optional facet selections, and an optional chat provider when clicked, but do not submit the message automatically.
 
 Starter prompt titles and subtitles can be translated in the frontend with Lingui message IDs derived from the starter prompt id:
@@ -2216,6 +2638,8 @@ Starter prompt titles and subtitles can be translated in the frontend with Lingu
 If no translation exists for a given starter prompt id, the frontend falls back to the configured `title` and `subtitle`.
 
 #### `starter_prompts.enabled`
+
+{/* erato_toml_config_key: starter_prompts.enabled */}
 
 Whether to enable starter prompts globally.
 
@@ -2231,6 +2655,8 @@ enabled = true
 ```
 
 #### `starter_prompts.prompts`
+
+{/* erato_toml_config_key: starter_prompts.prompts */}
 
 Map of starter prompt configurations, keyed by starter prompt id.
 
@@ -2283,6 +2709,8 @@ Each starter prompt supports these fields:
 
 #### `starter_prompts.priority_order`
 
+{/* erato_toml_config_key: starter_prompts.priority_order */}
+
 List of starter prompt IDs in the order they should be displayed.
 
 **Type:** `list<string>`
@@ -2298,11 +2726,15 @@ priority_order = ["research_topic", "draft_email", "summarize_notes"]
 
 ### `experimental_facets`
 
+{/* erato_toml_config_key: experimental_facets */}
+
 Configuration for the experimental facets feature. Facets allow users to select tool-focused modes (e.g. web search) with optional tool allowlists, model setting overrides, and system prompt additions.
 
 **Note:** This is an experimental feature. The configuration key may change once the feature has stabilized.
 
 #### `experimental_facets.facets`
+
+{/* erato_toml_config_key: experimental_facets.facets */}
 
 Map of facet configurations, keyed by facet id. Each facet defines display properties and optional behavior.
 
@@ -2346,6 +2778,8 @@ additional_system_prompt = { source = "static", prompt = "Please execute one or 
 
 #### `experimental_facets.priority_order`
 
+{/* erato_toml_config_key: experimental_facets.priority_order */}
+
 List of facet IDs in the order they should be displayed.
 
 **Type:** `list<string>`
@@ -2361,6 +2795,8 @@ priority_order = ["extended_thinking", "web_search"]
 
 #### `experimental_facets.tool_call_allowlist`
 
+{/* erato_toml_config_key: experimental_facets.tool_call_allowlist */}
+
 Global tool allowlist that applies regardless of selected facets.
 
 **Type:** `list<string>`
@@ -2375,6 +2811,8 @@ tool_call_allowlist = ["web-search-mcp/*"]
 ```
 
 #### `experimental_facets.facet_prompt_template`
+
+{/* erato_toml_config_key: experimental_facets.facet_prompt_template */}
 
 Optional global prompt template injected when facets are selected. Set to an empty string to disable.
 
@@ -2405,6 +2843,8 @@ facet_prompt_template = { source = "static", prompt = "The user has requested th
 
 #### `experimental_facets.only_single_facet`
 
+{/* erato_toml_config_key: experimental_facets.only_single_facet */}
+
 Whether only a single facet can be selected at the same time.
 
 **Type:** `boolean`
@@ -2413,6 +2853,8 @@ Whether only a single facet can be selected at the same time.
 
 #### `experimental_facets.show_facet_indicator_with_display_name`
 
+{/* erato_toml_config_key: experimental_facets.show_facet_indicator_with_display_name */}
+
 Whether the chat box indicator should include the facet display name.
 
 **Type:** `boolean`
@@ -2420,6 +2862,8 @@ Whether the chat box indicator should include the facet display name.
 **Default value:** `false`
 
 #### `experimental_facets.default_selected_facets`
+
+{/* erato_toml_config_key: experimental_facets.default_selected_facets */}
 
 Facets that should be selected by default in the frontend (no backend logic is applied).
 
@@ -2436,6 +2880,8 @@ default_selected_facets = ["web_search"]
 
 ### `action_facets`
 
+{/* erato_toml_config_key: action_facets */}
+
 Configuration for action facets. Action facets are non-user-visible, parameterized extensions of the facets system that inject context-aware additional system prompts based on client-supplied action ID and arguments. Unlike regular facets, action facets are not selectable by the user — they are resolved from client context at request time.
 
 Clients send an `action_facet` object (containing `id` and `args`) alongside the user's message on `submit`, `edit`, and `regenerate` requests. The backend resolves the configured prompt template, validates the arguments against the allowed list, and injects the rendered prompt as an additional system prompt before generation.
@@ -2444,13 +2890,22 @@ Clients send an `action_facet` object (containing `id` and `args`) alongside the
 
 #### `action_facets.enable_builtin_ms_office_addin`
 
+{/* erato_toml_config_key: action_facets.enable_builtin_ms_office_addin */}
+
 Whether to inject the builtin Outlook action facets used by the Microsoft Office add-in.
 
 **Type:** `boolean`
 
 **Default value:** `false`
 
+When `action_facets.enable_builtin_ms_office_addin = true`, the backend injects these builtin Outlook action facets unless the same IDs are explicitly configured under `action_facets.facets`:
+
+- `outlook_rewrite_selection`
+- `outlook_review_draft`
+
 #### `action_facets.facets.<id>`
+
+{/* erato_toml_config_key: action_facets.facets.<facet-id> */}
 
 Map of action facet configurations, keyed by action facet id. Each action facet defines a prompt template with declared argument variables.
 
@@ -2471,12 +2926,12 @@ Rewrite the following selected content:
 allowed_args = ["sheet_name", "selection_type", "selected_text"]
 ```
 
-When `action_facets.enable_builtin_ms_office_addin = true`, the backend also injects these builtin Outlook action facets unless the same IDs are explicitly configured under `action_facets.facets`:
-
-- `outlook_rewrite_selection`
-- `outlook_review_draft`
-
 Each action facet supports these fields:
+
+{/* erato_toml_config_key: action_facets.facets.<facet-id>.display_name */}
+{/* erato_toml_config_key: action_facets.facets.<facet-id>.platform */}
+{/* erato_toml_config_key: action_facets.facets.<facet-id>.template */}
+{/* erato_toml_config_key: action_facets.facets.<facet-id>.allowed_args.[] */}
 
 - `display_name` - Human-readable name for the action facet
 - `platform` - Optional platform identifier (e.g. `"excel"`, `"outlook"`)
@@ -2524,6 +2979,8 @@ The `action_facet` field is accepted on `submit`, `edit`, and `regenerate` endpo
 
 ### `budget`
 
+{/* erato_toml_config_key: budget */}
+
 Configuration for budget tracking and display functionality. This feature allows you to track and display per-user spending based on token usage and model pricing.
 
 **Type:** `object`
@@ -2543,6 +3000,8 @@ budget_period_days = 30
 
 #### `budget.enabled`
 
+{/* erato_toml_config_key: budget.enabled */}
+
 Whether budget tracking and display is enabled. When disabled, no budget information will be calculated or displayed to users.
 
 **Type:** `boolean`
@@ -2552,6 +3011,8 @@ Whether budget tracking and display is enabled. When disabled, no budget informa
 **Example:** `true`
 
 #### `budget.max_budget`
+
+{/* erato_toml_config_key: budget.max_budget */}
 
 The maximum budget amount per budget period (unit-less). This value is used for calculating budget usage percentages and determining when warning thresholds are exceeded.
 
@@ -2565,6 +3026,8 @@ The budget amount is treated as unit-less for flexibility - the actual monetary 
 
 #### `budget.budget_currency`
 
+{/* erato_toml_config_key: budget.budget_currency */}
+
 The currency to use for display purposes in the frontend. This is purely cosmetic and doesn't affect calculations - all budget amounts and costs are treated as unit-less values.
 
 **Type:** `string`
@@ -2576,6 +3039,8 @@ The currency to use for display purposes in the frontend. This is purely cosmeti
 **Example:** `"EUR"`
 
 #### `budget.warn_threshold`
+
+{/* erato_toml_config_key: budget.warn_threshold */}
 
 The threshold (between 0.0 and 1.0) at which to warn users about budget usage. When a user's spending exceeds this percentage of their budget limit, they will receive warnings in the UI.
 
@@ -2590,6 +3055,8 @@ For example, a value of `0.7` means users will be warned when they've used 70% o
 **Example:** `0.8`
 
 #### `budget.budget_period_days`
+
+{/* erato_toml_config_key: budget.budget_period_days */}
 
 Number of days that counts as one budget period. Budget usage is calculated and reset based on this period length.
 
@@ -2627,6 +3094,8 @@ cost_output_tokens_per_1m = 15.0
 
 ### `caches`
 
+{/* erato_toml_config_key: caches */}
+
 Configuration for in-memory caches that improve performance by reducing redundant file processing and token counting operations. Caches use memory-based size limits (in megabytes) rather than entry counts.
 
 **Type:** `object`
@@ -2643,6 +3112,8 @@ token_count_cache_mb = 100
 
 #### `caches.file_contents_cache_mb`
 
+{/* erato_toml_config_key: caches.file_contents_cache_mb */}
+
 Maximum memory size in megabytes for the file contents cache. This cache stores parsed file contents indexed by file ID to avoid repeatedly reading and parsing the same files.
 
 When the cache reaches this size limit, the least recently used entries will be automatically evicted to make room for new entries.
@@ -2654,6 +3125,8 @@ When the cache reaches this size limit, the least recently used entries will be 
 **Example:** `200` (for 200MB cache), `50` (for 50MB cache)
 
 #### `caches.token_count_cache_mb`
+
+{/* erato_toml_config_key: caches.token_count_cache_mb */}
 
 Maximum memory size in megabytes for the token count cache. This cache stores token counts indexed by file content to avoid repeatedly tokenizing the same content.
 

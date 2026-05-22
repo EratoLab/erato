@@ -1,5 +1,5 @@
 allowBuilds:
-  '@tailwindcss/oxide': true
+  "@tailwindcss/oxide": true
   sharp: true
 # 5 days delay
 minimumReleaseAge: 7200
