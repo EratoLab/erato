@@ -133,6 +133,16 @@ jobs:
         if: success() || failure()
         run: pnpm run typecheck
 
+      - name: "Install uv"
+        if: success() || failure()
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: "Check config documentation coverage"
+        if: success() || failure()
+        run: uv run site/scripts/check_config_reference_coverage.py
+
       - name: "Office add-in prettier"
         working-directory: ./office-addin
         if: success() || failure()
