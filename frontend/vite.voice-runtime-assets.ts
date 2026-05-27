@@ -9,7 +9,7 @@ import {
   RICKY0123_VAD_DIST_FILES,
   VOICE_RUNTIME_DIRECTORY,
   VOICE_RUNTIME_MANIFEST_FILENAME,
-} from "./src/lib/voice-runtime/assets";
+} from "./src/lib/voice-runtime/asset-constants";
 
 const VOICE_RUNTIME_SOURCE_FILES = [VOICE_RUNTIME_MANIFEST_FILENAME];
 const ONNX_RUNTIME_WEB_DIST_EXTENSIONS = new Set([".wasm", ".mjs"]);
