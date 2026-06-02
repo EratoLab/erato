@@ -12,6 +12,12 @@ interface OfficeContextValue {
   host: string | null;
   platform: string | null;
   mailboxUser: MailboxUser | null;
+  /**
+   * Whether this Office host can capture microphone audio. False on the
+   * WebKit-based Mac desktop client and on mobile, where mic capture is
+   * blocked regardless of permissions. See {@link isAudioCaptureSupportedPlatform}.
+   */
+  supportsAudioCapture: boolean;
 }
 
 const OfficeContext = createContext<OfficeContextValue>({
@@ -19,6 +25,7 @@ const OfficeContext = createContext<OfficeContextValue>({
   host: null,
   platform: null,
   mailboxUser: null,
+  supportsAudioCapture: false,
 });
 
 const OFFICE_JS_CDN =
@@ -48,6 +55,37 @@ function loadOfficeJs(): Promise<void> {
   return officeJsPromise;
 }
 
+/**
+ * Platforms where Outlook blocks microphone capture entirely:
+ * - `Mac`: the desktop client runs in a WebKit (WKWebView) host; the Device
+ *   Permission API "isn't supported in Safari" and getUserMedia is blocked.
+ * - `iOS` / `Android`: mobile add-ins can't capture audio.
+ *
+ * `PC` (classic Outlook desktop — the host shows a native prompt automatically)
+ * and `OfficeOnline` (Outlook on the web AND new Outlook on Windows, both
+ * Chromium) are supported. Values come from `Office.PlatformType`.
+ */
+const AUDIO_CAPTURE_BLOCKED_PLATFORMS = new Set(["Mac", "iOS", "Android"]);
+
+/**
+ * Reliable, synchronous probe for whether the current Office host can capture
+ * microphone audio, based on `Office.onReady().platform`. Returns false for an
+ * unknown/missing platform so audio is only surfaced where we know it works.
+ *
+ * Note: we deliberately do NOT probe `navigator.mediaDevices.enumerateDevices()`
+ * — on new Outlook on Windows it reports zero microphones until the Device
+ * Permission API grants access, which would wrongly flag a supported host as
+ * unsupported.
+ */
+export function isAudioCaptureSupportedPlatform(
+  platform: string | null,
+): boolean {
+  if (!platform) {
+    return false;
+  }
+  return !AUDIO_CAPTURE_BLOCKED_PLATFORMS.has(platform);
+}
+
 export function useOffice() {
   return useContext(OfficeContext);
 }
@@ -58,6 +96,7 @@ export function OfficeProvider({ children }: { children: React.ReactNode }) {
     host: null,
     platform: null,
     mailboxUser: null,
+    supportsAudioCapture: false,
   });
 
   useEffect(() => {
@@ -81,7 +120,13 @@ export function OfficeProvider({ children }: { children: React.ReactNode }) {
             }
           }
 
-          setContext({ isReady: true, host, platform, mailboxUser });
+          setContext({
+            isReady: true,
+            host,
+            platform,
+            mailboxUser,
+            supportsAudioCapture: isAudioCaptureSupportedPlatform(platform),
+          });
         });
       })
       .catch(() => {
@@ -90,6 +135,7 @@ export function OfficeProvider({ children }: { children: React.ReactNode }) {
           host: null,
           platform: null,
           mailboxUser: null,
+          supportsAudioCapture: false,
         });
       });
   }, []);

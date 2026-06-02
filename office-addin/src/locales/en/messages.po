@@ -363,6 +363,16 @@ msgstr "Follow your Outlook theme."
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.audio.description"
+msgstr "Choose and test the microphone used for voice input in this add-in."
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.audio.heading"
+msgstr "Microphone"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.placeholder.empty"
 msgstr "No settings available yet."
 
@@ -375,6 +385,11 @@ msgstr "Add-in"
 #: src/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.tabs.appearance"
 msgstr "Appearance"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.tabs.audio"
+msgstr "Microphone"
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx

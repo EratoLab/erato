@@ -363,6 +363,16 @@ msgstr "Podążaj za motywem Outlooka."
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.audio.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.audio.heading"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.placeholder.empty"
 msgstr "Brak dostępnych ustawień."
 
@@ -375,6 +385,11 @@ msgstr "Dodatek"
 #: src/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.tabs.appearance"
 msgstr "Wygląd"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.tabs.audio"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx

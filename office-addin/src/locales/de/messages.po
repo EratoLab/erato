@@ -363,6 +363,16 @@ msgstr "Folgt deinem Outlook-Design."
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.audio.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.audio.heading"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.placeholder.empty"
 msgstr "Noch keine Einstellungen verfügbar."
 
@@ -375,6 +385,11 @@ msgstr "Add-in"
 #: src/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.tabs.appearance"
 msgstr "Darstellung"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.tabs.audio"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx

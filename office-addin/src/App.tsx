@@ -63,15 +63,42 @@ function OutlookWrapper({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * Audio capture isn't available in every Outlook host — the Mac desktop client
+ * (WebKit) and mobile are blocked. When the host can't capture, force the audio
+ * feature flags off so the chat-input audio controls and the Microphone
+ * settings tab — all gated on these flags — disappear together. This sits
+ * inside {@link OfficeProvider} so it can read the platform probe, and still
+ * wraps {@link ApiProvider} as the feature-config provider did before.
+ */
+function FeatureConfigGate({ children }: { children: React.ReactNode }) {
+  const { supportsAudioCapture } = useOffice();
+
+  return (
+    <FeatureConfigProvider
+      config={{
+        chatInput: { showUsageAdvisory: false },
+        ...(supportsAudioCapture
+          ? {}
+          : {
+              audioTranscription: { enabled: false },
+              audioDictation: { enabled: false },
+              audioConversational: { enabled: false },
+            }),
+      }}
+    >
+      {children}
+    </FeatureConfigProvider>
+  );
+}
+
 export default function App() {
   return (
     <I18nProvider>
       <ThemeProvider enableCustomTheme persistThemeMode={true}>
-        <FeatureConfigProvider
-          config={{ chatInput: { showUsageAdvisory: false } }}
-        >
-          <ApiProvider enableDevtools={false}>
-            <OfficeProvider>
+        <OfficeProvider>
+          <FeatureConfigGate>
+            <ApiProvider enableDevtools={false}>
               <OfficeThemeProvider>
                 <MsalNaaProvider>
                   <AuthGate>
@@ -84,9 +111,9 @@ export default function App() {
                   <Toaster placement="bottom-center" />
                 </MsalNaaProvider>
               </OfficeThemeProvider>
-            </OfficeProvider>
-          </ApiProvider>
-        </FeatureConfigProvider>
+            </ApiProvider>
+          </FeatureConfigGate>
+        </OfficeProvider>
       </ThemeProvider>
     </I18nProvider>
   );

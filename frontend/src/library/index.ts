@@ -22,6 +22,7 @@ export { DefaultMessageControls } from "@/components/ui/Message/DefaultMessageCo
 export { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
 export { ModalBase } from "@/components/ui/Modal/ModalBase";
 export { AppearanceTabContent } from "@/components/ui/Settings/AppearanceTabContent";
+export { AudioInputTabContent } from "@/components/ui/Settings/AudioInputTabContent";
 export { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton";
 export { FilePreviewLoading } from "@/components/ui/FileUpload/FilePreviewLoading";
 export { GroupedFileAttachmentsPreview } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
