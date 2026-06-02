@@ -1,7 +1,4 @@
-import type {
-  ContentPart,
-  ToolUse,
-} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 /**
  * Interface representing a tool call for UI display
@@ -29,8 +26,8 @@ export function extractToolCallsFromContent(
 
   return content
     .filter((part) => part.content_type === "tool_use")
-    .map((part) => {
-      const toolUse = part as ToolUse & { content_type: "tool_use" };
+    .map((part): UiToolCall | null => {
+      const toolUse = part;
       if (!toolUse.tool_call_id || !toolUse.tool_name || !toolUse.status) {
         return null;
       }
@@ -39,11 +36,11 @@ export function extractToolCallsFromContent(
         id: toolUse.tool_call_id,
         name: toolUse.tool_name,
         status: toolUse.status,
-        input: toolUse.input,
-        output: toolUse.output,
+        input: toolUse.input as UiToolCall["input"],
+        output: toolUse.output as UiToolCall["output"],
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/prefer-nullish-coalescing
         progressMessage: toolUse.progress_message || undefined,
-      } as UiToolCall;
+      };
     })
     .filter((toolCall): toolCall is UiToolCall => toolCall !== null);
 }

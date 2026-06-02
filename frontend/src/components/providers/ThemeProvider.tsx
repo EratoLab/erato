@@ -303,7 +303,7 @@ const getSavedTheme = (): ThemeMode => {
     savedTheme === "light" ||
     savedTheme === "system"
   ) {
-    return savedTheme as ThemeMode;
+    return savedTheme;
   }
 
   return "system"; // Default to system if nothing saved

@@ -53,7 +53,6 @@ import { useExplicitNavigation } from "./useExplicitNavigation";
 import type {
   ActionFacetRequest,
   MessageSubmitStreamingResponseMessage,
-  MessageSubmitStreamingResponseError,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
 
@@ -978,10 +977,7 @@ export function useChatMessaging(
             break;
 
           case "error": {
-            const streamError =
-              responseData as MessageSubmitStreamingResponseError & {
-                message_type: "error";
-              };
+            const streamError = responseData;
             const description =
               streamError.error_description || "Streaming error";
             logger.error(

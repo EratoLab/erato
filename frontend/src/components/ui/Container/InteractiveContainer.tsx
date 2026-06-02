@@ -79,7 +79,7 @@ export const InteractiveContainer = ({
         className={commonClassNames}
         role="button"
         tabIndex={explicitTabIndex ?? 0}
-        onClick={onClick as React.MouseEventHandler<HTMLDivElement>}
+        onClick={onClick}
         onKeyDown={handleKeyDown}
         {...divProps}
       >
@@ -96,7 +96,7 @@ export const InteractiveContainer = ({
         commonClassNames,
       )}
       type="button"
-      onClick={onClick as React.MouseEventHandler<HTMLButtonElement>}
+      onClick={onClick}
       {...(props as Omit<
         React.ButtonHTMLAttributes<HTMLButtonElement>,
         "onClick"

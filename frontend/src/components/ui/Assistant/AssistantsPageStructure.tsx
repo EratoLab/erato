@@ -71,7 +71,7 @@ export default function AssistantsPageStructure({
               },
               fileCount: chat.file_uploads.length,
             },
-            assistantId: chat.assistant_id as string | null | undefined,
+            assistantId: chat.assistant_id,
           }))
         : [],
     [chatHistory],

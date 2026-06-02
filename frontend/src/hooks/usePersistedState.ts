@@ -82,7 +82,7 @@ function getSnapshot<T>(
 ): T | null {
   const raw = readRaw(key);
   const cached = snapshotCache.get(key);
-  if (cached && cached.raw === raw) {
+  if (cached?.raw === raw) {
     return cached.value as T | null;
   }
   const value = readValue(key, options);

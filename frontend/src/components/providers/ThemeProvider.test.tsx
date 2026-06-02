@@ -73,7 +73,7 @@ const createMatchMedia = (matches: boolean): typeof window.matchMedia =>
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
     dispatchEvent: vi.fn(),
-  })) as unknown as typeof window.matchMedia;
+  }));
 
 describe("ThemeProvider", () => {
   beforeEach(() => {

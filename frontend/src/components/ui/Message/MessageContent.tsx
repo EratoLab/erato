@@ -322,10 +322,10 @@ export const MessageContent = memo(function MessageContent({
           resolvedHref,
           previewFile:
             pageParam && file.filename.toLowerCase().endsWith(".pdf")
-              ? ({
+              ? {
                   ...file,
                   preview_url: resolvedHref,
-                } as unknown as FileUploadItem)
+                }
               : file,
         };
       } catch (error) {

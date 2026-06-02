@@ -61,8 +61,7 @@ const makeFile = (overrides: Partial<FileUploadItem> = {}): FileUploadItem => ({
   id: "file_123",
   filename: "sample-report-compressed.pdf",
   download_url: "https://files.example.com/sample-report-compressed.pdf",
-  preview_url:
-    "https://files.example.com/preview/sample-report-compressed.pdf" as never,
+  preview_url: "https://files.example.com/preview/sample-report-compressed.pdf",
   file_contents_unavailable_missing_permissions: false,
   is_sharepoint_file: false,
   file_capability: FileTypeUtil.createMockFileCapability(
@@ -476,7 +475,7 @@ describe("MessageContent", () => {
       id: "dog_123",
       filename: "dog.png",
       download_url: "https://files.example.com/downloads/dog.png",
-      preview_url: "https://files.example.com/preview/dog.png" as never,
+      preview_url: "https://files.example.com/preview/dog.png",
       file_capability: FileTypeUtil.createMockFileCapability("dog.png"),
     });
 

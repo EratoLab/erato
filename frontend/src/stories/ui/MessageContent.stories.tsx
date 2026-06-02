@@ -326,8 +326,7 @@ export const ResolvedImageFileInMarkdown: Story = {
         download_url: "https://files.example.com/downloads/generated-image.png",
         file_contents_unavailable_missing_permissions: false,
         is_sharepoint_file: false,
-        preview_url:
-          "https://files.example.com/preview/generated-image.png" as never,
+        preview_url: "https://files.example.com/preview/generated-image.png",
         file_capability: FileTypeUtil.createMockFileCapability(
           "generated-image.png",
         ),

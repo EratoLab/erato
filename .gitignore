@@ -12,6 +12,8 @@
 
 # Temporary files
 tmp/
+frontend/tmp/
+office-addin/tmp/
 .pnpm-store/
 
 # LLM helper

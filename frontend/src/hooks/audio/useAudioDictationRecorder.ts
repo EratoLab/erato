@@ -312,10 +312,7 @@ export function useAudioDictationRecorder({
       // audio-thread spin-up cost on every restart which is most likely
       // what was eating the first word on a warm second session. Close
       // only happens on the hook's unmount cleanup.
-      if (
-        audioContextRef.current &&
-        audioContextRef.current.state === "running"
-      ) {
+      if (audioContextRef.current?.state === "running") {
         void audioContextRef.current.suspend();
       }
       preSessionSamplesRef.current = [];

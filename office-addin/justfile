@@ -43,5 +43,9 @@ build:
 preview:
     pnpm run preview
 
+sbom:
+    mkdir -p tmp
+    pnpm sbom --sbom-format cyclonedx --sbom-spec-version 1.7 > tmp/office-addin.cdx.json
+
 office-validate:
     pnpm run office:validate

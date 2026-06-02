@@ -51,6 +51,10 @@ build-lib:
 watch-lib:
     pnpm run build:lib:watch
 
+sbom:
+    mkdir -p tmp
+    pnpm sbom --sbom-format cyclonedx --sbom-spec-version 1.7 > tmp/frontend.cdx.json
+
 format:
     pnpm exec prettier . --write
 

@@ -2,7 +2,6 @@ import type {
   ContentPart,
   ContentPartText,
   ContentPartImage,
-  ContentPartImageFilePointer,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 /**
@@ -66,9 +65,7 @@ export function extractImagesFromContent(
           id: `image-base64-${index}`,
         };
       } else {
-        const pointerPart = part as ContentPartImageFilePointer & {
-          content_type: "image_file_pointer";
-        };
+        const pointerPart = part;
         return {
           type: "image" as const,
           src: pointerPart.preview_url ?? pointerPart.download_url ?? "",
@@ -97,7 +94,7 @@ export function convertToUiContent(
     )
     .map((part, index) => {
       if (part.content_type === "text") {
-        const textPart = part as ContentPartText & { content_type: "text" };
+        const textPart = part;
         return {
           type: "text" as const,
           text: textPart.text,
@@ -141,7 +138,7 @@ export function parseContent(content?: ContentPart[] | null): {
 
   content.forEach((part) => {
     if (part.content_type === "text") {
-      const textPart = part as ContentPartText & { content_type: "text" };
+      const textPart = part;
       textParts.push(textPart.text);
     } else if (part.content_type === "image") {
       const imagePart = part as ContentPartImage & { content_type: "image" };
@@ -152,9 +149,7 @@ export function parseContent(content?: ContentPart[] | null): {
       });
       imageIndex++;
     } else if (part.content_type === "image_file_pointer") {
-      const pointerPart = part as ContentPartImageFilePointer & {
-        content_type: "image_file_pointer";
-      };
+      const pointerPart = part;
       images.push({
         type: "image" as const,
         src: pointerPart.preview_url ?? pointerPart.download_url ?? "",

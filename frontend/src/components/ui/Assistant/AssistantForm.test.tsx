@@ -349,7 +349,7 @@ describe("AssistantForm", () => {
       isCriticallyClose: false,
       usagePercentage: 0.4,
       exceedsLimit: false,
-    } as TokenUsageEstimationResult;
+    };
 
     renderForm({
       contextWarningThreshold: 0,
