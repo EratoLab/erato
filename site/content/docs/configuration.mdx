@@ -28,6 +28,22 @@ Configuration can also be provided via environment variables.
 Though it is not recommended, values for nested configuration can also be provided via environment variables.
 In that case, each nesting level is separated by double underscores (`__`). E.g. `CHAT_PROVIDER__BASE_URL` is equivalent to `chat_provider.base_url`.
 
+## Common config options
+
+### `prompt`
+
+Several configuration fields accept prompts in the same structure:
+
+- **string** — plain prompt text used directly as the prompt value.
+- **object** — a prompt source specification with fields:
+  - `source`: `"static"` or `"langfuse"`.
+  - `prompt`: prompt text used when `source = "static"`.
+  - `prompt_name`: Langfuse prompt identifier used when `source = "langfuse"`.
+  - `label`: optional Langfuse environment/label value.
+  - `fallback`: optional fallback prompt text if the Langfuse prompt cannot be loaded.
+
+The `prompt` format also supports template placeholders where applicable.
+
 ## Configuration reference
 
 🚧Work in progress; Covers ~80% of available configuration options 🚧
@@ -360,7 +376,7 @@ Configuration for multiple chat providers with priority ordering. This is the re
 
 #### `chat_providers.priority_order`
 
-{/* erato_toml_config_key: chat_providers.priority_order */}
+{/* erato_toml_config_key: chat_providers.priority_order.[] */}
 
 An ordered list of provider IDs that defines the priority for provider selection. The first provider in the list has the highest priority.
 
@@ -428,10 +444,11 @@ Each provider in `chat_providers.providers` supports the following fields:
 - **`model_name_langfuse`** - Optional model name for Langfuse reporting (falls back to `model_name`)
 - **`api_key`** - Optional API key for authentication
 - **`base_url`** - Optional custom base URL for the provider API
-- **`system_prompt`** - Optional prompt source specification (string or object)
+- **`system_prompt`** - Optional prompt source specification (string or object; see [`prompt`](#prompt))
 - **`system_prompt_langfuse`** - Optional Langfuse prompt configuration (deprecated, mutually exclusive with `system_prompt`)
 - **`additional_request_parameters`** - Optional array of additional request parameters
 - **`additional_request_headers`** - Optional array of additional request headers
+- **`hallucination_suppression`** - Optional settings to suppress non-substantive outputs
 - **`model_capabilities`** - Optional configuration for model capabilities and limitations
 - **`model_settings`** - Optional configuration for model behavior and generation settings
 
@@ -549,7 +566,9 @@ A system prompt specification to use with the chat provider. This sets the behav
 
 **Type:** `string | object | None`
 
-**Note:** This option is mutually exclusive with `system_prompt_langfuse` (deprecated). Requires the [Langfuse integration](./integrations/langfuse) to be enabled when using `source = "langfuse"`.
+A system prompt specification to use with the chat provider. This sets the behavior and personality of the AI assistant. For the shared prompt format, see [`prompt`](#prompt).
+
+This option is mutually exclusive with `system_prompt_langfuse` (deprecated). Requires the [Langfuse integration](./integrations/langfuse) to be enabled when using `source = "langfuse"`.
 
 **Example:**
 
@@ -588,6 +607,34 @@ Configuration for using a system prompt from [Langfuse](./integrations/langfuse)
 **Deprecated:** Use `chat_providers.providers.<provider-id>.system_prompt` with a prompt source specification instead.
 
 **Note:** This option is mutually exclusive with `system_prompt`. Requires the [Langfuse integration](./integrations/langfuse) to be enabled.
+
+##### `chat_providers.providers.<provider-id>.hallucination_suppression.enabled`
+
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.hallucination_suppression.enabled */}
+
+Controls whether hallucination suppression is enabled for this provider.
+
+When enabled, the model output is monitored for suspicious whitespace-only churn that can indicate degraded generation behavior.
+
+**Type:** `boolean`
+
+**Default value:** `false`
+
+**Example:** `true`
+
+##### `chat_providers.providers.<provider-id>.hallucination_suppression.whitespace_delta_threshold`
+
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.hallucination_suppression.whitespace_delta_threshold */}
+
+The number of successive whitespace-only text deltas after which generation is aborted to avoid low-quality or stalled output.
+
+Lower values are more aggressive and may truncate responses earlier; higher values allow more aggressive streaming before suppression triggers.
+
+**Type:** `number`
+
+**Default value:** `20`
+
+**Example:** `15`
 
 ##### `chat_providers.providers.<provider-id>.model_capabilities`
 
@@ -731,7 +778,15 @@ If not specified, Erato will use the highest priority provider from `priority_or
 
 Optional prompt source specification for summary generation.
 
-This prompt is used as the instruction prompt for generating chat summaries and supports prompt source formats (string or object), including template placeholders from our system prompt renderer.
+This prompt is used as the instruction prompt for generating chat summaries and supports the same prompt format as [`prompt`](#prompt).
+
+In practice, the `chat_providers.summary.system_prompt` structure matches `chat_providers.providers.<provider-id>.system_prompt`, including all of its nested fields.
+
+{/* erato_toml_config_key: chat_providers.summary.system_prompt.fallback */}
+{/* erato_toml_config_key: chat_providers.summary.system_prompt.label */}
+{/* erato_toml_config_key: chat_providers.summary.system_prompt.prompt */}
+{/* erato_toml_config_key: chat_providers.summary.system_prompt.prompt_name */}
+{/* erato_toml_config_key: chat_providers.summary.system_prompt.source */}
 
 **Type:** `string | object | None`
 
@@ -2482,7 +2537,7 @@ The chat provider ID to use for prompt optimization. Must match a provider confi
 
 {/* erato_toml_config_key: prompt_optimizer.prompt */}
 
-System prompt used by the prompt optimizer. If omitted, a built-in non-interactive default prompt is used.
+System prompt used by the prompt optimizer. If omitted, a built-in non-interactive default prompt is used. Uses the common [`prompt`](#prompt) format.
 
 **Type:** `string | object | None`
 
@@ -2696,8 +2751,8 @@ Each starter prompt supports these fields:
 - `title` - Fallback title shown when no frontend translation exists
 - `subtitle` - Fallback subtitle shown when no frontend translation exists
 - `icon` - Optional icon id
-- `prompt` - Default prompt source specification
-- `localized_prompts` - Optional map of locale code to prompt source specification
+- `prompt` - Prompt source specification (uses common [`prompt`](#prompt) format)
+- `localized_prompts` - Optional map of locale code to prompt source specification (each value uses the common [`prompt`](#prompt) format)
 - `selected_facets` - Optional list of facet ids to preselect
 - `chat_provider` - Optional chat provider id to preselect
 
@@ -2814,7 +2869,7 @@ tool_call_allowlist = ["web-search-mcp/*"]
 
 {/* erato_toml_config_key: experimental_facets.facet_prompt_template */}
 
-Optional global prompt template injected when facets are selected. Set to an empty string to disable.
+Optional global prompt template injected when facets are selected. Set to an empty string to disable. Uses the common [`prompt`](#prompt) format when set to an object.
 
 **Type:** `string | object | None`
 
@@ -3100,14 +3155,16 @@ Configuration for in-memory caches that improve performance by reducing redundan
 
 **Type:** `object`
 
-**Default behavior:** Both caches default to 100MB each.
+**Default behavior:** `file_contents_cache_mb`, `file_bytes_cache_mb`, and `token_count_cache_mb` default to `100MB` each. `file_processing_parallelism` defaults to `4`.
 
 **Example:**
 
 ```toml
 [caches]
 file_contents_cache_mb = 100
+file_bytes_cache_mb = 100
 token_count_cache_mb = 100
+file_processing_parallelism = 4
 ```
 
 #### `caches.file_contents_cache_mb`
@@ -3124,6 +3181,20 @@ When the cache reaches this size limit, the least recently used entries will be 
 
 **Example:** `200` (for 200MB cache), `50` (for 50MB cache)
 
+#### `caches.file_bytes_cache_mb`
+
+{/* erato_toml_config_key: caches.file_bytes_cache_mb */}
+
+Maximum memory size in megabytes for the raw file bytes cache. This cache stores original file bytes (text and images) before extraction and parsing.
+
+This cache helps avoid repeated file reads for frequently reused files and can be useful when documents are large or re-opened often.
+
+**Type:** `number`
+
+**Default value:** `100`
+
+**Example:** `300` (for 300MB cache), `75` (for 75MB cache)
+
 #### `caches.token_count_cache_mb`
 
 {/* erato_toml_config_key: caches.token_count_cache_mb */}
@@ -3138,6 +3209,20 @@ When the cache reaches this size limit, the least recently used entries will be 
 
 **Example:** `200` (for 200MB cache), `50` (for 50MB cache)
 
+#### `caches.file_processing_parallelism`
+
+{/* erato_toml_config_key: caches.file_processing_parallelism */}
+
+Maximum number of file processing tasks that may run in parallel when cache misses require extraction, token counting, or related preprocessing.
+
+Higher values can improve throughput for concurrent requests that trigger expensive file processing, while lower values reduce CPU and memory pressure.
+
+**Type:** `number`
+
+**Default value:** `4`
+
+**Example:** `8` for higher throughput, `2` for more conservative resource usage
+
 #### Complete Cache Configuration Example
 
 ```toml
@@ -3145,8 +3230,12 @@ When the cache reaches this size limit, the least recently used entries will be 
 [caches]
 # Allocate 200MB for file contents caching
 file_contents_cache_mb = 200
+# Allocate 150MB for raw file bytes caching
+file_bytes_cache_mb = 150
 # Allocate 100MB for token count caching
 token_count_cache_mb = 100
+# Allow up to 6 parallel file processing tasks
+file_processing_parallelism = 6
 ```
 
 **Performance Considerations:**
