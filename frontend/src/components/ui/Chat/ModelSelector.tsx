@@ -103,7 +103,7 @@ export const ModelSelector = ({
   const _modelDescriptionMarker = t`chat_models.<chat-provider-id>.description`;
   const noneLabel = t({
     id: "assistant.form.model.none",
-    message: "-",
+    message: "No default model",
   });
   // Track dropdown open state for chevron rotation
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);

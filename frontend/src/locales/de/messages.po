@@ -75,7 +75,7 @@ msgstr "Optional: Wählen Sie aus, welches Modell dieser Assistent standardmäß
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ModelSelector.tsx
 msgid "assistant.form.model.none"
-msgstr "-"
+msgstr "Kein Standardmodell"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
