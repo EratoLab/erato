@@ -6,3 +6,9 @@ allowBuilds:
   unrs-resolver: true
 # 5 days delay
 minimumReleaseAge: 7200
+overrides:
+  # A lot of packages depend on it, they make a lot of major version bumps and most are just about build env/packaging.
+  uuid: 14.0.0
+  # Dependency of `react-use`; See https://github.com/streamich/react-use & ERMAIN-327
+  # Is only used on codepath that we don't use.
+  js-cookie: 3.0.7

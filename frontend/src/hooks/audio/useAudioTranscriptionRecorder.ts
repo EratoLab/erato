@@ -597,7 +597,7 @@ export function useAudioTranscriptionRecorder({
               ...(selectedModel?.chat_provider_id
                 ? { chat_provider_id: selectedModel.chat_provider_id }
                 : {}),
-            } as never,
+            },
           })
         ).chat_id;
       if (!chatId && !silentChatId) {
@@ -841,7 +841,7 @@ export function useAudioTranscriptionRecorder({
                 ...(selectedModel?.chat_provider_id
                   ? { chat_provider_id: selectedModel.chat_provider_id }
                   : {}),
-              } as never,
+              },
             })
           ).chat_id;
         if (!chatId && !silentChatId) {

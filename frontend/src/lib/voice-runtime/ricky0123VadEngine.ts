@@ -199,9 +199,7 @@ export class Ricky0123VadEngine implements VoiceVadEngine {
       throw new Error("VAD engine has not finished starting.");
     }
 
-    if (this.baseTimestampMs === null) {
-      this.baseTimestampMs = frame.timestampMs;
-    }
+    this.baseTimestampMs ??= frame.timestampMs;
 
     try {
       const targetSamples = this.resampler.accept(

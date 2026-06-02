@@ -31,7 +31,7 @@ const TokenDisplay = ({
   theme: Theme;
   tokenPath: string[];
 }) => {
-  const value = getValue(theme as Record<string, ThemeValue>, tokenPath);
+  const value = getValue(theme, tokenPath);
 
   return (
     <div
@@ -71,7 +71,7 @@ const TokenSection = ({
   title: string;
   tokenPath: string[];
 }) => {
-  const sectionValue = getValue(theme as Record<string, ThemeValue>, tokenPath);
+  const sectionValue = getValue(theme, tokenPath);
   const leafPaths = getLeafTokenPaths(sectionValue, tokenPath);
 
   return (

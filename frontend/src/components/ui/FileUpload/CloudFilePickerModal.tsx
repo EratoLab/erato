@@ -55,7 +55,7 @@ export const CloudFilePickerModal = memo<CloudFilePickerModalProps>(
     // FileType is a union type like "pdf" | "document" | "image" etc.
     // CloudFilePicker expects mime types or file extensions as strings
     const acceptedFileTypesAsStrings = useMemo(() => {
-      return acceptedFileTypes as unknown as string[];
+      return acceptedFileTypes;
     }, [acceptedFileTypes]);
 
     return (

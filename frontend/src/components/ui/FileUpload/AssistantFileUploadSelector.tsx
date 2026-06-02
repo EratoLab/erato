@@ -25,10 +25,7 @@ import type {
   CloudProvider,
   SelectedCloudFile,
 } from "@/lib/api/cloudProviders/types";
-import type {
-  FileUploadItem,
-  LinkFileRequest,
-} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FileType } from "@/utils/fileTypes";
 import type React from "react";
 
@@ -179,7 +176,7 @@ export const AssistantFileUploadSelector: React.FC<
                   drive_id: file.drive_id,
                   item_id: file.item_id,
                 },
-              } as unknown as LinkFileRequest,
+              },
             });
 
             // Transform response to FileUploadItem format
@@ -197,7 +194,7 @@ export const AssistantFileUploadSelector: React.FC<
                   is_sharepoint_file: selectedCloudProvider === "sharepoint",
                   ...(previewUrl ? { preview_url: previewUrl } : {}),
                   file_capability: f.file_capability,
-                } as FileUploadItem;
+                };
               }),
             );
           }

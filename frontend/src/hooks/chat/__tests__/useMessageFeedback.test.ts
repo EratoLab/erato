@@ -56,7 +56,7 @@ describe("useMessageFeedback", () => {
       failureReason: null,
       submittedAt: 0,
       context: undefined,
-    } as ReturnType<typeof useSubmitMessageFeedback>);
+    });
 
     vi.mocked(useMessageFeedbackFeature).mockReturnValue(mockFeedbackConfig);
   });

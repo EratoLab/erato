@@ -376,7 +376,7 @@ export function useTokenUsageEstimation(): UseTokenUsageEstimationReturn {
         }
 
         const result = await tokenUsageMutation.mutateAsync({
-          body: requestBody as unknown as TokenUsageRequest,
+          body: requestBody,
         });
 
         queryClient.setQueryData(queryKey, result);

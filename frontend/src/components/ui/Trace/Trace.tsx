@@ -12,10 +12,7 @@ import { ReasoningStep } from "./steps/ReasoningStep";
 import { ToolUseStep } from "./steps/ToolUseStep";
 import { isTraceablePart, type LogicalStep, type TraceablePart } from "./types";
 
-import type {
-  ContentPart,
-  ToolUse,
-} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ReactNode } from "react";
 
 interface TraceProps {
@@ -242,7 +239,7 @@ export const flattenToLogicalSteps = (
           // eslint-disable-next-line lingui/no-unlocalized-strings
           kind: "tool_use",
           key: `t-${part.tool_call_id}`,
-          part: part as ToolUse & { content_type: "tool_use" },
+          part: part,
         });
         return;
       default: {

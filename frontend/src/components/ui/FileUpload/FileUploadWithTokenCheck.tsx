@@ -283,7 +283,7 @@ export const FileUploadWithTokenCheck: React.FC<
                   is_sharepoint_file: selectedCloudProvider === "sharepoint",
                   ...(previewUrl ? { preview_url: previewUrl } : {}),
                   file_capability: f.file_capability,
-                } as FileUploadItem;
+                };
               }),
             );
           }

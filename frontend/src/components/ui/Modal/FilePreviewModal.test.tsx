@@ -13,7 +13,7 @@ const makeFile = (overrides: Partial<FileUploadItem> = {}): FileUploadItem => ({
   id: "file_123",
   filename: "shared-report.pdf",
   download_url: "https://files.example.com/shared-report.pdf",
-  preview_url: "https://files.example.com/preview/shared-report.pdf" as never,
+  preview_url: "https://files.example.com/preview/shared-report.pdf",
   file_contents_unavailable_missing_permissions: false,
   is_sharepoint_file: false,
   file_capability: FileTypeUtil.createMockFileCapability("shared-report.pdf"),

@@ -14,7 +14,7 @@ const AUDIO_DICTATION_SOCKET_OPEN_TIMEOUT_MS = 15_000;
 const AUDIO_DICTATION_SOCKET_FRAME_TIMEOUT_MS = 5 * 60_000;
 
 function abortRejection(signal: AbortSignal | undefined): unknown {
-  if (signal && signal.reason !== undefined) {
+  if (signal?.reason !== undefined) {
     return signal.reason;
   }
   // The DOMException name / message are programmatic identifiers, not

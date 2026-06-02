@@ -27,7 +27,7 @@ vi.mock("zustand", async () => {
 
   const createUncurried = <T>(stateCreator: StateCreator<T>) => {
     const store = (actualZustand.create as any)(stateCreator);
-    const initialState = store.getInitialState() || store.getState();
+    const initialState = store.getInitialState() ?? store.getState();
 
     storeResetFns.add(() => {
       store.setState(initialState, true);
@@ -64,7 +64,7 @@ vi.mock("zustand", async () => {
     createStore: (<T>(stateCreator?: StateCreator<T>) => {
       if (typeof stateCreator === "function") {
         const store = (actualZustand.createStore as any)(stateCreator);
-        const initialState = store.getInitialState() || store.getState();
+        const initialState = store.getInitialState() ?? store.getState();
 
         storeResetFns.add(() => {
           store.setState(initialState, true);
@@ -75,7 +75,7 @@ vi.mock("zustand", async () => {
 
       return (<T>(stateCreator: StateCreator<T>) => {
         const store = (actualZustand.createStore as any)(stateCreator);
-        const initialState = store.getInitialState() || store.getState();
+        const initialState = store.getInitialState() ?? store.getState();
 
         storeResetFns.add(() => {
           store.setState(initialState, true);
@@ -920,13 +920,13 @@ describe("useChatMessaging", () => {
       return cleanup;
     });
 
-    const { result, rerender } = renderHook(
-      ({ chatId }: { chatId: string | null }) => useChatMessaging(chatId),
-      {
-        wrapper: TestWrapper,
-        initialProps: { chatId: "chat-a" as string | null },
-      },
-    );
+    const { result, rerender } = renderHook<
+      ReturnType<typeof useChatMessaging>,
+      { chatId: string | null }
+    >(({ chatId }: { chatId: string | null }) => useChatMessaging(chatId), {
+      wrapper: TestWrapper,
+      initialProps: { chatId: "chat-a" },
+    });
 
     const getStreamingText = () =>
       result.current.streamingContent
@@ -1424,11 +1424,13 @@ describe("useChatMessaging", () => {
       refetch: vi.fn().mockResolvedValue({}),
     });
 
+    const initialProps: { chatId: string | null } = { chatId: "chat-123" };
+
     const { result, rerender } = renderHook(
       ({ chatId }: { chatId: string | null }) => useChatMessaging(chatId),
       {
         wrapper: TestWrapper,
-        initialProps: { chatId: "chat-123" as string | null },
+        initialProps,
       },
     );
 

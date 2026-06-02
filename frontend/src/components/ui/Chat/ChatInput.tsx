@@ -1566,12 +1566,10 @@ export const ChatInput = ({
     if (!message.trim()) {
       // Dictation final text can arrive just after VAD stops. Keep the latch
       // briefly, but do not let a stale speech_end auto-submit future typing.
-      if (pendingAutoSendTimeoutRef.current === null) {
-        pendingAutoSendTimeoutRef.current = setTimeout(() => {
-          pendingAutoSendTimeoutRef.current = null;
-          pendingAutoSendRef.current = false;
-        }, CONVERSATIONAL_AUTO_SEND_EMPTY_TRANSCRIPT_TIMEOUT_MS);
-      }
+      pendingAutoSendTimeoutRef.current ??= setTimeout(() => {
+        pendingAutoSendTimeoutRef.current = null;
+        pendingAutoSendRef.current = false;
+      }, CONVERSATIONAL_AUTO_SEND_EMPTY_TRANSCRIPT_TIMEOUT_MS);
       return;
     }
     clearPendingAutoSendTimeout();

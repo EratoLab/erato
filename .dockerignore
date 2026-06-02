@@ -5,6 +5,11 @@
 .gitignore
 .gitmodules
 
+# Temporary directories
+tmp/
+./frontend/tmp
+./office-addin/tmp
+
 # Environment variables
 .env
 .env.*

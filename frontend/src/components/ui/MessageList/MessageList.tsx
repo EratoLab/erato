@@ -297,7 +297,7 @@ function useMessageLoading({
       }
 
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-      if (lastMessage && lastMessage.sender === "assistant") {
+      if (lastMessage?.sender === "assistant") {
         // Only scroll if message is loading or just completed (typing/thinking/done)
         if (
           lastMessage.loading &&
@@ -667,7 +667,7 @@ export const MessageList = memo<MessageListProps>(
 
     return (
       <div
-        ref={containerRef as React.RefObject<HTMLDivElement>}
+        ref={containerRef}
         className={containerClass}
         style={containerStyle}
         data-testid="message-list"
