@@ -108,6 +108,8 @@ export type CloudProvider = "sharepoint" | "googledrive";
 interface CloudProvidersFeatureConfig {
   /** List of available cloud file providers */
   availableProviders: CloudProvider[];
+  /** Whether to show the Sharepoint/OneDrive directory visibility disclaimer */
+  sharepointShowDisclaimer: boolean;
 }
 
 /**
@@ -221,6 +223,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
   },
   cloudProviders: {
     availableProviders: [],
+    sharepointShowDisclaimer: false,
   },
   messageFeedback: {
     enabled: false,
@@ -309,6 +312,7 @@ function createFeatureConfig(
     },
     cloudProviders: {
       availableProviders,
+      sharepointShowDisclaimer: environment.sharepointShowDisclaimer,
     },
     messageFeedback: {
       enabled: environment.messageFeedbackEnabled,

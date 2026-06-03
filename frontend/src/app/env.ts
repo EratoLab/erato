@@ -22,6 +22,7 @@ export type Env = {
   userPreferencesEnabled: boolean;
   mcpServersTabEnabled: boolean;
   sharepointEnabled: boolean;
+  sharepointShowDisclaimer: boolean;
   chatSharingEnabled: boolean;
   messageFeedbackEnabled: boolean;
   messageFeedbackCommentsEnabled: boolean;
@@ -67,6 +68,7 @@ declare global {
     USER_PREFERENCES_ENABLED?: boolean;
     MCP_SERVERS_TAB_ENABLED?: boolean;
     SHAREPOINT_ENABLED?: boolean;
+    SHAREPOINT_SHOW_DISCLAIMER?: boolean;
     CHAT_SHARING_ENABLED?: boolean;
     MESSAGE_FEEDBACK_ENABLED?: boolean;
     MESSAGE_FEEDBACK_COMMENTS_ENABLED?: boolean;
@@ -212,6 +214,10 @@ export const env = (): Env => {
     import.meta.env.VITE_SHAREPOINT_ENABLED === "true"
       ? true
       : (window.SHAREPOINT_ENABLED ?? false);
+  const sharepointShowDisclaimer =
+    import.meta.env.VITE_SHAREPOINT_SHOW_DISCLAIMER === "true"
+      ? true
+      : (window.SHAREPOINT_SHOW_DISCLAIMER ?? false);
   const chatSharingEnabled =
     import.meta.env.VITE_CHAT_SHARING_ENABLED === "true"
       ? true
@@ -315,6 +321,7 @@ export const env = (): Env => {
     userPreferencesEnabled,
     mcpServersTabEnabled,
     sharepointEnabled,
+    sharepointShowDisclaimer,
     chatSharingEnabled,
     messageFeedbackEnabled,
     messageFeedbackCommentsEnabled,

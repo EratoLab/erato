@@ -45,6 +45,7 @@ describe("themeConfig", () => {
     starterPromptsEnabled: false,
     promptOptimizerEnabled: false,
     sharepointEnabled: false,
+    sharepointShowDisclaimer: false,
     chatSharingEnabled: false,
     messageFeedbackEnabled: false,
     messageFeedbackCommentsEnabled: false,

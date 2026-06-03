@@ -220,6 +220,7 @@ vi.mock("@/app/env", () => ({
     assistantsShowRecentItems: false,
     starterPromptsEnabled: false,
     sharepointEnabled: false,
+    sharepointShowDisclaimer: false,
     messageFeedbackEnabled: false,
     messageFeedbackCommentsEnabled: false,
     userPreferencesEnabled: true,

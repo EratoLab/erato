@@ -696,6 +696,11 @@ msgstr "1 plik wybrany"
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.sharepoint.disclaimer"
+msgstr "Możesz widzieć katalogi SharePoint lub OneDrive, do których dostępu możesz się nie spodziewać. Może się tak zdarzyć na przykład wtedy, gdy właściciel udostępnił witrynę SharePoint całej organizacji."
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
 msgid "cloudFilePicker.title"
 msgstr "Wybierz pliki z chmury"
 

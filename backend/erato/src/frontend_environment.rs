@@ -36,6 +36,7 @@ const FRONTEND_ENV_KEY_PROMPT_OPTIMIZER_ENABLED: &str = "PROMPT_OPTIMIZER_ENABLE
 const FRONTEND_ENV_KEY_USER_PREFERENCES_ENABLED: &str = "USER_PREFERENCES_ENABLED";
 const FRONTEND_ENV_KEY_MCP_SERVERS_TAB_ENABLED: &str = "MCP_SERVERS_TAB_ENABLED";
 const FRONTEND_ENV_KEY_SHAREPOINT_ENABLED: &str = "SHAREPOINT_ENABLED";
+const FRONTEND_ENV_KEY_SHAREPOINT_SHOW_DISCLAIMER: &str = "SHAREPOINT_SHOW_DISCLAIMER";
 const FRONTEND_ENV_KEY_CHAT_SHARING_ENABLED: &str = "CHAT_SHARING_ENABLED";
 const FRONTEND_ENV_KEY_MESSAGE_FEEDBACK_ENABLED: &str = "MESSAGE_FEEDBACK_ENABLED";
 const FRONTEND_ENV_KEY_MESSAGE_FEEDBACK_COMMENTS_ENABLED: &str =
@@ -240,6 +241,10 @@ fn build_frontend_environment(
                     .experimental_sharepoint
                     .file_upload_enabled,
         ),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_SHAREPOINT_SHOW_DISCLAIMER.to_string(),
+        Value::Bool(config.integrations.experimental_sharepoint.show_disclaimer),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_CHAT_SHARING_ENABLED.to_string(),
