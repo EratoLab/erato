@@ -73,8 +73,18 @@ msgstr "New Chat"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.dismissDraftContext"
+msgstr "Don't include draft"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.dismissSelection"
 msgstr "Dismiss selection"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.draftContext"
+msgstr "Your draft is included as context"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx

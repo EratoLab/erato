@@ -73,8 +73,18 @@ msgstr "Nowy czat"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.dismissDraftContext"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.dismissSelection"
 msgstr "Odrzuć zaznaczenie"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.draftContext"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx

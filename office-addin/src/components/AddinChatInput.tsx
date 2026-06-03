@@ -15,13 +15,23 @@ import {
   type FileUploadItem,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
-import { forwardRef, useCallback, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { useOutlookComposeSelection } from "../hooks/useOutlookComposeSelection";
+import { useOutlookSelectionProbe } from "../hooks/useOutlookSelectionProbe";
 import { useOffice } from "../providers/OfficeProvider";
 import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
+import { resolveOutlookActionFacet } from "../utils/outlookActionFacet";
 import { getComposeBodyType } from "../utils/outlookComposeWrite";
+import { selLog } from "../utils/selectionDebug";
 
 function validateAttachment(
   filename: string,
@@ -124,10 +134,57 @@ export const AddinChatInput = forwardRef<
   const { host } = useOffice();
   const [isUploadingEmail, setIsUploadingEmail] = useState(false);
   const composeSelection = useOutlookComposeSelection();
-  const { mailItem } = useOutlookMailItem();
+  // TEMP selection-preview diagnostics — raw API probe (read + compose).
+  useOutlookSelectionProbe();
+  const { mailItem, itemIdentity } = useOutlookMailItem();
   const [isSelectionDismissed, setIsSelectionDismissed] = useState(false);
   const hasActiveSelection =
     composeSelection.data.length > 0 && !isSelectionDismissed;
+
+  // Draft-as-context (#1): a non-empty compose body is eligible to ride along
+  // as `outlook_review_draft`, but the user can switch it off via the draft
+  // chip. Default on; reset to on when the Outlook item changes (a new draft).
+  const draftBodyText = mailItem?.bodyText ?? mailItem?.bodyHtml ?? "";
+  const [isDraftDismissed, setIsDraftDismissed] = useState(false);
+  const lastDraftItemIdentityRef = useRef(itemIdentity);
+  if (itemIdentity !== lastDraftItemIdentityRef.current) {
+    lastDraftItemIdentityRef.current = itemIdentity;
+    setIsDraftDismissed(false);
+  }
+  const isDraftContextIncluded =
+    !!mailItem?.isComposeMode && draftBodyText.length > 0 && !isDraftDismissed;
+  // Show the draft chip only when it's actually what we'd send: a live
+  // selection takes priority (rewrite wins over review), so hide it then.
+  const hasDraftContextChip =
+    host === "Outlook" && isDraftContextIncluded && !hasActiveSelection;
+
+  // Draft de-dup marker (#4): the body we last sent as `review_draft` in this
+  // chat. Client-side by design — the backend is action-facet toggle-stateless.
+  // Reset when the chat changes so a fresh chat re-sends the draft.
+  const lastSentDraftBodyRef = useRef<string | null>(null);
+  const lastDraftChatIdRef = useRef(chatId);
+  if (chatId !== lastDraftChatIdRef.current) {
+    // Reset the dedup marker when the chat genuinely changes — but NOT when a
+    // brand-new chat just received its id on first send (null → id is the same
+    // conversation continuing). Otherwise the second message would needlessly
+    // re-send the unchanged draft.
+    const isNewChatGettingItsId =
+      lastDraftChatIdRef.current == null && chatId != null;
+    lastDraftChatIdRef.current = chatId;
+    if (!isNewChatGettingItsId) {
+      lastSentDraftBodyRef.current = null;
+    }
+  }
+
+  // TEMP selection-preview diagnostics — log the chip's final render gate so
+  // we can tell whether selection data is reaching the UI.
+  useEffect(() => {
+    selLog(
+      `chip-gate host=${host} dataLen=${composeSelection.data.length} dismissed=${isSelectionDismissed} hasActiveSelection=${hasActiveSelection} willRenderChip=${
+        host === "Outlook" && hasActiveSelection
+      }`,
+    );
+  }, [host, composeSelection.data, isSelectionDismissed, hasActiveSelection]);
 
   // Reset dismiss when selection changes (user selects new text)
   const lastSelectionDataRef = useRef(composeSelection.data);
@@ -495,45 +552,31 @@ export const AddinChatInput = forwardRef<
       modelId?: string,
       selectedFacetIds?: string[],
     ) => {
-      // Build action facet payload: selection-based rewrite or full-body review
-      let actionFacet: ActionFacetRequest | undefined;
+      // Build the action facet (selection rewrite vs. draft review) via a pure
+      // resolver so the selection-priority and draft de-dup rules stay testable.
+      //
+      // `outlook_review_draft` only ever carries the user's OWN draft: compose
+      // mode is required (`isDraftContextIncluded`), so a read-mode email body
+      // can never leak in. The body is sent as plain text — Outlook compose
+      // HTML is bloated with MS tags, inline styles, and base64 images that add
+      // no value to a writing-review prompt and blow the backend's per-arg size
+      // cap; text coercion still preserves quoted history (`>` lines), bullet
+      // lists, and link URLs, so the model keeps the full conversation context.
       const bodyFormat = mailItem ? await getComposeBodyType() : undefined;
-
-      if (hasActiveSelection) {
-        actionFacet = {
-          id: "outlook_rewrite_selection",
-          args: {
-            selected_text: composeSelection.data,
-            source_property: composeSelection.sourceProperty,
-            ...(bodyFormat ? { body_format: bodyFormat } : {}),
-          },
-        };
-      } else if (
-        mailItem?.isComposeMode &&
-        (mailItem.bodyText || mailItem.bodyHtml)
-      ) {
-        // Only attach `outlook_review_draft` when the user is composing
-        // their own message — the action is meaningless (and a privacy
-        // footgun) if applied to a read-mode email the user happens to
-        // have open. The gate here prevents the received-mail body from
-        // ever flowing into the request.
-        //
-        // Always send the body as plain text. Outlook compose HTML is
-        // bloated with MS-specific tags, inline styles, and base64-encoded
-        // images that have no semantic value for a writing-review prompt
-        // — and they easily push a 5-line reply over a long thread past
-        // the backend's per-arg size cap. The text coercion preserves
-        // quoted history (as `>` lines), bullet lists, and link URLs, so
-        // the LLM still sees the full conversation context.
-        const fullBody = mailItem.bodyText ?? mailItem.bodyHtml ?? "";
-        actionFacet = {
-          id: "outlook_review_draft",
-          args: {
-            full_body: fullBody,
-            body_format: "text",
-          },
-        };
+      const { facet: actionFacet, sentDraftBody } = resolveOutlookActionFacet({
+        hasActiveSelection,
+        selectionData: composeSelection.data,
+        selectionSource: composeSelection.sourceProperty,
+        draftContextIncluded: isDraftContextIncluded,
+        draftBody: draftBodyText,
+        lastSentDraftBody: lastSentDraftBodyRef.current,
+        bodyFormat,
+      });
+      if (sentDraftBody !== null) {
+        // Remember what we sent so an unchanged follow-up de-dupes (#4).
+        lastSentDraftBodyRef.current = sentDraftBody;
       }
+      selLog(`send: facet=${actionFacet?.id ?? "none"}`);
 
       if (!shouldUseSuggestedEmailSource) {
         chatInputProps.onSendMessage(
@@ -599,7 +642,9 @@ export const AddinChatInput = forwardRef<
       chatInputProps,
       composeSelection.data,
       composeSelection.sourceProperty,
+      draftBodyText,
       hasActiveSelection,
+      isDraftContextIncluded,
       mailItem,
       resolveSelectedFilesForSend,
       shouldUseSuggestedEmailSource,
@@ -666,6 +711,31 @@ export const AddinChatInput = forwardRef<
               aria-label={t({
                 id: "officeAddin.chatInput.dismissSelection",
                 message: "Dismiss selection",
+              })}
+            >
+              &#x2715;
+            </button>
+          </div>
+        </div>
+      )}
+
+      {hasDraftContextChip && (
+        <div className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4">
+          <div className="flex items-center gap-2 rounded-lg border border-theme-border bg-theme-bg-secondary px-3 py-1.5 text-xs text-theme-fg-secondary">
+            <span className="shrink-0">&#x1F4DD;</span>
+            <span className="min-w-0 truncate">
+              {t({
+                id: "officeAddin.chatInput.draftContext",
+                message: "Your draft is included as context",
+              })}
+            </span>
+            <button
+              type="button"
+              onClick={() => setIsDraftDismissed(true)}
+              className="ml-auto shrink-0 rounded p-0.5 hover:bg-theme-bg-tertiary"
+              aria-label={t({
+                id: "officeAddin.chatInput.dismissDraftContext",
+                message: "Don't include draft",
               })}
             >
               &#x2715;
