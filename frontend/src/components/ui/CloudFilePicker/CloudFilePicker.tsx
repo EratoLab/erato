@@ -13,11 +13,13 @@ import { useDebounce } from "use-debounce";
 import { useCloudData } from "@/hooks/cloud/useCloudData";
 import { useCloudNavigation } from "@/hooks/cloud/useCloudNavigation";
 import { useCloudSelection } from "@/hooks/cloud/useCloudSelection";
+import { useCloudProvidersFeature } from "@/providers/FeatureConfigProvider";
 
 import { CloudDriveList } from "./CloudDriveList";
 import { CloudItemBrowser } from "./CloudItemBrowser";
 import { CloudNavigationBreadcrumb } from "./CloudNavigationBreadcrumb";
 import { Button } from "../Controls/Button";
+import { Alert } from "../Feedback/Alert";
 import { Input } from "../Input/Input";
 import { ArrowLeftIcon, CloseIcon } from "../icons";
 
@@ -61,6 +63,7 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
     const [error, setError] = useState<string | null>(null);
     const [driveSearchQuery, setDriveSearchQuery] = useState("");
     const [debouncedDriveSearchQuery] = useDebounce(driveSearchQuery, 200);
+    const { sharepointShowDisclaimer } = useCloudProvidersFeature();
 
     // Navigation state
     const {
@@ -265,6 +268,15 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
 
             {showDriveList && (
               <>
+                {provider === "sharepoint" && sharepointShowDisclaimer && (
+                  <Alert type="info" className="mb-3">
+                    {t({
+                      id: "cloudFilePicker.sharepoint.disclaimer",
+                      message:
+                        "You may see SharePoint or OneDrive directories you do not expect to access. This can happen, for example, when a SharePoint site has been shared with the whole organization by its owner.",
+                    })}
+                  </Alert>
+                )}
                 <div className="mb-3">
                   <Input
                     type="search"

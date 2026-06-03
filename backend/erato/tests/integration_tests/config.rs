@@ -285,6 +285,7 @@ fn test_sharepoint_all_drives_sources_defaults_to_all_when_omitted() {
             .resolved_all_drives_sources(),
         SharepointAllDrivesSource::ALL.to_vec()
     );
+    assert!(!config.integrations.experimental_sharepoint.show_disclaimer);
 }
 
 #[test]
@@ -299,6 +300,7 @@ provider_kind = "openai"
 model_name = "o4-mini"
 
 [integrations.experimental_sharepoint]
+show_disclaimer = true
 all_drives_sources = ["me_drive", "shared_with_me", "shared_drive_details"]
 
 [file_storage_providers.azblob_demo]
@@ -334,6 +336,7 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
             SharepointAllDrivesSource::SharedDriveDetails,
         ]
     );
+    assert!(config.integrations.experimental_sharepoint.show_disclaimer);
 }
 
 /// Tests OpenAI provider configuration with custom base URL.

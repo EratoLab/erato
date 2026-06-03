@@ -2436,6 +2436,12 @@ pub struct ExperimentalSharepointConfig {
     #[serde(default = "default_true")]
     pub auth_via_access_token: bool,
 
+    // Whether to show a disclaimer in the Sharepoint/OneDrive picker explaining
+    // that unexpected directories may appear because of organization-wide sharing.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub show_disclaimer: bool,
+
     // Which Microsoft Graph discovery surfaces should be queried when building the
     // `/integrations/sharepoint/all-drives` response.
     //

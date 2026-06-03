@@ -38,6 +38,7 @@ const createMockEnv = (overrides: Partial<Env> = {}): Env => ({
   starterPromptsEnabled: false,
   promptOptimizerEnabled: false,
   sharepointEnabled: false,
+  sharepointShowDisclaimer: false,
   chatSharingEnabled: false,
   messageFeedbackEnabled: false,
   messageFeedbackCommentsEnabled: false,

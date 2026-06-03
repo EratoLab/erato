@@ -314,6 +314,7 @@
   "integrations.experimental_sharepoint.auth_via_access_token": {},
   "integrations.experimental_sharepoint.enabled": {},
   "integrations.experimental_sharepoint.file_upload_enabled": {},
+  "integrations.experimental_sharepoint.show_disclaimer": {},
   "integrations.langfuse.base_url": {},
   "integrations.langfuse.enable_feedback": {},
   "integrations.langfuse.enabled": {},

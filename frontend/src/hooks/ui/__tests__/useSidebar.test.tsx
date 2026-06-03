@@ -54,6 +54,7 @@ beforeEach(() => {
     mcpServersTabEnabled: false,
     chatSharingEnabled: false,
     sharepointEnabled: false,
+    sharepointShowDisclaimer: false,
     messageFeedbackEnabled: false,
     messageFeedbackCommentsEnabled: false,
     userPreferencesEnabled: true,
