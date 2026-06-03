@@ -173,7 +173,10 @@ export function AudioInputTabContent({ isActive }: AudioInputTabContentProps) {
           })}
         </p>
       </div>
-      <MicTestPanel deviceId={selectedAudioInputDeviceId} isAvailable={isActive} />
+      <MicTestPanel
+        deviceId={selectedAudioInputDeviceId}
+        isAvailable={isActive}
+      />
     </div>
   );
 }
