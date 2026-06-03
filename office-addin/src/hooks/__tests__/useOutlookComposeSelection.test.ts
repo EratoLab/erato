@@ -147,9 +147,53 @@ describe("useOutlookComposeSelection", () => {
 
     rerender();
 
-    // Should still show the text — dedup refs were reset on item change,
-    // so the first poll of the new draft propagated even though text matches.
+    // Should still show the text. The held selection already equals the new
+    // draft's, so it stays put even though no fresh update is emitted.
     expect(result.current.data).toBe("draft one text");
+  });
+
+  it("holds the last selection through a transient null item (no flicker)", () => {
+    setComposeItem({ data: "held text", sourceProperty: "body" });
+
+    const { result, rerender } = renderHook(() => useOutlookComposeSelection());
+
+    expect(result.current.data).toBe("held text");
+
+    // The mail item momentarily vanishes — the reply / inline-compose flap that
+    // used to wipe the chip. The raw item and the provider mailItem both report
+    // null on the same tick.
+    const mailbox = installMockMailbox();
+    mailbox.item = null;
+    mockUseOutlookMailItem.mockReturnValue({ mailItem: null });
+
+    rerender();
+
+    // Selection is HELD, not wiped — the chip stays visible.
+    expect(result.current.data).toBe("held text");
+  });
+
+  it("clears the held selection once the grace period elapses with no item", () => {
+    setComposeItem({ data: "held text", sourceProperty: "body" });
+
+    const { result, rerender } = renderHook(() => useOutlookComposeSelection());
+
+    expect(result.current.data).toBe("held text");
+
+    const mailbox = installMockMailbox();
+    mailbox.item = null;
+    mockUseOutlookMailItem.mockReturnValue({ mailItem: null });
+
+    rerender();
+
+    // Held immediately after the item drops...
+    expect(result.current.data).toBe("held text");
+
+    // ...then cleared once the grace window elapses with the item still gone.
+    act(() => {
+      vi.advanceTimersByTime(2500);
+    });
+
+    expect(result.current).toEqual({ data: "", sourceProperty: "body" });
   });
 
   it("clears interval and ignores callbacks after unmount", () => {
