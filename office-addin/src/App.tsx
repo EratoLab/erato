@@ -17,7 +17,8 @@ import { OutlookMailItemProvider } from "./providers/OutlookMailItemProvider";
 import "./styles.css";
 
 function AuthGate({ children }: { children: React.ReactNode }) {
-  const { isInitialized, isAuthenticated, error } = useMsalNaa();
+  const { isInitialized, isAuthenticated, retryAuthentication, error } =
+    useMsalNaa();
 
   if (!isInitialized) {
     return (
@@ -35,13 +36,25 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   if (!isAuthenticated) {
     return (
       <div className="office-shell office-shell--centered">
-        <p className="office-status office-status--error">
+        <p className="office-status office-status--error" role="alert">
           {error ??
             t({
               id: "officeAddin.auth.signInRequired",
               message: "Sign-in required",
             })}
         </p>
+        <button
+          className="office-status-action"
+          type="button"
+          onClick={() => {
+            void retryAuthentication();
+          }}
+        >
+          {t({
+            id: "officeAddin.auth.tryAgain",
+            message: "Try again",
+          })}
+        </button>
       </div>
     );
   }

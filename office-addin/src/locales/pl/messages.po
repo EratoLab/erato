@@ -23,13 +23,18 @@ msgstr "Uwierzytelnianie..."
 
 #. js-lingui-explicit-id
 #: src/providers/MsalNaaProvider.tsx
+msgid "officeAddin.auth.authenticationFailed"
+msgstr "Uwierzytelnianie nie powiodło się"
+
+#. js-lingui-explicit-id
+#: src/providers/MsalNaaProvider.tsx
 msgid "officeAddin.auth.msalClientIdMissing"
 msgstr "Identyfikator klienta MSAL nie jest skonfigurowany"
 
 #. js-lingui-explicit-id
 #: src/providers/MsalNaaProvider.tsx
-msgid "officeAddin.auth.msalInitializationFailed"
-msgstr "Nie udało się zainicjować MSAL"
+#~ msgid "officeAddin.auth.msalInitializationFailed"
+#~ msgstr "Nie udało się zainicjować MSAL"
 
 #. js-lingui-explicit-id
 #: src/providers/MsalNaaProvider.tsx
@@ -47,9 +52,20 @@ msgid "officeAddin.auth.naaUnsupported"
 msgstr "Uwierzytelnianie zagnieżdżonej aplikacji nie jest obsługiwane w tym środowisku"
 
 #. js-lingui-explicit-id
+#: src/providers/MsalNaaProvider.tsx
+msgid "officeAddin.auth.oauth2ProxySessionFailed"
+msgstr "Nie udało się ustanowić bezpiecznej sesji Erato. Zaloguj się ponownie."
+
+#. js-lingui-explicit-id
 #: src/App.tsx
+#: src/providers/MsalNaaProvider.tsx
 msgid "officeAddin.auth.signInRequired"
 msgstr "Wymagane logowanie"
+
+#. js-lingui-explicit-id
+#: src/App.tsx
+msgid "officeAddin.auth.tryAgain"
+msgstr "Spróbuj ponownie"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChat.tsx

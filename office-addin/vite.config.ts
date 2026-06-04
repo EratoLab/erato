@@ -171,6 +171,131 @@ const resolveFrontendVoiceRuntimeDir = (): string | null => {
   );
 };
 
+const resolveFrontendLibraryAssetsDir = (): string | null => {
+  const candidates = [
+    path.resolve(__dirname, "../frontend/dist-library/assets"),
+    path.resolve(
+      __dirname,
+      "node_modules",
+      "@erato",
+      "frontend",
+      "dist-library",
+      "assets",
+    ),
+  ];
+
+  return (
+    candidates.find(
+      (candidate) =>
+        fs.existsSync(candidate) && fs.statSync(candidate).isDirectory(),
+    ) ?? null
+  );
+};
+
+const sendFrontendLibraryAssetFile = (
+  sourceDir: string,
+  requestPath: string,
+  response: ServerResponse,
+): boolean => {
+  if (requestPath.includes("\0") || requestPath.includes("\\")) {
+    return false;
+  }
+
+  const normalizedPath = requestPath.split("?")[0].split("#")[0];
+  const requestPrefix = "/assets/";
+  if (!normalizedPath.startsWith(requestPrefix)) {
+    return false;
+  }
+
+  let relativePath: string;
+  try {
+    relativePath = decodeURIComponent(
+      normalizedPath.slice(requestPrefix.length),
+    );
+  } catch {
+    return false;
+  }
+
+  if (
+    relativePath.includes("\0") ||
+    relativePath.includes("\\") ||
+    path.isAbsolute(relativePath)
+  ) {
+    return false;
+  }
+
+  const resolvedPath = path.resolve(sourceDir, relativePath);
+  const resolvedSourceDir = path.resolve(sourceDir);
+  if (
+    resolvedPath !== resolvedSourceDir &&
+    !resolvedPath.startsWith(`${resolvedSourceDir}${path.sep}`)
+  ) {
+    return false;
+  }
+  if (!fs.existsSync(resolvedPath) || fs.statSync(resolvedPath).isDirectory()) {
+    return false;
+  }
+
+  response.statusCode = 200;
+  response.setHeader("Content-Type", contentTypeForPath(resolvedPath));
+  response.setHeader("X-Content-Type-Options", "nosniff");
+  fs.createReadStream(resolvedPath).pipe(response);
+  return true;
+};
+
+const stageFrontendLibraryAssetsPlugin = (): Plugin => {
+  return {
+    name: "stage-frontend-library-assets",
+    configureServer(server: ViteDevServer) {
+      if (!resolveFrontendLibraryAssetsDir()) {
+        server.config.logger.warn(
+          "[stage-frontend-library-assets] @erato/frontend library assets not found. " +
+            "Run `pnpm --filter @erato/frontend build:lib` before starting the office-addin dev server, " +
+            "otherwise audio worklet requests may 404.",
+        );
+      }
+
+      server.middlewares.use((request, response, next) => {
+        if (!request.url) {
+          next();
+          return;
+        }
+
+        const sourceDir = resolveFrontendLibraryAssetsDir();
+        if (
+          sourceDir &&
+          sendFrontendLibraryAssetFile(sourceDir, request.url, response)
+        ) {
+          return;
+        }
+
+        next();
+      });
+    },
+    generateBundle() {
+      const sourceDir = resolveFrontendLibraryAssetsDir();
+      if (!sourceDir) {
+        this.warn(
+          "Could not find @erato/frontend library assets; skipping Office add-in library asset staging.",
+        );
+        return;
+      }
+
+      for (const filePath of walkFiles(sourceDir)) {
+        const relativePath = path
+          .relative(sourceDir, filePath)
+          .split(path.sep)
+          .join("/");
+        this.emitFile({
+          type: "asset",
+          fileName: `assets/${relativePath}`,
+          source: fs.readFileSync(filePath),
+        });
+      }
+    },
+  };
+};
+
 const sendVoiceRuntimeFile = (
   sourceDir: string,
   requestPath: string,
@@ -402,6 +527,7 @@ export default defineConfig(({ mode }) => {
       }),
       lingui(),
       serveRootPublicAssetAliasesPlugin(),
+      stageFrontendLibraryAssetsPlugin(),
       stagePlatformLocalesPlugin(),
       stageFrontendVoiceRuntimeAssetsPlugin(),
       watchLinkedFrontendPublicOutputPlugin(linkedFrontend),

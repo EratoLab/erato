@@ -23,13 +23,18 @@ msgstr "Authentifizierung..."
 
 #. js-lingui-explicit-id
 #: src/providers/MsalNaaProvider.tsx
+msgid "officeAddin.auth.authenticationFailed"
+msgstr "Authentifizierung fehlgeschlagen"
+
+#. js-lingui-explicit-id
+#: src/providers/MsalNaaProvider.tsx
 msgid "officeAddin.auth.msalClientIdMissing"
 msgstr "Die MSAL-Client-ID ist nicht konfiguriert"
 
 #. js-lingui-explicit-id
 #: src/providers/MsalNaaProvider.tsx
-msgid "officeAddin.auth.msalInitializationFailed"
-msgstr "MSAL konnte nicht initialisiert werden"
+#~ msgid "officeAddin.auth.msalInitializationFailed"
+#~ msgstr "MSAL konnte nicht initialisiert werden"
 
 #. js-lingui-explicit-id
 #: src/providers/MsalNaaProvider.tsx
@@ -47,9 +52,20 @@ msgid "officeAddin.auth.naaUnsupported"
 msgstr "Verschachtelte App-Authentifizierung wird in dieser Umgebung nicht unterstützt"
 
 #. js-lingui-explicit-id
+#: src/providers/MsalNaaProvider.tsx
+msgid "officeAddin.auth.oauth2ProxySessionFailed"
+msgstr "Es konnte keine sichere Erato-Sitzung hergestellt werden. Melde dich erneut an."
+
+#. js-lingui-explicit-id
 #: src/App.tsx
+#: src/providers/MsalNaaProvider.tsx
 msgid "officeAddin.auth.signInRequired"
 msgstr "Anmeldung erforderlich"
+
+#. js-lingui-explicit-id
+#: src/App.tsx
+msgid "officeAddin.auth.tryAgain"
+msgstr "Erneut versuchen"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChat.tsx
