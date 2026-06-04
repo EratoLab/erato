@@ -629,11 +629,16 @@ export const AddinChatInput = forwardRef<
       try {
         const filesToUpload = await resolveSelectedFilesForSend();
         if (filesToUpload.length === 0) {
+          // No files resolved (e.g. only dismissed drops remain), but the
+          // action facet must still ride along: the dedup marker was already
+          // advanced above, so omitting the facet here would send without it
+          // AND then suppress the same unchanged draft on the next send.
           chatInputProps.onSendMessage(
             message,
             inputFileIds,
             modelId,
             selectedFacetIds,
+            actionFacet,
           );
           // No upload was attempted (e.g. only dismissed drops remain) and
           // nothing failed, so the staged drops are safe to clear.
