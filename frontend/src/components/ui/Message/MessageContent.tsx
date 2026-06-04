@@ -98,6 +98,10 @@ function classifyEratoEmailBlock(
   return { isEmail: false, isHtml: false };
 }
 
+function containsMarkdownFence(text: string): boolean {
+  return /^[^\S\n]*```/m.test(text);
+}
+
 const OutlookArtifactContext = React.createContext<OutlookArtifact | null>(
   null,
 );
@@ -776,7 +780,7 @@ export const MessageContent = memo(function MessageContent({
     !isStreaming &&
     !showRaw &&
     textForArtifact.trim().length > 0 &&
-    !/(^|\n)\s*```/.test(textForArtifact)
+    !containsMarkdownFence(textForArtifact)
       ? outlookArtifact
       : null;
 

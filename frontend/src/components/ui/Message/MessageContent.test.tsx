@@ -643,6 +643,43 @@ describe("MessageContent", () => {
     expect(screen.getByText(/vielen Dank/)).toBeInTheDocument();
   });
 
+  it("keeps the whole-body artifact fallback fast for newline-heavy unfenced text", () => {
+    renderWithTheme(
+      <MessageContent
+        content={textContent(`Hallo Frau Berger,${"\n".repeat(20_000)}`)}
+        outlookArtifact={{
+          facetId: "outlook_rewrite_selection",
+          bodyFormat: "text",
+          renderMode: "body",
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /Copy/ })).toBeInTheDocument();
+    expect(screen.getByText(/Hallo Frau Berger/)).toBeInTheDocument();
+  });
+
+  it("does NOT whole-body-fallback when the response contains an indented markdown fence", () => {
+    const { container } = renderWithTheme(
+      <MessageContent
+        content={textContent("  ```email\nHere is the rewritten passage.\n```")}
+        outlookArtifact={{
+          facetId: "outlook_rewrite_selection",
+          bodyFormat: "text",
+          renderMode: "body",
+        }}
+      />,
+    );
+
+    expect(
+      container.querySelector("pre.message-content-code-block code"),
+    ).toBeNull();
+    expect(
+      screen.getByText(/Here is the rewritten passage/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Copy/ })).toBeInTheDocument();
+  });
+
   it("does NOT whole-body-fallback for review_draft (feedback stays markdown)", () => {
     renderWithTheme(
       <MessageContent
