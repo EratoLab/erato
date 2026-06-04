@@ -643,6 +643,28 @@ describe("MessageContent", () => {
     expect(screen.getByText(/vielen Dank/)).toBeInTheDocument();
   });
 
+  it("renders ONE whole-body artifact from the joined text across multiple text parts", () => {
+    renderWithTheme(
+      <MessageContent
+        content={multipleTextContent(
+          "Hallo Frau Berger,",
+          "vielen Dank fuer Ihre Nachricht.",
+        )}
+        outlookArtifact={{
+          facetId: "outlook_rewrite_selection",
+          bodyFormat: "text",
+          renderMode: "body",
+        }}
+      />,
+    );
+
+    // A single artifact (one Copy button), not one per text part, and it
+    // carries the full joined body rather than only the first fragment.
+    expect(screen.getAllByRole("button", { name: /Copy/ })).toHaveLength(1);
+    expect(screen.getByText(/Hallo Frau Berger/)).toBeInTheDocument();
+    expect(screen.getByText(/vielen Dank/)).toBeInTheDocument();
+  });
+
   it("keeps the whole-body artifact fallback fast for newline-heavy unfenced text", () => {
     renderWithTheme(
       <MessageContent

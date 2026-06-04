@@ -784,6 +784,14 @@ export const MessageContent = memo(function MessageContent({
       ? outlookArtifact
       : null;
 
+  // Index of the first text part — the single anchor at which the whole-body
+  // artifact is rendered, so a multi-part body becomes one artifact rather than
+  // one per text part (each with its own insert/copy UI).
+  const firstTextPartIndex = React.useMemo(
+    () => content.findIndex((part) => part.content_type === "text"),
+    [content],
+  );
+
   const lastRenderableIndex = React.useMemo(() => {
     for (let index = content.length - 1; index >= 0; index--) {
       if (isRenderableContentPart(content[index])) {
@@ -863,10 +871,17 @@ export const MessageContent = memo(function MessageContent({
 
         if (part.content_type === "text") {
           if (wholeBodyArtifact) {
+            // One artifact for the whole message: render it at the first text
+            // part from the joined body, and drop the remaining text parts so a
+            // multi-part response doesn't fragment into duplicate insert/copy
+            // cards. (For a single text part `textForArtifact` is that part.)
+            if (index !== firstTextPartIndex) {
+              return null;
+            }
             return (
               <EratoEmailSuggestion
                 key={`email-body-${index}`}
-                content={part.text}
+                content={textForArtifact}
                 isHtml={wholeBodyArtifact.bodyFormat === "html"}
               />
             );
