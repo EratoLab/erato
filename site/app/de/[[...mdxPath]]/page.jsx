@@ -1,6 +1,5 @@
 import { generateStaticParamsFor } from "nextra/pages";
-import { useMDXComponents as getMDXComponents } from "../../../mdx-components";
-import { resolveContentWithFallback } from "../../../lib/content-resolver.js";
+import NewWebsiteRedirect from "../../../components/NewWebsiteRedirect.jsx";
 import { supportedLocales } from "../../../lib/i18n.js";
 
 /**
@@ -62,70 +61,16 @@ export const generateStaticParams = async () => {
 
 export async function generateMetadata(props) {
   const params = await props.params;
-  const locale = "de"; // Hardcoded for this route
   const mdxPath = params.mdxPath || [];
 
-  try {
-    const result = await resolveContentWithFallback(mdxPath, locale);
-    return {
-      ...result.metadata,
-      title: `${result.metadata.title} - Erato`,
-    };
-  } catch (error) {
-    // If content resolution fails, return a basic metadata object
-    console.error(
-      `[i18n] Failed to generate metadata for locale ${locale}, path [${mdxPath.join(", ")}]:`,
-      error,
-    );
-    return {
-      title: "Erato",
-    };
-  }
+  return {
+    title: "Redirecting to the new website - Erato",
+    alternates: {
+      canonical: `https://eratolabs.com/en/${mdxPath.join("/")}`,
+    },
+  };
 }
 
-const Wrapper = getMDXComponents().wrapper;
-
-export default async function Page(props) {
-  const params = await props.params;
-  const locale = "de"; // Hardcoded for this route
-  const mdxPath = params.mdxPath || [];
-
-  try {
-    const result = await resolveContentWithFallback(mdxPath, locale);
-    const { default: MDXContent, toc, metadata, actualLocale } = result;
-
-    // Skip wrapper for full-layout pages (index and about)
-    const isFullLayoutPage =
-      metadata.filePath === `content/${locale}/index.mdx` ||
-      metadata.filePath === `content/${locale}/about.mdx` ||
-      metadata.filePath === `content/${locale}/imprint.mdx` ||
-      (actualLocale === "en" &&
-        (metadata.filePath === "content/index.mdx" ||
-          metadata.filePath === "content/imprint.mdx" ||
-          metadata.filePath === "content/about.mdx") &&
-        locale === "de");
-
-    if (isFullLayoutPage) {
-      return <MDXContent {...props} params={params} />;
-    }
-
-    return (
-      <Wrapper toc={toc} metadata={metadata}>
-        <MDXContent {...props} params={params} />
-      </Wrapper>
-    );
-  } catch (error) {
-    // If content resolution fails, try to render a fallback
-    console.error(
-      `[i18n] Failed to load content for locale ${locale}, path [${mdxPath.join(", ")}]:`,
-      error,
-    );
-    // Return a simple error message or redirect
-    return (
-      <div className="p-8">
-        <h1>Content not found</h1>
-        <p>Unable to load content for this page.</p>
-      </div>
-    );
-  }
+export default function Page() {
+  return <NewWebsiteRedirect />;
 }

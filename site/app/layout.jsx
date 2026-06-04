@@ -1,74 +1,57 @@
-import { Footer, Layout } from "nextra-theme-docs";
-import { Banner, Head } from "nextra/components";
-import { getPageMap } from "nextra/page-map";
-import { Dongle } from "next/font/google";
-import LanguageDetection from "../components/LanguageDetection.jsx";
-import CustomFooter from "../components/CustomFooter.jsx";
-import CustomNavbar from "../components/CustomNavbar.jsx";
-import SearchConfig from "../components/SearchConfig.jsx";
+import { Geist, Geist_Mono } from "next/font/google";
 
 import "./globals.css";
 
-const dongle = Dongle({
-  weight: "400",
+const geist = Geist({
   subsets: ["latin"],
-  variable: "--font-dongle",
+  variable: "--font-geist",
+});
+
+const geistMono = Geist_Mono({
+  subsets: ["latin"],
+  variable: "--font-geist-mono",
 });
 
 export const metadata = {
-  // Define your metadata here
-  // For more information on metadata API, see: https://nextjs.org/docs/app/building-your-application/optimizing/metadata
   icons: {
     icon: [
       {
-        url: "/favicon.ico",
+        url: "/favicon.svg",
+        type: "image/svg+xml",
+      },
+      {
+        url: "/favicon-dark.png",
+        media: "(prefers-color-scheme: dark)",
+        type: "image/png",
+      },
+      {
+        url: "/favicon-light.png",
+        media: "(prefers-color-scheme: light)",
+        type: "image/png",
+      },
+      {
+        url: "/favicon-dark.ico",
+        media: "(prefers-color-scheme: dark)",
         sizes: "any",
       },
       {
-        url: "/favicon.svg",
-        type: "image/svg+xml",
+        url: "/favicon.ico",
+        media: "(prefers-color-scheme: light)",
+        sizes: "any",
       },
     ],
   },
 };
 
-// const banner = <Banner storageKey="some-key">Nextra 4.0 is released 🎉</Banner>
-const navbar = <CustomNavbar />;
-const footer = <CustomFooter />;
-
-export default async function RootLayout({ children }) {
+export default function RootLayout({ children }) {
   return (
     <html
-      // Not required, but good for SEO
       lang="en"
-      // Required to be set
       dir="ltr"
-      // Suggested by `next-themes` package https://github.com/pacocoursey/next-themes#with-app
       suppressHydrationWarning
-      className={`${dongle.variable}`}
+      className={`${geist.variable} ${geistMono.variable}`}
     >
-      <Head
-      // ... Your additional head options
-      >
-        {/* Favicon links */}
-        <link rel="icon" href="/favicon.ico" sizes="any" />
-        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-        {/* Your additional tags should be passed as `children` of `<Head>` element */}
-      </Head>
-      <body>
-        <LanguageDetection>
-          <SearchConfig />
-          <Layout
-            navbar={navbar}
-            pageMap={await getPageMap()}
-            docsRepositoryBase="https://github.com/EratoLab/erato/tree/main/site"
-            footer={footer}
-            // ... Your additional layout options
-          >
-            {children}
-          </Layout>
-        </LanguageDetection>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

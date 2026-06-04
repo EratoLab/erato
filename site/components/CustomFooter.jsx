@@ -1,123 +1,132 @@
-"use client";
+import EratoLabsLogo from "./EratoLabsLogo";
 
-import Link from "next/link";
-import { ThemeSwitch } from "nextra-theme-docs";
-import { usePathname } from "next/navigation";
-import LanguageSwitcher from "./LanguageSwitcher";
-import { getLocaleFromPath, addLocaleToPath } from "../lib/i18n.js";
+const NEW_WEBSITE_URL = "https://eratolabs.com/en/";
+
+const footerColumns = [
+  {
+    title: "Product",
+    links: [
+      ["Features", NEW_WEBSITE_URL],
+      ["Integration", "https://erato.chat/docs"],
+      ["Security", NEW_WEBSITE_URL],
+      ["Prices", NEW_WEBSITE_URL],
+    ],
+  },
+  {
+    title: "Erato Labs",
+    links: [
+      ["Contact", "mailto:contact@eratolabs.com"],
+      ["About us", NEW_WEBSITE_URL],
+      ["Team", NEW_WEBSITE_URL],
+    ],
+  },
+];
+
+const socialLinks = [
+  ["LinkedIn", "https://www.linkedin.com/company/erato-labs"],
+  ["GitHub", "https://github.com/EratoLab/erato"],
+];
+
+const legalLinks = [
+  ["Imprint", `${NEW_WEBSITE_URL}imprint`],
+  ["Privacy Policy", NEW_WEBSITE_URL],
+  ["Cookie Policy", NEW_WEBSITE_URL],
+];
+
+function ExternalArrow() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-3 w-3 rotate-[-45deg] text-[#10425d] dark:text-[#f7f6f3]"
+      fill="none"
+      viewBox="0 0 11 11"
+    >
+      <path
+        d="M6.545 6.545V0H0M6.545 0 0 6.545"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        transform="translate(1.8 2.2) rotate(45 3.25 3.25)"
+      />
+    </svg>
+  );
+}
 
 export default function CustomFooter() {
-  const pathname = usePathname();
-  const locale = getLocaleFromPath(pathname);
-
-  // Translations
-  const translations = {
-    en: {
-      about: "About",
-      aboutUs: "About Us",
-      documentation: "Documentation",
-      language: "Language",
-      imprint: "Imprint",
-    },
-    de: {
-      about: "Über uns",
-      aboutUs: "Über uns",
-      documentation: "Dokumentation",
-      language: "Sprache",
-      imprint: "Impressum",
-    },
-  };
-
-  const t = translations[locale] || translations.en;
-  const aboutPath = addLocaleToPath("/about", locale);
-  const imprintPath = addLocaleToPath("/imprint", locale);
-  // Documentation is English-only, so we always link to /docs regardless of locale
-  const docsPath = "/docs";
-
   return (
-    <footer className="border-t border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900">
-      <div className="max-w-7xl mx-auto px-6 py-6">
-        {/* Theme switcher aligned with rightmost column */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-8 mb-4">
-          <div></div>
-          <div></div>
-          <div></div>
-          <div></div>
-          {/* Column 5 - Theme picker above Language */}
-          <div className="flex justify-start">
-            <ThemeSwitch />
+    <footer className="border-t border-[#b0b0af] bg-[#f7f6f3] text-[#050505] dark:border-[#536970] dark:bg-[#050505] dark:text-[#f7f6f3]">
+      <div className="mx-auto flex max-w-7xl flex-col gap-14 px-6 py-16 lg:px-12">
+        <div className="grid gap-12 lg:grid-cols-[1fr_2fr]">
+          <div className="space-y-5">
+            <a
+              aria-label="Erato Labs"
+              className="inline-flex"
+              href={NEW_WEBSITE_URL}
+            >
+              <EratoLabsLogo className="h-9 w-auto" />
+            </a>
+            <p className="font-sans text-base leading-[22.4px] text-black/60 dark:text-[#f7f6f3]/60">
+              AI that fits in
+            </p>
+          </div>
+
+          <div className="grid gap-10 sm:grid-cols-3 lg:gap-[60px]">
+            {footerColumns.map((column) => (
+              <div className="space-y-5" key={column.title}>
+                <h3 className="font-mono text-sm font-medium leading-[21px] text-black/60 dark:text-[#f7f6f3]/60">
+                  {column.title}
+                </h3>
+                <ul className="space-y-3 font-sans text-base leading-[1.5]">
+                  {column.links.map(([label, href]) => (
+                    <li key={label}>
+                      <a
+                        className="transition-colors hover:text-[#10425d] dark:hover:text-white"
+                        href={href}
+                      >
+                        {label}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+
+            <div className="space-y-5">
+              <h3 className="font-mono text-sm font-medium leading-[21px] text-black/60 dark:text-[#f7f6f3]/60">
+                Stayup-to-date
+              </h3>
+              <div className="flex flex-col items-start gap-2 font-sans text-base font-medium tracking-[0.32px] text-[#10425d] dark:text-[#f7f6f3]">
+                {socialLinks.map(([label, href]) => (
+                  <a
+                    className="inline-flex items-center gap-2 rounded-lg py-2 pr-3 transition-colors hover:text-[#0b2f42] dark:hover:text-white"
+                    href={href}
+                    key={label}
+                    rel="noopener"
+                    target="_blank"
+                  >
+                    {label}
+                    <ExternalArrow />
+                  </a>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* 5-column grid layout */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
-          {/* Column 1 - Placeholder for future content */}
-          <div className="space-y-4">
-            {/* Empty for now - reserve space for future links like "Platform" */}
+        <div className="flex flex-col gap-6 border-t border-[#b0b0af] pt-10 sm:flex-row sm:items-center sm:justify-between dark:border-[#536970]">
+          <div className="flex flex-col gap-3 font-sans text-base leading-[1.5] text-[#050505]/60 sm:flex-row sm:gap-6 dark:text-[#f7f6f3]/60">
+            {legalLinks.map(([label, href]) => (
+              <a
+                className="underline transition-colors hover:text-[#10425d] dark:hover:text-white"
+                href={href}
+                key={label}
+              >
+                {label}
+              </a>
+            ))}
           </div>
-
-          {/* Column 2 - Placeholder for future content */}
-          <div className="space-y-4">
-            {/* Empty for now - reserve space for future links like "Integrations" */}
-          </div>
-
-          {/* Column 3 - Placeholder for future content */}
-          <div className="space-y-4">
-            {/* Empty for now - reserve space for future links like "Resources" */}
-          </div>
-
-          {/* Column 4 - About */}
-          <div className="space-y-4">
-            <h3 className="font-semibold text-neutral-900 dark:text-neutral-100 text-sm uppercase tracking-wider">
-              {t.about}
-            </h3>
-            <ul className="space-y-2">
-              <li>
-                <Link
-                  href={aboutPath}
-                  className="text-sm text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
-                >
-                  {t.aboutUs}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="https://github.com/EratoLab/erato"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
-                >
-                  GitHub
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href={docsPath}
-                  className="text-sm text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
-                >
-                  {t.documentation}
-                </Link>
-              </li>
-              <li className="mt-2">
-                <Link
-                  href={imprintPath}
-                  className="text-sm text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
-                >
-                  {t.imprint}
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          {/* Column 5 - Languages */}
-          <div className="space-y-4">
-            <h3 className="font-semibold text-neutral-900 dark:text-neutral-100 text-sm uppercase tracking-wider">
-              {t.language}
-            </h3>
-            <div className="flex flex-col gap-2">
-              <LanguageSwitcher />
-            </div>
-          </div>
+          <p className="font-sans text-sm leading-[21px] text-[#050505]/50 dark:text-[#f7f6f3]/50">
+            Erato Labs GmbH
+          </p>
         </div>
       </div>
     </footer>
