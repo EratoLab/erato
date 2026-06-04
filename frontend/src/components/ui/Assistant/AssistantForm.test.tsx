@@ -362,7 +362,7 @@ describe("AssistantForm", () => {
     expect(screen.getByText("Used context: 40%")).toBeInTheDocument();
   });
 
-  it("defaults the assistant model selector to '-' and submits a null model", async () => {
+  it("defaults the assistant model selector to 'No default model' and submits a null model", async () => {
     const onSubmit = vi.fn();
 
     render(
@@ -380,7 +380,7 @@ describe("AssistantForm", () => {
       </StaticFeatureConfigProvider>,
     );
 
-    expect(screen.getByTitle("-")).toBeInTheDocument();
+    expect(screen.getByTitle("No default model")).toBeInTheDocument();
     expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/name/i), {

@@ -75,7 +75,7 @@ msgstr "Opcional: Elija qué modelo debe usar este asistente de forma predetermi
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ModelSelector.tsx
 msgid "assistant.form.model.none"
-msgstr "-"
+msgstr "Sin modelo predeterminado"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
