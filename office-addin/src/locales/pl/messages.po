@@ -73,8 +73,18 @@ msgstr "Nowy czat"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.dismissDraftContext"
+msgstr "Nie dołączaj wersji roboczej"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.dismissSelection"
 msgstr "Odrzuć zaznaczenie"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.draftContext"
+msgstr "Twoja wersja robocza jest dołączona jako kontekst"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
@@ -363,6 +373,16 @@ msgstr "Podążaj za motywem Outlooka."
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.audio.description"
+msgstr "Wybierz i przetestuj mikrofon używany do wprowadzania głosowego w tym dodatku."
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.audio.heading"
+msgstr "Mikrofon"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.placeholder.empty"
 msgstr "Brak dostępnych ustawień."
 
@@ -375,6 +395,11 @@ msgstr "Dodatek"
 #: src/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.tabs.appearance"
 msgstr "Wygląd"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.tabs.audio"
+msgstr "Mikrofon"
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx

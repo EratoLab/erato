@@ -151,6 +151,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
     isEmailBodyIncluded,
     emailBodyFile,
     addDroppedEmail,
+    removeDroppedEmail,
   } = useOutlookEmailSource();
   const previewEmailMessageIdRef = useRef<string | null>(null);
 
@@ -174,6 +175,23 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
       return dedup.tryAdd(messageId);
     },
     [dedup],
+  );
+
+  // After a send actually attached its dropped emails, drop them from both
+  // layers: the provider's staged-drop state (clears the chip) AND the dedup
+  // set (releases the claim so the same email can be dropped again later).
+  // `removeDroppedEmail` only owns the former; the dedup set lives here, so the
+  // release has to be coordinated from this component.
+  const handleEmailSourceDropsSent = useCallback(
+    (drops: { key: string; messageId: string | null }[]) => {
+      for (const { key, messageId } of drops) {
+        removeDroppedEmail(key);
+        if (messageId) {
+          dedup.remove(messageId);
+        }
+      }
+    },
+    [dedup, removeDroppedEmail],
   );
 
   // Coalesce duplicate Outlook Graph fetches for the same item id. Two
@@ -603,6 +621,50 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
     [],
   );
 
+  // Stamp an `outlookArtifact` hint onto assistant messages whose triggering
+  // user message carried an Outlook action facet (resolved via
+  // `previous_message_id`). The shared renderer uses it to show the
+  // insert/replace email UI even when the model drifted or omitted the
+  // `erato-email` fence tag.
+  //
+  // Convention-driven, NOT an id allowlist: any Outlook action facet carries a
+  // `body_format` arg, so a facet added only in erato.toml (e.g. `compose_email`)
+  // renders here with no add-in change. `renderMode` defaults to "body" (whole
+  // response is an insertable email); only review/critique facets opt into
+  // "suggestions" (fenced blocks render, unfenced prose stays markdown).
+  const messagesWithArtifact = useMemo(() => {
+    let next = messages;
+    for (const id of messageOrder) {
+      const message = messages[id];
+      if (
+        !message ||
+        message.role !== "assistant" ||
+        !message.previous_message_id
+      ) {
+        continue;
+      }
+      const previous = messages[message.previous_message_id];
+      const facetId = previous?.action_facet_id;
+      const facetBodyFormat = previous?.action_facet_args?.body_format;
+      if (
+        !facetId ||
+        (facetBodyFormat !== "text" && facetBodyFormat !== "html")
+      ) {
+        continue;
+      }
+      const renderMode =
+        facetId === "outlook_review_draft" ? "suggestions" : "body";
+      if (next === messages) {
+        next = { ...messages };
+      }
+      next[id] = {
+        ...message,
+        outlookArtifact: { facetId, bodyFormat: facetBodyFormat, renderMode },
+      };
+    }
+    return next;
+  }, [messages, messageOrder]);
+
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const headerMenuItems = useMemo<DropdownMenuItem[]>(
@@ -683,7 +745,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
               />
             ) : null}
             <MessageList
-              messages={messages}
+              messages={messagesWithArtifact}
               messageOrder={messageOrder}
               loadOlderMessages={() => {}}
               hasOlderMessages={false}
@@ -731,6 +793,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
               initialSelectedFacetIds={currentChatLastSelectedFacets}
               onFacetSelectionChange={setActiveSelectedFacetIds}
               showSuggestedEmailSource={shouldSuggestCurrentEmail}
+              onEmailSourceDropsSent={handleEmailSourceDropsSent}
               uploadFiles={uploadFiles}
               uploadError={uploadError}
               isExpandingDroppedEmails={isExpandingDroppedEmails}

@@ -138,7 +138,17 @@ export function truncateFilename(filename: string, maxLength = 30): string {
   return `${nameWithoutExtension.substring(0, startChars)}...${nameWithoutExtension.substring(nameWithoutExtension.length - endChars)}.${extension}`;
 }
 
-function splitFilenameForDisplay(filename: string) {
+// Only a short, space-free, alphanumeric suffix counts as a real file
+// extension. Without this guard, free-text labels that merely contain a dot —
+// e.g. an email subject like "Kickoff Kundenportal 2.0 – Lastenheft" shown in a
+// context chip — would have their tail (".0 – Lastenheft …") treated as an
+// extension and pinned un-truncated, swamping the visible text.
+const FILE_EXTENSION_PATTERN = /^\.[A-Za-z0-9]{1,12}$/;
+
+export function splitFilenameForDisplay(filename: string): {
+  stem: string;
+  extension: string;
+} {
   const extensionSeparatorIndex = filename.lastIndexOf(".");
 
   if (
@@ -151,9 +161,20 @@ function splitFilenameForDisplay(filename: string) {
     };
   }
 
+  const candidateExtension = filename.slice(extensionSeparatorIndex);
+  if (!FILE_EXTENSION_PATTERN.test(candidateExtension)) {
+    // Not a plausible extension (too long, or contains spaces/punctuation):
+    // keep the whole string as the stem so it truncates with a trailing
+    // ellipsis like ordinary text instead of pinning the tail.
+    return {
+      stem: filename,
+      extension: "",
+    };
+  }
+
   return {
     stem: filename.slice(0, extensionSeparatorIndex),
-    extension: filename.slice(extensionSeparatorIndex),
+    extension: candidateExtension,
   };
 }
 

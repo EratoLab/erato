@@ -147,9 +147,143 @@ describe("useOutlookComposeSelection", () => {
 
     rerender();
 
-    // Should still show the text — dedup refs were reset on item change,
-    // so the first poll of the new draft propagated even though text matches.
+    // Should still show the text. The held selection already equals the new
+    // draft's, so it stays put even though no fresh update is emitted.
     expect(result.current.data).toBe("draft one text");
+  });
+
+  it("drops a stale selection when switching to a different compose surface", () => {
+    // Compose A (conversation A) with a live selection.
+    const mailbox = installMockMailbox();
+    mailbox.item = createMockMessageCompose({
+      getSelectedDataAsync: vi.fn(
+        (_coercionType: unknown, callback: Function) => {
+          callback(
+            createMockAsyncResult({
+              data: "Draft A selection",
+              sourceProperty: "body",
+            }),
+          );
+        },
+      ),
+    });
+    mockUseOutlookMailItem.mockReturnValue({
+      mailItem: { subject: "", conversationId: "conv-A", isComposeMode: true },
+    });
+
+    const { result, rerender } = renderHook(() => useOutlookComposeSelection());
+    expect(result.current.data).toBe("Draft A selection");
+
+    // Switch to compose B (different conversation) whose selection poll FAILS.
+    // Without the surface-change reset, A's selection would linger and stay
+    // eligible for outlook_rewrite_selection against B.
+    mailbox.item = createMockMessageCompose({
+      getSelectedDataAsync: vi.fn(
+        (_coercionType: unknown, callback: Function) => {
+          callback(
+            createMockAsyncResult(null, "failed", {
+              message: "InvalidSelection",
+              code: "5002",
+            }),
+          );
+        },
+      ),
+    });
+    mockUseOutlookMailItem.mockReturnValue({
+      mailItem: { subject: "", conversationId: "conv-B", isComposeMode: true },
+    });
+
+    rerender();
+
+    // Cleared on the surface switch — not carried over from A.
+    expect(result.current).toEqual({ data: "", sourceProperty: "body" });
+  });
+
+  it("keeps the selection across a re-render of the same compose surface", () => {
+    // Same conversation, but the provider hands back a new mailItem object (a
+    // body-load re-render). The selection must NOT be wiped.
+    const mailbox = installMockMailbox();
+    mailbox.item = createMockMessageCompose({
+      getSelectedDataAsync: vi.fn(
+        (_coercionType: unknown, callback: Function) => {
+          callback(
+            createMockAsyncResult({ data: "Keep me", sourceProperty: "body" }),
+          );
+        },
+      ),
+    });
+    mockUseOutlookMailItem.mockReturnValue({
+      mailItem: { subject: "", conversationId: "conv-A", isComposeMode: true },
+    });
+
+    const { result, rerender } = renderHook(() => useOutlookComposeSelection());
+    expect(result.current.data).toBe("Keep me");
+
+    // New mailItem object, same conversation; its poll happens to fail.
+    mailbox.item = createMockMessageCompose({
+      getSelectedDataAsync: vi.fn(
+        (_coercionType: unknown, callback: Function) => {
+          callback(
+            createMockAsyncResult(null, "failed", {
+              message: "InvalidSelection",
+              code: "5002",
+            }),
+          );
+        },
+      ),
+    });
+    mockUseOutlookMailItem.mockReturnValue({
+      mailItem: { subject: "", conversationId: "conv-A", isComposeMode: true },
+    });
+
+    rerender();
+
+    // Same surface → held, not cleared.
+    expect(result.current.data).toBe("Keep me");
+  });
+
+  it("holds the last selection through a transient null item (no flicker)", () => {
+    setComposeItem({ data: "held text", sourceProperty: "body" });
+
+    const { result, rerender } = renderHook(() => useOutlookComposeSelection());
+
+    expect(result.current.data).toBe("held text");
+
+    // The mail item momentarily vanishes — the reply / inline-compose flap that
+    // used to wipe the chip. The raw item and the provider mailItem both report
+    // null on the same tick.
+    const mailbox = installMockMailbox();
+    mailbox.item = null;
+    mockUseOutlookMailItem.mockReturnValue({ mailItem: null });
+
+    rerender();
+
+    // Selection is HELD, not wiped — the chip stays visible.
+    expect(result.current.data).toBe("held text");
+  });
+
+  it("clears the held selection once the grace period elapses with no item", () => {
+    setComposeItem({ data: "held text", sourceProperty: "body" });
+
+    const { result, rerender } = renderHook(() => useOutlookComposeSelection());
+
+    expect(result.current.data).toBe("held text");
+
+    const mailbox = installMockMailbox();
+    mailbox.item = null;
+    mockUseOutlookMailItem.mockReturnValue({ mailItem: null });
+
+    rerender();
+
+    // Held immediately after the item drops...
+    expect(result.current.data).toBe("held text");
+
+    // ...then cleared once the grace window elapses with the item still gone.
+    act(() => {
+      vi.advanceTimersByTime(2500);
+    });
+
+    expect(result.current).toEqual({ data: "", sourceProperty: "body" });
   });
 
   it("clears interval and ignores callbacks after unmount", () => {

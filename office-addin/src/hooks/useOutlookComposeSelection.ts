@@ -15,6 +15,12 @@ const EMPTY_SELECTION: OutlookComposeSelection = {
   sourceProperty: "body",
 };
 const POLL_INTERVAL_MS = 2500;
+// Grace period before clearing the selection when the mail item momentarily
+// disappears. In reply / inline-compose contexts `Office.context.mailbox.item`
+// (and the provider's `mailItem`) flap to null for a beat; clearing on the spot
+// made the selection chip flicker. We hold the last selection and only clear if
+// the item is still gone — or has become a read item — after this window.
+const NULL_GRACE_MS = 2500;
 
 /**
  * Polls `getSelectedDataAsync` while in compose mode, providing reactive
@@ -22,6 +28,12 @@ const POLL_INTERVAL_MS = 2500;
  * has selected in the Outlook compose window.
  *
  * Office.js has no selection-change events, so we poll on an interval.
+ *
+ * The selection is held across transient null-item windows (a reply/inline
+ * compose context briefly reports no item) so the consuming chip doesn't
+ * flicker; it is cleared on a positive read-mode switch, on a switch to a
+ * different compose surface (so a stale selection can't carry over to the new
+ * draft), or once the item is still gone after {@link NULL_GRACE_MS}.
  */
 export function useOutlookComposeSelection(): OutlookComposeSelection {
   const { mailItem } = useOutlookMailItem();
@@ -29,6 +41,12 @@ export function useOutlookComposeSelection(): OutlookComposeSelection {
     useState<OutlookComposeSelection>(EMPTY_SELECTION);
   const lastDataRef = useRef("");
   const lastSourceRef = useRef<"body" | "subject">("body");
+  // The compose surface (conversation + mode) the held selection belongs to,
+  // so a switch to a *different* surface can drop a stale selection.
+  const selectionSurfaceRef = useRef<{
+    conversationId: string | null;
+    isCompose: boolean;
+  } | null>(null);
 
   useEffect(() => {
     const item = Office.context.mailbox.item as
@@ -36,16 +54,66 @@ export function useOutlookComposeSelection(): OutlookComposeSelection {
       | Office.MessageCompose
       | null;
 
-    if (!mailItem || !item || isMessageRead(item)) {
-      setSelection(EMPTY_SELECTION);
+    const commitEmpty = () => {
       lastDataRef.current = "";
       lastSourceRef.current = "body";
+      setSelection(EMPTY_SELECTION);
+    };
+
+    // Positive read mode: the user is reading a received email, not composing.
+    // There is no compose selection to preview — clear right away.
+    if (item && isMessageRead(item)) {
+      commitEmpty();
       return;
     }
 
-    // Reset dedup refs so the first poll of a new draft always propagates.
-    lastDataRef.current = "";
-    lastSourceRef.current = "body";
+    // Transient/unknown context: the provider's `mailItem` or the raw Office
+    // item is momentarily null. Clearing here is what made the chip flicker, so
+    // instead hold the last selection and only clear if the context is STILL
+    // gone (or has become a read item) after a short grace period. If a valid
+    // compose item returns first, this effect re-runs and cancels the timer.
+    if (!mailItem || !item) {
+      const graceTimer = setTimeout(() => {
+        const latest = Office.context.mailbox.item as
+          | Office.MessageRead
+          | Office.MessageCompose
+          | null;
+        if (!latest || isMessageRead(latest)) {
+          commitEmpty();
+        }
+      }, NULL_GRACE_MS);
+
+      return () => clearTimeout(graceTimer);
+    }
+
+    // A switch to a *different* compose surface must drop the held selection at
+    // once: otherwise the previous draft's selection stays eligible for
+    // `outlook_rewrite_selection` until the new item's first poll resolves — and
+    // indefinitely if that poll fails (e.g. the cursor isn't in the body yet).
+    // We key on the session anchor (conversationId + compose flag), NOT the
+    // provider's `itemIdentity`: that falls back to a random value for a
+    // brand-new compose with no conversationId, so it would reset spuriously on
+    // body-load re-renders and redundant ItemChanged events. Two distinct blank
+    // composes (both null conversationId) share an anchor and aren't told apart
+    // — a rare case the first poll still corrects.
+    const currentSurface = {
+      conversationId: mailItem.conversationId,
+      isCompose: mailItem.isComposeMode,
+    };
+    const previousSurface = selectionSurfaceRef.current;
+    const isSameSurface =
+      previousSurface !== null &&
+      previousSurface.conversationId === currentSurface.conversationId &&
+      previousSurface.isCompose === currentSurface.isCompose;
+    selectionSurfaceRef.current = currentSurface;
+
+    // Same surface: keep the dedup refs so the held selection survives a
+    // transient null and only a genuine change (including deselect → empty)
+    // re-emits. Different surface: clear now (on first mount this is a no-op —
+    // the selection and refs already start empty).
+    if (!isSameSurface) {
+      commitEmpty();
+    }
 
     let cancelled = false;
 
@@ -79,8 +147,8 @@ export function useOutlookComposeSelection(): OutlookComposeSelection {
               setSelection({ data, sourceProperty });
             }
           }
-          // Silently ignore errors (e.g. InvalidSelection when cursor is
-          // outside body/subject). Selection simply stays at its last value.
+          // A failed poll (e.g. InvalidSelection when the cursor is outside
+          // body/subject) is ignored; the last selection is retained.
         },
       );
     };

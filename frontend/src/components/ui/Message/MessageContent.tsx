@@ -27,6 +27,7 @@ import type {
   FileUploadItem,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { UiImagePart } from "@/utils/adapters/contentPartAdapter";
+import type { OutlookArtifact } from "@/utils/adapters/messageAdapter";
 import type { Components } from "react-markdown";
 
 interface MessageContentProps {
@@ -48,7 +49,62 @@ interface MessageContentProps {
   updatedAt?: string;
   /** When true, the cold-load trace pill flips to "Stopped after X". */
   hasError?: boolean;
+  /**
+   * Present when this assistant message was generated under an Outlook action
+   * facet. When set, a fenced block is treated as the email insert/replace
+   * artifact regardless of the exact language tag (newer models drift it), and
+   * a `rewrite_selection` response with no fence at all falls back to rendering
+   * the whole body as the artifact. Absent on the web app, so behavior there is
+   * unchanged. See {@link OutlookArtifact}.
+   */
+  outlookArtifact?: OutlookArtifact;
 }
+
+/**
+ * Tags newer models drift to when they drop the `erato-email` convention.
+ * Only consulted when an Outlook facet produced the message (see
+ * {@link OutlookArtifactContext}), so generic chat code blocks are never
+ * hijacked. HTML-vs-text is then taken from the facet's `body_format`, not the
+ * tag (the `-html` suffix is exactly what the model keeps normalizing away).
+ */
+const DRIFTED_EMAIL_TAGS = new Set([
+  "",
+  "email",
+  "erato",
+  "erato-email-text",
+  "text",
+  "plaintext",
+  "plain",
+  "html",
+]);
+
+function classifyEratoEmailBlock(
+  language: string,
+  artifact: OutlookArtifact | null,
+): { isEmail: boolean; isHtml: boolean } {
+  // Canonical tags always render as the artifact — back-compat for both web and
+  // addin, independent of any facet context.
+  if (language === "erato-email") {
+    return { isEmail: true, isHtml: false };
+  }
+  if (language === "erato-email-html") {
+    return { isEmail: true, isHtml: true };
+  }
+  // Only when we KNOW a facet produced this message do we accept drifted tags,
+  // and we trust the facet's body_format over the (unreliable) tag.
+  if (artifact && DRIFTED_EMAIL_TAGS.has(language.toLowerCase())) {
+    return { isEmail: true, isHtml: artifact.bodyFormat === "html" };
+  }
+  return { isEmail: false, isHtml: false };
+}
+
+function containsMarkdownFence(text: string): boolean {
+  return /^[^\S\n]*```/m.test(text);
+}
+
+const OutlookArtifactContext = React.createContext<OutlookArtifact | null>(
+  null,
+);
 
 const INLINE_CODE_CLASS_NAME =
   "rounded-md border border-theme-code-inline-border bg-theme-code-inline-bg px-1.5 py-0.5 font-mono text-sm text-theme-code-inline-fg";
@@ -66,12 +122,17 @@ type MarkdownPreProps = React.ComponentPropsWithoutRef<"pre"> & {
   node?: unknown;
 };
 
-function isEratoEmailCodeChild(children: React.ReactNode): boolean {
+function isEratoEmailCodeChild(
+  children: React.ReactNode,
+  artifact: OutlookArtifact | null,
+): boolean {
   const child = React.Children.only(children) as React.ReactElement<{
     className?: string;
   }>;
   const cls = child.props.className ?? "";
-  return cls.includes("language-erato-email");
+  const match = /language-([\w-]+)/.exec(cls);
+  const language = match ? match[1] : "";
+  return classifyEratoEmailBlock(language, artifact).isEmail;
 }
 
 function MarkdownPre({
@@ -80,11 +141,12 @@ function MarkdownPre({
   children,
   ...props
 }: MarkdownPreProps) {
+  const artifact = React.useContext(OutlookArtifactContext);
   // erato-email blocks render a custom component, not a code block —
   // use a plain <div> to avoid inheriting <pre> monospace font and
   // horizontal scroll from message-content-code-block styling.
   try {
-    if (isEratoEmailCodeChild(children)) {
+    if (isEratoEmailCodeChild(children, artifact)) {
       return (
         <div>
           <BlockCodeContext.Provider value={true}>
@@ -119,9 +181,11 @@ function MarkdownCode({
 }: MarkdownCodeProps) {
   const { effectiveTheme, theme } = useTheme();
   const isBlockCode = React.useContext(BlockCodeContext);
+  const artifact = React.useContext(OutlookArtifactContext);
   const codeContent = String(children).replace(/\n$/, "");
   const match = /language-([\w-]+)/.exec(className ?? "");
   const language = match ? match[1] : "";
+  const emailBlock = classifyEratoEmailBlock(language, artifact);
   const fallbackPreset =
     effectiveTheme === "dark"
       ? DEFAULT_DARK_CODE_HIGHLIGHT_PRESET
@@ -135,15 +199,9 @@ function MarkdownCode({
     ...theme.codeHighlight.blockStyle,
   };
 
-  if (
-    isBlockCode &&
-    (language === "erato-email" || language === "erato-email-html")
-  ) {
+  if (isBlockCode && emailBlock.isEmail) {
     return (
-      <EratoEmailSuggestion
-        content={codeContent}
-        isHtml={language === "erato-email-html"}
-      />
+      <EratoEmailSuggestion content={codeContent} isHtml={emailBlock.isHtml} />
     );
   }
 
@@ -278,6 +336,7 @@ export const MessageContent = memo(function MessageContent({
   createdAt,
   updatedAt,
   hasError = false,
+  outlookArtifact,
 }: MessageContentProps) {
   const imageAdvisory = useOptionalTranslation("chat.message.image_advisory");
 
@@ -684,21 +743,54 @@ export const MessageContent = memo(function MessageContent({
     const linkedTextContent = autolinkEratoFiles(text);
 
     return (
-      <Markdown
-        remarkPlugins={[remarkGfm]}
-        components={components}
-        urlTransform={(url) =>
-          // eslint-disable-next-line lingui/no-unlocalized-strings
-          url.startsWith("erato-file://") ? url : defaultUrlTransform(url)
-        }
-        // Handle incomplete markdown patterns gracefully
-        skipHtml={false}
-        unwrapDisallowed={false}
-      >
-        {linkedTextContent}
-      </Markdown>
+      <OutlookArtifactContext.Provider value={outlookArtifact ?? null}>
+        <Markdown
+          remarkPlugins={[remarkGfm]}
+          components={components}
+          urlTransform={(url) =>
+            // eslint-disable-next-line lingui/no-unlocalized-strings
+            url.startsWith("erato-file://") ? url : defaultUrlTransform(url)
+          }
+          // Handle incomplete markdown patterns gracefully
+          skipHtml={false}
+          unwrapDisallowed={false}
+        >
+          {linkedTextContent}
+        </Markdown>
+      </OutlookArtifactContext.Provider>
     );
   };
+
+  // Whole-body fallback: a `"body"`-mode facet response whose email the model
+  // emitted with NO fence at all (common with newer models) — there's no code
+  // block for the tolerant tag-matching to catch, so treat the message text
+  // itself as the insert/replace artifact. Gated to completed messages and to
+  // `renderMode === "body"`: `"suggestions"` facets (review/critique) are
+  // feedback, not a single drop-in body, so they keep normal markdown.
+  const textForArtifact = React.useMemo(
+    () =>
+      content
+        .filter((part) => part.content_type === "text")
+        .map((part) => part.text)
+        .join("\n\n"),
+    [content],
+  );
+  const wholeBodyArtifact =
+    outlookArtifact?.renderMode === "body" &&
+    !isStreaming &&
+    !showRaw &&
+    textForArtifact.trim().length > 0 &&
+    !containsMarkdownFence(textForArtifact)
+      ? outlookArtifact
+      : null;
+
+  // Index of the first text part — the single anchor at which the whole-body
+  // artifact is rendered, so a multi-part body becomes one artifact rather than
+  // one per text part (each with its own insert/copy UI).
+  const firstTextPartIndex = React.useMemo(
+    () => content.findIndex((part) => part.content_type === "text"),
+    [content],
+  );
 
   const lastRenderableIndex = React.useMemo(() => {
     for (let index = content.length - 1; index >= 0; index--) {
@@ -778,6 +870,23 @@ export const MessageContent = memo(function MessageContent({
         const isLastRenderablePart = index === lastRenderableIndex;
 
         if (part.content_type === "text") {
+          if (wholeBodyArtifact) {
+            // One artifact for the whole message: render it at the first text
+            // part from the joined body, and drop the remaining text parts so a
+            // multi-part response doesn't fragment into duplicate insert/copy
+            // cards. (For a single text part `textForArtifact` is that part.)
+            if (index !== firstTextPartIndex) {
+              return null;
+            }
+            return (
+              <EratoEmailSuggestion
+                key={`email-body-${index}`}
+                content={textForArtifact}
+                isHtml={wholeBodyArtifact.bodyFormat === "html"}
+              />
+            );
+          }
+
           const displayText =
             isStreaming && isLastRenderablePart && !part.text.endsWith("\n")
               ? part.text + "▊"

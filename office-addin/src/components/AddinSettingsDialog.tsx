@@ -1,18 +1,17 @@
-import { AppearanceTabContent, ModalBase } from "@erato/frontend/library";
+import {
+  AppearanceTabContent,
+  AudioInputTabContent,
+  ModalBase,
+  useFeatureConfig,
+} from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
-import { useState, type KeyboardEvent } from "react";
+import { useMemo, useState, type KeyboardEvent } from "react";
 
 import { BehaviorTabContent } from "./BehaviorTabContent";
 import { UserSettingsTabContent } from "./UserSettingsTabContent";
 import { useOffice } from "../providers/OfficeProvider";
 
-type SettingsTab = "appearance" | "user" | "addin";
-
-const TAB_ORDER: readonly SettingsTab[] = [
-  "appearance",
-  "user",
-  "addin",
-] as const;
+type SettingsTab = "appearance" | "user" | "audio" | "addin";
 
 interface AddinSettingsDialogProps {
   isOpen: boolean;
@@ -25,7 +24,25 @@ export function AddinSettingsDialog({
 }: AddinSettingsDialogProps) {
   const { host } = useOffice();
   const isOutlookHost = host === "Outlook";
+  const featureConfig = useFeatureConfig();
+  // Mirror the chat input: the microphone tab is only relevant when a capture
+  // feature (transcription / dictation / conversational) is enabled, so it
+  // appears exactly when the audio buttons do.
+  const audioSettingsEnabled =
+    featureConfig.audioTranscription.enabled ||
+    featureConfig.audioDictation.enabled ||
+    featureConfig.audioConversational.enabled;
   const [activeTab, setActiveTab] = useState<SettingsTab>("appearance");
+
+  const tabOrder = useMemo<SettingsTab[]>(
+    () => [
+      "appearance",
+      "user",
+      ...(audioSettingsEnabled ? (["audio"] as const) : []),
+      "addin",
+    ],
+    [audioSettingsEnabled],
+  );
 
   const tabLabels: Record<SettingsTab, string> = {
     appearance: t({
@@ -36,6 +53,10 @@ export function AddinSettingsDialog({
       id: "officeAddin.settings.tabs.user",
       message: "User settings",
     }),
+    audio: t({
+      id: "officeAddin.settings.tabs.audio",
+      message: "Microphone",
+    }),
     addin: t({
       id: "officeAddin.settings.tabs.addin",
       message: "Add-in",
@@ -45,12 +66,14 @@ export function AddinSettingsDialog({
   const tabIds: Record<SettingsTab, string> = {
     appearance: "addin-settings-tab-appearance",
     user: "addin-settings-tab-user",
+    audio: "addin-settings-tab-audio",
     addin: "addin-settings-tab-addin",
   };
 
   const panelIds: Record<SettingsTab, string> = {
     appearance: "addin-settings-panel-appearance",
     user: "addin-settings-panel-user",
+    audio: "addin-settings-panel-audio",
     addin: "addin-settings-panel-addin",
   };
 
@@ -64,24 +87,24 @@ export function AddinSettingsDialog({
     event: KeyboardEvent<HTMLButtonElement>,
     currentTab: SettingsTab,
   ) => {
-    const currentIndex = TAB_ORDER.indexOf(currentTab);
+    const currentIndex = tabOrder.indexOf(currentTab);
     let nextTab: SettingsTab | undefined;
 
     switch (event.key) {
       case "ArrowDown":
       case "ArrowRight":
-        nextTab = TAB_ORDER[(currentIndex + 1) % TAB_ORDER.length];
+        nextTab = tabOrder[(currentIndex + 1) % tabOrder.length];
         break;
       case "ArrowUp":
       case "ArrowLeft":
         nextTab =
-          TAB_ORDER[(currentIndex - 1 + TAB_ORDER.length) % TAB_ORDER.length];
+          tabOrder[(currentIndex - 1 + tabOrder.length) % tabOrder.length];
         break;
       case "Home":
-        nextTab = TAB_ORDER[0];
+        nextTab = tabOrder[0];
         break;
       case "End":
-        nextTab = TAB_ORDER[TAB_ORDER.length - 1];
+        nextTab = tabOrder[tabOrder.length - 1];
         break;
       default:
         return;
@@ -118,7 +141,7 @@ export function AddinSettingsDialog({
             aria-orientation="horizontal"
             className="flex gap-1 overflow-x-auto"
           >
-            {TAB_ORDER.map((tab) => {
+            {tabOrder.map((tab) => {
               const isActive = activeTab === tab;
               return (
                 <button
@@ -200,6 +223,35 @@ export function AddinSettingsDialog({
           >
             <UserSettingsTabContent onClose={onClose} />
           </section>
+
+          {audioSettingsEnabled ? (
+            <section
+              id={panelIds.audio}
+              role="tabpanel"
+              aria-labelledby={tabIds.audio}
+              hidden={activeTab !== "audio"}
+              className="h-full space-y-4 overflow-y-auto"
+            >
+              <div className="space-y-1">
+                <h2 className="text-sm font-medium text-theme-fg-primary">
+                  {t({
+                    id: "officeAddin.settings.audio.heading",
+                    message: "Microphone",
+                  })}
+                </h2>
+                <p className="text-sm text-theme-fg-secondary">
+                  {t({
+                    id: "officeAddin.settings.audio.description",
+                    message:
+                      "Choose and test the microphone used for voice input in this add-in.",
+                  })}
+                </p>
+              </div>
+              <AudioInputTabContent
+                isActive={isOpen && activeTab === "audio"}
+              />
+            </section>
+          ) : null}
 
           <section
             id={panelIds.addin}

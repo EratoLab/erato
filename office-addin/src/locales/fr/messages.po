@@ -73,8 +73,18 @@ msgstr "Nouveau chat"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.dismissDraftContext"
+msgstr "Ne pas inclure le brouillon"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.dismissSelection"
 msgstr "Ignorer la sélection"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.draftContext"
+msgstr "Votre brouillon est inclus comme contexte"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
@@ -363,6 +373,16 @@ msgstr "Suit votre thème Outlook."
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.audio.description"
+msgstr "Choisissez et testez le microphone utilisé pour la saisie vocale dans ce complément."
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.audio.heading"
+msgstr "Microphone"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.placeholder.empty"
 msgstr "Aucun paramètre disponible pour le moment."
 
@@ -375,6 +395,11 @@ msgstr "Complément"
 #: src/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.tabs.appearance"
 msgstr "Apparence"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.tabs.audio"
+msgstr "Microphone"
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx

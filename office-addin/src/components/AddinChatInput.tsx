@@ -17,10 +17,12 @@ import {
 import { t } from "@lingui/core/macro";
 import { forwardRef, useCallback, useMemo, useRef, useState } from "react";
 
+import { useAvailableActionFacetIds } from "../hooks/useAvailableActionFacets";
 import { useOutlookComposeSelection } from "../hooks/useOutlookComposeSelection";
 import { useOffice } from "../providers/OfficeProvider";
 import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
+import { resolveOutlookActionFacet } from "../utils/outlookActionFacet";
 import { getComposeBodyType } from "../utils/outlookComposeWrite";
 
 function validateAttachment(
@@ -81,6 +83,17 @@ interface AddinChatInputProps {
   initialSelectedFacetIds?: string[];
   onFacetSelectionChange?: (selectedFacetIds: string[]) => void;
   showSuggestedEmailSource?: boolean;
+  /**
+   * Called after a send in which dropped emails were actually attached — i.e.
+   * their files uploaded successfully. The owner clears the drop from BOTH the
+   * provider drop-state and the AddinChat-owned dedup set (the two live in
+   * different layers, so neither can release the other alone). Intentionally
+   * NOT called when the email-file upload failed: in that path the message is
+   * sent without the emails, so the chips must stay for a retry.
+   */
+  onEmailSourceDropsSent?: (
+    drops: { key: string; messageId: string | null }[],
+  ) => void;
   uploadFiles?: (files: File[]) => Promise<FileUploadItem[] | undefined>;
   uploadError?: Error | string | null;
   /**
@@ -117,17 +130,55 @@ export const AddinChatInput = forwardRef<
     showSuggestedEmailSource = false,
     editInitialFiles,
     isExpandingDroppedEmails = false,
+    onEmailSourceDropsSent,
     ...chatInputProps
   },
   ref,
 ) {
   const { host } = useOffice();
+  const availableFacetIds = useAvailableActionFacetIds();
+  const composeEmailAvailable = availableFacetIds.has("compose_email");
   const [isUploadingEmail, setIsUploadingEmail] = useState(false);
   const composeSelection = useOutlookComposeSelection();
-  const { mailItem } = useOutlookMailItem();
+  const { mailItem, itemIdentity } = useOutlookMailItem();
   const [isSelectionDismissed, setIsSelectionDismissed] = useState(false);
   const hasActiveSelection =
     composeSelection.data.length > 0 && !isSelectionDismissed;
+
+  // Draft-as-context (#1): a non-empty compose body is eligible to ride along
+  // as `outlook_review_draft`, but the user can switch it off via the draft
+  // chip. Default on; reset to on when the Outlook item changes (a new draft).
+  const draftBodyText = mailItem?.bodyText ?? mailItem?.bodyHtml ?? "";
+  const [isDraftDismissed, setIsDraftDismissed] = useState(false);
+  const lastDraftItemIdentityRef = useRef(itemIdentity);
+  if (itemIdentity !== lastDraftItemIdentityRef.current) {
+    lastDraftItemIdentityRef.current = itemIdentity;
+    setIsDraftDismissed(false);
+  }
+  const isDraftContextIncluded =
+    !!mailItem?.isComposeMode && draftBodyText.length > 0 && !isDraftDismissed;
+  // Show the draft chip only when it's actually what we'd send: a live
+  // selection takes priority (rewrite wins over review), so hide it then.
+  const hasDraftContextChip =
+    host === "Outlook" && isDraftContextIncluded && !hasActiveSelection;
+
+  // Draft de-dup marker (#4): the body we last sent as `review_draft` in this
+  // chat. Client-side by design — the backend is action-facet toggle-stateless.
+  // Reset when the chat changes so a fresh chat re-sends the draft.
+  const lastSentDraftBodyRef = useRef<string | null>(null);
+  const lastDraftChatIdRef = useRef(chatId);
+  if (chatId !== lastDraftChatIdRef.current) {
+    // Reset the dedup marker when the chat genuinely changes — but NOT when a
+    // brand-new chat just received its id on first send (null → id is the same
+    // conversation continuing). Otherwise the second message would needlessly
+    // re-send the unchanged draft.
+    const isNewChatGettingItsId =
+      lastDraftChatIdRef.current == null && chatId != null;
+    lastDraftChatIdRef.current = chatId;
+    if (!isNewChatGettingItsId) {
+      lastSentDraftBodyRef.current = null;
+    }
+  }
 
   // Reset dismiss when selection changes (user selects new text)
   const lastSelectionDataRef = useRef(composeSelection.data);
@@ -495,45 +546,48 @@ export const AddinChatInput = forwardRef<
       modelId?: string,
       selectedFacetIds?: string[],
     ) => {
-      // Build action facet payload: selection-based rewrite or full-body review
-      let actionFacet: ActionFacetRequest | undefined;
+      // Build the action facet (selection rewrite vs. draft review) via a pure
+      // resolver so the selection-priority and draft de-dup rules stay testable.
+      //
+      // `outlook_review_draft` only ever carries the user's OWN draft: compose
+      // mode is required (`isDraftContextIncluded`), so a read-mode email body
+      // can never leak in. The body is sent as plain text — Outlook compose
+      // HTML is bloated with MS tags, inline styles, and base64 images that add
+      // no value to a writing-review prompt and blow the backend's per-arg size
+      // cap; text coercion still preserves quoted history (`>` lines), bullet
+      // lists, and link URLs, so the model keeps the full conversation context.
       const bodyFormat = mailItem ? await getComposeBodyType() : undefined;
-
-      if (hasActiveSelection) {
-        actionFacet = {
-          id: "outlook_rewrite_selection",
-          args: {
-            selected_text: composeSelection.data,
-            source_property: composeSelection.sourceProperty,
-            ...(bodyFormat ? { body_format: bodyFormat } : {}),
-          },
-        };
-      } else if (
-        mailItem?.isComposeMode &&
-        (mailItem.bodyText || mailItem.bodyHtml)
-      ) {
-        // Only attach `outlook_review_draft` when the user is composing
-        // their own message — the action is meaningless (and a privacy
-        // footgun) if applied to a read-mode email the user happens to
-        // have open. The gate here prevents the received-mail body from
-        // ever flowing into the request.
-        //
-        // Always send the body as plain text. Outlook compose HTML is
-        // bloated with MS-specific tags, inline styles, and base64-encoded
-        // images that have no semantic value for a writing-review prompt
-        // — and they easily push a 5-line reply over a long thread past
-        // the backend's per-arg size cap. The text coercion preserves
-        // quoted history (as `>` lines), bullet lists, and link URLs, so
-        // the LLM still sees the full conversation context.
-        const fullBody = mailItem.bodyText ?? mailItem.bodyHtml ?? "";
-        actionFacet = {
-          id: "outlook_review_draft",
-          args: {
-            full_body: fullBody,
-            body_format: "text",
-          },
-        };
+      const { facet: actionFacet, sentDraftBody } = resolveOutlookActionFacet({
+        hasActiveSelection,
+        selectionData: composeSelection.data,
+        selectionSource: composeSelection.sourceProperty,
+        draftContextIncluded: isDraftContextIncluded,
+        draftBody: draftBodyText,
+        lastSentDraftBody: lastSentDraftBodyRef.current,
+        bodyFormat,
+        isComposeMode: !!mailItem?.isComposeMode,
+        composeEmailAvailable,
+      });
+      if (sentDraftBody !== null) {
+        // Remember what we sent so an unchanged follow-up de-dupes (#4).
+        lastSentDraftBodyRef.current = sentDraftBody;
       }
+
+      // Snapshot the dropped emails staged for this send. They are cleared only
+      // once we know their files were actually attached (the awaited upload
+      // succeeded) — the chat-message dispatch itself is fire-and-forget, so the
+      // upload is the meaningful "were these attached?" boundary. Clearing
+      // releases both the provider drop-state and the dedup claim via the owner.
+      const sentDrops = stagedEmails.flatMap((staged) =>
+        staged.source === "drop"
+          ? [{ key: staged.key, messageId: staged.parsed.messageId ?? null }]
+          : [],
+      );
+      const clearSentDrops = () => {
+        if (sentDrops.length > 0) {
+          onEmailSourceDropsSent?.(sentDrops);
+        }
+      };
 
       if (!shouldUseSuggestedEmailSource) {
         chatInputProps.onSendMessage(
@@ -548,16 +602,25 @@ export const AddinChatInput = forwardRef<
 
       setIsUploadingEmail(true);
       let resolvedFileIds: string[] = [];
+      let uploadFailed = false;
 
       try {
         const filesToUpload = await resolveSelectedFilesForSend();
         if (filesToUpload.length === 0) {
+          // No files resolved (e.g. only dismissed drops remain), but the
+          // action facet must still ride along: the dedup marker was already
+          // advanced above, so omitting the facet here would send without it
+          // AND then suppress the same unchanged draft on the next send.
           chatInputProps.onSendMessage(
             message,
             inputFileIds,
             modelId,
             selectedFacetIds,
+            actionFacet,
           );
+          // No upload was attempted (e.g. only dismissed drops remain) and
+          // nothing failed, so the staged drops are safe to clear.
+          clearSentDrops();
           return;
         }
 
@@ -577,6 +640,7 @@ export const AddinChatInput = forwardRef<
 
         resolvedFileIds = result.files.map((file) => file.id);
       } catch (error) {
+        uploadFailed = true;
         console.warn(
           "Failed to upload Outlook email source files, sending without them:",
           error,
@@ -593,16 +657,28 @@ export const AddinChatInput = forwardRef<
         selectedFacetIds,
         actionFacet,
       );
+
+      // Clear the drops only when their files actually uploaded. On a failed
+      // upload the message was sent WITHOUT them (see catch), so the chips must
+      // remain so the user can retry.
+      if (!uploadFailed) {
+        clearSentDrops();
+      }
     },
     [
       chatId,
       chatInputProps,
+      composeEmailAvailable,
       composeSelection.data,
       composeSelection.sourceProperty,
+      draftBodyText,
       hasActiveSelection,
+      isDraftContextIncluded,
       mailItem,
+      onEmailSourceDropsSent,
       resolveSelectedFilesForSend,
       shouldUseSuggestedEmailSource,
+      stagedEmails,
     ],
   );
 
@@ -666,6 +742,31 @@ export const AddinChatInput = forwardRef<
               aria-label={t({
                 id: "officeAddin.chatInput.dismissSelection",
                 message: "Dismiss selection",
+              })}
+            >
+              &#x2715;
+            </button>
+          </div>
+        </div>
+      )}
+
+      {hasDraftContextChip && (
+        <div className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4">
+          <div className="flex items-center gap-2 rounded-lg border border-theme-border bg-theme-bg-secondary px-3 py-1.5 text-xs text-theme-fg-secondary">
+            <span className="shrink-0">&#x1F4DD;</span>
+            <span className="min-w-0 truncate">
+              {t({
+                id: "officeAddin.chatInput.draftContext",
+                message: "Your draft is included as context",
+              })}
+            </span>
+            <button
+              type="button"
+              onClick={() => setIsDraftDismissed(true)}
+              className="ml-auto shrink-0 rounded p-0.5 hover:bg-theme-bg-tertiary"
+              aria-label={t({
+                id: "officeAddin.chatInput.dismissDraftContext",
+                message: "Don't include draft",
               })}
             >
               &#x2715;

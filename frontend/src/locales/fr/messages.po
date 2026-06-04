@@ -1016,7 +1016,7 @@ msgid "preferences.dialog.appearance.theme.system.label"
 msgstr "Thème du système"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AudioInputTabContent.tsx
 msgid "preferences.dialog.audio.input.default"
 msgstr "Microphone par défaut du système"
 
@@ -1026,7 +1026,12 @@ msgid "preferences.dialog.audio.input.description"
 msgstr "Choisissez le périphérique d'entrée audio utilisé pour les enregistrements du chat dans ce navigateur."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AudioInputTabContent.tsx
+msgid "preferences.dialog.audio.input.diagnostics"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/AudioInputTabContent.tsx
 msgid "preferences.dialog.audio.input.empty"
 msgstr "Aucun microphone n'a été trouvé. Une autorisation du navigateur peut être nécessaire avant que les noms des périphériques soient disponibles."
 
@@ -1041,27 +1046,27 @@ msgstr "Microphone"
 #~ msgstr "Entrée audio"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AudioInputTabContent.tsx
 msgid "preferences.dialog.audio.input.persisted"
 msgstr "Cette sélection est enregistrée localement dans ce navigateur."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AudioInputTabContent.tsx
 msgid "preferences.dialog.audio.input.refresh"
 msgstr "Actualiser les périphériques"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AudioInputTabContent.tsx
 msgid "preferences.dialog.audio.input.refreshing"
 msgstr "Actualisation..."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AudioInputTabContent.tsx
 msgid "preferences.dialog.audio.test.description"
 msgstr "Lancez le test et parlez — les barres devraient bouger et l'appareil actif devrait correspondre à votre sélection."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AudioInputTabContent.tsx
 msgid "preferences.dialog.audio.test.heading"
 msgstr "Tester le microphone"
 
@@ -2386,6 +2391,10 @@ msgstr "Microphone {microphoneIndex}"
 msgid "Microphone permission denied. Allow access to test the microphone."
 msgstr "Accès au microphone refusé. Autorisez l'accès pour tester le microphone."
 
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+msgid "Microphone permission denied. Allow microphone access and try again."
+msgstr ""
+
 #: src/components/ui/Chat/ChatInput.tsx
 #~ msgid "Microphone settings:"
 #~ msgstr ""
@@ -2428,6 +2437,10 @@ msgstr ""
 #: src/components/ui/Message/ConversationIndicator.tsx
 msgid "No messages yet"
 msgstr "Aucun message pour l'instant"
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+msgid "No microphone is available. Connect or enable a microphone and try again."
+msgstr ""
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 #~ msgid "noise suppression: {0}"
@@ -2777,6 +2790,10 @@ msgstr "Les fichiers suivants ne peuvent pas être traités et n'ont pas été t
 #: src/hooks/audio/useAudioInputLevelPreview.ts
 msgid "The microphone is already in use by another application or recording."
 msgstr "Le microphone est déjà utilisé par une autre application ou un autre enregistrement."
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+msgid "The microphone is already in use by another application."
+msgstr ""
 
 #: src/hooks/audio/useAudioInputLevelPreview.ts
 msgid "The selected microphone is not available. Refresh the device list and try again."

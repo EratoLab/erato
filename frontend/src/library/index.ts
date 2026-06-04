@@ -22,6 +22,7 @@ export { DefaultMessageControls } from "@/components/ui/Message/DefaultMessageCo
 export { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
 export { ModalBase } from "@/components/ui/Modal/ModalBase";
 export { AppearanceTabContent } from "@/components/ui/Settings/AppearanceTabContent";
+export { AudioInputTabContent } from "@/components/ui/Settings/AudioInputTabContent";
 export { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton";
 export { FilePreviewLoading } from "@/components/ui/FileUpload/FilePreviewLoading";
 export { GroupedFileAttachmentsPreview } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
@@ -153,6 +154,7 @@ export {
   profileQuery,
   recentChatsQuery,
   useArchiveChatEndpoint,
+  useFacets,
   useRecentChats,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 export {
@@ -194,9 +196,11 @@ export type {
 } from "@/types/message-controls";
 export type { ChatInputControlsHandle } from "@/components/ui/Chat/ChatInputControlsContext";
 export type {
+  ActionFacetInfo,
   ActionFacetRequest,
   ChatModel,
   ContentPart,
+  FacetsResponse,
   FileUploadItem,
   UpdateProfilePreferencesRequest,
   UserProfile,

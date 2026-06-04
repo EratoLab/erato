@@ -1333,11 +1333,34 @@ export function useAudioTranscriptionRecorder({
       stopMediaRecordingStream();
       setIsRecording(false);
       setIsRecordingUpload(false);
-      setRecordingError(
-        error instanceof Error
-          ? error.message
-          : t`Could not start audio recording.`,
-      );
+      // Map the common getUserMedia DOMExceptions to actionable copy instead of
+      // leaking raw browser strings (e.g. "Requested device not found"). A
+      // NotFoundError here means no microphone is exposed to the page — common
+      // inside embedded webviews (e.g. the Office add-in) and when the OS mic
+      // privacy setting is off.
+      const errorName = error instanceof DOMException ? error.name : undefined;
+      if (errorName === "NotAllowedError" || errorName === "SecurityError") {
+        setRecordingError(
+          t`Microphone permission denied. Allow microphone access and try again.`,
+        );
+      } else if (
+        errorName === "NotFoundError" ||
+        errorName === "OverconstrainedError"
+      ) {
+        setRecordingError(
+          t`No microphone is available. Connect or enable a microphone and try again.`,
+        );
+      } else if (errorName === "NotReadableError") {
+        setRecordingError(
+          t`The microphone is already in use by another application.`,
+        );
+      } else {
+        setRecordingError(
+          error instanceof Error
+            ? error.message
+            : t`Could not start audio recording.`,
+        );
+      }
     }
   }, [
     audioTranscriptionEnabled,
