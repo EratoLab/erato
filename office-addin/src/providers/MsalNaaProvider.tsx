@@ -27,6 +27,12 @@ import {
 
 const OAUTH2_PROXY_SESSION_SCOPES = ["User.Read"];
 
+// When a timed refresh fails we keep the (now stale) session and retry on a
+// capped exponential backoff so a transient outage doesn't permanently stop the
+// refresh loop until the user interacts.
+const OAUTH2_PROXY_REFRESH_RETRY_BASE_MS = 30_000;
+const OAUTH2_PROXY_REFRESH_RETRY_MAX_MS = 5 * 60_000;
+
 type Oauth2ProxySessionStatus =
   | "idle"
   | "establishing"
@@ -155,6 +161,11 @@ export function MsalNaaProvider({ children }: { children: React.ReactNode }) {
   const [loginHint, setLoginHint] = useState<string | undefined>();
   const [oauth2ProxySession, setOauth2ProxySession] =
     useState<Oauth2ProxySessionState>(createInitialOauth2ProxySessionState);
+  // Bumped to re-run the MSAL initialization effect when retrying after an init
+  // failure (which leaves `pca` null and cannot be recovered by a refresh).
+  const [initNonce, setInitNonce] = useState(0);
+  // Number of consecutive failed timed refreshes; drives the backoff delay.
+  const [refreshFailureCount, setRefreshFailureCount] = useState(0);
   const lastRedeemedAtRef = useRef(oauth2ProxySession.lastRedeemedAt);
   const redeemInFlightRef = useRef<Promise<number> | null>(null);
 
@@ -190,6 +201,7 @@ export function MsalNaaProvider({ children }: { children: React.ReactNode }) {
             error: null,
           });
           setError(null);
+          setRefreshFailureCount(0);
           return redeemedAt;
         } catch (redeemError) {
           const message = formatAuthenticationError(redeemError);
@@ -340,7 +352,7 @@ export function MsalNaaProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [mailboxUser, redeemSessionForResult]);
+  }, [mailboxUser, redeemSessionForResult, initNonce]);
 
   const refreshOauth2ProxySession = useCallback(
     async (allowPopup: boolean): Promise<void> => {
@@ -377,22 +389,37 @@ export function MsalNaaProvider({ children }: { children: React.ReactNode }) {
   );
 
   useEffect(() => {
-    if (
-      !pca ||
-      !account ||
-      oauth2ProxySession.lastRedeemedAt === null ||
-      oauth2ProxySession.status === "error"
-    ) {
+    // Only schedule once we hold a session to refresh. An initial establish that
+    // never produced a session (lastRedeemedAt null) is recovered via the retry
+    // button instead of an automatic timer.
+    if (!pca || !account || oauth2ProxySession.lastRedeemedAt === null) {
       return;
     }
 
-    const sessionAgeMs = Date.now() - oauth2ProxySession.lastRedeemedAt;
-    const refreshDelayMs = Math.max(
-      1_000,
-      OAUTH2_PROXY_SESSION_REFRESH_AFTER_MS - sessionAgeMs,
-    );
+    let refreshDelayMs: number;
+    if (oauth2ProxySession.status === "error") {
+      // A previous refresh failed but the session may still be valid. Retry on a
+      // capped exponential backoff rather than going terminal — otherwise a
+      // single transient failure would silently disconnect the add-in until the
+      // user reloads or hits "Try again".
+      const attempt = Math.max(0, refreshFailureCount - 1);
+      refreshDelayMs = Math.min(
+        OAUTH2_PROXY_REFRESH_RETRY_BASE_MS * 2 ** attempt,
+        OAUTH2_PROXY_REFRESH_RETRY_MAX_MS,
+      );
+    } else {
+      const sessionAgeMs = Date.now() - oauth2ProxySession.lastRedeemedAt;
+      refreshDelayMs = Math.max(
+        1_000,
+        OAUTH2_PROXY_SESSION_REFRESH_AFTER_MS - sessionAgeMs,
+      );
+    }
+
     const timeoutId = window.setTimeout(() => {
       void refreshOauth2ProxySession(false).catch((refreshError) => {
+        // A successful redeem resets the counter; bump it here so the next
+        // scheduled retry backs off further.
+        setRefreshFailureCount((count) => count + 1);
         console.warn("OAuth2 proxy session refresh failed", refreshError);
       });
     }, refreshDelayMs);
@@ -405,15 +432,17 @@ export function MsalNaaProvider({ children }: { children: React.ReactNode }) {
     oauth2ProxySession.lastRedeemedAt,
     oauth2ProxySession.status,
     pca,
+    refreshFailureCount,
     refreshOauth2ProxySession,
   ]);
 
   useEffect(() => {
     function refreshIfStale() {
+      // Intentionally retries even from the "error" status: regaining focus is a
+      // natural recovery point, and the backoff timer may not have fired yet.
       if (
         !pca ||
         !account ||
-        oauth2ProxySession.status === "error" ||
         !shouldRefreshOauth2ProxySession(lastRedeemedAtRef.current)
       ) {
         return;
@@ -469,9 +498,19 @@ export function MsalNaaProvider({ children }: { children: React.ReactNode }) {
   );
 
   const retryAuthentication = useCallback(async (): Promise<void> => {
-    setIsInitialized(false);
     setError(null);
+    setRefreshFailureCount(0);
 
+    // If MSAL never initialized (init failure, NAA not yet ready) there is no
+    // client to refresh against — re-run the initialization effect instead of
+    // throwing "MSAL not initialized". The effect flips isInitialized back on.
+    if (!pca) {
+      setIsInitialized(false);
+      setInitNonce((nonce) => nonce + 1);
+      return;
+    }
+
+    setIsInitialized(false);
     try {
       await refreshOauth2ProxySession(true);
     } catch (authenticationError) {
@@ -479,7 +518,7 @@ export function MsalNaaProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsInitialized(true);
     }
-  }, [refreshOauth2ProxySession]);
+  }, [pca, refreshOauth2ProxySession]);
 
   const isOauth2ProxySessionReady =
     oauth2ProxySession.lastRedeemedAt !== null &&

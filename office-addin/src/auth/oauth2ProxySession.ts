@@ -23,9 +23,12 @@ export class Oauth2ProxySessionRedeemError extends Error {
 
   constructor(
     message: string,
-    options: { status?: number; body?: string } = {},
+    options: { status?: number; body?: string; cause?: unknown } = {},
   ) {
-    super(message);
+    super(
+      message,
+      options.cause === undefined ? undefined : { cause: options.cause },
+    );
     this.name = "Oauth2ProxySessionRedeemError";
     this.status = options.status ?? null;
     this.responseBody = options.body ?? null;
@@ -86,14 +89,28 @@ export async function redeemOauth2ProxySession({
   now = Date.now,
   ...input
 }: RedeemOauth2ProxySessionInput): Promise<RedeemOauth2ProxySessionResult> {
-  const response = await fetcher(OAUTH2_PROXY_REDEEM_EXTERNAL_TOKEN_PATH, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(buildRedeemRequestBody(input)),
-  });
+  // Build the body before the request so a missing-token rejection surfaces as
+  // a typed error rather than being reclassified as a network failure below.
+  const body = JSON.stringify(buildRedeemRequestBody(input));
+
+  let response: Response;
+  try {
+    response = await fetcher(OAUTH2_PROXY_REDEEM_EXTERNAL_TOKEN_PATH, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body,
+    });
+  } catch (networkError) {
+    // fetch() rejects (offline, DNS, CORS, aborted) with a raw TypeError. Map it
+    // onto the same typed error the callers already handle, preserving the cause.
+    throw new Oauth2ProxySessionRedeemError(
+      "OAuth2 session redemption could not reach oauth2-proxy",
+      { cause: networkError },
+    );
+  }
 
   if (response.status !== 202) {
     let body: string | undefined;

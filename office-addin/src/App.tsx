@@ -36,7 +36,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   if (!isAuthenticated) {
     return (
       <div className="office-shell office-shell--centered">
-        <p className="office-status office-status--error">
+        <p className="office-status office-status--error" role="alert">
           {error ??
             t({
               id: "officeAddin.auth.signInRequired",

@@ -77,6 +77,37 @@ body {
   background: #f8fafc;
 }
 
+.office-status-action:focus-visible {
+  outline: 2px solid #0f62fe;
+  outline-offset: 2px;
+}
+
+/* The centered auth/status screen is the only UI shown before the themed chat
+   library mounts, so theme its surfaces directly for Office dark mode. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    background: linear-gradient(180deg, #1f2733, #161b22);
+  }
+
+  .office-status {
+    color: #cbd5e1;
+  }
+
+  .office-status--error {
+    color: #f87171;
+  }
+
+  .office-status-action {
+    border-color: #475569;
+    background: #1e293b;
+    color: #e2e8f0;
+  }
+
+  .office-status-action:hover {
+    background: #273449;
+  }
+}
+
 .office-setup-page {
   display: flex;
   flex: 1 1 auto;

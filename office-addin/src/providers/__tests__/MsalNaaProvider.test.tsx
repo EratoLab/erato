@@ -1,9 +1,17 @@
 import { createNestablePublicClientApplication } from "@azure/msal-browser";
 import { setIdToken } from "@erato/frontend/library";
 import { i18n } from "@lingui/core";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { OAUTH2_PROXY_SESSION_REFRESH_AFTER_MS } from "../../auth/oauth2ProxySession";
 import { MsalNaaProvider, useMsalNaa } from "../MsalNaaProvider";
 
 import type {
@@ -87,6 +95,31 @@ function stubFetch(response: Response) {
   return fetcher;
 }
 
+// Returns a fresh Response per call, advancing through the factories and
+// repeating the last one. Factories avoid sharing an already-consumed body.
+function stubFetchSequence(factories: Array<() => Response>) {
+  let index = 0;
+  const fetcher = vi.fn(async () => {
+    const factory = factories[Math.min(index, factories.length - 1)];
+    index += 1;
+    return factory();
+  });
+  Object.defineProperty(window, "fetch", {
+    configurable: true,
+    value: fetcher,
+  });
+  vi.stubGlobal("fetch", fetcher);
+  return fetcher;
+}
+
+// Advances fake timers and flushes the awaited microtasks the auth flow chains
+// (MSAL acquisition, the redeem fetch, and the resulting state updates).
+async function advance(ms: number) {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
+}
+
 function AuthProbe() {
   const auth = useMsalNaa();
 
@@ -102,6 +135,18 @@ function AuthProbe() {
       <dd data-testid="status">{auth.oauth2ProxySessionStatus}</dd>
       <dt>error</dt>
       <dd data-testid="error">{auth.error ?? ""}</dd>
+      <dt>retry</dt>
+      <dd>
+        <button
+          type="button"
+          data-testid="retry"
+          onClick={() => {
+            void auth.retryAuthentication();
+          }}
+        >
+          retry
+        </button>
+      </dd>
     </dl>
   );
 }
@@ -168,5 +213,116 @@ describe("MsalNaaProvider", () => {
     expect(screen.getByTestId("error")).toHaveTextContent(
       "Could not establish a secure Erato session.",
     );
+  });
+
+  it("redeems a fresh session on the refresh timer before expiry", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetcher = stubFetch(new Response("{}", { status: 202 }));
+
+      render(
+        <MsalNaaProvider>
+          <AuthProbe />
+        </MsalNaaProvider>,
+      );
+
+      await advance(0);
+      expect(screen.getByTestId("status")).toHaveTextContent("ready");
+      expect(fetcher).toHaveBeenCalledTimes(1);
+
+      // Cross the 20-minute refresh window; the timer must redeem again without
+      // a reload.
+      await advance(OAUTH2_PROXY_SESSION_REFRESH_AFTER_MS + 1_000);
+
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId("status")).toHaveTextContent("ready");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("recovers on the backoff timer after a transient refresh failure", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetcher = stubFetchSequence([
+        () => new Response("{}", { status: 202 }), // initial establish
+        () => new Response("upstream down", { status: 503 }), // timed refresh fails
+        () => new Response("{}", { status: 202 }), // backoff retry succeeds
+      ]);
+
+      render(
+        <MsalNaaProvider>
+          <AuthProbe />
+        </MsalNaaProvider>,
+      );
+
+      await advance(0);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+
+      // Scheduled refresh fires and fails -> recoverable error state, not silent.
+      await advance(OAUTH2_PROXY_SESSION_REFRESH_AFTER_MS + 1_000);
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId("status")).toHaveTextContent("error");
+      expect(screen.getByTestId("authenticated")).toHaveTextContent("false");
+
+      // The backoff timer re-arms and the next attempt restores the session.
+      // Advancing past the max backoff guarantees the retry fires.
+      await advance(5 * 60_000 + 1_000);
+      expect(fetcher).toHaveBeenCalledTimes(3);
+      expect(screen.getByTestId("status")).toHaveTextContent("ready");
+      expect(screen.getByTestId("authenticated")).toHaveTextContent("true");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not refresh after unmount", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetcher = stubFetch(new Response("{}", { status: 202 }));
+
+      const view = render(
+        <MsalNaaProvider>
+          <AuthProbe />
+        </MsalNaaProvider>,
+      );
+
+      await advance(0);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+
+      view.unmount();
+      await advance(OAUTH2_PROXY_SESSION_REFRESH_AFTER_MS + 1_000);
+
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("recovers from an MSAL initialization failure when the user retries", async () => {
+    stubFetch(new Response("{}", { status: 202 }));
+    vi.mocked(createNestablePublicClientApplication)
+      .mockRejectedValueOnce(new Error("init boom"))
+      .mockResolvedValue(createPcaMock());
+
+    render(
+      <MsalNaaProvider>
+        <AuthProbe />
+      </MsalNaaProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("initialized")).toHaveTextContent("true"),
+    );
+    expect(screen.getByTestId("authenticated")).toHaveTextContent("false");
+
+    // "Try again" must re-run initialization (pca is null) rather than throwing
+    // "MSAL not initialized".
+    fireEvent.click(screen.getByTestId("retry"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("authenticated")).toHaveTextContent("true"),
+    );
+    expect(screen.getByTestId("status")).toHaveTextContent("ready");
   });
 });
