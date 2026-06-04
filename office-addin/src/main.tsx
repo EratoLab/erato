@@ -8,12 +8,8 @@ import App from "./App";
 import { injectFrontendEnv } from "./app/env";
 import { AddinFileSourceSelector } from "./components/AddinFileSourceSelector";
 import { OutlookEratoEmailRenderer } from "./components/OutlookEratoEmailRenderer";
-// TEMP crash-capture diagnostics — remove together with crashCapture.tsx once
-// the blank-pane (read -> compose) throwing line is identified.
-import { installGlobalCrashHandlers, RootCrashBoundary } from "./crashCapture";
 import { AddinSetupRoute } from "./pages/AddinSetupPage";
 
-installGlobalCrashHandlers();
 injectFrontendEnv();
 
 componentRegistry.ChatFileSourceSelector = AddinFileSourceSelector;
@@ -27,14 +23,12 @@ if (!rootElement) {
 
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
-    <RootCrashBoundary>
-      <BrowserRouter basename="/office-addin">
-        <Routes>
-          <Route path="/" element={<App />} />
-          <Route path="/setup" element={<AddinSetupRoute />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </BrowserRouter>
-    </RootCrashBoundary>
+    <BrowserRouter basename="/office-addin">
+      <Routes>
+        <Route path="/" element={<App />} />
+        <Route path="/setup" element={<AddinSetupRoute />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   </React.StrictMode>,
 );

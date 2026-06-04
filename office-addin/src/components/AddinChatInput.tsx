@@ -15,24 +15,15 @@ import {
   type FileUploadItem,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
-import {
-  forwardRef,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { forwardRef, useCallback, useMemo, useRef, useState } from "react";
 
 import { useAvailableActionFacetIds } from "../hooks/useAvailableActionFacets";
 import { useOutlookComposeSelection } from "../hooks/useOutlookComposeSelection";
-import { useOutlookSelectionProbe } from "../hooks/useOutlookSelectionProbe";
 import { useOffice } from "../providers/OfficeProvider";
 import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
 import { resolveOutlookActionFacet } from "../utils/outlookActionFacet";
 import { getComposeBodyType } from "../utils/outlookComposeWrite";
-import { selLog } from "../utils/selectionDebug";
 
 function validateAttachment(
   filename: string,
@@ -149,8 +140,6 @@ export const AddinChatInput = forwardRef<
   const composeEmailAvailable = availableFacetIds.has("compose_email");
   const [isUploadingEmail, setIsUploadingEmail] = useState(false);
   const composeSelection = useOutlookComposeSelection();
-  // TEMP selection-preview diagnostics — raw API probe (read + compose).
-  useOutlookSelectionProbe();
   const { mailItem, itemIdentity } = useOutlookMailItem();
   const [isSelectionDismissed, setIsSelectionDismissed] = useState(false);
   const hasActiveSelection =
@@ -190,16 +179,6 @@ export const AddinChatInput = forwardRef<
       lastSentDraftBodyRef.current = null;
     }
   }
-
-  // TEMP selection-preview diagnostics — log the chip's final render gate so
-  // we can tell whether selection data is reaching the UI.
-  useEffect(() => {
-    selLog(
-      `chip-gate host=${host} dataLen=${composeSelection.data.length} dismissed=${isSelectionDismissed} hasActiveSelection=${hasActiveSelection} willRenderChip=${
-        host === "Outlook" && hasActiveSelection
-      }`,
-    );
-  }, [host, composeSelection.data, isSelectionDismissed, hasActiveSelection]);
 
   // Reset dismiss when selection changes (user selects new text)
   const lastSelectionDataRef = useRef(composeSelection.data);
@@ -593,7 +572,6 @@ export const AddinChatInput = forwardRef<
         // Remember what we sent so an unchanged follow-up de-dupes (#4).
         lastSentDraftBodyRef.current = sentDraftBody;
       }
-      selLog(`send: facet=${actionFacet?.id ?? "none"}`);
 
       // Snapshot the dropped emails staged for this send. They are cleared only
       // once we know their files were actually attached (the awaited upload
