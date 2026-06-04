@@ -12,7 +12,6 @@ export const SELECTION_DEBUG = true;
 
 export function selLog(...args: unknown[]): void {
   if (SELECTION_DEBUG) {
-    // eslint-disable-next-line no-console
     console.log("[SELDEBUG]", ...args);
   }
 }
