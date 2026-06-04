@@ -13,6 +13,8 @@ const base: OutlookActionFacetInput = {
   draftBody: "",
   lastSentDraftBody: null,
   bodyFormat: undefined,
+  isComposeMode: false,
+  composeEmailAvailable: false,
 };
 
 describe("resolveOutlookActionFacet", () => {
@@ -117,5 +119,63 @@ describe("resolveOutlookActionFacet", () => {
     });
 
     expect(result).toEqual({ facet: undefined, sentDraftBody: null });
+  });
+
+  it("sends compose_email for an empty compose draft when the facet is available", () => {
+    const result = resolveOutlookActionFacet({
+      ...base,
+      isComposeMode: true,
+      draftBody: "   ",
+      bodyFormat: "html",
+      composeEmailAvailable: true,
+    });
+
+    expect(result.facet?.id).toBe("compose_email");
+    expect(result.facet?.args).toEqual({ body_format: "html" });
+    expect(result.sentDraftBody).toBeNull();
+  });
+
+  it("defaults compose_email body_format to text when unknown", () => {
+    const result = resolveOutlookActionFacet({
+      ...base,
+      isComposeMode: true,
+      composeEmailAvailable: true,
+    });
+
+    expect(result.facet?.args).toEqual({ body_format: "text" });
+  });
+
+  it("does NOT send compose_email when the facet is unavailable (avoids a 400)", () => {
+    const result = resolveOutlookActionFacet({
+      ...base,
+      isComposeMode: true,
+      composeEmailAvailable: false,
+    });
+
+    expect(result).toEqual({ facet: undefined, sentDraftBody: null });
+  });
+
+  it("prefers review_draft over compose_email once the draft has content", () => {
+    const result = resolveOutlookActionFacet({
+      ...base,
+      isComposeMode: true,
+      composeEmailAvailable: true,
+      draftContextIncluded: true,
+      draftBody: "an existing draft",
+    });
+
+    expect(result.facet?.id).toBe("outlook_review_draft");
+  });
+
+  it("prefers a selection over compose_email", () => {
+    const result = resolveOutlookActionFacet({
+      ...base,
+      isComposeMode: true,
+      composeEmailAvailable: true,
+      hasActiveSelection: true,
+      selectionData: "picked text",
+    });
+
+    expect(result.facet?.id).toBe("outlook_rewrite_selection");
   });
 });

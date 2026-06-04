@@ -31,6 +31,16 @@ export interface OutlookActionFacetInput {
   lastSentDraftBody: string | null;
   /** Compose body format; included in the rewrite facet args when known. */
   bodyFormat?: string;
+  /** The user is in an Outlook compose context (reply/new mail), body may be empty. */
+  isComposeMode: boolean;
+  /**
+   * Whether the backend reports the `compose_email` facet as available (from
+   * `GET /me/facets`). `compose_email` is config-defined (erato.toml only), and
+   * sending an unknown facet id hard-400s the request — so it is ONLY attached
+   * when the backend advertises it. A customer without the facet leaves this
+   * false and the empty-draft case simply sends no facet (today's behavior).
+   */
+  composeEmailAvailable: boolean;
 }
 
 export interface OutlookActionFacetResult {
@@ -86,6 +96,25 @@ export function resolveOutlookActionFacet(
         },
       },
       sentDraftBody: input.draftBody,
+    };
+  }
+
+  // Compose-from-scratch: an empty compose draft where the user wants an email
+  // written. Distinct, detectable context (no selection, compose mode, empty
+  // body) — unlike review_draft, which requires a non-empty body. Gated on
+  // availability because the unknown-facet path hard-400s the send.
+  if (
+    input.composeEmailAvailable &&
+    input.isComposeMode &&
+    !input.hasActiveSelection &&
+    input.draftBody.trim().length === 0
+  ) {
+    return {
+      facet: {
+        id: "compose_email",
+        args: { body_format: input.bodyFormat ?? "text" },
+      },
+      sentDraftBody: null,
     };
   }
 

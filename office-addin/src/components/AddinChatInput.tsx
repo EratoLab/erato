@@ -24,6 +24,7 @@ import {
   useState,
 } from "react";
 
+import { useAvailableActionFacetIds } from "../hooks/useAvailableActionFacets";
 import { useOutlookComposeSelection } from "../hooks/useOutlookComposeSelection";
 import { useOutlookSelectionProbe } from "../hooks/useOutlookSelectionProbe";
 import { useOffice } from "../providers/OfficeProvider";
@@ -91,6 +92,17 @@ interface AddinChatInputProps {
   initialSelectedFacetIds?: string[];
   onFacetSelectionChange?: (selectedFacetIds: string[]) => void;
   showSuggestedEmailSource?: boolean;
+  /**
+   * Called after a send in which dropped emails were actually attached — i.e.
+   * their files uploaded successfully. The owner clears the drop from BOTH the
+   * provider drop-state and the AddinChat-owned dedup set (the two live in
+   * different layers, so neither can release the other alone). Intentionally
+   * NOT called when the email-file upload failed: in that path the message is
+   * sent without the emails, so the chips must stay for a retry.
+   */
+  onEmailSourceDropsSent?: (
+    drops: { key: string; messageId: string | null }[],
+  ) => void;
   uploadFiles?: (files: File[]) => Promise<FileUploadItem[] | undefined>;
   uploadError?: Error | string | null;
   /**
@@ -127,11 +139,14 @@ export const AddinChatInput = forwardRef<
     showSuggestedEmailSource = false,
     editInitialFiles,
     isExpandingDroppedEmails = false,
+    onEmailSourceDropsSent,
     ...chatInputProps
   },
   ref,
 ) {
   const { host } = useOffice();
+  const availableFacetIds = useAvailableActionFacetIds();
+  const composeEmailAvailable = availableFacetIds.has("compose_email");
   const [isUploadingEmail, setIsUploadingEmail] = useState(false);
   const composeSelection = useOutlookComposeSelection();
   // TEMP selection-preview diagnostics — raw API probe (read + compose).
@@ -571,12 +586,30 @@ export const AddinChatInput = forwardRef<
         draftBody: draftBodyText,
         lastSentDraftBody: lastSentDraftBodyRef.current,
         bodyFormat,
+        isComposeMode: !!mailItem?.isComposeMode,
+        composeEmailAvailable,
       });
       if (sentDraftBody !== null) {
         // Remember what we sent so an unchanged follow-up de-dupes (#4).
         lastSentDraftBodyRef.current = sentDraftBody;
       }
       selLog(`send: facet=${actionFacet?.id ?? "none"}`);
+
+      // Snapshot the dropped emails staged for this send. They are cleared only
+      // once we know their files were actually attached (the awaited upload
+      // succeeded) — the chat-message dispatch itself is fire-and-forget, so the
+      // upload is the meaningful "were these attached?" boundary. Clearing
+      // releases both the provider drop-state and the dedup claim via the owner.
+      const sentDrops = stagedEmails.flatMap((staged) =>
+        staged.source === "drop"
+          ? [{ key: staged.key, messageId: staged.parsed.messageId ?? null }]
+          : [],
+      );
+      const clearSentDrops = () => {
+        if (sentDrops.length > 0) {
+          onEmailSourceDropsSent?.(sentDrops);
+        }
+      };
 
       if (!shouldUseSuggestedEmailSource) {
         chatInputProps.onSendMessage(
@@ -591,6 +624,7 @@ export const AddinChatInput = forwardRef<
 
       setIsUploadingEmail(true);
       let resolvedFileIds: string[] = [];
+      let uploadFailed = false;
 
       try {
         const filesToUpload = await resolveSelectedFilesForSend();
@@ -601,6 +635,9 @@ export const AddinChatInput = forwardRef<
             modelId,
             selectedFacetIds,
           );
+          // No upload was attempted (e.g. only dismissed drops remain) and
+          // nothing failed, so the staged drops are safe to clear.
+          clearSentDrops();
           return;
         }
 
@@ -620,6 +657,7 @@ export const AddinChatInput = forwardRef<
 
         resolvedFileIds = result.files.map((file) => file.id);
       } catch (error) {
+        uploadFailed = true;
         console.warn(
           "Failed to upload Outlook email source files, sending without them:",
           error,
@@ -636,18 +674,28 @@ export const AddinChatInput = forwardRef<
         selectedFacetIds,
         actionFacet,
       );
+
+      // Clear the drops only when their files actually uploaded. On a failed
+      // upload the message was sent WITHOUT them (see catch), so the chips must
+      // remain so the user can retry.
+      if (!uploadFailed) {
+        clearSentDrops();
+      }
     },
     [
       chatId,
       chatInputProps,
+      composeEmailAvailable,
       composeSelection.data,
       composeSelection.sourceProperty,
       draftBodyText,
       hasActiveSelection,
       isDraftContextIncluded,
       mailItem,
+      onEmailSourceDropsSent,
       resolveSelectedFilesForSend,
       shouldUseSuggestedEmailSource,
+      stagedEmails,
     ],
   );
 
