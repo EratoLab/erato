@@ -44,6 +44,12 @@ const contentTypeForPath = (filePath: string): string => {
       return "text/javascript; charset=utf-8";
     case ".json":
       return "application/json; charset=utf-8";
+    case ".ico":
+      return "image/x-icon";
+    case ".png":
+      return "image/png";
+    case ".svg":
+      return "image/svg+xml";
     case ".onnx":
       return "application/octet-stream";
     case ".wasm":
@@ -73,6 +79,75 @@ const walkFiles = (directory: string): string[] => {
   }
 
   return files;
+};
+
+const sendPublicAssetAliasFile = (
+  publicDir: string,
+  requestPath: string,
+  response: ServerResponse,
+): boolean => {
+  if (requestPath.includes("\0") || requestPath.includes("\\")) {
+    return false;
+  }
+
+  const normalizedPath = requestPath.split("?")[0].split("#")[0];
+  let relativePath: string;
+  if (normalizedPath === "/favicon.ico") {
+    relativePath = "favicon.ico";
+  } else if (normalizedPath.startsWith("/assets/")) {
+    try {
+      relativePath = decodeURIComponent(normalizedPath.slice(1));
+    } catch {
+      return false;
+    }
+  } else {
+    return false;
+  }
+
+  if (
+    relativePath.includes("\0") ||
+    relativePath.includes("\\") ||
+    path.isAbsolute(relativePath)
+  ) {
+    return false;
+  }
+
+  const resolvedPath = path.resolve(publicDir, relativePath);
+  const resolvedPublicDir = path.resolve(publicDir);
+  if (
+    resolvedPath !== resolvedPublicDir &&
+    !resolvedPath.startsWith(`${resolvedPublicDir}${path.sep}`)
+  ) {
+    return false;
+  }
+  if (!fs.existsSync(resolvedPath) || fs.statSync(resolvedPath).isDirectory()) {
+    return false;
+  }
+
+  response.statusCode = 200;
+  response.setHeader("Content-Type", contentTypeForPath(resolvedPath));
+  response.setHeader("X-Content-Type-Options", "nosniff");
+  fs.createReadStream(resolvedPath).pipe(response);
+  return true;
+};
+
+const serveRootPublicAssetAliasesPlugin = (): Plugin => {
+  return {
+    name: "serve-root-public-asset-aliases",
+    configureServer(server: ViteDevServer) {
+      const publicDir = path.resolve(__dirname, "public");
+      server.middlewares.use((request, response, next) => {
+        if (
+          request.url &&
+          sendPublicAssetAliasFile(publicDir, request.url, response)
+        ) {
+          return;
+        }
+
+        next();
+      });
+    },
+  };
 };
 
 const resolveFrontendVoiceRuntimeDir = (): string | null => {
@@ -326,6 +401,7 @@ export default defineConfig(({ mode }) => {
         },
       }),
       lingui(),
+      serveRootPublicAssetAliasesPlugin(),
       stagePlatformLocalesPlugin(),
       stageFrontendVoiceRuntimeAssetsPlugin(),
       watchLinkedFrontendPublicOutputPlugin(linkedFrontend),
