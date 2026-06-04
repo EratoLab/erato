@@ -4,11 +4,17 @@
 
 @variant dark (&:where(.dark *));
 
+.nextra-navbar nav > a + div.x\:flex.x\:gap-4 {
+  display: none;
+}
+
 @theme inline {
-  /*--font-sans: var(--font-dongle);*/
+  --font-sans: var(--font-geist);
+  --font-mono: var(--font-geist-mono);
 }
 
 @theme {
+  --color-erato-light-background: #f7f6f3;
   --color-erato-green: #059669; /* primary green (hover states) */
   --color-erato-green-light: #10b981; /* bright green (accents, dark mode button) */
   --color-erato-green-dark: #047857; /* dark green (active/pressed states) */
@@ -16,14 +22,51 @@
   --color-erato-dark-secondary: #035e4a; /* medium dark teal (dark mode backgrounds) */
 }
 
+@layer base {
+  :root {
+    --erato-docs-article-width: 58rem;
+  }
+
+  html,
+  body {
+    background: var(--color-erato-light-background);
+    font-family: var(--font-geist), var(--font-sans), sans-serif;
+  }
+
+  code,
+  kbd,
+  pre,
+  samp {
+    font-family: var(--font-geist-mono), var(--font-mono), monospace;
+  }
+
+  html.dark,
+  html.dark body {
+    background: var(--color-neutral-950);
+  }
+
+  html:not(.dark) article {
+    border-left: 1px solid #b0b0af;
+    border-right: 1px solid #b0b0af;
+  }
+
+  .nextra-navbar nav {
+    max-width: var(--erato-docs-article-width);
+  }
+
+  article {
+    max-width: var(--erato-docs-article-width);
+  }
+}
+
 @layer utilities {
   /* Section Background Utilities */
   .section-bg-primary {
-    @apply bg-white dark:bg-erato-dark-primary;
+    @apply bg-erato-light-background dark:bg-erato-dark-primary;
   }
 
   .section-bg-secondary {
-    @apply bg-gray-50 dark:bg-erato-dark-secondary;
+    @apply bg-erato-light-background dark:bg-erato-dark-secondary;
   }
 
   /* Section Text Utilities */
@@ -45,7 +88,7 @@
 
   /* UI Element Utilities (Footer, Navigation) */
   .ui-bg {
-    @apply bg-white dark:bg-neutral-900;
+    @apply bg-erato-light-background dark:bg-neutral-900;
   }
 
   .ui-border {

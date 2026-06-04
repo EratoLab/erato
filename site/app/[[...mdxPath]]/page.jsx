@@ -1,5 +1,5 @@
-import { generateStaticParamsFor, importPage } from "nextra/pages";
-import { useMDXComponents as getMDXComponents } from "../../mdx-components";
+import { generateStaticParamsFor } from "nextra/pages";
+import NewWebsiteRedirect from "../../components/NewWebsiteRedirect.jsx";
 
 // Force static generation for all non-locale routes
 export const dynamicParams = false;
@@ -39,33 +39,15 @@ export const generateStaticParams = async () => {
 export async function generateMetadata(props) {
   const params = await props.params;
   const mdxPath = params.mdxPath || [];
-  const { metadata } = await importPage(mdxPath);
+
   return {
-    ...metadata,
-    title: `${metadata.title} - Erato`,
+    title: "Redirecting to the new website - Erato",
+    alternates: {
+      canonical: `https://eratolabs.com/${mdxPath.join("/")}`,
+    },
   };
 }
 
-const Wrapper = getMDXComponents().wrapper;
-
-export default async function Page(props) {
-  const params = await props.params;
-  const mdxPath = params.mdxPath || [];
-  const result = await importPage(mdxPath);
-  const { default: MDXContent, toc, metadata } = result;
-
-  // Skip wrapper for full-layout pages
-  if (
-    metadata.filePath === "content/index.mdx" ||
-    metadata.filePath === "content/about.mdx" ||
-    metadata.filePath === "content/imprint.mdx"
-  ) {
-    return <MDXContent {...props} params={params} />;
-  }
-
-  return (
-    <Wrapper toc={toc} metadata={metadata}>
-      <MDXContent {...props} params={params} />
-    </Wrapper>
-  );
+export default function Page() {
+  return <NewWebsiteRedirect />;
 }
