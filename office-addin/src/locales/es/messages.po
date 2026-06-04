@@ -23,13 +23,18 @@ msgstr "Autenticando..."
 
 #. js-lingui-explicit-id
 #: src/providers/MsalNaaProvider.tsx
+msgid "officeAddin.auth.authenticationFailed"
+msgstr "Error de autenticación"
+
+#. js-lingui-explicit-id
+#: src/providers/MsalNaaProvider.tsx
 msgid "officeAddin.auth.msalClientIdMissing"
 msgstr "El ID de cliente de MSAL no está configurado"
 
 #. js-lingui-explicit-id
 #: src/providers/MsalNaaProvider.tsx
-msgid "officeAddin.auth.msalInitializationFailed"
-msgstr "No se pudo inicializar MSAL"
+#~ msgid "officeAddin.auth.msalInitializationFailed"
+#~ msgstr "No se pudo inicializar MSAL"
 
 #. js-lingui-explicit-id
 #: src/providers/MsalNaaProvider.tsx
@@ -47,9 +52,20 @@ msgid "officeAddin.auth.naaUnsupported"
 msgstr "La autenticación de aplicación anidada no es compatible con este entorno"
 
 #. js-lingui-explicit-id
+#: src/providers/MsalNaaProvider.tsx
+msgid "officeAddin.auth.oauth2ProxySessionFailed"
+msgstr "No se pudo establecer una sesión segura de Erato. Inicia sesión de nuevo."
+
+#. js-lingui-explicit-id
 #: src/App.tsx
+#: src/providers/MsalNaaProvider.tsx
 msgid "officeAddin.auth.signInRequired"
 msgstr "Se requiere iniciar sesión"
+
+#. js-lingui-explicit-id
+#: src/App.tsx
+msgid "officeAddin.auth.tryAgain"
+msgstr "Intentar de nuevo"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChat.tsx

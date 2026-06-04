@@ -60,6 +60,7 @@ ENTRA_CONFIG_PATH = LOCAL_AUTH_DIR / "oauth2-proxy-entra-id.cfg"
 REQUIRED_COMMANDS = ("docker", "node", "pnpm", "tailscale")
 EXPECTED_OAUTH2_PROXY_UPSTREAMS = """upstreams = [
     "http://localhost:3130/public/common/#/public/common/",
+    "http://localhost:3002/public/platform-office-addin/voice-runtime/#/public/platform-office-addin/voice-runtime/",
     "http://localhost:3002/assets/#/assets/",
     "http://localhost:3002/favicon.ico#/favicon.ico",
     "http://localhost:3002/office-addin/#/",
@@ -202,6 +203,75 @@ def sync_entra_proxy_upstreams() -> None:
 
     ENTRA_CONFIG_PATH.write_text(updated_config_text, encoding="utf-8")
     print("Updated oauth2-proxy upstreams for add-in manifest routing")
+
+
+def replace_or_append_config_assignment(
+    config_text: str,
+    key: str,
+    assignment: str,
+) -> str:
+    updated_config_text, replacements = re.subn(
+        rf"^{re.escape(key)}\s*=\s*(?:\[(?:.|\n)*?\]|[^\n]*)",
+        assignment,
+        config_text,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    if replacements:
+        return updated_config_text
+
+    separator = "" if config_text.endswith("\n") else "\n"
+    return f"{config_text}{separator}{assignment}\n"
+
+
+def format_config_string_list(values: list[str]) -> str:
+    rendered_values = ", ".join(json.dumps(value) for value in values)
+    return f"[{rendered_values}]"
+
+
+def sync_entra_proxy_funnel_settings(funnel_url: str) -> None:
+    parsed_funnel_url = urlparse(funnel_url)
+    funnel_host = parsed_funnel_url.hostname
+    if not funnel_host:
+        print(
+            f"Warning: could not determine funnel host from {funnel_url}",
+            file=sys.stderr,
+        )
+        return
+
+    config_text = ENTRA_CONFIG_PATH.read_text(encoding="utf-8")
+    callback_url = f"{funnel_url.rstrip('/')}/oauth2/callback"
+    whitelist_domains = [
+        funnel_host,
+        ".localhost:4181",
+        ".localhost:3002",
+        ".localhost:3130",
+    ]
+    replacements = {
+        "redirect_url": f'redirect_url = "{callback_url}"',
+        "cookie_secure": "cookie_secure = true",
+        "cookie_samesite": 'cookie_samesite = "none"',
+        "cookie_domains": (
+            f"cookie_domains = {format_config_string_list([funnel_host])}"
+        ),
+        "whitelist_domains": (
+            f"whitelist_domains = {format_config_string_list(whitelist_domains)}"
+        ),
+    }
+
+    updated_config_text = config_text
+    for key, assignment in replacements.items():
+        updated_config_text = replace_or_append_config_assignment(
+            updated_config_text,
+            key,
+            assignment,
+        )
+
+    if updated_config_text == config_text:
+        return
+
+    ENTRA_CONFIG_PATH.write_text(updated_config_text, encoding="utf-8")
+    print("Updated oauth2-proxy settings for Tailscale funnel cookies")
 
 
 def start_auth_proxy() -> None:
@@ -811,8 +881,11 @@ def main() -> int:
         require_command(command)
 
     ensure_entra_proxy_config()
-    start_auth_proxy()
     ensure_funnel()
+    funnel_url = extract_funnel_url(load_funnel_status())
+    if funnel_url:
+        sync_entra_proxy_funnel_settings(funnel_url)
+    start_auth_proxy()
     print_funnel_url()
 
     frontend_watch: subprocess.Popen[str] | None = None

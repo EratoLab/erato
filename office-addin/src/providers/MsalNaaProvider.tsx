@@ -1,4 +1,5 @@
 import {
+  type AuthenticationResult,
   InteractionRequiredAuthError,
   createNestablePublicClientApplication,
   type AccountInfo,
@@ -11,22 +12,50 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
 
 import { useOffice } from "./OfficeProvider";
+import {
+  OAUTH2_PROXY_SESSION_REFRESH_AFTER_MS,
+  Oauth2ProxySessionRedeemError,
+  readStoredOauth2ProxySessionRedeemedAt,
+  redeemOauth2ProxySession,
+  shouldRefreshOauth2ProxySession,
+} from "../auth/oauth2ProxySession";
+
+const OAUTH2_PROXY_SESSION_SCOPES = ["User.Read"];
+
+type Oauth2ProxySessionStatus =
+  | "idle"
+  | "establishing"
+  | "ready"
+  | "refreshing"
+  | "error";
+
+interface Oauth2ProxySessionState {
+  status: Oauth2ProxySessionStatus;
+  lastRedeemedAt: number | null;
+  error: string | null;
+}
 
 interface MsalNaaContextValue {
   isInitialized: boolean;
   isAuthenticated: boolean;
+  isOauth2ProxySessionReady: boolean;
+  oauth2ProxySessionStatus: Oauth2ProxySessionStatus;
   account: AccountInfo | null;
   acquireToken: (scopes: string[]) => Promise<string>;
+  retryAuthentication: () => Promise<void>;
   error: string | null;
 }
 
 const MsalNaaContext = createContext<MsalNaaContextValue>({
   isInitialized: false,
   isAuthenticated: false,
+  isOauth2ProxySessionReady: false,
+  oauth2ProxySessionStatus: "idle",
   account: null,
   acquireToken: () =>
     Promise.reject(
@@ -37,11 +66,84 @@ const MsalNaaContext = createContext<MsalNaaContextValue>({
         }),
       ),
     ),
+  retryAuthentication: () => Promise.resolve(),
   error: null,
 });
 
 export function useMsalNaa() {
   return useContext(MsalNaaContext);
+}
+
+function createInitialOauth2ProxySessionState(): Oauth2ProxySessionState {
+  const lastRedeemedAt = readStoredOauth2ProxySessionRedeemedAt();
+  return {
+    status: lastRedeemedAt === null ? "idle" : "ready",
+    lastRedeemedAt,
+    error: null,
+  };
+}
+
+function applyAuthenticationResult(
+  instance: IPublicClientApplication,
+  result: AuthenticationResult,
+  setAccount: React.Dispatch<React.SetStateAction<AccountInfo | null>>,
+) {
+  if (result.account) {
+    instance.setActiveAccount(result.account);
+  }
+  setAccount(result.account);
+  setIdToken(result.idToken);
+}
+
+async function acquireMsalResult(
+  instance: IPublicClientApplication,
+  scopes: string[],
+  loginHint: string | undefined,
+  allowPopup: boolean,
+): Promise<AuthenticationResult> {
+  try {
+    return await instance.acquireTokenSilent({
+      scopes,
+      ...(loginHint ? { loginHint } : {}),
+    });
+  } catch (silentError) {
+    if (silentError instanceof InteractionRequiredAuthError && allowPopup) {
+      const result = await instance.acquireTokenPopup({
+        scopes,
+        prompt: "select_account",
+      });
+      if (result.account) {
+        instance.setActiveAccount(result.account);
+      }
+      return result;
+    }
+
+    throw silentError;
+  }
+}
+
+function formatAuthenticationError(error: unknown): string {
+  if (error instanceof Oauth2ProxySessionRedeemError) {
+    return t({
+      id: "officeAddin.auth.oauth2ProxySessionFailed",
+      message:
+        "Could not establish a secure Erato session. Try signing in again.",
+    });
+  }
+
+  if (error instanceof InteractionRequiredAuthError) {
+    return t({
+      id: "officeAddin.auth.signInRequired",
+      message: "Sign-in required",
+    });
+  }
+
+  return error instanceof Error
+    ? error.message
+    : t({
+        id: "officeAddin.auth.authenticationFailed",
+        message: "Authentication failed",
+      });
 }
 
 export function MsalNaaProvider({ children }: { children: React.ReactNode }) {
@@ -51,8 +153,66 @@ export function MsalNaaProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [loginHint, setLoginHint] = useState<string | undefined>();
+  const [oauth2ProxySession, setOauth2ProxySession] =
+    useState<Oauth2ProxySessionState>(createInitialOauth2ProxySessionState);
+  const lastRedeemedAtRef = useRef(oauth2ProxySession.lastRedeemedAt);
+  const redeemInFlightRef = useRef<Promise<number> | null>(null);
 
   useEffect(() => {
+    lastRedeemedAtRef.current = oauth2ProxySession.lastRedeemedAt;
+  }, [oauth2ProxySession.lastRedeemedAt]);
+
+  const redeemSessionForResult = useCallback(
+    async (
+      result: AuthenticationResult,
+      status: Extract<Oauth2ProxySessionStatus, "establishing" | "refreshing">,
+    ): Promise<number> => {
+      if (redeemInFlightRef.current) {
+        return redeemInFlightRef.current;
+      }
+
+      const redeemPromise = (async () => {
+        setOauth2ProxySession((previous) => ({
+          status,
+          lastRedeemedAt: previous.lastRedeemedAt,
+          error: null,
+        }));
+
+        try {
+          const { redeemedAt } = await redeemOauth2ProxySession({
+            idToken: result.idToken,
+            accessToken: result.accessToken,
+          });
+          lastRedeemedAtRef.current = redeemedAt;
+          setOauth2ProxySession({
+            status: "ready",
+            lastRedeemedAt: redeemedAt,
+            error: null,
+          });
+          setError(null);
+          return redeemedAt;
+        } catch (redeemError) {
+          const message = formatAuthenticationError(redeemError);
+          setOauth2ProxySession((previous) => ({
+            status: "error",
+            lastRedeemedAt: previous.lastRedeemedAt,
+            error: message,
+          }));
+          setError(message);
+          throw redeemError;
+        } finally {
+          redeemInFlightRef.current = null;
+        }
+      })();
+
+      redeemInFlightRef.current = redeemPromise;
+      return redeemPromise;
+    },
+    [],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
     const clientId = import.meta.env.VITE_MSAL_CLIENT_ID ?? env().msalClientId;
     if (!clientId) {
       setError(
@@ -64,6 +224,9 @@ export function MsalNaaProvider({ children }: { children: React.ReactNode }) {
       setIsInitialized(true);
       return;
     }
+
+    setIsInitialized(false);
+    setError(null);
 
     let naaSupported = false;
     try {
@@ -122,39 +285,162 @@ export function MsalNaaProvider({ children }: { children: React.ReactNode }) {
 
     createNestablePublicClientApplication(msalConfig)
       .then(async (instance) => {
+        if (cancelled) {
+          return;
+        }
         setPca(instance);
 
         const hint = await resolveLoginHint();
+        if (cancelled) {
+          return;
+        }
         setLoginHint(hint);
 
         try {
-          const result = await instance.acquireTokenSilent({
-            scopes: ["User.Read"],
-            ...(hint ? { loginHint: hint } : {}),
-          });
-          setAccount(result.account);
-          setIdToken(result.idToken);
-        } catch (silentError) {
-          if (!(silentError instanceof InteractionRequiredAuthError)) {
-            console.warn("MSAL silent auth error", silentError);
+          const result = await acquireMsalResult(
+            instance,
+            OAUTH2_PROXY_SESSION_SCOPES,
+            hint,
+            false,
+          );
+          if (cancelled) {
+            return;
+          }
+          applyAuthenticationResult(instance, result, setAccount);
+          await redeemSessionForResult(result, "establishing");
+        } catch (authenticationError) {
+          if (cancelled) {
+            return;
+          }
+          if (authenticationError instanceof InteractionRequiredAuthError) {
+            setError(null);
+          } else if (
+            authenticationError instanceof Oauth2ProxySessionRedeemError
+          ) {
+            // The redeem helper already set the user-facing error state.
+          } else {
+            console.warn("MSAL silent auth error", authenticationError);
+            setError(formatAuthenticationError(authenticationError));
           }
         } finally {
-          setIsInitialized(true);
+          if (!cancelled) {
+            setIsInitialized(true);
+          }
         }
       })
       .catch((initializationError) => {
+        if (cancelled) {
+          return;
+        }
         console.error("MSAL initialization failed", initializationError);
-        setError(
-          initializationError instanceof Error
-            ? initializationError.message
-            : t({
-                id: "officeAddin.auth.msalInitializationFailed",
-                message: "Failed to initialize MSAL",
-              }),
-        );
+        setError(formatAuthenticationError(initializationError));
         setIsInitialized(true);
       });
-  }, [mailboxUser]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mailboxUser, redeemSessionForResult]);
+
+  const refreshOauth2ProxySession = useCallback(
+    async (allowPopup: boolean): Promise<void> => {
+      try {
+        if (!pca) {
+          throw new Error(
+            t({
+              id: "officeAddin.auth.msalNotInitialized",
+              message: "MSAL not initialized",
+            }),
+          );
+        }
+
+        const result = await acquireMsalResult(
+          pca,
+          OAUTH2_PROXY_SESSION_SCOPES,
+          loginHint,
+          allowPopup,
+        );
+        applyAuthenticationResult(pca, result, setAccount);
+        await redeemSessionForResult(result, "refreshing");
+      } catch (refreshError) {
+        const message = formatAuthenticationError(refreshError);
+        setOauth2ProxySession((previous) => ({
+          status: "error",
+          lastRedeemedAt: previous.lastRedeemedAt,
+          error: message,
+        }));
+        setError(message);
+        throw refreshError;
+      }
+    },
+    [loginHint, pca, redeemSessionForResult],
+  );
+
+  useEffect(() => {
+    if (
+      !pca ||
+      !account ||
+      oauth2ProxySession.lastRedeemedAt === null ||
+      oauth2ProxySession.status === "error"
+    ) {
+      return;
+    }
+
+    const sessionAgeMs = Date.now() - oauth2ProxySession.lastRedeemedAt;
+    const refreshDelayMs = Math.max(
+      1_000,
+      OAUTH2_PROXY_SESSION_REFRESH_AFTER_MS - sessionAgeMs,
+    );
+    const timeoutId = window.setTimeout(() => {
+      void refreshOauth2ProxySession(false).catch((refreshError) => {
+        console.warn("OAuth2 proxy session refresh failed", refreshError);
+      });
+    }, refreshDelayMs);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [
+    account,
+    oauth2ProxySession.lastRedeemedAt,
+    oauth2ProxySession.status,
+    pca,
+    refreshOauth2ProxySession,
+  ]);
+
+  useEffect(() => {
+    function refreshIfStale() {
+      if (
+        !pca ||
+        !account ||
+        oauth2ProxySession.status === "error" ||
+        !shouldRefreshOauth2ProxySession(lastRedeemedAtRef.current)
+      ) {
+        return;
+      }
+
+      void refreshOauth2ProxySession(false).catch((refreshError) => {
+        console.warn(
+          "OAuth2 proxy session refresh after resume failed",
+          refreshError,
+        );
+      });
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        refreshIfStale();
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", refreshIfStale);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", refreshIfStale);
+    };
+  }, [account, oauth2ProxySession.status, pca, refreshOauth2ProxySession]);
 
   const acquireToken = useCallback(
     async (scopes: string[]): Promise<string> => {
@@ -168,41 +454,51 @@ export function MsalNaaProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const result = await pca.acquireTokenSilent({
-          scopes,
-          ...(loginHint ? { loginHint } : {}),
-        });
-        setAccount(result.account);
-        setIdToken(result.idToken);
-        return result.accessToken;
-      } catch (silentError) {
-        if (silentError instanceof InteractionRequiredAuthError) {
-          const result = await pca.acquireTokenPopup({
-            scopes,
-            prompt: "select_account",
-          });
-          if (result.account) {
-            pca.setActiveAccount(result.account);
-          }
-          setAccount(result.account);
-          setIdToken(result.idToken);
-          return result.accessToken;
+        const result = await acquireMsalResult(pca, scopes, loginHint, true);
+        applyAuthenticationResult(pca, result, setAccount);
+        if (shouldRefreshOauth2ProxySession(lastRedeemedAtRef.current)) {
+          await redeemSessionForResult(result, "refreshing");
         }
-
-        throw silentError;
+        return result.accessToken;
+      } catch (authenticationError) {
+        setError(formatAuthenticationError(authenticationError));
+        throw authenticationError;
       }
     },
-    [loginHint, pca],
+    [loginHint, pca, redeemSessionForResult],
   );
+
+  const retryAuthentication = useCallback(async (): Promise<void> => {
+    setIsInitialized(false);
+    setError(null);
+
+    try {
+      await refreshOauth2ProxySession(true);
+    } catch (authenticationError) {
+      setError(formatAuthenticationError(authenticationError));
+    } finally {
+      setIsInitialized(true);
+    }
+  }, [refreshOauth2ProxySession]);
+
+  const isOauth2ProxySessionReady =
+    oauth2ProxySession.lastRedeemedAt !== null &&
+    oauth2ProxySession.status !== "error";
+  const authError = error ?? oauth2ProxySession.error;
+  const isAuthenticated =
+    account !== null && isOauth2ProxySessionReady && authError === null;
 
   return (
     <MsalNaaContext.Provider
       value={{
         isInitialized,
-        isAuthenticated: account !== null,
+        isAuthenticated,
+        isOauth2ProxySessionReady,
+        oauth2ProxySessionStatus: oauth2ProxySession.status,
         account,
         acquireToken,
-        error,
+        retryAuthentication,
+        error: authError,
       }}
     >
       {children}

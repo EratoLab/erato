@@ -60,6 +60,23 @@ body {
   color: #b91c1c;
 }
 
+.office-status-action {
+  margin-top: 12px;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.office-status-action:hover {
+  background: #f8fafc;
+}
+
 .office-setup-page {
   display: flex;
   flex: 1 1 auto;
