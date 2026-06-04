@@ -44,9 +44,9 @@ oauth2Proxy:
   enabled: true
   image:
     # -- OAuth2 Proxy image repository
-    repository: quay.io/oauth2-proxy/oauth2-proxy
+    repository: harbor.imassage.me/erato/oauth2-proxy
     # -- OAuth2 Proxy image tag
-    tag: v7.14.2
+    tag: v7.15.2-erato.3
     # -- OAuth2 Proxy image pull policy
     pullPolicy: IfNotPresent
     # -- OAuth2 Proxy image pull secrets
