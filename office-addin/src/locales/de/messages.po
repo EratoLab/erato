@@ -74,7 +74,7 @@ msgstr "Neuer Chat"
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.dismissDraftContext"
-msgstr ""
+msgstr "Entwurf nicht einbeziehen"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
@@ -84,7 +84,7 @@ msgstr "Auswahl verwerfen"
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.draftContext"
-msgstr ""
+msgstr "Dein Entwurf wird als Kontext einbezogen"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
@@ -374,12 +374,12 @@ msgstr "Folgt deinem Outlook-Design."
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.audio.description"
-msgstr ""
+msgstr "Wähle das Mikrofon aus, das für die Spracheingabe in diesem Add-in verwendet wird, und teste es."
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.audio.heading"
-msgstr ""
+msgstr "Mikrofon"
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
@@ -399,7 +399,7 @@ msgstr "Darstellung"
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.tabs.audio"
-msgstr ""
+msgstr "Mikrofon"
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
