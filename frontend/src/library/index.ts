@@ -154,6 +154,7 @@ export {
   profileQuery,
   recentChatsQuery,
   useArchiveChatEndpoint,
+  useFacets,
   useRecentChats,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 export {
@@ -195,9 +196,11 @@ export type {
 } from "@/types/message-controls";
 export type { ChatInputControlsHandle } from "@/components/ui/Chat/ChatInputControlsContext";
 export type {
+  ActionFacetInfo,
   ActionFacetRequest,
   ChatModel,
   ContentPart,
+  FacetsResponse,
   FileUploadItem,
   UpdateProfilePreferencesRequest,
   UserProfile,

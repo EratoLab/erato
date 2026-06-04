@@ -571,4 +571,127 @@ describe("MessageContent", () => {
       container.querySelector("pre.message-content-code-block code"),
     ).toHaveTextContent(/#import/);
   });
+
+  it("treats a drifted email fence as the artifact when an Outlook facet produced the message", () => {
+    const { container } = renderWithTheme(
+      <MessageContent
+        content={textContent("```email\nHere is the rewritten passage.\n```")}
+        outlookArtifact={{
+          facetId: "outlook_rewrite_selection",
+          bodyFormat: "text",
+          renderMode: "body",
+        }}
+      />,
+    );
+
+    // Rendered as the insert/replace artifact, not a syntax-highlighted block.
+    expect(
+      container.querySelector("pre.message-content-code-block code"),
+    ).toBeNull();
+    expect(
+      screen.getByText(/Here is the rewritten passage/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Copy/ })).toBeInTheDocument();
+  });
+
+  it("does NOT treat an email-ish fence as the artifact without facet context", () => {
+    const { container } = renderWithTheme(
+      <MessageContent
+        content={textContent("```email\nnot an outlook artifact\n```")}
+      />,
+    );
+
+    // No facet → stays an ordinary code block, no insert/replace UI.
+    expect(
+      container.querySelector("pre.message-content-code-block"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Copy/ })).toBeNull();
+  });
+
+  it("renders a drifted email fence as HTML when the facet body_format is html", () => {
+    const { container } = renderWithTheme(
+      <MessageContent
+        content={textContent("```email\n<b>Bold reply</b>\n```")}
+        outlookArtifact={{
+          facetId: "outlook_rewrite_selection",
+          bodyFormat: "html",
+          renderMode: "body",
+        }}
+      />,
+    );
+
+    // body_format drives HTML rendering even though the tag isn't `-html`.
+    expect(container.querySelector("b")).toHaveTextContent("Bold reply");
+  });
+
+  it("falls back to the whole body as the artifact for an unfenced rewrite_selection response", () => {
+    renderWithTheme(
+      <MessageContent
+        content={textContent(
+          "Hallo Frau Berger,\n\nvielen Dank fuer Ihre Nachricht.",
+        )}
+        outlookArtifact={{
+          facetId: "outlook_rewrite_selection",
+          bodyFormat: "text",
+          renderMode: "body",
+        }}
+      />,
+    );
+
+    // The unfenced email still gets the insert/replace UI.
+    expect(screen.getByRole("button", { name: /Copy/ })).toBeInTheDocument();
+    expect(screen.getByText(/vielen Dank/)).toBeInTheDocument();
+  });
+
+  it("does NOT whole-body-fallback for review_draft (feedback stays markdown)", () => {
+    renderWithTheme(
+      <MessageContent
+        content={textContent(
+          "Your draft looks good. Consider a shorter intro.",
+        )}
+        outlookArtifact={{
+          facetId: "outlook_review_draft",
+          bodyFormat: "text",
+          renderMode: "suggestions",
+        }}
+      />,
+    );
+
+    // review_draft is feedback, not a single drop-in body — no artifact UI.
+    expect(screen.queryByRole("button", { name: /Copy/ })).toBeNull();
+    expect(screen.getByText(/Consider a shorter intro/).tagName).toBe("P");
+  });
+
+  it("does NOT whole-body-fallback while the message is still streaming", () => {
+    renderWithTheme(
+      <MessageContent
+        isStreaming
+        content={textContent("Hallo Frau Berger, vielen Dank")}
+        outlookArtifact={{
+          facetId: "outlook_rewrite_selection",
+          bodyFormat: "text",
+          renderMode: "body",
+        }}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /Copy/ })).toBeNull();
+  });
+
+  it("renders the artifact for an unknown facet id as long as renderMode is body (id-agnostic)", () => {
+    renderWithTheme(
+      <MessageContent
+        content={textContent("Hallo, hier ist die kurze Email.")}
+        outlookArtifact={{
+          facetId: "compose_email",
+          bodyFormat: "text",
+          renderMode: "body",
+        }}
+      />,
+    );
+
+    // A facet added only in config (no frontend id allowlist) still renders.
+    expect(screen.getByRole("button", { name: /Copy/ })).toBeInTheDocument();
+    expect(screen.getByText(/kurze Email/)).toBeInTheDocument();
+  });
 });

@@ -202,6 +202,7 @@ export const ChatMessage = memo(function ChatMessage({
             createdAt={message.createdAt}
             updatedAt={message.updatedAt}
             hasError={!!message.error}
+            outlookArtifact={message.outlookArtifact}
           />
 
           {/* Display attached files if any */}
