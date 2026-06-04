@@ -697,6 +697,8 @@ where
     let mut config = StreamableHttpServerConfig::default();
     config.stateful_mode = true;
     config.sse_keep_alive = None;
+    config.allowed_hosts.clear();
+    config.allowed_origins.clear();
 
     StreamableHttpService::new(factory, Default::default(), config)
 }
