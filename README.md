@@ -1,4 +1,13 @@
-# Erato - Open Source Chat UI for LLM's
+# Erato
+
+<p align="center">
+    <img src="assets/erato_github_readme_header.png" alt="Erato - AI that fits in" height="150px">
+</p>
+
+- **[Homepage](https://eratolabs.com)**
+- **[Documentation](https://erato.chat/docs)**
+- **[Helm chart](https://artifacthub.io/packages/helm/erato/erato)**
+
 
 - 🌟 Open Source
 - 🚀 Built for self-hosted deployments (Helm charts included)
@@ -9,22 +18,9 @@
 
 ## Development Setup
 
-### Requirements Repository
-This project uses a private requirements repository as a Git submodule. To properly clone and set up the project:
-
 ```bash
-# Clone the repository with submodules
-git clone --recursive git@github.com:EratoLab/erato.git
-
-# If you've already cloned the repository without --recursive, run:
-git submodule update --init --recursive
-```
-
-The requirements repository is stored in `.requirements/` and is automatically ignored in both Git and Docker contexts.
-
-To update the requirements to their latest version:
-```bash
-git submodule update --remote .requirements
+# Clone the repository
+git clone git@github.com:EratoLab/erato.git
 ```
 
 ## License
