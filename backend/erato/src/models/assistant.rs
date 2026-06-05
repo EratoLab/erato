@@ -218,7 +218,7 @@ pub async fn get_user_assistants(
     };
 
     // Sort by updated_at desc
-    all_assistants.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    all_assistants.sort_by_key(|assistant| std::cmp::Reverse(assistant.updated_at));
 
     Ok(all_assistants)
 }
