@@ -192,6 +192,7 @@ ingress:
 | backend.image.pullSecrets | list | `[]` | Backend image pull secrets |
 | backend.image.repository | string | `"harbor.imassage.me/erato/app"` | Backend image repository |
 | backend.image.tag | string | `""` | Backend image tag (immutable tags are recommended) |
+| backend.logJson | bool | `true` | Emit backend logs as JSON by setting LOGGING__FORMAT=json |
 | backend.metrics.configFile.enabled | bool | `true` | Render and mount an additional `*.auto.erato.toml` config file that enables `integrations.prometheus`. |
 | backend.metrics.enabled | bool | `false` | Enable backend Prometheus metrics integration and related chart resources. |
 | backend.metrics.host | string | `"0.0.0.0"` | Host to bind the backend metrics listener to. |
@@ -217,6 +218,7 @@ ingress:
 | backend.resources.limits.memory | string | `"512Mi"` | The memory limit for backend |
 | backend.resources.requests.cpu | string | `"100m"` | The requested CPU for backend |
 | backend.resources.requests.memory | string | `"128Mi"` | The requested memory for backend |
+| backend.rustLog | string | `"warn"` | Backend RUST_LOG filter. Set to an empty string to omit the RUST_LOG env var. |
 | backend.service.port | int | `8080` | Backend service HTTP port |
 | backend.service.type | string | `"ClusterIP"` | Backend service type |
 | commonAnnotations | object | `{}` | Annotations to add to all deployed objects |

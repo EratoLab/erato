@@ -94,6 +94,47 @@ tests:
             name: CUSTOM_VAR
             value: test-value
 
+  - it: should set default logging environment variables
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RUST_LOG
+            value: warn
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: LOGGING__FORMAT
+            value: json
+
+  - it: should set custom RUST_LOG when backend.rustLog is configured
+    set:
+      backend.rustLog: info,erato=debug
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RUST_LOG
+            value: info,erato=debug
+
+  - it: should omit RUST_LOG when backend.rustLog is empty
+    set:
+      backend.rustLog: ""
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RUST_LOG
+
+  - it: should omit JSON logging format when backend.logJson is false
+    set:
+      backend.logJson: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: LOGGING__FORMAT
+
   - it: should add envFrom when extraEnvVarsCM is set
     set:
       backend.extraEnvVarsCM: erato-config-cm
