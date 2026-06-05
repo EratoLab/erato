@@ -88,7 +88,7 @@ pub async fn verify_latest_migration(conn: &DatabaseConnection) -> Result<bool> 
         vec![latest_change.into()],
     );
 
-    let row = conn.query_one(stmt).await?;
+    let row = conn.query_one_raw(stmt).await?;
     let exists = row
         .and_then(|r| r.try_get::<bool>("", "exists").ok())
         .unwrap_or(false);

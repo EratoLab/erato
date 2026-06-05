@@ -14,11 +14,11 @@ pub struct Model {
     #[sea_orm(column_type = "Text", nullable)]
     pub title_by_summary: Option<String>,
     pub archived_at: Option<DateTimeWithTimeZone>,
-    #[sea_orm(column_type = "Text", nullable)]
-    pub title_by_user_provided: Option<String>,
     #[sea_orm(column_type = "JsonBinary", nullable)]
     pub assistant_configuration: Option<Json>,
     pub assistant_id: Option<Uuid>,
+    #[sea_orm(column_type = "Text", nullable)]
+    pub title_by_user_provided: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

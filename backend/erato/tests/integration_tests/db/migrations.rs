@@ -4,6 +4,7 @@ use futures::future::BoxFuture;
 use serde::Deserialize;
 use serde::de::StdError;
 use sqlx::migrate::{Migration, MigrationSource, MigrationType};
+use sqlx::{AssertSqlSafe, SqlSafeStr};
 use std::borrow::Cow;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -88,7 +89,7 @@ impl<'a> MigrationSource<'a> for SqitchMigrationSource {
                 idx as i64,
                 Cow::Owned(description),
                 MigrationType::Simple,
-                Cow::Owned(sql),
+                AssertSqlSafe(sql).into_sql_str(),
                 false, // no_tx
             ));
         }

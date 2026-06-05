@@ -8,16 +8,17 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
     #[sea_orm(column_type = "Text")]
-    pub owner_user_id: String,
-    #[sea_orm(column_type = "Text")]
     pub filename: String,
     #[sea_orm(column_type = "Text")]
     pub file_storage_provider_id: String,
     #[sea_orm(column_type = "Text")]
     pub file_storage_path: String,
-    pub audio_transcription: Option<String>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
+    #[sea_orm(column_type = "Text")]
+    pub owner_user_id: String,
+    #[sea_orm(column_type = "Text", nullable)]
+    pub audio_transcription: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
