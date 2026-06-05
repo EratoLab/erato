@@ -30,6 +30,12 @@ async fn health() -> &'static str {
 }
 
 const OFFICE_ADDIN_MANIFEST_DEFAULT_BASE_URL: &str = "https://localhost:3002";
+const OFFICE_ADDIN_MANIFEST_DEFAULT_FRONTEND_BASE_URL: &str =
+    "https://localhost:3002/public/platform-office-addin";
+const OFFICE_ADDIN_MANIFEST_DEFAULT_ASSET_BASE_URL: &str =
+    "https://localhost:3002/public/platform-office-addin/assets";
+const OFFICE_ADDIN_MANIFEST_FRONTEND_MOUNT_PATH: &str = "/office-addin";
+const OFFICE_ADDIN_MANIFEST_ASSET_MOUNT_PATH: &str = "/public/platform-office-addin/assets";
 const OFFICE_ADDIN_MANIFEST_VERSION_PLACEHOLDER: &str = "{{OFFICE_ADDIN_MANIFEST_VERSION}}";
 const OFFICE_ADDIN_ID_PLACEHOLDER: &str = "{{OFFICE_ADDIN_ID}}";
 
@@ -114,15 +120,14 @@ fn render_office_addin_manifest(
     addin_id: &str,
     deployment_version: Option<&str>,
 ) -> String {
-    let office_addin_base_url = format!(
-        "{}/public/platform-office-addin",
-        base_url.trim_end_matches('/')
-    );
-    let office_addin_asset_base_url = format!("{office_addin_base_url}/assets");
+    let normalized_base_url = base_url.trim_end_matches('/');
+    let office_addin_base_url =
+        format!("{normalized_base_url}{OFFICE_ADDIN_MANIFEST_FRONTEND_MOUNT_PATH}");
+    let office_addin_asset_base_url =
+        format!("{normalized_base_url}{OFFICE_ADDIN_MANIFEST_ASSET_MOUNT_PATH}");
     let manifest_version = office_addin_manifest_version(deployment_version);
 
     template
-        .replace(OFFICE_ADDIN_MANIFEST_DEFAULT_BASE_URL, base_url)
         .replace("{{BASE_URL}}", base_url)
         .replace("{{OFFICE_ADDIN_BASE_URL}}", &office_addin_base_url)
         .replace(OFFICE_ADDIN_ID_PLACEHOLDER, addin_id)
@@ -131,6 +136,15 @@ fn render_office_addin_manifest(
             "{{OFFICE_ADDIN_ASSET_BASE_URL}}",
             &office_addin_asset_base_url,
         )
+        .replace(
+            OFFICE_ADDIN_MANIFEST_DEFAULT_ASSET_BASE_URL,
+            &office_addin_asset_base_url,
+        )
+        .replace(
+            OFFICE_ADDIN_MANIFEST_DEFAULT_FRONTEND_BASE_URL,
+            &office_addin_base_url,
+        )
+        .replace(OFFICE_ADDIN_MANIFEST_DEFAULT_BASE_URL, base_url)
 }
 
 /// Get the Office add-in manifest with runtime URL substitutions.
@@ -341,6 +355,7 @@ mod tests {
           <Version>{{OFFICE_ADDIN_MANIFEST_VERSION}}</Version>
           <IconUrl DefaultValue="https://localhost:3002/public/platform-office-addin/assets/color-icon-192x192.png" />
           <SourceLocation DefaultValue="https://localhost:3002/public/platform-office-addin/" />
+          <bt:Url id="taskPaneUrl" DefaultValue="https://localhost:3002/public/platform-office-addin/" />
         </OfficeApp>
         "#;
 
@@ -361,7 +376,15 @@ mod tests {
                 "https://app.example.com/base/public/platform-office-addin/assets/color-icon-192x192.png"
             )
         );
-        assert!(rendered.contains("https://app.example.com/base/public/platform-office-addin/"));
+        assert!(rendered.contains(
+            r#"<SourceLocation DefaultValue="https://app.example.com/base/office-addin/" />"#
+        ));
+        assert!(rendered.contains(
+            r#"<bt:Url id="taskPaneUrl" DefaultValue="https://app.example.com/base/office-addin/" />"#
+        ));
+        assert!(!rendered.contains(
+            r#"<bt:Url id="taskPaneUrl" DefaultValue="https://app.example.com/base/public/platform-office-addin/" />"#
+        ));
         assert!(rendered.contains(&format!("<Version>{expected_version}</Version>")));
         assert!(!rendered.contains(OFFICE_ADDIN_MANIFEST_DEFAULT_BASE_URL));
     }
