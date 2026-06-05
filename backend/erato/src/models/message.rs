@@ -686,7 +686,6 @@ pub async fn update_message_content(
     };
 
     messages::Entity::update(active_model)
-        .filter(messages::Column::Id.eq(*message_id))
         .exec(conn)
         .await
         .map_err(|e| eyre!("Failed to update message content: {}", e))?;
@@ -731,7 +730,6 @@ pub async fn update_message_generation_metadata(
     };
 
     messages::Entity::update(active_model)
-        .filter(messages::Column::Id.eq(*message_id))
         .exec(conn)
         .await
         .map_err(|e| eyre!("Failed to update message generation metadata: {}", e))?;

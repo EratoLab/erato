@@ -22,8 +22,8 @@ axum = { version = "0.8.4", features = ["macros", "ws"] }
 axum-extra = { version = "0.10.1", features = ["typed-header", "multipart"] }
 headers = "0.4.0"
 tower-http = { version = "0.6.2",  features = ["fs", "cors", "limit", "trace"] }
-sea-orm = { version = "1.1.10",  features = ["runtime-tokio", "sqlx-postgres", "runtime-tokio-native-tls"]}
-sqlx = { version = "0.8.5", features=["postgres", "runtime-tokio", "runtime-tokio-native-tls"] }
+sea-orm = { version = "2.0.0-rc.40",  features = ["runtime-tokio", "sqlx-postgres", "runtime-tokio-native-tls"]}
+sqlx = { version = "0.9.0", features=["postgres", "runtime-tokio", "tls-native-tls"] }
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.138"
 secrecy = "0.10.3"

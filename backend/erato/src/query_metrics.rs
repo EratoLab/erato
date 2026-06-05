@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::{OnceLock, RwLock};
 
 use metrics::histogram;
-use sea_orm::{DatabaseConnection, DatabaseConnection::SqlxPostgresPoolConnection, Value, metric};
+use sea_orm::{DatabaseConnection, DatabaseConnectionType, Value, metric};
 use sha2::{Digest, Sha256};
 
 use crate::metrics::duration_seconds_with_millisecond_precision;
@@ -28,7 +28,10 @@ pub fn init_known_postgres_query_metrics() {
 }
 
 pub fn install_postgres_query_metrics(db: &mut DatabaseConnection) {
-    if !matches!(db, SqlxPostgresPoolConnection(_)) {
+    if !matches!(
+        &db.inner,
+        DatabaseConnectionType::SqlxPostgresPoolConnection(_)
+    ) {
         return;
     }
 
