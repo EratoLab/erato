@@ -2354,6 +2354,7 @@ dependencies = [
  "percent-encoding",
  "ractor",
  "ractor_actors",
+ "regex",
  "regorus",
  "reqwest 0.13.2",
  "reqwest-middleware",

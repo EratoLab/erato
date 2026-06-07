@@ -48,6 +48,9 @@ use crate::services::prompt_composition::{
 use crate::services::prompt_composition::{
     build_mcp_tool_allowlist, build_model_settings_for_facets,
 };
+use crate::services::prompt_guardrails::{
+    prompt_injection_filter_details, scan_chat_request_for_prompt_injection,
+};
 use crate::services::sentry::capture_report;
 use crate::services::template_rendering::contexts::chat_provider_headers::ChatProviderHeadersContext;
 use crate::state::{AppState, ChatProviderConfigWithId};
@@ -80,6 +83,8 @@ use utoipa::ToSchema;
 
 const HALLUCINATION_LOOP_ERROR_DESCRIPTION: &str =
     "Generation aborted. Hallucination loop detected. Please regenerate the message.";
+const PROMPT_INJECTION_FILTER_ERROR_DESCRIPTION: &str =
+    "The request was filtered because it matched a configured prompt injection guardrail.";
 
 fn is_openai_responses_provider_kind(provider_kind: &str) -> bool {
     matches!(provider_kind, "openai_responses" | "azure_openai_responses")
@@ -2472,6 +2477,63 @@ async fn stream_generate_chat_completion<
                 ),
                 options: None,
             });
+        }
+
+        let provider_guardrails = app_state.config.chat_provider_guardrails(chat_provider_id);
+        match scan_chat_request_for_prompt_injection(
+            &current_turn_chat_request,
+            &app_state.config.guardrails,
+            &provider_guardrails,
+        ) {
+            Ok(Some(offense)) => {
+                let error_event = MessageSubmitStreamingResponseError {
+                    message_id: Some(assistant_message_id),
+                    error: GenerationErrorType::ContentFilter {
+                        error_description: PROMPT_INJECTION_FILTER_ERROR_DESCRIPTION.to_string(),
+                        filter_details: Some(prompt_injection_filter_details(offense)),
+                    },
+                };
+                report_chat_provider_generation_error(
+                    chat_provider_metric_label,
+                    &error_event.error,
+                );
+                let error_payload = Some(error_event.error.clone());
+
+                if let Some(task) = streaming_task
+                    && let Ok(error_json) = serde_json::to_value(
+                        MessageSubmitStreamingResponseMessage::Error(error_event.clone()),
+                    )
+                {
+                    let _ = task
+                        .send_event(StreamingEvent::Error {
+                            error: Some(error_json),
+                        })
+                        .await;
+                }
+
+                let message: MSG = error_event.into();
+                message.send_event(tx.clone()).await?;
+                let generation_metadata = build_generation_metadata(
+                    total_prompt_tokens,
+                    total_completion_tokens,
+                    total_total_tokens,
+                    total_reasoning_tokens,
+                    langfuse_trace_id.clone(),
+                    false,
+                    error_payload,
+                    non_empty_string(&captured_reasoning_summary),
+                    non_empty_vec(&captured_reasoning_items),
+                    non_empty_vec(&captured_reasoning_item_encrypted_content),
+                );
+                break 'loop_call_turns Ok((current_message_content, generation_metadata));
+            }
+            Ok(None) => {}
+            Err(err) => {
+                let _ = tx
+                    .send(Err(err).wrap_err("Failed to run prompt injection guardrail"))
+                    .await;
+                return Err(());
+            }
         }
 
         let chat_stream = match app_state

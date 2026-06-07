@@ -1,6 +1,12 @@
 # Many models test scenario - provides a large model list for selector testing
 # This scenario is used to test model selector behavior with many models
 
+[guardrails.prompt_patterns.ignore_previous_instructions]
+type = "fixed"
+pattern = "ignore all previous instructions"
+language = "en"
+tags = ["input", "prompt_injection"]
+
 [chat_providers.providers.mock-llm-openai]
 provider_kind = "openai"
 model_name = "placeholder"
@@ -13,6 +19,11 @@ supports_audio_input = true
 [chat_providers.providers.mock-llm-openai.hallucination_suppression]
 enabled = true
 whitespace_delta_threshold = 3
+
+[chat_providers.providers.mock-llm-openai.guardrails.filter_input_prompt_injection]
+enabled = true
+filter_pattern_ids = ["ignore_previous_instructions"]
+filter_pattern_tags = []
 
 [audio_transcription]
 enabled = true

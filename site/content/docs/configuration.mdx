@@ -360,6 +360,40 @@ language_detection_priority = ["id_token_xms_tpl", "browser_accept_language"]
 default_language = "de"
 ```
 
+### `guardrails`
+
+{/* erato_toml_config_key: guardrails */}
+
+Global guardrail definitions used by chat-provider filtering. Guardrail definitions do not run by themselves; enable them through `chat_providers.all_providers.guardrails` or a provider-specific `chat_providers.providers.<provider-id>.guardrails` block.
+
+#### `guardrails.prompt_patterns.<pattern-id>`
+
+{/* erato_toml_config_key: guardrails.prompt_patterns.<pattern-id>.type */}
+{/* erato_toml_config_key: guardrails.prompt_patterns.<pattern-id>.pattern */}
+{/* erato_toml_config_key: guardrails.prompt_patterns.<pattern-id>.language */}
+{/* erato_toml_config_key: guardrails.prompt_patterns.<pattern-id>.tags.[] */}
+
+Defines a prompt-injection pattern that can later be selected by ID or by tag.
+
+**Type:** `object`
+
+**Fields:**
+
+- **`type`** - Matching strategy. Supported values: `"fixed"` for substring matching, `"regex"` for Rust `regex` crate regular expressions.
+- **`pattern`** - The substring or regular expression to detect.
+- **`language`** - Optional BCP-47-style language hint such as `"en"`.
+- **`tags`** - Tags used to select groups of patterns, for example `["input", "prompt_injection"]`.
+
+**Example:**
+
+```toml
+[guardrails.prompt_patterns.ignore_previous_instructions]
+type = "fixed"
+pattern = "ignore all previous instructions"
+language = "en"
+tags = ["input", "prompt_injection"]
+```
+
 ### `chat_provider` (deprecated)
 
 {/* erato_toml_config_key: chat_provider */}
@@ -385,6 +419,32 @@ An ordered list of provider IDs that defines the priority for provider selection
 **Required:** Yes
 
 **Example:** `["primary", "backup", "local"]`
+
+#### `chat_providers.all_providers.guardrails.filter_input_prompt_injection`
+
+{/* erato_toml_config_key: chat_providers.all_providers.guardrails.filter_input_prompt_injection.enabled */}
+{/* erato_toml_config_key: chat_providers.all_providers.guardrails.filter_input_prompt_injection.filter_pattern_ids.[] */}
+{/* erato_toml_config_key: chat_providers.all_providers.guardrails.filter_input_prompt_injection.filter_pattern_tags.[] */}
+
+Default prompt-injection filtering settings for all configured chat providers.
+
+If `chat_providers.providers.<provider-id>.guardrails` is configured for a provider, that provider-level block completely overrides this `all_providers` block instead of merging with it.
+
+**Type:** `object`
+
+**Fields:**
+
+- **`enabled`** _(default: false)_ - Enables prompt-injection filtering before requests are sent to the model.
+- **`filter_pattern_ids`** _(default: [])_ - Explicit pattern IDs from `guardrails.prompt_patterns` to apply.
+- **`filter_pattern_tags`** _(default: [])_ - Pattern tags to apply.
+
+**Example:**
+
+```toml
+[chat_providers.all_providers.guardrails.filter_input_prompt_injection]
+enabled = true
+filter_pattern_tags = ["input"]
+```
 
 #### `chat_providers.providers.<provider-id>`
 
@@ -449,6 +509,7 @@ Each provider in `chat_providers.providers` supports the following fields:
 - **`additional_request_parameters`** - Optional array of additional request parameters
 - **`additional_request_headers`** - Optional array of additional request headers
 - **`hallucination_suppression`** - Optional settings to suppress non-substantive outputs
+- **`guardrails`** - Optional provider-level prompt-injection filtering settings
 - **`model_capabilities`** - Optional configuration for model capabilities and limitations
 - **`model_settings`** - Optional configuration for model behavior and generation settings
 
@@ -635,6 +696,41 @@ Lower values are more aggressive and may truncate responses earlier; higher valu
 **Default value:** `20`
 
 **Example:** `15`
+
+##### `chat_providers.providers.<provider-id>.guardrails.filter_input_prompt_injection`
+
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.guardrails.filter_input_prompt_injection.enabled */}
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.guardrails.filter_input_prompt_injection.filter_pattern_ids.[] */}
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.guardrails.filter_input_prompt_injection.filter_pattern_tags.[] */}
+
+Provider-specific prompt-injection filtering settings.
+
+When this block is configured for a provider, it completely overrides `chat_providers.all_providers.guardrails` for that provider. Matching runs after prompt composition and before each request turn is sent to the model. Text content parts are scanned, and tool-call outputs are scanned field-by-field when the tool output is JSON.
+
+If a match is found, generation is aborted with a content-filter-style error that includes the offending pattern ID and the matched text in structured error details.
+
+**Type:** `object | None`
+
+**Fields:**
+
+- **`enabled`** _(default: false)_ - Enables prompt-injection filtering for this provider.
+- **`filter_pattern_ids`** _(default: [])_ - Explicit pattern IDs from `guardrails.prompt_patterns` to apply.
+- **`filter_pattern_tags`** _(default: [])_ - Pattern tags to apply.
+
+**Example:**
+
+```toml
+[guardrails.prompt_patterns.ignore_previous_instructions]
+type = "fixed"
+pattern = "ignore all previous instructions"
+language = "en"
+tags = ["input", "prompt_injection"]
+
+[chat_providers.providers.main.guardrails.filter_input_prompt_injection]
+enabled = true
+filter_pattern_ids = ["ignore_previous_instructions"]
+filter_pattern_tags = []
+```
 
 ##### `chat_providers.providers.<provider-id>.model_capabilities`
 

@@ -277,6 +277,7 @@ fn map_key_placeholder(parent_segment: Option<&str>) -> String {
         Some("file_storage_providers") => "<provider-id>".to_string(),
         Some("localized_prompts") => "<locale>".to_string(),
         Some("mcp_servers") => "<server-id>".to_string(),
+        Some("prompt_patterns") => "<pattern-id>".to_string(),
         Some("prompts") => "<prompt-id>".to_string(),
         Some("providers") => "<provider-id>".to_string(),
         Some("rules") => "<rule-name>".to_string(),

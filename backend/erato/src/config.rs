@@ -5,6 +5,7 @@ use config::builder::DefaultState;
 use config::{Config, ConfigBuilder, ConfigError, Environment};
 use eyre::{OptionExt, Report, eyre};
 use facet::Facet;
+use regex::Regex;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize, de};
 use std::collections::HashMap;
@@ -300,6 +301,40 @@ impl PromptSourceSpecification {
     }
 }
 
+fn validate_prompt_injection_filter_config(
+    config_key: &str,
+    filter_config: &PromptInjectionFilterConfig,
+    prompt_patterns: &HashMap<String, PromptPatternConfig>,
+) -> Result<(), Report> {
+    if !filter_config.enabled {
+        return Ok(());
+    }
+
+    for pattern_id in &filter_config.filter_pattern_ids {
+        if !prompt_patterns.contains_key(pattern_id) {
+            return Err(eyre!(
+                "{config_key}.filter_pattern_ids references unknown prompt pattern '{pattern_id}'"
+            ));
+        }
+    }
+
+    for (pattern_id, pattern_config) in prompt_patterns {
+        if pattern_config.pattern.is_empty() {
+            return Err(eyre!(
+                "guardrails.prompt_patterns.{pattern_id}.pattern must not be empty"
+            ));
+        }
+
+        if matches!(pattern_config.r#type, PromptPatternType::Regex) {
+            Regex::new(&pattern_config.pattern).map_err(|err| {
+                eyre!("guardrails.prompt_patterns.{pattern_id}.pattern is not a valid regex: {err}")
+            })?;
+        }
+    }
+
+    Ok(())
+}
+
 #[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet)]
 pub struct AppConfig {
     // A opaque marker to signify the environment. This may be forwarded to diagnostic/observability tools to signify the environment,
@@ -347,6 +382,10 @@ pub struct AppConfig {
 
     #[serde(default)]
     pub logging: LoggingConfig,
+
+    // Global guardrail configuration.
+    #[serde(default)]
+    pub guardrails: GuardrailsConfig,
 
     // Model permissions configuration for controlling access to chat providers based on user attributes.
     #[serde(default)]
@@ -763,6 +802,7 @@ impl AppConfig {
 
                 self.chat_providers = Some(ChatProvidersConfig {
                     priority_order: vec!["default".to_string()],
+                    all_providers: AllChatProvidersConfig::default(),
                     providers,
                     summary: SummaryConfig::default(),
                 });
@@ -856,6 +896,26 @@ impl AppConfig {
                     ));
                 }
             }
+
+            validate_prompt_injection_filter_config(
+                "chat_providers.all_providers.guardrails.filter_input_prompt_injection",
+                &chat_providers
+                    .all_providers
+                    .guardrails
+                    .filter_input_prompt_injection,
+                &self.guardrails.prompt_patterns,
+            )?;
+            for (provider_id, provider_config) in &chat_providers.providers {
+                if let Some(provider_guardrails) = &provider_config.guardrails {
+                    validate_prompt_injection_filter_config(
+                        &format!(
+                            "chat_providers.providers.{provider_id}.guardrails.filter_input_prompt_injection"
+                        ),
+                        &provider_guardrails.filter_input_prompt_injection,
+                        &self.guardrails.prompt_patterns,
+                    )?;
+                }
+            }
         } else {
             // If no new chat_providers config, ensure we have at least the old single provider configured
             if self.chat_provider.is_none() {
@@ -865,6 +925,24 @@ impl AppConfig {
             }
         }
         Ok(())
+    }
+
+    pub fn chat_provider_guardrails(
+        &self,
+        provider_id: Option<&str>,
+    ) -> ChatProviderGuardrailsConfig {
+        let Some(chat_providers) = &self.chat_providers else {
+            return ChatProviderGuardrailsConfig::default();
+        };
+
+        if let Some(provider_id) = provider_id
+            && let Some(provider) = chat_providers.providers.get(provider_id)
+            && let Some(provider_guardrails) = &provider.guardrails
+        {
+            return provider_guardrails.clone();
+        }
+
+        chat_providers.all_providers.guardrails.clone()
     }
 
     pub fn validate_prompt_optimizer(&self) -> Result<(), eyre::Report> {
@@ -1291,11 +1369,60 @@ pub struct ChatProvidersConfig {
     // Priority order of chat providers to use.
     // Each string should match a key in the providers map.
     pub priority_order: Vec<String>,
+    // Defaults that apply to all chat providers unless a provider-level setting overrides them.
+    #[serde(default)]
+    pub all_providers: AllChatProvidersConfig,
     // Map of provider_id to provider configuration.
     pub providers: HashMap<String, ChatProviderConfig>,
     // Configuration for summary generation.
     #[serde(default)]
     pub summary: SummaryConfig,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct AllChatProvidersConfig {
+    #[serde(default)]
+    pub guardrails: ChatProviderGuardrailsConfig,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct GuardrailsConfig {
+    #[serde(default)]
+    pub prompt_patterns: HashMap<String, PromptPatternConfig>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[serde(rename_all = "snake_case")]
+#[facet(rename_all = "snake_case")]
+#[repr(C)]
+pub enum PromptPatternType {
+    Fixed,
+    Regex,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct PromptPatternConfig {
+    pub r#type: PromptPatternType,
+    pub pattern: String,
+    pub language: Option<String>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct ChatProviderGuardrailsConfig {
+    #[serde(default)]
+    pub filter_input_prompt_injection: PromptInjectionFilterConfig,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct PromptInjectionFilterConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub filter_pattern_ids: Vec<String>,
+    #[serde(default)]
+    pub filter_pattern_tags: Vec<String>,
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
@@ -1400,6 +1527,9 @@ pub struct ChatProviderConfig {
     // Hallucination suppression configuration for this chat provider.
     #[serde(default, alias = "hallucination_supression")]
     pub hallucination_suppression: HallucinationSuppressionConfig,
+    // Provider-level guardrail configuration. If set, this completely overrides
+    // `chat_providers.all_providers.guardrails`.
+    pub guardrails: Option<ChatProviderGuardrailsConfig>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
@@ -1530,6 +1660,7 @@ impl ChatProviderConfig {
             model_capabilities: self.model_capabilities,
             model_settings: self.model_settings,
             hallucination_suppression: self.hallucination_suppression,
+            guardrails: self.guardrails,
         })
     }
 
