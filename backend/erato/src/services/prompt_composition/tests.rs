@@ -322,6 +322,7 @@ mod test_cases {
             model_capabilities: crate::config::ModelCapabilities::default(),
             model_settings: crate::config::ModelSettings::default(),
             hallucination_suppression: crate::config::HallucinationSuppressionConfig::default(),
+            guardrails: None,
         }
     }
 
