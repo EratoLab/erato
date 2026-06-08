@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use base64::{Engine as _, engine::general_purpose};
 use eyre::{Context, Report};
 use kreuzberg::detect_mime_type_from_bytes;
 use std::sync::Arc;
@@ -38,6 +39,10 @@ fn normalize_mime_type(mime_type: &str) -> String {
         .to_ascii_lowercase()
 }
 
+fn is_message_rfc822_mime_type(mime_type: &str) -> bool {
+    mime_type.eq_ignore_ascii_case("message/rfc822")
+}
+
 fn detect_mime_type(file_bytes: &[u8]) -> Result<String, Report> {
     let mut mime_type = detect_mime_type_from_bytes(file_bytes)?;
     tracing::debug!("Detected MIME type from bytes: {:?}", &mime_type);
@@ -49,6 +54,295 @@ fn detect_mime_type(file_bytes: &[u8]) -> Result<String, Report> {
         mime_type = kreuzberg::DOCX_MIME_TYPE.to_string();
     }
     Ok(mime_type)
+}
+
+fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
+}
+
+fn split_mime_headers_body(entity: &[u8]) -> (&[u8], &[u8]) {
+    if let Some(index) = find_subslice(entity, b"\r\n\r\n") {
+        return (&entity[..index], &entity[index + 4..]);
+    }
+
+    if let Some(index) = find_subslice(entity, b"\n\n") {
+        return (&entity[..index], &entity[index + 2..]);
+    }
+
+    (entity, &[])
+}
+
+fn parse_mime_headers(headers: &[u8]) -> Vec<(String, String)> {
+    let header_text = String::from_utf8_lossy(headers);
+    let mut unfolded = Vec::new();
+    let mut current = String::new();
+
+    for line in header_text.replace("\r\n", "\n").split('\n') {
+        if line.starts_with(' ') || line.starts_with('\t') {
+            if !current.is_empty() {
+                current.push(' ');
+            }
+            current.push_str(line.trim());
+            continue;
+        }
+
+        if !current.is_empty() {
+            unfolded.push(current);
+        }
+        current = line.trim_end_matches('\r').to_string();
+    }
+
+    if !current.is_empty() {
+        unfolded.push(current);
+    }
+
+    unfolded
+        .into_iter()
+        .filter_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            Some((name.trim().to_ascii_lowercase(), value.trim().to_string()))
+        })
+        .collect()
+}
+
+fn header_value<'a>(headers: &'a [(String, String)], name: &str) -> Option<&'a str> {
+    headers
+        .iter()
+        .find(|(header_name, _)| header_name.eq_ignore_ascii_case(name))
+        .map(|(_, value)| value.as_str())
+}
+
+fn content_type_essence_and_param(
+    content_type: &str,
+    param_name: &str,
+) -> (String, Option<String>) {
+    let mut parts = content_type.split(';');
+    let essence = parts
+        .next()
+        .unwrap_or(content_type)
+        .trim()
+        .to_ascii_lowercase();
+
+    let param_name = param_name.to_ascii_lowercase();
+    let param_value = parts.find_map(|part| {
+        let (name, value) = part.split_once('=')?;
+        if !name.trim().eq_ignore_ascii_case(&param_name) {
+            return None;
+        }
+
+        Some(value.trim().trim_matches('"').to_string())
+    });
+
+    (essence, param_value)
+}
+
+fn content_disposition_essence(content_disposition: Option<&str>) -> String {
+    content_disposition
+        .and_then(|value| value.split(';').next())
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase()
+}
+
+fn decode_hex_digit(value: u8) -> Option<u8> {
+    match value {
+        b'0'..=b'9' => Some(value - b'0'),
+        b'a'..=b'f' => Some(value - b'a' + 10),
+        b'A'..=b'F' => Some(value - b'A' + 10),
+        _ => None,
+    }
+}
+
+fn decode_quoted_printable(input: &[u8]) -> Vec<u8> {
+    let mut output = Vec::with_capacity(input.len());
+    let mut index = 0;
+
+    while index < input.len() {
+        if input[index] != b'=' {
+            output.push(input[index]);
+            index += 1;
+            continue;
+        }
+
+        if input.get(index + 1) == Some(&b'\r') && input.get(index + 2) == Some(&b'\n') {
+            index += 3;
+            continue;
+        }
+
+        if input.get(index + 1) == Some(&b'\n') {
+            index += 2;
+            continue;
+        }
+
+        if let (Some(high), Some(low)) = (input.get(index + 1), input.get(index + 2))
+            && let (Some(high), Some(low)) = (decode_hex_digit(*high), decode_hex_digit(*low))
+        {
+            output.push((high << 4) | low);
+            index += 3;
+            continue;
+        }
+
+        output.push(input[index]);
+        index += 1;
+    }
+
+    output
+}
+
+fn decode_mime_body(body: &[u8], transfer_encoding: Option<&str>) -> Vec<u8> {
+    match transfer_encoding
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "base64" => {
+            let compact = body
+                .iter()
+                .copied()
+                .filter(|byte| !byte.is_ascii_whitespace())
+                .collect::<Vec<_>>();
+            general_purpose::STANDARD
+                .decode(compact)
+                .unwrap_or_else(|_| body.to_vec())
+        }
+        "quoted-printable" => decode_quoted_printable(body),
+        _ => body.to_vec(),
+    }
+}
+
+fn normalize_plain_text(text: &str) -> String {
+    text.replace("\r\n", "\n")
+        .replace('\r', "\n")
+        .lines()
+        .map(str::trim_end)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn split_multipart_body<'a>(body: &'a [u8], boundary: &str) -> Vec<&'a [u8]> {
+    let delimiter = format!("--{boundary}");
+    let delimiter_bytes = delimiter.as_bytes();
+    let closing_delimiter = format!("{delimiter}--");
+    let closing_delimiter_bytes = closing_delimiter.as_bytes();
+    let mut parts = Vec::new();
+    let mut current_part_start = None;
+    let mut line_start = 0;
+
+    while line_start <= body.len() {
+        let line_end_with_newline = body[line_start..]
+            .iter()
+            .position(|byte| *byte == b'\n')
+            .map_or(body.len(), |offset| line_start + offset + 1);
+        let mut line_end = line_end_with_newline;
+        if line_end > line_start && body[line_end - 1] == b'\n' {
+            line_end -= 1;
+        }
+        if line_end > line_start && body[line_end - 1] == b'\r' {
+            line_end -= 1;
+        }
+
+        let line = &body[line_start..line_end];
+        if line == delimiter_bytes || line == closing_delimiter_bytes {
+            if let Some(part_start) = current_part_start.take() {
+                parts.push(&body[part_start..line_start]);
+            }
+
+            if line == closing_delimiter_bytes {
+                break;
+            }
+
+            current_part_start = Some(line_end_with_newline);
+        }
+
+        if line_end_with_newline == body.len() {
+            break;
+        }
+        line_start = line_end_with_newline;
+    }
+
+    parts
+}
+
+fn collect_email_plain_text_parts(entity: &[u8], output: &mut Vec<String>) {
+    let (headers, body) = split_mime_headers_body(entity);
+    let headers = parse_mime_headers(headers);
+    let content_type = header_value(&headers, "content-type").unwrap_or("text/plain");
+    let (content_type_essence, boundary) = content_type_essence_and_param(content_type, "boundary");
+    let transfer_encoding = header_value(&headers, "content-transfer-encoding");
+    let content_disposition =
+        content_disposition_essence(header_value(&headers, "content-disposition"));
+
+    if content_type_essence.starts_with("multipart/") {
+        if let Some(boundary) = boundary {
+            for part in split_multipart_body(body, &boundary) {
+                collect_email_plain_text_parts(part, output);
+            }
+        }
+        return;
+    }
+
+    let decoded_body = decode_mime_body(body, transfer_encoding);
+
+    if content_type_essence == "message/rfc822" {
+        collect_email_plain_text_parts(&decoded_body, output);
+        return;
+    }
+
+    if content_type_essence == "text/plain" && content_disposition != "attachment" {
+        let text = normalize_plain_text(&String::from_utf8_lossy(&decoded_body));
+        if !text.trim().is_empty() {
+            output.push(text);
+        }
+    }
+}
+
+fn extract_email_plain_text(file_bytes: &[u8]) -> Option<String> {
+    let mut parts = Vec::new();
+    collect_email_plain_text_parts(file_bytes, &mut parts);
+
+    let plain_text = parts
+        .into_iter()
+        .map(|part| part.trim().to_string())
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+
+    if plain_text.is_empty() {
+        None
+    } else {
+        Some(plain_text)
+    }
+}
+
+fn content_already_contains_plain_text(content: &str, plain_text: &str) -> bool {
+    if content.contains(plain_text.trim()) {
+        return true;
+    }
+
+    plain_text
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.chars().filter(|char| !char.is_whitespace()).count() >= 24)
+        .any(|line| content.contains(line))
+}
+
+fn append_email_plain_text_if_missing(content: &mut String, plain_text: Option<String>) {
+    let Some(plain_text) = plain_text else {
+        return;
+    };
+
+    if content_already_contains_plain_text(content, &plain_text) {
+        return;
+    }
+
+    if !content.trim_end().is_empty() {
+        content.push_str("\n\n");
+    }
+    content.push_str("## Email plain text body\n\n");
+    content.push_str(plain_text.trim());
 }
 
 fn append_extraction_children(
@@ -155,6 +449,12 @@ impl FileProcessor for KreuzbergProcessor {
                     mime_type = kreuzberg::DOCX_MIME_TYPE.to_string();
                 }
                 tracing::debug!("Final decided MIME type: {:?}", &mime_type);
+                let email_plain_text = if is_message_rfc822_mime_type(&mime_type) {
+                    extract_email_plain_text(&file_bytes)
+                } else {
+                    None
+                };
+
                 // Configure kreuzberg for page-aware markdown extraction
                 let page_config = kreuzberg::PageConfig {
                     extract_pages: true,
@@ -176,6 +476,7 @@ impl FileProcessor for KreuzbergProcessor {
                 let mut content =
                     content_with_page_markers(result.content, result.pages, &marker_format);
                 append_extraction_children(&mut content, result.children);
+                append_email_plain_text_if_missing(&mut content, email_plain_text);
 
                 Ok(content)
             })
@@ -287,6 +588,46 @@ mod tests {
         );
         assert!(extracted.contains(
             "Please let me know if you have any specific questions or if you cannot see the attachment."
+        ));
+    }
+
+    #[test]
+    fn test_email_plain_text_supplement_decodes_quoted_printable_soft_breaks() {
+        let eml_bytes = br#"From: Microsoft 365 Message center <o365mc@microsoft.com>
+To: fms@maxgoisser.onmicrosoft.com
+Subject: Weekly digest: Microsoft service updates
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="digest-boundary"
+
+--digest-boundary
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+(Updated) Microsoft Teams: AI meeting recap without transcript to meet comp=
+liance policies
+
+--digest-boundary
+Content-Type: text/html; charset=utf-8
+
+<html><body><h1>Weekly digest: Microsoft service updates</h1></body></html>
+
+--digest-boundary--
+"#;
+
+        let plain_text =
+            extract_email_plain_text(eml_bytes).expect("expected decoded plain-text body");
+        assert!(plain_text.contains(
+            "(Updated) Microsoft Teams: AI meeting recap without transcript to meet compliance policies"
+        ));
+
+        let mut kreuzberg_content =
+            "Weekly digest: Microsoft service updates\n\nView a summary of the updates."
+                .to_string();
+        append_email_plain_text_if_missing(&mut kreuzberg_content, Some(plain_text));
+
+        assert!(kreuzberg_content.contains("## Email plain text body"));
+        assert!(kreuzberg_content.contains(
+            "(Updated) Microsoft Teams: AI meeting recap without transcript to meet compliance policies"
         ));
     }
 

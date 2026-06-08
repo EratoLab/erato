@@ -2588,7 +2588,10 @@ pub(super) fn effective_upload_content_type(
             None => true,
             Some(content_type) => {
                 content_type.eq_ignore_ascii_case("application/octet-stream")
-                    || content_type.eq_ignore_ascii_case("text/plain")
+                    || content_type
+                        .split('/')
+                        .next()
+                        .is_some_and(|type_| type_.eq_ignore_ascii_case("text"))
             }
         };
 
@@ -3051,6 +3054,14 @@ mod tests {
     fn effective_upload_content_type_normalizes_eml_text_plain() {
         assert_eq!(
             effective_upload_content_type("message.eml", Some("text/plain; charset=utf-8")),
+            Some("message/rfc822".to_string())
+        );
+    }
+
+    #[test]
+    fn effective_upload_content_type_normalizes_eml_text_html() {
+        assert_eq!(
+            effective_upload_content_type("message.eml", Some("text/html; charset=utf-8")),
             Some("message/rfc822".to_string())
         );
     }

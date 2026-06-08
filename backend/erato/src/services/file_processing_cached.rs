@@ -65,7 +65,10 @@ fn is_generic_or_text_mime_type(mime_type: Option<&str>) -> bool {
         None => true,
         Some(mime_type) => {
             mime_type.eq_ignore_ascii_case("application/octet-stream")
-                || mime_type.eq_ignore_ascii_case("text/plain")
+                || mime_type
+                    .split('/')
+                    .next()
+                    .is_some_and(|type_| type_.eq_ignore_ascii_case("text"))
         }
     }
 }
@@ -625,11 +628,15 @@ mod tests {
     #[test]
     fn effective_text_mime_type_preserves_specific_eml_storage_type() {
         assert_eq!(
-            effective_text_mime_type("message.eml", Some("text/html")).as_deref(),
-            Some("text/html")
-        );
-        assert_eq!(
             effective_text_mime_type("message.eml", Some("message/rfc822")).as_deref(),
+            Some("message/rfc822")
+        );
+    }
+
+    #[test]
+    fn effective_text_mime_type_treats_eml_text_html_as_email() {
+        assert_eq!(
+            effective_text_mime_type("message.eml", Some("text/html")).as_deref(),
             Some("message/rfc822")
         );
     }
