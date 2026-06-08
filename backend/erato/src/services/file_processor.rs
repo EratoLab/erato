@@ -385,6 +385,71 @@ fn strip_html_style_and_script(html: &str) -> String {
     out
 }
 
+/// Drop `data:` URI payloads from HTML attribute values, keeping the surrounding markup and text.
+///
+/// kreuzberg's standalone HTML extractor renders `<img src="data:image/png;base64,...">` as the
+/// markdown `![alt](data:...)`, so a single inline image (50 KB–500 KB of base64) lands in the
+/// extracted text and tokenizes at ~2 chars/token — a token bomb. (The email extractor happens to
+/// drop these today, but this guarantees the payload never reaches kreuzberg regardless of which
+/// renderer runs, and shrinks the bytes we hand it.) Data URIs in email bodies are never
+/// content-bearing text, so removing every `data:` payload is safe.
+///
+/// Each `data:` occurrence (in `src=`/`background=`/`srcset=`/CSS `url(data:...)`, quoted or not)
+/// is truncated to the bare scheme `data:` up to its closing delimiter — the enclosing quote, or
+/// whitespace/`)`/`>` when unquoted — so the tag stays structurally valid and no surrounding text
+/// is lost.
+fn strip_html_data_uris(html: &str) -> String {
+    // `to_ascii_lowercase` preserves byte length and only changes ASCII bytes, so byte offsets
+    // found in `lower` map onto valid char boundaries in `html` (`data:` and the delimiters are
+    // all ASCII).
+    let lower = html.to_ascii_lowercase();
+    let bytes = html.as_bytes();
+    let mut out = String::with_capacity(html.len());
+    let mut pos = 0;
+
+    while pos < html.len() {
+        let Some(rel) = lower[pos..].find("data:") else {
+            out.push_str(&html[pos..]);
+            break;
+        };
+        let scheme_start = pos + rel;
+        let payload_start = scheme_start + "data:".len();
+
+        // Keep everything up to and including the bare `data:` scheme, then skip the payload.
+        out.push_str(&html[pos..payload_start]);
+
+        // The delimiter that closes the URI depends on how it is embedded. If the byte preceding
+        // `data:` is a quote, the payload runs to the matching quote; otherwise it is unquoted and
+        // ends at the first whitespace or a `)`/`>` (CSS `url(...)` close, or tag close).
+        let opening_quote = bytes[..scheme_start]
+            .iter()
+            .rev()
+            .find(|&&b| b != b' ' && b != b'\t')
+            .copied()
+            .filter(|&b| b == b'"' || b == b'\'');
+
+        let payload_end = match opening_quote {
+            Some(quote) => bytes[payload_start..]
+                .iter()
+                .position(|&b| b == quote)
+                .map(|i| payload_start + i),
+            None => bytes[payload_start..]
+                .iter()
+                .position(|&b| matches!(b, b' ' | b'\t' | b'\r' | b'\n' | b')' | b'>'))
+                .map(|i| payload_start + i),
+        };
+
+        match payload_end {
+            Some(end) => pos = end,
+            // No delimiter found: the payload runs to end-of-input. Drop the rest entirely (it is
+            // base64, not text) rather than re-emitting the blob.
+            None => break,
+        }
+    }
+
+    out
+}
+
 /// Base64-encode bytes as a MIME body wrapped at 76 columns with CRLF line endings.
 fn base64_mime_body(data: &[u8]) -> String {
     let encoded = general_purpose::STANDARD.encode(data);
@@ -424,8 +489,26 @@ fn headers_with_base64_encoding(raw_headers: &[u8]) -> String {
 
 /// Walk the MIME tree and rewrite `text/html` parts with their `<style>`/`<script>` blocks removed,
 /// leaving every other part byte-identical. Returns the original bytes for non-multipart,
-/// non-HTML, or unparseable input. Nested `message/rfc822` parts are treated as opaque.
+/// non-HTML, or unparseable input. Nested `message/rfc822` parts are recursed into so a CSS-heavy
+/// email forwarded *inside* a thread is sanitized too.
 fn sanitize_email_html_blocks(entity: &[u8]) -> Vec<u8> {
+    sanitize_email_html_blocks_inner(entity, 0)
+}
+
+/// Maximum MIME nesting depth we recurse through. The recursion is naturally bounded by the
+/// structure of a well-formed email, but a maliciously crafted message could nest
+/// `multipart`/`message/rfc822` parts arbitrarily deep; this guard stops us from blowing the stack
+/// on such input. Beyond the limit we return the entity untouched (a higher token count for that
+/// sub-tree is strictly better than a crash).
+const MAX_SANITIZE_DEPTH: usize = 20;
+
+/// Recursive core of [`sanitize_email_html_blocks`]. `depth` tracks how many MIME levels deep we
+/// are so pathologically nested emails can't recurse without bound.
+fn sanitize_email_html_blocks_inner(entity: &[u8], depth: usize) -> Vec<u8> {
+    if depth >= MAX_SANITIZE_DEPTH {
+        return entity.to_vec();
+    }
+
     let (headers_raw, body) = split_mime_headers_body(entity);
     let headers = parse_mime_headers(headers_raw);
     let content_type = header_value(&headers, "content-type").unwrap_or("text/plain");
@@ -436,10 +519,21 @@ fn sanitize_email_html_blocks(entity: &[u8]) -> Vec<u8> {
             return entity.to_vec();
         };
 
+        // Defensive: if a `multipart/*` declares a boundary that never actually appears in the body
+        // (malformed/truncated email), `split_multipart_body` yields zero parts. Rebuilding from zero
+        // parts would emit only `--boundary--` and silently DROP the original body bytes (which may
+        // hold real, readable content a lenient parser would still surface). Returning the entity
+        // untouched guarantees the sanitizer can never make a previously-extractable email lose
+        // content; a marginally higher token count is strictly better than dropping the body.
+        let parts = split_multipart_body(body, &boundary);
+        if parts.is_empty() {
+            return entity.to_vec();
+        }
+
         let mut rebuilt_body = Vec::new();
-        for part in split_multipart_body(body, &boundary) {
+        for part in parts {
             rebuilt_body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
-            let mut sanitized_part = sanitize_email_html_blocks(part);
+            let mut sanitized_part = sanitize_email_html_blocks_inner(part, depth + 1);
             if !sanitized_part.ends_with(b"\r\n") {
                 sanitized_part.extend_from_slice(b"\r\n");
             }
@@ -451,6 +545,30 @@ fn sanitize_email_html_blocks(entity: &[u8]) -> Vec<u8> {
         out.extend_from_slice(headers_raw);
         out.extend_from_slice(b"\r\n\r\n");
         out.extend_from_slice(&rebuilt_body);
+        return out;
+    }
+
+    if content_type_essence == "message/rfc822" {
+        // A forwarded/attached email carried as `message/rfc822` is itself a full MIME message, so
+        // its `text/html` parts can leak `<style>`/`<script>` blocks just like a top-level email.
+        // Decode the part (it may be base64/quoted-printable), recurse to sanitize the inner
+        // message, then re-emit.
+        //
+        // CTE re-emit choice: we always re-emit the recursed inner message as base64. The recursed
+        // bytes are ascii-safe (any inner html became base64), but their internal structure
+        // contains its own MIME boundaries and CRLFs; re-emitting verbatim under the original CTE
+        // (e.g. `7bit`) risks a boundary/line-length/encoding mismatch against the inner message we
+        // just rebuilt. Base64-wrapping the whole inner message sidesteps every such pitfall and is
+        // transparent to kreuzberg, which decodes the CTE before recursing into the nested message
+        // — confirmed by `test_kreuzberg_extracts_nested_rfc822_thread_bundle` (the nested bodies,
+        // grandchild attachment, and filename all still extract).
+        let transfer_encoding = header_value(&headers, "content-transfer-encoding");
+        let decoded = decode_mime_body(body, transfer_encoding);
+        let sanitized_inner = sanitize_email_html_blocks_inner(&decoded, depth + 1);
+
+        let mut out = headers_with_base64_encoding(headers_raw).into_bytes();
+        out.extend_from_slice(b"\r\n");
+        out.extend_from_slice(base64_mime_body(&sanitized_inner).as_bytes());
         return out;
     }
 
@@ -471,7 +589,11 @@ fn sanitize_email_html_blocks(entity: &[u8]) -> Vec<u8> {
 
         let transfer_encoding = header_value(&headers, "content-transfer-encoding");
         let decoded = decode_mime_body(body, transfer_encoding);
-        let cleaned = strip_html_style_and_script(&String::from_utf8_lossy(&decoded));
+        // Strip `<style>`/`<script>` blocks first, then neutralize any `data:` URI payloads (large
+        // inline base64 images) — both are token bombs kreuzberg would otherwise render as text.
+        let cleaned = strip_html_data_uris(&strip_html_style_and_script(&String::from_utf8_lossy(
+            &decoded,
+        )));
 
         let mut out = headers_with_base64_encoding(headers_raw).into_bytes();
         out.extend_from_slice(b"\r\n");
@@ -802,6 +924,60 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn test_kreuzberg_strips_embedded_data_uri_image_from_eml() {
+        // A heavily-embedded inline image — `<img src="data:image/png;base64,...">` with a large
+        // base64 payload — is a token bomb: kreuzberg's HTML renderer turns it into `![](data:...)`
+        // and the whole blob tokenizes at ~2 chars/token. The sanitizer must drop the payload while
+        // keeping the readable body, so the extracted content stays tiny.
+        let mut payload = String::new();
+        while payload.len() < 200_000 {
+            payload.push_str("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ");
+        }
+        let raw_payload_len = payload.len();
+        let eml = format!(
+            "From: Sender <sender@example.com>\r\n\
+             To: Recipient <recipient@example.com>\r\n\
+             Subject: Photo of the week\r\n\
+             MIME-Version: 1.0\r\n\
+             Content-Type: text/html; charset=utf-8\r\n\
+             \r\n\
+             <html><body><p>READABLE IMAGE CAPTION MARKER.</p>\
+             <img src=\"data:image/png;base64,{payload}\" alt=\"chart\">\
+             <p>Trailing readable text.</p></body></html>\r\n"
+        );
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(eml.into_bytes(), Some("message/rfc822"))
+            .await
+            .expect("email with embedded data-URI image should extract");
+
+        assert!(
+            extracted.contains("READABLE IMAGE CAPTION MARKER."),
+            "readable body missing from extracted content:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("Trailing readable text."),
+            "trailing readable text missing from extracted content:\n{extracted}"
+        );
+        // The base64 sentinel must be gone — no data-URI payload leaked.
+        assert!(
+            !extracted.contains("iVBORw0KGgo"),
+            "embedded data-URI base64 leaked into extracted content:\n{extracted}"
+        );
+
+        // Token count must collapse to the real-content range, far below the raw base64 blob, which
+        // alone would tokenize at ~2 chars/token (~100k tokens for this 200 KB payload).
+        let bpe = tiktoken_rs::o200k_base().expect("o200k_base tokenizer");
+        let tokens = bpe.encode_with_special_tokens(&extracted).len();
+        assert!(
+            tokens < 200,
+            "expected the embedded-image email to reduce to real-content size, got {tokens} tokens \
+             ({raw_payload_len} raw base64 bytes)"
+        );
+    }
+
     #[test]
     fn strip_html_style_and_script_removes_blocks_but_keeps_content() {
         let cleaned = strip_html_style_and_script(
@@ -826,6 +1002,36 @@ mod tests {
         assert_eq!(
             strip_html_style_and_script("head <style>.a{color:red} no close and important tail"),
             "head <style>.a{color:red} no close and important tail"
+        );
+    }
+
+    #[test]
+    fn strip_html_data_uris_removes_payload_but_keeps_markup_and_text() {
+        // Quoted `src` data URI: the giant base64 goes, the tag structure and surrounding text stay.
+        assert_eq!(
+            strip_html_data_uris(
+                "<p>keep me</p><img src=\"data:image/png;base64,AAAABBBBCCCC\" alt=\"x\"><p>tail</p>"
+            ),
+            "<p>keep me</p><img src=\"data:\" alt=\"x\"><p>tail</p>"
+        );
+        // CSS `url(data:...)` (unquoted): payload removed, the `)` and rest of the rule preserved.
+        assert_eq!(
+            strip_html_data_uris(
+                "<div style=\"background:url(data:image/png;base64,ZZZZ)\">hi</div>"
+            ),
+            "<div style=\"background:url(data:)\">hi</div>"
+        );
+        // Single-quoted and multiple occurrences in one document.
+        assert_eq!(
+            strip_html_data_uris(
+                "<img src='data:image/gif;base64,QQQQ'><img src='data:image/gif;base64,RRRR'>"
+            ),
+            "<img src='data:'><img src='data:'>"
+        );
+        // No data URI: input passes through untouched (and real text is never dropped).
+        assert_eq!(
+            strip_html_data_uris("<p>plain text, no data here</p>"),
+            "<p>plain text, no data here</p>"
         );
     }
 
@@ -987,6 +1193,52 @@ Content-Type: text/html; charset=utf-8
     }
 
     #[tokio::test]
+    async fn test_kreuzberg_strips_style_in_nested_forwarded_email() {
+        // A CSS-heavy email forwarded *inside* a thread (as a `message/rfc822` attachment) must be
+        // sanitized too: before the sanitizer recursed into `message/rfc822` parts, the inner
+        // `<style>` block was treated as opaque and leaked into the token count. Build a
+        // `multipart/mixed` wrapper whose only attachment is a forwarded `text/html` email carrying
+        // a `ZZNESTEDCSSZZ` CSS sentinel plus a readable marker.
+        let inner_email = b"From: Inner Sender <inner@example.com>\r\n\
+            To: Outer Recipient <outer@example.com>\r\n\
+            Subject: Forwarded styled email\r\n\
+            MIME-Version: 1.0\r\n\
+            Content-Type: text/html; charset=utf-8\r\n\r\n\
+            <html><head><style>.brand{color:#ZZNESTEDCSSZZ;font-size:42px}</style></head>\
+            <body><p>NESTED_READABLE_MARKER_delta survives sanitization.</p></body></html>\r\n";
+
+        let mut eml = b"From: thread-wrapper@example.com\r\n\
+            To: reader@example.com\r\n\
+            Subject: Thread with forwarded styled email\r\n\
+            MIME-Version: 1.0\r\n\
+            Content-Type: multipart/mixed; boundary=\"OUTER\"\r\n\r\n\
+            --OUTER\r\n\
+            Content-Type: message/rfc822\r\n\
+            Content-Disposition: attachment; filename=\"forwarded.eml\"\r\n\r\n"
+            .to_vec();
+        eml.extend_from_slice(inner_email);
+        eml.extend_from_slice(b"\r\n--OUTER--\r\n");
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(eml, Some("message/rfc822"))
+            .await
+            .expect("nested forwarded styled email should extract");
+
+        // The readable body of the forwarded message survives the double recursion.
+        assert!(
+            extracted.contains("NESTED_READABLE_MARKER_delta"),
+            "readable marker from the nested forwarded email was dropped:\n{extracted}"
+        );
+        // The CSS sentinel must not appear — proving the nested `<style>` block was stripped.
+        assert_eq!(
+            extracted.matches("ZZNESTEDCSSZZ").count(),
+            0,
+            "nested <style> block leaked from the forwarded message/rfc822 part:\n{extracted}"
+        );
+    }
+
+    #[tokio::test]
     async fn test_kreuzberg_extracts_nested_rfc822_thread_bundle() {
         let eml_bytes = read_test_fixture("synthesized_thread_bundle.eml");
 
@@ -1042,5 +1294,220 @@ Content-Type: text/html; charset=utf-8
 
         assert!(extracted.contains("Alice"));
         assert!(extracted.contains("Johnson"));
+    }
+
+    /// Token ceiling for the malformed/adversarial MIME cases below. The real content in each is a
+    /// short marker line; a sane extraction stays well under this. The point of the bound is to fail
+    /// loudly if a sanitizer bug ever re-emits a raw multi-hundred-K byte blob as text.
+    const ADVERSARIAL_TOKEN_CEILING: usize = 500;
+
+    fn adversarial_token_count(text: &str) -> usize {
+        let bpe = tiktoken_rs::o200k_base().expect("o200k_base tokenizer");
+        bpe.encode_with_special_tokens(text).len()
+    }
+
+    #[tokio::test]
+    async fn test_kreuzberg_handles_multipart_missing_closing_boundary() {
+        // Adversarial MIME: declares `multipart/alternative; boundary="X"` but the message is
+        // truncated mid-part — there is no closing `--X--` and the final HTML part is cut off
+        // mid-tag. The sanitizer's MIME rebuild (`split_multipart_body` + boundary reconstruction)
+        // must survive this without panicking or producing a raw-bytes explosion, and the readable
+        // text/plain part must still be recoverable.
+        let eml = "From: a@example.com\r\nTo: b@example.com\r\nSubject: trunc\r\nMIME-Version: 1.0\r\n\
+            Content-Type: multipart/alternative; boundary=\"X\"\r\n\r\n\
+            --X\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nADV_MARKER_A readable.\r\n\
+            --X\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<html><body><p>trunc";
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(eml.as_bytes().to_vec(), Some("message/rfc822"))
+            .await
+            .expect("truncated multipart email must degrade gracefully, not panic");
+
+        assert!(
+            extracted.contains("ADV_MARKER_A"),
+            "readable part lost from truncated multipart:\n{extracted}"
+        );
+        let tokens = adversarial_token_count(&extracted);
+        assert!(
+            tokens < ADVERSARIAL_TOKEN_CEILING,
+            "truncated multipart produced a token blob ({tokens} tokens):\n{extracted}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_kreuzberg_handles_multipart_boundary_absent_from_body() {
+        // Adversarial MIME: declares a boundary (`NOPE`) that never appears anywhere in the body, so
+        // `split_multipart_body` yields ZERO parts. Before the defensive guard in
+        // `sanitize_email_html_blocks_inner`, rebuilding from zero parts emitted only `--NOPE--` and
+        // silently DROPPED the body bytes — a real content-loss bug. The guard now returns the entity
+        // untouched when a multipart yields no parts, so the body survives.
+        let eml = "From: a@example.com\r\nTo: b@example.com\r\nSubject: noboundary\r\nMIME-Version: 1.0\r\n\
+            Content-Type: multipart/alternative; boundary=\"NOPE\"\r\n\r\n\
+            ADV_MARKER_B body that has no boundary delimiter at all.\r\n";
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(eml.as_bytes().to_vec(), Some("message/rfc822"))
+            .await
+            .expect("multipart with an absent boundary must degrade gracefully, not panic");
+
+        assert!(
+            extracted.contains("ADV_MARKER_B"),
+            "body dropped when the declared boundary never appears:\n{extracted}"
+        );
+        let tokens = adversarial_token_count(&extracted);
+        assert!(
+            tokens < ADVERSARIAL_TOKEN_CEILING,
+            "absent-boundary multipart produced a token blob ({tokens} tokens):\n{extracted}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_kreuzberg_handles_invalid_base64_part() {
+        // Adversarial MIME: a part declares `Content-Transfer-Encoding: base64` but the body is not
+        // valid base64. `decode_mime_body` must not panic — it falls back to the raw bytes on a
+        // decode error — and the readable text/plain sibling must still extract.
+        let eml = "From: a@example.com\r\nTo: b@example.com\r\nSubject: badb64\r\nMIME-Version: 1.0\r\n\
+            Content-Type: multipart/mixed; boundary=\"Y\"\r\n\r\n\
+            --Y\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nADV_MARKER_C readable.\r\n\
+            --Y\r\nContent-Type: application/octet-stream\r\nContent-Transfer-Encoding: base64\r\n\r\n\
+            !!!not-valid-base64@@@truncated\r\n--Y--\r\n";
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(eml.as_bytes().to_vec(), Some("message/rfc822"))
+            .await
+            .expect("invalid base64 part must degrade gracefully, not panic");
+
+        assert!(
+            extracted.contains("ADV_MARKER_C"),
+            "readable part lost alongside an invalid-base64 sibling:\n{extracted}"
+        );
+        let tokens = adversarial_token_count(&extracted);
+        assert!(
+            tokens < ADVERSARIAL_TOKEN_CEILING,
+            "invalid-base64 email produced a token blob ({tokens} tokens):\n{extracted}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_kreuzberg_does_not_leak_inline_cid_image_base64() {
+        // A `multipart/related` email with an inline image referenced by CID: a `text/html` part with
+        // `<img src="cid:logo123">` plus a readable marker, and a sibling `image/png` part carrying a
+        // few KB of base64 (`Content-ID: <logo123>`). The readable marker must survive, and the
+        // image's base64 must NOT be tokenized as a raw blob — kreuzberg's email extractor skips
+        // image parts, so this just locks that behavior in.
+        let mut image_base64 = String::new();
+        while image_base64.len() < 4_000 {
+            // A tiny valid GIF, repeated — content doesn't matter, only that it's a sizable blob.
+            image_base64.push_str("R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=");
+        }
+        let eml = format!(
+            "From: a@example.com\r\nTo: b@example.com\r\nSubject: cid image\r\nMIME-Version: 1.0\r\n\
+             Content-Type: multipart/related; boundary=\"R\"\r\n\r\n\
+             --R\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
+             <html><body><p>CID_READABLE_MARKER text.</p><img src=\"cid:logo123\"></body></html>\r\n\
+             --R\r\nContent-Type: image/png\r\nContent-ID: <logo123>\r\n\
+             Content-Transfer-Encoding: base64\r\n\r\n\
+             {image_base64}\r\n--R--\r\n"
+        );
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(eml.into_bytes(), Some("message/rfc822"))
+            .await
+            .expect("multipart/related with an inline CID image should extract");
+
+        assert!(
+            extracted.contains("CID_READABLE_MARKER"),
+            "readable body missing from CID-image email:\n{extracted}"
+        );
+        assert!(
+            !extracted.contains("R0lGODlhAQABA"),
+            "inline CID image base64 leaked into extracted content:\n{extracted}"
+        );
+        let tokens = adversarial_token_count(&extracted);
+        assert!(
+            tokens < ADVERSARIAL_TOKEN_CEILING,
+            "CID-image email tokenized the image blob ({tokens} tokens):\n{extracted}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_kreuzberg_preserves_latin1_html_email_content() {
+        // Charset edge: an `iso-8859-1` (Latin-1) `text/html` part with a high byte (é = 0xE9) and a
+        // `<style>` block. Like the UTF-16 case, the sanitizer's charset guard leaves non-UTF-8 parts
+        // untouched (running them through `from_utf8_lossy` would corrupt the high bytes), so
+        // kreuzberg decodes the part itself via the charset header and the accented text survives.
+        //
+        // KNOWN LIMITATION: because we skip sanitizing non-UTF-8 parts, the `<style>` block is NOT
+        // stripped for Latin-1 emails and its CSS can leak. We assert content *correctness* here
+        // (the accented text is preserved, not mojibake), not zero-leak — the CSS leak for non-UTF-8
+        // parts is the accepted trade-off for not corrupting the text.
+        let mut eml =
+            b"From: a@example.com\r\nTo: b@example.com\r\nSubject: latin1\r\nMIME-Version: 1.0\r\n\
+              Content-Type: text/html; charset=iso-8859-1\r\n\r\n"
+                .to_vec();
+        eml.extend_from_slice(
+            b"<html><head><style>.x{color:red;LATIN1CSSLEAK:1}</style></head><body><p>caf",
+        );
+        eml.push(0xE9); // é in Latin-1
+        eml.extend_from_slice(b" LATIN1_MARKER works</p></body></html>\r\n");
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(eml, Some("message/rfc822"))
+            .await
+            .expect("Latin-1 html email should still extract");
+
+        assert!(
+            extracted.contains("LATIN1_MARKER works"),
+            "Latin-1 content was dropped:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("café"),
+            "Latin-1 high byte (é) was corrupted rather than decoded:\n{extracted}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_kreuzberg_handles_mixed_transfer_encodings_in_one_email() {
+        // A `multipart/mixed` with two differently-encoded parts: a quoted-printable `text/html` part
+        // carrying a `<style>` block (which must be stripped) and a base64 `text/plain` part (which
+        // must decode and survive). Exercises both transfer-encoding paths in `decode_mime_body`
+        // within a single email and confirms the HTML sanitizer still strips the style block after QP
+        // decoding.
+        let plain_base64 =
+            general_purpose::STANDARD.encode("BASE64_PLAIN_MARKER survives decoding.");
+        let eml = format!(
+            "From: a@example.com\r\nTo: b@example.com\r\nSubject: multienc\r\nMIME-Version: 1.0\r\n\
+             Content-Type: multipart/mixed; boundary=\"M\"\r\n\r\n\
+             --M\r\nContent-Type: text/html; charset=utf-8\r\n\
+             Content-Transfer-Encoding: quoted-printable\r\n\r\n\
+             <html><head><style>.y{{color:blue;QPCSSLEAK:1}}</style></head>\
+             <body><p>QP_HTML_MARKER=20works</p></body></html>\r\n\
+             --M\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n\
+             {plain_base64}\r\n--M--\r\n"
+        );
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(eml.into_bytes(), Some("message/rfc822"))
+            .await
+            .expect("mixed-transfer-encoding email should extract");
+
+        assert!(
+            extracted.contains("QP_HTML_MARKER works"),
+            "quoted-printable HTML body missing (soft break not decoded?):\n{extracted}"
+        );
+        assert!(
+            !extracted.contains("QPCSSLEAK"),
+            "<style> leaked from the quoted-printable HTML part:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("BASE64_PLAIN_MARKER survives decoding."),
+            "base64 text/plain part did not survive decoding:\n{extracted}"
+        );
     }
 }
