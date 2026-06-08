@@ -258,6 +258,11 @@ msgid "officeAddin.fileSource.show"
 msgstr "Afficher"
 
 #. js-lingui-explicit-id
+#: src/components/AddinFileSourceSelector.tsx
+msgid "officeAddin.fileSource.updatingThread"
+msgstr "Mise à jour…"
+
+#. js-lingui-explicit-id
 #: src/components/AddinChat.tsx
 msgid "officeAddin.headerMenu.settings"
 msgstr "Paramètres"

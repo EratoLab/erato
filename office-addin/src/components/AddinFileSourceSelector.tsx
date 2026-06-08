@@ -48,6 +48,7 @@ export function AddinFileSourceSelector({
     useOutlookMailItem();
   const {
     emailBodyFile,
+    isThreadEmlStale,
     isLoadingEmailBody,
     emailThreadLoadError,
     isEmailBodyDismissed,
@@ -324,7 +325,12 @@ export function AddinFileSourceSelector({
                           </div>
                         </div>
                         <span className="shrink-0 text-xs text-theme-fg-muted">
-                          {formatFileSize(emailBodyFile.size)}
+                          {isThreadEmlStale
+                            ? t({
+                                id: "officeAddin.fileSource.updatingThread",
+                                message: "Updating…",
+                              })
+                            : formatFileSize(emailBodyFile.size)}
                         </span>
                       </button>
                     );
