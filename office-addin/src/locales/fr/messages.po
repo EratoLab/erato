@@ -140,7 +140,7 @@ msgstr "(sans objet)"
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.unknownSender"
-msgstr ""
+msgstr "Expéditeur inconnu"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
@@ -577,8 +577,8 @@ msgstr "et téléversez-y le fichier téléchargé."
 # ==============================
 #: src/components/AddinChatInput.tsx
 msgid "{messageCount} messages"
-msgstr ""
+msgstr "{messageCount} messages"
 
 #: src/components/AddinChatInput.tsx
 msgid "1 message"
-msgstr ""
+msgstr "1 message"
