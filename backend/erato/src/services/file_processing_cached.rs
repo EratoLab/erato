@@ -60,23 +60,14 @@ fn content_type_essence(content_type: &str) -> &str {
         .trim()
 }
 
-fn is_generic_or_text_mime_type(mime_type: Option<&str>) -> bool {
-    match mime_type {
-        None => true,
-        Some(mime_type) => {
-            mime_type.eq_ignore_ascii_case("application/octet-stream")
-                || mime_type
-                    .split('/')
-                    .next()
-                    .is_some_and(|type_| type_.eq_ignore_ascii_case("text"))
-        }
-    }
-}
-
 fn effective_text_mime_type(filename: &str, storage_mime_type: Option<&str>) -> Option<String> {
     let storage_mime_type = storage_mime_type.map(content_type_essence);
 
-    if is_eml_file(filename) && is_generic_or_text_mime_type(storage_mime_type) {
+    // The `.eml` extension is authoritative: an `.eml` is always an RFC822 message, so force
+    // `message/rfc822` regardless of the stored type. Trusting the stored type breaks extraction
+    // when it is the file's own inner header (`multipart/alternative`/`multipart/mixed`), which
+    // kreuzberg cannot parse and which fell through to a raw, hugely-inflated token count.
+    if is_eml_file(filename) {
         return Some("message/rfc822".to_string());
     }
 
@@ -637,6 +628,22 @@ mod tests {
     fn effective_text_mime_type_treats_eml_text_html_as_email() {
         assert_eq!(
             effective_text_mime_type("message.eml", Some("text/html")).as_deref(),
+            Some("message/rfc822")
+        );
+    }
+
+    #[test]
+    fn effective_text_mime_type_forces_eml_with_multipart_storage_type() {
+        // Regression: a real `.eml` is often persisted under its own inner header
+        // (`multipart/alternative`/`multipart/mixed`). kreuzberg cannot parse those and the raw
+        // content used to be counted, inflating a ~6k-token newsletter to hundreds of thousands.
+        assert_eq!(
+            effective_text_mime_type("digest.eml", Some("multipart/alternative")).as_deref(),
+            Some("message/rfc822")
+        );
+        assert_eq!(
+            effective_text_mime_type("thread.eml", Some("multipart/mixed; boundary=abc"))
+                .as_deref(),
             Some("message/rfc822")
         );
     }
