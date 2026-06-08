@@ -317,6 +317,171 @@ fn extract_email_plain_text(file_bytes: &[u8]) -> Option<String> {
     }
 }
 
+/// A byte that legitimately follows an HTML tag name (so `<style` is a `<style>` open tag and not
+/// the start of a custom element like `<styled-list>`).
+fn is_tag_name_boundary(byte: Option<u8>) -> bool {
+    matches!(
+        byte,
+        None | Some(b' ' | b'\t' | b'\r' | b'\n' | b'>' | b'/')
+    )
+}
+
+/// Find the next `tag` (e.g. `"<style"`) at or after `from` whose tag name actually ends there —
+/// i.e. the following byte is a tag-name boundary. Avoids matching `<styled-...>`/`<scripture>`.
+fn find_tag_open(lower: &str, from: usize, tag: &str) -> Option<usize> {
+    let bytes = lower.as_bytes();
+    let mut search = from;
+    while let Some(rel) = lower[search..].find(tag) {
+        let start = search + rel;
+        if is_tag_name_boundary(bytes.get(start + tag.len()).copied()) {
+            return Some(start);
+        }
+        search = start + tag.len();
+    }
+    None
+}
+
+/// Remove `<style>`/`<script>` blocks and HTML comments (which may wrap MSO CSS) from an HTML
+/// fragment. kreuzberg's email extractor renders `<style>` block *contents* as text (it drops
+/// inline `style=` attributes but keeps style blocks), so a CSS-heavy newsletter leaks tens of
+/// thousands of tokens of CSS. Stripping these blocks removes the leak without touching real text.
+fn strip_html_style_and_script(html: &str) -> String {
+    // `to_ascii_lowercase` preserves byte length and only changes ASCII bytes, so byte offsets
+    // found in `lower` map onto valid char boundaries in `html` (the markers are all ASCII).
+    let lower = html.to_ascii_lowercase();
+    let mut out = String::with_capacity(html.len());
+    let mut pos = 0;
+
+    while pos < html.len() {
+        let next = [
+            find_tag_open(&lower, pos, "<style").map(|start| (start, "</style>")),
+            find_tag_open(&lower, pos, "<script").map(|start| (start, "</script>")),
+            lower[pos..].find("<!--").map(|rel| (pos + rel, "-->")),
+        ]
+        .into_iter()
+        .flatten()
+        .min_by_key(|(start, _)| *start);
+
+        match next {
+            None => {
+                out.push_str(&html[pos..]);
+                break;
+            }
+            Some((start, close)) => {
+                out.push_str(&html[pos..start]);
+                match lower[start..].find(close) {
+                    // Skip past the close tag. The block (CSS/JS/comment body) is dropped.
+                    Some(rel) => pos = start + rel + close.len(),
+                    // Unterminated tag: keep the original text from here so we never lose content.
+                    None => {
+                        out.push_str(&html[start..]);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    out
+}
+
+/// Base64-encode bytes as a MIME body wrapped at 76 columns with CRLF line endings.
+fn base64_mime_body(data: &[u8]) -> String {
+    let encoded = general_purpose::STANDARD.encode(data);
+    let mut out = String::with_capacity(encoded.len() + encoded.len() / 76 + 2);
+    let mut index = 0;
+    while index < encoded.len() {
+        let end = (index + 76).min(encoded.len());
+        out.push_str(&encoded[index..end]);
+        out.push_str("\r\n");
+        index = end;
+    }
+    out
+}
+
+/// Rebuild a leaf entity's header block, replacing any Content-Transfer-Encoding with `base64`
+/// (the re-emitted body is always base64-encoded for safe, encoding-agnostic transport).
+fn headers_with_base64_encoding(raw_headers: &[u8]) -> String {
+    let header_text = String::from_utf8_lossy(raw_headers);
+    let mut out = String::with_capacity(header_text.len() + 40);
+    for line in header_text.replace("\r\n", "\n").split('\n') {
+        if line.is_empty() {
+            continue;
+        }
+        let is_transfer_encoding = line.split_once(':').is_some_and(|(name, _)| {
+            name.trim()
+                .eq_ignore_ascii_case("content-transfer-encoding")
+        });
+        if is_transfer_encoding {
+            continue;
+        }
+        out.push_str(line.trim_end_matches('\r'));
+        out.push_str("\r\n");
+    }
+    out.push_str("Content-Transfer-Encoding: base64\r\n");
+    out
+}
+
+/// Walk the MIME tree and rewrite `text/html` parts with their `<style>`/`<script>` blocks removed,
+/// leaving every other part byte-identical. Returns the original bytes for non-multipart,
+/// non-HTML, or unparseable input. Nested `message/rfc822` parts are treated as opaque.
+fn sanitize_email_html_blocks(entity: &[u8]) -> Vec<u8> {
+    let (headers_raw, body) = split_mime_headers_body(entity);
+    let headers = parse_mime_headers(headers_raw);
+    let content_type = header_value(&headers, "content-type").unwrap_or("text/plain");
+    let (content_type_essence, boundary) = content_type_essence_and_param(content_type, "boundary");
+
+    if content_type_essence.starts_with("multipart/") {
+        let Some(boundary) = boundary else {
+            return entity.to_vec();
+        };
+
+        let mut rebuilt_body = Vec::new();
+        for part in split_multipart_body(body, &boundary) {
+            rebuilt_body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
+            let mut sanitized_part = sanitize_email_html_blocks(part);
+            if !sanitized_part.ends_with(b"\r\n") {
+                sanitized_part.extend_from_slice(b"\r\n");
+            }
+            rebuilt_body.extend_from_slice(&sanitized_part);
+        }
+        rebuilt_body.extend_from_slice(format!("--{boundary}--\r\n").as_bytes());
+
+        let mut out = Vec::with_capacity(headers_raw.len() + rebuilt_body.len() + 4);
+        out.extend_from_slice(headers_raw);
+        out.extend_from_slice(b"\r\n\r\n");
+        out.extend_from_slice(&rebuilt_body);
+        return out;
+    }
+
+    if content_type_essence == "text/html" {
+        // Only rewrite UTF-8/ASCII HTML: decoding other charsets (UTF-16, Latin-1, …) through
+        // `from_utf8_lossy` would corrupt the text, so leave those parts untouched. kreuzberg still
+        // decodes them itself via the charset header; the CSS leak is overwhelmingly a UTF-8 case.
+        let (_, charset) = content_type_essence_and_param(content_type, "charset");
+        let is_utf8_or_ascii = charset.as_deref().is_none_or(|charset| {
+            matches!(
+                charset.to_ascii_lowercase().as_str(),
+                "utf-8" | "utf8" | "us-ascii" | "ascii"
+            )
+        });
+        if !is_utf8_or_ascii {
+            return entity.to_vec();
+        }
+
+        let transfer_encoding = header_value(&headers, "content-transfer-encoding");
+        let decoded = decode_mime_body(body, transfer_encoding);
+        let cleaned = strip_html_style_and_script(&String::from_utf8_lossy(&decoded));
+
+        let mut out = headers_with_base64_encoding(headers_raw).into_bytes();
+        out.extend_from_slice(b"\r\n");
+        out.extend_from_slice(base64_mime_body(cleaned.as_bytes()).as_bytes());
+        return out;
+    }
+
+    entity.to_vec()
+}
+
 fn content_already_contains_plain_text(content: &str, plain_text: &str) -> bool {
     if content.contains(plain_text.trim()) {
         return true;
@@ -448,11 +613,31 @@ impl FileProcessor for KreuzbergProcessor {
                 {
                     mime_type = kreuzberg::DOCX_MIME_TYPE.to_string();
                 }
+
+                // kreuzberg rejects bare `multipart/*` types ("Unsupported format"), but those are
+                // the inner header of an RFC822 message (a `.eml` whose Content-Type is
+                // `multipart/alternative`/`multipart/mixed`). Route them through the email
+                // extractor instead of failing and falling back to a raw, hugely-inflated count.
+                if mime_type.starts_with("multipart/") {
+                    mime_type = "message/rfc822".to_string();
+                }
                 tracing::debug!("Final decided MIME type: {:?}", &mime_type);
                 let email_plain_text = if is_message_rfc822_mime_type(&mime_type) {
                     extract_email_plain_text(&file_bytes)
                 } else {
                     None
+                };
+
+                // For emails, strip `<style>`/`<script>` blocks from HTML parts before extraction:
+                // kreuzberg renders style-block contents as text, which otherwise leaks a CSS-heavy
+                // newsletter's stylesheet into the token count. Other parts are left untouched.
+                let sanitized_email_bytes;
+                let did_sanitize = is_message_rfc822_mime_type(&mime_type);
+                let extraction_bytes: &[u8] = if did_sanitize {
+                    sanitized_email_bytes = sanitize_email_html_blocks(&file_bytes);
+                    &sanitized_email_bytes
+                } else {
+                    &file_bytes
                 };
 
                 // Configure kreuzberg for page-aware markdown extraction
@@ -469,9 +654,23 @@ impl FileProcessor for KreuzbergProcessor {
                     ..Default::default()
                 };
 
-                // Extract content using kreuzberg
-                let result = kreuzberg::extract_bytes_sync(&file_bytes, &mime_type, &config)
-                    .wrap_err("Kreuzberg extraction failed")?;
+                // Extract content using kreuzberg. If HTML sanitization rewrote the email and the
+                // rewritten bytes somehow fail to parse, fall back to the original bytes so we never
+                // regress a previously-extractable email into a silent drop (a higher token count is
+                // strictly better than losing the file).
+                let result = match kreuzberg::extract_bytes_sync(extraction_bytes, &mime_type, &config)
+                {
+                    Ok(result) => result,
+                    Err(err) if did_sanitize => {
+                        tracing::warn!(
+                            error = %err,
+                            "Email HTML sanitization produced unparseable output; retrying with original bytes"
+                        );
+                        kreuzberg::extract_bytes_sync(&file_bytes, &mime_type, &config)
+                            .wrap_err("Kreuzberg extraction failed")?
+                    }
+                    Err(err) => return Err(err).wrap_err("Kreuzberg extraction failed"),
+                };
 
                 let mut content =
                     content_with_page_markers(result.content, result.pages, &marker_format);
@@ -547,6 +746,162 @@ mod tests {
         assert!(extracted.contains(
             "could you please take a quick look at the attached draft document and let me know whether it looks fine from your side."
         ));
+    }
+
+    #[tokio::test]
+    async fn test_kreuzberg_coerces_multipart_alternative_eml_and_strips_css() {
+        // A styled newsletter is `multipart/alternative` in its own header, and its HTML body is
+        // dominated by inline `style="..."` attributes (the real case: ~600 KB of inline CSS).
+        // Clients sometimes forward that inner type verbatim; kreuzberg rejects it
+        // ("Unsupported format") and the raw CSS-heavy bytes used to be counted (~600k tokens for
+        // ~6k of real text). parse_file must coerce `multipart/*` to `message/rfc822` so the email
+        // extractor runs and drops the inline CSS.
+        let bloat_cell = "<td style=\"font-family:Helvetica;color:#ff0000;font-size:13px;\
+             line-height:18px;padding:8px;border:1px solid #cccccc;CSSSENTINEL:1\"></td>"
+            .repeat(400);
+        let raw_len_marker = bloat_cell.len();
+        let eml = format!(
+            "From: News <news@example.com>\r\n\
+             To: Recipient <recipient@example.com>\r\n\
+             Subject: Weekly digest\r\n\
+             MIME-Version: 1.0\r\n\
+             Content-Type: multipart/alternative; boundary=\"BOUND\"\r\n\
+             \r\n\
+             --BOUND\r\n\
+             Content-Type: text/plain; charset=utf-8\r\n\
+             \r\n\
+             Readable digest body marker.\r\n\
+             --BOUND\r\n\
+             Content-Type: text/html; charset=utf-8\r\n\
+             \r\n\
+             <html><body><p style=\"color:#ff0000;font-size:13px\">Readable digest body marker.</p>\
+             <table>{bloat_cell}</table></body></html>\r\n\
+             --BOUND--\r\n"
+        );
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(eml.into_bytes(), Some("multipart/alternative"))
+            .await
+            .expect("multipart/alternative .eml should be coerced to message/rfc822 and parse");
+
+        assert!(
+            extracted.contains("Readable digest body marker."),
+            "readable body missing from extracted content:\n{extracted}"
+        );
+        assert!(
+            !extracted.contains("CSSSENTINEL"),
+            "inline CSS leaked into extracted content:\n{extracted}"
+        );
+        assert!(
+            extracted.len() < raw_len_marker,
+            "extracted content ({} bytes) not smaller than the inline-CSS payload ({} bytes) — \
+             the email extractor did not run (raw passthrough)",
+            extracted.len(),
+            raw_len_marker
+        );
+    }
+
+    #[test]
+    fn strip_html_style_and_script_removes_blocks_but_keeps_content() {
+        let cleaned = strip_html_style_and_script(
+            "<p>keep me</p><style>.a{color:red}</style><script>alert(1)</script>\
+             <!-- comment --><p>also keep</p>",
+        );
+        assert_eq!(cleaned, "<p>keep me</p><p>also keep</p>");
+    }
+
+    #[test]
+    fn strip_html_style_and_script_preserves_custom_elements_and_unterminated_tags() {
+        // Custom elements that merely start with the tag name must not be treated as style/script.
+        assert_eq!(
+            strip_html_style_and_script("<styled-list>important</styled-list> tail"),
+            "<styled-list>important</styled-list> tail"
+        );
+        assert_eq!(
+            strip_html_style_and_script("before <scripture>verse</scripture> after"),
+            "before <scripture>verse</scripture> after"
+        );
+        // An unterminated <style> must keep the remaining text rather than dropping it.
+        assert_eq!(
+            strip_html_style_and_script("head <style>.a{color:red} no close and important tail"),
+            "head <style>.a{color:red} no close and important tail"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_kreuzberg_leaves_non_utf8_html_email_untouched() {
+        // A UTF-16 HTML part must not be run through the lossy UTF-8 sanitizer (it would corrupt
+        // the text); the sanitizer should leave it for kreuzberg to decode via the charset header.
+        let mut body = Vec::new();
+        for unit in "<html><body><p>UTF16 body marker works</p></body></html>".encode_utf16() {
+            body.extend_from_slice(&unit.to_le_bytes());
+        }
+        let mut eml = b"From: a@example.com\r\nTo: b@example.com\r\nSubject: utf16\r\n\
+            MIME-Version: 1.0\r\nContent-Type: text/html; charset=utf-16\r\n\r\n"
+            .to_vec();
+        eml.extend_from_slice(&body);
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(eml, Some("message/rfc822"))
+            .await
+            .expect("UTF-16 html email should still extract");
+        assert!(
+            extracted.contains("UTF16 body marker works"),
+            "UTF-16 content was corrupted or dropped:\n{extracted}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_kreuzberg_reduces_production_scale_styled_newsletter_without_leaking() {
+        // Production-scale regression: a ~950 KB synthetic Microsoft-style weekly digest
+        // (`multipart/alternative`, quoted-printable HTML, a large `<style>` block, hundreds of
+        // inline-styled nested tables, MSO conditionals, tracking URLs). The CSS carries a
+        // `ZZCSSLEAKZZ` sentinel; the clean text/plain twin carries readable markers. Before the
+        // fix this estimated at ~628k tokens (raw passthrough) or errored; with MIME coercion alone
+        // it still leaked the `<style>` block (~27.5k tokens, 451 CSS fragments). The HTML
+        // sanitizer must drop the CSS while preserving the readable content.
+        let eml_bytes = read_test_fixture("styled_newsletter_multipart_alternative.eml");
+        let raw_len = eml_bytes.len();
+        assert!(
+            raw_len > 800_000,
+            "fixture unexpectedly small ({raw_len} bytes)"
+        );
+
+        let processor = KreuzbergProcessor;
+        // The bug case: a client forwards the `.eml`'s own inner `multipart/alternative` type.
+        let extracted = processor
+            .parse_file(eml_bytes, Some("multipart/alternative"))
+            .await
+            .expect("styled newsletter should be coerced, sanitized, and parsed");
+
+        // Readable content survives (the text/plain twin is appended when the HTML lacks it).
+        for marker in [
+            "readable item ONE",
+            "readable item TWO",
+            "readable item THREE",
+        ] {
+            assert!(
+                extracted.contains(marker),
+                "readable marker {marker:?} missing from extracted content"
+            );
+        }
+        // The CSS sentinel must not appear anywhere — no `<style>` leak.
+        assert_eq!(
+            extracted.matches("ZZCSSLEAKZZ").count(),
+            0,
+            "CSS leaked from the <style> block into extracted content"
+        );
+
+        // Token count must collapse to the real-content range, far below the pre-fix ~27.5k leak.
+        let bpe = tiktoken_rs::o200k_base().expect("o200k_base tokenizer");
+        let tokens = bpe.encode_with_special_tokens(&extracted).len();
+        assert!(
+            tokens < 15_000,
+            "expected the styled newsletter to reduce to real-content size, got {tokens} tokens \
+             ({raw_len} raw bytes)"
+        );
     }
 
     #[tokio::test]

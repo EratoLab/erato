@@ -2583,19 +2583,11 @@ pub(super) fn effective_upload_content_type(
 ) -> Option<String> {
     let provided_content_type = provided_content_type.map(content_type_essence);
 
-    let needs_eml_override = is_eml_filename(filename)
-        && match provided_content_type {
-            None => true,
-            Some(content_type) => {
-                content_type.eq_ignore_ascii_case("application/octet-stream")
-                    || content_type
-                        .split('/')
-                        .next()
-                        .is_some_and(|type_| type_.eq_ignore_ascii_case("text"))
-            }
-        };
-
-    if needs_eml_override {
+    // The `.eml` extension is authoritative: an `.eml` is always an RFC822 message, so force
+    // `message/rfc822` regardless of the provided type. A client that sends the file's own inner
+    // header (`multipart/alternative`/`multipart/mixed`) would otherwise have it preserved, and
+    // kreuzberg cannot parse those — the raw content then gets counted, inflating the estimate.
+    if is_eml_filename(filename) {
         return Some("message/rfc822".to_string());
     }
 
@@ -3043,9 +3035,24 @@ mod tests {
     }
 
     #[test]
-    fn effective_upload_content_type_preserves_specific_multipart_type() {
+    fn effective_upload_content_type_preserves_message_rfc822() {
         assert_eq!(
             effective_upload_content_type("message.eml", Some("message/rfc822")),
+            Some("message/rfc822".to_string())
+        );
+    }
+
+    #[test]
+    fn effective_upload_content_type_forces_eml_with_multipart_type() {
+        // Regression: a client sending the `.eml`'s own inner header must not bypass the override.
+        // kreuzberg errors on `multipart/*`, so the raw bytes used to be counted (~600k tokens for
+        // a newsletter whose real content is ~6k).
+        assert_eq!(
+            effective_upload_content_type("message.eml", Some("multipart/alternative")),
+            Some("message/rfc822".to_string())
+        );
+        assert_eq!(
+            effective_upload_content_type("thread.eml", Some("multipart/mixed; boundary=abc")),
             Some("message/rfc822".to_string())
         );
     }
