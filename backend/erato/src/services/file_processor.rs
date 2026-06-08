@@ -213,7 +213,189 @@ fn decode_mime_body(body: &[u8], transfer_encoding: Option<&str>) -> Vec<u8> {
     }
 }
 
+/// Strip zero-width and invisible formatting characters that carry no readable meaning. These are
+/// used to obfuscate keywords (`pass\u{200b}word`) — splitting a word so a naive filter misses it
+/// while a human/LLM still reads it — and to pad the token count. We remove only true zero-width /
+/// invisible-control characters; normal whitespace, legitimate non-ASCII letters, and emoji are
+/// left untouched so we never corrupt real content.
+///
+/// Removed: U+200B ZERO WIDTH SPACE, U+200C ZERO WIDTH NON-JOINER, U+200D ZERO WIDTH JOINER,
+/// U+2060 WORD JOINER, U+FEFF ZERO WIDTH NO-BREAK SPACE / BOM, U+00AD SOFT HYPHEN.
+fn strip_zero_width_chars(text: &str) -> String {
+    if !text.chars().any(is_zero_width_char) {
+        return text.to_string();
+    }
+    text.chars().filter(|ch| !is_zero_width_char(*ch)).collect()
+}
+
+/// Whether `ch` is a zero-width / invisible formatting character we strip. See
+/// [`strip_zero_width_chars`] for the rationale and the exact set.
+fn is_zero_width_char(ch: char) -> bool {
+    matches!(
+        ch,
+        '\u{200B}' | '\u{200C}' | '\u{200D}' | '\u{2060}' | '\u{FEFF}' | '\u{00AD}'
+    )
+}
+
+/// Minimum number of base64-charset characters in a contiguous run before we elide it. Set high so
+/// we never eat real prose, code, short hashes, or a single wrapped line: a 512-char base64 blob is
+/// ~384 bytes of binary, far larger than any natural-language token, and tokenizes as pure noise.
+const MIN_BASE64_RUN_CHARS: usize = 512;
+
+/// Minimum length of an individual whitespace-separated segment for it to count as part of a base64
+/// run. Real base64 is emitted either as one giant contiguous string or as long unbroken lines
+/// (64–76 chars per RFC 2045/7468 wrapping); natural-language words are short (~5 chars). A run is
+/// only extended across whitespace into the next segment when that segment is itself this long, so
+/// a short prose word immediately ends the run — this is what stops a few prose words next to a
+/// blob (or a whole paragraph of alphanumeric words) from being absorbed.
+const MIN_BASE64_SEGMENT_LEN: usize = 24;
+
+/// Whether `byte` is in the base64 alphabet (`A–Z a–z 0–9 + / =`). `=` is the padding char and is
+/// only ever valid base64 trailing, but allowing it mid-run is harmless for detection.
+fn is_base64_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'/' | b'=')
+}
+
+/// Replace each PEM-delimited block and each long contiguous base64-ish run with a compact
+/// `[base64 data omitted, N chars]` marker. Pasted certificates / keys / image dumps tokenize as
+/// huge noise (~2 chars/token), so eliding them is a large token win that loses no readable text.
+///
+/// Two passes, conservative to avoid false positives on real prose, code, or short tokens:
+///   1. PEM blocks: anything between a `-----BEGIN …-----` and the next `-----END …-----` line
+///      (RFC 7468 textual encoding) is replaced wholesale — the delimiters mark it as non-prose.
+///      Handled first because kreuzberg collapses newlines to spaces in the final content, so the
+///      block can arrive either newline- or space-separated; matching on the literal delimiters
+///      works for both.
+///   2. Contiguous runs: a run is a sequence of *long* (>= [`MIN_BASE64_SEGMENT_LEN`]) base64
+///      segments joined by whitespace — a short segment ends the run, so a prose word adjacent to a
+///      blob never gets absorbed. The run is elided only when its total base64 chars reach
+///      [`MIN_BASE64_RUN_CHARS`]. This matches both a single contiguous blob (one long segment) and
+///      RFC-wrapped base64 (many long lines) while sparing ordinary text.
+fn elide_base64_blobs(text: &str) -> String {
+    let without_pem = elide_pem_blocks(text);
+    elide_long_base64_runs(&without_pem)
+}
+
+/// Pass 1 of [`elide_base64_blobs`]: replace each `-----BEGIN …----- … -----END …-----` PEM block
+/// with a marker. Matches on the literal ASCII delimiters so it works whether the block is newline-
+/// or (post-kreuzberg) space-separated. An unterminated `-----BEGIN-----` (no matching END) is left
+/// untouched so we never swallow trailing real text.
+fn elide_pem_blocks(text: &str) -> String {
+    const BEGIN: &str = "-----BEGIN ";
+    const END_PREFIX: &str = "-----END ";
+    const DELIM_SUFFIX: &str = "-----";
+
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+
+    while let Some(begin_rel) = rest.find(BEGIN) {
+        // Find the end of the `-----BEGIN …-----` opening delimiter line.
+        let after_begin_kw = begin_rel + BEGIN.len();
+        let Some(begin_close_rel) = rest[after_begin_kw..].find(DELIM_SUFFIX) else {
+            break; // No closing `-----` for the BEGIN line: not a well-formed PEM header.
+        };
+        let header_end = after_begin_kw + begin_close_rel + DELIM_SUFFIX.len();
+
+        // Find the matching `-----END …-----` and the end of its delimiter line.
+        let Some(end_rel) = rest[header_end..].find(END_PREFIX) else {
+            break; // Unterminated block: keep the original text from here untouched.
+        };
+        let end_start = header_end + end_rel;
+        let after_end_kw = end_start + END_PREFIX.len();
+        let Some(end_close_rel) = rest[after_end_kw..].find(DELIM_SUFFIX) else {
+            break;
+        };
+        let block_end = after_end_kw + end_close_rel + DELIM_SUFFIX.len();
+
+        let block_len = block_end - begin_rel;
+        out.push_str(&rest[..begin_rel]);
+        out.push_str(&format!("[base64 data omitted, {block_len} chars]"));
+        rest = &rest[block_end..];
+    }
+
+    out.push_str(rest);
+    out
+}
+
+/// Pass 2 of [`elide_base64_blobs`]: replace each long base64 run with a marker. A run is a chain of
+/// long (>= [`MIN_BASE64_SEGMENT_LEN`]) base64 segments joined by whitespace; a short segment or any
+/// non-base64/non-whitespace byte ends it. See [`elide_base64_blobs`] for the rationale.
+fn elide_long_base64_runs(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut out = String::with_capacity(text.len());
+    let mut index = 0;
+
+    while index < bytes.len() {
+        // Measure a single maximal segment of base64 chars starting at `index`.
+        let segment_len = base64_segment_len(bytes, index);
+        if segment_len < MIN_BASE64_SEGMENT_LEN {
+            // Not the start of a long base64 segment: emit one byte and move on. (Indexing by byte is
+            // safe to re-emit verbatim because non-ASCII bytes are never base64 and are copied as-is.)
+            out.push_str(&text[index..index + utf8_char_len(bytes[index])]);
+            index += utf8_char_len(bytes[index]);
+            continue;
+        }
+
+        // Extend the run across whitespace into each following *long* base64 segment. We track the
+        // index just past the last base64 char so trailing whitespace is left for the normal path.
+        let run_start = index;
+        let mut run_end = index + segment_len;
+        let mut base64_chars = segment_len;
+        let mut cursor = run_end;
+
+        loop {
+            // Skip interior whitespace, then peek the next segment; only consume it if it is long.
+            let mut probe = cursor;
+            while probe < bytes.len() && bytes[probe].is_ascii_whitespace() {
+                probe += 1;
+            }
+            let next_len = base64_segment_len(bytes, probe);
+            if next_len < MIN_BASE64_SEGMENT_LEN {
+                break;
+            }
+            base64_chars += next_len;
+            run_end = probe + next_len;
+            cursor = run_end;
+        }
+
+        if base64_chars >= MIN_BASE64_RUN_CHARS {
+            out.push_str(&format!("[base64 data omitted, {base64_chars} chars]"));
+        } else {
+            out.push_str(&text[run_start..run_end]);
+        }
+        index = run_end;
+    }
+
+    out
+}
+
+/// Length (in bytes/chars — base64 chars are all ASCII) of the maximal run of base64-alphabet chars
+/// starting at `start`. Returns 0 if `start` is not a base64 char.
+fn base64_segment_len(bytes: &[u8], start: usize) -> usize {
+    let mut end = start;
+    while end < bytes.len() && is_base64_byte(bytes[end]) {
+        end += 1;
+    }
+    end - start
+}
+
+/// Byte length of the UTF-8 sequence whose lead byte is `byte`. Used so the non-base64 fall-through
+/// copies whole multi-byte characters (base64 chars are ASCII, so this only matters for the bytes we
+/// pass through untouched).
+fn utf8_char_len(byte: u8) -> usize {
+    match byte {
+        0x00..=0x7F => 1,
+        0xC0..=0xDF => 2,
+        0xE0..=0xEF => 3,
+        0xF0..=0xF7 => 4,
+        // Continuation/invalid lead byte: advance one byte to guarantee progress.
+        _ => 1,
+    }
+}
+
 fn normalize_plain_text(text: &str) -> String {
+    let text = strip_zero_width_chars(text);
+    let text = elide_base64_blobs(&text);
     text.replace("\r\n", "\n")
         .replace('\r', "\n")
         .lines()
@@ -598,6 +780,20 @@ fn sanitize_email_html_blocks_inner(entity: &[u8], depth: usize) -> Vec<u8> {
         let mut out = headers_with_base64_encoding(headers_raw).into_bytes();
         out.extend_from_slice(b"\r\n");
         out.extend_from_slice(base64_mime_body(cleaned.as_bytes()).as_bytes());
+        return out;
+    }
+
+    let content_disposition = header_value(&headers, "content-disposition");
+    if is_tnef_part(&content_type_essence, content_type, content_disposition) {
+        // A `winmail.dat` / TNEF part is an opaque Outlook blob we deliberately do not decode. BLANK
+        // its body (re-emit empty base64) so its base64 can never reach the token count, regardless
+        // of how a given kreuzberg version chooses to render an unknown attachment. A short
+        // `[winmail.dat (TNEF) attachment omitted]` marker is appended separately by the supplement
+        // in `parse_file` so the reader still knows an attachment was present. Mirrors the
+        // calendar/vcard blanking branch below.
+        let mut out = headers_with_base64_encoding(headers_raw).into_bytes();
+        out.extend_from_slice(b"\r\n");
+        out.extend_from_slice(base64_mime_body(b"").as_bytes());
         return out;
     }
 
@@ -1044,11 +1240,45 @@ fn is_vcard_mime(mime: &str) -> bool {
     matches!(mime, "text/vcard" | "text/x-vcard")
 }
 
+/// Whether a MIME part is a TNEF (Transport Neutral Encapsulation Format) blob — the proprietary
+/// `winmail.dat` attachment Outlook emits when "Rich Text" is on. We do NOT decode TNEF (out of
+/// scope); we only need to recognize it so the sanitizer can blank its base64 (otherwise a few KB
+/// of opaque blob can tokenize as noise, and even if a given extractor drops it today, blanking
+/// guarantees the bytes never reach kreuzberg). Detection is by content-type essence
+/// (`application/ms-tnef`, `application/vnd.ms-tnef`) OR by a `winmail.dat` filename in the
+/// content-type `name=` / content-disposition `filename=` parameter — Outlook sets all of these,
+/// but third-party relays sometimes mangle the content-type to `application/octet-stream` while
+/// keeping the canonical filename.
+fn is_tnef_part(
+    content_type_essence: &str,
+    content_type: &str,
+    content_disposition: Option<&str>,
+) -> bool {
+    if matches!(
+        content_type_essence,
+        "application/ms-tnef" | "application/vnd.ms-tnef"
+    ) {
+        return true;
+    }
+
+    let name = content_type_essence_and_param(content_type, "name").1;
+    let filename =
+        content_disposition.and_then(|cd| content_type_essence_and_param(cd, "filename").1);
+    [name, filename]
+        .into_iter()
+        .flatten()
+        .any(|value| value.trim().eq_ignore_ascii_case("winmail.dat"))
+}
+
 /// A readable supplement extracted from the calendar/vcard parts of an email.
 #[derive(Default)]
 struct CalendarVcardSupplement {
     calendar_events: Vec<String>,
     contact_cards: Vec<String>,
+    /// Number of TNEF (`winmail.dat`) parts seen. We don't decode them; we only count them so a
+    /// single `[winmail.dat (TNEF) attachment omitted]` marker can tell the reader an attachment
+    /// existed after the sanitizer blanked its bytes.
+    tnef_attachments: usize,
 }
 
 /// Walk the MIME tree (recursing into `multipart/*` and `message/rfc822`) and
@@ -1061,6 +1291,7 @@ fn collect_calendar_vcard_parts(entity: &[u8], output: &mut CalendarVcardSupplem
     let content_type = header_value(&headers, "content-type").unwrap_or("text/plain");
     let (content_type_essence, boundary) = content_type_essence_and_param(content_type, "boundary");
     let transfer_encoding = header_value(&headers, "content-transfer-encoding");
+    let content_disposition = header_value(&headers, "content-disposition");
 
     if content_type_essence.starts_with("multipart/") {
         if let Some(boundary) = boundary {
@@ -1068,6 +1299,12 @@ fn collect_calendar_vcard_parts(entity: &[u8], output: &mut CalendarVcardSupplem
                 collect_calendar_vcard_parts(part, output);
             }
         }
+        return;
+    }
+
+    if is_tnef_part(&content_type_essence, content_type, content_disposition) {
+        // Count the blanked TNEF blob so `parse_file` can surface a marker (see struct doc).
+        output.tnef_attachments += 1;
         return;
     }
 
@@ -1095,7 +1332,10 @@ fn collect_calendar_vcard_parts(entity: &[u8], output: &mut CalendarVcardSupplem
 fn extract_calendar_vcard_supplement(file_bytes: &[u8]) -> Option<CalendarVcardSupplement> {
     let mut supplement = CalendarVcardSupplement::default();
     collect_calendar_vcard_parts(file_bytes, &mut supplement);
-    if supplement.calendar_events.is_empty() && supplement.contact_cards.is_empty() {
+    if supplement.calendar_events.is_empty()
+        && supplement.contact_cards.is_empty()
+        && supplement.tnef_attachments == 0
+    {
         None
     } else {
         Some(supplement)
@@ -1120,6 +1360,16 @@ fn append_calendar_vcard_supplement(
     }
     for card in supplement.contact_cards {
         append_supplement_block(content, "## Contact card", &card);
+    }
+    // The TNEF blob itself was blanked by the sanitizer (its content is not recoverable without a
+    // TNEF decoder, which is out of scope). Emit a single short marker so the reader knows an
+    // attachment was present rather than silently losing the fact.
+    if supplement.tnef_attachments > 0 {
+        append_supplement_block(
+            content,
+            "## Attachment",
+            "[winmail.dat (TNEF) attachment omitted]",
+        );
     }
 }
 
@@ -1334,6 +1584,16 @@ impl FileProcessor for KreuzbergProcessor {
                 append_extraction_children(&mut content, result.children);
                 append_email_plain_text_if_missing(&mut content, email_plain_text);
                 append_calendar_vcard_supplement(&mut content, calendar_vcard_supplement);
+
+                // Final post-extraction pass for emails: kreuzberg renders the email body directly
+                // (so a PEM block / pasted blob in a `text/plain` body, or zero-width-obfuscated
+                // keywords, land in `content` even though the plain-text supplement is deduped away).
+                // Elide long base64 blobs and strip zero-width characters here so the cleanup applies
+                // to the rendered body regardless of which part it came from. Both helpers are
+                // no-ops when there is nothing to remove, so this never alters clean content.
+                if did_sanitize {
+                    content = strip_zero_width_chars(&elide_base64_blobs(&content));
+                }
 
                 Ok(content)
             })
@@ -2467,6 +2727,272 @@ Content-Type: text/html; charset=utf-8
         assert!(
             summary.contains("Description: Pens and paper"),
             "missing vtodo desc:\n{summary}"
+        );
+    }
+
+    // --- TNEF / winmail.dat, base64-in-text, and zero-width noise filtering -----------------
+
+    #[test]
+    fn is_tnef_part_detects_content_type_and_filename() {
+        // Canonical Outlook content-types.
+        assert!(is_tnef_part(
+            "application/ms-tnef",
+            "application/ms-tnef; name=\"winmail.dat\"",
+            Some("attachment; filename=\"winmail.dat\"")
+        ));
+        assert!(is_tnef_part(
+            "application/vnd.ms-tnef",
+            "application/vnd.ms-tnef",
+            None
+        ));
+        // Mangled content-type but canonical filename (relay rewrote the type to octet-stream).
+        assert!(is_tnef_part(
+            "application/octet-stream",
+            "application/octet-stream; name=\"WINMAIL.DAT\"",
+            Some("attachment; filename=\"WinMail.Dat\"")
+        ));
+        // A normal attachment is not TNEF.
+        assert!(!is_tnef_part(
+            "application/pdf",
+            "application/pdf; name=\"report.pdf\"",
+            Some("attachment; filename=\"report.pdf\"")
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_kreuzberg_blanks_tnef_winmail_dat_and_marks_attachment() {
+        // An Outlook email whose Rich Text produced a `winmail.dat` (TNEF) attachment, a few KB of
+        // base64, alongside a readable text/plain body. Modeled on the real Outlook TNEF MIME shape
+        // (`application/ms-tnef; name="winmail.dat"` + `Content-Disposition: attachment;
+        // filename="winmail.dat"`). The body must survive, the TNEF base64 must never reach the
+        // token count, the omission marker must be present, and output must be tiny.
+        let mut blob = String::new();
+        while blob.len() < 4_000 {
+            // Realistic TNEF byte signature start (0x78 0x9F …) base64-ish, repeated; content is
+            // irrelevant, only that it is a sizable opaque blob carrying a sentinel.
+            blob.push_str("eJzNVk1vTNEFSENTINEL2zAMvfdXED0VWGw7ztIm4ABCDEFGH");
+        }
+        let raw_blob_len = blob.len();
+        let eml = format!(
+            "From: Sender <sender@example.com>\r\n\
+             To: Recipient <recipient@example.com>\r\n\
+             Subject: Quarterly numbers\r\n\
+             MIME-Version: 1.0\r\n\
+             Content-Type: multipart/mixed; boundary=\"TNEFBOUND\"\r\n\r\n\
+             --TNEFBOUND\r\n\
+             Content-Type: text/plain; charset=utf-8\r\n\r\n\
+             Please see the attached spreadsheet. TNEF_BODY_MARKER readable.\r\n\
+             --TNEFBOUND\r\n\
+             Content-Type: application/ms-tnef; name=\"winmail.dat\"\r\n\
+             Content-Transfer-Encoding: base64\r\n\
+             Content-Disposition: attachment; filename=\"winmail.dat\"\r\n\r\n\
+             {blob}\r\n--TNEFBOUND--\r\n"
+        );
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(eml.into_bytes(), Some("message/rfc822"))
+            .await
+            .expect("TNEF email should extract");
+
+        assert!(
+            extracted.contains("TNEF_BODY_MARKER readable."),
+            "readable body lost:\n{extracted}"
+        );
+        assert!(
+            !extracted.contains("TNEFSENTINEL"),
+            "TNEF base64 leaked into extracted content:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("[winmail.dat (TNEF) attachment omitted]"),
+            "TNEF omission marker missing:\n{extracted}"
+        );
+        let tokens = token_count(&extracted);
+        assert!(
+            tokens < 100,
+            "TNEF email output too large: {tokens} tokens (raw blob {raw_blob_len} bytes):\n{extracted}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_kreuzberg_elides_pem_block_in_plain_text_body() {
+        // A `text/plain` body containing a PEM CERTIFICATE block (~1.5 KB of base64) wrapped in
+        // ordinary sentences. The sentences must survive, the base64 must be elided behind a marker,
+        // and the token count must collapse. Modeled on RFC 7468 PEM textual encoding.
+        let mut blob = String::new();
+        while blob.len() < 1_500 {
+            blob.push_str("MIIDXTCCAkWgAwIBAgIJAKL0UG+mRkSPMA0GCSqGSIb3DQEBCwUAMEUxCzAJBgNV\r\n");
+        }
+        let raw_blob_len = blob.len();
+        let body = format!(
+            "Dear team, please find our signing certificate below for verification.\r\n\r\n\
+             -----BEGIN CERTIFICATE-----\r\n{blob}-----END CERTIFICATE-----\r\n\r\n\
+             Let me know if you need anything else. Regards, Alice"
+        );
+        let eml = format!(
+            "From: Alice <alice@example.com>\r\n\
+             To: Bob <bob@example.com>\r\n\
+             Subject: Our certificate\r\n\
+             MIME-Version: 1.0\r\n\
+             Content-Type: text/plain; charset=utf-8\r\n\r\n{body}\r\n"
+        );
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(eml.into_bytes(), Some("message/rfc822"))
+            .await
+            .expect("PEM-in-body email should extract");
+
+        assert!(
+            extracted.contains("please find our signing certificate below"),
+            "leading sentence lost:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("Let me know if you need anything else."),
+            "trailing sentence lost:\n{extracted}"
+        );
+        assert!(
+            !extracted.contains("MIIDXTCCAkW"),
+            "PEM base64 leaked into extracted content:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("[base64 data omitted"),
+            "PEM omission marker missing:\n{extracted}"
+        );
+        let tokens = token_count(&extracted);
+        assert!(
+            tokens < 100,
+            "PEM email output too large: {tokens} tokens (raw blob {raw_blob_len} bytes):\n{extracted}"
+        );
+    }
+
+    #[test]
+    fn elide_base64_blobs_elides_pem_block_keeps_surrounding_prose() {
+        let mut blob = String::new();
+        while blob.len() < 1_000 {
+            blob.push_str("AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHH");
+        }
+        let input = format!(
+            "before text -----BEGIN PRIVATE KEY-----\n{blob}\n-----END PRIVATE KEY----- after text"
+        );
+        let out = elide_base64_blobs(&input);
+        assert!(out.starts_with("before text "), "leading prose lost: {out}");
+        assert!(out.ends_with(" after text"), "trailing prose lost: {out}");
+        assert!(
+            out.contains("[base64 data omitted"),
+            "marker missing: {out}"
+        );
+        assert!(!out.contains("AAAABBBB"), "PEM body leaked: {out}");
+    }
+
+    #[test]
+    fn elide_base64_blobs_elides_long_contiguous_run() {
+        // A pasted blob: one contiguous 800-char base64 string with no natural-language spacing.
+        let blob = "QWxhZGRpbjpvcGVuIHNlc2FtZQ".repeat(40); // ~1040 chars, no spaces
+        let input = format!("Here is the dump: {blob} -- end of dump");
+        let out = elide_base64_blobs(&input);
+        assert!(
+            out.starts_with("Here is the dump: "),
+            "prose before run lost: {out}"
+        );
+        assert!(
+            out.contains("-- end of dump"),
+            "prose after run lost: {out}"
+        );
+        assert!(
+            out.contains("[base64 data omitted"),
+            "marker missing: {out}"
+        );
+        assert!(!out.contains("QWxhZGRpbg"), "blob leaked: {out}");
+    }
+
+    #[test]
+    fn elide_base64_blobs_keeps_short_tokens_and_prose() {
+        // A short base64-looking token (a word, a short hash) in prose must NOT be elided.
+        let inputs = [
+            "The build hash is a1b2c3d4e5f6 and the deploy succeeded.",
+            "Send the invoice to accounting before Friday please.",
+            "Run base64 QWxhZGRpbg== to decode the example value.",
+            // A whole sentence of alphanumeric words separated by single spaces: long total base64
+            // chars but short average segment length, so the segment-average guard must spare it.
+            "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike \
+             november oscar papa quebec romeo sierra tango uniform victor whiskey xray yankee \
+             zulu alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike",
+        ];
+        for input in inputs {
+            let out = elide_base64_blobs(input);
+            assert_eq!(out, input, "false-positive elision of prose/token: {out}");
+        }
+    }
+
+    #[test]
+    fn strip_zero_width_chars_joins_obfuscated_keywords() {
+        // Zero-width chars inside keywords (a classic phishing obfuscation) must be removed so the
+        // joined word is readable, while legitimate text/emoji are untouched.
+        let input = "Your in\u{200b}voice and pass\u{200d}word were re\u{2060}set \u{feff}now. \
+                     Soft\u{00ad}hyphen café 🚀";
+        let out = strip_zero_width_chars(input);
+        assert!(out.contains("invoice"), "zero-width not joined: {out}");
+        assert!(out.contains("password"), "zero-width not joined: {out}");
+        assert!(out.contains("reset"), "word joiner not removed: {out}");
+        assert!(out.contains("Softhyphen"), "soft hyphen not removed: {out}");
+        assert!(
+            out.contains("café"),
+            "legitimate non-ASCII letter dropped: {out}"
+        );
+        assert!(out.contains('🚀'), "emoji dropped: {out}");
+        // No invisible chars remain.
+        assert!(
+            !out.chars().any(is_zero_width_char),
+            "zero-width chars remained: {out:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_kreuzberg_strips_zero_width_obfuscation_in_email_body() {
+        // End-to-end: a phishing-style body that splits keywords with zero-width spaces must come
+        // out with the keywords joined so a downstream filter/LLM reads the real word.
+        let eml = "From: a@example.com\r\nTo: b@example.com\r\nSubject: alert\r\nMIME-Version: 1.0\r\n\
+            Content-Type: text/plain; charset=utf-8\r\n\r\n\
+            Please confirm your pass\u{200b}word and in\u{200b}voice details immediately.\r\n";
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(eml.as_bytes().to_vec(), Some("message/rfc822"))
+            .await
+            .expect("zero-width email should extract");
+
+        assert!(
+            extracted.contains("password") && extracted.contains("invoice"),
+            "zero-width obfuscation not removed from final content:\n{extracted:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_kreuzberg_elides_pasted_base64_blob_in_email_body() {
+        // A pasted contiguous base64 blob (e.g. someone pasted a log/image) in a text/plain body.
+        let blob = "R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs".repeat(30);
+        let eml = format!(
+            "From: a@example.com\r\nTo: b@example.com\r\nSubject: dump\r\nMIME-Version: 1.0\r\n\
+             Content-Type: text/plain; charset=utf-8\r\n\r\n\
+             PASTE_BODY_MARKER here is the blob {blob} and PASTE_TAIL_MARKER after.\r\n"
+        );
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(eml.into_bytes(), Some("message/rfc822"))
+            .await
+            .expect("pasted-blob email should extract");
+        assert!(
+            extracted.contains("PASTE_BODY_MARKER") && extracted.contains("PASTE_TAIL_MARKER"),
+            "surrounding prose lost:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("[base64 data omitted"),
+            "blob marker missing:\n{extracted}"
+        );
+        assert!(
+            !extracted.contains("R0lGODlhAQABA"),
+            "pasted base64 blob leaked:\n{extracted}"
         );
     }
 
