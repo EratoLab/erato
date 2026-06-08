@@ -155,7 +155,8 @@ describe("buildThreadSynthInputs", () => {
             id: "<m@x>:ref",
             filename: "a&b.docx",
             contentBytes: null,
-            unavailableReason: "cloud attachment (OneDrive/SharePoint): a&b.docx — not inlined",
+            unavailableReason:
+              "cloud attachment (OneDrive/SharePoint): a&b.docx — not inlined",
           }),
         ],
       }),
@@ -213,12 +214,126 @@ describe("buildThreadSynthInputs", () => {
     expect(inputs[0].bodyText).not.toContain("identical to");
   });
 
-  it("appends a synthetic partial-thread note when the thread is incomplete", () => {
-    const inputs = buildThreadSynthInputs(
-      [makeMessage()],
-      NO_DISMISSALS,
-      true,
+  it("keeps every byte-distinct attachment exactly once across a long chain, collapsing only re-forwards", () => {
+    const A = () => bytes(600, 0xaa); // the file re-forwarded down the whole chain
+    const messages = [
+      makeMessage({
+        id: "<m1@x>",
+        from: { name: "Anna", address: "anna@x" },
+        attachments: [
+          makeAttachment({
+            id: "<m1@x>:A",
+            filename: "spec.pdf",
+            contentBytes: A(),
+            size: 600,
+          }),
+        ],
+      }),
+      makeMessage({
+        id: "<m2@x>",
+        attachments: [
+          makeAttachment({
+            id: "<m2@x>:A",
+            filename: "spec.pdf",
+            contentBytes: A(),
+            size: 600,
+          }), // dup
+          makeAttachment({
+            id: "<m2@x>:B",
+            filename: "review.docx",
+            contentBytes: bytes(700, 0xbb),
+            size: 700,
+          }), // unique
+        ],
+      }),
+      makeMessage({
+        id: "<m3@x>",
+        attachments: [
+          makeAttachment({
+            id: "<m3@x>:A",
+            filename: "spec.pdf",
+            contentBytes: A(),
+            size: 600,
+          }), // dup
+          makeAttachment({
+            id: "<m3@x>:C",
+            filename: "budget.xlsx",
+            contentBytes: bytes(800, 0xcc),
+            size: 800,
+          }), // unique
+        ],
+      }),
+      makeMessage({
+        id: "<m4@x>",
+        attachments: [
+          // same filename as spec.pdf but DIFFERENT bytes → a real new version, must be kept
+          makeAttachment({
+            id: "<m4@x>:A2",
+            filename: "spec.pdf",
+            contentBytes: bytes(600, 0xdd),
+            size: 600,
+          }),
+        ],
+      }),
+      makeMessage({
+        id: "<m5@x>",
+        attachments: [
+          makeAttachment({
+            id: "<m5@x>:D",
+            filename: "minutes.pdf",
+            contentBytes: bytes(900, 0xee),
+            size: 900,
+          }), // unique
+        ],
+      }),
+      makeMessage({
+        id: "<m6@x>",
+        attachments: [
+          makeAttachment({
+            id: "<m6@x>:A",
+            filename: "spec.pdf",
+            contentBytes: A(),
+            size: 600,
+          }), // dup again
+        ],
+      }),
+    ];
+
+    const inputs = buildThreadSynthInputs(messages, NO_DISMISSALS);
+
+    // Collect every emitted attachment across the whole chain.
+    const emitted = inputs.flatMap((input) => input.attachments);
+    // 5 byte-distinct streams: A, B, C, A2 (new version), D — each exactly once.
+    expect(emitted).toHaveLength(5);
+
+    const emittedBytes = emitted.map(
+      (att) =>
+        new Uint8Array(
+          att.contentBytes instanceof Uint8Array
+            ? att.contentBytes
+            : new Uint8Array(att.contentBytes),
+        )[0],
     );
+    // First byte of each distinct stream's fill — proves all five survive.
+    expect(emittedBytes.sort()).toEqual([0xaa, 0xbb, 0xcc, 0xdd, 0xee]);
+
+    // The canonical spec.pdf is the earliest copy (m1); later identical
+    // re-forwards (m2, m3, m6) are dropped and markered.
+    expect(inputs[0].attachments.map((a) => a.filename)).toEqual(["spec.pdf"]);
+    expect(inputs[1].attachments.map((a) => a.filename)).toEqual([
+      "review.docx",
+    ]);
+    expect(inputs[1].bodyText).toContain("identical to");
+    expect(inputs[2].attachments.map((a) => a.filename)).toEqual([
+      "budget.xlsx",
+    ]);
+    expect(inputs[3].attachments.map((a) => a.filename)).toEqual(["spec.pdf"]); // new version kept
+    expect(inputs[5].attachments).toHaveLength(0);
+    expect(inputs[5].bodyText).toContain("identical to");
+  });
+
+  it("appends a synthetic partial-thread note when the thread is incomplete", () => {
+    const inputs = buildThreadSynthInputs([makeMessage()], NO_DISMISSALS, true);
 
     expect(inputs).toHaveLength(2);
     expect(inputs[1].subject).toBe("[Partial conversation]");

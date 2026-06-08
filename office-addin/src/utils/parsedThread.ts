@@ -220,7 +220,11 @@ function chooseBody(message: GraphConversationMessage): ChosenBody {
   // is treated as text. Mislabeling text as HTML would let a downstream tag
   // stripper delete content between `<…>`; the reverse merely leaves a few
   // literal tags. Bias the tie to text/plain.
-  if (chosenIsHtml && chosenContent !== null && !/<\w[\s\S]*>/.test(chosenContent)) {
+  if (
+    chosenIsHtml &&
+    chosenContent !== null &&
+    !/<\w[\s\S]*>/.test(chosenContent)
+  ) {
     chosenIsHtml = false;
   }
 

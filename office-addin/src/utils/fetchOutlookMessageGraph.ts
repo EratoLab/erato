@@ -254,7 +254,10 @@ export async function fetchConversationMessagesViaGraph(
   try {
     token = await acquireToken();
   } catch (error) {
-    console.warn("[fetchConversationMessagesViaGraph] token acquire failed:", error);
+    console.warn(
+      "[fetchConversationMessagesViaGraph] token acquire failed:",
+      error,
+    );
     return { messages: [], state: "error" };
   }
 
@@ -296,7 +299,8 @@ export async function fetchConversationMessagesViaGraph(
   const expand = `attachments($select=${attachmentSelect})`;
 
   const messages: GraphConversationMessage[] = [];
-  let nextUrl: string | null = `${GRAPH_BASE}/me/messages?$filter=${encodeURIComponent(filter)}&$top=${CONVERSATION_PAGE_SIZE}&$select=${select}&$expand=${expand}`;
+  let nextUrl: string | null =
+    `${GRAPH_BASE}/me/messages?$filter=${encodeURIComponent(filter)}&$top=${CONVERSATION_PAGE_SIZE}&$select=${select}&$expand=${expand}`;
   let pages = 0;
   let state: ConversationFetchState = "ok";
 
@@ -330,7 +334,10 @@ export async function fetchConversationMessagesViaGraph(
     try {
       payload = await response.json();
     } catch (error) {
-      console.warn("[fetchConversationMessagesViaGraph] JSON parse failed:", error);
+      console.warn(
+        "[fetchConversationMessagesViaGraph] JSON parse failed:",
+        error,
+      );
       state = pages === 0 ? "error" : "partial";
       break;
     }

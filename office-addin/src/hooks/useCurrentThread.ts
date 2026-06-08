@@ -75,7 +75,10 @@ export function useCurrentThread(
         if (cancelled) return;
         // Total fetch failure (ThreadFetchError) — surface it loudly instead
         // of degrading to a silent empty thread.
-        console.warn("[useCurrentThread] conversation fetch failed:", fetchError);
+        console.warn(
+          "[useCurrentThread] conversation fetch failed:",
+          fetchError,
+        );
         setThread(null);
         setError(true);
       })
