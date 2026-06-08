@@ -1,4 +1,8 @@
 {{- if and .Values.oauth2Proxy.enabled .Values.oauth2Proxy.redis.enabled }}
+{{- $redisImage := printf "%s:%s" .Values.oauth2Proxy.redis.image.repository .Values.oauth2Proxy.redis.image.tag }}
+{{- if .Values.oauth2Proxy.redis.image.digest }}
+{{- $redisImage = printf "%s@%s" $redisImage .Values.oauth2Proxy.redis.image.digest }}
+{{- end }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -19,7 +23,7 @@ spec:
     spec:
       containers:
         - name: redis
-          image: "{{ .Values.oauth2Proxy.redis.image.repository }}:{{ .Values.oauth2Proxy.redis.image.tag }}"
+          image: {{ $redisImage | quote }}
           imagePullPolicy: {{ .Values.oauth2Proxy.redis.image.pullPolicy }}
           ports:
             - name: redis

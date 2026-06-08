@@ -1,0 +1,59 @@
+# yaml-language-server: $schema=../tests_schema/helm-testsuite.json
+suite: test oauth2-proxy redis statefulset
+minimumVersion: 1.0.1
+templates:
+  - oauth2-proxy-redis-statefulset.yaml
+tests:
+  - it: should render statefulset when oauth2Proxy redis is enabled
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-oauth2-proxy-redis
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: redis
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: redis:8.8.0-alpine3.23@sha256:09160599abd229764c0fb44cb6be640294e1d360a54b19985ab4843dcf2d90f1
+
+  - it: should not render when oauth2Proxy is disabled
+    set:
+      oauth2Proxy.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render when oauth2Proxy redis is disabled
+    set:
+      oauth2Proxy.redis.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should use custom image repository tag and digest
+    set:
+      oauth2Proxy.redis.image.repository: my-registry/redis
+      oauth2Proxy.redis.image.tag: 8.0-alpine
+      oauth2Proxy.redis.image.digest: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: my-registry/redis:8.0-alpine@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+  - it: should omit digest when empty
+    set:
+      oauth2Proxy.redis.image.digest: ""
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: redis:8.8.0-alpine3.23
+
+  - it: should set custom imagePullPolicy
+    set:
+      oauth2Proxy.redis.image.pullPolicy: Always
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: Always
