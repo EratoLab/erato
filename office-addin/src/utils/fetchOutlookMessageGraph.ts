@@ -160,15 +160,16 @@ export async function fetchParentMessageInConversationViaGraph(
  *
  * `uniqueBody` is included alongside `body`: the former contains only the
  * portion of the body unique to that message (Graph strips prior quoted
- * history), the latter contains the message as it would render in Outlook.
- * Callers pick whichever they prefer; today we prefer `uniqueBody` for
- * synthesized thread .emls so the LLM doesn't see N copies of the same
- * quoted history.
+ * history), the latter the message as it would render in Outlook. We carry
+ * BOTH and let `parsedThread.chooseBody` decide — defaulting to the full
+ * `body` so forwarded content (whose `uniqueBody` is often just a signature)
+ * is never lost; see `parsedThread.ts`.
  *
  * Attachments returned here are typed loosely: `fileAttachment` carries
- * `contentBytes` (base64), but `itemAttachment` / `referenceAttachment`
- * subtypes are pointers and won't have content inline. Callers must check
- * the `@odata.type` discriminator.
+ * `contentBytes` (base64), `itemAttachment` is a nested message/item whose
+ * bytes we fetch best-effort via `/$value` (see `enrichItemAttachments`),
+ * and `referenceAttachment` is a cloud pointer with no inline bytes. Callers
+ * discriminate on the `@odata.type` discriminator; nothing is silently dropped.
  */
 export interface GraphRecipient {
   emailAddress?: { name?: string; address?: string };
@@ -219,73 +220,204 @@ export interface FetchConversationOptions {
   transport?: GraphTransport;
 }
 
+/**
+ * Outcome of a conversation fetch — distinguishes the three cases the caller
+ * must treat differently (a bare `[]` conflates them):
+ *   - `ok`      — every page fetched successfully.
+ *   - `partial` — at least one page succeeded but a later page failed or the
+ *                 hard page cap was hit. Some messages may be missing; the
+ *                 caller should mark the thread incomplete (INV-7).
+ *   - `error`   — the very first page failed; `messages` is empty and the
+ *                 caller must surface a load error rather than silently
+ *                 producing "no thread".
+ */
+export type ConversationFetchState = "ok" | "partial" | "error";
+
+export interface FetchConversationResult {
+  messages: GraphConversationMessage[];
+  state: ConversationFetchState;
+}
+
+const ITEM_ATTACHMENT_TYPE = "#microsoft.graph.itemAttachment";
+/** Graph paginates at server discretion; follow `@odata.nextLink` up to this
+ * many pages (50 × 20 = 1000 messages) before declaring the thread partial. */
+const MAX_CONVERSATION_PAGES = 20;
+const CONVERSATION_PAGE_SIZE = 50;
+
 export async function fetchConversationMessagesViaGraph(
   conversationId: string,
   acquireToken: AcquireGraphToken,
   options: FetchConversationOptions = {},
-): Promise<GraphConversationMessage[]> {
+): Promise<FetchConversationResult> {
   const transport = options.transport ?? globalThis.fetch.bind(globalThis);
+  let token: string;
   try {
-    const token = await acquireToken();
-    const filter = `conversationId eq '${escapeODataString(conversationId)}'`;
-    const select = [
-      "id",
-      "internetMessageId",
-      "subject",
-      "from",
-      "toRecipients",
-      "ccRecipients",
-      "sentDateTime",
-      "receivedDateTime",
-      "body",
-      "uniqueBody",
-      "isDraft",
-      "hasAttachments",
-    ].join(",");
-    // Both `contentBytes` AND `contentId` live only on the
-    // `microsoft.graph.fileAttachment` subtype — the polymorphic
-    // `attachment` base type defines just `id`, `name`, `contentType`,
-    // `size`, `isInline`, and `lastModifiedDateTime`. Selecting either
-    // unqualified trips `BadRequest: Could not find a property named '…'
-    // on type 'microsoft.graph.attachment'`. OData's derived-type-property
-    // syntax `<namespace.subtype>/<property>` projects the field only when
-    // the row materializes as that subtype; itemAttachment and
-    // referenceAttachment items still come back (without those fields), so
-    // callers can discriminate on `@odata.type` and skip non-file rows.
-    // See microsoftgraph/microsoft-graph-explorer-v4#3916.
-    const attachmentSelect = [
-      "id",
-      "name",
-      "contentType",
-      "size",
-      "isInline",
-      "microsoft.graph.fileAttachment/contentId",
-      "microsoft.graph.fileAttachment/contentBytes",
-    ].join(",");
-    const expand = `attachments($select=${attachmentSelect})`;
-    const url = `${GRAPH_BASE}/me/messages?$filter=${encodeURIComponent(filter)}&$top=25&$select=${select}&$expand=${expand}`;
-    const response = await transport(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-      },
-    });
+    token = await acquireToken();
+  } catch (error) {
+    console.warn("[fetchConversationMessagesViaGraph] token acquire failed:", error);
+    return { messages: [], state: "error" };
+  }
+
+  const filter = `conversationId eq '${escapeODataString(conversationId)}'`;
+  const select = [
+    "id",
+    "internetMessageId",
+    "subject",
+    "from",
+    "toRecipients",
+    "ccRecipients",
+    "sentDateTime",
+    "receivedDateTime",
+    "body",
+    "uniqueBody",
+    "isDraft",
+    "hasAttachments",
+  ].join(",");
+  // Both `contentBytes` AND `contentId` live only on the
+  // `microsoft.graph.fileAttachment` subtype — the polymorphic
+  // `attachment` base type defines just `id`, `name`, `contentType`,
+  // `size`, `isInline`, and `lastModifiedDateTime`. Selecting either
+  // unqualified trips `BadRequest: Could not find a property named '…'
+  // on type 'microsoft.graph.attachment'`. OData's derived-type-property
+  // syntax `<namespace.subtype>/<property>` projects the field only when
+  // the row materializes as that subtype; itemAttachment and
+  // referenceAttachment items still come back (without those fields), so
+  // callers can discriminate on `@odata.type` and skip non-file rows.
+  // See microsoftgraph/microsoft-graph-explorer-v4#3916.
+  const attachmentSelect = [
+    "id",
+    "name",
+    "contentType",
+    "size",
+    "isInline",
+    "microsoft.graph.fileAttachment/contentId",
+    "microsoft.graph.fileAttachment/contentBytes",
+  ].join(",");
+  const expand = `attachments($select=${attachmentSelect})`;
+
+  const messages: GraphConversationMessage[] = [];
+  let nextUrl: string | null = `${GRAPH_BASE}/me/messages?$filter=${encodeURIComponent(filter)}&$top=${CONVERSATION_PAGE_SIZE}&$select=${select}&$expand=${expand}`;
+  let pages = 0;
+  let state: ConversationFetchState = "ok";
+
+  while (nextUrl && pages < MAX_CONVERSATION_PAGES) {
+    let response: Response;
+    try {
+      response = await transport(nextUrl, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      });
+    } catch (error) {
+      console.warn("[fetchConversationMessagesViaGraph] fetch failed:", error);
+      state = pages === 0 ? "error" : "partial";
+      break;
+    }
     if (!response.ok) {
       console.warn(
         "[fetchConversationMessagesViaGraph] non-OK status:",
         response.status,
         response.statusText,
       );
-      return [];
+      state = pages === 0 ? "error" : "partial";
+      break;
     }
-    const payload = (await response.json()) as {
+    let payload: {
       value?: GraphConversationMessage[];
+      "@odata.nextLink"?: string;
     };
-    return payload.value ?? [];
-  } catch (error) {
-    console.warn("[fetchConversationMessagesViaGraph] failed:", error);
-    return [];
+    try {
+      payload = await response.json();
+    } catch (error) {
+      console.warn("[fetchConversationMessagesViaGraph] JSON parse failed:", error);
+      state = pages === 0 ? "error" : "partial";
+      break;
+    }
+    messages.push(...(payload.value ?? []));
+    nextUrl = payload["@odata.nextLink"] ?? null;
+    pages += 1;
   }
+  // More pages remained but we stopped at the cap → the window is incomplete.
+  if (nextUrl && state === "ok") {
+    state = "partial";
+  }
+
+  // Best-effort: pull the bytes of any itemAttachment (forwarded .msg/.eml)
+  // so its content reaches the LLM. Failures degrade to a disclosure marker
+  // downstream (parsedThread.transformAttachment), never a silent drop.
+  if (messages.length > 0) {
+    await enrichItemAttachments(messages, token, transport);
+  }
+
+  return { messages, state };
+}
+
+/**
+ * For every `itemAttachment` lacking inline bytes, fetch the item as raw MIME
+ * via `/messages/{id}/attachments/{attId}/$value` and splice the base64 onto
+ * the attachment's `contentBytes` so the existing fileAttachment decode path
+ * picks it up. Each fetch is independently guarded — one failure (or a
+ * transport that doesn't implement `arrayBuffer`) leaves that attachment
+ * byte-less, to be disclosed as a marker rather than dropped.
+ */
+async function enrichItemAttachments(
+  messages: GraphConversationMessage[],
+  token: string,
+  transport: GraphTransport,
+): Promise<void> {
+  const fetches: Promise<void>[] = [];
+  for (const message of messages) {
+    const messageId = message.id;
+    if (!messageId || !message.attachments) continue;
+    for (const attachment of message.attachments) {
+      if (attachment["@odata.type"] !== ITEM_ATTACHMENT_TYPE) continue;
+      if (attachment.contentBytes || !attachment.id) continue;
+      const attachmentId = attachment.id;
+      fetches.push(
+        (async () => {
+          try {
+            const url = `${GRAPH_BASE}/me/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}/$value`;
+            const response = await transport(url, {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                Accept: "application/octet-stream",
+              },
+            });
+            if (!response.ok) return;
+            const buffer = await response.arrayBuffer();
+            if (!buffer || buffer.byteLength === 0) return;
+            attachment.contentBytes = arrayBufferToBase64(buffer);
+            if (!attachment.contentType) {
+              attachment.contentType = "message/rfc822";
+            }
+            if (!attachment.name) {
+              attachment.name = "attached-item.eml";
+            }
+          } catch (error) {
+            console.warn(
+              "[enrichItemAttachments] item $value fetch failed:",
+              error,
+            );
+          }
+        })(),
+      );
+    }
+  }
+  await Promise.all(fetches);
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(
+      null,
+      Array.from(bytes.subarray(i, i + chunk)),
+    );
+  }
+  return btoa(binary);
 }
 
 /**
