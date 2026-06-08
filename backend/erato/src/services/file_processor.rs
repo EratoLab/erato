@@ -601,6 +601,20 @@ fn sanitize_email_html_blocks_inner(entity: &[u8], depth: usize) -> Vec<u8> {
         return out;
     }
 
+    if is_calendar_mime(&content_type_essence) || is_vcard_mime(&content_type_essence) {
+        // kreuzberg's email path doesn't understand `text/calendar`/`text/vcard`: it dumps the raw
+        // ICS/vCard verbatim as a `text/plain` attachment, leaking every line of VTIMEZONE/VALARM
+        // boilerplate and any huge base64 PHOTO. BLANK the part body here so kreuzberg renders
+        // nothing from it; the clean, token-light summary is instead appended by the supplement in
+        // `parse_file` under its own `## Calendar event` / `## Contact card` header. (We can't keep
+        // the raw bytes — that is exactly the leak — and we deliberately don't put the summary here,
+        // so the supplement is the single, well-labeled source of truth.)
+        let mut out = headers_with_base64_encoding(headers_raw).into_bytes();
+        out.extend_from_slice(b"\r\n");
+        out.extend_from_slice(base64_mime_body(b"").as_bytes());
+        return out;
+    }
+
     entity.to_vec()
 }
 
@@ -630,6 +644,496 @@ fn append_email_plain_text_if_missing(content: &mut String, plain_text: Option<S
     }
     content.push_str("## Email plain text body\n\n");
     content.push_str(plain_text.trim());
+}
+
+// --- Calendar (ICS) and vCard extraction -----------------------------------
+//
+// kreuzberg 4.9.4 has no useful handling for `text/calendar` or `text/vcard`:
+// a meeting-invite email's calendar part is silently dropped by its email path
+// (only Subject/From survive), and a *bare* `text/calendar`/`text/vcard` upload
+// errors out with "Unsupported format". So invite and contact emails extract to
+// near-nothing today. The helpers below parse these RFC 5545 / RFC 6350 bodies
+// into a compact, token-light human summary, dropping the technical boilerplate
+// (VTIMEZONE/VALARM, PHOTO/LOGO base64, PRODID/UID/SEQUENCE/etc.) that carries no
+// readable meaning but would otherwise bloat the token count.
+
+/// Unfold RFC 5545 / RFC 6350 line folding: a line break followed by a single
+/// space or TAB is a continuation of the previous logical line. We normalize
+/// CRLF/CR to LF first so a folded line split on either sequence is rejoined.
+/// Returns the unfolded logical lines with their fold whitespace removed.
+fn unfold_content_lines(body: &str) -> Vec<String> {
+    let normalized = body.replace("\r\n", "\n").replace('\r', "\n");
+    let mut lines: Vec<String> = Vec::new();
+    for raw in normalized.split('\n') {
+        // A continuation line starts with a space or TAB; strip exactly that one
+        // folding character and append the remainder to the line in progress.
+        if (raw.starts_with(' ') || raw.starts_with('\t'))
+            && let Some(last) = lines.last_mut()
+        {
+            last.push_str(&raw[1..]);
+            continue;
+        }
+        lines.push(raw.to_string());
+    }
+    lines
+}
+
+/// Split one unfolded content line into `(NAME, params, VALUE)`. The property
+/// name and its parameters precede the first unquoted `:`; parameters are
+/// separated by `;`. Returns `None` for lines without a colon (e.g. blank lines).
+fn parse_content_line(line: &str) -> Option<(String, Vec<String>, String)> {
+    // The value starts after the first `:` that is not inside a quoted param
+    // value (param values may legitimately contain a colon, e.g. a mailto URI in
+    // quotes). Track quote state while scanning for the separator.
+    let mut in_quote = false;
+    let mut colon = None;
+    for (index, byte) in line.bytes().enumerate() {
+        match byte {
+            b'"' => in_quote = !in_quote,
+            b':' if !in_quote => {
+                colon = Some(index);
+                break;
+            }
+            _ => {}
+        }
+    }
+    let colon = colon?;
+    let (name_and_params, value) = line.split_at(colon);
+    let value = &value[1..];
+
+    let mut segments = name_and_params.split(';');
+    let name = segments.next().unwrap_or("").trim().to_ascii_uppercase();
+    if name.is_empty() {
+        return None;
+    }
+    let params = segments.map(|segment| segment.trim().to_string()).collect();
+    Some((name, params, value.to_string()))
+}
+
+/// Look up a parameter value by name (case-insensitive) from a property's
+/// parameter list (each entry is a raw `NAME=value` segment).
+fn content_line_param<'a>(params: &'a [String], name: &str) -> Option<&'a str> {
+    params.iter().find_map(|param| {
+        let (key, value) = param.split_once('=')?;
+        if key.trim().eq_ignore_ascii_case(name) {
+            Some(value.trim().trim_matches('"'))
+        } else {
+            None
+        }
+    })
+}
+
+/// Unescape RFC 5545 / RFC 6350 TEXT escaping: `\n`/`\N` -> newline, `\,` -> `,`,
+/// `\;` -> `;`, `\\` -> `\`. Other backslash sequences keep the following char.
+fn unescape_ics_text(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    let mut chars = value.chars();
+    while let Some(ch) = chars.next() {
+        if ch != '\\' {
+            out.push(ch);
+            continue;
+        }
+        match chars.next() {
+            Some('n' | 'N') => out.push('\n'),
+            Some(',') => out.push(','),
+            Some(';') => out.push(';'),
+            Some('\\') => out.push('\\'),
+            Some(other) => out.push(other),
+            None => out.push('\\'),
+        }
+    }
+    out
+}
+
+/// Render an ORGANIZER/ATTENDEE value as a readable string: prefer the `CN=`
+/// display name, fall back to the bare address with any `mailto:` scheme dropped.
+/// When both are present, show `Name <addr>`.
+fn format_calendar_person(params: &[String], value: &str) -> String {
+    let address = value
+        .trim()
+        .strip_prefix("mailto:")
+        .or_else(|| value.trim().strip_prefix("MAILTO:"))
+        .unwrap_or_else(|| value.trim());
+    match content_line_param(params, "CN") {
+        Some(cn) if !cn.is_empty() && !address.is_empty() => format!("{cn} <{address}>"),
+        Some(cn) if !cn.is_empty() => cn.to_string(),
+        _ => address.to_string(),
+    }
+}
+
+/// State accumulated while walking the content lines of a single VEVENT/VTODO/
+/// VJOURNAL component. Fields are emitted in a stable, human-friendly order.
+#[derive(Default)]
+struct CalendarComponent {
+    summary: Option<String>,
+    dtstart: Option<String>,
+    dtend: Option<String>,
+    duration: Option<String>,
+    location: Option<String>,
+    organizer: Option<String>,
+    attendees: Vec<String>,
+    description: Option<String>,
+    rrule: Option<String>,
+    status: Option<String>,
+}
+
+impl CalendarComponent {
+    /// Render the component as a compact block of `Field: value` lines, skipping
+    /// any field that was not present. Returns `None` if nothing useful was found.
+    fn render(&self) -> Option<String> {
+        let mut lines: Vec<String> = Vec::new();
+        if let Some(summary) = &self.summary {
+            lines.push(format!("Summary: {summary}"));
+        }
+        if let Some(dtstart) = &self.dtstart {
+            lines.push(format!("Start: {dtstart}"));
+        }
+        if let Some(dtend) = &self.dtend {
+            lines.push(format!("End: {dtend}"));
+        }
+        if let Some(duration) = &self.duration {
+            lines.push(format!("Duration: {duration}"));
+        }
+        if let Some(location) = &self.location {
+            lines.push(format!("Location: {location}"));
+        }
+        if let Some(organizer) = &self.organizer {
+            lines.push(format!("Organizer: {organizer}"));
+        }
+        if !self.attendees.is_empty() {
+            lines.push(format!("Attendees: {}", self.attendees.join(", ")));
+        }
+        if let Some(rrule) = &self.rrule {
+            lines.push(format!("Recurrence: {rrule}"));
+        }
+        if let Some(status) = &self.status {
+            lines.push(format!("Status: {status}"));
+        }
+        if let Some(description) = &self.description {
+            lines.push(format!("Description: {description}"));
+        }
+        if lines.is_empty() {
+            None
+        } else {
+            Some(lines.join("\n"))
+        }
+    }
+}
+
+/// Parse a `text/calendar` (ICS / RFC 5545) body into a compact human summary.
+///
+/// We deliberately keep only the fields a reader cares about for an invite, and
+/// DROP all boilerplate: entire `VTIMEZONE` blocks (timezone offset rules carry
+/// no readable meaning), `VALARM` blocks (client reminder config), and technical
+/// properties (`PRODID`, `UID`, `SEQUENCE`, `DTSTAMP`, `CREATED`, `TRANSP`,
+/// `CLASS`, `X-*`, …). The VCALENDAR-level `METHOD` (REQUEST/CANCEL/REPLY) is
+/// surfaced because it distinguishes a new invite from a cancellation/reply.
+fn extract_calendar_summary(body: &str) -> Option<String> {
+    let lines = unfold_content_lines(body);
+
+    let mut method: Option<String> = None;
+    let mut blocks: Vec<String> = Vec::new();
+    // Depth of any VTIMEZONE / VALARM nesting we are currently skipping. While
+    // non-zero, every line is dropped until the matching END is seen.
+    let mut skip_depth: usize = 0;
+    let mut current: Option<(String, CalendarComponent)> = None;
+
+    for line in &lines {
+        let Some((name, params, value)) = parse_content_line(line) else {
+            continue;
+        };
+
+        // Skip VTIMEZONE/VALARM wholesale, including any nested sub-components.
+        if skip_depth > 0 {
+            if name == "BEGIN" {
+                skip_depth += 1;
+            } else if name == "END" {
+                skip_depth -= 1;
+            }
+            continue;
+        }
+
+        if name == "BEGIN" {
+            let component = value.trim().to_ascii_uppercase();
+            if component == "VTIMEZONE" || component == "VALARM" {
+                skip_depth = 1;
+                continue;
+            }
+            if matches!(component.as_str(), "VEVENT" | "VTODO" | "VJOURNAL") {
+                current = Some((component, CalendarComponent::default()));
+            }
+            continue;
+        }
+
+        if name == "END" {
+            let component = value.trim().to_ascii_uppercase();
+            if let Some((open, data)) = current.take()
+                && open == component
+                && let Some(rendered) = data.render()
+            {
+                blocks.push(rendered);
+            }
+            continue;
+        }
+
+        // METHOD lives at the VCALENDAR level, before any component opens.
+        if name == "METHOD" && current.is_none() {
+            let value = value.trim();
+            if !value.is_empty() {
+                method = Some(value.to_ascii_uppercase());
+            }
+            continue;
+        }
+
+        let Some((_, component)) = current.as_mut() else {
+            continue;
+        };
+
+        match name.as_str() {
+            "SUMMARY" => component.summary = Some(unescape_ics_text(value.trim())),
+            "DTSTART" => component.dtstart = Some(unescape_ics_text(value.trim())),
+            "DTEND" => component.dtend = Some(unescape_ics_text(value.trim())),
+            "DURATION" => component.duration = Some(value.trim().to_string()),
+            "LOCATION" => component.location = Some(unescape_ics_text(value.trim())),
+            "ORGANIZER" => component.organizer = Some(format_calendar_person(&params, &value)),
+            "ATTENDEE" => {
+                let person = format_calendar_person(&params, &value);
+                if !person.is_empty() {
+                    component.attendees.push(person);
+                }
+            }
+            "DESCRIPTION" => component.description = Some(unescape_ics_text(value.trim())),
+            "RRULE" => component.rrule = Some(value.trim().to_string()),
+            "STATUS" => component.status = Some(value.trim().to_ascii_uppercase()),
+            _ => {}
+        }
+    }
+
+    if blocks.is_empty() {
+        return None;
+    }
+
+    let mut out = String::new();
+    if let Some(method) = method {
+        out.push_str(&format!("Method: {method}\n"));
+    }
+    out.push_str(&blocks.join("\n\n"));
+    Some(out)
+}
+
+/// Parse a `text/vcard` / `text/x-vcard` (RFC 6350) body into a compact summary.
+///
+/// Keeps the human-meaningful fields (name, org, title, emails, phones, address,
+/// URL, note) and DROPS large/technical properties: `PHOTO`/`LOGO`/`KEY` (often
+/// hundreds of KB of base64 that would dominate the token count) and metadata
+/// like `VERSION`/`PRODID`/`REV`/`UID`/`X-*`.
+fn extract_vcard_summary(body: &str) -> Option<String> {
+    let lines = unfold_content_lines(body);
+
+    let mut full_name: Option<String> = None;
+    let mut structured_name: Option<String> = None;
+    let mut org: Option<String> = None;
+    let mut title: Option<String> = None;
+    let mut emails: Vec<String> = Vec::new();
+    let mut phones: Vec<String> = Vec::new();
+    let mut address: Option<String> = None;
+    let mut url: Option<String> = None;
+    let mut note: Option<String> = None;
+
+    for line in &lines {
+        let Some((name, _params, value)) = parse_content_line(line) else {
+            continue;
+        };
+        // Property names may be prefixed with a group ("item1.EMAIL"); strip it.
+        let name = name.rsplit('.').next().unwrap_or(&name);
+
+        match name {
+            "FN" => full_name = Some(unescape_ics_text(value.trim())),
+            "N" if structured_name.is_none() => {
+                // N is `Family;Given;Additional;Prefix;Suffix`; assemble the
+                // human order "Given Family" from the populated components.
+                let fields: Vec<String> = value
+                    .split(';')
+                    .map(|field| unescape_ics_text(field.trim()))
+                    .collect();
+                let family = fields.first().map(String::as_str).unwrap_or("");
+                let given = fields.get(1).map(String::as_str).unwrap_or("");
+                let assembled = format!("{given} {family}").trim().to_string();
+                if !assembled.is_empty() {
+                    structured_name = Some(assembled);
+                }
+            }
+            "ORG" => {
+                let value = unescape_ics_text(value.trim()).replace(';', ", ");
+                let value = value.trim_end_matches(", ").trim().to_string();
+                if !value.is_empty() {
+                    org = Some(value);
+                }
+            }
+            "TITLE" => title = Some(unescape_ics_text(value.trim())),
+            "EMAIL" => {
+                let value = value.trim();
+                if !value.is_empty() {
+                    emails.push(value.to_string());
+                }
+            }
+            "TEL" => {
+                let value = value.trim().strip_prefix("tel:").unwrap_or(value.trim());
+                if !value.is_empty() {
+                    phones.push(value.to_string());
+                }
+            }
+            "ADR" => {
+                // ADR is `pobox;ext;street;locality;region;postcode;country`;
+                // join the non-empty components into a readable single line.
+                let parts: Vec<String> = value
+                    .split(';')
+                    .map(|part| unescape_ics_text(part.trim()))
+                    .filter(|part| !part.is_empty())
+                    .collect();
+                if !parts.is_empty() {
+                    address = Some(parts.join(", "));
+                }
+            }
+            "URL" => url = Some(value.trim().to_string()),
+            "NOTE" => note = Some(unescape_ics_text(value.trim())),
+            _ => {}
+        }
+    }
+
+    let mut out: Vec<String> = Vec::new();
+    if let Some(name) = full_name.or(structured_name) {
+        out.push(format!("Name: {name}"));
+    }
+    if let Some(org) = org {
+        out.push(format!("Organization: {org}"));
+    }
+    if let Some(title) = title {
+        out.push(format!("Title: {title}"));
+    }
+    if !emails.is_empty() {
+        out.push(format!("Email: {}", emails.join(", ")));
+    }
+    if !phones.is_empty() {
+        out.push(format!("Phone: {}", phones.join(", ")));
+    }
+    if let Some(address) = address {
+        out.push(format!("Address: {address}"));
+    }
+    if let Some(url) = url {
+        out.push(format!("URL: {url}"));
+    }
+    if let Some(note) = note {
+        out.push(format!("Note: {note}"));
+    }
+
+    if out.is_empty() {
+        None
+    } else {
+        Some(out.join("\n"))
+    }
+}
+
+/// Whether `mime` (already lowercased essence) is a calendar type.
+fn is_calendar_mime(mime: &str) -> bool {
+    mime == "text/calendar"
+}
+
+/// Whether `mime` (already lowercased essence) is a vCard type.
+fn is_vcard_mime(mime: &str) -> bool {
+    matches!(mime, "text/vcard" | "text/x-vcard")
+}
+
+/// A readable supplement extracted from the calendar/vcard parts of an email.
+#[derive(Default)]
+struct CalendarVcardSupplement {
+    calendar_events: Vec<String>,
+    contact_cards: Vec<String>,
+}
+
+/// Walk the MIME tree (recursing into `multipart/*` and `message/rfc822`) and
+/// collect every `text/calendar` and `text/vcard`/`text/x-vcard` part, decoding
+/// each per its transfer encoding and running the matching extractor. Mirrors
+/// `collect_email_plain_text_parts`.
+fn collect_calendar_vcard_parts(entity: &[u8], output: &mut CalendarVcardSupplement) {
+    let (headers, body) = split_mime_headers_body(entity);
+    let headers = parse_mime_headers(headers);
+    let content_type = header_value(&headers, "content-type").unwrap_or("text/plain");
+    let (content_type_essence, boundary) = content_type_essence_and_param(content_type, "boundary");
+    let transfer_encoding = header_value(&headers, "content-transfer-encoding");
+
+    if content_type_essence.starts_with("multipart/") {
+        if let Some(boundary) = boundary {
+            for part in split_multipart_body(body, &boundary) {
+                collect_calendar_vcard_parts(part, output);
+            }
+        }
+        return;
+    }
+
+    let decoded_body = decode_mime_body(body, transfer_encoding);
+
+    if content_type_essence == "message/rfc822" {
+        collect_calendar_vcard_parts(&decoded_body, output);
+        return;
+    }
+
+    let text = String::from_utf8_lossy(&decoded_body);
+    if is_calendar_mime(&content_type_essence) {
+        if let Some(summary) = extract_calendar_summary(&text) {
+            output.calendar_events.push(summary);
+        }
+    } else if is_vcard_mime(&content_type_essence)
+        && let Some(summary) = extract_vcard_summary(&text)
+    {
+        output.contact_cards.push(summary);
+    }
+}
+
+/// Extract the calendar/vCard supplement from a full email's bytes, if any of its
+/// parts are invites or contact cards. Returns `None` when there is nothing.
+fn extract_calendar_vcard_supplement(file_bytes: &[u8]) -> Option<CalendarVcardSupplement> {
+    let mut supplement = CalendarVcardSupplement::default();
+    collect_calendar_vcard_parts(file_bytes, &mut supplement);
+    if supplement.calendar_events.is_empty() && supplement.contact_cards.is_empty() {
+        None
+    } else {
+        Some(supplement)
+    }
+}
+
+/// Append calendar-event / contact-card blocks to the extracted content, under
+/// `## Calendar event` / `## Contact card` headers. Each block is skipped if its
+/// readable content is already present in `content` (dedupe like the plain-text
+/// supplement) — a text/plain twin frequently already describes the invite, and
+/// the bare-`.ics` path already put the summary into `content` directly.
+fn append_calendar_vcard_supplement(
+    content: &mut String,
+    supplement: Option<CalendarVcardSupplement>,
+) {
+    let Some(supplement) = supplement else {
+        return;
+    };
+
+    for event in supplement.calendar_events {
+        append_supplement_block(content, "## Calendar event", &event);
+    }
+    for card in supplement.contact_cards {
+        append_supplement_block(content, "## Contact card", &card);
+    }
+}
+
+/// Append one labeled supplement block unless its content is already present.
+fn append_supplement_block(content: &mut String, header: &str, block: &str) {
+    if content_already_contains_plain_text(content, block) {
+        return;
+    }
+    if !content.trim_end().is_empty() {
+        content.push_str("\n\n");
+    }
+    content.push_str(header);
+    content.push_str("\n\n");
+    content.push_str(block.trim());
 }
 
 fn append_extraction_children(
@@ -744,8 +1248,39 @@ impl FileProcessor for KreuzbergProcessor {
                     mime_type = "message/rfc822".to_string();
                 }
                 tracing::debug!("Final decided MIME type: {:?}", &mime_type);
+
+                // A *bare* `text/calendar`/`text/vcard` upload (a `.ics`/`.vcf` file, or an email
+                // whose top-level Content-Type is the calendar/vcard part itself) makes kreuzberg
+                // error with "Unsupported format". Route those directly to our extractor instead.
+                // This runs before the `message/rfc822` path so a real email (`message/rfc822` or a
+                // coerced `multipart/*`) still flows through kreuzberg, with its embedded
+                // calendar/vcard parts surfaced later via the supplement.
+                if is_calendar_mime(&mime_type) || is_vcard_mime(&mime_type) {
+                    let text = String::from_utf8_lossy(&file_bytes);
+                    let summary = if is_calendar_mime(&mime_type) {
+                        extract_calendar_summary(&text)
+                            .map(|event| format!("## Calendar event\n\n{event}"))
+                    } else {
+                        extract_vcard_summary(&text)
+                            .map(|card| format!("## Contact card\n\n{card}"))
+                    };
+                    // Fall back to the raw text when the body parses to nothing useful, so a
+                    // malformed `.ics`/`.vcf` still yields *something* rather than an error.
+                    return Ok(summary
+                        .unwrap_or_else(|| normalize_plain_text(text.trim())));
+                }
+
                 let email_plain_text = if is_message_rfc822_mime_type(&mime_type) {
                     extract_email_plain_text(&file_bytes)
+                } else {
+                    None
+                };
+
+                // Invite/contact emails carry their calendar (`text/calendar`) and vCard
+                // (`text/vcard`) data in MIME parts kreuzberg's email path silently drops. Collect
+                // and parse them now so they can be appended as a readable supplement below.
+                let calendar_vcard_supplement = if is_message_rfc822_mime_type(&mime_type) {
+                    extract_calendar_vcard_supplement(&file_bytes)
                 } else {
                     None
                 };
@@ -798,6 +1333,7 @@ impl FileProcessor for KreuzbergProcessor {
                     content_with_page_markers(result.content, result.pages, &marker_format);
                 append_extraction_children(&mut content, result.children);
                 append_email_plain_text_if_missing(&mut content, email_plain_text);
+                append_calendar_vcard_supplement(&mut content, calendar_vcard_supplement);
 
                 Ok(content)
             })
@@ -1509,5 +2045,441 @@ Content-Type: text/html; charset=utf-8
             extracted.contains("BASE64_PLAIN_MARKER survives decoding."),
             "base64 text/plain part did not survive decoding:\n{extracted}"
         );
+    }
+
+    fn token_count(text: &str) -> usize {
+        let bpe = tiktoken_rs::o200k_base().expect("o200k_base tokenizer");
+        bpe.encode_with_special_tokens(text).len()
+    }
+
+    // --- Calendar (ICS) and vCard extraction tests --------------------------
+
+    #[tokio::test]
+    async fn test_kreuzberg_extracts_outlook_meeting_request_calendar() {
+        // An Outlook-style meeting REQUEST: `multipart/alternative` with text/plain + text/html +
+        // `text/calendar; method=REQUEST`, where the calendar part carries a full VTIMEZONE and a
+        // VALARM (the boilerplate Outlook always emits). Modeled on the structure of a real Outlook
+        // iCalendar invite (RFC 5545 VEVENT + VTIMEZONE + VALARM). The readable invite details must
+        // surface; the timezone/alarm/PRODID boilerplate must NOT; the output must be small.
+        let eml = "From: Organizer <organizer@example.com>\r\n\
+            To: Attendee One <attendee1@example.com>\r\n\
+            Subject: Project sync\r\n\
+            MIME-Version: 1.0\r\n\
+            Content-Type: multipart/alternative; boundary=\"INVITE\"\r\n\r\n\
+            --INVITE\r\n\
+            Content-Type: text/plain; charset=utf-8\r\n\r\n\
+            When: June 12, 2026 10:00-10:30\r\n\r\n\
+            --INVITE\r\n\
+            Content-Type: text/html; charset=utf-8\r\n\r\n\
+            <html><body><p>You're invited.</p></body></html>\r\n\
+            --INVITE\r\n\
+            Content-Type: text/calendar; method=REQUEST; charset=utf-8\r\n\
+            Content-Transfer-Encoding: 7bit\r\n\r\n\
+            BEGIN:VCALENDAR\r\n\
+            PRODID:-//Microsoft Corporation//Outlook 16.0 MIMEDIR//EN\r\n\
+            VERSION:2.0\r\n\
+            METHOD:REQUEST\r\n\
+            BEGIN:VTIMEZONE\r\n\
+            TZID:W. Europe Standard Time\r\n\
+            BEGIN:STANDARD\r\n\
+            DTSTART:16011028T030000\r\n\
+            TZOFFSETFROM:+0200\r\n\
+            TZOFFSETTO:+0100\r\n\
+            END:STANDARD\r\n\
+            END:VTIMEZONE\r\n\
+            BEGIN:VEVENT\r\n\
+            DTSTART;TZID=W. Europe Standard Time:20260612T100000\r\n\
+            DTEND;TZID=W. Europe Standard Time:20260612T103000\r\n\
+            DTSTAMP:20260601T120000Z\r\n\
+            UID:040000008200E00074C5B7101A82E00800000000\r\n\
+            SEQUENCE:0\r\n\
+            ORGANIZER;CN=Organizer Name:mailto:organizer@example.com\r\n\
+            ATTENDEE;CN=Attendee One;RSVP=TRUE:mailto:attendee1@example.com\r\n\
+            ATTENDEE;CN=Attendee Two:mailto:attendee2@example.com\r\n\
+            SUMMARY:Project sync\r\n\
+            LOCATION:Conference Room B\r\n\
+            DESCRIPTION:Weekly project sync to review status.\r\n\
+            TRANSP:OPAQUE\r\n\
+            CLASS:PUBLIC\r\n\
+            X-MICROSOFT-CDO-BUSYSTATUS:BUSY\r\n\
+            BEGIN:VALARM\r\n\
+            TRIGGER:-PT15M\r\n\
+            ACTION:DISPLAY\r\n\
+            DESCRIPTION:Reminder\r\n\
+            END:VALARM\r\n\
+            END:VEVENT\r\n\
+            END:VCALENDAR\r\n\
+            --INVITE--\r\n";
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(eml.as_bytes().to_vec(), Some("message/rfc822"))
+            .await
+            .expect("Outlook meeting request should extract");
+
+        // Readable invite details surface.
+        assert!(
+            extracted.contains("## Calendar event"),
+            "missing header:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("Method: REQUEST"),
+            "missing method:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("Summary: Project sync"),
+            "missing summary:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("Location: Conference Room B"),
+            "missing location:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("Organizer: Organizer Name <organizer@example.com>"),
+            "missing organizer:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("Attendee One <attendee1@example.com>")
+                && extracted.contains("Attendee Two <attendee2@example.com>"),
+            "missing attendees:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("Start: 20260612T100000"),
+            "missing dtstart:\n{extracted}"
+        );
+
+        // Boilerplate must NOT leak.
+        for forbidden in [
+            "VTIMEZONE",
+            "TZOFFSET",
+            "VALARM",
+            "PRODID",
+            "Outlook 16.0",
+            "X-MICROSOFT",
+            "TRANSP",
+            "040000008200E000",
+        ] {
+            assert!(
+                !extracted.contains(forbidden),
+                "boilerplate {forbidden:?} leaked into extracted content:\n{extracted}"
+            );
+        }
+
+        // Output is token-light.
+        let tokens = token_count(&extracted);
+        assert!(
+            tokens < 200,
+            "invite output too large: {tokens} tokens:\n{extracted}"
+        );
+    }
+
+    #[test]
+    fn test_calendar_summary_surfaces_recurrence_rule() {
+        // A recurring event: the RRULE recurrence line must be surfaced.
+        let ics = "BEGIN:VCALENDAR\r\n\
+            VERSION:2.0\r\n\
+            BEGIN:VEVENT\r\n\
+            SUMMARY:Weekly standup\r\n\
+            DTSTART:20260601T090000Z\r\n\
+            RRULE:FREQ=WEEKLY;BYDAY=MO;COUNT=10\r\n\
+            UID:recurring-1\r\n\
+            END:VEVENT\r\n\
+            END:VCALENDAR\r\n";
+        let summary = extract_calendar_summary(ics).expect("recurring event should parse");
+        assert!(
+            summary.contains("Recurrence: FREQ=WEEKLY;BYDAY=MO;COUNT=10"),
+            "recurrence rule not surfaced:\n{summary}"
+        );
+        assert!(!summary.contains("recurring-1"), "UID leaked:\n{summary}");
+    }
+
+    #[test]
+    fn test_calendar_summary_reflects_cancellation_method() {
+        // A cancellation: METHOD:CANCEL plus STATUS:CANCELLED must be reflected.
+        let ics = "BEGIN:VCALENDAR\r\n\
+            VERSION:2.0\r\n\
+            METHOD:CANCEL\r\n\
+            BEGIN:VEVENT\r\n\
+            SUMMARY:Project sync\r\n\
+            STATUS:CANCELLED\r\n\
+            DTSTART:20260612T100000Z\r\n\
+            END:VEVENT\r\n\
+            END:VCALENDAR\r\n";
+        let summary = extract_calendar_summary(ics).expect("cancellation should parse");
+        assert!(
+            summary.contains("Method: CANCEL"),
+            "method not reflected:\n{summary}"
+        );
+        assert!(
+            summary.contains("Status: CANCELLED"),
+            "status not reflected:\n{summary}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_kreuzberg_extracts_bare_ics_upload() {
+        // A bare `.ics` body (mime `text/calendar`) used to error with "Unsupported format" in
+        // kreuzberg. It must now extract via our route and yield the summary. Includes ICS text
+        // escaping (`\,` and `\n`) which must be unescaped.
+        let ics = "BEGIN:VCALENDAR\r\n\
+            VERSION:2.0\r\n\
+            PRODID:-//Google Inc//Google Calendar 70.9054//EN\r\n\
+            BEGIN:VEVENT\r\n\
+            SUMMARY:Lunch with Sam\\, then walk\r\n\
+            DTSTART:20260615T120000Z\r\n\
+            DTEND:20260615T130000Z\r\n\
+            LOCATION:Cafe Central\r\n\
+            DESCRIPTION:First line\\nSecond line\r\n\
+            UID:bare-ics-1\r\n\
+            END:VEVENT\r\n\
+            END:VCALENDAR\r\n";
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(ics.as_bytes().to_vec(), Some("text/calendar"))
+            .await
+            .expect("bare .ics must extract, not error with Unsupported format");
+
+        assert!(
+            extracted.contains("## Calendar event"),
+            "missing header:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("Summary: Lunch with Sam, then walk"),
+            "ICS escaping not unescaped or summary missing:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("Location: Cafe Central"),
+            "missing location:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("First line\nSecond line"),
+            "escaped newline not unescaped:\n{extracted}"
+        );
+        assert!(
+            !extracted.contains("bare-ics-1"),
+            "UID leaked:\n{extracted}"
+        );
+        assert!(!extracted.contains("PRODID"), "PRODID leaked:\n{extracted}");
+    }
+
+    #[tokio::test]
+    async fn test_kreuzberg_extracts_vcard_3_with_photo() {
+        // A vCard 3.0 with a large base64 PHOTO. FN/ORG/EMAIL/TEL must be present; the PHOTO base64
+        // sentinel must be ABSENT; output must be token-light. Modeled on RFC 6350 / Apple Contacts
+        // vCard 3.0 exports.
+        let mut photo = String::new();
+        while photo.len() < 60_000 {
+            photo.push_str("PHOTOSENTINELiVBORw0KGgoAAAANSUhEUgAAAAEAAAAB");
+        }
+        let raw_photo_len = photo.len();
+        let vcf = format!(
+            "BEGIN:VCARD\r\n\
+             VERSION:3.0\r\n\
+             N:Doe;Jane;;;\r\n\
+             FN:Jane Doe\r\n\
+             ORG:Example Corp;Engineering\r\n\
+             TITLE:Staff Engineer\r\n\
+             EMAIL;TYPE=INTERNET:jane.doe@example.com\r\n\
+             TEL;TYPE=WORK,VOICE:+1-555-0100\r\n\
+             ADR;TYPE=WORK:;;123 Main St;Springfield;CA;94000;USA\r\n\
+             URL:https://example.com/jane\r\n\
+             NOTE:Met at conference.\r\n\
+             PHOTO;ENCODING=b;TYPE=PNG:{photo}\r\n\
+             REV:20260601T120000Z\r\n\
+             UID:vcard3-uid\r\n\
+             END:VCARD\r\n"
+        );
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(vcf.into_bytes(), Some("text/vcard"))
+            .await
+            .expect("bare vCard 3.0 must extract");
+
+        assert!(
+            extracted.contains("## Contact card"),
+            "missing header:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("Name: Jane Doe"),
+            "missing FN:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("Organization: Example Corp, Engineering"),
+            "missing ORG:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("Title: Staff Engineer"),
+            "missing TITLE:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("Email: jane.doe@example.com"),
+            "missing EMAIL:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("Phone: +1-555-0100"),
+            "missing TEL:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("123 Main St"),
+            "missing ADR:\n{extracted}"
+        );
+
+        assert!(
+            !extracted.contains("PHOTOSENTINEL"),
+            "PHOTO base64 leaked into extracted content:\n{extracted}"
+        );
+        assert!(
+            !extracted.contains("vcard3-uid"),
+            "UID leaked:\n{extracted}"
+        );
+
+        let tokens = token_count(&extracted);
+        assert!(
+            tokens < 100,
+            "vCard output too large: {tokens} tokens (raw photo {raw_photo_len} bytes):\n{extracted}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_kreuzberg_extracts_vcard_4_with_photo() {
+        // A vCard 4.0 with a large base64 data-URI PHOTO. Same assertions: useful fields present,
+        // PHOTO absent, small. Modeled on RFC 6350 vCard 4.0 (PHOTO as a `data:` URI).
+        let mut photo = String::new();
+        while photo.len() < 60_000 {
+            photo.push_str("PHOTO4SENTINELiVBORw0KGgoAAAANSUhEUgAAAAE");
+        }
+        let vcf = format!(
+            "BEGIN:VCARD\r\n\
+             VERSION:4.0\r\n\
+             FN:John Smith\r\n\
+             N:Smith;John;;;\r\n\
+             ORG:Acme Inc.\r\n\
+             TITLE:Director\r\n\
+             EMAIL:john.smith@acme.example\r\n\
+             TEL;VALUE=uri;TYPE=\"voice,home\":tel:+1-555-0199\r\n\
+             URL:https://acme.example\r\n\
+             PHOTO:data:image/png;base64,{photo}\r\n\
+             UID:urn:uuid:vcard4-uid\r\n\
+             END:VCARD\r\n"
+        );
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(vcf.into_bytes(), Some("text/x-vcard"))
+            .await
+            .expect("bare vCard 4.0 must extract");
+
+        assert!(
+            extracted.contains("Name: John Smith"),
+            "missing FN:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("Organization: Acme Inc."),
+            "missing ORG:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("Email: john.smith@acme.example"),
+            "missing EMAIL:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("Phone: +1-555-0199"),
+            "missing TEL (tel: scheme not stripped?):\n{extracted}"
+        );
+        assert!(
+            !extracted.contains("PHOTO4SENTINEL"),
+            "PHOTO base64 leaked:\n{extracted}"
+        );
+        let tokens = token_count(&extracted);
+        assert!(
+            tokens < 100,
+            "vCard 4.0 output too large: {tokens} tokens:\n{extracted}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_kreuzberg_surfaces_calendar_part_in_invite_email() {
+        // End-to-end: a meeting-invite email carrying a `text/calendar` part must surface the event
+        // via the supplement appended in parse_file (confirming the email-path wiring, not just the
+        // bare-upload path).
+        let eml = "From: Organizer <org@example.com>\r\n\
+            To: Person <p@example.com>\r\n\
+            Subject: Invite\r\n\
+            MIME-Version: 1.0\r\n\
+            Content-Type: multipart/mixed; boundary=\"MX\"\r\n\r\n\
+            --MX\r\n\
+            Content-Type: text/plain; charset=utf-8\r\n\r\n\
+            Body text.\r\n\
+            --MX\r\n\
+            Content-Type: text/calendar; method=REQUEST; charset=utf-8\r\n\r\n\
+            BEGIN:VCALENDAR\r\n\
+            METHOD:REQUEST\r\n\
+            BEGIN:VEVENT\r\n\
+            SUMMARY:Quarterly review\r\n\
+            DTSTART:20260701T140000Z\r\n\
+            END:VEVENT\r\n\
+            END:VCALENDAR\r\n\
+            --MX--\r\n";
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(eml.as_bytes().to_vec(), Some("message/rfc822"))
+            .await
+            .expect("invite email should extract");
+
+        assert!(
+            extracted.contains("## Calendar event")
+                && extracted.contains("Summary: Quarterly review"),
+            "calendar part not surfaced from invite email:\n{extracted}"
+        );
+    }
+
+    #[test]
+    fn test_calendar_summary_handles_multiple_events_and_vtodo() {
+        // Multiple VEVENTs plus a minimal VTODO (SUMMARY + DESCRIPTION).
+        let ics = "BEGIN:VCALENDAR\r\n\
+            VERSION:2.0\r\n\
+            BEGIN:VEVENT\r\n\
+            SUMMARY:First event\r\n\
+            END:VEVENT\r\n\
+            BEGIN:VEVENT\r\n\
+            SUMMARY:Second event\r\n\
+            END:VEVENT\r\n\
+            BEGIN:VTODO\r\n\
+            SUMMARY:Buy supplies\r\n\
+            DESCRIPTION:Pens and paper\r\n\
+            END:VTODO\r\n\
+            END:VCALENDAR\r\n";
+        let summary = extract_calendar_summary(ics).expect("multi-component should parse");
+        assert!(
+            summary.contains("Summary: First event"),
+            "missing first:\n{summary}"
+        );
+        assert!(
+            summary.contains("Summary: Second event"),
+            "missing second:\n{summary}"
+        );
+        assert!(
+            summary.contains("Summary: Buy supplies"),
+            "missing vtodo:\n{summary}"
+        );
+        assert!(
+            summary.contains("Description: Pens and paper"),
+            "missing vtodo desc:\n{summary}"
+        );
+    }
+
+    #[test]
+    fn test_unfold_content_lines_rejoins_folded_values() {
+        // RFC 5545 line folding: a CRLF followed by a space continues the line.
+        let folded =
+            "DESCRIPTION:This is a long\r\n  description that was folded\r\nSUMMARY:Short\r\n";
+        let lines = unfold_content_lines(folded);
+        assert_eq!(
+            lines[0],
+            "DESCRIPTION:This is a long description that was folded"
+        );
+        assert_eq!(lines[1], "SUMMARY:Short");
     }
 }
