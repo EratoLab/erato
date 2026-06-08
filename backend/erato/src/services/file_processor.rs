@@ -519,8 +519,19 @@ fn sanitize_email_html_blocks_inner(entity: &[u8], depth: usize) -> Vec<u8> {
             return entity.to_vec();
         };
 
+        // Defensive: if a `multipart/*` declares a boundary that never actually appears in the body
+        // (malformed/truncated email), `split_multipart_body` yields zero parts. Rebuilding from zero
+        // parts would emit only `--boundary--` and silently DROP the original body bytes (which may
+        // hold real, readable content a lenient parser would still surface). Returning the entity
+        // untouched guarantees the sanitizer can never make a previously-extractable email lose
+        // content; a marginally higher token count is strictly better than dropping the body.
+        let parts = split_multipart_body(body, &boundary);
+        if parts.is_empty() {
+            return entity.to_vec();
+        }
+
         let mut rebuilt_body = Vec::new();
-        for part in split_multipart_body(body, &boundary) {
+        for part in parts {
             rebuilt_body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
             let mut sanitized_part = sanitize_email_html_blocks_inner(part, depth + 1);
             if !sanitized_part.ends_with(b"\r\n") {
@@ -580,9 +591,9 @@ fn sanitize_email_html_blocks_inner(entity: &[u8], depth: usize) -> Vec<u8> {
         let decoded = decode_mime_body(body, transfer_encoding);
         // Strip `<style>`/`<script>` blocks first, then neutralize any `data:` URI payloads (large
         // inline base64 images) — both are token bombs kreuzberg would otherwise render as text.
-        let cleaned = strip_html_data_uris(&strip_html_style_and_script(
-            &String::from_utf8_lossy(&decoded),
-        ));
+        let cleaned = strip_html_data_uris(&strip_html_style_and_script(&String::from_utf8_lossy(
+            &decoded,
+        )));
 
         let mut out = headers_with_base64_encoding(headers_raw).into_bytes();
         out.extend_from_slice(b"\r\n");
@@ -1005,7 +1016,9 @@ mod tests {
         );
         // CSS `url(data:...)` (unquoted): payload removed, the `)` and rest of the rule preserved.
         assert_eq!(
-            strip_html_data_uris("<div style=\"background:url(data:image/png;base64,ZZZZ)\">hi</div>"),
+            strip_html_data_uris(
+                "<div style=\"background:url(data:image/png;base64,ZZZZ)\">hi</div>"
+            ),
             "<div style=\"background:url(data:)\">hi</div>"
         );
         // Single-quoted and multiple occurrences in one document.
@@ -1281,5 +1294,220 @@ Content-Type: text/html; charset=utf-8
 
         assert!(extracted.contains("Alice"));
         assert!(extracted.contains("Johnson"));
+    }
+
+    /// Token ceiling for the malformed/adversarial MIME cases below. The real content in each is a
+    /// short marker line; a sane extraction stays well under this. The point of the bound is to fail
+    /// loudly if a sanitizer bug ever re-emits a raw multi-hundred-K byte blob as text.
+    const ADVERSARIAL_TOKEN_CEILING: usize = 500;
+
+    fn adversarial_token_count(text: &str) -> usize {
+        let bpe = tiktoken_rs::o200k_base().expect("o200k_base tokenizer");
+        bpe.encode_with_special_tokens(text).len()
+    }
+
+    #[tokio::test]
+    async fn test_kreuzberg_handles_multipart_missing_closing_boundary() {
+        // Adversarial MIME: declares `multipart/alternative; boundary="X"` but the message is
+        // truncated mid-part — there is no closing `--X--` and the final HTML part is cut off
+        // mid-tag. The sanitizer's MIME rebuild (`split_multipart_body` + boundary reconstruction)
+        // must survive this without panicking or producing a raw-bytes explosion, and the readable
+        // text/plain part must still be recoverable.
+        let eml = "From: a@example.com\r\nTo: b@example.com\r\nSubject: trunc\r\nMIME-Version: 1.0\r\n\
+            Content-Type: multipart/alternative; boundary=\"X\"\r\n\r\n\
+            --X\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nADV_MARKER_A readable.\r\n\
+            --X\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<html><body><p>trunc";
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(eml.as_bytes().to_vec(), Some("message/rfc822"))
+            .await
+            .expect("truncated multipart email must degrade gracefully, not panic");
+
+        assert!(
+            extracted.contains("ADV_MARKER_A"),
+            "readable part lost from truncated multipart:\n{extracted}"
+        );
+        let tokens = adversarial_token_count(&extracted);
+        assert!(
+            tokens < ADVERSARIAL_TOKEN_CEILING,
+            "truncated multipart produced a token blob ({tokens} tokens):\n{extracted}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_kreuzberg_handles_multipart_boundary_absent_from_body() {
+        // Adversarial MIME: declares a boundary (`NOPE`) that never appears anywhere in the body, so
+        // `split_multipart_body` yields ZERO parts. Before the defensive guard in
+        // `sanitize_email_html_blocks_inner`, rebuilding from zero parts emitted only `--NOPE--` and
+        // silently DROPPED the body bytes — a real content-loss bug. The guard now returns the entity
+        // untouched when a multipart yields no parts, so the body survives.
+        let eml = "From: a@example.com\r\nTo: b@example.com\r\nSubject: noboundary\r\nMIME-Version: 1.0\r\n\
+            Content-Type: multipart/alternative; boundary=\"NOPE\"\r\n\r\n\
+            ADV_MARKER_B body that has no boundary delimiter at all.\r\n";
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(eml.as_bytes().to_vec(), Some("message/rfc822"))
+            .await
+            .expect("multipart with an absent boundary must degrade gracefully, not panic");
+
+        assert!(
+            extracted.contains("ADV_MARKER_B"),
+            "body dropped when the declared boundary never appears:\n{extracted}"
+        );
+        let tokens = adversarial_token_count(&extracted);
+        assert!(
+            tokens < ADVERSARIAL_TOKEN_CEILING,
+            "absent-boundary multipart produced a token blob ({tokens} tokens):\n{extracted}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_kreuzberg_handles_invalid_base64_part() {
+        // Adversarial MIME: a part declares `Content-Transfer-Encoding: base64` but the body is not
+        // valid base64. `decode_mime_body` must not panic — it falls back to the raw bytes on a
+        // decode error — and the readable text/plain sibling must still extract.
+        let eml = "From: a@example.com\r\nTo: b@example.com\r\nSubject: badb64\r\nMIME-Version: 1.0\r\n\
+            Content-Type: multipart/mixed; boundary=\"Y\"\r\n\r\n\
+            --Y\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nADV_MARKER_C readable.\r\n\
+            --Y\r\nContent-Type: application/octet-stream\r\nContent-Transfer-Encoding: base64\r\n\r\n\
+            !!!not-valid-base64@@@truncated\r\n--Y--\r\n";
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(eml.as_bytes().to_vec(), Some("message/rfc822"))
+            .await
+            .expect("invalid base64 part must degrade gracefully, not panic");
+
+        assert!(
+            extracted.contains("ADV_MARKER_C"),
+            "readable part lost alongside an invalid-base64 sibling:\n{extracted}"
+        );
+        let tokens = adversarial_token_count(&extracted);
+        assert!(
+            tokens < ADVERSARIAL_TOKEN_CEILING,
+            "invalid-base64 email produced a token blob ({tokens} tokens):\n{extracted}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_kreuzberg_does_not_leak_inline_cid_image_base64() {
+        // A `multipart/related` email with an inline image referenced by CID: a `text/html` part with
+        // `<img src="cid:logo123">` plus a readable marker, and a sibling `image/png` part carrying a
+        // few KB of base64 (`Content-ID: <logo123>`). The readable marker must survive, and the
+        // image's base64 must NOT be tokenized as a raw blob — kreuzberg's email extractor skips
+        // image parts, so this just locks that behavior in.
+        let mut image_base64 = String::new();
+        while image_base64.len() < 4_000 {
+            // A tiny valid GIF, repeated — content doesn't matter, only that it's a sizable blob.
+            image_base64.push_str("R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=");
+        }
+        let eml = format!(
+            "From: a@example.com\r\nTo: b@example.com\r\nSubject: cid image\r\nMIME-Version: 1.0\r\n\
+             Content-Type: multipart/related; boundary=\"R\"\r\n\r\n\
+             --R\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
+             <html><body><p>CID_READABLE_MARKER text.</p><img src=\"cid:logo123\"></body></html>\r\n\
+             --R\r\nContent-Type: image/png\r\nContent-ID: <logo123>\r\n\
+             Content-Transfer-Encoding: base64\r\n\r\n\
+             {image_base64}\r\n--R--\r\n"
+        );
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(eml.into_bytes(), Some("message/rfc822"))
+            .await
+            .expect("multipart/related with an inline CID image should extract");
+
+        assert!(
+            extracted.contains("CID_READABLE_MARKER"),
+            "readable body missing from CID-image email:\n{extracted}"
+        );
+        assert!(
+            !extracted.contains("R0lGODlhAQABA"),
+            "inline CID image base64 leaked into extracted content:\n{extracted}"
+        );
+        let tokens = adversarial_token_count(&extracted);
+        assert!(
+            tokens < ADVERSARIAL_TOKEN_CEILING,
+            "CID-image email tokenized the image blob ({tokens} tokens):\n{extracted}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_kreuzberg_preserves_latin1_html_email_content() {
+        // Charset edge: an `iso-8859-1` (Latin-1) `text/html` part with a high byte (é = 0xE9) and a
+        // `<style>` block. Like the UTF-16 case, the sanitizer's charset guard leaves non-UTF-8 parts
+        // untouched (running them through `from_utf8_lossy` would corrupt the high bytes), so
+        // kreuzberg decodes the part itself via the charset header and the accented text survives.
+        //
+        // KNOWN LIMITATION: because we skip sanitizing non-UTF-8 parts, the `<style>` block is NOT
+        // stripped for Latin-1 emails and its CSS can leak. We assert content *correctness* here
+        // (the accented text is preserved, not mojibake), not zero-leak — the CSS leak for non-UTF-8
+        // parts is the accepted trade-off for not corrupting the text.
+        let mut eml =
+            b"From: a@example.com\r\nTo: b@example.com\r\nSubject: latin1\r\nMIME-Version: 1.0\r\n\
+              Content-Type: text/html; charset=iso-8859-1\r\n\r\n"
+                .to_vec();
+        eml.extend_from_slice(
+            b"<html><head><style>.x{color:red;LATIN1CSSLEAK:1}</style></head><body><p>caf",
+        );
+        eml.push(0xE9); // é in Latin-1
+        eml.extend_from_slice(b" LATIN1_MARKER works</p></body></html>\r\n");
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(eml, Some("message/rfc822"))
+            .await
+            .expect("Latin-1 html email should still extract");
+
+        assert!(
+            extracted.contains("LATIN1_MARKER works"),
+            "Latin-1 content was dropped:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("café"),
+            "Latin-1 high byte (é) was corrupted rather than decoded:\n{extracted}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_kreuzberg_handles_mixed_transfer_encodings_in_one_email() {
+        // A `multipart/mixed` with two differently-encoded parts: a quoted-printable `text/html` part
+        // carrying a `<style>` block (which must be stripped) and a base64 `text/plain` part (which
+        // must decode and survive). Exercises both transfer-encoding paths in `decode_mime_body`
+        // within a single email and confirms the HTML sanitizer still strips the style block after QP
+        // decoding.
+        let plain_base64 =
+            general_purpose::STANDARD.encode("BASE64_PLAIN_MARKER survives decoding.");
+        let eml = format!(
+            "From: a@example.com\r\nTo: b@example.com\r\nSubject: multienc\r\nMIME-Version: 1.0\r\n\
+             Content-Type: multipart/mixed; boundary=\"M\"\r\n\r\n\
+             --M\r\nContent-Type: text/html; charset=utf-8\r\n\
+             Content-Transfer-Encoding: quoted-printable\r\n\r\n\
+             <html><head><style>.y{{color:blue;QPCSSLEAK:1}}</style></head>\
+             <body><p>QP_HTML_MARKER=20works</p></body></html>\r\n\
+             --M\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n\
+             {plain_base64}\r\n--M--\r\n"
+        );
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(eml.into_bytes(), Some("message/rfc822"))
+            .await
+            .expect("mixed-transfer-encoding email should extract");
+
+        assert!(
+            extracted.contains("QP_HTML_MARKER works"),
+            "quoted-printable HTML body missing (soft break not decoded?):\n{extracted}"
+        );
+        assert!(
+            !extracted.contains("QPCSSLEAK"),
+            "<style> leaked from the quoted-printable HTML part:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("BASE64_PLAIN_MARKER survives decoding."),
+            "base64 text/plain part did not survive decoding:\n{extracted}"
+        );
     }
 }
