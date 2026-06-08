@@ -214,6 +214,11 @@ msgstr "Hilo de correo"
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
+msgid "officeAddin.fileSource.emailThreadLoadError"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/AddinFileSourceSelector.tsx
 msgid "officeAddin.fileSource.fromComputer"
 msgstr "Cargar desde el equipo"
 
