@@ -178,6 +178,7 @@ ingress:
 | backend.configFile.inlineContent | string | `""` | Inline content for erato.toml (alternative to secret/configMap) |
 | backend.configFile.secretKey | string | `""` | Key in the secret that contains the erato.toml content |
 | backend.configFile.secretName | string | `""` | Name of the secret containing the erato.toml file |
+| backend.containerSecurityContext | object | `{"runAsNonRoot":true}` | Security context for the backend container |
 | backend.deploymentAnnotations | object | `{}` | Annotations to add to the backend deployment |
 | backend.deploymentStrategy | object | `{}` | Optional deployment strategy for backend rollout (e.g., RollingUpdate/Recreate). Example: deploymentStrategy:   type: RollingUpdate   rollingUpdate:     maxUnavailable: 25%     maxSurge: 25% |
 | backend.deploymentVersion | string | `""` | Optional deployment version for cache headers on static files (falls back to image tag if not set) |

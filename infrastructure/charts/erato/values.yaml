@@ -209,6 +209,9 @@ backend:
   deploymentStrategy: {}
   # -- Annotations to add to the backend pod
   podAnnotations: {}
+  # -- Security context for the backend container
+  containerSecurityContext:
+    runAsNonRoot: true
   networkPolicy:
     # -- Enable NetworkPolicy for backend pods
     enabled: true
