@@ -45,6 +45,52 @@ fn get_mime_type_from_extension(filename: &str) -> String {
     }
 }
 
+fn is_eml_file(filename: &str) -> bool {
+    filename
+        .rsplit('.')
+        .next()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("eml"))
+}
+
+fn content_type_essence(content_type: &str) -> &str {
+    content_type
+        .split(';')
+        .next()
+        .unwrap_or(content_type)
+        .trim()
+}
+
+fn is_generic_or_text_mime_type(mime_type: Option<&str>) -> bool {
+    match mime_type {
+        None => true,
+        Some(mime_type) => {
+            mime_type.eq_ignore_ascii_case("application/octet-stream")
+                || mime_type.eq_ignore_ascii_case("text/plain")
+        }
+    }
+}
+
+fn effective_text_mime_type(filename: &str, storage_mime_type: Option<&str>) -> Option<String> {
+    let storage_mime_type = storage_mime_type.map(content_type_essence);
+
+    if is_eml_file(filename) && is_generic_or_text_mime_type(storage_mime_type) {
+        return Some("message/rfc822".to_string());
+    }
+
+    storage_mime_type.map(ToOwned::to_owned)
+}
+
+async fn parse_text_file_bytes(
+    file_processor: &dyn crate::services::file_processor::FileProcessor,
+    file_bytes: Vec<u8>,
+    filename: &str,
+    storage_mime_type: Option<&str>,
+) -> Result<String, Report> {
+    let mime_type = effective_text_mime_type(filename, storage_mime_type);
+    let parsed_content = parse_file(file_processor, file_bytes, mime_type.as_deref()).await?;
+    Ok(remove_null_characters(&parsed_content))
+}
+
 /// Get raw file bytes from cache or storage
 #[instrument(
     skip_all,
@@ -121,6 +167,7 @@ pub async fn get_file_contents_cached<'a>(
     cache_key: &FileCacheKey,
     file_storage: &FileStorage,
     file_storage_path: &str,
+    filename: &str,
     sharepoint_ctx: Option<&SharepointContext<'a>>,
 ) -> Result<String, Report> {
     let file_id_str = cache_key.file_id.to_string();
@@ -149,7 +196,7 @@ pub async fn get_file_contents_cached<'a>(
             .await?;
 
             span.record("file_bytes_length", file_bytes.len());
-            let mime_type = file_storage
+            let storage_mime_type = file_storage
                 .get_file_content_type_with_context(file_storage_path, sharepoint_ctx)
                 .await?;
 
@@ -159,13 +206,13 @@ pub async fn get_file_contents_cached<'a>(
                 .acquire()
                 .await
                 .wrap_err("File processing semaphore closed")?;
-            let parsed_content = parse_file(
+            let content = parse_text_file_bytes(
                 app_state.file_processor.as_ref(),
                 file_bytes,
-                mime_type.as_deref(),
+                filename,
+                storage_mime_type.as_deref(),
             )
             .await?;
-            let content = remove_null_characters(&parsed_content);
 
             tracing::debug!(
                 file_id = %cache_key.file_id,
@@ -267,6 +314,7 @@ pub fn get_file_cached<'a>(
                 &cache_key,
                 file_storage,
                 file_storage_path,
+                filename,
                 sharepoint_ctx,
             )
             .await?;
@@ -551,4 +599,78 @@ pub fn process_files_parallel_cached<'a>(
 
         Ok(converted_files)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{effective_text_mime_type, parse_text_file_bytes};
+    use crate::services::file_processor::KreuzbergProcessor;
+
+    #[test]
+    fn effective_text_mime_type_forces_eml_to_message_rfc822() {
+        assert_eq!(
+            effective_text_mime_type("message.eml", Some("text/plain; charset=utf-8")).as_deref(),
+            Some("message/rfc822")
+        );
+        assert_eq!(
+            effective_text_mime_type("message.EML", Some("application/octet-stream")).as_deref(),
+            Some("message/rfc822")
+        );
+        assert_eq!(
+            effective_text_mime_type("message.eml", None).as_deref(),
+            Some("message/rfc822")
+        );
+    }
+
+    #[test]
+    fn effective_text_mime_type_preserves_specific_eml_storage_type() {
+        assert_eq!(
+            effective_text_mime_type("message.eml", Some("text/html")).as_deref(),
+            Some("text/html")
+        );
+        assert_eq!(
+            effective_text_mime_type("message.eml", Some("message/rfc822")).as_deref(),
+            Some("message/rfc822")
+        );
+    }
+
+    #[test]
+    fn effective_text_mime_type_preserves_non_eml_storage_type() {
+        assert_eq!(
+            effective_text_mime_type("notes.txt", Some("text/plain; charset=utf-8")).as_deref(),
+            Some("text/plain")
+        );
+        assert_eq!(effective_text_mime_type("notes.txt", None), None);
+    }
+
+    #[tokio::test]
+    async fn parse_text_file_bytes_treats_eml_with_missing_storage_type_as_email() {
+        let eml_bytes = br#"From: Sender <sender@example.com>
+To: Recipient <recipient@example.com>
+Subject: Persisted EML MIME fallback
+Date: Mon, 18 May 2026 03:32:14 +0000
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+<html><body><p>Persisted EML body token.</p></body></html>
+"#
+        .to_vec();
+
+        let extracted = parse_text_file_bytes(&KreuzbergProcessor, eml_bytes, "digest.eml", None)
+            .await
+            .expect("expected .eml to parse through the email extractor");
+
+        assert!(extracted.contains("Persisted EML MIME fallback"));
+        assert!(extracted.contains("sender@example.com"));
+        assert!(extracted.contains("Persisted EML body token."));
+        assert!(
+            !extracted.contains("Content-Transfer-Encoding"),
+            "raw MIME headers leaked into extracted content:\n{extracted}"
+        );
+        assert!(
+            !extracted.contains("<html>"),
+            "raw HTML leaked into extracted content:\n{extracted}"
+        );
+    }
 }
