@@ -215,7 +215,7 @@ msgstr "Fil d’e-mails"
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
 msgid "officeAddin.fileSource.emailThreadLoadError"
-msgstr ""
+msgstr "Impossible de charger cette conversation depuis le serveur. Certains messages ou pièces jointes sont peut-être manquants — essayez de rouvrir l'e-mail."
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx

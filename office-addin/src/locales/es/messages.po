@@ -215,7 +215,7 @@ msgstr "Hilo de correo"
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
 msgid "officeAddin.fileSource.emailThreadLoadError"
-msgstr ""
+msgstr "No se pudo cargar esta conversación desde el servidor. Es posible que falten algunos mensajes o archivos adjuntos: prueba a volver a abrir el correo electrónico."
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
