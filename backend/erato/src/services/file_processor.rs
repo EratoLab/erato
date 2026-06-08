@@ -385,6 +385,71 @@ fn strip_html_style_and_script(html: &str) -> String {
     out
 }
 
+/// Drop `data:` URI payloads from HTML attribute values, keeping the surrounding markup and text.
+///
+/// kreuzberg's standalone HTML extractor renders `<img src="data:image/png;base64,...">` as the
+/// markdown `![alt](data:...)`, so a single inline image (50 KB–500 KB of base64) lands in the
+/// extracted text and tokenizes at ~2 chars/token — a token bomb. (The email extractor happens to
+/// drop these today, but this guarantees the payload never reaches kreuzberg regardless of which
+/// renderer runs, and shrinks the bytes we hand it.) Data URIs in email bodies are never
+/// content-bearing text, so removing every `data:` payload is safe.
+///
+/// Each `data:` occurrence (in `src=`/`background=`/`srcset=`/CSS `url(data:...)`, quoted or not)
+/// is truncated to the bare scheme `data:` up to its closing delimiter — the enclosing quote, or
+/// whitespace/`)`/`>` when unquoted — so the tag stays structurally valid and no surrounding text
+/// is lost.
+fn strip_html_data_uris(html: &str) -> String {
+    // `to_ascii_lowercase` preserves byte length and only changes ASCII bytes, so byte offsets
+    // found in `lower` map onto valid char boundaries in `html` (`data:` and the delimiters are
+    // all ASCII).
+    let lower = html.to_ascii_lowercase();
+    let bytes = html.as_bytes();
+    let mut out = String::with_capacity(html.len());
+    let mut pos = 0;
+
+    while pos < html.len() {
+        let Some(rel) = lower[pos..].find("data:") else {
+            out.push_str(&html[pos..]);
+            break;
+        };
+        let scheme_start = pos + rel;
+        let payload_start = scheme_start + "data:".len();
+
+        // Keep everything up to and including the bare `data:` scheme, then skip the payload.
+        out.push_str(&html[pos..payload_start]);
+
+        // The delimiter that closes the URI depends on how it is embedded. If the byte preceding
+        // `data:` is a quote, the payload runs to the matching quote; otherwise it is unquoted and
+        // ends at the first whitespace or a `)`/`>` (CSS `url(...)` close, or tag close).
+        let opening_quote = bytes[..scheme_start]
+            .iter()
+            .rev()
+            .find(|&&b| b != b' ' && b != b'\t')
+            .copied()
+            .filter(|&b| b == b'"' || b == b'\'');
+
+        let payload_end = match opening_quote {
+            Some(quote) => bytes[payload_start..]
+                .iter()
+                .position(|&b| b == quote)
+                .map(|i| payload_start + i),
+            None => bytes[payload_start..]
+                .iter()
+                .position(|&b| matches!(b, b' ' | b'\t' | b'\r' | b'\n' | b')' | b'>'))
+                .map(|i| payload_start + i),
+        };
+
+        match payload_end {
+            Some(end) => pos = end,
+            // No delimiter found: the payload runs to end-of-input. Drop the rest entirely (it is
+            // base64, not text) rather than re-emitting the blob.
+            None => break,
+        }
+    }
+
+    out
+}
+
 /// Base64-encode bytes as a MIME body wrapped at 76 columns with CRLF line endings.
 fn base64_mime_body(data: &[u8]) -> String {
     let encoded = general_purpose::STANDARD.encode(data);
@@ -471,7 +536,11 @@ fn sanitize_email_html_blocks(entity: &[u8]) -> Vec<u8> {
 
         let transfer_encoding = header_value(&headers, "content-transfer-encoding");
         let decoded = decode_mime_body(body, transfer_encoding);
-        let cleaned = strip_html_style_and_script(&String::from_utf8_lossy(&decoded));
+        // Strip `<style>`/`<script>` blocks first, then neutralize any `data:` URI payloads (large
+        // inline base64 images) — both are token bombs kreuzberg would otherwise render as text.
+        let cleaned = strip_html_data_uris(&strip_html_style_and_script(
+            &String::from_utf8_lossy(&decoded),
+        ));
 
         let mut out = headers_with_base64_encoding(headers_raw).into_bytes();
         out.extend_from_slice(b"\r\n");
@@ -802,6 +871,60 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn test_kreuzberg_strips_embedded_data_uri_image_from_eml() {
+        // A heavily-embedded inline image — `<img src="data:image/png;base64,...">` with a large
+        // base64 payload — is a token bomb: kreuzberg's HTML renderer turns it into `![](data:...)`
+        // and the whole blob tokenizes at ~2 chars/token. The sanitizer must drop the payload while
+        // keeping the readable body, so the extracted content stays tiny.
+        let mut payload = String::new();
+        while payload.len() < 200_000 {
+            payload.push_str("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ");
+        }
+        let raw_payload_len = payload.len();
+        let eml = format!(
+            "From: Sender <sender@example.com>\r\n\
+             To: Recipient <recipient@example.com>\r\n\
+             Subject: Photo of the week\r\n\
+             MIME-Version: 1.0\r\n\
+             Content-Type: text/html; charset=utf-8\r\n\
+             \r\n\
+             <html><body><p>READABLE IMAGE CAPTION MARKER.</p>\
+             <img src=\"data:image/png;base64,{payload}\" alt=\"chart\">\
+             <p>Trailing readable text.</p></body></html>\r\n"
+        );
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(eml.into_bytes(), Some("message/rfc822"))
+            .await
+            .expect("email with embedded data-URI image should extract");
+
+        assert!(
+            extracted.contains("READABLE IMAGE CAPTION MARKER."),
+            "readable body missing from extracted content:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("Trailing readable text."),
+            "trailing readable text missing from extracted content:\n{extracted}"
+        );
+        // The base64 sentinel must be gone — no data-URI payload leaked.
+        assert!(
+            !extracted.contains("iVBORw0KGgo"),
+            "embedded data-URI base64 leaked into extracted content:\n{extracted}"
+        );
+
+        // Token count must collapse to the real-content range, far below the raw base64 blob, which
+        // alone would tokenize at ~2 chars/token (~100k tokens for this 200 KB payload).
+        let bpe = tiktoken_rs::o200k_base().expect("o200k_base tokenizer");
+        let tokens = bpe.encode_with_special_tokens(&extracted).len();
+        assert!(
+            tokens < 200,
+            "expected the embedded-image email to reduce to real-content size, got {tokens} tokens \
+             ({raw_payload_len} raw base64 bytes)"
+        );
+    }
+
     #[test]
     fn strip_html_style_and_script_removes_blocks_but_keeps_content() {
         let cleaned = strip_html_style_and_script(
@@ -826,6 +949,34 @@ mod tests {
         assert_eq!(
             strip_html_style_and_script("head <style>.a{color:red} no close and important tail"),
             "head <style>.a{color:red} no close and important tail"
+        );
+    }
+
+    #[test]
+    fn strip_html_data_uris_removes_payload_but_keeps_markup_and_text() {
+        // Quoted `src` data URI: the giant base64 goes, the tag structure and surrounding text stay.
+        assert_eq!(
+            strip_html_data_uris(
+                "<p>keep me</p><img src=\"data:image/png;base64,AAAABBBBCCCC\" alt=\"x\"><p>tail</p>"
+            ),
+            "<p>keep me</p><img src=\"data:\" alt=\"x\"><p>tail</p>"
+        );
+        // CSS `url(data:...)` (unquoted): payload removed, the `)` and rest of the rule preserved.
+        assert_eq!(
+            strip_html_data_uris("<div style=\"background:url(data:image/png;base64,ZZZZ)\">hi</div>"),
+            "<div style=\"background:url(data:)\">hi</div>"
+        );
+        // Single-quoted and multiple occurrences in one document.
+        assert_eq!(
+            strip_html_data_uris(
+                "<img src='data:image/gif;base64,QQQQ'><img src='data:image/gif;base64,RRRR'>"
+            ),
+            "<img src='data:'><img src='data:'>"
+        );
+        // No data URI: input passes through untouched (and real text is never dropped).
+        assert_eq!(
+            strip_html_data_uris("<p>plain text, no data here</p>"),
+            "<p>plain text, no data here</p>"
         );
     }
 
