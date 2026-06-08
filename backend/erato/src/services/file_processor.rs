@@ -489,8 +489,26 @@ fn headers_with_base64_encoding(raw_headers: &[u8]) -> String {
 
 /// Walk the MIME tree and rewrite `text/html` parts with their `<style>`/`<script>` blocks removed,
 /// leaving every other part byte-identical. Returns the original bytes for non-multipart,
-/// non-HTML, or unparseable input. Nested `message/rfc822` parts are treated as opaque.
+/// non-HTML, or unparseable input. Nested `message/rfc822` parts are recursed into so a CSS-heavy
+/// email forwarded *inside* a thread is sanitized too.
 fn sanitize_email_html_blocks(entity: &[u8]) -> Vec<u8> {
+    sanitize_email_html_blocks_inner(entity, 0)
+}
+
+/// Maximum MIME nesting depth we recurse through. The recursion is naturally bounded by the
+/// structure of a well-formed email, but a maliciously crafted message could nest
+/// `multipart`/`message/rfc822` parts arbitrarily deep; this guard stops us from blowing the stack
+/// on such input. Beyond the limit we return the entity untouched (a higher token count for that
+/// sub-tree is strictly better than a crash).
+const MAX_SANITIZE_DEPTH: usize = 20;
+
+/// Recursive core of [`sanitize_email_html_blocks`]. `depth` tracks how many MIME levels deep we
+/// are so pathologically nested emails can't recurse without bound.
+fn sanitize_email_html_blocks_inner(entity: &[u8], depth: usize) -> Vec<u8> {
+    if depth >= MAX_SANITIZE_DEPTH {
+        return entity.to_vec();
+    }
+
     let (headers_raw, body) = split_mime_headers_body(entity);
     let headers = parse_mime_headers(headers_raw);
     let content_type = header_value(&headers, "content-type").unwrap_or("text/plain");
@@ -504,7 +522,7 @@ fn sanitize_email_html_blocks(entity: &[u8]) -> Vec<u8> {
         let mut rebuilt_body = Vec::new();
         for part in split_multipart_body(body, &boundary) {
             rebuilt_body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
-            let mut sanitized_part = sanitize_email_html_blocks(part);
+            let mut sanitized_part = sanitize_email_html_blocks_inner(part, depth + 1);
             if !sanitized_part.ends_with(b"\r\n") {
                 sanitized_part.extend_from_slice(b"\r\n");
             }
@@ -516,6 +534,30 @@ fn sanitize_email_html_blocks(entity: &[u8]) -> Vec<u8> {
         out.extend_from_slice(headers_raw);
         out.extend_from_slice(b"\r\n\r\n");
         out.extend_from_slice(&rebuilt_body);
+        return out;
+    }
+
+    if content_type_essence == "message/rfc822" {
+        // A forwarded/attached email carried as `message/rfc822` is itself a full MIME message, so
+        // its `text/html` parts can leak `<style>`/`<script>` blocks just like a top-level email.
+        // Decode the part (it may be base64/quoted-printable), recurse to sanitize the inner
+        // message, then re-emit.
+        //
+        // CTE re-emit choice: we always re-emit the recursed inner message as base64. The recursed
+        // bytes are ascii-safe (any inner html became base64), but their internal structure
+        // contains its own MIME boundaries and CRLFs; re-emitting verbatim under the original CTE
+        // (e.g. `7bit`) risks a boundary/line-length/encoding mismatch against the inner message we
+        // just rebuilt. Base64-wrapping the whole inner message sidesteps every such pitfall and is
+        // transparent to kreuzberg, which decodes the CTE before recursing into the nested message
+        // — confirmed by `test_kreuzberg_extracts_nested_rfc822_thread_bundle` (the nested bodies,
+        // grandchild attachment, and filename all still extract).
+        let transfer_encoding = header_value(&headers, "content-transfer-encoding");
+        let decoded = decode_mime_body(body, transfer_encoding);
+        let sanitized_inner = sanitize_email_html_blocks_inner(&decoded, depth + 1);
+
+        let mut out = headers_with_base64_encoding(headers_raw).into_bytes();
+        out.extend_from_slice(b"\r\n");
+        out.extend_from_slice(base64_mime_body(&sanitized_inner).as_bytes());
         return out;
     }
 
@@ -1135,6 +1177,52 @@ Content-Type: text/html; charset=utf-8
         assert!(kreuzberg_content.contains(
             "(Updated) Microsoft Teams: AI meeting recap without transcript to meet compliance policies"
         ));
+    }
+
+    #[tokio::test]
+    async fn test_kreuzberg_strips_style_in_nested_forwarded_email() {
+        // A CSS-heavy email forwarded *inside* a thread (as a `message/rfc822` attachment) must be
+        // sanitized too: before the sanitizer recursed into `message/rfc822` parts, the inner
+        // `<style>` block was treated as opaque and leaked into the token count. Build a
+        // `multipart/mixed` wrapper whose only attachment is a forwarded `text/html` email carrying
+        // a `ZZNESTEDCSSZZ` CSS sentinel plus a readable marker.
+        let inner_email = b"From: Inner Sender <inner@example.com>\r\n\
+            To: Outer Recipient <outer@example.com>\r\n\
+            Subject: Forwarded styled email\r\n\
+            MIME-Version: 1.0\r\n\
+            Content-Type: text/html; charset=utf-8\r\n\r\n\
+            <html><head><style>.brand{color:#ZZNESTEDCSSZZ;font-size:42px}</style></head>\
+            <body><p>NESTED_READABLE_MARKER_delta survives sanitization.</p></body></html>\r\n";
+
+        let mut eml = b"From: thread-wrapper@example.com\r\n\
+            To: reader@example.com\r\n\
+            Subject: Thread with forwarded styled email\r\n\
+            MIME-Version: 1.0\r\n\
+            Content-Type: multipart/mixed; boundary=\"OUTER\"\r\n\r\n\
+            --OUTER\r\n\
+            Content-Type: message/rfc822\r\n\
+            Content-Disposition: attachment; filename=\"forwarded.eml\"\r\n\r\n"
+            .to_vec();
+        eml.extend_from_slice(inner_email);
+        eml.extend_from_slice(b"\r\n--OUTER--\r\n");
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(eml, Some("message/rfc822"))
+            .await
+            .expect("nested forwarded styled email should extract");
+
+        // The readable body of the forwarded message survives the double recursion.
+        assert!(
+            extracted.contains("NESTED_READABLE_MARKER_delta"),
+            "readable marker from the nested forwarded email was dropped:\n{extracted}"
+        );
+        // The CSS sentinel must not appear — proving the nested `<style>` block was stripped.
+        assert_eq!(
+            extracted.matches("ZZNESTEDCSSZZ").count(),
+            0,
+            "nested <style> block leaked from the forwarded message/rfc822 part:\n{extracted}"
+        );
     }
 
     #[tokio::test]
