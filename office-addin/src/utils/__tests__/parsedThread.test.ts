@@ -107,7 +107,6 @@ describe("fetchCurrentThread", () => {
     // Full body kept (forwarded content survives), not the signature-only uniqueBody.
     expect(thread?.messages[0].bodyHtml).toContain("full thread quote");
     expect(thread?.messages[0].bodyText).toBeNull();
-    expect(thread?.messages[0].fullBodyHtml).toContain("full thread quote");
     expect(thread?.messages[1].bodyText).toContain("fallback wins");
     expect(thread?.messages[1].bodyHtml).toBeNull();
   });
@@ -145,6 +144,57 @@ describe("fetchCurrentThread", () => {
     expect(thread?.messages[0].bodyText).toBe("Reply text");
     // Not a subset → keep the full body (never risk dropping content).
     expect(thread?.messages[1].bodyText).toBe("The real full body");
+  });
+
+  it("does NOT collapse a plaintext subset when the thread is incomplete (dropped tail may be the only copy)", async () => {
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // First page succeeds with a collapsible plaintext message, but a later
+    // page fails → thread is partial → the quoted tail must be retained.
+    let call = 0;
+    const transport: GraphTransport = vi.fn(async () => {
+      call += 1;
+      if (call === 1) {
+        return {
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => ({
+            value: [
+              {
+                id: "subset",
+                internetMessageId: "<subset@x>",
+                subject: "reply quoting an earlier (unfetched) message",
+                body: {
+                  contentType: "text",
+                  content:
+                    "Reply text\n\n> On 1 Jan, X wrote:\n> quoted history",
+                },
+                uniqueBody: { contentType: "text", content: "Reply text" },
+                receivedDateTime: "2026-03-02T10:00:00Z",
+                isDraft: false,
+              },
+            ],
+            "@odata.nextLink":
+              "https://graph.microsoft.com/v1.0/me/messages?$skiptoken=PAGE2",
+          }),
+        } as unknown as Response;
+      }
+      return {
+        ok: false,
+        status: 503,
+        statusText: "Service Unavailable",
+        json: async () => ({}),
+      } as unknown as Response;
+    });
+
+    const thread = await fetchCurrentThread("conv-1", acquireToken, {
+      transport,
+    });
+    consoleWarn.mockRestore();
+
+    expect(thread?.incomplete).toBe(true);
+    // Full body kept despite the subset being collapsible on a complete thread.
+    expect(thread?.messages[0].bodyText).toContain("quoted history");
   });
 
   it("reads isHtml from the chosen source so an empty html uniqueBody can't mislabel a plaintext body", async () => {

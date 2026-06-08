@@ -154,9 +154,10 @@ export async function fetchParentMessageInConversationViaGraph(
 
 /**
  * Fetches every non-draft message in a conversation thread, with each
- * message's attachments expanded inline. One Graph call covers the entire
- * thread + attachment bytes within the Graph response envelope cap (~4 MB),
- * avoiding the throttle hazard of N parallel `/$value` fetches.
+ * message's `fileAttachment` bytes expanded inline. Paginates `@odata.nextLink`
+ * up to `MAX_CONVERSATION_PAGES` (declaring the thread `partial` past the cap),
+ * then enriches any `itemAttachment` bytes via bounded-concurrency `/$value`
+ * fetches (see `enrichItemAttachments`) to stay under Graph's throttle.
  *
  * `uniqueBody` is included alongside `body`: the former contains only the
  * portion of the body unique to that message (Graph strips prior quoted
@@ -243,6 +244,10 @@ const ITEM_ATTACHMENT_TYPE = "#microsoft.graph.itemAttachment";
  * many pages (50 × 20 = 1000 messages) before declaring the thread partial. */
 const MAX_CONVERSATION_PAGES = 20;
 const CONVERSATION_PAGE_SIZE = 50;
+/** Max simultaneous item-attachment `/$value` fetches (Graph throttle guard). */
+const ITEM_ENRICH_CONCURRENCY = 5;
+/** Upper bound on an honored `Retry-After`, so a bad header can't hang us. */
+const MAX_RETRY_AFTER_SECONDS = 10;
 
 export async function fetchConversationMessagesViaGraph(
   conversationId: string,
@@ -373,7 +378,7 @@ async function enrichItemAttachments(
   token: string,
   transport: GraphTransport,
 ): Promise<void> {
-  const fetches: Promise<void>[] = [];
+  const tasks: Array<() => Promise<void>> = [];
   for (const message of messages) {
     const messageId = message.id;
     if (!messageId || !message.attachments) continue;
@@ -381,37 +386,91 @@ async function enrichItemAttachments(
       if (attachment["@odata.type"] !== ITEM_ATTACHMENT_TYPE) continue;
       if (attachment.contentBytes || !attachment.id) continue;
       const attachmentId = attachment.id;
-      fetches.push(
-        (async () => {
-          try {
-            const url = `${GRAPH_BASE}/me/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}/$value`;
-            const response = await transport(url, {
-              headers: {
-                Authorization: `Bearer ${token}`,
-                Accept: "application/octet-stream",
-              },
-            });
-            if (!response.ok) return;
-            const buffer = await response.arrayBuffer();
-            if (!buffer || buffer.byteLength === 0) return;
-            attachment.contentBytes = arrayBufferToBase64(buffer);
-            if (!attachment.contentType) {
-              attachment.contentType = "message/rfc822";
-            }
-            if (!attachment.name) {
-              attachment.name = "attached-item.eml";
-            }
-          } catch (error) {
-            console.warn(
-              "[enrichItemAttachments] item $value fetch failed:",
-              error,
-            );
-          }
-        })(),
+      tasks.push(() =>
+        enrichOneItemAttachment(
+          messageId,
+          attachmentId,
+          attachment,
+          token,
+          transport,
+        ),
       );
     }
   }
-  await Promise.all(fetches);
+  // Bounded fan-out: a thread that forwarded many items would otherwise fire
+  // one /$value GET per item simultaneously and trip Graph's per-app throttle.
+  await runWithConcurrency(tasks, ITEM_ENRICH_CONCURRENCY);
+}
+
+async function enrichOneItemAttachment(
+  messageId: string,
+  attachmentId: string,
+  attachment: GraphAttachment,
+  token: string,
+  transport: GraphTransport,
+): Promise<void> {
+  const url = `${GRAPH_BASE}/me/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}/$value`;
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/octet-stream",
+  };
+  try {
+    let response = await transport(url, { headers });
+    // Honor a single Retry-After on throttle before giving up to a marker.
+    if (response.status === 429) {
+      const retryMs = retryAfterMs(response);
+      if (retryMs !== null) {
+        await sleep(retryMs);
+        response = await transport(url, { headers });
+      }
+    }
+    if (!response.ok) return;
+    const buffer = await response.arrayBuffer();
+    if (!buffer || buffer.byteLength === 0) return;
+    attachment.contentBytes = arrayBufferToBase64(buffer);
+    if (!attachment.contentType) {
+      attachment.contentType = "message/rfc822";
+    }
+    if (!attachment.name) {
+      attachment.name = "attached-item.eml";
+    }
+  } catch (error) {
+    console.warn("[enrichItemAttachments] item $value fetch failed:", error);
+  }
+}
+
+/** Run thunks with at most `limit` in flight at once. Each thunk is expected to
+ * swallow its own errors (these do), so the pool never rejects. */
+async function runWithConcurrency(
+  tasks: Array<() => Promise<void>>,
+  limit: number,
+): Promise<void> {
+  let cursor = 0;
+  const workers = Array.from(
+    { length: Math.min(limit, tasks.length) },
+    async () => {
+      while (cursor < tasks.length) {
+        const index = cursor;
+        cursor += 1;
+        await tasks[index]();
+      }
+    },
+  );
+  await Promise.all(workers);
+}
+
+/** Parse a `Retry-After` (delta-seconds) header into a clamped ms delay, or
+ * null when absent/unparseable. Clamped so a hostile header can't stall us. */
+function retryAfterMs(response: Response): number | null {
+  const header = response.headers?.get?.("Retry-After");
+  if (!header) return null;
+  const seconds = Number(header);
+  if (!Number.isFinite(seconds) || seconds < 0) return null;
+  return Math.min(seconds, MAX_RETRY_AFTER_SECONDS) * 1000;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {

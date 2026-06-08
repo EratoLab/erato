@@ -35,8 +35,6 @@ function makeMessage(overrides: Partial<ThreadMessage> = {}): ThreadMessage {
     date: "2026-03-01T10:00:00Z",
     bodyText: "body",
     bodyHtml: null,
-    fullBodyText: "body",
-    fullBodyHtml: null,
     attachments: [],
     ...overrides,
   };
@@ -148,8 +146,6 @@ describe("buildThreadSynthInputs", () => {
       makeMessage({
         bodyText: null,
         bodyHtml: "<p>Hallo</p>",
-        fullBodyText: null,
-        fullBodyHtml: "<p>Hallo</p>",
         attachments: [
           makeAttachment({
             id: "<m@x>:ref",
@@ -175,8 +171,6 @@ describe("buildThreadSynthInputs", () => {
       makeMessage({
         bodyText: "",
         bodyHtml: null,
-        fullBodyText: "",
-        fullBodyHtml: null,
         attachments: [
           makeAttachment({
             id: "<m@x>:img",

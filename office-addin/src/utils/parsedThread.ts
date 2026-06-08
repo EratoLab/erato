@@ -55,13 +55,6 @@ export interface ThreadMessage {
   /** The chosen body (see `chooseBody`) — what synthesis emits. */
   bodyText: string | null;
   bodyHtml: string | null;
-  /**
-   * The full Graph `body` (never the stripped `uniqueBody`), retained so the
-   * complete content is always available even when `bodyText`/`bodyHtml`
-   * carry a collapsed uniqueBody. One of these is null per the body's type.
-   */
-  fullBodyText: string | null;
-  fullBodyHtml: string | null;
   attachments: ThreadAttachment[];
 }
 
@@ -73,8 +66,11 @@ export interface ParsedThread {
   /**
    * True when the conversation could not be fully fetched (a later page
    * failed or the page cap was hit). Consumers disclose this to the LLM
-   * (INV-7) and disable cross-message dedup, since a canonical copy may be
-   * outside the fetched window.
+   * (INV-7), and `chooseBody` suppresses the plaintext-body collapse so
+   * quoted history that may live only in an unfetched earlier message is
+   * retained. (Attachment dedup stays safe even when incomplete: the
+   * canonical copy a marker points to is always the first occurrence within
+   * the fetched window, so the reference is never dangling.)
    */
   incomplete: boolean;
 }
@@ -108,9 +104,10 @@ export async function fetchCurrentThread(
   }
   if (raw.length === 0) return null;
 
+  const incomplete = state === "partial";
   const messages = raw
     .filter((message) => message.isDraft !== true)
-    .map((message) => transformMessage(message))
+    .map((message) => transformMessage(message, incomplete))
     .filter((message): message is ThreadMessage => message !== null);
 
   if (messages.length === 0) return null;
@@ -126,12 +123,13 @@ export async function fetchCurrentThread(
     conversationId,
     subject: latestSubject,
     messages,
-    incomplete: state === "partial",
+    incomplete,
   };
 }
 
 function transformMessage(
   message: GraphConversationMessage,
+  incomplete: boolean,
 ): ThreadMessage | null {
   const id = message.internetMessageId ?? message.id ?? null;
   if (!id) return null;
@@ -142,7 +140,7 @@ function transformMessage(
       (attachment): attachment is ThreadAttachment => attachment !== null,
     );
 
-  const body = chooseBody(message);
+  const body = chooseBody(message, incomplete);
 
   return {
     id,
@@ -164,8 +162,6 @@ function transformMessage(
 interface ChosenBody {
   bodyText: string | null;
   bodyHtml: string | null;
-  fullBodyText: string | null;
-  fullBodyHtml: string | null;
 }
 
 /**
@@ -180,15 +176,19 @@ interface ChosenBody {
  * full — accepted). `isHtml` is always read from the SAME source object that
  * supplied the chosen string, closing the decoupling bug where an empty-but-
  * typed `uniqueBody` mislabeled a plaintext `body` as HTML.
+ *
+ * When the thread is `incomplete`, the collapse is suppressed entirely: the
+ * dropped quoted history might be the only surviving copy of an unfetched
+ * earlier message, so we keep the full body and pay the tokens.
  */
-function chooseBody(message: GraphConversationMessage): ChosenBody {
+function chooseBody(
+  message: GraphConversationMessage,
+  incomplete: boolean,
+): ChosenBody {
   const uniqContent = nullIfEmpty(message.uniqueBody?.content);
   const fullContent = nullIfEmpty(message.body?.content);
   const uniqIsHtml = message.uniqueBody?.contentType === "html";
   const fullIsHtml = message.body?.contentType === "html";
-
-  const fullBodyText = fullContent !== null && !fullIsHtml ? fullContent : null;
-  const fullBodyHtml = fullContent !== null && fullIsHtml ? fullContent : null;
 
   let chosenContent: string | null;
   let chosenIsHtml: boolean;
@@ -204,11 +204,13 @@ function chooseBody(message: GraphConversationMessage): ChosenBody {
     chosenContent = fullContent;
     chosenIsHtml = fullIsHtml;
   } else if (
+    !incomplete &&
     !uniqIsHtml &&
     normalize(fullContent).includes(normalize(uniqContent))
   ) {
     // Plaintext and uniqueBody is a provable loss-free substring of full →
-    // collapse to the smaller copy (the only safe token win here).
+    // collapse to the smaller copy (the only safe token win here). Skipped on
+    // incomplete threads, where the dropped tail may be the sole copy.
     chosenContent = uniqContent;
     chosenIsHtml = false;
   } else {
@@ -231,8 +233,6 @@ function chooseBody(message: GraphConversationMessage): ChosenBody {
   return {
     bodyText: chosenContent !== null && !chosenIsHtml ? chosenContent : null,
     bodyHtml: chosenContent !== null && chosenIsHtml ? chosenContent : null,
-    fullBodyText,
-    fullBodyHtml,
   };
 }
 

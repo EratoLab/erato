@@ -49,6 +49,7 @@ export function AddinFileSourceSelector({
   const {
     emailBodyFile,
     isLoadingEmailBody,
+    emailThreadLoadError,
     isEmailBodyDismissed,
     dismissedAttachmentIds,
     restoreEmailBody,
@@ -284,6 +285,16 @@ export function AddinFileSourceSelector({
                   </div>
                 )}
 
+                {!isLoadingEmailBody && emailThreadLoadError && (
+                  <div className="px-3 py-2 text-xs text-theme-error-fg">
+                    {t({
+                      id: "officeAddin.fileSource.emailThreadLoadError",
+                      message:
+                        "Couldn't load this conversation from the server. Some messages or attachments may be missing — try reopening the item.",
+                    })}
+                  </div>
+                )}
+
                 {emailBodyFile &&
                   (() => {
                     const isAlreadyAdded =
@@ -376,6 +387,7 @@ export function AddinFileSourceSelector({
 
                 {!isLoadingEmailBody &&
                   !isLoadingAttachments &&
+                  !emailThreadLoadError &&
                   !emailBodyFile &&
                   selectableAttachments.length === 0 && (
                     <div className="px-3 py-2 text-xs text-theme-fg-muted">
