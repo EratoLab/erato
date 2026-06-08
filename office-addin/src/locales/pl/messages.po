@@ -140,7 +140,7 @@ msgstr "(brak tematu)"
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.unknownSender"
-msgstr ""
+msgstr "Nieznany nadawca"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
@@ -256,6 +256,11 @@ msgstr "Dla tego elementu nie jest dostępna treść wiadomości."
 #: src/components/AddinFileSourceSelector.tsx
 msgid "officeAddin.fileSource.show"
 msgstr "Pokaż"
+
+#. js-lingui-explicit-id
+#: src/components/AddinFileSourceSelector.tsx
+msgid "officeAddin.fileSource.updatingThread"
+msgstr "Aktualizowanie…"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChat.tsx
@@ -572,8 +577,8 @@ msgstr "i prześlij tam pobrany plik."
 # ==============================
 #: src/components/AddinChatInput.tsx
 msgid "{messageCount} messages"
-msgstr ""
+msgstr "{messageCount} wiadomości"
 
 #: src/components/AddinChatInput.tsx
 msgid "1 message"
-msgstr ""
+msgstr "1 wiadomość"

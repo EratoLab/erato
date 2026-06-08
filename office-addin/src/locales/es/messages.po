@@ -140,7 +140,7 @@ msgstr "(sin asunto)"
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.unknownSender"
-msgstr ""
+msgstr "Remitente desconocido"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
@@ -256,6 +256,11 @@ msgstr "No hay contenido de correo disponible para este elemento."
 #: src/components/AddinFileSourceSelector.tsx
 msgid "officeAddin.fileSource.show"
 msgstr "Mostrar"
+
+#. js-lingui-explicit-id
+#: src/components/AddinFileSourceSelector.tsx
+msgid "officeAddin.fileSource.updatingThread"
+msgstr "Actualizando…"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChat.tsx
@@ -572,8 +577,8 @@ msgstr "y cargue allí el archivo descargado."
 # ==============================
 #: src/components/AddinChatInput.tsx
 msgid "{messageCount} messages"
-msgstr ""
+msgstr "{messageCount} mensajes"
 
 #: src/components/AddinChatInput.tsx
 msgid "1 message"
-msgstr ""
+msgstr "1 mensaje"

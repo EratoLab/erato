@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -11,7 +12,7 @@ import {
 import { useMsalNaa } from "./MsalNaaProvider";
 import { useOutlookMailItem } from "./OutlookMailItemProvider";
 import { useCurrentThread } from "../hooks/useCurrentThread";
-import { buildThreadSynthInputs } from "../utils/buildThreadSynthInputs";
+import { buildThreadEmlFile } from "../utils/buildThreadEmlFile";
 import { fetchParentMessageInConversationViaGraph } from "../utils/fetchOutlookMessageGraph";
 import {
   dismissAttachment as applyDismissAttachment,
@@ -19,7 +20,6 @@ import {
   restoreAttachment as applyRestoreAttachment,
   restoreBody as applyRestoreBody,
 } from "../utils/stagedEmailDismissals";
-import { synthesizeThreadEml } from "../utils/synthesizeThreadEml";
 import { trimEmlAttachments } from "../utils/trimEmlAttachments";
 
 import type { ParentMessageMetadata } from "../utils/fetchOutlookMessageGraph";
@@ -34,17 +34,6 @@ const GRAPH_MAIL_SCOPES = ["Mail.Read"];
 
 function generateDroppedKey(): string {
   return `drop-${globalThis.crypto.randomUUID()}`;
-}
-
-/**
- * UTF-8 byte length of whichever body wins (HTML preferred, text fallback).
- * Used to seed the token-estimator placeholder. Cheap text-encoding, no
- * base64 expansion — attachment bytes are added separately by the caller.
- */
-function textByteLength(text: string | null, html: string | null): number {
-  const winning = html ?? text;
-  if (!winning) return 0;
-  return new TextEncoder().encode(winning).length;
 }
 
 function collectDismissedIndices(
@@ -120,6 +109,14 @@ interface OutlookEmailSourceContextValue {
   emailSubject: string;
   isEmailBodyIncluded: boolean;
   emailBodyFile: File | null;
+  /**
+   * True while the synthesized thread `.eml` (and therefore `emailBodyFile`'s
+   * size / token estimate) is being recomputed after a dismissal toggle. The
+   * checkbox state has already updated; this only signals that the derived
+   * file is catching up. Lets the UI show an "Updating…" hint on large threads
+   * instead of appearing frozen.
+   */
+  isThreadEmlStale: boolean;
   isLoadingEmailBody: boolean;
   /**
    * True when the open conversation failed to load entirely (Graph fetch
@@ -153,6 +150,7 @@ const defaultValue: OutlookEmailSourceContextValue = {
   emailSubject: "",
   isEmailBodyIncluded: false,
   emailBodyFile: null,
+  isThreadEmlStale: false,
   isLoadingEmailBody: false,
   emailThreadLoadError: false,
   currentThread: null,
@@ -319,33 +317,46 @@ export function OutlookEmailSourceProvider({
     );
   }, [currentThread, threadStaged]);
 
-  // Approximate size of the synthesised thread .eml without paying the
-  // base64 cost. Used to give the chat-input's token estimator a non-zero
-  // signal via `emailBodyFile.size` — the real synthesis only runs at send
-  // time inside `resolveSelectedFilesForSend`, so checkbox toggles don't
-  // re-encode tens of MB of attachment bytes.
-  const threadPreviewFile = useMemo<File | null>(() => {
+  // Everything `buildThreadEmlFile` needs, bundled into one object so the
+  // thread and its dismissal state always travel together (never a new thread
+  // paired with stale dismissals). New identity whenever the conversation or a
+  // checkbox changes; null in compose mode / before a thread loads.
+  const threadSynthInput = useMemo(() => {
     if (!currentThread || !threadStaged) return null;
-    if (includedThreadMessages.length === 0) return null;
-    let estimatedBytes = 1024; // outer headers + boundaries fixed overhead
-    for (const message of includedThreadMessages) {
-      estimatedBytes += 512; // per-message header block
-      estimatedBytes += textByteLength(message.bodyText, message.bodyHtml);
-      for (const attachment of message.attachments) {
-        if (attachment.isInline) continue;
-        if (threadStaged.dismissedAttachmentIds.has(attachment.id)) continue;
-        // base64 expands content by ~4/3 and adds ~2 bytes per 76-char line.
-        estimatedBytes += Math.ceil(attachment.size * 1.37);
-      }
-    }
-    // The preview File only needs the right `.size`; its bytes are never
-    // read (consumers use it for token estimation). Allocate a zero-filled
-    // placeholder of the right length — far cheaper than base64-encoding
-    // the real attachments on every keystroke.
-    return new File([new Uint8Array(estimatedBytes)], "thread-preview.eml", {
-      type: "message/rfc822",
-    });
+    return {
+      thread: currentThread,
+      includedMessages: includedThreadMessages,
+      dismissedAttachmentIds: threadStaged.dismissedAttachmentIds,
+    };
   }, [currentThread, includedThreadMessages, threadStaged]);
+
+  // The full base64 synthesis is genuinely expensive on large threads (tens of
+  // MB of attachments → a ~1-2s synchronous encode). Running it directly in a
+  // render-phase useMemo would freeze the checkbox the user just clicked. So we
+  // synthesize from a DEFERRED copy of the input: the urgent render (checkbox
+  // tick, body-dismiss state) commits instantly, and React reruns the heavy
+  // memo against the latest input in a follow-up, non-blocking pass.
+  //
+  // `threadEmlFile` is still the single source of truth — the exact bytes we
+  // upload — reused for BOTH the token estimate (as a virtual file) and the
+  // actual send, so the estimate measures byte-for-byte what is sent. It only
+  // lags the live selection by the deferred pass; see `isThreadEmlStale`.
+  // Null when every message is dismissed.
+  const deferredSynthInput = useDeferredValue(threadSynthInput);
+  const threadEmlFile = useMemo<File | null>(() => {
+    if (!deferredSynthInput) return null;
+    return buildThreadEmlFile(
+      deferredSynthInput.thread,
+      deferredSynthInput.includedMessages,
+      deferredSynthInput.dismissedAttachmentIds,
+    );
+  }, [deferredSynthInput]);
+
+  // True while the deferred synthesis is catching up to the latest toggle: the
+  // urgent UI has committed but `threadEmlFile` still reflects the previous
+  // input. Drives an "Updating…" hint so a large-thread re-encode reads as
+  // "recalculating", not a frozen click.
+  const isThreadEmlStale = threadSynthInput !== deferredSynthInput;
 
   const currentStagedDrop = stagedEmails.find(
     (staged): staged is Extract<StagedEmail, { source: "drop" }> =>
@@ -355,7 +366,7 @@ export function OutlookEmailSourceProvider({
     ? includedThreadMessages.length === 0
     : (currentStagedDrop?.bodyDismissed ?? false);
   const emailBodyFile = currentThread
-    ? threadPreviewFile
+    ? threadEmlFile
     : (currentStagedDrop?.parsed.rawEmlFile ?? null);
   const isEmailBodyIncluded = !!emailBodyFile && !isEmailBodyDismissed;
 
@@ -468,26 +479,13 @@ export function OutlookEmailSourceProvider({
   const resolveSelectedFilesForSend = useCallback(async (): Promise<File[]> => {
     const filesToSend: File[] = [];
 
-    // Thread upload: one synthesized .eml carrying every non-dismissed
-    // message + their non-dismissed attachments. The structure preserves
-    // version provenance — three files named "Lastenheft.pdf" land as
-    // attachments inside three different nested message/rfc822 parts.
-    //
-    // We synthesize lazily here (not in a useMemo) so checkbox toggles in
-    // the staged-preview UI don't re-base64-encode every kept attachment
-    // on every click. The cost is paid once, at send time.
-    if (currentThread && threadStaged && includedThreadMessages.length > 0) {
-      const synthInputs = buildThreadSynthInputs(
-        includedThreadMessages,
-        threadStaged.dismissedAttachmentIds,
-        currentThread.incomplete,
-      );
-      filesToSend.push(
-        synthesizeThreadEml({
-          subject: currentThread.subject,
-          messages: synthInputs,
-        }),
-      );
+    // Thread upload: reuse the exact File already built for the estimate, so
+    // what we upload is byte-identical to what the token estimate measured.
+    // It carries every non-dismissed message + their non-dismissed attachments
+    // as nested message/rfc822 parts, preserving version provenance — three
+    // files named "Lastenheft.pdf" land inside three different nested parts.
+    if (threadEmlFile) {
+      filesToSend.push(threadEmlFile);
     }
 
     // Drop uploads: keep the existing per-drop trim path. Each drop is
@@ -546,10 +544,9 @@ export function OutlookEmailSourceProvider({
     currentThread,
     dismissedAttachmentIds,
     getAttachmentFile,
-    includedThreadMessages,
     selectableAttachments,
     stagedEmails,
-    threadStaged,
+    threadEmlFile,
   ]);
 
   const value = useMemo<OutlookEmailSourceContextValue>(
@@ -557,6 +554,7 @@ export function OutlookEmailSourceProvider({
       emailSubject: mailItem?.subject ?? "",
       isEmailBodyIncluded,
       emailBodyFile,
+      isThreadEmlStale,
       isLoadingEmailBody,
       emailThreadLoadError,
       currentThread,
@@ -590,6 +588,7 @@ export function OutlookEmailSourceProvider({
       dismissStagedEmailBody,
       dismissedAttachmentIds,
       emailBodyFile,
+      isThreadEmlStale,
       isEmailBodyDismissed,
       emailThreadLoadError,
       isEmailBodyIncluded,
