@@ -30,6 +30,10 @@ spec:
       {{- end }}
     spec:
       {{- include "erato.imagePullSecrets" . | nindent 6 }}
+      {{- with .Values.oauth2Proxy.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: oauth2-proxy
           image: "{{ .Values.oauth2Proxy.image.repository }}:{{ .Values.oauth2Proxy.image.tag }}"

@@ -29,6 +29,9 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].image
           value: harbor.imassage.me/erato/oauth2-proxy:v7.15.2-erato.3
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
 
   - it: should not render when oauth2Proxy is disabled
     set:
@@ -62,6 +65,15 @@ tests:
       - equal:
           path: spec.strategy.type
           value: Recreate
+
+  - it: should set oauth2-proxy pod security context when configured
+    set:
+      oauth2Proxy.podSecurityContext:
+        runAsNonRoot: false
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: false
 
   - it: should include config file argument
     asserts:

@@ -29,6 +29,10 @@ spec:
       {{- end }}
     spec:
       {{- include "erato.imagePullSecrets" . | nindent 6 }}
+      {{- with .Values.backend.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       initContainers:
         - name: run-migrations
           image: {{ include "common.images.image" ( dict "imageRoot" .Values.backend.image "global" .Values.global "chart" .Chart ) }}

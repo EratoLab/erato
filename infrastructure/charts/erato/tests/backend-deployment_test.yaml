@@ -32,6 +32,9 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].ports[0].containerPort
           value: 3130
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
 
   - it: should honor namespaceOverride
     set:
@@ -66,6 +69,15 @@ tests:
       - equal:
           path: spec.strategy.rollingUpdate.maxSurge
           value: 1
+
+  - it: should set backend pod security context when configured
+    set:
+      backend.podSecurityContext:
+        runAsNonRoot: false
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: false
 
   - it: should use custom image repository and tag
     set:

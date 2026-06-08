@@ -213,6 +213,7 @@ ingress:
 | backend.metrics.serviceMonitor.scrapeTimeout | string | `""` | Optional scrape timeout for ServiceMonitor endpoint. |
 | backend.networkPolicy.enabled | bool | `true` | Enable NetworkPolicy for backend pods |
 | backend.podAnnotations | object | `{}` | Annotations to add to the backend pod |
+| backend.podSecurityContext | object | `{"runAsNonRoot":true}` | Security context for the backend pod |
 | backend.replicaCount | int | `1` | Number of backend replicas to deploy |
 | backend.resources.limits.cpu | string | `"500m"` | The CPU limit for backend |
 | backend.resources.limits.memory | string | `"512Mi"` | The memory limit for backend |
@@ -265,6 +266,7 @@ ingress:
 | oauth2Proxy.metrics.serviceMonitor.scrapeTimeout | string | `""` | Optional scrape timeout for ServiceMonitor endpoint. |
 | oauth2Proxy.networkPolicy.enabled | bool | `true` | Enable NetworkPolicy for oauth2-proxy pods |
 | oauth2Proxy.podAnnotations | object | `{}` | Annotations to add to the oauth2-proxy pod |
+| oauth2Proxy.podSecurityContext | object | `{"runAsNonRoot":true}` | Security context for the oauth2-proxy pod |
 | oauth2Proxy.redis.enabled | bool | `true` | Enable Redis for OAuth2 Proxy session storage |
 | oauth2Proxy.redis.image.digest | string | `"sha256:09160599abd229764c0fb44cb6be640294e1d360a54b19985ab4843dcf2d90f1"` | Redis image digest |
 | oauth2Proxy.redis.image.pullPolicy | string | `"IfNotPresent"` | Redis image pull policy |
@@ -274,6 +276,7 @@ ingress:
 | oauth2Proxy.redis.persistence.accessModes | list | `["ReadWriteOnce"]` | Persistent Volume access modes |
 | oauth2Proxy.redis.persistence.enabled | bool | `true` | Enable persistence using Persistent Volume Claims |
 | oauth2Proxy.redis.persistence.size | string | `"1Gi"` | Persistent Volume size |
+| oauth2Proxy.redis.podSecurityContext | object | `{"runAsNonRoot":true}` | Security context for the oauth2-proxy Redis pod |
 | oauth2Proxy.redis.resources.limits.cpu | string | `"100m"` | The CPU limit for Redis |
 | oauth2Proxy.redis.resources.limits.memory | string | `"128Mi"` | The memory limit for Redis |
 | oauth2Proxy.redis.resources.requests.cpu | string | `"10m"` | The requested CPU for Redis |
