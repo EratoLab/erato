@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { fetchCurrentThread } from "../parsedThread";
+import { fetchCurrentThread, ThreadFetchError } from "../parsedThread";
 
 import type {
   GraphConversationMessage,
@@ -67,14 +67,23 @@ describe("fetchCurrentThread", () => {
     expect(thread?.messages[0].id).toBe("<m1@x>");
   });
 
-  it("prefers uniqueBody over body and tracks html vs text content-type", async () => {
+  it("defaults to the full html body so forwarded content is never lost", async () => {
+    // The forward bug: uniqueBody is just the signature, the forwarded payload
+    // lives only in `body`. HTML uniqueBody is an independent fragment (not a
+    // substring of `body`), so we must keep the full body.
     const transport = makeTransport([
       {
         id: "m1",
         internetMessageId: "<m1@x>",
-        subject: "html with unique body",
-        body: { contentType: "html", content: "<p>full thread quote</p>" },
-        uniqueBody: { contentType: "html", content: "<p>just my reply</p>" },
+        subject: "forward with only a signature in uniqueBody",
+        body: {
+          contentType: "html",
+          content: "<p>full thread quote</p><p>Sent from Outlook for Mac</p>",
+        },
+        uniqueBody: {
+          contentType: "html",
+          content: "<p>Sent from Outlook for Mac</p>",
+        },
         receivedDateTime: "2026-03-01T10:00:00Z",
         isDraft: false,
       },
@@ -95,13 +104,127 @@ describe("fetchCurrentThread", () => {
       transport,
     });
 
-    expect(thread?.messages[0].bodyHtml).toContain("just my reply");
+    // Full body kept (forwarded content survives), not the signature-only uniqueBody.
+    expect(thread?.messages[0].bodyHtml).toContain("full thread quote");
     expect(thread?.messages[0].bodyText).toBeNull();
     expect(thread?.messages[1].bodyText).toContain("fallback wins");
     expect(thread?.messages[1].bodyHtml).toBeNull();
   });
 
-  it("keeps only fileAttachments with contentBytes; skips itemAttachment and referenceAttachment", async () => {
+  it("collapses to a plaintext uniqueBody only when it is a provable subset of the full body", async () => {
+    const transport = makeTransport([
+      {
+        id: "subset",
+        internetMessageId: "<subset@x>",
+        subject: "plaintext reply with quoted tail",
+        body: {
+          contentType: "text",
+          content: "Reply text\n\n> On 1 Jan, X wrote:\n> quoted history",
+        },
+        uniqueBody: { contentType: "text", content: "Reply text" },
+        receivedDateTime: "2026-03-01T10:00:00Z",
+        isDraft: false,
+      },
+      {
+        id: "notsubset",
+        internetMessageId: "<notsubset@x>",
+        subject: "plaintext uniqueBody NOT contained in full",
+        body: { contentType: "text", content: "The real full body" },
+        uniqueBody: { contentType: "text", content: "something entirely else" },
+        receivedDateTime: "2026-03-02T10:00:00Z",
+        isDraft: false,
+      },
+    ]);
+
+    const thread = await fetchCurrentThread("conv-1", acquireToken, {
+      transport,
+    });
+
+    // Provable subset → collapse to the smaller copy (token win, loss-free).
+    expect(thread?.messages[0].bodyText).toBe("Reply text");
+    // Not a subset → keep the full body (never risk dropping content).
+    expect(thread?.messages[1].bodyText).toBe("The real full body");
+  });
+
+  it("does NOT collapse a plaintext subset when the thread is incomplete (dropped tail may be the only copy)", async () => {
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // First page succeeds with a collapsible plaintext message, but a later
+    // page fails → thread is partial → the quoted tail must be retained.
+    let call = 0;
+    const transport: GraphTransport = vi.fn(async () => {
+      call += 1;
+      if (call === 1) {
+        return {
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => ({
+            value: [
+              {
+                id: "subset",
+                internetMessageId: "<subset@x>",
+                subject: "reply quoting an earlier (unfetched) message",
+                body: {
+                  contentType: "text",
+                  content:
+                    "Reply text\n\n> On 1 Jan, X wrote:\n> quoted history",
+                },
+                uniqueBody: { contentType: "text", content: "Reply text" },
+                receivedDateTime: "2026-03-02T10:00:00Z",
+                isDraft: false,
+              },
+            ],
+            "@odata.nextLink":
+              "https://graph.microsoft.com/v1.0/me/messages?$skiptoken=PAGE2",
+          }),
+        } as unknown as Response;
+      }
+      return {
+        ok: false,
+        status: 503,
+        statusText: "Service Unavailable",
+        json: async () => ({}),
+      } as unknown as Response;
+    });
+
+    const thread = await fetchCurrentThread("conv-1", acquireToken, {
+      transport,
+    });
+    consoleWarn.mockRestore();
+
+    expect(thread?.incomplete).toBe(true);
+    // Full body kept despite the subset being collapsible on a complete thread.
+    expect(thread?.messages[0].bodyText).toContain("quoted history");
+  });
+
+  it("reads isHtml from the chosen source so an empty html uniqueBody can't mislabel a plaintext body", async () => {
+    const transport = makeTransport([
+      {
+        id: "m1",
+        internetMessageId: "<m1@x>",
+        subject: "isHtml decoupling",
+        // uniqueBody is typed html but empty; body is the real plaintext.
+        uniqueBody: { contentType: "html", content: "" },
+        body: {
+          contentType: "text",
+          content: "a<b and R&D, List<String> survive intact",
+        },
+        receivedDateTime: "2026-03-01T10:00:00Z",
+        isDraft: false,
+      },
+    ]);
+
+    const thread = await fetchCurrentThread("conv-1", acquireToken, {
+      transport,
+    });
+
+    expect(thread?.messages[0].bodyHtml).toBeNull();
+    expect(thread?.messages[0].bodyText).toBe(
+      "a<b and R&D, List<String> survive intact",
+    );
+  });
+
+  it("surfaces itemAttachment and referenceAttachment as disclosure markers instead of dropping them", async () => {
     const transport = makeTransport([
       {
         id: "m1",
@@ -144,12 +267,76 @@ describe("fetchCurrentThread", () => {
       transport,
     });
 
-    expect(thread?.messages[0].attachments).toHaveLength(1);
-    const [keptAttachment] = thread!.messages[0].attachments;
-    expect(keptAttachment.filename).toBe("report.pdf");
-    expect(keptAttachment.contentBytes).not.toBeNull();
-    expect(keptAttachment.contentBytes!.byteLength).toBe(11); // "hello world"
-    expect(keptAttachment.id).toBe("<m1@x>:att-1");
+    // All three are kept (none silently dropped, INV-9).
+    expect(thread?.messages[0].attachments).toHaveLength(3);
+    const [file, item, reference] = thread!.messages[0].attachments;
+
+    expect(file.filename).toBe("report.pdf");
+    expect(file.contentBytes).not.toBeNull();
+    expect(file.contentBytes!.byteLength).toBe(11); // "hello world"
+    expect(file.unavailableReason).toBeNull();
+    expect(file.id).toBe("<m1@x>:att-1");
+
+    // The transport stub returns no arrayBuffer, so item $value enrichment
+    // fails gracefully → disclosed as a marker rather than dropped.
+    expect(item.contentBytes).toBeNull();
+    expect(item.unavailableReason).toContain("could not be retrieved");
+
+    expect(reference.contentBytes).toBeNull();
+    expect(reference.unavailableReason).toContain("cloud attachment");
+  });
+
+  it("decodes an itemAttachment whose bytes the fetch layer enriched via /$value", async () => {
+    // Transport that serves the conversation list, then the item's $value MIME.
+    const transport: GraphTransport = vi.fn(async (url: string) => {
+      if (url.includes("/attachments/") && url.endsWith("/$value")) {
+        return {
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          arrayBuffer: async () =>
+            new TextEncoder().encode("Forwarded .eml bytes").buffer,
+        } as unknown as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({
+          value: [
+            {
+              id: "graph-m1",
+              internetMessageId: "<m1@x>",
+              subject: "with forwarded item",
+              body: { contentType: "text", content: "see forwarded" },
+              receivedDateTime: "2026-03-01T10:00:00Z",
+              isDraft: false,
+              attachments: [
+                {
+                  "@odata.type": ITEM_ATTACHMENT,
+                  id: "item-1",
+                  name: "Forwarded.eml",
+                  contentType: "message/rfc822",
+                  size: 20,
+                  isInline: false,
+                },
+              ],
+            },
+          ],
+        }),
+      } as unknown as Response;
+    });
+
+    const thread = await fetchCurrentThread("conv-1", acquireToken, {
+      transport,
+    });
+
+    const [att] = thread!.messages[0].attachments;
+    expect(att.contentBytes).not.toBeNull();
+    expect(att.unavailableReason).toBeNull();
+    expect(new TextDecoder().decode(new Uint8Array(att.contentBytes!))).toBe(
+      "Forwarded .eml bytes",
+    );
   });
 
   it("preserves the isInline flag on attachments so the provider can filter them", async () => {
@@ -225,16 +412,65 @@ describe("fetchCurrentThread", () => {
     expect(thread?.subject).toBe("Re: Re: Original");
   });
 
-  it("returns null when Graph returns no messages or errors out", async () => {
+  it("returns null for a genuinely empty conversation (no messages, no error)", async () => {
     expect(
       await fetchCurrentThread("missing-conv", acquireToken, {
         transport: makeTransport([]),
       }),
     ).toBeNull();
-    expect(
-      await fetchCurrentThread("missing-conv", acquireToken, {
+  });
+
+  it("throws ThreadFetchError when the first-page fetch fails (loud, not silent null)", async () => {
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await expect(
+      fetchCurrentThread("conv-1", acquireToken, {
         transport: makeFailingTransport(500),
       }),
-    ).toBeNull();
+    ).rejects.toBeInstanceOf(ThreadFetchError);
+    consoleWarn.mockRestore();
+  });
+
+  it("marks the thread incomplete when a later page fails after the first succeeds", async () => {
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    let call = 0;
+    const transport: GraphTransport = vi.fn(async () => {
+      call += 1;
+      if (call === 1) {
+        return {
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => ({
+            value: [
+              {
+                id: "m1",
+                internetMessageId: "<m1@x>",
+                subject: "page one",
+                body: { contentType: "text", content: "first page body" },
+                receivedDateTime: "2026-03-01T10:00:00Z",
+                isDraft: false,
+              },
+            ],
+            "@odata.nextLink":
+              "https://graph.microsoft.com/v1.0/me/messages?$skiptoken=PAGE2",
+          }),
+        } as unknown as Response;
+      }
+      return {
+        ok: false,
+        status: 503,
+        statusText: "Service Unavailable",
+        json: async () => ({}),
+      } as unknown as Response;
+    });
+
+    const thread = await fetchCurrentThread("conv-1", acquireToken, {
+      transport,
+    });
+    consoleWarn.mockRestore();
+
+    expect(thread).not.toBeNull();
+    expect(thread?.messages).toHaveLength(1);
+    expect(thread?.incomplete).toBe(true);
   });
 });

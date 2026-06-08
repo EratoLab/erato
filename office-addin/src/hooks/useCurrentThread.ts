@@ -10,6 +10,13 @@ import type {
 export interface UseCurrentThreadResult {
   thread: ParsedThread | null;
   isLoading: boolean;
+  /**
+   * True when the conversation fetch failed outright (first page errored, so
+   * nothing was retrieved). Consumers surface this rather than silently
+   * showing "no thread" — distinct from a genuinely empty conversation, which
+   * leaves `thread === null` with `error === false` (INV-7).
+   */
+  error: boolean;
 }
 
 /**
@@ -41,6 +48,7 @@ export function useCurrentThread(
 ): UseCurrentThreadResult {
   const [thread, setThread] = useState<ParsedThread | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(false);
   // Stable transport reference avoids re-running the effect on every render
   // when the consumer passes an inline transport closure.
   const { transport } = options;
@@ -49,17 +57,30 @@ export function useCurrentThread(
     if (!itemId || !conversationId) {
       setThread(null);
       setIsLoading(false);
+      setError(false);
       return;
     }
 
     let cancelled = false;
     setIsLoading(true);
     setThread(null);
+    setError(false);
 
     void fetchCurrentThread(conversationId, acquireGraphToken, { transport })
       .then((result) => {
         if (cancelled) return;
         setThread(result);
+      })
+      .catch((fetchError) => {
+        if (cancelled) return;
+        // Total fetch failure (ThreadFetchError) — surface it loudly instead
+        // of degrading to a silent empty thread.
+        console.warn(
+          "[useCurrentThread] conversation fetch failed:",
+          fetchError,
+        );
+        setThread(null);
+        setError(true);
       })
       .finally(() => {
         if (cancelled) return;
@@ -71,5 +92,5 @@ export function useCurrentThread(
     };
   }, [acquireGraphToken, conversationId, itemId, transport]);
 
-  return { thread, isLoading };
+  return { thread, isLoading, error };
 }

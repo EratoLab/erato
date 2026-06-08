@@ -11,6 +11,7 @@ import {
 import { useMsalNaa } from "./MsalNaaProvider";
 import { useOutlookMailItem } from "./OutlookMailItemProvider";
 import { useCurrentThread } from "../hooks/useCurrentThread";
+import { buildThreadSynthInputs } from "../utils/buildThreadSynthInputs";
 import { fetchParentMessageInConversationViaGraph } from "../utils/fetchOutlookMessageGraph";
 import {
   dismissAttachment as applyDismissAttachment,
@@ -23,16 +24,8 @@ import { trimEmlAttachments } from "../utils/trimEmlAttachments";
 
 import type { ParentMessageMetadata } from "../utils/fetchOutlookMessageGraph";
 import type { ParsedEmail } from "../utils/parsedEmail";
-import type {
-  ParsedThread,
-  ThreadAttachment,
-  ThreadMessage,
-} from "../utils/parsedThread";
+import type { ParsedThread, ThreadMessage } from "../utils/parsedThread";
 import type { StagedEmailDismissalsMap } from "../utils/stagedEmailDismissals";
-import type {
-  ThreadAttachmentInput,
-  ThreadMessageInput,
-} from "../utils/synthesizeThreadEml";
 import type { LocalFilePreviewItem } from "@erato/frontend/library";
 import type { ReactNode } from "react";
 
@@ -128,6 +121,12 @@ interface OutlookEmailSourceContextValue {
   isEmailBodyIncluded: boolean;
   emailBodyFile: File | null;
   isLoadingEmailBody: boolean;
+  /**
+   * True when the open conversation failed to load entirely (Graph fetch
+   * errored on the first page). Surfaced so the UI can warn the user rather
+   * than silently presenting an empty thread (INV-7).
+   */
+  emailThreadLoadError: boolean;
   currentThread: ParsedThread | null;
   stagedEmails: StagedEmail[];
   dismissStagedEmailBody: (key: string) => void;
@@ -155,6 +154,7 @@ const defaultValue: OutlookEmailSourceContextValue = {
   isEmailBodyIncluded: false,
   emailBodyFile: null,
   isLoadingEmailBody: false,
+  emailThreadLoadError: false,
   currentThread: null,
   stagedEmails: [],
   dismissStagedEmailBody: () => {},
@@ -219,8 +219,11 @@ export function OutlookEmailSourceProvider({
 
   // Conversation fetch lives in its own hook so it can be unit-tested in
   // isolation against an injected Graph transport.
-  const { thread: currentThread, isLoading: isLoadingEmailBody } =
-    useCurrentThread(itemId, conversationId, acquireGraphToken);
+  const {
+    thread: currentThread,
+    isLoading: isLoadingEmailBody,
+    error: emailThreadLoadError,
+  } = useCurrentThread(itemId, conversationId, acquireGraphToken);
 
   // Reply-context chip for compose mode (drafts have no itemId but do have a
   // conversationId). Display-only — the parent body reaches the LLM via the
@@ -474,29 +477,10 @@ export function OutlookEmailSourceProvider({
     // the staged-preview UI don't re-base64-encode every kept attachment
     // on every click. The cost is paid once, at send time.
     if (currentThread && threadStaged && includedThreadMessages.length > 0) {
-      const synthInputs = includedThreadMessages.map<ThreadMessageInput>(
-        (message) => ({
-          internetMessageId: message.internetMessageId,
-          subject: message.subject,
-          from: message.from
-            ? { name: message.from.name, address: message.from.address }
-            : null,
-          to: message.to.map((addr) => ({
-            name: addr.name,
-            address: addr.address,
-          })),
-          cc: message.cc.map((addr) => ({
-            name: addr.name,
-            address: addr.address,
-          })),
-          date: message.date,
-          bodyText: message.bodyText,
-          bodyHtml: message.bodyHtml,
-          attachments: filterAttachments(
-            message.attachments,
-            threadStaged.dismissedAttachmentIds,
-          ),
-        }),
+      const synthInputs = buildThreadSynthInputs(
+        includedThreadMessages,
+        threadStaged.dismissedAttachmentIds,
+        currentThread.incomplete,
       );
       filesToSend.push(
         synthesizeThreadEml({
@@ -574,6 +558,7 @@ export function OutlookEmailSourceProvider({
       isEmailBodyIncluded,
       emailBodyFile,
       isLoadingEmailBody,
+      emailThreadLoadError,
       currentThread,
       stagedEmails,
       dismissStagedEmailBody,
@@ -606,6 +591,7 @@ export function OutlookEmailSourceProvider({
       dismissedAttachmentIds,
       emailBodyFile,
       isEmailBodyDismissed,
+      emailThreadLoadError,
       isEmailBodyIncluded,
       isLoadingAttachments,
       isLoadingEmailBody,
@@ -630,22 +616,4 @@ export function OutlookEmailSourceProvider({
       {children}
     </OutlookEmailSourceContext.Provider>
   );
-}
-
-function filterAttachments(
-  attachments: ThreadAttachment[],
-  dismissedAttachmentIds: ReadonlySet<string>,
-): ThreadAttachmentInput[] {
-  const output: ThreadAttachmentInput[] = [];
-  for (const attachment of attachments) {
-    if (attachment.isInline) continue;
-    if (attachment.contentBytes === null) continue;
-    if (dismissedAttachmentIds.has(attachment.id)) continue;
-    output.push({
-      filename: attachment.filename,
-      mimeType: attachment.mimeType,
-      contentBytes: attachment.contentBytes,
-    });
-  }
-  return output;
 }

@@ -214,6 +214,11 @@ msgstr "Wątek wiadomości"
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
+msgid "officeAddin.fileSource.emailThreadLoadError"
+msgstr "Nie udało się załadować tej konwersacji z serwera. Niektóre wiadomości lub załączniki mogą być niedostępne — spróbuj ponownie otworzyć wiadomość."
+
+#. js-lingui-explicit-id
+#: src/components/AddinFileSourceSelector.tsx
 msgid "officeAddin.fileSource.fromComputer"
 msgstr "Prześlij z komputera"
 

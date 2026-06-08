@@ -28,13 +28,21 @@ describe("useCurrentThread", () => {
     const { result } = renderHook(() =>
       useCurrentThread(null, "conv-1", acquireToken, { transport }),
     );
-    expect(result.current).toEqual({ thread: null, isLoading: false });
+    expect(result.current).toEqual({
+      thread: null,
+      isLoading: false,
+      error: false,
+    });
     expect(transport).not.toHaveBeenCalled();
 
     const { result: result2 } = renderHook(() =>
       useCurrentThread("item-1", null, acquireToken, { transport }),
     );
-    expect(result2.current).toEqual({ thread: null, isLoading: false });
+    expect(result2.current).toEqual({
+      thread: null,
+      isLoading: false,
+      error: false,
+    });
     expect(transport).not.toHaveBeenCalled();
   });
 
@@ -108,18 +116,19 @@ describe("useCurrentThread", () => {
     });
   });
 
-  it("returns null thread when the Graph request fails", async () => {
+  it("sets error=true (not a silent null) when the Graph request fails outright", async () => {
     const transport = buildResponder({ value: [] }, false, 500);
 
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { result } = renderHook(() =>
       useCurrentThread("item-1", "conv-1", acquireToken, { transport }),
     );
 
-    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
     });
     consoleWarn.mockRestore();
     expect(result.current.thread).toBeNull();
+    expect(result.current.error).toBe(true);
   });
 });

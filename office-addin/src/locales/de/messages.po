@@ -214,6 +214,11 @@ msgstr "E-Mail-Verlauf"
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
+msgid "officeAddin.fileSource.emailThreadLoadError"
+msgstr "Diese Unterhaltung konnte nicht vom Server geladen werden. Einige Nachrichten oder Anhänge fehlen möglicherweise – versuche, die E-Mail erneut zu öffnen."
+
+#. js-lingui-explicit-id
+#: src/components/AddinFileSourceSelector.tsx
 msgid "officeAddin.fileSource.fromComputer"
 msgstr "Vom Computer hochladen"
 

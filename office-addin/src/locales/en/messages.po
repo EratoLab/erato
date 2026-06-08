@@ -214,6 +214,11 @@ msgstr "Email thread"
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
+msgid "officeAddin.fileSource.emailThreadLoadError"
+msgstr "Couldn't load this conversation from the server. Some messages or attachments may be missing — try reopening the item."
+
+#. js-lingui-explicit-id
+#: src/components/AddinFileSourceSelector.tsx
 msgid "officeAddin.fileSource.fromComputer"
 msgstr "Upload from Computer"
 
