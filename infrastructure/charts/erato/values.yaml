@@ -142,7 +142,9 @@ oauth2Proxy:
       # -- Redis image repository
       repository: redis
       # -- Redis image tag
-      tag: 7.0-alpine
+      tag: 8.8.0-alpine3.23
+      # -- Redis image digest
+      digest: sha256:09160599abd229764c0fb44cb6be640294e1d360a54b19985ab4843dcf2d90f1
       # -- Redis image pull policy
       pullPolicy: IfNotPresent
     resources:

@@ -266,9 +266,10 @@ ingress:
 | oauth2Proxy.networkPolicy.enabled | bool | `true` | Enable NetworkPolicy for oauth2-proxy pods |
 | oauth2Proxy.podAnnotations | object | `{}` | Annotations to add to the oauth2-proxy pod |
 | oauth2Proxy.redis.enabled | bool | `true` | Enable Redis for OAuth2 Proxy session storage |
+| oauth2Proxy.redis.image.digest | string | `"sha256:09160599abd229764c0fb44cb6be640294e1d360a54b19985ab4843dcf2d90f1"` | Redis image digest |
 | oauth2Proxy.redis.image.pullPolicy | string | `"IfNotPresent"` | Redis image pull policy |
 | oauth2Proxy.redis.image.repository | string | `"redis"` | Redis image repository |
-| oauth2Proxy.redis.image.tag | string | `"7.0-alpine"` | Redis image tag |
+| oauth2Proxy.redis.image.tag | string | `"8.8.0-alpine3.23"` | Redis image tag |
 | oauth2Proxy.redis.networkPolicy.enabled | bool | `true` | Enable NetworkPolicy for oauth2-proxy redis pods |
 | oauth2Proxy.redis.persistence.accessModes | list | `["ReadWriteOnce"]` | Persistent Volume access modes |
 | oauth2Proxy.redis.persistence.enabled | bool | `true` | Enable persistence using Persistent Volume Claims |
