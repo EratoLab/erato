@@ -330,6 +330,11 @@ msgstr "Failed to open the reply form. Make sure the received email is still ope
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
+msgid "officeAddin.emailRenderer.replyStaleItem"
+msgstr "This draft was written for a different email. Open that email again, or use Copy."
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.replyTooLarge"
 msgstr "Draft is too large to prefill a reply. Use Copy and paste it into a reply instead."
 

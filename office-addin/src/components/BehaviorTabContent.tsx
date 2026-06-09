@@ -239,7 +239,12 @@ export function BehaviorTabContent({
           })}
         </p>
         {actionGroups.map((group) => (
-          <div key={group.action} className="space-y-2">
+          <div
+            key={group.action}
+            role="radiogroup"
+            aria-label={group.legend}
+            className="space-y-2"
+          >
             <p className="text-xs font-medium text-theme-fg-primary">
               {group.legend}
             </p>

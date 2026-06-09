@@ -90,6 +90,14 @@ export interface OutlookArtifact {
    * those.
    */
   isFreshCompletion?: boolean;
+  /**
+   * The Outlook item identity observed when this message completed (fresh
+   * completions only). Executors compare it against the CURRENT item before
+   * opening anything, so a draft never opens a reply on a different email
+   * than it was written for. Absent for history messages, where the
+   * generation-time item is unknown.
+   */
+  itemIdentity?: string;
 }
 
 export interface Message {

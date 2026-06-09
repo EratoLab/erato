@@ -122,7 +122,9 @@ export function resolveAutoPromptBehavior(input: {
 /**
  * Persisted-state options: unknown shapes reset to defaults, unknown modes
  * reject the stored value, actions absent from storage keep their default
- * (so adding a future action never invalidates existing settings).
+ * (so adding a future action never invalidates existing settings). Stored
+ * modes are clamped to each action's floor so the settings UI never shows
+ * a state below it (e.g. a hand-edited reply_all "dont_ask").
  */
 export const clientActionPreferencesPersistedOptions: PersistedStateOptions<ClientActionPreferences> =
   {
@@ -141,6 +143,9 @@ export const clientActionPreferencesPersistedOptions: PersistedStateOptions<Clie
           return null;
         }
         result[action] = mode;
+      }
+      for (const action of IMPLEMENTED_CLIENT_ACTIONS) {
+        result[action] = effectiveApprovalMode(action, result);
       }
       return result;
     },

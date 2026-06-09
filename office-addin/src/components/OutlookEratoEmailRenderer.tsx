@@ -5,7 +5,7 @@ import {
   usePersistedState,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useOutlookComposeSelection } from "../hooks/useOutlookComposeSelection";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
@@ -34,8 +34,10 @@ import type { EratoEmailCodeBlockProps } from "@erato/frontend/library";
 
 const ACTION_BUTTON_CLASS =
   "rounded-md border border-theme-border bg-theme-bg-primary px-3 py-1 text-xs hover:bg-theme-bg-tertiary disabled:opacity-50";
+// Mirrors the library Button "primary" variant tokens (Button.tsx) at the
+// compact geometry of the sibling action buttons.
 const PRIMARY_ACTION_BUTTON_CLASS =
-  "rounded-md border border-theme-border bg-theme-bg-tertiary px-3 py-1 text-xs font-medium hover:bg-theme-bg-hover disabled:opacity-50";
+  "rounded-md px-3 py-1 text-xs font-medium bg-theme-action-primary-bg text-theme-action-primary-fg hover:bg-theme-action-primary-hover theme-transition disabled:opacity-50";
 
 /**
  * Auto-prompt fires at most once per assistant message, across remounts
@@ -69,9 +71,15 @@ export function OutlookEratoEmailRenderer({
 }: EratoEmailCodeBlockProps) {
   const composeSelection = useOutlookComposeSelection();
   const hasSelection = composeSelection.data.length > 0;
-  const { mailItem } = useOutlookMailItem();
+  const { mailItem, itemIdentity } = useOutlookMailItem();
   const artifact = useOutlookArtifact();
   const isReadMode = !!mailItem && !mailItem.isComposeMode;
+  // Identity of the Outlook item this draft was generated for (fresh
+  // completions only). When it no longer matches the currently open item,
+  // the draft must not open a reply — the user switched emails since.
+  const expectedItemIdentity = artifact?.itemIdentity;
+  const isStaleForCurrentItem =
+    !!expectedItemIdentity && itemIdentity !== expectedItemIdentity;
   const [actionPreferences] = usePersistedState(
     CLIENT_ACTION_PREFERENCES_KEY,
     DEFAULT_CLIENT_ACTION_PREFERENCES,
@@ -96,8 +104,11 @@ export function OutlookEratoEmailRenderer({
   const [status, setStatus] = useState<
     "idle" | "inserting" | "done" | "copied" | "error"
   >("idle");
-  const [errorKind, setErrorKind] = useState<"insert" | "reply" | "tooLarge">(
-    "insert",
+  const [errorKind, setErrorKind] = useState<
+    "insert" | "reply" | "tooLarge" | "staleItem"
+  >("insert");
+  const [busyAction, setBusyAction] = useState<OutlookClientAction | null>(
+    null,
   );
   const [pendingConfirm, setPendingConfirm] = useState<{
     action: OutlookClientAction;
@@ -109,37 +120,69 @@ export function OutlookEratoEmailRenderer({
     [content, isHtml],
   );
 
+  // Single pending status-reset timer: a new schedule cancels the previous
+  // one (a stale 2s success timer must not clear a newer 4s error early),
+  // and unmount cancels outright.
+  const statusResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleStatusReset = useCallback((delayMs: number) => {
+    if (statusResetRef.current) {
+      clearTimeout(statusResetRef.current);
+    }
+    statusResetRef.current = setTimeout(() => setStatus("idle"), delayMs);
+  }, []);
+  useEffect(
+    () => () => {
+      if (statusResetRef.current) {
+        clearTimeout(statusResetRef.current);
+      }
+    },
+    [],
+  );
+
+  const showError = useCallback(
+    (kind: "insert" | "reply" | "tooLarge" | "staleItem", delayMs: number) => {
+      setErrorKind(kind);
+      setStatus("error");
+      scheduleStatusReset(delayMs);
+    },
+    [scheduleStatusReset],
+  );
+
   const handleInsert = useCallback(async () => {
     setStatus("inserting");
     try {
       await replaceComposeSelection(content, isHtml);
       setStatus("done");
-      setTimeout(() => setStatus("idle"), 2000);
+      scheduleStatusReset(2000);
     } catch (err) {
       console.warn("Failed to insert into compose body:", err);
-      setErrorKind("insert");
-      setStatus("error");
-      setTimeout(() => setStatus("idle"), 2000);
+      showError("insert", 2000);
     }
-  }, [content, isHtml]);
+  }, [content, isHtml, scheduleStatusReset, showError]);
 
   const executeReply = useCallback(
     async (action: OutlookClientAction) => {
+      if (isStaleForCurrentItem) {
+        showError("staleItem", 4000);
+        return;
+      }
+      setBusyAction(action);
       setStatus("inserting");
       try {
         await openReplyForm(action, content, !!isHtml);
         setStatus("done");
-        setTimeout(() => setStatus("idle"), 2000);
+        scheduleStatusReset(2000);
       } catch (err) {
         console.warn("Failed to open reply form:", err);
-        setErrorKind(
+        showError(
           err instanceof ReplyBodyTooLargeError ? "tooLarge" : "reply",
+          4000,
         );
-        setStatus("error");
-        setTimeout(() => setStatus("idle"), 4000);
+      } finally {
+        setBusyAction(null);
       }
     },
-    [content, isHtml],
+    [content, isHtml, isStaleForCurrentItem, scheduleStatusReset, showError],
   );
 
   // Open the confirmation dialog with recipients RE-READ from the current
@@ -159,17 +202,27 @@ export function OutlookEratoEmailRenderer({
 
   const handleReplyAction = useCallback(
     (action: OutlookClientAction) => {
+      if (isStaleForCurrentItem) {
+        // Don't open a confirmation that would show the NEW email's
+        // recipients for a draft written against the old one.
+        showError("staleItem", 4000);
+        return;
+      }
       if (resolveClickBehavior(action, actionPreferences) === "execute") {
         void executeReply(action);
         return;
       }
       if (!requestConfirmation(action)) {
-        setErrorKind("reply");
-        setStatus("error");
-        setTimeout(() => setStatus("idle"), 4000);
+        showError("reply", 4000);
       }
     },
-    [actionPreferences, executeReply, requestConfirmation],
+    [
+      actionPreferences,
+      executeReply,
+      isStaleForCurrentItem,
+      requestConfirmation,
+      showError,
+    ],
   );
 
   // Auto-prompt: only under the facet's `auto_prompt` presentation, only for
@@ -197,6 +250,12 @@ export function OutlookEratoEmailRenderer({
       return;
     }
     firedAutoPrompts.add(autoPromptMessageId);
+    if (isStaleForCurrentItem) {
+      // The user switched emails before the auto-prompt could fire. The
+      // moment has passed: consume the fired flag silently (no surprise
+      // window later) and leave the buttons as fallback.
+      return;
+    }
     if (autoPromptBehavior === "execute") {
       void executeReply(proposedAction);
     } else {
@@ -207,6 +266,7 @@ export function OutlookEratoEmailRenderer({
     autoPromptMessageId,
     proposedAction,
     executeReply,
+    isStaleForCurrentItem,
     requestConfirmation,
   ]);
 
@@ -215,12 +275,12 @@ export function OutlookEratoEmailRenderer({
       .writeText(content)
       .then(() => {
         setStatus("copied");
-        setTimeout(() => setStatus("idle"), 2000);
+        scheduleStatusReset(2000);
       })
       .catch(() => {
         // ignore clipboard errors
       });
-  }, [content]);
+  }, [content, scheduleStatusReset]);
 
   const insertLabel = (() => {
     if (status === "done")
@@ -296,7 +356,7 @@ export function OutlookEratoEmailRenderer({
                     : ACTION_BUTTON_CLASS
                 }
               >
-                {status === "inserting"
+                {busyAction === action
                   ? t({
                       id: "officeAddin.emailRenderer.opening",
                       message: "Opening...",
@@ -332,23 +392,29 @@ export function OutlookEratoEmailRenderer({
         </button>
       </div>
       {status === "error" && (
-        <p className="mt-1 text-xs text-red-500">
+        <p role="alert" className="mt-1 text-xs text-theme-error-fg">
           {errorKind === "tooLarge"
             ? t({
                 id: "officeAddin.emailRenderer.replyTooLarge",
                 message:
                   "Draft is too large to prefill a reply. Use Copy and paste it into a reply instead.",
               })
-            : errorKind === "reply"
+            : errorKind === "staleItem"
               ? t({
-                  id: "officeAddin.emailRenderer.replyFailed",
+                  id: "officeAddin.emailRenderer.replyStaleItem",
                   message:
-                    "Failed to open the reply form. Make sure the received email is still open, or use Copy.",
+                    "This draft was written for a different email. Open that email again, or use Copy.",
                 })
-              : t({
-                  id: "officeAddin.emailRenderer.insertFailed",
-                  message: "Failed to insert into compose body.",
-                })}
+              : errorKind === "reply"
+                ? t({
+                    id: "officeAddin.emailRenderer.replyFailed",
+                    message:
+                      "Failed to open the reply form. Make sure the received email is still open, or use Copy.",
+                  })
+                : t({
+                    id: "officeAddin.emailRenderer.insertFailed",
+                    message: "Failed to insert into compose body.",
+                  })}
         </p>
       )}
       <ConfirmationDialog

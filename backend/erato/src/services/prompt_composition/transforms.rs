@@ -491,7 +491,9 @@ pub async fn resolve_sequence(
                                 //   • legacy rendered text (pre-marker rows
                                 //     in the DB) → System message whose text
                                 //     starts with "FOR THIS MESSAGE ONLY:"
-                                if is_prior_turn_action_facet_message(&input_msg) {
+                                if is_prior_turn_action_facet_message(&input_msg)
+                                    || is_client_action_tool_use_message(&input_msg)
+                                {
                                     continue;
                                 }
                                 let input_msg = normalize_historical_input_message(input_msg);
@@ -524,6 +526,13 @@ pub async fn resolve_sequence(
                 for content_part in parsed.content {
                     match content_part {
                         ContentPart::ToolUse(tool_use) => {
+                            // Client-action proposals never replay — see
+                            // is_client_action_tool_use_message.
+                            if tool_use.tool_name
+                                == crate::services::client_actions::CLIENT_ACTION_TOOL_NAME
+                            {
+                                continue;
+                            }
                             input_messages.push(InputMessage {
                                 role: MessageRole::Assistant,
                                 content: ContentPart::ToolUse(tool_use.clone()),
@@ -613,6 +622,21 @@ fn is_prior_turn_action_facet_message(input_msg: &InputMessage) -> bool {
         }
         _ => false,
     }
+}
+
+/// True when an `InputMessage` carries a `propose_client_action` ToolUse.
+/// Client-action proposals are request-scoped UI hints, not real tool
+/// round-trips: the synthetic tool is only offered while the producing
+/// action facet is active, so replaying the call/response pair on later
+/// requests would reference a tool absent from the request's tool set —
+/// which some providers reject outright. Stripped like prior-turn
+/// action-facet directives.
+fn is_client_action_tool_use_message(input_msg: &InputMessage) -> bool {
+    matches!(
+        &input_msg.content,
+        ContentPart::ToolUse(tool_use)
+            if tool_use.tool_name == crate::services::client_actions::CLIENT_ACTION_TOOL_NAME
+    )
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

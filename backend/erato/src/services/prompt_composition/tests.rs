@@ -1887,6 +1887,84 @@ mod test_cases {
     }
 
     #[tokio::test]
+    async fn test_client_action_tool_use_is_stripped_from_replay() {
+        let mut message_repo = MockMessageRepository::new();
+        let file_resolver = MockFileResolver::new();
+        let prompt_provider = MockPromptProvider::new().with_system_prompt("You are helpful.");
+
+        let chat = create_test_chat();
+        let config = create_test_chat_provider_config();
+
+        let msg1_id = Uuid::new_v4();
+        message_repo.add_message(msg1_id, None, MessageRole::User, "Draft a reply");
+
+        // Assistant turn produced under a client-action facet: draft text plus
+        // a propose_client_action ToolUse. The synthetic tool is only offered
+        // while the facet is active, so the call/response pair must NOT replay
+        // on later requests (providers reject tool messages for unknown tools).
+        let msg2_id = Uuid::new_v4();
+        message_repo.add_message_with_content(
+            msg2_id,
+            Some(msg1_id),
+            MessageRole::Assistant,
+            vec![
+                ContentPart::Text(ContentPartText {
+                    text: "Here is a draft reply.".to_string(),
+                }),
+                ContentPart::ToolUse(ToolUse {
+                    tool_call_id: "call_client_action".to_string(),
+                    status: ToolCallStatus::Success,
+                    tool_name: crate::services::client_actions::CLIENT_ACTION_TOOL_NAME
+                        .to_string(),
+                    progress_message: None,
+                    input: Some(serde_json::json!({ "action": "outlook.reply" })),
+                    output: Some(
+                        serde_json::json!({ "status": "proposed", "action": "outlook.reply" }),
+                    ),
+                    ..Default::default()
+                }),
+            ],
+        );
+
+        let msg3_id = Uuid::new_v4();
+        message_repo.add_message(msg3_id, Some(msg2_id), MessageRole::User, "Make it shorter");
+
+        let abstract_seq = build_abstract_sequence(
+            &message_repo,
+            &prompt_provider,
+            &chat,
+            &msg3_id,
+            vec![],
+            &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
+            None,
+        )
+        .await
+        .expect("Failed to build abstract sequence");
+
+        let (resolved, _) = resolve_sequence(abstract_seq, &message_repo, &file_resolver)
+            .await
+            .expect("Failed to resolve sequence");
+
+        assert!(
+            !resolved.messages.iter().any(|msg| matches!(
+                &msg.content,
+                ContentPart::ToolUse(ToolUse { tool_name, .. })
+                    if tool_name == crate::services::client_actions::CLIENT_ACTION_TOOL_NAME
+            )),
+            "propose_client_action ToolUse parts must not replay into later requests",
+        );
+        assert!(
+            resolved.messages.iter().any(|msg| matches!(
+                &msg.content,
+                ContentPart::Text(text) if text.text == "Here is a draft reply."
+            )),
+            "The assistant draft text must still replay",
+        );
+    }
+
+    #[tokio::test]
     async fn test_history_replays_single_tool_call_as_valid_openai_sequence() {
         let generation_input = GenerationInputMessages {
             messages: vec![

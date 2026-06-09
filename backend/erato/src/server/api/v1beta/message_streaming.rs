@@ -2105,6 +2105,10 @@ async fn stream_generate_chat_completion<
     let mut unfinished_tool_calls: Vec<genai::chat::ToolCall> = vec![];
     let mut current_turn = 0;
     let mut current_tool_call_count = 0;
+    // At most one successful client-action proposal per generation: the
+    // client needs a single authoritative proposal, so duplicate or
+    // conflicting calls after the first are answered with an error.
+    let mut client_action_already_proposed = false;
 
     let mut current_message_content: Vec<ContentPart> = vec![];
     let mut current_turn_chat_request = chat_request.clone();
@@ -2306,20 +2310,34 @@ async fn stream_generate_chat_completion<
                     .remove(&unfinished_tool_call.call_id)
                     .unwrap_or_else(now_timestamp);
                 tool_call_parent_observation_ids.remove(&unfinished_tool_call.call_id);
+                let validated = crate::services::client_actions::validate_client_action_input(
+                    &unfinished_tool_call.fn_arguments,
+                    &allowed_actions,
+                )
+                .and_then(|action| {
+                    if client_action_already_proposed {
+                        Err(
+                            "a client action was already proposed for this message; only one proposal is allowed and it cannot be changed"
+                                .to_string(),
+                        )
+                    } else {
+                        Ok(action)
+                    }
+                });
                 let (status, bg_status, message_status, output_value, response_text) =
-                    match crate::services::client_actions::validate_client_action_input(
-                        &unfinished_tool_call.fn_arguments,
-                        &allowed_actions,
-                    ) {
-                        Ok(action) => (
-                            ToolCallStatus::Success,
-                            BgToolCallStatus::Success,
-                            MessageToolCallStatus::Success,
-                            json!({ "status": "proposed", "action": action }),
-                            format!(
-                                "Proposed client action '{action}' to the user. The user's application will ask for confirmation and perform it. Do not call this tool again for this request and do not claim the action has been executed."
-                            ),
-                        ),
+                    match validated {
+                        Ok(action) => {
+                            client_action_already_proposed = true;
+                            (
+                                ToolCallStatus::Success,
+                                BgToolCallStatus::Success,
+                                MessageToolCallStatus::Success,
+                                json!({ "status": "proposed", "action": action }),
+                                format!(
+                                    "Proposed client action '{action}' to the user. The user's application will ask for confirmation and perform it. Do not call this tool again for this request and do not claim the action has been executed."
+                                ),
+                            )
+                        }
                         Err(error) => (
                             ToolCallStatus::Error,
                             BgToolCallStatus::Error,

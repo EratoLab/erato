@@ -146,4 +146,11 @@ describe("clientActionPreferencesPersistedOptions.parse", () => {
     expect(parse("dont_ask")).toBeNull();
     expect(parse(null)).toBeNull();
   });
+
+  it("clamps stored modes to the per-action floor (hand-edited storage)", () => {
+    expect(parse({ "outlook.reply_all": "dont_ask" })).toEqual({
+      "outlook.reply": "dont_ask",
+      "outlook.reply_all": "always_ask",
+    });
+  });
 });

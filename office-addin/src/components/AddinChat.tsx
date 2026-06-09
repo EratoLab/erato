@@ -149,7 +149,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
   // drops keep working since they parse without a backend.
   const { fetcher: messageFetcher } = useOutlookMessageFetcher();
 
-  const { mailItem } = useOutlookMailItem();
+  const { mailItem, itemIdentity } = useOutlookMailItem();
   const {
     hasSelectedEmailSource,
     isEmailBodyIncluded,
@@ -651,16 +651,23 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
   // Track which assistant messages finished streaming during THIS session.
   // Auto-prompt (presentation = "auto_prompt") may only fire for those —
   // history loads, refetches, and chat switches never auto-open anything.
+  // The Outlook item identity at completion time is recorded alongside, so
+  // executors can refuse to open a reply when the user has meanwhile
+  // switched to a different email.
   const freshTrackerRef = useRef(new FreshCompletionTracker());
+  const freshItemIdentityRef = useRef(new Map<string, string | null>());
   const [freshMessageIds, setFreshMessageIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
   useEffect(() => {
     const newlyFresh = freshTrackerRef.current.observe(messages, messageOrder);
     if (newlyFresh.length > 0) {
+      for (const id of newlyFresh) {
+        freshItemIdentityRef.current.set(id, itemIdentity ?? null);
+      }
       setFreshMessageIds((previous) => new Set([...previous, ...newlyFresh]));
     }
-  }, [messages, messageOrder]);
+  }, [messages, messageOrder, itemIdentity]);
 
   const messagesWithArtifact = useMemo(() => {
     let next = messages;
@@ -708,7 +715,14 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
           ...(clientActionInfo?.presentation
             ? { clientActionPresentation: clientActionInfo.presentation }
             : {}),
-          ...(freshMessageIds.has(id) ? { isFreshCompletion: true } : {}),
+          ...(freshMessageIds.has(id)
+            ? {
+                isFreshCompletion: true,
+                ...(freshItemIdentityRef.current.get(id)
+                  ? { itemIdentity: freshItemIdentityRef.current.get(id)! }
+                  : {}),
+              }
+            : {}),
         },
       };
     }
