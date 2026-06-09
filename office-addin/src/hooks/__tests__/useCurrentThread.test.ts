@@ -1,9 +1,13 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
+import { createElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { useCurrentThread } from "../useCurrentThread";
 
 import type { GraphTransport } from "../../utils/fetchOutlookMessageGraph";
+import type { ParsedThread } from "../../utils/parsedThread";
+import type { ReactNode } from "react";
 
 function buildResponder(jsonValue: unknown, ok = true, status = 200) {
   return vi.fn(
@@ -19,14 +23,53 @@ function buildResponder(jsonValue: unknown, ok = true, status = 200) {
 
 const acquireToken = async () => "token";
 
+function createTestQueryClient() {
+  return new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+}
+
+function createWrapper(queryClient = createTestQueryClient()) {
+  return function Wrapper({ children }: { children: ReactNode }) {
+    return createElement(
+      QueryClientProvider,
+      { client: queryClient },
+      children,
+    );
+  };
+}
+
+function buildThread(subject: string): ParsedThread {
+  return {
+    conversationId: "conv-1",
+    subject,
+    messages: [
+      {
+        id: "<m1@x>",
+        internetMessageId: "<m1@x>",
+        subject,
+        from: null,
+        to: [],
+        cc: [],
+        date: "2026-03-01T10:00:00Z",
+        bodyText: "body",
+        bodyHtml: null,
+        attachments: [],
+      },
+    ],
+    incomplete: false,
+  };
+}
+
 describe("useCurrentThread", () => {
   it("returns null thread + isLoading=false when itemId or conversationId is missing", () => {
     const transport: GraphTransport = vi.fn(async () => {
       throw new Error("transport should not be called");
     });
 
-    const { result } = renderHook(() =>
-      useCurrentThread(null, "conv-1", acquireToken, { transport }),
+    const { result } = renderHook(
+      () => useCurrentThread(null, "conv-1", acquireToken, { transport }),
+      { wrapper: createWrapper() },
     );
     expect(result.current).toEqual({
       thread: null,
@@ -35,8 +78,9 @@ describe("useCurrentThread", () => {
     });
     expect(transport).not.toHaveBeenCalled();
 
-    const { result: result2 } = renderHook(() =>
-      useCurrentThread("item-1", null, acquireToken, { transport }),
+    const { result: result2 } = renderHook(
+      () => useCurrentThread("item-1", null, acquireToken, { transport }),
+      { wrapper: createWrapper() },
     );
     expect(result2.current).toEqual({
       thread: null,
@@ -60,8 +104,9 @@ describe("useCurrentThread", () => {
       ],
     });
 
-    const { result } = renderHook(() =>
-      useCurrentThread("item-1", "conv-1", acquireToken, { transport }),
+    const { result } = renderHook(
+      () => useCurrentThread("item-1", "conv-1", acquireToken, { transport }),
+      { wrapper: createWrapper() },
     );
 
     // Effect runs synchronously after mount; first observed value should be
@@ -98,7 +143,7 @@ describe("useCurrentThread", () => {
     const { result, rerender } = renderHook(
       ({ conversationId }) =>
         useCurrentThread("item-1", conversationId, acquireToken, { transport }),
-      { initialProps: { conversationId: "conv-A" } },
+      { initialProps: { conversationId: "conv-A" }, wrapper: createWrapper() },
     );
 
     await waitFor(() => {
@@ -120,8 +165,9 @@ describe("useCurrentThread", () => {
     const transport = buildResponder({ value: [] }, false, 500);
 
     const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const { result } = renderHook(() =>
-      useCurrentThread("item-1", "conv-1", acquireToken, { transport }),
+    const { result } = renderHook(
+      () => useCurrentThread("item-1", "conv-1", acquireToken, { transport }),
+      { wrapper: createWrapper() },
     );
 
     await waitFor(() => {
@@ -130,5 +176,68 @@ describe("useCurrentThread", () => {
     consoleWarn.mockRestore();
     expect(result.current.thread).toBeNull();
     expect(result.current.error).toBe(true);
+  });
+
+  it("keeps cached thread data non-loading during a background refetch", async () => {
+    const queryClient = createTestQueryClient();
+    const queryKey = [
+      "office-addin",
+      "outlook-current-thread",
+      "item-1",
+      "conv-1",
+    ];
+    queryClient.setQueryData(queryKey, buildThread("Cached thread"));
+
+    let resolveFetch: ((response: Response) => void) | null = null;
+    const transport: GraphTransport = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+
+    const { result } = renderHook(
+      () => useCurrentThread("item-1", "conv-1", acquireToken, { transport }),
+      { wrapper: createWrapper(queryClient) },
+    );
+
+    expect(result.current.thread?.subject).toBe("Cached thread");
+    expect(result.current.isLoading).toBe(false);
+    expect(transport).not.toHaveBeenCalled();
+
+    act(() => {
+      void queryClient.invalidateQueries({ queryKey });
+    });
+
+    await waitFor(() => {
+      expect(transport).toHaveBeenCalledTimes(1);
+    });
+    expect(result.current.thread?.subject).toBe("Cached thread");
+    expect(result.current.isLoading).toBe(false);
+
+    await act(async () => {
+      resolveFetch?.({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({
+          value: [
+            {
+              id: "m1",
+              internetMessageId: "<m1@x>",
+              subject: "Refetched thread",
+              body: { contentType: "text", content: "body" },
+              receivedDateTime: "2026-03-01T10:00:00Z",
+              isDraft: false,
+            },
+          ],
+        }),
+      } as Response);
+    });
+
+    await waitFor(() => {
+      expect(result.current.thread?.subject).toBe("Refetched thread");
+    });
+    expect(result.current.isLoading).toBe(false);
   });
 });

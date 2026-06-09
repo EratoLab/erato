@@ -14,7 +14,12 @@ import { FilePreviewLoading } from "./FilePreviewLoading";
 import { FILE_PREVIEW_STYLES } from "./fileUploadStyles";
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { Button } from "../Controls/Button";
-import { ChevronDownIcon, ChevronRightIcon } from "../icons";
+import {
+  ChevronDownIcon,
+  ChevronRightIcon,
+  ErrorIcon,
+  InfoIcon,
+} from "../icons";
 
 import type React from "react";
 
@@ -28,6 +33,8 @@ import type React from "react";
  *   context"); renderers must suppress the remove affordance.
  * - `loading`: an in-flight placeholder; rendered as a spinner. Has no
  *   `file` because no file has materialised yet.
+ * - `status`: an inline non-file notice for grouped attachment state, such as
+ *   a recoverable email-preview load failure.
  *
  * `labelOverride` lets callers force the metadata row text (e.g. label an
  * `.html` synthetic file as "Email") instead of deriving it from the file's
@@ -64,6 +71,15 @@ export type FileAttachmentGroupItem =
   | {
       kind: "loading";
       id: string;
+      label?: string;
+      description?: string;
+    }
+  | {
+      kind: "status";
+      id: string;
+      label: string;
+      description?: string;
+      tone?: "neutral" | "error";
     }
   | {
       /**
@@ -123,6 +139,7 @@ export interface GroupedFileAttachmentsPreviewProps {
   className?: string;
   filenameTruncateLength?: number;
   defaultVisibleItems?: number;
+  stickyGroupHeaders?: boolean;
 }
 
 type ItemWithFile = Extract<
@@ -327,6 +344,52 @@ const ThreadMessageGroupSection: React.FC<ThreadMessageGroupSectionProps> = ({
   );
 };
 
+const StatusRow: React.FC<{
+  label: string;
+  description?: string;
+  tone?: "neutral" | "error";
+}> = ({ label, description, tone = "neutral" }) => {
+  const isError = tone === "error";
+  const Icon = isError ? ErrorIcon : InfoIcon;
+  return (
+    <div
+      className={clsx(
+        FILE_PREVIEW_STYLES.container,
+        isError && "border-[var(--theme-error-border)]",
+      )}
+      role={isError ? "alert" : "status"}
+      aria-live={isError ? undefined : "polite"}
+    >
+      <div
+        className={clsx(
+          "mr-2 shrink-0",
+          isError
+            ? "text-[var(--theme-error-fg)]"
+            : "text-[var(--theme-fg-muted)]",
+        )}
+      >
+        <Icon className={FILE_PREVIEW_STYLES.icon} aria-hidden="true" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div
+          className={clsx(
+            FILE_PREVIEW_STYLES.name,
+            isError && "text-[var(--theme-error-fg)]",
+          )}
+          title={label}
+        >
+          {label}
+        </div>
+        {description && (
+          <div className="text-xs text-[var(--theme-fg-muted)]">
+            {description}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const DefaultGroupedFileAttachmentsPreview: React.FC<
   GroupedFileAttachmentsPreviewProps
 > = ({
@@ -339,10 +402,11 @@ const DefaultGroupedFileAttachmentsPreview: React.FC<
   className = "",
   filenameTruncateLength = 25,
   defaultVisibleItems = 3,
+  stickyGroupHeaders = false,
 }) => {
   const [expandedGroupIds, setExpandedGroupIds] = useState<string[]>([]);
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<
-    Record<string, boolean>
+    Partial<Record<string, boolean>>
   >(() => {
     const initial: Record<string, boolean> = {};
     for (const group of groups) {
@@ -363,11 +427,27 @@ const DefaultGroupedFileAttachmentsPreview: React.FC<
     });
   };
 
-  const toggleGroupCollapsed = (groupId: string) => {
-    setCollapsedGroupIds((previous) => ({
-      ...previous,
-      [groupId]: !previous[groupId],
-    }));
+  const getGroupDefaultCollapsed = (group: FileAttachmentGroup): boolean =>
+    group.defaultCollapsed !== false;
+
+  const getGroupCollapsed = (group: FileAttachmentGroup): boolean => {
+    if (!group.collapsible) {
+      return false;
+    }
+
+    return collapsedGroupIds[group.id] ?? getGroupDefaultCollapsed(group);
+  };
+
+  const toggleGroupCollapsed = (group: FileAttachmentGroup) => {
+    setCollapsedGroupIds((previous) => {
+      const currentlyCollapsed =
+        previous[group.id] ?? getGroupDefaultCollapsed(group);
+
+      return {
+        ...previous,
+        [group.id]: !currentlyCollapsed,
+      };
+    });
   };
 
   if (groups.length === 0) {
@@ -378,7 +458,7 @@ const DefaultGroupedFileAttachmentsPreview: React.FC<
     <div className={clsx("mb-3 flex flex-col gap-3", className)}>
       {groups.map((group) => {
         const itemCount = group.items.length;
-        const isCollapsed = group.collapsible && collapsedGroupIds[group.id];
+        const isCollapsed = getGroupCollapsed(group);
         const isExpanded = expandedGroupIds.includes(group.id);
         const shouldCollapse = itemCount > defaultVisibleItems;
         const baseItems = isCollapsed ? [] : group.items;
@@ -387,6 +467,24 @@ const DefaultGroupedFileAttachmentsPreview: React.FC<
             ? baseItems.slice(0, defaultVisibleItems)
             : baseItems;
         const hiddenCount = isCollapsed ? 0 : itemCount - visibleItems.length;
+        const sectionClassName = stickyGroupHeaders
+          ? "rounded-md bg-[var(--theme-bg-primary)]"
+          : FILE_PREVIEW_STYLES.group.container;
+        const headerClassName = clsx(
+          stickyGroupHeaders
+            ? "flex min-w-0 items-start gap-2"
+            : FILE_PREVIEW_STYLES.group.header,
+          stickyGroupHeaders &&
+            clsx(
+              "sticky top-0 z-10 border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] px-3 pb-2 pt-3",
+              isCollapsed ? "rounded-md" : "rounded-t-md",
+            ),
+        );
+        const itemsClassName = clsx(
+          "flex flex-col gap-2",
+          stickyGroupHeaders &&
+            "rounded-b-md border-x border-b border-[var(--theme-border)] bg-[var(--theme-bg-primary)] px-3 pb-3 pt-2",
+        );
 
         const headerInner = (
           <>
@@ -420,29 +518,18 @@ const DefaultGroupedFileAttachmentsPreview: React.FC<
         );
 
         return (
-          <section
-            key={group.id}
-            className={FILE_PREVIEW_STYLES.group.container}
-          >
+          <section key={group.id} className={sectionClassName}>
             {group.collapsible ? (
               <button
                 type="button"
-                onClick={() => toggleGroupCollapsed(group.id)}
-                className={clsx(
-                  FILE_PREVIEW_STYLES.group.header,
-                  "w-full text-left",
-                )}
+                onClick={() => toggleGroupCollapsed(group)}
+                className={clsx(headerClassName, "w-full text-left")}
                 aria-expanded={!isCollapsed}
               >
                 {headerInner}
               </button>
             ) : (
-              <div
-                className={clsx(
-                  FILE_PREVIEW_STYLES.group.header,
-                  "justify-between",
-                )}
-              >
+              <div className={clsx(headerClassName, "justify-between")}>
                 {headerInner}
                 {shouldCollapse && isExpanded && (
                   <Button
@@ -458,96 +545,110 @@ const DefaultGroupedFileAttachmentsPreview: React.FC<
               </div>
             )}
 
-            <div className="flex flex-col gap-2">
-              {visibleItems.map((item) => {
-                if (item.kind === "loading") {
-                  return (
-                    <FilePreviewLoading
-                      key={item.id}
-                      className="w-full"
-                      label={t`Loading attachment...`}
-                    />
-                  );
-                }
+            {(!stickyGroupHeaders || !isCollapsed) && (
+              <div className={itemsClassName}>
+                {visibleItems.map((item) => {
+                  if (item.kind === "loading") {
+                    return (
+                      <FilePreviewLoading
+                        key={item.id}
+                        className="w-full"
+                        label={item.label ?? t`Loading attachment...`}
+                        description={item.description}
+                      />
+                    );
+                  }
 
-                if (item.kind === "threadMessageGroup") {
-                  return (
-                    <ThreadMessageGroupSection
-                      key={item.id}
-                      label={item.label}
-                      sublabel={item.sublabel}
-                      selected={item.selected}
-                      onToggle={item.onToggle}
-                      attachments={item.attachments}
-                      defaultCollapsed={item.defaultCollapsed}
-                      disabled={disabled}
-                      showFileType={showFileTypes}
-                      showSize={showFileSizes}
-                      filenameTruncateLength={filenameTruncateLength}
-                    />
-                  );
-                }
+                  if (item.kind === "status") {
+                    return (
+                      <StatusRow
+                        key={item.id}
+                        label={item.label}
+                        description={item.description}
+                        tone={item.tone}
+                      />
+                    );
+                  }
 
-                if (item.kind === "selectableAttachment") {
-                  return (
-                    <SelectableAttachmentRow
-                      key={getFileKey(item)}
+                  if (item.kind === "threadMessageGroup") {
+                    return (
+                      <ThreadMessageGroupSection
+                        key={item.id}
+                        label={item.label}
+                        sublabel={item.sublabel}
+                        selected={item.selected}
+                        onToggle={item.onToggle}
+                        attachments={item.attachments}
+                        defaultCollapsed={item.defaultCollapsed}
+                        disabled={disabled}
+                        showFileType={showFileTypes}
+                        showSize={showFileSizes}
+                        filenameTruncateLength={filenameTruncateLength}
+                      />
+                    );
+                  }
+
+                  if (item.kind === "selectableAttachment") {
+                    return (
+                      <SelectableAttachmentRow
+                        key={getFileKey(item)}
+                        file={item.file}
+                        selected={item.selected}
+                        onToggle={item.onToggle}
+                        disabled={disabled}
+                        showFileType={showFileTypes}
+                        showSize={showFileSizes}
+                        filenameTruncateLength={filenameTruncateLength}
+                        validation={item.validation}
+                      />
+                    );
+                  }
+
+                  const content = (
+                    <FilePreviewButton
                       file={item.file}
-                      selected={item.selected}
-                      onToggle={item.onToggle}
+                      onRemove={() => onRemoveFile(getFileId(item))}
                       disabled={disabled}
+                      className="w-full"
                       showFileType={showFileTypes}
                       showSize={showFileSizes}
                       filenameTruncateLength={filenameTruncateLength}
-                      validation={item.validation}
+                      filenameClassName="max-w-full"
                     />
                   );
-                }
 
-                const content = (
-                  <FilePreviewButton
-                    file={item.file}
-                    onRemove={() => onRemoveFile(getFileId(item))}
-                    disabled={disabled}
-                    className="w-full"
-                    showFileType={showFileTypes}
-                    showSize={showFileSizes}
-                    filenameTruncateLength={filenameTruncateLength}
-                    filenameClassName="max-w-full"
-                  />
-                );
+                  if (!onFilePreview) {
+                    return <div key={getFileKey(item)}>{content}</div>;
+                  }
 
-                if (!onFilePreview) {
-                  return <div key={getFileKey(item)}>{content}</div>;
-                }
+                  return (
+                    <InteractiveContainer
+                      key={getFileKey(item)}
+                      onClick={() => onFilePreview(item.file)}
+                      useDiv={true}
+                      className="w-full cursor-pointer hover:bg-theme-bg-accent"
+                      aria-label={`${t`Preview attachment`} ${getFileName(item.file)}`}
+                    >
+                      {content}
+                    </InteractiveContainer>
+                  );
+                })}
 
-                return (
-                  <InteractiveContainer
-                    key={getFileKey(item)}
-                    onClick={() => onFilePreview(item.file)}
-                    useDiv={true}
-                    className="w-full cursor-pointer hover:bg-theme-bg-accent"
-                    aria-label={`${t`Preview attachment`} ${getFileName(item.file)}`}
+                {hiddenCount > 0 && !isExpanded && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setGroupExpanded(group.id, true)}
+                    className={FILE_PREVIEW_STYLES.group.moreButton}
                   >
-                    {content}
-                  </InteractiveContainer>
-                );
-              })}
-
-              {hiddenCount > 0 && !isExpanded && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setGroupExpanded(group.id, true)}
-                  className={FILE_PREVIEW_STYLES.group.moreButton}
-                >
-                  {hiddenCount === 1
-                    ? t`Show 1 more item`
-                    : t`Show ${hiddenCount} more items`}
-                </Button>
-              )}
-            </div>
+                    {hiddenCount === 1
+                      ? t`Show 1 more item`
+                      : t`Show ${hiddenCount} more items`}
+                  </Button>
+                )}
+              </div>
+            )}
           </section>
         );
       })}

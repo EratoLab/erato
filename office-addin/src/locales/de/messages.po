@@ -119,8 +119,33 @@ msgstr "E-Mail"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.emailSourcePreviewRegion"
+msgstr "E-Mail-Kontextvorschau"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.emailThreadLoadError"
+msgstr "E-Mail-Konversation konnte nicht geladen werden"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.emailThreadLoadErrorDescription"
+msgstr "Sie können weiterhin ohne diesen E-Mail-Kontext senden."
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.expandingDroppedEmails"
 msgstr "Abgelegte E-Mails werden verarbeitet…"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.loadingEmailThread"
+msgstr "E-Mail-Konversation wird geladen..."
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.loadingEmailThreadDescription"
+msgstr "E-Mail-Kontext wird vorbereitet"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx

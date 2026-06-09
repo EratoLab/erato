@@ -35,6 +35,10 @@ export interface FetchOutlookMessageBytesResult {
 
 export type AcquireGraphToken = () => Promise<string>;
 
+export interface GraphRequestOptions {
+  signal?: AbortSignal;
+}
+
 /**
  * Fetches a message by its EWS item id. The id is converted to the Graph-
  * compatible REST id via `Office.context.mailbox.convertToRestId` before the
@@ -43,9 +47,10 @@ export type AcquireGraphToken = () => Promise<string>;
 export async function fetchOutlookMessageFilesViaGraph(
   ewsItemId: string,
   acquireToken: AcquireGraphToken,
+  options: GraphRequestOptions = {},
 ): Promise<FetchOutlookMessageResult> {
   const { bytes, subject, internetMessageId } =
-    await fetchOutlookMessageBytesViaGraph(ewsItemId, acquireToken);
+    await fetchOutlookMessageBytesViaGraph(ewsItemId, acquireToken, options);
   return {
     subject,
     files: [buildEmlFile(bytes, subject)],
@@ -56,11 +61,12 @@ export async function fetchOutlookMessageFilesViaGraph(
 export async function fetchOutlookMessageBytesViaGraph(
   ewsItemId: string,
   acquireToken: AcquireGraphToken,
+  options: GraphRequestOptions = {},
 ): Promise<FetchOutlookMessageBytesResult> {
   const restId = convertEwsIdToGraphId(ewsItemId);
   const token = await acquireToken();
-  const metadata = await fetchMessageMetadataById(restId, token);
-  const bytes = await fetchMessageRawMimeById(restId, token);
+  const metadata = await fetchMessageMetadataById(restId, token, options);
+  const bytes = await fetchMessageRawMimeById(restId, token, options);
   return {
     bytes,
     subject: metadata.subject ?? "",
@@ -92,6 +98,7 @@ export interface ParentMessageMetadata {
 export async function fetchParentMessageInConversationViaGraph(
   conversationId: string,
   acquireToken: AcquireGraphToken,
+  options: GraphRequestOptions = {},
 ): Promise<ParentMessageMetadata | null> {
   try {
     const token = await acquireToken();
@@ -106,6 +113,7 @@ export async function fetchParentMessageInConversationViaGraph(
     const filter = `conversationId eq '${escapeODataString(conversationId)}'`;
     const url = `${GRAPH_BASE}/me/messages?$filter=${encodeURIComponent(filter)}&$top=20&$select=id,subject,from,receivedDateTime,isDraft`;
     const response = await fetch(url, {
+      signal: options.signal,
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/json",
@@ -219,6 +227,7 @@ export type GraphTransport = (
 
 export interface FetchConversationOptions {
   transport?: GraphTransport;
+  signal?: AbortSignal;
 }
 
 /**
@@ -313,12 +322,16 @@ export async function fetchConversationMessagesViaGraph(
     let response: Response;
     try {
       response = await transport(nextUrl, {
+        signal: options.signal,
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
         },
       });
     } catch (error) {
+      if (options.signal?.aborted) {
+        throw options.signal.reason ?? error;
+      }
       console.warn("[fetchConversationMessagesViaGraph] fetch failed:", error);
       state = pages === 0 ? "error" : "partial";
       break;
@@ -359,7 +372,7 @@ export async function fetchConversationMessagesViaGraph(
   // so its content reaches the LLM. Failures degrade to a disclosure marker
   // downstream (parsedThread.transformAttachment), never a silent drop.
   if (messages.length > 0) {
-    await enrichItemAttachments(messages, token, transport);
+    await enrichItemAttachments(messages, token, transport, options.signal);
   }
 
   return { messages, state };
@@ -377,6 +390,7 @@ async function enrichItemAttachments(
   messages: GraphConversationMessage[],
   token: string,
   transport: GraphTransport,
+  signal: AbortSignal | undefined,
 ): Promise<void> {
   const tasks: Array<() => Promise<void>> = [];
   for (const message of messages) {
@@ -393,6 +407,7 @@ async function enrichItemAttachments(
           attachment,
           token,
           transport,
+          signal,
         ),
       );
     }
@@ -408,6 +423,7 @@ async function enrichOneItemAttachment(
   attachment: GraphAttachment,
   token: string,
   transport: GraphTransport,
+  signal: AbortSignal | undefined,
 ): Promise<void> {
   const url = `${GRAPH_BASE}/me/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}/$value`;
   const headers = {
@@ -415,13 +431,13 @@ async function enrichOneItemAttachment(
     Accept: "application/octet-stream",
   };
   try {
-    let response = await transport(url, { headers });
+    let response = await transport(url, { headers, signal });
     // Honor a single Retry-After on throttle before giving up to a marker.
     if (response.status === 429) {
       const retryMs = retryAfterMs(response);
       if (retryMs !== null) {
-        await sleep(retryMs);
-        response = await transport(url, { headers });
+        await sleep(retryMs, signal);
+        response = await transport(url, { headers, signal });
       }
     }
     if (!response.ok) return;
@@ -435,6 +451,9 @@ async function enrichOneItemAttachment(
       attachment.name = "attached-item.eml";
     }
   } catch (error) {
+    if (signal?.aborted) {
+      throw signal.reason ?? error;
+    }
     console.warn("[enrichItemAttachments] item $value fetch failed:", error);
   }
 }
@@ -469,8 +488,26 @@ function retryAfterMs(response: Response): number | null {
   return Math.min(seconds, MAX_RETRY_AFTER_SECONDS) * 1000;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      signal?.removeEventListener("abort", handleAbort);
+      resolve();
+    }, ms);
+
+    const handleAbort = () => {
+      clearTimeout(timeoutId);
+      signal?.removeEventListener("abort", handleAbort);
+      reject(signal?.reason ?? new DOMException("Aborted", "AbortError"));
+    };
+
+    signal?.addEventListener("abort", handleAbort, { once: true });
+  });
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
@@ -495,10 +532,12 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 export async function fetchOutlookMessageFilesByInternetMessageIdViaGraph(
   internetMessageId: string,
   acquireToken: AcquireGraphToken,
+  options: GraphRequestOptions = {},
 ): Promise<FetchOutlookMessageResult | null> {
   const result = await fetchOutlookMessageBytesByInternetMessageIdViaGraph(
     internetMessageId,
     acquireToken,
+    options,
   );
   if (!result) {
     return null;
@@ -513,13 +552,18 @@ export async function fetchOutlookMessageFilesByInternetMessageIdViaGraph(
 export async function fetchOutlookMessageBytesByInternetMessageIdViaGraph(
   internetMessageId: string,
   acquireToken: AcquireGraphToken,
+  options: GraphRequestOptions = {},
 ): Promise<FetchOutlookMessageBytesResult | null> {
   const token = await acquireToken();
-  const match = await findMessageByInternetMessageId(internetMessageId, token);
+  const match = await findMessageByInternetMessageId(
+    internetMessageId,
+    token,
+    options,
+  );
   if (!match?.id) {
     return null;
   }
-  const bytes = await fetchMessageRawMimeById(match.id, token);
+  const bytes = await fetchMessageRawMimeById(match.id, token, options);
   return {
     bytes,
     subject: match.subject ?? "",
@@ -538,9 +582,11 @@ function convertEwsIdToGraphId(ewsItemId: string): string {
 async function fetchMessageMetadataById(
   messageId: string,
   token: string,
+  options: GraphRequestOptions = {},
 ): Promise<GraphMessageMetadata> {
   const url = `${GRAPH_BASE}/me/messages/${encodeURIComponent(messageId)}?$select=subject,internetMessageId`;
   const response = await fetch(url, {
+    signal: options.signal,
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: "application/json",
@@ -557,9 +603,11 @@ async function fetchMessageMetadataById(
 async function fetchMessageRawMimeById(
   messageId: string,
   token: string,
+  options: GraphRequestOptions = {},
 ): Promise<ArrayBuffer> {
   const url = `${GRAPH_BASE}/me/messages/${encodeURIComponent(messageId)}/$value`;
   const response = await fetch(url, {
+    signal: options.signal,
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: "application/octet-stream",
@@ -576,10 +624,12 @@ async function fetchMessageRawMimeById(
 async function findMessageByInternetMessageId(
   internetMessageId: string,
   token: string,
+  options: GraphRequestOptions = {},
 ): Promise<GraphMessageMetadata | null> {
   const filter = `internetMessageId eq '${escapeODataString(internetMessageId)}'`;
   const url = `${GRAPH_BASE}/me/messages?$filter=${encodeURIComponent(filter)}&$top=1&$select=id,subject,internetMessageId`;
   const response = await fetch(url, {
+    signal: options.signal,
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: "application/json",

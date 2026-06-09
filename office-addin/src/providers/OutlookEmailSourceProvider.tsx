@@ -15,6 +15,10 @@ import { useCurrentThread } from "../hooks/useCurrentThread";
 import { buildThreadEmlFile } from "../utils/buildThreadEmlFile";
 import { fetchParentMessageInConversationViaGraph } from "../utils/fetchOutlookMessageGraph";
 import {
+  OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
+  runWithGraphTimeout,
+} from "../utils/graphRequestTimeout";
+import {
   dismissAttachment as applyDismissAttachment,
   dismissBody as applyDismissBody,
   restoreAttachment as applyRestoreAttachment,
@@ -233,25 +237,32 @@ export function OutlookEmailSourceProvider({
       return;
     }
 
-    let cancelled = false;
+    const controller = new AbortController();
     setIsLoadingParentReplyContext(true);
     setParentReplyContext(null);
 
-    void fetchParentMessageInConversationViaGraph(
-      conversationId,
-      acquireGraphToken,
+    void runWithGraphTimeout(
+      OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
+      `Outlook reply-context fetch timed out after ${OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS}ms`,
+      controller.signal,
+      (signal) =>
+        fetchParentMessageInConversationViaGraph(
+          conversationId,
+          acquireGraphToken,
+          { signal },
+        ),
     )
       .then((result) => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         setParentReplyContext(result);
       })
       .finally(() => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         setIsLoadingParentReplyContext(false);
       });
 
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, [acquireGraphToken, conversationId, isComposeMode, itemId]);
 

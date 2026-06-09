@@ -45,6 +45,10 @@ import { useMsalNaa } from "../providers/MsalNaaProvider";
 import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
 import { fetchOutlookMessageBytesViaGraph } from "../utils/fetchOutlookMessageGraph";
+import {
+  OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
+  runWithGraphTimeout,
+} from "../utils/graphRequestTimeout";
 import { parseDroppedFiles } from "../utils/parseDroppedFiles";
 import { parseEmlBytes } from "../utils/parsedEmail";
 
@@ -52,9 +56,6 @@ import type { FetchOutlookMessageBytesResult } from "../utils/fetchOutlookMessag
 import type { OutlookMailListDragItem } from "../utils/outlookMailListDragParse";
 
 const GRAPH_MAIL_SCOPES = ["Mail.Read"];
-// Upper bound for a single Outlook item's Graph fetch. Beyond this we drop
-// the item from the drop batch so the send button isn't held hostage.
-const OUTLOOK_FETCH_TIMEOUT_MS = 10_000;
 
 // Accept real `.eml` / `.msg` files dropped by Outlook clients that expose
 // emails as native file drags (Outlook Mac, Classic Outlook on Windows). OWA
@@ -196,7 +197,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
 
   // Coalesce duplicate Outlook Graph fetches for the same item id. Two
   // rapid drops of the same mail-list row now share a single Graph call
-  // instead of burning quota on both. A 10s timeout keeps a hung fetch
+  // instead of burning quota on both. A timeout keeps a hung fetch
   // from locking the send button indefinitely — the coalesced promise
   // rejects and its entry is cleared so a later retry can start fresh.
   const pendingOutlookFetchesRef = useRef<
@@ -210,20 +211,15 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
       }
       const fetchPromise = (async () => {
         try {
-          return await Promise.race([
-            fetchOutlookMessageBytesViaGraph(itemId, acquireGraphToken),
-            new Promise<FetchOutlookMessageBytesResult>((_, reject) => {
-              setTimeout(
-                () =>
-                  reject(
-                    new Error(
-                      `Outlook fetch timed out after ${OUTLOOK_FETCH_TIMEOUT_MS}ms`,
-                    ),
-                  ),
-                OUTLOOK_FETCH_TIMEOUT_MS,
-              );
-            }),
-          ]);
+          return await runWithGraphTimeout(
+            OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
+            `Outlook fetch timed out after ${OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS}ms`,
+            undefined,
+            (signal) =>
+              fetchOutlookMessageBytesViaGraph(itemId, acquireGraphToken, {
+                signal,
+              }),
+          );
         } finally {
           pendingOutlookFetchesRef.current.delete(itemId);
         }
@@ -764,6 +760,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
               virtualizationThreshold={30}
               onFilePreview={openPreviewModal}
               onViewFeedback={openFeedbackViewDialog}
+              className="overscroll-none"
             />
 
             <AddinChatInput

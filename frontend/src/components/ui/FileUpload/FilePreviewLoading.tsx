@@ -7,12 +7,18 @@ import { FILE_PREVIEW_STYLES } from "./fileUploadStyles";
 interface FilePreviewLoadingProps {
   /** Optional loading label */
   label?: string;
+  /** Optional secondary text */
+  description?: string;
   /** Additional CSS class name */
   className?: string;
 }
 
 export const FilePreviewLoading = memo<FilePreviewLoadingProps>(
-  ({ label = t`Loading file...`, className = "" }) => {
+  ({
+    label = t`Loading file...`,
+    description = t`Please wait`,
+    className = "",
+  }) => {
     return (
       <div
         className={`${FILE_PREVIEW_STYLES.container} ${className}`}
@@ -28,9 +34,11 @@ export const FilePreviewLoading = memo<FilePreviewLoadingProps>(
 
         <div className="min-w-0 flex-1">
           <div className={FILE_PREVIEW_STYLES.name}>{label}</div>
-          <div className="text-xs text-[var(--theme-fg-muted)]">
-            {t`Please wait`}
-          </div>
+          {description && (
+            <div className="text-xs text-[var(--theme-fg-muted)]">
+              {description}
+            </div>
+          )}
         </div>
       </div>
     );
