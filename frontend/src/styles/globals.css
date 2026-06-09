@@ -572,7 +572,6 @@ body {
   }
 
   pre.message-content-code-block {
-    margin-block: 1rem;
     overflow-x: auto;
     padding: 0;
     border: 0;

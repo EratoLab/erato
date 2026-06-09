@@ -1996,12 +1996,20 @@ msgstr "Die Kontextnutzung überschreitet die Modellkapazität. Der Assistent ka
 msgid "Conversational"
 msgstr ""
 
+#: src/components/ui/Message/MessageContent.tsx
+msgid "Copied"
+msgstr ""
+
 #: src/components/ui/Message/EratoEmailSuggestion.tsx
 msgid "Copied!"
 msgstr ""
 
 #: src/components/ui/Message/EratoEmailSuggestion.tsx
 msgid "Copy"
+msgstr ""
+
+#: src/components/ui/Message/MessageContent.tsx
+msgid "Copy code"
 msgstr ""
 
 #: src/hooks/audio/useAudioDictationRecorder.ts

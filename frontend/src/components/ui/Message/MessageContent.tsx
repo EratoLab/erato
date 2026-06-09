@@ -11,6 +11,7 @@ import {
   durationFromTracePartsOrLegacyMessageTimestamps,
   groupIntoTraceClusters,
 } from "@/components/ui/Trace";
+import { CheckIcon, CopyIcon } from "@/components/ui/icons";
 import {
   DEFAULT_DARK_CODE_HIGHLIGHT_PRESET,
   DEFAULT_LIGHT_CODE_HIGHLIGHT_PRESET,
@@ -142,6 +143,30 @@ function MarkdownPre({
   ...props
 }: MarkdownPreProps) {
   const artifact = React.useContext(OutlookArtifactContext);
+  const [copied, setCopied] = React.useState(false);
+
+  // Extract the raw code text from the child <code> element so the copy button
+  // can access it without needing a separate context or ref strategy.
+  let codeContent = "";
+  try {
+    const child = React.Children.only(children) as React.ReactElement<{
+      children?: React.ReactNode;
+    }>;
+    codeContent = String(child.props.children ?? "").replace(/\n$/, "");
+  } catch {
+    // Non-standard children structure — leave codeContent empty.
+  }
+
+  const handleCopy = React.useCallback(() => {
+    void navigator.clipboard
+      .writeText(codeContent)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      })
+      .catch(() => {});
+  }, [codeContent]);
+
   // erato-email blocks render a custom component, not a code block —
   // use a plain <div> to avoid inheriting <pre> monospace font and
   // horizontal scroll from message-content-code-block styling.
@@ -160,16 +185,31 @@ function MarkdownPre({
   }
 
   return (
-    <pre
-      className={["message-content-code-block", className]
-        .filter(Boolean)
-        .join(" ")}
-      {...props}
-    >
-      <BlockCodeContext.Provider value={true}>
-        {children}
-      </BlockCodeContext.Provider>
-    </pre>
+    <div className="group relative my-4">
+      <pre
+        className={["message-content-code-block", className]
+          .filter(Boolean)
+          .join(" ")}
+        {...props}
+      >
+        <BlockCodeContext.Provider value={true}>
+          {children}
+        </BlockCodeContext.Provider>
+      </pre>
+      <button
+        type="button"
+        onClick={handleCopy}
+        aria-label={copied ? t`Copied` : t`Copy code`}
+        title={copied ? t`Copied` : t`Copy code`}
+        className="absolute right-2 top-2 z-10 flex items-center justify-center rounded border border-theme-border bg-theme-bg-secondary p-1 text-theme-fg-muted opacity-0 transition-opacity hover:bg-theme-bg-tertiary hover:text-theme-fg-primary focus:opacity-100 group-hover:opacity-100"
+      >
+        {copied ? (
+          <CheckIcon className="size-3.5 text-theme-success-fg" />
+        ) : (
+          <CopyIcon className="size-3.5" />
+        )}
+      </button>
+    </div>
   );
 }
 

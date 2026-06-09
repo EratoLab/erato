@@ -1996,6 +1996,10 @@ msgstr "Context usage exceeds model capacity. The assistant can't be created lik
 msgid "Conversational"
 msgstr "Conversational"
 
+#: src/components/ui/Message/MessageContent.tsx
+msgid "Copied"
+msgstr "Copied"
+
 #: src/components/ui/Message/EratoEmailSuggestion.tsx
 msgid "Copied!"
 msgstr "Copied!"
@@ -2003,6 +2007,10 @@ msgstr "Copied!"
 #: src/components/ui/Message/EratoEmailSuggestion.tsx
 msgid "Copy"
 msgstr "Copy"
+
+#: src/components/ui/Message/MessageContent.tsx
+msgid "Copy code"
+msgstr "Copy code"
 
 #: src/hooks/audio/useAudioDictationRecorder.ts
 #~ msgid "Could not complete audio dictation."
