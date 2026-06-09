@@ -601,10 +601,13 @@ describe("MessageContent", () => {
     );
 
     // No facet → stays an ordinary code block, no insert/replace UI.
+    // The code block does have its own copy button, but NOT the email artifact UI.
     expect(
       container.querySelector("pre.message-content-code-block"),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Copy/ })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: /Copy code/ }),
+    ).toBeInTheDocument();
   });
 
   it("renders a drifted email fence as HTML when the facet body_format is html", () => {
