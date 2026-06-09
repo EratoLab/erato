@@ -1996,12 +1996,20 @@ msgstr "L'utilisation du contexte dépasse la capacité du modèle. L'assistant 
 msgid "Conversational"
 msgstr ""
 
+#: src/components/ui/Message/MessageContent.tsx
+msgid "Copied"
+msgstr ""
+
 #: src/components/ui/Message/EratoEmailSuggestion.tsx
 msgid "Copied!"
 msgstr ""
 
 #: src/components/ui/Message/EratoEmailSuggestion.tsx
 msgid "Copy"
+msgstr ""
+
+#: src/components/ui/Message/MessageContent.tsx
+msgid "Copy code"
 msgstr ""
 
 #: src/hooks/audio/useAudioDictationRecorder.ts
