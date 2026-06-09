@@ -9,6 +9,14 @@ import {
   outlookSessionPreferencesPersistedOptions,
   type OutlookSessionPreferences,
 } from "../sessionPolicy";
+import {
+  CLIENT_ACTION_PREFERENCES_KEY,
+  DEFAULT_CLIENT_ACTION_PREFERENCES,
+  clientActionPreferencesPersistedOptions,
+  type ClientActionApprovalMode,
+  type ClientActionPreferences,
+} from "../utils/clientActionPolicy";
+import { type OutlookClientAction } from "../utils/outlookClientActions";
 
 interface BehaviorTabContentProps {
   emptyStateText: string;
@@ -26,6 +34,12 @@ export function BehaviorTabContent({
       OUTLOOK_SESSION_PREFERENCES_KEY,
       DEFAULT_OUTLOOK_SESSION_PREFERENCES,
       outlookSessionPreferencesPersistedOptions,
+    );
+  const [actionPreferences, setActionPreferences] =
+    usePersistedState<ClientActionPreferences>(
+      CLIENT_ACTION_PREFERENCES_KEY,
+      DEFAULT_CLIENT_ACTION_PREFERENCES,
+      clientActionPreferencesPersistedOptions,
     );
 
   if (!isOutlook) {
@@ -74,6 +88,69 @@ export function BehaviorTabContent({
         message:
           "Start a new chat each time when opening or switching to a different conversation.",
       }),
+    },
+  ];
+
+  // Per-action approval settings for assistant-proposed reply actions.
+  // Reply-all deliberately has no "don't ask": its confirmation doubles as
+  // the fresh-recipient check and local settings cannot downgrade it.
+  const approvalOptionLabels: Record<
+    ClientActionApprovalMode,
+    { label: string; helper: string }
+  > = {
+    dont_ask: {
+      label: t({
+        id: "officeAddin.settings.addin.replyActions.dontAsk.label",
+        message: "Open immediately",
+      }),
+      helper: t({
+        id: "officeAddin.settings.addin.replyActions.dontAsk.helper",
+        message:
+          "Opens the prefilled Outlook reply window without asking. Nothing is sent until you press Send.",
+      }),
+    },
+    always_ask: {
+      label: t({
+        id: "officeAddin.settings.addin.replyActions.alwaysAsk.label",
+        message: "Ask first",
+      }),
+      helper: t({
+        id: "officeAddin.settings.addin.replyActions.alwaysAsk.helper",
+        message: "Shows a confirmation before opening the reply window.",
+      }),
+    },
+    deny: {
+      label: t({
+        id: "officeAddin.settings.addin.replyActions.deny.label",
+        message: "Never",
+      }),
+      helper: t({
+        id: "officeAddin.settings.addin.replyActions.deny.helper",
+        message: "Hides this action and ignores the assistant's suggestion.",
+      }),
+    },
+  };
+
+  const actionGroups: ReadonlyArray<{
+    action: OutlookClientAction;
+    legend: string;
+    modes: readonly ClientActionApprovalMode[];
+  }> = [
+    {
+      action: "outlook.reply",
+      legend: t({
+        id: "officeAddin.settings.addin.replyActions.reply.legend",
+        message: "Reply to sender",
+      }),
+      modes: ["dont_ask", "always_ask", "deny"],
+    },
+    {
+      action: "outlook.reply_all",
+      legend: t({
+        id: "officeAddin.settings.addin.replyActions.replyAll.legend",
+        message: "Reply to all recipients",
+      }),
+      modes: ["always_ask", "deny"],
     },
   ];
 
@@ -146,6 +223,45 @@ export function BehaviorTabContent({
             );
           })}
         </div>
+      </fieldset>
+      <fieldset className="space-y-3">
+        <legend className="text-sm font-medium text-theme-fg-primary">
+          {t({
+            id: "officeAddin.settings.addin.replyActions.legend",
+            message: "When the assistant suggests replying to an email",
+          })}
+        </legend>
+        <p className="text-xs text-theme-fg-secondary">
+          {t({
+            id: "officeAddin.settings.addin.replyActions.intro",
+            message:
+              "Applies to reading mode. Replies only open as a prefilled Outlook draft — sending always stays your manual step.",
+          })}
+        </p>
+        {actionGroups.map((group) => (
+          <div key={group.action} className="space-y-2">
+            <p className="text-xs font-medium text-theme-fg-primary">
+              {group.legend}
+            </p>
+            {group.modes.map((mode) => (
+              <RadioCard
+                key={mode}
+                size="sm"
+                name={`${radioGroupName}-${group.action}`}
+                value={mode}
+                checked={actionPreferences[group.action] === mode}
+                onChange={() =>
+                  setActionPreferences({
+                    ...actionPreferences,
+                    [group.action]: mode,
+                  })
+                }
+                label={approvalOptionLabels[mode].label}
+                helper={approvalOptionLabels[mode].helper}
+              />
+            ))}
+          </div>
+        ))}
       </fieldset>
     </div>
   );

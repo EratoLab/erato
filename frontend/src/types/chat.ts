@@ -67,10 +67,29 @@ export interface OutlookArtifact {
    * The client action the model proposed for this message via the
    * `propose_client_action` tool, already validated by the add-in against
    * {@link OutlookArtifact.allowedClientActions} and the tool-call status.
-   * Used as a render hint (e.g. which button is primary) — never executed
-   * without an explicit user click.
+   * Used as a render hint (e.g. which button is primary) — auto-surfaced
+   * only under `auto_prompt` presentation and the user's local approval
+   * preferences, never on history reloads.
    */
   proposedClientAction?: string;
+  /**
+   * The producing facet's `presentation` from `GET /me/facets`:
+   * `render_buttons` (default) or `auto_prompt`.
+   */
+  clientActionPresentation?: string;
+  /**
+   * Id of the assistant message this artifact was stamped from. Lets a
+   * fence renderer key once-per-message behavior (auto-prompt) stably
+   * across remounts.
+   */
+  messageId?: string;
+  /**
+   * True only when this assistant message finished streaming during the
+   * current session (a status transition to complete was observed). False
+   * for messages loaded from history — auto-prompt must never fire for
+   * those.
+   */
+  isFreshCompletion?: boolean;
 }
 
 export interface Message {

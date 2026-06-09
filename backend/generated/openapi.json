@@ -2416,6 +2416,10 @@
           },
           "platform": {
             "type": "string"
+          },
+          "presentation": {
+            "type": "string",
+            "description": "How the client should surface a proposed client action:\n`render_buttons` (show buttons, user clicks) or `auto_prompt` (the\nclient may surface the proposal immediately after a fresh assistant\ncompletion, subject to the user's local approval preferences). Present\nonly when `client_actions` is non-empty; defaults to `render_buttons`."
           }
         }
       },

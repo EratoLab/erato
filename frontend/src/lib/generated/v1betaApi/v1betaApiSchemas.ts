@@ -26,6 +26,14 @@ export type ActionFacetInfo = {
   client_actions?: string[];
   id: string;
   platform?: string;
+  /**
+   * How the client should surface a proposed client action:
+   * `render_buttons` (show buttons, user clicks) or `auto_prompt` (the
+   * client may surface the proposal immediately after a fresh assistant
+   * completion, subject to the user's local approval preferences). Present
+   * only when `client_actions` is non-empty; defaults to `render_buttons`.
+   */
+  presentation?: string;
 };
 
 /**

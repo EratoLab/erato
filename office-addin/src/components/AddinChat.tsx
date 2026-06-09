@@ -34,7 +34,7 @@ import {
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AddinChatInput } from "./AddinChatInput";
 import { AddinSettingsDialog } from "./AddinSettingsDialog";
@@ -45,6 +45,7 @@ import { useOutlookMailListDrag } from "../hooks/useOutlookMailListDrag";
 import { useOutlookMessageFetcher } from "../hooks/useOutlookMessageFetcher";
 import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
+import { FreshCompletionTracker } from "../utils/freshCompletionTracker";
 import {
   OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
   runWithGraphTimeout,
@@ -646,6 +647,21 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
   // response is an insertable email); only review/critique facets opt into
   // "suggestions" (fenced blocks render, unfenced prose stays markdown).
   const clientActionsByFacetId = useActionFacetClientActions();
+
+  // Track which assistant messages finished streaming during THIS session.
+  // Auto-prompt (presentation = "auto_prompt") may only fire for those —
+  // history loads, refetches, and chat switches never auto-open anything.
+  const freshTrackerRef = useRef(new FreshCompletionTracker());
+  const [freshMessageIds, setFreshMessageIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  useEffect(() => {
+    const newlyFresh = freshTrackerRef.current.observe(messages, messageOrder);
+    if (newlyFresh.length > 0) {
+      setFreshMessageIds((previous) => new Set([...previous, ...newlyFresh]));
+    }
+  }, [messages, messageOrder]);
+
   const messagesWithArtifact = useMemo(() => {
     let next = messages;
     for (const id of messageOrder) {
@@ -672,7 +688,8 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
       // set comes from the backend facet config, and the model's proposal is
       // only stamped after revalidation against that set + tool-call status —
       // never parsed out of message text.
-      const allowedClientActions = clientActionsByFacetId.get(facetId);
+      const clientActionInfo = clientActionsByFacetId.get(facetId);
+      const allowedClientActions = clientActionInfo?.clientActions;
       const proposedClientAction = allowedClientActions
         ? extractProposedClientAction(message.content, allowedClientActions)
         : undefined;
@@ -685,13 +702,18 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
           facetId,
           bodyFormat: facetBodyFormat,
           renderMode,
+          messageId: id,
           ...(allowedClientActions ? { allowedClientActions } : {}),
           ...(proposedClientAction ? { proposedClientAction } : {}),
+          ...(clientActionInfo?.presentation
+            ? { clientActionPresentation: clientActionInfo.presentation }
+            : {}),
+          ...(freshMessageIds.has(id) ? { isFreshCompletion: true } : {}),
         },
       };
     }
     return next;
-  }, [messages, messageOrder, clientActionsByFacetId]);
+  }, [messages, messageOrder, clientActionsByFacetId, freshMessageIds]);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 

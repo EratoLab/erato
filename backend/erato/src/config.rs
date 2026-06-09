@@ -774,6 +774,22 @@ impl AppConfig {
                     id
                 );
             }
+            if let Some(presentation) = &action_facet.presentation {
+                if !ACTION_FACET_PRESENTATIONS.contains(&presentation.as_str()) {
+                    panic!(
+                        "Action facet '{}' has an invalid presentation '{}'. Must be one of: {}",
+                        id,
+                        presentation,
+                        ACTION_FACET_PRESENTATIONS.join(", ")
+                    );
+                }
+                if action_facet.client_actions.is_empty() {
+                    panic!(
+                        "Action facet '{}' sets presentation but declares no client_actions.",
+                        id
+                    );
+                }
+            }
         }
 
         validate_audio_feature_config(&config, "audio_transcription", &config.audio_transcription);
@@ -2290,6 +2306,7 @@ impl ActionFacetsConfig {
                     "body_format".to_string(),
                 ],
                 client_actions: vec![],
+                presentation: None,
             });
 
         self.facets
@@ -2300,6 +2317,7 @@ impl ActionFacetsConfig {
                 template: BUILTIN_OUTLOOK_REVIEW_DRAFT_TEMPLATE.trim().to_string(),
                 allowed_args: vec!["full_body".to_string(), "body_format".to_string()],
                 client_actions: vec![],
+                presentation: None,
             });
     }
 }
@@ -2356,7 +2374,18 @@ pub struct ActionFacetConfig {
     // the action only after user confirmation.
     #[serde(default)]
     pub client_actions: Vec<String>,
+
+    // How the client should surface a proposed client action:
+    // - "render_buttons" (default): show action buttons; the user clicks.
+    // - "auto_prompt": the client may immediately surface the proposed action
+    //   after a fresh assistant completion, subject to the user's local
+    //   approval preferences.
+    // Only meaningful when `client_actions` is non-empty.
+    pub presentation: Option<String>,
 }
+
+/// Valid values for `ActionFacetConfig::presentation`.
+pub const ACTION_FACET_PRESENTATIONS: [&str; 2] = ["render_buttons", "auto_prompt"];
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct CachesConfig {

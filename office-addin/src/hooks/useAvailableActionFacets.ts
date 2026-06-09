@@ -20,21 +20,39 @@ export function useAvailableActionFacetIds(): Set<string> {
   );
 }
 
+export interface ActionFacetClientActionInfo {
+  /** Server-allowed client actions for this facet. */
+  clientActions: string[];
+  /** `render_buttons` (default) or `auto_prompt`; from `GET /me/facets`. */
+  presentation: string | undefined;
+}
+
 /**
- * Map of action-facet id → the `client_actions` the backend allows for it
- * (from `GET /me/facets`). This list is the server-side gate for what the
- * model may propose via `propose_client_action`; the add-in additionally
- * intersects it with the actions it actually implements before offering
- * anything to the user. Facets without client actions are omitted.
+ * Map of action-facet id → its client-action config from `GET /me/facets`.
+ * `clientActions` is the server-side gate for what the model may propose via
+ * `propose_client_action`; the add-in additionally intersects it with the
+ * actions it actually implements before offering anything to the user.
+ * Facets without client actions are omitted.
  */
-export function useActionFacetClientActions(): Map<string, string[]> {
+export function useActionFacetClientActions(): Map<
+  string,
+  ActionFacetClientActionInfo
+> {
   const { data } = useFacets({});
   return useMemo(
     () =>
       new Map(
         (data?.action_facets ?? []).flatMap((facet) =>
           facet.client_actions && facet.client_actions.length > 0
-            ? [[facet.id, facet.client_actions] as const]
+            ? [
+                [
+                  facet.id,
+                  {
+                    clientActions: facet.client_actions,
+                    presentation: facet.presentation,
+                  },
+                ] as const,
+              ]
             : [],
         ),
       ),

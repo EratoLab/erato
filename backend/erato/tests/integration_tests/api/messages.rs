@@ -2875,6 +2875,7 @@ fn add_action_facets(app_config: &mut erato::config::AppConfig) {
             template: "Rewrite the following in a {{tone}} tone:\n\n{{content}}".to_string(),
             allowed_args: vec!["tone".to_string(), "content".to_string()],
             client_actions: vec![],
+            presentation: None,
         },
     );
 }

@@ -536,6 +536,14 @@ pub struct ActionFacetInfo {
     /// must only execute actions from this list, after user confirmation.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     client_actions: Vec<String>,
+    /// How the client should surface a proposed client action:
+    /// `render_buttons` (show buttons, user clicks) or `auto_prompt` (the
+    /// client may surface the proposal immediately after a fresh assistant
+    /// completion, subject to the user's local approval preferences). Present
+    /// only when `client_actions` is non-empty; defaults to `render_buttons`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    presentation: Option<String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -640,6 +648,11 @@ pub async fn facets(
             id: id.clone(),
             platform: af.platform.clone(),
             client_actions: af.client_actions.clone(),
+            presentation: (!af.client_actions.is_empty()).then(|| {
+                af.presentation
+                    .clone()
+                    .unwrap_or_else(|| "render_buttons".to_string())
+            }),
         })
         .collect();
     action_facets.sort_by(|a, b| a.id.cmp(&b.id));

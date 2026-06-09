@@ -2120,6 +2120,7 @@ mod test_cases {
                 template: "You are composing an email. Context: {{context}}".to_string(),
                 allowed_args: vec!["context".to_string()],
                 client_actions: vec![],
+                presentation: None,
             },
         )]);
 
@@ -2252,6 +2253,7 @@ mod test_cases {
                 template: "Compose a reply with tone: {{tone}}".to_string(),
                 allowed_args: vec!["tone".to_string()],
                 client_actions: vec![],
+                presentation: None,
             },
         )]);
 

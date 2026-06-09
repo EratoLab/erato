@@ -2,12 +2,21 @@ import {
   ConfirmationDialog,
   sanitizeHtmlPreview,
   useOutlookArtifact,
+  usePersistedState,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useOutlookComposeSelection } from "../hooks/useOutlookComposeSelection";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
+import {
+  CLIENT_ACTION_PREFERENCES_KEY,
+  DEFAULT_CLIENT_ACTION_PREFERENCES,
+  clientActionPreferencesPersistedOptions,
+  isActionDenied,
+  resolveAutoPromptBehavior,
+  resolveClickBehavior,
+} from "../utils/clientActionPolicy";
 import {
   offerableClientActions,
   type OutlookClientAction,
@@ -29,6 +38,13 @@ const PRIMARY_ACTION_BUTTON_CLASS =
   "rounded-md border border-theme-border bg-theme-bg-tertiary px-3 py-1 text-xs font-medium hover:bg-theme-bg-hover disabled:opacity-50";
 
 /**
+ * Auto-prompt fires at most once per assistant message, across remounts
+ * (virtualized lists unmount/remount renderers) and across multiple fences
+ * within one message. Module-level by design.
+ */
+const firedAutoPrompts = new Set<string>();
+
+/**
  * Office-aware renderer for erato-email code blocks.
  * Registered via componentRegistry in main.tsx so the shared MessageContent
  * delegates to this component when running inside the Outlook addin.
@@ -39,9 +55,13 @@ const PRIMARY_ACTION_BUTTON_CLASS =
  * Read mode: when the producing facet allows client actions (reply /
  * reply-all from `GET /me/facets`, intersected with the add-in's fixed
  * registry), buttons that open Outlook's native reply form prefilled with the
- * draft. The model's proposal only chooses which button is primary — nothing
- * runs without an explicit click, reply-all asks for confirmation against
- * freshly read recipients, and sending always stays a manual step in Outlook.
+ * draft. Per-action local approval preferences apply: "deny" hides an action,
+ * "always ask" confirms before opening (reply-all is floored here and shows
+ * freshly read recipients), "don't ask" opens directly. Under the facet's
+ * `auto_prompt` presentation the proposed action may surface immediately —
+ * but only after a FRESH assistant completion, never from history, and still
+ * subject to the same preferences. Sending always stays a manual user step
+ * in Outlook's own compose window.
  */
 export function OutlookEratoEmailRenderer({
   content,
@@ -52,13 +72,20 @@ export function OutlookEratoEmailRenderer({
   const { mailItem } = useOutlookMailItem();
   const artifact = useOutlookArtifact();
   const isReadMode = !!mailItem && !mailItem.isComposeMode;
+  const [actionPreferences] = usePersistedState(
+    CLIENT_ACTION_PREFERENCES_KEY,
+    DEFAULT_CLIENT_ACTION_PREFERENCES,
+    clientActionPreferencesPersistedOptions,
+  );
 
   const readActions = useMemo<OutlookClientAction[]>(
     () =>
       isReadMode && isReadReplySupported()
-        ? offerableClientActions(artifact?.allowedClientActions)
+        ? offerableClientActions(artifact?.allowedClientActions).filter(
+            (action) => !isActionDenied(action, actionPreferences),
+          )
         : [],
-    [isReadMode, artifact],
+    [isReadMode, artifact, actionPreferences],
   );
   const proposedAction =
     artifact?.proposedClientAction &&
@@ -72,7 +99,8 @@ export function OutlookEratoEmailRenderer({
   const [errorKind, setErrorKind] = useState<"insert" | "reply" | "tooLarge">(
     "insert",
   );
-  const [pendingReplyAll, setPendingReplyAll] = useState<{
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    action: OutlookClientAction;
     recipients: ReadModeRecipientSummary;
   } | null>(null);
   const isBusy = status === "inserting";
@@ -114,26 +142,73 @@ export function OutlookEratoEmailRenderer({
     [content, isHtml],
   );
 
+  // Open the confirmation dialog with recipients RE-READ from the current
+  // item — the user confirms against fresh data, not against whatever the
+  // chat message was generated from.
+  const requestConfirmation = useCallback(
+    (action: OutlookClientAction): boolean => {
+      const recipients = getReadModeRecipientSummary();
+      if (!recipients) {
+        return false;
+      }
+      setPendingConfirm({ action, recipients });
+      return true;
+    },
+    [],
+  );
+
   const handleReplyAction = useCallback(
     (action: OutlookClientAction) => {
-      if (action === "outlook.reply_all") {
-        // Re-read the recipients of the CURRENT item at click time so the
-        // confirmation reflects what reply-all will actually address — not
-        // what the chat message was generated from.
-        const recipients = getReadModeRecipientSummary();
-        if (!recipients) {
-          setErrorKind("reply");
-          setStatus("error");
-          setTimeout(() => setStatus("idle"), 4000);
-          return;
-        }
-        setPendingReplyAll({ recipients });
+      if (resolveClickBehavior(action, actionPreferences) === "execute") {
+        void executeReply(action);
         return;
       }
-      void executeReply(action);
+      if (!requestConfirmation(action)) {
+        setErrorKind("reply");
+        setStatus("error");
+        setTimeout(() => setStatus("idle"), 4000);
+      }
     },
-    [executeReply],
+    [actionPreferences, executeReply, requestConfirmation],
   );
+
+  // Auto-prompt: only under the facet's `auto_prompt` presentation, only for
+  // a validated proposal on a FRESH completion (stamped by AddinChat — never
+  // history reloads), at most once per message, and still through the user's
+  // approval preference ("don't ask" opens the form, "ask" opens the
+  // confirmation dialog). If the user meanwhile left read mode,
+  // requestConfirmation returns false and nothing happens — the buttons
+  // remain as fallback.
+  const autoPromptBehavior = resolveAutoPromptBehavior({
+    presentation: artifact?.clientActionPresentation,
+    proposedAction,
+    isFreshCompletion: !!artifact?.isFreshCompletion,
+    preferences: actionPreferences,
+  });
+  const autoPromptMessageId = artifact?.messageId;
+  useEffect(() => {
+    if (autoPromptBehavior === "none") {
+      return;
+    }
+    if (!autoPromptMessageId || !proposedAction) {
+      return;
+    }
+    if (firedAutoPrompts.has(autoPromptMessageId)) {
+      return;
+    }
+    firedAutoPrompts.add(autoPromptMessageId);
+    if (autoPromptBehavior === "execute") {
+      void executeReply(proposedAction);
+    } else {
+      requestConfirmation(proposedAction);
+    }
+  }, [
+    autoPromptBehavior,
+    autoPromptMessageId,
+    proposedAction,
+    executeReply,
+    requestConfirmation,
+  ]);
 
   const handleCopy = useCallback(() => {
     void navigator.clipboard
@@ -189,9 +264,10 @@ export function OutlookEratoEmailRenderer({
       ]
     : readActions;
 
-  const replyAllRecipientCount = pendingReplyAll
-    ? pendingReplyAll.recipients.recipients.length +
-      (pendingReplyAll.recipients.sender ? 1 : 0)
+  const isConfirmingReplyAll = pendingConfirm?.action === "outlook.reply_all";
+  const confirmRecipientCount = pendingConfirm
+    ? (isConfirmingReplyAll ? pendingConfirm.recipients.recipients.length : 0) +
+      (pendingConfirm.recipients.sender ? 1 : 0)
     : 0;
 
   return (
@@ -276,40 +352,65 @@ export function OutlookEratoEmailRenderer({
         </p>
       )}
       <ConfirmationDialog
-        isOpen={pendingReplyAll !== null}
-        onClose={() => setPendingReplyAll(null)}
+        isOpen={pendingConfirm !== null}
+        onClose={() => setPendingConfirm(null)}
         onConfirm={() => {
-          setPendingReplyAll(null);
-          void executeReply("outlook.reply_all");
+          const action = pendingConfirm?.action;
+          setPendingConfirm(null);
+          if (action) {
+            void executeReply(action);
+          }
         }}
-        title={t({
-          id: "officeAddin.emailRenderer.replyAllConfirmTitle",
-          message: "Reply to all recipients?",
-        })}
+        title={
+          isConfirmingReplyAll
+            ? t({
+                id: "officeAddin.emailRenderer.replyAllConfirmTitle",
+                message: "Reply to all recipients?",
+              })
+            : t({
+                id: "officeAddin.emailRenderer.replyConfirmTitle",
+                message: "Open this reply?",
+              })
+        }
         message={
           <div className="space-y-2 text-sm text-theme-fg-secondary">
             <p>
-              {t({
-                id: "officeAddin.emailRenderer.replyAllConfirmMessage",
-                message: `This opens a reply addressed to ${replyAllRecipientCount} people from the email you are reading. Nothing is sent until you press Send in Outlook.`,
-              })}
+              {isConfirmingReplyAll
+                ? t({
+                    id: "officeAddin.emailRenderer.replyAllConfirmMessage",
+                    message: `This opens a reply addressed to ${confirmRecipientCount} people from the email you are reading. Nothing is sent until you press Send in Outlook.`,
+                  })
+                : t({
+                    id: "officeAddin.emailRenderer.replyConfirmMessage",
+                    message:
+                      "This opens a prefilled reply to the sender of the email you are reading. Nothing is sent until you press Send in Outlook.",
+                  })}
             </p>
-            {pendingReplyAll && (
+            {pendingConfirm && (
               <p className="break-words text-xs">
                 {[
-                  ...(pendingReplyAll.recipients.sender
-                    ? [pendingReplyAll.recipients.sender]
+                  ...(pendingConfirm.recipients.sender
+                    ? [pendingConfirm.recipients.sender]
                     : []),
-                  ...pendingReplyAll.recipients.recipients,
+                  ...(isConfirmingReplyAll
+                    ? pendingConfirm.recipients.recipients
+                    : []),
                 ].join(", ")}
               </p>
             )}
           </div>
         }
-        confirmButtonText={t({
-          id: "officeAddin.emailRenderer.replyAllConfirm",
-          message: "Open Reply All",
-        })}
+        confirmButtonText={
+          isConfirmingReplyAll
+            ? t({
+                id: "officeAddin.emailRenderer.replyAllConfirm",
+                message: "Open Reply All",
+              })
+            : t({
+                id: "officeAddin.emailRenderer.replyConfirm",
+                message: "Open Reply",
+              })
+        }
       />
     </div>
   );

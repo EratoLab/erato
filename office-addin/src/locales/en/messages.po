@@ -310,6 +310,21 @@ msgstr "Reply to all recipients?"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
+msgid "officeAddin.emailRenderer.replyConfirm"
+msgstr "Open Reply"
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoEmailRenderer.tsx
+msgid "officeAddin.emailRenderer.replyConfirmMessage"
+msgstr "This opens a prefilled reply to the sender of the email you are reading. Nothing is sent until you press Send in Outlook."
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoEmailRenderer.tsx
+msgid "officeAddin.emailRenderer.replyConfirmTitle"
+msgstr "Open this reply?"
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.replyFailed"
 msgstr "Failed to open the reply form. Make sure the received email is still open, or use Copy."
 
@@ -507,6 +522,56 @@ msgstr "Reopens the previous conversation when opening or switching emails."
 #: src/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.mode.resume.label"
 msgstr "Resume last chat"
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.replyActions.alwaysAsk.helper"
+msgstr "Shows a confirmation before opening the reply window."
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.replyActions.alwaysAsk.label"
+msgstr "Ask first"
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.replyActions.deny.helper"
+msgstr "Hides this action and ignores the assistant's suggestion."
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.replyActions.deny.label"
+msgstr "Never"
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.replyActions.dontAsk.helper"
+msgstr "Opens the prefilled Outlook reply window without asking. Nothing is sent until you press Send."
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.replyActions.dontAsk.label"
+msgstr "Open immediately"
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.replyActions.intro"
+msgstr "Applies to reading mode. Replies only open as a prefilled Outlook draft — sending always stays your manual step."
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.replyActions.legend"
+msgstr "When the assistant suggests replying to an email"
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.replyActions.reply.legend"
+msgstr "Reply to sender"
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.replyActions.replyAll.legend"
+msgstr "Reply to all recipients"
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx

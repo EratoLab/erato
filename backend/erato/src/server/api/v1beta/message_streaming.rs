@@ -4425,6 +4425,7 @@ mod tests {
                     template: "Summarize this".to_string(),
                     allowed_args: vec![],
                     client_actions: vec![],
+                    presentation: None,
                 },
             );
             let af = ActionFacetRequest {
@@ -4445,6 +4446,7 @@ mod tests {
                     template: "Reply".to_string(),
                     allowed_args: vec![],
                     client_actions: vec![],
+                    presentation: None,
                 },
             );
             let af = ActionFacetRequest {
@@ -4466,6 +4468,7 @@ mod tests {
                     template: "Reply".to_string(),
                     allowed_args: vec![],
                     client_actions: vec![],
+                    presentation: None,
                 },
             );
             let af = ActionFacetRequest {
@@ -4485,6 +4488,7 @@ mod tests {
                     template: "Write about {{topic}}".to_string(),
                     allowed_args: vec!["topic".to_string()],
                     client_actions: vec![],
+                    presentation: None,
                 },
             );
             let af = ActionFacetRequest {
@@ -4506,6 +4510,7 @@ mod tests {
                     template: "Write about {{topic}}".to_string(),
                     allowed_args: vec!["topic".to_string()],
                     client_actions: vec![],
+                    presentation: None,
                 },
             );
             let af = ActionFacetRequest {
@@ -4525,6 +4530,7 @@ mod tests {
                     template: "{{content}}".to_string(),
                     allowed_args: vec!["content".to_string()],
                     client_actions: vec![],
+                    presentation: None,
                 },
             );
             let oversized = "x".repeat(ACTION_FACET_ARG_MAX_SIZE + 1);
@@ -4547,6 +4553,7 @@ mod tests {
                     template: "{{content}}".to_string(),
                     allowed_args: vec!["content".to_string()],
                     client_actions: vec![],
+                    presentation: None,
                 },
             );
             let at_limit = "x".repeat(ACTION_FACET_ARG_MAX_SIZE);
@@ -4572,6 +4579,7 @@ mod tests {
                     template: "Rewrite {{text}}".to_string(),
                     allowed_args: vec!["text".to_string()],
                     client_actions: vec![],
+                    presentation: None,
                 },
             );
             config
@@ -4627,6 +4635,7 @@ mod tests {
                     template: "Do something".to_string(),
                     allowed_args: vec![],
                     client_actions: vec![],
+                    presentation: None,
                 },
             );
             assert!(is_known_platform(&config, "web"));
