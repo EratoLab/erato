@@ -55,6 +55,18 @@ VITE_BIN_PATH = OFFICE_ADDIN_DIR / "node_modules" / ".bin" / "vite"
 VITE_CACHE_DIR = OFFICE_ADDIN_DIR / "node_modules" / ".vite"
 MANIFEST_LOCAL_PATH = OFFICE_ADDIN_DIR / "manifests" / "manifest-local.xml"
 MANIFEST_FUNNEL_PATH = OFFICE_ADDIN_DIR / "manifests" / "manifest-funnel.xml"
+MANIFEST_FUNNEL_ONPREM_PATH = (
+    OFFICE_ADDIN_DIR / "manifests" / "manifest-funnel-onprem.xml"
+)
+# Fixed identity distinct from manifest-local.xml so the on-prem variant can
+# be installed alongside the EXO add-in without colliding in OWA.
+MANIFEST_ONPREM_ID = "b11bda8b-6dda-46ae-ad77-c920658262fd"
+MANIFEST_ONPREM_DISPLAY_NAME_SUFFIX = " (On-prem)"
+MANIFEST_V1_1_OPEN_TAG = (
+    '<VersionOverrides xmlns="http://schemas.microsoft.com/office/'
+    'mailappversionoverrides/1.1" xsi:type="VersionOverridesV1_1">'
+)
+MANIFEST_VERSION_OVERRIDES_CLOSE_TAG = "</VersionOverrides>"
 ENTRA_TEMPLATE_PATH = LOCAL_AUTH_DIR / "oauth2-proxy-entra-id.template.cfg"
 ENTRA_CONFIG_PATH = LOCAL_AUTH_DIR / "oauth2-proxy-entra-id.cfg"
 REQUIRED_COMMANDS = ("docker", "node", "pnpm", "tailscale")
@@ -352,6 +364,54 @@ def build_redirect_status_message(funnel_url: str) -> str:
     )
 
 
+# On-prem Exchange SE OWA caps the Mailbox requirement set at 1.5 and refuses
+# to install a manifest whose nested VersionOverridesV1_1 block demands 1.13,
+# so the on-prem variant drops that block (the outer V1_0 block stays intact).
+def make_onprem_manifest(contents: str) -> str:
+    open_tag_count = contents.count(MANIFEST_V1_1_OPEN_TAG)
+    if open_tag_count != 1:
+        raise ValueError(
+            f"Expected exactly one VersionOverridesV1_1 block, found {open_tag_count}"
+        )
+
+    open_index = contents.index(MANIFEST_V1_1_OPEN_TAG)
+    close_index = contents.find(
+        MANIFEST_VERSION_OVERRIDES_CLOSE_TAG,
+        open_index + len(MANIFEST_V1_1_OPEN_TAG),
+    )
+    if close_index == -1:
+        raise ValueError("VersionOverridesV1_1 block is missing its closing tag")
+
+    removal_start = open_index
+    while removal_start > 0 and contents[removal_start - 1] in " \t":
+        removal_start -= 1
+    removal_end = close_index + len(MANIFEST_VERSION_OVERRIDES_CLOSE_TAG)
+    if contents[removal_end : removal_end + 1] == "\n":
+        removal_end += 1
+
+    updated_contents = contents[:removal_start] + contents[removal_end:]
+
+    updated_contents, id_replacements = re.subn(
+        r"<Id>[^<]*</Id>",
+        f"<Id>{MANIFEST_ONPREM_ID}</Id>",
+        updated_contents,
+    )
+    if id_replacements != 1:
+        raise ValueError(f"Expected exactly one manifest <Id>, found {id_replacements}")
+
+    updated_contents, display_name_replacements = re.subn(
+        r'(<DisplayName DefaultValue="[^"]*)"',
+        rf'\1{MANIFEST_ONPREM_DISPLAY_NAME_SUFFIX}"',
+        updated_contents,
+    )
+    if display_name_replacements != 1:
+        raise ValueError(
+            f"Expected exactly one <DisplayName>, found {display_name_replacements}"
+        )
+
+    return updated_contents
+
+
 def write_funnel_manifest(funnel_url: str) -> None:
     manifest_contents = MANIFEST_LOCAL_PATH.read_text(encoding="utf-8")
     updated_contents = manifest_contents.replace(
@@ -359,6 +419,10 @@ def write_funnel_manifest(funnel_url: str) -> None:
         funnel_url.rstrip("/"),
     )
     MANIFEST_FUNNEL_PATH.write_text(updated_contents, encoding="utf-8")
+    MANIFEST_FUNNEL_ONPREM_PATH.write_text(
+        make_onprem_manifest(updated_contents),
+        encoding="utf-8",
+    )
 
 
 def funnel_is_correct(status: dict) -> bool:
@@ -412,6 +476,10 @@ def print_funnel_url() -> None:
         redirect_status,
         "",
         ("Upload manifests/manifest-funnel.xml via https://aka.ms/olksideload"),
+        (
+            "On Exchange SE OWA, sideload manifests/manifest-funnel-onprem.xml via"
+        ),
+        ("Get Add-ins → My add-ins → Add a custom add-in → Add from file"),
     ]
     width = max(len(line) for line in lines) + 4
     border = "#" * width
