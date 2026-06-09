@@ -68,14 +68,25 @@ msgstr "El inicio de sesión en Exchange local (heredado) aún no es compatible.
 
 #. js-lingui-explicit-id
 #: src/App.tsx
-#: src/providers/SessionAuthProvider.tsx
-msgid "officeAddin.auth.signInRequired"
-msgstr "Se requiere iniciar sesión"
+msgid "officeAddin.auth.signIn"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/App.tsx
-msgid "officeAddin.auth.tryAgain"
-msgstr "Intentar de nuevo"
+#: src/providers/SessionAuthProvider.tsx
+#~ msgid "officeAddin.auth.signInRequired"
+#~ msgstr "Se requiere iniciar sesión"
+
+#. js-lingui-explicit-id
+#: src/App.tsx
+#: src/providers/SessionAuthProvider.tsx
+msgid "officeAddin.auth.signInToContinue"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/App.tsx
+#~ msgid "officeAddin.auth.tryAgain"
+#~ msgstr "Intentar de nuevo"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChat.tsx
@@ -181,6 +192,26 @@ msgstr "Remitente desconocido"
 #: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.validation.tooLarge"
 msgstr "El archivo supera el límite del servidor de {globalMaxFormatted}"
+
+#. js-lingui-explicit-id
+#: src/providers/EntraGraphTokenProvider.tsx
+msgid "officeAddin.email.signedIn.title"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/providers/EntraGraphTokenProvider.tsx
+msgid "officeAddin.email.signInToLoad.action"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/providers/EntraGraphTokenProvider.tsx
+msgid "officeAddin.email.signInToLoad.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/providers/EntraGraphTokenProvider.tsx
+msgid "officeAddin.email.signInToLoad.title"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx

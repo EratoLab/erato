@@ -211,7 +211,8 @@ export function OutlookEmailSourceProvider({
   const [droppedEmails, setDroppedEmails] = useState<DroppedEmailEntry[]>([]);
 
   const acquireGraphToken = useCallback(
-    () => acquireToken(GRAPH_MAIL_SCOPES),
+    (options?: { forceRefresh?: boolean }) =>
+      acquireToken(GRAPH_MAIL_SCOPES, options),
     [acquireToken],
   );
 

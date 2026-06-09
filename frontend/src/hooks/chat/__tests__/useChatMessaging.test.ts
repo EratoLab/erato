@@ -691,6 +691,122 @@ describe("useChatMessaging", () => {
     expect(result.current.error).toBeNull();
   });
 
+  it("should attempt resumestream on unexpected close during an edit stream", async () => {
+    const { result, sendSSEEvent, simulateConnectionClose } =
+      setupChatMessagingTest();
+
+    await act(async () => {
+      await result.current.editMessage("msg1", "Edited content");
+    });
+
+    await sendSSEEvent({
+      message_type: "assistant_message_started",
+      message_id: "assistant-edit-close",
+    });
+    expect(result.current.isStreaming).toBe(true);
+
+    mockCreateSSEConnection.mockClear();
+
+    await simulateConnectionClose();
+
+    expect(mockCreateSSEConnection).toHaveBeenCalledWith(
+      "/api/v1beta/me/messages/resumestream",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ chat_id: "chat1" }),
+      }),
+    );
+    expect(result.current.isStreaming).toBe(true);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("should attempt resumestream on SSE error during an edit stream", async () => {
+    const { result, sendSSEEvent, simulateConnectionError } =
+      setupChatMessagingTest();
+
+    await act(async () => {
+      await result.current.editMessage("msg1", "Edited content");
+    });
+
+    await sendSSEEvent({
+      message_type: "assistant_message_started",
+      message_id: "assistant-edit-error",
+    });
+    expect(result.current.isStreaming).toBe(true);
+
+    mockCreateSSEConnection.mockClear();
+
+    await simulateConnectionError();
+
+    expect(mockCreateSSEConnection).toHaveBeenCalledWith(
+      "/api/v1beta/me/messages/resumestream",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ chat_id: "chat1" }),
+      }),
+    );
+    expect(result.current.isStreaming).toBe(true);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("should attempt resumestream on unexpected close during a regenerate stream", async () => {
+    const { result, sendSSEEvent, simulateConnectionClose } =
+      setupChatMessagingTest();
+
+    await act(async () => {
+      await result.current.regenerateMessage("msg2");
+    });
+
+    await sendSSEEvent({
+      message_type: "assistant_message_started",
+      message_id: "assistant-regen-close",
+    });
+    expect(result.current.isStreaming).toBe(true);
+
+    mockCreateSSEConnection.mockClear();
+
+    await simulateConnectionClose();
+
+    expect(mockCreateSSEConnection).toHaveBeenCalledWith(
+      "/api/v1beta/me/messages/resumestream",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ chat_id: "chat1" }),
+      }),
+    );
+    expect(result.current.isStreaming).toBe(true);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("should attempt resumestream on SSE error during a regenerate stream", async () => {
+    const { result, sendSSEEvent, simulateConnectionError } =
+      setupChatMessagingTest();
+
+    await act(async () => {
+      await result.current.regenerateMessage("msg2");
+    });
+
+    await sendSSEEvent({
+      message_type: "assistant_message_started",
+      message_id: "assistant-regen-error",
+    });
+    expect(result.current.isStreaming).toBe(true);
+
+    mockCreateSSEConnection.mockClear();
+
+    await simulateConnectionError();
+
+    expect(mockCreateSSEConnection).toHaveBeenCalledWith(
+      "/api/v1beta/me/messages/resumestream",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ chat_id: "chat1" }),
+      }),
+    );
+    expect(result.current.isStreaming).toBe(true);
+    expect(result.current.error).toBeNull();
+  });
+
   it("should keep completed assistant placeholder visible when refetch has not persisted it yet", async () => {
     mockUseChatMessages.mockReturnValue({
       data: undefined,

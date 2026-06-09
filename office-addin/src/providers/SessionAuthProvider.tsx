@@ -1,3 +1,4 @@
+import { setAuthRecoveryHandler } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import {
   createContext,
@@ -113,8 +114,8 @@ function formatAuthenticationError(error: unknown): string {
 
   if (error instanceof InteractionRequiredError) {
     return t({
-      id: "officeAddin.auth.signInRequired",
-      message: "Sign-in required",
+      id: "officeAddin.auth.signInToContinue",
+      message: "Sign in to continue",
     });
   }
 
@@ -158,6 +159,11 @@ export function SessionAuthProvider({
   // Replaces the old `!!account` check. Must be state and must appear in the
   // refresh effects' dependency arrays, or the refresh timer never arms.
   const [isBootstrapAcquired, setIsBootstrapAcquired] = useState(false);
+  // True ONLY when an interactive sign-in is required (interaction-required).
+  // Transient / background-refresh failures do NOT set this, so a working chat
+  // stays visible while recovery retries silently; only a genuine sign-in
+  // escalation (or a never-established session) gates the chat.
+  const [signInRequired, setSignInRequired] = useState(false);
   const [oauth2ProxySession, setOauth2ProxySession] =
     useState<Oauth2ProxySessionState>(createInitialOauth2ProxySessionState);
   // Bumped to re-run the init effect when retrying after an init failure (which
@@ -167,6 +173,9 @@ export function SessionAuthProvider({
   const [refreshFailureCount, setRefreshFailureCount] = useState(0);
   const lastRedeemedAtRef = useRef(oauth2ProxySession.lastRedeemedAt);
   const redeemInFlightRef = useRef<Promise<number> | null>(null);
+  // Dedupes the whole acquire+redeem recovery unit so N concurrent 401s trigger
+  // a single recovery (the redeem half is additionally deduped by the ref above).
+  const recoverInFlightRef = useRef<Promise<boolean> | null>(null);
 
   useEffect(() => {
     lastRedeemedAtRef.current = oauth2ProxySession.lastRedeemedAt;
@@ -176,9 +185,26 @@ export function SessionAuthProvider({
     async (
       token: BootstrapToken,
       status: Extract<Oauth2ProxySessionStatus, "establishing" | "refreshing">,
+      // A `forced` redeem carries a freshly force-refreshed token (recoverAuth).
+      // It must NOT silently coalesce onto a non-forced redeem in flight, which
+      // may be re-POSTing the very token that's stale/revoked.
+      forced = false,
     ): Promise<number> => {
-      if (redeemInFlightRef.current) {
-        return redeemInFlightRef.current;
+      const inFlight = redeemInFlightRef.current;
+      if (inFlight) {
+        if (!forced) {
+          // Non-forced callers (timed / focus / Graph-warm) coalesce.
+          return inFlight;
+        }
+        // Forced recovery: let the in-flight redeem finish first. If it
+        // establishes a session we're done; only if it FAILS do we redeem with
+        // our fresh force-refreshed token below (sequentially — no concurrent
+        // redeems, so no error-clobbers-success race).
+        try {
+          return await inFlight;
+        } catch {
+          // fall through to a fresh redeem with the forced token
+        }
       }
 
       const redeemPromise = (async () => {
@@ -201,6 +227,7 @@ export function SessionAuthProvider({
           });
           setError(null);
           setRefreshFailureCount(0);
+          setSignInRequired(false);
           return redeemedAt;
         } catch (redeemError) {
           const message = formatAuthenticationError(redeemError);
@@ -211,12 +238,18 @@ export function SessionAuthProvider({
           }));
           setError(message);
           throw redeemError;
-        } finally {
-          redeemInFlightRef.current = null;
         }
       })();
 
       redeemInFlightRef.current = redeemPromise;
+      // Clear the in-flight ref once this redeem settles — but only if a later
+      // (forced) recovery hasn't already superseded it mid-flight.
+      const clearIfCurrent = () => {
+        if (redeemInFlightRef.current === redeemPromise) {
+          redeemInFlightRef.current = null;
+        }
+      };
+      void redeemPromise.then(clearIfCurrent, clearIfCurrent);
       return redeemPromise;
     },
     [],
@@ -251,9 +284,10 @@ export function SessionAuthProvider({
             return;
           }
           if (authenticationError instanceof InteractionRequiredError) {
-            // Silent acquire needs interaction we didn't allow — not an error,
-            // the gate renders "Sign-in required" with a Try-again button.
+            // Silent establish needs interaction we didn't allow — surface the
+            // sign-in screen (this is a genuine sign-in-required, not transient).
             setError(null);
+            setSignInRequired(true);
           } else if (
             authenticationError instanceof Oauth2ProxySessionRedeemError
           ) {
@@ -303,6 +337,70 @@ export function SessionAuthProvider({
     },
     [authSource, redeemSessionForToken],
   );
+
+  /**
+   * 401-recovery primitive: force-refresh a fresh bootstrap token and re-redeem
+   * the proxy session, deduped across concurrent callers. Silent (never opens a
+   * popup). Resolves `true` when the session was refreshed (the caller may
+   * replay its request once) and `false` on failure — surfacing the error so the
+   * AuthGate "Try again" path is reachable. Registered with the shared API/SSE
+   * layer below so a 401 anywhere drives a single recovery.
+   */
+  const recoverAuth = useCallback(
+    async (reason: string): Promise<boolean> => {
+      if (recoverInFlightRef.current) {
+        return recoverInFlightRef.current;
+      }
+      const recoverPromise = (async () => {
+        try {
+          const token = await authSource.acquireBootstrapToken({
+            forceRefresh: true,
+            allowInteraction: false,
+          });
+          setIsBootstrapAcquired(true);
+          await redeemSessionForToken(token, "refreshing", true);
+          return true;
+        } catch (recoverError) {
+          const message = formatAuthenticationError(recoverError);
+          setOauth2ProxySession((previous) => ({
+            status: "error",
+            lastRedeemedAt: previous.lastRedeemedAt,
+            error: message,
+          }));
+          setError(message);
+          // Contribute to the shared backoff curve so a recovery failure (not
+          // just a timed-refresh failure) advances the retry interval.
+          setRefreshFailureCount((count) => count + 1);
+          // Only a genuine interaction-required failure escalates to the full
+          // sign-in screen; transient failures keep the chat visible and are
+          // retried by the request's caller / the backoff timer.
+          if (recoverError instanceof InteractionRequiredError) {
+            setSignInRequired(true);
+          }
+          console.warn(
+            `OAuth2 proxy session recovery failed (${reason})`,
+            recoverError,
+          );
+          return false;
+        } finally {
+          recoverInFlightRef.current = null;
+        }
+      })();
+      recoverInFlightRef.current = recoverPromise;
+      return recoverPromise;
+    },
+    [authSource, redeemSessionForToken],
+  );
+
+  useEffect(() => {
+    // Register recovery with the shared @erato/frontend API + SSE layer so a 401
+    // on any request triggers a single silent re-acquire + re-redeem, then a
+    // one-shot replay. The web app registers nothing, so those sites no-op there.
+    setAuthRecoveryHandler(recoverAuth);
+    return () => {
+      setAuthRecoveryHandler(null);
+    };
+  }, [recoverAuth]);
 
   useEffect(() => {
     // Only schedule once we hold a session to refresh. An initial establish that
@@ -430,8 +528,15 @@ export function SessionAuthProvider({
     oauth2ProxySession.lastRedeemedAt !== null &&
     oauth2ProxySession.status !== "error";
   const authError = error ?? oauth2ProxySession.error;
+  // The chat stays mounted as long as we hold an established session and no
+  // interactive sign-in is required. A transient background-refresh failure
+  // (status "error") no longer blanks the UI — the backoff timer retries it
+  // silently; only a never-established session or a sign-in-required escalation
+  // gates the chat.
   const isAuthenticated =
-    isBootstrapAcquired && isOauth2ProxySessionReady && authError === null;
+    isBootstrapAcquired &&
+    oauth2ProxySession.lastRedeemedAt !== null &&
+    !signInRequired;
 
   return (
     <SessionAuthContext.Provider

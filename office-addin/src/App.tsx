@@ -39,8 +39,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
         <p className="office-status office-status--error" role="alert">
           {error ??
             t({
-              id: "officeAddin.auth.signInRequired",
-              message: "Sign-in required",
+              id: "officeAddin.auth.signInToContinue",
+              message: "Sign in to continue",
             })}
         </p>
         <button
@@ -51,8 +51,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
           }}
         >
           {t({
-            id: "officeAddin.auth.tryAgain",
-            message: "Try again",
+            id: "officeAddin.auth.signIn",
+            message: "Sign in",
           })}
         </button>
       </div>

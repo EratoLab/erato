@@ -1,13 +1,29 @@
+import { toast } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { createContext, useCallback, useContext, useMemo } from "react";
 
 import { useSessionRedeem } from "./SessionAuthProvider";
-import { type AuthSource, type GraphCapableSource } from "../auth/AuthSource";
+import {
+  InteractionRequiredError,
+  type AuthSource,
+  type GraphCapableSource,
+} from "../auth/AuthSource";
 import { shouldRefreshOauth2ProxySession } from "../auth/oauth2ProxySession";
 
+/** Dedupe key so repeated failed email drops replace (not stack) the prompt. */
+const GRAPH_SIGNIN_TOAST_KEY = "graph-email-signin";
+
 export interface GraphTokenContextValue {
-  /** Microsoft Graph access token for the given scopes (e.g. `["Mail.Read"]`). */
-  acquireToken: (scopes: string[]) => Promise<string>;
+  /**
+   * Microsoft Graph access token for the given scopes (e.g. `["Mail.Read"]`).
+   * Silent by default (never auto-popups). `{ forceRefresh: true }` bypasses the
+   * MSAL cache (Graph 401-retry); `{ allowInteraction: true }` permits a popup
+   * and is used only by the user-initiated "Sign in" action.
+   */
+  acquireToken: (
+    scopes: string[],
+    options?: { forceRefresh?: boolean; allowInteraction?: boolean },
+  ) => Promise<string>;
 }
 
 const GraphTokenContext = createContext<GraphTokenContextValue | null>(null);
@@ -56,17 +72,80 @@ export function EntraGraphTokenProvider({
 }) {
   const { redeemSessionForToken, lastRedeemedAtRef } = useSessionRedeem();
 
-  const acquireToken = useCallback(
-    async (scopes: string[]): Promise<string> => {
-      const { accessToken, bootstrap } = await source.acquireGraphToken(scopes);
-      // Opportunistically warm the proxy session from the token we just got,
-      // but only if it's gone stale — reusing the core's dedup + staleness ref.
-      if (shouldRefreshOauth2ProxySession(lastRedeemedAtRef.current)) {
-        await redeemSessionForToken(bootstrap, "refreshing");
-      }
-      return accessToken;
+  // Explicit, user-initiated interactive sign-in for Graph (Mail.Read). Fired
+  // ONLY from the toast's "Sign in" action (a real click), never automatically.
+  const signInForGraph = useCallback(
+    async (scopes: string[]): Promise<void> => {
+      await source.acquireGraphToken(scopes, { allowInteraction: true });
+      toast.success({
+        dedupeKey: GRAPH_SIGNIN_TOAST_KEY,
+        title: t({
+          id: "officeAddin.email.signedIn.title",
+          message: "Signed in. Add the email again to attach it.",
+        }),
+      });
     },
-    [lastRedeemedAtRef, redeemSessionForToken, source],
+    [source],
+  );
+
+  const acquireToken = useCallback(
+    async (
+      scopes: string[],
+      options?: { forceRefresh?: boolean; allowInteraction?: boolean },
+    ): Promise<string> => {
+      try {
+        const { accessToken, bootstrap } = await source.acquireGraphToken(
+          scopes,
+          options,
+        );
+        // Opportunistically warm the proxy session from the token we just got,
+        // but only if it's gone stale — reusing the core's dedup + staleness ref.
+        if (shouldRefreshOauth2ProxySession(lastRedeemedAtRef.current)) {
+          await redeemSessionForToken(bootstrap, "refreshing");
+        }
+        return accessToken;
+      } catch (error) {
+        // Silent Graph acquire needs the user to sign in (first-run consent or a
+        // Conditional-Access policy on the Graph resource). Do NOT auto-popup
+        // mid-drop — surface a deduped, email-scoped "Sign in" prompt and let the
+        // email fetch fail gracefully (it just doesn't attach). The chat session
+        // is unaffected.
+        if (
+          error instanceof InteractionRequiredError &&
+          !options?.allowInteraction
+        ) {
+          toast.warning({
+            dedupeKey: GRAPH_SIGNIN_TOAST_KEY,
+            title: t({
+              id: "officeAddin.email.signInToLoad.title",
+              message: "Sign in to load email",
+            }),
+            description: t({
+              id: "officeAddin.email.signInToLoad.description",
+              message:
+                "This email wasn't attached because reading it needs a quick sign-in.",
+            }),
+            actions: [
+              {
+                id: "graph-signin",
+                label: t({
+                  id: "officeAddin.email.signInToLoad.action",
+                  message: "Sign in",
+                }),
+                variant: "primary",
+                onClick: () => {
+                  void signInForGraph(scopes).catch(() => {
+                    // Popup cancelled/blocked — leave the prompt in place.
+                  });
+                },
+              },
+            ],
+          });
+        }
+        throw error;
+      }
+    },
+    [lastRedeemedAtRef, redeemSessionForToken, signInForGraph, source],
   );
 
   const value = useMemo<GraphTokenContextValue>(

@@ -1,4 +1,5 @@
 import { V1betaApiContext } from "./v1betaApiContext";
+import { tryRecoverAuth } from "../../../auth/authRecovery";
 import { mergeApiAuthHeaders } from "../../../auth/apiRequestAuth";
 
 const baseUrl = ""; // TODO add your baseUrl
@@ -30,20 +31,15 @@ export async function v1betaApiFetch<
   THeaders extends {},
   TQueryParams extends {},
   TPathParams extends {},
->({
-  url,
-  method,
-  body,
-  headers,
-  pathParams,
-  queryParams,
-  signal,
-}: V1betaApiFetcherOptions<
-  TBody,
-  THeaders,
-  TQueryParams,
-  TPathParams
->): Promise<TData> {
+>(
+  options: V1betaApiFetcherOptions<TBody, THeaders, TQueryParams, TPathParams>,
+  // Add-in only: allow a single auth-recovery retry on 401. The recursive
+  // replay below sets this false so it can't loop. No-op for the web app, which
+  // registers no recovery handler (see ../../../auth/authRecovery).
+  allowAuthRetry = true,
+): Promise<TData> {
+  const { url, method, body, headers, pathParams, queryParams, signal } =
+    options;
   let error: ErrorWrapper<TError>;
   try {
     const isFormDataBody = body instanceof FormData;
@@ -79,6 +75,23 @@ export async function v1betaApiFetch<
       },
     );
     if (!response.ok) {
+      // On a 401, ask the (optionally) registered recovery handler to refresh
+      // the session, then replay the request exactly once. Falls straight
+      // through for the web app (tryRecoverAuth returns false with no handler).
+      if (
+        response.status === 401 &&
+        allowAuthRetry &&
+        (await tryRecoverAuth("rest-401"))
+      ) {
+        return v1betaApiFetch<
+          TData,
+          TError,
+          TBody,
+          THeaders,
+          TQueryParams,
+          TPathParams
+        >(options, false);
+      }
       try {
         error = await response.json();
       } catch (e) {

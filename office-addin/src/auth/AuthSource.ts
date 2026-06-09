@@ -78,7 +78,10 @@ export type LoginHintResolver = () => Promise<string | undefined>;
  * acquisition. Excel/Word never reference this.
  */
 export interface GraphCapableSource {
-  acquireGraphToken(scopes: string[]): Promise<{
+  acquireGraphToken(
+    scopes: string[],
+    options?: { forceRefresh?: boolean; allowInteraction?: boolean },
+  ): Promise<{
     accessToken: string;
     bootstrap: BootstrapToken;
   }>;

@@ -109,6 +109,46 @@ describe("fetchOutlookMessageFilesViaGraph", () => {
     expect(valueHeaders.Authorization).toBe("Bearer graph-token-xyz");
   });
 
+  it("force-refreshes the Graph token and retries once on a 401", async () => {
+    const acquireToken = vi.fn(async (options?: { forceRefresh?: boolean }) =>
+      options?.forceRefresh ? "fresh-token" : "stale-token",
+    );
+    const fetchMock = installFetchMock((url, init) => {
+      const auth = (init?.headers as Record<string, string> | undefined)
+        ?.Authorization;
+      // The first attempt carries the stale cached token and is rejected.
+      if (auth === "Bearer stale-token") {
+        return { ok: false, status: 401, statusText: "Unauthorized" };
+      }
+      if (url.endsWith("/$value")) {
+        return { ok: true, bytes: bytesFrom("raw-mime") };
+      }
+      return {
+        ok: true,
+        jsonValue: { subject: "Recovered", internetMessageId: "<abc@host>" },
+      };
+    });
+
+    const { subject } = await fetchOutlookMessageFilesViaGraph(
+      EWS_ID,
+      acquireToken,
+    );
+
+    expect(subject).toBe("Recovered");
+    expect(acquireToken).toHaveBeenCalledWith({ forceRefresh: true });
+    // metadata(stale → 401) → metadata(fresh) → $value(fresh, reuses cache).
+    const authorizations = fetchMock.mock.calls.map(
+      (call) =>
+        ((call[1] as RequestInit).headers as Record<string, string>)
+          .Authorization,
+    );
+    expect(authorizations).toEqual([
+      "Bearer stale-token",
+      "Bearer fresh-token",
+      "Bearer fresh-token",
+    ]);
+  });
+
   it("returns a single .eml File wrapping the RFC822 stream, named after the subject", async () => {
     const acquireToken = vi.fn().mockResolvedValue("tok");
     installFetchMock((url) => {

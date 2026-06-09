@@ -187,6 +187,10 @@ export {
   type UiChatMessage,
 } from "@/utils/adapters/messageAdapter";
 export { getIdToken, setIdToken } from "@/auth/tokenStore";
+export {
+  setAuthRecoveryHandler,
+  type AuthRecoveryHandler,
+} from "@/auth/authRecovery";
 
 export type { Message } from "@/types/chat";
 export type {
