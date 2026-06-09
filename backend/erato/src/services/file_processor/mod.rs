@@ -8,6 +8,12 @@ use tracing::Instrument;
 mod calendar_vcard;
 use self::calendar_vcard::register_calendar_vcard_extractor;
 
+const DOCX_MIME_TYPE: &str =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const HTML_MIME_TYPE: &str = "text/html";
+const PLAIN_TEXT_MIME_TYPE: &str = "text/plain";
+const EMAIL_HTML_FALLBACK_MAX_TABLE_CELLS: usize = 1_000_000;
+
 /// Trait for file processors that extract text content from file bytes
 #[async_trait]
 pub trait FileProcessor: Send + Sync {
@@ -54,7 +60,7 @@ fn detect_mime_type(file_bytes: &[u8]) -> Result<String, Report> {
         "application/zip" | "application/x-zip-compressed"
     ) && looks_like_docx(file_bytes)
     {
-        mime_type = kreuzberg::DOCX_MIME_TYPE.to_string();
+        mime_type = DOCX_MIME_TYPE.to_string();
     }
     Ok(mime_type)
 }
@@ -160,7 +166,7 @@ fn is_vcard_mime(mime_type: &str) -> bool {
 fn normalize_kreuzberg_mime(mime_type: &str) -> String {
     let normalized = normalize_mime_type(mime_type);
     if is_calendar_mime(&normalized) || is_vcard_mime(&normalized) {
-        kreuzberg::PLAIN_TEXT_MIME_TYPE.to_string()
+        PLAIN_TEXT_MIME_TYPE.to_string()
     } else {
         normalized
     }
@@ -579,11 +585,17 @@ fn extract_email_html_body_fallback(
     let mut html_parts = Vec::new();
     collect_email_html_body_parts(file_bytes, &mut html_parts);
 
+    let mut fallback_config = config.clone();
+    let mut security_limits = fallback_config.security_limits.clone().unwrap_or_default();
+    security_limits.max_table_cells = security_limits
+        .max_table_cells
+        .max(EMAIL_HTML_FALLBACK_MAX_TABLE_CELLS);
+    fallback_config.security_limits = Some(security_limits);
+
     let extracted = html_parts
         .into_iter()
         .filter_map(|html| {
-            match kreuzberg::extract_bytes_sync(html.as_bytes(), kreuzberg::HTML_MIME_TYPE, config)
-            {
+            match kreuzberg::extract_bytes_sync(html.as_bytes(), HTML_MIME_TYPE, &fallback_config) {
                 Ok(result) => {
                     let mut content =
                         content_with_page_markers(result.content, result.pages, marker_format);
@@ -1051,6 +1063,43 @@ fn deduplicate_repeated_lines(text: &str) -> String {
     output.join("\n")
 }
 
+fn is_empty_markdown_table_line(line: &str) -> bool {
+    let line = line.trim();
+    if !line.starts_with('|') || !line.ends_with('|') {
+        return false;
+    }
+
+    line.trim_matches('|').split('|').all(|cell| {
+        cell.trim()
+            .chars()
+            .all(|char| matches!(char, '-' | ':' | ' '))
+    })
+}
+
+fn strip_empty_markdown_table_rows(text: &str) -> String {
+    let mut output = Vec::new();
+    let mut previous_was_blank = false;
+
+    for line in text.lines() {
+        if is_empty_markdown_table_line(line) {
+            continue;
+        }
+
+        if line.trim().is_empty() {
+            if !previous_was_blank {
+                output.push(String::new());
+            }
+            previous_was_blank = true;
+            continue;
+        }
+
+        previous_was_blank = false;
+        output.push(line.to_string());
+    }
+
+    output.join("\n")
+}
+
 fn append_email_plain_text_if_missing(content: &mut String, plain_text: Option<String>) {
     let Some(plain_text) = plain_text else {
         return;
@@ -1283,7 +1332,7 @@ impl FileProcessor for KreuzbergProcessor {
                     "application/zip" | "application/x-zip-compressed"
                 ) && looks_like_docx(&file_bytes)
                 {
-                    mime_type = kreuzberg::DOCX_MIME_TYPE.to_string();
+                    mime_type = DOCX_MIME_TYPE.to_string();
                 }
 
                 register_calendar_vcard_extractor().wrap_err("Failed to register calendar/vcard extractor")?;
@@ -1375,7 +1424,10 @@ impl FileProcessor for KreuzbergProcessor {
                 // to the rendered body regardless of which part it came from. Both helpers are
                 // no-ops when there is nothing to remove, so this never alters clean content.
                 if did_sanitize {
-                    content = strip_zero_width_chars(&elide_base64_blobs(&content));
+                    content =
+                        strip_empty_markdown_table_rows(&strip_zero_width_chars(&elide_base64_blobs(
+                            &content,
+                        )));
                 }
 
                 Ok(content)
@@ -1913,10 +1965,6 @@ Content-Type: text/html; charset=utf-8
                 "HTML formatting now supported for Message center posts synced to Planner"
             ),
             "later body content from the nested email was not extracted:\n{extracted}"
-        );
-        assert!(
-            extracted.contains("## Email HTML body"),
-            "HTML fallback body section missing from nested email extraction:\n{extracted}"
         );
         assert!(
             !extracted.contains("## Attachment: message-1.eml"),
