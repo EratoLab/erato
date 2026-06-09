@@ -1711,10 +1711,28 @@ export function useChatMessaging(
               "[DEBUG_STREAMING] SSE error in editMessage:",
               connectionError,
             );
+            const activeStreamKey = connectionStreamKeyRef.current;
+            // Mid-stream drop/expiry: reconnect via resumestream (replays from
+            // the backend's event history and re-runs connect-time auth
+            // recovery), matching submitstream.
+            if (
+              useMessagingStore.getState().getStreaming(activeStreamKey)
+                .isStreaming
+            ) {
+              setSSECleanupForKey(activeStreamKey, null);
+              setSSEAbortCallback(null, activeStreamKey);
+              const resumed = attemptResumeStream({
+                reason: "editstream-onError",
+                streamKeyHint: activeStreamKey,
+              });
+              if (resumed) {
+                return;
+              }
+            }
             setError(connectionError);
-            resetStreaming(streamKey);
+            resetStreaming(activeStreamKey);
             void handleRefetchAndClear({ logContext: "SSE error (edit)" });
-            setSubmittingForKey(streamKey, false);
+            setSubmittingForKey(activeStreamKey, false);
           },
           onOpen: () => {
             // no-op
@@ -1728,11 +1746,20 @@ export function useChatMessaging(
                 logContext: "Edit SSE closed normally",
               });
             } else {
+              setSSECleanupForKey(activeStreamKey, null);
+              setSSEAbortCallback(null, activeStreamKey);
+              const resumed = attemptResumeStream({
+                reason: "editstream-onClose-unexpected",
+                streamKeyHint: activeStreamKey,
+              });
+              if (resumed) {
+                return;
+              }
               logger.warn(
                 "[DEBUG_STREAMING] Edit SSE connection closed unexpectedly while streaming was still active.",
               );
               setError(new Error("SSE connection closed unexpectedly (edit)"));
-              resetStreaming(streamKey);
+              resetStreaming(activeStreamKey);
               void handleRefetchAndClear({
                 logContext: "Edit SSE closed unexpectedly",
               });
@@ -1827,12 +1854,30 @@ export function useChatMessaging(
               "[DEBUG_STREAMING] SSE error in regenerateMessage:",
               connectionError,
             );
+            const activeStreamKey = connectionStreamKeyRef.current;
+            // Mid-stream drop/expiry: reconnect via resumestream (replays from
+            // the backend's event history and re-runs connect-time auth
+            // recovery), matching submitstream.
+            if (
+              useMessagingStore.getState().getStreaming(activeStreamKey)
+                .isStreaming
+            ) {
+              setSSECleanupForKey(activeStreamKey, null);
+              setSSEAbortCallback(null, activeStreamKey);
+              const resumed = attemptResumeStream({
+                reason: "regeneratestream-onError",
+                streamKeyHint: activeStreamKey,
+              });
+              if (resumed) {
+                return;
+              }
+            }
             setError(connectionError);
-            resetStreaming(streamKey);
+            resetStreaming(activeStreamKey);
             void handleRefetchAndClear({
               logContext: "SSE error (regenerate)",
             });
-            setSubmittingForKey(streamKey, false);
+            setSubmittingForKey(activeStreamKey, false);
           },
           onOpen: () => {
             // no-op
@@ -1846,13 +1891,22 @@ export function useChatMessaging(
                 logContext: "Regenerate SSE closed normally",
               });
             } else {
+              setSSECleanupForKey(activeStreamKey, null);
+              setSSEAbortCallback(null, activeStreamKey);
+              const resumed = attemptResumeStream({
+                reason: "regeneratestream-onClose-unexpected",
+                streamKeyHint: activeStreamKey,
+              });
+              if (resumed) {
+                return;
+              }
               logger.warn(
                 "[DEBUG_STREAMING] Regenerate SSE connection closed unexpectedly while streaming was still active.",
               );
               setError(
                 new Error("SSE connection closed unexpectedly (regenerate)"),
               );
-              resetStreaming(streamKey);
+              resetStreaming(activeStreamKey);
               void handleRefetchAndClear({
                 logContext: "Regenerate SSE closed unexpectedly",
               });
