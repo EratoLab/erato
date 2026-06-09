@@ -2336,6 +2336,7 @@ dependencies = [
  "headers",
  "hmac 0.12.1",
  "http-body-util",
+ "ical",
  "infer",
  "jemalloc_pprof",
  "jsonwebtoken 9.3.1",
@@ -3566,6 +3567,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f31827a206f56af32e590ba56d5d2d085f558508192593743f16b2306495269f"
 dependencies = [
  "cc",
+]
+
+[[package]]
+name = "ical"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b7cab7543a8b7729a19e2c04309f902861293dcdae6558dfbeb634454d279f6"
+dependencies = [
+ "thiserror 1.0.69",
 ]
 
 [[package]]
