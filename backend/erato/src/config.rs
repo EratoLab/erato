@@ -764,6 +764,16 @@ impl AppConfig {
                     id
                 );
             }
+            if action_facet
+                .client_actions
+                .iter()
+                .any(|action| action.trim().is_empty())
+            {
+                panic!(
+                    "Action facet '{}' has an empty client action identifier in client_actions.",
+                    id
+                );
+            }
         }
 
         validate_audio_feature_config(&config, "audio_transcription", &config.audio_transcription);
@@ -2279,6 +2289,7 @@ impl ActionFacetsConfig {
                     "source_property".to_string(),
                     "body_format".to_string(),
                 ],
+                client_actions: vec![],
             });
 
         self.facets
@@ -2288,6 +2299,7 @@ impl ActionFacetsConfig {
                 platform: Some("outlook".to_string()),
                 template: BUILTIN_OUTLOOK_REVIEW_DRAFT_TEMPLATE.trim().to_string(),
                 allowed_args: vec!["full_body".to_string(), "body_format".to_string()],
+                client_actions: vec![],
             });
     }
 }
@@ -2337,6 +2349,13 @@ pub struct ActionFacetConfig {
     // List of allowed argument names for the template.
     #[serde(default)]
     pub allowed_args: Vec<String>,
+
+    // Fixed identifiers of client-side actions (e.g. "outlook.reply") the
+    // model may propose via the `propose_client_action` tool when this facet
+    // is active. The client application validates the proposal and performs
+    // the action only after user confirmation.
+    #[serde(default)]
+    pub client_actions: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]

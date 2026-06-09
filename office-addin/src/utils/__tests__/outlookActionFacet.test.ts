@@ -15,6 +15,8 @@ const base: OutlookActionFacetInput = {
   bodyFormat: undefined,
   isComposeMode: false,
   composeEmailAvailable: false,
+  isReadMode: false,
+  replyFromReadAvailable: false,
 };
 
 describe("resolveOutlookActionFacet", () => {
@@ -177,5 +179,39 @@ describe("resolveOutlookActionFacet", () => {
     });
 
     expect(result.facet?.id).toBe("outlook_rewrite_selection");
+  });
+
+  it("sends outlook_reply_from_read in read mode when the facet is available", () => {
+    const result = resolveOutlookActionFacet({
+      ...base,
+      isReadMode: true,
+      replyFromReadAvailable: true,
+    });
+
+    expect(result.facet).toEqual({
+      id: "outlook_reply_from_read",
+      args: { body_format: "html" },
+    });
+    expect(result.sentDraftBody).toBeNull();
+  });
+
+  it("does NOT send outlook_reply_from_read when the facet is unavailable (avoids a 400)", () => {
+    const result = resolveOutlookActionFacet({
+      ...base,
+      isReadMode: true,
+      replyFromReadAvailable: false,
+    });
+
+    expect(result).toEqual({ facet: undefined, sentDraftBody: null });
+  });
+
+  it("does NOT send outlook_reply_from_read outside read mode", () => {
+    const result = resolveOutlookActionFacet({
+      ...base,
+      isReadMode: false,
+      replyFromReadAvailable: true,
+    });
+
+    expect(result).toEqual({ facet: undefined, sentDraftBody: null });
   });
 });

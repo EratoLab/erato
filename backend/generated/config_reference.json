@@ -1,6 +1,7 @@
 {
   "action_facets.enable_builtin_ms_office_addin": {},
   "action_facets.facets.<facet-id>.allowed_args.[]": {},
+  "action_facets.facets.<facet-id>.client_actions.[]": {},
   "action_facets.facets.<facet-id>.display_name": {},
   "action_facets.facets.<facet-id>.platform": {},
   "action_facets.facets.<facet-id>.template": {},

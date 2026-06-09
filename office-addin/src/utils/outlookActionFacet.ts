@@ -1,3 +1,5 @@
+import { OUTLOOK_REPLY_FROM_READ_FACET_ID } from "./outlookClientActions";
+
 import type { ActionFacetRequest } from "@erato/frontend/library";
 
 /**
@@ -41,6 +43,14 @@ export interface OutlookActionFacetInput {
    * false and the empty-draft case simply sends no facet (today's behavior).
    */
   composeEmailAvailable: boolean;
+  /** The user is reading a received email (read mode, not compose). */
+  isReadMode: boolean;
+  /**
+   * Whether the backend reports the `outlook_reply_from_read` facet as
+   * available (from `GET /me/facets`). Config-defined (erato.toml only) and
+   * gated exactly like `compose_email`: never attached unless advertised.
+   */
+  replyFromReadAvailable: boolean;
 }
 
 export interface OutlookActionFacetResult {
@@ -113,6 +123,21 @@ export function resolveOutlookActionFacet(
       facet: {
         id: "compose_email",
         args: { body_format: input.bodyFormat ?? "text" },
+      },
+      sentDraftBody: null,
+    };
+  }
+
+  // Read mode: the user is looking at a received email. The facet primes the
+  // model to draft a reply (in an erato-email fence) and to propose
+  // reply-vs-reply-all via the backend's `propose_client_action` tool when —
+  // and only when — the user actually asks for a reply; other requests are
+  // answered normally. The reply form prefill is HTML, so request html output.
+  if (input.replyFromReadAvailable && input.isReadMode) {
+    return {
+      facet: {
+        id: OUTLOOK_REPLY_FROM_READ_FACET_ID,
+        args: { body_format: "html" },
       },
       sentDraftBody: null,
     };

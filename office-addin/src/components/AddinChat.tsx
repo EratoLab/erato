@@ -38,6 +38,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 
 import { AddinChatInput } from "./AddinChatInput";
 import { AddinSettingsDialog } from "./AddinSettingsDialog";
+import { useActionFacetClientActions } from "../hooks/useAvailableActionFacets";
 import { useEmailDedupSet } from "../hooks/useEmailDedupSet";
 import { useOfficeDragAndDrop } from "../hooks/useOfficeDragAndDrop";
 import { useOutlookMailListDrag } from "../hooks/useOutlookMailListDrag";
@@ -48,6 +49,7 @@ import {
   OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
   runWithGraphTimeout,
 } from "../utils/graphRequestTimeout";
+import { extractProposedClientAction } from "../utils/outlookClientActions";
 import { parseDroppedFiles } from "../utils/parseDroppedFiles";
 import { parseEmlBytes } from "../utils/parsedEmail";
 
@@ -643,6 +645,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
   // renders here with no add-in change. `renderMode` defaults to "body" (whole
   // response is an insertable email); only review/critique facets opt into
   // "suggestions" (fenced blocks render, unfenced prose stays markdown).
+  const clientActionsByFacetId = useActionFacetClientActions();
   const messagesWithArtifact = useMemo(() => {
     let next = messages;
     for (const id of messageOrder) {
@@ -665,16 +668,30 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
       }
       const renderMode =
         facetId === "outlook_review_draft" ? "suggestions" : "body";
+      // Client actions (e.g. reply / reply-all from read mode): the offerable
+      // set comes from the backend facet config, and the model's proposal is
+      // only stamped after revalidation against that set + tool-call status —
+      // never parsed out of message text.
+      const allowedClientActions = clientActionsByFacetId.get(facetId);
+      const proposedClientAction = allowedClientActions
+        ? extractProposedClientAction(message.content, allowedClientActions)
+        : undefined;
       if (next === messages) {
         next = { ...messages };
       }
       next[id] = {
         ...message,
-        outlookArtifact: { facetId, bodyFormat: facetBodyFormat, renderMode },
+        outlookArtifact: {
+          facetId,
+          bodyFormat: facetBodyFormat,
+          renderMode,
+          ...(allowedClientActions ? { allowedClientActions } : {}),
+          ...(proposedClientAction ? { proposedClientAction } : {}),
+        },
       };
     }
     return next;
-  }, [messages, messageOrder]);
+  }, [messages, messageOrder, clientActionsByFacetId]);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 

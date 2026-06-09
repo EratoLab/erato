@@ -107,6 +107,16 @@ const OutlookArtifactContext = React.createContext<OutlookArtifact | null>(
   null,
 );
 
+/**
+ * The Outlook artifact hint for the message currently being rendered, or null
+ * outside an Outlook-facet message. Exposed so registry overrides (e.g. the
+ * add-in's erato-email renderer) can read facet metadata such as the allowed
+ * and proposed client actions without new props on every code block.
+ */
+export function useOutlookArtifact(): OutlookArtifact | null {
+  return React.useContext(OutlookArtifactContext);
+}
+
 const INLINE_CODE_CLASS_NAME =
   "rounded-md border border-theme-code-inline-border bg-theme-code-inline-bg px-1.5 py-0.5 font-mono text-sm text-theme-code-inline-fg";
 const BlockCodeContext = React.createContext(false);

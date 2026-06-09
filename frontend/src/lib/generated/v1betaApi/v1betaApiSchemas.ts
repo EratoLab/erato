@@ -18,6 +18,12 @@ export type AbortStreamResponse = {
 };
 
 export type ActionFacetInfo = {
+  /**
+   * Fixed identifiers of client-side actions the model may propose via the
+   * `propose_client_action` tool when this facet is active. The client
+   * must only execute actions from this list, after user confirmation.
+   */
+  client_actions?: string[];
   id: string;
   platform?: string;
 };

@@ -1,21 +1,47 @@
-import { sanitizeHtmlPreview } from "@erato/frontend/library";
+import {
+  ConfirmationDialog,
+  sanitizeHtmlPreview,
+  useOutlookArtifact,
+} from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useCallback, useMemo, useState } from "react";
 
 import { useOutlookComposeSelection } from "../hooks/useOutlookComposeSelection";
+import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
+import {
+  offerableClientActions,
+  type OutlookClientAction,
+} from "../utils/outlookClientActions";
 import { replaceComposeSelection } from "../utils/outlookComposeWrite";
+import {
+  ReplyBodyTooLargeError,
+  getReadModeRecipientSummary,
+  isReadReplySupported,
+  openReplyForm,
+  type ReadModeRecipientSummary,
+} from "../utils/outlookReadReply";
 
 import type { EratoEmailCodeBlockProps } from "@erato/frontend/library";
+
+const ACTION_BUTTON_CLASS =
+  "rounded-md border border-theme-border bg-theme-bg-primary px-3 py-1 text-xs hover:bg-theme-bg-tertiary disabled:opacity-50";
+const PRIMARY_ACTION_BUTTON_CLASS =
+  "rounded-md border border-theme-border bg-theme-bg-tertiary px-3 py-1 text-xs font-medium hover:bg-theme-bg-hover disabled:opacity-50";
 
 /**
  * Office-aware renderer for erato-email code blocks.
  * Registered via componentRegistry in main.tsx so the shared MessageContent
  * delegates to this component when running inside the Outlook addin.
  *
- * Provides action buttons that write back into the Outlook compose body
- * via Office.js setSelectedDataAsync. Button labels adapt dynamically:
- * - "Replace Selection" when text is selected in the compose window
- * - "Insert at Cursor" when nothing is selected
+ * Compose mode: action buttons that write back into the Outlook compose body
+ * via Office.js setSelectedDataAsync ("Replace Selection" / "Insert at Cursor").
+ *
+ * Read mode: when the producing facet allows client actions (reply /
+ * reply-all from `GET /me/facets`, intersected with the add-in's fixed
+ * registry), buttons that open Outlook's native reply form prefilled with the
+ * draft. The model's proposal only chooses which button is primary — nothing
+ * runs without an explicit click, reply-all asks for confirmation against
+ * freshly read recipients, and sending always stays a manual step in Outlook.
  */
 export function OutlookEratoEmailRenderer({
   content,
@@ -23,10 +49,32 @@ export function OutlookEratoEmailRenderer({
 }: EratoEmailCodeBlockProps) {
   const composeSelection = useOutlookComposeSelection();
   const hasSelection = composeSelection.data.length > 0;
+  const { mailItem } = useOutlookMailItem();
+  const artifact = useOutlookArtifact();
+  const isReadMode = !!mailItem && !mailItem.isComposeMode;
+
+  const readActions = useMemo<OutlookClientAction[]>(
+    () =>
+      isReadMode && isReadReplySupported()
+        ? offerableClientActions(artifact?.allowedClientActions)
+        : [],
+    [isReadMode, artifact],
+  );
+  const proposedAction =
+    artifact?.proposedClientAction &&
+    (readActions as string[]).includes(artifact.proposedClientAction)
+      ? (artifact.proposedClientAction as OutlookClientAction)
+      : undefined;
 
   const [status, setStatus] = useState<
     "idle" | "inserting" | "done" | "copied" | "error"
   >("idle");
+  const [errorKind, setErrorKind] = useState<"insert" | "reply" | "tooLarge">(
+    "insert",
+  );
+  const [pendingReplyAll, setPendingReplyAll] = useState<{
+    recipients: ReadModeRecipientSummary;
+  } | null>(null);
   const isBusy = status === "inserting";
   const previewHtml = useMemo(
     () => (isHtml ? sanitizeHtmlPreview(content) : null),
@@ -41,10 +89,51 @@ export function OutlookEratoEmailRenderer({
       setTimeout(() => setStatus("idle"), 2000);
     } catch (err) {
       console.warn("Failed to insert into compose body:", err);
+      setErrorKind("insert");
       setStatus("error");
       setTimeout(() => setStatus("idle"), 2000);
     }
   }, [content, isHtml]);
+
+  const executeReply = useCallback(
+    async (action: OutlookClientAction) => {
+      setStatus("inserting");
+      try {
+        await openReplyForm(action, content, !!isHtml);
+        setStatus("done");
+        setTimeout(() => setStatus("idle"), 2000);
+      } catch (err) {
+        console.warn("Failed to open reply form:", err);
+        setErrorKind(
+          err instanceof ReplyBodyTooLargeError ? "tooLarge" : "reply",
+        );
+        setStatus("error");
+        setTimeout(() => setStatus("idle"), 4000);
+      }
+    },
+    [content, isHtml],
+  );
+
+  const handleReplyAction = useCallback(
+    (action: OutlookClientAction) => {
+      if (action === "outlook.reply_all") {
+        // Re-read the recipients of the CURRENT item at click time so the
+        // confirmation reflects what reply-all will actually address — not
+        // what the chat message was generated from.
+        const recipients = getReadModeRecipientSummary();
+        if (!recipients) {
+          setErrorKind("reply");
+          setStatus("error");
+          setTimeout(() => setStatus("idle"), 4000);
+          return;
+        }
+        setPendingReplyAll({ recipients });
+        return;
+      }
+      void executeReply(action);
+    },
+    [executeReply],
+  );
 
   const handleCopy = useCallback(() => {
     void navigator.clipboard
@@ -80,6 +169,31 @@ export function OutlookEratoEmailRenderer({
         });
   })();
 
+  const replyActionLabel = (action: OutlookClientAction) =>
+    action === "outlook.reply_all"
+      ? t({
+          id: "officeAddin.emailRenderer.replyAll",
+          message: "Reply All",
+        })
+      : t({
+          id: "officeAddin.emailRenderer.reply",
+          message: "Reply",
+        });
+
+  const showReadReplyActions = isReadMode && readActions.length > 0;
+  // Proposed action first (primary), then the remaining offerable actions.
+  const orderedReadActions = proposedAction
+    ? [
+        proposedAction,
+        ...readActions.filter((action) => action !== proposedAction),
+      ]
+    : readActions;
+
+  const replyAllRecipientCount = pendingReplyAll
+    ? pendingReplyAll.recipients.recipients.length +
+      (pendingReplyAll.recipients.sender ? 1 : 0)
+    : 0;
+
   return (
     <div className="my-2 rounded-lg border border-theme-border bg-theme-bg-secondary p-3">
       {isHtml ? (
@@ -93,19 +207,42 @@ export function OutlookEratoEmailRenderer({
         <div className="mb-2 whitespace-pre-wrap text-sm">{content}</div>
       )}
       <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => void handleInsert()}
-          disabled={isBusy}
-          className="rounded-md border border-theme-border bg-theme-bg-primary px-3 py-1 text-xs hover:bg-theme-bg-tertiary disabled:opacity-50"
-        >
-          {insertLabel}
-        </button>
+        {showReadReplyActions
+          ? orderedReadActions.map((action, index) => (
+              <button
+                key={action}
+                type="button"
+                onClick={() => handleReplyAction(action)}
+                disabled={isBusy}
+                className={
+                  index === 0 && proposedAction
+                    ? PRIMARY_ACTION_BUTTON_CLASS
+                    : ACTION_BUTTON_CLASS
+                }
+              >
+                {status === "inserting"
+                  ? t({
+                      id: "officeAddin.emailRenderer.opening",
+                      message: "Opening...",
+                    })
+                  : replyActionLabel(action)}
+              </button>
+            ))
+          : !isReadMode && (
+              <button
+                type="button"
+                onClick={() => void handleInsert()}
+                disabled={isBusy}
+                className={ACTION_BUTTON_CLASS}
+              >
+                {insertLabel}
+              </button>
+            )}
         <button
           type="button"
           onClick={handleCopy}
           disabled={isBusy}
-          className="rounded-md border border-theme-border bg-theme-bg-primary px-3 py-1 text-xs hover:bg-theme-bg-tertiary disabled:opacity-50"
+          className={ACTION_BUTTON_CLASS}
         >
           {status === "copied"
             ? t({
@@ -120,12 +257,60 @@ export function OutlookEratoEmailRenderer({
       </div>
       {status === "error" && (
         <p className="mt-1 text-xs text-red-500">
-          {t({
-            id: "officeAddin.emailRenderer.insertFailed",
-            message: "Failed to insert into compose body.",
-          })}
+          {errorKind === "tooLarge"
+            ? t({
+                id: "officeAddin.emailRenderer.replyTooLarge",
+                message:
+                  "Draft is too large to prefill a reply. Use Copy and paste it into a reply instead.",
+              })
+            : errorKind === "reply"
+              ? t({
+                  id: "officeAddin.emailRenderer.replyFailed",
+                  message:
+                    "Failed to open the reply form. Make sure the received email is still open, or use Copy.",
+                })
+              : t({
+                  id: "officeAddin.emailRenderer.insertFailed",
+                  message: "Failed to insert into compose body.",
+                })}
         </p>
       )}
+      <ConfirmationDialog
+        isOpen={pendingReplyAll !== null}
+        onClose={() => setPendingReplyAll(null)}
+        onConfirm={() => {
+          setPendingReplyAll(null);
+          void executeReply("outlook.reply_all");
+        }}
+        title={t({
+          id: "officeAddin.emailRenderer.replyAllConfirmTitle",
+          message: "Reply to all recipients?",
+        })}
+        message={
+          <div className="space-y-2 text-sm text-theme-fg-secondary">
+            <p>
+              {t({
+                id: "officeAddin.emailRenderer.replyAllConfirmMessage",
+                message: `This opens a reply addressed to ${replyAllRecipientCount} people from the email you are reading. Nothing is sent until you press Send in Outlook.`,
+              })}
+            </p>
+            {pendingReplyAll && (
+              <p className="break-words text-xs">
+                {[
+                  ...(pendingReplyAll.recipients.sender
+                    ? [pendingReplyAll.recipients.sender]
+                    : []),
+                  ...pendingReplyAll.recipients.recipients,
+                ].join(", ")}
+              </p>
+            )}
+          </div>
+        }
+        confirmButtonText={t({
+          id: "officeAddin.emailRenderer.replyAllConfirm",
+          message: "Open Reply All",
+        })}
+      />
     </div>
   );
 }

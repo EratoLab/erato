@@ -23,6 +23,7 @@ import { useOffice } from "../providers/OfficeProvider";
 import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
 import { resolveOutlookActionFacet } from "../utils/outlookActionFacet";
+import { OUTLOOK_REPLY_FROM_READ_FACET_ID } from "../utils/outlookClientActions";
 import { getComposeBodyType } from "../utils/outlookComposeWrite";
 
 function validateAttachment(
@@ -138,6 +139,9 @@ export const AddinChatInput = forwardRef<
   const { host } = useOffice();
   const availableFacetIds = useAvailableActionFacetIds();
   const composeEmailAvailable = availableFacetIds.has("compose_email");
+  const replyFromReadAvailable = availableFacetIds.has(
+    OUTLOOK_REPLY_FROM_READ_FACET_ID,
+  );
   const [isUploadingEmail, setIsUploadingEmail] = useState(false);
   const composeSelection = useOutlookComposeSelection();
   const { mailItem, itemIdentity } = useOutlookMailItem();
@@ -628,6 +632,8 @@ export const AddinChatInput = forwardRef<
         bodyFormat,
         isComposeMode: !!mailItem?.isComposeMode,
         composeEmailAvailable,
+        isReadMode: !!mailItem && !mailItem.isComposeMode,
+        replyFromReadAvailable,
       });
       if (sentDraftBody !== null) {
         // Remember what we sent so an unchanged follow-up de-dupes (#4).
@@ -737,6 +743,7 @@ export const AddinChatInput = forwardRef<
       isDraftContextIncluded,
       mailItem,
       onEmailSourceDropsSent,
+      replyFromReadAvailable,
       resolveSelectedFilesForSend,
       shouldUseSuggestedEmailSource,
       stagedEmails,

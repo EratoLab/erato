@@ -2404,6 +2404,13 @@
           "id"
         ],
         "properties": {
+          "client_actions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Fixed identifiers of client-side actions the model may propose via the\n`propose_client_action` tool when this facet is active. The client\nmust only execute actions from this list, after user confirmation."
+          },
           "id": {
             "type": "string"
           },

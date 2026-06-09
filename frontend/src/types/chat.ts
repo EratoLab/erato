@@ -56,6 +56,21 @@ export interface OutlookArtifact {
    *   unfenced prose is left as normal markdown — never treated as a drop-in body.
    */
   renderMode: "body" | "suggestions";
+  /**
+   * Client actions the backend allows for the producing facet (the facet's
+   * `client_actions` from `GET /me/facets`). The renderer must only offer
+   * actions from this list, further intersected with the actions the client
+   * actually implements.
+   */
+  allowedClientActions?: string[];
+  /**
+   * The client action the model proposed for this message via the
+   * `propose_client_action` tool, already validated by the add-in against
+   * {@link OutlookArtifact.allowedClientActions} and the tool-call status.
+   * Used as a render hint (e.g. which button is primary) — never executed
+   * without an explicit user click.
+   */
+  proposedClientAction?: string;
 }
 
 export interface Message {

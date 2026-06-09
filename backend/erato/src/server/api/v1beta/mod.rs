@@ -531,6 +531,11 @@ pub struct ActionFacetInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     platform: Option<String>,
+    /// Fixed identifiers of client-side actions the model may propose via the
+    /// `propose_client_action` tool when this facet is active. The client
+    /// must only execute actions from this list, after user confirmation.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    client_actions: Vec<String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -634,6 +639,7 @@ pub async fn facets(
         .map(|(id, af)| ActionFacetInfo {
             id: id.clone(),
             platform: af.platform.clone(),
+            client_actions: af.client_actions.clone(),
         })
         .collect();
     action_facets.sort_by(|a, b| a.id.cmp(&b.id));
