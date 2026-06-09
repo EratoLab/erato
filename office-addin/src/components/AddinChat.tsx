@@ -656,10 +656,18 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
   // switched to a different email.
   const freshTrackerRef = useRef(new FreshCompletionTracker());
   const freshItemIdentityRef = useRef(new Map<string, string | null>());
+  const freshTrackerChatIdRef = useRef(currentChatId);
   const [freshMessageIds, setFreshMessageIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
   useEffect(() => {
+    // A chat switch replaces the whole message list — discard the tracker so
+    // the next snapshot is treated as history and nothing in the switched-to
+    // chat can be considered "just completed".
+    if (freshTrackerChatIdRef.current !== currentChatId) {
+      freshTrackerChatIdRef.current = currentChatId;
+      freshTrackerRef.current = new FreshCompletionTracker();
+    }
     const newlyFresh = freshTrackerRef.current.observe(messages, messageOrder);
     if (newlyFresh.length > 0) {
       for (const id of newlyFresh) {
@@ -667,7 +675,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
       }
       setFreshMessageIds((previous) => new Set([...previous, ...newlyFresh]));
     }
-  }, [messages, messageOrder, itemIdentity]);
+  }, [messages, messageOrder, itemIdentity, currentChatId]);
 
   const messagesWithArtifact = useMemo(() => {
     let next = messages;

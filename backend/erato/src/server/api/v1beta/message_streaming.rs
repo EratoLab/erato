@@ -1885,9 +1885,9 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         && let Some(facet_config) = app_state.config.action_facets.facets.get(&action_facet.id)
         && !facet_config.client_actions.is_empty()
     {
-        let name_taken_by_mcp_tool = generation_mcp_tools.iter().any(|tool| {
-            tool.tool.name == crate::services::client_actions::CLIENT_ACTION_TOOL_NAME
-        });
+        let name_taken_by_mcp_tool = generation_mcp_tools
+            .iter()
+            .any(|tool| tool.tool.name == crate::services::client_actions::CLIENT_ACTION_TOOL_NAME);
         if name_taken_by_mcp_tool {
             tracing::warn!(
                 "Not offering the client-action tool for action facet '{}': an MCP tool already uses the name '{}'",
@@ -6228,6 +6228,38 @@ pub async fn regenerate_message_sse(
             } else {
                 None
             };
+            // Mirror the chat-provider fallback for the action facet: a
+            // regenerate without an explicit facet re-applies the one the
+            // original generation ran under ("same input, new sample"),
+            // including any client-action tool it implied. Re-validated
+            // against the CURRENT config — a facet that was removed or
+            // changed since is dropped (regenerate proceeds without it)
+            // rather than failing the request.
+            let fallback_action_facet = if request.action_facet.is_none() {
+                crate::models::message::get_generation_action_facet_from_message(&current_message)
+                    .ok()
+                    .flatten()
+                    .map(|(id, args)| ActionFacetRequest { id, args })
+                    .filter(|af| {
+                        let platform = generation_request_context
+                            .platform
+                            .as_deref()
+                            .unwrap_or(DEFAULT_ERATO_PLATFORM);
+                        match validate_action_facet(&app_state.config, Some(af), platform) {
+                            Ok(()) => true,
+                            Err((_, reason)) => {
+                                tracing::warn!(
+                                    "Dropping stored action facet '{}' on regenerate: {}",
+                                    af.id,
+                                    reason
+                                );
+                                false
+                            }
+                        }
+                    })
+            } else {
+                None
+            };
 
             let me_profile_input = MeProfileChatRequestInput::from_me_profile(&me_user);
             let user_input = crate::services::prompt_composition::PromptCompositionUserInput {
@@ -6238,12 +6270,16 @@ pub async fn regenerate_message_sse(
                     .or(fallback_chat_provider_id),
                 new_input_file_ids: input_files_for_previous_message,
                 selected_facet_ids: request.selected_facet_ids.clone(),
-                action_facet: request.action_facet.as_ref().map(|af| {
-                    crate::services::prompt_composition::types::ActionFacetUserInput {
-                        id: af.id.clone(),
-                        args: af.args.clone(),
-                    }
-                }),
+                action_facet: request
+                    .action_facet
+                    .as_ref()
+                    .or(fallback_action_facet.as_ref())
+                    .map(
+                        |af| crate::services::prompt_composition::types::ActionFacetUserInput {
+                            id: af.id.clone(),
+                            args: af.args.clone(),
+                        },
+                    ),
             };
             let prepare_chat_request_res = prepare_chat_request(
                 &app_state,

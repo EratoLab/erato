@@ -71,7 +71,10 @@ pub fn validate_client_action_input(input: &Value, allowed: &[String]) -> Result
         .get("action")
         .and_then(Value::as_str)
         .ok_or_else(|| "missing required string field 'action'".to_string())?;
-    if allowed.iter().any(|allowed_action| allowed_action == action) {
+    if allowed
+        .iter()
+        .any(|allowed_action| allowed_action == action)
+    {
         Ok(action.to_string())
     } else {
         Err(format!(

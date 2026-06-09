@@ -532,6 +532,96 @@ async fn test_platform_persisted_for_regenerate_and_edit_generation_requests(poo
     );
 }
 
+/// Regenerating a message generated under an action facet re-applies the
+/// stored facet when the request doesn't re-send one — mirroring the chat
+/// provider fallback ("same input, new sample").
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_regenerate_falls_back_to_stored_action_facet(pool: Pool<Postgres>) {
+    let (mut app_config, _server) = setup_mock_llm_server(None).await;
+    add_action_facets(&mut app_config);
+    let app_state = test_app_state(app_config, pool).await;
+    let db = app_state.db.clone();
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let submit_response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "user_message": "Rewrite this",
+            "action_facet": {
+                "id": "rewrite",
+                "args": { "tone": "professional", "content": "yo whats up" }
+            }
+        }))
+        .await;
+    submit_response.assert_status_ok();
+
+    let submit_events = parse_sse_events(&submit_response);
+    let original_assistant_message_id = submit_events
+        .iter()
+        .find_map(|event| {
+            if let Ok(json) = serde_json::from_str::<Value>(&event.data)
+                && json["message_type"] == "assistant_message_completed"
+            {
+                return json["message_id"].as_str().map(|s| s.to_string());
+            }
+            None
+        })
+        .expect("Expected assistant_message_completed event with message_id");
+
+    // Regenerate WITHOUT re-sending the action facet.
+    let regenerate_response = server
+        .post("/api/v1beta/me/messages/regeneratestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "current_message_id": original_assistant_message_id }))
+        .await;
+    regenerate_response.assert_status_ok();
+
+    let assistant_messages = erato::db::entity::messages::Entity::find()
+        .filter(erato::db::entity::messages::Column::GenerationParameters.is_not_null())
+        .order_by_asc(erato::db::entity::messages::Column::CreatedAt)
+        .all(&db)
+        .await
+        .expect("Failed to fetch assistant messages");
+    assert_eq!(assistant_messages.len(), 2);
+
+    let regenerate_params: GenerationParameters = serde_json::from_value(
+        assistant_messages[1]
+            .generation_parameters
+            .clone()
+            .expect("Missing regenerate generation_parameters"),
+    )
+    .expect("Failed to deserialize regenerate generation parameters");
+    assert_eq!(
+        regenerate_params.action_facet_id.as_deref(),
+        Some("rewrite"),
+        "Regenerate must re-apply the facet stored on the original generation",
+    );
+    assert_eq!(
+        regenerate_params
+            .action_facet_args
+            .as_ref()
+            .and_then(|args| args.get("tone"))
+            .map(String::as_str),
+        Some("professional")
+    );
+}
+
 /// Test facet prompt injection behavior across a two-turn chat.
 ///
 /// # Test Categories

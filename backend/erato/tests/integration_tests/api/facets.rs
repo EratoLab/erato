@@ -128,10 +128,7 @@ async fn test_facets_endpoint_exposes_action_facet_client_actions(pool: Pool<Pos
             platform: Some("outlook".to_string()),
             template: "FOR THIS MESSAGE ONLY: draft a reply.".to_string(),
             allowed_args: vec!["body_format".to_string()],
-            client_actions: vec![
-                "outlook.reply".to_string(),
-                "outlook.reply_all".to_string(),
-            ],
+            client_actions: vec!["outlook.reply".to_string(), "outlook.reply_all".to_string()],
             presentation: None,
         },
     );
@@ -204,10 +201,7 @@ async fn test_facets_endpoint_exposes_auto_prompt_presentation(pool: Pool<Postgr
             platform: Some("outlook".to_string()),
             template: "FOR THIS MESSAGE ONLY: draft a reply.".to_string(),
             allowed_args: vec!["body_format".to_string()],
-            client_actions: vec![
-                "outlook.reply".to_string(),
-                "outlook.reply_all".to_string(),
-            ],
+            client_actions: vec!["outlook.reply".to_string(), "outlook.reply_all".to_string()],
             presentation: Some("auto_prompt".to_string()),
         },
     );

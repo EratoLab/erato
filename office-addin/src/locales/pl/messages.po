@@ -276,7 +276,7 @@ msgstr "Wstawianie..."
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.opening"
-msgstr ""
+msgstr "Otwieranie..."
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
@@ -286,57 +286,57 @@ msgstr "Zastąp zaznaczenie"
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.reply"
-msgstr ""
+msgstr "Odpowiedz"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.replyAll"
-msgstr ""
+msgstr "Odpowiedz wszystkim"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.replyAllConfirm"
-msgstr ""
+msgstr "Otwórz Odpowiedz wszystkim"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.replyAllConfirmMessage"
-msgstr ""
+msgstr "{confirmRecipientCount, plural, one {Spowoduje to otwarcie odpowiedzi zaadresowanej do # osoby z czytanej wiadomości. Nic nie zostanie wysłane, dopóki nie klikniesz Wyślij w Outlooku.} few {Spowoduje to otwarcie odpowiedzi zaadresowanej do # osób z czytanej wiadomości. Nic nie zostanie wysłane, dopóki nie klikniesz Wyślij w Outlooku.} many {Spowoduje to otwarcie odpowiedzi zaadresowanej do # osób z czytanej wiadomości. Nic nie zostanie wysłane, dopóki nie klikniesz Wyślij w Outlooku.} other {Spowoduje to otwarcie odpowiedzi zaadresowanej do # osoby z czytanej wiadomości. Nic nie zostanie wysłane, dopóki nie klikniesz Wyślij w Outlooku.}}"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.replyAllConfirmTitle"
-msgstr ""
+msgstr "Odpowiedzieć wszystkim odbiorcom?"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.replyConfirm"
-msgstr ""
+msgstr "Otwórz odpowiedź"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.replyConfirmMessage"
-msgstr ""
+msgstr "Spowoduje to otwarcie wstępnie wypełnionej odpowiedzi do nadawcy czytanej wiadomości. Nic nie zostanie wysłane, dopóki nie klikniesz Wyślij w Outlooku."
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.replyConfirmTitle"
-msgstr ""
+msgstr "Otworzyć tę odpowiedź?"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.replyFailed"
-msgstr ""
+msgstr "Nie udało się otworzyć formularza odpowiedzi. Upewnij się, że otrzymana wiadomość jest nadal otwarta, lub użyj Kopiuj."
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.replyStaleItem"
-msgstr ""
+msgstr "Ten szkic został napisany dla innej wiadomości. Otwórz ponownie tę wiadomość lub użyj Kopiuj."
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.replyTooLarge"
-msgstr ""
+msgstr "Szkic jest zbyt duży, aby wstępnie wypełnić odpowiedź. Użyj Kopiuj i wklej go do odpowiedzi."
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
@@ -531,52 +531,52 @@ msgstr "Wznów ostatni czat"
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.replyActions.alwaysAsk.helper"
-msgstr ""
+msgstr "Wyświetla potwierdzenie przed otwarciem okna odpowiedzi."
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.replyActions.alwaysAsk.label"
-msgstr ""
+msgstr "Najpierw zapytaj"
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.replyActions.deny.helper"
-msgstr ""
+msgstr "Ukrywa tę akcję i ignoruje sugestię asystenta."
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.replyActions.deny.label"
-msgstr ""
+msgstr "Nigdy"
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.replyActions.dontAsk.helper"
-msgstr ""
+msgstr "Otwiera wstępnie wypełnione okno odpowiedzi Outlooka bez pytania. Nic nie zostanie wysłane, dopóki nie klikniesz Wyślij."
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.replyActions.dontAsk.label"
-msgstr ""
+msgstr "Otwieraj od razu"
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.replyActions.intro"
-msgstr ""
+msgstr "Dotyczy trybu czytania. Odpowiedzi otwierają się wyłącznie jako wstępnie wypełniony szkic w Outlooku — wysyłanie zawsze pozostaje Twoim ręcznym krokiem."
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.replyActions.legend"
-msgstr ""
+msgstr "Gdy asystent sugeruje odpowiedź na wiadomość"
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.replyActions.reply.legend"
-msgstr ""
+msgstr "Odpowiedz nadawcy"
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.replyActions.replyAll.legend"
-msgstr ""
+msgstr "Odpowiedz wszystkim odbiorcom"
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
@@ -777,6 +777,13 @@ msgstr "Prześlij wygenerowany manifest"
 #: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.setup.uploadInstruction"
 msgstr "i prześlij tam pobrany plik."
+
+# ==============================
+# Unstable IDs
+# ==============================
+#: src/components/OutlookEratoEmailRenderer.tsx
+#~ msgid "{confirmRecipientCount, plural, id {officeAddin.emailRenderer.replyAllConfirmMessage} one {This opens a reply addressed to # person from the email you are reading. Nothing is sent until you press Send in Outlook.} other {This opens a reply addressed to # people from the email you are reading. Nothing is sent until you press Send in Outlook.}}"
+#~ msgstr ""
 
 # ==============================
 # Unstable IDs

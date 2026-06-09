@@ -11,10 +11,6 @@ import {
   openReplyForm,
 } from "../outlookReadReply";
 
-vi.mock("@erato/frontend/library", () => ({
-  sanitizeHtmlPreview: (html: string) => `sanitized:${html}`,
-}));
-
 type OfficeGlobal = { Office?: unknown };
 
 function installOffice({
@@ -76,10 +72,11 @@ describe("escapeTextAsHtml", () => {
 });
 
 describe("buildReplyFormBody", () => {
-  it("sanitizes HTML content", () => {
-    expect(buildReplyFormBody("<p>hello</p>", true)).toBe(
-      "sanitized:<p>hello</p>",
-    );
+  it("sanitizes HTML content with the outbound config", () => {
+    expect(buildReplyFormBody("<p>hello</p>", true)).toBe("<p>hello</p>");
+    expect(
+      buildReplyFormBody('<p onclick="x()">hi<script>x()</script></p>', true),
+    ).toBe("<p>hi</p>");
   });
 
   it("escapes plain text content", () => {
@@ -151,9 +148,13 @@ describe("openReplyForm", () => {
   it("opens the reply-all form with the sanitized HTML body", async () => {
     const item = readModeItem();
     installOffice({ item });
-    await openReplyForm("outlook.reply_all", "<p>Hi</p>", true);
+    await openReplyForm(
+      "outlook.reply_all",
+      "<p>Hi<script>x()</script></p>",
+      true,
+    );
     expect(item.displayReplyAllFormAsync).toHaveBeenCalledWith(
-      "sanitized:<p>Hi</p>",
+      "<p>Hi</p>",
       expect.any(Function),
     );
   });

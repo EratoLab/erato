@@ -4,7 +4,7 @@ import {
   useOutlookArtifact,
   usePersistedState,
 } from "@erato/frontend/library";
-import { t } from "@lingui/core/macro";
+import { plural, t } from "@lingui/core/macro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useOutlookComposeSelection } from "../hooks/useOutlookComposeSelection";
@@ -444,7 +444,11 @@ export function OutlookEratoEmailRenderer({
               {isConfirmingReplyAll
                 ? t({
                     id: "officeAddin.emailRenderer.replyAllConfirmMessage",
-                    message: `This opens a reply addressed to ${confirmRecipientCount} people from the email you are reading. Nothing is sent until you press Send in Outlook.`,
+                    message: plural(confirmRecipientCount, {
+                      one: "This opens a reply addressed to # person from the email you are reading. Nothing is sent until you press Send in Outlook.",
+                      other:
+                        "This opens a reply addressed to # people from the email you are reading. Nothing is sent until you press Send in Outlook.",
+                    }),
                   })
                 : t({
                     id: "officeAddin.emailRenderer.replyConfirmMessage",

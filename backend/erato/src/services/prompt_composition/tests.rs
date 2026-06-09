@@ -1914,8 +1914,7 @@ mod test_cases {
                 ContentPart::ToolUse(ToolUse {
                     tool_call_id: "call_client_action".to_string(),
                     status: ToolCallStatus::Success,
-                    tool_name: crate::services::client_actions::CLIENT_ACTION_TOOL_NAME
-                        .to_string(),
+                    tool_name: crate::services::client_actions::CLIENT_ACTION_TOOL_NAME.to_string(),
                     progress_message: None,
                     input: Some(serde_json::json!({ "action": "outlook.reply" })),
                     output: Some(
