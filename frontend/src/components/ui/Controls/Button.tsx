@@ -108,12 +108,23 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ) => {
     const [isPressed, setIsPressed] = React.useState(false);
     const [showConfirmDialog, setShowConfirmDialog] = React.useState(false);
+    const pressTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(
+      null,
+    );
+
+    React.useEffect(() => {
+      return () => {
+        if (pressTimerRef.current !== null) {
+          clearTimeout(pressTimerRef.current);
+        }
+      };
+    }, []);
 
     // Memoize the click handler
     const handleClick = useCallback(
       (e: React.MouseEvent<HTMLButtonElement>) => {
         setIsPressed(true);
-        setTimeout(() => setIsPressed(false), 200);
+        pressTimerRef.current = setTimeout(() => setIsPressed(false), 200);
 
         if (confirmAction) {
           e.stopPropagation();
