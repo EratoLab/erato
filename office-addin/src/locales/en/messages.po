@@ -301,7 +301,7 @@ msgstr "Open Reply All"
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.replyAllConfirmMessage"
-msgstr "This opens a reply addressed to {replyAllRecipientCount} people from the email you are reading. Nothing is sent until you press Send in Outlook."
+msgstr "This opens a reply addressed to {confirmRecipientCount} people from the email you are reading. Nothing is sent until you press Send in Outlook."
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
