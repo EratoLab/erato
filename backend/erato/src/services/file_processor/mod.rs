@@ -519,6 +519,178 @@ fn extract_email_plain_text(file_bytes: &[u8]) -> Option<String> {
     }
 }
 
+fn has_utf8_or_ascii_charset(content_type: &str) -> bool {
+    let (_, charset) = content_type_essence_and_param(content_type, "charset");
+    charset.as_deref().is_none_or(|charset| {
+        matches!(
+            charset.to_ascii_lowercase().as_str(),
+            "utf-8" | "utf8" | "us-ascii" | "ascii"
+        )
+    })
+}
+
+fn sanitized_html_body(decoded_body: &[u8]) -> String {
+    strip_html_data_uris(&strip_html_style_and_script(&String::from_utf8_lossy(
+        decoded_body,
+    )))
+}
+
+fn collect_email_html_body_parts(entity: &[u8], output: &mut Vec<String>) {
+    let (headers, body) = split_mime_headers_body(entity);
+    let headers = parse_mime_headers(headers);
+    let content_type = header_value(&headers, "content-type").unwrap_or("text/plain");
+    let (content_type_essence, boundary) = content_type_essence_and_param(content_type, "boundary");
+    let transfer_encoding = header_value(&headers, "content-transfer-encoding");
+    let content_disposition =
+        content_disposition_essence(header_value(&headers, "content-disposition"));
+
+    if content_type_essence.starts_with("multipart/") {
+        if let Some(boundary) = boundary {
+            for part in split_multipart_body(body, &boundary) {
+                collect_email_html_body_parts(part, output);
+            }
+        }
+        return;
+    }
+
+    let decoded_body = decode_mime_body(body, transfer_encoding);
+
+    if content_type_essence == "message/rfc822" {
+        collect_email_html_body_parts(&decoded_body, output);
+        return;
+    }
+
+    if content_type_essence == "text/html"
+        && content_disposition != "attachment"
+        && has_utf8_or_ascii_charset(content_type)
+    {
+        let html = sanitized_html_body(&decoded_body);
+        if !html.trim().is_empty() {
+            output.push(html);
+        }
+    }
+}
+
+fn extract_email_html_body_fallback(
+    file_bytes: &[u8],
+    config: &kreuzberg::ExtractionConfig,
+    marker_format: &str,
+) -> Option<String> {
+    let mut html_parts = Vec::new();
+    collect_email_html_body_parts(file_bytes, &mut html_parts);
+
+    let extracted = html_parts
+        .into_iter()
+        .filter_map(|html| {
+            match kreuzberg::extract_bytes_sync(html.as_bytes(), kreuzberg::HTML_MIME_TYPE, config)
+            {
+                Ok(result) => {
+                    let mut content =
+                        content_with_page_markers(result.content, result.pages, marker_format);
+                    append_extraction_children(&mut content, result.children);
+                    let content = normalize_email_html_fallback_markdown(&content);
+                    if content.trim().is_empty() {
+                        None
+                    } else {
+                        Some(content)
+                    }
+                }
+                Err(err) => {
+                    tracing::debug!(error = %err, "Skipping email HTML body fallback extraction");
+                    None
+                }
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n");
+
+    if extracted.trim().is_empty() {
+        None
+    } else {
+        Some(extracted)
+    }
+}
+
+fn normalize_email_html_fallback_markdown(markdown: &str) -> String {
+    let markdown = replace_markdown_links_and_images(markdown);
+    let markdown = markdown
+        .replace("<br>", "\n")
+        .replace("<br/>", "\n")
+        .replace("<br />", "\n")
+        .replace("\\|", "|");
+
+    let mut lines = Vec::new();
+    for raw_line in markdown.lines() {
+        let line = raw_line.trim();
+        if line.matches('|').count() >= 2 {
+            for cell in line.split('|') {
+                push_clean_email_html_fallback_line(cell, &mut lines);
+            }
+        } else {
+            push_clean_email_html_fallback_line(line, &mut lines);
+        }
+    }
+
+    deduplicate_repeated_lines(&normalize_plain_text(&lines.join("\n")))
+}
+
+fn push_clean_email_html_fallback_line(line: &str, output: &mut Vec<String>) {
+    let line = line.trim();
+    if line.is_empty() {
+        return;
+    }
+
+    let line = line.trim_start_matches('#').trim();
+    if line.is_empty()
+        || line == "---"
+        || line.chars().all(|char| matches!(char, '-' | ':' | ' '))
+        || line.starts_with("meta-")
+    {
+        return;
+    }
+
+    output.push(line.split_whitespace().collect::<Vec<_>>().join(" "));
+}
+
+fn replace_markdown_links_and_images(markdown: &str) -> String {
+    let mut output = String::with_capacity(markdown.len());
+    let mut position = 0;
+
+    while position < markdown.len() {
+        let rest = &markdown[position..];
+        let Some(relative_start) = rest.find('[').or_else(|| rest.find("![")) else {
+            output.push_str(rest);
+            break;
+        };
+
+        let start = position + relative_start;
+        let is_image = start > 0 && markdown.as_bytes().get(start - 1) == Some(&b'!');
+        let token_start = if is_image { start - 1 } else { start };
+        output.push_str(&markdown[position..token_start]);
+
+        let label_start = start + 1;
+        let Some(relative_label_end) = markdown[label_start..].find("](") else {
+            output.push_str(&markdown[token_start..]);
+            break;
+        };
+        let label_end = label_start + relative_label_end;
+        let url_start = label_end + 2;
+        let Some(relative_url_end) = markdown[url_start..].find(')') else {
+            output.push_str(&markdown[token_start..]);
+            break;
+        };
+        let url_end = url_start + relative_url_end;
+        let label = markdown[label_start..label_end].trim();
+
+        if !is_image || !label.is_empty() {
+            output.push_str(label);
+        }
+        position = url_end + 1;
+    }
+
+    output
+}
+
 /// A byte that legitimately follows an HTML tag name (so `<style` is a `<style>` open tag and not
 /// the start of a custom element like `<styled-list>`).
 fn is_tag_name_boundary(byte: Option<u8>) -> bool {
@@ -666,8 +838,8 @@ fn base64_mime_body(data: &[u8]) -> String {
     out
 }
 
-/// Rebuild a leaf entity's header block, replacing any Content-Transfer-Encoding with `base64`
-/// (the re-emitted body is always base64-encoded for safe, encoding-agnostic transport).
+/// Rebuild a leaf entity's header block, replacing any Content-Transfer-Encoding with
+/// base64.
 fn headers_with_base64_encoding(raw_headers: &[u8]) -> String {
     let header_text = String::from_utf8_lossy(raw_headers);
     let mut out = String::with_capacity(header_text.len() + 40);
@@ -778,14 +950,7 @@ fn sanitize_email_html_blocks_inner(entity: &[u8], depth: usize) -> Vec<u8> {
         // Only rewrite UTF-8/ASCII HTML: decoding other charsets (UTF-16, Latin-1, …) through
         // `from_utf8_lossy` would corrupt the text, so leave those parts untouched. kreuzberg still
         // decodes them itself via the charset header; the CSS leak is overwhelmingly a UTF-8 case.
-        let (_, charset) = content_type_essence_and_param(content_type, "charset");
-        let is_utf8_or_ascii = charset.as_deref().is_none_or(|charset| {
-            matches!(
-                charset.to_ascii_lowercase().as_str(),
-                "utf-8" | "utf8" | "us-ascii" | "ascii"
-            )
-        });
-        if !is_utf8_or_ascii {
+        if !has_utf8_or_ascii_charset(content_type) {
             return entity.to_vec();
         }
 
@@ -793,9 +958,7 @@ fn sanitize_email_html_blocks_inner(entity: &[u8], depth: usize) -> Vec<u8> {
         let decoded = decode_mime_body(body, transfer_encoding);
         // Strip `<style>`/`<script>` blocks first, then neutralize any `data:` URI payloads (large
         // inline base64 images) — both are token bombs kreuzberg would otherwise render as text.
-        let cleaned = strip_html_data_uris(&strip_html_style_and_script(&String::from_utf8_lossy(
-            &decoded,
-        )));
+        let cleaned = sanitized_html_body(&decoded);
 
         let mut out = headers_with_base64_encoding(headers_raw).into_bytes();
         out.extend_from_slice(b"\r\n");
@@ -831,6 +994,63 @@ fn content_already_contains_plain_text(content: &str, plain_text: &str) -> bool 
         .any(|line| content.contains(line))
 }
 
+fn content_contains_meaningful_body_portion(content: &str, body: &str) -> bool {
+    if content.contains(body.trim()) {
+        return true;
+    }
+
+    let significant_lines = body
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.chars().filter(|char| !char.is_whitespace()).count() >= 24)
+        .collect::<Vec<_>>();
+
+    if significant_lines.is_empty() {
+        return false;
+    }
+
+    let contained_lines = significant_lines
+        .iter()
+        .filter(|line| content.contains(**line))
+        .count();
+
+    if significant_lines.len() <= 3 {
+        contained_lines > 0
+    } else {
+        contained_lines * 100 / significant_lines.len() >= 25
+    }
+}
+
+fn deduplicate_repeated_lines(text: &str) -> String {
+    let mut seen = std::collections::HashSet::new();
+    let mut output = Vec::new();
+    let mut previous_was_blank = false;
+
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            if !previous_was_blank {
+                output.push(String::new());
+            }
+            previous_was_blank = true;
+            continue;
+        }
+
+        previous_was_blank = false;
+        let meaningful_chars = trimmed
+            .chars()
+            .filter(|char| char.is_alphanumeric())
+            .count();
+        let should_dedupe = meaningful_chars >= 4 && !trimmed.starts_with('|');
+
+        if !should_dedupe || seen.insert(trimmed.to_string()) {
+            output.push(line.to_string());
+        }
+    }
+
+    output.join("\n")
+}
+
 fn append_email_plain_text_if_missing(content: &mut String, plain_text: Option<String>) {
     let Some(plain_text) = plain_text else {
         return;
@@ -845,6 +1065,31 @@ fn append_email_plain_text_if_missing(content: &mut String, plain_text: Option<S
     }
     content.push_str("## Email plain text body\n\n");
     content.push_str(plain_text.trim());
+}
+
+fn append_email_html_body_if_missing(content: &mut String, html_body: Option<String>) {
+    let Some(html_body) = html_body else {
+        return;
+    };
+
+    let content_chars = content.chars().filter(|char| !char.is_whitespace()).count();
+    let html_body_chars = html_body
+        .chars()
+        .filter(|char| !char.is_whitespace())
+        .count();
+    if html_body_chars > 0 && content_chars * 100 / html_body_chars >= 40 {
+        return;
+    }
+
+    if content_contains_meaningful_body_portion(content, &html_body) {
+        return;
+    }
+
+    if !content.trim_end().is_empty() {
+        content.push_str("\n\n");
+    }
+    content.push_str("## Email HTML body\n\n");
+    content.push_str(html_body.trim());
 }
 
 /// Whether a MIME part is a TNEF (Transport Neutral Encapsulation Format) blob — the proprietary
@@ -929,7 +1174,15 @@ fn append_extraction_children(
         return;
     };
 
+    let has_parsed_nested_message = children
+        .iter()
+        .any(|child| child.mime_type.eq_ignore_ascii_case("message/rfc822"));
+
     for child in children {
+        if has_parsed_nested_message && is_raw_nested_message_attachment_duplicate(&child) {
+            continue;
+        }
+
         if !content.trim_end().is_empty() {
             content.push_str("\n\n");
         }
@@ -942,6 +1195,13 @@ fn append_extraction_children(
 
         append_extraction_children(content, child.result.children);
     }
+}
+
+fn is_raw_nested_message_attachment_duplicate(child: &kreuzberg::ArchiveEntry) -> bool {
+    child.path.to_ascii_lowercase().ends_with(".eml")
+        && child.mime_type.eq_ignore_ascii_case("text/plain")
+        && child.result.content.contains("Content-Type:")
+        && child.result.content.contains("Content-Transfer-Encoding:")
 }
 
 fn content_with_page_markers(
@@ -1097,7 +1357,13 @@ impl FileProcessor for KreuzbergProcessor {
                 let mut content =
                     content_with_page_markers(result.content, result.pages, &marker_format);
                 append_extraction_children(&mut content, result.children);
+                let email_html_body_fallback = if did_sanitize && email_plain_text.is_none() {
+                    extract_email_html_body_fallback(&file_bytes, &config, &marker_format)
+                } else {
+                    None
+                };
                 append_email_plain_text_if_missing(&mut content, email_plain_text);
+                append_email_html_body_if_missing(&mut content, email_html_body_fallback);
                 if tnef_attachment_count > 0 {
                     append_tnef_attachment_marker(&mut content);
                 }
@@ -1588,6 +1854,77 @@ Content-Type: text/html; charset=utf-8
         assert!(
             extracted.contains("thread_notes.txt"),
             "missing inner-attachment filename in:\n{extracted}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_kreuzberg_extracts_deep_html_body_from_erato_wrapped_nested_message() {
+        let eml_bytes = read_test_fixture("weekly_digest_microsoft_via_erato.eml");
+        let mut html_parts = Vec::new();
+        collect_email_html_body_parts(&eml_bytes, &mut html_parts);
+        assert_eq!(
+            html_parts.len(),
+            1,
+            "expected one nested HTML body part in Erato-wrapped fixture"
+        );
+        assert!(
+            html_parts[0].contains("Security Detection Report in Teams Admin Center"),
+            "sanitized nested HTML body did not contain expected content"
+        );
+        assert!(
+            extract_email_plain_text(&eml_bytes).is_none(),
+            "HTML-only nested email should not be treated as having a text/plain body"
+        );
+        let marker_format = "<page number=\"{page_num}\">".to_string();
+        let config = kreuzberg::ExtractionConfig {
+            output_format: kreuzberg::OutputFormat::Markdown,
+            pages: Some(kreuzberg::PageConfig {
+                extract_pages: true,
+                insert_page_markers: true,
+                marker_format: marker_format.clone(),
+            }),
+            ..Default::default()
+        };
+        let fallback_bytes = eml_bytes.clone();
+        let fallback_marker_format = marker_format.clone();
+        let html_fallback = tokio::task::spawn_blocking(move || {
+            extract_email_html_body_fallback(&fallback_bytes, &config, &fallback_marker_format)
+        })
+        .await
+        .expect("HTML fallback task should complete")
+        .expect("expected nested HTML fallback extraction");
+        assert!(
+            html_fallback.contains("Security Detection Report in Teams Admin Center"),
+            "HTML fallback extraction did not contain expected content:\n{html_fallback}"
+        );
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(eml_bytes, Some("message/rfc822"))
+            .await
+            .expect("Failed to extract Erato-wrapped weekly digest");
+
+        assert!(
+            extracted.contains("Security Detection Report in Teams Admin Center"),
+            "deep HTML body content from the nested email was not extracted:\n{extracted}"
+        );
+        assert!(
+            extracted.contains(
+                "HTML formatting now supported for Message center posts synced to Planner"
+            ),
+            "later body content from the nested email was not extracted:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("## Email HTML body"),
+            "HTML fallback body section missing from nested email extraction:\n{extracted}"
+        );
+        assert!(
+            !extracted.contains("## Attachment: message-1.eml"),
+            "raw nested-message attachment duplicate should not be appended when parsed nested message exists:\n{extracted}"
+        );
+        assert!(
+            !extracted.contains("@media only screen"),
+            "sanitized HTML fallback leaked CSS media queries:\n{extracted}"
         );
     }
 

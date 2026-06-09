@@ -61,6 +61,21 @@ async fn test_file_processor_examples_are_snapshotted() {
             path: "synthesized_thread_bundle.eml",
             mime_type: Some("message/rfc822"),
         },
+        ExampleFixture {
+            name: "weekly_digest_microsoft.eml",
+            path: "weekly_digest_microsoft.eml",
+            mime_type: Some("message/rfc822"),
+        },
+        ExampleFixture {
+            name: "weekly_digest_microsoft_via_erato.eml",
+            path: "weekly_digest_microsoft_via_erato.eml",
+            mime_type: Some("message/rfc822"),
+        },
+        ExampleFixture {
+            name: "long_thread_via_erato.eml",
+            path: "long_thread_via_erato.eml",
+            mime_type: Some("message/rfc822"),
+        },
     ];
 
     for fixture in fixtures {
