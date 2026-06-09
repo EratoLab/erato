@@ -185,9 +185,26 @@ export function SessionAuthProvider({
     async (
       token: BootstrapToken,
       status: Extract<Oauth2ProxySessionStatus, "establishing" | "refreshing">,
+      // A `forced` redeem carries a freshly force-refreshed token (recoverAuth).
+      // It must NOT silently coalesce onto a non-forced redeem in flight, which
+      // may be re-POSTing the very token that's stale/revoked.
+      forced = false,
     ): Promise<number> => {
-      if (redeemInFlightRef.current) {
-        return redeemInFlightRef.current;
+      const inFlight = redeemInFlightRef.current;
+      if (inFlight) {
+        if (!forced) {
+          // Non-forced callers (timed / focus / Graph-warm) coalesce.
+          return inFlight;
+        }
+        // Forced recovery: let the in-flight redeem finish first. If it
+        // establishes a session we're done; only if it FAILS do we redeem with
+        // our fresh force-refreshed token below (sequentially — no concurrent
+        // redeems, so no error-clobbers-success race).
+        try {
+          return await inFlight;
+        } catch {
+          // fall through to a fresh redeem with the forced token
+        }
       }
 
       const redeemPromise = (async () => {
@@ -221,12 +238,18 @@ export function SessionAuthProvider({
           }));
           setError(message);
           throw redeemError;
-        } finally {
-          redeemInFlightRef.current = null;
         }
       })();
 
       redeemInFlightRef.current = redeemPromise;
+      // Clear the in-flight ref once this redeem settles — but only if a later
+      // (forced) recovery hasn't already superseded it mid-flight.
+      const clearIfCurrent = () => {
+        if (redeemInFlightRef.current === redeemPromise) {
+          redeemInFlightRef.current = null;
+        }
+      };
+      void redeemPromise.then(clearIfCurrent, clearIfCurrent);
       return redeemPromise;
     },
     [],
@@ -335,7 +358,7 @@ export function SessionAuthProvider({
             allowInteraction: false,
           });
           setIsBootstrapAcquired(true);
-          await redeemSessionForToken(token, "refreshing");
+          await redeemSessionForToken(token, "refreshing", true);
           return true;
         } catch (recoverError) {
           const message = formatAuthenticationError(recoverError);
@@ -345,6 +368,9 @@ export function SessionAuthProvider({
             error: message,
           }));
           setError(message);
+          // Contribute to the shared backoff curve so a recovery failure (not
+          // just a timed-refresh failure) advances the retry interval.
+          setRefreshFailureCount((count) => count + 1);
           // Only a genuine interaction-required failure escalates to the full
           // sign-in screen; transient failures keep the chat visible and are
           // retried by the request's caller / the backoff timer.

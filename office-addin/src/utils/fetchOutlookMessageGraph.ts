@@ -597,17 +597,39 @@ interface GraphTokenSource {
 function makeGraphTokenSource(
   acquireToken: AcquireGraphToken,
 ): GraphTokenSource {
+  // The current in-flight/resolved token promise, and the in-flight FORCED
+  // acquire (if any). A forced acquire is tracked separately so a burst of
+  // concurrent 401-driven refresh() calls (e.g. the bounded itemAttachment
+  // enrichment fan-out) coalesces onto ONE force-refresh instead of firing N.
   let cached: Promise<string> | null = null;
+  let pendingForce: Promise<string> | null = null;
+
+  const run = (force: boolean): Promise<string> => {
+    const promise = acquireToken(force ? { forceRefresh: true } : undefined);
+    cached = promise;
+    if (force) {
+      pendingForce = promise;
+    }
+    void promise.then(
+      () => {
+        if (pendingForce === promise) pendingForce = null;
+      },
+      () => {
+        // Never cache a rejected promise — clear so the next caller re-attempts
+        // instead of being served the poisoned failure forever.
+        if (cached === promise) cached = null;
+        if (pendingForce === promise) pendingForce = null;
+      },
+    );
+    return promise;
+  };
+
   return {
     get() {
-      if (!cached) {
-        cached = acquireToken();
-      }
-      return cached;
+      return cached ?? run(false);
     },
     refresh() {
-      cached = acquireToken({ forceRefresh: true });
-      return cached;
+      return pendingForce ?? run(true);
     },
   };
 }
@@ -635,6 +657,11 @@ async function graphFetch(
   const response = await request(await tokenSource.get());
   if (response.status !== 401) {
     return response;
+  }
+  // Don't waste a force-refresh + replay if the caller already aborted in the
+  // window between the 401 and the retry (matches the abort checks elsewhere).
+  if (signal?.aborted) {
+    throw signal.reason ?? new DOMException("Aborted", "AbortError");
   }
   return request(await tokenSource.refresh());
 }

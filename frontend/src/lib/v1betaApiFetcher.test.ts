@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { setAuthRecoveryHandler } from "@/auth/authRecovery";
 import { setIdToken } from "@/auth/tokenStore";
 
 import { v1betaApiFetch } from "./generated/v1betaApi/v1betaApiFetcher";
@@ -112,5 +113,72 @@ describe("v1betaApiFetch auth injection", () => {
     expect(fetchMock.mock.calls[0][1]?.headers).toEqual({
       Authorization: "Bearer caller-token",
     });
+  });
+});
+
+// Guards the hand-added 401-recovery seam in the (codegen-generated) fetcher: if
+// a regenerate ever clobbers it back to the stock template, these fail in CI
+// rather than silently shipping a fetcher that can't recover.
+describe("v1betaApiFetch 401 auth recovery", () => {
+  afterEach(() => {
+    setAuthRecoveryHandler(null);
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  const okJson = () => ({
+    ok: true,
+    status: 200,
+    headers: new Headers({ "content-type": "application/json" }),
+    json: vi.fn().mockResolvedValue({ recovered: true }),
+  });
+  const unauthorized = () => ({
+    ok: false,
+    status: 401,
+    headers: new Headers(),
+    json: vi.fn().mockResolvedValue({ detail: "unauthorized" }),
+  });
+
+  it("recovers on a 401 and replays the request exactly once", async () => {
+    const handler = vi.fn().mockResolvedValue(true);
+    setAuthRecoveryHandler(handler);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(unauthorized())
+      .mockResolvedValueOnce(okJson());
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await v1betaApiFetch({
+      url: "/api/v1beta/me/budget",
+      method: "get",
+    });
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith("rest-401");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result).toEqual({ recovered: true });
+  });
+
+  it("does not replay when no recovery handler is registered (web app)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(unauthorized());
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      v1betaApiFetch({ url: "/api/v1beta/me/budget", method: "get" }),
+    ).rejects.toBeDefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not replay when recovery fails", async () => {
+    const handler = vi.fn().mockResolvedValue(false);
+    setAuthRecoveryHandler(handler);
+    const fetchMock = vi.fn().mockResolvedValue(unauthorized());
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      v1betaApiFetch({ url: "/api/v1beta/me/budget", method: "get" }),
+    ).rejects.toBeDefined();
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
