@@ -119,8 +119,33 @@ msgstr "Email"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.emailSourcePreviewRegion"
+msgstr "Email context preview"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.emailThreadLoadError"
+msgstr "Couldn't load the email thread"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.emailThreadLoadErrorDescription"
+msgstr "You can still send without this email context."
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.expandingDroppedEmails"
 msgstr "Processing dropped emails…"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.loadingEmailThread"
+msgstr "Loading email thread..."
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.loadingEmailThreadDescription"
+msgstr "Preparing the email context"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx

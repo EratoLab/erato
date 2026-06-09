@@ -194,6 +194,8 @@ export const AddinChatInput = forwardRef<
     isEmailBodyIncluded,
     emailBodyFile,
     emailSubject,
+    isLoadingEmailBody,
+    emailThreadLoadError,
     selectedAttachmentItems,
     isLoadingAttachments,
     removeEmailBody,
@@ -220,6 +222,11 @@ export const AddinChatInput = forwardRef<
   const shouldUseSuggestedEmailSource =
     (showSuggestedEmailSource && hasSelectedEmailSource) ||
     hasDroppedStagedEmails;
+  const isWaitingForSuggestedEmail =
+    showSuggestedEmailSource &&
+    !hasDroppedStagedEmails &&
+    isLoadingEmailBody &&
+    !emailThreadLoadError;
   // Render the email-source preview whenever there is *something* to show:
   // a real attachment, an in-flight attachment fetch, or the reply-context
   // chip (resolved or still loading). Without this gate the preview region
@@ -230,11 +237,61 @@ export const AddinChatInput = forwardRef<
     (hasDroppedStagedEmails ||
       (showSuggestedEmailSource &&
         (hasSelectedEmailSource ||
+          isLoadingEmailBody ||
+          emailThreadLoadError ||
           isLoadingAttachments ||
           parentReplyContext !== null ||
           isLoadingParentReplyContext)));
   const emailSourceGroups = useMemo<FileAttachmentGroup[]>(() => {
     const groups: FileAttachmentGroup[] = [];
+
+    if (
+      showSuggestedEmailSource &&
+      !hasDroppedStagedEmails &&
+      stagedEmails.every((staged) => staged.source !== "current-thread") &&
+      (isLoadingEmailBody || emailThreadLoadError)
+    ) {
+      groups.push({
+        id: "current-email-thread-status",
+        label:
+          emailSubject ||
+          t({
+            id: "officeAddin.chatInput.emailFallback",
+            message: "Email",
+          }),
+        metaLabel: "",
+        items: isLoadingEmailBody
+          ? [
+              {
+                kind: "loading",
+                id: "current-email-thread-loading",
+                label: t({
+                  id: "officeAddin.chatInput.loadingEmailThread",
+                  message: "Loading email thread...",
+                }),
+                description: t({
+                  id: "officeAddin.chatInput.loadingEmailThreadDescription",
+                  message: "Preparing the email context",
+                }),
+              },
+            ]
+          : [
+              {
+                kind: "status",
+                id: "current-email-thread-error",
+                tone: "error",
+                label: t({
+                  id: "officeAddin.chatInput.emailThreadLoadError",
+                  message: "Couldn't load the email thread",
+                }),
+                description: t({
+                  id: "officeAddin.chatInput.emailThreadLoadErrorDescription",
+                  message: "You can still send without this email context.",
+                }),
+              },
+            ],
+      });
+    }
 
     // Reply-context chip (compose mode) — read-only, not threaded into
     // `resolveSelectedFilesForSend` (the parent body reaches the LLM via
@@ -514,16 +571,20 @@ export const AddinChatInput = forwardRef<
     dismissStagedEmailAttachment,
     dismissStagedEmailBody,
     emailBodyFile,
+    emailThreadLoadError,
     emailSubject,
     globalMaxSizeBytes,
+    hasDroppedStagedEmails,
     isEmailBodyIncluded,
     isLoadingAttachments,
+    isLoadingEmailBody,
     isLoadingParentReplyContext,
     maxSizeFormatted,
     parentReplyContext,
     restoreStagedEmailAttachment,
     restoreStagedEmailBody,
     selectedAttachmentItems,
+    showSuggestedEmailSource,
     stagedEmails,
   ]);
 
@@ -691,8 +752,19 @@ export const AddinChatInput = forwardRef<
       }
     >
       {shouldShowEmailSourcePreview && (
-        <div className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4">
-          <div className="max-h-[40vh] overflow-y-auto pr-1">
+        <div className="mx-auto w-full max-w-4xl overflow-hidden overscroll-none px-2 pb-1 sm:px-4">
+          <div
+            className="max-h-[40vh] overflow-y-auto overscroll-none pr-1 focus:outline-none focus:ring-2 focus:ring-theme-focus"
+            role="region"
+            // The attachment preview is a bounded scroll area in the task pane;
+            // keyboard users need a focus target before arrow/page scrolling.
+            // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+            tabIndex={0}
+            aria-label={t({
+              id: "officeAddin.chatInput.emailSourcePreviewRegion",
+              message: "Email context preview",
+            })}
+          >
             <GroupedFileAttachmentsPreview
               groups={emailSourceGroups}
               onRemoveFile={handleRemoveEmailSourceFile}
@@ -700,6 +772,7 @@ export const AddinChatInput = forwardRef<
               showFileTypes={true}
               showFileSizes={true}
               defaultVisibleItems={10}
+              stickyGroupHeaders={true}
             />
           </div>
         </div>
@@ -796,6 +869,7 @@ export const AddinChatInput = forwardRef<
         disabled={
           isUploadingEmail ||
           isExpandingDroppedEmails ||
+          isWaitingForSuggestedEmail ||
           chatInputProps.disabled
         }
       />

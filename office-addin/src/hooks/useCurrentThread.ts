@@ -1,5 +1,10 @@
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
 
+import {
+  createTimeoutSignal,
+  OUTLOOK_GRAPH_THREAD_TIMEOUT_MS,
+} from "../utils/graphRequestTimeout";
 import { fetchCurrentThread, type ParsedThread } from "../utils/parsedThread";
 
 import type {
@@ -21,18 +26,17 @@ export interface UseCurrentThreadResult {
 
 /**
  * Fetches the Outlook conversation for the open mail item via Microsoft
- * Graph and exposes it as React state. Used to be inlined inside
- * `OutlookEmailSourceProvider` — pulled into its own hook so it can be
- * unit-tested with `renderHook` against an injected transport instead of
- * a global `fetch` stub.
+ * Graph and exposes it as React state.
  *
  * Behaviour:
  *   - Returns `{ thread: null, isLoading: false }` when either `itemId` or
  *     `conversationId` is missing. `itemId === null` is the read-mode gate
  *     (drafts/compose items have no Graph-reachable id).
- *   - Sets `isLoading=true` while a fetch is in flight; cancellation flag
- *     prevents state updates after `itemId`/`conversationId` change or
- *     after the consumer unmounts.
+ *   - Sets `isLoading=true` only for the initial fetch. Background refetches
+ *     must not disable the composer after the email chip has materialized.
+ *     TanStack Query supplies cancellation on item/conversation changes; the
+ *     Graph utilities consume that signal so stale network requests are
+ *     aborted, not just ignored.
  *   - Clears the previous `thread` to `null` at the start of each new fetch
  *     so consumers see "loading" rather than stale content from a prior
  *     conversation.
@@ -46,51 +50,57 @@ export function useCurrentThread(
   acquireGraphToken: AcquireGraphToken,
   options: FetchConversationOptions = {},
 ): UseCurrentThreadResult {
-  const [thread, setThread] = useState<ParsedThread | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(false);
   // Stable transport reference avoids re-running the effect on every render
   // when the consumer passes an inline transport closure.
   const { transport } = options;
+  const enabled = itemId !== null && conversationId !== null;
+
+  const query = useQuery({
+    queryKey: [
+      "office-addin",
+      "outlook-current-thread",
+      itemId,
+      conversationId,
+    ],
+    enabled,
+    retry: false,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    queryFn: async ({ signal }) => {
+      if (!conversationId) return null;
+      const timeout = createTimeoutSignal(
+        signal,
+        OUTLOOK_GRAPH_THREAD_TIMEOUT_MS,
+        `Outlook conversation fetch timed out after ${OUTLOOK_GRAPH_THREAD_TIMEOUT_MS}ms`,
+      );
+      try {
+        return await fetchCurrentThread(conversationId, acquireGraphToken, {
+          transport,
+          signal: timeout.signal,
+        });
+      } finally {
+        timeout.dispose();
+      }
+    },
+  });
 
   useEffect(() => {
-    if (!itemId || !conversationId) {
-      setThread(null);
-      setIsLoading(false);
-      setError(false);
-      return;
+    if (query.isError) {
+      console.warn(
+        "[useCurrentThread] conversation fetch failed:",
+        query.error,
+      );
     }
+  }, [query.error, query.isError]);
 
-    let cancelled = false;
-    setIsLoading(true);
-    setThread(null);
-    setError(false);
+  if (!enabled) {
+    return { thread: null, isLoading: false, error: false };
+  }
 
-    void fetchCurrentThread(conversationId, acquireGraphToken, { transport })
-      .then((result) => {
-        if (cancelled) return;
-        setThread(result);
-      })
-      .catch((fetchError) => {
-        if (cancelled) return;
-        // Total fetch failure (ThreadFetchError) — surface it loudly instead
-        // of degrading to a silent empty thread.
-        console.warn(
-          "[useCurrentThread] conversation fetch failed:",
-          fetchError,
-        );
-        setThread(null);
-        setError(true);
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setIsLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [acquireGraphToken, conversationId, itemId, transport]);
-
-  return { thread, isLoading, error };
+  return {
+    thread: query.data ?? null,
+    isLoading: query.isPending,
+    error: query.isError,
+  };
 }

@@ -119,8 +119,33 @@ msgstr "E-mail"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.emailSourcePreviewRegion"
+msgstr "Aperçu du contexte de l'e-mail"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.emailThreadLoadError"
+msgstr "Impossible de charger le fil d'e-mails"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.emailThreadLoadErrorDescription"
+msgstr "Vous pouvez toujours envoyer sans ce contexte d'e-mail."
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.expandingDroppedEmails"
 msgstr "Traitement des e-mails déposés…"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.loadingEmailThread"
+msgstr "Chargement du fil d'e-mails..."
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.loadingEmailThreadDescription"
+msgstr "Préparation du contexte de l'e-mail"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx

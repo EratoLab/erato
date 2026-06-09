@@ -3,6 +3,10 @@ import {
   fetchOutlookMessageBytesByInternetMessageIdViaGraph,
   fetchOutlookMessageFilesByInternetMessageIdViaGraph,
 } from "./fetchOutlookMessageGraph";
+import {
+  createTimeoutSignal,
+  OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
+} from "./graphRequestTimeout";
 import { parseEmlBytes } from "./parsedEmail";
 
 import type { AcquireGraphToken } from "./fetchOutlookMessageGraph";
@@ -36,10 +40,21 @@ export async function parseMsgFileToFiles(
   }
 
   try {
-    const result = await fetchOutlookMessageFilesByInternetMessageIdViaGraph(
-      internetMessageId,
-      acquireGraphToken,
+    const timeout = createTimeoutSignal(
+      undefined,
+      OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
+      `Outlook .msg fetch timed out after ${OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS}ms`,
     );
+    let result;
+    try {
+      result = await fetchOutlookMessageFilesByInternetMessageIdViaGraph(
+        internetMessageId,
+        acquireGraphToken,
+        { signal: timeout.signal },
+      );
+    } finally {
+      timeout.dispose();
+    }
     if (!result) {
       console.warn(
         "[parseMsgFile] Graph lookup returned no match for Message-ID:",
@@ -74,10 +89,20 @@ export async function parseMsgFileToParsedEmail(
 
   let bytesResult;
   try {
-    bytesResult = await fetchOutlookMessageBytesByInternetMessageIdViaGraph(
-      internetMessageId,
-      acquireGraphToken,
+    const timeout = createTimeoutSignal(
+      undefined,
+      OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
+      `Outlook .msg fetch timed out after ${OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS}ms`,
     );
+    try {
+      bytesResult = await fetchOutlookMessageBytesByInternetMessageIdViaGraph(
+        internetMessageId,
+        acquireGraphToken,
+        { signal: timeout.signal },
+      );
+    } finally {
+      timeout.dispose();
+    }
   } catch (error) {
     console.warn(
       "[parseMsgFile] Graph fetch failed for dropped .msg:",

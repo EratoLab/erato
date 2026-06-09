@@ -119,8 +119,33 @@ msgstr "E-mail"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.emailSourcePreviewRegion"
+msgstr "Podgląd kontekstu e-maila"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.emailThreadLoadError"
+msgstr "Nie udało się wczytać wątku e-maili"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.emailThreadLoadErrorDescription"
+msgstr "Nadal możesz wysłać wiadomość bez tego kontekstu e-maila."
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.expandingDroppedEmails"
 msgstr "Przetwarzanie upuszczonych e-maili…"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.loadingEmailThread"
+msgstr "Wczytywanie wątku e-maili..."
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.loadingEmailThreadDescription"
+msgstr "Przygotowywanie kontekstu e-maila"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx

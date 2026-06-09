@@ -5,6 +5,7 @@ import {
   uninstallMockMailbox,
 } from "../../test/mocks/outlook/mailbox";
 import {
+  fetchConversationMessagesViaGraph,
   fetchOutlookMessageFilesByInternetMessageIdViaGraph,
   fetchOutlookMessageFilesViaGraph,
   fetchParentMessageInConversationViaGraph,
@@ -511,5 +512,76 @@ describe("fetchParentMessageInConversationViaGraph", () => {
       fromName: null,
       fromAddress: null,
     });
+  });
+});
+
+describe("fetchConversationMessagesViaGraph", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("aborts promptly while waiting for an item-attachment Retry-After delay", async () => {
+    const acquireToken = vi.fn().mockResolvedValue("tok");
+    const abortController = new AbortController();
+    const abortReason = new Error("abort during retry-after");
+    const transport = vi.fn(async (url: string) => {
+      if (url.includes("/attachments/")) {
+        return {
+          ok: false,
+          status: 429,
+          statusText: "Too Many Requests",
+          headers: {
+            get: (name: string) =>
+              name.toLowerCase() === "retry-after" ? "10" : null,
+          },
+        } as Response;
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({
+          value: [
+            {
+              id: "m1",
+              internetMessageId: "<m1@x>",
+              subject: "Forwarded item",
+              body: { contentType: "text", content: "body" },
+              receivedDateTime: "2026-03-01T10:00:00Z",
+              isDraft: false,
+              attachments: [
+                {
+                  "@odata.type": "#microsoft.graph.itemAttachment",
+                  id: "att-1",
+                  name: "attached.eml",
+                  contentType: "message/rfc822",
+                  size: 100,
+                  isInline: false,
+                },
+              ],
+            },
+          ],
+        }),
+      } as Response;
+    });
+
+    const promise = fetchConversationMessagesViaGraph("conv-1", acquireToken, {
+      transport,
+      signal: abortController.signal,
+    });
+
+    for (
+      let attempt = 0;
+      attempt < 10 && transport.mock.calls.length < 2;
+      attempt += 1
+    ) {
+      await Promise.resolve();
+    }
+    expect(transport).toHaveBeenCalledTimes(2);
+
+    abortController.abort(abortReason);
+
+    await expect(promise).rejects.toBe(abortReason);
   });
 });

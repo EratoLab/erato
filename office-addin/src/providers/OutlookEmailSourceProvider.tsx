@@ -15,6 +15,10 @@ import { useCurrentThread } from "../hooks/useCurrentThread";
 import { buildThreadEmlFile } from "../utils/buildThreadEmlFile";
 import { fetchParentMessageInConversationViaGraph } from "../utils/fetchOutlookMessageGraph";
 import {
+  createTimeoutSignal,
+  OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
+} from "../utils/graphRequestTimeout";
+import {
   dismissAttachment as applyDismissAttachment,
   dismissBody as applyDismissBody,
   restoreAttachment as applyRestoreAttachment,
@@ -237,21 +241,33 @@ export function OutlookEmailSourceProvider({
     setIsLoadingParentReplyContext(true);
     setParentReplyContext(null);
 
+    const timeout = createTimeoutSignal(
+      undefined,
+      OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
+      `Outlook reply-context fetch timed out after ${OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS}ms`,
+    );
+
     void fetchParentMessageInConversationViaGraph(
       conversationId,
       acquireGraphToken,
+      {
+        signal: timeout.signal,
+      },
     )
       .then((result) => {
         if (cancelled) return;
         setParentReplyContext(result);
       })
       .finally(() => {
+        timeout.dispose();
         if (cancelled) return;
         setIsLoadingParentReplyContext(false);
       });
 
     return () => {
       cancelled = true;
+      timeout.abort();
+      timeout.dispose();
     };
   }, [acquireGraphToken, conversationId, isComposeMode, itemId]);
 
