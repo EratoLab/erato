@@ -46,8 +46,8 @@ import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
 import { fetchOutlookMessageBytesViaGraph } from "../utils/fetchOutlookMessageGraph";
 import {
-  createTimeoutSignal,
   OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
+  runWithGraphTimeout,
 } from "../utils/graphRequestTimeout";
 import { parseDroppedFiles } from "../utils/parseDroppedFiles";
 import { parseEmlBytes } from "../utils/parsedEmail";
@@ -210,19 +210,17 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
         return existing;
       }
       const fetchPromise = (async () => {
-        const timeout = createTimeoutSignal(
-          undefined,
-          OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
-          `Outlook fetch timed out after ${OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS}ms`,
-        );
         try {
-          return await fetchOutlookMessageBytesViaGraph(
-            itemId,
-            acquireGraphToken,
-            { signal: timeout.signal },
+          return await runWithGraphTimeout(
+            OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
+            `Outlook fetch timed out after ${OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS}ms`,
+            undefined,
+            (signal) =>
+              fetchOutlookMessageBytesViaGraph(itemId, acquireGraphToken, {
+                signal,
+              }),
           );
         } finally {
-          timeout.dispose();
           pendingOutlookFetchesRef.current.delete(itemId);
         }
       })();

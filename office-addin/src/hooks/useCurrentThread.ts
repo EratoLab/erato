@@ -2,8 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 
 import {
-  createTimeoutSignal,
   OUTLOOK_GRAPH_THREAD_TIMEOUT_MS,
+  runWithGraphTimeout,
 } from "../utils/graphRequestTimeout";
 import { fetchCurrentThread, type ParsedThread } from "../utils/parsedThread";
 
@@ -67,21 +67,18 @@ export function useCurrentThread(
     staleTime: Infinity,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    queryFn: async ({ signal }) => {
+    queryFn: ({ signal }) => {
       if (!conversationId) return null;
-      const timeout = createTimeoutSignal(
-        signal,
+      return runWithGraphTimeout(
         OUTLOOK_GRAPH_THREAD_TIMEOUT_MS,
         `Outlook conversation fetch timed out after ${OUTLOOK_GRAPH_THREAD_TIMEOUT_MS}ms`,
+        signal,
+        (timeoutSignal) =>
+          fetchCurrentThread(conversationId, acquireGraphToken, {
+            transport,
+            signal: timeoutSignal,
+          }),
       );
-      try {
-        return await fetchCurrentThread(conversationId, acquireGraphToken, {
-          transport,
-          signal: timeout.signal,
-        });
-      } finally {
-        timeout.dispose();
-      }
     },
   });
 

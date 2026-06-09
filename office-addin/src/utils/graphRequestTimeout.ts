@@ -8,44 +8,35 @@ export class OutlookGraphTimeoutError extends Error {
   }
 }
 
-export function createTimeoutSignal(
-  parentSignal: AbortSignal | undefined,
+/**
+ * Runs a Graph fetch under a timeout, optionally chained to a parent signal
+ * (e.g. TanStack Query's per-query signal or an effect-lifecycle controller).
+ *
+ * The composed signal aborts when *either* the timeout elapses — surfacing an
+ * {@link OutlookGraphTimeoutError} as the abort `reason` so callers can tell a
+ * timeout apart from a cancellation — or the parent aborts, propagating the
+ * parent's reason. `AbortSignal.any` owns the listener wiring (and its own
+ * teardown), so this helper only has to clear its timer; the `finally`
+ * guarantees that even on rejection.
+ */
+export async function runWithGraphTimeout<T>(
   timeoutMs: number,
   message: string,
-): { signal: AbortSignal; abort: () => void; dispose: () => void } {
-  const controller = new AbortController();
-  let disposed = false;
-
-  const abortFromParent = () => {
-    if (!controller.signal.aborted) {
-      controller.abort(parentSignal?.reason);
-    }
-  };
-
-  if (parentSignal?.aborted) {
-    abortFromParent();
-  } else {
-    parentSignal?.addEventListener("abort", abortFromParent, { once: true });
-  }
-
+  parentSignal: AbortSignal | undefined,
+  run: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const timeoutController = new AbortController();
   const timeoutId = globalThis.setTimeout(() => {
-    if (!controller.signal.aborted) {
-      controller.abort(new OutlookGraphTimeoutError(message));
-    }
+    timeoutController.abort(new OutlookGraphTimeoutError(message));
   }, timeoutMs);
 
-  return {
-    signal: controller.signal,
-    abort: () => {
-      if (!controller.signal.aborted) {
-        controller.abort();
-      }
-    },
-    dispose: () => {
-      if (disposed) return;
-      disposed = true;
-      globalThis.clearTimeout(timeoutId);
-      parentSignal?.removeEventListener("abort", abortFromParent);
-    },
-  };
+  const signal = parentSignal
+    ? AbortSignal.any([parentSignal, timeoutController.signal])
+    : timeoutController.signal;
+
+  try {
+    return await run(signal);
+  } finally {
+    globalThis.clearTimeout(timeoutId);
+  }
 }

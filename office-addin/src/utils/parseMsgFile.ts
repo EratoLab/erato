@@ -4,8 +4,8 @@ import {
   fetchOutlookMessageFilesByInternetMessageIdViaGraph,
 } from "./fetchOutlookMessageGraph";
 import {
-  createTimeoutSignal,
   OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
+  runWithGraphTimeout,
 } from "./graphRequestTimeout";
 import { parseEmlBytes } from "./parsedEmail";
 
@@ -40,21 +40,17 @@ export async function parseMsgFileToFiles(
   }
 
   try {
-    const timeout = createTimeoutSignal(
-      undefined,
+    const result = await runWithGraphTimeout(
       OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
       `Outlook .msg fetch timed out after ${OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS}ms`,
+      undefined,
+      (signal) =>
+        fetchOutlookMessageFilesByInternetMessageIdViaGraph(
+          internetMessageId,
+          acquireGraphToken,
+          { signal },
+        ),
     );
-    let result;
-    try {
-      result = await fetchOutlookMessageFilesByInternetMessageIdViaGraph(
-        internetMessageId,
-        acquireGraphToken,
-        { signal: timeout.signal },
-      );
-    } finally {
-      timeout.dispose();
-    }
     if (!result) {
       console.warn(
         "[parseMsgFile] Graph lookup returned no match for Message-ID:",
@@ -89,20 +85,17 @@ export async function parseMsgFileToParsedEmail(
 
   let bytesResult;
   try {
-    const timeout = createTimeoutSignal(
-      undefined,
+    bytesResult = await runWithGraphTimeout(
       OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
       `Outlook .msg fetch timed out after ${OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS}ms`,
+      undefined,
+      (signal) =>
+        fetchOutlookMessageBytesByInternetMessageIdViaGraph(
+          internetMessageId,
+          acquireGraphToken,
+          { signal },
+        ),
     );
-    try {
-      bytesResult = await fetchOutlookMessageBytesByInternetMessageIdViaGraph(
-        internetMessageId,
-        acquireGraphToken,
-        { signal: timeout.signal },
-      );
-    } finally {
-      timeout.dispose();
-    }
   } catch (error) {
     console.warn(
       "[parseMsgFile] Graph fetch failed for dropped .msg:",
