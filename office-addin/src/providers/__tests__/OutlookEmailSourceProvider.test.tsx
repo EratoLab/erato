@@ -14,8 +14,8 @@ import type { ParsedThread, ThreadMessage } from "../../utils/parsedThread";
 const mockUseCurrentThread = vi.fn();
 const mockUseOutlookMailItem = vi.fn();
 
-vi.mock("../MsalNaaProvider", () => ({
-  useMsalNaa: () => ({ acquireToken: vi.fn() }),
+vi.mock("../EntraGraphTokenProvider", () => ({
+  useGraphToken: () => ({ acquireToken: vi.fn() }),
 }));
 
 vi.mock("../OutlookMailItemProvider", () => ({

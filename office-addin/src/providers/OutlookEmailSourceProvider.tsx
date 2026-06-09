@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 
-import { useMsalNaa } from "./MsalNaaProvider";
+import { useGraphToken } from "./EntraGraphTokenProvider";
 import { useOutlookMailItem } from "./OutlookMailItemProvider";
 import { useCurrentThread } from "../hooks/useCurrentThread";
 import { buildThreadEmlFile } from "../utils/buildThreadEmlFile";
@@ -198,7 +198,7 @@ export function OutlookEmailSourceProvider({
     isLoadingAttachments,
     getAttachmentFile,
   } = useOutlookMailItem();
-  const { acquireToken } = useMsalNaa();
+  const { acquireToken } = useGraphToken();
   const [dismissedAttachmentIds, setDismissedAttachmentIds] = useState<
     string[]
   >([]);

@@ -22,12 +22,17 @@ msgid "officeAddin.auth.authenticating"
 msgstr "Autenticando..."
 
 #. js-lingui-explicit-id
-#: src/providers/MsalNaaProvider.tsx
+#: src/providers/SessionAuthProvider.tsx
 msgid "officeAddin.auth.authenticationFailed"
 msgstr "Error de autenticación"
 
 #. js-lingui-explicit-id
-#: src/providers/MsalNaaProvider.tsx
+#: src/providers/EntraGraphTokenProvider.tsx
+msgid "officeAddin.auth.graphUnavailable"
+msgstr "La autenticación de Graph no está disponible en este host"
+
+#. js-lingui-explicit-id
+#: src/auth/EntraNaaAuthSource.ts
 msgid "officeAddin.auth.msalClientIdMissing"
 msgstr "El ID de cliente de MSAL no está configurado"
 
@@ -37,28 +42,33 @@ msgstr "El ID de cliente de MSAL no está configurado"
 #~ msgstr "No se pudo inicializar MSAL"
 
 #. js-lingui-explicit-id
-#: src/providers/MsalNaaProvider.tsx
+#: src/auth/EntraNaaAuthSource.ts
 msgid "officeAddin.auth.msalNotInitialized"
 msgstr "MSAL no está inicializado"
 
 #. js-lingui-explicit-id
 #: src/providers/MsalNaaProvider.tsx
-msgid "officeAddin.auth.msalProviderNotMounted"
-msgstr "MsalNaaProvider no está montado"
+#~ msgid "officeAddin.auth.msalProviderNotMounted"
+#~ msgstr "MsalNaaProvider no está montado"
 
 #. js-lingui-explicit-id
-#: src/providers/MsalNaaProvider.tsx
+#: src/auth/UnsupportedAuthSource.ts
 msgid "officeAddin.auth.naaUnsupported"
 msgstr "La autenticación de aplicación anidada no es compatible con este entorno"
 
 #. js-lingui-explicit-id
-#: src/providers/MsalNaaProvider.tsx
+#: src/providers/SessionAuthProvider.tsx
 msgid "officeAddin.auth.oauth2ProxySessionFailed"
 msgstr "No se pudo establecer una sesión segura de Erato. Inicia sesión de nuevo."
 
 #. js-lingui-explicit-id
+#: src/auth/UnsupportedAuthSource.ts
+msgid "officeAddin.auth.onPremNotSupported"
+msgstr "El inicio de sesión en Exchange local (heredado) aún no es compatible."
+
+#. js-lingui-explicit-id
 #: src/App.tsx
-#: src/providers/MsalNaaProvider.tsx
+#: src/providers/SessionAuthProvider.tsx
 msgid "officeAddin.auth.signInRequired"
 msgstr "Se requiere iniciar sesión"
 

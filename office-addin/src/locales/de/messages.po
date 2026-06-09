@@ -22,12 +22,17 @@ msgid "officeAddin.auth.authenticating"
 msgstr "Authentifizierung..."
 
 #. js-lingui-explicit-id
-#: src/providers/MsalNaaProvider.tsx
+#: src/providers/SessionAuthProvider.tsx
 msgid "officeAddin.auth.authenticationFailed"
 msgstr "Authentifizierung fehlgeschlagen"
 
 #. js-lingui-explicit-id
-#: src/providers/MsalNaaProvider.tsx
+#: src/providers/EntraGraphTokenProvider.tsx
+msgid "officeAddin.auth.graphUnavailable"
+msgstr "Graph-Authentifizierung ist auf diesem Host nicht verfügbar"
+
+#. js-lingui-explicit-id
+#: src/auth/EntraNaaAuthSource.ts
 msgid "officeAddin.auth.msalClientIdMissing"
 msgstr "Die MSAL-Client-ID ist nicht konfiguriert"
 
@@ -37,28 +42,33 @@ msgstr "Die MSAL-Client-ID ist nicht konfiguriert"
 #~ msgstr "MSAL konnte nicht initialisiert werden"
 
 #. js-lingui-explicit-id
-#: src/providers/MsalNaaProvider.tsx
+#: src/auth/EntraNaaAuthSource.ts
 msgid "officeAddin.auth.msalNotInitialized"
 msgstr "MSAL ist nicht initialisiert"
 
 #. js-lingui-explicit-id
 #: src/providers/MsalNaaProvider.tsx
-msgid "officeAddin.auth.msalProviderNotMounted"
-msgstr "MsalNaaProvider ist nicht eingebunden"
+#~ msgid "officeAddin.auth.msalProviderNotMounted"
+#~ msgstr "MsalNaaProvider ist nicht eingebunden"
 
 #. js-lingui-explicit-id
-#: src/providers/MsalNaaProvider.tsx
+#: src/auth/UnsupportedAuthSource.ts
 msgid "officeAddin.auth.naaUnsupported"
 msgstr "Verschachtelte App-Authentifizierung wird in dieser Umgebung nicht unterstützt"
 
 #. js-lingui-explicit-id
-#: src/providers/MsalNaaProvider.tsx
+#: src/providers/SessionAuthProvider.tsx
 msgid "officeAddin.auth.oauth2ProxySessionFailed"
 msgstr "Es konnte keine sichere Erato-Sitzung hergestellt werden. Melde dich erneut an."
 
 #. js-lingui-explicit-id
+#: src/auth/UnsupportedAuthSource.ts
+msgid "officeAddin.auth.onPremNotSupported"
+msgstr "Die Anmeldung bei lokalem Exchange (Legacy) wird noch nicht unterstützt."
+
+#. js-lingui-explicit-id
 #: src/App.tsx
-#: src/providers/MsalNaaProvider.tsx
+#: src/providers/SessionAuthProvider.tsx
 msgid "officeAddin.auth.signInRequired"
 msgstr "Anmeldung erforderlich"
 
