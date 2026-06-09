@@ -10,6 +10,7 @@
  */
 
 import { mergeApiAuthHeaders } from "@/auth/apiRequestAuth";
+import { tryRecoverAuth } from "@/auth/authRecovery";
 
 import { createLogger } from "../debugLogger";
 
@@ -242,7 +243,9 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
         return;
       }
 
-      const response = await fetch(url, {
+      // Built fresh per attempt so an auth-recovery retry picks up the
+      // refreshed session cookie / Authorization header.
+      const buildInit = (): RequestInit => ({
         method,
         headers: mergeApiAuthHeaders({
           ...(method === "POST" && { "Content-Type": "application/json" }),
@@ -254,6 +257,15 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
         cache: "no-store",
         credentials: "same-origin",
       });
+
+      let response = await fetch(url, buildInit());
+      // Connect-time 401 (the proxy rejected the request before it reached the
+      // backend/stream): recover the session and reopen ONCE. Safe to replay —
+      // a pre-stream 401 means nothing was processed. No-op for the web app,
+      // which registers no recovery handler (see @/auth/authRecovery).
+      if (response.status === 401 && (await tryRecoverAuth("sse-401"))) {
+        response = await fetch(url, buildInit());
+      }
 
       if (!response.ok) {
         // Read the body so the caller can surface the validation reason
