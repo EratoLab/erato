@@ -1,0 +1,76 @@
+---
+source: erato/tests/integration_test_file_processor_snapshots.rs
+expression: extracted
+---
+\<page number="1"\>
+
+## Acme Inc. Company Overview
+
+Revenue and Headcount Development (2000–2025)
+
+\<page number="2"\>
+
+## Revenue Development (2000–2025) \<page number="3"\>
+
+## Headcount by Department \<page number="4"\>
+
+## Departments & Contacts
+
+Engineering – Alice Johnson
+
+- Sales – Bob Smith
+- Marketing – Clara Lee
+- Operations – David Brown
+- HR – Eva Müller
+- Finance – Frank Wilson
+
+
+## Attachment: Microsoft_Excel_Sheet1.xlsx
+
+MIME type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+
+## Sheet1
+
+|  | Revenue (Million USD) |
+| --- | --- |
+| 2000 | 120 |
+| 2001 | 125 |
+| 2002 | 130 |
+| 2003 | 138 |
+| 2004 | 145 |
+| 2005 | 155 |
+| 2006 | 165 |
+| 2007 | 180 |
+| 2008 | 190 |
+| 2009 | 185 |
+| 2010 | 200 |
+| 2011 | 215 |
+| 2012 | 230 |
+| 2013 | 245 |
+| 2014 | 260 |
+| 2015 | 280 |
+| 2016 | 300 |
+| 2017 | 320 |
+| 2018 | 345 |
+| 2019 | 360 |
+| 2020 | 350 |
+| 2021 | 380 |
+| 2022 | 410 |
+| 2023 | 445 |
+| 2024 | 480 |
+| 2025 | 520 |
+
+## Attachment: Microsoft_Excel_Sheet2.xlsx
+
+MIME type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+
+## Sheet1
+
+|  | Engineering | Sales | Marketing | Operations | HR | Finance |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2000 | 40 | 25 | 15 | 20 | 5 | 5 |
+| 2005 | 60 | 40 | 25 | 30 | 8 | 7 |
+| 2010 | 90 | 70 | 40 | 45 | 12 | 10 |
+| 2015 | 130 | 100 | 60 | 70 | 18 | 15 |
+| 2020 | 170 | 140 | 85 | 95 | 25 | 22 |
+| 2025 | 220 | 190 | 120 | 130 | 35 | 30 |

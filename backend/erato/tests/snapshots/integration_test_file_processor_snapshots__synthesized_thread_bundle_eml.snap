@@ -1,0 +1,66 @@
+---
+source: erato/tests/integration_test_file_processor_snapshots.rs
+expression: extracted
+---
+**Subject**: Thread bundle for nested-rfc822 test
+
+**From**: thread-wrapper@example.com
+
+**Date**: Mon, 18 May 2026 10:00:00 +0000
+
+FIRST_MESSAGE_UNIQUE_BODY_TOKEN_alpha — body sent by Alice. SECOND_MESSAGE_UNIQUE_BODY_TOKEN_beta — reply sent by Bob, please find the attached notes.
+
+
+## Attachment: msg-1.eml
+
+MIME type: text/plain
+
+From: Alice Example \<alice@example.com\> To: Bob Example \<bob@example.com\> Subject: First message in thread Date: Mon, 18 May 2026 09:00:00 +0000 Message-ID: \<msg-1@example.com\> MIME-Version: 1.0 Content-Type: text/plain; charset=utf-8
+
+FIRST_MESSAGE_UNIQUE_BODY_TOKEN_alpha — body sent by Alice.
+
+## Attachment: msg-2.eml
+
+MIME type: text/plain
+
+From: Bob Example \<bob@example.com\> To: Alice Example \<alice@example.com\> Subject: Re: First message in thread Date: Mon, 18 May 2026 10:00:00 +0000 Message-ID: \<msg-2@example.com\> MIME-Version: 1.0 Content-Type: multipart/mixed; boundary="INNER" --INNER Content-Type: text/plain; charset=utf-8
+
+SECOND_MESSAGE_UNIQUE_BODY_TOKEN_beta — reply sent by Bob, please find the attached notes.
+
+\--INNER Content-Type: text/plain; charset=utf-8; name="thread_notes.txt" Content-Disposition: attachment; filename="thread_notes.txt"
+
+INNER_ATTACHMENT_UNIQUE_TOKEN_gamma — notes attached inside the second thread message. --INNER--
+
+## Attachment: nested_message_0.eml
+
+MIME type: message/rfc822
+
+**Subject**: First message in thread
+
+**From**: "Alice Example" \<alice@example.com\>
+
+**To**: "Bob Example" \<bob@example.com\>
+
+**Date**: Mon, 18 May 2026 09:00:00 +0000
+
+FIRST_MESSAGE_UNIQUE_BODY_TOKEN_alpha — body sent by Alice.
+
+## Attachment: nested_message_1.eml
+
+MIME type: message/rfc822
+
+**Subject**: Re: First message in thread
+
+**From**: "Bob Example" \<bob@example.com\>
+
+**To**: "Alice Example" \<alice@example.com\>
+
+**Date**: Mon, 18 May 2026 10:00:00 +0000
+
+SECOND_MESSAGE_UNIQUE_BODY_TOKEN_beta — reply sent by Bob, please find the attached notes.
+
+## Attachment: thread_notes.txt
+
+MIME type: text/plain
+
+INNER_ATTACHMENT_UNIQUE_TOKEN_gamma — notes attached inside the second thread message.

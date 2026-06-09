@@ -1,0 +1,983 @@
+---
+source: erato/tests/integration_test_file_processor_snapshots.rs
+expression: extracted
+---
+**Subject**: Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+
+**Date**: Tue, 19 May 2026 17:29:38 GMT
+
+Hallo Herr Klein,
+
+vielen Dank für das produktive Erstgespräch letzte Woche. Wie besprochen, sende ich Ihnen hiermit unser Lastenheft für das Kundenportal 2.0 (Version 1.0, Stand 02.06.2025).
+
+Das Dokument enthält alle funktionalen und nicht-funktionalen Anforderungen, einen groben Zeitplan sowie eine Liste offener Punkte, die wir gemeinsam klären müssen. Bitte schauen Sie es sich bis Freitag an – ich würde gerne Montag eine erste Einschätzung von Ihrer Seite haben.
+
+Besonders interessiert mich Ihre Einschätzung zu Anforderung F-05 (3D-Produktkonfigurator) und zur SAP-Schnittstelle, da wir dort intern noch selbst Unsicherheiten haben.
+
+Mit freundlichen Grüßen Anna Berger | Projektleiterin | Firma A GmbH
+
+Hallo Frau Berger,
+
+vielen Dank für das Lastenheft, ich habe es bereits überflogen und werde es bis Donnerstag vollständig durcharbeiten.
+
+Erste Reaktion: Der Scope ist gut strukturiert und die Prioritäten sind klar. Die Anforderungen F-01 bis F-04 und F-08 halte ich für technisch gut umsetzbar innerhalb des genannten Zeitrahmens.
+
+Zwei Punkte, bei denen ich sofort Klärungsbedarf sehe: Zum Technologie-Stack bei Frontend und zum Auth-Thema sollten wir uns kurzschließen – ich tendiere zu React, habe aber noch Fragen zur bestehenden SSO-Infrastruktur Ihres Unternehmens. Die SAP-Anbindung (offener Punkt im Lastenheft) könnte kritischer Pfad werden. Haben Sie Kontakt zu Ihrer SAP-Basis-Abteilung?
+
+Mein Vorschlag: Können wir uns Montag um 10 Uhr zu einem kurzen Call zusammenfinden?
+
+Beste Grüße Thomas Klein | Technischer Leiter | Firma B Software GmbH
+
+**Von:** Daniel Person \<mail@dfiebig.de\> **Gesendet:** Dienstag, 19. Mai 2026 16:58 **An:** Max Token \<testuser@maxgoisser.onmicrosoft.com\> **Betreff:** Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+
+Hallo Herr Klein,
+
+vielen Dank für das produktive Erstgespräch letzte Woche. Wie besprochen, sende ich Ihnen hiermit unser Lastenheft für das Kundenportal 2.0 (Version 1.0, Stand 02.06.2025).
+
+Das Dokument enthält alle funktionalen und nicht-funktionalen Anforderungen, einen groben Zeitplan sowie eine Liste offener Punkte, die wir gemeinsam klären müssen. Bitte schauen Sie es sich bis Freitag an – ich würde gerne Montag eine erste Einschätzung von Ihrer Seite haben.
+
+Besonders interessiert mich Ihre Einschätzung zu Anforderung F-05 (3D-Produktkonfigurator) und zur SAP-Schnittstelle, da wir dort intern noch selbst Unsicherheiten haben.
+
+Mit freundlichen Grüßen Anna Berger | Projektleiterin | Firma A GmbH
+
+Hallo Herr Klein,
+
+Montag 10 Uhr passt ausgezeichnet, ich habe den Termin eingestellt.
+
+Zur SSO-Infrastruktur: Wir nutzen aktuell Azure AD (jetzt Entra ID) für interne Mitarbeiter, die Kunden haben aber noch kein zentrales Identity-Management – das müsste neu aufgebaut werden. Ich schicke Ihnen vor dem Call die technischen Details, die ich von unserer IT bekommen habe.
+
+Zur SAP-Frage: Ja, ich habe bereits Kontakt zu unserem SAP-Basis-Team aufgenommen. Die zuständige Kollegin (Fr. Hoffmann) ist aber erst ab 16.06. wieder aus dem Urlaub zurück. Das könnte sich also etwas verzögern.
+
+Bis Montag\! Anna Berger
+
+Am Di., 19. Mai 2026 um 19:00 Uhr schrieb Max Token \<<testuser@maxgoisser.onmicrosoft.com>\>:
+
+\--
+
+Best regards
+
+Daniel
+
+Hallo Frau Berger,
+
+nach unserem Call heute Morgen habe ich wie besprochen direkt begonnen, die Projektspezifikation aufzusetzen. Im Anhang finden Sie Version 0.1 – noch sehr schlank, aber es gibt uns ein gemeinsames Dokument, das wir von jetzt an beide bearbeiten und erweitern.
+
+Drin sind aktuell: Änderungshistorie, Projektübersicht, der Technologie-Stack (noch mit einigen offenen Punkten) und eine Sammlung der offenen Themen aus dem Lastenheft.
+
+Bitte schauen Sie drüber und sagen Sie mir, ob ich etwas grundlegend falsch verstanden habe. Das Frontend-Framework wollten wir ja noch entscheiden – haben Sie intern eine Präferenz?
+
+Viele Grüße Thomas Klein
+
+**Von:** Daniel Person \<mail@dfiebig.de\> **Gesendet:** Dienstag, 19. Mai 2026 17:00 **An:** Max Token \<testuser@maxgoisser.onmicrosoft.com\> **Betreff:** Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+
+Hallo Herr Klein,
+
+Montag 10 Uhr passt ausgezeichnet, ich habe den Termin eingestellt.
+
+Zur SSO-Infrastruktur: Wir nutzen aktuell Azure AD (jetzt Entra ID) für interne Mitarbeiter, die Kunden haben aber noch kein zentrales Identity-Management – das müsste neu aufgebaut werden. Ich schicke Ihnen vor dem Call die technischen Details, die ich von unserer IT bekommen habe.
+
+Zur SAP-Frage: Ja, ich habe bereits Kontakt zu unserem SAP-Basis-Team aufgenommen. Die zuständige Kollegin (Fr. Hoffmann) ist aber erst ab 16.06. wieder aus dem Urlaub zurück. Das könnte sich also etwas verzögern.
+
+Bis Montag\! Anna Berger
+
+Am Di., 19. Mai 2026 um 19:00 Uhr schrieb Max Token \<<testuser@maxgoisser.onmicrosoft.com>\>:
+
+\--
+
+Best regards
+
+Daniel
+
+Hallo Herr Klein,
+
+das Dokument sieht gut aus, danke für die schnelle Aufstellung\! Die Struktur ist genau richtig.
+
+Zur Frontend-Frage: Ich habe kurz mit unserem internen UX-Team gesprochen. Die haben bisher mit React gearbeitet und wären froh, wenn wir dabei bleiben. Für die Komponentenbibliothek haben wir keine starke Meinung – das würde ich Ihnen überlassen. Unser Designer kann mit MUI oder shadcn/ui arbeiten.
+
+Eine Frage zum Auth-Thema: Sie hatten Keycloak erwähnt. Ist das die Empfehlung, oder schauen wir uns auch Auth0 an?
+
+Viele Grüße Anna Berger
+
+Am Di., 19. Mai 2026 um 19:02 Uhr schrieb Max Token \<<testuser@maxgoisser.onmicrosoft.com>\>:
+
+\--
+
+Best regards
+
+Daniel
+
+Hallo Frau Berger,
+
+gut, React ist gesetzt – dann stimmt das schon mal. Für die Komponentenbibliothek empfehle ich shadcn/ui mit Tailwind CSS: deutlich flexibler in der Anpassung, kein Vendor-Lock-in, und die Performance ist bei großen Dashboards besser als bei MUI. Ich schicke Ihnen kurz ein paar Screenshots aus einem Referenzprojekt, wenn Sie möchten.
+
+Zu Auth: Keycloak ist meine klare Empfehlung gegenüber Auth0. Keycloak ist Open Source, wir betreiben es self-hosted auf Azure – damit bleiben alle Daten in der EU und wir haben volle Kontrolle. Auth0 wäre einfacher im Setup, aber mit laufenden Lizenzkosten und einem US-Anbieter. Für DSGVO-sensitive Kundendaten eindeutig Keycloak.
+
+Ich trage das nach unserem OK in die Spezifikation ein.
+
+Viele Grüße Thomas Klein
+
+**Von:** Daniel Person \<mail@dfiebig.de\> **Gesendet:** Dienstag, 19. Mai 2026 17:21 **An:** Max Token \<testuser@maxgoisser.onmicrosoft.com\> **Betreff:** Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+
+Hallo Herr Klein,
+
+das Dokument sieht gut aus, danke für die schnelle Aufstellung\! Die Struktur ist genau richtig.
+
+Zur Frontend-Frage: Ich habe kurz mit unserem internen UX-Team gesprochen. Die haben bisher mit React gearbeitet und wären froh, wenn wir dabei bleiben. Für die Komponentenbibliothek haben wir keine starke Meinung – das würde ich Ihnen überlassen. Unser Designer kann mit MUI oder shadcn/ui arbeiten.
+
+Eine Frage zum Auth-Thema: Sie hatten Keycloak erwähnt. Ist das die Empfehlung, oder schauen wir uns auch Auth0 an?
+
+Viele Grüße Anna Berger
+
+Am Di., 19. Mai 2026 um 19:02 Uhr schrieb Max Token \<<testuser@maxgoisser.onmicrosoft.com>\>:
+
+\--
+
+Best regards
+
+Daniel
+
+Hallo Herr Klein,
+
+shadcn/ui + Keycloak – beides einverstanden. Das DSGVO-Argument für Keycloak hat auch intern direkt überzeugt, das hatte ich unserer Rechtsabteilung weitergeleitet.
+
+Bitte tragen Sie beides in die Spezifikation ein und schicken mir die nächste Version zu. Ich wäre außerdem dankbar, wenn Sie die Architektur grob skizzieren könnten – also wie Frontend, Backend, Datenbank und Auth zusammenspielen. Das würde mir helfen, das intern zu kommunizieren.
+
+Noch eine Information zu SAP: Ich habe von Fr. Hoffmann erfahren, dass sie doch schon ab nächster Woche zurück ist. Wir können den Klärungstermin also vorziehen – wäre Donnerstag, 19. Juni um 14 Uhr möglich?
+
+Viele Grüße Anna Berger
+
+Am Di., 19. Mai 2026 um 19:22 Uhr schrieb Max Token \<<testuser@maxgoisser.onmicrosoft.com>\>:
+
+\--
+
+Best regards
+
+Daniel
+
+Hallo Frau Berger,
+
+im Anhang die aktualisierte Spezifikation (v0.2). Neu drin sind: die finalisierten Technologie-Entscheidungen (mit Datumshinweis) und ein Abschnitt zur Systemarchitektur im 3-Schichten-Modell – das sollte für die interne Kommunikation gut verständlich sein.
+
+Donnerstag 19. Juni, 14 Uhr für den SAP-Termin ist prima, ich habe ihn eingestellt.
+
+Eine Bitte: Können Sie Fr. Hoffmann bitten, vorab die Frage zu beantworten, ob wir RFC over HTTP mit OData oder einen anderen Mechanismus nutzen sollen? Das würde den Termin deutlich effizienter machen.
+
+Viele Grüße Thomas Klein
+
+**Von:** Daniel Person \<mail@dfiebig.de\> **Gesendet:** Dienstag, 19. Mai 2026 17:22 **An:** Max Token \<testuser@maxgoisser.onmicrosoft.com\> **Betreff:** Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+
+Hallo Herr Klein,
+
+shadcn/ui + Keycloak – beides einverstanden. Das DSGVO-Argument für Keycloak hat auch intern direkt überzeugt, das hatte ich unserer Rechtsabteilung weitergeleitet.
+
+Bitte tragen Sie beides in die Spezifikation ein und schicken mir die nächste Version zu. Ich wäre außerdem dankbar, wenn Sie die Architektur grob skizzieren könnten – also wie Frontend, Backend, Datenbank und Auth zusammenspielen. Das würde mir helfen, das intern zu kommunizieren.
+
+Noch eine Information zu SAP: Ich habe von Fr. Hoffmann erfahren, dass sie doch schon ab nächster Woche zurück ist. Wir können den Klärungstermin also vorziehen – wäre Donnerstag, 19. Juni um 14 Uhr möglich?
+
+Viele Grüße Anna Berger
+
+Am Di., 19. Mai 2026 um 19:22 Uhr schrieb Max Token \<<testuser@maxgoisser.onmicrosoft.com>\>:
+
+\--
+
+Best regards
+
+Daniel
+
+Hallo Herr Klein,
+
+ich habe Fr. Hoffmann Ihre Frage weitergeleitet. Sie hat bereits geantwortet: Das SAP-System nutzt S/4HANA, und die bevorzugte Integrationsmethode in unserem Unternehmen ist SAP BTP Integration Suite – OData v4 ist technisch möglich und von IT freigegeben.
+
+Das Dokument sieht sehr gut aus. Der Architekturüberblick ist genau das, was ich gebraucht habe – ich habe ihn heute Nachmittag schon erfolgreich meinem Geschäftsführer präsentiert.
+
+Bis Donnerstag\! Anna Berger
+
+Am Di., 19. Mai 2026 um 19:24 Uhr schrieb Max Token \<<testuser@maxgoisser.onmicrosoft.com>\>:
+
+\--
+
+Best regards
+
+Daniel
+
+Hallo Frau Berger,
+
+der SAP-Termin war sehr gut. Fr. Hoffmann hat die letzten offenen Fragen beantwortet – ich kann jetzt die SAP-Schnittstelle vollständig spezifizieren. Zusammengefasst: BTP Integration Suite, OData v4, Echtzeit-Webhooks für kritische Ereignisse und 15-Minuten-Delta-Sync für Stammdaten.
+
+Zum Sicherheitsaudit: Ich habe in zwei Projekten mit SRC Security Research & Consulting (Bonn) sehr gute Erfahrungen gemacht. Zertifiziert nach BSI-Standards, erfahren mit Webanwendungen und DSGVO. Ich würde die empfehlen, wenn Sie einverstanden sind.
+
+Ich bereite dann v0.3 der Spezifikation vor, in der beide Punkte geklärt sind.
+
+Viele Grüße Thomas Klein
+
+**Von:** Daniel Person \<mail@dfiebig.de\> **Gesendet:** Dienstag, 19. Mai 2026 17:24 **An:** Max Token \<testuser@maxgoisser.onmicrosoft.com\> **Betreff:** Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+
+Hallo Herr Klein,
+
+ich habe Fr. Hoffmann Ihre Frage weitergeleitet. Sie hat bereits geantwortet: Das SAP-System nutzt S/4HANA, und die bevorzugte Integrationsmethode in unserem Unternehmen ist SAP BTP Integration Suite – OData v4 ist technisch möglich und von IT freigegeben.
+
+Das Dokument sieht sehr gut aus. Der Architekturüberblick ist genau das, was ich gebraucht habe – ich habe ihn heute Nachmittag schon erfolgreich meinem Geschäftsführer präsentiert.
+
+Bis Donnerstag\! Anna Berger
+
+Am Di., 19. Mai 2026 um 19:24 Uhr schrieb Max Token \<<testuser@maxgoisser.onmicrosoft.com>\>:
+
+\--
+
+Best regards
+
+Daniel
+
+Hallo Herr Klein,
+
+SRC klingt gut, ich habe kurz gegoogelt – solide Referenzliste. Bitte beauftragen Sie eine Anfrage zu einem unverbindlichen Angebot und halten Sie mich auf dem Laufenden.
+
+Bitte schicken Sie mir v0.3 der Spezifikation sobald fertig – ich brauche sie für ein internes Statusmeeting am 25. Juni.
+
+Viele Grüße Anna Berger
+
+Am Di., 19. Mai 2026 um 19:28 Uhr schrieb Max Token \<<testuser@maxgoisser.onmicrosoft.com>\>:
+
+\--
+
+Best regards
+
+Daniel
+
+Hallo Frau Berger,
+
+im Anhang Version 0.3 der Spezifikation, rechtzeitig für Ihr Meeting. Neu drin:
+
+- SAP-Schnittstelle vollständig beschrieben (Abschnitt 4.2)
+- Sicherheitsaudit: SRC als Anbieter eingetragen, Zeitslot Phase 4 (KW 42)
+- Neues Risikoregister (Abschnitt 6) mit vier identifizierten Risiken und Maßnahmen
+
+Eine offene Frage bleibt: F-05, der 3D-Produktkonfigurator. Haben Sie intern schon eine Tendenz, ob wir das in Angriff nehmen oder auf 2D reduzieren?
+
+SRC hat sich übrigens bereits gemeldet – Angebot kommt bis Ende der Woche.
+
+Viele Grüße Thomas Klein
+
+**Von:** Daniel Person \<mail@dfiebig.de\> **Gesendet:** Dienstag, 19. Mai 2026 17:28 **An:** Max Token \<testuser@maxgoisser.onmicrosoft.com\> **Betreff:** Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+
+Hallo Herr Klein,
+
+SRC klingt gut, ich habe kurz gegoogelt – solide Referenzliste. Bitte beauftragen Sie eine Anfrage zu einem unverbindlichen Angebot und halten Sie mich auf dem Laufenden.
+
+Bitte schicken Sie mir v0.3 der Spezifikation sobald fertig – ich brauche sie für ein internes Statusmeeting am 25. Juni.
+
+Viele Grüße Anna Berger
+
+Am Di., 19. Mai 2026 um 19:28 Uhr schrieb Max Token \<<testuser@maxgoisser.onmicrosoft.com>\>:
+
+\--
+
+Best regards
+
+Daniel
+
+Hallo Herr Klein,
+
+das Dokument ist sehr gut geworden, das Meeting lief super. Der Geschäftsführer war beeindruckt vom Risikoregister – sowas hatten wir bei früheren Projekten nie.
+
+Zum 3D-Konfigurator: Das ist intern tatsächlich noch umstritten. Unsere Vertriebsleitung möchte ihn unbedingt haben, unser IT-Leiter hält ihn für eine „nice-to-have-Spielerei" mit hohem Risiko. Ich brauche von Ihnen eine ehrliche technische Einschätzung: Ist das realistisch umsetzbar in Phase 4, und was würde es extra kosten?
+
+Viele Grüße Anna Berger
+
+Am Di., 19. Mai 2026 um 19:29 Uhr schrieb Max Token \<<testuser@maxgoisser.onmicrosoft.com>\>:
+
+\--
+
+Best regards
+
+Daniel
+
+
+## Attachment: nested_message_0.eml
+
+MIME type: message/rfc822
+
+**Subject**: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+
+**From**: "Daniel Person" \<mail@dfiebig.de\>
+
+**To**: "Max Token" \<testuser@maxgoisser.onmicrosoft.com\>
+
+**Date**: Tue, 19 May 2026 16:58:51 GMT
+
+Hallo Herr Klein,
+
+vielen Dank für das produktive Erstgespräch letzte Woche. Wie besprochen, sende ich Ihnen hiermit unser Lastenheft für das Kundenportal 2.0 (Version 1.0, Stand 02.06.2025).
+
+Das Dokument enthält alle funktionalen und nicht-funktionalen Anforderungen, einen groben Zeitplan sowie eine Liste offener Punkte, die wir gemeinsam klären müssen. Bitte schauen Sie es sich bis Freitag an – ich würde gerne Montag eine erste Einschätzung von Ihrer Seite haben.
+
+Besonders interessiert mich Ihre Einschätzung zu Anforderung F-05 (3D-Produktkonfigurator) und zur SAP-Schnittstelle, da wir dort intern noch selbst Unsicherheiten haben.
+
+Mit freundlichen Grüßen Anna Berger | Projektleiterin | Firma A GmbH
+
+## Attachment: Lastenheft_Kundenportal_v1.pdf
+
+MIME type: application/pdf
+
+# Lastenheft – Kundenportal 2.0
+
+Dokumentversion 1.0 | Erstellt: 02. Juni 2025 | Vertraulich
+
+## 1\. Projektziel
+
+Entwicklung eines modernen, webbasierten Kundenportals, das bestehenden Kunden Zugang zu Bestellhistorien, Rechnungen, Support-Tickets und Produktkonfigurationen bietet. Das System soll die bisherige, veraltete Lösung vollständig ersetzen.
+
+## 2\. Zielgruppe
+
+Primäre Nutzer sind Bestandskunden der Firma A GmbH (ca. 1.200 aktive Accounts). Sekundär: interne Sachbearbeiter im Kundenservice.
+
+## 3\. Funktionale Anforderungen
+
+## ID Anforderung Priorität
+
+F-01 Login mit SSO (OAuth 2.0 / SAML) Hoch
+
+F-02 Bestellübersicht mit Filterfunktion Hoch
+
+F-03 Rechnungsdownload (PDF) Hoch
+
+F-04 Support-Ticket-System Mittel
+
+F-05 Produktkonfigurator (3D-Vorschau) Niedrig F-06 Benachrichtigungssystem (E-Mail / Push) Mittel
+
+F-07 Mehrsprachigkeit (DE, EN, FR) Mittel
+
+F-08 Admin-Dashboard für Kundenservice Hoch
+
+## 4\. Nicht-funktionale Anforderungen
+
+Performance: Ladezeit der Hauptseite unter 2 Sekunden (P95). Verfügbarkeit: 99,5 % SLA. Datenschutz: DSGVO-konform, Hosting ausschliesslich auf EU-Servern. Barrierefreiheit: WCAG 2.1 Level AA.
+
+## 5\. Technische Rahmenbedingungen
+
+### 5.1 Frontend
+
+React 18+ mit TypeScript. Komponentenbibliothek nach Absprache (bevorzugt MUI oder shadcn/ui). Responsives Design (Mobile-first).
+
+### 5.2 Backend
+
+REST-API oder GraphQL. Bevorzugte Sprache: Node.js (NestJS) oder Java (Spring Boot). Datenbankanbindung: PostgreSQL. Caching: Redis.
+
+### 5.3 Infrastruktur
+
+Deployment via Docker / Kubernetes auf Azure. CI/CD-Pipeline erforderlich. Staging- und Produktionsumgebung getrennt.
+
+## 6\. Zeitplan (grob)
+
+## Phase Inhalt Dauer
+
+Phase 1 Konzeption & Architektur 4 Wochen
+
+Phase 2 MVP (F-01, F-02, F-03, F-08) 8 Wochen
+
+Phase 3 Ausbau (F-04, F-06, F-07) 6 Wochen
+
+Phase 4 Produktkonfigurator (F-05) 4 Wochen
+
+Phase 5 Testing, UAT, Go-Live 4 Wochen
+
+## 7\. Offene Punkte
+
+- Entscheidung Frontend-Framework noch ausstehend
+- Lizenzmodell fuer Drittanbieter-Komponenten klaeren
+- Integration bestehende ERP-Schnittstelle (SAP) unklar
+- Sicherheitsaudit durch externen Dienstleister einplanen
+
+Erstellt von: Anna Berger, Firma A GmbH | Freigegeben: ausstehend
+
+## Attachment: nested_message_1.eml
+
+MIME type: message/rfc822
+
+**Subject**: AW: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+
+**From**: "Max Token" \<testuser@maxgoisser.onmicrosoft.com\>
+
+**To**: "Daniel Person" \<mail@dfiebig.de\>
+
+**Date**: Tue, 19 May 2026 17:00:16 GMT
+
+Hallo Frau Berger,
+
+vielen Dank für das Lastenheft, ich habe es bereits überflogen und werde es bis Donnerstag vollständig durcharbeiten.
+
+Erste Reaktion: Der Scope ist gut strukturiert und die Prioritäten sind klar. Die Anforderungen F-01 bis F-04 und F-08 halte ich für technisch gut umsetzbar innerhalb des genannten Zeitrahmens.
+
+Zwei Punkte, bei denen ich sofort Klärungsbedarf sehe: Zum Technologie-Stack bei Frontend und zum Auth-Thema sollten wir uns kurzschließen – ich tendiere zu React, habe aber noch Fragen zur bestehenden SSO-Infrastruktur Ihres Unternehmens. Die SAP-Anbindung (offener Punkt im Lastenheft) könnte kritischer Pfad werden. Haben Sie Kontakt zu Ihrer SAP-Basis-Abteilung?
+
+Mein Vorschlag: Können wir uns Montag um 10 Uhr zu einem kurzen Call zusammenfinden?
+
+Beste Grüße Thomas Klein | Technischer Leiter | Firma B Software GmbH
+
+**Von:** Daniel Person \<mail@dfiebig.de\> **Gesendet:** Dienstag, 19. Mai 2026 16:58 **An:** Max Token \<testuser@maxgoisser.onmicrosoft.com\> **Betreff:** Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+
+Hallo Herr Klein,
+
+vielen Dank für das produktive Erstgespräch letzte Woche. Wie besprochen, sende ich Ihnen hiermit unser Lastenheft für das Kundenportal 2.0 (Version 1.0, Stand 02.06.2025).
+
+Das Dokument enthält alle funktionalen und nicht-funktionalen Anforderungen, einen groben Zeitplan sowie eine Liste offener Punkte, die wir gemeinsam klären müssen. Bitte schauen Sie es sich bis Freitag an – ich würde gerne Montag eine erste Einschätzung von Ihrer Seite haben.
+
+Besonders interessiert mich Ihre Einschätzung zu Anforderung F-05 (3D-Produktkonfigurator) und zur SAP-Schnittstelle, da wir dort intern noch selbst Unsicherheiten haben.
+
+Mit freundlichen Grüßen Anna Berger | Projektleiterin | Firma A GmbH
+
+## Attachment: nested_message_2.eml
+
+MIME type: message/rfc822
+
+**Subject**: Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+
+**From**: "Daniel Person" \<mail@dfiebig.de\>
+
+**To**: "Max Token" \<testuser@maxgoisser.onmicrosoft.com\>
+
+**Date**: Tue, 19 May 2026 17:00:49 GMT
+
+Hallo Herr Klein,
+
+Montag 10 Uhr passt ausgezeichnet, ich habe den Termin eingestellt.
+
+Zur SSO-Infrastruktur: Wir nutzen aktuell Azure AD (jetzt Entra ID) für interne Mitarbeiter, die Kunden haben aber noch kein zentrales Identity-Management – das müsste neu aufgebaut werden. Ich schicke Ihnen vor dem Call die technischen Details, die ich von unserer IT bekommen habe.
+
+Zur SAP-Frage: Ja, ich habe bereits Kontakt zu unserem SAP-Basis-Team aufgenommen. Die zuständige Kollegin (Fr. Hoffmann) ist aber erst ab 16.06. wieder aus dem Urlaub zurück. Das könnte sich also etwas verzögern.
+
+Bis Montag\! Anna Berger
+
+Am Di., 19. Mai 2026 um 19:00 Uhr schrieb Max Token \<<testuser@maxgoisser.onmicrosoft.com>\>:
+
+\--
+
+Best regards
+
+Daniel
+
+## Attachment: nested_message_3.eml
+
+MIME type: message/rfc822
+
+**Subject**: AW: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+
+**From**: "Max Token" \<testuser@maxgoisser.onmicrosoft.com\>
+
+**To**: "Daniel Person" \<mail@dfiebig.de\>
+
+**Date**: Tue, 19 May 2026 17:02:28 GMT
+
+Hallo Frau Berger,
+
+nach unserem Call heute Morgen habe ich wie besprochen direkt begonnen, die Projektspezifikation aufzusetzen. Im Anhang finden Sie Version 0.1 – noch sehr schlank, aber es gibt uns ein gemeinsames Dokument, das wir von jetzt an beide bearbeiten und erweitern.
+
+Drin sind aktuell: Änderungshistorie, Projektübersicht, der Technologie-Stack (noch mit einigen offenen Punkten) und eine Sammlung der offenen Themen aus dem Lastenheft.
+
+Bitte schauen Sie drüber und sagen Sie mir, ob ich etwas grundlegend falsch verstanden habe. Das Frontend-Framework wollten wir ja noch entscheiden – haben Sie intern eine Präferenz?
+
+Viele Grüße Thomas Klein
+
+**Von:** Daniel Person \<mail@dfiebig.de\> **Gesendet:** Dienstag, 19. Mai 2026 17:00 **An:** Max Token \<testuser@maxgoisser.onmicrosoft.com\> **Betreff:** Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+
+Hallo Herr Klein,
+
+Montag 10 Uhr passt ausgezeichnet, ich habe den Termin eingestellt.
+
+Zur SSO-Infrastruktur: Wir nutzen aktuell Azure AD (jetzt Entra ID) für interne Mitarbeiter, die Kunden haben aber noch kein zentrales Identity-Management – das müsste neu aufgebaut werden. Ich schicke Ihnen vor dem Call die technischen Details, die ich von unserer IT bekommen habe.
+
+Zur SAP-Frage: Ja, ich habe bereits Kontakt zu unserem SAP-Basis-Team aufgenommen. Die zuständige Kollegin (Fr. Hoffmann) ist aber erst ab 16.06. wieder aus dem Urlaub zurück. Das könnte sich also etwas verzögern.
+
+Bis Montag\! Anna Berger
+
+Am Di., 19. Mai 2026 um 19:00 Uhr schrieb Max Token \<<testuser@maxgoisser.onmicrosoft.com>\>:
+
+\--
+
+Best regards
+
+Daniel
+
+## Attachment: Projektspezifikation_v01.docx
+
+MIME type: application/vnd.openxmlformats-officedocument.wordprocessingml.document
+
+**Projektspezifikation – Kundenportal 2.0**
+
+Firma A GmbH × Firma B Software GmbH
+
+*Version 0.1 – Entwurf | Stand: 05. Juni 2025*
+
+# 1\. Änderungshistorie
+
+| \*\*Version\*\* | \*\*Datum\*\* | \*\*Autor\*\* | \*\*Änderung\*\* |
+| --- | --- | --- | --- |
+| 0.1 | 05.06.2025 | A. Berger / T. Klein | Initiales Dokument erstellt |
+
+# 2\. Projektübersicht
+
+Dieses Dokument beschreibt die technische und fachliche Spezifikation des Kundenportals 2.0 auf Basis des Lastenhefts v1.0 (Firma A GmbH, 02.06.2025). Es wird im Verlauf des Projekts gemeinsam gepflegt.
+
+# 3\. Technologie-Stack (in Abstimmung)
+
+**Frontend:** TBD – Entscheidung ausstehend (React mit MUI oder shadcn/ui)
+
+**Backend:** Node.js mit NestJS (bevorzugt) oder Java Spring Boot
+
+**Datenbank:** PostgreSQL + Redis (Caching)
+
+**Infrastruktur:** Azure (Docker / Kubernetes), CI/CD via GitHub Actions
+
+# 4\. Offene Punkte
+
+• Frontend-Framework noch nicht finalisiert
+
+• SAP-Schnittstelle: Technische Details noch zu klären
+
+• Sicherheitsaudit: Anbieter noch nicht ausgewählt
+
+*Dieses Dokument ist vertraulich. Weitergabe nur mit ausdrücklicher Genehmigung beider Parteien.*
+
+## Attachment: nested_message_4.eml
+
+MIME type: message/rfc822
+
+**Subject**: Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+
+**From**: "Daniel Person" \<mail@dfiebig.de\>
+
+**To**: "Max Token" \<testuser@maxgoisser.onmicrosoft.com\>
+
+**Date**: Tue, 19 May 2026 17:21:44 GMT
+
+Hallo Herr Klein,
+
+das Dokument sieht gut aus, danke für die schnelle Aufstellung\! Die Struktur ist genau richtig.
+
+Zur Frontend-Frage: Ich habe kurz mit unserem internen UX-Team gesprochen. Die haben bisher mit React gearbeitet und wären froh, wenn wir dabei bleiben. Für die Komponentenbibliothek haben wir keine starke Meinung – das würde ich Ihnen überlassen. Unser Designer kann mit MUI oder shadcn/ui arbeiten.
+
+Eine Frage zum Auth-Thema: Sie hatten Keycloak erwähnt. Ist das die Empfehlung, oder schauen wir uns auch Auth0 an?
+
+Viele Grüße Anna Berger
+
+Am Di., 19. Mai 2026 um 19:02 Uhr schrieb Max Token \<<testuser@maxgoisser.onmicrosoft.com>\>:
+
+\--
+
+Best regards
+
+Daniel
+
+## Attachment: nested_message_5.eml
+
+MIME type: message/rfc822
+
+**Subject**: AW: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+
+**From**: "Max Token" \<testuser@maxgoisser.onmicrosoft.com\>
+
+**To**: "Daniel Person" \<mail@dfiebig.de\>
+
+**Date**: Tue, 19 May 2026 17:22:11 GMT
+
+Hallo Frau Berger,
+
+gut, React ist gesetzt – dann stimmt das schon mal. Für die Komponentenbibliothek empfehle ich shadcn/ui mit Tailwind CSS: deutlich flexibler in der Anpassung, kein Vendor-Lock-in, und die Performance ist bei großen Dashboards besser als bei MUI. Ich schicke Ihnen kurz ein paar Screenshots aus einem Referenzprojekt, wenn Sie möchten.
+
+Zu Auth: Keycloak ist meine klare Empfehlung gegenüber Auth0. Keycloak ist Open Source, wir betreiben es self-hosted auf Azure – damit bleiben alle Daten in der EU und wir haben volle Kontrolle. Auth0 wäre einfacher im Setup, aber mit laufenden Lizenzkosten und einem US-Anbieter. Für DSGVO-sensitive Kundendaten eindeutig Keycloak.
+
+Ich trage das nach unserem OK in die Spezifikation ein.
+
+Viele Grüße Thomas Klein
+
+**Von:** Daniel Person \<mail@dfiebig.de\> **Gesendet:** Dienstag, 19. Mai 2026 17:21 **An:** Max Token \<testuser@maxgoisser.onmicrosoft.com\> **Betreff:** Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+
+Hallo Herr Klein,
+
+das Dokument sieht gut aus, danke für die schnelle Aufstellung\! Die Struktur ist genau richtig.
+
+Zur Frontend-Frage: Ich habe kurz mit unserem internen UX-Team gesprochen. Die haben bisher mit React gearbeitet und wären froh, wenn wir dabei bleiben. Für die Komponentenbibliothek haben wir keine starke Meinung – das würde ich Ihnen überlassen. Unser Designer kann mit MUI oder shadcn/ui arbeiten.
+
+Eine Frage zum Auth-Thema: Sie hatten Keycloak erwähnt. Ist das die Empfehlung, oder schauen wir uns auch Auth0 an?
+
+Viele Grüße Anna Berger
+
+Am Di., 19. Mai 2026 um 19:02 Uhr schrieb Max Token \<<testuser@maxgoisser.onmicrosoft.com>\>:
+
+\--
+
+Best regards
+
+Daniel
+
+## Attachment: nested_message_6.eml
+
+MIME type: message/rfc822
+
+**Subject**: Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+
+**From**: "Daniel Person" \<mail@dfiebig.de\>
+
+**To**: "Max Token" \<testuser@maxgoisser.onmicrosoft.com\>
+
+**Date**: Tue, 19 May 2026 17:22:33 GMT
+
+Hallo Herr Klein,
+
+shadcn/ui + Keycloak – beides einverstanden. Das DSGVO-Argument für Keycloak hat auch intern direkt überzeugt, das hatte ich unserer Rechtsabteilung weitergeleitet.
+
+Bitte tragen Sie beides in die Spezifikation ein und schicken mir die nächste Version zu. Ich wäre außerdem dankbar, wenn Sie die Architektur grob skizzieren könnten – also wie Frontend, Backend, Datenbank und Auth zusammenspielen. Das würde mir helfen, das intern zu kommunizieren.
+
+Noch eine Information zu SAP: Ich habe von Fr. Hoffmann erfahren, dass sie doch schon ab nächster Woche zurück ist. Wir können den Klärungstermin also vorziehen – wäre Donnerstag, 19. Juni um 14 Uhr möglich?
+
+Viele Grüße Anna Berger
+
+Am Di., 19. Mai 2026 um 19:22 Uhr schrieb Max Token \<<testuser@maxgoisser.onmicrosoft.com>\>:
+
+\--
+
+Best regards
+
+Daniel
+
+## Attachment: nested_message_7.eml
+
+MIME type: message/rfc822
+
+**Subject**: AW: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+
+**From**: "Max Token" \<testuser@maxgoisser.onmicrosoft.com\>
+
+**To**: "Daniel Person" \<mail@dfiebig.de\>
+
+**Date**: Tue, 19 May 2026 17:24:42 GMT
+
+Hallo Frau Berger,
+
+im Anhang die aktualisierte Spezifikation (v0.2). Neu drin sind: die finalisierten Technologie-Entscheidungen (mit Datumshinweis) und ein Abschnitt zur Systemarchitektur im 3-Schichten-Modell – das sollte für die interne Kommunikation gut verständlich sein.
+
+Donnerstag 19. Juni, 14 Uhr für den SAP-Termin ist prima, ich habe ihn eingestellt.
+
+Eine Bitte: Können Sie Fr. Hoffmann bitten, vorab die Frage zu beantworten, ob wir RFC over HTTP mit OData oder einen anderen Mechanismus nutzen sollen? Das würde den Termin deutlich effizienter machen.
+
+Viele Grüße Thomas Klein
+
+**Von:** Daniel Person \<mail@dfiebig.de\> **Gesendet:** Dienstag, 19. Mai 2026 17:22 **An:** Max Token \<testuser@maxgoisser.onmicrosoft.com\> **Betreff:** Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+
+Hallo Herr Klein,
+
+shadcn/ui + Keycloak – beides einverstanden. Das DSGVO-Argument für Keycloak hat auch intern direkt überzeugt, das hatte ich unserer Rechtsabteilung weitergeleitet.
+
+Bitte tragen Sie beides in die Spezifikation ein und schicken mir die nächste Version zu. Ich wäre außerdem dankbar, wenn Sie die Architektur grob skizzieren könnten – also wie Frontend, Backend, Datenbank und Auth zusammenspielen. Das würde mir helfen, das intern zu kommunizieren.
+
+Noch eine Information zu SAP: Ich habe von Fr. Hoffmann erfahren, dass sie doch schon ab nächster Woche zurück ist. Wir können den Klärungstermin also vorziehen – wäre Donnerstag, 19. Juni um 14 Uhr möglich?
+
+Viele Grüße Anna Berger
+
+Am Di., 19. Mai 2026 um 19:22 Uhr schrieb Max Token \<<testuser@maxgoisser.onmicrosoft.com>\>:
+
+\--
+
+Best regards
+
+Daniel
+
+## Attachment: Projektspezifikation_v01.docx
+
+MIME type: application/vnd.openxmlformats-officedocument.wordprocessingml.document
+
+**Projektspezifikation – Kundenportal 2.0**
+
+Firma A GmbH × Firma B Software GmbH
+
+*Version 0.2 – Entwurf | Stand: 12. Juni 2025*
+
+# 1\. Änderungshistorie
+
+| \*\*Version\*\* | \*\*Datum\*\* | \*\*Autor\*\* | \*\*Änderung\*\* |
+| --- | --- | --- | --- |
+| 0.1 | 05.06.2025 | A. Berger / T. Klein | Initiales Dokument erstellt |
+| 0.2 | 12.06.2025 | T. Klein | Technologie-Entscheidung ergänzt; Architekturdiagramm-Beschreibung hinzugefügt |
+
+# 2\. Projektübersicht
+
+Dieses Dokument beschreibt die technische und fachliche Spezifikation des Kundenportals 2.0 auf Basis des Lastenhefts v1.0 (Firma A GmbH, 02.06.2025). Es wird im Verlauf des Projekts gemeinsam gepflegt.
+
+# 3\. Technologie-Stack
+
+**Frontend:** React 18 mit shadcn/ui + Tailwind CSS (beschlossen, E-Mail 05.06.2025)
+
+**Backend:** Node.js mit NestJS
+
+**Datenbank:** PostgreSQL 15 + Redis 7 (Caching)
+
+**Auth:** OAuth 2.0 via Keycloak (Self-hosted auf Azure)
+
+**Infrastruktur:** Azure AKS (Kubernetes), CI/CD via GitHub Actions
+
+# 4\. Systemarchitektur (Überblick)
+
+## 4.1 Schichtenmodell
+
+Das System folgt einer klassischen 3-Schicht-Architektur:
+
+**Präsentationsschicht:** React SPA, gehostet als Azure Static Web App
+
+**Applikationsschicht:** NestJS REST API, containerisiert via Docker
+
+**Datenschicht:** PostgreSQL (Azure Database), Redis (Azure Cache)
+
+# 5\. Offene Punkte
+
+• SAP-Schnittstelle: Technische Details noch zu klären (Klärungstermin 19.06.2025)
+
+• Sicherheitsaudit: Anbieter noch nicht ausgewählt
+
+• 3D-Konfigurator (F-05): Technische Machbarkeit offen
+
+*Dieses Dokument ist vertraulich. Weitergabe nur mit ausdrücklicher Genehmigung beider Parteien.*
+
+## Attachment: nested_message_8.eml
+
+MIME type: message/rfc822
+
+**Subject**: Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+
+**From**: "Daniel Person" \<mail@dfiebig.de\>
+
+**To**: "Max Token" \<testuser@maxgoisser.onmicrosoft.com\>
+
+**Date**: Tue, 19 May 2026 17:24:59 GMT
+
+Hallo Herr Klein,
+
+ich habe Fr. Hoffmann Ihre Frage weitergeleitet. Sie hat bereits geantwortet: Das SAP-System nutzt S/4HANA, und die bevorzugte Integrationsmethode in unserem Unternehmen ist SAP BTP Integration Suite – OData v4 ist technisch möglich und von IT freigegeben.
+
+Das Dokument sieht sehr gut aus. Der Architekturüberblick ist genau das, was ich gebraucht habe – ich habe ihn heute Nachmittag schon erfolgreich meinem Geschäftsführer präsentiert.
+
+Bis Donnerstag\! Anna Berger
+
+Am Di., 19. Mai 2026 um 19:24 Uhr schrieb Max Token \<<testuser@maxgoisser.onmicrosoft.com>\>:
+
+\--
+
+Best regards
+
+Daniel
+
+## Attachment: nested_message_9.eml
+
+MIME type: message/rfc822
+
+**Subject**: AW: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+
+**From**: "Max Token" \<testuser@maxgoisser.onmicrosoft.com\>
+
+**To**: "Daniel Person" \<mail@dfiebig.de\>
+
+**Date**: Tue, 19 May 2026 17:28:02 GMT
+
+Hallo Frau Berger,
+
+der SAP-Termin war sehr gut. Fr. Hoffmann hat die letzten offenen Fragen beantwortet – ich kann jetzt die SAP-Schnittstelle vollständig spezifizieren. Zusammengefasst: BTP Integration Suite, OData v4, Echtzeit-Webhooks für kritische Ereignisse und 15-Minuten-Delta-Sync für Stammdaten.
+
+Zum Sicherheitsaudit: Ich habe in zwei Projekten mit SRC Security Research & Consulting (Bonn) sehr gute Erfahrungen gemacht. Zertifiziert nach BSI-Standards, erfahren mit Webanwendungen und DSGVO. Ich würde die empfehlen, wenn Sie einverstanden sind.
+
+Ich bereite dann v0.3 der Spezifikation vor, in der beide Punkte geklärt sind.
+
+Viele Grüße Thomas Klein
+
+**Von:** Daniel Person \<mail@dfiebig.de\> **Gesendet:** Dienstag, 19. Mai 2026 17:24 **An:** Max Token \<testuser@maxgoisser.onmicrosoft.com\> **Betreff:** Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+
+Hallo Herr Klein,
+
+ich habe Fr. Hoffmann Ihre Frage weitergeleitet. Sie hat bereits geantwortet: Das SAP-System nutzt S/4HANA, und die bevorzugte Integrationsmethode in unserem Unternehmen ist SAP BTP Integration Suite – OData v4 ist technisch möglich und von IT freigegeben.
+
+Das Dokument sieht sehr gut aus. Der Architekturüberblick ist genau das, was ich gebraucht habe – ich habe ihn heute Nachmittag schon erfolgreich meinem Geschäftsführer präsentiert.
+
+Bis Donnerstag\! Anna Berger
+
+Am Di., 19. Mai 2026 um 19:24 Uhr schrieb Max Token \<<testuser@maxgoisser.onmicrosoft.com>\>:
+
+\--
+
+Best regards
+
+Daniel
+
+## Attachment: nested_message_10.eml
+
+MIME type: message/rfc822
+
+**Subject**: Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+
+**From**: "Daniel Person" \<mail@dfiebig.de\>
+
+**To**: "Max Token" \<testuser@maxgoisser.onmicrosoft.com\>
+
+**Date**: Tue, 19 May 2026 17:28:25 GMT
+
+Hallo Herr Klein,
+
+SRC klingt gut, ich habe kurz gegoogelt – solide Referenzliste. Bitte beauftragen Sie eine Anfrage zu einem unverbindlichen Angebot und halten Sie mich auf dem Laufenden.
+
+Bitte schicken Sie mir v0.3 der Spezifikation sobald fertig – ich brauche sie für ein internes Statusmeeting am 25. Juni.
+
+Viele Grüße Anna Berger
+
+Am Di., 19. Mai 2026 um 19:28 Uhr schrieb Max Token \<<testuser@maxgoisser.onmicrosoft.com>\>:
+
+\--
+
+Best regards
+
+Daniel
+
+## Attachment: nested_message_11.eml
+
+MIME type: message/rfc822
+
+**Subject**: AW: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+
+**From**: "Max Token" \<testuser@maxgoisser.onmicrosoft.com\>
+
+**To**: "Daniel Person" \<mail@dfiebig.de\>
+
+**Date**: Tue, 19 May 2026 17:29:10 GMT
+
+Hallo Frau Berger,
+
+im Anhang Version 0.3 der Spezifikation, rechtzeitig für Ihr Meeting. Neu drin:
+
+- SAP-Schnittstelle vollständig beschrieben (Abschnitt 4.2)
+- Sicherheitsaudit: SRC als Anbieter eingetragen, Zeitslot Phase 4 (KW 42)
+- Neues Risikoregister (Abschnitt 6) mit vier identifizierten Risiken und Maßnahmen
+
+Eine offene Frage bleibt: F-05, der 3D-Produktkonfigurator. Haben Sie intern schon eine Tendenz, ob wir das in Angriff nehmen oder auf 2D reduzieren?
+
+SRC hat sich übrigens bereits gemeldet – Angebot kommt bis Ende der Woche.
+
+Viele Grüße Thomas Klein
+
+**Von:** Daniel Person \<mail@dfiebig.de\> **Gesendet:** Dienstag, 19. Mai 2026 17:28 **An:** Max Token \<testuser@maxgoisser.onmicrosoft.com\> **Betreff:** Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+
+Hallo Herr Klein,
+
+SRC klingt gut, ich habe kurz gegoogelt – solide Referenzliste. Bitte beauftragen Sie eine Anfrage zu einem unverbindlichen Angebot und halten Sie mich auf dem Laufenden.
+
+Bitte schicken Sie mir v0.3 der Spezifikation sobald fertig – ich brauche sie für ein internes Statusmeeting am 25. Juni.
+
+Viele Grüße Anna Berger
+
+Am Di., 19. Mai 2026 um 19:28 Uhr schrieb Max Token \<<testuser@maxgoisser.onmicrosoft.com>\>:
+
+\--
+
+Best regards
+
+Daniel
+
+## Attachment: Projektspezifikation_v01.docx
+
+MIME type: application/vnd.openxmlformats-officedocument.wordprocessingml.document
+
+**Projektspezifikation – Kundenportal 2.0**
+
+Firma A GmbH × Firma B Software GmbH
+
+*Version 0.3 – Entwurf | Stand: 23. Juni 2025*
+
+# 1\. Änderungshistorie
+
+| \*\*Version\*\* | \*\*Datum\*\* | \*\*Autor\*\* | \*\*Änderung\*\* |
+| --- | --- | --- | --- |
+| 0.1 | 05.06.2025 | A. Berger / T. Klein | Initiales Dokument erstellt |
+| 0.2 | 12.06.2025 | T. Klein | Technologie-Entscheidung + Architektur |
+| 0.3 | 23.06.2025 | A. Berger / T. Klein | SAP-Schnittstelle spezifiziert; Sicherheitsaudit-Anbieter festgelegt; Risikotabelle hinzugefügt |
+
+# 2\. Projektübersicht
+
+Dieses Dokument beschreibt die technische und fachliche Spezifikation des Kundenportals 2.0 auf Basis des Lastenhefts v1.0 (Firma A GmbH, 02.06.2025).
+
+# 3\. Technologie-Stack
+
+**Frontend:** React 18 mit shadcn/ui + Tailwind CSS ✓
+
+**Backend:** Node.js mit NestJS
+
+**Datenbank:** PostgreSQL 15 + Redis 7
+
+**Auth:** OAuth 2.0 via Keycloak (Self-hosted auf Azure)
+
+**Infrastruktur:** Azure AKS, CI/CD via GitHub Actions
+
+# 4\. Systemarchitektur
+
+## 4.1 Schichtenmodell
+
+**Präsentationsschicht:** React SPA, Azure Static Web App
+
+**Applikationsschicht:** NestJS REST API, containerisiert via Docker
+
+**Datenschicht:** PostgreSQL (Azure Database), Redis (Azure Cache)
+
+## 4.2 SAP-Schnittstelle (neu)
+
+Die Anbindung an das bestehende SAP ERP (S/4HANA) erfolgt über SAP BTP Integration Suite (ehemals SAP Cloud Platform Integration). Die API-Kommunikation nutzt RFC over HTTP (OData v4). Folgende Entitäten werden synchronisiert:
+
+• Kundenstammdaten (Customer Master)
+
+• Bestellungen (Sales Orders) – Lesezugriff
+
+• Rechnungen (Billing Documents) – Lesezugriff + PDF-Export
+
+**Synchronisationsintervall:** Echtzeit via Webhooks für kritische Ereignisse; Delta-Sync alle 15 Min. für Stammdaten.
+
+# 5\. Sicherheit
+
+**Sicherheitsaudit:** SRC Security Research Consulting GmbH (Bonn) – Beauftragung erfolgt. Audit geplant für Phase 4 (ab KW 42).
+
+Weitere Massnahmen: OWASP Top 10 als Entwicklungsrichtlinie; Penetrationstest vor Go-Live; DSGVO-Datenschutz-Folgenabschätzung durch Datenschutzbeauftragten der Firma A.
+
+# 6\. Risikoregister
+
+| \*\*Risiko\*\* | \*\*Wahrsch.\*\* | \*\*Auswirkung\*\* | \*\*Massnahme\*\* |
+| --- | --- | --- | --- |
+| SAP-Integration komplexer als erwartet | Mittel | Hoch | Puffer 2 Wo. in Phase 2 |
+| 3D-Konfigurator technisch nicht realisierbar | Niedrig | Mittel | Fallback: 2D-Konfigurator |
+| Schlüsselperson fällt aus | Niedrig | Hoch | Wissenstransfer Doku |
+| Azure-Ausfallzeiten (Infrastruktur) | Niedrig | Mittel | Multi-Zone-Deployment |
+
+# 7\. Offene Punkte
+
+• 3D-Konfigurator (F-05): Technische Machbarkeit – Entscheidung bis 30.06.2025
+
+*Dieses Dokument ist vertraulich. Weitergabe nur mit ausdrücklicher Genehmigung beider Parteien.*
+
+## Attachment: nested_message_12.eml
+
+MIME type: message/rfc822
+
+**Subject**: Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+
+**From**: "Daniel Person" \<mail@dfiebig.de\>
+
+**To**: "Max Token" \<testuser@maxgoisser.onmicrosoft.com\>
+
+**Date**: Tue, 19 May 2026 17:29:38 GMT
+
+Hallo Herr Klein,
+
+das Dokument ist sehr gut geworden, das Meeting lief super. Der Geschäftsführer war beeindruckt vom Risikoregister – sowas hatten wir bei früheren Projekten nie.
+
+Zum 3D-Konfigurator: Das ist intern tatsächlich noch umstritten. Unsere Vertriebsleitung möchte ihn unbedingt haben, unser IT-Leiter hält ihn für eine „nice-to-have-Spielerei" mit hohem Risiko. Ich brauche von Ihnen eine ehrliche technische Einschätzung: Ist das realistisch umsetzbar in Phase 4, und was würde es extra kosten?
+
+Viele Grüße Anna Berger
+
+Am Di., 19. Mai 2026 um 19:29 Uhr schrieb Max Token \<<testuser@maxgoisser.onmicrosoft.com>\>:
+
+\--
+
+Best regards
+
+Daniel

@@ -1,0 +1,136 @@
+---
+source: erato/tests/integration_test_file_processor_snapshots.rs
+expression: extracted
+---
+**Subject**: E2E HTML email with PDF attachment
+
+**From**: "Erato E2E" \<e2e@eratolabs.com\>
+
+**To**: "Test User" \<testuser@eratolabs.com\>
+
+**Date**: Fri, 20 Mar 2026 13:28:03 +0100
+
+
+## Attachment: sample_compressed.pdf
+
+MIME type: application/pdf
+
+# Sample Team Prepared By
+
+### sample-files.com Multi-Page Report "A comprehensive and content-heavy report that includes text, images, and tables for thorough
+
+### testing of pagination and complex layouts."
+
+## Table of Contents
+
+**1. Introduction 2. Market Analysis 3. Data Analysis 4. Product Overview 5. Results & Discussion 6. Marketing Strategy 7. Sales Projections 8. Launch Timeline**
+
+This sample PDF file is provided by Sample-Files.com. Visit us for more sample files and resource.
+
+## Introduction
+
+This section introduces the report and highlights the key objectives. The purpose of this report is to analyze data, evaluate outcomes, and provide insights for future decisions. This analysis is based on various data sources that include quantitative and qualitative inputs. Note: Add an image here illustrating the concept of data analysis or research methodology.
+
+ID Metric Value Remarks
+
+1 Metric 1 70 Valid Data
+
+2 Metric 2 431 Valid Data
+
+3 Metric 3 186 Valid Data
+
+4 Metric 4 489 Valid Data
+
+5 Metric 5 180 Valid Data
+
+This sample PDF file is provided by Sample-Files.com. Visit us for more sample files and resource.
+
+## Market Analysis
+
+Nam quis porta ex. Donec porttitor at sem nec sollicitudin. Ut vel commodo tortor, sagittis egestas
+
+- nisl. Donec quam mauris, tristique non tempus vitae, ornare sed mauris. Etiam blandit tempor metus, at vehicula nisi. Maecenas suscipit vulputate varius.
+
+**Current market share Projected sales for the first three years**
+
+This sample PDF file is provided by Sample-Files.com. Visit us for more sample files and resource.
+
+![](image_0.png)
+
+![](image_1.png)
+
+## Data Analysis
+
+This section analyzes data collected from various sources. The data is presented in a structured format to identify trends, patterns, and anomalies. Statistical methods are used to derive meaningful insights. Note: Add a chart or a graph here depicting the data trends visually.
+
+This sample PDF file is provided by Sample-Files.com. Visit us for more sample files and resource.
+
+![](image_2.png)
+
+## Product Overview
+
+Nam quis porta ex. Donec porttitor at sem nec sollicitudin. Ut vel commodo tortor, sagittis egestas
+
+- nisl. Donec quam mauris, tristique non tempus vitae, ornare sed mauris. Etiam blandit tempor metus, at vehicula nisi. Maecenas suscipit vulputate varius.
+
+### Integer et justo velus.
+
+Ut in ipsum ac risus. Maecenas iaculis. Ut nec mauris vel. Tellus accumsan.
+
+Key Features
+
+### Integer et justo velus.
+
+Ut in ipsum ac risus. Maecenas iaculis. Ut nec mauris vel.
+
+Tellus accumsan. Key Features
+
+This sample PDF file is provided by Sample-Files.com. Visit us for more sample files and resource.
+
+![](image_3.png)
+
+![](image_4.png)
+
+## Results & Discussion
+
+The results and findings are discussed in this section. The data presented previously is analyzed and contextualized to understand the implications. This section highlights key trends, potential causes, and implications for future strategies. Note: Add a comparative analysis image or table illustrating different scenarios.
+
+This sample PDF file is provided by Sample-Files.com. Visit us for more sample files and resource.
+
+## Marketing Strategy
+
+Tristique non tempus vitae, ornare sed mauris. Etiam blandit tempor metus, at vehicula nisi. Maecenas suscipit vulputate varius.
+
+### Integer et justo velus.
+
+Ut in ipsum ac risus. Maecenas iaculis. Ut nec mauris vel. Tellus accumsan.
+
+1st Strategy
+
+### Integer et justo velus.
+
+Ut in ipsum ac risus. Maecenas iaculis. Ut nec mauris vel. Tellus accumsan.
+
+2nd Strategy
+
+This sample PDF file is provided by Sample-Files.com. Visit us for more sample files and resource.
+
+## Sales Projections
+
+Tristique non tempus vitae, ornare sed mauris. Etiam blandit tempor metus, at vehicula nisi. Maecenas suscipit vulputate varius. Metric Sales Market Size $50 Billion
+
+User Satisfaction 85%
+
+Growth Rate 10% Series 1 Series 2
+
+Item 1 Item 2 Item 3
+
+0 5 10 15 20
+
+This sample PDF file is provided by Sample-Files.com. Visit us for more sample files and resource.
+
+## Launch Timeline
+
+Vivamus ac nunc vitae nulla molestie sodales. Proin sit amet rhoncus lacus. Cras non erat imperdiet sapien porttitor aliquam nec ut velit.
+
+This sample PDF file is provided by Sample-Files.com. Visit us for more sample files and resource.

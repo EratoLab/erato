@@ -1500,6 +1500,79 @@ async fn test_token_usage_estimate_with_virtual_file(pool: Pool<Postgres>) {
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_token_usage_estimate_with_virtual_styled_newsletter_eml(pool: Pool<Postgres>) {
+    use base64::{Engine as _, engine::general_purpose};
+
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let eml_bytes = read_integration_test_file_bytes("weekly_digest_microsoft_via_erato.eml");
+    let request = json!({
+        "new_chat": {},
+        "new_message_content": "Summarize this email and identify key points.",
+        "virtual_files": [{
+            "filename": "weekly_digest_microsoft_via_erato.eml",
+            "content_type": "message/rfc822",
+            "base64": general_purpose::STANDARD.encode(eml_bytes),
+        }],
+    });
+
+    let response = server
+        .post("/api/v1beta/token_usage/estimate")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&request)
+        .await;
+
+    response.assert_status_ok();
+    let token_usage: Value = response.json();
+
+    let file_details = token_usage["file_details"]
+        .as_array()
+        .expect("Expected file_details array");
+    assert_eq!(file_details.len(), 1, "Expected one virtual file detail");
+    let virtual_detail = &file_details[0];
+    assert_eq!(
+        virtual_detail["filename"].as_str().unwrap(),
+        "weekly_digest_microsoft_via_erato.eml",
+        "Filename should be echoed in file_details"
+    );
+    let virtual_tokens = virtual_detail["token_count"]
+        .as_u64()
+        .expect("Expected token_count");
+    assert!(
+        virtual_tokens > 1000,
+        "Virtual EML should contribute tokens (and not remove too much content)"
+    );
+    assert!(
+        virtual_tokens < 20_000,
+        "Virtual EML should be parsed and bounded to realistic size; got {virtual_tokens} tokens"
+    );
+
+    let total_tokens = token_usage["stats"]["total_tokens"]
+        .as_u64()
+        .expect("Expected total_tokens");
+    let file_tokens = token_usage["stats"]["file_tokens"]
+        .as_u64()
+        .expect("Expected file_tokens");
+
+    assert!(
+        file_tokens >= virtual_tokens,
+        "Stats file_tokens should include virtual file contribution"
+    );
+    assert!(
+        total_tokens >= file_tokens,
+        "total_tokens should include file token contribution"
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_message_submit_with_completed_audio_transcription(pool: Pool<Postgres>) {
     use crate::test_utils::MockLlmConfig;
     let mock_config = MockLlmConfig {

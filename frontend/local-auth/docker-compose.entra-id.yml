@@ -8,3 +8,10 @@ services:
     volumes:
       - ./oauth2-proxy-entra-id.cfg:/etc/oauth2-proxy/oauth2-proxy.cfg
     command: ["--config", "/etc/oauth2-proxy/oauth2-proxy.cfg"]
+    depends_on:
+      redis:
+        condition: service_started
+
+  redis:
+    image: redis:8.8.0-alpine3.23@sha256:09160599abd229764c0fb44cb6be640294e1d360a54b19985ab4843dcf2d90f1
+    network_mode: host

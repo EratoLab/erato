@@ -1,0 +1,145 @@
+---
+source: erato/tests/integration_test_file_processor_snapshots.rs
+expression: extracted
+---
+**Subject**: Weekly digest: Microsoft service updates
+
+**From**: "Microsoft 365 Message center" \<o365mc@synthetic.example.com\>
+
+**To**: "Tenant Admin" \<admin@contoso.example\>
+
+**Date**: Mon, 08 Jun 2026 06:00:00 +0000
+
+Synthetic preheader preview text
+
+Weekly digest readable item ONE about service retirement
+
+
+## Email plain text body
+
+Microsoft 365 service updates - synthetic sample
+
+Weekly digest readable item ONE about service retirement. Action required by the listed date.
+Weekly digest readable item TWO about new admin controls. No action required.
+Weekly digest readable item THREE about rollout timing. Rollout begins in early stages and completes over several weeks.
+
+Update MC100000: A synthetic change notice describing a feature update number 0 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100001: A synthetic change notice describing a feature update number 1 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100002: A synthetic change notice describing a feature update number 2 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100003: A synthetic change notice describing a feature update number 3 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100004: A synthetic change notice describing a feature update number 4 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100005: A synthetic change notice describing a feature update number 5 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100006: A synthetic change notice describing a feature update number 6 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100007: A synthetic change notice describing a feature update number 7 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100008: A synthetic change notice describing a feature update number 8 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100009: A synthetic change notice describing a feature update number 9 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100010: A synthetic change notice describing a feature update number 10 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100011: A synthetic change notice describing a feature update number 11 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100012: A synthetic change notice describing a feature update number 12 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100013: A synthetic change notice describing a feature update number 13 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100014: A synthetic change notice describing a feature update number 14 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100015: A synthetic change notice describing a feature update number 15 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100016: A synthetic change notice describing a feature update number 16 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100017: A synthetic change notice describing a feature update number 17 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100018: A synthetic change notice describing a feature update number 18 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100019: A synthetic change notice describing a feature update number 19 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100020: A synthetic change notice describing a feature update number 20 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100021: A synthetic change notice describing a feature update number 21 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100022: A synthetic change notice describing a feature update number 22 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100023: A synthetic change notice describing a feature update number 23 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100024: A synthetic change notice describing a feature update number 24 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100025: A synthetic change notice describing a feature update number 25 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100026: A synthetic change notice describing a feature update number 26 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100027: A synthetic change notice describing a feature update number 27 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100028: A synthetic change notice describing a feature update number 28 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100029: A synthetic change notice describing a feature update number 29 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100030: A synthetic change notice describing a feature update number 30 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100031: A synthetic change notice describing a feature update number 31 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100032: A synthetic change notice describing a feature update number 32 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100033: A synthetic change notice describing a feature update number 33 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100034: A synthetic change notice describing a feature update number 34 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100035: A synthetic change notice describing a feature update number 35 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100036: A synthetic change notice describing a feature update number 36 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100037: A synthetic change notice describing a feature update number 37 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100038: A synthetic change notice describing a feature update number 38 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100039: A synthetic change notice describing a feature update number 39 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100040: A synthetic change notice describing a feature update number 40 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100041: A synthetic change notice describing a feature update number 41 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100042: A synthetic change notice describing a feature update number 42 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100043: A synthetic change notice describing a feature update number 43 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100044: A synthetic change notice describing a feature update number 44 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100045: A synthetic change notice describing a feature update number 45 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100046: A synthetic change notice describing a feature update number 46 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100047: A synthetic change notice describing a feature update number 47 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100048: A synthetic change notice describing a feature update number 48 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100049: A synthetic change notice describing a feature update number 49 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100050: A synthetic change notice describing a feature update number 50 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100051: A synthetic change notice describing a feature update number 51 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100052: A synthetic change notice describing a feature update number 52 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100053: A synthetic change notice describing a feature update number 53 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100054: A synthetic change notice describing a feature update number 54 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100055: A synthetic change notice describing a feature update number 55 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100056: A synthetic change notice describing a feature update number 56 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100057: A synthetic change notice describing a feature update number 57 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100058: A synthetic change notice describing a feature update number 58 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100059: A synthetic change notice describing a feature update number 59 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100060: A synthetic change notice describing a feature update number 60 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100061: A synthetic change notice describing a feature update number 61 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100062: A synthetic change notice describing a feature update number 62 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100063: A synthetic change notice describing a feature update number 63 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100064: A synthetic change notice describing a feature update number 64 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100065: A synthetic change notice describing a feature update number 65 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100066: A synthetic change notice describing a feature update number 66 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100067: A synthetic change notice describing a feature update number 67 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100068: A synthetic change notice describing a feature update number 68 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100069: A synthetic change notice describing a feature update number 69 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100070: A synthetic change notice describing a feature update number 70 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100071: A synthetic change notice describing a feature update number 71 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100072: A synthetic change notice describing a feature update number 72 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100073: A synthetic change notice describing a feature update number 73 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100074: A synthetic change notice describing a feature update number 74 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100075: A synthetic change notice describing a feature update number 75 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100076: A synthetic change notice describing a feature update number 76 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100077: A synthetic change notice describing a feature update number 77 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100078: A synthetic change notice describing a feature update number 78 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100079: A synthetic change notice describing a feature update number 79 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100080: A synthetic change notice describing a feature update number 80 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100081: A synthetic change notice describing a feature update number 81 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100082: A synthetic change notice describing a feature update number 82 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100083: A synthetic change notice describing a feature update number 83 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100084: A synthetic change notice describing a feature update number 84 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100085: A synthetic change notice describing a feature update number 85 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100086: A synthetic change notice describing a feature update number 86 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100087: A synthetic change notice describing a feature update number 87 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100088: A synthetic change notice describing a feature update number 88 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100089: A synthetic change notice describing a feature update number 89 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100090: A synthetic change notice describing a feature update number 90 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100091: A synthetic change notice describing a feature update number 91 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100092: A synthetic change notice describing a feature update number 92 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100093: A synthetic change notice describing a feature update number 93 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100094: A synthetic change notice describing a feature update number 94 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100095: A synthetic change notice describing a feature update number 95 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100096: A synthetic change notice describing a feature update number 96 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100097: A synthetic change notice describing a feature update number 97 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100098: A synthetic change notice describing a feature update number 98 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100099: A synthetic change notice describing a feature update number 99 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100100: A synthetic change notice describing a feature update number 100 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100101: A synthetic change notice describing a feature update number 101 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100102: A synthetic change notice describing a feature update number 102 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100103: A synthetic change notice describing a feature update number 103 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100104: A synthetic change notice describing a feature update number 104 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100105: A synthetic change notice describing a feature update number 105 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100106: A synthetic change notice describing a feature update number 106 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100107: A synthetic change notice describing a feature update number 107 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100108: A synthetic change notice describing a feature update number 108 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100109: A synthetic change notice describing a feature update number 109 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100110: A synthetic change notice describing a feature update number 110 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100111: A synthetic change notice describing a feature update number 111 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100112: A synthetic change notice describing a feature update number 112 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100113: A synthetic change notice describing a feature update number 113 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100114: A synthetic change notice describing a feature update number 114 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100115: A synthetic change notice describing a feature update number 115 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100116: A synthetic change notice describing a feature update number 116 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100117: A synthetic change notice describing a feature update number 117 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100118: A synthetic change notice describing a feature update number 118 that administrators may want to review for their tenant configuration and end-user impact.
+Update MC100119: A synthetic change notice describing a feature update number 119 that administrators may want to review for their tenant configuration and end-user impact.
