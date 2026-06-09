@@ -33,7 +33,9 @@ export interface FetchOutlookMessageBytesResult {
   internetMessageId: string | null;
 }
 
-export type AcquireGraphToken = () => Promise<string>;
+export type AcquireGraphToken = (options?: {
+  forceRefresh?: boolean;
+}) => Promise<string>;
 
 export interface GraphRequestOptions {
   signal?: AbortSignal;
@@ -64,9 +66,9 @@ export async function fetchOutlookMessageBytesViaGraph(
   options: GraphRequestOptions = {},
 ): Promise<FetchOutlookMessageBytesResult> {
   const restId = convertEwsIdToGraphId(ewsItemId);
-  const token = await acquireToken();
-  const metadata = await fetchMessageMetadataById(restId, token, options);
-  const bytes = await fetchMessageRawMimeById(restId, token, options);
+  const tokenSource = makeGraphTokenSource(acquireToken);
+  const metadata = await fetchMessageMetadataById(restId, tokenSource, options);
+  const bytes = await fetchMessageRawMimeById(restId, tokenSource, options);
   return {
     bytes,
     subject: metadata.subject ?? "",
@@ -101,7 +103,7 @@ export async function fetchParentMessageInConversationViaGraph(
   options: GraphRequestOptions = {},
 ): Promise<ParentMessageMetadata | null> {
   try {
-    const token = await acquireToken();
+    const tokenSource = makeGraphTokenSource(acquireToken);
     // Single-clause filter on an indexed property + no `$orderby`. Adding
     // `and isDraft eq false` plus `$orderby=receivedDateTime desc` trips
     // Graph's `InefficientFilter` constraint: properties in `$orderby` must
@@ -112,13 +114,12 @@ export async function fetchParentMessageInConversationViaGraph(
     // the latest non-draft client-side.
     const filter = `conversationId eq '${escapeODataString(conversationId)}'`;
     const url = `${GRAPH_BASE}/me/messages?$filter=${encodeURIComponent(filter)}&$top=20&$select=id,subject,from,receivedDateTime,isDraft`;
-    const response = await fetch(url, {
-      signal: options.signal,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-      },
-    });
+    const response = await graphFetch(
+      url,
+      tokenSource,
+      "application/json",
+      options.signal,
+    );
     if (!response.ok) {
       console.warn(
         "[fetchParentMessageInConversationViaGraph] non-OK status:",
@@ -264,16 +265,7 @@ export async function fetchConversationMessagesViaGraph(
   options: FetchConversationOptions = {},
 ): Promise<FetchConversationResult> {
   const transport = options.transport ?? globalThis.fetch.bind(globalThis);
-  let token: string;
-  try {
-    token = await acquireToken();
-  } catch (error) {
-    console.warn(
-      "[fetchConversationMessagesViaGraph] token acquire failed:",
-      error,
-    );
-    return { messages: [], state: "error" };
-  }
+  const tokenSource = makeGraphTokenSource(acquireToken);
 
   const filter = `conversationId eq '${escapeODataString(conversationId)}'`;
   const select = [
@@ -321,13 +313,13 @@ export async function fetchConversationMessagesViaGraph(
   while (nextUrl && pages < MAX_CONVERSATION_PAGES) {
     let response: Response;
     try {
-      response = await transport(nextUrl, {
-        signal: options.signal,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
-      });
+      response = await graphFetch(
+        nextUrl,
+        tokenSource,
+        "application/json",
+        options.signal,
+        transport,
+      );
     } catch (error) {
       if (options.signal?.aborted) {
         throw options.signal.reason ?? error;
@@ -372,7 +364,12 @@ export async function fetchConversationMessagesViaGraph(
   // so its content reaches the LLM. Failures degrade to a disclosure marker
   // downstream (parsedThread.transformAttachment), never a silent drop.
   if (messages.length > 0) {
-    await enrichItemAttachments(messages, token, transport, options.signal);
+    await enrichItemAttachments(
+      messages,
+      tokenSource,
+      transport,
+      options.signal,
+    );
   }
 
   return { messages, state };
@@ -388,7 +385,7 @@ export async function fetchConversationMessagesViaGraph(
  */
 async function enrichItemAttachments(
   messages: GraphConversationMessage[],
-  token: string,
+  tokenSource: GraphTokenSource,
   transport: GraphTransport,
   signal: AbortSignal | undefined,
 ): Promise<void> {
@@ -405,7 +402,7 @@ async function enrichItemAttachments(
           messageId,
           attachmentId,
           attachment,
-          token,
+          tokenSource,
           transport,
           signal,
         ),
@@ -421,23 +418,31 @@ async function enrichOneItemAttachment(
   messageId: string,
   attachmentId: string,
   attachment: GraphAttachment,
-  token: string,
+  tokenSource: GraphTokenSource,
   transport: GraphTransport,
   signal: AbortSignal | undefined,
 ): Promise<void> {
   const url = `${GRAPH_BASE}/me/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}/$value`;
-  const headers = {
-    Authorization: `Bearer ${token}`,
-    Accept: "application/octet-stream",
-  };
   try {
-    let response = await transport(url, { headers, signal });
+    let response = await graphFetch(
+      url,
+      tokenSource,
+      "application/octet-stream",
+      signal,
+      transport,
+    );
     // Honor a single Retry-After on throttle before giving up to a marker.
     if (response.status === 429) {
       const retryMs = retryAfterMs(response);
       if (retryMs !== null) {
         await sleep(retryMs, signal);
-        response = await transport(url, { headers, signal });
+        response = await graphFetch(
+          url,
+          tokenSource,
+          "application/octet-stream",
+          signal,
+          transport,
+        );
       }
     }
     if (!response.ok) return;
@@ -554,16 +559,16 @@ export async function fetchOutlookMessageBytesByInternetMessageIdViaGraph(
   acquireToken: AcquireGraphToken,
   options: GraphRequestOptions = {},
 ): Promise<FetchOutlookMessageBytesResult | null> {
-  const token = await acquireToken();
+  const tokenSource = makeGraphTokenSource(acquireToken);
   const match = await findMessageByInternetMessageId(
     internetMessageId,
-    token,
+    tokenSource,
     options,
   );
   if (!match?.id) {
     return null;
   }
-  const bytes = await fetchMessageRawMimeById(match.id, token, options);
+  const bytes = await fetchMessageRawMimeById(match.id, tokenSource, options);
   return {
     bytes,
     subject: match.subject ?? "",
@@ -579,19 +584,73 @@ function convertEwsIdToGraphId(ewsItemId: string): string {
   );
 }
 
+/**
+ * Caches one Mail.Read token across all requests of a single operation (so a
+ * multi-request fetch still acquires only once) while allowing a forced refresh
+ * when a request comes back 401.
+ */
+interface GraphTokenSource {
+  get(): Promise<string>;
+  refresh(): Promise<string>;
+}
+
+function makeGraphTokenSource(
+  acquireToken: AcquireGraphToken,
+): GraphTokenSource {
+  let cached: Promise<string> | null = null;
+  return {
+    get() {
+      if (!cached) {
+        cached = acquireToken();
+      }
+      return cached;
+    },
+    refresh() {
+      cached = acquireToken({ forceRefresh: true });
+      return cached;
+    },
+  };
+}
+
+/**
+ * Issues a Graph request with the operation's cached Mail.Read token and, on a
+ * 401 (token revoked / CAE-invalidated even though MSAL returned it from cache),
+ * force-refreshes the token and retries exactly once. The add-in-side analogue
+ * of the session `recoverAuth`, scoped to the Graph token — a separate cache
+ * from the proxy-session bootstrap token, hence handled here rather than via the
+ * shared recovery handler.
+ */
+async function graphFetch(
+  url: string,
+  tokenSource: GraphTokenSource,
+  accept: string,
+  signal: AbortSignal | undefined,
+  transport: GraphTransport = globalThis.fetch.bind(globalThis),
+): Promise<Response> {
+  const request = (token: string) =>
+    transport(url, {
+      signal,
+      headers: { Authorization: `Bearer ${token}`, Accept: accept },
+    });
+  const response = await request(await tokenSource.get());
+  if (response.status !== 401) {
+    return response;
+  }
+  return request(await tokenSource.refresh());
+}
+
 async function fetchMessageMetadataById(
   messageId: string,
-  token: string,
+  tokenSource: GraphTokenSource,
   options: GraphRequestOptions = {},
 ): Promise<GraphMessageMetadata> {
   const url = `${GRAPH_BASE}/me/messages/${encodeURIComponent(messageId)}?$select=subject,internetMessageId`;
-  const response = await fetch(url, {
-    signal: options.signal,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
-    },
-  });
+  const response = await graphFetch(
+    url,
+    tokenSource,
+    "application/json",
+    options.signal,
+  );
   if (!response.ok) {
     throw new Error(
       `Graph fetch failed: ${response.status} ${response.statusText}`,
@@ -602,17 +661,16 @@ async function fetchMessageMetadataById(
 
 async function fetchMessageRawMimeById(
   messageId: string,
-  token: string,
+  tokenSource: GraphTokenSource,
   options: GraphRequestOptions = {},
 ): Promise<ArrayBuffer> {
   const url = `${GRAPH_BASE}/me/messages/${encodeURIComponent(messageId)}/$value`;
-  const response = await fetch(url, {
-    signal: options.signal,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/octet-stream",
-    },
-  });
+  const response = await graphFetch(
+    url,
+    tokenSource,
+    "application/octet-stream",
+    options.signal,
+  );
   if (!response.ok) {
     throw new Error(
       `Graph MIME fetch failed: ${response.status} ${response.statusText}`,
@@ -623,18 +681,17 @@ async function fetchMessageRawMimeById(
 
 async function findMessageByInternetMessageId(
   internetMessageId: string,
-  token: string,
+  tokenSource: GraphTokenSource,
   options: GraphRequestOptions = {},
 ): Promise<GraphMessageMetadata | null> {
   const filter = `internetMessageId eq '${escapeODataString(internetMessageId)}'`;
   const url = `${GRAPH_BASE}/me/messages?$filter=${encodeURIComponent(filter)}&$top=1&$select=id,subject,internetMessageId`;
-  const response = await fetch(url, {
-    signal: options.signal,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
-    },
-  });
+  const response = await graphFetch(
+    url,
+    tokenSource,
+    "application/json",
+    options.signal,
+  );
   if (!response.ok) {
     throw new Error(
       `Graph lookup failed: ${response.status} ${response.statusText}`,

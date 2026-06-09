@@ -142,7 +142,8 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
 
   const { acquireToken } = useGraphToken();
   const acquireGraphToken = useCallback(
-    () => acquireToken(GRAPH_MAIL_SCOPES),
+    (options?: { forceRefresh?: boolean }) =>
+      acquireToken(GRAPH_MAIL_SCOPES, options),
     [acquireToken],
   );
 

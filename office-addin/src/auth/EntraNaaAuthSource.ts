@@ -4,7 +4,7 @@ import {
   type AuthenticationResult,
   type IPublicClientApplication,
 } from "@azure/msal-browser";
-import { env, setIdToken } from "@erato/frontend/library";
+import { env } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 
 import {
@@ -72,6 +72,11 @@ export function createEntraNaaAuthSource(
     }
   }
 
+  // Sets the MSAL active account so subsequent silent acquisitions resolve it.
+  // Deliberately does NOT push the id token into the shared token store: the
+  // add-in authenticates via the oauth2-proxy session cookie (the id token is
+  // redeemed for that cookie, not sent as a per-request Bearer), matching the
+  // cookie-only on-prem Exchange SE path.
   function applyResult(
     instance: IPublicClientApplication,
     result: AuthenticationResult,
@@ -79,7 +84,6 @@ export function createEntraNaaAuthSource(
     if (result.account) {
       instance.setActiveAccount(result.account);
     }
-    setIdToken(result.idToken);
   }
 
   function requirePca(): IPublicClientApplication {
@@ -149,14 +153,24 @@ export function createEntraNaaAuthSource(
       };
     },
 
-    async acquireGraphToken(scopes: string[]): Promise<{
+    async acquireGraphToken(
+      scopes: string[],
+      options: { forceRefresh?: boolean; allowInteraction?: boolean } = {},
+    ): Promise<{
       accessToken: string;
       bootstrap: BootstrapToken;
     }> {
       const instance = requirePca();
-      // Graph acquisition is user-initiated (an email action), so interaction
-      // is allowed — matching the old `acquireToken(scopes)` (allowPopup=true).
-      const result = await acquireMsalResult(instance, scopes, true, false);
+      // Silent by default: a failed silent acquire surfaces as
+      // InteractionRequiredError so the caller can show an inline "Sign in"
+      // prompt instead of auto-popping a window mid email-drop. A popup happens
+      // only when the user explicitly opts in via `allowInteraction`.
+      const result = await acquireMsalResult(
+        instance,
+        scopes,
+        options.allowInteraction ?? false,
+        options.forceRefresh ?? false,
+      );
       applyResult(instance, result);
       return {
         accessToken: result.accessToken,

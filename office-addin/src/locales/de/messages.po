@@ -68,14 +68,25 @@ msgstr "Die Anmeldung bei lokalem Exchange (Legacy) wird noch nicht unterstützt
 
 #. js-lingui-explicit-id
 #: src/App.tsx
-#: src/providers/SessionAuthProvider.tsx
-msgid "officeAddin.auth.signInRequired"
-msgstr "Anmeldung erforderlich"
+msgid "officeAddin.auth.signIn"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/App.tsx
-msgid "officeAddin.auth.tryAgain"
-msgstr "Erneut versuchen"
+#: src/providers/SessionAuthProvider.tsx
+#~ msgid "officeAddin.auth.signInRequired"
+#~ msgstr "Anmeldung erforderlich"
+
+#. js-lingui-explicit-id
+#: src/App.tsx
+#: src/providers/SessionAuthProvider.tsx
+msgid "officeAddin.auth.signInToContinue"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/App.tsx
+#~ msgid "officeAddin.auth.tryAgain"
+#~ msgstr "Erneut versuchen"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChat.tsx
@@ -181,6 +192,26 @@ msgstr "Unbekannter Absender"
 #: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.validation.tooLarge"
 msgstr "Datei überschreitet das Serverlimit von {globalMaxFormatted}"
+
+#. js-lingui-explicit-id
+#: src/providers/EntraGraphTokenProvider.tsx
+msgid "officeAddin.email.signedIn.title"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/providers/EntraGraphTokenProvider.tsx
+msgid "officeAddin.email.signInToLoad.action"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/providers/EntraGraphTokenProvider.tsx
+msgid "officeAddin.email.signInToLoad.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/providers/EntraGraphTokenProvider.tsx
+msgid "officeAddin.email.signInToLoad.title"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx

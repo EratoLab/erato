@@ -1,5 +1,5 @@
 import { createNestablePublicClientApplication } from "@azure/msal-browser";
-import { setIdToken } from "@erato/frontend/library";
+import { setAuthRecoveryHandler } from "@erato/frontend/library";
 import { i18n } from "@lingui/core";
 import {
   act,
@@ -9,7 +9,15 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from "vitest";
 
 import { OAUTH2_PROXY_SESSION_REFRESH_AFTER_MS } from "../../auth/oauth2ProxySession";
 import { MsalNaaProvider, useMsalNaa } from "../MsalNaaProvider";
@@ -35,6 +43,13 @@ vi.mock("@erato/frontend/library", () => ({
     msalAuthority: "https://login.microsoftonline.com/tenant",
   }),
   setIdToken: vi.fn(),
+  setAuthRecoveryHandler: vi.fn(),
+  toast: {
+    info: vi.fn(),
+    success: vi.fn(),
+    warning: vi.fn(),
+    error: vi.fn(),
+  },
 }));
 
 const account = {
@@ -183,7 +198,6 @@ describe("MsalNaaProvider", () => {
 
     expect(screen.getByTestId("cookie")).toHaveTextContent("true");
     expect(screen.getByTestId("status")).toHaveTextContent("ready");
-    expect(setIdToken).toHaveBeenCalledWith("id-token");
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(fetcher).toHaveBeenCalledWith(
       "/oauth2/redeem-external-token",
@@ -263,7 +277,10 @@ describe("MsalNaaProvider", () => {
       await advance(OAUTH2_PROXY_SESSION_REFRESH_AFTER_MS + 1_000);
       expect(fetcher).toHaveBeenCalledTimes(2);
       expect(screen.getByTestId("status")).toHaveTextContent("error");
-      expect(screen.getByTestId("authenticated")).toHaveTextContent("false");
+      // A transient background-refresh failure must NOT blank the chat: the
+      // session is still established, so the user stays authenticated while the
+      // backoff timer retries silently.
+      expect(screen.getByTestId("authenticated")).toHaveTextContent("true");
 
       // The backoff timer re-arms and the next attempt restores the session.
       // Advancing past the max backoff guarantees the retry fires.
@@ -324,5 +341,50 @@ describe("MsalNaaProvider", () => {
       expect(screen.getByTestId("authenticated")).toHaveTextContent("true"),
     );
     expect(screen.getByTestId("status")).toHaveTextContent("ready");
+  });
+
+  it("registers a recovery handler that force-refreshes and re-redeems on a 401", async () => {
+    const fetcher = stubFetch(new Response("{}", { status: 202 }));
+    const pca = createPcaMock();
+    vi.mocked(createNestablePublicClientApplication).mockResolvedValue(pca);
+
+    render(
+      <MsalNaaProvider>
+        <AuthProbe />
+      </MsalNaaProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("authenticated")).toHaveTextContent("true"),
+    );
+
+    // The provider registered its recoverAuth with the shared API/SSE layer.
+    const handler = vi
+      .mocked(setAuthRecoveryHandler)
+      .mock.calls.map((call) => call[0])
+      .find(
+        (arg): arg is (reason: string) => Promise<boolean> =>
+          typeof arg === "function",
+      );
+    expect(handler).toBeDefined();
+
+    fetcher.mockClear();
+    (pca.acquireTokenSilent as Mock).mockClear();
+
+    let recovered: boolean | undefined;
+    await act(async () => {
+      recovered = await handler!("rest-401");
+    });
+
+    expect(recovered).toBe(true);
+    // Forced a fresh MSAL token (not the cached one that just 401'd)…
+    expect(pca.acquireTokenSilent).toHaveBeenCalledWith(
+      expect.objectContaining({ forceRefresh: true }),
+    );
+    // …and re-redeemed the proxy session cookie.
+    expect(fetcher).toHaveBeenCalledWith(
+      "/oauth2/redeem-external-token",
+      expect.objectContaining({ method: "POST", credentials: "include" }),
+    );
   });
 });

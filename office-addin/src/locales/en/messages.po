@@ -68,14 +68,25 @@ msgstr "On-prem (legacy Exchange) sign-in isn't supported yet."
 
 #. js-lingui-explicit-id
 #: src/App.tsx
-#: src/providers/SessionAuthProvider.tsx
-msgid "officeAddin.auth.signInRequired"
-msgstr "Sign-in required"
+msgid "officeAddin.auth.signIn"
+msgstr "Sign in"
 
 #. js-lingui-explicit-id
 #: src/App.tsx
-msgid "officeAddin.auth.tryAgain"
-msgstr "Try again"
+#: src/providers/SessionAuthProvider.tsx
+#~ msgid "officeAddin.auth.signInRequired"
+#~ msgstr "Sign-in required"
+
+#. js-lingui-explicit-id
+#: src/App.tsx
+#: src/providers/SessionAuthProvider.tsx
+msgid "officeAddin.auth.signInToContinue"
+msgstr "Sign in to continue"
+
+#. js-lingui-explicit-id
+#: src/App.tsx
+#~ msgid "officeAddin.auth.tryAgain"
+#~ msgstr "Try again"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChat.tsx
@@ -181,6 +192,26 @@ msgstr "Unknown sender"
 #: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.validation.tooLarge"
 msgstr "File exceeds the server limit of {globalMaxFormatted}"
+
+#. js-lingui-explicit-id
+#: src/providers/EntraGraphTokenProvider.tsx
+msgid "officeAddin.email.signedIn.title"
+msgstr "Signed in. Add the email again to attach it."
+
+#. js-lingui-explicit-id
+#: src/providers/EntraGraphTokenProvider.tsx
+msgid "officeAddin.email.signInToLoad.action"
+msgstr "Sign in"
+
+#. js-lingui-explicit-id
+#: src/providers/EntraGraphTokenProvider.tsx
+msgid "officeAddin.email.signInToLoad.description"
+msgstr "This email wasn't attached because reading it needs a quick sign-in."
+
+#. js-lingui-explicit-id
+#: src/providers/EntraGraphTokenProvider.tsx
+msgid "officeAddin.email.signInToLoad.title"
+msgstr "Sign in to load email"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
