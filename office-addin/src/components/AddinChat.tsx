@@ -41,7 +41,7 @@ import { AddinSettingsDialog } from "./AddinSettingsDialog";
 import { useEmailDedupSet } from "../hooks/useEmailDedupSet";
 import { useOfficeDragAndDrop } from "../hooks/useOfficeDragAndDrop";
 import { useOutlookMailListDrag } from "../hooks/useOutlookMailListDrag";
-import { useMsalNaa } from "../providers/MsalNaaProvider";
+import { useGraphToken } from "../providers/EntraGraphTokenProvider";
 import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
 import { fetchOutlookMessageBytesViaGraph } from "../utils/fetchOutlookMessageGraph";
@@ -140,7 +140,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
     chatInputControlsRef.current?.addUploadedFiles(uploaded);
   }, []);
 
-  const { acquireToken } = useMsalNaa();
+  const { acquireToken } = useGraphToken();
   const acquireGraphToken = useCallback(
     () => acquireToken(GRAPH_MAIL_SCOPES),
     [acquireToken],

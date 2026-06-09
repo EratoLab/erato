@@ -22,12 +22,17 @@ msgid "officeAddin.auth.authenticating"
 msgstr "Authentification..."
 
 #. js-lingui-explicit-id
-#: src/providers/MsalNaaProvider.tsx
+#: src/providers/SessionAuthProvider.tsx
 msgid "officeAddin.auth.authenticationFailed"
 msgstr "Échec de l’authentification"
 
 #. js-lingui-explicit-id
-#: src/providers/MsalNaaProvider.tsx
+#: src/providers/EntraGraphTokenProvider.tsx
+msgid "officeAddin.auth.graphUnavailable"
+msgstr "L’authentification Graph n’est pas disponible sur cet hôte"
+
+#. js-lingui-explicit-id
+#: src/auth/EntraNaaAuthSource.ts
 msgid "officeAddin.auth.msalClientIdMissing"
 msgstr "L’identifiant client MSAL n’est pas configuré"
 
@@ -37,28 +42,33 @@ msgstr "L’identifiant client MSAL n’est pas configuré"
 #~ msgstr "Échec de l’initialisation de MSAL"
 
 #. js-lingui-explicit-id
-#: src/providers/MsalNaaProvider.tsx
+#: src/auth/EntraNaaAuthSource.ts
 msgid "officeAddin.auth.msalNotInitialized"
 msgstr "MSAL n’est pas initialisé"
 
 #. js-lingui-explicit-id
 #: src/providers/MsalNaaProvider.tsx
-msgid "officeAddin.auth.msalProviderNotMounted"
-msgstr "MsalNaaProvider n’est pas monté"
+#~ msgid "officeAddin.auth.msalProviderNotMounted"
+#~ msgstr "MsalNaaProvider n’est pas monté"
 
 #. js-lingui-explicit-id
-#: src/providers/MsalNaaProvider.tsx
+#: src/auth/UnsupportedAuthSource.ts
 msgid "officeAddin.auth.naaUnsupported"
 msgstr "L’authentification d’application imbriquée n’est pas prise en charge dans cet environnement"
 
 #. js-lingui-explicit-id
-#: src/providers/MsalNaaProvider.tsx
+#: src/providers/SessionAuthProvider.tsx
 msgid "officeAddin.auth.oauth2ProxySessionFailed"
 msgstr "Impossible d’établir une session Erato sécurisée. Reconnectez-vous."
 
 #. js-lingui-explicit-id
+#: src/auth/UnsupportedAuthSource.ts
+msgid "officeAddin.auth.onPremNotSupported"
+msgstr "La connexion à Exchange local (hérité) n’est pas encore prise en charge."
+
+#. js-lingui-explicit-id
 #: src/App.tsx
-#: src/providers/MsalNaaProvider.tsx
+#: src/providers/SessionAuthProvider.tsx
 msgid "officeAddin.auth.signInRequired"
 msgstr "Connexion requise"
 

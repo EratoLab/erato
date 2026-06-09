@@ -19,6 +19,13 @@ export function mergeApiAuthHeaders(
     return definedHeaders;
   }
 
+  // The web app leaves this null (cookie auth). The Office add-in populates it,
+  // but for the add-in this Bearer is INCIDENTAL, not the auth source of truth:
+  // requests are authenticated by the oauth2-proxy session cookie minted at
+  // /oauth2/redeem-external-token. The add-in's MSAL token is a separate app
+  // registration from oauth2-proxy's, and there is no `oidc_extra_audiences`, so
+  // the proxy does not accept this Bearer — it falls through to the cookie. Kept
+  // as a harmless best-effort header; do not treat its freshness as load-bearing.
   const idToken = getIdToken();
   if (!idToken) {
     return definedHeaders;

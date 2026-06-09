@@ -22,12 +22,17 @@ msgid "officeAddin.auth.authenticating"
 msgstr "Authenticating..."
 
 #. js-lingui-explicit-id
-#: src/providers/MsalNaaProvider.tsx
+#: src/providers/SessionAuthProvider.tsx
 msgid "officeAddin.auth.authenticationFailed"
 msgstr "Authentication failed"
 
 #. js-lingui-explicit-id
-#: src/providers/MsalNaaProvider.tsx
+#: src/providers/EntraGraphTokenProvider.tsx
+msgid "officeAddin.auth.graphUnavailable"
+msgstr "Graph auth is not available on this host"
+
+#. js-lingui-explicit-id
+#: src/auth/EntraNaaAuthSource.ts
 msgid "officeAddin.auth.msalClientIdMissing"
 msgstr "MSAL client ID is not configured"
 
@@ -37,28 +42,33 @@ msgstr "MSAL client ID is not configured"
 #~ msgstr "Failed to initialize MSAL"
 
 #. js-lingui-explicit-id
-#: src/providers/MsalNaaProvider.tsx
+#: src/auth/EntraNaaAuthSource.ts
 msgid "officeAddin.auth.msalNotInitialized"
 msgstr "MSAL not initialized"
 
 #. js-lingui-explicit-id
 #: src/providers/MsalNaaProvider.tsx
-msgid "officeAddin.auth.msalProviderNotMounted"
-msgstr "MsalNaaProvider not mounted"
+#~ msgid "officeAddin.auth.msalProviderNotMounted"
+#~ msgstr "MsalNaaProvider not mounted"
 
 #. js-lingui-explicit-id
-#: src/providers/MsalNaaProvider.tsx
+#: src/auth/UnsupportedAuthSource.ts
 msgid "officeAddin.auth.naaUnsupported"
 msgstr "Nested App Authentication is not supported in this environment"
 
 #. js-lingui-explicit-id
-#: src/providers/MsalNaaProvider.tsx
+#: src/providers/SessionAuthProvider.tsx
 msgid "officeAddin.auth.oauth2ProxySessionFailed"
 msgstr "Could not establish a secure Erato session. Try signing in again."
 
 #. js-lingui-explicit-id
+#: src/auth/UnsupportedAuthSource.ts
+msgid "officeAddin.auth.onPremNotSupported"
+msgstr "On-prem (legacy Exchange) sign-in isn't supported yet."
+
+#. js-lingui-explicit-id
 #: src/App.tsx
-#: src/providers/MsalNaaProvider.tsx
+#: src/providers/SessionAuthProvider.tsx
 msgid "officeAddin.auth.signInRequired"
 msgstr "Sign-in required"
 
