@@ -4444,6 +4444,7 @@ mod tests {
                     allowed_args: vec![],
                     client_actions: vec![],
                     presentation: None,
+                    client_actions_always_ask: vec![],
                 },
             );
             let af = ActionFacetRequest {
@@ -4465,6 +4466,7 @@ mod tests {
                     allowed_args: vec![],
                     client_actions: vec![],
                     presentation: None,
+                    client_actions_always_ask: vec![],
                 },
             );
             let af = ActionFacetRequest {
@@ -4487,6 +4489,7 @@ mod tests {
                     allowed_args: vec![],
                     client_actions: vec![],
                     presentation: None,
+                    client_actions_always_ask: vec![],
                 },
             );
             let af = ActionFacetRequest {
@@ -4507,6 +4510,7 @@ mod tests {
                     allowed_args: vec!["topic".to_string()],
                     client_actions: vec![],
                     presentation: None,
+                    client_actions_always_ask: vec![],
                 },
             );
             let af = ActionFacetRequest {
@@ -4529,6 +4533,7 @@ mod tests {
                     allowed_args: vec!["topic".to_string()],
                     client_actions: vec![],
                     presentation: None,
+                    client_actions_always_ask: vec![],
                 },
             );
             let af = ActionFacetRequest {
@@ -4549,6 +4554,7 @@ mod tests {
                     allowed_args: vec!["content".to_string()],
                     client_actions: vec![],
                     presentation: None,
+                    client_actions_always_ask: vec![],
                 },
             );
             let oversized = "x".repeat(ACTION_FACET_ARG_MAX_SIZE + 1);
@@ -4572,6 +4578,7 @@ mod tests {
                     allowed_args: vec!["content".to_string()],
                     client_actions: vec![],
                     presentation: None,
+                    client_actions_always_ask: vec![],
                 },
             );
             let at_limit = "x".repeat(ACTION_FACET_ARG_MAX_SIZE);
@@ -4598,6 +4605,7 @@ mod tests {
                     allowed_args: vec!["text".to_string()],
                     client_actions: vec![],
                     presentation: None,
+                    client_actions_always_ask: vec![],
                 },
             );
             config
@@ -4654,6 +4662,7 @@ mod tests {
                     allowed_args: vec![],
                     client_actions: vec![],
                     presentation: None,
+                    client_actions_always_ask: vec![],
                 },
             );
             assert!(is_known_platform(&config, "web"));

@@ -23,8 +23,28 @@ msgstr "O nas"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ActionConfirmationCard.tsx
+msgid "actionConfirmation.allowOnce"
+msgstr "Zezwól raz"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ActionConfirmationCard.tsx
+msgid "actionConfirmation.alwaysAllow"
+msgstr "Zawsze zezwalaj"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ActionConfirmationCard.tsx
+msgid "actionConfirmation.deny"
+msgstr "Odmów"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ActionConfirmationCard.tsx
 msgid "actionConfirmation.dismissed"
 msgstr "Odrzucono"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ActionConfirmationCard.tsx
+msgid "actionConfirmation.title"
+msgstr "Zezwolić na tę akcję?"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
@@ -1866,7 +1886,6 @@ msgstr "Język przeglądarki:"
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 #: src/components/ui/Chat/ChatInput.tsx
-#: src/components/ui/Message/ActionConfirmationCard.tsx
 #: src/components/ui/Modal/ConfirmationDialog.tsx
 msgid "Cancel"
 msgstr "Anuluj"
@@ -1969,7 +1988,6 @@ msgstr ""
 msgid "Configure a custom assistant with specific instructions and capabilities"
 msgstr ""
 
-#: src/components/ui/Message/ActionConfirmationCard.tsx
 #: src/components/ui/Modal/ConfirmationDialog.tsx
 msgid "Confirm"
 msgstr "Potwierdź"

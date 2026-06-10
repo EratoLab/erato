@@ -244,6 +244,21 @@ msgid "officeAddin.email.signInToLoad.title"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/utils/outlookClientActions.ts
+msgid "officeAddin.clientActions.reply"
+msgstr "Responder al remitente"
+
+#. js-lingui-explicit-id
+#: src/utils/outlookClientActions.ts
+msgid "officeAddin.clientActions.replyAll"
+msgstr "Responder a todos los destinatarios"
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoEmailRenderer.tsx
+msgid "officeAddin.emailRenderer.alwaysAllowLocked"
+msgstr "Tu organización requiere confirmación para esta acción cada vez."
+
+#. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.copied"
 msgstr "Copiado"
@@ -295,8 +310,8 @@ msgstr "Responder a todos"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
-msgid "officeAddin.emailRenderer.replyAllConfirm"
-msgstr "Abrir Responder a todos"
+#~ msgid "officeAddin.emailRenderer.replyAllConfirm"
+#~ msgstr "Abrir Responder a todos"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
@@ -305,13 +320,13 @@ msgstr "{confirmRecipientCount, plural, one {Esto abre una respuesta dirigida a 
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
-msgid "officeAddin.emailRenderer.replyAllConfirmTitle"
-msgstr "¿Responder a todos los destinatarios?"
+#~ msgid "officeAddin.emailRenderer.replyAllConfirmTitle"
+#~ msgstr "¿Responder a todos los destinatarios?"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
-msgid "officeAddin.emailRenderer.replyConfirm"
-msgstr "Abrir respuesta"
+#~ msgid "officeAddin.emailRenderer.replyConfirm"
+#~ msgstr "Abrir respuesta"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
@@ -320,8 +335,8 @@ msgstr "Esto abre una respuesta precompletada al remitente del correo que estás
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
-msgid "officeAddin.emailRenderer.replyConfirmTitle"
-msgstr "¿Abrir esta respuesta?"
+#~ msgid "officeAddin.emailRenderer.replyConfirmTitle"
+#~ msgstr "¿Abrir esta respuesta?"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
@@ -475,6 +490,51 @@ msgstr "Elige un chat reciente"
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.clientActions.always.helper"
+msgstr "Realiza la acción sin preguntar. No se envía nada hasta que pulses Enviar en Outlook."
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.clientActions.always.label"
+msgstr "Permitir siempre"
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.clientActions.always.locked"
+msgstr "Bloqueado: tu organización requiere confirmación para esta acción cada vez."
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.clientActions.ask.helper"
+msgstr "Muestra un paso de confirmación en el chat antes de abrir nada."
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.clientActions.ask.label"
+msgstr "Preguntar cada vez"
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.clientActions.intro"
+msgstr "Tus decisiones de la confirmación en el chat se guardan aquí y pueden cambiarse en cualquier momento. No se envía nada hasta que pulses Enviar en Outlook."
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.clientActions.legend"
+msgstr "Acciones sugeridas por el asistente"
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.clientActions.never.helper"
+msgstr "Oculta esta acción e ignora la sugerencia del asistente."
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.clientActions.never.label"
+msgstr "Nunca"
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.composeInherits.helper"
 msgstr "Al responder o reenviar un correo, mantiene el chat actual en lugar de iniciar uno nuevo."
 
@@ -530,53 +590,53 @@ msgstr "Retomar último chat"
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
-msgid "officeAddin.settings.addin.replyActions.alwaysAsk.helper"
-msgstr "Muestra una confirmación antes de abrir la ventana de respuesta."
+#~ msgid "officeAddin.settings.addin.replyActions.alwaysAsk.helper"
+#~ msgstr "Muestra una confirmación antes de abrir la ventana de respuesta."
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
-msgid "officeAddin.settings.addin.replyActions.alwaysAsk.label"
-msgstr "Preguntar primero"
+#~ msgid "officeAddin.settings.addin.replyActions.alwaysAsk.label"
+#~ msgstr "Preguntar primero"
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
-msgid "officeAddin.settings.addin.replyActions.deny.helper"
-msgstr "Oculta esta acción e ignora la sugerencia del asistente."
+#~ msgid "officeAddin.settings.addin.replyActions.deny.helper"
+#~ msgstr "Oculta esta acción e ignora la sugerencia del asistente."
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
-msgid "officeAddin.settings.addin.replyActions.deny.label"
-msgstr "Nunca"
+#~ msgid "officeAddin.settings.addin.replyActions.deny.label"
+#~ msgstr "Nunca"
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
-msgid "officeAddin.settings.addin.replyActions.dontAsk.helper"
-msgstr "Abre la ventana de respuesta precompletada de Outlook sin preguntar. No se envía nada hasta que pulses Enviar."
+#~ msgid "officeAddin.settings.addin.replyActions.dontAsk.helper"
+#~ msgstr "Abre la ventana de respuesta precompletada de Outlook sin preguntar. No se envía nada hasta que pulses Enviar."
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
-msgid "officeAddin.settings.addin.replyActions.dontAsk.label"
-msgstr "Abrir inmediatamente"
+#~ msgid "officeAddin.settings.addin.replyActions.dontAsk.label"
+#~ msgstr "Abrir inmediatamente"
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
-msgid "officeAddin.settings.addin.replyActions.intro"
-msgstr "Se aplica al modo de lectura. Las respuestas solo se abren como borrador precompletado de Outlook: enviar siempre es tu paso manual."
+#~ msgid "officeAddin.settings.addin.replyActions.intro"
+#~ msgstr "Se aplica al modo de lectura. Las respuestas solo se abren como borrador precompletado de Outlook: enviar siempre es tu paso manual."
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
-msgid "officeAddin.settings.addin.replyActions.legend"
-msgstr "Cuando el asistente sugiere responder a un correo"
+#~ msgid "officeAddin.settings.addin.replyActions.legend"
+#~ msgstr "Cuando el asistente sugiere responder a un correo"
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
-msgid "officeAddin.settings.addin.replyActions.reply.legend"
-msgstr "Responder al remitente"
+#~ msgid "officeAddin.settings.addin.replyActions.reply.legend"
+#~ msgstr "Responder al remitente"
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
-msgid "officeAddin.settings.addin.replyActions.replyAll.legend"
-msgstr "Responder a todos los destinatarios"
+#~ msgid "officeAddin.settings.addin.replyActions.replyAll.legend"
+#~ msgstr "Responder a todos los destinatarios"
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx

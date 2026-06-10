@@ -21,10 +21,17 @@ export function useAvailableActionFacetIds(): Set<string> {
 }
 
 export interface ActionFacetClientActionInfo {
+  /** Human readable facet name, for settings UIs. */
+  displayName: string;
   /** Server-allowed client actions for this facet. */
   clientActions: string[];
   /** `render_buttons` (default) or `auto_prompt`; from `GET /me/facets`. */
   presentation: string | undefined;
+  /**
+   * Actions the deployment enforces a per-use confirmation for — "always
+   * allow" must be greyed out and stored grants ignored for these.
+   */
+  alwaysAskActions: string[];
 }
 
 /**
@@ -48,8 +55,10 @@ export function useActionFacetClientActions(): Map<
                 [
                   facet.id,
                   {
+                    displayName: facet.display_name,
                     clientActions: facet.client_actions,
                     presentation: facet.presentation,
+                    alwaysAskActions: facet.client_actions_always_ask ?? [],
                   },
                 ] as const,
               ]

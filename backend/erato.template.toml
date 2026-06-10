@@ -334,6 +334,10 @@ chat_provider_ids = ["test-token-limit"]
 # # proposed action immediately after a fresh assistant completion, subject
 # # to the user's local approval preferences in the add-in settings).
 # presentation = "render_buttons"
+# # Subset of client_actions the deployment ENFORCES a per-use confirmation
+# # for: the client always asks and never offers a persistent "always allow"
+# # (greyed out with a reason in the client settings). Users can still deny.
+# client_actions_always_ask = ["outlook.reply_all"]
 # allowed_args = ["body_format"]
 # template = """
 # FOR THIS MESSAGE ONLY: <your reply-drafting instructions; have the model emit

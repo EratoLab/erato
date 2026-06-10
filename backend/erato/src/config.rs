@@ -790,6 +790,14 @@ impl AppConfig {
                     );
                 }
             }
+            for enforced in &action_facet.client_actions_always_ask {
+                if !action_facet.client_actions.contains(enforced) {
+                    panic!(
+                        "Action facet '{}' lists '{}' in client_actions_always_ask but not in client_actions.",
+                        id, enforced
+                    );
+                }
+            }
         }
 
         validate_audio_feature_config(&config, "audio_transcription", &config.audio_transcription);
@@ -2307,6 +2315,7 @@ impl ActionFacetsConfig {
                 ],
                 client_actions: vec![],
                 presentation: None,
+                client_actions_always_ask: vec![],
             });
 
         self.facets
@@ -2318,6 +2327,7 @@ impl ActionFacetsConfig {
                 allowed_args: vec!["full_body".to_string(), "body_format".to_string()],
                 client_actions: vec![],
                 presentation: None,
+                client_actions_always_ask: vec![],
             });
     }
 }
@@ -2382,6 +2392,13 @@ pub struct ActionFacetConfig {
     //   approval preferences.
     // Only meaningful when `client_actions` is non-empty.
     pub presentation: Option<String>,
+
+    // Subset of `client_actions` for which the deployment ENFORCES a
+    // per-use confirmation: the client must always ask and must not offer
+    // (or honor) a persistent "always allow" for these actions. Users may
+    // still deny them entirely.
+    #[serde(default)]
+    pub client_actions_always_ask: Vec<String>,
 }
 
 /// Valid values for `ActionFacetConfig::presentation`.

@@ -27,6 +27,11 @@ interface RadioCardProps {
    *   selectable-card layout.
    */
   size?: "sm" | "md";
+  /**
+   * Renders the card greyed out and non-interactive (e.g. an option locked
+   * by deployment policy). Communicate the reason via `helper`.
+   */
+  disabled?: boolean;
 }
 
 /**
@@ -48,6 +53,7 @@ export function RadioCard({
   trailing,
   children,
   size = "sm",
+  disabled = false,
 }: RadioCardProps) {
   const inputId = id ?? `radiocard-${name}-${value}`;
   const hideRadio = Boolean(icon);
@@ -60,10 +66,12 @@ export function RadioCard({
     checked
       ? "border-theme-border-focus bg-theme-bg-hover"
       : "border-theme-border bg-theme-bg-primary",
+    disabled && "opacity-60",
   );
 
   const rowClasses = clsx(
-    "relative flex cursor-pointer items-start gap-3 hover:bg-theme-bg-hover",
+    "relative flex items-start gap-3",
+    disabled ? "cursor-not-allowed" : "cursor-pointer hover:bg-theme-bg-hover",
     size === "md" ? "p-4" : "p-3",
   );
 
@@ -87,14 +95,15 @@ export function RadioCard({
           value={value}
           checked={checked}
           onChange={onChange}
+          disabled={disabled}
           className={
             hideRadio
               ? // Cover the whole label as a transparent overlay so click
                 // targeting (incl. Playwright's getByRole("radio").click())
                 // lands on the input rather than the label that would
                 // otherwise occlude an `sr-only` 1x1 input.
-                "absolute inset-0 cursor-pointer opacity-0"
-              : "mt-1 size-4 cursor-pointer accent-theme-bg-accent"
+                "absolute inset-0 cursor-pointer opacity-0 disabled:cursor-not-allowed"
+              : "mt-1 size-4 cursor-pointer accent-theme-bg-accent disabled:cursor-not-allowed"
           }
         />
         {icon ? (

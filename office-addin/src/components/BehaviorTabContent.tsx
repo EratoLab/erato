@@ -2,6 +2,7 @@ import { RadioCard, usePersistedState } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useId } from "react";
 
+import { useActionFacetClientActions } from "../hooks/useAvailableActionFacets";
 import { useOffice } from "../providers/OfficeProvider";
 import {
   DEFAULT_OUTLOOK_SESSION_PREFERENCES,
@@ -10,13 +11,17 @@ import {
   type OutlookSessionPreferences,
 } from "../sessionPolicy";
 import {
-  CLIENT_ACTION_PREFERENCES_KEY,
-  DEFAULT_CLIENT_ACTION_PREFERENCES,
-  clientActionPreferencesPersistedOptions,
-  type ClientActionApprovalMode,
-  type ClientActionPreferences,
+  CLIENT_ACTION_DECISIONS_KEY,
+  DEFAULT_CLIENT_ACTION_DECISIONS,
+  clientActionDecisionsPersistedOptions,
+  decisionKey,
+  effectiveDecision,
+  type ClientActionDecision,
 } from "../utils/clientActionPolicy";
-import { type OutlookClientAction } from "../utils/outlookClientActions";
+import {
+  clientActionDisplayLabel,
+  offerableClientActions,
+} from "../utils/outlookClientActions";
 
 interface BehaviorTabContentProps {
   emptyStateText: string;
@@ -35,12 +40,15 @@ export function BehaviorTabContent({
       DEFAULT_OUTLOOK_SESSION_PREFERENCES,
       outlookSessionPreferencesPersistedOptions,
     );
-  const [actionPreferences, setActionPreferences] =
-    usePersistedState<ClientActionPreferences>(
-      CLIENT_ACTION_PREFERENCES_KEY,
-      DEFAULT_CLIENT_ACTION_PREFERENCES,
-      clientActionPreferencesPersistedOptions,
-    );
+  const [decisions, setDecisions] = usePersistedState(
+    CLIENT_ACTION_DECISIONS_KEY,
+    DEFAULT_CLIENT_ACTION_DECISIONS,
+    clientActionDecisionsPersistedOptions,
+  );
+  // The settings rows mirror what the backend actually advertises: one group
+  // per facet with client actions, one decision toggle per implemented
+  // action. No facets advertised → the whole section is hidden.
+  const clientActionFacets = useActionFacetClientActions();
 
   if (!isOutlook) {
     return (
@@ -91,68 +99,65 @@ export function BehaviorTabContent({
     },
   ];
 
-  // Per-action approval settings for assistant-proposed reply actions.
-  // Reply-all deliberately has no "don't ask": its confirmation doubles as
-  // the fresh-recipient check and local settings cannot downgrade it.
-  const approvalOptionLabels: Record<
-    ClientActionApprovalMode,
+  // Decision toggles mirror the stored per-facet+action decisions written by
+  // the inline permission card. Always the same three options; defaults to
+  // "ask" until the user decides otherwise.
+  const decisionOptionLabels: Record<
+    ClientActionDecision,
     { label: string; helper: string }
   > = {
-    dont_ask: {
+    ask: {
       label: t({
-        id: "officeAddin.settings.addin.replyActions.dontAsk.label",
-        message: "Open immediately",
+        id: "officeAddin.settings.addin.clientActions.ask.label",
+        message: "Ask every time",
       }),
       helper: t({
-        id: "officeAddin.settings.addin.replyActions.dontAsk.helper",
+        id: "officeAddin.settings.addin.clientActions.ask.helper",
         message:
-          "Opens the prefilled Outlook reply window without asking. Nothing is sent until you press Send.",
+          "Shows a confirmation step in the chat before opening anything.",
       }),
     },
-    always_ask: {
+    always: {
       label: t({
-        id: "officeAddin.settings.addin.replyActions.alwaysAsk.label",
-        message: "Ask first",
+        id: "officeAddin.settings.addin.clientActions.always.label",
+        message: "Always allow",
       }),
       helper: t({
-        id: "officeAddin.settings.addin.replyActions.alwaysAsk.helper",
-        message: "Shows a confirmation before opening the reply window.",
+        id: "officeAddin.settings.addin.clientActions.always.helper",
+        message:
+          "Performs the action without asking. Nothing is sent until you press Send in Outlook.",
       }),
     },
-    deny: {
+    never: {
       label: t({
-        id: "officeAddin.settings.addin.replyActions.deny.label",
+        id: "officeAddin.settings.addin.clientActions.never.label",
         message: "Never",
       }),
       helper: t({
-        id: "officeAddin.settings.addin.replyActions.deny.helper",
+        id: "officeAddin.settings.addin.clientActions.never.helper",
         message: "Hides this action and ignores the assistant's suggestion.",
       }),
     },
   };
-
-  const actionGroups: ReadonlyArray<{
-    action: OutlookClientAction;
-    legend: string;
-    modes: readonly ClientActionApprovalMode[];
-  }> = [
-    {
-      action: "outlook.reply",
-      legend: t({
-        id: "officeAddin.settings.addin.replyActions.reply.legend",
-        message: "Reply to sender",
-      }),
-      modes: ["dont_ask", "always_ask", "deny"],
-    },
-    {
-      action: "outlook.reply_all",
-      legend: t({
-        id: "officeAddin.settings.addin.replyActions.replyAll.legend",
-        message: "Reply to all recipients",
-      }),
-      modes: ["always_ask", "deny"],
-    },
+  const alwaysLockedHelper = t({
+    id: "officeAddin.settings.addin.clientActions.always.locked",
+    message:
+      "Locked: your organization requires confirmation for this action every time.",
+  });
+  const decisionOrder: readonly ClientActionDecision[] = [
+    "ask",
+    "always",
+    "never",
   ];
+
+  const clientActionGroups = [...clientActionFacets.entries()].flatMap(
+    ([facetId, info]) => {
+      const actions = offerableClientActions(info.clientActions);
+      return actions.length > 0
+        ? [{ facetId, displayName: info.displayName, actions, info }]
+        : [];
+    },
+  );
 
   const composeToggleLabel = t({
     id: "officeAddin.settings.addin.composeInherits.label",
@@ -224,50 +229,79 @@ export function BehaviorTabContent({
           })}
         </div>
       </fieldset>
-      <fieldset className="space-y-3">
-        <legend className="text-sm font-medium text-theme-fg-primary">
-          {t({
-            id: "officeAddin.settings.addin.replyActions.legend",
-            message: "When the assistant suggests replying to an email",
-          })}
-        </legend>
-        <p className="text-xs text-theme-fg-secondary">
-          {t({
-            id: "officeAddin.settings.addin.replyActions.intro",
-            message:
-              "Applies to reading mode. Replies only open as a prefilled Outlook draft — sending always stays your manual step.",
-          })}
-        </p>
-        {actionGroups.map((group) => (
-          <div
-            key={group.action}
-            role="radiogroup"
-            aria-label={group.legend}
-            className="space-y-2"
-          >
-            <p className="text-xs font-medium text-theme-fg-primary">
-              {group.legend}
-            </p>
-            {group.modes.map((mode) => (
-              <RadioCard
-                key={mode}
-                size="sm"
-                name={`${radioGroupName}-${group.action}`}
-                value={mode}
-                checked={actionPreferences[group.action] === mode}
-                onChange={() =>
-                  setActionPreferences({
-                    ...actionPreferences,
-                    [group.action]: mode,
-                  })
-                }
-                label={approvalOptionLabels[mode].label}
-                helper={approvalOptionLabels[mode].helper}
-              />
-            ))}
-          </div>
-        ))}
-      </fieldset>
+      {clientActionGroups.length > 0 && (
+        <fieldset className="space-y-3">
+          <legend className="text-sm font-medium text-theme-fg-primary">
+            {t({
+              id: "officeAddin.settings.addin.clientActions.legend",
+              message: "Assistant-suggested actions",
+            })}
+          </legend>
+          <p className="text-xs text-theme-fg-secondary">
+            {t({
+              id: "officeAddin.settings.addin.clientActions.intro",
+              message:
+                "Your decisions from the in-chat confirmation are stored here and can be changed any time. Nothing is sent until you press Send in Outlook.",
+            })}
+          </p>
+          {clientActionGroups.map((group) => (
+            <div key={group.facetId} className="space-y-3">
+              <p className="text-xs font-medium text-theme-fg-primary">
+                {group.displayName}
+              </p>
+              {group.actions.map((action) => {
+                const enforced = group.info.alwaysAskActions.includes(action);
+                const current = effectiveDecision({
+                  facetId: group.facetId,
+                  action,
+                  decisions,
+                  enforcedAskActions: group.info.alwaysAskActions,
+                });
+                return (
+                  <div
+                    key={action}
+                    role="radiogroup"
+                    aria-label={clientActionDisplayLabel(action)}
+                    className="space-y-2"
+                  >
+                    <p className="text-xs text-theme-fg-secondary">
+                      {clientActionDisplayLabel(action)}
+                    </p>
+                    {decisionOrder.map((decision) => {
+                      const lockedAlways = decision === "always" && enforced;
+                      return (
+                        <RadioCard
+                          key={decision}
+                          size="sm"
+                          name={`${radioGroupName}-${group.facetId}-${action}`}
+                          value={decision}
+                          checked={current === decision}
+                          disabled={lockedAlways}
+                          onChange={() => {
+                            if (lockedAlways) {
+                              return;
+                            }
+                            setDecisions({
+                              ...decisions,
+                              [decisionKey(group.facetId, action)]: decision,
+                            });
+                          }}
+                          label={decisionOptionLabels[decision].label}
+                          helper={
+                            lockedAlways
+                              ? alwaysLockedHelper
+                              : decisionOptionLabels[decision].helper
+                          }
+                        />
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </fieldset>
+      )}
     </div>
   );
 }

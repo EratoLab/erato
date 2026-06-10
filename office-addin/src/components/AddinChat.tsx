@@ -719,6 +719,9 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
           renderMode,
           messageId: id,
           ...(allowedClientActions ? { allowedClientActions } : {}),
+          ...(clientActionInfo && clientActionInfo.alwaysAskActions.length > 0
+            ? { alwaysAskClientActions: clientActionInfo.alwaysAskActions }
+            : {}),
           ...(proposedClientAction ? { proposedClientAction } : {}),
           ...(clientActionInfo?.presentation
             ? { clientActionPresentation: clientActionInfo.presentation }

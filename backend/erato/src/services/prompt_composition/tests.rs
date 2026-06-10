@@ -2198,6 +2198,7 @@ mod test_cases {
                 allowed_args: vec!["context".to_string()],
                 client_actions: vec![],
                 presentation: None,
+                client_actions_always_ask: vec![],
             },
         )]);
 
@@ -2331,6 +2332,7 @@ mod test_cases {
                 allowed_args: vec!["tone".to_string()],
                 client_actions: vec![],
                 presentation: None,
+                client_actions_always_ask: vec![],
             },
         )]);
 

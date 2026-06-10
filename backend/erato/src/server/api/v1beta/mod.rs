@@ -528,6 +528,8 @@ pub struct GlobalFacetSettings {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ActionFacetInfo {
     id: String,
+    /// Human readable name for the facet, e.g. for client settings UIs.
+    display_name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     platform: Option<String>,
@@ -544,6 +546,12 @@ pub struct ActionFacetInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     presentation: Option<String>,
+    /// Subset of `client_actions` the deployment enforces a per-use
+    /// confirmation for: the client must always ask and must not offer or
+    /// honor a persistent "always allow" for these actions. Users may still
+    /// deny them entirely.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    client_actions_always_ask: Vec<String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -646,6 +654,7 @@ pub async fn facets(
         .iter()
         .map(|(id, af)| ActionFacetInfo {
             id: id.clone(),
+            display_name: af.display_name.clone(),
             platform: af.platform.clone(),
             client_actions: af.client_actions.clone(),
             presentation: (!af.client_actions.is_empty()).then(|| {
@@ -653,6 +662,7 @@ pub async fn facets(
                     .clone()
                     .unwrap_or_else(|| "render_buttons".to_string())
             }),
+            client_actions_always_ask: af.client_actions_always_ask.clone(),
         })
         .collect();
     action_facets.sort_by(|a, b| a.id.cmp(&b.id));

@@ -2966,6 +2966,7 @@ fn add_action_facets(app_config: &mut erato::config::AppConfig) {
             allowed_args: vec!["tone".to_string(), "content".to_string()],
             client_actions: vec![],
             presentation: None,
+            client_actions_always_ask: vec![],
         },
     );
 }

@@ -13,26 +13,62 @@ vi.mock("../Controls/Button", () => ({
 }));
 
 describe("ActionConfirmationCard", () => {
-  it("renders title, description, and both actions while pending", () => {
-    const onConfirm = vi.fn();
-    const onDismiss = vi.fn();
+  it("renders the generic frame with all three decisions", () => {
+    const onAllowOnce = vi.fn();
+    const onAlwaysAllow = vi.fn();
+    const onDeny = vi.fn();
     render(
       <ActionConfirmationCard
-        title="Reply to all recipients?"
-        description="Alice, Bob"
-        confirmLabel="Open Reply All"
-        dismissLabel="Not now"
-        onConfirm={onConfirm}
-        onDismiss={onDismiss}
+        description="Open a reply to all recipients: Alice, Bob"
+        onAllowOnce={onAllowOnce}
+        onAlwaysAllow={onAlwaysAllow}
+        onDeny={onDeny}
       />,
     );
 
-    expect(screen.getByText("Reply to all recipients?")).toBeInTheDocument();
-    expect(screen.getByText("Alice, Bob")).toBeInTheDocument();
-    fireEvent.click(screen.getByText("Open Reply All"));
-    expect(onConfirm).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByText("Not now"));
-    expect(onDismiss).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("Allow this action?")).toBeInTheDocument();
+    expect(
+      screen.getByText("Open a reply to all recipients: Alice, Bob"),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Allow once"));
+    expect(onAllowOnce).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByText("Always allow"));
+    expect(onAlwaysAllow).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByText("Deny"));
+    expect(onDeny).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides Always allow when no persistence callback is given", () => {
+    render(
+      <ActionConfirmationCard
+        title="t"
+        onAllowOnce={vi.fn()}
+        onDeny={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText("Always allow")).not.toBeInTheDocument();
+  });
+
+  it("greys out Always allow with the deployment reason", () => {
+    const onAlwaysAllow = vi.fn();
+    render(
+      <ActionConfirmationCard
+        title="t"
+        onAllowOnce={vi.fn()}
+        onAlwaysAllow={onAlwaysAllow}
+        alwaysAllowDisabledReason="Your organization requires confirmation for this action."
+        onDeny={vi.fn()}
+      />,
+    );
+    const alwaysAllow = screen.getByText("Always allow");
+    expect(alwaysAllow).toBeDisabled();
+    expect(
+      screen.getByText(
+        "Your organization requires confirmation for this action.",
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(alwaysAllow);
+    expect(onAlwaysAllow).not.toHaveBeenCalled();
   });
 
   it("renders rich description nodes as-is", () => {
@@ -40,60 +76,55 @@ describe("ActionConfirmationCard", () => {
       <ActionConfirmationCard
         title="t"
         description={<ul data-testid="recipients" />}
-        onConfirm={vi.fn()}
-        onDismiss={vi.fn()}
+        onAllowOnce={vi.fn()}
+        onDeny={vi.fn()}
       />,
     );
     expect(screen.getByTestId("recipients")).toBeInTheDocument();
   });
 
-  it("disables both buttons while busy", () => {
+  it("disables all buttons while busy", () => {
     render(
       <ActionConfirmationCard
         title="t"
-        confirmLabel="Go"
-        dismissLabel="No"
-        onConfirm={vi.fn()}
-        onDismiss={vi.fn()}
+        onAllowOnce={vi.fn()}
+        onAlwaysAllow={vi.fn()}
+        onDeny={vi.fn()}
         isBusy
       />,
     );
-    expect(screen.getByText("Go")).toBeDisabled();
-    expect(screen.getByText("No")).toBeDisabled();
+    expect(screen.getByText("Allow once")).toBeDisabled();
+    expect(screen.getByText("Always allow")).toBeDisabled();
+    expect(screen.getByText("Deny")).toBeDisabled();
   });
 
   it("renders a compact resolved row instead of buttons once resolved", () => {
     render(
       <ActionConfirmationCard
         title="t"
-        confirmLabel="Go"
-        onConfirm={vi.fn()}
-        onDismiss={vi.fn()}
+        onAllowOnce={vi.fn()}
+        onDeny={vi.fn()}
         status="confirmed"
         resolvedLabel="Reply opened"
       />,
     );
     expect(screen.getByText("Reply opened")).toBeInTheDocument();
-    expect(screen.queryByText("Go")).not.toBeInTheDocument();
+    expect(screen.queryByText("Allow once")).not.toBeInTheDocument();
   });
 
   it("scrolls into view on mount only when requested", () => {
     const scrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;
     const { unmount } = render(
-      <ActionConfirmationCard
-        title="t"
-        onConfirm={vi.fn()}
-        onDismiss={vi.fn()}
-      />,
+      <ActionConfirmationCard title="t" onAllowOnce={vi.fn()} onDeny={vi.fn()} />,
     );
     expect(scrollIntoView).not.toHaveBeenCalled();
     unmount();
     render(
       <ActionConfirmationCard
         title="t"
-        onConfirm={vi.fn()}
-        onDismiss={vi.fn()}
+        onAllowOnce={vi.fn()}
+        onDeny={vi.fn()}
         scrollIntoViewOnMount
       />,
     );

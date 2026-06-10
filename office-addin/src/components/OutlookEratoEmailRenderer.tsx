@@ -10,14 +10,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useOutlookComposeSelection } from "../hooks/useOutlookComposeSelection";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
 import {
-  CLIENT_ACTION_PREFERENCES_KEY,
-  DEFAULT_CLIENT_ACTION_PREFERENCES,
-  clientActionPreferencesPersistedOptions,
+  CLIENT_ACTION_DECISIONS_KEY,
+  DEFAULT_CLIENT_ACTION_DECISIONS,
+  clientActionDecisionsPersistedOptions,
+  decisionKey,
   isActionDenied,
   resolveAutoPromptBehavior,
   resolveClickBehavior,
 } from "../utils/clientActionPolicy";
 import {
+  clientActionDisplayLabel,
   offerableClientActions,
   type OutlookClientAction,
 } from "../utils/outlookClientActions";
@@ -80,20 +82,31 @@ export function OutlookEratoEmailRenderer({
   const expectedItemIdentity = artifact?.itemIdentity;
   const isStaleForCurrentItem =
     !!expectedItemIdentity && itemIdentity !== expectedItemIdentity;
-  const [actionPreferences] = usePersistedState(
-    CLIENT_ACTION_PREFERENCES_KEY,
-    DEFAULT_CLIENT_ACTION_PREFERENCES,
-    clientActionPreferencesPersistedOptions,
+  const [decisions, setDecisions] = usePersistedState(
+    CLIENT_ACTION_DECISIONS_KEY,
+    DEFAULT_CLIENT_ACTION_DECISIONS,
+    clientActionDecisionsPersistedOptions,
+  );
+  const facetId = artifact?.facetId ?? "";
+  const enforcedAskActions = useMemo(
+    () => artifact?.alwaysAskClientActions ?? [],
+    [artifact],
   );
 
   const readActions = useMemo<OutlookClientAction[]>(
     () =>
       isReadMode && isReadReplySupported()
         ? offerableClientActions(artifact?.allowedClientActions).filter(
-            (action) => !isActionDenied(action, actionPreferences),
+            (action) =>
+              !isActionDenied({
+                facetId,
+                action,
+                decisions,
+                enforcedAskActions,
+              }),
           )
         : [],
-    [isReadMode, artifact, actionPreferences],
+    [isReadMode, artifact, facetId, decisions, enforcedAskActions],
   );
   const proposedAction =
     artifact?.proposedClientAction &&
@@ -210,7 +223,14 @@ export function OutlookEratoEmailRenderer({
         showError("staleItem", 4000);
         return;
       }
-      if (resolveClickBehavior(action, actionPreferences) === "execute") {
+      if (
+        resolveClickBehavior({
+          facetId,
+          action,
+          decisions,
+          enforcedAskActions,
+        }) === "execute"
+      ) {
         void executeReply(action);
         return;
       }
@@ -219,8 +239,10 @@ export function OutlookEratoEmailRenderer({
       }
     },
     [
-      actionPreferences,
+      decisions,
+      enforcedAskActions,
       executeReply,
+      facetId,
       isStaleForCurrentItem,
       requestConfirmation,
       showError,
@@ -236,9 +258,11 @@ export function OutlookEratoEmailRenderer({
   // remain as fallback.
   const autoPromptBehavior = resolveAutoPromptBehavior({
     presentation: artifact?.clientActionPresentation,
+    facetId: artifact?.facetId,
     proposedAction,
     isFreshCompletion: !!artifact?.isFreshCompletion,
-    preferences: actionPreferences,
+    decisions,
+    enforcedAskActions,
   });
   const autoPromptMessageId = artifact?.messageId;
   useEffect(() => {
@@ -421,19 +445,11 @@ export function OutlookEratoEmailRenderer({
       )}
       {pendingConfirm && (
         <ActionConfirmationCard
-          title={
-            isConfirmingReplyAll
-              ? t({
-                  id: "officeAddin.emailRenderer.replyAllConfirmTitle",
-                  message: "Reply to all recipients?",
-                })
-              : t({
-                  id: "officeAddin.emailRenderer.replyConfirmTitle",
-                  message: "Open this reply?",
-                })
-          }
           description={
             <div className="space-y-2 text-sm text-theme-fg-secondary">
+              <p className="font-medium text-theme-fg-primary">
+                {clientActionDisplayLabel(pendingConfirm.action)}
+              </p>
               <p>
                 {isConfirmingReplyAll
                   ? t({
@@ -462,23 +478,32 @@ export function OutlookEratoEmailRenderer({
               </p>
             </div>
           }
-          confirmLabel={
-            isConfirmingReplyAll
-              ? t({
-                  id: "officeAddin.emailRenderer.replyAllConfirm",
-                  message: "Open Reply All",
-                })
-              : t({
-                  id: "officeAddin.emailRenderer.replyConfirm",
-                  message: "Open Reply",
-                })
-          }
-          onConfirm={() => {
+          onAllowOnce={() => {
             const action = pendingConfirm.action;
             setPendingConfirm(null);
             void executeReply(action);
           }}
-          onDismiss={() => setPendingConfirm(null)}
+          onAlwaysAllow={() => {
+            // Persist the grant for THIS facet + action, then execute. The
+            // store is the source the settings page mirrors and revises.
+            const action = pendingConfirm.action;
+            setDecisions({
+              ...decisions,
+              [decisionKey(facetId, action)]: "always",
+            });
+            setPendingConfirm(null);
+            void executeReply(action);
+          }}
+          alwaysAllowDisabledReason={
+            enforcedAskActions.includes(pendingConfirm.action)
+              ? t({
+                  id: "officeAddin.emailRenderer.alwaysAllowLocked",
+                  message:
+                    "Your organization requires confirmation for this action every time.",
+                })
+              : undefined
+          }
+          onDeny={() => setPendingConfirm(null)}
           isBusy={isBusy}
           scrollIntoViewOnMount={pendingConfirm.autoTriggered}
         />

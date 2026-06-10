@@ -64,6 +64,12 @@ export interface OutlookArtifact {
    */
   allowedClientActions?: string[];
   /**
+   * Actions the deployment enforces a per-use confirmation for (the facet's
+   * `client_actions_always_ask`). The client must not offer or honor a
+   * persistent "always allow" for these.
+   */
+  alwaysAskClientActions?: string[];
+  /**
    * The client action the model proposed for this message via the
    * `propose_client_action` tool, already validated by the add-in against
    * {@link OutlookArtifact.allowedClientActions} and the tool-call status.

@@ -1,156 +1,185 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  DEFAULT_CLIENT_ACTION_PREFERENCES,
-  clientActionPreferencesPersistedOptions,
-  effectiveApprovalMode,
+  clientActionDecisionsPersistedOptions,
+  decisionKey,
+  effectiveDecision,
   isActionDenied,
   resolveAutoPromptBehavior,
   resolveClickBehavior,
-  type ClientActionPreferences,
+  type ClientActionDecisionMap,
 } from "../clientActionPolicy";
 
-const prefs = (
-  overrides: Partial<ClientActionPreferences> = {},
-): ClientActionPreferences => ({
-  ...DEFAULT_CLIENT_ACTION_PREFERENCES,
-  ...overrides,
+const FACET = "outlook_reply_from_read";
+const REPLY = "outlook.reply" as const;
+const REPLY_ALL = "outlook.reply_all" as const;
+
+const base = {
+  facetId: FACET,
+  decisions: {} as ClientActionDecisionMap,
+  enforcedAskActions: [] as string[],
+};
+
+describe("effectiveDecision", () => {
+  it("defaults every action to ask — no pre-granted permissions", () => {
+    expect(effectiveDecision({ ...base, action: REPLY })).toBe("ask");
+    expect(effectiveDecision({ ...base, action: REPLY_ALL })).toBe("ask");
+  });
+
+  it("honors a stored user grant", () => {
+    expect(
+      effectiveDecision({
+        ...base,
+        action: REPLY,
+        decisions: { [decisionKey(FACET, REPLY)]: "always" },
+      }),
+    ).toBe("always");
+  });
+
+  it("clamps a stored grant back to ask when the deployment enforces confirmation", () => {
+    expect(
+      effectiveDecision({
+        ...base,
+        action: REPLY_ALL,
+        decisions: { [decisionKey(FACET, REPLY_ALL)]: "always" },
+        enforcedAskActions: [REPLY_ALL],
+      }),
+    ).toBe("ask");
+  });
+
+  it("honors never regardless of enforcement (stricter than server is fine)", () => {
+    expect(
+      effectiveDecision({
+        ...base,
+        action: REPLY_ALL,
+        decisions: { [decisionKey(FACET, REPLY_ALL)]: "never" },
+        enforcedAskActions: [REPLY_ALL],
+      }),
+    ).toBe("never");
+  });
+
+  it("scopes decisions per facet — a grant for one facet never leaks to another", () => {
+    const decisions = { [decisionKey(FACET, REPLY)]: "always" } as const;
+    expect(
+      effectiveDecision({
+        facetId: "some_other_facet",
+        action: REPLY,
+        decisions,
+        enforcedAskActions: [],
+      }),
+    ).toBe("ask");
+  });
 });
 
-describe("effectiveApprovalMode", () => {
-  it("defaults reproduce pre-settings behavior", () => {
-    expect(effectiveApprovalMode("outlook.reply", prefs())).toBe("dont_ask");
-    expect(effectiveApprovalMode("outlook.reply_all", prefs())).toBe(
-      "always_ask",
-    );
-  });
-
-  it("clamps reply_all to its always_ask floor — local settings cannot make it silent", () => {
+describe("resolveClickBehavior / isActionDenied", () => {
+  it("ask confirms, always executes, never hides", () => {
+    expect(resolveClickBehavior({ ...base, action: REPLY })).toBe("confirm");
     expect(
-      effectiveApprovalMode(
-        "outlook.reply_all",
-        prefs({ "outlook.reply_all": "dont_ask" }),
-      ),
-    ).toBe("always_ask");
-  });
-
-  it("allows stricter settings everywhere", () => {
+      resolveClickBehavior({
+        ...base,
+        action: REPLY,
+        decisions: { [decisionKey(FACET, REPLY)]: "always" },
+      }),
+    ).toBe("execute");
     expect(
-      effectiveApprovalMode(
-        "outlook.reply",
-        prefs({ "outlook.reply": "deny" }),
-      ),
-    ).toBe("deny");
-    expect(
-      effectiveApprovalMode(
-        "outlook.reply_all",
-        prefs({ "outlook.reply_all": "deny" }),
-      ),
-    ).toBe("deny");
-  });
-});
-
-describe("isActionDenied / resolveClickBehavior", () => {
-  it("deny hides, always_ask confirms, dont_ask executes", () => {
-    expect(
-      isActionDenied("outlook.reply", prefs({ "outlook.reply": "deny" })),
+      isActionDenied({
+        ...base,
+        action: REPLY,
+        decisions: { [decisionKey(FACET, REPLY)]: "never" },
+      }),
     ).toBe(true);
-    expect(resolveClickBehavior("outlook.reply", prefs())).toBe("execute");
-    expect(
-      resolveClickBehavior(
-        "outlook.reply",
-        prefs({ "outlook.reply": "always_ask" }),
-      ),
-    ).toBe("confirm");
-    expect(resolveClickBehavior("outlook.reply_all", prefs())).toBe("confirm");
   });
 });
 
 describe("resolveAutoPromptBehavior", () => {
-  const base = {
+  const auto = {
     presentation: "auto_prompt",
-    proposedAction: "outlook.reply" as const,
+    facetId: FACET,
+    proposedAction: REPLY,
     isFreshCompletion: true,
-    preferences: prefs(),
+    decisions: {} as ClientActionDecisionMap,
+    enforcedAskActions: [] as string[],
   };
 
-  it("executes for a fresh proposal under dont_ask", () => {
-    expect(resolveAutoPromptBehavior(base)).toBe("execute");
+  it("surfaces the card by default (ask)", () => {
+    expect(resolveAutoPromptBehavior(auto)).toBe("confirm");
   });
 
-  it("confirms when the user prefers always_ask", () => {
+  it("executes only after a user-granted always", () => {
     expect(
       resolveAutoPromptBehavior({
-        ...base,
-        preferences: prefs({ "outlook.reply": "always_ask" }),
+        ...auto,
+        decisions: { [decisionKey(FACET, REPLY)]: "always" },
+      }),
+    ).toBe("execute");
+  });
+
+  it("never executes when the deployment enforces confirmation", () => {
+    expect(
+      resolveAutoPromptBehavior({
+        ...auto,
+        proposedAction: REPLY_ALL,
+        decisions: { [decisionKey(FACET, REPLY_ALL)]: "always" },
+        enforcedAskActions: [REPLY_ALL],
       }),
     ).toBe("confirm");
   });
 
-  it("confirms for reply_all even if storage claims dont_ask (floor)", () => {
+  it("stays silent without auto_prompt, freshness, proposal, or when denied", () => {
+    expect(
+      resolveAutoPromptBehavior({ ...auto, presentation: "render_buttons" }),
+    ).toBe("none");
+    expect(
+      resolveAutoPromptBehavior({ ...auto, isFreshCompletion: false }),
+    ).toBe("none");
+    expect(
+      resolveAutoPromptBehavior({ ...auto, proposedAction: undefined }),
+    ).toBe("none");
+    expect(resolveAutoPromptBehavior({ ...auto, facetId: undefined })).toBe(
+      "none",
+    );
     expect(
       resolveAutoPromptBehavior({
-        ...base,
-        proposedAction: "outlook.reply_all",
-        preferences: prefs({ "outlook.reply_all": "dont_ask" }),
-      }),
-    ).toBe("confirm");
-  });
-
-  it("never fires without auto_prompt presentation", () => {
-    expect(
-      resolveAutoPromptBehavior({ ...base, presentation: "render_buttons" }),
-    ).toBe("none");
-    expect(
-      resolveAutoPromptBehavior({ ...base, presentation: undefined }),
-    ).toBe("none");
-  });
-
-  it("never fires for stale (history) completions", () => {
-    expect(
-      resolveAutoPromptBehavior({ ...base, isFreshCompletion: false }),
-    ).toBe("none");
-  });
-
-  it("never fires without a validated proposal or when denied", () => {
-    expect(
-      resolveAutoPromptBehavior({ ...base, proposedAction: undefined }),
-    ).toBe("none");
-    expect(
-      resolveAutoPromptBehavior({
-        ...base,
-        preferences: prefs({ "outlook.reply": "deny" }),
+        ...auto,
+        decisions: { [decisionKey(FACET, REPLY)]: "never" },
       }),
     ).toBe("none");
   });
 });
 
-describe("clientActionPreferencesPersistedOptions.parse", () => {
-  const parse = clientActionPreferencesPersistedOptions.parse;
+describe("clientActionDecisionsPersistedOptions.parse", () => {
+  const parse = clientActionDecisionsPersistedOptions.parse;
 
-  it("accepts a valid stored shape", () => {
+  it("accepts a valid stored map", () => {
     expect(
-      parse({ "outlook.reply": "deny", "outlook.reply_all": "always_ask" }),
-    ).toEqual({ "outlook.reply": "deny", "outlook.reply_all": "always_ask" });
-  });
-
-  it("fills missing actions with defaults (forward compatible)", () => {
-    expect(parse({ "outlook.reply": "always_ask" })).toEqual({
-      "outlook.reply": "always_ask",
-      "outlook.reply_all": "always_ask",
+      parse({
+        [decisionKey(FACET, REPLY)]: "always",
+        [decisionKey(FACET, REPLY_ALL)]: "never",
+      }),
+    ).toEqual({
+      [decisionKey(FACET, REPLY)]: "always",
+      [decisionKey(FACET, REPLY_ALL)]: "never",
     });
   });
 
-  it("rejects unknown modes and non-object values", () => {
-    expect(parse({ "outlook.reply": "yolo" })).toBeNull();
-    expect(parse("dont_ask")).toBeNull();
+  it("drops malformed or unimplemented entries instead of resetting everything", () => {
+    expect(
+      parse({
+        [decisionKey(FACET, REPLY)]: "always",
+        "no-separator": "always",
+        [decisionKey(FACET, "outlook.unknown")]: "always",
+        [decisionKey(FACET, REPLY_ALL)]: "yolo",
+      }),
+    ).toEqual({ [decisionKey(FACET, REPLY)]: "always" });
+  });
+
+  it("normalizes redundant ask entries away", () => {
+    expect(parse({ [decisionKey(FACET, REPLY)]: "ask" })).toEqual({});
+  });
+
+  it("rejects non-object values", () => {
+    expect(parse("always")).toBeNull();
     expect(parse(null)).toBeNull();
-  });
-
-  it("clamps stored modes to the per-action floor (hand-edited storage)", () => {
-    expect(parse({ "outlook.reply_all": "dont_ask" })).toEqual({
-      "outlook.reply": "dont_ask",
-      "outlook.reply_all": "always_ask",
-    });
+    expect(parse(["always"])).toBeNull();
   });
 });

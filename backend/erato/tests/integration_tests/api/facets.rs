@@ -130,6 +130,7 @@ async fn test_facets_endpoint_exposes_action_facet_client_actions(pool: Pool<Pos
             allowed_args: vec!["body_format".to_string()],
             client_actions: vec!["outlook.reply".to_string(), "outlook.reply_all".to_string()],
             presentation: None,
+            client_actions_always_ask: vec![],
         },
     );
     app_config.action_facets.facets.insert(
@@ -141,6 +142,7 @@ async fn test_facets_endpoint_exposes_action_facet_client_actions(pool: Pool<Pos
             allowed_args: vec![],
             client_actions: vec![],
             presentation: None,
+            client_actions_always_ask: vec![],
         },
     );
 
@@ -179,6 +181,12 @@ async fn test_facets_endpoint_exposes_action_facet_client_actions(pool: Pool<Pos
     );
     // Presentation defaults to render_buttons when client actions exist...
     assert_eq!(action_facets[0]["presentation"], "render_buttons");
+    assert_eq!(
+        action_facets[0]["display_name"],
+        "Outlook Reply from Read Mode"
+    );
+    // No enforced confirmations configured → field omitted.
+    assert!(action_facets[0].get("client_actions_always_ask").is_none());
     assert_eq!(action_facets[1]["id"], "plain_facet");
     assert!(action_facets[1].get("client_actions").is_none());
     // ...and is omitted entirely for facets without client actions.
@@ -203,6 +211,7 @@ async fn test_facets_endpoint_exposes_auto_prompt_presentation(pool: Pool<Postgr
             allowed_args: vec!["body_format".to_string()],
             client_actions: vec!["outlook.reply".to_string(), "outlook.reply_all".to_string()],
             presentation: Some("auto_prompt".to_string()),
+            client_actions_always_ask: vec!["outlook.reply_all".to_string()],
         },
     );
 
@@ -232,6 +241,12 @@ async fn test_facets_endpoint_exposes_auto_prompt_presentation(pool: Pool<Postgr
         .and_then(Value::as_array)
         .expect("Missing action_facets list");
     assert_eq!(action_facets[0]["presentation"], "auto_prompt");
+    // Deployment-enforced per-use confirmation is passed through so the
+    // client can grey out "always allow" with a reason.
+    assert_eq!(
+        action_facets[0]["client_actions_always_ask"],
+        serde_json::json!(["outlook.reply_all"])
+    );
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]

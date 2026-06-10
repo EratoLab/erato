@@ -1,3 +1,5 @@
+import { t } from "@lingui/core/macro";
+
 import type { ContentPart } from "@erato/frontend/library";
 
 /**
@@ -29,6 +31,22 @@ export function isImplementedClientAction(
   action: string,
 ): action is OutlookClientAction {
   return (IMPLEMENTED_CLIENT_ACTIONS as readonly string[]).includes(action);
+}
+
+/**
+ * Human-readable description of an action, shared by the permission card
+ * payload and the settings decision toggles.
+ */
+export function clientActionDisplayLabel(action: OutlookClientAction): string {
+  return action === "outlook.reply_all"
+    ? t({
+        id: "officeAddin.clientActions.replyAll",
+        message: "Reply to all recipients",
+      })
+    : t({
+        id: "officeAddin.clientActions.reply",
+        message: "Reply to sender",
+      });
 }
 
 /**

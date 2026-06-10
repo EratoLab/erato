@@ -24,6 +24,17 @@ export type ActionFacetInfo = {
    * must only execute actions from this list, after user confirmation.
    */
   client_actions?: string[];
+  /**
+   * Subset of `client_actions` the deployment enforces a per-use
+   * confirmation for: the client must always ask and must not offer or
+   * honor a persistent "always allow" for these actions. Users may still
+   * deny them entirely.
+   */
+  client_actions_always_ask?: string[];
+  /**
+   * Human readable name for the facet, e.g. for client settings UIs.
+   */
+  display_name: string;
   id: string;
   platform?: string;
   /**
