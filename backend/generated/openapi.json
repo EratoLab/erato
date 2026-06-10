@@ -488,6 +488,65 @@
         ]
       }
     },
+    "/api/v1beta/integrations/ms-office/ews": {
+      "post": {
+        "tags": [
+          "ms_office"
+        ],
+        "summary": "Proxy an Exchange EWS SOAP request to the configured EWS API endpoint.",
+        "operationId": "ews_proxy",
+        "requestBody": {
+          "content": {
+            "text/xml": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Response from the configured Exchange EWS endpoint",
+            "content": {
+              "text/xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no Authorization header is provided"
+          },
+          "404": {
+            "description": "Exchange EWS proxy is not configured",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Failed to proxy the Exchange EWS request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/integrations/sharepoint/all-drives": {
       "get": {
         "tags": [

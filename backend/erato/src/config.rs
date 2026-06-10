@@ -683,9 +683,9 @@ impl AppConfig {
             panic!("Invalid Entra ID configuration: {}", e);
         }
 
-        // Validate MS Office add-in configuration
-        if let Err(e) = config.integrations.ms_office.addin.validate() {
-            panic!("Invalid Microsoft Office add-in configuration: {}", e);
+        // Validate MS Office configuration
+        if let Err(e) = config.integrations.ms_office.validate() {
+            panic!("Invalid Microsoft Office integration configuration: {}", e);
         }
 
         // Validate Prometheus configuration
@@ -2673,8 +2673,42 @@ pub struct IntegrationsConfig {
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
 pub struct MsOfficeConfig {
+    // Exchange EWS API endpoint used by the backend EWS proxy.
+    // Example: https://outlook.office365.com/EWS/Exchange.asmx
+    #[serde(default)]
+    pub ews_api_endpoint: Option<String>,
+
+    // Whether the backend EWS proxy should skip TLS certificate validation.
+    // This should only be enabled for development or controlled internal environments.
+    #[serde(default)]
+    pub ews_skip_tls_validation: bool,
+
     #[serde(default)]
     pub addin: MsOfficeAddinConfig,
+}
+
+impl MsOfficeConfig {
+    pub fn validate(&self) -> Result<(), Report> {
+        if let Some(endpoint) = self.ews_api_endpoint.as_deref() {
+            let trimmed_endpoint = endpoint.trim();
+            if trimmed_endpoint.is_empty() {
+                return Err(eyre!(
+                    "Microsoft Office EWS API endpoint cannot be empty when configured."
+                ));
+            }
+
+            let parsed_endpoint = url::Url::parse(trimmed_endpoint).map_err(|err| {
+                eyre!("Microsoft Office EWS API endpoint is not a valid URL: {err}")
+            })?;
+            if !matches!(parsed_endpoint.scheme(), "http" | "https") {
+                return Err(eyre!(
+                    "Microsoft Office EWS API endpoint must use http or https."
+                ));
+            }
+        }
+
+        self.addin.validate()
+    }
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]

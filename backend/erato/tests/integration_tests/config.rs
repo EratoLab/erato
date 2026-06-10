@@ -90,6 +90,8 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
         config.integrations.ms_office.addin.msal_authority,
         "https://login.microsoftonline.com/common"
     );
+    assert_eq!(config.integrations.ms_office.ews_api_endpoint, None);
+    assert!(!config.integrations.ms_office.ews_skip_tls_validation);
     assert!(!config.cleanup_enabled);
     assert_eq!(config.cleanup_archived_max_age_days, 30);
 
@@ -110,6 +112,10 @@ model_name = "gpt-4o"
 [file_storage_providers.azblob_demo]
 provider_kind = "azblob"
 config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+
+[integrations.ms_office]
+ews_api_endpoint = "https://outlook.office365.com/EWS/Exchange.asmx"
+ews_skip_tls_validation = true
 
 [integrations.ms_office.addin]
 enabled = true
@@ -139,6 +145,11 @@ msal_client_id = "00000000-0000-0000-0000-000000000000"
         config.integrations.ms_office.addin.addin_id,
         "f00ba5-1111-2222-3333-444444444444"
     );
+    assert_eq!(
+        config.integrations.ms_office.ews_api_endpoint.as_deref(),
+        Some("https://outlook.office365.com/EWS/Exchange.asmx")
+    );
+    assert!(config.integrations.ms_office.ews_skip_tls_validation);
 }
 
 #[test]

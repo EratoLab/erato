@@ -2061,7 +2061,29 @@ The service name to identify this application in traces.
 
 {/* erato_toml_config_key: integrations.ms_office */}
 
-Configuration for the Microsoft Office add-in integration.
+Configuration for Microsoft Office integrations.
+
+##### `integrations.ms_office.ews_api_endpoint`
+
+{/* erato_toml_config_key: integrations.ms_office.ews_api_endpoint */}
+
+Optional Exchange EWS API endpoint used by the backend EWS proxy.
+
+When configured, Erato exposes `POST /api/v1beta/integrations/ms-office/ews` and forwards the incoming `Authorization` header to this endpoint.
+
+**Type:** `string | None`
+
+##### `integrations.ms_office.ews_skip_tls_validation`
+
+{/* erato_toml_config_key: integrations.ms_office.ews_skip_tls_validation */}
+
+Whether the backend EWS proxy skips TLS certificate validation when calling the configured EWS endpoint.
+
+This is unsafe and should only be enabled for development or controlled internal environments with non-compliant certificates.
+
+**Default value:** `false`
+
+**Type:** `boolean`
 
 ##### `integrations.ms_office.addin.enabled`
 
@@ -2134,6 +2156,10 @@ The path must contain the Office add-in frontend artifacts including `manifest.x
 **Example:**
 
 ```toml
+[integrations.ms_office]
+ews_api_endpoint = "https://outlook.office365.com/EWS/Exchange.asmx"
+ews_skip_tls_validation = false
+
 [integrations.ms_office.addin]
 enabled = true
 msal_client_id = "00000000-0000-0000-0000-000000000000"
