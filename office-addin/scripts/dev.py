@@ -269,6 +269,11 @@ def sync_entra_proxy_funnel_settings(funnel_url: str) -> None:
         "whitelist_domains": (
             f"whitelist_domains = {format_config_string_list(whitelist_domains)}"
         ),
+        # MUST stay false: the add-in's login popup enters at /oauth2/sign_in so
+        # its first-party 200 page primes the CSRF cookie context (otherwise the
+        # first /oauth2/callback drops the CSRF cookie → double login). Skipping
+        # the button page would 302 straight to Entra and reintroduce that.
+        "skip_provider_button": "skip_provider_button = false",
     }
 
     updated_config_text = config_text

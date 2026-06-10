@@ -27,12 +27,22 @@ msgid "officeAddin.auth.authenticationFailed"
 msgstr "Échec de l’authentification"
 
 #. js-lingui-explicit-id
-#: src/providers/EntraGraphTokenProvider.tsx
-msgid "officeAddin.auth.graphUnavailable"
-msgstr "L’authentification Graph n’est pas disponible sur cet hôte"
+#: src/auth/ExchangeCallbackAuthSource.ts
+#~ msgid "officeAddin.auth.exchangeCallbackTokenEmpty"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
-#: src/auth/EntraNaaAuthSource.ts
+#: src/auth/outlook/mintExchangeCallbackToken.ts
+#~ msgid "officeAddin.auth.exchangeCallbackTokenFailed"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/providers/EntraGraphTokenProvider.tsx
+#~ msgid "officeAddin.auth.graphUnavailable"
+#~ msgstr "L’authentification Graph n’est pas disponible sur cet hôte"
+
+#. js-lingui-explicit-id
+#: src/auth/entraAuthSource.ts
 msgid "officeAddin.auth.msalClientIdMissing"
 msgstr "L’identifiant client MSAL n’est pas configuré"
 
@@ -42,7 +52,7 @@ msgstr "L’identifiant client MSAL n’est pas configuré"
 #~ msgstr "Échec de l’initialisation de MSAL"
 
 #. js-lingui-explicit-id
-#: src/auth/EntraNaaAuthSource.ts
+#: src/auth/entraAuthSource.ts
 msgid "officeAddin.auth.msalNotInitialized"
 msgstr "MSAL n’est pas initialisé"
 
@@ -53,8 +63,18 @@ msgstr "MSAL n’est pas initialisé"
 
 #. js-lingui-explicit-id
 #: src/auth/UnsupportedAuthSource.ts
-msgid "officeAddin.auth.naaUnsupported"
-msgstr "L’authentification d’application imbriquée n’est pas prise en charge dans cet environnement"
+#~ msgid "officeAddin.auth.naaUnsupported"
+#~ msgstr "L’authentification d’application imbriquée n’est pas prise en charge dans cet environnement"
+
+#. js-lingui-explicit-id
+#: src/providers/Oauth2ProxyLoginProvider.tsx
+msgid "officeAddin.auth.oauth2ProxyPopupBlocked"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/providers/Oauth2ProxyLoginProvider.tsx
+msgid "officeAddin.auth.oauth2ProxyProbeFailed"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/providers/SessionAuthProvider.tsx
@@ -62,9 +82,14 @@ msgid "officeAddin.auth.oauth2ProxySessionFailed"
 msgstr "Impossible d’établir une session Erato sécurisée. Reconnectez-vous."
 
 #. js-lingui-explicit-id
+#: src/providers/Oauth2ProxyLoginProvider.tsx
+msgid "officeAddin.auth.oauth2ProxySignInTimedOut"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/auth/UnsupportedAuthSource.ts
-msgid "officeAddin.auth.onPremNotSupported"
-msgstr "La connexion à Exchange local (hérité) n’est pas encore prise en charge."
+#~ msgid "officeAddin.auth.onPremNotSupported"
+#~ msgstr "La connexion à Exchange local (hérité) n’est pas encore prise en charge."
 
 #. js-lingui-explicit-id
 #: src/App.tsx
@@ -81,6 +106,11 @@ msgstr ""
 #: src/App.tsx
 #: src/providers/SessionAuthProvider.tsx
 msgid "officeAddin.auth.signInToContinue"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/auth/UnsupportedAuthSource.ts
+msgid "officeAddin.auth.signInUnavailable"
 msgstr ""
 
 #. js-lingui-explicit-id

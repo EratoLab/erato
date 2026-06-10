@@ -1,4 +1,7 @@
-import { createNestablePublicClientApplication } from "@azure/msal-browser";
+import {
+  createNestablePublicClientApplication,
+  createStandardPublicClientApplication,
+} from "@azure/msal-browser";
 import { setAuthRecoveryHandler } from "@erato/frontend/library";
 import { i18n } from "@lingui/core";
 import {
@@ -20,7 +23,9 @@ import {
 } from "vitest";
 
 import { OAUTH2_PROXY_SESSION_REFRESH_AFTER_MS } from "../../auth/oauth2ProxySession";
-import { MsalNaaProvider, useMsalNaa } from "../MsalNaaProvider";
+import { useGraphTokenOptional } from "../EntraGraphTokenProvider";
+import { OutlookAuthProvider } from "../OutlookAuthProvider";
+import { useSessionAuth } from "../SessionAuthProvider";
 
 import type {
   AccountInfo,
@@ -29,11 +34,24 @@ import type {
 } from "@azure/msal-browser";
 
 vi.mock("@azure/msal-browser", () => {
-  class InteractionRequiredAuthError extends Error {}
+  class AuthError extends Error {
+    errorCode: string;
+    constructor(errorCode: string, message?: string) {
+      super(message ?? errorCode);
+      this.errorCode = errorCode;
+    }
+  }
+  class InteractionRequiredAuthError extends AuthError {
+    constructor(message?: string) {
+      super("interaction_required", message);
+    }
+  }
 
   return {
+    AuthError,
     InteractionRequiredAuthError,
     createNestablePublicClientApplication: vi.fn(),
+    createStandardPublicClientApplication: vi.fn(),
   };
 });
 
@@ -90,6 +108,18 @@ function uninstallNaaOfficeContext() {
   delete (Office as unknown as Record<string, unknown>).auth;
 }
 
+// A NAA-less mailbox (e.g. Exchange SE OWA). With NAA absent but a mailbox
+// present, OutlookAuthProvider picks the oauth2-proxy redirect-login path.
+function installMailbox() {
+  (Office.context as unknown as Record<string, unknown>).mailbox = {
+    userProfile: { accountType: "enterprise" },
+  };
+}
+
+function uninstallMailbox() {
+  delete (Office.context as unknown as Record<string, unknown>).mailbox;
+}
+
 function createPcaMock(
   result: AuthenticationResult = authenticationResult,
 ): IPublicClientApplication {
@@ -136,10 +166,17 @@ async function advance(ms: number) {
 }
 
 function AuthProbe() {
-  const auth = useMsalNaa();
+  const auth = useSessionAuth();
+  // Observes whether EntraGraphTokenProvider is mounted — it must be for
+  // entra-msal only.
+  const graph = useGraphTokenOptional();
 
   return (
     <dl>
+      <dt>mode</dt>
+      <dd data-testid="mode">{auth.mode}</dd>
+      <dt>graph-mounted</dt>
+      <dd data-testid="graph-mounted">{String(graph !== null)}</dd>
       <dt>initialized</dt>
       <dd data-testid="initialized">{String(auth.isInitialized)}</dd>
       <dt>authenticated</dt>
@@ -166,7 +203,7 @@ function AuthProbe() {
   );
 }
 
-describe("MsalNaaProvider", () => {
+describe("OutlookAuthProvider", () => {
   beforeEach(() => {
     i18n.activate("en");
     window.localStorage.clear();
@@ -174,11 +211,15 @@ describe("MsalNaaProvider", () => {
     vi.mocked(createNestablePublicClientApplication).mockResolvedValue(
       createPcaMock(),
     );
+    vi.mocked(createStandardPublicClientApplication).mockResolvedValue(
+      createPcaMock(),
+    );
   });
 
   afterEach(() => {
     cleanup();
     uninstallNaaOfficeContext();
+    uninstallMailbox();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
@@ -187,9 +228,9 @@ describe("MsalNaaProvider", () => {
     const fetcher = stubFetch(new Response("{}", { status: 202 }));
 
     render(
-      <MsalNaaProvider>
+      <OutlookAuthProvider>
         <AuthProbe />
-      </MsalNaaProvider>,
+      </OutlookAuthProvider>,
     );
 
     await waitFor(() =>
@@ -198,6 +239,8 @@ describe("MsalNaaProvider", () => {
 
     expect(screen.getByTestId("cookie")).toHaveTextContent("true");
     expect(screen.getByTestId("status")).toHaveTextContent("ready");
+    expect(screen.getByTestId("mode")).toHaveTextContent("entra-msal");
+    expect(screen.getByTestId("graph-mounted")).toHaveTextContent("true");
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(fetcher).toHaveBeenCalledWith(
       "/oauth2/redeem-external-token",
@@ -212,9 +255,9 @@ describe("MsalNaaProvider", () => {
     stubFetch(new Response("Unauthorized", { status: 401 }));
 
     render(
-      <MsalNaaProvider>
+      <OutlookAuthProvider>
         <AuthProbe />
-      </MsalNaaProvider>,
+      </OutlookAuthProvider>,
     );
 
     await waitFor(() =>
@@ -235,9 +278,9 @@ describe("MsalNaaProvider", () => {
       const fetcher = stubFetch(new Response("{}", { status: 202 }));
 
       render(
-        <MsalNaaProvider>
+        <OutlookAuthProvider>
           <AuthProbe />
-        </MsalNaaProvider>,
+        </OutlookAuthProvider>,
       );
 
       await advance(0);
@@ -265,9 +308,9 @@ describe("MsalNaaProvider", () => {
       ]);
 
       render(
-        <MsalNaaProvider>
+        <OutlookAuthProvider>
           <AuthProbe />
-        </MsalNaaProvider>,
+        </OutlookAuthProvider>,
       );
 
       await advance(0);
@@ -299,9 +342,9 @@ describe("MsalNaaProvider", () => {
       const fetcher = stubFetch(new Response("{}", { status: 202 }));
 
       const view = render(
-        <MsalNaaProvider>
+        <OutlookAuthProvider>
           <AuthProbe />
-        </MsalNaaProvider>,
+        </OutlookAuthProvider>,
       );
 
       await advance(0);
@@ -323,9 +366,9 @@ describe("MsalNaaProvider", () => {
       .mockResolvedValue(createPcaMock());
 
     render(
-      <MsalNaaProvider>
+      <OutlookAuthProvider>
         <AuthProbe />
-      </MsalNaaProvider>,
+      </OutlookAuthProvider>,
     );
 
     await waitFor(() =>
@@ -349,9 +392,9 @@ describe("MsalNaaProvider", () => {
     vi.mocked(createNestablePublicClientApplication).mockResolvedValue(pca);
 
     render(
-      <MsalNaaProvider>
+      <OutlookAuthProvider>
         <AuthProbe />
-      </MsalNaaProvider>,
+      </OutlookAuthProvider>,
     );
 
     await waitFor(() =>
@@ -386,5 +429,63 @@ describe("MsalNaaProvider", () => {
       "/oauth2/redeem-external-token",
       expect.objectContaining({ method: "POST", credentials: "include" }),
     );
+  });
+
+  it("authenticates a NAA-less mailbox (Exchange SE) via the oauth2-proxy session", async () => {
+    uninstallNaaOfficeContext();
+    installMailbox();
+    // The proxy already holds a valid cookie (the user signed in to the web app
+    // on the same funnel domain) so the mount probe authenticates immediately.
+    const fetcher = stubFetch(new Response("{}", { status: 202 }));
+
+    render(
+      <OutlookAuthProvider>
+        <AuthProbe />
+      </OutlookAuthProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("authenticated")).toHaveTextContent("true"),
+    );
+
+    // The proxy-login path reports entra-msal (an Entra identity, via the proxy)
+    // but mounts NO Graph provider — SE reads mail via the REST callback token.
+    expect(screen.getByTestId("mode")).toHaveTextContent("entra-msal");
+    expect(screen.getByTestId("graph-mounted")).toHaveTextContent("false");
+    // No client-side MSAL acquisition happens on this path — the proxy owns the
+    // OIDC login. Neither PCA factory is called, and there is no redeem POST.
+    expect(createStandardPublicClientApplication).not.toHaveBeenCalled();
+    expect(createNestablePublicClientApplication).not.toHaveBeenCalled();
+    // Authentication is established by probing the proxy auth endpoint, not by
+    // redeeming a client-side token.
+    expect(fetcher).toHaveBeenCalledWith(
+      "/oauth2/auth",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(fetcher).not.toHaveBeenCalledWith(
+      "/oauth2/redeem-external-token",
+      expect.anything(),
+    );
+  });
+
+  it("treats a NAA-less host without a mailbox as unsupported", async () => {
+    uninstallNaaOfficeContext();
+    const fetcher = stubFetch(new Response("{}", { status: 202 }));
+
+    render(
+      <OutlookAuthProvider>
+        <AuthProbe />
+      </OutlookAuthProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("initialized")).toHaveTextContent("true"),
+    );
+
+    expect(screen.getByTestId("mode")).toHaveTextContent("unsupported");
+    expect(screen.getByTestId("authenticated")).toHaveTextContent("false");
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(createStandardPublicClientApplication).not.toHaveBeenCalled();
+    expect(createNestablePublicClientApplication).not.toHaveBeenCalled();
   });
 });

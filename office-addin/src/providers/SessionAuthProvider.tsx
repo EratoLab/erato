@@ -11,6 +11,7 @@ import {
 
 import {
   InteractionRequiredError,
+  type AuthMode,
   type AuthSource,
   type BootstrapToken,
 } from "../auth/AuthSource";
@@ -52,13 +53,18 @@ export interface SessionAuthCore {
 interface SessionAuthContextValue extends SessionAuthCore {
   isOauth2ProxySessionReady: boolean;
   oauth2ProxySessionStatus: Oauth2ProxySessionStatus;
+  /** The auth mode of the active {@link AuthSource}. The mail-fetch hook gates
+   * on this (`entra-msal` vs `unsupported`) before picking a backend by mailbox
+   * location. */
+  mode: AuthMode;
 }
 
-const SessionAuthContext = createContext<SessionAuthContextValue>({
+export const SessionAuthContext = createContext<SessionAuthContextValue>({
   isInitialized: false,
   isAuthenticated: false,
   isOauth2ProxySessionReady: false,
   oauth2ProxySessionStatus: "idle",
+  mode: "unsupported",
   retryAuthentication: () => Promise.resolve(),
   error: null,
 });
@@ -545,6 +551,7 @@ export function SessionAuthProvider({
         isAuthenticated,
         isOauth2ProxySessionReady,
         oauth2ProxySessionStatus: oauth2ProxySession.status,
+        mode: authSource.mode,
         retryAuthentication,
         error: authError,
       }}

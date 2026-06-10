@@ -1,11 +1,16 @@
-import type { AccountInfo } from "@azure/msal-browser";
-
 /**
- * The auth strategy in effect for the current host/environment. Step 0 only
- * produces a working source for `entra-msal`; the other two are honest
- * "not supported yet" states (see {@link "./UnsupportedAuthSource"}).
+ * The auth strategy in effect for the current host/environment. The `entra-msal`
+ * mode covers the EXO NAA {@link AuthSource} ({@link "./EntraNaaAuthSource"}),
+ * which redeems an Entra id_token + Graph token for the proxy session. The
+ * NAA-less hybrid mailbox (Exchange SE) ALSO reports `entra-msal` — but via the
+ * oauth2-proxy redirect login (see
+ * {@link "../providers/Oauth2ProxyLoginProvider"}), which has no client-side
+ * `AuthSource`: the user is still an Entra identity, so the mail-fetch hook
+ * treats it as authenticated and routes SE mail to the REST callback backend.
+ * `unsupported` is the one residual "can't sign in here" state — no NAA and no
+ * mailbox to log in against (see {@link "./UnsupportedAuthSource"}).
  */
-export type AuthMode = "entra-msal" | "exchange-callback" | "unsupported";
+export type AuthMode = "entra-msal" | "unsupported";
 
 /**
  * Layer-1 bootstrap token plus the identity it was minted for. This is the
@@ -17,8 +22,6 @@ export interface BootstrapToken {
   idToken: string;
   /** Redeemed as `access_token` when present. EXO has it; on-prem won't. */
   accessToken?: string;
-  /** MSAL account when MSAL-backed; null otherwise. The core never reads it. */
-  account: AccountInfo | null;
 }
 
 export interface AcquireBootstrapOptions {
@@ -64,9 +67,9 @@ export interface AuthSource {
 
 /**
  * Resolves an optional login hint for the bootstrap acquire. Injected per host:
- * the Outlook wrapper adds a mailbox fallback; Excel/Word supply a mailbox-less
- * resolver (or none). Keeping this injected is what stops the mailbox from
- * leaking into the Entra source.
+ * {@link "../providers/OutlookAuthProvider"} adds a mailbox fallback; Excel/Word
+ * supply a mailbox-less resolver (or none). Keeping this injected is what stops
+ * the mailbox from leaking into the Entra source.
  */
 export type LoginHintResolver = () => Promise<string | undefined>;
 

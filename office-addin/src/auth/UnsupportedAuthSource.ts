@@ -2,38 +2,30 @@ import { t } from "@lingui/core/macro";
 
 import type { AuthMode, AuthSource, BootstrapToken } from "./AuthSource";
 
-/** The modes Step 0 recognises but can't authenticate yet — every `AuthMode`
- * except the one working source. Derived from {@link AuthMode} so a new mode
- * can't silently fall out of sync. */
-type UnsupportedReason = Exclude<AuthMode, "entra-msal">;
+/** The single mode with no working {@link AuthSource}: no NAA and no mailbox to
+ * log in against. The `entra-msal` mode authenticates (NAA or interactive), so
+ * the only residual unsupported `AuthMode` is `"unsupported"` itself. */
+type UnsupportedReason = Extract<AuthMode, "unsupported">;
 
-/** The localized "can't sign in here yet" error for an unsupported mode. */
-function unsupportedReasonError(mode: UnsupportedReason): Error {
-  if (mode === "exchange-callback") {
-    return new Error(
-      t({
-        id: "officeAddin.auth.onPremNotSupported",
-        message: "On-prem (legacy Exchange) sign-in isn't supported yet.",
-      }),
-    );
-  }
+/** The localized "can't sign in here" error for an unsupported environment.
+ * Host-neutral on purpose: this state is now reached only when there is neither
+ * NAA nor a mailbox to run an interactive Entra login against, so the older
+ * NAA-specific wording would misattribute the cause. */
+function unsupportedReasonError(): Error {
   return new Error(
     t({
-      id: "officeAddin.auth.naaUnsupported",
-      message: "Nested App Authentication is not supported in this environment",
+      id: "officeAddin.auth.signInUnavailable",
+      message: "Sign-in isn't available in this environment",
     }),
   );
 }
 
 /**
- * An {@link AuthSource} for environments Step 0 can't authenticate yet. Its
- * `initialize()` throws a typed, localized message that the SessionAuth core
- * surfaces through the existing error + "Try again" UI — no new component.
- *
- * - `exchange-callback`: on-prem Exchange (callback-token path) — recognised but
- *   not implemented yet (a future step wires the Exchange callback token).
- * - `unsupported`: genuinely unsupported host (no NAA, no mailbox) — preserves
- *   the previous "Nested App Authentication is not supported" behaviour.
+ * An {@link AuthSource} for `unsupported` environments — a host with no NAA and
+ * no mailbox to run an interactive Entra login against, so neither Entra source
+ * applies. Its `initialize()` throws a typed, localized message that the
+ * SessionAuth core surfaces through the existing error + "Try again" UI — no
+ * new component.
  */
 export class UnsupportedAuthSource implements AuthSource {
   readonly mode: UnsupportedReason;
@@ -43,12 +35,12 @@ export class UnsupportedAuthSource implements AuthSource {
   }
 
   initialize(): Promise<void> {
-    return Promise.reject(unsupportedReasonError(this.mode));
+    return Promise.reject(unsupportedReasonError());
   }
 
   acquireBootstrapToken(): Promise<BootstrapToken> {
     // Unreachable on the happy path — the core never advances to bootstrap once
     // initialize() rejects — but the AuthSource contract requires it.
-    return Promise.reject(unsupportedReasonError(this.mode));
+    return Promise.reject(unsupportedReasonError());
   }
 }

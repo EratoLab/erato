@@ -8,17 +8,18 @@ import {
 import { t } from "@lingui/core/macro";
 
 import { AddinChatPage } from "./pages/AddinChatPage";
-import { MsalNaaProvider, useMsalNaa } from "./providers/MsalNaaProvider";
 import { OfficeProvider, useOffice } from "./providers/OfficeProvider";
 import { OfficeThemeProvider } from "./providers/OfficeThemeProvider";
+import { OutlookAuthProvider } from "./providers/OutlookAuthProvider";
 import { OutlookEmailSourceProvider } from "./providers/OutlookEmailSourceProvider";
 import { OutlookMailItemProvider } from "./providers/OutlookMailItemProvider";
+import { useSessionAuth } from "./providers/SessionAuthProvider";
 
 import "./styles.css";
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { isInitialized, isAuthenticated, retryAuthentication, error } =
-    useMsalNaa();
+    useSessionAuth();
 
   if (!isInitialized) {
     return (
@@ -113,7 +114,7 @@ export default function App() {
           <FeatureConfigGate>
             <ApiProvider enableDevtools={false}>
               <OfficeThemeProvider>
-                <MsalNaaProvider>
+                <OutlookAuthProvider>
                   <AuthGate>
                     <OutlookWrapper>
                       <div className="office-shell">
@@ -122,7 +123,7 @@ export default function App() {
                     </OutlookWrapper>
                   </AuthGate>
                   <Toaster placement="bottom-center" />
-                </MsalNaaProvider>
+                </OutlookAuthProvider>
               </OfficeThemeProvider>
             </ApiProvider>
           </FeatureConfigGate>
