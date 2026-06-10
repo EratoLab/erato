@@ -22,6 +22,11 @@ msgid "about.title"
 msgstr "Acerca de"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ActionConfirmationCard.tsx
+msgid "actionConfirmation.dismissed"
+msgstr "Descartado"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "assistant.form.button.save"
 msgstr "Guardar cambios"
@@ -1861,6 +1866,7 @@ msgstr "Idioma del navegador:"
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 #: src/components/ui/Chat/ChatInput.tsx
+#: src/components/ui/Message/ActionConfirmationCard.tsx
 #: src/components/ui/Modal/ConfirmationDialog.tsx
 msgid "Cancel"
 msgstr "Cancelar"
@@ -1963,6 +1969,7 @@ msgstr ""
 msgid "Configure a custom assistant with specific instructions and capabilities"
 msgstr ""
 
+#: src/components/ui/Message/ActionConfirmationCard.tsx
 #: src/components/ui/Modal/ConfirmationDialog.tsx
 msgid "Confirm"
 msgstr "Confirmar"
@@ -1983,6 +1990,10 @@ msgstr ""
 #: src/components/ui/Chat/ChatHistoryList.tsx
 msgid "Confirm Removal"
 msgstr "Confirmar eliminación"
+
+#: src/components/ui/Message/ActionConfirmationCard.tsx
+msgid "Confirmed"
+msgstr "Confirmado"
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Context usage"
