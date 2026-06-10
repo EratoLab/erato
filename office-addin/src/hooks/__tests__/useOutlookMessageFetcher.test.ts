@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { detectExchangeOnPrem } from "../../utils/detectExchangeOnPrem";
 import {
+  createEwsOutlookMessageFetcher,
   createGraphOutlookMessageFetcher,
-  createRestV2OutlookMessageFetcher,
 } from "../../utils/fetchOutlookMessage";
 import { useOutlookMessageFetcher } from "../useOutlookMessageFetcher";
 
@@ -31,7 +31,7 @@ vi.mock("../../utils/detectExchangeOnPrem", () => ({
 
 vi.mock("../../utils/fetchOutlookMessage", () => ({
   createGraphOutlookMessageFetcher: vi.fn(() => ({ kind: "graph" })),
-  createRestV2OutlookMessageFetcher: vi.fn(() => ({ kind: "restv2" })),
+  createEwsOutlookMessageFetcher: vi.fn(() => ({ kind: "ews" })),
 }));
 
 function prime(
@@ -59,7 +59,7 @@ describe("useOutlookMessageFetcher", () => {
     expect(result.current.unavailableReason).toBeNull();
     expect(result.current.fetcher).toEqual({ kind: "graph" });
     expect(createGraphOutlookMessageFetcher).toHaveBeenCalledTimes(1);
-    expect(createRestV2OutlookMessageFetcher).not.toHaveBeenCalled();
+    expect(createEwsOutlookMessageFetcher).not.toHaveBeenCalled();
   });
 
   it("binds the Graph acquirer to Mail.Read and passes forceRefresh through", async () => {
@@ -89,14 +89,14 @@ describe("useOutlookMessageFetcher", () => {
     expect(createGraphOutlookMessageFetcher).not.toHaveBeenCalled();
   });
 
-  it("selects the REST v2 fetcher for an on-prem mailbox, ignoring the absent Graph context", () => {
+  it("selects the EWS fetcher for an on-prem mailbox, ignoring the absent Graph context", () => {
     prime("entra-msal", { graph: null, onPrem: true });
 
     const { result } = renderHook(() => useOutlookMessageFetcher());
 
     expect(result.current.unavailableReason).toBeNull();
-    expect(result.current.fetcher).toEqual({ kind: "restv2" });
-    expect(createRestV2OutlookMessageFetcher).toHaveBeenCalledTimes(1);
+    expect(result.current.fetcher).toEqual({ kind: "ews" });
+    expect(createEwsOutlookMessageFetcher).toHaveBeenCalledTimes(1);
     expect(createGraphOutlookMessageFetcher).not.toHaveBeenCalled();
   });
 
@@ -108,7 +108,7 @@ describe("useOutlookMessageFetcher", () => {
     expect(result.current.fetcher).toBeNull();
     expect(result.current.unavailableReason).toBe("unsupported-mode");
     // The location probe must not pick a backend before auth gates.
-    expect(createRestV2OutlookMessageFetcher).not.toHaveBeenCalled();
+    expect(createEwsOutlookMessageFetcher).not.toHaveBeenCalled();
     expect(createGraphOutlookMessageFetcher).not.toHaveBeenCalled();
   });
 
@@ -121,6 +121,6 @@ describe("useOutlookMessageFetcher", () => {
     rerender();
 
     expect(result.current.fetcher).toBe(first);
-    expect(createRestV2OutlookMessageFetcher).toHaveBeenCalledTimes(1);
+    expect(createEwsOutlookMessageFetcher).toHaveBeenCalledTimes(1);
   });
 });

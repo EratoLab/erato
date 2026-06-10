@@ -1,17 +1,17 @@
 import {
+  fetchConversationMessagesViaEws,
+  fetchOutlookMessageBytesByInternetMessageIdViaEws,
+  fetchOutlookMessageBytesViaEws,
+  fetchOutlookMessageFilesByInternetMessageIdViaEws,
+  fetchParentMessageInConversationViaEws,
+} from "./fetchOutlookMessageEws";
+import {
   fetchConversationMessagesViaGraph,
   fetchOutlookMessageBytesByInternetMessageIdViaGraph,
   fetchOutlookMessageBytesViaGraph,
   fetchOutlookMessageFilesByInternetMessageIdViaGraph,
   fetchParentMessageInConversationViaGraph,
 } from "./fetchOutlookMessageGraph";
-import {
-  fetchConversationMessagesViaRestV2,
-  fetchOutlookMessageBytesByInternetMessageIdViaRestV2,
-  fetchOutlookMessageBytesViaRestV2,
-  fetchOutlookMessageFilesByInternetMessageIdViaRestV2,
-  fetchParentMessageInConversationViaRestV2,
-} from "./fetchOutlookMessageRestV2";
 
 import type {
   AcquireGraphToken,
@@ -46,10 +46,14 @@ export type {
  *     callback tokens were shut off for all Microsoft 365 tenants in
  *     October 2025.
  *   - On-prem mailbox (Exchange on-premises / Subscription Edition): the
- *     Exchange server's own Outlook REST v2.0 endpoint
- *     (`Office.context.mailbox.restUrl`) with a
- *     `getCallbackTokenAsync({ isRest: true })` token. Microsoft Graph does
- *     not exist for on-prem mailboxes.
+ *     Exchange server's own EWS SOAP endpoint
+ *     (`Office.context.mailbox.ewsUrl`, `/EWS/Exchange.asmx`) via a direct
+ *     cross-origin `fetch()` with a `getCallbackTokenAsync({ isRest: false })`
+ *     Bearer token. NOT Graph (it does not exist for on-prem mailboxes) and
+ *     NOT Outlook REST v2.0 — the dormant REST backend
+ *     (`./fetchOutlookMessageRestV2.ts`) is retained only as a fallback. The
+ *     direct `fetch()` (rather than `makeEwsRequestAsync`) avoids the host
+ *     method's ~1 MB response cap.
  *
  * `OutlookMessageFetcher` carries one capability per existing call-site need,
  * with signatures, result shapes, and error contracts identical to the
@@ -139,27 +143,28 @@ export function createGraphOutlookMessageFetcher(
 }
 
 /**
- * Outlook REST v2.0 backing (Exchange on-premises). Callback tokens are
- * acquired per operation from the Office host, so no token parameter is
- * needed here.
+ * Direct EWS SOAP backing (Exchange on-premises). Callback tokens are acquired
+ * per operation from the Office host (`getCallbackTokenAsync({ isRest: false })`),
+ * so no token parameter is needed here. Replaces the dormant Outlook REST v2.0
+ * backend for the SE/on-prem path.
  */
-export function createRestV2OutlookMessageFetcher(): OutlookMessageFetcher {
+export function createEwsOutlookMessageFetcher(): OutlookMessageFetcher {
   return {
     fetchMessageBytes: (ewsItemId, options) =>
-      fetchOutlookMessageBytesViaRestV2(ewsItemId, options),
+      fetchOutlookMessageBytesViaEws(ewsItemId, options),
     fetchMessageFilesByInternetMessageId: (internetMessageId, options) =>
-      fetchOutlookMessageFilesByInternetMessageIdViaRestV2(
+      fetchOutlookMessageFilesByInternetMessageIdViaEws(
         internetMessageId,
         options,
       ),
     fetchMessageBytesByInternetMessageId: (internetMessageId, options) =>
-      fetchOutlookMessageBytesByInternetMessageIdViaRestV2(
+      fetchOutlookMessageBytesByInternetMessageIdViaEws(
         internetMessageId,
         options,
       ),
     fetchConversationMessages: (conversationId, options) =>
-      fetchConversationMessagesViaRestV2(conversationId, options),
+      fetchConversationMessagesViaEws(conversationId, options),
     fetchParentMessageInConversation: (conversationId, options) =>
-      fetchParentMessageInConversationViaRestV2(conversationId, options),
+      fetchParentMessageInConversationViaEws(conversationId, options),
   };
 }

@@ -4,8 +4,8 @@ import { useGraphTokenOptional } from "../providers/EntraGraphTokenProvider";
 import { useSessionAuth } from "../providers/SessionAuthProvider";
 import { detectExchangeOnPrem } from "../utils/detectExchangeOnPrem";
 import {
+  createEwsOutlookMessageFetcher,
   createGraphOutlookMessageFetcher,
-  createRestV2OutlookMessageFetcher,
 } from "../utils/fetchOutlookMessage";
 
 import type { OutlookMessageFetcher } from "../utils/fetchOutlookMessage";
@@ -32,7 +32,7 @@ export interface UseOutlookMessageFetcherResult {
  *
  *   - not authenticated (mode !== `entra-msal`) → `fetcher: null` +
  *     `unsupported-mode`.
- *   - on-prem mailbox (`detectExchangeOnPrem`) → Outlook REST v2.0 fetcher;
+ *   - on-prem mailbox (`detectExchangeOnPrem`) → direct EWS SOAP fetcher;
  *     Graph can't reach on-prem mailboxes, so it reads mail via the Exchange
  *     callback token (acquired per operation from the Office host, no React
  *     context needed).
@@ -62,7 +62,7 @@ export function useOutlookMessageFetcher(): UseOutlookMessageFetcherResult {
     }
     if (isOnPrem) {
       return {
-        fetcher: createRestV2OutlookMessageFetcher(),
+        fetcher: createEwsOutlookMessageFetcher(),
         unavailableReason: null,
       };
     }

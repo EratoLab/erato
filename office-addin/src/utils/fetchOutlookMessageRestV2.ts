@@ -1,3 +1,6 @@
+// DORMANT FALLBACK — no longer wired into the dispatcher or hook. SE/on-prem
+// now fetches mail via direct EWS SOAP (`./fetchOutlookMessageEws.ts`); this is
+// retained as an easy-revert fallback in case EWS-over-CORS proves unworkable.
 import { buildEmailBodyFile } from "./buildEmailBodyHtml";
 import { buildEmlFile } from "./fetchOutlookMessageGraph";
 import { callOfficeAsync } from "./officeAsync";
