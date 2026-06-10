@@ -729,7 +729,9 @@ async function findMessageByInternetMessageId(
   return first ?? null;
 }
 
-function buildEmlFile(bytes: ArrayBuffer, subject: string): File {
+/** Exported for the REST v2 sibling so both backends produce identically
+ * named/typed `.eml` Files for the same message. */
+export function buildEmlFile(bytes: ArrayBuffer, subject: string): File {
   return new File([bytes], buildEmlFilename(subject), {
     type: "message/rfc822",
   });

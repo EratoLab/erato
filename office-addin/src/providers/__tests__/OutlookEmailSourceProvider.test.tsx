@@ -1,4 +1,4 @@
-import { act, cleanup, render } from "@testing-library/react";
+import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { parseEmlBytes } from "../../utils/parsedEmail";
@@ -7,16 +7,16 @@ import {
   useOutlookEmailSource,
 } from "../OutlookEmailSourceProvider";
 
+import type { OutlookMessageFetcher } from "../../utils/fetchOutlookMessage";
 import type { ParsedThread, ThreadMessage } from "../../utils/parsedThread";
 
 // The provider only needs these three hooks; mocking them keeps the test off
-// Office.js / MSAL / Graph and lets us inject a fixed thread.
+// Office.js / MSAL / the network and lets us inject a fixed thread. Note
+// there is deliberately NO Graph provider anywhere in this file — the
+// provider must work (or quietly degrade) without one.
 const mockUseCurrentThread = vi.fn();
 const mockUseOutlookMailItem = vi.fn();
-
-vi.mock("../EntraGraphTokenProvider", () => ({
-  useGraphToken: () => ({ acquireToken: vi.fn() }),
-}));
+const mockUseOutlookMessageFetcher = vi.fn();
 
 vi.mock("../OutlookMailItemProvider", () => ({
   useOutlookMailItem: () => mockUseOutlookMailItem(),
@@ -24,6 +24,10 @@ vi.mock("../OutlookMailItemProvider", () => ({
 
 vi.mock("../../hooks/useCurrentThread", () => ({
   useCurrentThread: () => mockUseCurrentThread(),
+}));
+
+vi.mock("../../hooks/useOutlookMessageFetcher", () => ({
+  useOutlookMessageFetcher: () => mockUseOutlookMessageFetcher(),
 }));
 
 function makeMessage(overrides: Partial<ThreadMessage> = {}): ThreadMessage {
@@ -114,6 +118,10 @@ describe("OutlookEmailSourceProvider — current-thread emailBodyFile", () => {
       isLoading: false,
       error: false,
     });
+    mockUseOutlookMessageFetcher.mockReturnValue({
+      fetcher: null,
+      unavailableReason: "unsupported-mode",
+    });
   }
 
   it("exposes the real synthesized .eml as emailBodyFile (real bytes, not a zero-filled placeholder)", async () => {
@@ -194,5 +202,77 @@ describe("OutlookEmailSourceProvider — current-thread emailBodyFile", () => {
       sent = await captured!.resolveSelectedFilesForSend();
     });
     expect(sent).toHaveLength(0);
+  });
+});
+
+describe("OutlookEmailSourceProvider — compose reply-context via the dispatched fetcher", () => {
+  function primeComposeMode() {
+    mockUseOutlookMailItem.mockReturnValue({
+      itemIdentity: "id-2",
+      // No itemId but a conversationId => the compose reply-context path.
+      mailItem: {
+        itemId: null,
+        conversationId: "conv-9",
+        internetMessageId: null,
+        subject: "Re: Project kickoff",
+        isComposeMode: true,
+      },
+      attachments: [],
+      isLoadingAttachments: false,
+      getAttachmentFile: vi.fn(),
+    });
+    mockUseCurrentThread.mockReturnValue({
+      thread: null,
+      isLoading: false,
+      error: false,
+    });
+  }
+
+  // The SE crash regression (ERMAIN-353): before the dispatcher seam the
+  // provider called the THROWING useGraphToken() at render time, so any
+  // non-Graph host took the whole tree down. With no fetcher available it
+  // must render and quietly skip the reply-context preview instead.
+  it("renders without any Graph provider and quietly no-ops the reply context when the fetcher is null", () => {
+    primeComposeMode();
+    mockUseOutlookMessageFetcher.mockReturnValue({
+      fetcher: null,
+      unavailableReason: "unsupported-mode",
+    });
+
+    expect(() => renderProvider()).not.toThrow();
+
+    expect(captured).not.toBeNull();
+    expect(captured!.parentReplyContext).toBeNull();
+    expect(captured!.isLoadingParentReplyContext).toBe(false);
+  });
+
+  it("loads the reply-context preview through the fetcher capability when one is available", async () => {
+    primeComposeMode();
+    const fetchParentMessageInConversation = vi.fn(async () => ({
+      subject: "Re: Project kickoff",
+      fromName: "Alice",
+      fromAddress: "alice@x",
+    }));
+    mockUseOutlookMessageFetcher.mockReturnValue({
+      fetcher: {
+        fetchParentMessageInConversation,
+      } as unknown as OutlookMessageFetcher,
+      unavailableReason: null,
+    });
+
+    renderProvider();
+
+    await waitFor(() => {
+      expect(captured!.parentReplyContext).toEqual({
+        subject: "Re: Project kickoff",
+        fromName: "Alice",
+        fromAddress: "alice@x",
+      });
+    });
+    expect(fetchParentMessageInConversation).toHaveBeenCalledWith(
+      "conv-9",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(captured!.isLoadingParentReplyContext).toBe(false);
   });
 });

@@ -1,12 +1,16 @@
 import { isEmlFile, parseEmlToParsedEmail } from "./parseEmlFile";
 import { parseMsgFileToParsedEmail } from "./parseMsgFile";
 
-import type { AcquireGraphToken } from "./fetchOutlookMessageGraph";
+import type { OutlookMessageFetcher } from "./fetchOutlookMessage";
 import type { ParsedEmail } from "./parsedEmail";
 
 interface ParseDroppedFilesOptions {
-  /** Required for `.msg` resolution; the parser goes through Microsoft Graph. */
-  acquireGraphToken?: AcquireGraphToken;
+  /**
+   * Required for `.msg` resolution; the parser resolves the message through
+   * the environment's mail backend. `.eml` drops parse locally and work
+   * without it.
+   */
+  fetcher?: OutlookMessageFetcher;
   /**
    * Atomic check-and-claim consulted with the RFC 5322 `Message-ID` of each
    * successfully parsed email. Returning `true` keeps the email; `false`
@@ -47,17 +51,14 @@ export async function parseDroppedFiles(
     }
 
     if (isMsgFile(file)) {
-      if (!options.acquireGraphToken) {
+      if (!options.fetcher) {
         console.warn(
-          "[parseDroppedFiles] .msg drop received without a Graph token — skipping",
+          "[parseDroppedFiles] .msg drop received without a message fetcher — skipping",
           file.name,
         );
         continue;
       }
-      const result = await parseMsgFileToParsedEmail(
-        file,
-        options.acquireGraphToken,
-      );
+      const result = await parseMsgFileToParsedEmail(file, options.fetcher);
       if (result.parsed && !claim(result.messageId, options.tryAttachEmail)) {
         logSkip(file.name, result.messageId);
         continue;

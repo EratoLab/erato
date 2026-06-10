@@ -41,10 +41,9 @@ import { AddinSettingsDialog } from "./AddinSettingsDialog";
 import { useEmailDedupSet } from "../hooks/useEmailDedupSet";
 import { useOfficeDragAndDrop } from "../hooks/useOfficeDragAndDrop";
 import { useOutlookMailListDrag } from "../hooks/useOutlookMailListDrag";
-import { useGraphToken } from "../providers/EntraGraphTokenProvider";
+import { useOutlookMessageFetcher } from "../hooks/useOutlookMessageFetcher";
 import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
-import { fetchOutlookMessageBytesViaGraph } from "../utils/fetchOutlookMessageGraph";
 import {
   OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
   runWithGraphTimeout,
@@ -52,10 +51,8 @@ import {
 import { parseDroppedFiles } from "../utils/parseDroppedFiles";
 import { parseEmlBytes } from "../utils/parsedEmail";
 
-import type { FetchOutlookMessageBytesResult } from "../utils/fetchOutlookMessageGraph";
+import type { FetchOutlookMessageBytesResult } from "../utils/fetchOutlookMessage";
 import type { OutlookMailListDragItem } from "../utils/outlookMailListDragParse";
-
-const GRAPH_MAIL_SCOPES = ["Mail.Read"];
 
 // Accept real `.eml` / `.msg` files dropped by Outlook clients that expose
 // emails as native file drags (Outlook Mac, Classic Outlook on Windows). OWA
@@ -140,12 +137,11 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
     chatInputControlsRef.current?.addUploadedFiles(uploaded);
   }, []);
 
-  const { acquireToken } = useGraphToken();
-  const acquireGraphToken = useCallback(
-    (options?: { forceRefresh?: boolean }) =>
-      acquireToken(GRAPH_MAIL_SCOPES, options),
-    [acquireToken],
-  );
+  // Environment-dispatched message fetch (Graph on Exchange Online, Outlook
+  // REST v2.0 on Exchange SE). Null when no backend is available — the email
+  // fetch paths below then skip-and-log instead of crashing; local `.eml`
+  // drops keep working since they parse without a backend.
+  const { fetcher: messageFetcher } = useOutlookMessageFetcher();
 
   const { mailItem } = useOutlookMailItem();
   const {
@@ -196,8 +192,8 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
     [dedup, removeDroppedEmail],
   );
 
-  // Coalesce duplicate Outlook Graph fetches for the same item id. Two
-  // rapid drops of the same mail-list row now share a single Graph call
+  // Coalesce duplicate Outlook message fetches for the same item id. Two
+  // rapid drops of the same mail-list row now share a single backend call
   // instead of burning quota on both. A timeout keeps a hung fetch
   // from locking the send button indefinitely — the coalesced promise
   // rejects and its entry is cleared so a later retry can start fresh.
@@ -206,6 +202,13 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
   >(new Map());
   const fetchOutlookMessageBytesCoalesced = useCallback(
     (itemId: string): Promise<FetchOutlookMessageBytesResult> => {
+      if (!messageFetcher) {
+        // Rejected (not thrown) so the caller's per-item catch logs and
+        // skips it — the same degradation as any other failed email fetch.
+        return Promise.reject(
+          new Error("Outlook message fetch is not available on this host"),
+        );
+      }
       const existing = pendingOutlookFetchesRef.current.get(itemId);
       if (existing) {
         return existing;
@@ -216,10 +219,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
             OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
             `Outlook fetch timed out after ${OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS}ms`,
             undefined,
-            (signal) =>
-              fetchOutlookMessageBytesViaGraph(itemId, acquireGraphToken, {
-                signal,
-              }),
+            (signal) => messageFetcher.fetchMessageBytes(itemId, { signal }),
           );
         } finally {
           pendingOutlookFetchesRef.current.delete(itemId);
@@ -228,7 +228,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
       pendingOutlookFetchesRef.current.set(itemId, fetchPromise);
       return fetchPromise;
     },
-    [acquireGraphToken],
+    [messageFetcher],
   );
 
   // Counter for in-flight drop batches. Drives the "processing dropped
@@ -254,7 +254,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
       return trackExpansion(async () => {
         const claimedIds: string[] = [];
         const { emails, nonEmail } = await parseDroppedFiles(files, {
-          acquireGraphToken,
+          fetcher: messageFetcher ?? undefined,
           tryAttachEmail: (messageId) => {
             if (!tryClaimEmailAttachment(messageId)) {
               return false;
@@ -280,9 +280,9 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
       });
     },
     [
-      acquireGraphToken,
       addDroppedEmail,
       dedup,
+      messageFetcher,
       trackExpansion,
       tryClaimEmailAttachment,
       uploadFiles,
@@ -357,6 +357,9 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
 
   const { isDragActive: isOutlookMailDragActive } = useOutlookMailListDrag({
     onDrop: handleOutlookMailListDrop,
+    // Mail-list rows carry only an item id; without a backend fetch the drop
+    // could never materialize, so don't advertise the target at all.
+    disabled: !messageFetcher,
   });
 
   const handleOfficeDragAndDrop = useCallback(
@@ -367,7 +370,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
       return trackExpansion(async () => {
         const claimedIds: string[] = [];
         const { emails, nonEmail } = await parseDroppedFiles(files, {
-          acquireGraphToken,
+          fetcher: messageFetcher ?? undefined,
           tryAttachEmail: (messageId) => {
             if (!tryClaimEmailAttachment(messageId)) {
               return false;
@@ -396,9 +399,9 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
       });
     },
     [
-      acquireGraphToken,
       addDroppedEmail,
       dedup,
+      messageFetcher,
       trackExpansion,
       tryClaimEmailAttachment,
       uploadFiles,
