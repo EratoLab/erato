@@ -132,6 +132,11 @@ chat_provider_ids = ["test-token-limit"]
 # enabled = true
 # auth_via_access_token = true  # Use the user's access token for MS Graph API (currently required)
 
+# Microsoft Office integration configuration
+# [integrations.ms_office]
+# ews_api_endpoint = "https://outlook.office365.com/EWS/Exchange.asmx"  # Optional Exchange EWS endpoint for the backend EWS proxy
+# ews_skip_tls_validation = false  # Skip TLS certificate validation for EWS proxy requests (unsafe; default: false)
+
 # Frontend configuration options for embedded scenarios
 # [frontend]
 # # Whether to disable file upload functionality in the UI (default: false)

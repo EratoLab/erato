@@ -8,6 +8,7 @@ pub mod mcp_servers;
 pub mod me_profile_middleware;
 pub mod message_streaming;
 mod message_streaming_file_extraction;
+pub mod ms_office;
 pub mod policy_engine_middleware;
 pub mod share_grants;
 pub mod share_links;
@@ -225,10 +226,18 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
             me_profile_middleware::user_profile_middleware,
         ));
 
+    // The EWS proxy intentionally sits outside the normal user-profile middleware:
+    // it forwards the caller's incoming Authorization header directly to Exchange.
+    let ews_proxy_routes = Router::new().route(
+        "/integrations/ms-office/ews",
+        post(ms_office::ews_proxy).layer(DefaultBodyLimit::max(max_upload_size * 10)),
+    );
+
     let app = Router::new()
         .route("/messages", get(messages))
         .route("/chats", get(chats))
         .nest("/me", me_routes)
+        .merge(ews_proxy_routes)
         .merge(authenticated_routes)
         .fallback(fallback);
     app.into()
@@ -280,6 +289,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         share_links::get_share_link_for_resource,
         share_links::set_share_link,
         share_links::resolve_share_link,
+        ms_office::ews_proxy,
         sharepoint::all_drives,
         sharepoint::get_drive_root,
         sharepoint::get_drive_item,

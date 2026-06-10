@@ -1,0 +1,235 @@
+//! Microsoft Office integration routes.
+
+use crate::state::AppState;
+use axum::body::{Body, Bytes};
+use axum::extract::State;
+use axum::http::header::{AUTHORIZATION, CACHE_CONTROL, CONTENT_TYPE};
+use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
+use axum::response::{IntoResponse, Response};
+
+/// Proxy an Exchange EWS SOAP request to the configured EWS API endpoint.
+#[utoipa::path(
+    post,
+    path = "/integrations/ms-office/ews",
+    request_body(content = String, content_type = "text/xml"),
+    responses(
+        (status = OK, description = "Response from the configured Exchange EWS endpoint", body = String, content_type = "text/xml"),
+        (status = NOT_FOUND, description = "Exchange EWS proxy is not configured", body = str),
+        (status = UNAUTHORIZED, description = "When no Authorization header is provided"),
+        (status = BAD_GATEWAY, description = "Failed to proxy the Exchange EWS request", body = str)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn ews_proxy(
+    State(app_state): State<AppState>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    let Some(ews_api_endpoint) = app_state
+        .config
+        .integrations
+        .ms_office
+        .ews_api_endpoint
+        .as_deref()
+        .map(str::trim)
+        .filter(|endpoint| !endpoint.is_empty())
+    else {
+        return (
+            StatusCode::NOT_FOUND,
+            "Exchange EWS proxy is not configured",
+        )
+            .into_response();
+    };
+
+    let forwarded_headers = match build_ews_request_headers(&headers) {
+        Ok(headers) => headers,
+        Err(status) => return status.into_response(),
+    };
+
+    if !forwarded_headers.contains_key(reqwest::header::AUTHORIZATION) {
+        tracing::error!("No authorization header available for Exchange EWS proxy");
+        return StatusCode::UNAUTHORIZED.into_response();
+    };
+
+    let client = match build_ews_client(
+        app_state
+            .config
+            .integrations
+            .ms_office
+            .ews_skip_tls_validation,
+    ) {
+        Ok(client) => client,
+        Err(err) => {
+            tracing::error!("Failed to build Exchange EWS HTTP client: {}", err);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to build Exchange EWS HTTP client",
+            )
+                .into_response();
+        }
+    };
+    let proxied_response = match client
+        .post(ews_api_endpoint)
+        .headers(forwarded_headers)
+        .body(body)
+        .send()
+        .await
+    {
+        Ok(response) => response,
+        Err(err) => {
+            tracing::warn!("Failed to proxy Exchange EWS request: {}", err);
+            return (
+                StatusCode::BAD_GATEWAY,
+                "Failed to proxy Exchange EWS request",
+            )
+                .into_response();
+        }
+    };
+
+    response_from_ews(proxied_response).await
+}
+
+fn build_ews_client(skip_tls_validation: bool) -> Result<reqwest::Client, reqwest::Error> {
+    reqwest::Client::builder()
+        .danger_accept_invalid_certs(skip_tls_validation)
+        .build()
+}
+
+fn build_ews_request_headers(
+    incoming_headers: &HeaderMap,
+) -> Result<reqwest::header::HeaderMap, StatusCode> {
+    let mut forwarded_headers = reqwest::header::HeaderMap::new();
+    for (name, value) in incoming_headers {
+        if !should_forward_ews_request_header(name) {
+            continue;
+        }
+
+        let Ok(forwarded_name) = reqwest::header::HeaderName::from_bytes(name.as_str().as_bytes())
+        else {
+            continue;
+        };
+        let Ok(forwarded_value) = reqwest::header::HeaderValue::from_bytes(value.as_bytes()) else {
+            continue;
+        };
+        forwarded_headers.insert(forwarded_name, forwarded_value);
+    }
+
+    Ok(forwarded_headers)
+}
+
+fn should_forward_ews_request_header(name: &HeaderName) -> bool {
+    let name = name.as_str();
+    name.eq_ignore_ascii_case("accept")
+        || name.eq_ignore_ascii_case(AUTHORIZATION.as_str())
+        || name.eq_ignore_ascii_case("content-type")
+        || name.eq_ignore_ascii_case("soapaction")
+        || name.eq_ignore_ascii_case("prefer")
+        || name.eq_ignore_ascii_case("x-anchormailbox")
+        || name.eq_ignore_ascii_case("x-preferserveraffinity")
+        || name.eq_ignore_ascii_case("client-request-id")
+        || name.eq_ignore_ascii_case("return-client-request-id")
+}
+
+async fn response_from_ews(response: reqwest::Response) -> Response {
+    let status = StatusCode::from_u16(response.status().as_u16())
+        .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+    let response_headers = build_ews_response_headers(response.headers());
+    let body = match response.bytes().await {
+        Ok(body) => Body::from(body),
+        Err(err) => {
+            tracing::warn!("Failed to read Exchange EWS response body: {}", err);
+            return (
+                StatusCode::BAD_GATEWAY,
+                "Failed to read Exchange EWS response",
+            )
+                .into_response();
+        }
+    };
+
+    let mut proxied_response = Response::new(body);
+    *proxied_response.status_mut() = status;
+    *proxied_response.headers_mut() = response_headers;
+    proxied_response
+}
+
+fn build_ews_response_headers(ews_headers: &reqwest::header::HeaderMap) -> HeaderMap {
+    let mut response_headers = HeaderMap::new();
+    response_headers.insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
+
+    for (name, value) in ews_headers {
+        if !should_forward_ews_response_header(name.as_str()) {
+            continue;
+        }
+
+        let Ok(response_name) = HeaderName::from_bytes(name.as_str().as_bytes()) else {
+            continue;
+        };
+        let Ok(response_value) = HeaderValue::from_bytes(value.as_bytes()) else {
+            continue;
+        };
+        response_headers.insert(response_name, response_value);
+    }
+
+    response_headers
+}
+
+fn should_forward_ews_response_header(name: &str) -> bool {
+    name.eq_ignore_ascii_case(CONTENT_TYPE.as_str())
+        || name.eq_ignore_ascii_case("request-id")
+        || name.eq_ignore_ascii_case("client-request-id")
+        || name.eq_ignore_ascii_case("return-client-request-id")
+        || name.eq_ignore_ascii_case("x-ms-diagnostics")
+        || name.eq_ignore_ascii_case("x-feserver")
+        || name.eq_ignore_ascii_case("x-beserver")
+        || name.eq_ignore_ascii_case("x-calculatedbetarget")
+        || name.eq_ignore_ascii_case("x-diaginfo")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::header::{ACCEPT, AUTHORIZATION, HOST};
+
+    #[test]
+    fn ews_request_headers_forward_only_expected_values_and_preserve_authorization() {
+        let mut headers = HeaderMap::new();
+        headers.insert(ACCEPT, HeaderValue::from_static("text/xml"));
+        headers.insert(
+            CONTENT_TYPE,
+            HeaderValue::from_static("text/xml; charset=utf-8"),
+        );
+        headers.insert(HOST, HeaderValue::from_static("erato.example.com"));
+        headers.insert(
+            AUTHORIZATION,
+            HeaderValue::from_static("Bearer browser-token"),
+        );
+        headers.insert(
+            HeaderName::from_static("soapaction"),
+            HeaderValue::from_static("\"GetItem\""),
+        );
+        headers.insert(
+            HeaderName::from_static("x-anchormailbox"),
+            HeaderValue::from_static("user@example.com"),
+        );
+
+        let forwarded = build_ews_request_headers(&headers).unwrap();
+
+        assert_eq!(forwarded.get(reqwest::header::ACCEPT).unwrap(), "text/xml");
+        assert_eq!(
+            forwarded.get(reqwest::header::CONTENT_TYPE).unwrap(),
+            "text/xml; charset=utf-8"
+        );
+        assert_eq!(
+            forwarded.get(reqwest::header::AUTHORIZATION).unwrap(),
+            "Bearer browser-token"
+        );
+        assert_eq!(forwarded.get("soapaction").unwrap(), "\"GetItem\"");
+        assert_eq!(
+            forwarded.get("x-anchormailbox").unwrap(),
+            "user@example.com"
+        );
+        assert!(!forwarded.contains_key(reqwest::header::HOST));
+    }
+}
