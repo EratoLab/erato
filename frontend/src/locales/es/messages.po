@@ -33,6 +33,11 @@ msgstr "Permitir siempre"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ActionConfirmationCard.tsx
+msgid "actionConfirmation.confirmed"
+msgstr "Confirmado"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ActionConfirmationCard.tsx
 msgid "actionConfirmation.deny"
 msgstr "Denegar"
 
@@ -2008,10 +2013,6 @@ msgstr ""
 #: src/components/ui/Chat/ChatHistoryList.tsx
 msgid "Confirm Removal"
 msgstr "Confirmar eliminación"
-
-#: src/components/ui/Message/ActionConfirmationCard.tsx
-msgid "Confirmed"
-msgstr "Confirmado"
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Context usage"

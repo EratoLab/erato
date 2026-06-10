@@ -72,28 +72,62 @@ export function isReadReplySupported(): boolean {
 }
 
 export interface ReadModeRecipientSummary {
-  /** Sender display name or address — the target of a plain reply. */
+  /** Formatted sender entry — the target of a plain reply. */
   sender: string | null;
-  /** Display names/addresses on To + Cc of the message being read. */
+  /**
+   * Formatted To + Cc entries of the message being read, deduplicated by
+   * address and excluding the reading user and the sender (the reply form
+   * never re-addresses the user, and the sender is already listed above).
+   */
   recipients: string[];
+}
+
+/**
+ * Display names are sender-controlled: one could spoof another address or
+ * fake extra entries via commas. The SMTP address is therefore always part
+ * of the entry, never replaced by the display name.
+ */
+function formatRecipientEntry(details: Office.EmailAddressDetails): string {
+  const name = details.displayName?.trim();
+  return name && name.toLowerCase() !== details.emailAddress.toLowerCase()
+    ? `${name} <${details.emailAddress}>`
+    : details.emailAddress;
 }
 
 /**
  * Re-read the recipients of the CURRENT read-mode item at confirmation time.
  * Outlook itself derives the actual reply-all recipient set when the form
  * opens; this summary exists so the user confirms against fresh data, not
- * against whatever the chat message was generated from.
+ * against whatever the chat message was generated from. Every listed entry
+ * counts: the confirmation copy's recipient count is the number of entries
+ * shown.
  */
 export function getReadModeRecipientSummary(): ReadModeRecipientSummary | null {
   const item = getReadModeItem();
   if (!item) {
     return null;
   }
-  const format = (details: Office.EmailAddressDetails): string =>
-    details.displayName || details.emailAddress;
+  const ownAddress =
+    Office.context.mailbox.userProfile?.emailAddress?.toLowerCase() ?? null;
+  const senderAddress = item.from?.emailAddress.toLowerCase() ?? null;
+  const seen = new Set<string>();
+  const recipients = [...(item.to ?? []), ...(item.cc ?? [])]
+    .filter((details) => {
+      const address = details.emailAddress.toLowerCase();
+      if (
+        address === ownAddress ||
+        address === senderAddress ||
+        seen.has(address)
+      ) {
+        return false;
+      }
+      seen.add(address);
+      return true;
+    })
+    .map(formatRecipientEntry);
   return {
-    sender: item.from ? format(item.from) : null,
-    recipients: [...(item.to ?? []), ...(item.cc ?? [])].map(format),
+    sender: item.from ? formatRecipientEntry(item.from) : null,
+    recipients,
   };
 }
 

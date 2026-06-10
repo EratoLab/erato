@@ -5,7 +5,9 @@ mod test_cases {
         build_abstract_sequence, build_abstract_sequence_with_facet_tool_expansions,
         resolve_sequence,
     };
-    use super::super::types::{AbstractChatSequencePart, ActionFacetUserInput, PromptSpec};
+    use super::super::types::{
+        AbstractChatSequencePart, ActionFacetUserInput, PromptSpec, ResolvedChatSequence,
+    };
     use crate::config::{ChatProviderConfig, ExperimentalFacetsConfig, PromptSourceSpecification};
     use crate::db::entity::{chats, messages};
     use crate::models::assistant::{AssistantWithFiles, FileInfo};
@@ -1899,9 +1901,9 @@ mod test_cases {
         message_repo.add_message(msg1_id, None, MessageRole::User, "Draft a reply");
 
         // Assistant turn produced under a client-action facet: draft text plus
-        // a propose_client_action ToolUse. The synthetic tool is only offered
-        // while the facet is active, so the call/response pair must NOT replay
-        // on later requests (providers reject tool messages for unknown tools).
+        // a propose_client_action ToolUse with the synthetic interception's
+        // success output. Proposals are request-scoped UI hints, so the
+        // call/response pair must NOT replay on later requests.
         let msg2_id = Uuid::new_v4();
         message_repo.add_message_with_content(
             msg2_id,
@@ -1960,6 +1962,351 @@ mod test_cases {
                 ContentPart::Text(text) if text.text == "Here is a draft reply."
             )),
             "The assistant draft text must still replay",
+        );
+    }
+
+    #[tokio::test]
+    async fn test_rejected_client_action_tool_use_is_stripped_from_replay() {
+        let mut message_repo = MockMessageRepository::new();
+        let file_resolver = MockFileResolver::new();
+        let prompt_provider = MockPromptProvider::new().with_system_prompt("You are helpful.");
+
+        let chat = create_test_chat();
+        let config = create_test_chat_provider_config();
+
+        let msg1_id = Uuid::new_v4();
+        message_repo.add_message(msg1_id, None, MessageRole::User, "Draft a reply");
+
+        // Synthetic interception error output: stripped just like a success —
+        // the rejected call also references the request-scoped tool.
+        let msg2_id = Uuid::new_v4();
+        message_repo.add_message_with_content(
+            msg2_id,
+            Some(msg1_id),
+            MessageRole::Assistant,
+            vec![
+                ContentPart::Text(ContentPartText {
+                    text: "I could not propose that action.".to_string(),
+                }),
+                ContentPart::ToolUse(ToolUse {
+                    tool_call_id: "call_client_action".to_string(),
+                    status: ToolCallStatus::Error,
+                    tool_name: crate::services::client_actions::CLIENT_ACTION_TOOL_NAME.to_string(),
+                    progress_message: None,
+                    input: Some(serde_json::json!({ "action": "outlook.forward" })),
+                    output: Some(serde_json::json!({
+                        "status": "rejected",
+                        "error": "action 'outlook.forward' is not allowed"
+                    })),
+                    ..Default::default()
+                }),
+            ],
+        );
+
+        let msg3_id = Uuid::new_v4();
+        message_repo.add_message(msg3_id, Some(msg2_id), MessageRole::User, "Try again");
+
+        let abstract_seq = build_abstract_sequence(
+            &message_repo,
+            &prompt_provider,
+            &chat,
+            &msg3_id,
+            vec![],
+            &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
+            None,
+        )
+        .await
+        .expect("Failed to build abstract sequence");
+
+        let (resolved, _) = resolve_sequence(abstract_seq, &message_repo, &file_resolver)
+            .await
+            .expect("Failed to resolve sequence");
+
+        assert!(
+            !resolved.messages.iter().any(|msg| matches!(
+                &msg.content,
+                ContentPart::ToolUse(ToolUse { tool_name, .. })
+                    if tool_name == crate::services::client_actions::CLIENT_ACTION_TOOL_NAME
+            )),
+            "Rejected synthetic proposals must not replay into later requests",
+        );
+    }
+
+    #[tokio::test]
+    async fn test_same_named_mcp_tool_use_is_preserved_in_replay() {
+        let mut message_repo = MockMessageRepository::new();
+        let file_resolver = MockFileResolver::new();
+        let prompt_provider = MockPromptProvider::new().with_system_prompt("You are helpful.");
+
+        let chat = create_test_chat();
+        let config = create_test_chat_provider_config();
+
+        let msg1_id = Uuid::new_v4();
+        message_repo.add_message(msg1_id, None, MessageRole::User, "Draft a reply");
+
+        // An MCP tool that claims the synthetic tool's name takes precedence
+        // at prepare time, so this ToolUse is a real MCP round-trip — its
+        // output does not carry the interception's status shape and it must
+        // replay normally.
+        let msg2_id = Uuid::new_v4();
+        message_repo.add_message_with_content(
+            msg2_id,
+            Some(msg1_id),
+            MessageRole::Assistant,
+            vec![ContentPart::ToolUse(ToolUse {
+                tool_call_id: "call_mcp_tool".to_string(),
+                status: ToolCallStatus::Success,
+                tool_name: crate::services::client_actions::CLIENT_ACTION_TOOL_NAME.to_string(),
+                progress_message: None,
+                input: Some(serde_json::json!({ "action": "outlook.reply" })),
+                output: Some(serde_json::json!({ "result": "reply form opened" })),
+                ..Default::default()
+            })],
+        );
+
+        let msg3_id = Uuid::new_v4();
+        message_repo.add_message(msg3_id, Some(msg2_id), MessageRole::User, "Make it shorter");
+
+        let assert_round_trip_preserved = |resolved: &ResolvedChatSequence, path: &str| {
+            let assistant_call = resolved.messages.iter().any(|msg| {
+                msg.role == MessageRole::Assistant
+                    && matches!(
+                        &msg.content,
+                        ContentPart::ToolUse(ToolUse { tool_call_id, .. })
+                            if tool_call_id == "call_mcp_tool"
+                    )
+            });
+            let tool_response = resolved.messages.iter().any(|msg| {
+                msg.role == MessageRole::Tool
+                    && matches!(
+                        &msg.content,
+                        ContentPart::ToolUse(ToolUse { tool_call_id, .. })
+                            if tool_call_id == "call_mcp_tool"
+                    )
+            });
+            assert!(
+                assistant_call && tool_response,
+                "A same-named MCP tool round-trip must replay as call + response ({path})",
+            );
+        };
+
+        let abstract_seq = build_abstract_sequence(
+            &message_repo,
+            &prompt_provider,
+            &chat,
+            &msg3_id,
+            vec![],
+            &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
+            None,
+        )
+        .await
+        .expect("Failed to build abstract sequence");
+
+        let (resolved, unresolved) = resolve_sequence(abstract_seq, &message_repo, &file_resolver)
+            .await
+            .expect("Failed to resolve sequence");
+        assert_round_trip_preserved(&resolved, "previous assistant message");
+
+        // One turn later the round-trip replays again, this time out of the
+        // persisted generation_input_messages of the next assistant message.
+        let msg4_id = Uuid::new_v4();
+        message_repo.add_message(msg4_id, Some(msg3_id), MessageRole::Assistant, "Shorter.");
+        message_repo.update_generation_input_messages(msg4_id, &unresolved);
+
+        let msg5_id = Uuid::new_v4();
+        message_repo.add_message(msg5_id, Some(msg4_id), MessageRole::User, "Even shorter");
+
+        let abstract_seq = build_abstract_sequence(
+            &message_repo,
+            &prompt_provider,
+            &chat,
+            &msg5_id,
+            vec![],
+            &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
+            None,
+        )
+        .await
+        .expect("Failed to build abstract sequence");
+
+        let (resolved, _) = resolve_sequence(abstract_seq, &message_repo, &file_resolver)
+            .await
+            .expect("Failed to resolve sequence");
+        assert_round_trip_preserved(&resolved, "historic generation input");
+    }
+
+    #[tokio::test]
+    async fn test_same_named_mcp_tool_with_non_string_status_values_is_preserved_in_replay() {
+        let mut message_repo = MockMessageRepository::new();
+        let file_resolver = MockFileResolver::new();
+        let prompt_provider = MockPromptProvider::new().with_system_prompt("You are helpful.");
+
+        let chat = create_test_chat();
+        let config = create_test_chat_provider_config();
+
+        let msg1_id = Uuid::new_v4();
+        message_repo.add_message(msg1_id, None, MessageRole::User, "Draft a reply");
+
+        // A same-named MCP tool may emit output that coincidentally carries
+        // the interception's `status`/`action` (or `status`/`error`) keys but
+        // with non-string values. The interception always writes string
+        // values, so these parts are real MCP round-trips and must replay.
+        let msg2_id = Uuid::new_v4();
+        message_repo.add_message_with_content(
+            msg2_id,
+            Some(msg1_id),
+            MessageRole::Assistant,
+            vec![
+                ContentPart::ToolUse(ToolUse {
+                    tool_call_id: "call_non_string_action".to_string(),
+                    status: ToolCallStatus::Success,
+                    tool_name: crate::services::client_actions::CLIENT_ACTION_TOOL_NAME.to_string(),
+                    progress_message: None,
+                    input: Some(serde_json::json!({ "action": "outlook.reply" })),
+                    output: Some(serde_json::json!({
+                        "status": "proposed",
+                        "action": { "id": "outlook.reply" }
+                    })),
+                    ..Default::default()
+                }),
+                ContentPart::ToolUse(ToolUse {
+                    tool_call_id: "call_non_string_error".to_string(),
+                    status: ToolCallStatus::Error,
+                    tool_name: crate::services::client_actions::CLIENT_ACTION_TOOL_NAME.to_string(),
+                    progress_message: None,
+                    input: Some(serde_json::json!({ "action": "outlook.forward" })),
+                    output: Some(serde_json::json!({ "status": "rejected", "error": 42 })),
+                    ..Default::default()
+                }),
+            ],
+        );
+
+        let msg3_id = Uuid::new_v4();
+        message_repo.add_message(msg3_id, Some(msg2_id), MessageRole::User, "Make it shorter");
+
+        let abstract_seq = build_abstract_sequence(
+            &message_repo,
+            &prompt_provider,
+            &chat,
+            &msg3_id,
+            vec![],
+            &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
+            None,
+        )
+        .await
+        .expect("Failed to build abstract sequence");
+
+        let (resolved, _) = resolve_sequence(abstract_seq, &message_repo, &file_resolver)
+            .await
+            .expect("Failed to resolve sequence");
+
+        for tool_call_id in ["call_non_string_action", "call_non_string_error"] {
+            let assistant_call = resolved.messages.iter().any(|msg| {
+                msg.role == MessageRole::Assistant
+                    && matches!(
+                        &msg.content,
+                        ContentPart::ToolUse(ToolUse { tool_call_id: id, .. })
+                            if id == tool_call_id
+                    )
+            });
+            let tool_response = resolved.messages.iter().any(|msg| {
+                msg.role == MessageRole::Tool
+                    && matches!(
+                        &msg.content,
+                        ContentPart::ToolUse(ToolUse { tool_call_id: id, .. })
+                            if id == tool_call_id
+                    )
+            });
+            assert!(
+                assistant_call && tool_response,
+                "A same-named MCP round-trip with non-string status values must replay ({tool_call_id})",
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_synthetic_client_action_in_historic_generation_input_is_stripped() {
+        let mut message_repo = MockMessageRepository::new();
+        let file_resolver = MockFileResolver::new();
+        let prompt_provider = MockPromptProvider::new().with_system_prompt("You are helpful.");
+
+        let chat = create_test_chat();
+        let config = create_test_chat_provider_config();
+
+        let msg1_id = Uuid::new_v4();
+        message_repo.add_message(msg1_id, None, MessageRole::User, "Draft a reply");
+
+        let msg2_id = Uuid::new_v4();
+        message_repo.add_message(msg2_id, Some(msg1_id), MessageRole::Assistant, "Done.");
+        // Simulate a legacy persisted generation input that still contains a
+        // synthetic proposal round-trip (rows written before the proposal was
+        // stripped at generation time).
+        let synthetic_tool_use = ToolUse {
+            tool_call_id: "call_client_action".to_string(),
+            status: ToolCallStatus::Success,
+            tool_name: crate::services::client_actions::CLIENT_ACTION_TOOL_NAME.to_string(),
+            progress_message: None,
+            input: Some(serde_json::json!({ "action": "outlook.reply" })),
+            output: Some(serde_json::json!({ "status": "proposed", "action": "outlook.reply" })),
+            ..Default::default()
+        };
+        message_repo.update_generation_input_messages(
+            msg2_id,
+            &GenerationInputMessages {
+                messages: vec![
+                    InputMessage {
+                        role: MessageRole::User,
+                        content: ContentPart::Text(ContentPartText {
+                            text: "Draft a reply".to_string(),
+                        }),
+                    },
+                    InputMessage {
+                        role: MessageRole::Assistant,
+                        content: ContentPart::ToolUse(synthetic_tool_use.clone()),
+                    },
+                    InputMessage {
+                        role: MessageRole::Tool,
+                        content: ContentPart::ToolUse(synthetic_tool_use),
+                    },
+                ],
+            },
+        );
+
+        let msg3_id = Uuid::new_v4();
+        message_repo.add_message(msg3_id, Some(msg2_id), MessageRole::User, "Make it shorter");
+
+        let abstract_seq = build_abstract_sequence(
+            &message_repo,
+            &prompt_provider,
+            &chat,
+            &msg3_id,
+            vec![],
+            &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
+            None,
+        )
+        .await
+        .expect("Failed to build abstract sequence");
+
+        let (resolved, _) = resolve_sequence(abstract_seq, &message_repo, &file_resolver)
+            .await
+            .expect("Failed to resolve sequence");
+
+        assert!(
+            !resolved.messages.iter().any(|msg| matches!(
+                &msg.content,
+                ContentPart::ToolUse(ToolUse { tool_name, .. })
+                    if tool_name == crate::services::client_actions::CLIENT_ACTION_TOOL_NAME
+            )),
+            "Synthetic proposals in historic generation input must not replay",
         );
     }
 

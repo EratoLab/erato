@@ -2857,6 +2857,182 @@ allowed_args = []
 }
 
 #[test]
+#[should_panic(expected = "duplicate client action identifier 'outlook.reply' in client_actions.")]
+fn test_config_action_facet_duplicate_client_action_rejected() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-3.5-turbo"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+
+[action_facets.facets.bad_facet]
+display_name = "Bad"
+template = "Do something with {{text}}"
+allowed_args = ["text"]
+client_actions = ["outlook.reply", "outlook.reply"]
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let temp_path = temp_file.path().to_str().unwrap();
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let config: AppConfig = config_schema
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    let _ = config.migrate(); // should panic
+}
+
+#[test]
+#[should_panic(
+    expected = "duplicate client action identifier 'outlook.reply_all' in client_actions_always_ask."
+)]
+fn test_config_action_facet_duplicate_client_action_always_ask_rejected() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-3.5-turbo"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+
+[action_facets.facets.bad_facet]
+display_name = "Bad"
+template = "Do something with {{text}}"
+allowed_args = ["text"]
+client_actions = ["outlook.reply", "outlook.reply_all"]
+client_actions_always_ask = ["outlook.reply_all", "outlook.reply_all"]
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let temp_path = temp_file.path().to_str().unwrap();
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let config: AppConfig = config_schema
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    let _ = config.migrate(); // should panic
+}
+
+#[test]
+#[should_panic(expected = "with leading or trailing whitespace in client_actions.")]
+fn test_config_action_facet_untrimmed_client_action_rejected() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-3.5-turbo"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+
+[action_facets.facets.bad_facet]
+display_name = "Bad"
+template = "Do something with {{text}}"
+allowed_args = ["text"]
+client_actions = ["outlook.reply ", "outlook.reply_all"]
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let temp_path = temp_file.path().to_str().unwrap();
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let config: AppConfig = config_schema
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    let _ = config.migrate(); // should panic
+}
+
+#[test]
+#[should_panic(expected = "with leading or trailing whitespace in client_actions_always_ask.")]
+fn test_config_action_facet_untrimmed_client_action_always_ask_rejected() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-3.5-turbo"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+
+[action_facets.facets.bad_facet]
+display_name = "Bad"
+template = "Do something with {{text}}"
+allowed_args = ["text"]
+client_actions = ["outlook.reply", "outlook.reply_all"]
+client_actions_always_ask = ["outlook.reply_all "]
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let temp_path = temp_file.path().to_str().unwrap();
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let config: AppConfig = config_schema
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    let _ = config.migrate(); // should panic
+}
+
+#[test]
 fn test_config_server_encryption_key_parses() {
     let mut temp_file = Builder::new()
         .suffix(".toml")

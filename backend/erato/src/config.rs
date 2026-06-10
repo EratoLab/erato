@@ -774,6 +774,29 @@ impl AppConfig {
                     id
                 );
             }
+            for (list_name, actions) in [
+                ("client_actions", &action_facet.client_actions),
+                (
+                    "client_actions_always_ask",
+                    &action_facet.client_actions_always_ask,
+                ),
+            ] {
+                if let Some(untrimmed) = actions.iter().find(|action| *action != action.trim()) {
+                    panic!(
+                        "Action facet '{}' has a client action identifier '{}' with leading or trailing whitespace in {}.",
+                        id, untrimmed, list_name
+                    );
+                }
+                let mut seen = std::collections::HashSet::new();
+                for action in actions {
+                    if !seen.insert(action) {
+                        panic!(
+                            "Action facet '{}' has a duplicate client action identifier '{}' in {}.",
+                            id, action, list_name
+                        );
+                    }
+                }
+            }
             if let Some(presentation) = &action_facet.presentation {
                 if !ACTION_FACET_PRESENTATIONS.contains(&presentation.as_str()) {
                     panic!(

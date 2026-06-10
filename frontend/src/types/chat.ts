@@ -97,11 +97,19 @@ export interface OutlookArtifact {
    */
   isFreshCompletion?: boolean;
   /**
-   * The Outlook item identity observed when this message completed (fresh
-   * completions only). Executors compare it against the CURRENT item before
-   * opening anything, so a draft never opens a reply on a different email
-   * than it was written for. Absent for history messages, where the
-   * generation-time item is unknown.
+   * The Outlook item identity captured when the user SENT the message that
+   * triggered this completion (fresh completions only). Send time is the
+   * guard's baseline — the user can switch emails while the response
+   * streams, so the item open at completion time proves nothing. Executors
+   * compare it against the CURRENT item before opening anything, so a draft
+   * never opens a reply on a different email than it was requested for.
+   *
+   * A fresh completion ({@link OutlookArtifact.isFreshCompletion}) WITHOUT
+   * this field means no send-time identity was recorded (no open item at
+   * send, or the completion could not be matched to a send): executors must
+   * fail closed — never auto-prompt, and treat the draft as stale rather
+   * than as unguarded. Absent together with `isFreshCompletion` for history
+   * messages, where the generation-time item is unknown.
    */
   itemIdentity?: string;
 }

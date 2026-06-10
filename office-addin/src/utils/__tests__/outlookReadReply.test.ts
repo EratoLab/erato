@@ -16,14 +16,16 @@ type OfficeGlobal = { Office?: unknown };
 function installOffice({
   item,
   supportedSets = ["Mailbox 1.1", "Mailbox 1.9"],
+  userEmailAddress = "me@example.com",
 }: {
   item: Record<string, unknown> | null;
   supportedSets?: string[];
+  userEmailAddress?: string;
 }) {
   (globalThis as OfficeGlobal).Office = {
     AsyncResultStatus: { Succeeded: "succeeded", Failed: "failed" },
     context: {
-      mailbox: { item },
+      mailbox: { item, userProfile: { emailAddress: userEmailAddress } },
       requirements: {
         isSetSupported: (name: string, version: string) =>
           supportedSets.includes(`${name} ${version}`),
@@ -119,11 +121,73 @@ describe("isReadReplySupported", () => {
 });
 
 describe("getReadModeRecipientSummary", () => {
-  it("summarizes sender and recipients, preferring display names", () => {
+  it("always shows the address and excludes the reading user from To/Cc", () => {
     installOffice({ item: readModeItem() });
     expect(getReadModeRecipientSummary()).toEqual({
-      sender: "Alice",
-      recipients: ["Me", "bob@example.com"],
+      sender: "Alice <alice@example.com>",
+      recipients: ["bob@example.com"],
+    });
+  });
+
+  it("excludes the user's own address case-insensitively", () => {
+    installOffice({
+      item: readModeItem({
+        to: [{ displayName: "Me", emailAddress: "ME@Example.COM" }],
+        cc: [],
+      }),
+    });
+    expect(getReadModeRecipientSummary()).toEqual({
+      sender: "Alice <alice@example.com>",
+      recipients: [],
+    });
+  });
+
+  it("does not double-list a sender who is also on To/Cc", () => {
+    installOffice({
+      item: readModeItem({
+        to: [
+          { displayName: "Alice", emailAddress: "Alice@example.com" },
+          { displayName: "Carol", emailAddress: "carol@example.com" },
+        ],
+        cc: [],
+      }),
+    });
+    expect(getReadModeRecipientSummary()).toEqual({
+      sender: "Alice <alice@example.com>",
+      recipients: ["Carol <carol@example.com>"],
+    });
+  });
+
+  it("dedupes recipients listed on both To and Cc", () => {
+    installOffice({
+      item: readModeItem({
+        to: [{ displayName: "Bob", emailAddress: "bob@example.com" }],
+        cc: [{ displayName: "", emailAddress: "BOB@example.com" }],
+      }),
+    });
+    expect(getReadModeRecipientSummary()).toEqual({
+      sender: "Alice <alice@example.com>",
+      recipients: ["Bob <bob@example.com>"],
+    });
+  });
+
+  it("never lets a display name replace or spoof the address", () => {
+    installOffice({
+      item: readModeItem({
+        from: {
+          displayName: "ceo@example.com",
+          emailAddress: "attacker@evil.example",
+        },
+        to: [
+          // Display name equal to the address adds nothing — bare address.
+          { displayName: "bob@example.com", emailAddress: "bob@example.com" },
+        ],
+        cc: [],
+      }),
+    });
+    expect(getReadModeRecipientSummary()).toEqual({
+      sender: "ceo@example.com <attacker@evil.example>",
+      recipients: ["bob@example.com"],
     });
   });
 

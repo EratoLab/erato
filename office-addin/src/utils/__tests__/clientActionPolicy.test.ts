@@ -1,10 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  CLIENT_ACTION_DECISIONS_KEY,
   clientActionDecisionsPersistedOptions,
   decisionKey,
   effectiveDecision,
   isActionDenied,
+  mergeIntoStoredDecisions,
+  parseDecisionKey,
   resolveAutoPromptBehavior,
   resolveClickBehavior,
   type ClientActionDecisionMap,
@@ -97,6 +100,9 @@ describe("resolveAutoPromptBehavior", () => {
     facetId: FACET,
     proposedAction: REPLY,
     isFreshCompletion: true,
+    isLatestAssistantMessage: true,
+    expectedItemIdentity: "item-1",
+    currentItemIdentity: "item-1",
     decisions: {} as ClientActionDecisionMap,
     enforcedAskActions: [] as string[],
   };
@@ -145,6 +151,70 @@ describe("resolveAutoPromptBehavior", () => {
       }),
     ).toBe("none");
   });
+
+  it("fails closed when no send-time identity was recorded", () => {
+    expect(
+      resolveAutoPromptBehavior({ ...auto, expectedItemIdentity: undefined }),
+    ).toBe("none");
+    expect(
+      resolveAutoPromptBehavior({ ...auto, expectedItemIdentity: null }),
+    ).toBe("none");
+  });
+
+  it("stays silent for an identity-unknown completion degraded to history-like (not fresh, no identity)", () => {
+    // The shape AddinChat emits when a regenerate/edit completes but the
+    // original exchange's send-time identity is no longer known (e.g. after
+    // a reload): not stamped fresh, no identity. Even a stored grant must
+    // not let it auto-open — only the user's explicit click may act on it.
+    expect(
+      resolveAutoPromptBehavior({
+        ...auto,
+        isFreshCompletion: false,
+        expectedItemIdentity: undefined,
+        decisions: { [decisionKey(FACET, REPLY)]: "always" },
+      }),
+    ).toBe("none");
+  });
+
+  it("stays silent when the open item differs from the send-time item", () => {
+    expect(
+      resolveAutoPromptBehavior({ ...auto, currentItemIdentity: "item-2" }),
+    ).toBe("none");
+    expect(
+      resolveAutoPromptBehavior({ ...auto, currentItemIdentity: null }),
+    ).toBe("none");
+  });
+
+  it("keeps the decision-driven behavior when the identities match", () => {
+    expect(resolveAutoPromptBehavior(auto)).toBe("confirm");
+    expect(
+      resolveAutoPromptBehavior({
+        ...auto,
+        decisions: { [decisionKey(FACET, REPLY)]: "always" },
+      }),
+    ).toBe("execute");
+  });
+
+  it("stays silent for a message that is no longer the latest assistant message", () => {
+    expect(
+      resolveAutoPromptBehavior({ ...auto, isLatestAssistantMessage: false }),
+    ).toBe("none");
+  });
+});
+
+describe("parseDecisionKey", () => {
+  it("splits at the LAST separator — facet ids may themselves contain one", () => {
+    expect(parseDecisionKey(decisionKey("team/eu/replies", REPLY))).toEqual({
+      facetId: "team/eu/replies",
+      action: REPLY,
+    });
+  });
+
+  it("rejects keys without a facet or action side", () => {
+    expect(parseDecisionKey("no-separator")).toBeNull();
+    expect(parseDecisionKey("/outlook.reply")).toBeNull();
+    expect(parseDecisionKey("facet/")).toBeNull();
+  });
 });
 
 describe("clientActionDecisionsPersistedOptions.parse", () => {
@@ -160,6 +230,20 @@ describe("clientActionDecisionsPersistedOptions.parse", () => {
       [decisionKey(FACET, REPLY)]: "always",
       [decisionKey(FACET, REPLY_ALL)]: "never",
     });
+  });
+
+  it("keeps a persistent deny for a facet id containing a separator", () => {
+    const facetWithSlash = "team/eu/replies";
+    const stored = parse({ [decisionKey(facetWithSlash, REPLY)]: "never" });
+    expect(stored).toEqual({ [decisionKey(facetWithSlash, REPLY)]: "never" });
+    expect(
+      effectiveDecision({
+        facetId: facetWithSlash,
+        action: REPLY,
+        decisions: stored ?? {},
+        enforcedAskActions: [],
+      }),
+    ).toBe("never");
   });
 
   it("drops malformed or unimplemented entries instead of resetting everything", () => {
@@ -181,5 +265,64 @@ describe("clientActionDecisionsPersistedOptions.parse", () => {
     expect(parse("always")).toBeNull();
     expect(parse(null)).toBeNull();
     expect(parse(["always"])).toBeNull();
+  });
+});
+
+describe("mergeIntoStoredDecisions / serialize round-trip", () => {
+  afterEach(() => {
+    localStorage.removeItem(CLIENT_ACTION_DECISIONS_KEY);
+  });
+
+  it("preserves entries this build cannot parse while replacing its own", () => {
+    expect(
+      mergeIntoStoredDecisions(
+        {
+          [decisionKey(FACET, "outlook.future_action")]: "always",
+          [decisionKey(FACET, REPLY_ALL)]: "always_for_session",
+          [decisionKey(FACET, REPLY)]: "never",
+          "no-separator": "always",
+        },
+        {
+          [decisionKey(FACET, REPLY)]: "always",
+          // Same key as the preserved unknown-decision entry: the new value
+          // wins — keyed collisions never duplicate.
+          [decisionKey(FACET, REPLY_ALL)]: "never",
+        },
+      ),
+    ).toEqual({
+      [decisionKey(FACET, "outlook.future_action")]: "always",
+      "no-separator": "always",
+      [decisionKey(FACET, REPLY)]: "always",
+      [decisionKey(FACET, REPLY_ALL)]: "never",
+    });
+  });
+
+  it("lets owned removals stick — an entry absent from the new map is dropped", () => {
+    expect(
+      mergeIntoStoredDecisions({ [decisionKey(FACET, REPLY)]: "always" }, {}),
+    ).toEqual({});
+  });
+
+  it("starts from the new map alone when the stored value is not an object", () => {
+    expect(
+      mergeIntoStoredDecisions("corrupt", {
+        [decisionKey(FACET, REPLY)]: "never",
+      }),
+    ).toEqual({ [decisionKey(FACET, REPLY)]: "never" });
+  });
+
+  it("serialize keeps an unknown-action entry across a write", () => {
+    const futureKey = decisionKey(FACET, "outlook.future_action");
+    localStorage.setItem(
+      CLIENT_ACTION_DECISIONS_KEY,
+      JSON.stringify({ [futureKey]: "never" }),
+    );
+    const written = clientActionDecisionsPersistedOptions.serialize?.({
+      [decisionKey(FACET, REPLY)]: "always",
+    });
+    expect(JSON.parse(written ?? "")).toEqual({
+      [futureKey]: "never",
+      [decisionKey(FACET, REPLY)]: "always",
+    });
   });
 });

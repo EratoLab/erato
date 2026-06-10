@@ -2102,7 +2102,8 @@ async fn stream_generate_chat_completion<
         .as_ref()
         .map(|client| client.trace_id().to_string());
     let max_tool_call_iterations = 15;
-    let mut unfinished_tool_calls: Vec<genai::chat::ToolCall> = vec![];
+    let mut unfinished_tool_calls: std::collections::VecDeque<genai::chat::ToolCall> =
+        std::collections::VecDeque::new();
     let mut current_turn = 0;
     let mut current_tool_call_count = 0;
     // At most one successful client-action proposal per generation: the
@@ -2226,9 +2227,11 @@ async fn stream_generate_chat_completion<
                 "Trying to progress chat completion after first iteration without open tool calls. Will likely result in error."
             )
         }
-        // First work off open tool calls
+        // First work off open tool calls, in the order the model emitted them
+        // — for a parallel batch of client-action proposals the FIRST one
+        // must be the one that wins.
         let mut current_turn_tool_responses = vec![];
-        while let Some(unfinished_tool_call) = unfinished_tool_calls.pop() {
+        while let Some(unfinished_tool_call) = unfinished_tool_calls.pop_front() {
             if streaming_task.is_some_and(|task| task.is_abort_requested()) {
                 let generation_metadata = build_generation_metadata(
                     total_prompt_tokens,

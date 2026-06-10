@@ -60,6 +60,13 @@ interface AddinChatInputProps {
     modelId?: string,
     selectedFacetIds?: string[],
     actionFacet?: ActionFacetRequest,
+    /**
+     * Identity of the Outlook item open at the moment the user pressed send
+     * — the wrong-item guard's baseline for the resulting completion. `null`
+     * when no item identity was available; the owner then fails closed
+     * (the completion's artifact is treated as stale, never unguarded).
+     */
+    sendItemIdentity?: string | null,
   ) => void;
   onEditMessage?: (
     messageId: string,
@@ -611,6 +618,11 @@ export const AddinChatInput = forwardRef<
       modelId?: string,
       selectedFacetIds?: string[],
     ) => {
+      // Capture the item identity BEFORE any await: the uploads below can
+      // take long enough for the user to switch emails, and the wrong-item
+      // guard must be anchored to the item the user actually sent from.
+      const sendItemIdentity = itemIdentity;
+
       // Build the action facet (selection rewrite vs. draft review) via a pure
       // resolver so the selection-priority and draft de-dup rules stay testable.
       //
@@ -663,6 +675,7 @@ export const AddinChatInput = forwardRef<
           modelId,
           selectedFacetIds,
           actionFacet,
+          sendItemIdentity,
         );
         return;
       }
@@ -684,6 +697,7 @@ export const AddinChatInput = forwardRef<
             modelId,
             selectedFacetIds,
             actionFacet,
+            sendItemIdentity,
           );
           // No upload was attempted (e.g. only dismissed drops remain) and
           // nothing failed, so the staged drops are safe to clear.
@@ -723,6 +737,7 @@ export const AddinChatInput = forwardRef<
         modelId,
         selectedFacetIds,
         actionFacet,
+        sendItemIdentity,
       );
 
       // Clear the drops only when their files actually uploaded. On a failed
@@ -741,6 +756,7 @@ export const AddinChatInput = forwardRef<
       draftBodyText,
       hasActiveSelection,
       isDraftContextIncluded,
+      itemIdentity,
       mailItem,
       onEmailSourceDropsSent,
       replyFromReadAvailable,

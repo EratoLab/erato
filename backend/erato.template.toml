@@ -322,8 +322,12 @@ chat_provider_ids = ["test-token-limit"]
 # "outlook.reply" and "outlook.reply_all" (read mode, opens a pre-filled
 # reply form; sending always remains a manual user step in Outlook).
 #
-# Per-turn templates must start with "FOR THIS MESSAGE ONLY:" so they are
-# stripped when the conversation history is replayed on later turns.
+# Per-turn directives are persisted as metadata markers and dropped from
+# prior-turn history when it is replayed on later turns, so stripping does
+# not depend on the template text. The built-in templates still start with
+# "FOR THIS MESSAGE ONLY:" by convention: it makes the request-scoped intent
+# explicit to the model, and rows persisted before the marker format are
+# recognized (and stripped) by exactly this text prefix.
 #
 # [action_facets.facets.outlook_reply_from_read]
 # display_name = "Outlook Reply from Read Mode"

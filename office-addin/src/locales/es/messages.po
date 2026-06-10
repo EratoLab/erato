@@ -224,6 +224,16 @@ msgid "officeAddin.chatInput.validation.tooLarge"
 msgstr "El archivo supera el límite del servidor de {globalMaxFormatted}"
 
 #. js-lingui-explicit-id
+#: src/utils/outlookClientActions.ts
+msgid "officeAddin.clientActions.reply"
+msgstr "Responder al remitente"
+
+#. js-lingui-explicit-id
+#: src/utils/outlookClientActions.ts
+msgid "officeAddin.clientActions.replyAll"
+msgstr "Responder a todos los destinatarios"
+
+#. js-lingui-explicit-id
 #: src/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.signedIn.title"
 msgstr ""
@@ -242,16 +252,6 @@ msgstr ""
 #: src/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.signInToLoad.title"
 msgstr ""
-
-#. js-lingui-explicit-id
-#: src/utils/outlookClientActions.ts
-msgid "officeAddin.clientActions.reply"
-msgstr "Responder al remitente"
-
-#. js-lingui-explicit-id
-#: src/utils/outlookClientActions.ts
-msgid "officeAddin.clientActions.replyAll"
-msgstr "Responder a todos los destinatarios"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
@@ -325,6 +325,11 @@ msgstr "{confirmRecipientCount, plural, one {Esto abre una respuesta dirigida a 
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
+msgid "officeAddin.emailRenderer.replyAllFormOpened"
+msgstr "Se abrió el formulario de respuesta a todos"
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoEmailRenderer.tsx
 #~ msgid "officeAddin.emailRenderer.replyConfirm"
 #~ msgstr "Abrir respuesta"
 
@@ -342,6 +347,16 @@ msgstr "Esto abre una respuesta precompletada al remitente del correo que estás
 #: src/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.replyFailed"
 msgstr "No se pudo abrir el formulario de respuesta. Asegúrate de que el correo recibido siga abierto o usa Copiar."
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoEmailRenderer.tsx
+msgid "officeAddin.emailRenderer.replyFormNotOpened"
+msgstr "No se pudo abrir el formulario de respuesta"
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoEmailRenderer.tsx
+msgid "officeAddin.emailRenderer.replyFormOpened"
+msgstr "Se abrió el formulario de respuesta"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx

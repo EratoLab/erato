@@ -526,11 +526,9 @@ pub async fn resolve_sequence(
                 for content_part in parsed.content {
                     match content_part {
                         ContentPart::ToolUse(tool_use) => {
-                            // Client-action proposals never replay — see
-                            // is_client_action_tool_use_message.
-                            if tool_use.tool_name
-                                == crate::services::client_actions::CLIENT_ACTION_TOOL_NAME
-                            {
+                            // Synthetic client-action proposals never replay
+                            // — see is_client_action_tool_use_message.
+                            if is_synthetic_client_action_tool_use(&tool_use) {
                                 continue;
                             }
                             input_messages.push(InputMessage {
@@ -624,19 +622,43 @@ fn is_prior_turn_action_facet_message(input_msg: &InputMessage) -> bool {
     }
 }
 
-/// True when an `InputMessage` carries a `propose_client_action` ToolUse.
-/// Client-action proposals are request-scoped UI hints, not real tool
-/// round-trips: the synthetic tool is only offered while the producing
-/// action facet is active, so replaying the call/response pair on later
-/// requests would reference a tool absent from the request's tool set —
-/// which some providers reject outright. Stripped like prior-turn
-/// action-facet directives.
+/// True when an `InputMessage` carries a ToolUse produced by the synthetic
+/// `propose_client_action` tool. Such proposals are request-scoped UI hints,
+/// not real tool round-trips, so they are stripped like prior-turn
+/// action-facet directives. The tool name alone is not enough to decide: an
+/// MCP tool may legitimately claim the same name (in which case the synthetic
+/// tool is never offered and the call dispatches to MCP — see prepare), and
+/// those round-trips must replay normally.
 fn is_client_action_tool_use_message(input_msg: &InputMessage) -> bool {
     matches!(
         &input_msg.content,
-        ContentPart::ToolUse(tool_use)
-            if tool_use.tool_name == crate::services::client_actions::CLIENT_ACTION_TOOL_NAME
+        ContentPart::ToolUse(tool_use) if is_synthetic_client_action_tool_use(tool_use)
     )
+}
+
+/// True when a `ToolUse` part was produced by the synthetic client-action
+/// interception rather than a same-named MCP tool. Identified by the output
+/// shape the interception writes (`{"status": "proposed", "action": <string>}`
+/// on success, `{"status": "rejected", "error": <string>}` on error — the
+/// `action`/`error` values are always strings); parts with absent or
+/// differently shaped output carry real MCP tool output.
+fn is_synthetic_client_action_tool_use(tool_use: &crate::models::message::ToolUse) -> bool {
+    if tool_use.tool_name != crate::services::client_actions::CLIENT_ACTION_TOOL_NAME {
+        return false;
+    }
+    tool_use.output.as_ref().is_some_and(|output| {
+        match output.get("status").and_then(serde_json::Value::as_str) {
+            Some("proposed") => output
+                .get("action")
+                .and_then(serde_json::Value::as_str)
+                .is_some(),
+            Some("rejected") => output
+                .get("error")
+                .and_then(serde_json::Value::as_str)
+                .is_some(),
+            _ => false,
+        }
+    })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
