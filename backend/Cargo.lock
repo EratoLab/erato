@@ -844,9 +844,9 @@ checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 
 [[package]]
 name = "biblatex"
-version = "0.12.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "591eba69b7c085632e22ca03606f0bbea68d53bbe26c8962e2d549af20c6a561"
+checksum = "53d0c374feba1b9a59042a7c1cf00ce7c34b977b9134fe7c42b08e5183729f66"
 dependencies = [
  "paste",
  "roman-numerals-rs",
@@ -2475,6 +2475,7 @@ dependencies = [
  "handlebars 6.4.0",
  "headers",
  "hmac 0.12.1",
+ "html-to-markdown-rs",
  "http-body-util",
  "ical",
  "infer",
@@ -3549,9 +3550,9 @@ dependencies = [
 
 [[package]]
 name = "html-to-markdown-rs"
-version = "3.5.7"
+version = "3.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6cbbfb183e8634cb956309c6bbd781d9ddae068d376fb9eb1451ac49cf4cbba7"
+checksum = "42f856d5f5daa55ea8b81bd746f1e49170fe589eccd2f5020d9ea888417983ab"
 dependencies = [
  "ahash 0.8.12",
  "astral-tl",
@@ -4338,9 +4339,9 @@ dependencies = [
 
 [[package]]
 name = "kreuzberg"
-version = "5.0.0-rc.10"
+version = "5.0.0-rc.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9dcea2be69f7c00df300a0652b5ab640c2ab3df3c585ab3e076ca2f96e6eca1a"
+checksum = "6bc1f8a1e9a9625855bbc606d0c21e8d8aa96eb7581ab092aa6d0518bf9d88bf"
 dependencies = [
  "ahash 0.8.12",
  "async-trait",
@@ -4359,8 +4360,6 @@ dependencies = [
  "dirs",
  "encoding_rs",
  "flate2",
- "getrandom 0.2.17",
- "getrandom 0.3.4",
  "getrandom 0.4.2",
  "hex",
  "html-to-markdown-rs",
@@ -4607,9 +4606,9 @@ dependencies = [
 
 [[package]]
 name = "lopdf"
-version = "0.41.0"
+version = "0.40.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67513274c50a2b51e5f75d9e682fcf4ab064a8a9c9ae2c3c59309084882bb24d"
+checksum = "73fdcbab5b237a03984f83b1394dc534e0b1960675c7f3ec4d04dccc9032b56d"
 dependencies = [
  "aes 0.8.4",
  "bitflags 2.10.0",
@@ -4625,6 +4624,7 @@ dependencies = [
  "log",
  "md-5 0.10.6",
  "nom 8.0.0",
+ "nom_locate",
  "rand 0.10.1",
  "rangemap",
  "rayon",
@@ -5054,6 +5054,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df9761775871bdef83bee530e60050f7e54b1105350d6884eb0fb4f46c2f9405"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "nom_locate"
+version = "5.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b577e2d69827c4740cba2b52efaad1c4cc7c73042860b199710b3575c68438d"
+dependencies = [
+ "bytecount",
+ "memchr",
+ "nom 8.0.0",
 ]
 
 [[package]]
@@ -5938,9 +5949,9 @@ dependencies = [
 
 [[package]]
 name = "pdf_oxide"
-version = "0.3.61"
+version = "0.3.63"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5b2e1871e9ab73de8873f9cb57f7f5e66cd072ea1361d5dfbbe89c52d6affa2"
+checksum = "6f0b90c85ca0756d2bfa358a033c24d1546ba7ce4324f5a98956250323f0fb26"
 dependencies = [
  "aes 0.9.1",
  "base64 0.22.1",
