@@ -66,6 +66,7 @@ export function WaveformButton({
         disabled={disabled}
         className="group relative overflow-hidden"
         aria-label={ariaLabel}
+        title={ariaLabel}
         data-testid={testIds?.root}
         icon={
           <span className="relative flex size-5 items-center justify-center text-[var(--theme-fg-primary)]">

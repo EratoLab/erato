@@ -2102,6 +2102,7 @@ export const ChatInput = ({
                     disabled
                     data-testid="chat-input-record-audio-transcript"
                     aria-label={t`Finishing audio transcript`}
+                    title={t`Finishing audio transcript`}
                   />
                 )}
               {audioDictationEnabled &&
@@ -2164,6 +2165,13 @@ export const ChatInput = ({
                     }
                     data-testid="chat-input-record-audio"
                     aria-label={
+                      isDictationStarting
+                        ? t`Starting dictation`
+                        : isDictationCompleting
+                          ? t`Finishing dictation`
+                          : t`Start dictation`
+                    }
+                    title={
                       isDictationStarting
                         ? t`Starting dictation`
                         : isDictationCompleting
