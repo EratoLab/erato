@@ -484,6 +484,7 @@ export const ChatInput = ({
 
   const {
     isRecording,
+    isCapturingAudio: isRecordingCapturingAudio,
     isRecordingUpload,
     recordingError,
     setRecordingError,
@@ -2055,11 +2056,11 @@ export const ChatInput = ({
                 )}
               {isAudioMode &&
                 isPendingResponse &&
-                isConversationalAudioActive && (
+                isConversationalAudioActive &&
+                (isCapturingAudio && isDictating ? (
                   <WaveformButton
                     onClick={handleAudioModeButtonToggle}
                     bars={dictationBars}
-                    isBuffering={!isCapturingAudio || !isDictating}
                     disabled={disabled || isLoading || isDictationCompleting}
                     ariaLabel={t`Stop audio mode`}
                     statusLabel={t`Listening for your next message`}
@@ -2071,24 +2072,52 @@ export const ChatInput = ({
                         "chat-input-audio-mode-pending-recording-stop-icon",
                     }}
                   />
-                )}
-              {audioTranscriptionEnabled && !isAudioMode && isRecording && (
-                <WaveformButton
-                  onClick={toggleAudioRecording}
-                  bars={recordingBars}
-                  disabled={disabled || isLoading}
-                  ariaLabel={t`Stop audio transcript recording`}
-                  statusLabel={t`Recording audio transcript`}
-                  testIds={{
-                    root: "chat-input-record-audio-transcript",
-                    waveform: "chat-input-record-audio-transcript-waveform",
-                    stopIcon: "chat-input-record-audio-transcript-stop-icon",
-                  }}
-                />
-              )}
+                ) : (
+                  // Re-arming between turns: the mic is being re-acquired
+                  // and is not yet capturing — show the spinner, not a
+                  // live-looking waveform.
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    icon={
+                      <LoadingIcon
+                        className="size-4 animate-spin text-[var(--theme-fg-primary)]"
+                        data-testid="chat-input-audio-mode-pending-loading-icon"
+                      />
+                    }
+                    onClick={handleAudioModeButtonToggle}
+                    disabled={disabled || isLoading || isDictationCompleting}
+                    data-testid="chat-input-audio-mode-pending-recording"
+                    aria-label={t`Stop audio mode`}
+                    title={t`Stop audio mode`}
+                  />
+                ))}
               {audioTranscriptionEnabled &&
                 !isAudioMode &&
-                isRecordingUpload && (
+                isRecording &&
+                isRecordingCapturingAudio && (
+                  <WaveformButton
+                    onClick={toggleAudioRecording}
+                    bars={recordingBars}
+                    disabled={disabled || isLoading}
+                    ariaLabel={t`Stop audio transcript recording`}
+                    statusLabel={t`Recording audio transcript`}
+                    testIds={{
+                      root: "chat-input-record-audio-transcript",
+                      waveform: "chat-input-record-audio-transcript-waveform",
+                      stopIcon: "chat-input-record-audio-transcript-stop-icon",
+                    }}
+                  />
+                )}
+              {audioTranscriptionEnabled &&
+                !isAudioMode &&
+                (isRecordingUpload ||
+                  (isRecording && !isRecordingCapturingAudio)) && (
+                  // The spinner covers the session handshake AND the mic
+                  // warm-up: the waveform appears only once real audio is
+                  // flowing, so its appearance is the "speak now" cue.
+                  // During warm-up the button stays clickable to stop.
                   <Button
                     type="button"
                     variant="secondary"
@@ -2099,21 +2128,35 @@ export const ChatInput = ({
                         data-testid="chat-input-record-audio-transcript-loading-icon"
                       />
                     }
-                    disabled
+                    onClick={isRecording ? toggleAudioRecording : undefined}
+                    disabled={!isRecording}
                     data-testid="chat-input-record-audio-transcript"
-                    aria-label={t`Finishing audio transcript`}
-                    title={t`Finishing audio transcript`}
+                    aria-label={
+                      isRecording
+                        ? t`Starting audio transcript recording`
+                        : t`Finishing audio transcript`
+                    }
+                    title={
+                      isRecording
+                        ? t`Starting audio transcript recording`
+                        : t`Finishing audio transcript`
+                    }
                   />
                 )}
               {audioDictationEnabled &&
                 !isAudioMode &&
                 !isRecording &&
                 !isRecordingUpload &&
-                (isCapturingAudio || isDictating ? (
+                // The live waveform appears only once the session is ready
+                // AND real (non-zero) audio is flowing; until then the
+                // loading spinner stays. A single spinner → waveform
+                // transition is the "speak now" cue — showing the waveform
+                // during the mic's cold warm-up invited users to speak too
+                // early and lose their first words (ERMAIN-334).
+                (isCapturingAudio && isDictating ? (
                   <WaveformButton
                     onClick={toggleDictationForCurrentTarget}
                     bars={dictationBars}
-                    isBuffering={!isDictating}
                     disabled={
                       disabled ||
                       isLoading ||
@@ -2122,16 +2165,8 @@ export const ChatInput = ({
                       isFileButtonProcessing ||
                       isAnyTokenLimitExceeded
                     }
-                    ariaLabel={
-                      isDictating
-                        ? t`Stop dictation`
-                        : t`Cancel starting dictation`
-                    }
-                    statusLabel={
-                      isDictating
-                        ? t`Dictating audio`
-                        : t`Capturing audio — waiting for transcription to start`
-                    }
+                    ariaLabel={t`Stop dictation`}
+                    statusLabel={t`Dictating audio`}
                     testIds={{
                       root: "chat-input-record-audio",
                       waveform: "chat-input-dictation-waveform",
@@ -2144,7 +2179,10 @@ export const ChatInput = ({
                     variant="secondary"
                     size="sm"
                     icon={
-                      isDictationStarting || isDictationCompleting ? (
+                      isDictationStarting ||
+                      isDictating ||
+                      isCapturingAudio ||
+                      isDictationCompleting ? (
                         <LoadingIcon
                           className="size-4 animate-spin text-[var(--theme-fg-primary)]"
                           data-testid="chat-input-dictation-loading-icon"
@@ -2165,14 +2203,14 @@ export const ChatInput = ({
                     }
                     data-testid="chat-input-record-audio"
                     aria-label={
-                      isDictationStarting
+                      isDictationStarting || isDictating || isCapturingAudio
                         ? t`Starting dictation`
                         : isDictationCompleting
                           ? t`Finishing dictation`
                           : t`Start dictation`
                     }
                     title={
-                      isDictationStarting
+                      isDictationStarting || isDictating || isCapturingAudio
                         ? t`Starting dictation`
                         : isDictationCompleting
                           ? t`Finishing dictation`
@@ -2195,6 +2233,10 @@ export const ChatInput = ({
                   <ChatInputAudioModeButton
                     isRecording
                     recordingBars={dictationBars}
+                    // Spinner until the session is live AND real audio
+                    // flows — the waveform's appearance is the "speak
+                    // now" cue (ERMAIN-334).
+                    isStarting={!isCapturingAudio || !isDictating}
                     onToggle={handleAudioModeButtonToggle}
                     disabled={isAudioModeButtonDisabled}
                   />

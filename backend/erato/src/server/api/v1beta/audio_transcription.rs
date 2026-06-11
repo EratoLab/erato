@@ -1529,6 +1529,18 @@ async fn transcribe_audio_chunk_genai(
         .exec_chat("PLACEHOLDER_MODEL", chat_request, Some(&chat_options))
         .await?;
     let transcript = response.first_text().unwrap_or_default().trim().to_string();
+    let transcript = if is_punctuation_only_transcript(&transcript) {
+        if !transcript.is_empty() {
+            debug!(
+                chunk_index = pending.chunk_index,
+                raw_transcript = %transcript,
+                "Discarding punctuation-only transcript as a silence hallucination"
+            );
+        }
+        String::new()
+    } else {
+        transcript
+    };
     debug!(
         chunk_index = pending.chunk_index,
         provider_id = %provider.chat_provider_id,
@@ -1539,6 +1551,17 @@ async fn transcribe_audio_chunk_genai(
     );
 
     Ok(transcript)
+}
+
+/// Audio models reliably hallucinate on (near-)silent excerpts despite the
+/// prompt asking for an empty string — a lone "." or other punctuation-only
+/// output is the canonical signature (silent chunks are guaranteed to occur:
+/// the client prepends a synthetic silence primer and trailing VAD
+/// redemption silence). No real utterance transcribes to pure punctuation,
+/// so treat any transcript without a single alphanumeric character as
+/// "no audible speech".
+fn is_punctuation_only_transcript(transcript: &str) -> bool {
+    !transcript.chars().any(char::is_alphanumeric)
 }
 
 fn max_output_tokens_for_chunk(
@@ -1879,6 +1902,18 @@ mod tests {
             canonical_audio_max_bytes_for_config(&dictation_config)
                 < canonical_audio_max_bytes_for_config(&transcription_config)
         );
+    }
+
+    #[test]
+    fn discards_punctuation_only_transcripts_as_silence_hallucinations() {
+        assert!(is_punctuation_only_transcript(""));
+        assert!(is_punctuation_only_transcript("."));
+        assert!(is_punctuation_only_transcript("…!?"));
+        assert!(is_punctuation_only_transcript(". . ."));
+        assert!(!is_punctuation_only_transcript("ok."));
+        assert!(!is_punctuation_only_transcript("ja"));
+        assert!(!is_punctuation_only_transcript("好"));
+        assert!(!is_punctuation_only_transcript("42"));
     }
 
     #[test]

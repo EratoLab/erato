@@ -1058,6 +1058,10 @@ describe("ChatInput", () => {
       isDictating: true,
       isDictationStarting: false,
       isDictationCompleting: false,
+      // Real audio is flowing — the waveform shows at full opacity and
+      // the status announces active dictation (when false, the button
+      // dims and announces the mic warm-up instead).
+      isCapturingAudio: true,
       dictationError: null,
       setDictationError: vi.fn(),
       dictationBars: [2, 5, 8, 5, 2],

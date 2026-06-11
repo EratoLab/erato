@@ -49,6 +49,10 @@ vi.mock("@/lib/voice-runtime", () => ({
     mockCreateRicky0123VadEngine(...args),
 }));
 
+vi.mock("../audio-dictation-worklet.ts?worker&url", () => ({
+  default: "blob:mock-audio-dictation-worklet",
+}));
+
 const fixturePath = join(
   process.cwd(),
   "src/hooks/audio/__tests__/fixtures/sales-summary-1-3.wav",
@@ -117,20 +121,14 @@ class MockMediaStream {
 }
 
 class MockAnalyserNode {
-  fftSize = 64;
-  frequencyBinCount = 32;
+  fftSize = 256;
+  smoothingTimeConstant = 0;
 
   disconnect = vi.fn();
 
-  getByteFrequencyData(data: Uint8Array) {
-    data.fill(16);
+  getByteTimeDomainData(data: Uint8Array) {
+    data.fill(128);
   }
-}
-
-class MockGainNode {
-  gain = { value: 1 };
-  connect = vi.fn();
-  disconnect = vi.fn();
 }
 
 class MockMediaStreamAudioSourceNode {
@@ -138,18 +136,34 @@ class MockMediaStreamAudioSourceNode {
   disconnect = vi.fn();
 }
 
-class MockScriptProcessorNode {
-  onaudioprocess: ((event: AudioProcessingEvent) => void) | null = null;
-  connect = vi.fn();
-  disconnect = vi.fn();
+class MockMessagePort {
+  onmessage: ((event: MessageEvent<Float32Array>) => void) | null = null;
+  postMessage = vi.fn();
 }
 
-const mockProcessors: MockScriptProcessorNode[] = [];
+class MockAudioWorkletNode {
+  static instances: MockAudioWorkletNode[] = [];
+  port = new MockMessagePort();
+  connect = vi.fn();
+  disconnect = vi.fn();
+
+  constructor(
+    public readonly context: unknown,
+    public readonly name: string,
+  ) {
+    MockAudioWorkletNode.instances.push(this);
+  }
+}
+
+class MockAudioWorklet {
+  addModule = vi.fn(async () => undefined);
+}
 
 class MockAudioContext {
   sampleRate = 16000;
   state = "running";
   destination = {};
+  audioWorklet = new MockAudioWorklet();
 
   createMediaStreamSource() {
     return new MockMediaStreamAudioSourceNode();
@@ -159,41 +173,16 @@ class MockAudioContext {
     return new MockAnalyserNode();
   }
 
-  createScriptProcessor() {
-    const processor = new MockScriptProcessorNode();
-    mockProcessors.push(processor);
-    return processor;
-  }
+  resume = vi.fn(async () => {
+    this.state = "running";
+  });
 
-  createGain() {
-    return new MockGainNode();
-  }
+  suspend = vi.fn(async () => {
+    this.state = "suspended";
+  });
 
   close = vi.fn(async () => {
     this.state = "closed";
-  });
-}
-
-class MockMediaRecorder extends EventTarget {
-  static instances: MockMediaRecorder[] = [];
-  state: "inactive" | "recording" = "inactive";
-  mimeType = "audio/webm";
-  ondataavailable: ((event: BlobEvent) => void) | null = null;
-  onstop: (() => void) | null = null;
-  onerror: ((event: Event) => void) | null = null;
-
-  constructor() {
-    super();
-    MockMediaRecorder.instances.push(this);
-  }
-
-  start = vi.fn(() => {
-    this.state = "recording";
-  });
-
-  stop = vi.fn(() => {
-    this.state = "inactive";
-    this.onstop?.();
   });
 }
 
@@ -204,6 +193,9 @@ type MockWebSocketEvent = {
 class MockWebSocket {
   static OPEN = 1;
   static instances: MockWebSocket[] = [];
+  /** When false, the mock withholds the automatic session_state reply so
+   *  tests can drive the handshake manually (pre-handshake capture). */
+  static autoRespondSessionState = true;
   readyState = MockWebSocket.OPEN;
   sentJsonFrames: Record<string, unknown>[] = [];
   sentBinaryFrames: Uint8Array[] = [];
@@ -239,7 +231,7 @@ class MockWebSocket {
       const frame = JSON.parse(data) as Record<string, unknown>;
       this.sentJsonFrames.push(frame);
 
-      if (frame.type === "start") {
+      if (frame.type === "start" && MockWebSocket.autoRespondSessionState) {
         this.emitJson({
           type: "session_state",
           file_upload_id: audioFileUpload.id,
@@ -334,7 +326,7 @@ class MockWebSocket {
     this.emit("close", {});
   });
 
-  private emitJson(frame: Record<string, unknown>) {
+  emitJson(frame: Record<string, unknown>) {
     globalThis.queueMicrotask(() =>
       this.emit("message", { data: JSON.stringify(frame) }),
     );
@@ -346,16 +338,12 @@ class MockWebSocket {
 }
 
 function emitAudioSamples(samples: Float32Array) {
-  const processor = mockProcessors.at(-1);
-  if (!processor?.onaudioprocess) {
-    throw new Error("Script processor was not initialized");
+  const processor = MockAudioWorkletNode.instances.at(-1);
+  if (!processor?.port.onmessage) {
+    throw new Error("Audio worklet node was not initialized");
   }
 
-  processor.onaudioprocess({
-    inputBuffer: {
-      getChannelData: () => samples,
-    },
-  } as unknown as AudioProcessingEvent);
+  processor.port.onmessage({ data: samples } as MessageEvent<Float32Array>);
 }
 
 describe("useAudioTranscriptionRecorder", () => {
@@ -363,9 +351,9 @@ describe("useAudioTranscriptionRecorder", () => {
     vi.restoreAllMocks();
     mockFetchGetFile.mockReset();
     mockUseCreateChat.mockReset();
-    mockProcessors.length = 0;
-    MockMediaRecorder.instances.length = 0;
+    MockAudioWorkletNode.instances.length = 0;
     MockWebSocket.instances.length = 0;
+    MockWebSocket.autoRespondSessionState = true;
     mockVadListeners.length = 0;
     mockVadEngine.start.mockClear();
     mockVadEngine.stop.mockClear();
@@ -388,7 +376,7 @@ describe("useAudioTranscriptionRecorder", () => {
     });
 
     vi.stubGlobal("AudioContext", MockAudioContext);
-    vi.stubGlobal("MediaRecorder", MockMediaRecorder);
+    vi.stubGlobal("AudioWorkletNode", MockAudioWorkletNode);
     vi.stubGlobal("WebSocket", MockWebSocket);
     vi.spyOn(window, "requestAnimationFrame").mockReturnValue(1);
     vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
@@ -488,6 +476,75 @@ describe("useAudioTranscriptionRecorder", () => {
         }),
       ]),
     );
+  });
+
+  it("captures speech during the socket handshake and ships it once the session is ready", async () => {
+    MockWebSocket.autoRespondSessionState = false;
+    let attachedFiles: FileUploadItem[] = [];
+    const setAttachedFiles = vi.fn((nextAttachedFiles: FileUploadItem[]) => {
+      attachedFiles = nextAttachedFiles;
+    });
+    const { result } = renderHook(() =>
+      useAudioTranscriptionRecorder({
+        audioTranscriptionEnabled: true,
+        uploadEnabled: true,
+        maxRecordingDurationSeconds: 1200,
+        chatId: "chat-1",
+        silentChatId: null,
+        setSilentChatId: vi.fn(),
+        attachedFiles,
+        setAttachedFiles,
+      }),
+    );
+
+    await act(async () => {
+      result.current.toggleAudioRecording();
+    });
+
+    // Regression test for ERMAIN-334's tap-after-handshake truncation:
+    // the worklet must already be capturing while the server has NOT
+    // yet replied with session_state.
+    await waitFor(() => expect(MockAudioWorkletNode.instances).toHaveLength(1));
+    await waitFor(() =>
+      expect(MockWebSocket.instances[0].sentJsonFrames).toContainEqual(
+        expect.objectContaining({ type: "start" }),
+      ),
+    );
+
+    // Speak during the handshake: samples buffer client-side and
+    // nothing is transmitted yet.
+    act(() => {
+      emitAudioSamples(new Float32Array(1600).fill(0.5));
+    });
+    expect(MockWebSocket.instances[0].sentBinaryFrames).toHaveLength(0);
+    expect(result.current.isRecording).toBe(false);
+
+    // Server completes the handshake.
+    await act(async () => {
+      MockWebSocket.instances[0].emitJson({
+        type: "session_state",
+        file_upload_id: audioFileUpload.id,
+        next_chunk_index: 0,
+        stored_offset: 0,
+        chunk_duration_ms: 100,
+        audio_transcription: audioFileUpload.audio_transcription,
+      });
+    });
+    await waitFor(() => expect(result.current.isRecording).toBe(true));
+
+    // The 300ms zero primer (4800 samples at the mocked 16kHz rate) plus
+    // the 1600 pre-handshake speech samples drain into exactly four
+    // 100ms chunks: three zero primer chunks, then the speech.
+    await waitFor(() =>
+      expect(MockWebSocket.instances[0].sentBinaryFrames).toHaveLength(4),
+    );
+    const frames = MockWebSocket.instances[0].sentBinaryFrames;
+    expect(String.fromCharCode(...frames[0].slice(0, 4))).toBe("RIFF");
+    // 0.5 resamples 1:1 at the mocked rate and packs as int16 0x3fff
+    // little-endian — the speech spoken during the handshake reached
+    // the server instead of being dropped.
+    expect(frames[3][0]).toBe(0xff);
+    expect(frames[3][1]).toBe(0x3f);
   });
 
   it("auto-stops a live recording when VAD detects speech end", async () => {
