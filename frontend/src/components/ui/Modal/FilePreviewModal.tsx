@@ -10,6 +10,9 @@ import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas"
 import type React from "react";
 
 const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp"];
+const DOCX_MIME_TYPE =
+  // eslint-disable-next-line lingui/no-unlocalized-strings
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 const getExtension = (filename: string): string =>
   filename.split(".").pop()?.toLowerCase() ?? "";
@@ -24,10 +27,15 @@ const resolvePreviewSource = (
 ): { url: string; canPreview: boolean } => {
   const extension = getExtension(file.filename);
   const previewUrl = getPreviewUrl(file);
+  const mimeType = file.file_capability.mime_types[0];
   if (IMAGE_EXTENSIONS.includes(extension) || extension === "pdf") {
     return { url: previewUrl ?? "", canPreview: Boolean(previewUrl) };
   }
-  if (extension === "eml") {
+  if (
+    extension === "eml" ||
+    extension === "docx" ||
+    mimeType === DOCX_MIME_TYPE
+  ) {
     return {
       url: file.download_url,
       canPreview: Boolean(file.download_url),
@@ -90,7 +98,11 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
     if (canPreview) {
       return (
         <>
-          <FilePreviewContent filename={file.filename} url={url} />
+          <FilePreviewContent
+            filename={file.filename}
+            url={url}
+            mimeType={file.file_capability.mime_types[0]}
+          />
           {actionButtons}
         </>
       );

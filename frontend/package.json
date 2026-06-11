@@ -41,6 +41,7 @@
     "i18n:watch": "lingui extract --watch"
   },
   "dependencies": {
+    "@extend-ai/react-docx": "0.7.0-alpha.2",
     "@lingui/detect-locale": "^5.9.4",
     "@lingui/format-po": "^5.9.4",
     "@react-hook/resize-observer": "^2.0.2",

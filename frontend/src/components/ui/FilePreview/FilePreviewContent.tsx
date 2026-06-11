@@ -2,6 +2,7 @@ import { t } from "@lingui/core/macro";
 
 import { Alert } from "@/components/ui/Feedback/Alert";
 
+import { DocxPreview } from "./DocxPreview";
 import { EmlPreview } from "./EmlPreview";
 
 import type React from "react";
@@ -22,6 +23,9 @@ function getExtension(filename: string): string {
 
 // eslint-disable-next-line lingui/no-unlocalized-strings
 const IMAGE_MIME_PREFIX = "image/";
+const DOCX_MIME_TYPE =
+  // eslint-disable-next-line lingui/no-unlocalized-strings
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 function isImageMime(mimeType: string | undefined): boolean {
   return mimeType?.startsWith(IMAGE_MIME_PREFIX) ?? false;
@@ -56,6 +60,7 @@ export const FilePreviewContent: React.FC<FilePreviewContentProps> = ({
     isImageMime(mimeType);
   const isPdf = extension === "pdf" || mimeType === "application/pdf";
   const isEml = extension === "eml" || mimeType === "message/rfc822";
+  const isDocx = extension === "docx" || mimeType === DOCX_MIME_TYPE;
 
   if (isImage) {
     return (
@@ -80,6 +85,10 @@ export const FilePreviewContent: React.FC<FilePreviewContentProps> = ({
 
   if (isEml) {
     return <EmlPreview filename={filename} url={url} />;
+  }
+
+  if (isDocx) {
+    return <DocxPreview url={url} />;
   }
 
   return (
