@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  OAUTH2_PROXY_AUTH_PATH,
   OAUTH2_PROXY_REDEEM_EXTERNAL_TOKEN_PATH,
   OAUTH2_PROXY_SESSION_REFRESH_AFTER_MS,
   Oauth2ProxySessionRedeemError,
+  checkOauth2ProxySession,
   readStoredOauth2ProxySessionRedeemedAt,
   redeemOauth2ProxySession,
   shouldRefreshOauth2ProxySession,
@@ -120,6 +122,45 @@ describe("redeemOauth2ProxySession", () => {
       status: null,
       cause: networkError,
     });
+  });
+});
+
+describe("checkOauth2ProxySession", () => {
+  it("probes the auth endpoint with credentials and threads the abort signal", async () => {
+    const fetcher = vi.fn(async () => new Response("", { status: 202 }));
+    const controller = new AbortController();
+
+    await expect(
+      checkOauth2ProxySession({ fetcher, signal: controller.signal }),
+    ).resolves.toBe(true);
+
+    expect(fetcher).toHaveBeenCalledWith(OAUTH2_PROXY_AUTH_PATH, {
+      method: "GET",
+      credentials: "include",
+      signal: controller.signal,
+    });
+  });
+
+  it("stays source-compatible without a signal (401 resolves false)", async () => {
+    const fetcher = vi.fn(async () => new Response("", { status: 401 }));
+
+    await expect(checkOauth2ProxySession({ fetcher })).resolves.toBe(false);
+
+    expect(fetcher).toHaveBeenCalledWith(OAUTH2_PROXY_AUTH_PATH, {
+      method: "GET",
+      credentials: "include",
+      signal: undefined,
+    });
+  });
+
+  it("rejects with the abort reason when the probe request is aborted", async () => {
+    const reason = new Error("probe aborted");
+    const fetcher = vi.fn(async () => {
+      // fetch rejects with the signal's reason once the abort fires.
+      throw reason;
+    });
+
+    await expect(checkOauth2ProxySession({ fetcher })).rejects.toBe(reason);
   });
 });
 

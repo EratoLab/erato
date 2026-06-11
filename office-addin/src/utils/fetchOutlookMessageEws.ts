@@ -2,6 +2,7 @@ import PostalMime from "postal-mime";
 
 import { buildEmlFile } from "./fetchOutlookMessageGraph";
 import { callOfficeAsync } from "./officeAsync";
+import { checkOauth2ProxySession } from "../auth/oauth2ProxySession";
 
 import type {
   ConversationFetchState,
@@ -22,8 +23,8 @@ import type { Attachment as MimeAttachment } from "postal-mime";
 /**
  * HYBRID EWS SOAP implementations of the message-fetch capabilities, for
  * Exchange on-premises / Subscription Edition where Microsoft Graph does not
- * exist. This is the wired on-prem backend; the Outlook REST v2.0 sibling
- * (`./fetchOutlookMessageRestV2.ts`) is retained as a dormant fallback.
+ * exist. This is the wired on-prem backend; the Outlook REST v2.0 sibling has
+ * been removed (it lives in git history as `fetchOutlookMessageRestV2.ts`).
  *
  * TWO TRANSPORTS, routed by what the credential authorizes (proven empirically
  * against a live SE box):
@@ -86,8 +87,9 @@ import type { Attachment as MimeAttachment } from "postal-mime";
  *       → HOST path (broad), except the member equal to the current item, which
  *         is fetched via the DIRECT path (no cap on the message we care about
  *         most). A sibling that overflows the 1 MB cap degrades to `partial`.
- *   - FindItem-by-Message-ID is mailbox-wide → HOST path; the resolved GetItem
- *     then goes DIRECT if it is the current item, else HOST.
+ *   - FindItem-by-Message-ID spans the well-known mail folders → HOST path;
+ *     the resolved GetItem then goes DIRECT if it is the current item, else
+ *     HOST.
  *
  * Both transports return the SAME SOAP shapes, so the response handling (XML
  * parse + SOAP fault + EWS ResponseCode error) is factored into
@@ -110,12 +112,15 @@ const MESSAGES_NS =
 /**
  * Same-origin Erato endpoint that forwards EWS SOAP to Exchange server-side (see
  * module doc for why a direct cross-origin EWS POST is impossible). Contract per
- * the backend (EratoLab/erato PR #727, `ms_office::ews_proxy`): POST the raw SOAP
- * envelope as `text/xml`; the Exchange callback token rides the `Authorization`
- * header (the proxy forwards it to Exchange verbatim and 401s if absent); the
- * proxy derives the target EWS URL from its own `integrations.ms_office.
- * ews_api_endpoint` config, so the client does NOT send a target URL. The
- * response is Exchange's SOAP response passed through verbatim.
+ * the backend (`ms_office::ews_proxy`): POST the raw SOAP envelope as
+ * `text/xml`; the session authenticates via oauth2-proxy (cookie, which owns
+ * the `Authorization` header on the way in); the Exchange callback token rides
+ * the dedicated `X-EWS-Authentication` header, which the proxy re-maps onto
+ * `Authorization` for the upstream Exchange request (the inbound session
+ * Authorization is never forwarded). The proxy derives the target EWS URL from
+ * its own `integrations.ms_office.ews_api_endpoint` config, so the client does
+ * NOT send a target URL. The response is Exchange's SOAP response passed
+ * through verbatim.
  */
 const EWS_PROXY_PATH = "/api/v1beta/integrations/ms-office/ews";
 
@@ -139,11 +144,11 @@ const GRAPH_FILE_ATTACHMENT_TYPE = "#microsoft.graph.fileAttachment";
 const GRAPH_ITEM_ATTACHMENT_TYPE = "#microsoft.graph.itemAttachment";
 
 /** Past this many conversation members the thread is declared `partial`,
- * mirroring the Graph/REST cap (50 × 20 = 1000). */
+ * mirroring the Graph cap (50 × 20 = 1000). */
 const MAX_CONVERSATION_ITEMS = 1000;
 /** Max simultaneous per-message GetItem fetches — both the body-shape GetItem
  * and the attachment-MIME GetItem (on-prem Exchange throttles per-connection),
- * mirroring the Graph/REST throttle guard. */
+ * mirroring the Graph throttle guard. */
 const EWS_FETCH_CONCURRENCY = 5;
 
 /** EWS ResponseCode meaning "the item does not exist" — maps to not-found
@@ -159,6 +164,27 @@ export class EwsRequestError extends Error {
   ) {
     super(message);
     this.name = "EwsRequestError";
+  }
+}
+
+/**
+ * The EWS proxy 401'd even with a FRESHLY-minted Exchange callback token AND
+ * the oauth2-proxy session probe came back dead: it is the Erato session (not
+ * the Exchange token) that expired, so the remedy is re-login, not retry.
+ * Extends {@link EwsRequestError} so blanket EWS error handling (conversation
+ * fetch → `state: "error"`, parent lookup → null) still applies, while callers
+ * that CAN re-surface the sign-in CTA get a distinct signal. {@link ewsFetch}
+ * additionally fires the shared API layer's auth-recovery trigger
+ * (`tryRecoverAuth` — the handler `Oauth2ProxyLoginProvider` registers via
+ * `setAuthRecoveryHandler`, mirroring the `sseClient`/`v1betaApiFetcher` 401
+ * call sites) BEFORE throwing this, so the provider re-probes the session and
+ * flips the UI to the sign-in CTA even when the caller swallows this error
+ * into a generic failure state.
+ */
+export class EwsProxySessionExpiredError extends EwsRequestError {
+  constructor(message: string) {
+    super(message);
+    this.name = "EwsProxySessionExpiredError";
   }
 }
 
@@ -214,8 +240,8 @@ function getEwsUrl(): string {
   return ewsUrl.trim().replace(/\/$/, "");
 }
 
-/** The SOAP-token analogue of REST's `getRestCallbackToken`: a callback token
- * for EWS (NOT REST), accepted by the on-prem server as an OAuth Bearer. */
+/** A callback token for EWS — `getCallbackTokenAsync({ isRest: false })`, the
+ * SOAP flavor — accepted by the on-prem server as an OAuth Bearer. */
 async function getEwsCallbackToken(): Promise<string> {
   return callOfficeAsync<string>((callback) =>
     Office.context.mailbox.getCallbackTokenAsync({ isRest: false }, callback),
@@ -225,8 +251,7 @@ async function getEwsCallbackToken(): Promise<string> {
 /**
  * Caches one callback token across all requests of a single operation while
  * coalescing concurrent 401-driven re-acquisitions onto a single
- * `getCallbackTokenAsync` round-trip. The EWS analogue of the REST module's
- * token source.
+ * `getCallbackTokenAsync` round-trip.
  */
 interface EwsTokenSource {
   get(): Promise<string>;
@@ -272,10 +297,8 @@ function makeEwsTokenSource(): EwsTokenSource {
  * EWS_PROXY_PATH}), which forwards it to Exchange. The operation's cached
  * callback token rides the `X-EWS-Authentication` header (the proxy re-maps it
  * onto Exchange's `Authorization`); the Erato session authenticates the proxy
- * call via the cookie (`credentials: "include"`). On a 401 (callback tokens live ~5 minutes and can
- * expire mid-operation), re-acquires the token and retries exactly once —
- * mirroring the REST module's `restFetch` recovery contract. Returns the parsed
- * XML document; throws `EwsRequestError` on transport failure or a SOAP Fault.
+ * call via the cookie (`credentials: "include"`). Returns the parsed XML
+ * document; throws `EwsRequestError` on transport failure or a SOAP Fault.
  *
  * Same-origin POST → no CORS preflight (preflight is a cross-origin concern).
  *
@@ -285,12 +308,19 @@ function makeEwsTokenSource(): EwsTokenSource {
  * this mailbox" precheck (throws → `state: "error"`); the value itself is now
  * vestigial here and the threading can be removed in a later cleanup.
  *
- * 401 NUANCE (finalize against the proxy's error contract): a 401 here is either
- * an expired *Erato session* (oauth2-proxy, before the endpoint) OR an expired
- * *callback token* (Exchange's 401 passed through). Today we treat 401 as the
- * latter and re-acquire the callback token; if a distinct signal emerges for the
- * token case, switch this branch to it and let the shared API layer's
- * `recoverAuth` own the session 401.
+ * 401 CONTRACT: a 401 here is EITHER an expired Exchange *callback token*
+ * (tokens live ~5 minutes and can expire mid-operation; Exchange's 401 passes
+ * through the proxy) OR an expired *oauth2-proxy session* (the proxy endpoint
+ * sits behind oauth2-proxy, which 401s before the request ever reaches the
+ * backend). The two are indistinguishable by status, so we disambiguate by
+ * behavior: re-acquire the callback token and retry exactly ONCE (the common,
+ * token-expiry case). If the retry 401s too, the fresh token cannot be the
+ * problem — probe the session via {@link checkOauth2ProxySession}: a dead
+ * session fires the shared auth-recovery trigger (fire-and-forget, so the
+ * login provider flips the UI to the sign-in CTA; see
+ * {@link EwsProxySessionExpiredError}) and then surfaces as
+ * {@link EwsProxySessionExpiredError} (re-login is the remedy), anything else
+ * stays a generic {@link EwsRequestError}.
  */
 async function ewsFetch(
   soapXml: string,
@@ -318,10 +348,59 @@ async function ewsFetch(
 
   let response = await request(await tokenSource.get());
   if (response.status === 401) {
-    if (signal?.aborted) {
-      throw signal.reason ?? new DOMException("Aborted", "AbortError");
-    }
+    throwIfAborted(signal);
     response = await request(await tokenSource.refresh());
+    if (response.status === 401) {
+      // Honor an abort that raced the retry before spending another
+      // round-trip on the disambiguation probe.
+      throwIfAborted(signal);
+      // A freshly-minted callback token was rejected too, so this is not a
+      // token-expiry race — probe the oauth2-proxy session to tell the two 401
+      // sources apart (see the 401 CONTRACT above).
+      let sessionAlive: boolean | null = null;
+      try {
+        // checkOauth2ProxySession only calls its fetcher with a string path,
+        // so the narrower GraphTransport is safe to pass.
+        sessionAlive = await checkOauth2ProxySession({
+          fetcher: transport as typeof fetch,
+          signal,
+        });
+      } catch (probeError) {
+        // An abort mid-probe propagates as-is (no disambiguation, no
+        // recovery trigger); any other failure means the probe is
+        // unreachable → cannot disambiguate; fall through to the generic
+        // EwsRequestError below.
+        if (signal?.aborted) {
+          throw signal.reason ?? probeError;
+        }
+        console.warn(
+          "[ewsFetch] oauth2-proxy session probe failed:",
+          probeError,
+        );
+      }
+      if (sessionAlive === false) {
+        // The Erato session (not the Exchange token) is dead: fire the shared
+        // auth-recovery trigger exactly once, fire-and-forget — the login
+        // provider's handler re-probes and flips the UI to the sign-in CTA
+        // while the fetch path below still surfaces the typed error to its
+        // caller. Imported lazily so this module does not eagerly pull the
+        // whole library bundle into consumers that never hit a dead session
+        // (mirrors the static `tryRecoverAuth` call sites in `sseClient` /
+        // `v1betaApiFetcher`).
+        void import("@erato/frontend/library")
+          .then(({ tryRecoverAuth }) => tryRecoverAuth("ews-401"))
+          .catch((recoverError) => {
+            console.warn(
+              "[ewsFetch] auth-recovery trigger failed:",
+              recoverError,
+            );
+          });
+        throw new EwsProxySessionExpiredError(
+          "EWS proxy rejected the request: the oauth2-proxy session has " +
+            "expired — sign-in required",
+        );
+      }
+    }
   }
   if (!response.ok) {
     throw new EwsRequestError(
@@ -453,6 +532,64 @@ function escapeXml(value: string): string {
 
 // --- SOAP body builders (one per operation) --------------------------------
 
+/**
+ * The well-known mail folders the FindItem builders search. FindItem has NO
+ * Deep traversal (`Deep` is a FindFolder value; FindItem allows only Shallow/
+ * SoftDeleted/Associated) and the `root` distinguished folder is the NON-IPM
+ * subtree — it contains no mail items, so a FindItem against it always comes
+ * back empty. A mailbox-wide lookup is therefore approximated by searching
+ * every well-known mail folder in ONE request: `<m:ParentFolderIds>` is a
+ * NonEmptyArrayOfBaseFolderIdsType (unlimited entries) and EWS answers with
+ * one FindItemResponseMessage PER folder, in request order (parsed by
+ * {@link collectFindItemResponseMessages}). Archive folders (archiveinbox, …)
+ * are deliberately NOT searched: they are only valid when an In-Place Archive
+ * is provisioned for the mailbox (rare on SE boxes; early Exchange 15 builds
+ * even failed multi-folder archive searches with ErrorInvalidOperation).
+ * Custom subfolders are likewise out of Shallow reach — both are accepted
+ * coverage gaps for a best-effort lookup.
+ */
+const FIND_ITEM_SEARCH_FOLDERS = [
+  "inbox",
+  "sentitems",
+  "drafts",
+  "deleteditems",
+  "junkemail",
+] as const;
+
+function buildParentFolderIdsXml(): string {
+  return (
+    "<m:ParentFolderIds>" +
+    FIND_ITEM_SEARCH_FOLDERS.map(
+      (folderId) => `<t:DistinguishedFolderId Id="${folderId}"/>`,
+    ).join("") +
+    "</m:ParentFolderIds>"
+  );
+}
+
+/**
+ * The metadata the parent-message chip needs (subject + sender, plus the
+ * fields the latest-non-draft selection reads) — requested during the
+ * conversation ENUMERATION itself so the parent lookup never GetItems a body
+ * or runs attachment enrichment (see
+ * {@link fetchParentMessageInConversationViaEws}). `item:IsDraft`, not
+ * `message:IsDraft` — see the note in {@link buildGetItemMessageBody}.
+ */
+const PARENT_METADATA_FIELD_URIS = [
+  "item:Subject",
+  "item:DateTimeReceived",
+  "message:From",
+  "item:IsDraft",
+] as const;
+
+function buildAdditionalPropertiesXml(fieldUris: readonly string[]): string {
+  if (fieldUris.length === 0) return "";
+  return (
+    "<t:AdditionalProperties>" +
+    fieldUris.map((uri) => `<t:FieldURI FieldURI="${uri}"/>`).join("") +
+    "</t:AdditionalProperties>"
+  );
+}
+
 function buildGetItemMimeBody(itemId: string): string {
   return (
     "<m:GetItem>" +
@@ -501,20 +638,17 @@ function buildGetItemMessageBody(itemId: string): string {
 /**
  * FindItem restricted to messages whose PR_INTERNET_MESSAGE_ID equals the given
  * RFC 5322 Message-ID. IdOnly shape; the caller resolves the id then GetItems.
- * NOTE: FindItem only supports Shallow traversal (Deep is a FindFolder value and
- * is rejected). Shallow does NOT span subfolders, so this resolves a message
- * only within the searched folder — cross-folder .msg resolution would need a
- * per-folder walk (runtime-verify; left for hardening once the approach proves
- * out on a live SE box).
+ * Searches all of {@link FIND_ITEM_SEARCH_FOLDERS} in one request (FindItem has
+ * no Deep traversal and `root` holds no mail — see the constant's doc); the
+ * page view applies per searched folder, so `MaxEntriesReturned="1"` yields at
+ * most one match per folder and the caller takes the first folder's match.
  */
 function buildFindByInternetMessageIdBody(internetMessageId: string): string {
   return (
     '<m:FindItem Traversal="Shallow">' +
     "<m:ItemShape>" +
     "<t:BaseShape>IdOnly</t:BaseShape>" +
-    "<t:AdditionalProperties>" +
-    '<t:FieldURI FieldURI="item:Subject"/>' +
-    "</t:AdditionalProperties>" +
+    buildAdditionalPropertiesXml(["item:Subject"]) +
     "</m:ItemShape>" +
     '<m:IndexedPageItemView MaxEntriesReturned="1" Offset="0" BasePoint="Beginning"/>' +
     "<m:Restriction>" +
@@ -525,9 +659,7 @@ function buildFindByInternetMessageIdBody(internetMessageId: string): string {
     "</t:FieldURIOrConstant>" +
     "</t:IsEqualTo>" +
     "</m:Restriction>" +
-    "<m:ParentFolderIds>" +
-    '<t:DistinguishedFolderId Id="root"/>' +
-    "</m:ParentFolderIds>" +
+    buildParentFolderIdsXml() +
     "</m:FindItem>"
   );
 }
@@ -545,11 +677,15 @@ function buildFindByInternetMessageIdBody(internetMessageId: string): string {
  * for conversation ids. We pass it as-is; if the server rejects it the caller
  * falls back to `buildFindByConversationIdBody`.
  */
-function buildGetConversationItemsBody(conversationId: string): string {
+function buildGetConversationItemsBody(
+  conversationId: string,
+  additionalFieldUris: readonly string[] = [],
+): string {
   return (
     "<m:GetConversationItems>" +
     "<m:ItemShape>" +
     "<t:BaseShape>IdOnly</t:BaseShape>" +
+    buildAdditionalPropertiesXml(additionalFieldUris) +
     "</m:ItemShape>" +
     "<m:Conversations>" +
     "<t:Conversation>" +
@@ -562,18 +698,24 @@ function buildGetConversationItemsBody(conversationId: string): string {
 
 /**
  * Best-effort fallback: FindItem restricted by item:ConversationId, used only
- * when GetConversationItems rejects the id format. Two caveats, both runtime-
- * verify on a live SE box: FindItem only supports Shallow traversal (so this
- * does NOT span folders — it won't see Sent-folder copies the way
- * GetConversationItems does), and restricting on item:ConversationId (an
- * ItemId-typed property) may itself be rejected. GetConversationItems is the
- * real cross-folder path; this fallback is a long shot kept for diagnostics.
+ * when GetConversationItems rejects the id format. Searches all of
+ * {@link FIND_ITEM_SEARCH_FOLDERS} in one request (so Sent-folder copies are
+ * covered explicitly — FindItem has no Deep traversal); the caller unions the
+ * per-folder matches. One caveat, runtime-verify on a live SE box: restricting
+ * on item:ConversationId (an ItemId-typed property) may itself be rejected.
+ * GetConversationItems is the real cross-folder path; this fallback is a long
+ * shot kept for diagnostics. With `additionalFieldUris` the matched items
+ * carry metadata (the parent-chip path) instead of bare ids.
  */
-function buildFindByConversationIdBody(conversationId: string): string {
+function buildFindByConversationIdBody(
+  conversationId: string,
+  additionalFieldUris: readonly string[] = [],
+): string {
   return (
     '<m:FindItem Traversal="Shallow">' +
     "<m:ItemShape>" +
     "<t:BaseShape>IdOnly</t:BaseShape>" +
+    buildAdditionalPropertiesXml(additionalFieldUris) +
     "</m:ItemShape>" +
     `<m:IndexedPageItemView MaxEntriesReturned="${MAX_CONVERSATION_ITEMS}" Offset="0" BasePoint="Beginning"/>` +
     "<m:Restriction>" +
@@ -584,9 +726,7 @@ function buildFindByConversationIdBody(conversationId: string): string {
     "</t:FieldURIOrConstant>" +
     "</t:IsEqualTo>" +
     "</m:Restriction>" +
-    "<m:ParentFolderIds>" +
-    '<t:DistinguishedFolderId Id="root"/>' +
-    "</m:ParentFolderIds>" +
+    buildParentFolderIdsXml() +
     "</m:FindItem>"
   );
 }
@@ -646,6 +786,131 @@ function assertResponseOk(
     );
   }
   return { responseClass, responseCode: responseCode ?? undefined };
+}
+
+/**
+ * Splits a multi-folder FindItem response into its per-folder
+ * FindItemResponseMessages (EWS answers with ONE response message per
+ * `<m:ParentFolderIds>` entry, in request order) and returns the successful
+ * ones. Per-folder hard errors are tolerated — ErrorAccessDenied on one folder
+ * must not sink the matches from the others — ONLY while some folder actually
+ * matched (the swallowed errors are then console.warn'd). When NO folder
+ * matched and at least one folder hard-errored, the first failure rethrows:
+ * the wanted message may be sitting in exactly the folder we couldn't read,
+ * and the lookup contract is "null when no match, thrown error when the
+ * lookup itself fails" — a clean miss here would mask the failure. Folders
+ * answering a `tolerate`d code (e.g. ErrorItemNotFound = a clean per-folder
+ * miss) never count as hard errors.
+ */
+function collectFindItemResponseMessages(
+  doc: Document,
+  tolerate: ReadonlySet<string> = new Set(),
+): Element[] {
+  const responseMessages = Array.from(
+    doc.getElementsByTagNameNS(MESSAGES_NS, "FindItemResponseMessage"),
+  );
+  if (responseMessages.length === 0) {
+    throw new EwsRequestError("EWS FindItem returned no response message");
+  }
+  const successes: Element[] = [];
+  let hardErrorCount = 0;
+  let firstHardError: EwsRequestError | null = null;
+  for (const responseMessage of responseMessages) {
+    try {
+      const { responseClass } = assertResponseOk(responseMessage, tolerate);
+      // A tolerated error response message (e.g. ErrorItemNotFound) is a clean
+      // per-folder miss — neither a success to read items from nor a failure.
+      if (responseClass !== "Error") {
+        successes.push(responseMessage);
+      }
+    } catch (error) {
+      if (!(error instanceof EwsRequestError)) throw error;
+      hardErrorCount += 1;
+      firstHardError ??= error;
+    }
+  }
+  if (firstHardError) {
+    const anyMatches = successes.some(
+      (responseMessage) => collectItemIds(responseMessage).length > 0,
+    );
+    if (!anyMatches) {
+      throw firstHardError;
+    }
+    console.warn(
+      `[collectFindItemResponseMessages] swallowed ${hardErrorCount} ` +
+        `hard-errored folder(s) (first: ${
+          firstHardError.responseCode ?? firstHardError.message
+        }) because other folders matched`,
+    );
+  }
+  return successes;
+}
+
+/** Every `<t:ItemId>`'s Id under `scope`, in document order. */
+function collectItemIds(scope: Element): string[] {
+  const ids: string[] = [];
+  const itemIdEls = scope.getElementsByTagNameNS(TYPES_NS, "ItemId");
+  for (const itemIdEl of Array.from(itemIdEls)) {
+    const id = itemIdEl.getAttribute("Id");
+    if (id) ids.push(id);
+  }
+  return ids;
+}
+
+/** The base64 MimeContent of a GetItem response message — normally inside the
+ * `<t:Message>` item; read off the response message directly when a server
+ * omits the item wrapper. */
+function mimeContentBase64(responseMessage: Element): string | undefined {
+  const message = firstTypesEl(responseMessage, "Message");
+  return message
+    ? typesText(message, "MimeContent")
+    : typesText(responseMessage, "MimeContent");
+}
+
+/**
+ * STRICT shared GetItem-MIME response handling for both transports' byte
+ * fetchers (the network legs differ, the SOAP shape does not): asserts a
+ * successful GetItemResponseMessage, then extracts + base64-decodes the
+ * MimeContent alongside the subject/Message-ID metadata. Throws
+ * {@link EwsRequestError} when the response message, the MimeContent, or a
+ * decodable base64 body is missing.
+ */
+function extractMimeBytesResult(doc: Document): FetchOutlookMessageBytesResult {
+  const responseMessage = firstMessagesEl(doc, "GetItemResponseMessage");
+  if (!responseMessage) {
+    throw new EwsRequestError("EWS GetItem returned no response message");
+  }
+  assertResponseOk(responseMessage);
+  const message = firstTypesEl(responseMessage, "Message");
+  const mimeBase64 = mimeContentBase64(responseMessage);
+  if (!mimeBase64) {
+    throw new EwsRequestError("EWS GetItem returned no MimeContent");
+  }
+  const bytes = decodeBase64ToBuffer(mimeBase64);
+  if (!bytes) {
+    throw new EwsRequestError("EWS MimeContent was not valid base64");
+  }
+  return {
+    bytes,
+    subject: (message ? typesText(message, "Subject") : undefined) ?? "",
+    internetMessageId:
+      (message ? typesText(message, "InternetMessageId") : undefined) ?? null,
+  };
+}
+
+/**
+ * LENIENT GetItem-MIME extraction for the attachment-enrichment path: a
+ * missing or erroring response message and a missing MimeContent all return
+ * null (never throw), so one bad message degrades to byte-less disclosure
+ * markers instead of poisoning the thread.
+ */
+function extractMimeBase64(doc: Document): string | null {
+  const responseMessage = firstMessagesEl(doc, "GetItemResponseMessage");
+  if (!responseMessage) return null;
+  // Tolerate any per-message error — one bad message must not poison the
+  // thread; its attachments degrade to disclosure markers.
+  if (responseMessage.getAttribute("ResponseClass") === "Error") return null;
+  return mimeContentBase64(responseMessage) ?? null;
 }
 
 // --- EWS XML → Graph-shape mapper ------------------------------------------
@@ -776,7 +1041,7 @@ function parseSize(value: string | undefined): number | undefined {
  * `fetchOutlookMessageBytesViaGraph` (same result shape, throws on failure).
  * GetItem with `IncludeMimeContent` returns the MIME as base64; we decode it to
  * bytes. The item id is already an EWS id, so no conversion is needed (unlike
- * the Graph/REST paths, which convert to a REST id).
+ * the Graph path, which converts to a REST id).
  */
 export async function fetchOutlookMessageBytesViaEws(
   ewsItemId: string,
@@ -793,28 +1058,7 @@ export async function fetchOutlookMessageBytesViaEws(
     options.signal,
     transport,
   );
-  const responseMessage = firstMessagesEl(doc, "GetItemResponseMessage");
-  if (!responseMessage) {
-    throw new EwsRequestError("EWS GetItem returned no response message");
-  }
-  assertResponseOk(responseMessage);
-  const message = firstTypesEl(responseMessage, "Message");
-  const mimeBase64 = message
-    ? typesText(message, "MimeContent")
-    : typesText(responseMessage, "MimeContent");
-  if (!mimeBase64) {
-    throw new EwsRequestError("EWS GetItem returned no MimeContent");
-  }
-  const bytes = decodeBase64ToBuffer(mimeBase64);
-  if (!bytes) {
-    throw new EwsRequestError("EWS MimeContent was not valid base64");
-  }
-  return {
-    bytes,
-    subject: (message ? typesText(message, "Subject") : undefined) ?? "",
-    internetMessageId:
-      (message ? typesText(message, "InternetMessageId") : undefined) ?? null,
-  };
+  return extractMimeBytesResult(doc);
 }
 
 /**
@@ -823,9 +1067,10 @@ export async function fetchOutlookMessageBytesViaEws(
  * not-found semantics: `null` when FindItem yields no match (or returns
  * ErrorItemNotFound), a thrown error when the lookup itself fails.
  *
- * HYBRID: FindItem is mailbox-wide, which the item-scoped callback token can't
- * run, so the lookup goes through the HOST path. The resolved GetItem then goes
- * DIRECT if it happens to be the current item (no cap), else HOST.
+ * HYBRID: FindItem reaches beyond the current item (it searches the well-known
+ * mail folders), which the item-scoped callback token can't do, so the lookup
+ * goes through the HOST path. The resolved GetItem then goes DIRECT if it
+ * happens to be the current item (no cap), else HOST.
  */
 export async function fetchOutlookMessageBytesByInternetMessageIdViaEws(
   internetMessageId: string,
@@ -865,28 +1110,7 @@ async function fetchOutlookMessageBytesViaEwsHost(
   const doc = await ewsHostFetch(
     buildSoapEnvelope(buildGetItemMimeBody(ewsItemId)),
   );
-  const responseMessage = firstMessagesEl(doc, "GetItemResponseMessage");
-  if (!responseMessage) {
-    throw new EwsRequestError("EWS GetItem returned no response message");
-  }
-  assertResponseOk(responseMessage);
-  const message = firstTypesEl(responseMessage, "Message");
-  const mimeBase64 = message
-    ? typesText(message, "MimeContent")
-    : typesText(responseMessage, "MimeContent");
-  if (!mimeBase64) {
-    throw new EwsRequestError("EWS GetItem returned no MimeContent");
-  }
-  const bytes = decodeBase64ToBuffer(mimeBase64);
-  if (!bytes) {
-    throw new EwsRequestError("EWS MimeContent was not valid base64");
-  }
-  return {
-    bytes,
-    subject: (message ? typesText(message, "Subject") : undefined) ?? "",
-    internetMessageId:
-      (message ? typesText(message, "InternetMessageId") : undefined) ?? null,
-  };
+  return extractMimeBytesResult(doc);
 }
 
 export async function fetchOutlookMessageFilesByInternetMessageIdViaEws(
@@ -908,50 +1132,65 @@ export async function fetchOutlookMessageFilesByInternetMessageIdViaEws(
 }
 
 /** Resolves an item id by RFC 5322 Message-ID via FindItem on the HOST path —
- * FindItem is mailbox-wide, which the item-scoped callback token can't run. */
+ * FindItem spans folders only via multiple ParentFolderIds, which the
+ * item-scoped callback token can't run. One response message comes back per
+ * searched folder ({@link FIND_ITEM_SEARCH_FOLDERS} order); the first folder
+ * that yields a match wins. Per-folder errors are tolerated; a clean
+ * cross-folder miss (including ErrorItemNotFound) is null, not a failure —
+ * mirrors Graph's empty-filter case. */
 async function findItemIdByInternetMessageId(
   internetMessageId: string,
 ): Promise<string | null> {
   const doc = await ewsHostFetch(
     buildSoapEnvelope(buildFindByInternetMessageIdBody(internetMessageId)),
   );
-  const responseMessage = firstMessagesEl(doc, "FindItemResponseMessage");
-  if (!responseMessage) {
-    throw new EwsRequestError("EWS FindItem returned no response message");
-  }
-  // A clean "no such item" is a miss (null), not a failure — mirrors Graph's
-  // empty-filter case.
-  const { responseClass } = assertResponseOk(
-    responseMessage,
+  for (const responseMessage of collectFindItemResponseMessages(
+    doc,
     new Set([ERROR_ITEM_NOT_FOUND]),
-  );
-  if (responseClass === "Error") {
-    return null;
+  )) {
+    const [matchId] = collectItemIds(responseMessage);
+    if (matchId) return matchId;
   }
-  const message = firstTypesEl(responseMessage, "Message");
-  return message
-    ? (firstTypesEl(message, "ItemId")?.getAttribute("Id") ?? null)
-    : null;
+  return null;
 }
 
 /**
  * Latest non-draft message in a conversation — the EWS mirror of
- * `fetchParentMessageInConversationViaGraph`. Reuses the full conversation
- * enumeration + per-message GetItem, then picks the latest non-draft
- * client-side. Returns `null` on a miss or ANY failure — the reply-context chip
- * quietly does without it.
+ * `fetchParentMessageInConversationViaGraph`, and like it METADATA-ONLY: the
+ * reply-context chip needs subject + sender, so the fields are requested
+ * during the conversation enumeration itself ({@link
+ * PARENT_METADATA_FIELD_URIS}) and the latest non-draft is picked client-side
+ * (the same selection as the Graph sibling). NO per-member GetItem (body) and
+ * NO attachment-MIME enrichment run on this path — it renders a display-only
+ * chip under a tight budget. Returns `null` on a miss or ANY failure — the
+ * chip quietly does without it — EXCEPT an abort, which rejects with the
+ * abort reason: the dispatcher's timeout (`runWithGraphTimeout`) only aborts
+ * the signal and trusts the callee to reject. The HOST transport cannot be
+ * cancelled mid-flight, so the signal is honored by checking between
+ * round-trips (see {@link enumerateConversationMessageMetadata}).
  */
 export async function fetchParentMessageInConversationViaEws(
   conversationId: string,
   options: EwsRequestOptions = {},
 ): Promise<ParentMessageMetadata | null> {
+  const signal = options.signal;
   try {
-    const { messages } = await fetchConversationMessagesViaEws(conversationId, {
-      signal: options.signal,
-      transport: options.transport,
-    });
-    const latest = messages
-      .filter((message) => message.isDraft !== true)
+    // Same "is EWS available on this mailbox" precheck as the full fetch.
+    getEwsUrl();
+    const candidates = await enumerateConversationMessageMetadata(
+      conversationId,
+      signal,
+    );
+    // Candidates without a DateTimeReceived cannot take part in the "latest"
+    // selection: a metadata-less enumeration would otherwise pick an arbitrary
+    // member (isDraft === undefined also passes the non-draft filter — so
+    // possibly the user's own open draft). They are dropped individually, and
+    // when NO candidate carries the field the chip degrades to null like
+    // every other failure mode.
+    const latest = candidates
+      .filter(
+        (message) => message.isDraft !== true && message.receivedDateTime,
+      )
       .sort((a, b) =>
         (b.receivedDateTime ?? "").localeCompare(a.receivedDateTime ?? ""),
       )[0];
@@ -964,18 +1203,105 @@ export async function fetchParentMessageInConversationViaEws(
       fromAddress: latest.from?.emailAddress?.address ?? null,
     };
   } catch (error) {
+    if (signal?.aborted) {
+      throw signal.reason ?? error;
+    }
     console.warn("[fetchParentMessageInConversationViaEws] failed:", error);
     return null;
   }
 }
 
 /**
+ * Conversation member METADATA (subject / From / DateTimeReceived / IsDraft —
+ * no bodies, no attachments) via the HOST path, for the parent-message chip.
+ * Tries GetConversationItems with the metadata shape first; when the server
+ * rejects the conversation id format, falls back to a FindItem with the same
+ * shape across the well-known folders ({@link FIND_ITEM_SEARCH_FOLDERS}),
+ * mirroring {@link enumerateConversationItemIds}. CAVEAT on the fallback:
+ * FindItem omits the EmailAddress of From mailboxes by design (only the
+ * display Name survives the summary shape), so it can yield a
+ * `fromAddress`-less chip.
+ *
+ * The HOST transport cannot be cancelled mid-flight, so the caller's abort
+ * signal is honored by checking before and after each host round-trip (an
+ * abort throws the signal's reason and is never swallowed into the FindItem
+ * fallback).
+ */
+async function enumerateConversationMessageMetadata(
+  conversationId: string,
+  signal?: AbortSignal,
+): Promise<GraphConversationMessage[]> {
+  try {
+    throwIfAborted(signal);
+    const doc = await ewsHostFetch(
+      buildSoapEnvelope(
+        buildGetConversationItemsBody(
+          conversationId,
+          PARENT_METADATA_FIELD_URIS,
+        ),
+      ),
+    );
+    throwIfAborted(signal);
+    const responseMessage = firstMessagesEl(
+      doc,
+      "GetConversationItemsResponseMessage",
+    );
+    if (!responseMessage) {
+      throw new EwsRequestError(
+        "EWS GetConversationItems returned no response message",
+      );
+    }
+    assertResponseOk(responseMessage);
+    // Every member is a <t:Message> under its <t:ConversationNode>, carrying
+    // the requested metadata inline — nothing left to GetItem.
+    return Array.from(
+      responseMessage.getElementsByTagNameNS(TYPES_NS, "Message"),
+    ).map((message) => mapEwsItemToGraphShape(message));
+  } catch (error) {
+    // An abort is not a fallback trigger — rethrow the reason instead of
+    // spending another host round-trip the caller no longer wants.
+    if (signal?.aborted) {
+      throw signal.reason ?? error;
+    }
+    console.warn(
+      "[fetchParentMessageInConversationViaEws] GetConversationItems failed, " +
+        "falling back to FindItem ConversationId restriction:",
+      error,
+    );
+    const doc = await ewsHostFetch(
+      buildSoapEnvelope(
+        buildFindByConversationIdBody(
+          conversationId,
+          PARENT_METADATA_FIELD_URIS,
+        ),
+      ),
+    );
+    throwIfAborted(signal);
+    const messages: GraphConversationMessage[] = [];
+    for (const responseMessage of collectFindItemResponseMessages(
+      doc,
+      new Set([ERROR_ITEM_NOT_FOUND]),
+    )) {
+      for (const message of Array.from(
+        responseMessage.getElementsByTagNameNS(TYPES_NS, "Message"),
+      )) {
+        messages.push(mapEwsItemToGraphShape(message));
+      }
+    }
+    return messages;
+  }
+}
+
+/**
  * Every message in a conversation, attachments expanded — the EWS mirror of
  * `fetchConversationMessagesViaGraph`, including the `{ messages, state }`
- * contract (`error` only when nothing could be fetched, `partial` when some
- * per-message GetItem calls fail, a sibling overflows the host 1 MB cap, or the
- * item cap is hit). NEVER throws (abort aside): a server (or host) that rejects
- * the enumeration surfaces as `state: "error"`, not a crash.
+ * contract (`error` when nothing could be fetched — INCLUDING an enumeration
+ * that yields zero members, since the current item is by definition a member
+ * of its own conversation, so an empty enumeration is always a failure, never
+ * a real empty thread; `partial` when some per-message GetItem calls fail, a
+ * sibling overflows the host 1 MB cap, or the item cap is hit). NEVER throws
+ * (abort aside): a server (or host) that rejects the enumeration surfaces as
+ * `state: "error"`, not a crash.
  *
  * HYBRID transport (see module doc): the item-scoped callback token can't reach
  * the conversation, so we (1) enumerate the member ids via the HOST path
@@ -1019,6 +1345,17 @@ export async function fetchConversationMessagesViaEws(
     console.warn(
       "[fetchConversationMessagesViaEws] enumeration failed:",
       error,
+    );
+    return { messages: [], state: "error" };
+  }
+  if (itemIds.length === 0) {
+    // The current item is by definition a member of its own conversation, so
+    // an empty enumeration can never be a real "empty thread" — it means both
+    // GetConversationItems and the FindItem fallback failed to see the
+    // conversation (id-format mismatch, folder coverage, …). Surface as error
+    // so the caller doesn't silently render "no thread".
+    console.warn(
+      "[fetchConversationMessagesViaEws] enumeration yielded no members",
     );
     return { messages: [], state: "error" };
   }
@@ -1077,7 +1414,7 @@ export async function fetchConversationMessagesViaEws(
   const fetched = messages.filter(
     (message): message is GraphConversationMessage => message != null,
   );
-  if (fetched.length === 0 && itemIds.length > 0) {
+  if (fetched.length === 0) {
     // We found members but couldn't fetch a single body → surface as error so
     // the caller doesn't silently render "no thread".
     return { messages: [], state: "error" };
@@ -1145,16 +1482,10 @@ async function getConversationItemIdsViaGetConversationItems(
     );
   }
   assertResponseOk(responseMessage);
-  const ids: string[] = [];
   // Each <t:ConversationNode> holds the items in one node; every item carries
   // an <t:ItemId>. The order is server-defined; sorting happens client-side via
   // receivedDateTime where it matters (parent selection).
-  const itemIdEls = responseMessage.getElementsByTagNameNS(TYPES_NS, "ItemId");
-  for (const itemIdEl of Array.from(itemIdEls)) {
-    const id = itemIdEl.getAttribute("Id");
-    if (id) ids.push(id);
-  }
-  return ids;
+  return collectItemIds(responseMessage);
 }
 
 async function getConversationItemIdsViaFindItem(
@@ -1163,18 +1494,19 @@ async function getConversationItemIdsViaFindItem(
   const doc = await ewsHostFetch(
     buildSoapEnvelope(buildFindByConversationIdBody(conversationId)),
   );
-  const responseMessage = firstMessagesEl(doc, "FindItemResponseMessage");
-  if (!responseMessage) {
-    throw new EwsRequestError("EWS FindItem returned no response message");
+  // Union of the per-folder matches (one response message per searched folder,
+  // tolerating per-folder errors); the Set guards against an item surfacing
+  // twice mid-move.
+  const ids = new Set<string>();
+  for (const responseMessage of collectFindItemResponseMessages(
+    doc,
+    new Set([ERROR_ITEM_NOT_FOUND]),
+  )) {
+    for (const id of collectItemIds(responseMessage)) {
+      ids.add(id);
+    }
   }
-  assertResponseOk(responseMessage, new Set([ERROR_ITEM_NOT_FOUND]));
-  const ids: string[] = [];
-  const itemIdEls = responseMessage.getElementsByTagNameNS(TYPES_NS, "ItemId");
-  for (const itemIdEl of Array.from(itemIdEls)) {
-    const id = itemIdEl.getAttribute("Id");
-    if (id) ids.push(id);
-  }
-  return ids;
+  return [...ids];
 }
 
 /**
@@ -1288,15 +1620,7 @@ async function enrichMessageAttachmentsFromMime(
     const doc = useDirect
       ? await ewsFetch(soapXml, ewsUrl, tokenSource, signal, transport)
       : await ewsHostFetch(soapXml);
-    const responseMessage = firstMessagesEl(doc, "GetItemResponseMessage");
-    if (!responseMessage) return;
-    // Tolerate any per-message error — one bad message must not poison the
-    // thread; its attachments degrade to disclosure markers.
-    if (responseMessage.getAttribute("ResponseClass") === "Error") return;
-    const mimeMessage = firstTypesEl(responseMessage, "Message");
-    const mimeBase64 = mimeMessage
-      ? typesText(mimeMessage, "MimeContent")
-      : typesText(responseMessage, "MimeContent");
+    const mimeBase64 = extractMimeBase64(doc);
     if (!mimeBase64) return;
     const bytes = decodeBase64ToBuffer(mimeBase64);
     if (!bytes) return;
@@ -1420,7 +1744,17 @@ function mimeContentToBase64(
   return btoa(binary);
 }
 
-// --- Shared utilities (mirrored from the REST/Graph siblings) --------------
+// --- Shared utilities (mirrored from the Graph sibling) --------------------
+
+/** Throws the signal's abort reason once it has fired. The HOST transport
+ * (`makeEwsRequestAsync`) cannot be cancelled mid-flight, so abort is honored
+ * by checking between round-trips; the direct transport additionally threads
+ * the signal into fetch itself. */
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw signal.reason ?? new DOMException("Aborted", "AbortError");
+  }
+}
 
 function decodeBase64ToBuffer(base64: string): ArrayBuffer | null {
   try {

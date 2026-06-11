@@ -147,6 +147,10 @@ export async function redeemOauth2ProxySession({
 
 export interface CheckOauth2ProxySessionInput {
   fetcher?: typeof fetch;
+  /** Optional abort signal threaded into the probe request so a caller's
+   * timeout/teardown cancels the probe (it then rejects with the abort
+   * reason) instead of leaving it running. */
+  signal?: AbortSignal;
 }
 
 /**
@@ -162,10 +166,12 @@ export interface CheckOauth2ProxySessionInput {
  */
 export async function checkOauth2ProxySession({
   fetcher = window.fetch.bind(window),
+  signal,
 }: CheckOauth2ProxySessionInput = {}): Promise<boolean> {
   const response = await fetcher(OAUTH2_PROXY_AUTH_PATH, {
     method: "GET",
     credentials: "include",
+    signal,
   });
   if (response.ok || response.status === 202) {
     return true;
