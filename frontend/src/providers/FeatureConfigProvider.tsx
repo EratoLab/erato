@@ -80,6 +80,8 @@ interface AssistantsFeatureConfig {
   contextWarningThreshold: number;
   /** Threshold at or above which files are listed as major context contributors */
   contextFileContributorThreshold: number;
+  /** Maximum number of characters allowed in the system prompt */
+  maxSystemPromptLength: number;
 }
 
 interface StarterPromptsFeatureConfig {
@@ -213,6 +215,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
     showRecentItems: false,
     contextWarningThreshold: 0.5,
     contextFileContributorThreshold: 0.05,
+    maxSystemPromptLength: 5000,
   },
   starterPrompts: {
     enabled: false,
@@ -302,6 +305,7 @@ function createFeatureConfig(
       contextWarningThreshold: environment.assistantContextWarningThreshold,
       contextFileContributorThreshold:
         environment.assistantContextFileContributorThreshold,
+      maxSystemPromptLength: environment.assistantsMaxSystemPromptLength,
     },
     starterPrompts: {
       enabled: environment.starterPromptsEnabled,

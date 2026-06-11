@@ -42,6 +42,7 @@ describe("themeConfig", () => {
     assistantsShowRecentItems: false,
     assistantContextWarningThreshold: 0.5,
     assistantContextFileContributorThreshold: 0.05,
+    assistantsMaxSystemPromptLength: 5000,
     starterPromptsEnabled: false,
     promptOptimizerEnabled: false,
     sharepointEnabled: false,

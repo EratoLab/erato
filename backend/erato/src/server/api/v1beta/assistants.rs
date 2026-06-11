@@ -440,6 +440,14 @@ pub async fn create_assistant(
     )
     .await?;
 
+    let max_prompt_length = app_state
+        .config
+        .experimental_assistants
+        .max_system_prompt_length;
+    if request.prompt.len() > max_prompt_length {
+        return Err(StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
     // Create the assistant
     let created_assistant = assistant::create_assistant(
         &app_state.db,
@@ -819,6 +827,16 @@ pub async fn update_assistant(
             .and_then(|provider| provider.as_deref()),
     )
     .await?;
+
+    let max_prompt_length = app_state
+        .config
+        .experimental_assistants
+        .max_system_prompt_length;
+    if let Some(prompt) = &request.prompt {
+        if prompt.len() > max_prompt_length {
+            return Err(StatusCode::UNPROCESSABLE_ENTITY);
+        }
+    }
 
     // Update the assistant
     let updated_assistant = assistant::update_assistant(

@@ -107,10 +107,9 @@ msgstr "Name muss mindestens 2 Zeichen lang sein"
 msgid "assistant.form.validation.prompt.required"
 msgstr "System-Prompt ist erforderlich"
 
-#. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
-msgid "assistant.form.validation.prompt.tooLong"
-msgstr "System-Prompt muss weniger als 5000 Zeichen lang sein"
+msgid "System prompt must be less than {maxSystemPromptLength} characters"
+msgstr "System-Prompt muss weniger als {maxSystemPromptLength} Zeichen lang sein"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx

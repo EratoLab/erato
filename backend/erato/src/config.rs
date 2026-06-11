@@ -2088,6 +2088,11 @@ pub struct ExperimentalAssistantsConfig {
     // Defaults to `0.05` (5%).
     #[serde(default = "default_assistant_context_file_contributor_threshold")]
     pub context_file_contributor_threshold: f64,
+
+    // The maximum number of characters allowed in the system prompt of an assistant.
+    // Defaults to `5000`.
+    #[serde(default = "default_assistant_max_system_prompt_length")]
+    pub max_system_prompt_length: usize,
 }
 
 impl Default for ExperimentalAssistantsConfig {
@@ -2098,6 +2103,7 @@ impl Default for ExperimentalAssistantsConfig {
             context_warning_threshold: default_assistant_context_warning_threshold(),
             context_file_contributor_threshold:
                 default_assistant_context_file_contributor_threshold(),
+            max_system_prompt_length: default_assistant_max_system_prompt_length(),
         }
     }
 }
@@ -2108,6 +2114,10 @@ fn default_assistant_context_warning_threshold() -> f64 {
 
 fn default_assistant_context_file_contributor_threshold() -> f64 {
     0.05
+}
+
+fn default_assistant_max_system_prompt_length() -> usize {
+    5000
 }
 
 impl ExperimentalAssistantsConfig {
