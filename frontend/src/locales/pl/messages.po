@@ -2422,7 +2422,7 @@ msgstr "Mikrofon {microphoneIndex}"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Microphone is starting — wait for the level meter before speaking"
-msgstr ""
+msgstr "Mikrofon się uruchamia; zaczekaj na miernik poziomu, zanim zaczniesz mówić"
 
 #: src/hooks/audio/useAudioInputLevelPreview.ts
 msgid "Microphone permission denied. Allow access to test the microphone."
