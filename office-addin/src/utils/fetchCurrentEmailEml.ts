@@ -5,7 +5,7 @@ import type { ParsedEmail } from "./parsedEmail";
 
 /**
  * Fetches and parses the currently-open Outlook message via the environment's
- * message fetcher (Graph on Exchange Online, Outlook REST v2.0 on-prem; see
+ * message fetcher (Graph on Exchange Online, EWS SOAP on-prem; see
  * `fetchOutlookMessage.ts`).
  *
  * Both backends can only serve messages that are indexed — drafts/compose

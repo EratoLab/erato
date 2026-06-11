@@ -12,7 +12,7 @@ import type { ParsedEmail } from "./parsedEmail";
  * Resolves a dropped `.msg` file into the same body + attachment File[] shape
  * our other paths produce. Strategy: extract only the RFC 5322 `Message-ID`
  * from the CFB, then look the message up through the environment's message
- * fetcher (Graph on Exchange Online, Outlook REST v2.0 on-prem). We never
+ * fetcher (Graph on Exchange Online, EWS SOAP on-prem). We never
  * parse the binary body / attachments locally — the mail backend owns the
  * fidelity-sensitive work (RTF-encapsulated HTML, embedded content types,
  * etc.).

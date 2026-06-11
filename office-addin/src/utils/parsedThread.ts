@@ -1,7 +1,7 @@
 /**
  * In-memory representation of an Outlook conversation thread fetched via the
- * environment's message backend (Graph on Exchange Online, Outlook REST v2.0
- * on-prem — see `fetchOutlookMessage.ts`; both produce the Graph-shaped
+ * environment's message backend (Graph on Exchange Online, EWS SOAP on
+ * Exchange SE — see `fetchOutlookMessage.ts`; both produce the Graph-shaped
  * `GraphConversationMessage` rows consumed here). Drives the staged-input
  * preview UI (per-message cards with per-attachment checkboxes) and feeds
  * `synthesizeThreadEml` at send-time so a deselection in the UI is reflected

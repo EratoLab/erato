@@ -5,8 +5,8 @@
  * (same as EXO), so the mail backend can't be chosen by auth mode. The caller
  * ({@link "../hooks/useOutlookMessageFetcher"}) uses this to pick the mail
  * backend by where the mailbox lives — Microsoft Graph for cloud mailboxes,
- * Outlook REST v2 + the Exchange callback token for on-prem ones (Graph can't
- * reach on-prem mailboxes).
+ * the EWS SOAP backend (`fetchOutlookMessageEws.ts`) for on-prem ones (Graph
+ * can't reach on-prem mailboxes).
  */
 
 /**
@@ -44,9 +44,9 @@ const NON_ON_PREM_ACCOUNT_TYPES = new Set([
 
 /**
  * Whether the current mailbox is served by an on-prem Exchange (SE) rather
- * than Exchange Online — i.e. whether mail must be fetched via Outlook REST v2 +
- * the Exchange callback token instead of Microsoft Graph (Graph can't reach
- * on-prem mailboxes).
+ * than Exchange Online — i.e. whether mail must be fetched via EWS SOAP
+ * (backend proxy + host-brokered `makeEwsRequestAsync`) instead of Microsoft
+ * Graph (Graph can't reach on-prem mailboxes).
  *
  * Signals, in order of authority:
  * (a) `userProfile.accountType`: "enterprise" ⇒ on-prem; any of the known
@@ -57,7 +57,7 @@ const NON_ON_PREM_ACCOUNT_TYPES = new Set([
  *     (`ewsUrl`/`restUrl`) live — a non-Microsoft host means on-prem.
  * (c) No usable signal ⇒ false. Conservative on purpose: better that a cloud
  *     host falls through to the Graph path than fetching mail via the on-prem
- *     REST path it has no callback token for.
+ *     EWS path its host won't broker or issue callback tokens for.
  */
 export function detectExchangeOnPrem(): boolean {
   try {

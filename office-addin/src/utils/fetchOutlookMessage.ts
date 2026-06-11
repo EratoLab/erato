@@ -45,15 +45,13 @@ export type {
  *     token from MSAL. Outlook REST v2.0 is NOT an option there — legacy
  *     callback tokens were shut off for all Microsoft 365 tenants in
  *     October 2025.
- *   - On-prem mailbox (Exchange on-premises / Subscription Edition): the
- *     Exchange server's own EWS SOAP endpoint
- *     (`Office.context.mailbox.ewsUrl`, `/EWS/Exchange.asmx`) via a direct
- *     cross-origin `fetch()` with a `getCallbackTokenAsync({ isRest: false })`
- *     Bearer token. NOT Graph (it does not exist for on-prem mailboxes) and
- *     NOT Outlook REST v2.0 — the dormant REST backend
- *     (`./fetchOutlookMessageRestV2.ts`) is retained only as a fallback. The
- *     direct `fetch()` (rather than `makeEwsRequestAsync`) avoids the host
- *     method's ~1 MB response cap.
+ *   - On-prem mailbox (Exchange on-premises / Subscription Edition): EWS SOAP
+ *     (`./fetchOutlookMessageEws.ts`) over two transports — the CURRENT item
+ *     via the same-origin Erato backend proxy, carrying the item-scoped
+ *     `getCallbackTokenAsync({ isRest: false })` callback token in the
+ *     `X-EWS-Authentication` header; conversation/sibling fetches via the
+ *     host-brokered `makeEwsRequestAsync` (the callback token doesn't
+ *     authorize them). NOT Graph — it does not exist for on-prem mailboxes.
  *
  * `OutlookMessageFetcher` carries one capability per existing call-site need,
  * with signatures, result shapes, and error contracts identical to the
@@ -64,8 +62,8 @@ export type {
  */
 export interface OutlookMessageFetcher {
   /**
-   * Raw RFC822 MIME of a message by its EWS item id (converted to a REST id
-   * internally). Throws on HTTP failure.
+   * Raw RFC822 MIME of a message by its EWS item id (each backend translates
+   * it to its native id form as needed). Throws on HTTP failure.
    */
   fetchMessageBytes(
     ewsItemId: string,
@@ -143,10 +141,10 @@ export function createGraphOutlookMessageFetcher(
 }
 
 /**
- * Direct EWS SOAP backing (Exchange on-premises). Callback tokens are acquired
- * per operation from the Office host (`getCallbackTokenAsync({ isRest: false })`),
- * so no token parameter is needed here. Replaces the dormant Outlook REST v2.0
- * backend for the SE/on-prem path.
+ * EWS SOAP backing (Exchange on-premises / Subscription Edition). Credentials
+ * are acquired per operation inside the backend — host-issued callback tokens
+ * (`getCallbackTokenAsync({ isRest: false })`) for the proxy transport, the
+ * host itself for `makeEwsRequestAsync` — so no token parameter is needed here.
  */
 export function createEwsOutlookMessageFetcher(): OutlookMessageFetcher {
   return {
