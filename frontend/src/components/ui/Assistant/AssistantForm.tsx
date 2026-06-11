@@ -301,7 +301,10 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
               message: "System prompt must be at least 10 characters",
             });
           }
-          if (promptValue.length > maxSystemPromptLength) {
+          if (
+            maxSystemPromptLength !== null &&
+            promptValue.length > maxSystemPromptLength
+          ) {
             return t`System prompt must be less than ${maxSystemPromptLength} characters`;
           }
           return "";

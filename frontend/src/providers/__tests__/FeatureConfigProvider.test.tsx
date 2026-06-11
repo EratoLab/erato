@@ -62,7 +62,7 @@ describe("FeatureConfigProvider", () => {
       assistantsShowRecentItems: false,
       assistantContextWarningThreshold: 0.5,
       assistantContextFileContributorThreshold: 0.05,
-      assistantsMaxSystemPromptLength: 5000,
+      assistantsMaxSystemPromptLength: null,
       starterPromptsEnabled: false,
       promptOptimizerEnabled: false,
       mcpServersTabEnabled: false,
@@ -149,7 +149,7 @@ describe("FeatureConfigProvider", () => {
           showRecentItems: false,
           contextWarningThreshold: 0.5,
           contextFileContributorThreshold: 0.05,
-          maxSystemPromptLength: 5000,
+          maxSystemPromptLength: null,
         },
         starterPrompts: {
           enabled: false,
@@ -659,7 +659,7 @@ describe("FeatureConfigProvider", () => {
         showRecentItems: false,
         contextWarningThreshold: 0.5,
         contextFileContributorThreshold: 0.05,
-        maxSystemPromptLength: 5000,
+        maxSystemPromptLength: null,
       });
     });
 

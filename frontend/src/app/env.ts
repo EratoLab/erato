@@ -17,7 +17,7 @@ export type Env = {
   assistantsShowRecentItems: boolean;
   assistantContextWarningThreshold: number;
   assistantContextFileContributorThreshold: number;
-  assistantsMaxSystemPromptLength: number;
+  assistantsMaxSystemPromptLength: number | null;
   starterPromptsEnabled: boolean;
   promptOptimizerEnabled: boolean;
   userPreferencesEnabled: boolean;
@@ -199,7 +199,7 @@ export const env = (): Env => {
   const assistantsMaxSystemPromptLength = import.meta.env
     .VITE_ASSISTANTS_MAX_SYSTEM_PROMPT_LENGTH
     ? Number(import.meta.env.VITE_ASSISTANTS_MAX_SYSTEM_PROMPT_LENGTH)
-    : (window.ASSISTANTS_MAX_SYSTEM_PROMPT_LENGTH ?? 5000);
+    : (window.ASSISTANTS_MAX_SYSTEM_PROMPT_LENGTH ?? null);
   const starterPromptsEnabled =
     import.meta.env.VITE_STARTER_PROMPTS_ENABLED === "true"
       ? true
