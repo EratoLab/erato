@@ -2401,14 +2401,37 @@
       "ActionFacetInfo": {
         "type": "object",
         "required": [
-          "id"
+          "id",
+          "display_name"
         ],
         "properties": {
+          "client_actions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Fixed identifiers of client-side actions the model may propose via the\n`propose_client_action` tool when this facet is active. The client\nmust only execute actions from this list, after user confirmation."
+          },
+          "client_actions_always_ask": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Subset of `client_actions` the deployment enforces a per-use\nconfirmation for: the client must always ask and must not offer or\nhonor a persistent \"always allow\" for these actions. Users may still\ndeny them entirely."
+          },
+          "display_name": {
+            "type": "string",
+            "description": "Human readable name for the facet, e.g. for client settings UIs."
+          },
           "id": {
             "type": "string"
           },
           "platform": {
             "type": "string"
+          },
+          "presentation": {
+            "type": "string",
+            "description": "How the client should surface a proposed client action:\n`render_buttons` (show buttons, user clicks) or `auto_prompt` (the\nclient may surface the proposal immediately after a fresh assistant\ncompletion, subject to the user's local approval preferences). Present\nonly when `client_actions` is non-empty; defaults to `render_buttons`."
           }
         }
       },

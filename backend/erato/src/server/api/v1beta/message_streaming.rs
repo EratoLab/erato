@@ -1872,10 +1872,35 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     if did_prior_assistant_chat_provider_change {
         strip_persisted_reasoning_messages(&mut chat_request);
     }
-    let chat_request_tools = convert_mcp_tools_to_genai_tools(
+    let mut chat_request_tools = convert_mcp_tools_to_genai_tools(
         generation_mcp_tools.clone(),
         effective_model_settings.compat_omit_strict,
     );
+    // Offer the synthetic client-action tool only when the current request's
+    // action facet declares client actions. The tool is handled in the tool
+    // call loop instead of being dispatched to an MCP server. If an MCP tool
+    // already claims the same name, it wins — adding a duplicate tool name
+    // would be rejected by providers and ambiguous to dispatch.
+    if let Some(action_facet) = user_input.action_facet.as_ref()
+        && let Some(facet_config) = app_state.config.action_facets.facets.get(&action_facet.id)
+        && !facet_config.client_actions.is_empty()
+    {
+        let name_taken_by_mcp_tool = generation_mcp_tools
+            .iter()
+            .any(|tool| tool.tool.name == crate::services::client_actions::CLIENT_ACTION_TOOL_NAME);
+        if name_taken_by_mcp_tool {
+            tracing::warn!(
+                "Not offering the client-action tool for action facet '{}': an MCP tool already uses the name '{}'",
+                action_facet.id,
+                crate::services::client_actions::CLIENT_ACTION_TOOL_NAME
+            );
+        } else {
+            chat_request_tools.push(crate::services::client_actions::build_client_action_tool(
+                &facet_config.client_actions,
+                effective_model_settings.compat_omit_strict,
+            ));
+        }
+    }
     if !chat_request_tools.is_empty() {
         chat_request.tools = Some(chat_request_tools);
     } else {
@@ -2077,9 +2102,14 @@ async fn stream_generate_chat_completion<
         .as_ref()
         .map(|client| client.trace_id().to_string());
     let max_tool_call_iterations = 15;
-    let mut unfinished_tool_calls: Vec<genai::chat::ToolCall> = vec![];
+    let mut unfinished_tool_calls: std::collections::VecDeque<genai::chat::ToolCall> =
+        std::collections::VecDeque::new();
     let mut current_turn = 0;
     let mut current_tool_call_count = 0;
+    // At most one successful client-action proposal per generation: the
+    // client needs a single authoritative proposal, so duplicate or
+    // conflicting calls after the first are answered with an error.
+    let mut client_action_already_proposed = false;
 
     let mut current_message_content: Vec<ContentPart> = vec![];
     let mut current_turn_chat_request = chat_request.clone();
@@ -2197,9 +2227,11 @@ async fn stream_generate_chat_completion<
                 "Trying to progress chat completion after first iteration without open tool calls. Will likely result in error."
             )
         }
-        // First work off open tool calls
+        // First work off open tool calls, in the order the model emitted them
+        // — for a parallel batch of client-action proposals the FIRST one
+        // must be the one that wins.
         let mut current_turn_tool_responses = vec![];
-        while let Some(unfinished_tool_call) = unfinished_tool_calls.pop() {
+        while let Some(unfinished_tool_call) = unfinished_tool_calls.pop_front() {
             if streaming_task.is_some_and(|task| task.is_abort_requested()) {
                 let generation_metadata = build_generation_metadata(
                     total_prompt_tokens,
@@ -2260,6 +2292,104 @@ async fn stream_generate_chat_completion<
                     )))
                     .await;
                 return Err(());
+            }
+
+            // Client-action proposals are never executed server-side: validate
+            // the input against the enum offered on this request, record the
+            // ToolUse part for the client to consume after user confirmation,
+            // and answer the model so the turn can continue. An MCP tool that
+            // happens to use the same name takes precedence (the synthetic
+            // tool is never offered in that case — see prepare).
+            if unfinished_tool_call.fn_name
+                == crate::services::client_actions::CLIENT_ACTION_TOOL_NAME
+                && !available_mcp_tools_by_name
+                    .contains_key(crate::services::client_actions::CLIENT_ACTION_TOOL_NAME)
+            {
+                let allowed_actions =
+                    crate::services::client_actions::allowed_client_actions_from_tools(
+                        current_turn_chat_request.tools.as_ref(),
+                    );
+                let tool_call_started = tool_call_started_at
+                    .remove(&unfinished_tool_call.call_id)
+                    .unwrap_or_else(now_timestamp);
+                tool_call_parent_observation_ids.remove(&unfinished_tool_call.call_id);
+                let validated = crate::services::client_actions::validate_client_action_input(
+                    &unfinished_tool_call.fn_arguments,
+                    &allowed_actions,
+                )
+                .and_then(|action| {
+                    if client_action_already_proposed {
+                        Err(
+                            "a client action was already proposed for this message; only one proposal is allowed and it cannot be changed"
+                                .to_string(),
+                        )
+                    } else {
+                        Ok(action)
+                    }
+                });
+                let (status, bg_status, message_status, output_value, response_text) =
+                    match validated {
+                        Ok(action) => {
+                            client_action_already_proposed = true;
+                            (
+                                ToolCallStatus::Success,
+                                BgToolCallStatus::Success,
+                                MessageToolCallStatus::Success,
+                                json!({ "status": "proposed", "action": action }),
+                                format!(
+                                    "Proposed client action '{action}' to the user. The user's application will ask for confirmation and perform it. Do not call this tool again for this request and do not claim the action has been executed."
+                                ),
+                            )
+                        }
+                        Err(error) => (
+                            ToolCallStatus::Error,
+                            BgToolCallStatus::Error,
+                            MessageToolCallStatus::Error,
+                            json!({ "status": "rejected", "error": error }),
+                            format!("Invalid client action proposal: {error}"),
+                        ),
+                    };
+                let update_event = MessageSubmitStreamingResponseToolCallUpdate {
+                    message_id: assistant_message_id,
+                    content_index: current_message_content.len(),
+                    tool_call_id: unfinished_tool_call.call_id.clone(),
+                    tool_name: unfinished_tool_call.fn_name.clone(),
+                    input: Some(unfinished_tool_call.fn_arguments.clone()),
+                    status,
+                    progress_message: None,
+                    output: Some(output_value.clone()),
+                };
+                if let Some(task) = streaming_task {
+                    let _ = task
+                        .send_event(StreamingEvent::ToolCallUpdate {
+                            message_id: assistant_message_id,
+                            content_index: current_message_content.len(),
+                            tool_call_id: unfinished_tool_call.call_id.clone(),
+                            tool_name: unfinished_tool_call.fn_name.clone(),
+                            input: Some(unfinished_tool_call.fn_arguments.clone()),
+                            status: bg_status,
+                            progress_message: None,
+                            output: Some(output_value.clone()),
+                        })
+                        .await;
+                }
+                let message: MSG = update_event.into();
+                message.send_event(tx.clone()).await?;
+                current_message_content.push(ContentPart::ToolUse(ToolUse {
+                    tool_call_id: unfinished_tool_call.call_id.clone(),
+                    status: message_status,
+                    tool_name: unfinished_tool_call.fn_name.clone(),
+                    input: Some(unfinished_tool_call.fn_arguments.clone()),
+                    progress_message: None,
+                    output: Some(output_value),
+                    started_at: Some(tool_call_started),
+                    ended_at: Some(now_timestamp()),
+                }));
+                current_turn_tool_responses.push(genai::chat::ToolResponse {
+                    call_id: unfinished_tool_call.call_id.clone(),
+                    content: response_text,
+                });
+                continue;
             }
 
             let managed_tool = match available_mcp_tools_by_name
@@ -4315,6 +4445,9 @@ mod tests {
                     platform: None,
                     template: "Summarize this".to_string(),
                     allowed_args: vec![],
+                    client_actions: vec![],
+                    presentation: None,
+                    client_actions_always_ask: vec![],
                 },
             );
             let af = ActionFacetRequest {
@@ -4334,6 +4467,9 @@ mod tests {
                     platform: Some("teams".to_string()),
                     template: "Reply".to_string(),
                     allowed_args: vec![],
+                    client_actions: vec![],
+                    presentation: None,
+                    client_actions_always_ask: vec![],
                 },
             );
             let af = ActionFacetRequest {
@@ -4354,6 +4490,9 @@ mod tests {
                     platform: Some("teams".to_string()),
                     template: "Reply".to_string(),
                     allowed_args: vec![],
+                    client_actions: vec![],
+                    presentation: None,
+                    client_actions_always_ask: vec![],
                 },
             );
             let af = ActionFacetRequest {
@@ -4372,6 +4511,9 @@ mod tests {
                     platform: None,
                     template: "Write about {{topic}}".to_string(),
                     allowed_args: vec!["topic".to_string()],
+                    client_actions: vec![],
+                    presentation: None,
+                    client_actions_always_ask: vec![],
                 },
             );
             let af = ActionFacetRequest {
@@ -4392,6 +4534,9 @@ mod tests {
                     platform: None,
                     template: "Write about {{topic}}".to_string(),
                     allowed_args: vec!["topic".to_string()],
+                    client_actions: vec![],
+                    presentation: None,
+                    client_actions_always_ask: vec![],
                 },
             );
             let af = ActionFacetRequest {
@@ -4410,6 +4555,9 @@ mod tests {
                     platform: None,
                     template: "{{content}}".to_string(),
                     allowed_args: vec!["content".to_string()],
+                    client_actions: vec![],
+                    presentation: None,
+                    client_actions_always_ask: vec![],
                 },
             );
             let oversized = "x".repeat(ACTION_FACET_ARG_MAX_SIZE + 1);
@@ -4431,6 +4579,9 @@ mod tests {
                     platform: None,
                     template: "{{content}}".to_string(),
                     allowed_args: vec!["content".to_string()],
+                    client_actions: vec![],
+                    presentation: None,
+                    client_actions_always_ask: vec![],
                 },
             );
             let at_limit = "x".repeat(ACTION_FACET_ARG_MAX_SIZE);
@@ -4455,6 +4606,9 @@ mod tests {
                     platform: Some("outlook".to_string()),
                     template: "Rewrite {{text}}".to_string(),
                     allowed_args: vec!["text".to_string()],
+                    client_actions: vec![],
+                    presentation: None,
+                    client_actions_always_ask: vec![],
                 },
             );
             config
@@ -4509,6 +4663,9 @@ mod tests {
                     platform: None,
                     template: "Do something".to_string(),
                     allowed_args: vec![],
+                    client_actions: vec![],
+                    presentation: None,
+                    client_actions_always_ask: vec![],
                 },
             );
             assert!(is_known_platform(&config, "web"));
@@ -6083,6 +6240,38 @@ pub async fn regenerate_message_sse(
             } else {
                 None
             };
+            // Mirror the chat-provider fallback for the action facet: a
+            // regenerate without an explicit facet re-applies the one the
+            // original generation ran under ("same input, new sample"),
+            // including any client-action tool it implied. Re-validated
+            // against the CURRENT config — a facet that was removed or
+            // changed since is dropped (regenerate proceeds without it)
+            // rather than failing the request.
+            let fallback_action_facet = if request.action_facet.is_none() {
+                crate::models::message::get_generation_action_facet_from_message(&current_message)
+                    .ok()
+                    .flatten()
+                    .map(|(id, args)| ActionFacetRequest { id, args })
+                    .filter(|af| {
+                        let platform = generation_request_context
+                            .platform
+                            .as_deref()
+                            .unwrap_or(DEFAULT_ERATO_PLATFORM);
+                        match validate_action_facet(&app_state.config, Some(af), platform) {
+                            Ok(()) => true,
+                            Err((_, reason)) => {
+                                tracing::warn!(
+                                    "Dropping stored action facet '{}' on regenerate: {}",
+                                    af.id,
+                                    reason
+                                );
+                                false
+                            }
+                        }
+                    })
+            } else {
+                None
+            };
 
             let me_profile_input = MeProfileChatRequestInput::from_me_profile(&me_user);
             let user_input = crate::services::prompt_composition::PromptCompositionUserInput {
@@ -6093,12 +6282,16 @@ pub async fn regenerate_message_sse(
                     .or(fallback_chat_provider_id),
                 new_input_file_ids: input_files_for_previous_message,
                 selected_facet_ids: request.selected_facet_ids.clone(),
-                action_facet: request.action_facet.as_ref().map(|af| {
-                    crate::services::prompt_composition::types::ActionFacetUserInput {
-                        id: af.id.clone(),
-                        args: af.args.clone(),
-                    }
-                }),
+                action_facet: request
+                    .action_facet
+                    .as_ref()
+                    .or(fallback_action_facet.as_ref())
+                    .map(
+                        |af| crate::services::prompt_composition::types::ActionFacetUserInput {
+                            id: af.id.clone(),
+                            args: af.args.clone(),
+                        },
+                    ),
             };
             let prepare_chat_request_res = prepare_chat_request(
                 &app_state,

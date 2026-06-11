@@ -34,20 +34,23 @@ import {
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AddinChatInput } from "./AddinChatInput";
 import { AddinSettingsDialog } from "./AddinSettingsDialog";
+import { useActionFacetClientActions } from "../hooks/useAvailableActionFacets";
 import { useEmailDedupSet } from "../hooks/useEmailDedupSet";
 import { useOfficeDragAndDrop } from "../hooks/useOfficeDragAndDrop";
 import { useOutlookMailListDrag } from "../hooks/useOutlookMailListDrag";
 import { useOutlookMessageFetcher } from "../hooks/useOutlookMessageFetcher";
 import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
+import { FreshCompletionTracker } from "../utils/freshCompletionTracker";
 import {
   OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
   runWithGraphTimeout,
 } from "../utils/graphRequestTimeout";
+import { extractProposedClientAction } from "../utils/outlookClientActions";
 import { parseDroppedFiles } from "../utils/parseDroppedFiles";
 import { parseEmlBytes } from "../utils/parsedEmail";
 
@@ -479,6 +482,60 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
     [isPreviewBodyIncluded, emailBodyFile],
   );
 
+  // Outlook item identity captured by AddinChatInput when the user pressed
+  // send, held until the completion of that exchange is observed (there is
+  // one in-flight generation per chat). Edits and regenerations replay the
+  // ORIGINAL email (it rides in the stored user message / facet args), so
+  // they re-seed this ref with the original exchange's send-time identity
+  // when this session still knows it; otherwise it stays null and the
+  // completion is not stamped fresh at all (degrading to a history-like
+  // draft — see the tracking effect below).
+  const pendingSendItemIdentityRef = useRef<string | null>(null);
+
+  // Track which assistant messages finished streaming during THIS session.
+  // Auto-prompt (presentation = "auto_prompt") may only fire for those —
+  // history loads, refetches, and chat switches never auto-open anything.
+  // The SEND-time Outlook item identity is recorded alongside (the user can
+  // switch emails mid-stream, so the item at completion time is the wrong
+  // baseline), so executors can refuse to open a reply on a different email
+  // than the draft was requested for.
+  const freshTrackerRef = useRef(new FreshCompletionTracker());
+  const freshItemIdentityRef = useRef(new Map<string, string>());
+  const freshTrackerChatIdRef = useRef(currentChatId);
+  const [freshMessageIds, setFreshMessageIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  useEffect(() => {
+    // A chat switch replaces the whole message list — discard the tracker so
+    // the next snapshot is treated as history and nothing in the switched-to
+    // chat can be considered "just completed". The pending send identity
+    // belongs to the abandoned chat's in-flight exchange, so drop it too.
+    if (freshTrackerChatIdRef.current !== currentChatId) {
+      freshTrackerChatIdRef.current = currentChatId;
+      freshTrackerRef.current = new FreshCompletionTracker();
+      pendingSendItemIdentityRef.current = null;
+    }
+    const newlyFresh = freshTrackerRef.current.observe(messages, messageOrder);
+    if (newlyFresh.length > 0) {
+      // Consume the send-time identity: one send maps to one completion
+      // (several ids completing at once would make the mapping ambiguous, so
+      // none of them gets the identity). A completion whose identity is
+      // unknown is NOT stamped fresh at all: it renders exactly like a
+      // history draft — buttons usable, re-guarded at confirmation time,
+      // auto-prompt impossible — instead of being bricked behind the
+      // stale-item error. Only a KNOWN identity that mismatches the open
+      // item may block a reply.
+      const sendItemIdentity =
+        newlyFresh.length === 1 ? pendingSendItemIdentityRef.current : null;
+      pendingSendItemIdentityRef.current = null;
+      if (sendItemIdentity) {
+        const completedId = newlyFresh[0];
+        freshItemIdentityRef.current.set(completedId, sendItemIdentity);
+        setFreshMessageIds((previous) => new Set([...previous, completedId]));
+      }
+    }
+  }, [messages, messageOrder, currentChatId]);
+
   const handleSendMessage = useCallback(
     (
       message: string,
@@ -486,7 +543,9 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
       modelId?: string,
       selectedFacetIds?: string[],
       actionFacet?: ActionFacetRequest,
+      sendItemIdentity?: string | null,
     ) => {
+      pendingSendItemIdentityRef.current = sendItemIdentity ?? null;
       void sendMessage(
         message,
         inputFileIds,
@@ -508,6 +567,22 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
       replaceInputFileIds?: string[],
       selectedFacetIds?: string[],
     ) => {
+      // The edited exchange replays the ORIGINAL email (it rides in the
+      // stored user message / facet args), so the wrong-item guard must
+      // anchor on the original exchange's send-time identity — never the
+      // item open right now, which may be a different email entirely. That
+      // identity is the one stamped as `outlookArtifact.itemIdentity` on
+      // the exchange's assistant message; when this session no longer knows
+      // it (e.g. after a reload — the map is in-memory only) the ref stays
+      // null and the new completion degrades to a history-like draft.
+      const exchangeAssistantId = messageOrder.find(
+        (id) =>
+          messages[id]?.role === "assistant" &&
+          messages[id]?.previous_message_id === messageId,
+      );
+      pendingSendItemIdentityRef.current = exchangeAssistantId
+        ? (freshItemIdentityRef.current.get(exchangeAssistantId) ?? null)
+        : null;
       void editMessage(
         messageId,
         newContent,
@@ -515,11 +590,18 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
         selectedFacetIds,
       ).finally(() => setEditState({ mode: "compose" }));
     },
-    [editMessage],
+    [editMessage, messages, messageOrder],
   );
 
   const handleRegenerate = useCallback(
     (assistantMessageId: string) => {
+      // Same anchor rule as handleEditSubmit: the regenerated exchange
+      // replays the original email, so reuse the regenerated message's own
+      // send-time identity when this session still knows it (null after a
+      // reload — the completion then degrades to a history-like draft
+      // instead of stale-bricking the reply buttons).
+      pendingSendItemIdentityRef.current =
+        freshItemIdentityRef.current.get(assistantMessageId) ?? null;
       void regenerateMessage(assistantMessageId, activeSelectedFacetIds);
     },
     [activeSelectedFacetIds, regenerateMessage],
@@ -643,6 +725,8 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
   // renders here with no add-in change. `renderMode` defaults to "body" (whole
   // response is an insertable email); only review/critique facets opt into
   // "suggestions" (fenced blocks render, unfenced prose stays markdown).
+  const clientActionsByFacetId = useActionFacetClientActions();
+
   const messagesWithArtifact = useMemo(() => {
     let next = messages;
     for (const id of messageOrder) {
@@ -665,16 +749,51 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
       }
       const renderMode =
         facetId === "outlook_review_draft" ? "suggestions" : "body";
+      // Client actions (e.g. reply / reply-all from read mode): the offerable
+      // set comes from the backend facet config, and the model's proposal is
+      // only stamped after revalidation against that set + tool-call status —
+      // never parsed out of message text.
+      const clientActionInfo = clientActionsByFacetId.get(facetId);
+      const allowedClientActions = clientActionInfo?.clientActions;
+      const proposedClientAction = allowedClientActions
+        ? extractProposedClientAction(message.content, allowedClientActions)
+        : undefined;
       if (next === messages) {
         next = { ...messages };
       }
       next[id] = {
         ...message,
-        outlookArtifact: { facetId, bodyFormat: facetBodyFormat, renderMode },
+        outlookArtifact: {
+          facetId,
+          bodyFormat: facetBodyFormat,
+          renderMode,
+          messageId: id,
+          ...(allowedClientActions ? { allowedClientActions } : {}),
+          ...(clientActionInfo && clientActionInfo.alwaysAskActions.length > 0
+            ? { alwaysAskClientActions: clientActionInfo.alwaysAskActions }
+            : {}),
+          ...(proposedClientAction ? { proposedClientAction } : {}),
+          ...(clientActionInfo?.presentation
+            ? { clientActionPresentation: clientActionInfo.presentation }
+            : {}),
+          // `itemIdentity` is the SEND-time identity, and fresh implies it
+          // is known: completions whose identity is unknown (capture
+          // failed, edit/regenerate of an exchange this session no longer
+          // knows, ambiguous multi-id completion) were never added to
+          // `freshMessageIds`, so they render as history-like drafts. The
+          // renderer still fails closed on a fresh-but-identity-less
+          // artifact, but this component no longer produces that shape.
+          ...(freshMessageIds.has(id)
+            ? {
+                isFreshCompletion: true,
+                itemIdentity: freshItemIdentityRef.current.get(id)!,
+              }
+            : {}),
+        },
       };
     }
     return next;
-  }, [messages, messageOrder]);
+  }, [messages, messageOrder, clientActionsByFacetId, freshMessageIds]);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 

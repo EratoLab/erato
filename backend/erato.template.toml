@@ -310,6 +310,44 @@ chat_provider_ids = ["test-token-limit"]
 # For general feedback (tone, completeness, structure), use plain text. Output exactly one suggestion unless the user explicitly asks for alternatives. On follow-up messages without a new draft, respond normally in plain text.
 # """
 # allowed_args = ["full_body", "body_format"]
+#
+# Client-action proposals: an action facet may additionally declare a fixed
+# set of client-side action identifiers via `client_actions`. While such a
+# facet is active, the model is offered a `propose_client_action` tool whose
+# input is restricted to exactly these values. The tool is never executed
+# server-side: the resulting tool_use content part is consumed by the client
+# application, which validates the proposal against this list and performs
+# the action only after user confirmation. The identifiers must match actions
+# implemented by the client - the Outlook add-in currently implements
+# "outlook.reply" and "outlook.reply_all" (read mode, opens a pre-filled
+# reply form; sending always remains a manual user step in Outlook).
+#
+# Per-turn directives are persisted as metadata markers and dropped from
+# prior-turn history when it is replayed on later turns, so stripping does
+# not depend on the template text. The built-in templates still start with
+# "FOR THIS MESSAGE ONLY:" by convention: it makes the request-scoped intent
+# explicit to the model, and rows persisted before the marker format are
+# recognized (and stripped) by exactly this text prefix.
+#
+# [action_facets.facets.outlook_reply_from_read]
+# display_name = "Outlook Reply from Read Mode"
+# platform = "outlook"
+# client_actions = ["outlook.reply", "outlook.reply_all"]
+# # How the client surfaces a proposal: "render_buttons" (default - show
+# # buttons, the user clicks) or "auto_prompt" (the client may surface the
+# # proposed action immediately after a fresh assistant completion, subject
+# # to the user's local approval preferences in the add-in settings).
+# presentation = "render_buttons"
+# # Subset of client_actions the deployment ENFORCES a per-use confirmation
+# # for: the client always asks and never offers a persistent "always allow"
+# # (greyed out with a reason in the client settings). Users can still deny.
+# client_actions_always_ask = ["outlook.reply_all"]
+# allowed_args = ["body_format"]
+# template = """
+# FOR THIS MESSAGE ONLY: <your reply-drafting instructions; have the model emit
+# the reply body in an erato-email / erato-email-html fenced block and call the
+# propose_client_action tool exactly once with the recommended action>
+# """
 
 # Experimental facets feature configuration
 # [experimental_facets]

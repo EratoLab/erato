@@ -22,6 +22,36 @@ msgid "about.title"
 msgstr "Über uns"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ActionConfirmationCard.tsx
+msgid "actionConfirmation.allowOnce"
+msgstr "Einmal erlauben"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ActionConfirmationCard.tsx
+msgid "actionConfirmation.alwaysAllow"
+msgstr "Immer erlauben"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ActionConfirmationCard.tsx
+msgid "actionConfirmation.confirmed"
+msgstr "Bestätigt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ActionConfirmationCard.tsx
+msgid "actionConfirmation.deny"
+msgstr "Ablehnen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ActionConfirmationCard.tsx
+msgid "actionConfirmation.dismissed"
+msgstr "Verworfen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ActionConfirmationCard.tsx
+msgid "actionConfirmation.title"
+msgstr "Diese Aktion erlauben?"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "assistant.form.button.save"
 msgstr "Änderungen speichern"

@@ -20,16 +20,33 @@ use sqlx::postgres::Postgres;
 use std::collections::HashMap;
 use std::env;
 
+use mocktail::MockSet;
+use mocktail::body::BodyAction;
+use mocktail::mock_builder::Then;
+
 use crate::test_app_state;
 use crate::test_utils::{
-    JwtTokenBuilder, TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt,
-    extract_chat_id, extract_full_text, parse_sse_events, read_integration_test_file_bytes,
-    setup_mock_llm_server,
+    BodyContainsMatcher, JwtTokenBuilder, RequestBodyRecorder, TEST_JWT_TOKEN, TEST_USER_ISSUER,
+    TEST_USER_SUBJECT, TestRequestAuthExt, build_openai_text_streaming_response,
+    build_openai_tool_calls_streaming_response, extract_chat_id, extract_full_text,
+    hermetic_app_config, parse_sse_events, read_integration_test_file_bytes, setup_mock_llm_server,
+    setup_mock_llm_server_with_mocks,
 };
 
 fn mock_mcp_base_url() -> String {
     env::var("TEST_MOCK_MCP_SERVER_BASE_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:44321".to_string())
+}
+
+/// Configures a mock-LLM `then` clause to stream the given SSE body actions.
+fn mock_llm_sse_response(then: Then, actions: Vec<BodyAction>) {
+    then.status(http::StatusCode::OK)
+        .headers([
+            ("Content-Type", "text/event-stream"),
+            ("Cache-Control", "no-cache"),
+            ("Connection", "keep-alive"),
+        ])
+        .bytes_stream_with_delays(actions);
 }
 
 fn mcp_server_config(
@@ -530,6 +547,233 @@ async fn test_platform_persisted_for_regenerate_and_edit_generation_requests(poo
             .and_then(|context| context.platform.as_deref()),
         Some("ios")
     );
+}
+
+/// Regenerating a message generated under an action facet re-applies the
+/// stored facet when the request doesn't re-send one — mirroring the chat
+/// provider fallback ("same input, new sample").
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_regenerate_falls_back_to_stored_action_facet(pool: Pool<Postgres>) {
+    // Capture the LLM request bodies so we can assert the rendered facet
+    // directive actually reached the model, not just the persisted params.
+    let llm_request_recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = llm_request_recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post().path("/v1/chat/completions").matcher(recorder);
+            mock_llm_sse_response(then, build_openai_text_streaming_response(&["Rewritten."]));
+        });
+    }
+    let (mut app_config, _server) = setup_mock_llm_server_with_mocks(mocks).await;
+    add_action_facets(&mut app_config);
+    let app_state = test_app_state(app_config, pool).await;
+    let db = app_state.db.clone();
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let submit_response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "user_message": "Rewrite this",
+            "action_facet": {
+                "id": "rewrite",
+                "args": { "tone": "professional", "content": "yo whats up" }
+            }
+        }))
+        .await;
+    submit_response.assert_status_ok();
+
+    let submit_events = parse_sse_events(&submit_response);
+    let original_assistant_message_id = submit_events
+        .iter()
+        .find_map(|event| {
+            if let Ok(json) = serde_json::from_str::<Value>(&event.data)
+                && json["message_type"] == "assistant_message_completed"
+            {
+                return json["message_id"].as_str().map(|s| s.to_string());
+            }
+            None
+        })
+        .expect("Expected assistant_message_completed event with message_id");
+
+    // Regenerate WITHOUT re-sending the action facet.
+    let regenerate_response = server
+        .post("/api/v1beta/me/messages/regeneratestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "current_message_id": original_assistant_message_id }))
+        .await;
+    regenerate_response.assert_status_ok();
+
+    let assistant_messages = erato::db::entity::messages::Entity::find()
+        .filter(erato::db::entity::messages::Column::GenerationParameters.is_not_null())
+        .order_by_asc(erato::db::entity::messages::Column::CreatedAt)
+        .all(&db)
+        .await
+        .expect("Failed to fetch assistant messages");
+    assert_eq!(assistant_messages.len(), 2);
+
+    let regenerate_params: GenerationParameters = serde_json::from_value(
+        assistant_messages[1]
+            .generation_parameters
+            .clone()
+            .expect("Missing regenerate generation_parameters"),
+    )
+    .expect("Failed to deserialize regenerate generation parameters");
+    assert_eq!(
+        regenerate_params.action_facet_id.as_deref(),
+        Some("rewrite"),
+        "Regenerate must re-apply the facet stored on the original generation",
+    );
+    assert_eq!(
+        regenerate_params
+            .action_facet_args
+            .as_ref()
+            .and_then(|args| args.get("tone"))
+            .map(String::as_str),
+        Some("professional")
+    );
+
+    // The rendered directive must have reached the LLM on both the original
+    // submit and the regenerate request, not merely the persisted parameters.
+    // The recorder also sees the chat-title summary request, which carries
+    // only the raw user message — so count the directive-carrying bodies.
+    let llm_request_bodies = llm_request_recorder.bodies();
+    let directive_body_count = llm_request_bodies
+        .iter()
+        .filter(|body| {
+            body.contains("Rewrite the following in a professional tone:")
+                && body.contains("yo whats up")
+        })
+        .count();
+    assert_eq!(
+        directive_body_count, 2,
+        "Expected the rendered facet directive in both generation request bodies: {llm_request_bodies:?}"
+    );
+}
+
+/// Regenerating after the stored action facet stopped validating against the
+/// current config drops the facet instead of failing the request.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_regenerate_drops_stored_action_facet_that_no_longer_validates(pool: Pool<Postgres>) {
+    let (mut app_config, server) = setup_mock_llm_server(None).await;
+    add_action_facets(&mut app_config);
+    let app_state = test_app_state(app_config, pool.clone()).await;
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let test_server =
+        TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let submit_response = test_server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "user_message": "Rewrite this",
+            "action_facet": {
+                "id": "rewrite",
+                "args": { "tone": "professional", "content": "yo whats up" }
+            }
+        }))
+        .await;
+    submit_response.assert_status_ok();
+
+    let submit_events = parse_sse_events(&submit_response);
+    let original_assistant_message_id = submit_events
+        .iter()
+        .find_map(|event| {
+            if let Ok(json) = serde_json::from_str::<Value>(&event.data)
+                && json["message_type"] == "assistant_message_completed"
+            {
+                return json["message_id"].as_str().map(|s| s.to_string());
+            }
+            None
+        })
+        .expect("Expected assistant_message_completed event with message_id");
+
+    // Replace the config with one that no longer knows the stored facet
+    // (same mock LLM, same database) and regenerate against the new app.
+    let replacement_config = hermetic_app_config(None, Some(server.url("/v1/").to_string()));
+    assert!(
+        !replacement_config
+            .action_facets
+            .facets
+            .contains_key("rewrite"),
+        "Replacement config must not declare the stored facet"
+    );
+    let replacement_app_state = test_app_state(replacement_config, pool).await;
+    let db = replacement_app_state.db.clone();
+    let replacement_app: Router = router(replacement_app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(replacement_app_state);
+    let replacement_server =
+        TestServer::new(replacement_app.into_make_service()).expect("Failed to create test server");
+
+    let regenerate_response = replacement_server
+        .post("/api/v1beta/me/messages/regeneratestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "current_message_id": original_assistant_message_id }))
+        .await;
+    regenerate_response.assert_status_ok();
+
+    // The stream returns 200 even when it carries a mid-stream error event,
+    // so assert the regenerate actually completed a generation.
+    let regenerate_events = parse_sse_events(&regenerate_response);
+    let regenerate_assistant_message_id = assistant_message_id_from_events(&regenerate_events);
+
+    let assistant_messages = erato::db::entity::messages::Entity::find()
+        .filter(erato::db::entity::messages::Column::GenerationParameters.is_not_null())
+        .order_by_asc(erato::db::entity::messages::Column::CreatedAt)
+        .all(&db)
+        .await
+        .expect("Failed to fetch assistant messages");
+    assert_eq!(assistant_messages.len(), 2);
+    assert_eq!(
+        assistant_messages[1].id.to_string(),
+        regenerate_assistant_message_id,
+        "The completed regenerate stream must correspond to the second assistant row",
+    );
+
+    let regenerate_params: GenerationParameters = serde_json::from_value(
+        assistant_messages[1]
+            .generation_parameters
+            .clone()
+            .expect("Missing regenerate generation_parameters"),
+    )
+    .expect("Failed to deserialize regenerate generation parameters");
+    assert_eq!(
+        regenerate_params.action_facet_id, None,
+        "A stored facet that no longer validates must be dropped on regenerate",
+    );
+    assert_eq!(regenerate_params.action_facet_args, None);
 }
 
 /// Test facet prompt injection behavior across a two-turn chat.
@@ -2874,6 +3118,23 @@ fn add_action_facets(app_config: &mut erato::config::AppConfig) {
             platform: None,
             template: "Rewrite the following in a {{tone}} tone:\n\n{{content}}".to_string(),
             allowed_args: vec!["tone".to_string(), "content".to_string()],
+            client_actions: vec![],
+            presentation: None,
+            client_actions_always_ask: vec![],
+        },
+    );
+    app_config.action_facets.facets.insert(
+        "reply".to_string(),
+        ActionFacetConfig {
+            display_name: "Reply".to_string(),
+            platform: None,
+            template: "FOR THIS MESSAGE ONLY: Draft a reply ({{body_format}}) and propose \
+                       how to send it."
+                .to_string(),
+            allowed_args: vec!["body_format".to_string()],
+            client_actions: vec!["outlook.reply".to_string(), "outlook.reply_all".to_string()],
+            presentation: None,
+            client_actions_always_ask: vec![],
         },
     );
 }
@@ -3115,4 +3376,311 @@ async fn test_action_facet_template_literal_values_no_rerendering(pool: Pool<Pos
         marker["content"]["args"]["content"].as_str(),
         Some("actual content")
     );
+}
+
+// --- Client-action interception tests ---
+
+const CLIENT_ACTION_TOOL: &str = erato::services::client_actions::CLIENT_ACTION_TOOL_NAME;
+
+/// Distinctive fragments of the model-facing tool responses written by the
+/// client-action interception, used to route the mock LLM's turns.
+const PROPOSED_RESPONSE_FRAGMENT: &str = "Proposed client action";
+const INVALID_RESPONSE_FRAGMENT: &str = "Invalid client action proposal";
+
+/// Submits a message under the `reply` client-action facet and returns the
+/// parsed SSE events of the response.
+async fn submit_under_reply_facet(server: &TestServer) -> Vec<crate::test_utils::Event> {
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "user_message": "Reply to this email",
+            "action_facet": { "id": "reply", "args": { "body_format": "text" } }
+        }))
+        .await;
+    response.assert_status_ok();
+    parse_sse_events(&response)
+}
+
+/// Fetches the persisted assistant message's tool_use content parts.
+async fn fetch_assistant_tool_use_parts(
+    server: &TestServer,
+    chat_id: &str,
+    assistant_message_id: &str,
+) -> Vec<Value> {
+    let response = server
+        .get(&format!("/api/v1beta/chats/{chat_id}/messages"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    response.assert_status_ok();
+    let body: Value = response.json();
+    let assistant_message = body["messages"]
+        .as_array()
+        .and_then(|messages| {
+            messages
+                .iter()
+                .find(|message| message["id"] == assistant_message_id)
+        })
+        .expect("Expected assistant message in chat messages response")
+        .clone();
+    assistant_message["content"]
+        .as_array()
+        .expect("Expected content parts array")
+        .iter()
+        .filter(|part| part["content_type"] == "tool_use")
+        .cloned()
+        .collect()
+}
+
+fn tool_call_update_events(events: &[crate::test_utils::Event]) -> Vec<Value> {
+    events
+        .iter()
+        .filter_map(|event| serde_json::from_str::<Value>(&event.data).ok())
+        .filter(|json| json["message_type"] == "tool_call_update")
+        .collect()
+}
+
+fn assistant_message_id_from_events(events: &[crate::test_utils::Event]) -> String {
+    events
+        .iter()
+        .find_map(|event| {
+            if let Ok(json) = serde_json::from_str::<Value>(&event.data)
+                && json["message_type"] == "assistant_message_completed"
+            {
+                return json["message_id"].as_str().map(|s| s.to_string());
+            }
+            None
+        })
+        .expect("Expected assistant_message_completed event with message_id")
+}
+
+/// Two `propose_client_action` calls in one parallel batch: the FIRST one
+/// wins, the second is answered with the already-proposed error, and the
+/// model receives corrective tool responses before finishing the turn.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_client_action_parallel_proposals_first_wins(pool: Pool<Postgres>) {
+    let corrective_request_recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    // Turn 1: no tool responses in the request yet → propose both actions in
+    // one parallel batch.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[], &[PROPOSED_RESPONSE_FRAGMENT]));
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[
+                (
+                    "call_first",
+                    CLIENT_ACTION_TOOL,
+                    json!({"action": "outlook.reply"}),
+                ),
+                (
+                    "call_second",
+                    CLIENT_ACTION_TOOL,
+                    json!({"action": "outlook.reply_all"}),
+                ),
+            ]),
+        );
+    });
+    // Turn 2: the corrective tool responses arrived → finish with text.
+    {
+        let recorder = corrective_request_recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&[PROPOSED_RESPONSE_FRAGMENT], &[]))
+                .matcher(recorder);
+            mock_llm_sse_response(then, build_openai_text_streaming_response(&["Done."]));
+        });
+    }
+
+    let (mut app_config, _server) = setup_mock_llm_server_with_mocks(mocks).await;
+    add_action_facets(&mut app_config);
+    let app_state = test_app_state(app_config, pool).await;
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let events = submit_under_reply_facet(&server).await;
+
+    // SSE: both calls get a terminal update — success for the first emitted
+    // call, the already-proposed error for the second.
+    let updates = tool_call_update_events(&events);
+    assert_eq!(
+        updates.len(),
+        2,
+        "Expected one tool_call_update per proposal, got: {updates:?}"
+    );
+    assert_eq!(updates[0]["tool_call_id"], "call_first");
+    assert_eq!(updates[0]["status"], "success");
+    assert_eq!(updates[0]["output"]["status"], "proposed");
+    assert_eq!(updates[0]["output"]["action"], "outlook.reply");
+    assert_eq!(updates[1]["tool_call_id"], "call_second");
+    assert_eq!(updates[1]["status"], "error");
+    assert_eq!(updates[1]["output"]["status"], "rejected");
+    assert!(
+        updates[1]["output"]["error"]
+            .as_str()
+            .is_some_and(|error| error.contains("already proposed")),
+        "Expected the already-proposed error, got: {}",
+        updates[1]["output"]
+    );
+
+    // Persisted message: exactly one successful proposal (the FIRST action)
+    // plus the error part for the superseded call.
+    let chat_id = extract_chat_id(&events).expect("Expected chat_id");
+    let assistant_message_id = assistant_message_id_from_events(&events);
+    let tool_use_parts =
+        fetch_assistant_tool_use_parts(&server, &chat_id, &assistant_message_id).await;
+    let proposed: Vec<&Value> = tool_use_parts
+        .iter()
+        .filter(|part| part["output"]["status"] == "proposed")
+        .collect();
+    assert_eq!(
+        proposed.len(),
+        1,
+        "Expected exactly one successful proposal part, got: {tool_use_parts:?}"
+    );
+    assert_eq!(proposed[0]["tool_call_id"], "call_first");
+    assert_eq!(proposed[0]["status"], "success");
+    assert_eq!(proposed[0]["output"]["action"], "outlook.reply");
+    let rejected: Vec<&Value> = tool_use_parts
+        .iter()
+        .filter(|part| part["output"]["status"] == "rejected")
+        .collect();
+    assert_eq!(
+        rejected.len(),
+        1,
+        "Expected exactly one rejected proposal part, got: {tool_use_parts:?}"
+    );
+    assert_eq!(rejected[0]["tool_call_id"], "call_second");
+    assert_eq!(rejected[0]["status"], "error");
+    assert_eq!(tool_use_parts.len(), 2);
+
+    // The model received both corrective tool responses on the next turn.
+    let corrective_bodies = corrective_request_recorder.bodies();
+    assert!(
+        corrective_bodies.iter().any(|body| {
+            body.contains("Proposed client action 'outlook.reply'")
+                && body.contains("only one proposal is allowed")
+        }),
+        "Expected corrective tool responses in the follow-up LLM request: {corrective_bodies:?}"
+    );
+}
+
+/// An out-of-enum action is answered with a corrective error WITHOUT
+/// consuming the one-proposal budget: a later valid call in the same
+/// generation still succeeds.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_client_action_invalid_proposal_then_valid_retry_succeeds(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    // Turn 1: propose an action outside the configured enum.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[],
+                &[INVALID_RESPONSE_FRAGMENT, PROPOSED_RESPONSE_FRAGMENT],
+            ));
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[(
+                "call_invalid",
+                CLIENT_ACTION_TOOL,
+                json!({"action": "outlook.forward"}),
+            )]),
+        );
+    });
+    // Turn 2: the corrective error arrived → retry with a valid action.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[INVALID_RESPONSE_FRAGMENT],
+                &[PROPOSED_RESPONSE_FRAGMENT],
+            ));
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[(
+                "call_valid",
+                CLIENT_ACTION_TOOL,
+                json!({"action": "outlook.reply_all"}),
+            )]),
+        );
+    });
+    // Turn 3: the retry was accepted → finish with text.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[PROPOSED_RESPONSE_FRAGMENT], &[]));
+        mock_llm_sse_response(then, build_openai_text_streaming_response(&["Done."]));
+    });
+
+    let (mut app_config, _server) = setup_mock_llm_server_with_mocks(mocks).await;
+    add_action_facets(&mut app_config);
+    let app_state = test_app_state(app_config, pool).await;
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let events = submit_under_reply_facet(&server).await;
+
+    let updates = tool_call_update_events(&events);
+    assert_eq!(
+        updates.len(),
+        2,
+        "Expected one tool_call_update per proposal, got: {updates:?}"
+    );
+    assert_eq!(updates[0]["tool_call_id"], "call_invalid");
+    assert_eq!(updates[0]["status"], "error");
+    assert_eq!(updates[0]["output"]["status"], "rejected");
+    assert!(
+        updates[0]["output"]["error"]
+            .as_str()
+            .is_some_and(|error| error.contains("not allowed")),
+        "Expected the out-of-enum error, got: {}",
+        updates[0]["output"]
+    );
+    assert_eq!(updates[1]["tool_call_id"], "call_valid");
+    assert_eq!(updates[1]["status"], "success");
+    assert_eq!(updates[1]["output"]["status"], "proposed");
+    assert_eq!(updates[1]["output"]["action"], "outlook.reply_all");
+
+    let chat_id = extract_chat_id(&events).expect("Expected chat_id");
+    let assistant_message_id = assistant_message_id_from_events(&events);
+    let tool_use_parts =
+        fetch_assistant_tool_use_parts(&server, &chat_id, &assistant_message_id).await;
+    assert_eq!(tool_use_parts.len(), 2, "Got: {tool_use_parts:?}");
+    assert_eq!(tool_use_parts[0]["tool_call_id"], "call_invalid");
+    assert_eq!(tool_use_parts[0]["output"]["status"], "rejected");
+    assert_eq!(tool_use_parts[1]["tool_call_id"], "call_valid");
+    assert_eq!(tool_use_parts[1]["output"]["status"], "proposed");
+    assert_eq!(tool_use_parts[1]["output"]["action"], "outlook.reply_all");
 }

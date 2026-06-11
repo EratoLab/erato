@@ -16,6 +16,7 @@ use std::fs;
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tempfile::{Builder, NamedTempFile};
 
@@ -749,4 +750,179 @@ pub fn hermetic_app_config(
         .unwrap();
 
     app_config.build().unwrap().try_deserialize().unwrap()
+}
+
+// ============================================================================
+// Multi-turn Mock LLM Helpers
+// ============================================================================
+
+/// Starts a mock LLM server with caller-provided mocks and returns an
+/// `AppConfig` pointing at it. Unlike [`setup_mock_llm_server`], the caller
+/// fully controls the mock set, which allows routing the individual turns of
+/// a tool-call loop to different responses (e.g. via [`BodyContainsMatcher`]).
+pub async fn setup_mock_llm_server_with_mocks(mocks: MockSet) -> (AppConfig, MockServer) {
+    let mockserver_config = MockServerConfig {
+        listen_addr: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+        ..Default::default()
+    };
+    let server = MockServer::new_http("llm-mock")
+        .with_config(mockserver_config)
+        .with_mocks(mocks);
+
+    server.start().await.expect("Failed to start mock server");
+
+    let mock_url_str = server.url("/v1/").to_string();
+    let app_config = hermetic_app_config(None, Some(mock_url_str));
+
+    (app_config, server)
+}
+
+/// Builds an OpenAI-compatible SSE stream for an assistant turn consisting of
+/// streamed tool calls (one delta chunk per call, all in one parallel batch).
+///
+/// Each tool call is given as `(call_id, tool_name, arguments)`.
+pub fn build_openai_tool_calls_streaming_response(
+    tool_calls: &[(&str, &str, Value)],
+) -> Vec<BodyAction> {
+    let mut actions = Vec::new();
+
+    let role_chunk = json!({
+        "id": "chatcmpl-mock-123",
+        "object": "chat.completion.chunk",
+        "created": 1234567890,
+        "model": "gpt-3.5-turbo",
+        "choices": [{
+            "index": 0,
+            "delta": { "role": "assistant", "content": null },
+            "finish_reason": null
+        }]
+    });
+    actions.push(BodyAction::Bytes(
+        format!("data: {}\n\n", role_chunk).into(),
+    ));
+
+    for (index, (call_id, tool_name, arguments)) in tool_calls.iter().enumerate() {
+        let tool_call_chunk = json!({
+            "id": "chatcmpl-mock-123",
+            "object": "chat.completion.chunk",
+            "created": 1234567890,
+            "model": "gpt-3.5-turbo",
+            "choices": [{
+                "index": 0,
+                "delta": {
+                    "tool_calls": [{
+                        "index": index,
+                        "id": call_id,
+                        "type": "function",
+                        "function": {
+                            "name": tool_name,
+                            "arguments": arguments.to_string()
+                        }
+                    }]
+                },
+                "finish_reason": null
+            }]
+        });
+        actions.push(BodyAction::Bytes(
+            format!("data: {}\n\n", tool_call_chunk).into(),
+        ));
+    }
+
+    let finish_chunk = json!({
+        "id": "chatcmpl-mock-123",
+        "object": "chat.completion.chunk",
+        "created": 1234567890,
+        "model": "gpt-3.5-turbo",
+        "choices": [{
+            "index": 0,
+            "delta": {},
+            "finish_reason": "tool_calls"
+        }]
+    });
+    actions.push(BodyAction::Bytes(
+        format!("data: {}\n\n", finish_chunk).into(),
+    ));
+    actions.push(BodyAction::Bytes("data: [DONE]\n\n".into()));
+
+    actions
+}
+
+/// Builds an OpenAI-compatible SSE stream for a plain text assistant turn.
+pub fn build_openai_text_streaming_response(chunks: &[&str]) -> Vec<BodyAction> {
+    build_delayed_streaming_response(chunks.to_vec(), 0)
+}
+
+fn request_body_string(req: &Request) -> String {
+    String::from_utf8_lossy(&req.body().clone().as_bytes()).into_owned()
+}
+
+/// Matches when the request body contains all `contains` needles and none of
+/// the `excludes` needles. Used to route the turns of a multi-turn mock-LLM
+/// conversation (e.g. a tool-call loop) to different responses.
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub struct BodyContainsMatcher {
+    contains: Vec<String>,
+    excludes: Vec<String>,
+}
+
+impl BodyContainsMatcher {
+    pub fn new(contains: &[&str], excludes: &[&str]) -> Self {
+        Self {
+            contains: contains.iter().map(|s| s.to_string()).collect(),
+            excludes: excludes.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+}
+
+impl Matcher for BodyContainsMatcher {
+    fn name(&self) -> &str {
+        "body_contains"
+    }
+
+    fn matches(&self, req: &Request) -> bool {
+        let body = request_body_string(req);
+        self.contains.iter().all(|needle| body.contains(needle))
+            && self.excludes.iter().all(|needle| !body.contains(needle))
+    }
+}
+
+/// Always-matching matcher that records every request body it is evaluated
+/// against. Attach it last in a `when` chain so it only sees requests that
+/// passed the preceding matchers.
+#[derive(Debug, Clone, Default)]
+pub struct RequestBodyRecorder {
+    bodies: Arc<Mutex<Vec<String>>>,
+}
+
+impl RequestBodyRecorder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn bodies(&self) -> Vec<String> {
+        self.bodies.lock().unwrap().clone()
+    }
+}
+
+impl PartialEq for RequestBodyRecorder {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.bodies, &other.bodies)
+    }
+}
+
+impl PartialOrd for RequestBodyRecorder {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.eq(other).then_some(std::cmp::Ordering::Equal)
+    }
+}
+
+impl Matcher for RequestBodyRecorder {
+    fn name(&self) -> &str {
+        "request_body_recorder"
+    }
+
+    fn matches(&self, req: &Request) -> bool {
+        self.bodies.lock().unwrap().push(request_body_string(req));
+        true
+    }
 }

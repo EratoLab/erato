@@ -18,8 +18,33 @@ export type AbortStreamResponse = {
 };
 
 export type ActionFacetInfo = {
+  /**
+   * Fixed identifiers of client-side actions the model may propose via the
+   * `propose_client_action` tool when this facet is active. The client
+   * must only execute actions from this list, after user confirmation.
+   */
+  client_actions?: string[];
+  /**
+   * Subset of `client_actions` the deployment enforces a per-use
+   * confirmation for: the client must always ask and must not offer or
+   * honor a persistent "always allow" for these actions. Users may still
+   * deny them entirely.
+   */
+  client_actions_always_ask?: string[];
+  /**
+   * Human readable name for the facet, e.g. for client settings UIs.
+   */
+  display_name: string;
   id: string;
   platform?: string;
+  /**
+   * How the client should surface a proposed client action:
+   * `render_buttons` (show buttons, user clicks) or `auto_prompt` (the
+   * client may surface the proposal immediately after a fresh assistant
+   * completion, subject to the user's local approval preferences). Present
+   * only when `client_actions` is non-empty; defaults to `render_buttons`.
+   */
+  presentation?: string;
 };
 
 /**

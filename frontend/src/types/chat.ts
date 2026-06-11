@@ -56,6 +56,62 @@ export interface OutlookArtifact {
    *   unfenced prose is left as normal markdown — never treated as a drop-in body.
    */
   renderMode: "body" | "suggestions";
+  /**
+   * Client actions the backend allows for the producing facet (the facet's
+   * `client_actions` from `GET /me/facets`). The renderer must only offer
+   * actions from this list, further intersected with the actions the client
+   * actually implements.
+   */
+  allowedClientActions?: string[];
+  /**
+   * Actions the deployment enforces a per-use confirmation for (the facet's
+   * `client_actions_always_ask`). The client must not offer or honor a
+   * persistent "always allow" for these.
+   */
+  alwaysAskClientActions?: string[];
+  /**
+   * The client action the model proposed for this message via the
+   * `propose_client_action` tool, already validated by the add-in against
+   * {@link OutlookArtifact.allowedClientActions} and the tool-call status.
+   * Used as a render hint (e.g. which button is primary) — auto-surfaced
+   * only under `auto_prompt` presentation and the user's local approval
+   * preferences, never on history reloads.
+   */
+  proposedClientAction?: string;
+  /**
+   * The producing facet's `presentation` from `GET /me/facets`:
+   * `render_buttons` (default) or `auto_prompt`.
+   */
+  clientActionPresentation?: string;
+  /**
+   * Id of the assistant message this artifact was stamped from. Lets a
+   * fence renderer key once-per-message behavior (auto-prompt) stably
+   * across remounts.
+   */
+  messageId?: string;
+  /**
+   * True only when this assistant message finished streaming during the
+   * current session (a status transition to complete was observed). False
+   * for messages loaded from history — auto-prompt must never fire for
+   * those.
+   */
+  isFreshCompletion?: boolean;
+  /**
+   * The Outlook item identity captured when the user SENT the message that
+   * triggered this completion (fresh completions only). Send time is the
+   * guard's baseline — the user can switch emails while the response
+   * streams, so the item open at completion time proves nothing. Executors
+   * compare it against the CURRENT item before opening anything, so a draft
+   * never opens a reply on a different email than it was requested for.
+   *
+   * A fresh completion ({@link OutlookArtifact.isFreshCompletion}) WITHOUT
+   * this field means no send-time identity was recorded (no open item at
+   * send, or the completion could not be matched to a send): executors must
+   * fail closed — never auto-prompt, and treat the draft as stale rather
+   * than as unguarded. Absent together with `isFreshCompletion` for history
+   * messages, where the generation-time item is unknown.
+   */
+  itemIdentity?: string;
 }
 
 export interface Message {

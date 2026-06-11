@@ -764,6 +764,63 @@ impl AppConfig {
                     id
                 );
             }
+            if action_facet
+                .client_actions
+                .iter()
+                .any(|action| action.trim().is_empty())
+            {
+                panic!(
+                    "Action facet '{}' has an empty client action identifier in client_actions.",
+                    id
+                );
+            }
+            for (list_name, actions) in [
+                ("client_actions", &action_facet.client_actions),
+                (
+                    "client_actions_always_ask",
+                    &action_facet.client_actions_always_ask,
+                ),
+            ] {
+                if let Some(untrimmed) = actions.iter().find(|action| *action != action.trim()) {
+                    panic!(
+                        "Action facet '{}' has a client action identifier '{}' with leading or trailing whitespace in {}.",
+                        id, untrimmed, list_name
+                    );
+                }
+                let mut seen = std::collections::HashSet::new();
+                for action in actions {
+                    if !seen.insert(action) {
+                        panic!(
+                            "Action facet '{}' has a duplicate client action identifier '{}' in {}.",
+                            id, action, list_name
+                        );
+                    }
+                }
+            }
+            if let Some(presentation) = &action_facet.presentation {
+                if !ACTION_FACET_PRESENTATIONS.contains(&presentation.as_str()) {
+                    panic!(
+                        "Action facet '{}' has an invalid presentation '{}'. Must be one of: {}",
+                        id,
+                        presentation,
+                        ACTION_FACET_PRESENTATIONS.join(", ")
+                    );
+                }
+                if action_facet.client_actions.is_empty() {
+                    panic!(
+                        "Action facet '{}' sets presentation but declares no client_actions.",
+                        id
+                    );
+                }
+            }
+            for enforced in &action_facet.client_actions_always_ask {
+                if !action_facet.client_actions.contains(enforced) {
+                    panic!(
+                        "Action facet '{}' lists '{}' in client_actions_always_ask but not in client_actions.",
+                        id, enforced
+                    );
+                }
+            }
         }
 
         validate_audio_feature_config(&config, "audio_transcription", &config.audio_transcription);
@@ -2279,6 +2336,9 @@ impl ActionFacetsConfig {
                     "source_property".to_string(),
                     "body_format".to_string(),
                 ],
+                client_actions: vec![],
+                presentation: None,
+                client_actions_always_ask: vec![],
             });
 
         self.facets
@@ -2288,6 +2348,9 @@ impl ActionFacetsConfig {
                 platform: Some("outlook".to_string()),
                 template: BUILTIN_OUTLOOK_REVIEW_DRAFT_TEMPLATE.trim().to_string(),
                 allowed_args: vec!["full_body".to_string(), "body_format".to_string()],
+                client_actions: vec![],
+                presentation: None,
+                client_actions_always_ask: vec![],
             });
     }
 }
@@ -2337,7 +2400,32 @@ pub struct ActionFacetConfig {
     // List of allowed argument names for the template.
     #[serde(default)]
     pub allowed_args: Vec<String>,
+
+    // Fixed identifiers of client-side actions (e.g. "outlook.reply") the
+    // model may propose via the `propose_client_action` tool when this facet
+    // is active. The client application validates the proposal and performs
+    // the action only after user confirmation.
+    #[serde(default)]
+    pub client_actions: Vec<String>,
+
+    // How the client should surface a proposed client action:
+    // - "render_buttons" (default): show action buttons; the user clicks.
+    // - "auto_prompt": the client may immediately surface the proposed action
+    //   after a fresh assistant completion, subject to the user's local
+    //   approval preferences.
+    // Only meaningful when `client_actions` is non-empty.
+    pub presentation: Option<String>,
+
+    // Subset of `client_actions` for which the deployment ENFORCES a
+    // per-use confirmation: the client must always ask and must not offer
+    // (or honor) a persistent "always allow" for these actions. Users may
+    // still deny them entirely.
+    #[serde(default)]
+    pub client_actions_always_ask: Vec<String>,
 }
+
+/// Valid values for `ActionFacetConfig::presentation`.
+pub const ACTION_FACET_PRESENTATIONS: [&str; 2] = ["render_buttons", "auto_prompt"];
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct CachesConfig {

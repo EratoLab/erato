@@ -615,6 +615,31 @@ pub fn get_generation_chat_provider_id_from_message(
     Ok(None)
 }
 
+/// An action facet (id + args) as stored in generation parameters.
+pub type StoredActionFacet = (String, std::collections::HashMap<String, String>);
+
+/// The action facet (id + args) stored in a message's generation parameters,
+/// if any. Used by regenerate to re-apply the facet the original generation
+/// ran under when the request doesn't re-send one.
+pub fn get_generation_action_facet_from_message(
+    message: &messages::Model,
+) -> Result<Option<StoredActionFacet>, Report> {
+    if let Some(generation_params_json) = &message.generation_parameters {
+        let generation_params: GenerationParameters =
+            serde_json::from_value(generation_params_json.clone()).map_err(|e| {
+                eyre!(
+                    "Failed to parse generation parameters for message {}: {}",
+                    message.id,
+                    e
+                )
+            })?;
+        return Ok(generation_params
+            .action_facet_id
+            .map(|id| (id, generation_params.action_facet_args.unwrap_or_default())));
+    }
+    Ok(None)
+}
+
 /// Resolve a provider for a user message branch by checking the assistant response that follows
 /// the user message. Prefer the active-thread assistant sibling; fall back to newest sibling.
 pub async fn get_generation_chat_provider_id_for_replaced_user_message(

@@ -90,6 +90,7 @@ vi.mock("@erato/frontend/library", () => ({
     openPreviewModal: vi.fn(),
     closePreviewModal: vi.fn(),
   }),
+  useFacets: () => ({ data: { action_facets: [] } }),
   useFileUploadWithTokenCheck: () => ({
     uploadFiles: vi.fn(async () => []),
     uploadError: null,

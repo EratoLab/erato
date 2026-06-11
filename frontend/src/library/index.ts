@@ -16,11 +16,19 @@ export {
   type ChatMessageProps,
 } from "@/components/ui/Chat/ChatMessage";
 export * from "@/components/ui/MessageList";
-export { MessageContent } from "@/components/ui/Message/MessageContent";
+export {
+  MessageContent,
+  useOutlookArtifact,
+} from "@/components/ui/Message/MessageContent";
+export type { OutlookArtifact } from "@/types/chat";
 export { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 export { DefaultMessageControls } from "@/components/ui/Message/DefaultMessageControls";
 export { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
 export { ModalBase } from "@/components/ui/Modal/ModalBase";
+export {
+  ActionConfirmationCard,
+  type ActionConfirmationStatus,
+} from "@/components/ui/Message/ActionConfirmationCard";
 export { AppearanceTabContent } from "@/components/ui/Settings/AppearanceTabContent";
 export { AudioInputTabContent } from "@/components/ui/Settings/AudioInputTabContent";
 export { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton";

@@ -2,6 +2,7 @@ import { RadioCard, usePersistedState } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useId } from "react";
 
+import { useActionFacetClientActions } from "../hooks/useAvailableActionFacets";
 import { useOffice } from "../providers/OfficeProvider";
 import {
   DEFAULT_OUTLOOK_SESSION_PREFERENCES,
@@ -9,6 +10,18 @@ import {
   outlookSessionPreferencesPersistedOptions,
   type OutlookSessionPreferences,
 } from "../sessionPolicy";
+import {
+  CLIENT_ACTION_DECISIONS_KEY,
+  DEFAULT_CLIENT_ACTION_DECISIONS,
+  clientActionDecisionsPersistedOptions,
+  decisionKey,
+  effectiveDecision,
+  type ClientActionDecision,
+} from "../utils/clientActionPolicy";
+import {
+  clientActionDisplayLabel,
+  offerableClientActions,
+} from "../utils/outlookClientActions";
 
 interface BehaviorTabContentProps {
   emptyStateText: string;
@@ -27,6 +40,15 @@ export function BehaviorTabContent({
       DEFAULT_OUTLOOK_SESSION_PREFERENCES,
       outlookSessionPreferencesPersistedOptions,
     );
+  const [decisions, setDecisions] = usePersistedState(
+    CLIENT_ACTION_DECISIONS_KEY,
+    DEFAULT_CLIENT_ACTION_DECISIONS,
+    clientActionDecisionsPersistedOptions,
+  );
+  // The settings rows mirror what the backend actually advertises: one group
+  // per facet with client actions, one decision toggle per implemented
+  // action. No facets advertised → the whole section is hidden.
+  const clientActionFacets = useActionFacetClientActions();
 
   if (!isOutlook) {
     return (
@@ -76,6 +98,66 @@ export function BehaviorTabContent({
       }),
     },
   ];
+
+  // Decision toggles mirror the stored per-facet+action decisions written by
+  // the inline permission card. Always the same three options; defaults to
+  // "ask" until the user decides otherwise.
+  const decisionOptionLabels: Record<
+    ClientActionDecision,
+    { label: string; helper: string }
+  > = {
+    ask: {
+      label: t({
+        id: "officeAddin.settings.addin.clientActions.ask.label",
+        message: "Ask every time",
+      }),
+      helper: t({
+        id: "officeAddin.settings.addin.clientActions.ask.helper",
+        message:
+          "Shows a confirmation step in the chat before opening anything.",
+      }),
+    },
+    always: {
+      label: t({
+        id: "officeAddin.settings.addin.clientActions.always.label",
+        message: "Always allow",
+      }),
+      helper: t({
+        id: "officeAddin.settings.addin.clientActions.always.helper",
+        message:
+          "Performs the action without asking. Nothing is sent until you press Send in Outlook.",
+      }),
+    },
+    never: {
+      label: t({
+        id: "officeAddin.settings.addin.clientActions.never.label",
+        message: "Never",
+      }),
+      helper: t({
+        id: "officeAddin.settings.addin.clientActions.never.helper",
+        message: "Hides this action and ignores the assistant's suggestion.",
+      }),
+    },
+  };
+  const alwaysLockedHelper = t({
+    id: "officeAddin.settings.addin.clientActions.always.locked",
+    message:
+      "Locked: your organization requires confirmation for this action every time.",
+  });
+  const decisionOrder: readonly ClientActionDecision[] = [
+    "ask",
+    "always",
+    "never",
+  ];
+
+  const clientActionGroups = [...clientActionFacets.entries()].flatMap(
+    ([facetId, info]) => {
+      const actions = offerableClientActions(info.clientActions);
+      return actions.length > 0
+        ? [{ facetId, displayName: info.displayName, actions, info }]
+        : [];
+    },
+  );
 
   const composeToggleLabel = t({
     id: "officeAddin.settings.addin.composeInherits.label",
@@ -147,6 +229,79 @@ export function BehaviorTabContent({
           })}
         </div>
       </fieldset>
+      {clientActionGroups.length > 0 && (
+        <fieldset className="space-y-3">
+          <legend className="text-sm font-medium text-theme-fg-primary">
+            {t({
+              id: "officeAddin.settings.addin.clientActions.legend",
+              message: "Assistant-suggested actions",
+            })}
+          </legend>
+          <p className="text-xs text-theme-fg-secondary">
+            {t({
+              id: "officeAddin.settings.addin.clientActions.intro",
+              message:
+                "Your decisions from the in-chat confirmation are stored here and can be changed any time. Nothing is sent until you press Send in Outlook.",
+            })}
+          </p>
+          {clientActionGroups.map((group) => (
+            <div key={group.facetId} className="space-y-3">
+              <p className="text-xs font-medium text-theme-fg-primary">
+                {group.displayName}
+              </p>
+              {group.actions.map((action) => {
+                const enforced = group.info.alwaysAskActions.includes(action);
+                const current = effectiveDecision({
+                  facetId: group.facetId,
+                  action,
+                  decisions,
+                  enforcedAskActions: group.info.alwaysAskActions,
+                });
+                return (
+                  <div
+                    key={action}
+                    role="radiogroup"
+                    aria-label={clientActionDisplayLabel(action)}
+                    className="space-y-2"
+                  >
+                    <p className="text-xs text-theme-fg-secondary">
+                      {clientActionDisplayLabel(action)}
+                    </p>
+                    {decisionOrder.map((decision) => {
+                      const lockedAlways = decision === "always" && enforced;
+                      return (
+                        <RadioCard
+                          key={decision}
+                          size="sm"
+                          name={`${radioGroupName}-${group.facetId}-${action}`}
+                          value={decision}
+                          checked={current === decision}
+                          disabled={lockedAlways}
+                          onChange={() => {
+                            if (lockedAlways) {
+                              return;
+                            }
+                            setDecisions({
+                              ...decisions,
+                              [decisionKey(group.facetId, action)]: decision,
+                            });
+                          }}
+                          label={decisionOptionLabels[decision].label}
+                          helper={
+                            lockedAlways
+                              ? alwaysLockedHelper
+                              : decisionOptionLabels[decision].helper
+                          }
+                        />
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </fieldset>
+      )}
     </div>
   );
 }
