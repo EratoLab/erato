@@ -10,10 +10,25 @@ import {
 
 /** How often we re-probe the proxy session while the popup is open. */
 const SESSION_POLL_INTERVAL_MS = 1_500;
-/** Give up on the popup login after this long and return to the sign-in CTA. */
-const SIGN_IN_TIMEOUT_MS = 3 * 60_000;
+/**
+ * Give up on the popup login after this long and return to the sign-in CTA.
+ * Generous on purpose: timing out force-closes the popup, and first-time Entra
+ * logins (MFA enrollment, conditional-access prompts) routinely take several
+ * minutes.
+ */
+const SIGN_IN_TIMEOUT_MS = 10 * 60_000;
 /** The popup posts this message back to the opener once the cookie is set. */
 const LOGIN_COMPLETE_MESSAGE = "erato-oauth2-login-complete";
+/**
+ * The auth-complete popup closes itself right after posting the completion
+ * message, so once that message has arrived a closed popup does NOT mean the
+ * user gave up. The session cookie can stay invisible to the taskpane for
+ * longer than one poll tick (slow Set-Cookie propagation, Safari partitioning
+ * churn), so the closed-popup branch keeps re-probing on the poll cadence for
+ * this long before surfacing a failure — bouncing a SUCCESSFUL login back to
+ * the sign-in CTA is worse than a few extra seconds of "signing in".
+ */
+const COMPLETION_GRACE_MS = 12_000;
 
 type LoginPhase =
   | "checking"
@@ -35,7 +50,8 @@ type LoginPhase =
  *
  * No {@link "./EntraGraphTokenProvider"} is mounted here: there is no
  * client-side Graph token on this path, which is correct because the SE on-prem
- * mailbox reads mail via the Exchange REST callback token, not Graph.
+ * mailbox reads mail via EWS SOAP through the Erato backend proxy (host-issued
+ * Exchange callback token in `X-EWS-Authentication`), not Graph.
  */
 export function Oauth2ProxyLoginProvider({
   children,
@@ -87,6 +103,14 @@ export function Oauth2ProxyLoginProvider({
     // and leak a parallel listener + poll interval + timeout. Ignore clicks
     // while a popup flow is already in flight.
     if (popupRef.current && !popupRef.current.closed) {
+      // Surface the existing popup instead of silently no-oping — it routinely
+      // ends up buried behind the Outlook window, where a dead-looking button
+      // is all the user sees.
+      try {
+        popupRef.current.focus();
+      } catch {
+        // COOP / host quirks can make focus() throw; the guard still holds.
+      }
       return;
     }
 
@@ -129,6 +153,15 @@ export function Oauth2ProxyLoginProvider({
       let settled = false;
       let pollId: number | undefined;
       let timeoutId: number | undefined;
+      // Set once the auth-complete popup posts its completion message. The
+      // popup closes itself right after posting, so from then on "popup
+      // closed" means "login finished, cookie may lag" rather than "user
+      // cancelled" — the poll's closed branch then probes through the grace
+      // window instead of giving up after a single probe.
+      let completionSignaled = false;
+      let completionGraceProbesLeft = Math.ceil(
+        COMPLETION_GRACE_MS / SESSION_POLL_INTERVAL_MS,
+      );
 
       const cleanup = () => {
         window.removeEventListener("message", handleMessage);
@@ -151,9 +184,16 @@ export function Oauth2ProxyLoginProvider({
         } catch {
           // Best effort: the user can close it manually.
         }
-        popupRef.current = null;
-        setError(null);
-        setPhase("authenticated");
+        // Ownership check: a re-click can start a NEWER flow while this one
+        // still has a poll tick in flight (the re-entrancy guard lets it
+        // through once this popup is closed). popupRef/phase/error then belong
+        // to that newer flow — a superseded flow only cleans up its own
+        // listener/interval/timeout above and resolves quietly.
+        if (popupRef.current === popup) {
+          popupRef.current = null;
+          setError(null);
+          setPhase("authenticated");
+        }
         resolve();
       };
 
@@ -172,41 +212,91 @@ export function Oauth2ProxyLoginProvider({
         } catch {
           // The user can close it manually.
         }
-        popupRef.current = null;
-        setError(message);
-        setPhase("needs-signin");
+        // Same ownership check as succeed(): never clobber a newer flow's
+        // popupRef/phase/error from a superseded flow's late tick or timeout.
+        if (popupRef.current === popup) {
+          popupRef.current = null;
+          setError(message);
+          setPhase("needs-signin");
+        }
         resolve();
       };
 
       function handleMessage(event: MessageEvent) {
         if (
-          event.origin === window.location.origin &&
-          event.data === LOGIN_COMPLETE_MESSAGE
+          event.origin !== window.location.origin ||
+          event.data !== LOGIN_COMPLETE_MESSAGE
         ) {
-          succeed();
+          return;
         }
+        completionSignaled = true;
+        // The message is a completion HINT, not proof: in a third-party-cookie
+        // blocked taskpane iframe (Safari) the popup's login completes while
+        // the iframe still can't send the session cookie, so succeeding here
+        // would flash "authenticated" and 401 on the first API call. Verify
+        // like the other completion paths do. On false, do NOT give up — the
+        // cookie can land a beat after the message — the poll keeps probing
+        // (through the post-completion grace window once the popup closes
+        // itself) and surfaces the failure if the cookie never lands.
+        void checkOauth2ProxySession()
+          .then((authenticated) => {
+            if (authenticated) {
+              succeed();
+            }
+          })
+          .catch(() => {
+            // Transient probe failure: the poll keeps probing.
+          });
       }
       window.addEventListener("message", handleMessage);
 
       pollId = window.setInterval(() => {
         if (popup.closed) {
-          // The user closed the popup before completing — re-probe once in case
-          // the cookie was actually set, otherwise return to the sign-in CTA.
-          // Stop the interval first so a slow probe can't spawn concurrent
-          // re-probes on subsequent ticks.
+          if (completionSignaled && completionGraceProbesLeft > 0) {
+            // The popup reported a COMPLETED login before closing itself, so a
+            // still-401 probe here means cookie-visibility lag, not user
+            // cancellation. Keep re-probing on the poll cadence through the
+            // grace window (same overlap tolerance as the open-popup polling
+            // below) instead of bailing after a single probe.
+            completionGraceProbesLeft -= 1;
+            void checkOauth2ProxySession()
+              .then((authenticated) => {
+                if (authenticated) {
+                  succeed();
+                }
+              })
+              .catch(() => {
+                // Transient probe failure: the grace window keeps probing.
+              });
+            return;
+          }
+          // The user closed the popup before completing (or the post-completion
+          // grace window ran out) — re-probe once in case the cookie was
+          // actually set, otherwise return to the sign-in CTA. Stop the
+          // interval first so a slow probe can't spawn concurrent re-probes on
+          // subsequent ticks. A user-cancelled flow stays a silent return to
+          // the CTA; an exhausted grace window surfaces an error, since the
+          // user DID complete the login and a silent bounce would look like a
+          // broken button.
           if (pollId !== undefined) {
             window.clearInterval(pollId);
             pollId = undefined;
           }
+          const failureMessage = completionSignaled
+            ? t({
+                id: "officeAddin.auth.oauth2ProxyProbeFailed",
+                message: "Could not reach the sign-in service. Try again.",
+              })
+            : null;
           void checkOauth2ProxySession()
             .then((authenticated) => {
               if (authenticated) {
                 succeed();
               } else {
-                giveUp(null);
+                giveUp(failureMessage);
               }
             })
-            .catch(() => giveUp(null));
+            .catch(() => giveUp(failureMessage));
           return;
         }
         void checkOauth2ProxySession()
@@ -302,7 +392,8 @@ export function Oauth2ProxyLoginProvider({
         // Deliberately "entra-msal": the user IS authenticated with an Entra
         // identity (via the proxy's own OIDC login), so useOutlookMessageFetcher
         // treats SE as authenticated and detectExchangeOnPrem() routes mail to
-        // the REST callback-token backend.
+        // the EWS SOAP fetcher (through the Erato backend proxy, callback token
+        // in X-EWS-Authentication).
         mode: "entra-msal",
       }}
     >

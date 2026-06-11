@@ -6,7 +6,8 @@
  * oauth2-proxy redirect login (see
  * {@link "../providers/Oauth2ProxyLoginProvider"}), which has no client-side
  * `AuthSource`: the user is still an Entra identity, so the mail-fetch hook
- * treats it as authenticated and routes SE mail to the REST callback backend.
+ * treats it as authenticated and routes SE mail to the EWS SOAP backend
+ * (Erato backend proxy + host-brokered `makeEwsRequestAsync`).
  * `unsupported` is the one residual "can't sign in here" state — no NAA and no
  * mailbox to log in against (see {@link "./UnsupportedAuthSource"}).
  */
