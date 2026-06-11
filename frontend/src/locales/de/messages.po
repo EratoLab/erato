@@ -2042,8 +2042,8 @@ msgstr ""
 #~ msgstr "Audiodiktat konnte nicht abgeschlossen werden."
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
-msgid "Could not complete audio recording."
-msgstr ""
+#~ msgid "Could not complete audio recording."
+#~ msgstr ""
 
 #: src/hooks/audio/useAudioInputDevicePreference.ts
 msgid "Could not load audio input devices."
@@ -2419,6 +2419,10 @@ msgstr "Nachrichten"
 #: src/hooks/audio/useAudioInputDevicePreference.ts
 msgid "Microphone {microphoneIndex}"
 msgstr "Mikrofon {microphoneIndex}"
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Microphone is starting — wait for the level meter before speaking"
+msgstr ""
 
 #: src/hooks/audio/useAudioInputLevelPreview.ts
 msgid "Microphone permission denied. Allow access to test the microphone."

@@ -298,6 +298,7 @@ describe("useAudioDictationRecorder", () => {
     MockWebSocket.instances.length = 0;
     MockAudioWorkletNode.instances.length = 0;
     vadMock.engines.length = 0;
+    vadMock.createRicky0123VadEngine.mockClear();
 
     Object.defineProperty(navigator, "mediaDevices", {
       configurable: true,
@@ -551,6 +552,64 @@ describe("useAudioDictationRecorder", () => {
       MockWebSocket.instances[0].emitJson({ type: "completed" });
     });
     await waitFor(() => expect(result.current.isDictating).toBe(false));
+    // The engine is kept warm across sessions: teardown only stop()s it
+    // so the loaded ONNX/WASM session survives; destroy() is reserved
+    // for unmount.
+    expect(vadMock.engines[0].stop).toHaveBeenCalled();
+    expect(vadMock.engines[0].destroy).not.toHaveBeenCalled();
+  });
+
+  it("reuses the warm VAD engine across sessions and destroys it on unmount", async () => {
+    const { result, unmount } = renderDictationHook(vi.fn(), {
+      vadAutoStopEnabled: true,
+    });
+
+    await act(async () => {
+      result.current.toggleDictation();
+    });
+    await waitFor(() => expect(vadMock.engines).toHaveLength(1));
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+
+    act(() => {
+      MockWebSocket.instances[0].emit("open");
+    });
+    await waitFor(() =>
+      expect(MockWebSocket.instances[0].sentJsonFrames).toContainEqual({
+        mode: "dictation",
+        type: "start",
+      }),
+    );
+    act(() => {
+      MockWebSocket.instances[0].emitJson({
+        type: "session_state",
+        next_chunk_index: 0,
+        chunk_duration_ms: 100,
+      });
+    });
+    await waitFor(() => expect(result.current.isDictating).toBe(true));
+
+    await act(async () => {
+      result.current.toggleDictation();
+    });
+    act(() => {
+      MockWebSocket.instances[0].emitJson({ type: "completed" });
+    });
+    await waitFor(() =>
+      expect(result.current.isDictationCompleting).toBe(false),
+    );
+    expect(vadMock.engines[0].stop).toHaveBeenCalled();
+
+    // Second session: the SAME engine instance is re-started instead of
+    // a new one being created (no second model load).
+    await act(async () => {
+      result.current.toggleDictation();
+    });
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(2));
+    expect(vadMock.engines).toHaveLength(1);
+    expect(vadMock.engines[0].start).toHaveBeenCalledTimes(2);
+    expect(vadMock.createRicky0123VadEngine).toHaveBeenCalledTimes(1);
+
+    unmount();
     expect(vadMock.engines[0].destroy).toHaveBeenCalled();
   });
 });

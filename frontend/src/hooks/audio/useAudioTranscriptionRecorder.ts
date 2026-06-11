@@ -1,5 +1,6 @@
 import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useMountedState } from "react-use";
 import { useThrottledCallback } from "use-debounce";
 /* eslint-disable lingui/no-unlocalized-strings */
 
@@ -11,9 +12,18 @@ import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext"
 import { createRicky0123VadEngine } from "@/lib/voice-runtime";
 import { createLogger } from "@/utils/debugLogger";
 
+// `?worker&url` routes the worklet through Vite's worker bundling
+// pipeline — see useAudioDictationRecorder for why the canonical
+// `new URL(..., import.meta.url)` pattern does not work for TS worklets.
+import audioDictationWorkletUrl from "./audio-dictation-worklet.ts?worker&url";
 import {
   AUDIO_BARS_COUNT,
+  CANONICAL_AUDIO_BYTES_PER_SAMPLE,
+  CANONICAL_AUDIO_SAMPLE_RATE_HZ,
+  CANONICAL_AUDIO_WAV_HEADER_BYTES,
+  createCanonicalWavBytesFromPcm,
   getAudioLevelBarsFromTimeDomainData,
+  resampleMonoFloat32ToPcm16,
 } from "./audio-pcm-codec";
 import { useAudioInputDevicePreference } from "./useAudioInputDevicePreference";
 
@@ -24,11 +34,24 @@ import type {
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { VoiceVadEngine } from "@/lib/voice-runtime";
 
-const CANONICAL_AUDIO_SAMPLE_RATE_HZ = 16_000;
-const CANONICAL_AUDIO_WAV_HEADER_BYTES = 44;
-const CANONICAL_AUDIO_BYTES_PER_SAMPLE = 2;
 const DEFAULT_AUDIO_TRANSCRIPTION_CHUNK_DURATION_MS = 30_000;
 const VAD_DEBUG_FRAME_LOG_INTERVAL_MS = 2_000;
+
+/**
+ * The transcription recorder shares the dictation recorder's worklet
+ * module (and therefore its registered processor name): both need the
+ * same "batch render quanta to 4096-sample frames on the audio render
+ * thread" behavior.
+ */
+const AUDIO_TRANSCRIPTION_WORKLET_PROCESSOR_NAME = "audio-dictation-processor";
+
+/**
+ * Synthetic silence prefix prepended before the captured audio, and the
+ * floor between pipeline-ready and the visible `isCapturingAudio` flip.
+ * Both mirror useAudioDictationRecorder — see the rationale there.
+ */
+const PRE_SPEECH_SILENCE_PRIMER_MS = 300;
+const MIN_AUDIO_CAPTURE_DELAY_MS = 150;
 
 const logger = createLogger("HOOK", "useAudioTranscriptionRecorder");
 
@@ -94,6 +117,9 @@ type AudioTranscriptionChunk = {
 type LiveAudioTranscriptionSession = {
   socket: WebSocket;
   fileUploadId: string;
+  /** Recording filename; carried on the session so the deferred
+   *  finalization can build the retry source File after teardown. */
+  filename: string;
   chunkDurationMs: number;
   nextChunkIndex: number;
   startedAtMs: number;
@@ -101,6 +127,10 @@ type LiveAudioTranscriptionSession = {
   pcmParts: Uint8Array[];
   pendingSourceSamples: number[];
   sourceSampleRate: number;
+  /** Cumulative canonical-PCM bytes accepted for sending (tracked
+   *  synchronously at enqueue time), used to clamp the recording to the
+   *  configured maximum duration the backend enforces strictly. */
+  queuedPcmBytes: number;
 };
 
 export type AudioRecordingDiagnostics = {
@@ -128,40 +158,6 @@ type UseAudioTranscriptionRecorderOptions = {
 
 function isAudioTranscriptionAttachment(file: FileUploadItem): boolean {
   return Boolean(file.audio_transcription);
-}
-
-function writeAscii(view: DataView, offset: number, value: string) {
-  for (let index = 0; index < value.length; index += 1) {
-    view.setUint8(offset + index, value.charCodeAt(index));
-  }
-}
-
-function createCanonicalWavBytesFromPcm(pcmBytes: Uint8Array): Uint8Array {
-  const wavBytes = new Uint8Array(
-    CANONICAL_AUDIO_WAV_HEADER_BYTES + pcmBytes.length,
-  );
-  const view = new DataView(wavBytes.buffer);
-
-  writeAscii(view, 0, "RIFF");
-  view.setUint32(4, 36 + pcmBytes.length, true);
-  writeAscii(view, 8, "WAVE");
-  writeAscii(view, 12, "fmt ");
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true);
-  view.setUint32(24, CANONICAL_AUDIO_SAMPLE_RATE_HZ, true);
-  view.setUint32(
-    28,
-    CANONICAL_AUDIO_SAMPLE_RATE_HZ * CANONICAL_AUDIO_BYTES_PER_SAMPLE,
-    true,
-  );
-  view.setUint16(32, CANONICAL_AUDIO_BYTES_PER_SAMPLE, true);
-  view.setUint16(34, 16, true);
-  writeAscii(view, 36, "data");
-  view.setUint32(40, pcmBytes.length, true);
-  wavBytes.set(pcmBytes, CANONICAL_AUDIO_WAV_HEADER_BYTES);
-
-  return wavBytes;
 }
 
 function validateCanonicalWavBytes(bytes: Uint8Array): void {
@@ -266,6 +262,18 @@ function waitForAudioTranscriptionFrame(
   predicate: (frame: AudioTranscriptionSocketFrame) => boolean,
 ): Promise<AudioTranscriptionSocketFrame> {
   return new Promise<AudioTranscriptionSocketFrame>((resolve, reject) => {
+    // A clean server/proxy close fires only "close" (no "error"), and a
+    // socket that died mid-recording is already CLOSED by the time the
+    // finalization attaches listeners — both would otherwise leave this
+    // promise (and the stop finalization awaiting it) hanging forever.
+    if (
+      socket.readyState === WebSocket.CLOSING ||
+      socket.readyState === WebSocket.CLOSED
+    ) {
+      reject(new Error(t`Audio transcription connection closed unexpectedly.`));
+      return;
+    }
+
     const handleMessage = (event: MessageEvent) => {
       if (typeof event.data !== "string") {
         return;
@@ -298,13 +306,20 @@ function waitForAudioTranscriptionFrame(
       reject(new Error(t`Audio transcription connection failed.`));
     };
 
+    const handleClose = () => {
+      cleanup();
+      reject(new Error(t`Audio transcription connection closed unexpectedly.`));
+    };
+
     const cleanup = () => {
       socket.removeEventListener("message", handleMessage);
       socket.removeEventListener("error", handleError);
+      socket.removeEventListener("close", handleClose);
     };
 
     socket.addEventListener("message", handleMessage);
     socket.addEventListener("error", handleError);
+    socket.addEventListener("close", handleClose);
   });
 }
 
@@ -319,45 +334,6 @@ function concatUint8Arrays(parts: Uint8Array[]): Uint8Array {
   });
 
   return bytes;
-}
-
-function resampleMonoFloat32ToPcm16(
-  samples: Float32Array,
-  sourceSampleRate: number,
-): Uint8Array {
-  const targetSampleCount = Math.max(
-    1,
-    Math.round(
-      (samples.length * CANONICAL_AUDIO_SAMPLE_RATE_HZ) / sourceSampleRate,
-    ),
-  );
-  const pcmBytes = new Uint8Array(
-    targetSampleCount * CANONICAL_AUDIO_BYTES_PER_SAMPLE,
-  );
-  const view = new DataView(pcmBytes.buffer);
-  const rateRatio = sourceSampleRate / CANONICAL_AUDIO_SAMPLE_RATE_HZ;
-
-  for (
-    let targetSampleIndex = 0;
-    targetSampleIndex < targetSampleCount;
-    targetSampleIndex += 1
-  ) {
-    const sourcePosition = targetSampleIndex * rateRatio;
-    const sourceIndex = Math.floor(sourcePosition);
-    const nextSourceIndex = Math.min(sourceIndex + 1, samples.length - 1);
-    const interpolation = sourcePosition - sourceIndex;
-    const sample =
-      samples[sourceIndex] * (1 - interpolation) +
-      samples[nextSourceIndex] * interpolation;
-    const clampedSample = Math.max(-1, Math.min(1, sample));
-    view.setInt16(
-      targetSampleIndex * CANONICAL_AUDIO_BYTES_PER_SAMPLE,
-      clampedSample < 0 ? clampedSample * 0x8000 : clampedSample * 0x7fff,
-      true,
-    );
-  }
-
-  return pcmBytes;
 }
 
 function mediaTrackSettingsToDiagnostics(
@@ -412,6 +388,12 @@ export function useAudioTranscriptionRecorder({
   setAttachedFiles,
 }: UseAudioTranscriptionRecorderOptions) {
   const [isRecording, setIsRecording] = useState(false);
+  /**
+   * True once the worklet has delivered the first non-zero sample —
+   * the mic is really live, as opposed to streaming OS warm-up zeros.
+   * Drives the UI "speak now" cue; mirrors useAudioDictationRecorder.
+   */
+  const [isCapturingAudio, setIsCapturingAudio] = useState(false);
   const [isRecordingUpload, setIsRecordingUpload] = useState(false);
   const [recordingError, setRecordingError] = useState<string | null>(null);
   const [retryingAudioFileId, setRetryingAudioFileId] = useState<string | null>(
@@ -430,19 +412,33 @@ export function useAudioTranscriptionRecorder({
   const [isVadListening, setIsVadListening] = useState(false);
   const [isVadSpeechActive, setIsVadSpeechActive] = useState(false);
 
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
-  const mediaChunksRef = useRef<BlobPart[]>([]);
   const liveSessionRef = useRef<LiveAudioTranscriptionSession | null>(null);
   const recordedAudioFilesRef = useRef(new Map<string, File>());
   const attachedFilesRef = useRef(attachedFiles);
+  /**
+   * Pre-session sample buffer: holds Float32 samples captured between
+   * the worklet's first frame and the live session being ready, so the
+   * user's first words aren't dropped during the chat-create + socket
+   * handshake. Mirrors useAudioDictationRecorder (ERMAIN-334).
+   */
+  const preSessionSamplesRef = useRef<number[]>([]);
+  /**
+   * AudioContext persists across recordings (suspend between sessions,
+   * close only on unmount) and the worklet module registers once per
+   * context — both mirror useAudioDictationRecorder.
+   */
   const audioContextRef = useRef<AudioContext | null>(null);
+  const workletModuleLoadedRef = useRef(false);
   const audioAnalyserRef = useRef<AnalyserNode | null>(null);
   const audioSourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const audioProcessorRef = useRef<ScriptProcessorNode | null>(null);
-  const audioProcessorSinkRef = useRef<GainNode | null>(null);
+  const audioProcessorRef = useRef<AudioWorkletNode | null>(null);
   const audioLevelDataRef = useRef<Uint8Array | null>(null);
   const audioFrameRef = useRef<number | null>(null);
+  /** Defers the isCapturingAudio flip when real audio arrives sooner
+   *  than MIN_AUDIO_CAPTURE_DELAY_MS; cleared on teardown. */
+  const capturingFlipTimerRef = useRef<number | null>(null);
+  const startInFlightRef = useRef(false);
   const vadEngineRef = useRef<VoiceVadEngine | null>(null);
   const vadAutoStopTriggeredRef = useRef(false);
   const vadDebugLastFrameLogAtRef = useRef(0);
@@ -452,7 +448,11 @@ export function useAudioTranscriptionRecorder({
   const createChatMutation = useCreateChat();
   const { fetcherOptions: fileFetchOptions } = useV1betaApiContext();
   const fileFetchOptionsRef = useRef(fileFetchOptions);
-  const { selectedAudioInputDeviceId } = useAudioInputDevicePreference();
+  /** Mounted getter for the awaits in startAudioRecording and the
+   *  deferred finalization — mirrors useAudioDictationRecorder. */
+  const isMounted = useMountedState();
+  const { selectedAudioInputDeviceId, setSelectedAudioInputDeviceId } =
+    useAudioInputDevicePreference();
 
   useEffect(() => {
     fileFetchOptionsRef.current = fileFetchOptions;
@@ -519,6 +519,10 @@ export function useAudioTranscriptionRecorder({
   );
 
   const stopRecordingVisualizer = useCallback(() => {
+    if (capturingFlipTimerRef.current !== null) {
+      window.clearTimeout(capturingFlipTimerRef.current);
+      capturingFlipTimerRef.current = null;
+    }
     if (audioFrameRef.current !== null) {
       window.cancelAnimationFrame(audioFrameRef.current);
       audioFrameRef.current = null;
@@ -528,16 +532,23 @@ export function useAudioTranscriptionRecorder({
     audioAnalyserRef.current = null;
     audioSourceNodeRef.current?.disconnect();
     audioSourceNodeRef.current = null;
-    audioProcessorRef.current?.disconnect();
-    audioProcessorRef.current = null;
-    audioProcessorSinkRef.current?.disconnect();
-    audioProcessorSinkRef.current = null;
+    if (audioProcessorRef.current) {
+      audioProcessorRef.current.port.onmessage = null;
+      audioProcessorRef.current.disconnect();
+      audioProcessorRef.current = null;
+    }
     audioLevelDataRef.current = null;
 
-    if (audioContextRef.current && audioContextRef.current.state !== "closed") {
-      void audioContextRef.current.close();
+    // Suspend rather than close: each recording gets fresh source /
+    // analyser / worklet nodes, but the AudioContext itself, its audio
+    // rendering thread, and the registered worklet module stay warm.
+    // Closing + re-creating the context paid an audio-thread spin-up
+    // cost on every restart. Close only happens on unmount.
+    if (audioContextRef.current?.state === "running") {
+      void audioContextRef.current.suspend();
     }
-    audioContextRef.current = null;
+    preSessionSamplesRef.current = [];
+    setIsCapturingAudio(false);
     // Drop any pending throttled bar updates before resetting to the idle
     // pattern, so a stale RAF frame can't overwrite the reset.
     setRecordingBarsThrottled.cancel();
@@ -576,8 +587,66 @@ export function useAudioTranscriptionRecorder({
     stopRecordingVisualizer();
   }, [clearRecordingDurationTimer, stopRecordingVisualizer, stopVadEngine]);
 
+  /**
+   * Returns a ready-to-use AudioContext with the shared dictation
+   * worklet module registered and the context in the `running` state.
+   * Reuses the existing context across recordings (resume) and creates
+   * a fresh one only when the previous one was closed. Returns `null`
+   * when the host browser doesn't support Web Audio / AudioWorkletNode.
+   * Mirrors useAudioDictationRecorder.ensureAudioContextReady.
+   */
+  const ensureAudioContextReady = useCallback(
+    async (preferredSampleRate?: number): Promise<AudioContext | null> => {
+      if (
+        typeof AudioContext === "undefined" ||
+        typeof AudioWorkletNode === "undefined"
+      ) {
+        return null;
+      }
+
+      let audioContext = audioContextRef.current;
+      if (!audioContext || audioContext.state === "closed") {
+        try {
+          audioContext = preferredSampleRate
+            ? new AudioContext({ sampleRate: preferredSampleRate })
+            : new AudioContext();
+        } catch {
+          // Browser refused the requested sample rate; fall back to the
+          // default rate — the PCM resampler handles 16 kHz either way.
+          audioContext = new AudioContext();
+        }
+        audioContextRef.current = audioContext;
+        workletModuleLoadedRef.current = false;
+      }
+
+      if (!workletModuleLoadedRef.current) {
+        await audioContext.audioWorklet.addModule(audioDictationWorkletUrl);
+        workletModuleLoadedRef.current = true;
+      }
+
+      // resume() is a no-op when already running; it matters when
+      // reusing a context suspended at the end of the prior recording,
+      // and on hosts where a fresh context starts suspended (embedded
+      // webviews / lapsed user activation). The transcription recorder
+      // previously never resumed, which silently produced zero capture
+      // on suspended-start hosts (ERMAIN-334).
+      try {
+        await audioContext.resume();
+      } catch {
+        // Resume can reject when user activation has fully expired; the
+        // context still works once the source is connected.
+      }
+
+      return audioContext;
+    },
+    [],
+  );
+
   const startLiveAudioTranscriptionSession = useCallback(
-    async (filename: string): Promise<LiveAudioTranscriptionSession> => {
+    async (
+      filename: string,
+      sourceSampleRate: number,
+    ): Promise<LiveAudioTranscriptionSession> => {
       if (!audioTranscriptionEnabled) {
         throw new Error(
           t`Audio transcription is not available in this environment.`,
@@ -632,46 +701,58 @@ export function useAudioTranscriptionRecorder({
         setRecordingError(t`Audio transcription connection failed.`);
       });
 
-      await waitForSocketOpen(socket);
-      const sessionStatePromise = waitForAudioTranscriptionFrame(
-        socket,
-        (frame) => frame.type === "session_state",
-      );
+      try {
+        await waitForSocketOpen(socket);
+        const sessionStatePromise = waitForAudioTranscriptionFrame(
+          socket,
+          (frame) => frame.type === "session_state",
+        );
 
-      sendAudioTranscriptionControlFrame(socket, {
-        type: "start",
-        chat_id: uploadChatId,
-        filename,
-        content_type: "audio/wav",
-      });
+        sendAudioTranscriptionControlFrame(socket, {
+          type: "start",
+          chat_id: uploadChatId,
+          filename,
+          content_type: "audio/wav",
+        });
 
-      const sessionFrame = await sessionStatePromise;
-      if (sessionFrame.type !== "session_state") {
-        throw new Error(t`Audio transcription did not start.`);
+        const sessionFrame = await sessionStatePromise;
+        if (sessionFrame.type !== "session_state") {
+          throw new Error(t`Audio transcription did not start.`);
+        }
+
+        const initialFile = await fetchGetFile({
+          ...fileFetchOptionsRef.current,
+          pathParams: { fileId: sessionFrame.file_upload_id },
+        });
+        upsertAudioTranscriptionAttachment(initialFile);
+
+        // The caller drains the pre-session sample buffer into this
+        // session and only then publishes it to liveSessionRef — the
+        // drain → ref-assign → flush sequence must stay one synchronous
+        // block there so no audio frame can interleave.
+        const session: LiveAudioTranscriptionSession = {
+          socket,
+          fileUploadId: sessionFrame.file_upload_id,
+          filename,
+          chunkDurationMs:
+            sessionFrame.chunk_duration_ms ??
+            DEFAULT_AUDIO_TRANSCRIPTION_CHUNK_DURATION_MS,
+          nextChunkIndex: sessionFrame.next_chunk_index ?? 0,
+          startedAtMs: Date.now(),
+          sendQueue: Promise.resolve(),
+          pcmParts: [],
+          pendingSourceSamples: [],
+          sourceSampleRate,
+          queuedPcmBytes: 0,
+        };
+        setIsRecordingUpload(false);
+        return session;
+      } catch (error) {
+        // The session was never published to liveSessionRef, so the
+        // socket would otherwise leak on handshake failure.
+        socket.close();
+        throw error;
       }
-
-      const initialFile = await fetchGetFile({
-        ...fileFetchOptionsRef.current,
-        pathParams: { fileId: sessionFrame.file_upload_id },
-      });
-      upsertAudioTranscriptionAttachment(initialFile);
-
-      const session: LiveAudioTranscriptionSession = {
-        socket,
-        fileUploadId: sessionFrame.file_upload_id,
-        chunkDurationMs:
-          sessionFrame.chunk_duration_ms ??
-          DEFAULT_AUDIO_TRANSCRIPTION_CHUNK_DURATION_MS,
-        nextChunkIndex: sessionFrame.next_chunk_index ?? 0,
-        startedAtMs: Date.now(),
-        sendQueue: Promise.resolve(),
-        pcmParts: [],
-        pendingSourceSamples: [],
-        sourceSampleRate: CANONICAL_AUDIO_SAMPLE_RATE_HZ,
-      };
-      liveSessionRef.current = session;
-      setIsRecordingUpload(false);
-      return session;
     },
     [
       assistantId,
@@ -686,53 +767,82 @@ export function useAudioTranscriptionRecorder({
     ],
   );
 
-  const sendLivePcmChunk = useCallback((pcmBytes: Uint8Array) => {
-    const session = liveSessionRef.current;
-    if (!session || pcmBytes.length === 0) {
-      return;
-    }
-
-    session.sendQueue = session.sendQueue.then(async () => {
-      if (session.socket.readyState !== WebSocket.OPEN) {
+  const sendLivePcmChunk = useCallback(
+    (session: LiveAudioTranscriptionSession, pcmBytes: Uint8Array) => {
+      if (pcmBytes.length === 0) {
         return;
       }
 
-      const chunkIndex = session.nextChunkIndex;
-      const startMs = chunkIndex * session.chunkDurationMs;
-      const chunkDurationMs = Math.ceil(
-        (pcmBytes.length /
-          CANONICAL_AUDIO_BYTES_PER_SAMPLE /
-          CANONICAL_AUDIO_SAMPLE_RATE_HZ) *
-          1000,
-      );
-      const endMs =
-        startMs + Math.min(chunkDurationMs, session.chunkDurationMs);
-      const isFirstChunk = chunkIndex === 0;
-      const canonicalAudioBytes = isFirstChunk
-        ? createCanonicalWavBytesFromPcm(pcmBytes)
-        : null;
+      // Clamp the cumulative recording to the configured maximum: the
+      // 300ms primer plus the pre-handshake capture push a recording
+      // that runs to the cap slightly past the backend's strict
+      // duration/byte limits, which would reject the FINAL chunk (the
+      // end of the user's speech) and break the retry path. Trimming
+      // the overflow client-side keeps the last chunk's end_ms exactly
+      // at the limit.
+      const maxSessionPcmBytes =
+        Math.floor(
+          maxRecordingDurationSeconds * CANONICAL_AUDIO_SAMPLE_RATE_HZ,
+        ) * CANONICAL_AUDIO_BYTES_PER_SAMPLE;
+      const remainingPcmBytes = maxSessionPcmBytes - session.queuedPcmBytes;
+      if (remainingPcmBytes <= 0) {
+        return;
+      }
+      const boundedPcmBytes =
+        pcmBytes.length > remainingPcmBytes
+          ? pcmBytes.slice(
+              0,
+              remainingPcmBytes -
+                (remainingPcmBytes % CANONICAL_AUDIO_BYTES_PER_SAMPLE),
+            )
+          : pcmBytes;
+      if (boundedPcmBytes.length === 0) {
+        return;
+      }
+      session.queuedPcmBytes += boundedPcmBytes.length;
 
-      session.nextChunkIndex += 1;
-      session.pcmParts.push(pcmBytes);
+      session.sendQueue = session.sendQueue.then(async () => {
+        if (session.socket.readyState !== WebSocket.OPEN) {
+          return;
+        }
 
-      sendAudioTranscriptionControlFrame(session.socket, {
-        type: "chunk_metadata",
-        chunk_index: chunkIndex,
-        start_ms: startMs,
-        end_ms: endMs,
-        content_type: isFirstChunk ? "audio/wav" : "audio/pcm",
+        const chunkIndex = session.nextChunkIndex;
+        const startMs = chunkIndex * session.chunkDurationMs;
+        const chunkDurationMs = Math.ceil(
+          (boundedPcmBytes.length /
+            CANONICAL_AUDIO_BYTES_PER_SAMPLE /
+            CANONICAL_AUDIO_SAMPLE_RATE_HZ) *
+            1000,
+        );
+        const endMs =
+          startMs + Math.min(chunkDurationMs, session.chunkDurationMs);
+        const isFirstChunk = chunkIndex === 0;
+        const canonicalAudioBytes = isFirstChunk
+          ? createCanonicalWavBytesFromPcm(boundedPcmBytes)
+          : null;
+
+        session.nextChunkIndex += 1;
+        session.pcmParts.push(boundedPcmBytes);
+
+        sendAudioTranscriptionControlFrame(session.socket, {
+          type: "chunk_metadata",
+          chunk_index: chunkIndex,
+          start_ms: startMs,
+          end_ms: endMs,
+          content_type: isFirstChunk ? "audio/wav" : "audio/pcm",
+        });
+        session.socket.send(canonicalAudioBytes ?? boundedPcmBytes);
       });
-      session.socket.send(canonicalAudioBytes ?? pcmBytes);
-    });
-  }, []);
+    },
+    [maxRecordingDurationSeconds],
+  );
 
+  // Takes the session explicitly (rather than reading liveSessionRef) so
+  // the deferred stop finalization keeps flushing ITS session even after
+  // the ref was cleared at stop time — and so a freshly started
+  // recording can never be routed into a dying one.
   const flushLiveAudioSamples = useCallback(
-    (flushFinalChunk: boolean) => {
-      const session = liveSessionRef.current;
-      if (!session) {
-        return;
-      }
-
+    (session: LiveAudioTranscriptionSession, flushFinalChunk: boolean) => {
       const sourceSamplesPerChunk = Math.max(
         1,
         Math.floor((session.sourceSampleRate * session.chunkDurationMs) / 1000),
@@ -750,6 +860,7 @@ export function useAudioTranscriptionRecorder({
           session.pendingSourceSamples.splice(0, sourceSampleCount),
         );
         sendLivePcmChunk(
+          session,
           resampleMonoFloat32ToPcm16(sourceSamples, session.sourceSampleRate),
         );
       }
@@ -759,13 +870,21 @@ export function useAudioTranscriptionRecorder({
 
   useEffect(() => {
     return () => {
-      if (mediaRecorderRef.current) {
-        mediaRecorderRef.current.stop();
-      }
-
+      startInFlightRef.current = false;
       liveSessionRef.current?.socket.close();
       liveSessionRef.current = null;
       stopMediaRecordingStream();
+      // stopRecordingVisualizer suspends the AudioContext between
+      // recordings; close it for real on unmount so the audio rendering
+      // thread and the registered worklet are released.
+      if (
+        audioContextRef.current &&
+        audioContextRef.current.state !== "closed"
+      ) {
+        void audioContextRef.current.close();
+      }
+      audioContextRef.current = null;
+      workletModuleLoadedRef.current = false;
     };
   }, [stopMediaRecordingStream]);
 
@@ -1010,15 +1129,79 @@ export function useAudioTranscriptionRecorder({
     [uploadRecordedAudio],
   );
 
-  const stopAudioRecording = useCallback(() => {
-    if (mediaRecorderRef.current?.state === "recording") {
-      mediaRecorderRef.current.stop();
-      return;
-    }
+  /**
+   * Deferred completion of a live session after the capture graph is
+   * torn down: flush the remaining buffered samples, send `finish`,
+   * await the server's `completed` frame, and retain the assembled WAV
+   * for retries. Takes the session explicitly — the caller clears
+   * liveSessionRef synchronously at stop time, so a recording started
+   * while this finalization awaits the server can never be routed into
+   * or clobbered by the dying session. Replaces the former
+   * MediaRecorder.onstop driver.
+   */
+  const finalizeLiveTranscriptionSession = useCallback(
+    async (session: LiveAudioTranscriptionSession | null) => {
+      try {
+        if (!session) {
+          return;
+        }
 
+        flushLiveAudioSamples(session, true);
+        await session.sendQueue;
+
+        if (session.pcmParts.length === 0) {
+          removeAudioTranscriptionAttachment(session.fileUploadId);
+          if (isMounted()) {
+            setRecordingError(
+              t`No audio was captured. Please try recording again.`,
+            );
+          }
+          return;
+        }
+
+        const completedFramePromise = waitForAudioTranscriptionFrame(
+          session.socket,
+          (frame) => frame.type === "completed",
+        );
+        sendAudioTranscriptionControlFrame(session.socket, {
+          type: "finish",
+        });
+        await completedFramePromise;
+
+        const audioFile = new File(
+          [createCanonicalWavBytesFromPcm(concatUint8Arrays(session.pcmParts))],
+          session.filename,
+          { type: "audio/wav" },
+        );
+        recordedAudioFilesRef.current.set(session.fileUploadId, audioFile);
+      } catch (error) {
+        if (isMounted()) {
+          setRecordingError(
+            error instanceof Error
+              ? error.message
+              : t`Failed to upload audio recording for transcription.`,
+          );
+        }
+      } finally {
+        session?.socket.close();
+      }
+    },
+    [flushLiveAudioSamples, isMounted, removeAudioTranscriptionAttachment],
+  );
+
+  const stopAudioRecording = useCallback(() => {
+    // Detach the session BEFORE tearing down: from this point no worklet
+    // frame can be routed into the dying session, and a follow-up
+    // recording owns the ref exclusively.
+    const session = liveSessionRef.current;
+    liveSessionRef.current = null;
     setIsRecording(false);
+    // Tear the capture graph down (stop tracks, disconnect the worklet,
+    // suspend the context), then complete the protocol exchange on
+    // whatever was already delivered to the JS side.
     stopMediaRecordingStream();
-  }, [stopMediaRecordingStream]);
+    void finalizeLiveTranscriptionSession(session);
+  }, [finalizeLiveTranscriptionSession, stopMediaRecordingStream]);
 
   const startAudioRecording = useCallback(async () => {
     if (!audioTranscriptionEnabled || !uploadEnabled) {
@@ -1039,27 +1222,219 @@ export function useAudioTranscriptionRecorder({
       return;
     }
 
+    if (startInFlightRef.current) {
+      return;
+    }
+    startInFlightRef.current = true;
+
+    const baseAudioConstraints: MediaTrackConstraints = {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+      channelCount: { ideal: 1 },
+      sampleRate: { ideal: CANONICAL_AUDIO_SAMPLE_RATE_HZ },
+    };
+
     try {
-      const stream = await mediaDevices.getUserMedia({
-        audio: {
-          ...(selectedAudioInputDeviceId
-            ? { deviceId: { exact: selectedAudioInputDeviceId } }
-            : {}),
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-          channelCount: { ideal: 1 },
-          sampleRate: { ideal: CANONICAL_AUDIO_SAMPLE_RATE_HZ },
-        },
-      });
+      let stream: MediaStream;
+      try {
+        stream = await mediaDevices.getUserMedia({
+          audio: selectedAudioInputDeviceId
+            ? {
+                deviceId: { exact: selectedAudioInputDeviceId },
+                ...baseAudioConstraints,
+              }
+            : baseAudioConstraints,
+        });
+      } catch (firstError) {
+        // A stored deviceId can go stale between enumeration and
+        // getUserMedia (e.g. a Bluetooth disconnect). On
+        // OverconstrainedError, retry once with the system-default mic
+        // and clear the stale stored id — mirrors the dictation recorder.
+        if (
+          selectedAudioInputDeviceId &&
+          firstError instanceof DOMException &&
+          firstError.name === "OverconstrainedError"
+        ) {
+          stream = await mediaDevices.getUserMedia({
+            audio: baseAudioConstraints,
+          });
+          setSelectedAudioInputDeviceId("");
+        } else {
+          throw firstError;
+        }
+      }
+      if (!isMounted()) {
+        // Unmounted while the permission prompt / device open was
+        // pending: the unmount cleanup already ran (and saw a null
+        // stream ref), so stop the tracks here or the mic stays hot.
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+
       mediaStreamRef.current = stream;
       const audioTrack = stream.getAudioTracks()[0];
-      setRecordingDiagnostics(
-        mediaTrackSettingsToDiagnostics(audioTrack.getSettings()),
-      );
+      const trackSettings = audioTrack.getSettings();
+      setRecordingDiagnostics(mediaTrackSettingsToDiagnostics(trackSettings));
 
       const filename = formatAudioRecordingFilename(new Date());
-      const liveSession = await startLiveAudioTranscriptionSession(filename);
+
+      // Build the audio pipeline BEFORE the chat-create + socket
+      // handshake (the dictation recorder's anti-truncation pattern,
+      // ERMAIN-334): once the worklet is connected, samples land in
+      // preSessionSamplesRef until the live session is ready, so the
+      // words spoken during the handshake are no longer lost. The
+      // previous ordering tapped the microphone only after the full
+      // handshake resolved, dropping everything spoken until then.
+      let sourceSampleRate = CANONICAL_AUDIO_SAMPLE_RATE_HZ;
+      const audioContext = await ensureAudioContextReady(
+        trackSettings.sampleRate,
+      );
+      if (!isMounted()) {
+        stream.getTracks().forEach((track) => track.stop());
+        // The unmount cleanup already closed (and nulled) the previous
+        // context, so a context created by the await above would leak.
+        if (audioContext && audioContext.state !== "closed") {
+          void audioContext.close();
+        }
+        audioContextRef.current = null;
+        return;
+      }
+      if (audioContext) {
+        const source = audioContext.createMediaStreamSource(stream);
+        const analyser = audioContext.createAnalyser();
+        const processor = new AudioWorkletNode(
+          audioContext,
+          AUDIO_TRANSCRIPTION_WORKLET_PROCESSOR_NAME,
+        );
+        // Match the dictation recorder: time-domain sampling with a
+        // 256-sample FFT and a touch of smoothing reads voice energy
+        // across the whole window instead of bucketing it into one
+        // low-frequency bin, so all five bars react to speech.
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.65;
+        sourceSampleRate = audioContext.sampleRate;
+        logger.log("Audio worklet connected", {
+          sampleRate: audioContext.sampleRate,
+          vadAutoStopEnabled,
+        });
+
+        // Synthetic silence primer — see useAudioDictationRecorder for
+        // the rationale (server-side VAD onset calibration).
+        const primerSampleCount = Math.max(
+          0,
+          Math.floor(
+            (audioContext.sampleRate * PRE_SPEECH_SILENCE_PRIMER_MS) / 1000,
+          ),
+        );
+        const primer: number[] = [];
+        primer.length = primerSampleCount;
+        primer.fill(0);
+        preSessionSamplesRef.current = primer;
+
+        // The worklet posts every render quantum, including zero-filled
+        // OS warm-up frames — those belong in the stream sent to the
+        // server. The "speak now" UI cue waits for real audio though:
+        // scan each frame for a non-zero sample and flip
+        // isCapturingAudio on the first one.
+        let audioFlowing = false;
+        const pipelineReadyAt = Date.now();
+        const flipCapturingAudio = () => {
+          // Guard against late firings after teardown or unmount: the
+          // processor ref will be null or point at a different node.
+          if (!isMounted() || audioProcessorRef.current !== processor) {
+            return;
+          }
+          setIsCapturingAudio(true);
+        };
+        processor.port.onmessage = (event: MessageEvent<Float32Array>) => {
+          const input = event.data;
+          const vadFrame = vadEngineRef.current
+            ? new Float32Array(input)
+            : null;
+          if (!audioFlowing) {
+            for (let index = 0; index < input.length; index += 1) {
+              if (input[index] !== 0) {
+                audioFlowing = true;
+                const elapsed = Date.now() - pipelineReadyAt;
+                const remaining = MIN_AUDIO_CAPTURE_DELAY_MS - elapsed;
+                if (remaining > 0) {
+                  capturingFlipTimerRef.current = window.setTimeout(() => {
+                    capturingFlipTimerRef.current = null;
+                    flipCapturingAudio();
+                  }, remaining);
+                } else {
+                  flipCapturingAudio();
+                }
+                break;
+              }
+            }
+          }
+          const session = liveSessionRef.current;
+          if (session) {
+            for (let index = 0; index < input.length; index += 1) {
+              session.pendingSourceSamples.push(input[index]);
+            }
+            flushLiveAudioSamples(session, false);
+          } else {
+            const preBuffer = preSessionSamplesRef.current;
+            for (let index = 0; index < input.length; index += 1) {
+              preBuffer.push(input[index]);
+            }
+          }
+          if (vadFrame && vadEngineRef.current) {
+            void vadEngineRef.current
+              .acceptFrame({
+                samples: vadFrame,
+                sampleRate: audioContext.sampleRate,
+                timestampMs: Date.now(),
+              })
+              .catch((error) => {
+                logger.warn(
+                  "VAD frame processing failed; disabling VAD",
+                  error,
+                );
+                stopVadEngine();
+              });
+          }
+        };
+
+        const levelData = new Uint8Array(analyser.fftSize);
+
+        const analyzeLevel = () => {
+          if (!audioAnalyserRef.current || !audioLevelDataRef.current) {
+            return;
+          }
+
+          audioAnalyserRef.current.getByteTimeDomainData(
+            audioLevelDataRef.current,
+          );
+
+          setRecordingBarsThrottled(
+            getAudioLevelBarsFromTimeDomainData(audioLevelDataRef.current),
+          );
+          audioFrameRef.current = window.requestAnimationFrame(analyzeLevel);
+        };
+
+        audioContextRef.current = audioContext;
+        audioAnalyserRef.current = analyser;
+        audioSourceNodeRef.current = source;
+        audioProcessorRef.current = processor;
+        audioLevelDataRef.current = levelData;
+        source.connect(analyser);
+        source.connect(processor);
+        audioFrameRef.current = window.requestAnimationFrame(analyzeLevel);
+      } else {
+        setRecordingBars((existingBars) =>
+          existingBars.length === AUDIO_BARS_COUNT
+            ? [2, 2, 6, 2, 2]
+            : Array.from({ length: AUDIO_BARS_COUNT }, () => 2),
+        );
+      }
+
+      // The VAD model load below and the session handshake after it no
+      // longer gate capture — the connected worklet is already filling
+      // the pre-session buffer.
       let vadEngine: VoiceVadEngine | null = null;
       if (vadAutoStopEnabled) {
         const vadOptions = {
@@ -1147,173 +1522,34 @@ export function useAudioTranscriptionRecorder({
         }
       }
 
-      if (typeof AudioContext !== "undefined") {
-        const audioContext = new AudioContext();
-        const source = audioContext.createMediaStreamSource(stream);
-        const analyser = audioContext.createAnalyser();
-        const processor = audioContext.createScriptProcessor(4096, 1, 1);
-        const processorSink = audioContext.createGain();
-        // Match the dictation recorder: time-domain sampling with a
-        // 256-sample FFT and a touch of smoothing reads voice energy
-        // across the whole window instead of bucketing it into one
-        // low-frequency bin, so all five bars react to speech.
-        analyser.fftSize = 256;
-        analyser.smoothingTimeConstant = 0.65;
-        processorSink.gain.value = 0;
-        source.connect(analyser);
-        source.connect(processor);
-        processor.connect(processorSink);
-        processorSink.connect(audioContext.destination);
-        liveSession.sourceSampleRate = audioContext.sampleRate;
-        logger.log("Audio processor connected", {
-          sampleRate: audioContext.sampleRate,
-          bufferSize: 4096,
-          vadAutoStopEnabled: Boolean(vadEngineRef.current),
-        });
-        processor.onaudioprocess = (event) => {
-          const session = liveSessionRef.current;
-          if (!session) {
-            return;
-          }
-
-          const input = event.inputBuffer.getChannelData(0);
-          const vadFrame = vadEngineRef.current
-            ? new Float32Array(input)
-            : null;
-          for (let index = 0; index < input.length; index += 1) {
-            session.pendingSourceSamples.push(input[index]);
-          }
-          flushLiveAudioSamples(false);
-          if (vadFrame && vadEngineRef.current) {
-            void vadEngineRef.current
-              .acceptFrame({
-                samples: vadFrame,
-                sampleRate: audioContext.sampleRate,
-                timestampMs: Date.now(),
-              })
-              .catch((error) => {
-                logger.warn(
-                  "VAD frame processing failed; disabling VAD",
-                  error,
-                );
-                stopVadEngine();
-              });
-          }
-        };
-
-        const levelData = new Uint8Array(analyser.fftSize);
-
-        const analyzeLevel = () => {
-          if (!audioAnalyserRef.current || !audioLevelDataRef.current) {
-            return;
-          }
-
-          audioAnalyserRef.current.getByteTimeDomainData(
-            audioLevelDataRef.current,
-          );
-
-          setRecordingBarsThrottled(
-            getAudioLevelBarsFromTimeDomainData(audioLevelDataRef.current),
-          );
-          audioFrameRef.current = window.requestAnimationFrame(analyzeLevel);
-        };
-
-        audioContextRef.current = audioContext;
-        audioAnalyserRef.current = analyser;
-        audioSourceNodeRef.current = source;
-        audioProcessorRef.current = processor;
-        audioProcessorSinkRef.current = processorSink;
-        audioLevelDataRef.current = levelData;
-        audioFrameRef.current = window.requestAnimationFrame(analyzeLevel);
-      } else {
-        setRecordingBars((existingBars) =>
-          existingBars.length === AUDIO_BARS_COUNT
-            ? [2, 2, 6, 2, 2]
-            : Array.from({ length: AUDIO_BARS_COUNT }, () => 2),
-        );
+      const liveSession = await startLiveAudioTranscriptionSession(
+        filename,
+        sourceSampleRate,
+      );
+      if (!isMounted() || mediaStreamRef.current !== stream) {
+        // Unmounted, or the capture graph was torn down (e.g. VAD
+        // auto-stop) while the handshake was in flight — don't resurrect
+        // a recording on a dead graph.
+        liveSession.socket.close();
+        return;
       }
 
-      const mediaRecorder = new MediaRecorder(stream);
-
-      mediaChunksRef.current = [];
-      mediaRecorderRef.current = mediaRecorder;
-      mediaRecorder.ondataavailable = (event: BlobEvent) => {
-        if (event.data.size > 0) {
-          mediaChunksRef.current.push(event.data);
+      // Drain pre-buffered samples into the new session in their
+      // original order, THEN publish the session ref. Order matters:
+      // until `liveSessionRef.current` is set, the worklet handler keeps
+      // pushing to `preSessionSamplesRef`. The drain → ref-assign →
+      // flush sequence is one synchronous block, so no audio frame can
+      // interleave and split samples across the two buffers.
+      const preBuffer = preSessionSamplesRef.current;
+      if (preBuffer.length > 0) {
+        for (let index = 0; index < preBuffer.length; index += 1) {
+          liveSession.pendingSourceSamples.push(preBuffer[index]);
         }
-      };
+        preSessionSamplesRef.current = [];
+      }
+      liveSessionRef.current = liveSession;
+      flushLiveAudioSamples(liveSession, false);
 
-      mediaRecorder.onstop = () => {
-        clearRecordingDurationTimer();
-        setIsRecording(false);
-        stopMediaRecordingStream();
-        mediaChunksRef.current = [];
-
-        void (async () => {
-          const session = liveSessionRef.current;
-          try {
-            if (!session) {
-              return;
-            }
-
-            flushLiveAudioSamples(true);
-            await session.sendQueue;
-
-            if (session.pcmParts.length === 0) {
-              removeAudioTranscriptionAttachment(session.fileUploadId);
-              setRecordingError(
-                t`No audio was captured. Please try recording again.`,
-              );
-              return;
-            }
-
-            const completedFramePromise = waitForAudioTranscriptionFrame(
-              session.socket,
-              (frame) => frame.type === "completed",
-            );
-            sendAudioTranscriptionControlFrame(session.socket, {
-              type: "finish",
-            });
-            await completedFramePromise;
-
-            const audioFile = new File(
-              [
-                createCanonicalWavBytesFromPcm(
-                  concatUint8Arrays(session.pcmParts),
-                ),
-              ],
-              filename,
-              { type: "audio/wav" },
-            );
-            recordedAudioFilesRef.current.set(session.fileUploadId, audioFile);
-          } catch (error) {
-            setRecordingError(
-              error instanceof Error
-                ? error.message
-                : t`Failed to upload audio recording for transcription.`,
-            );
-          } finally {
-            liveSessionRef.current = null;
-            session?.socket.close();
-          }
-        })();
-      };
-
-      mediaRecorder.onerror = (event: Event) => {
-        const error = (event as ErrorEvent).error;
-        liveSessionRef.current?.socket.close();
-        liveSessionRef.current = null;
-        stopMediaRecordingStream();
-        setIsRecording(false);
-        setIsRecordingUpload(false);
-        setRecordingError(
-          error instanceof Error
-            ? error.message
-            : t`Could not complete audio recording.`,
-        );
-      };
-
-      mediaRecorder.start();
       clearRecordingDurationTimer();
       const recordingLimitMs = Math.max(
         1,
@@ -1361,6 +1597,8 @@ export function useAudioTranscriptionRecorder({
             : t`Could not start audio recording.`,
         );
       }
+    } finally {
+      startInFlightRef.current = false;
     }
   }, [
     audioTranscriptionEnabled,
@@ -1368,11 +1606,13 @@ export function useAudioTranscriptionRecorder({
     stopMediaRecordingStream,
     maxRecordingDurationSeconds,
     clearRecordingDurationTimer,
+    ensureAudioContextReady,
+    isMounted,
     stopAudioRecording,
     startLiveAudioTranscriptionSession,
     flushLiveAudioSamples,
-    removeAudioTranscriptionAttachment,
     selectedAudioInputDeviceId,
+    setSelectedAudioInputDeviceId,
     setRecordingBarsThrottled,
     stopVadEngine,
     vadAutoStopEnabled,
@@ -1412,6 +1652,7 @@ export function useAudioTranscriptionRecorder({
 
   return {
     isRecording,
+    isCapturingAudio,
     isRecordingUpload,
     recordingError,
     setRecordingError,

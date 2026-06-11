@@ -239,6 +239,26 @@ export function useAudioDictationRecorder({
   const recordingDurationTimerRef = useRef<number | null>(null);
   const onTranscriptChunkRef = useRef(onTranscriptChunk);
   const vadEngineRef = useRef<VoiceVadEngine | null>(null);
+  /**
+   * VAD engine instance kept warm ACROSS dictation sessions. The first
+   * `vadEngine.start()` pays a multi-megabyte onnxruntime-web WASM +
+   * Silero ONNX model load; the engine supports cheap `stop()` + reset
+   * reuse, so we create it once and re-start it per session instead of
+   * destroying and re-downloading every conversational turn. Destroyed
+   * only in the unmount cleanup. `vadEngineRef` stays the "active and
+   * listening" signal consumed by the worklet frame feed.
+   */
+  const persistentVadEngineRef = useRef<VoiceVadEngine | null>(null);
+  /** Per-session VAD listener detach; called on every stop so a reused
+   *  engine never fires stale callbacks into a finished session. */
+  const vadEngineUnsubscribeRef = useRef<(() => void) | null>(null);
+  /**
+   * Serializes `vadEngine.start()` calls on the shared engine. A
+   * stop-then-restart while the cold model load is still in flight
+   * would otherwise run two concurrent `MicVAD.new()` loads inside the
+   * same instance and leak one ORT session.
+   */
+  const vadEngineStartQueueRef = useRef<Promise<void>>(Promise.resolve());
   const vadAutoStopTriggeredRef = useRef(false);
   const onVadAutoStopRef = useRef(onVadAutoStop);
   /**
@@ -271,7 +291,13 @@ export function useAudioDictationRecorder({
   }, []);
 
   const stopVadEngine = useCallback(() => {
-    vadEngineRef.current?.destroy();
+    vadEngineUnsubscribeRef.current?.();
+    vadEngineUnsubscribeRef.current = null;
+    // stop() — NOT destroy() — so the loaded WASM/ONNX session stays
+    // warm in persistentVadEngineRef for the next dictation turn;
+    // re-start is then a cheap state reset instead of a multi-second
+    // model reload. destroy() happens only on unmount.
+    vadEngineRef.current?.stop();
     vadEngineRef.current = null;
     vadAutoStopTriggeredRef.current = false;
     if (isMounted()) {
@@ -764,63 +790,6 @@ export function useAudioDictationRecorder({
         analyser.fftSize = 256;
         analyser.smoothingTimeConstant = 0.65;
         sourceSampleRate = audioContext.sampleRate;
-        if (vadAutoStopEnabled) {
-          let vadEngine: VoiceVadEngine | null = null;
-          try {
-            vadEngine = createRicky0123VadEngine({
-              model: "silero-v5",
-              redemptionMs: 1800,
-              preSpeechPadMs: 500,
-              minSpeechMs: 400,
-            });
-            vadEngine.subscribe((event) => {
-              if (event.type === "error") {
-                stopVadEngine();
-                return;
-              }
-              if (
-                event.type === "speech_start" ||
-                event.type === "speech_real_start"
-              ) {
-                if (isMounted()) {
-                  setIsVadSpeechActive(true);
-                }
-                return;
-              }
-              if (event.type === "vad_misfire") {
-                if (isMounted()) {
-                  setIsVadSpeechActive(false);
-                }
-                return;
-              }
-              if (event.type !== "speech_end") {
-                return;
-              }
-
-              if (isMounted()) {
-                setIsVadSpeechActive(false);
-              }
-              if (vadAutoStopTriggeredRef.current) {
-                return;
-              }
-              vadAutoStopTriggeredRef.current = true;
-              onVadAutoStopRef.current?.();
-              stopDictation();
-            });
-            await vadEngine.start();
-            vadEngineRef.current = vadEngine;
-            if (isMounted()) {
-              setIsVadListening(true);
-            }
-          } catch {
-            vadEngine?.destroy();
-            vadEngineRef.current = null;
-            if (isMounted()) {
-              setIsVadListening(false);
-              setIsVadSpeechActive(false);
-            }
-          }
-        }
         // Synthetic silence primer: seeds the pre-session buffer with a
         // fixed amount of zero samples so the audio sent to the server
         // always starts with the same calibration window for its VAD,
@@ -932,6 +901,96 @@ export function useAudioDictationRecorder({
         source.connect(analyser);
         source.connect(processor);
         audioFrameRef.current = window.requestAnimationFrame(analyzeLevel);
+
+        if (vadAutoStopEnabled) {
+          // Start (or re-start) the VAD engine only AFTER the capture
+          // graph is connected: samples buffer into preSessionSamplesRef
+          // while the model loads, so the first-time onnxruntime WASM +
+          // Silero ONNX fetch no longer eats the start of the first
+          // utterance (ERMAIN-334). The await therefore delays only the
+          // session handshake below, never audio capture. The engine is
+          // created once and reused warm across turns.
+          const vadEngine =
+            persistentVadEngineRef.current ??
+            createRicky0123VadEngine({
+              model: "silero-v5",
+              redemptionMs: 1800,
+              preSpeechPadMs: 500,
+              minSpeechMs: 400,
+            });
+          persistentVadEngineRef.current = vadEngine;
+          const unsubscribeVad = vadEngine.subscribe((event) => {
+            if (event.type === "error") {
+              stopVadEngine();
+              return;
+            }
+            if (
+              event.type === "speech_start" ||
+              event.type === "speech_real_start"
+            ) {
+              if (isMounted()) {
+                setIsVadSpeechActive(true);
+              }
+              return;
+            }
+            if (event.type === "vad_misfire") {
+              if (isMounted()) {
+                setIsVadSpeechActive(false);
+              }
+              return;
+            }
+            if (event.type !== "speech_end") {
+              return;
+            }
+
+            if (isMounted()) {
+              setIsVadSpeechActive(false);
+            }
+            if (vadAutoStopTriggeredRef.current) {
+              return;
+            }
+            vadAutoStopTriggeredRef.current = true;
+            onVadAutoStopRef.current?.();
+            stopDictation();
+          });
+          vadEngineUnsubscribeRef.current = unsubscribeVad;
+          const vadStartPromise = vadEngineStartQueueRef.current
+            .catch(() => undefined)
+            .then(() => vadEngine.start());
+          vadEngineStartQueueRef.current = vadStartPromise.then(
+            () => undefined,
+            () => undefined,
+          );
+          try {
+            await vadStartPromise;
+            if (audioProcessorRef.current === processor) {
+              vadEngineRef.current = vadEngine;
+              if (isMounted()) {
+                setIsVadListening(true);
+              }
+            } else {
+              // The session was torn down while the model loaded; leave
+              // the engine warm but detached. Guard the ref compare so a
+              // newer session's subscription is never ripped out.
+              unsubscribeVad();
+              if (vadEngineUnsubscribeRef.current === unsubscribeVad) {
+                vadEngineUnsubscribeRef.current = null;
+              }
+              vadEngine.stop();
+            }
+          } catch {
+            // Model load failed — continue without auto-stop; the warm
+            // instance is retained so the next session can retry.
+            unsubscribeVad();
+            if (vadEngineUnsubscribeRef.current === unsubscribeVad) {
+              vadEngineUnsubscribeRef.current = null;
+            }
+            if (isMounted()) {
+              setIsVadListening(false);
+              setIsVadSpeechActive(false);
+            }
+          }
+        }
       } else {
         setDictationBars((existingBars) =>
           existingBars.length === AUDIO_BARS_COUNT
@@ -1039,6 +1098,10 @@ export function useAudioDictationRecorder({
       liveSessionRef.current = null;
       pendingSocketRef.current = null;
       stopVadEngine();
+      // stopVadEngine only stop()s the engine so it stays warm between
+      // sessions; on unmount release the ONNX/WASM session for real.
+      persistentVadEngineRef.current?.destroy();
+      persistentVadEngineRef.current = null;
       stopRecordingVisualizer(false);
       // stopRecordingVisualizer suspends the AudioContext between
       // sessions; close it for real on unmount so the audio rendering

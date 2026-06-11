@@ -484,6 +484,7 @@ export const ChatInput = ({
 
   const {
     isRecording,
+    isCapturingAudio: isRecordingCapturingAudio,
     isRecordingUpload,
     recordingError,
     setRecordingError,
@@ -2062,7 +2063,11 @@ export const ChatInput = ({
                     isBuffering={!isCapturingAudio || !isDictating}
                     disabled={disabled || isLoading || isDictationCompleting}
                     ariaLabel={t`Stop audio mode`}
-                    statusLabel={t`Listening for your next message`}
+                    statusLabel={
+                      isCapturingAudio && isDictating
+                        ? t`Listening for your next message`
+                        : t`Microphone is starting — wait for the level meter before speaking`
+                    }
                     testIds={{
                       root: "chat-input-audio-mode-pending-recording",
                       waveform:
@@ -2076,9 +2081,16 @@ export const ChatInput = ({
                 <WaveformButton
                   onClick={toggleAudioRecording}
                   bars={recordingBars}
+                  // Dimmed until real (non-zero) audio flows, so the user
+                  // isn't invited to speak into a still-warming mic.
+                  isBuffering={!isRecordingCapturingAudio}
                   disabled={disabled || isLoading}
                   ariaLabel={t`Stop audio transcript recording`}
-                  statusLabel={t`Recording audio transcript`}
+                  statusLabel={
+                    isRecordingCapturingAudio
+                      ? t`Recording audio transcript`
+                      : t`Microphone is starting — wait for the level meter before speaking`
+                  }
                   testIds={{
                     root: "chat-input-record-audio-transcript",
                     waveform: "chat-input-record-audio-transcript-waveform",
@@ -2113,7 +2125,12 @@ export const ChatInput = ({
                   <WaveformButton
                     onClick={toggleDictationForCurrentTarget}
                     bars={dictationBars}
-                    isBuffering={!isDictating}
+                    // Stay dimmed until BOTH the session is ready and real
+                    // (non-zero) audio is flowing. Gating on isDictating
+                    // alone invited users to speak during the mic's cold
+                    // warm-up window, losing the first words (ERMAIN-334).
+                    // Matches the conversational pending button above.
+                    isBuffering={!isCapturingAudio || !isDictating}
                     disabled={
                       disabled ||
                       isLoading ||
@@ -2128,9 +2145,11 @@ export const ChatInput = ({
                         : t`Cancel starting dictation`
                     }
                     statusLabel={
-                      isDictating
+                      isDictating && isCapturingAudio
                         ? t`Dictating audio`
-                        : t`Capturing audio — waiting for transcription to start`
+                        : isDictating
+                          ? t`Microphone is starting — wait for the level meter before speaking`
+                          : t`Capturing audio — waiting for transcription to start`
                     }
                     testIds={{
                       root: "chat-input-record-audio",
