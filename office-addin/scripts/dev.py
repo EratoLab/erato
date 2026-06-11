@@ -62,9 +62,11 @@ MANIFEST_FUNNEL_ONPREM_PATH = (
 # be installed alongside the EXO add-in without colliding in OWA.
 MANIFEST_ONPREM_ID = "b11bda8b-6dda-46ae-ad77-c920658262fd"
 MANIFEST_ONPREM_DISPLAY_NAME_SUFFIX = " (On-prem)"
-MANIFEST_V1_1_OPEN_TAG = (
-    '<VersionOverrides xmlns="http://schemas.microsoft.com/office/'
-    'mailappversionoverrides/1.1" xsi:type="VersionOverridesV1_1">'
+# Matched tolerantly — the xsi:type attribute identifies the nested 1.1 block
+# regardless of attribute order/spacing, so a hand-reformat of
+# manifest-local.xml doesn't break the on-prem transform.
+MANIFEST_V1_1_OPEN_TAG_PATTERN = re.compile(
+    r'<VersionOverrides\b[^>]*xsi:type="VersionOverridesV1_1"[^>]*>'
 )
 MANIFEST_VERSION_OVERRIDES_CLOSE_TAG = "</VersionOverrides>"
 ENTRA_TEMPLATE_PATH = LOCAL_AUTH_DIR / "oauth2-proxy-entra-id.template.cfg"
@@ -373,16 +375,17 @@ def build_redirect_status_message(funnel_url: str) -> str:
 # to install a manifest whose nested VersionOverridesV1_1 block demands 1.13,
 # so the on-prem variant drops that block (the outer V1_0 block stays intact).
 def make_onprem_manifest(contents: str) -> str:
-    open_tag_count = contents.count(MANIFEST_V1_1_OPEN_TAG)
-    if open_tag_count != 1:
+    open_tag_matches = list(MANIFEST_V1_1_OPEN_TAG_PATTERN.finditer(contents))
+    if len(open_tag_matches) != 1:
         raise ValueError(
-            f"Expected exactly one VersionOverridesV1_1 block, found {open_tag_count}"
+            "Expected exactly one VersionOverridesV1_1 block, "
+            f"found {len(open_tag_matches)}"
         )
 
-    open_index = contents.index(MANIFEST_V1_1_OPEN_TAG)
+    open_index = open_tag_matches[0].start()
     close_index = contents.find(
         MANIFEST_VERSION_OVERRIDES_CLOSE_TAG,
-        open_index + len(MANIFEST_V1_1_OPEN_TAG),
+        open_tag_matches[0].end(),
     )
     if close_index == -1:
         raise ValueError("VersionOverridesV1_1 block is missing its closing tag")
@@ -424,10 +427,23 @@ def write_funnel_manifest(funnel_url: str) -> None:
         funnel_url.rstrip("/"),
     )
     MANIFEST_FUNNEL_PATH.write_text(updated_contents, encoding="utf-8")
-    MANIFEST_FUNNEL_ONPREM_PATH.write_text(
-        make_onprem_manifest(updated_contents),
-        encoding="utf-8",
-    )
+    # The on-prem variant is best-effort: a manifest-local.xml the transform
+    # can't parse must not kill the whole dev session (this runs after the
+    # auth proxy is already up), so warn and keep EXO development — and the
+    # fail-loud EXO funnel manifest written above — going.
+    try:
+        onprem_contents = make_onprem_manifest(updated_contents)
+    except ValueError as error:
+        # Remove any previous run's copy so a stale manifest (pointing at an
+        # old funnel URL) can't be sideloaded by mistake.
+        MANIFEST_FUNNEL_ONPREM_PATH.unlink(missing_ok=True)
+        print(
+            f"Warning: skipping {MANIFEST_FUNNEL_ONPREM_PATH.name} — {error}. "
+            "EXO development is unaffected.",
+            file=sys.stderr,
+        )
+        return
+    MANIFEST_FUNNEL_ONPREM_PATH.write_text(onprem_contents, encoding="utf-8")
 
 
 def funnel_is_correct(status: dict) -> bool:
