@@ -104,12 +104,22 @@ The server comes with pre-configured mocks:
 | Fast | Demonstrates fast streaming | "fast" | Quick response | 10ms |
 | Delay | Demonstrates delayed response | "delay" | Medium-sized text | 5000ms (5s) |
 | RandomOneLiner | Returns one of 100 short variants and avoids repeating a previous assistant variant on regenerate when possible | "random" | Single one-line response | 20ms |
+| SubmitStreamReplay | Replays a captured paragraph chunk sequence from a submitstream trace | "and one more time" | 10 paragraph response with captured chunk boundaries | 20ms |
 | AudioSummary | Returns a deterministic summary for audio transcription prompts | "summarize this audio" | One-line audio summary response | 80ms |
 | LongRunning | Demonstrates very long streaming | "long running" or "long running 30" | Countdown for requested seconds (default 90s) | 1000ms (1s) |
 | SmoothLong | Streams one lorem word every 50ms for 10s | "smooth_long" | 200-word lorem ipsum stream | 50ms |
+| ScrollLong | Streams long line-based text for scroll testing | "scroll_long" | 120-line lorem ipsum stream | 50ms |
 | ReadMockFileToolCall | Triggers normal MCP file-read flow | "read mock file" | Tool call to `read_file` with `docs/readme.txt` | 100ms |
 | TriggerMcpContentFilterToolCall | Triggers MCP content-filter error flow | "mcp content filter" | Tool call to `trigger_content_filter` | 100ms |
 | (default) | Fallback when no match | - | Generic response | 50ms |
+
+### OpenAI Responses mocks
+
+| Name | Description | Pattern(s) | Response |
+|------|-------------|-----------|----------|
+| responses-reasoning-lock-code | Emits reasoning summary chunks followed by assistant output                                  | "five-digit riddle" | Reasoning summary stream and final answer                      |
+| responses-riddle-follow-up    | Validates replayed encrypted reasoning content from the prior reasoning response             | "riddle follow-up"  | Assistant output, or 400 if reasoning content was not replayed |
+| responses-scroll-long         | Emits a 5s reasoning stream with three bold headers, then a long line-based assistant stream | "scroll_long"       | Reasoning summary stream and 120-line output stream            |
 
 Each mock has:
 - **Name**: Identifier for the mock

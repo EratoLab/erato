@@ -289,6 +289,7 @@ export default defineConfig(({ mode }) => {
       alias: {
         "@": path.resolve(__dirname, "./src"),
       },
+      dedupe: ["@lingui/core", "@lingui/react", "react", "react-dom"],
     },
     build: {
       outDir: "out",

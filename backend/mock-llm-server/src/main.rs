@@ -137,7 +137,7 @@ async fn main() {
 
     println!(
         "{}",
-        "2 configured OpenAI Responses mocks available:".bright_white()
+        "3 configured OpenAI Responses mocks available:".bright_white()
     );
     println!("  [responses-reasoning-lock-code]");
     println!(
@@ -163,6 +163,20 @@ async fn main() {
         "Match rule".bold()
     );
     println!("    {}: response.output_text.delta", "Response".bold());
+    println!();
+    println!("  [responses-scroll-long]");
+    println!(
+        "    {}: emits a 5s reasoning stream with three bold headers, then a long line-based assistant stream",
+        "Description".bold()
+    );
+    println!(
+        "    {}: request text contains \"scroll_long\"",
+        "Match rule".bold()
+    );
+    println!(
+        "    {}: response.reasoning_summary_text.delta + response.output_text.delta",
+        "Response".bold()
+    );
     println!();
 
     // Print image mock summary

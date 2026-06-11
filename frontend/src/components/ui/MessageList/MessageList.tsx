@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { debounce } from "lodash";
-import { memo, useCallback, useMemo, useEffect, useRef } from "react";
+import { memo, useCallback, useMemo, useEffect, useRef, useState } from "react";
 
 import { useMessageListVirtualization, useScrollEvents } from "@/hooks/ui";
 import { usePaginatedData } from "@/hooks/ui/usePaginatedData";
@@ -270,11 +270,13 @@ function useMessageLoading({
   messages,
   scrollToBottom,
   isScrolledUp,
+  autoScrollPaused,
 }: {
   messageOrder: string[];
   messages: Record<string, ChatMessage>;
   scrollToBottom: () => void;
   isScrolledUp: boolean;
+  autoScrollPaused: boolean;
 }) {
   // Track the last loading state to avoid unwanted scroll when message completes
   const lastLoadingState = useRef<string | null>(null);
@@ -318,7 +320,7 @@ function useMessageLoading({
 
             // Only scroll to bottom during active streaming if user hasn't scrolled up
             // This allows user to interrupt auto-scroll by scrolling up
-            if (!isScrolledUp) {
+            if (!isScrolledUp && !autoScrollPaused) {
               scrollToBottom();
             }
           }
@@ -327,7 +329,84 @@ function useMessageLoading({
         // This prevents the unwanted "scroll up and down" at the end
       }
     }
-  }, [messageOrder, messages, scrollToBottom, isScrolledUp]);
+  }, [messageOrder, messages, scrollToBottom, isScrolledUp, autoScrollPaused]);
+}
+
+/* eslint-disable lingui/no-unlocalized-strings -- KeyboardEvent.key constants, not user-facing text. */
+const scrollAwayFromBottomKeyboardKeys = new Set(["ArrowUp", "Home", "PageUp"]);
+
+const scrollTowardBottomKeyboardKeys = new Set([
+  "ArrowDown",
+  "End",
+  "PageDown",
+]);
+/* eslint-enable lingui/no-unlocalized-strings */
+
+const autoScrollPauseBottomThresholdPx = 4;
+const autoScrollResumeBottomThresholdPx = 100;
+
+const isNearScrollBottom = (container: HTMLElement, thresholdPx: number) => {
+  const distanceFromBottom =
+    container.scrollHeight - container.scrollTop - container.clientHeight;
+
+  return distanceFromBottom <= thresholdPx;
+};
+
+function useManualScrollPause({
+  messageOrder,
+  messages,
+}: {
+  messageOrder: string[];
+  messages: Record<string, ChatMessage>;
+}) {
+  const activeCompletionMessageId = useMemo(() => {
+    if (messageOrder.length === 0) return null;
+
+    const lastMessageId = messageOrder[messageOrder.length - 1];
+    const lastMessage = messages[lastMessageId];
+    const loadingState = lastMessage.loading?.state;
+    const isActiveAssistantCompletion =
+      lastMessage.sender === "assistant" &&
+      (loadingState === "typing" ||
+        loadingState === "thinking" ||
+        loadingState === "done");
+
+    return isActiveAssistantCompletion ? lastMessageId : null;
+  }, [messageOrder, messages]);
+
+  const [pausedCompletionMessageId, setPausedCompletionMessageId] = useState<
+    string | null
+  >(null);
+
+  useEffect(() => {
+    if (!activeCompletionMessageId) {
+      setPausedCompletionMessageId(null);
+    }
+  }, [activeCompletionMessageId]);
+
+  const pauseAutoScrollForActiveCompletion = useCallback(() => {
+    if (activeCompletionMessageId) {
+      setPausedCompletionMessageId(activeCompletionMessageId);
+    }
+  }, [activeCompletionMessageId]);
+
+  const resumeAutoScrollForActiveCompletion = useCallback(() => {
+    if (activeCompletionMessageId) {
+      setPausedCompletionMessageId((currentPausedCompletionMessageId) =>
+        currentPausedCompletionMessageId === activeCompletionMessageId
+          ? null
+          : currentPausedCompletionMessageId,
+      );
+    }
+  }, [activeCompletionMessageId]);
+
+  return {
+    isAutoScrollPaused:
+      activeCompletionMessageId !== null &&
+      pausedCompletionMessageId === activeCompletionMessageId,
+    pauseAutoScrollForActiveCompletion,
+    resumeAutoScrollForActiveCompletion,
+  };
 }
 
 // Hook to manage loading more messages when near top
@@ -399,6 +478,12 @@ export const MessageList = memo<MessageListProps>(
       return result;
     }, [messageOrder, messages]);
 
+    const {
+      isAutoScrollPaused,
+      pauseAutoScrollForActiveCompletion,
+      resumeAutoScrollForActiveCompletion,
+    } = useManualScrollPause({ messageOrder, messages });
+
     // Use our custom hooks for scroll behavior and pagination
     const {
       containerRef,
@@ -411,8 +496,134 @@ export const MessageList = memo<MessageListProps>(
       useSmoothScroll: true,
       transitionDuration: 300,
       isTransitioning: isPending || isTransitioning,
+      autoScrollPaused: isAutoScrollPaused,
       deps: [messageOrder.length, currentSessionId, lastMessageLoadingContent],
     });
+
+    useEffect(() => {
+      const container = containerRef.current;
+      if (!container) return;
+
+      let lastTouchY: number | null = null;
+
+      let lastScrollTop = container.scrollTop;
+
+      const resumeIfNearBottom = () => {
+        if (isNearScrollBottom(container, autoScrollResumeBottomThresholdPx)) {
+          resumeAutoScrollForActiveCompletion();
+          scrollToBottom();
+        }
+      };
+
+      const pauseIfAwayFromBottom = () => {
+        if (!isNearScrollBottom(container, autoScrollPauseBottomThresholdPx)) {
+          pauseAutoScrollForActiveCompletion();
+        }
+      };
+
+      const handleWheel = (event: WheelEvent) => {
+        if (event.deltaY < 0) {
+          pauseIfAwayFromBottom();
+          return;
+        }
+
+        if (event.deltaY > 0) {
+          resumeIfNearBottom();
+        }
+      };
+
+      const handleTouchStart = (event: TouchEvent) => {
+        lastTouchY = event.touches.length > 0 ? event.touches[0].clientY : null;
+      };
+
+      const handleTouchMove = (event: TouchEvent) => {
+        if (lastTouchY === null || event.touches.length === 0) {
+          return;
+        }
+
+        const currentTouchY = event.touches[0].clientY;
+
+        if (currentTouchY > lastTouchY) {
+          pauseIfAwayFromBottom();
+        } else if (currentTouchY < lastTouchY) {
+          resumeIfNearBottom();
+        }
+
+        lastTouchY = currentTouchY;
+      };
+
+      const handleKeyDown = (event: KeyboardEvent) => {
+        if (
+          scrollAwayFromBottomKeyboardKeys.has(event.key) ||
+          (event.key === " " && event.shiftKey)
+        ) {
+          pauseIfAwayFromBottom();
+          return;
+        }
+
+        if (
+          scrollTowardBottomKeyboardKeys.has(event.key) ||
+          (event.key === " " && !event.shiftKey)
+        ) {
+          resumeIfNearBottom();
+        }
+      };
+
+      const handlePointerDown = (event: PointerEvent) => {
+        const bounds = container.getBoundingClientRect();
+        const scrollbarWidth = container.offsetWidth - container.clientWidth;
+
+        if (
+          scrollbarWidth > 0 &&
+          event.clientX >= bounds.right - scrollbarWidth
+        ) {
+          pauseAutoScrollForActiveCompletion();
+        }
+      };
+
+      const handleScroll = () => {
+        const currentScrollTop = container.scrollTop;
+        const isScrollingDown = currentScrollTop > lastScrollTop;
+        lastScrollTop = currentScrollTop;
+
+        if (isAutoScrollPaused) {
+          if (isScrollingDown) {
+            resumeIfNearBottom();
+          }
+          return;
+        }
+
+        if (!isScrollingDown) {
+          pauseIfAwayFromBottom();
+        }
+      };
+
+      container.addEventListener("wheel", handleWheel, { passive: true });
+      container.addEventListener("touchstart", handleTouchStart, {
+        passive: true,
+      });
+      container.addEventListener("touchmove", handleTouchMove, {
+        passive: true,
+      });
+      container.addEventListener("keydown", handleKeyDown);
+      container.addEventListener("pointerdown", handlePointerDown);
+      container.addEventListener("scroll", handleScroll, { passive: true });
+
+      return () => {
+        container.removeEventListener("wheel", handleWheel);
+        container.removeEventListener("touchstart", handleTouchStart);
+        container.removeEventListener("touchmove", handleTouchMove);
+        container.removeEventListener("keydown", handleKeyDown);
+        container.removeEventListener("pointerdown", handlePointerDown);
+        container.removeEventListener("scroll", handleScroll);
+      };
+    }, [
+      containerRef,
+      isAutoScrollPaused,
+      pauseAutoScrollForActiveCompletion,
+      resumeAutoScrollForActiveCompletion,
+      scrollToBottom,
+    ]);
 
     // Expose scrollToBottom function to parent component
     useEffect(() => {
@@ -422,7 +633,13 @@ export const MessageList = memo<MessageListProps>(
     }, [onScrollToBottomRef, scrollToBottom]);
 
     // Use the message loading hook
-    useMessageLoading({ messageOrder, messages, scrollToBottom, isScrolledUp });
+    useMessageLoading({
+      messageOrder,
+      messages,
+      scrollToBottom,
+      isScrolledUp,
+      autoScrollPaused: isAutoScrollPaused,
+    });
 
     // Set up pagination for message data
     const { visibleData, hasMore, loadMore, isNewlyLoaded, paginationStats } =

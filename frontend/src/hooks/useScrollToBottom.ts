@@ -46,6 +46,11 @@ interface UseScrollToBottomOptions {
    * (e.g., navigating between chats)
    */
   isTransitioning?: boolean;
+
+  /**
+   * Whether automatic dependency-driven scrolls should be paused.
+   */
+  autoScrollPaused?: boolean;
 }
 
 /**
@@ -143,6 +148,7 @@ export function useScrollToBottom({
   useSmoothScroll = false,
   transitionDuration = 300,
   isTransitioning = false,
+  autoScrollPaused = false,
 }: UseScrollToBottomOptions = {}): ScrollToBottomResult {
   // Ref for the scrollable container element - use more specific type
   const containerRef = useRef<HTMLDivElement>(null);
@@ -235,6 +241,12 @@ export function useScrollToBottom({
     }
   }, [useSmoothScroll, smoothScrollToBottom, instantScrollToBottom]);
 
+  useEffect(() => {
+    if (autoScrollPaused && containerRef.current) {
+      containerRef.current.style.scrollBehavior = "auto";
+    }
+  }, [autoScrollPaused]);
+
   // Debounced scroll handler to minimize performance impact
   const debouncedCheckScrollPosition = useMemo(
     () =>
@@ -284,7 +296,7 @@ export function useScrollToBottom({
     }
 
     // If we haven't scrolled to bottom yet or user isn't scrolled up
-    if (!hasScrolledToBottom || !isUserScrolledUp) {
+    if (!autoScrollPaused && (!hasScrolledToBottom || !isUserScrolledUp)) {
       // Add a small delay to ensure content is fully rendered
       const timer = setTimeout(() => {
         if (useSmoothScroll) {
@@ -311,7 +323,15 @@ export function useScrollToBottom({
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, isTransitioning, useSmoothScroll, transitionDuration, ...deps]);
+  }, [
+    enabled,
+    isTransitioning,
+    autoScrollPaused,
+    useSmoothScroll,
+    transitionDuration,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    ...deps,
+  ]);
 
   // Helper function for managing container styles
   const updateContainerStyle = useCallback(
