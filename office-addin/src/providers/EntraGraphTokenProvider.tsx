@@ -28,29 +28,12 @@ export interface GraphTokenContextValue {
 
 const GraphTokenContext = createContext<GraphTokenContextValue | null>(null);
 
-/** The error raised when Graph auth is requested on a host without it (no
- * EntraGraphTokenProvider mounted). Shared so the throwing `useGraphToken` and
- * the back-compat `useMsalNaa` shim surface an identical message. */
-export function graphUnavailableError(): Error {
-  return new Error(
-    t({
-      id: "officeAddin.auth.graphUnavailable",
-      message: "Graph auth is not available on this host",
-    }),
-  );
-}
-
-export function useGraphToken(): GraphTokenContextValue {
-  const value = useContext(GraphTokenContext);
-  if (!value) {
-    throw graphUnavailableError();
-  }
-  return value;
-}
-
 /**
- * Non-throwing variant for callers that may run outside the Graph provider
- * (e.g. the back-compat `useMsalNaa()` shim in unsupported/non-Outlook modes).
+ * Reads the Graph token context, or null when no {@link EntraGraphTokenProvider}
+ * is mounted (any non-`entra-msal` host). Callers MUST handle null and degrade
+ * — never assume Graph is available. New code that needs the session should use
+ * `useSessionAuth()`, mail fetching should use `useOutlookMessageFetcher()`, and
+ * only raw Graph-token needs reach for this hook.
  */
 export function useGraphTokenOptional(): GraphTokenContextValue | null {
   return useContext(GraphTokenContext);

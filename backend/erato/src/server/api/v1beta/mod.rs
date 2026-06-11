@@ -217,6 +217,18 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
             "/integrations/sharepoint/drives/{drive_id}/items/{item_id}/children",
             get(sharepoint::get_drive_item_children),
         )
+        // Exchange EWS proxy for the Outlook add-in (Exchange SE / on-prem).
+        // Authorization carries the Erato session token (injected by
+        // oauth2-proxy via `pass_authorization_header`) and is validated by
+        // `user_profile_middleware` like every other integration route; the
+        // Exchange callback token rides X-EWS-Authentication and is re-mapped
+        // onto Authorization for the upstream EWS request by the handler.
+        .route(
+            "/integrations/ms-office/ews",
+            // EWS SOAP payloads (e.g. attachment bytes) can exceed the default
+            // body cap; use the same budget as `/me/files`.
+            post(ms_office::ews_proxy).layer(DefaultBodyLimit::max(max_upload_size * 10)),
+        )
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
             policy_engine_middleware::policy_engine_middleware,
@@ -226,18 +238,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
             me_profile_middleware::user_profile_middleware,
         ));
 
-    // The EWS proxy intentionally sits outside the normal user-profile middleware:
-    // it forwards the caller's incoming Authorization header directly to Exchange.
-    let ews_proxy_routes = Router::new().route(
-        "/integrations/ms-office/ews",
-        post(ms_office::ews_proxy).layer(DefaultBodyLimit::max(max_upload_size * 10)),
-    );
-
     let app = Router::new()
         .route("/messages", get(messages))
         .route("/chats", get(chats))
         .nest("/me", me_routes)
-        .merge(ews_proxy_routes)
         .merge(authenticated_routes)
         .fallback(fallback);
     app.into()

@@ -8,9 +8,9 @@ import {
 import { fetchCurrentThread, type ParsedThread } from "../utils/parsedThread";
 
 import type {
-  AcquireGraphToken,
+  FetchConversationMessages,
   FetchConversationOptions,
-} from "../utils/fetchOutlookMessageGraph";
+} from "../utils/fetchOutlookMessage";
 
 export interface UseCurrentThreadResult {
   thread: ParsedThread | null;
@@ -25,17 +25,20 @@ export interface UseCurrentThreadResult {
 }
 
 /**
- * Fetches the Outlook conversation for the open mail item via Microsoft
- * Graph and exposes it as React state.
+ * Fetches the Outlook conversation for the open mail item via the
+ * environment-dispatched conversation capability (see
+ * `useOutlookMessageFetcher`) and exposes it as React state.
  *
  * Behaviour:
  *   - Returns `{ thread: null, isLoading: false }` when either `itemId` or
- *     `conversationId` is missing. `itemId === null` is the read-mode gate
- *     (drafts/compose items have no Graph-reachable id).
+ *     `conversationId` is missing, or when `fetchConversationMessages` is
+ *     null (no mail backend available — thread synthesis quietly stays off).
+ *     `itemId === null` is the read-mode gate (drafts/compose items have no
+ *     backend-reachable id).
  *   - Sets `isLoading=true` only for the initial fetch. Background refetches
  *     must not disable the composer after the email chip has materialized.
  *     TanStack Query supplies cancellation on item/conversation changes; the
- *     Graph utilities consume that signal so stale network requests are
+ *     fetch utilities consume that signal so stale network requests are
  *     aborted, not just ignored.
  *   - Clears the previous `thread` to `null` at the start of each new fetch
  *     so consumers see "loading" rather than stale content from a prior
@@ -47,13 +50,16 @@ export interface UseCurrentThreadResult {
 export function useCurrentThread(
   itemId: string | null,
   conversationId: string | null,
-  acquireGraphToken: AcquireGraphToken,
+  fetchConversationMessages: FetchConversationMessages | null,
   options: FetchConversationOptions = {},
 ): UseCurrentThreadResult {
   // Stable transport reference avoids re-running the effect on every render
   // when the consumer passes an inline transport closure.
   const { transport } = options;
-  const enabled = itemId !== null && conversationId !== null;
+  const enabled =
+    itemId !== null &&
+    conversationId !== null &&
+    fetchConversationMessages !== null;
 
   const query = useQuery({
     queryKey: [
@@ -68,13 +74,13 @@ export function useCurrentThread(
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     queryFn: ({ signal }) => {
-      if (!conversationId) return null;
+      if (!conversationId || !fetchConversationMessages) return null;
       return runWithGraphTimeout(
         OUTLOOK_GRAPH_THREAD_TIMEOUT_MS,
         `Outlook conversation fetch timed out after ${OUTLOOK_GRAPH_THREAD_TIMEOUT_MS}ms`,
         signal,
         (timeoutSignal) =>
-          fetchCurrentThread(conversationId, acquireGraphToken, {
+          fetchCurrentThread(conversationId, fetchConversationMessages, {
             transport,
             signal: timeoutSignal,
           }),

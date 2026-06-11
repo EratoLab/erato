@@ -27,12 +27,22 @@ msgid "officeAddin.auth.authenticationFailed"
 msgstr "Authentifizierung fehlgeschlagen"
 
 #. js-lingui-explicit-id
-#: src/providers/EntraGraphTokenProvider.tsx
-msgid "officeAddin.auth.graphUnavailable"
-msgstr "Graph-Authentifizierung ist auf diesem Host nicht verfügbar"
+#: src/auth/ExchangeCallbackAuthSource.ts
+#~ msgid "officeAddin.auth.exchangeCallbackTokenEmpty"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
-#: src/auth/EntraNaaAuthSource.ts
+#: src/auth/outlook/mintExchangeCallbackToken.ts
+#~ msgid "officeAddin.auth.exchangeCallbackTokenFailed"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/providers/EntraGraphTokenProvider.tsx
+#~ msgid "officeAddin.auth.graphUnavailable"
+#~ msgstr "Graph-Authentifizierung ist auf diesem Host nicht verfügbar"
+
+#. js-lingui-explicit-id
+#: src/auth/entraAuthSource.ts
 msgid "officeAddin.auth.msalClientIdMissing"
 msgstr "Die MSAL-Client-ID ist nicht konfiguriert"
 
@@ -42,7 +52,7 @@ msgstr "Die MSAL-Client-ID ist nicht konfiguriert"
 #~ msgstr "MSAL konnte nicht initialisiert werden"
 
 #. js-lingui-explicit-id
-#: src/auth/EntraNaaAuthSource.ts
+#: src/auth/entraAuthSource.ts
 msgid "officeAddin.auth.msalNotInitialized"
 msgstr "MSAL ist nicht initialisiert"
 
@@ -53,8 +63,18 @@ msgstr "MSAL ist nicht initialisiert"
 
 #. js-lingui-explicit-id
 #: src/auth/UnsupportedAuthSource.ts
-msgid "officeAddin.auth.naaUnsupported"
-msgstr "Verschachtelte App-Authentifizierung wird in dieser Umgebung nicht unterstützt"
+#~ msgid "officeAddin.auth.naaUnsupported"
+#~ msgstr "Verschachtelte App-Authentifizierung wird in dieser Umgebung nicht unterstützt"
+
+#. js-lingui-explicit-id
+#: src/providers/Oauth2ProxyLoginProvider.tsx
+msgid "officeAddin.auth.oauth2ProxyPopupBlocked"
+msgstr "Das Anmelde-Popup wurde blockiert. Erlaube Popups für diese Seite und versuche es erneut."
+
+#. js-lingui-explicit-id
+#: src/providers/Oauth2ProxyLoginProvider.tsx
+msgid "officeAddin.auth.oauth2ProxyProbeFailed"
+msgstr "Der Anmeldedienst konnte nicht erreicht werden. Versuche es erneut."
 
 #. js-lingui-explicit-id
 #: src/providers/SessionAuthProvider.tsx
@@ -62,9 +82,14 @@ msgid "officeAddin.auth.oauth2ProxySessionFailed"
 msgstr "Es konnte keine sichere Erato-Sitzung hergestellt werden. Melde dich erneut an."
 
 #. js-lingui-explicit-id
+#: src/providers/Oauth2ProxyLoginProvider.tsx
+msgid "officeAddin.auth.oauth2ProxySignInTimedOut"
+msgstr "Zeitüberschreitung bei der Anmeldung. Versuche es erneut."
+
+#. js-lingui-explicit-id
 #: src/auth/UnsupportedAuthSource.ts
-msgid "officeAddin.auth.onPremNotSupported"
-msgstr "Die Anmeldung bei lokalem Exchange (Legacy) wird noch nicht unterstützt."
+#~ msgid "officeAddin.auth.onPremNotSupported"
+#~ msgstr "Die Anmeldung bei lokalem Exchange (Legacy) wird noch nicht unterstützt."
 
 #. js-lingui-explicit-id
 #: src/App.tsx
@@ -82,6 +107,11 @@ msgstr ""
 #: src/providers/SessionAuthProvider.tsx
 msgid "officeAddin.auth.signInToContinue"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/auth/UnsupportedAuthSource.ts
+msgid "officeAddin.auth.signInUnavailable"
+msgstr "Die Anmeldung ist in dieser Umgebung nicht verfügbar"
 
 #. js-lingui-explicit-id
 #: src/App.tsx

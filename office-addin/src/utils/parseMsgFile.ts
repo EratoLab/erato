@@ -1,27 +1,24 @@
 import { extractMsgInternetMessageId } from "./extractMsgInternetMessageId";
 import {
-  fetchOutlookMessageBytesByInternetMessageIdViaGraph,
-  fetchOutlookMessageFilesByInternetMessageIdViaGraph,
-} from "./fetchOutlookMessageGraph";
-import {
   OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
   runWithGraphTimeout,
 } from "./graphRequestTimeout";
 import { parseEmlBytes } from "./parsedEmail";
 
-import type { AcquireGraphToken } from "./fetchOutlookMessageGraph";
+import type { OutlookMessageFetcher } from "./fetchOutlookMessage";
 import type { ParsedEmail } from "./parsedEmail";
 
 /**
  * Resolves a dropped `.msg` file into the same body + attachment File[] shape
  * our other paths produce. Strategy: extract only the RFC 5322 `Message-ID`
- * from the CFB, then look the message up via Microsoft Graph with a
- * `Mail.Read` token. We never parse the binary body / attachments locally —
- * Graph owns the fidelity-sensitive work (RTF-encapsulated HTML, embedded
- * content types, etc.).
+ * from the CFB, then look the message up through the environment's message
+ * fetcher (Graph on Exchange Online, EWS SOAP on-prem). We never
+ * parse the binary body / attachments locally — the mail backend owns the
+ * fidelity-sensitive work (RTF-encapsulated HTML, embedded content types,
+ * etc.).
  *
  * Returns an empty file list on any recoverable failure (unreadable CFB,
- * missing Message-ID, Graph filter yields no match, network/auth failure).
+ * missing Message-ID, the lookup yields no match, network/auth failure).
  * The extracted `messageId` (if any) is still surfaced so callers can apply
  * de-duplication against other representations of the same email.
  */
@@ -32,7 +29,7 @@ export interface MsgParseResult {
 
 export async function parseMsgFileToFiles(
   file: File,
-  acquireGraphToken: AcquireGraphToken,
+  fetcher: OutlookMessageFetcher,
 ): Promise<MsgParseResult> {
   const internetMessageId = await extractMessageIdSafely(file);
   if (!internetMessageId) {
@@ -45,15 +42,13 @@ export async function parseMsgFileToFiles(
       `Outlook .msg fetch timed out after ${OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS}ms`,
       undefined,
       (signal) =>
-        fetchOutlookMessageFilesByInternetMessageIdViaGraph(
-          internetMessageId,
-          acquireGraphToken,
-          { signal },
-        ),
+        fetcher.fetchMessageFilesByInternetMessageId(internetMessageId, {
+          signal,
+        }),
     );
     if (!result) {
       console.warn(
-        "[parseMsgFile] Graph lookup returned no match for Message-ID:",
+        "[parseMsgFile] lookup returned no match for Message-ID:",
         internetMessageId,
       );
       return { files: [], messageId: internetMessageId };
@@ -61,7 +56,7 @@ export async function parseMsgFileToFiles(
     return { files: result.files, messageId: internetMessageId };
   } catch (error) {
     console.warn(
-      "[parseMsgFile] Graph fetch failed for dropped .msg:",
+      "[parseMsgFile] message fetch failed for dropped .msg:",
       file.name,
       error,
     );
@@ -76,7 +71,7 @@ export interface MsgParsedResult {
 
 export async function parseMsgFileToParsedEmail(
   file: File,
-  acquireGraphToken: AcquireGraphToken,
+  fetcher: OutlookMessageFetcher,
 ): Promise<MsgParsedResult> {
   const internetMessageId = await extractMessageIdSafely(file);
   if (!internetMessageId) {
@@ -90,15 +85,13 @@ export async function parseMsgFileToParsedEmail(
       `Outlook .msg fetch timed out after ${OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS}ms`,
       undefined,
       (signal) =>
-        fetchOutlookMessageBytesByInternetMessageIdViaGraph(
-          internetMessageId,
-          acquireGraphToken,
-          { signal },
-        ),
+        fetcher.fetchMessageBytesByInternetMessageId(internetMessageId, {
+          signal,
+        }),
     );
   } catch (error) {
     console.warn(
-      "[parseMsgFile] Graph fetch failed for dropped .msg:",
+      "[parseMsgFile] message fetch failed for dropped .msg:",
       file.name,
       error,
     );
@@ -107,7 +100,7 @@ export async function parseMsgFileToParsedEmail(
 
   if (!bytesResult) {
     console.warn(
-      "[parseMsgFile] Graph lookup returned no match for Message-ID:",
+      "[parseMsgFile] lookup returned no match for Message-ID:",
       internetMessageId,
     );
     return { parsed: null, messageId: internetMessageId };

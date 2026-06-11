@@ -189,6 +189,7 @@ export {
 export { getIdToken, setIdToken } from "@/auth/tokenStore";
 export {
   setAuthRecoveryHandler,
+  tryRecoverAuth,
   type AuthRecoveryHandler,
 } from "@/auth/authRecovery";
 

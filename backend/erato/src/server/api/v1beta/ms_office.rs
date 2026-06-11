@@ -3,9 +3,16 @@
 use crate::state::AppState;
 use axum::body::{Body, Bytes};
 use axum::extract::State;
-use axum::http::header::{AUTHORIZATION, CACHE_CONTROL, CONTENT_TYPE};
+use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
+
+/// Header the add-in client carries the Exchange callback token in, as
+/// `Bearer <token>`. It is kept OFF `Authorization` because that header is owned
+/// by oauth2-proxy (it sets it to the Erato session token via
+/// `pass_authorization_header`), which would clobber the Exchange token. This
+/// proxy re-maps this header onto `Authorization` for the upstream EWS request.
+const EWS_AUTHENTICATION_HEADER: &str = "x-ews-authentication";
 
 /// Proxy an Exchange EWS SOAP request to the configured EWS API endpoint.
 #[utoipa::path(
@@ -15,7 +22,7 @@ use axum::response::{IntoResponse, Response};
     responses(
         (status = OK, description = "Response from the configured Exchange EWS endpoint", body = String, content_type = "text/xml"),
         (status = NOT_FOUND, description = "Exchange EWS proxy is not configured", body = str),
-        (status = UNAUTHORIZED, description = "When no Authorization header is provided"),
+        (status = UNAUTHORIZED, description = "When the X-EWS-Authentication header is missing or malformed (must be `Bearer <token>` with a non-empty token)"),
         (status = BAD_GATEWAY, description = "Failed to proxy the Exchange EWS request", body = str)
     ),
     security(
@@ -49,7 +56,10 @@ pub async fn ews_proxy(
     };
 
     if !forwarded_headers.contains_key(reqwest::header::AUTHORIZATION) {
-        tracing::error!("No authorization header available for Exchange EWS proxy");
+        tracing::error!(
+            "Missing {} header for Exchange EWS proxy",
+            EWS_AUTHENTICATION_HEADER
+        );
         return StatusCode::UNAUTHORIZED.into_response();
     };
 
@@ -116,13 +126,37 @@ fn build_ews_request_headers(
         forwarded_headers.insert(forwarded_name, forwarded_value);
     }
 
+    // The Exchange callback token rides X-EWS-Authentication (Bearer <token>) so
+    // oauth2-proxy doesn't clobber it; re-map it onto Authorization for Exchange.
+    // Only well-formed `Bearer <token>` values are re-mapped; anything else is
+    // dropped so the handler rejects the request with 401 instead of relaying a
+    // malformed credential to Exchange. The incoming Authorization (the Erato
+    // session token) is deliberately NOT forwarded — see
+    // `should_forward_ews_request_header`.
+    if let Some(value) = incoming_headers.get(EWS_AUTHENTICATION_HEADER)
+        && is_well_formed_ews_bearer_value(value)
+        && let Ok(forwarded_value) = reqwest::header::HeaderValue::from_bytes(value.as_bytes())
+    {
+        forwarded_headers.insert(reqwest::header::AUTHORIZATION, forwarded_value);
+    }
+
     Ok(forwarded_headers)
+}
+
+/// Whether an X-EWS-Authentication value is a well-formed Bearer credential:
+/// a case-insensitive `Bearer ` scheme prefix followed by a non-empty token.
+/// Empty values, other schemes (e.g. `Basic`), and a bare `Bearer` without a
+/// token are all rejected.
+fn is_well_formed_ews_bearer_value(value: &HeaderValue) -> bool {
+    let Some((scheme, token)) = value.as_bytes().split_at_checked("Bearer ".len()) else {
+        return false;
+    };
+    scheme.eq_ignore_ascii_case(b"Bearer ") && token.iter().any(|byte| !byte.is_ascii_whitespace())
 }
 
 fn should_forward_ews_request_header(name: &HeaderName) -> bool {
     let name = name.as_str();
     name.eq_ignore_ascii_case("accept")
-        || name.eq_ignore_ascii_case(AUTHORIZATION.as_str())
         || name.eq_ignore_ascii_case("content-type")
         || name.eq_ignore_ascii_case("soapaction")
         || name.eq_ignore_ascii_case("prefer")
@@ -193,7 +227,7 @@ mod tests {
     use axum::http::header::{ACCEPT, AUTHORIZATION, HOST};
 
     #[test]
-    fn ews_request_headers_forward_only_expected_values_and_preserve_authorization() {
+    fn ews_request_headers_map_ews_authentication_and_drop_session_authorization() {
         let mut headers = HeaderMap::new();
         headers.insert(ACCEPT, HeaderValue::from_static("text/xml"));
         headers.insert(
@@ -201,9 +235,15 @@ mod tests {
             HeaderValue::from_static("text/xml; charset=utf-8"),
         );
         headers.insert(HOST, HeaderValue::from_static("erato.example.com"));
+        // The Erato session token on Authorization must NOT reach Exchange.
         headers.insert(
             AUTHORIZATION,
-            HeaderValue::from_static("Bearer browser-token"),
+            HeaderValue::from_static("Bearer erato-session"),
+        );
+        // The Exchange callback token rides X-EWS-Authentication.
+        headers.insert(
+            HeaderName::from_static("x-ews-authentication"),
+            HeaderValue::from_static("Bearer exchange-token"),
         );
         headers.insert(
             HeaderName::from_static("soapaction"),
@@ -221,15 +261,95 @@ mod tests {
             forwarded.get(reqwest::header::CONTENT_TYPE).unwrap(),
             "text/xml; charset=utf-8"
         );
+        // Authorization sent to Exchange is the X-EWS-Authentication value, NOT
+        // the Erato session token.
         assert_eq!(
             forwarded.get(reqwest::header::AUTHORIZATION).unwrap(),
-            "Bearer browser-token"
+            "Bearer exchange-token"
         );
+        // The raw X-EWS-Authentication header itself is not forwarded.
+        assert!(!forwarded.contains_key("x-ews-authentication"));
         assert_eq!(forwarded.get("soapaction").unwrap(), "\"GetItem\"");
         assert_eq!(
             forwarded.get("x-anchormailbox").unwrap(),
             "user@example.com"
         );
         assert!(!forwarded.contains_key(reqwest::header::HOST));
+    }
+
+    #[test]
+    fn ews_request_headers_without_ews_authentication_set_no_authorization() {
+        let mut headers = HeaderMap::new();
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("text/xml"));
+        // Only the Erato session token is present — it must not be forwarded, so
+        // the handler will reject the request (401) for a missing EWS token.
+        headers.insert(
+            AUTHORIZATION,
+            HeaderValue::from_static("Bearer erato-session"),
+        );
+
+        let forwarded = build_ews_request_headers(&headers).unwrap();
+
+        assert!(!forwarded.contains_key(reqwest::header::AUTHORIZATION));
+    }
+
+    /// Builds headers with the given X-EWS-Authentication value and returns
+    /// the forwarded header map. Whenever no Authorization header comes out of
+    /// here, the handler's missing-Authorization guard returns 401 before any
+    /// upstream EWS request is built or sent.
+    fn forwarded_headers_for_ews_authentication(value: &'static str) -> reqwest::header::HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("text/xml"));
+        headers.insert(
+            AUTHORIZATION,
+            HeaderValue::from_static("Bearer erato-session"),
+        );
+        headers.insert(
+            HeaderName::from_static("x-ews-authentication"),
+            HeaderValue::from_static(value),
+        );
+
+        build_ews_request_headers(&headers).unwrap()
+    }
+
+    #[test]
+    fn ews_request_headers_reject_empty_ews_authentication() {
+        // An empty value must not defeat the handler's 401 guard by inserting
+        // an empty Authorization header.
+        let forwarded = forwarded_headers_for_ews_authentication("");
+
+        assert!(!forwarded.contains_key(reqwest::header::AUTHORIZATION));
+    }
+
+    #[test]
+    fn ews_request_headers_reject_non_bearer_ews_authentication_scheme() {
+        // Only Bearer credentials may be relayed to Exchange; other schemes
+        // (e.g. Basic) are dropped so the handler returns 401.
+        let forwarded = forwarded_headers_for_ews_authentication("Basic dXNlcjpwYXNz");
+
+        assert!(!forwarded.contains_key(reqwest::header::AUTHORIZATION));
+    }
+
+    #[test]
+    fn ews_request_headers_reject_bearer_without_token() {
+        // A bare scheme without a token is malformed and must not be relayed.
+        for malformed in ["Bearer", "Bearer ", "Bearer   "] {
+            let forwarded = forwarded_headers_for_ews_authentication(malformed);
+
+            assert!(
+                !forwarded.contains_key(reqwest::header::AUTHORIZATION),
+                "expected no Authorization for X-EWS-Authentication value {malformed:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn ews_request_headers_accept_case_insensitive_bearer_scheme() {
+        let forwarded = forwarded_headers_for_ews_authentication("bearer exchange-token");
+
+        assert_eq!(
+            forwarded.get(reqwest::header::AUTHORIZATION).unwrap(),
+            "bearer exchange-token"
+        );
     }
 }

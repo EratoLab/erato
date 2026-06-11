@@ -9,11 +9,10 @@ import {
   useState,
 } from "react";
 
-import { useGraphToken } from "./EntraGraphTokenProvider";
 import { useOutlookMailItem } from "./OutlookMailItemProvider";
 import { useCurrentThread } from "../hooks/useCurrentThread";
+import { useOutlookMessageFetcher } from "../hooks/useOutlookMessageFetcher";
 import { buildThreadEmlFile } from "../utils/buildThreadEmlFile";
-import { fetchParentMessageInConversationViaGraph } from "../utils/fetchOutlookMessageGraph";
 import {
   OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
   runWithGraphTimeout,
@@ -26,7 +25,7 @@ import {
 } from "../utils/stagedEmailDismissals";
 import { trimEmlAttachments } from "../utils/trimEmlAttachments";
 
-import type { ParentMessageMetadata } from "../utils/fetchOutlookMessageGraph";
+import type { ParentMessageMetadata } from "../utils/fetchOutlookMessage";
 import type { ParsedEmail } from "../utils/parsedEmail";
 import type { ParsedThread, ThreadMessage } from "../utils/parsedThread";
 import type { StagedEmailDismissalsMap } from "../utils/stagedEmailDismissals";
@@ -34,7 +33,6 @@ import type { LocalFilePreviewItem } from "@erato/frontend/library";
 import type { ReactNode } from "react";
 
 const OUTLOOK_CLOUD_ATTACHMENT_TYPE = "cloud";
-const GRAPH_MAIL_SCOPES = ["Mail.Read"];
 
 function generateDroppedKey(): string {
   return `drop-${globalThis.crypto.randomUUID()}`;
@@ -198,7 +196,10 @@ export function OutlookEmailSourceProvider({
     isLoadingAttachments,
     getAttachmentFile,
   } = useOutlookMailItem();
-  const { acquireToken } = useGraphToken();
+  // Environment-dispatched message fetch; null when no mail backend is
+  // available, in which case the thread preview and reply-context chip
+  // quietly stay off (the same UX as a failed fetch).
+  const { fetcher: messageFetcher } = useOutlookMessageFetcher();
   const [dismissedAttachmentIds, setDismissedAttachmentIds] = useState<
     string[]
   >([]);
@@ -210,29 +211,28 @@ export function OutlookEmailSourceProvider({
     useState<StagedEmailDismissalsMap>(() => new Map());
   const [droppedEmails, setDroppedEmails] = useState<DroppedEmailEntry[]>([]);
 
-  const acquireGraphToken = useCallback(
-    (options?: { forceRefresh?: boolean }) =>
-      acquireToken(GRAPH_MAIL_SCOPES, options),
-    [acquireToken],
-  );
-
   const itemId = mailItem?.itemId ?? null;
   const conversationId = mailItem?.conversationId ?? null;
   const isComposeMode = mailItem?.isComposeMode ?? false;
 
   // Conversation fetch lives in its own hook so it can be unit-tested in
-  // isolation against an injected Graph transport.
+  // isolation against an injected transport.
   const {
     thread: currentThread,
     isLoading: isLoadingEmailBody,
     error: emailThreadLoadError,
-  } = useCurrentThread(itemId, conversationId, acquireGraphToken);
+  } = useCurrentThread(
+    itemId,
+    conversationId,
+    messageFetcher?.fetchConversationMessages ?? null,
+  );
 
   // Reply-context chip for compose mode (drafts have no itemId but do have a
   // conversationId). Display-only — the parent body reaches the LLM via the
   // draft's auto-quote + the `outlook_review_draft.full_body` action facet.
+  // A missing fetcher no-ops exactly like a failed fetch: no chip, no error.
   useEffect(() => {
-    if (!isComposeMode || !conversationId || itemId) {
+    if (!isComposeMode || !conversationId || itemId || !messageFetcher) {
       setParentReplyContext(null);
       setIsLoadingParentReplyContext(false);
       return;
@@ -247,11 +247,9 @@ export function OutlookEmailSourceProvider({
       `Outlook reply-context fetch timed out after ${OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS}ms`,
       controller.signal,
       (signal) =>
-        fetchParentMessageInConversationViaGraph(
-          conversationId,
-          acquireGraphToken,
-          { signal },
-        ),
+        messageFetcher.fetchParentMessageInConversation(conversationId, {
+          signal,
+        }),
     )
       .then((result) => {
         if (controller.signal.aborted) return;
@@ -265,7 +263,7 @@ export function OutlookEmailSourceProvider({
     return () => {
       controller.abort();
     };
-  }, [acquireGraphToken, conversationId, isComposeMode, itemId]);
+  }, [conversationId, isComposeMode, itemId, messageFetcher]);
 
   // Office.js attachment ids are per-item; flush the dismissal list when
   // the host mail item changes so stale ids don't leak. Thread + drop

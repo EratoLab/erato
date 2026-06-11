@@ -7,8 +7,9 @@
  * should upload them separately.
  *
  * This is the Microsoft-365 / Exchange-Online path. It is the blessed
- * replacement for the legacy callback-token + Outlook REST v2.0 route
- * (preserved for on-prem in `./fetchOutlookMessageRestV2.ts`). Callers
+ * replacement for the legacy callback-token + Outlook REST v2.0 route (shut
+ * off for Microsoft 365 tenants in October 2025); on-prem mailboxes use the
+ * EWS SOAP backend in `./fetchOutlookMessageEws.ts` instead. Callers
  * provide an `acquireGraphToken` function bound to the `Mail.Read` scope via
  * MSAL NAA; see `AddinChat.tsx` for the wiring.
  */
@@ -729,7 +730,9 @@ async function findMessageByInternetMessageId(
   return first ?? null;
 }
 
-function buildEmlFile(bytes: ArrayBuffer, subject: string): File {
+/** Exported for the EWS sibling so both backends produce identically
+ * named/typed `.eml` Files for the same message. */
+export function buildEmlFile(bytes: ArrayBuffer, subject: string): File {
   return new File([bytes], buildEmlFilename(subject), {
     type: "message/rfc822",
   });

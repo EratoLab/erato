@@ -1,23 +1,24 @@
 /**
- * In-memory representation of an Outlook conversation thread fetched via
- * Microsoft Graph. Drives the staged-input preview UI (per-message cards
- * with per-attachment checkboxes) and feeds `synthesizeThreadEml` at
- * send-time so a deselection in the UI is reflected in the upload.
+ * In-memory representation of an Outlook conversation thread fetched via the
+ * environment's message backend (Graph on Exchange Online, EWS SOAP on
+ * Exchange SE — see `fetchOutlookMessage.ts`; both produce the Graph-shaped
+ * `GraphConversationMessage` rows consumed here). Drives the staged-input
+ * preview UI (per-message cards with per-attachment checkboxes) and feeds
+ * `synthesizeThreadEml` at send-time so a deselection in the UI is reflected
+ * in the upload.
  *
  * We keep the structure normalised (mirrors `ParsedEmail` shapes) rather
- * than holding Graph's raw JSON so the rest of the codebase doesn't have
- * to know about Graph attachment subtypes or the `@odata.type` discriminator.
+ * than holding the raw JSON so the rest of the codebase doesn't have
+ * to know about attachment subtypes or the `@odata.type` discriminator.
  */
 
-import {
-  fetchConversationMessagesViaGraph,
-  type AcquireGraphToken,
-  type FetchConversationOptions,
-  type GraphAttachment,
-  type GraphConversationMessage,
-  type GraphRecipient,
+import type { FetchConversationMessages } from "./fetchOutlookMessage";
+import type {
+  FetchConversationOptions,
+  GraphAttachment,
+  GraphConversationMessage,
+  GraphRecipient,
 } from "./fetchOutlookMessageGraph";
-
 import type { ParsedEmailAddress } from "./parsedEmail";
 
 const FILE_ATTACHMENT_TYPE = "#microsoft.graph.fileAttachment";
@@ -82,19 +83,18 @@ export interface ParsedThread {
  */
 export class ThreadFetchError extends Error {
   constructor(conversationId: string) {
-    super(`Failed to load Outlook conversation ${conversationId} from Graph`);
+    super(`Failed to load Outlook conversation ${conversationId}`);
     this.name = "ThreadFetchError";
   }
 }
 
 export async function fetchCurrentThread(
   conversationId: string,
-  acquireToken: AcquireGraphToken,
+  fetchConversationMessages: FetchConversationMessages,
   options: FetchConversationOptions = {},
 ): Promise<ParsedThread | null> {
-  const { messages: raw, state } = await fetchConversationMessagesViaGraph(
+  const { messages: raw, state } = await fetchConversationMessages(
     conversationId,
-    acquireToken,
     options,
   );
   // Total failure (first page errored → nothing fetched) must be loud, not a

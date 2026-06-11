@@ -68,7 +68,7 @@ describe("parseDroppedFiles", () => {
     expect(tryAttachEmail).not.toHaveBeenCalled();
   });
 
-  it("skips .msg drops without a Graph token", async () => {
+  it("skips .msg drops without a message fetcher", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const msg = new File(["msg"], "x.msg", {
       type: "application/vnd.ms-outlook",

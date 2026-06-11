@@ -6,6 +6,7 @@ import {
   msgFileFromBytes,
   utf16le,
 } from "../../test/fixtures/msg";
+import { createGraphOutlookMessageFetcher } from "../fetchOutlookMessage";
 import {
   parseMsgFileToFiles,
   parseMsgFileToParsedEmail,
@@ -81,7 +82,10 @@ describe("parseMsgFileToFiles", () => {
       return { ok: true, bytes: bytesFrom("raw-mime") };
     });
 
-    const result = await parseMsgFileToFiles(file, acquireToken);
+    const result = await parseMsgFileToFiles(
+      file,
+      createGraphOutlookMessageFetcher(acquireToken),
+    );
 
     expect(result.messageId).toBe("<abc@host>");
     expect(result.files).toHaveLength(1);
@@ -114,7 +118,10 @@ describe("parseMsgFileToFiles", () => {
     const acquireToken = vi.fn();
     const fetchMock = installFetchMock(() => ({ ok: true }));
 
-    const result = await parseMsgFileToFiles(file, acquireToken);
+    const result = await parseMsgFileToFiles(
+      file,
+      createGraphOutlookMessageFetcher(acquireToken),
+    );
 
     expect(result).toEqual({ files: [], messageId: null });
     expect(fetchMock).not.toHaveBeenCalled();
@@ -126,7 +133,10 @@ describe("parseMsgFileToFiles", () => {
     const acquireToken = vi.fn();
     const fetchMock = installFetchMock(() => ({ ok: true }));
 
-    const result = await parseMsgFileToFiles(file, acquireToken);
+    const result = await parseMsgFileToFiles(
+      file,
+      createGraphOutlookMessageFetcher(acquireToken),
+    );
 
     expect(result).toEqual({ files: [], messageId: null });
     expect(fetchMock).not.toHaveBeenCalled();
@@ -157,7 +167,10 @@ describe("parseMsgFileToFiles", () => {
     const acquireToken = vi.fn().mockResolvedValue("tok");
     installFetchMock(responder);
 
-    const result = await parseMsgFileToFiles(file, acquireToken);
+    const result = await parseMsgFileToFiles(
+      file,
+      createGraphOutlookMessageFetcher(acquireToken),
+    );
 
     expect(result).toEqual({ files: [], messageId: "<abc@host>" });
   });
@@ -208,7 +221,10 @@ describe("parseMsgFileToParsedEmail", () => {
       return { ok: true, bytes: bytesFrom(buildEml("Hi", "<abc@host>")) };
     });
 
-    const result = await parseMsgFileToParsedEmail(file, acquireToken);
+    const result = await parseMsgFileToParsedEmail(
+      file,
+      createGraphOutlookMessageFetcher(acquireToken),
+    );
 
     expect(result.parsed).not.toBeNull();
     expect(result.parsed?.subject).toBe("Hi");
@@ -226,7 +242,10 @@ describe("parseMsgFileToParsedEmail", () => {
     const acquireToken = vi.fn();
     const fetchMock = installFetchMock(() => ({ ok: true }));
 
-    const result = await parseMsgFileToParsedEmail(file, acquireToken);
+    const result = await parseMsgFileToParsedEmail(
+      file,
+      createGraphOutlookMessageFetcher(acquireToken),
+    );
 
     expect(result).toEqual({ parsed: null, messageId: null });
     expect(fetchMock).not.toHaveBeenCalled();
@@ -258,7 +277,10 @@ describe("parseMsgFileToParsedEmail", () => {
       const acquireToken = vi.fn().mockResolvedValue("tok");
       installFetchMock(responder);
 
-      const result = await parseMsgFileToParsedEmail(file, acquireToken);
+      const result = await parseMsgFileToParsedEmail(
+        file,
+        createGraphOutlookMessageFetcher(acquireToken),
+      );
 
       expect(result).toEqual({ parsed: null, messageId: "<abc@host>" });
     },

@@ -3,6 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 
+import { createGraphOutlookMessageFetcher } from "../../utils/fetchOutlookMessage";
 import { useCurrentThread } from "../useCurrentThread";
 
 import type { GraphTransport } from "../../utils/fetchOutlookMessageGraph";
@@ -21,7 +22,9 @@ function buildResponder(jsonValue: unknown, ok = true, status = 200) {
   );
 }
 
-const acquireToken = async () => "token";
+const { fetchConversationMessages } = createGraphOutlookMessageFetcher(
+  async () => "token",
+);
 
 function createTestQueryClient() {
   return new QueryClient({
@@ -68,7 +71,10 @@ describe("useCurrentThread", () => {
     });
 
     const { result } = renderHook(
-      () => useCurrentThread(null, "conv-1", acquireToken, { transport }),
+      () =>
+        useCurrentThread(null, "conv-1", fetchConversationMessages, {
+          transport,
+        }),
       { wrapper: createWrapper() },
     );
     expect(result.current).toEqual({
@@ -79,7 +85,10 @@ describe("useCurrentThread", () => {
     expect(transport).not.toHaveBeenCalled();
 
     const { result: result2 } = renderHook(
-      () => useCurrentThread("item-1", null, acquireToken, { transport }),
+      () =>
+        useCurrentThread("item-1", null, fetchConversationMessages, {
+          transport,
+        }),
       { wrapper: createWrapper() },
     );
     expect(result2.current).toEqual({
@@ -105,7 +114,10 @@ describe("useCurrentThread", () => {
     });
 
     const { result } = renderHook(
-      () => useCurrentThread("item-1", "conv-1", acquireToken, { transport }),
+      () =>
+        useCurrentThread("item-1", "conv-1", fetchConversationMessages, {
+          transport,
+        }),
       { wrapper: createWrapper() },
     );
 
@@ -142,7 +154,9 @@ describe("useCurrentThread", () => {
 
     const { result, rerender } = renderHook(
       ({ conversationId }) =>
-        useCurrentThread("item-1", conversationId, acquireToken, { transport }),
+        useCurrentThread("item-1", conversationId, fetchConversationMessages, {
+          transport,
+        }),
       { initialProps: { conversationId: "conv-A" }, wrapper: createWrapper() },
     );
 
@@ -166,7 +180,10 @@ describe("useCurrentThread", () => {
 
     const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { result } = renderHook(
-      () => useCurrentThread("item-1", "conv-1", acquireToken, { transport }),
+      () =>
+        useCurrentThread("item-1", "conv-1", fetchConversationMessages, {
+          transport,
+        }),
       { wrapper: createWrapper() },
     );
 
@@ -197,7 +214,10 @@ describe("useCurrentThread", () => {
     );
 
     const { result } = renderHook(
-      () => useCurrentThread("item-1", "conv-1", acquireToken, { transport }),
+      () =>
+        useCurrentThread("item-1", "conv-1", fetchConversationMessages, {
+          transport,
+        }),
       { wrapper: createWrapper(queryClient) },
     );
 

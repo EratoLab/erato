@@ -5,6 +5,7 @@ import {
   uninstallMockMailbox,
 } from "../../test/mocks/outlook/mailbox";
 import { fetchCurrentEmailParsed } from "../fetchCurrentEmailEml";
+import { createGraphOutlookMessageFetcher } from "../fetchOutlookMessage";
 
 const EWS_ID = "AAkALgAAA-ews-id";
 const GRAPH_ID = "graph-id-converted";
@@ -98,7 +99,10 @@ describe("fetchCurrentEmailParsed", () => {
           },
     );
 
-    const result = await fetchCurrentEmailParsed(EWS_ID, acquireToken);
+    const result = await fetchCurrentEmailParsed(
+      EWS_ID,
+      createGraphOutlookMessageFetcher(acquireToken),
+    );
 
     expect(result).not.toBeNull();
     expect(result?.parsed.subject).toBe("Hi parsed");
@@ -130,12 +134,15 @@ describe("fetchCurrentEmailParsed", () => {
           },
     );
 
-    const result = await fetchCurrentEmailParsed(EWS_ID, acquireToken);
+    const result = await fetchCurrentEmailParsed(
+      EWS_ID,
+      createGraphOutlookMessageFetcher(acquireToken),
+    );
 
     expect(result?.messageId).toBe("<graph-id@example.com>");
   });
 
-  it("returns null and logs when the Graph fetch fails", async () => {
+  it("returns null and logs when the backend fetch fails", async () => {
     const acquireToken = vi.fn().mockResolvedValue("tok");
     installFetchMock(() => ({
       ok: false,
@@ -143,7 +150,10 @@ describe("fetchCurrentEmailParsed", () => {
       statusText: "Not Found",
     }));
 
-    const result = await fetchCurrentEmailParsed(EWS_ID, acquireToken);
+    const result = await fetchCurrentEmailParsed(
+      EWS_ID,
+      createGraphOutlookMessageFetcher(acquireToken),
+    );
 
     expect(result).toBeNull();
   });

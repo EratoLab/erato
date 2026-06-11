@@ -517,7 +517,7 @@
             }
           },
           "401": {
-            "description": "When no Authorization header is provided"
+            "description": "When the X-EWS-Authentication header is missing or malformed (must be `Bearer <token>` with a non-empty token)"
           },
           "404": {
             "description": "Exchange EWS proxy is not configured",

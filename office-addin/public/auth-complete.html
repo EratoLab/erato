@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Signed in</title>
+  </head>
+  <body>
+    <p>Signed in — you can close this window.</p>
+    <script>
+      // The oauth2-proxy login popup lands here after the cookie is set. Notify
+      // the opener so it can stop polling, then close ourselves.
+      try {
+        if (window.opener) {
+          window.opener.postMessage(
+            "erato-oauth2-login-complete",
+            window.location.origin,
+          );
+        }
+      } catch (error) {
+        // Best effort: the opener also polls the session as a fallback.
+      }
+      try {
+        window.close();
+      } catch (error) {
+        // Some hosts block programmatic close; the body text is the fallback.
+      }
+    </script>
+  </body>
+</html>

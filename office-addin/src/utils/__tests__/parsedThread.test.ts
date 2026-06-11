@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { createGraphOutlookMessageFetcher } from "../fetchOutlookMessage";
 import { fetchCurrentThread, ThreadFetchError } from "../parsedThread";
 
 import type {
@@ -35,7 +36,12 @@ function makeFailingTransport(status: number): GraphTransport {
   );
 }
 
-const acquireToken = async () => "test-token";
+// The Graph-backed conversation capability, with only the network boundary
+// (the injected transport) stubbed per test — same coverage as before the
+// dispatcher seam, now exercised through it.
+const { fetchConversationMessages } = createGraphOutlookMessageFetcher(
+  async () => "test-token",
+);
 
 describe("fetchCurrentThread", () => {
   it("filters drafts out of the thread", async () => {
@@ -58,9 +64,13 @@ describe("fetchCurrentThread", () => {
       },
     ]);
 
-    const thread = await fetchCurrentThread("conv-1", acquireToken, {
-      transport,
-    });
+    const thread = await fetchCurrentThread(
+      "conv-1",
+      fetchConversationMessages,
+      {
+        transport,
+      },
+    );
 
     expect(thread).not.toBeNull();
     expect(thread?.messages).toHaveLength(1);
@@ -100,9 +110,13 @@ describe("fetchCurrentThread", () => {
       },
     ]);
 
-    const thread = await fetchCurrentThread("conv-1", acquireToken, {
-      transport,
-    });
+    const thread = await fetchCurrentThread(
+      "conv-1",
+      fetchConversationMessages,
+      {
+        transport,
+      },
+    );
 
     // Full body kept (forwarded content survives), not the signature-only uniqueBody.
     expect(thread?.messages[0].bodyHtml).toContain("full thread quote");
@@ -136,9 +150,13 @@ describe("fetchCurrentThread", () => {
       },
     ]);
 
-    const thread = await fetchCurrentThread("conv-1", acquireToken, {
-      transport,
-    });
+    const thread = await fetchCurrentThread(
+      "conv-1",
+      fetchConversationMessages,
+      {
+        transport,
+      },
+    );
 
     // Provable subset → collapse to the smaller copy (token win, loss-free).
     expect(thread?.messages[0].bodyText).toBe("Reply text");
@@ -187,9 +205,13 @@ describe("fetchCurrentThread", () => {
       } as unknown as Response;
     });
 
-    const thread = await fetchCurrentThread("conv-1", acquireToken, {
-      transport,
-    });
+    const thread = await fetchCurrentThread(
+      "conv-1",
+      fetchConversationMessages,
+      {
+        transport,
+      },
+    );
     consoleWarn.mockRestore();
 
     expect(thread?.incomplete).toBe(true);
@@ -214,9 +236,13 @@ describe("fetchCurrentThread", () => {
       },
     ]);
 
-    const thread = await fetchCurrentThread("conv-1", acquireToken, {
-      transport,
-    });
+    const thread = await fetchCurrentThread(
+      "conv-1",
+      fetchConversationMessages,
+      {
+        transport,
+      },
+    );
 
     expect(thread?.messages[0].bodyHtml).toBeNull();
     expect(thread?.messages[0].bodyText).toBe(
@@ -263,9 +289,13 @@ describe("fetchCurrentThread", () => {
       },
     ]);
 
-    const thread = await fetchCurrentThread("conv-1", acquireToken, {
-      transport,
-    });
+    const thread = await fetchCurrentThread(
+      "conv-1",
+      fetchConversationMessages,
+      {
+        transport,
+      },
+    );
 
     // All three are kept (none silently dropped, INV-9).
     expect(thread?.messages[0].attachments).toHaveLength(3);
@@ -327,9 +357,13 @@ describe("fetchCurrentThread", () => {
       } as unknown as Response;
     });
 
-    const thread = await fetchCurrentThread("conv-1", acquireToken, {
-      transport,
-    });
+    const thread = await fetchCurrentThread(
+      "conv-1",
+      fetchConversationMessages,
+      {
+        transport,
+      },
+    );
 
     const [att] = thread!.messages[0].attachments;
     expect(att.contentBytes).not.toBeNull();
@@ -363,9 +397,13 @@ describe("fetchCurrentThread", () => {
       },
     ]);
 
-    const thread = await fetchCurrentThread("conv-1", acquireToken, {
-      transport,
-    });
+    const thread = await fetchCurrentThread(
+      "conv-1",
+      fetchConversationMessages,
+      {
+        transport,
+      },
+    );
 
     expect(thread?.messages[0].attachments).toHaveLength(1);
     expect(thread?.messages[0].attachments[0].isInline).toBe(true);
@@ -400,9 +438,13 @@ describe("fetchCurrentThread", () => {
       },
     ]);
 
-    const thread = await fetchCurrentThread("conv-1", acquireToken, {
-      transport,
-    });
+    const thread = await fetchCurrentThread(
+      "conv-1",
+      fetchConversationMessages,
+      {
+        transport,
+      },
+    );
 
     expect(thread?.messages.map((m) => m.subject)).toEqual([
       "Original",
@@ -414,7 +456,7 @@ describe("fetchCurrentThread", () => {
 
   it("returns null for a genuinely empty conversation (no messages, no error)", async () => {
     expect(
-      await fetchCurrentThread("missing-conv", acquireToken, {
+      await fetchCurrentThread("missing-conv", fetchConversationMessages, {
         transport: makeTransport([]),
       }),
     ).toBeNull();
@@ -423,7 +465,7 @@ describe("fetchCurrentThread", () => {
   it("throws ThreadFetchError when the first-page fetch fails (loud, not silent null)", async () => {
     const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
     await expect(
-      fetchCurrentThread("conv-1", acquireToken, {
+      fetchCurrentThread("conv-1", fetchConversationMessages, {
         transport: makeFailingTransport(500),
       }),
     ).rejects.toBeInstanceOf(ThreadFetchError);
@@ -464,9 +506,13 @@ describe("fetchCurrentThread", () => {
       } as unknown as Response;
     });
 
-    const thread = await fetchCurrentThread("conv-1", acquireToken, {
-      transport,
-    });
+    const thread = await fetchCurrentThread(
+      "conv-1",
+      fetchConversationMessages,
+      {
+        transport,
+      },
+    );
     consoleWarn.mockRestore();
 
     expect(thread).not.toBeNull();
