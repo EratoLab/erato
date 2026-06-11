@@ -108,11 +108,11 @@ function uninstallNaaOfficeContext() {
   delete (Office as unknown as Record<string, unknown>).auth;
 }
 
-// A NAA-less mailbox (e.g. Exchange SE OWA). With NAA absent but a mailbox
-// present, OutlookAuthProvider picks the oauth2-proxy redirect-login path.
-function installMailbox() {
+// An on-prem (Exchange SE) mailbox. Whether or not the host supports NAA,
+// OutlookAuthProvider picks the oauth2-proxy redirect-login path for it.
+function installMailbox(accountType = "enterprise") {
   (Office.context as unknown as Record<string, unknown>).mailbox = {
-    userProfile: { accountType: "enterprise" },
+    userProfile: { accountType },
   };
 }
 
@@ -465,6 +465,60 @@ describe("OutlookAuthProvider", () => {
     expect(fetcher).not.toHaveBeenCalledWith(
       "/oauth2/redeem-external-token",
       expect.anything(),
+    );
+  });
+
+  it("vetoes NAA for an on-prem mailbox even when the host supports it", async () => {
+    // Classic desktop Outlook with an SE profile: the NestedAppAuth requirement
+    // set is reported as supported, but the host broker has no Entra account.
+    // The plan must take the oauth2-proxy path, never client-side MSAL.
+    installMailbox();
+    const fetcher = stubFetch(new Response("{}", { status: 202 }));
+
+    render(
+      <OutlookAuthProvider>
+        <AuthProbe />
+      </OutlookAuthProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("authenticated")).toHaveTextContent("true"),
+    );
+
+    expect(screen.getByTestId("mode")).toHaveTextContent("entra-msal");
+    expect(screen.getByTestId("graph-mounted")).toHaveTextContent("false");
+    expect(createStandardPublicClientApplication).not.toHaveBeenCalled();
+    expect(createNestablePublicClientApplication).not.toHaveBeenCalled();
+    expect(fetcher).toHaveBeenCalledWith(
+      "/oauth2/auth",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(fetcher).not.toHaveBeenCalledWith(
+      "/oauth2/redeem-external-token",
+      expect.anything(),
+    );
+  });
+
+  it("keeps NAA for a cloud mailbox on a NAA-capable host", async () => {
+    installMailbox("office365");
+    const fetcher = stubFetch(new Response("{}", { status: 202 }));
+
+    render(
+      <OutlookAuthProvider>
+        <AuthProbe />
+      </OutlookAuthProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("authenticated")).toHaveTextContent("true"),
+    );
+
+    expect(screen.getByTestId("mode")).toHaveTextContent("entra-msal");
+    expect(screen.getByTestId("graph-mounted")).toHaveTextContent("true");
+    expect(createNestablePublicClientApplication).toHaveBeenCalled();
+    expect(fetcher).toHaveBeenCalledWith(
+      "/oauth2/redeem-external-token",
+      expect.objectContaining({ method: "POST", credentials: "include" }),
     );
   });
 

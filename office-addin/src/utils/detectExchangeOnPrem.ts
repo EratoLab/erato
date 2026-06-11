@@ -1,12 +1,17 @@
 /**
- * Mailbox-location probe for the mail data plane — this module reads
- * `Office.context.mailbox`. It is no longer an auth concern: SE authenticates
- * via the oauth2-proxy redirect login but still reports the `entra-msal` mode
- * (same as EXO), so the mail backend can't be chosen by auth mode. The caller
- * ({@link "../hooks/useOutlookMessageFetcher"}) uses this to pick the mail
- * backend by where the mailbox lives — Microsoft Graph for cloud mailboxes,
- * the EWS SOAP backend (`fetchOutlookMessageEws.ts`) for on-prem ones (Graph
- * can't reach on-prem mailboxes).
+ * Mailbox-location probe — this module reads `Office.context.mailbox`. Two
+ * consumers branch on it:
+ *
+ *   - The mail data plane ({@link "../hooks/useOutlookMessageFetcher"}) picks
+ *     the mail backend by where the mailbox lives — Microsoft Graph for cloud
+ *     mailboxes, the EWS SOAP backend (`fetchOutlookMessageEws.ts`) for
+ *     on-prem ones (Graph can't reach on-prem mailboxes). Auth mode can't
+ *     drive this choice: SE authenticates via the oauth2-proxy redirect login
+ *     but still reports `entra-msal` (same as EXO).
+ *   - The auth composition root ({@link "../providers/OutlookAuthProvider"})
+ *     vetoes NAA for on-prem mailboxes: classic desktop Outlook reports the
+ *     NestedAppAuth requirement set even when the profile has no Entra
+ *     account, so host support alone would pick a broken MSAL path.
  */
 
 /**

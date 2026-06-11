@@ -7,6 +7,7 @@ import { SessionAuthProvider } from "./SessionAuthProvider";
 import { createEntraNaaAuthSource } from "../auth/EntraNaaAuthSource";
 import { UnsupportedAuthSource } from "../auth/UnsupportedAuthSource";
 import { isNestedAppAuthSupported } from "../auth/isNestedAppAuthSupported";
+import { detectExchangeOnPrem } from "../utils/detectExchangeOnPrem";
 
 import type {
   AuthSource,
@@ -24,9 +25,9 @@ import type {
  *     (mode `entra-msal`), redeemed for the proxy session via the client-side
  *     id_token, with the Outlook-only {@link EntraGraphTokenProvider} (Graph
  *     mail tokens) layered on top.
- *   - On-prem-but-hybrid SE (a NAA-less mailbox): the oauth2-proxy redirect
- *     login (popup) via {@link Oauth2ProxyLoginProvider}. NAA is unavailable
- *     here and the add-in is served through oauth2-proxy, so the proxy already
+ *   - On-prem SE (an on-prem mailbox, with or without host NAA support): the
+ *     oauth2-proxy redirect login (popup) via {@link Oauth2ProxyLoginProvider}.
+ *     The add-in is served through oauth2-proxy, so the proxy already
  *     federates to the same Entra tenant and performs the full OIDC login with
  *     ITS OWN app registration — no add-in MSAL app reg, no client-side token,
  *     no redeem-external-token. That provider supplies the {@link
@@ -73,14 +74,20 @@ export function OutlookAuthProvider({
     | { kind: "oauth2-proxy" }
     | { kind: "unsupported"; source: AuthSource }
   >(() => {
-    if (isNestedAppAuthSupported()) {
+    // NAA needs more than host support: classic desktop Outlook reports the
+    // NestedAppAuth requirement set even when the profile is a pure on-prem
+    // Exchange (SE) account. There the host broker has no Entra account
+    // (ACCOUNT_UNAVAILABLE), MSAL silently degrades to a standard popup with
+    // the page URL as redirect URI, and Entra rejects it (AADSTS50011). So an
+    // on-prem mailbox always takes the oauth2-proxy path below, NAA or not.
+    if (isNestedAppAuthSupported() && !detectExchangeOnPrem()) {
       return {
         kind: "naa",
         source: createEntraNaaAuthSource({ resolveLoginHint }),
       };
     }
-    // No NAA. If a mailbox is present, the user is on OWA with an Entra
-    // identity served through oauth2-proxy (hybrid on-prem Exchange SE): the
+    // No usable NAA. If a mailbox is present, the user has an Entra identity
+    // served through oauth2-proxy (on-prem Exchange SE, hybrid or not): the
     // proxy performs its own OIDC redirect login and sets the session cookie,
     // so we run that popup flow rather than a client-side MSAL acquisition. A
     // non-mailbox host has no Entra identity to log in with, so it stays
