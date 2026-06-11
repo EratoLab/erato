@@ -218,15 +218,12 @@ fn build_frontend_environment(
                 .context_file_contributor_threshold,
         ),
     );
-    env.additional_environment.insert(
-        FRONTEND_ENV_KEY_ASSISTANTS_MAX_SYSTEM_PROMPT_LENGTH.to_string(),
-        Value::Number(
-            config
-                .experimental_assistants
-                .max_system_prompt_length
-                .into(),
-        ),
-    );
+    if let Some(max_length) = config.experimental_assistants.max_system_prompt_length {
+        env.additional_environment.insert(
+            FRONTEND_ENV_KEY_ASSISTANTS_MAX_SYSTEM_PROMPT_LENGTH.to_string(),
+            Value::Number(max_length.into()),
+        );
+    }
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_STARTER_PROMPTS_ENABLED.to_string(),
         Value::Bool(config.starter_prompts.enabled),

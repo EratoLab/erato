@@ -233,7 +233,8 @@ chat_provider_ids = ["test-token-limit"]
 # # Threshold between 0.0 and 1.0 at or above which a file is included in the
 # # "largest file context contributors" list (default: 0.05)
 # context_file_contributor_threshold = 0.05
-# # Maximum number of characters allowed in an assistant's system prompt (default: 5000)
+# # Maximum number of characters allowed in an assistant's system prompt.
+# # When not set, no server-side limit is enforced and the frontend defaults to 5000 for UI validation.
 # max_system_prompt_length = 5000
 
 # Starter prompts feature configuration
