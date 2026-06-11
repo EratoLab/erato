@@ -1901,8 +1901,8 @@ msgid "Cancel action"
 msgstr "Annuler l'action"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Cancel starting dictation"
-msgstr "Annuler le démarrage de la dictée"
+#~ msgid "Cancel starting dictation"
+#~ msgstr "Annuler le démarrage de la dictée"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Canceled"
@@ -1917,8 +1917,8 @@ msgid "Cannot send: Token limit exceeded"
 msgstr "Impossible d'envoyer : limite de tokens dépassée"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Capturing audio — waiting for transcription to start"
-msgstr "Capture audio en cours — en attente du démarrage de la transcription"
+#~ msgid "Capturing audio — waiting for transcription to start"
+#~ msgstr "Capture audio en cours — en attente du démarrage de la transcription"
 
 #: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "Cc"
@@ -2421,8 +2421,8 @@ msgid "Microphone {microphoneIndex}"
 msgstr "Microphone {microphoneIndex}"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Microphone is starting — wait for the level meter before speaking"
-msgstr "Le microphone démarre ; attendez l'indicateur de niveau avant de parler"
+#~ msgid "Microphone is starting — wait for the level meter before speaking"
+#~ msgstr "Le microphone démarre ; attendez l'indicateur de niveau avant de parler"
 
 #: src/hooks/audio/useAudioInputLevelPreview.ts
 msgid "Microphone permission denied. Allow access to test the microphone."
@@ -2748,6 +2748,10 @@ msgstr ""
 #: src/components/ui/Chat/StarterPromptsSection.tsx
 #: src/hooks/chat/useStarterPrompts.ts
 msgid "starter_prompts.<starter-prompt-id>.title"
+msgstr ""
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Starting audio transcript recording"
 msgstr ""
 
 #: src/components/ui/Chat/ChatInput.tsx

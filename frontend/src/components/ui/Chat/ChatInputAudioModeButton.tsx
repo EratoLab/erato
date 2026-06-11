@@ -3,6 +3,7 @@ import { t } from "@lingui/core/macro";
 import { Waveform, audioLevelsToBarHeights } from "./Waveform";
 import { WaveformButton } from "./WaveformButton";
 import { Button } from "../Controls/Button";
+import { LoadingIcon } from "../icons";
 
 // Symmetric, gently peaked pattern shown in idle (resting) state. Values
 // flow through the same `max(v, 2) * 2` scale + 14px clamp as live bars,
@@ -26,6 +27,14 @@ type ChatInputAudioModeButtonRecordingProps =
     isRecording: true;
     /** Live bar heights from the active conversational dictation session. */
     recordingBars: readonly number[];
+    /**
+     * True while the session is still starting up (handshake, VAD model
+     * load, mic warm-up) — i.e. before real audio is captured. Shows a
+     * loading spinner instead of a live-looking waveform so the user
+     * isn't invited to speak before the microphone actually delivers
+     * audio (ERMAIN-334). Clicking still stops/cancels audio mode.
+     */
+    isStarting?: boolean;
   };
 
 type ChatInputAudioModeButtonProps =
@@ -39,6 +48,27 @@ type ChatInputAudioModeButtonProps =
  */
 export function ChatInputAudioModeButton(props: ChatInputAudioModeButtonProps) {
   if (props.isRecording) {
+    if (props.isStarting) {
+      return (
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={props.onToggle}
+          disabled={props.disabled}
+          aria-label={t`Stop audio mode`}
+          title={t`Stop audio mode`}
+          data-testid="chat-input-audio-mode-stop"
+          icon={
+            <LoadingIcon
+              className="size-4 animate-spin text-[var(--theme-fg-primary)]"
+              data-testid="chat-input-audio-mode-starting-icon"
+            />
+          }
+        />
+      );
+    }
+
     return (
       <WaveformButton
         onClick={props.onToggle}
