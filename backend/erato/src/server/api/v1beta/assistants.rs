@@ -832,10 +832,10 @@ pub async fn update_assistant(
         .config
         .experimental_assistants
         .max_system_prompt_length;
-    if let Some(prompt) = &request.prompt {
-        if prompt.len() > max_prompt_length {
-            return Err(StatusCode::UNPROCESSABLE_ENTITY);
-        }
+    if let Some(prompt) = &request.prompt
+        && prompt.len() > max_prompt_length
+    {
+        return Err(StatusCode::UNPROCESSABLE_ENTITY);
     }
 
     // Update the assistant
