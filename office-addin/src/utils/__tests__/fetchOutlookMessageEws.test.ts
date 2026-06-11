@@ -620,7 +620,9 @@ describe("fetchOutlookMessageFilesByInternetMessageIdViaEws", () => {
     // The swallowed per-folder error is disclosed (count + first ResponseCode)
     // rather than disappearing silently.
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringMatching(/swallowed 1 hard-errored folder.*ErrorAccessDenied/),
+      expect.stringMatching(
+        /swallowed 1 hard-errored folder.*ErrorAccessDenied/,
+      ),
     );
     warnSpy.mockRestore();
   });
@@ -1780,9 +1782,7 @@ describe("fetchParentMessageInConversationViaEws", () => {
       fromName: "Carol",
       fromAddress: null,
     });
-    const hostBodies = hostMock.mock.calls.map((call) =>
-      String(call[0] ?? ""),
-    );
+    const hostBodies = hostMock.mock.calls.map((call) => String(call[0] ?? ""));
     const findBody = hostBodies.find((body) => body.includes("<m:FindItem"));
     expect(findBody).toContain('<t:FieldURI FieldURI="item:Subject"/>');
     expect(findBody).toContain(
@@ -1795,9 +1795,7 @@ describe("fetchParentMessageInConversationViaEws", () => {
         "</m:ParentFolderIds>",
     );
     // No member body was ever fetched.
-    expect(hostBodies.some((body) => body.includes("<m:GetItem>"))).toBe(
-      false,
-    );
+    expect(hostBodies.some((body) => body.includes("<m:GetItem>"))).toBe(false);
     warnSpy.mockRestore();
   });
 

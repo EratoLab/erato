@@ -1188,9 +1188,7 @@ export async function fetchParentMessageInConversationViaEws(
     // when NO candidate carries the field the chip degrades to null like
     // every other failure mode.
     const latest = candidates
-      .filter(
-        (message) => message.isDraft !== true && message.receivedDateTime,
-      )
+      .filter((message) => message.isDraft !== true && message.receivedDateTime)
       .sort((a, b) =>
         (b.receivedDateTime ?? "").localeCompare(a.receivedDateTime ?? ""),
       )[0];

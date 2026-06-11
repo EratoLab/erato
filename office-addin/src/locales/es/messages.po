@@ -69,12 +69,12 @@ msgstr "MSAL no está inicializado"
 #. js-lingui-explicit-id
 #: src/providers/Oauth2ProxyLoginProvider.tsx
 msgid "officeAddin.auth.oauth2ProxyPopupBlocked"
-msgstr ""
+msgstr "Se bloqueó la ventana emergente de inicio de sesión. Permite las ventanas emergentes para este sitio e inténtalo de nuevo."
 
 #. js-lingui-explicit-id
 #: src/providers/Oauth2ProxyLoginProvider.tsx
 msgid "officeAddin.auth.oauth2ProxyProbeFailed"
-msgstr ""
+msgstr "No se pudo conectar con el servicio de inicio de sesión. Inténtalo de nuevo."
 
 #. js-lingui-explicit-id
 #: src/providers/SessionAuthProvider.tsx
@@ -84,7 +84,7 @@ msgstr "No se pudo establecer una sesión segura de Erato. Inicia sesión de nue
 #. js-lingui-explicit-id
 #: src/providers/Oauth2ProxyLoginProvider.tsx
 msgid "officeAddin.auth.oauth2ProxySignInTimedOut"
-msgstr ""
+msgstr "Se agotó el tiempo de espera del inicio de sesión. Inténtalo de nuevo."
 
 #. js-lingui-explicit-id
 #: src/auth/UnsupportedAuthSource.ts
@@ -111,7 +111,7 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/auth/UnsupportedAuthSource.ts
 msgid "officeAddin.auth.signInUnavailable"
-msgstr ""
+msgstr "El inicio de sesión no está disponible en este entorno"
 
 #. js-lingui-explicit-id
 #: src/App.tsx

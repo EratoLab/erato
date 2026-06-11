@@ -69,12 +69,12 @@ msgstr "MSAL nie został zainicjowany"
 #. js-lingui-explicit-id
 #: src/providers/Oauth2ProxyLoginProvider.tsx
 msgid "officeAddin.auth.oauth2ProxyPopupBlocked"
-msgstr ""
+msgstr "Wyskakujące okno logowania zostało zablokowane. Zezwól na wyskakujące okna dla tej witryny i spróbuj ponownie."
 
 #. js-lingui-explicit-id
 #: src/providers/Oauth2ProxyLoginProvider.tsx
 msgid "officeAddin.auth.oauth2ProxyProbeFailed"
-msgstr ""
+msgstr "Nie udało się połączyć z usługą logowania. Spróbuj ponownie."
 
 #. js-lingui-explicit-id
 #: src/providers/SessionAuthProvider.tsx
@@ -84,7 +84,7 @@ msgstr "Nie udało się ustanowić bezpiecznej sesji Erato. Zaloguj się ponowni
 #. js-lingui-explicit-id
 #: src/providers/Oauth2ProxyLoginProvider.tsx
 msgid "officeAddin.auth.oauth2ProxySignInTimedOut"
-msgstr ""
+msgstr "Upłynął limit czasu logowania. Spróbuj ponownie."
 
 #. js-lingui-explicit-id
 #: src/auth/UnsupportedAuthSource.ts
@@ -111,7 +111,7 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/auth/UnsupportedAuthSource.ts
 msgid "officeAddin.auth.signInUnavailable"
-msgstr ""
+msgstr "Logowanie nie jest dostępne w tym środowisku"
 
 #. js-lingui-explicit-id
 #: src/App.tsx

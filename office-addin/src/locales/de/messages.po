@@ -69,12 +69,12 @@ msgstr "MSAL ist nicht initialisiert"
 #. js-lingui-explicit-id
 #: src/providers/Oauth2ProxyLoginProvider.tsx
 msgid "officeAddin.auth.oauth2ProxyPopupBlocked"
-msgstr ""
+msgstr "Das Anmelde-Popup wurde blockiert. Erlaube Popups für diese Seite und versuche es erneut."
 
 #. js-lingui-explicit-id
 #: src/providers/Oauth2ProxyLoginProvider.tsx
 msgid "officeAddin.auth.oauth2ProxyProbeFailed"
-msgstr ""
+msgstr "Der Anmeldedienst konnte nicht erreicht werden. Versuche es erneut."
 
 #. js-lingui-explicit-id
 #: src/providers/SessionAuthProvider.tsx
@@ -84,7 +84,7 @@ msgstr "Es konnte keine sichere Erato-Sitzung hergestellt werden. Melde dich ern
 #. js-lingui-explicit-id
 #: src/providers/Oauth2ProxyLoginProvider.tsx
 msgid "officeAddin.auth.oauth2ProxySignInTimedOut"
-msgstr ""
+msgstr "Zeitüberschreitung bei der Anmeldung. Versuche es erneut."
 
 #. js-lingui-explicit-id
 #: src/auth/UnsupportedAuthSource.ts
@@ -111,7 +111,7 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/auth/UnsupportedAuthSource.ts
 msgid "officeAddin.auth.signInUnavailable"
-msgstr ""
+msgstr "Die Anmeldung ist in dieser Umgebung nicht verfügbar"
 
 #. js-lingui-explicit-id
 #: src/App.tsx
