@@ -58,8 +58,11 @@ import type { OutlookMailListDragItem } from "../utils/outlookMailListDragParse"
 // emails as native file drags (Outlook Mac, Classic Outlook on Windows). OWA
 // and New Outlook use the custom `maillistrow` path handled separately via
 // `useOutlookMailListDrag`.
-const EMAIL_MIME_TYPES: Record<string, string[]> = {
+const EML_MIME_TYPES: Record<string, string[]> = {
   "message/rfc822": [".eml"],
+};
+const EMAIL_MIME_TYPES: Record<string, string[]> = {
+  ...EML_MIME_TYPES,
   "application/vnd.ms-outlook": [".msg"],
 };
 
@@ -137,8 +140,8 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
     chatInputControlsRef.current?.addUploadedFiles(uploaded);
   }, []);
 
-  // Environment-dispatched message fetch (Graph on Exchange Online, Outlook
-  // REST v2.0 on Exchange SE). Null when no backend is available — the email
+  // Environment-dispatched message fetch (Graph on Exchange Online, EWS SOAP
+  // on Exchange SE). Null when no backend is available — the email
   // fetch paths below then skip-and-log instead of crashing; local `.eml`
   // drops keep working since they parse without a backend.
   const { fetcher: messageFetcher } = useOutlookMessageFetcher();
@@ -289,6 +292,14 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
     ],
   );
 
+  // `.eml` drops parse locally, but `.msg` resolution requires a backend
+  // message lookup (`parseMsgFile` extracts only the Message-ID); without a
+  // fetcher a dropped `.msg` would show "Drop to upload", be accepted, and
+  // then be silently discarded by `parseDroppedFiles`. Mirror the mail-list
+  // drag gating below: only advertise `.msg` when the backend exists, so a
+  // fetcherless drop gets the normal unsupported-file feedback instead.
+  const emailDropMimeTypes = messageFetcher ? EMAIL_MIME_TYPES : EML_MIME_TYPES;
+
   const {
     getRootProps: getConversationDropzoneRootProps,
     getInputProps: getConversationDropzoneInputProps,
@@ -298,7 +309,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
     uploadFiles: uploadFilesWithEmailExpansion,
     onUploaded: handleDropUploaded,
     acceptedFileTypes,
-    extraAcceptMimeTypes: EMAIL_MIME_TYPES,
+    extraAcceptMimeTypes: emailDropMimeTypes,
     isUploading,
   });
 

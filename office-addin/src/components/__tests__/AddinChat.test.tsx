@@ -20,6 +20,20 @@ import type { ReactNode } from "react";
 // The shared library is stubbed to its render-relevant surface; everything
 // the regression exercises (the fetcher hook, both providers' wiring, the
 // drop plumbing) runs for real.
+
+// Hoisted so the dropzone stub can record the options AddinChat passes —
+// the `.msg` advertising test below asserts on `extraAcceptMimeTypes`.
+const { useConversationDropzoneMock } = vi.hoisted(() => ({
+  useConversationDropzoneMock: vi.fn(
+    (_options: { extraAcceptMimeTypes?: Record<string, string[]> }) => ({
+      getRootProps: () => ({}),
+      getInputProps: () => ({}),
+      isDragActive: false,
+      isDragAccept: false,
+    }),
+  ),
+}));
+
 vi.mock("@erato/frontend/library", () => ({
   // Transitive needs of the real SessionAuthProvider / EntraGraphTokenProvider
   // modules (imported via useOutlookMessageFetcher, not mounted here).
@@ -68,12 +82,7 @@ vi.mock("@erato/frontend/library", () => ({
     refetchHistory: vi.fn(async () => {}),
     currentChatLastModel: undefined,
   }),
-  useConversationDropzone: () => ({
-    getRootProps: () => ({}),
-    getInputProps: () => ({}),
-    isDragActive: false,
-    isDragAccept: false,
-  }),
+  useConversationDropzone: useConversationDropzoneMock,
   useFileCapabilitiesContext: () => ({ capabilities: {} }),
   useFilePreviewModal: () => ({
     isPreviewModalOpen: false,
@@ -148,5 +157,19 @@ describe("AddinChat without any Graph provider mounted (Exchange SE / unsupporte
     ).not.toThrow();
 
     expect(screen.getByText("New Chat")).toBeInTheDocument();
+  });
+
+  // With no backend a dropped `.msg` could never be resolved (parseMsgFile
+  // only extracts the Message-ID and needs a fetcher for the lookup), so the
+  // dropzone must not advertise it — the drop then gets the regular
+  // unsupported-file feedback instead of being accepted and silently dropped.
+  it("does not advertise .msg drops when no message fetcher is available", () => {
+    renderWithoutGraphProvider(<AddinChat />);
+
+    expect(useConversationDropzoneMock).toHaveBeenCalled();
+    const dropzoneOptions = useConversationDropzoneMock.mock.calls.at(-1)?.[0];
+    expect(dropzoneOptions?.extraAcceptMimeTypes).toEqual({
+      "message/rfc822": [".eml"],
+    });
   });
 });
