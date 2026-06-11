@@ -2,6 +2,637 @@
 
 All notable changes to this project will be documented in this file.
 
+<!--
+
+More docs: see bottom
+
+Typical "Notable changes" categories to copy & paste:
+
+#### Features and enhancements
+#### Stability improvements
+#### Bug fixes
+#### Test coverage
+#### Documentation
+#### Documentation & Website
+#### Security
+#### Observability
+#### Dependency changes
+#### Chores & Developer experience
+#### Other
+
+-->
+
+## [0.6.1] - 2026-06-08
+
+### Notable changes
+
+#### Features and enhancements
+
+- Add input guardrails against prompt injection [#709][repo-pr-709]
+- Make summary prompt configurable [#687][repo-pr-687]
+- Feature/ermain 316 stage full outlook conversation thread for chat upload [#690][repo-pr-690]
+- Make office addin ID configurable [#691][repo-pr-691]
+- feat: show explicit empty state label for missing default model (ERMAIN-326) [#696][repo-pr-696]
+- Add microphone settings tab and gate audio to supported Outlook hosts [#698][repo-pr-698]
+- Add option to show Sharepoint disclaimer regarding unexpected sites [#699][repo-pr-699]
+- Integrate oauth2-proxy session redemption in add-in [#702][repo-pr-702]
+- Update default oauth2-proxy to latest version of our fork [#700][repo-pr-700]
+- Add rustLog and logJson config keys to Helm chart [#708][repo-pr-708]
+ 
+#### Bug fixes
+
+- Fix persistence of image pointers for proper preview/download [#689][repo-pr-689]
+- Fix rendering of Markdown inline image [#692][repo-pr-692]
+- Fix office-addin manifest taskPaneUrl [#704][repo-pr-704]
+- Wrap AddinSetupPage in I18NProvider [#693][repo-pr-693]
+
+#### Documentation
+
+- Add docs for audio modes [#688][repo-pr-688]
+- Add script to check that all config options are documented [#694][repo-pr-694]
+- Add some more docs about how to configure prompts [#695][repo-pr-695]
+- Adjust docs page to rebranding [#703][repo-pr-703]
+- Add README header and clean up outdated requirements instructions [#707][repo-pr-707]
+ 
+#### Dependency changes
+
+- Update frontend dependencies with open CVEs [#697][repo-pr-697]
+- Update backend crates with open CVEs [#701][repo-pr-701]
+- Update Rust toolchain to 1.96.0 and build tools [#705][repo-pr-705]
+- Update sqlx to 0.9.0; sea-orm to 2.0.0-rc.40 [#706][repo-pr-706]
+
+#### Chores & Developer experience
+
+- fix: resolve `import.meta` CJS warning in frontend and addin dev builds (ERMAIN-312) [#684][repo-pr-684]
+- Prepare release 0.6.1 [#710][repo-pr-710]
+
+
+### Full list of changes (same as above; uncategorized)
+
+- fix: resolve `import.meta` CJS warning in frontend and addin dev builds (ERMAIN-312) [#684][repo-pr-684]
+- Make summary prompt configurable [#687][repo-pr-687]
+- Add docs for audio modes [#688][repo-pr-688]
+- Fix persistence of image pointers for proper preview/download [#689][repo-pr-689]
+- Feature/ermain 316 stage full outlook conversation thread for chat upload [#690][repo-pr-690]
+- Make office addin ID configurable [#691][repo-pr-691]
+- Fix rendering of Markdown inline image [#692][repo-pr-692]
+- Wrap AddinSetupPage in I18NProvider [#693][repo-pr-693]
+- Add script to check that all config options are documented [#694][repo-pr-694]
+- Add some more docs about how to configure prompts [#695][repo-pr-695]
+- feat: show explicit empty state label for missing default model (ERMAIN-326) [#696][repo-pr-696]
+- Update frontend dependencies with open CVEs [#697][repo-pr-697]
+- Add microphone settings tab and gate audio to supported Outlook hosts [#698][repo-pr-698]
+- Add option to show Sharepoint disclaimer regarding unexpected sites [#699][repo-pr-699]
+- Update default oauth2-proxy to latest version of our fork [#700][repo-pr-700]
+- Update backend crates with open CVEs [#701][repo-pr-701]
+- Integrate oauth2-proxy session redemption in add-in [#702][repo-pr-702]
+- Adjust docs page to rebranding [#703][repo-pr-703]
+- Fix office-addin manifest taskPaneUrl [#704][repo-pr-704]
+- Update Rust toolchain to 1.96.0 and build tools [#705][repo-pr-705]
+- Update sqlx to 0.9.0; sea-orm to 2.0.0-rc.40 [#706][repo-pr-706]
+- Add README header and clean up outdated requirements instructions [#707][repo-pr-707]
+- Add rustLog and logJson config keys to Helm chart [#708][repo-pr-708]
+- Add input guardrails against prompt injection [#709][repo-pr-709]
+- Prepare release 0.6.1 [#710][repo-pr-710]
+
+## [0.6.0] - 2026-05-19
+
+`0.6.0` is the first release after almost 3 months, with many new features & improvements.
+We highly recommend to upgrade.
+
+### Notable changes
+
+#### Features and enhancements
+
+**Starter prompts**: Add starter prompts that help users kickstart a conversation ([#530][repo-pr-530], [#550][repo-pr-550]); translateable ([#553][repo-pr-553]), and overridable via custom component registry ([#566][repo-pr-566])
+
+**.eml support**: Add support for parsing and previewing `.eml` (Email) files ([#624][repo-pr-624], [#633][repo-pr-633], [#685][repo-pr-685], [#677][repo-pr-677])
+ 
+**Theming system improvements**: Reworked theming system, to switch from JSON-based tokens to a CSS-based approach with more consistency and flexibility to override styles via theme
+([#510][repo-pr-510], [#512][repo-pr-512], [#513][repo-pr-513], [#514][repo-pr-514], [#515][repo-pr-515],
+[#516][repo-pr-516], [#523][repo-pr-523], [#526][repo-pr-526], [#527][repo-pr-527], [#528][repo-pr-528],
+[#536][repo-pr-536], [#556][repo-pr-556], [#545][repo-pr-545], [#563][repo-pr-563]).
+Also reworked how themes are served to work with multiple platforms (web, office-addin and beyond)
+([#618][repo-pr-618]).
+
+ **Action facets**: Add "action facet" system to complement existing facet system with one-off actions requested by the user with fixed contracts
+ ([#573][repo-pr-573], [#575][repo-pr-575], [#584][repo-pr-584], [#576][repo-pr-576], [#577][repo-pr-577],
+[#579][repo-pr-579], [#605][repo-pr-605], [#638][repo-pr-638])
+
+**MCP authentication**: Add multiple modes of MCP authentication: `forwarded`, `fixed` ([#595][repo-pr-595], [#602][repo-pr-602]) and support for OAuth2 ([#601][repo-pr-601]) with encrypted secret handling ([#600][repo-pr-600])
+
+**OpenAI Responses API**: Add support for OpenAI Responses API (and compatible providers) ([#641][repo-pr-641], [#640][repo-pr-640])
+
+**Thinking trace support**: Add general support for displaying thinking traces from reasoning models
+([#649][repo-pr-649], [#637][repo-pr-637], [#642][repo-pr-642], [#650][repo-pr-650], [#679][repo-pr-679])
+and improve display of tool call progress by using a unified timeline for thinking & tool calls with tracked timings
+( [#659][repo-pr-659], [#657][repo-pr-657], [#681][repo-pr-681], [#658][repo-pr-658])
+
+**Shared chats**: Add optional feature to share chats between logged-in users via link ([#565][repo-pr-565], [#615][repo-pr-615], [#503][repo-pr-503])
+
+**Sharepoint drive listing**: Extend support OneDrive/Sharepoint support to list all available Sharepoint sites,
+with search and configureable discovery sources ([#639][repo-pr-639], [#616][repo-pr-616], [#628][repo-pr-628], [#660][repo-pr-660], [#665][repo-pr-665], [#675][repo-pr-675])
+
+**Image editing**: Enhance tool calling inputs to support image editing via MCP servers [#625][repo-pr-625]
+
+**Outlook addin**:
+- Provide frontend as library; Initial Outlook addin version [#537][repo-pr-537]
+- Stabilize office-addin/frontend dev watchers [#539][repo-pr-539]
+- Harden office-addin packaged dev cache invalidation [#540][repo-pr-540]
+- Add add-in auth to frontend API transports [#541][repo-pr-541]
+- Outlook add-in: scope email suggestions to new chats and add email picker [#543][repo-pr-543]
+- Improve Outlook add-in task pane sizing and file picker popover [#544][repo-pr-544]
+- Add office-addin setup page [#603][repo-pr-603]
+- Serve office-adding from backend [#591][repo-pr-591]
+- Expose compose selection reading via useComposeSelection hook [#580][repo-pr-580]
+- Add compose body write operations for Outlook [#585][repo-pr-585]
+- Handle HTML vs plain text body format for compose insertions [#589][repo-pr-589]
+- Hide chat advisory in Outlook add-in [#609][repo-pr-609]
+- Build EratoEmailSuggestion component for erato-email code blocks [#586][repo-pr-586]
+- Selection preview chip and action facet injection on send [#587][repo-pr-587]
+- Register Office-aware erato-email renderer via componentRegistry [#588][repo-pr-588]
+- Dynamic insert button labels based on compose selection state [#590][repo-pr-590]
+- Full body context mode for general compose writing assistance [#592][repo-pr-592]
+- Fix Outlook action-facet HTML preview and insertion [#610][repo-pr-610]
+- Add officeTheme utils module (ERMAIN-265) [#619][repo-pr-619]
+- Add useOfficeTheme hook (ERMAIN-266) [#620][repo-pr-620]
+- Add redirect-uri instruction to office-addin setup page [#604][repo-pr-604]
+- Add ephemeral token estimate + add-in attachment improvements [#634][repo-pr-634]
+- Wire OfficeThemeProvider into App (ERMAIN-267) [#621][repo-pr-621]
+- Fix linked add-in linked-dev asset rebuilds and startup flow [#622][repo-pr-622]
+- Add fallback for Outlook hosts missing body.getTypeAsync [#614][repo-pr-614]
+- Fix oversized-draft errors in Outlook compose-mode chat [#635][repo-pr-635]
+- Show reply-context chip when composing a reply in Outlook [#643][repo-pr-643]
+- Add-in settings dialog and Outlook session policy [#647][repo-pr-647]
+- Extended mail utilities support [#626][repo-pr-626]
+
+ 
+- Add namespaceOverride to erato Helm chart [#481][repo-pr-481]
+- Add network policies to Helm chart [#484][repo-pr-484]
+- Make user preferences dialog disableable [#483][repo-pr-483]
+- Add estimation of tokens in assistant form [#485][repo-pr-485]
+- Add button to stop message generation/streaming [#506][repo-pr-506]
+- Re-focus chat input after response streaming completes [#507][repo-pr-507]
+- Turn budget warning translation strings into explicit IDs [#509][repo-pr-509]
+- Adjust file upload preview to show longer filename parts [#520][repo-pr-520]
+- Allow for configuring default/locked facets for assistants [#521][repo-pr-521]
+- Improve Preferences dialog accessibility and reuse [#525][repo-pr-525]
+- Increase size of dropzone to whole center page [#531][repo-pr-531]
+- Make budget i18n strings reference "personal budget" [#533][repo-pr-533]
+- Preferences -> Settings; Move theme switcher into settings [#546][repo-pr-546]
+- Allow for configuring assistant form context estimate thresholds [#552][repo-pr-552]
+- Add ability to add description and icon for chat_provider [#558][repo-pr-558]
+- Add regenerate message action [#562][repo-pr-562]
+- Center empty chat input layout [#564][repo-pr-564]
+- Adjust favicon to Erato logo [#607][repo-pr-607]
+- Expand drive listing to Sharepoint sites/Teams channels [#606][repo-pr-606]
+- Add hallucination loop suppression [#664][repo-pr-664]
+- Make priority of language preferences configurable [#627][repo-pr-627]
+- Refactor templating system on top of handlebars [#629][repo-pr-629]
+- Show warnings when sharing Sharepoint files regarding permissions [#676][repo-pr-676]
+- Add support for `facet_permissions`, `mcp_server_permissions`; Switch all config-based permissions to be evaluated via OPA policy [#561][repo-pr-561]
+
+
+**Audio input modes**:
+
+- Add audio-mode button with shared Waveform primitives [#666][repo-pr-666]
+- Add dedicated audio chat mode to ChatInput [#667][repo-pr-667]
+- Add microphone test panel to audio settings [#668][repo-pr-668]
+- fix: resolve audio transcripts before generating chat summary (fixes "Untitled Chat" on audio sessions) [#670][repo-pr-670]
+- Add shared voice runtime asset resolver [#671][repo-pr-671]
+- Add Ricky VAD engine adapter [#672][repo-pr-672]
+- Add conversational audio backend config [#673][repo-pr-673]
+- Add support for audio transcription [#644][repo-pr-644]
+- Add non-persistent audio dictation socket [#654][repo-pr-654]
+ 
+#### Stability improvements
+
+- Add limit for parallelism of file processing [#496][repo-pr-496]
+- Add mechanism to ensure minimum tokio worker threads [#497][repo-pr-497]
+- Adopt latest genai reqwest client settings [#651][repo-pr-651]
+- Replace slow messages sibling constraing validation query [#611][repo-pr-611]
+- Make tool listing resilient against MCP server unavailability [#613][repo-pr-613]
+- Add compat_omit_strict flag as workaround for Bifrost bug [#648][repo-pr-648]
+
+#### Bug fixes
+
+- Fail gracefully if unshared files are attached to assistant [#492][repo-pr-492]
+- Fix page number extraction regression by pinning kreuzberg version [#478][repo-pr-478]
+- Fix opaque file too big upload error by draining file upload [#479][repo-pr-479]
+- Fix/assistant icon collapse [#486][repo-pr-486]
+- Fix file getting lost in edit; Use file picker duringe edits [#488][repo-pr-488]
+- Fix token estimation not working with custom components [#489][repo-pr-489]
+- Fix file upload error persisting between chats; Make input sticky [#490][repo-pr-490]
+- Prevent copying of theme colors in Chromium-based browsers [#491][repo-pr-491]
+- Only inject OTEL layer if OTEL is enabled [#493][repo-pr-493]
+- Fix tool responses getting lost on subsequent messages [#494][repo-pr-494]
+- Fix metrics: rename cache count to imply gauge, fix ratio range [#499][repo-pr-499]
+- Fix anchor links of footnote citations [#500][repo-pr-500]
+- Generate download links with correct filename [#501][repo-pr-501]
+- Always open erato-file:// links in preview dialog [#502][repo-pr-502]
+- Re-ingest OneDrive files on ETag change [#504][repo-pr-504]
+- Fix preview URL generation for azblob file storage [#508][repo-pr-508]
+- Fix broken image icon in slim navbar when no sidebar logo exists [#511][repo-pr-511]
+- Refresh token estimate in assistant editor on file delete [#517][repo-pr-517]
+- Make user prefrences dialog more consistent [#518][repo-pr-518]
+- Fix textarea auto-resize and preferences spacing [#524][repo-pr-524]
+- Fix broken history reconstruction with tool results [#529][repo-pr-529]
+- Reload chats and then page after delete all chats [#532][repo-pr-532]
+- Use correct hook when uploading via drag & drop [#534][repo-pr-534]
+- Handle removal of shared assistant better in reliant chats [#535][repo-pr-535]
+- Fix file uploads be shown twice in upload preview [#554][repo-pr-554]
+- Fix preferences textarea sizing on first open [#559][repo-pr-559]
+- Fix assistant welcome layout sizing [#560][repo-pr-560]
+- Fix token estimate when entering assistant edit form [#567][repo-pr-567]
+- Fix search page header/body background color mismatch [#568][repo-pr-568]
+- Fix preferences textarea auto-resize on tab switch [#569][repo-pr-569]
+- Default assistant model option to None [#617][repo-pr-617]
+- Fix repeating start of text for Gemini calls with tools [#598][repo-pr-598]
+- Skip caching of locales files [#682][repo-pr-682]
+- Make settings dialog tabs scroll horizontally on small viewports [#645][repo-pr-645]
+- Fix summary generation missing user input message [#662][repo-pr-662]
+- Portal CloudFilePicker to document.body (ERMAIN-254) [#674][repo-pr-674]
+- Fix user message soft line breaks [#655][repo-pr-655]
+ 
+#### Test coverage
+
+- Add mock-llm-server mock to check smooth streaming [#480][repo-pr-480]
+- Add tests and fix triggeres for chat token estimates [#487][repo-pr-487]
+- Improvements for accessibility and test coverage UI components [#557][repo-pr-557]
+- Testing: Action-Facet integration tests [#578][repo-pr-578]
+- Add Vitest test infrastructure for office-addin [#582][repo-pr-582]
+ 
+#### Documentation
+
+- Remove README from Helm chart gitignore; Add metadata [#482][repo-pr-482]
+- Extend auth documentation [#597][repo-pr-597]
+- Document MCP server access and overview of auth methods [#612][repo-pr-612]
+
+#### Security
+
+- Set up basic Helm chart scanning with Kubescan [#477][repo-pr-477]
+- Use cargo-auditable for dependency SBOM [#505][repo-pr-505]
+- Generate CycloneDX SBOMs for frontend [#680][repo-pr-680]
+- Add secrecy for preventing leakage in log messages [#630][repo-pr-630]
+ 
+#### Observability
+
+- Trace Langfuse tool calls and tag summaries [#652][repo-pr-652]
+- Add optional tracing of summary generation with Langfuse [#646][repo-pr-646]
+- Add support for OTEL-based Langfuse ingestion [#653][repo-pr-653]
+- Add tags on Langfuse traces for better filterability [#519][repo-pr-519]
+- Add support for X-Erato-Platform header to track request platform [#551][repo-pr-551]
+- Add prometheus metrics for active MCP sessions [#547][repo-pr-547]
+- Add metrics for time to first/last token [#548][repo-pr-548]
+- Add prometheus metrics for postgres query histograms [#549][repo-pr-549]
+- Add logging config; Add json logging mode [#572][repo-pr-572]
+- Fix X-Erato-Platform to send host name instead of runtime platform [#593][repo-pr-593]
+- Wire X-Erato-Platform header in SSE client and office-addin [#574][repo-pr-574]
+- Fix top-level langfuse trace name [#656][repo-pr-656]
+- Fix tags missing in Langfuse OTEL-based tracing [#663][repo-pr-663]
+- Add image variant with continous memory profiling [#495][repo-pr-495]
+ 
+#### Dependency changes
+
+##### Frontend
+
+- Update Node.js from 22.10.0 to 22.22.2 LTS [#583][repo-pr-583]
+- Update pnpm to 11.1.3 [#678][repo-pr-678]
+- Update Vite from v5 to v6 [#581][repo-pr-581]
+- Update `@tanstack/` frontend libraries [#669][repo-pr-669]
+ 
+##### Backend
+
+- Update to rmcp 1.3.0; Inline removed SSE transport [#599][repo-pr-599]
+- Upgrade Kreuzberg to 4.9.4; Process attachments in Email files [#632][repo-pr-632]
+- Upgrade to genai fork rev 102f18cb1f558fc1975bc413abc1bf206c75944a [#636][repo-pr-636]
+- Update genai to version that skips tool rewriting [#661][repo-pr-661]
+ 
+#### Chores & Developer experience
+
+- Adjust Storybook to also use tooltip for facets in AssistantForm [#522][repo-pr-522]
+- Add Geist font imports to Storybook preview [#555][repo-pr-555]
+- Support `extra` field in lingui extraction [#571][repo-pr-571]
+- Generate config reference file from config structs via facet [#570][repo-pr-570]
+- Fix missing dev env config loading [#608][repo-pr-608]
+- Fix test suite; Switch to seaweed fully [#631][repo-pr-631]
+- Add input_parameters column for user message context [#596][repo-pr-596]
+- Add direct owner of files to replace implied owner via linked chat [#498][repo-pr-498]
+- Prepare release 0.6.0 [#686][repo-pr-686]
+
+### Full list of changes (same as above; uncategorized)
+
+- Set up basic Helm chart scanning with Kubescan [#477][repo-pr-477]
+- Fix page number extraction regression by pinning kreuzberg version [#478][repo-pr-478]
+- Fix opaque file too big upload error by draining file upload [#479][repo-pr-479]
+- Add mock-llm-server mock to check smooth streaming [#480][repo-pr-480]
+- Add namespaceOverride to erato Helm chart [#481][repo-pr-481]
+- Remove README from Helm chart gitignore; Add metadata [#482][repo-pr-482]
+- Make user preferences dialog disableable [#483][repo-pr-483]
+- Add network policies to Helm chart [#484][repo-pr-484]
+- Add estimation of tokens in assistant form [#485][repo-pr-485]
+- Fix/assistant icon collapse [#486][repo-pr-486]
+- Add tests and fix triggeres for chat token estimates [#487][repo-pr-487]
+- Fix file getting lost in edit; Use file picker duringe edits [#488][repo-pr-488]
+- Fix token estimation not working with custom components [#489][repo-pr-489]
+- Fix file upload error persisting between chats; Make input sticky [#490][repo-pr-490]
+- Prevent copying of theme colors in Chromium-based browsers [#491][repo-pr-491]
+- Fail gracefully if unshared files are attached to assistant [#492][repo-pr-492]
+- Only inject OTEL layer if OTEL is enabled [#493][repo-pr-493]
+- Fix tool responses getting lost on subsequent messages [#494][repo-pr-494]
+- Add image variant with continous memory profiling [#495][repo-pr-495]
+- Add limit for parallelism of file processing [#496][repo-pr-496]
+- Add mechanism to ensure minimum tokio worker threads [#497][repo-pr-497]
+- Add direct owner of files to replace implied owner via linked chat [#498][repo-pr-498]
+- Fix metrics: rename cache count to imply gauge, fix ratio range [#499][repo-pr-499]
+- Fix anchor links of footnote citations [#500][repo-pr-500]
+- Generate download links with correct filename [#501][repo-pr-501]
+- Always open erato-file:// links in preview dialog [#502][repo-pr-502]
+- Adjust assistant card layout to be consistent between own/shared [#503][repo-pr-503]
+- Re-ingest OneDrive files on ETag change [#504][repo-pr-504]
+- Use cargo-auditable for dependency SBOM [#505][repo-pr-505]
+- Add button to stop message generation/streaming [#506][repo-pr-506]
+- Re-focus chat input after response streaming completes [#507][repo-pr-507]
+- Fix preview URL generation for azblob file storage [#508][repo-pr-508]
+- Turn budget warning translation strings into explicit IDs [#509][repo-pr-509]
+- feat(theme): load optional runtime theme.css support [#510][repo-pr-510]
+- Fix broken image icon in slim navbar when no sidebar logo exists [#511][repo-pr-511]
+- feat(theme): add stable styling hooks [#512][repo-pr-512]
+- feat(theme): add typed shell token contract [#513][repo-pr-513]
+- feat(theme): bridge legacy theme values [#514][repo-pr-514]
+- refactor(theme): remove legacy theme applier [#515][repo-pr-515]
+- feat(theme): consume token surface in core UI [#516][repo-pr-516]
+- Refresh token estimate in assistant editor on file delete [#517][repo-pr-517]
+- Make user prefrences dialog more consistent [#518][repo-pr-518]
+- Add tags on Langfuse traces for better filterability [#519][repo-pr-519]
+- Adjust file upload preview to show longer filename parts [#520][repo-pr-520]
+- Allow for configuring default/locked facets for assistants [#521][repo-pr-521]
+- Adjust Storybook to also use tooltip for facets in AssistantForm [#522][repo-pr-522]
+- Repair foundation theme contracts and input geometry [#523][repo-pr-523]
+- Fix textarea auto-resize and preferences spacing [#524][repo-pr-524]
+- Improve Preferences dialog accessibility and reuse [#525][repo-pr-525]
+- feat(frontend): theme primary button semantics [#526][repo-pr-526]
+- Focus normalization and error-ring tokenization [#527][repo-pr-527]
+- Typography contract expansion and audited consumer adoption [#528][repo-pr-528]
+- Fix broken history reconstruction with tool results [#529][repo-pr-529]
+- Add starter prompts [#530][repo-pr-530]
+- Increase size of dropzone to whole center page [#531][repo-pr-531]
+- Reload chats and then page after delete all chats [#532][repo-pr-532]
+- Make budget i18n strings reference "personal budget" [#533][repo-pr-533]
+- Use correct hook when uploading via drag & drop [#534][repo-pr-534]
+- Handle removal of shared assistant better in reliant chats [#535][repo-pr-535]
+- Expand foundation geometry and configurable code themes [#536][repo-pr-536]
+- Provide frontend as library; Initial Outlook addin version [#537][repo-pr-537]
+- Stabilize office-addin/frontend dev watchers [#539][repo-pr-539]
+- Harden office-addin packaged dev cache invalidation [#540][repo-pr-540]
+- Add add-in auth to frontend API transports [#541][repo-pr-541]
+- Outlook add-in: scope email suggestions to new chats and add email picker [#543][repo-pr-543]
+- Improve Outlook add-in task pane sizing and file picker popover [#544][repo-pr-544]
+- Wire shell app page surfaces [#545][repo-pr-545]
+- Preferences -> Settings; Move theme switcher into settings [#546][repo-pr-546]
+- Add prometheus metrics for active MCP sessions [#547][repo-pr-547]
+- Add metrics for time to first/last token [#548][repo-pr-548]
+- Add prometheus metrics for postgres query histograms [#549][repo-pr-549]
+- Remove starter prompts from assistants [#550][repo-pr-550]
+- Add support for X-Erato-Platform header to track request platform [#551][repo-pr-551]
+- Allow for configuring assistant form context estimate thresholds [#552][repo-pr-552]
+- Make starter prompts translateable [#553][repo-pr-553]
+- Fix file uploads be shown twice in upload preview [#554][repo-pr-554]
+- Add Geist font imports to Storybook preview [#555][repo-pr-555]
+- Normalize nested chat surface frame styling [#556][repo-pr-556]
+- Improvements for accessibility and test coverage UI components [#557][repo-pr-557]
+- Add ability to add description and icon for chat_provider [#558][repo-pr-558]
+- Fix preferences textarea sizing on first open [#559][repo-pr-559]
+- Fix assistant welcome layout sizing [#560][repo-pr-560]
+- Refactor provider, MCP server, and facet permissions [#561][repo-pr-561]
+- Add regenerate message action [#562][repo-pr-562]
+- Interface refactor [#563][repo-pr-563]
+- Center empty chat input layout [#564][repo-pr-564]
+- Add ability to share chats [#565][repo-pr-565]
+- Prompt suggestion harness [#566][repo-pr-566]
+- Fix token estimate when entering assistant edit form [#567][repo-pr-567]
+- Fix search page header/body background color mismatch [#568][repo-pr-568]
+- Fix preferences textarea auto-resize on tab switch [#569][repo-pr-569]
+- Generate config reference file from config structs via facet [#570][repo-pr-570]
+- Support `extra` field in lingui extraction [#571][repo-pr-571]
+- Add logging config; Add json logging mode [#572][repo-pr-572]
+- Config: Add action_facets definitions to erato.toml [#573][repo-pr-573]
+- Wire X-Erato-Platform header in SSE client and office-addin [#574][repo-pr-574]
+- Backend API: action_facet request field, persistence, and plumbing [#575][repo-pr-575]
+- Prompt composition: Action-Facet validation, rendering, and injection [#576][repo-pr-576]
+- Frontend: codegen and hook updates for action_facet payload [#577][repo-pr-577]
+- Testing: Action-Facet integration tests [#578][repo-pr-578]
+- Docs: Add action_facets configuration reference [#579][repo-pr-579]
+- Expose compose selection reading via useComposeSelection hook [#580][repo-pr-580]
+- Upgrade Vite from v5 to v6 [#581][repo-pr-581]
+- Add Vitest test infrastructure for office-addin [#582][repo-pr-582]
+- Upgrade Node.js from 22.10.0 to 22.22.2 LTS [#583][repo-pr-583]
+- Define Outlook compose Action-Facet template examples [#584][repo-pr-584]
+- Add compose body write operations for Outlook [#585][repo-pr-585]
+- Build EratoEmailSuggestion component for erato-email code blocks [#586][repo-pr-586]
+- Selection preview chip and action facet injection on send [#587][repo-pr-587]
+- Register Office-aware erato-email renderer via componentRegistry [#588][repo-pr-588]
+- Handle HTML vs plain text body format for compose insertions [#589][repo-pr-589]
+- Dynamic insert button labels based on compose selection state [#590][repo-pr-590]
+- Serve office-adding from backend [#591][repo-pr-591]
+- Full body context mode for general compose writing assistance [#592][repo-pr-592]
+- Fix X-Erato-Platform to send host name instead of runtime platform [#593][repo-pr-593]
+- Set up none/forwarded/fixed authentication for MCP servers [#595][repo-pr-595]
+- Add input_parameters column for user message context [#596][repo-pr-596]
+- Extend auth documentation [#597][repo-pr-597]
+- Fix repeating start of text for Gemini calls with tools [#598][repo-pr-598]
+- Update to rmcp 1.3.0; Inline removed SSE transport [#599][repo-pr-599]
+- Add encryption key to config [#600][repo-pr-600]
+- Add backend interactions for oauth2 MCP support [#601][repo-pr-601]
+- Reduce logging for MCP oauth [#602][repo-pr-602]
+- Add office-addin setup page [#603][repo-pr-603]
+- Add redirect-uri instruction to office-addin setup page [#604][repo-pr-604]
+- Adjust action_facets config structure; Add builtin outlook facets [#605][repo-pr-605]
+- Expand drive listing to Sharepoint sites/Teams channels [#606][repo-pr-606]
+- Adjust favicon to Erato logo [#607][repo-pr-607]
+- Fix missing dev env config loading [#608][repo-pr-608]
+- Hide chat advisory in Outlook add-in [#609][repo-pr-609]
+- Fix Outlook action-facet HTML preview and insertion [#610][repo-pr-610]
+- Replace slow messages sibling constraing validation query [#611][repo-pr-611]
+- Document MCP server access and overview of auth methods [#612][repo-pr-612]
+- Make tool listing resilient against MCP server unavailability [#613][repo-pr-613]
+- Add fallback for Outlook hosts missing body.getTypeAsync [#614][repo-pr-614]
+- Correctly display unavailable file preview in shared chat [#615][repo-pr-615]
+- Add config option to allow limit OneDrive drive listing [#616][repo-pr-616]
+- Default assistant model option to None [#617][repo-pr-617]
+- Adjust platform i18n/theme system to have more structure [#618][repo-pr-618]
+- Add officeTheme utils module (ERMAIN-265) [#619][repo-pr-619]
+- Add useOfficeTheme hook (ERMAIN-266) [#620][repo-pr-620]
+- Wire OfficeThemeProvider into App (ERMAIN-267) [#621][repo-pr-621]
+- Fix linked add-in linked-dev asset rebuilds and startup flow [#622][repo-pr-622]
+- Add backend .eml support and tests [#624][repo-pr-624]
+- Enhance tool calling inputs to support image editing [#625][repo-pr-625]
+- Extended mail utilities support [#626][repo-pr-626]
+- Make priority of language preferences configurable [#627][repo-pr-627]
+- Extend sharepoint with backend search and ordering [#628][repo-pr-628]
+- Refactor templating system on top of handlebars [#629][repo-pr-629]
+- Add secrecy for preventing leakage in log messages [#630][repo-pr-630]
+- Fix test suite; Switch to seaweed fully [#631][repo-pr-631]
+- Upgrade Kreuzberg to 4.9.4; Process attachments in Email files [#632][repo-pr-632]
+- Register email FileType for .eml / message/rfc822 [#633][repo-pr-633]
+- Add ephemeral token estimate + add-in attachment improvements [#634][repo-pr-634]
+- Fix oversized-draft errors in Outlook compose-mode chat [#635][repo-pr-635]
+- Upgrade to genai fork rev 102f18cb1f558fc1975bc413abc1bf206c75944a [#636][repo-pr-636]
+- Add support for storing / replaying thought signatures [#637][repo-pr-637]
+- Persist action facets as markers; render in user turn with sentinel [#638][repo-pr-638]
+- Adjust default naming from "OneDrive" to "Sharepoint" [#639][repo-pr-639]
+- Add chat provider recorder helper; Add Reponses API mock endpoint [#640][repo-pr-640]
+- Fix replay of reasoning items [#641][repo-pr-641]
+- Add streaming event/content part for reasoning [#642][repo-pr-642]
+- Show reply-context chip when composing a reply in Outlook [#643][repo-pr-643]
+- Add support for audio transcription [#644][repo-pr-644]
+- Make settings dialog tabs scroll horizontally on small viewports [#645][repo-pr-645]
+- Add optional tracing of summary generation with Langfuse [#646][repo-pr-646]
+- Add-in settings dialog and Outlook session policy [#647][repo-pr-647]
+- Add compat_omit_strict flag as workaround for Bifrost bug [#648][repo-pr-648]
+- Workaround on .summary issue [#649][repo-pr-649]
+- Turn reasoning encrypted_content and summary into separate configs [#650][repo-pr-650]
+- Adopt latest genai reqwest client settings [#651][repo-pr-651]
+- Trace Langfuse tool calls and tag summaries [#652][repo-pr-652]
+- Add support for OTEL-based Langfuse ingestion [#653][repo-pr-653]
+- Add non-persistent audio dictation socket [#654][repo-pr-654]
+- Fix user message soft line breaks [#655][repo-pr-655]
+- Fix top-level langfuse trace name [#656][repo-pr-656]
+- Feature/inline tool call rendering [#657][repo-pr-657]
+- Split multi-header reasoning into per-header trace steps [#658][repo-pr-658]
+- Collapse trace timeline behind a 'Thought for X' summary on cold load [#659][repo-pr-659]
+- Adjust sharepoint "Teams library" drive discovery with filter [#660][repo-pr-660]
+- Update genai to version that skips tool rewriting [#661][repo-pr-661]
+- Fix summary generation missing user input message [#662][repo-pr-662]
+- Fix tags missing in Langfuse OTEL-based tracing [#663][repo-pr-663]
+- Add hallucination loop suppression [#664][repo-pr-664]
+- Adjust sharepoint group drive search: default public filter [#665][repo-pr-665]
+- Add audio-mode button with shared Waveform primitives [#666][repo-pr-666]
+- Add dedicated audio chat mode to ChatInput [#667][repo-pr-667]
+- Add microphone test panel to audio settings [#668][repo-pr-668]
+- Upgrade versions [#669][repo-pr-669]
+- fix: resolve audio transcripts before generating chat summary (fixes "Untitled Chat" on audio sessions) [#670][repo-pr-670]
+- Add shared voice runtime asset resolver [#671][repo-pr-671]
+- Add Ricky VAD engine adapter [#672][repo-pr-672]
+- Add conversational audio backend config [#673][repo-pr-673]
+- Portal CloudFilePicker to document.body (ERMAIN-254) [#674][repo-pr-674]
+- Fix Sharepoint filtering to not paginate internally and filter [#675][repo-pr-675]
+- Show warnings when sharing Sharepoint files regarding permissions [#676][repo-pr-676]
+- Add ParsedEmail shape and refactor parseEmlFile (ERMAIN-275) [#677][repo-pr-677]
+- Update pnpm to 11.1.3 [#678][repo-pr-678]
+- Discard reasoning items when switching chat providers [#679][repo-pr-679]
+- Generate CycloneDX SBOMs for frontend [#680][repo-pr-680]
+- Track timing per ContentPart for reasoning and tool calls [#681][repo-pr-681]
+- Skip caching of locales files [#682][repo-pr-682]
+- Add EmlPreview component for .eml file preview (ERMAIN-308) [#685][repo-pr-685]
+- Prepare release 0.6.0 [#686][repo-pr-686]
+
+## [0.5.2] - 2026-02-20
+
+### Full list of changes
+
+- Seed e2e test secrets from single file [#375][repo-pr-375]
+- Set up Entra ID test scenario [#376][repo-pr-376]
+- Set up initial CHANGELOG.md [#377][repo-pr-377]
+- Set up nginx-auth test scenario [#379][repo-pr-379]
+- Add tests for simple chat completion with slowdown [#380][repo-pr-380]
+- Optimize navigation and state transition [#381][repo-pr-381]
+- Add option to automatically use latest main commit for setup-dev [#382][repo-pr-382]
+- Fix outdated policy data when trying to share assistant [#383][repo-pr-383]
+- Extend infrastructure with architecture charts [#384][repo-pr-384]
+- Add message lifecycle diagrams [#385][repo-pr-385]
+- Filter sharing users/groups to ones user is a member of [#386][repo-pr-386]
+- Add filter for sharing-relation to assistants list route [#387][repo-pr-387]
+- Add endpoint and extend file model to show available capabilities [#388][repo-pr-388]
+- Use content of last user-supplied message for Langfuse trace name [#389][repo-pr-389]
+- Fix chatIsReadyToChat test helper expecting enabled chatbox [#390][repo-pr-390]
+- Fix feedback sentiment not being changeable on edit [#391][repo-pr-391]
+- Fix wrong `download_url`s being generated for assistant files [#392][repo-pr-392]
+- Allow overriding the feedback placeholder by sentiment [#393][repo-pr-393]
+- Fix broken OneDrive assistant files download_urls being generated [#394][repo-pr-394]
+- Update to Ubuntu 24.04 and Debian Trixie [#395][repo-pr-395]
+- Update GHA docker login action to 3.6.0 [#396][repo-pr-396]
+- Add `query` option to groups/users endpoints for Graph API search [#397][repo-pr-397]
+- Allow for more model settings (e.g. temprature) to be set [#398][repo-pr-398]
+- Add scripts to create EntraID bulk import spam users [#399][repo-pr-399]
+- Handle general generation errors and content_filter error [#400][repo-pr-400]
+- Add prompt template variable to inject current date/time [#401][repo-pr-401]
+- Inject file error message instead of omitting file message [#402][repo-pr-402]
+- Add `kreuzberg` as alternative file processor with page-awareness [#403][repo-pr-403]
+- Add tabs to differentiate assistant sharing [#404][repo-pr-404]
+- Replace list with search on sharing [#405][repo-pr-405]
+- Only query first page for empty users/groups query [#406][repo-pr-406]
+- Check session status on window focus and redirect if expired [#407][repo-pr-407]
+- Add file validation handling [#408][repo-pr-408]
+- Add tooltip based on language file translations [#409][repo-pr-409]
+- Fix checks on test [#410][repo-pr-410]
+- Component registry + Assistant sample [#411][repo-pr-411]
+- Resolve erato-file:// links in generated messages [#412][repo-pr-412]
+- Add system prompt injection of user language preferences [#413][repo-pr-413]
+- Refactor message composition [#414][repo-pr-414]
+- Add docs for stream buffering [#415][repo-pr-415]
+- Remove dbg! statements [#416][repo-pr-416]
+- Add config/routes for experimental facets [#417][repo-pr-417]
+- Add facet prompt injection logic [#418][repo-pr-418]
+- Add facet MCP filter logic [#419][repo-pr-419]
+- Add logic for applying model settings via settings [#420][repo-pr-420]
+- Fix display of display_name of user/group in share grants [#421][repo-pr-421]
+- Add config/route for prompt optimizer [#422][repo-pr-422]
+- Add prompt-optimizer button to assistant creation dialog [#423][repo-pr-423]
+- Add support for file generation in mcp servers [#424][repo-pr-424]
+- Add slim navbar variant, optimize animations and performance [#425][repo-pr-425]
+- Add facet selector to chat input [#426][repo-pr-426]
+- Autolink erato-file:// URLs correctly [#427][repo-pr-427]
+- Extend customization options [#428][repo-pr-428]
+- Optimize layout and distances [#429][repo-pr-429]
+- Add tests for pptx and docx [#430][repo-pr-430]
+- Only build erato binary in backend Dockerfile [#431][repo-pr-431]
+- Add helm-docs for automatic README generation [#432][repo-pr-432]
+- Setup Entra ID assistant flow chats with multiple users [#433][repo-pr-433]
+- Refactor e2e test scenario grouping [#434][repo-pr-434]
+- Add images API to mock-llm-server [#435][repo-pr-435]
+- Add default builtin facet system prompt template [#436][repo-pr-436]
+- Set up many-models e2e test scenario [#437][repo-pr-437]
+- Add docs FE architecture [#438][repo-pr-438]
+- Missing frontend architecture docs [#439][repo-pr-439]
+- Unify handling of static + langfuse prompt specs [#440][repo-pr-440]
+- Fix assistant tooltip placement [#441][repo-pr-441]
+- Add optional image advisory [#442][repo-pr-442]
+- Add missing assistant_id on file uploads [#443][repo-pr-443]
+- Fix navigation bug on assistant [#444][repo-pr-444]
+- Add optional AI advisory below chat input [#445][repo-pr-445]
+- Add handling of 429 rate limit error [#446][repo-pr-446]
+- Improve accuracy of token usage estimate [#447][repo-pr-447]
+- Fix broken download URLs for sharepoint [#448][repo-pr-448]
+- Extend custom icon, Toggle display metadata [#449][repo-pr-449]
+- Add more custom components samples, improve e2e pre checks [#450][repo-pr-450]
+- Add Gemini/Vertex AI providers [#451][repo-pr-451]
+- Fix race condition in assistant model selection [#452][repo-pr-452]
+- Add e2e tests that verifies that chatting with different models works [#453][repo-pr-453]
+- Set up CI build of docker image for mock-llm-server [#454][repo-pr-454]
+- Add mock-llm-server to erato-local setup [#455][repo-pr-455]
+- Add tests for error messages with mock-llm [#456][repo-pr-456]
+- Add mock MCP server [#457][repo-pr-457]
+- Add reproduction test for broken assistant file links [#458][repo-pr-458]
+- Allow for configuring MCP session idle time [#459][repo-pr-459]
+- Optimize MCP server listing; Fix tool patterns rendering in facets [#460][repo-pr-460]
+- Add prometheus integration [#461][repo-pr-461]
+- Add Prometheus metrics service for backend to Helm chart [#462][repo-pr-462]
+- Add backend support for editing chat name [#463][repo-pr-463]
+- Add support for pasting images from clipboard [#464][repo-pr-464]
+- Add user preferences [#465][repo-pr-465]
+- Add archive all button [#466][repo-pr-466]
+- Add support for parsing/forwarding content filter error from MCP [#467][repo-pr-467]
+- Update imprint page [#468][repo-pr-468]
+- Refactor message streaming and include resume [#469][repo-pr-469]
+- Fix regression in handleUserMessageSaved [#470][repo-pr-470]
+- Add streaming resumption after network interruption [#471][repo-pr-471]
+- Add cache metrics to metrics endpoint [#472][repo-pr-472]
+- Add CI test to test MCP tool call [#473][repo-pr-473]
+- Add prometheus info metrics for chat_providers [#474][repo-pr-474]
+- Re-add $schema filtering [#475][repo-pr-475]
+- Prepare release 0.5.2 [#476][repo-pr-476]
+
 ## [0.5.1] - 2026-01-14
 
 ### Full list of changes
@@ -671,6 +1302,336 @@ First tagged release
 [repo-pr-371]: https://github.com/EratoLab/erato/pull/371
 [repo-pr-372]: https://github.com/EratoLab/erato/pull/372
 [repo-pr-373]: https://github.com/EratoLab/erato/pull/373
+[repo-pr-375]: https://github.com/EratoLab/erato/pull/375
+[repo-pr-376]: https://github.com/EratoLab/erato/pull/376
+[repo-pr-377]: https://github.com/EratoLab/erato/pull/377
+[repo-pr-379]: https://github.com/EratoLab/erato/pull/379
+[repo-pr-380]: https://github.com/EratoLab/erato/pull/380
+[repo-pr-381]: https://github.com/EratoLab/erato/pull/381
+[repo-pr-382]: https://github.com/EratoLab/erato/pull/382
+[repo-pr-383]: https://github.com/EratoLab/erato/pull/383
+[repo-pr-384]: https://github.com/EratoLab/erato/pull/384
+[repo-pr-385]: https://github.com/EratoLab/erato/pull/385
+[repo-pr-386]: https://github.com/EratoLab/erato/pull/386
+[repo-pr-387]: https://github.com/EratoLab/erato/pull/387
+[repo-pr-388]: https://github.com/EratoLab/erato/pull/388
+[repo-pr-389]: https://github.com/EratoLab/erato/pull/389
+[repo-pr-390]: https://github.com/EratoLab/erato/pull/390
+[repo-pr-391]: https://github.com/EratoLab/erato/pull/391
+[repo-pr-392]: https://github.com/EratoLab/erato/pull/392
+[repo-pr-393]: https://github.com/EratoLab/erato/pull/393
+[repo-pr-394]: https://github.com/EratoLab/erato/pull/394
+[repo-pr-395]: https://github.com/EratoLab/erato/pull/395
+[repo-pr-396]: https://github.com/EratoLab/erato/pull/396
+[repo-pr-397]: https://github.com/EratoLab/erato/pull/397
+[repo-pr-398]: https://github.com/EratoLab/erato/pull/398
+[repo-pr-399]: https://github.com/EratoLab/erato/pull/399
+[repo-pr-400]: https://github.com/EratoLab/erato/pull/400
+[repo-pr-401]: https://github.com/EratoLab/erato/pull/401
+[repo-pr-402]: https://github.com/EratoLab/erato/pull/402
+[repo-pr-403]: https://github.com/EratoLab/erato/pull/403
+[repo-pr-404]: https://github.com/EratoLab/erato/pull/404
+[repo-pr-405]: https://github.com/EratoLab/erato/pull/405
+[repo-pr-406]: https://github.com/EratoLab/erato/pull/406
+[repo-pr-407]: https://github.com/EratoLab/erato/pull/407
+[repo-pr-408]: https://github.com/EratoLab/erato/pull/408
+[repo-pr-409]: https://github.com/EratoLab/erato/pull/409
+[repo-pr-410]: https://github.com/EratoLab/erato/pull/410
+[repo-pr-411]: https://github.com/EratoLab/erato/pull/411
+[repo-pr-412]: https://github.com/EratoLab/erato/pull/412
+[repo-pr-413]: https://github.com/EratoLab/erato/pull/413
+[repo-pr-414]: https://github.com/EratoLab/erato/pull/414
+[repo-pr-415]: https://github.com/EratoLab/erato/pull/415
+[repo-pr-416]: https://github.com/EratoLab/erato/pull/416
+[repo-pr-417]: https://github.com/EratoLab/erato/pull/417
+[repo-pr-418]: https://github.com/EratoLab/erato/pull/418
+[repo-pr-419]: https://github.com/EratoLab/erato/pull/419
+[repo-pr-420]: https://github.com/EratoLab/erato/pull/420
+[repo-pr-421]: https://github.com/EratoLab/erato/pull/421
+[repo-pr-422]: https://github.com/EratoLab/erato/pull/422
+[repo-pr-423]: https://github.com/EratoLab/erato/pull/423
+[repo-pr-424]: https://github.com/EratoLab/erato/pull/424
+[repo-pr-425]: https://github.com/EratoLab/erato/pull/425
+[repo-pr-426]: https://github.com/EratoLab/erato/pull/426
+[repo-pr-427]: https://github.com/EratoLab/erato/pull/427
+[repo-pr-428]: https://github.com/EratoLab/erato/pull/428
+[repo-pr-429]: https://github.com/EratoLab/erato/pull/429
+[repo-pr-430]: https://github.com/EratoLab/erato/pull/430
+[repo-pr-431]: https://github.com/EratoLab/erato/pull/431
+[repo-pr-432]: https://github.com/EratoLab/erato/pull/432
+[repo-pr-433]: https://github.com/EratoLab/erato/pull/433
+[repo-pr-434]: https://github.com/EratoLab/erato/pull/434
+[repo-pr-435]: https://github.com/EratoLab/erato/pull/435
+[repo-pr-436]: https://github.com/EratoLab/erato/pull/436
+[repo-pr-437]: https://github.com/EratoLab/erato/pull/437
+[repo-pr-438]: https://github.com/EratoLab/erato/pull/438
+[repo-pr-439]: https://github.com/EratoLab/erato/pull/439
+[repo-pr-440]: https://github.com/EratoLab/erato/pull/440
+[repo-pr-441]: https://github.com/EratoLab/erato/pull/441
+[repo-pr-442]: https://github.com/EratoLab/erato/pull/442
+[repo-pr-443]: https://github.com/EratoLab/erato/pull/443
+[repo-pr-444]: https://github.com/EratoLab/erato/pull/444
+[repo-pr-445]: https://github.com/EratoLab/erato/pull/445
+[repo-pr-446]: https://github.com/EratoLab/erato/pull/446
+[repo-pr-447]: https://github.com/EratoLab/erato/pull/447
+[repo-pr-448]: https://github.com/EratoLab/erato/pull/448
+[repo-pr-449]: https://github.com/EratoLab/erato/pull/449
+[repo-pr-450]: https://github.com/EratoLab/erato/pull/450
+[repo-pr-451]: https://github.com/EratoLab/erato/pull/451
+[repo-pr-452]: https://github.com/EratoLab/erato/pull/452
+[repo-pr-453]: https://github.com/EratoLab/erato/pull/453
+[repo-pr-454]: https://github.com/EratoLab/erato/pull/454
+[repo-pr-455]: https://github.com/EratoLab/erato/pull/455
+[repo-pr-456]: https://github.com/EratoLab/erato/pull/456
+[repo-pr-457]: https://github.com/EratoLab/erato/pull/457
+[repo-pr-458]: https://github.com/EratoLab/erato/pull/458
+[repo-pr-459]: https://github.com/EratoLab/erato/pull/459
+[repo-pr-460]: https://github.com/EratoLab/erato/pull/460
+[repo-pr-461]: https://github.com/EratoLab/erato/pull/461
+[repo-pr-462]: https://github.com/EratoLab/erato/pull/462
+[repo-pr-463]: https://github.com/EratoLab/erato/pull/463
+[repo-pr-464]: https://github.com/EratoLab/erato/pull/464
+[repo-pr-465]: https://github.com/EratoLab/erato/pull/465
+[repo-pr-466]: https://github.com/EratoLab/erato/pull/466
+[repo-pr-467]: https://github.com/EratoLab/erato/pull/467
+[repo-pr-468]: https://github.com/EratoLab/erato/pull/468
+[repo-pr-469]: https://github.com/EratoLab/erato/pull/469
+[repo-pr-470]: https://github.com/EratoLab/erato/pull/470
+[repo-pr-471]: https://github.com/EratoLab/erato/pull/471
+[repo-pr-472]: https://github.com/EratoLab/erato/pull/472
+[repo-pr-473]: https://github.com/EratoLab/erato/pull/473
+[repo-pr-474]: https://github.com/EratoLab/erato/pull/474
+[repo-pr-475]: https://github.com/EratoLab/erato/pull/475
+[repo-pr-476]: https://github.com/EratoLab/erato/pull/476
+[repo-pr-477]: https://github.com/EratoLab/erato/pull/477
+[repo-pr-478]: https://github.com/EratoLab/erato/pull/478
+[repo-pr-479]: https://github.com/EratoLab/erato/pull/479
+[repo-pr-480]: https://github.com/EratoLab/erato/pull/480
+[repo-pr-481]: https://github.com/EratoLab/erato/pull/481
+[repo-pr-482]: https://github.com/EratoLab/erato/pull/482
+[repo-pr-483]: https://github.com/EratoLab/erato/pull/483
+[repo-pr-484]: https://github.com/EratoLab/erato/pull/484
+[repo-pr-485]: https://github.com/EratoLab/erato/pull/485
+[repo-pr-486]: https://github.com/EratoLab/erato/pull/486
+[repo-pr-487]: https://github.com/EratoLab/erato/pull/487
+[repo-pr-488]: https://github.com/EratoLab/erato/pull/488
+[repo-pr-489]: https://github.com/EratoLab/erato/pull/489
+[repo-pr-490]: https://github.com/EratoLab/erato/pull/490
+[repo-pr-491]: https://github.com/EratoLab/erato/pull/491
+[repo-pr-492]: https://github.com/EratoLab/erato/pull/492
+[repo-pr-493]: https://github.com/EratoLab/erato/pull/493
+[repo-pr-494]: https://github.com/EratoLab/erato/pull/494
+[repo-pr-495]: https://github.com/EratoLab/erato/pull/495
+[repo-pr-496]: https://github.com/EratoLab/erato/pull/496
+[repo-pr-497]: https://github.com/EratoLab/erato/pull/497
+[repo-pr-498]: https://github.com/EratoLab/erato/pull/498
+[repo-pr-499]: https://github.com/EratoLab/erato/pull/499
+[repo-pr-500]: https://github.com/EratoLab/erato/pull/500
+[repo-pr-501]: https://github.com/EratoLab/erato/pull/501
+[repo-pr-502]: https://github.com/EratoLab/erato/pull/502
+[repo-pr-503]: https://github.com/EratoLab/erato/pull/503
+[repo-pr-504]: https://github.com/EratoLab/erato/pull/504
+[repo-pr-505]: https://github.com/EratoLab/erato/pull/505
+[repo-pr-506]: https://github.com/EratoLab/erato/pull/506
+[repo-pr-507]: https://github.com/EratoLab/erato/pull/507
+[repo-pr-508]: https://github.com/EratoLab/erato/pull/508
+[repo-pr-509]: https://github.com/EratoLab/erato/pull/509
+[repo-pr-510]: https://github.com/EratoLab/erato/pull/510
+[repo-pr-511]: https://github.com/EratoLab/erato/pull/511
+[repo-pr-512]: https://github.com/EratoLab/erato/pull/512
+[repo-pr-513]: https://github.com/EratoLab/erato/pull/513
+[repo-pr-514]: https://github.com/EratoLab/erato/pull/514
+[repo-pr-515]: https://github.com/EratoLab/erato/pull/515
+[repo-pr-516]: https://github.com/EratoLab/erato/pull/516
+[repo-pr-517]: https://github.com/EratoLab/erato/pull/517
+[repo-pr-518]: https://github.com/EratoLab/erato/pull/518
+[repo-pr-519]: https://github.com/EratoLab/erato/pull/519
+[repo-pr-520]: https://github.com/EratoLab/erato/pull/520
+[repo-pr-521]: https://github.com/EratoLab/erato/pull/521
+[repo-pr-522]: https://github.com/EratoLab/erato/pull/522
+[repo-pr-523]: https://github.com/EratoLab/erato/pull/523
+[repo-pr-524]: https://github.com/EratoLab/erato/pull/524
+[repo-pr-525]: https://github.com/EratoLab/erato/pull/525
+[repo-pr-526]: https://github.com/EratoLab/erato/pull/526
+[repo-pr-527]: https://github.com/EratoLab/erato/pull/527
+[repo-pr-528]: https://github.com/EratoLab/erato/pull/528
+[repo-pr-529]: https://github.com/EratoLab/erato/pull/529
+[repo-pr-530]: https://github.com/EratoLab/erato/pull/530
+[repo-pr-531]: https://github.com/EratoLab/erato/pull/531
+[repo-pr-532]: https://github.com/EratoLab/erato/pull/532
+[repo-pr-533]: https://github.com/EratoLab/erato/pull/533
+[repo-pr-534]: https://github.com/EratoLab/erato/pull/534
+[repo-pr-535]: https://github.com/EratoLab/erato/pull/535
+[repo-pr-536]: https://github.com/EratoLab/erato/pull/536
+[repo-pr-537]: https://github.com/EratoLab/erato/pull/537
+[repo-pr-539]: https://github.com/EratoLab/erato/pull/539
+[repo-pr-540]: https://github.com/EratoLab/erato/pull/540
+[repo-pr-541]: https://github.com/EratoLab/erato/pull/541
+[repo-pr-543]: https://github.com/EratoLab/erato/pull/543
+[repo-pr-544]: https://github.com/EratoLab/erato/pull/544
+[repo-pr-545]: https://github.com/EratoLab/erato/pull/545
+[repo-pr-546]: https://github.com/EratoLab/erato/pull/546
+[repo-pr-547]: https://github.com/EratoLab/erato/pull/547
+[repo-pr-548]: https://github.com/EratoLab/erato/pull/548
+[repo-pr-549]: https://github.com/EratoLab/erato/pull/549
+[repo-pr-550]: https://github.com/EratoLab/erato/pull/550
+[repo-pr-551]: https://github.com/EratoLab/erato/pull/551
+[repo-pr-552]: https://github.com/EratoLab/erato/pull/552
+[repo-pr-553]: https://github.com/EratoLab/erato/pull/553
+[repo-pr-554]: https://github.com/EratoLab/erato/pull/554
+[repo-pr-555]: https://github.com/EratoLab/erato/pull/555
+[repo-pr-556]: https://github.com/EratoLab/erato/pull/556
+[repo-pr-557]: https://github.com/EratoLab/erato/pull/557
+[repo-pr-558]: https://github.com/EratoLab/erato/pull/558
+[repo-pr-559]: https://github.com/EratoLab/erato/pull/559
+[repo-pr-560]: https://github.com/EratoLab/erato/pull/560
+[repo-pr-561]: https://github.com/EratoLab/erato/pull/561
+[repo-pr-562]: https://github.com/EratoLab/erato/pull/562
+[repo-pr-563]: https://github.com/EratoLab/erato/pull/563
+[repo-pr-564]: https://github.com/EratoLab/erato/pull/564
+[repo-pr-565]: https://github.com/EratoLab/erato/pull/565
+[repo-pr-566]: https://github.com/EratoLab/erato/pull/566
+[repo-pr-567]: https://github.com/EratoLab/erato/pull/567
+[repo-pr-568]: https://github.com/EratoLab/erato/pull/568
+[repo-pr-569]: https://github.com/EratoLab/erato/pull/569
+[repo-pr-570]: https://github.com/EratoLab/erato/pull/570
+[repo-pr-571]: https://github.com/EratoLab/erato/pull/571
+[repo-pr-572]: https://github.com/EratoLab/erato/pull/572
+[repo-pr-573]: https://github.com/EratoLab/erato/pull/573
+[repo-pr-574]: https://github.com/EratoLab/erato/pull/574
+[repo-pr-575]: https://github.com/EratoLab/erato/pull/575
+[repo-pr-576]: https://github.com/EratoLab/erato/pull/576
+[repo-pr-577]: https://github.com/EratoLab/erato/pull/577
+[repo-pr-578]: https://github.com/EratoLab/erato/pull/578
+[repo-pr-579]: https://github.com/EratoLab/erato/pull/579
+[repo-pr-580]: https://github.com/EratoLab/erato/pull/580
+[repo-pr-581]: https://github.com/EratoLab/erato/pull/581
+[repo-pr-582]: https://github.com/EratoLab/erato/pull/582
+[repo-pr-583]: https://github.com/EratoLab/erato/pull/583
+[repo-pr-584]: https://github.com/EratoLab/erato/pull/584
+[repo-pr-585]: https://github.com/EratoLab/erato/pull/585
+[repo-pr-586]: https://github.com/EratoLab/erato/pull/586
+[repo-pr-587]: https://github.com/EratoLab/erato/pull/587
+[repo-pr-588]: https://github.com/EratoLab/erato/pull/588
+[repo-pr-589]: https://github.com/EratoLab/erato/pull/589
+[repo-pr-590]: https://github.com/EratoLab/erato/pull/590
+[repo-pr-591]: https://github.com/EratoLab/erato/pull/591
+[repo-pr-592]: https://github.com/EratoLab/erato/pull/592
+[repo-pr-593]: https://github.com/EratoLab/erato/pull/593
+[repo-pr-595]: https://github.com/EratoLab/erato/pull/595
+[repo-pr-596]: https://github.com/EratoLab/erato/pull/596
+[repo-pr-597]: https://github.com/EratoLab/erato/pull/597
+[repo-pr-598]: https://github.com/EratoLab/erato/pull/598
+[repo-pr-599]: https://github.com/EratoLab/erato/pull/599
+[repo-pr-600]: https://github.com/EratoLab/erato/pull/600
+[repo-pr-601]: https://github.com/EratoLab/erato/pull/601
+[repo-pr-602]: https://github.com/EratoLab/erato/pull/602
+[repo-pr-603]: https://github.com/EratoLab/erato/pull/603
+[repo-pr-604]: https://github.com/EratoLab/erato/pull/604
+[repo-pr-605]: https://github.com/EratoLab/erato/pull/605
+[repo-pr-606]: https://github.com/EratoLab/erato/pull/606
+[repo-pr-607]: https://github.com/EratoLab/erato/pull/607
+[repo-pr-608]: https://github.com/EratoLab/erato/pull/608
+[repo-pr-609]: https://github.com/EratoLab/erato/pull/609
+[repo-pr-610]: https://github.com/EratoLab/erato/pull/610
+[repo-pr-611]: https://github.com/EratoLab/erato/pull/611
+[repo-pr-612]: https://github.com/EratoLab/erato/pull/612
+[repo-pr-613]: https://github.com/EratoLab/erato/pull/613
+[repo-pr-614]: https://github.com/EratoLab/erato/pull/614
+[repo-pr-615]: https://github.com/EratoLab/erato/pull/615
+[repo-pr-616]: https://github.com/EratoLab/erato/pull/616
+[repo-pr-617]: https://github.com/EratoLab/erato/pull/617
+[repo-pr-618]: https://github.com/EratoLab/erato/pull/618
+[repo-pr-619]: https://github.com/EratoLab/erato/pull/619
+[repo-pr-620]: https://github.com/EratoLab/erato/pull/620
+[repo-pr-621]: https://github.com/EratoLab/erato/pull/621
+[repo-pr-622]: https://github.com/EratoLab/erato/pull/622
+[repo-pr-624]: https://github.com/EratoLab/erato/pull/624
+[repo-pr-625]: https://github.com/EratoLab/erato/pull/625
+[repo-pr-626]: https://github.com/EratoLab/erato/pull/626
+[repo-pr-627]: https://github.com/EratoLab/erato/pull/627
+[repo-pr-628]: https://github.com/EratoLab/erato/pull/628
+[repo-pr-629]: https://github.com/EratoLab/erato/pull/629
+[repo-pr-630]: https://github.com/EratoLab/erato/pull/630
+[repo-pr-631]: https://github.com/EratoLab/erato/pull/631
+[repo-pr-632]: https://github.com/EratoLab/erato/pull/632
+[repo-pr-633]: https://github.com/EratoLab/erato/pull/633
+[repo-pr-634]: https://github.com/EratoLab/erato/pull/634
+[repo-pr-635]: https://github.com/EratoLab/erato/pull/635
+[repo-pr-636]: https://github.com/EratoLab/erato/pull/636
+[repo-pr-637]: https://github.com/EratoLab/erato/pull/637
+[repo-pr-638]: https://github.com/EratoLab/erato/pull/638
+[repo-pr-639]: https://github.com/EratoLab/erato/pull/639
+[repo-pr-640]: https://github.com/EratoLab/erato/pull/640
+[repo-pr-641]: https://github.com/EratoLab/erato/pull/641
+[repo-pr-642]: https://github.com/EratoLab/erato/pull/642
+[repo-pr-643]: https://github.com/EratoLab/erato/pull/643
+[repo-pr-644]: https://github.com/EratoLab/erato/pull/644
+[repo-pr-645]: https://github.com/EratoLab/erato/pull/645
+[repo-pr-646]: https://github.com/EratoLab/erato/pull/646
+[repo-pr-647]: https://github.com/EratoLab/erato/pull/647
+[repo-pr-648]: https://github.com/EratoLab/erato/pull/648
+[repo-pr-649]: https://github.com/EratoLab/erato/pull/649
+[repo-pr-650]: https://github.com/EratoLab/erato/pull/650
+[repo-pr-651]: https://github.com/EratoLab/erato/pull/651
+[repo-pr-652]: https://github.com/EratoLab/erato/pull/652
+[repo-pr-653]: https://github.com/EratoLab/erato/pull/653
+[repo-pr-654]: https://github.com/EratoLab/erato/pull/654
+[repo-pr-655]: https://github.com/EratoLab/erato/pull/655
+[repo-pr-656]: https://github.com/EratoLab/erato/pull/656
+[repo-pr-657]: https://github.com/EratoLab/erato/pull/657
+[repo-pr-658]: https://github.com/EratoLab/erato/pull/658
+[repo-pr-659]: https://github.com/EratoLab/erato/pull/659
+[repo-pr-660]: https://github.com/EratoLab/erato/pull/660
+[repo-pr-661]: https://github.com/EratoLab/erato/pull/661
+[repo-pr-662]: https://github.com/EratoLab/erato/pull/662
+[repo-pr-663]: https://github.com/EratoLab/erato/pull/663
+[repo-pr-664]: https://github.com/EratoLab/erato/pull/664
+[repo-pr-665]: https://github.com/EratoLab/erato/pull/665
+[repo-pr-666]: https://github.com/EratoLab/erato/pull/666
+[repo-pr-667]: https://github.com/EratoLab/erato/pull/667
+[repo-pr-668]: https://github.com/EratoLab/erato/pull/668
+[repo-pr-669]: https://github.com/EratoLab/erato/pull/669
+[repo-pr-670]: https://github.com/EratoLab/erato/pull/670
+[repo-pr-671]: https://github.com/EratoLab/erato/pull/671
+[repo-pr-672]: https://github.com/EratoLab/erato/pull/672
+[repo-pr-673]: https://github.com/EratoLab/erato/pull/673
+[repo-pr-674]: https://github.com/EratoLab/erato/pull/674
+[repo-pr-675]: https://github.com/EratoLab/erato/pull/675
+[repo-pr-676]: https://github.com/EratoLab/erato/pull/676
+[repo-pr-677]: https://github.com/EratoLab/erato/pull/677
+[repo-pr-678]: https://github.com/EratoLab/erato/pull/678
+[repo-pr-679]: https://github.com/EratoLab/erato/pull/679
+[repo-pr-680]: https://github.com/EratoLab/erato/pull/680
+[repo-pr-681]: https://github.com/EratoLab/erato/pull/681
+[repo-pr-682]: https://github.com/EratoLab/erato/pull/682
+[repo-pr-684]: https://github.com/EratoLab/erato/pull/684
+[repo-pr-685]: https://github.com/EratoLab/erato/pull/685
+[repo-pr-686]: https://github.com/EratoLab/erato/pull/686
+[repo-pr-687]: https://github.com/EratoLab/erato/pull/687
+[repo-pr-688]: https://github.com/EratoLab/erato/pull/688
+[repo-pr-689]: https://github.com/EratoLab/erato/pull/689
+[repo-pr-690]: https://github.com/EratoLab/erato/pull/690
+[repo-pr-691]: https://github.com/EratoLab/erato/pull/691
+[repo-pr-692]: https://github.com/EratoLab/erato/pull/692
+[repo-pr-693]: https://github.com/EratoLab/erato/pull/693
+[repo-pr-694]: https://github.com/EratoLab/erato/pull/694
+[repo-pr-695]: https://github.com/EratoLab/erato/pull/695
+[repo-pr-696]: https://github.com/EratoLab/erato/pull/696
+[repo-pr-697]: https://github.com/EratoLab/erato/pull/697
+[repo-pr-698]: https://github.com/EratoLab/erato/pull/698
+[repo-pr-699]: https://github.com/EratoLab/erato/pull/699
+[repo-pr-700]: https://github.com/EratoLab/erato/pull/700
+[repo-pr-701]: https://github.com/EratoLab/erato/pull/701
+[repo-pr-702]: https://github.com/EratoLab/erato/pull/702
+[repo-pr-703]: https://github.com/EratoLab/erato/pull/703
+[repo-pr-704]: https://github.com/EratoLab/erato/pull/704
+[repo-pr-705]: https://github.com/EratoLab/erato/pull/705
+[repo-pr-706]: https://github.com/EratoLab/erato/pull/706
+[repo-pr-707]: https://github.com/EratoLab/erato/pull/707
+[repo-pr-708]: https://github.com/EratoLab/erato/pull/708
+[repo-pr-709]: https://github.com/EratoLab/erato/pull/709
+[repo-pr-710]: https://github.com/EratoLab/erato/pull/710
 
 ---
 
