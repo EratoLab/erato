@@ -185,8 +185,11 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
   } = useFilePreviewModal();
   const promptOptimizer = usePromptOptimizer();
   const { data: facetsData } = useFacets({});
-  const { contextWarningThreshold, contextFileContributorThreshold } =
-    useAssistantsFeature();
+  const {
+    contextWarningThreshold,
+    contextFileContributorThreshold,
+    maxSystemPromptLength,
+  } = useAssistantsFeature();
   const {
     estimateTokenUsageFromParts,
     lastEstimation,
@@ -298,11 +301,11 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
               message: "System prompt must be at least 10 characters",
             });
           }
-          if (promptValue.length > 5000) {
-            return t({
-              id: "assistant.form.validation.prompt.tooLong",
-              message: "System prompt must be less than 5000 characters",
-            });
+          if (
+            maxSystemPromptLength !== null &&
+            promptValue.length > maxSystemPromptLength
+          ) {
+            return t`System prompt must be less than ${maxSystemPromptLength} characters`;
           }
           return "";
         }
@@ -311,7 +314,7 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
           return "";
       }
     },
-    [],
+    [maxSystemPromptLength],
   );
 
   const validateForm = useCallback((): boolean => {

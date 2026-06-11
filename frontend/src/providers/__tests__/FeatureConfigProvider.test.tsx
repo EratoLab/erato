@@ -62,6 +62,7 @@ describe("FeatureConfigProvider", () => {
       assistantsShowRecentItems: false,
       assistantContextWarningThreshold: 0.5,
       assistantContextFileContributorThreshold: 0.05,
+      assistantsMaxSystemPromptLength: null,
       starterPromptsEnabled: false,
       promptOptimizerEnabled: false,
       mcpServersTabEnabled: false,
@@ -148,6 +149,7 @@ describe("FeatureConfigProvider", () => {
           showRecentItems: false,
           contextWarningThreshold: 0.5,
           contextFileContributorThreshold: 0.05,
+          maxSystemPromptLength: null,
         },
         starterPrompts: {
           enabled: false,
@@ -657,6 +659,7 @@ describe("FeatureConfigProvider", () => {
         showRecentItems: false,
         contextWarningThreshold: 0.5,
         contextFileContributorThreshold: 0.05,
+        maxSystemPromptLength: null,
       });
     });
 
@@ -676,6 +679,7 @@ describe("FeatureConfigProvider", () => {
         assistantsShowRecentItems: true,
         assistantContextWarningThreshold: 0.1,
         assistantContextFileContributorThreshold: 0.02,
+        assistantsMaxSystemPromptLength: 10000,
         sharepointEnabled: false,
         sharepointShowDisclaimer: false,
         messageFeedbackEnabled: false,
@@ -697,6 +701,7 @@ describe("FeatureConfigProvider", () => {
         showRecentItems: true,
         contextWarningThreshold: 0.1,
         contextFileContributorThreshold: 0.02,
+        maxSystemPromptLength: 10000,
       });
     });
   });

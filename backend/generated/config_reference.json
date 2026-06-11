@@ -252,6 +252,7 @@
   "experimental_assistants.context_file_contributor_threshold": {},
   "experimental_assistants.context_warning_threshold": {},
   "experimental_assistants.enabled": {},
+  "experimental_assistants.max_system_prompt_length": {},
   "experimental_assistants.show_recent_items": {},
   "experimental_facets.default_selected_facets.[]": {},
   "experimental_facets.facet_prompt_template": {},

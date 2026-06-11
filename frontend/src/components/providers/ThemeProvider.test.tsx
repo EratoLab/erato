@@ -35,6 +35,7 @@ const createMockEnv = (overrides: Partial<Env> = {}): Env => ({
   assistantsShowRecentItems: false,
   assistantContextWarningThreshold: 0.5,
   assistantContextFileContributorThreshold: 0.05,
+  assistantsMaxSystemPromptLength: null,
   starterPromptsEnabled: false,
   promptOptimizerEnabled: false,
   sharepointEnabled: false,

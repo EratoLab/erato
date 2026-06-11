@@ -139,11 +139,6 @@ msgstr "Prompt systemowy jest wymagany"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
-msgid "assistant.form.validation.prompt.tooLong"
-msgstr "Prompt systemowy musi mieć mniej niż 5000 znaków"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Assistant/AssistantForm.tsx
 msgid "assistant.form.validation.prompt.tooShort"
 msgstr "Prompt systemowy musi mieć co najmniej 10 znaków"
 
@@ -2808,6 +2803,10 @@ msgstr "Obsługiwane języki:"
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "System Prompt"
 msgstr ""
+
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "System prompt must be less than {maxSystemPromptLength} characters"
+msgstr "Prompt systemowy musi mieć mniej niż {maxSystemPromptLength} znaków"
 
 #: src/components/ui/Controls/UserProfileDropdown.tsx
 #~ msgid "System theme"

@@ -31,6 +31,8 @@ const FRONTEND_ENV_KEY_ASSISTANTS_CONTEXT_WARNING_THRESHOLD: &str =
     "ASSISTANTS_CONTEXT_WARNING_THRESHOLD";
 const FRONTEND_ENV_KEY_ASSISTANTS_CONTEXT_FILE_CONTRIBUTOR_THRESHOLD: &str =
     "ASSISTANTS_CONTEXT_FILE_CONTRIBUTOR_THRESHOLD";
+const FRONTEND_ENV_KEY_ASSISTANTS_MAX_SYSTEM_PROMPT_LENGTH: &str =
+    "ASSISTANTS_MAX_SYSTEM_PROMPT_LENGTH";
 const FRONTEND_ENV_KEY_STARTER_PROMPTS_ENABLED: &str = "STARTER_PROMPTS_ENABLED";
 const FRONTEND_ENV_KEY_PROMPT_OPTIMIZER_ENABLED: &str = "PROMPT_OPTIMIZER_ENABLED";
 const FRONTEND_ENV_KEY_USER_PREFERENCES_ENABLED: &str = "USER_PREFERENCES_ENABLED";
@@ -216,6 +218,12 @@ fn build_frontend_environment(
                 .context_file_contributor_threshold,
         ),
     );
+    if let Some(max_length) = config.experimental_assistants.max_system_prompt_length {
+        env.additional_environment.insert(
+            FRONTEND_ENV_KEY_ASSISTANTS_MAX_SYSTEM_PROMPT_LENGTH.to_string(),
+            Value::Number(max_length.into()),
+        );
+    }
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_STARTER_PROMPTS_ENABLED.to_string(),
         Value::Bool(config.starter_prompts.enabled),
