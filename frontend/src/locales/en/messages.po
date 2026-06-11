@@ -893,6 +893,31 @@ msgid "feedback.view.title"
 msgstr "Your Feedback"
 
 #. js-lingui-explicit-id
+#: src/components/ui/FilePreview/DocxPreview.tsx
+msgid "filePreview.docxEmpty"
+msgstr "Document preview is empty."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/DocxPreview.tsx
+msgid "filePreview.docxLoading"
+msgstr "Loading document preview..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/DocxPreview.tsx
+msgid "filePreview.docxPreviewUnavailable"
+msgstr "Preview unavailable: this document could not be loaded."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/DocxPreview.tsx
+msgid "filePreview.docxTheme.useDark"
+msgstr "Use dark document theme"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/DocxPreview.tsx
+msgid "filePreview.docxTheme.useLight"
+msgstr "Use light document theme"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Modal/FilePreviewModal.tsx
 msgid "filePreviewModal.unavailableMissingPermissions"
 msgstr "This file is unavailable because you do not have permission to access it."

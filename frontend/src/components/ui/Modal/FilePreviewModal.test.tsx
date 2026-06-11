@@ -9,6 +9,25 @@ import { FilePreviewModal } from "./FilePreviewModal";
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type React from "react";
 
+const useDocxModelMock = vi.hoisted(() =>
+  vi.fn((file?: ArrayBuffer) => ({
+    model: file ? { type: "mock-docx-model" } : undefined,
+    isLoading: false,
+    error: undefined,
+  })),
+);
+const setWasmSourceMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@extend-ai/react-docx", () => ({
+  ReactDocxViewer: ({ model }: { model?: unknown }) => (
+    <div data-testid="mock-react-docx-viewer">
+      {model ? "DOCX rendered" : "DOCX empty"}
+    </div>
+  ),
+  setWasmSource: setWasmSourceMock,
+  useDocxModel: useDocxModelMock,
+}));
+
 const makeFile = (overrides: Partial<FileUploadItem> = {}): FileUploadItem => ({
   id: "file_123",
   filename: "shared-report.pdf",
@@ -24,6 +43,37 @@ const renderWithTheme = (ui: React.ReactElement) =>
   render(<ThemeProvider>{ui}</ThemeProvider>);
 
 describe("FilePreviewModal", () => {
+  it("previews DOCX files from the download URL", async () => {
+    global.fetch = vi.fn(async () => {
+      return {
+        ok: true,
+        arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+      } as Response;
+    });
+
+    renderWithTheme(
+      <FilePreviewModal
+        isOpen={true}
+        onClose={vi.fn()}
+        file={makeFile({
+          filename: "meeting-notes.docx",
+          download_url: "https://files.example.com/download/meeting-notes.docx",
+          preview_url:
+            "https://files.example.com/preview/meeting-notes-not-used",
+          file_capability:
+            FileTypeUtil.createMockFileCapability("meeting-notes.docx"),
+        })}
+      />,
+    );
+
+    await screen.findByTestId("mock-react-docx-viewer");
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://files.example.com/download/meeting-notes.docx",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
   it("shows a permission warning instead of preview actions for inaccessible files", () => {
     renderWithTheme(
       <FilePreviewModal

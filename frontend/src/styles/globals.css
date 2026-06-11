@@ -613,6 +613,45 @@ body {
   @apply transition-[background-color,border-color,color,fill,stroke,opacity,box-shadow,transform] duration-150 ease-in-out motion-reduce:transition-none;
 }
 
+.docx-preview-theme {
+  --docx-preview-surface-bg: #f3f4f6;
+  --docx-preview-page-bg: #ffffff;
+  --docx-preview-page-fg: #111827;
+  --docx-preview-page-border: #d4d4d4;
+  --docx-preview-page-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  --docx-preview-control-bg: rgba(255, 255, 255, 0.94);
+  --docx-preview-control-fg: #111827;
+  --docx-preview-control-border: rgba(17, 24, 39, 0.16);
+  --docx-preview-control-hover-bg: #ffffff;
+  --docx-preview-control-hover-fg: #111827;
+  background: var(--docx-preview-surface-bg);
+  color: var(--docx-preview-page-fg);
+}
+
+.docx-preview-theme[data-docx-theme="dark"] {
+  --docx-preview-surface-bg: #0f172a;
+  --docx-preview-page-bg: #111827;
+  --docx-preview-page-fg: #f8fafc;
+  --docx-preview-page-border: #334155;
+  --docx-preview-page-shadow: 0 10px 28px rgba(0, 0, 0, 0.32);
+  --docx-preview-control-bg: rgba(15, 23, 42, 0.94);
+  --docx-preview-control-fg: #f8fafc;
+  --docx-preview-control-border: rgba(226, 232, 240, 0.22);
+  --docx-preview-control-hover-bg: #1e293b;
+  --docx-preview-control-hover-fg: #ffffff;
+}
+
+.docx-preview-theme [data-testid="react-docx-viewer"] {
+  color: var(--docx-preview-page-fg);
+}
+
+.docx-preview-theme [data-testid="react-docx-viewer"] > section {
+  background: var(--docx-preview-page-bg) !important;
+  border-color: var(--docx-preview-page-border) !important;
+  box-shadow: var(--docx-preview-page-shadow) !important;
+  color: var(--docx-preview-page-fg) !important;
+}
+
 /* Footnote reference styling - add square brackets and remove underline */
 a[data-footnote-ref="true"] {
   text-decoration: none;

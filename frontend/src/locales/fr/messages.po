@@ -893,6 +893,31 @@ msgid "feedback.view.title"
 msgstr "Votre avis"
 
 #. js-lingui-explicit-id
+#: src/components/ui/FilePreview/DocxPreview.tsx
+msgid "filePreview.docxEmpty"
+msgstr "L'aperçu du document est vide."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/DocxPreview.tsx
+msgid "filePreview.docxLoading"
+msgstr "Chargement de l'aperçu du document..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/DocxPreview.tsx
+msgid "filePreview.docxPreviewUnavailable"
+msgstr "Aperçu indisponible : ce document n'a pas pu être chargé."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/DocxPreview.tsx
+msgid "filePreview.docxTheme.useDark"
+msgstr "Utiliser le thème sombre du document"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/DocxPreview.tsx
+msgid "filePreview.docxTheme.useLight"
+msgstr "Utiliser le thème clair du document"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Modal/FilePreviewModal.tsx
 msgid "filePreviewModal.unavailableMissingPermissions"
 msgstr ""
