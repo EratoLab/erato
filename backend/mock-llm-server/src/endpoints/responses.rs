@@ -5,6 +5,7 @@ use axum::{
     Json,
 };
 use futures::StreamExt;
+use rand::Rng;
 use serde_json::{json, Value};
 use std::time::Duration;
 use tokio::time::sleep;
@@ -13,10 +14,18 @@ use crate::{log, request_id::RequestId};
 
 const REASONING_ITEM_ID: &str = "rs_mock_reasoning_123";
 const MESSAGE_ITEM_ID: &str = "msg_mock_reasoning_123";
+const SCROLL_LONG_REASONING_ITEM_ID: &str = "rs_mock_scroll_long_123";
+const SCROLL_LONG_MESSAGE_ITEM_ID: &str = "msg_mock_scroll_long_123";
 const RESPONSE_ID: &str = "resp_mock_reasoning_123";
 const ENCRYPTED_REASONING_CONTENT: &str =
     "gAAAAABmockEncryptedReasoningContentForThoughtSignatureReplay0123456789";
 const RESPONSE_STREAM_EVENT_DELAY_MS: u64 = 450;
+const SCROLL_LONG_OUTPUT_DELAY_MS: u64 = 100;
+
+struct MockStreamEvent {
+    event: Event,
+    delay_before_ms: u64,
+}
 
 /// Handler for OpenAI Responses API endpoint.
 pub async fn responses(
@@ -81,6 +90,12 @@ pub async fn responses(
             "Matched OpenAI Responses reasoning scenario",
         );
         reasoning_response_events()
+    } else if is_scroll_long_scenario(&input_text) {
+        log::log_with_id(
+            request_id.as_str(),
+            "Matched OpenAI Responses scroll_long scenario",
+        );
+        scroll_long_response_events()
     } else {
         log::log_with_id(
             request_id.as_str(),
@@ -97,13 +112,13 @@ pub async fn responses(
         futures::stream::iter(events.into_iter().enumerate()).filter_map(move |(idx, event)| {
             let request_id = request_id_for_stream.clone();
             async move {
-                if idx > 0 {
-                    sleep(Duration::from_millis(RESPONSE_STREAM_EVENT_DELAY_MS)).await;
+                if idx > 0 && event.delay_before_ms > 0 {
+                    sleep(Duration::from_millis(event.delay_before_ms)).await;
                 }
                 if idx >= total_events - 1 {
                     log::log_response_complete(request_id.as_str());
                 }
-                Some(Ok(event))
+                Some(Ok(event.event))
             }
         });
 
@@ -116,6 +131,10 @@ fn is_reasoning_scenario(input_text: &str) -> bool {
 
 fn is_riddle_follow_up_scenario(input_text: &str) -> bool {
     input_text.contains("riddle follow-up")
+}
+
+fn is_scroll_long_scenario(input_text: &str) -> bool {
+    input_text.contains("scroll_long")
 }
 
 fn has_replayed_reasoning_signature(value: &Value) -> bool {
@@ -141,7 +160,7 @@ fn collect_strings(value: &Value) -> Vec<String> {
     }
 }
 
-fn reasoning_response_events() -> Vec<Event> {
+fn reasoning_response_events() -> Vec<MockStreamEvent> {
     let summary_text = "**Evaluating the constraints**\n\nThe first digit cannot be 1 or 5, the fifth digit is smaller than the first, and the third digit must equal the sum of the first and fifth. Checking the valid digit pairs leaves 3 and 2 as the first and fifth digits, which makes 5 the third digit. The fourth digit must be odd and unused, so it is 1, leaving 4 for the second digit.";
     let summary_chunks = [
         "**Evaluating the constraints**\n\n",
@@ -280,7 +299,7 @@ fn reasoning_response_events() -> Vec<Event> {
     events
 }
 
-fn riddle_follow_up_response_events() -> Vec<Event> {
+fn riddle_follow_up_response_events() -> Vec<MockStreamEvent> {
     let output_text =
         "The prior reasoning signature was replayed correctly for the riddle follow-up.";
 
@@ -333,7 +352,187 @@ fn riddle_follow_up_response_events() -> Vec<Event> {
     ]
 }
 
-fn generic_response_events() -> Vec<Event> {
+fn scroll_long_response_events() -> Vec<MockStreamEvent> {
+    let reasoning_chunks = [
+        "**Inspecting scroll state**\n\n",
+        "**Following streaming output**\n\n",
+        "**Preparing long answer**\n\n",
+    ];
+    let reasoning_text = reasoning_chunks.concat();
+    let output_chunks = build_scroll_long_chunks(45);
+    let output_text = output_chunks.concat();
+    let completed_sequence_number = 8 + output_chunks.len();
+
+    let mut events = vec![
+        sse_json_after(
+            "response.created",
+            json!({
+                "type": "response.created",
+                "response": response_object("in_progress", vec![], None),
+                "sequence_number": 0
+            }),
+            0,
+        ),
+        sse_json_after(
+            "response.output_item.added",
+            json!({
+                "type": "response.output_item.added",
+                "output_index": 0,
+                "item": {
+                    "id": SCROLL_LONG_REASONING_ITEM_ID,
+                    "type": "reasoning",
+                    "encrypted_content": ENCRYPTED_REASONING_CONTENT,
+                    "summary": []
+                },
+                "sequence_number": 1
+            }),
+            0,
+        ),
+        sse_json_after(
+            "response.reasoning_summary_part.added",
+            json!({
+                "type": "response.reasoning_summary_part.added",
+                "item_id": SCROLL_LONG_REASONING_ITEM_ID,
+                "output_index": 0,
+                "summary_index": 0,
+                "part": {"type": "summary_text", "text": ""},
+                "sequence_number": 2
+            }),
+            0,
+        ),
+    ];
+
+    for (chunk_index, summary_chunk) in reasoning_chunks.iter().enumerate() {
+        let delay_before_ms = if chunk_index == 0 { 1_000 } else { 2_000 };
+        events.push(sse_json_after(
+            "response.reasoning_summary_text.delta",
+            json!({
+                "type": "response.reasoning_summary_text.delta",
+                "output_index": 0,
+                "summary_index": 0,
+                "delta": summary_chunk,
+                "sequence_number": 3 + chunk_index
+            }),
+            delay_before_ms,
+        ));
+    }
+
+    events.extend([
+        sse_json_after(
+            "response.output_item.added",
+            json!({
+                "type": "response.output_item.added",
+                "output_index": 1,
+                "item": {
+                    "id": SCROLL_LONG_MESSAGE_ITEM_ID,
+                    "type": "message",
+                    "role": "assistant",
+                    "status": "in_progress",
+                    "content": []
+                },
+                "sequence_number": 6
+            }),
+            0,
+        ),
+        sse_json_after(
+            "response.content_part.added",
+            json!({
+                "type": "response.content_part.added",
+                "item_id": SCROLL_LONG_MESSAGE_ITEM_ID,
+                "output_index": 1,
+                "content_index": 0,
+                "part": {"type": "output_text", "text": "", "annotations": []},
+                "sequence_number": 7
+            }),
+            0,
+        ),
+    ]);
+
+    for (chunk_index, output_chunk) in output_chunks.iter().enumerate() {
+        events.push(sse_json_after(
+            "response.output_text.delta",
+            json!({
+                "type": "response.output_text.delta",
+                "item_id": SCROLL_LONG_MESSAGE_ITEM_ID,
+                "output_index": 1,
+                "content_index": 0,
+                "delta": output_chunk,
+                "sequence_number": 8 + chunk_index
+            }),
+            SCROLL_LONG_OUTPUT_DELAY_MS,
+        ));
+    }
+
+    events.push(sse_json_after(
+        "response.completed",
+        json!({
+            "type": "response.completed",
+            "response": response_object(
+                "completed",
+                vec![
+                    json!({
+                        "id": SCROLL_LONG_REASONING_ITEM_ID,
+                        "type": "reasoning",
+                        "encrypted_content": ENCRYPTED_REASONING_CONTENT,
+                        "summary": [{"type": "summary_text", "text": reasoning_text}]
+                    }),
+                    json!({
+                        "id": SCROLL_LONG_MESSAGE_ITEM_ID,
+                        "type": "message",
+                        "status": "completed",
+                        "role": "assistant",
+                        "content": [{
+                            "type": "output_text",
+                            "text": output_text,
+                            "annotations": []
+                        }]
+                    })
+                ],
+                Some(json!({
+                    "input_tokens": 14,
+                    "input_tokens_details": {"cached_tokens": 0},
+                    "output_tokens": 1700,
+                    "output_tokens_details": {"reasoning_tokens": 48},
+                    "total_tokens": 1714
+                }))
+            ),
+            "sequence_number": completed_sequence_number
+        }),
+        0,
+    ));
+
+    events
+}
+
+fn build_scroll_long_chunks(total_lines: usize) -> Vec<String> {
+    let mut rng = rand::thread_rng();
+    let mut chunks = Vec::new();
+
+    for line_number in 1..=total_lines {
+        let line = format!(
+            "Streaming scroll line {line_number:03}: lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.\n\n"
+        );
+        chunks.extend(split_into_random_chunks(&line, &mut rng));
+    }
+
+    chunks
+}
+
+fn split_into_random_chunks(line: &str, rng: &mut impl Rng) -> Vec<String> {
+    let mut chunks = Vec::new();
+    let mut start = 0;
+
+    while start < line.len() {
+        let chunk_len = rng.gen_range(12..=48);
+        let end = (start + chunk_len).min(line.len());
+        chunks.push(line[start..end].to_string());
+        start = end;
+    }
+
+    chunks
+}
+
+fn generic_response_events() -> Vec<MockStreamEvent> {
     let output_text = "This is a generic OpenAI Responses mock reply.";
     vec![
         sse_json(
@@ -401,6 +600,13 @@ fn response_object(status: &str, output: Vec<Value>, usage: Option<Value>) -> Va
     })
 }
 
-fn sse_json(event_name: &str, data: Value) -> Event {
-    Event::default().event(event_name).data(data.to_string())
+fn sse_json(event_name: &str, data: Value) -> MockStreamEvent {
+    sse_json_after(event_name, data, RESPONSE_STREAM_EVENT_DELAY_MS)
+}
+
+fn sse_json_after(event_name: &str, data: Value, delay_before_ms: u64) -> MockStreamEvent {
+    MockStreamEvent {
+        event: Event::default().event(event_name).data(data.to_string()),
+        delay_before_ms,
+    }
 }

@@ -316,6 +316,127 @@ test(
 );
 
 test(
+  "Mock-LLM pauses auto-scroll after manual scroll and resumes at the bottom",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    test.setTimeout(60000);
+    let scrollTopAfterManualScroll = 0;
+
+    await test.step("start a long streaming completion", async () => {
+      await page.setViewportSize({ width: 1000, height: 700 });
+
+      await page.goto("/");
+      await chatIsReadyToChat(page);
+      await selectMockModel(page);
+
+      const textbox = page.getByRole("textbox", { name: "Type a message..." });
+      await expect(textbox).toBeVisible();
+
+      await textbox.fill("scroll_long");
+      await textbox.press("Enter");
+    });
+
+    await test.step("wait until the streamed answer is scrollable", async () => {
+      const messageList = page.getByTestId("message-list");
+      await expect(messageList).toBeVisible();
+
+      await expect
+        .poll(
+          async () =>
+            await messageList.evaluate((element) =>
+              Math.min(
+                element.scrollHeight - element.clientHeight,
+                element.scrollTop,
+              ),
+            ),
+          { timeout: 15000 },
+        )
+        .toBeGreaterThan(300);
+    });
+
+    await test.step("manual upward scroll pauses auto-scroll", async () => {
+      const messageList = page.getByTestId("message-list");
+      const scrollTopBeforeManualScroll = await messageList.evaluate(
+        (element) => element.scrollTop,
+      );
+      const messageListBox = await messageList.boundingBox();
+      if (!messageListBox) {
+        throw new Error("Expected message list to have a bounding box");
+      }
+      await page.mouse.move(
+        messageListBox.x + messageListBox.width / 2,
+        messageListBox.y + messageListBox.height / 2,
+      );
+      await page.mouse.wheel(0, -500);
+
+      await expect
+        .poll(
+          async () =>
+            await messageList.evaluate((element) => element.scrollTop),
+          { timeout: 5000 },
+        )
+        .toBeLessThan(scrollTopBeforeManualScroll - 50);
+
+      scrollTopAfterManualScroll = await messageList.evaluate(
+        (element) => element.scrollTop,
+      );
+    });
+
+    await test.step("continued streaming does not pull the viewport down", async () => {
+      const messageList = page.getByTestId("message-list");
+      await expect(page.getByText("Streaming scroll line 003")).toBeAttached({
+        timeout: 15000,
+      });
+      await page.waitForTimeout(1000);
+
+      const scrollTopAfterMoreStreaming = await messageList.evaluate(
+        (element) => element.scrollTop,
+      );
+      expect(
+        Math.abs(scrollTopAfterMoreStreaming - scrollTopAfterManualScroll),
+      ).toBeLessThanOrEqual(20);
+    });
+
+    await test.step("manual downward scroll near the bottom resumes auto-scroll", async () => {
+      const messageList = page.getByTestId("message-list");
+      await page.mouse.wheel(0, 10000);
+      await expect
+        .poll(
+          async () =>
+            await messageList.evaluate(
+              (element) =>
+                element.scrollHeight - element.scrollTop - element.clientHeight,
+            ),
+          { timeout: 5000 },
+        )
+        .toBeLessThanOrEqual(30);
+
+      await expect(page.getByText("Streaming scroll line 030")).toBeAttached({
+        timeout: 15000,
+      });
+      await expect
+        .poll(
+          async () =>
+            await messageList.evaluate(
+              (element) =>
+                element.scrollHeight - element.scrollTop - element.clientHeight,
+            ),
+          { timeout: 5000 },
+        )
+        .toBeLessThanOrEqual(45);
+    });
+
+    await test.step("completion finishes with latest content attached", async () => {
+      await chatIsReadyToChat(page, {
+        expectAssistantResponse: true,
+        loadingTimeoutMs: 30000,
+      });
+      await expect(page.getByText("Streaming scroll line 045")).toBeAttached();
+    });
+  },
+);
+
+test(
   "Mock-LLM regenerating an assistant message creates a new active branch",
   { tag: TAG_CI },
   async ({ page }) => {
