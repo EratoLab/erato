@@ -816,7 +816,12 @@ export const MessageContent = memo(function MessageContent({
   // block for the tolerant tag-matching to catch, so treat the message text
   // itself as the insert/replace artifact. Gated to completed messages and to
   // `renderMode === "body"`: `"suggestions"` facets (review/critique) are
-  // feedback, not a single drop-in body, so they keep normal markdown.
+  // feedback, not a single drop-in body, so they keep normal markdown. The
+  // producer (add-in AddinChat) decides whether an ambient-reply facet's plain
+  // answer should card and stamps the verdict as `shouldRenderEmailCard`;
+  // absent (web app, or a facet that always cards) is treated as `true`. This
+  // single field is the source of truth shared with the add-in renderer — see
+  // {@link OutlookArtifact.shouldRenderEmailCard}.
   const textForArtifact = React.useMemo(
     () =>
       content
@@ -830,7 +835,8 @@ export const MessageContent = memo(function MessageContent({
     !isStreaming &&
     !showRaw &&
     textForArtifact.trim().length > 0 &&
-    !containsMarkdownFence(textForArtifact)
+    !containsMarkdownFence(textForArtifact) &&
+    (outlookArtifact.shouldRenderEmailCard ?? true)
       ? outlookArtifact
       : null;
 

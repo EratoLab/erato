@@ -78,7 +78,7 @@ vi.mock("../../hooks/useOutlookComposeSelection", () => ({
 
 vi.mock("../../utils/outlookReadReply", () => ({
   ReplyBodyTooLargeError: class ReplyBodyTooLargeError extends Error {},
-  isReadReplySupported: () => true,
+  isReplyFormHostSupported: () => true,
   getReadModeRecipientSummary: () => mockGetReadModeRecipientSummary(),
   openReplyForm: (...args: unknown[]) => mockOpenReplyForm(...args),
 }));
@@ -554,5 +554,57 @@ describe("OutlookEratoEmailRenderer — resolved confirmation card", () => {
       "data-status",
       "pending",
     );
+  });
+});
+
+describe("OutlookEratoEmailRenderer — read-reply gate tracks the reactive item signal", () => {
+  // Stale-memo fix (ERMAIN-364): read actions gate on the REACTIVE isReadMode
+  // (from the mail-item provider) plus the host-static isReplyFormHostSupported
+  // (mocked true), never a live item read — so reply buttons appear in read
+  // mode and are withheld when the provider reports compose / no item, instead
+  // of caching a stale empty result.
+  function primeMailItem(mailItem: unknown) {
+    const artifact = makeArtifact();
+    mockUseOutlookArtifact.mockReturnValue(artifact);
+    mockUseOutlookMailItem.mockReturnValue({
+      mailItem,
+      itemIdentity: "item-a",
+    });
+    mockUseChatContext.mockReturnValue({
+      messages: {
+        [artifact.messageId]: { id: artifact.messageId, role: "assistant" },
+      },
+      messageOrder: [artifact.messageId],
+    });
+    mockUsePersistedState.mockReturnValue([{}, vi.fn()]);
+    mockGetReadModeRecipientSummary.mockReturnValue({
+      sender: "Alice Sender",
+      recipients: ["Bob"],
+    });
+  }
+
+  it("offers Reply / Reply All in read mode", () => {
+    primeMailItem({ isComposeMode: false });
+    render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
+
+    expect(screen.getByRole("button", { name: "Reply" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Reply All" }),
+    ).toBeInTheDocument();
+  });
+
+  it("withholds the reply buttons when the provider reports compose mode", () => {
+    primeMailItem({ isComposeMode: true });
+    render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
+
+    expect(screen.queryByRole("button", { name: "Reply" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reply All" })).toBeNull();
+  });
+
+  it("withholds the reply buttons when the provider reports no open item", () => {
+    primeMailItem(null);
+    render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
+
+    expect(screen.queryByRole("button", { name: "Reply" })).toBeNull();
   });
 });

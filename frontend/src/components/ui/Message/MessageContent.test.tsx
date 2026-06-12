@@ -755,4 +755,93 @@ describe("MessageContent", () => {
     expect(screen.getByRole("button", { name: /Copy/ })).toBeInTheDocument();
     expect(screen.getByText(/kurze Email/)).toBeInTheDocument();
   });
+
+  it("does NOT whole-body-fallback for a client-action facet (reply) with no proposed action", () => {
+    renderWithTheme(
+      <MessageContent
+        content={textContent(
+          "It is a long thread about several tickets. The latest message is from Jakob.",
+        )}
+        outlookArtifact={{
+          facetId: "outlook_reply_from_read",
+          bodyFormat: "html",
+          renderMode: "body",
+          allowedClientActions: ["outlook.reply", "outlook.reply_all"],
+          // The producer (AddinChat) stamps suppression for an ambient reply
+          // facet that produced a plain answer (offerable actions but no
+          // proposal). The gate reads this single verdict.
+          shouldRenderEmailCard: false,
+        }}
+      />,
+    );
+
+    // The reply facet is attached ambiently to every read-mode message; a plain
+    // summary (no fence, suppressed by the producer) must NOT become an email card.
+    expect(screen.queryByRole("button", { name: /Copy/ })).toBeNull();
+    expect(screen.getByText(/latest message is from Jakob/).tagName).toBe("P");
+  });
+
+  it("DOES whole-body-fallback for a reply facet when the model proposed a client action", () => {
+    renderWithTheme(
+      <MessageContent
+        content={textContent(
+          "Hallo Herr Wolf-Sebottendorff,\n\nvielen Dank fuer das Update.",
+        )}
+        outlookArtifact={{
+          facetId: "outlook_reply_from_read",
+          bodyFormat: "html",
+          renderMode: "body",
+          allowedClientActions: ["outlook.reply", "outlook.reply_all"],
+          proposedClientAction: "outlook.reply",
+          // The producer did NOT suppress (the model proposed), so the
+          // verdict is absent → the gate defaults to card. The proposal field
+          // itself is not read by the gate; it is the producer's reason.
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /Copy/ })).toBeInTheDocument();
+    expect(screen.getByText(/vielen Dank/)).toBeInTheDocument();
+  });
+
+  it("still cards a FENCED reply draft for a client-action facet even without a proposed action", () => {
+    renderWithTheme(
+      <MessageContent
+        content={textContent("```erato-email\nHallo, anbei mein Entwurf.\n```")}
+        outlookArtifact={{
+          facetId: "outlook_reply_from_read",
+          bodyFormat: "html",
+          renderMode: "body",
+          allowedClientActions: ["outlook.reply", "outlook.reply_all"],
+          // Even with the producer's verdict set to SUPPRESS, a fenced draft
+          // must still card: the fence path runs ahead of the whole-body gate.
+          shouldRenderEmailCard: false,
+        }}
+      />,
+    );
+
+    // A fenced draft routes through the fenced-block path, never the whole-body
+    // gate, so the suppression verdict must not reach it.
+    expect(screen.getByRole("button", { name: /Copy/ })).toBeInTheDocument();
+    expect(screen.getByText(/anbei mein Entwurf/)).toBeInTheDocument();
+  });
+
+  it("treats an empty allowedClientActions list as a non-client-action facet (still cards)", () => {
+    renderWithTheme(
+      <MessageContent
+        content={textContent("Hallo Frau Berger,\n\nvielen Dank.")}
+        outlookArtifact={{
+          facetId: "outlook_rewrite_selection",
+          bodyFormat: "text",
+          renderMode: "body",
+          allowedClientActions: [],
+        }}
+      />,
+    );
+
+    // A non-suppressed artifact (the producer stamps nothing for a compose /
+    // rewrite facet, so the flag is absent → defaults to card).
+    expect(screen.getByRole("button", { name: /Copy/ })).toBeInTheDocument();
+    expect(screen.getByText(/vielen Dank/)).toBeInTheDocument();
+  });
 });

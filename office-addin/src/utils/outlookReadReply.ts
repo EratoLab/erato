@@ -58,17 +58,32 @@ function getReadModeItem(): Office.MessageRead | null {
 }
 
 /**
+ * Whether the host supports the reply form APIs at all (Mailbox 1.1; not
+ * available on Outlook mobile). Host-static for the session — does NOT read the
+ * live `Office.context.mailbox.item`, so it is safe to call from a render path
+ * without going stale as the open item changes. Pair it with the REACTIVE
+ * read-item signal (`isReadMode`, from OutlookMailItemProvider) to decide
+ * whether to OFFER reply actions; use `isReadReplySupported()` /
+ * `getReadModeItem()` to GUARD execution against the live item.
+ */
+export function isReplyFormHostSupported(): boolean {
+  return (
+    Office.context.requirements?.isSetSupported?.("Mailbox", "1.1") ?? false
+  );
+}
+
+/**
  * Whether the current Office context can open a reply form right now: a
- * read-mode message is open and the host supports the reply form APIs
- * (Mailbox 1.1; not available on Outlook mobile).
+ * read-mode message is open and the host supports the reply form APIs. Reads
+ * the LIVE item, so use this to GUARD execution (e.g. `openReplyForm`), never
+ * to gate render — a render gate must track the reactive item state via
+ * `isReadMode` + `isReplyFormHostSupported`, or it caches stale results.
  */
 export function isReadReplySupported(): boolean {
   if (!getReadModeItem()) {
     return false;
   }
-  return (
-    Office.context.requirements?.isSetSupported?.("Mailbox", "1.1") ?? false
-  );
+  return isReplyFormHostSupported();
 }
 
 export interface ReadModeRecipientSummary {

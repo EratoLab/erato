@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 
 import {
   CLIENT_ACTION_TOOL_NAME,
+  computeShouldRenderEmailCard,
   extractProposedClientAction,
   isImplementedClientAction,
   offerableClientActions,
@@ -116,5 +117,68 @@ describe("extractProposedClientAction", () => {
   it("handles empty content", () => {
     expect(extractProposedClientAction(undefined, ALLOWED)).toBeUndefined();
     expect(extractProposedClientAction([], ALLOWED)).toBeUndefined();
+  });
+});
+
+describe("computeShouldRenderEmailCard", () => {
+  it("suppresses an ambient reply facet that produced no proposal", () => {
+    // The reply facet offers reply/reply-all but the model only answered
+    // (no proposal) — a plain summary must NOT become an email card.
+    expect(
+      computeShouldRenderEmailCard({
+        allowedClientActions: ALLOWED,
+        proposedClientAction: undefined,
+      }),
+    ).toBe(false);
+  });
+
+  it("cards a reply facet once the model has proposed a client action", () => {
+    expect(
+      computeShouldRenderEmailCard({
+        allowedClientActions: ALLOWED,
+        proposedClientAction: "outlook.reply",
+      }),
+    ).toBe(true);
+  });
+
+  it("cards a facet that advertises ONLY an unimplemented action", () => {
+    // The intentional Finding-2 behavior: keyed off the OFFERABLE set, so an
+    // action the add-in does not implement does not make this a client-action
+    // facet. If this were keyed off the RAW allowed list it would (wrongly)
+    // suppress. This is the assertion that fails if the offerable intersection
+    // is dropped.
+    expect(
+      computeShouldRenderEmailCard({
+        allowedClientActions: ["outlook.forward"],
+        proposedClientAction: undefined,
+      }),
+    ).toBe(true);
+  });
+
+  it("still suppresses when a mix of implemented + unimplemented actions is offered without a proposal", () => {
+    // outlook.reply IS offerable, so this is a client-action facet and a plain
+    // answer (no proposal) must suppress — outlook.forward being present and
+    // unimplemented does not change that.
+    expect(
+      computeShouldRenderEmailCard({
+        allowedClientActions: ["outlook.forward", "outlook.reply"],
+        proposedClientAction: undefined,
+      }),
+    ).toBe(false);
+  });
+
+  it("always cards a facet with no client actions (compose / rewrite)", () => {
+    expect(
+      computeShouldRenderEmailCard({
+        allowedClientActions: [],
+        proposedClientAction: undefined,
+      }),
+    ).toBe(true);
+    expect(
+      computeShouldRenderEmailCard({
+        allowedClientActions: undefined,
+        proposedClientAction: undefined,
+      }),
+    ).toBe(true);
   });
 });

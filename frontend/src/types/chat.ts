@@ -79,6 +79,21 @@ export interface OutlookArtifact {
    */
   proposedClientAction?: string;
   /**
+   * Producer-computed verdict (add-in only) for whether an UNFENCED whole
+   * `"body"`-mode response should render as the insertable email card. Computed
+   * once in AddinChat as `!isClientActionFacet || proposedClientAction != null`,
+   * where `isClientActionFacet` is keyed off the OFFERABLE actions (the backend
+   * `allowedClientActions` intersected with the actions the add-in actually
+   * implements) — so an ambient reply facet that produced a plain answer (no
+   * proposal) suppresses the card, while a compose/rewrite facet (no offerable
+   * actions) always cards. Stamped only when it SUPPRESSES (`false`); absent is
+   * treated as `true`. Undefined on the web app (the producer runs only in the
+   * add-in), which leaves web rendering unchanged. Single source of truth for
+   * carding so the gate and the add-in renderer cannot drift; a future
+   * backend draft-intent signal folds into this one field.
+   */
+  shouldRenderEmailCard?: boolean;
+  /**
    * The producing facet's `presentation` from `GET /me/facets`:
    * `render_buttons` (default) or `auto_prompt`.
    */

@@ -50,7 +50,10 @@ import {
   OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
   runWithGraphTimeout,
 } from "../utils/graphRequestTimeout";
-import { extractProposedClientAction } from "../utils/outlookClientActions";
+import {
+  computeShouldRenderEmailCard,
+  extractProposedClientAction,
+} from "../utils/outlookClientActions";
 import { parseDroppedFiles } from "../utils/parseDroppedFiles";
 import { parseEmlBytes } from "../utils/parsedEmail";
 
@@ -758,6 +761,12 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
       const proposedClientAction = allowedClientActions
         ? extractProposedClientAction(message.content, allowedClientActions)
         : undefined;
+      // Single source of truth for carding (see OutlookArtifact.shouldRenderEmailCard).
+      // Stamped below only when it SUPPRESSES (false); absent ⇒ cards.
+      const shouldRenderEmailCard = computeShouldRenderEmailCard({
+        allowedClientActions,
+        proposedClientAction,
+      });
       if (next === messages) {
         next = { ...messages };
       }
@@ -769,6 +778,9 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
           renderMode,
           messageId: id,
           ...(allowedClientActions ? { allowedClientActions } : {}),
+          ...(renderMode === "body" && !shouldRenderEmailCard
+            ? { shouldRenderEmailCard: false }
+            : {}),
           ...(clientActionInfo && clientActionInfo.alwaysAskActions.length > 0
             ? { alwaysAskClientActions: clientActionInfo.alwaysAskActions }
             : {}),

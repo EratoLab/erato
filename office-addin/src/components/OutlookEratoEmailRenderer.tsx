@@ -28,7 +28,7 @@ import { replaceComposeSelection } from "../utils/outlookComposeWrite";
 import {
   ReplyBodyTooLargeError,
   getReadModeRecipientSummary,
-  isReadReplySupported,
+  isReplyFormHostSupported,
   openReplyForm,
   type ReadModeRecipientSummary,
 } from "../utils/outlookReadReply";
@@ -130,7 +130,14 @@ export function OutlookEratoEmailRenderer({
 
   const readActions = useMemo<OutlookClientAction[]>(
     () =>
-      isReadMode && isReadReplySupported()
+      // Gate on the REACTIVE read-item signal (`isReadMode`, synced to the live
+      // item by OutlookMailItemProvider) plus the host-static capability check
+      // — NOT the live `isReadReplySupported()`, which reads Office state
+      // outside this dep array and could cache an empty result when the item
+      // was momentarily unavailable (e.g. a pinned-pane reload), permanently
+      // hiding the reply buttons. Execution re-checks the live item in
+      // openReplyForm, so offering optimistically here fails closed on click.
+      isReadMode && isReplyFormHostSupported()
         ? offerableClientActions(artifact?.allowedClientActions).filter(
             (action) =>
               !isActionDenied({
