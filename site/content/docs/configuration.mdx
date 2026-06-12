@@ -2713,7 +2713,8 @@ Configuration for the user preferences feature.
 
 Whether to enable the user preferences feature.
 
-When disabled, the frontend hides the Preferences item in the user profile dropdown.
+When disabled, the frontend hides the Personalization tab in the preferences dialog.
+Other preferences tabs can still be shown.
 
 **Default value:** `true`
 
@@ -2724,6 +2725,26 @@ When disabled, the frontend hides the Preferences item in the user profile dropd
 ```toml
 [user_preferences]
 enabled = false
+```
+
+#### `user_preferences.data_tab_enabled`
+
+{/* erato_toml_config_key: user_preferences.data_tab_enabled */}
+
+Whether the Data tab should be shown in the frontend preferences dialog.
+
+This only controls frontend visibility of the tab. It does not change backend
+availability of account data actions.
+
+**Default value:** `true`
+
+**Type:** `boolean`
+
+**Example:**
+
+```toml
+[user_preferences]
+data_tab_enabled = false
 ```
 
 ### `experimental_assistants`
