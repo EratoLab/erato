@@ -109,3 +109,24 @@ export function extractProposedClientAction(
   }
   return undefined;
 }
+
+/**
+ * Producer-side verdict for {@link OutlookArtifact.shouldRenderEmailCard}:
+ * whether an UNFENCED, `"body"`-mode response should render as the insertable
+ * email card. A facet that OFFERS client actions (reply / reply-all) is
+ * attached ambiently to every read-mode message, so a plain answer with no
+ * proposal must NOT card; a facet with no offerable actions — compose /
+ * rewrite-selection, or a facet advertising ONLY actions this add-in does not
+ * implement — always cards. Keyed off the OFFERABLE set (`allowedClientActions`
+ * intersected with the implemented registry) so the carding verdict matches
+ * what the renderer can actually act on. A fenced draft never reaches this
+ * verdict; the renderer's fence path handles it.
+ */
+export function computeShouldRenderEmailCard(args: {
+  allowedClientActions: readonly string[] | undefined;
+  proposedClientAction: string | undefined;
+}): boolean {
+  const isClientActionFacet =
+    offerableClientActions(args.allowedClientActions).length > 0;
+  return !isClientActionFacet || args.proposedClientAction != null;
+}

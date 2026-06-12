@@ -8,6 +8,7 @@ import {
   getReadModeRecipientSummary,
   isReadReplySupported,
   isReplyFormBodyTooLarge,
+  isReplyFormHostSupported,
   openReplyForm,
 } from "../outlookReadReply";
 
@@ -116,6 +117,32 @@ describe("isReadReplySupported", () => {
     installOffice({ item: null });
     expect(isReadReplySupported()).toBe(false);
     installOffice({ item: readModeItem(), supportedSets: [] });
+    expect(isReadReplySupported()).toBe(false);
+  });
+});
+
+describe("isReplyFormHostSupported", () => {
+  it("reflects only host capability, independent of the live item", () => {
+    // Host-static: the render gate uses this so it never goes stale as the
+    // open item transitions (a live item is NOT required to be true here).
+    installOffice({ item: null });
+    expect(isReplyFormHostSupported()).toBe(true);
+    installOffice({ item: composeModeItem() });
+    expect(isReplyFormHostSupported()).toBe(true);
+  });
+
+  it("is false when the host lacks Mailbox 1.1", () => {
+    installOffice({ item: readModeItem(), supportedSets: [] });
+    expect(isReplyFormHostSupported()).toBe(false);
+  });
+
+  it("diverges from isReadReplySupported when the live item is momentarily gone on a supporting host", () => {
+    // The exact stale state the render-gate swap targets: the host supports
+    // replies, but a live item read returns nothing. The host-static check
+    // stays true (so the reactive render gate can recover) while the live
+    // execution guard correctly reports false.
+    installOffice({ item: null });
+    expect(isReplyFormHostSupported()).toBe(true);
     expect(isReadReplySupported()).toBe(false);
   });
 });
