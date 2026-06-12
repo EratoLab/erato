@@ -51,6 +51,7 @@ describe("themeConfig", () => {
     messageFeedbackEnabled: false,
     messageFeedbackCommentsEnabled: false,
     userPreferencesEnabled: true,
+    userPreferencesDataTabEnabled: true,
     mcpServersTabEnabled: false,
     messageFeedbackEditTimeLimitSeconds: null,
     maxUploadSizeBytes: 20971520,

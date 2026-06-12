@@ -36,6 +36,8 @@ const FRONTEND_ENV_KEY_ASSISTANTS_MAX_SYSTEM_PROMPT_LENGTH: &str =
 const FRONTEND_ENV_KEY_STARTER_PROMPTS_ENABLED: &str = "STARTER_PROMPTS_ENABLED";
 const FRONTEND_ENV_KEY_PROMPT_OPTIMIZER_ENABLED: &str = "PROMPT_OPTIMIZER_ENABLED";
 const FRONTEND_ENV_KEY_USER_PREFERENCES_ENABLED: &str = "USER_PREFERENCES_ENABLED";
+const FRONTEND_ENV_KEY_USER_PREFERENCES_DATA_TAB_ENABLED: &str =
+    "USER_PREFERENCES_DATA_TAB_ENABLED";
 const FRONTEND_ENV_KEY_MCP_SERVERS_TAB_ENABLED: &str = "MCP_SERVERS_TAB_ENABLED";
 const FRONTEND_ENV_KEY_SHAREPOINT_ENABLED: &str = "SHAREPOINT_ENABLED";
 const FRONTEND_ENV_KEY_SHAREPOINT_SHOW_DISCLAIMER: &str = "SHAREPOINT_SHOW_DISCLAIMER";
@@ -235,6 +237,10 @@ fn build_frontend_environment(
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_USER_PREFERENCES_ENABLED.to_string(),
         Value::Bool(config.user_preferences.enabled),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_USER_PREFERENCES_DATA_TAB_ENABLED.to_string(),
+        Value::Bool(config.user_preferences.data_tab_enabled),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_MCP_SERVERS_TAB_ENABLED.to_string(),

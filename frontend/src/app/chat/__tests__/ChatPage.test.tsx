@@ -224,6 +224,7 @@ vi.mock("@/app/env", () => ({
     messageFeedbackEnabled: false,
     messageFeedbackCommentsEnabled: false,
     userPreferencesEnabled: true,
+    userPreferencesDataTabEnabled: true,
   }),
 }));
 

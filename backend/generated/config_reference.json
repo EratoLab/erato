@@ -422,5 +422,6 @@
   "starter_prompts.prompts.<prompt-id>.selected_facets.[]": {},
   "starter_prompts.prompts.<prompt-id>.subtitle": {},
   "starter_prompts.prompts.<prompt-id>.title": {},
+  "user_preferences.data_tab_enabled": {},
   "user_preferences.enabled": {}
 }

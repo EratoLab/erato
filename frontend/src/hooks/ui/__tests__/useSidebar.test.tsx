@@ -58,6 +58,7 @@ beforeEach(() => {
     messageFeedbackEnabled: false,
     messageFeedbackCommentsEnabled: false,
     userPreferencesEnabled: true,
+    userPreferencesDataTabEnabled: true,
     messageFeedbackEditTimeLimitSeconds: null,
     maxUploadSizeBytes: 20971520,
     sidebarCollapsedMode: "hidden",

@@ -78,8 +78,11 @@ export function UserPreferencesDialog({
   const navigate = useNavigate();
   const tabGroupId = useId();
   const queryClient = useQueryClient();
-  const { enabled: personalizationEnabled, mcpServersTabEnabled } =
-    useUserPreferencesFeature();
+  const {
+    enabled: personalizationEnabled,
+    dataTabEnabled,
+    mcpServersTabEnabled,
+  } = useUserPreferencesFeature();
   const { enabled: audioTranscriptionEnabled } = useAudioTranscriptionFeature();
   const { enabled: audioDictationEnabled } = useAudioDictationFeature();
   const audioInputSettingsEnabled =
@@ -131,7 +134,7 @@ export function UserPreferencesDialog({
               ? // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal preferences tab id
                 (["mcpServers"] as const)
               : []),
-            "data",
+            ...(dataTabEnabled ? (["data"] as const) : []),
           ]
         : [
             "appearance",
@@ -140,9 +143,14 @@ export function UserPreferencesDialog({
               ? // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal preferences tab id
                 (["mcpServers"] as const)
               : []),
-            "data",
+            ...(dataTabEnabled ? (["data"] as const) : []),
           ]) satisfies PreferencesTab[],
-    [audioInputSettingsEnabled, mcpServersTabEnabled, personalizationEnabled],
+    [
+      audioInputSettingsEnabled,
+      dataTabEnabled,
+      mcpServersTabEnabled,
+      personalizationEnabled,
+    ],
   );
   const handledOauthCallbackKeyRef = useRef<string | null>(null);
   const requestedDefaultTab =

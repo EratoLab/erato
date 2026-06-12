@@ -21,6 +21,7 @@ export type Env = {
   starterPromptsEnabled: boolean;
   promptOptimizerEnabled: boolean;
   userPreferencesEnabled: boolean;
+  userPreferencesDataTabEnabled: boolean;
   mcpServersTabEnabled: boolean;
   sharepointEnabled: boolean;
   sharepointShowDisclaimer: boolean;
@@ -68,6 +69,7 @@ declare global {
     STARTER_PROMPTS_ENABLED?: boolean;
     PROMPT_OPTIMIZER_ENABLED?: boolean;
     USER_PREFERENCES_ENABLED?: boolean;
+    USER_PREFERENCES_DATA_TAB_ENABLED?: boolean;
     MCP_SERVERS_TAB_ENABLED?: boolean;
     SHAREPOINT_ENABLED?: boolean;
     SHAREPOINT_SHOW_DISCLAIMER?: boolean;
@@ -212,6 +214,10 @@ export const env = (): Env => {
     import.meta.env.VITE_USER_PREFERENCES_ENABLED === "false"
       ? false
       : (window.USER_PREFERENCES_ENABLED ?? true);
+  const userPreferencesDataTabEnabled =
+    import.meta.env.VITE_USER_PREFERENCES_DATA_TAB_ENABLED === "false"
+      ? false
+      : (window.USER_PREFERENCES_DATA_TAB_ENABLED ?? true);
   const mcpServersTabEnabled =
     import.meta.env.VITE_MCP_SERVERS_TAB_ENABLED === "true"
       ? true
@@ -326,6 +332,7 @@ export const env = (): Env => {
     starterPromptsEnabled,
     promptOptimizerEnabled,
     userPreferencesEnabled,
+    userPreferencesDataTabEnabled,
     mcpServersTabEnabled,
     sharepointEnabled,
     sharepointShowDisclaimer,
