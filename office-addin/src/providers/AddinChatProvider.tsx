@@ -219,6 +219,15 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
 
   const { currentChatLastModel } = useModelHistory({ currentChatId, chats });
 
+  // `useChatMessaging` keeps `newlyCreatedChatId` set after the first-message
+  // redirect below consumes it (this provider never remounts the hook, unlike
+  // the web app's route-based navigation). Every path that abandons the
+  // current chat by setting chatId to null must clear it, or the redirect
+  // effect immediately navigates back into the stale chat. The hook is called
+  // further down, so these earlier callbacks reach the clear function through
+  // a ref — same pattern as `createNewChatRef` below.
+  const clearNewlyCreatedChatIdRef = useRef<() => void>(() => {});
+
   const createNewChat = useCallback(async () => {
     setNewChatCounter((previous) => previous + 1);
     setCurrentChatId(null, currentAnchor);
@@ -226,6 +235,7 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
     useMessagingStore.getState().abortActiveSSE();
     useMessagingStore.getState().clearUserMessages();
     useMessagingStore.getState().resetStreaming();
+    clearNewlyCreatedChatIdRef.current();
 
     return `temp-${Date.now()}`;
   }, [currentAnchor, setCurrentChatId]);
@@ -247,6 +257,7 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
       if (currentChatId === chatId) {
         setCurrentChatId(null, currentAnchor);
         setNewChatCounter((previous) => previous + 1);
+        clearNewlyCreatedChatIdRef.current();
       }
     },
     [
@@ -330,6 +341,7 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
           useMessagingStore.getState().abortActiveSSE();
           useMessagingStore.getState().clearUserMessages();
           useMessagingStore.getState().resetStreaming();
+          clearNewlyCreatedChatIdRef.current();
         } else {
           setSession({ chatId: null, anchor: currentAnchor });
         }
@@ -404,21 +416,28 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
     cancelMessage,
     refetch: refetchMessages,
     newlyCreatedChatId,
+    clearNewlyCreatedChatId,
   } = useChatMessaging({
     chatId: effectiveChatId,
     silentChatId,
     platform: host?.toLowerCase() ?? "office-addin",
   });
+  clearNewlyCreatedChatIdRef.current = clearNewlyCreatedChatId;
 
   useEffect(() => {
     if (newlyCreatedChatId && !currentChatId && !isPendingResponse) {
       useMessagingStore.getState().setNavigationTransition(true);
       setCurrentChatId(newlyCreatedChatId, currentAnchor);
+      // Consume the id once acted on. The navigation transition suppresses
+      // the hook's own mount-effect reset, so without this the id would stay
+      // set and re-fire this effect the next time chatId goes null.
+      clearNewlyCreatedChatId();
       setTimeout(() => {
         useMessagingStore.getState().setNavigationTransition(false);
       }, 100);
     }
   }, [
+    clearNewlyCreatedChatId,
     currentAnchor,
     currentChatId,
     isPendingResponse,
