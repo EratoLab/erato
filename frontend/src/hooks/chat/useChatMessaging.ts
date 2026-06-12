@@ -1953,6 +1953,22 @@ export function useChatMessaging(
     ],
   );
 
+  // Consumers that navigate by state instead of by route (the Office add-in)
+  // never remount this hook, so `newlyCreatedChatId` survives past the
+  // navigation that consumed it. A stale id re-triggers navigation effects the
+  // next time chatId goes null (new chat, archive, session-policy "new"),
+  // bouncing the user back into the previous chat. Such consumers must clear
+  // the id once they have acted on it — both the local copy and the store
+  // copy, which otherwise keeps `renderStreamKey` pointed at the old chat's
+  // stream while chatId is null.
+  const clearNewlyCreatedChatId = useCallback(() => {
+    logger.log(
+      "[DEBUG_REDIRECT] clearNewlyCreatedChatId: Clearing local and store newlyCreatedChatId.",
+    );
+    setNewlyCreatedChatId(null);
+    setNewlyCreatedChatIdInStore(null);
+  }, [setNewlyCreatedChatIdInStore]);
+
   // isPendingResponse is true from the moment send is clicked until streaming completes
   // This is different from isStreaming which only becomes true after the first chunk arrives
   const isPendingResponse =
@@ -1974,6 +1990,7 @@ export function useChatMessaging(
     cancelMessage,
     refetch: chatMessagesQuery.refetch,
     newlyCreatedChatId,
+    clearNewlyCreatedChatId,
     messageOrder, // Keep messageOrder in the return object
   };
 }
