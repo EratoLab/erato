@@ -2200,15 +2200,27 @@ pub struct UserPreferencesConfig {
     // Defaults to `true`.
     #[serde(default = "default_user_preferences_enabled")]
     pub enabled: bool,
+
+    // Whether the data tab should be shown in the frontend preferences dialog.
+    // Defaults to `true`.
+    #[serde(default = "default_user_preferences_data_tab_enabled")]
+    pub data_tab_enabled: bool,
 }
 
 impl Default for UserPreferencesConfig {
     fn default() -> Self {
-        Self { enabled: true }
+        Self {
+            enabled: true,
+            data_tab_enabled: true,
+        }
     }
 }
 
 fn default_user_preferences_enabled() -> bool {
+    true
+}
+
+fn default_user_preferences_data_tab_enabled() -> bool {
     true
 }
 
