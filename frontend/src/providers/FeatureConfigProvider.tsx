@@ -95,6 +95,8 @@ interface StarterPromptsFeatureConfig {
 interface UserPreferencesFeatureConfig {
   /** Whether the user preferences feature is enabled */
   enabled: boolean;
+  /** Whether the data tab is shown in the preferences dialog */
+  dataTabEnabled: boolean;
   /** Whether the MCP servers tab is shown in the preferences dialog */
   mcpServersTabEnabled: boolean;
 }
@@ -222,6 +224,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
   },
   userPreferences: {
     enabled: false,
+    dataTabEnabled: true,
     mcpServersTabEnabled: false,
   },
   cloudProviders: {
@@ -312,6 +315,7 @@ function createFeatureConfig(
     },
     userPreferences: {
       enabled: environment.userPreferencesEnabled,
+      dataTabEnabled: environment.userPreferencesDataTabEnabled,
       mcpServersTabEnabled: environment.mcpServersTabEnabled,
     },
     cloudProviders: {

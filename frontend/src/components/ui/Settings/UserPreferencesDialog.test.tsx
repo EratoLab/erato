@@ -95,6 +95,7 @@ function renderDialog({
   initialEntries = ["/"],
   initialTab,
   mcpServersTabEnabled = true,
+  dataTabEnabled = true,
   audioTranscriptionEnabled = false,
   onMcpOauthCallbackHandled,
   pendingMcpOauthCallback = null,
@@ -116,6 +117,7 @@ function renderDialog({
     | "mcpServers"
     | "data";
   mcpServersTabEnabled?: boolean;
+  dataTabEnabled?: boolean;
   audioTranscriptionEnabled?: boolean;
   onMcpOauthCallbackHandled?: () => void;
   pendingMcpOauthCallback?: {
@@ -135,6 +137,7 @@ function renderDialog({
         config={{
           userPreferences: {
             enabled: userPreferencesEnabled,
+            dataTabEnabled,
             mcpServersTabEnabled,
           },
           audioTranscription: {
@@ -307,6 +310,14 @@ describe("UserPreferencesDialog", () => {
     expect(
       screen.queryByRole("tab", { name: "MCP servers" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("hides the Data tab when the feature flag is disabled", () => {
+    renderDialog({
+      dataTabEnabled: false,
+    });
+
+    expect(screen.queryByRole("tab", { name: "Data" })).not.toBeInTheDocument();
   });
 
   it("shows an Audio tab when audio transcription is enabled and persists the selected microphone", async () => {

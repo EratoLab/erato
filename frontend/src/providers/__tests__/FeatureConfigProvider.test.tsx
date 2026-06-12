@@ -71,6 +71,7 @@ describe("FeatureConfigProvider", () => {
       messageFeedbackEnabled: false,
       messageFeedbackCommentsEnabled: false,
       userPreferencesEnabled: true,
+      userPreferencesDataTabEnabled: true,
       messageFeedbackEditTimeLimitSeconds: null,
       maxUploadSizeBytes: 20971520, // 20 MB - matches backend default
       audioTranscriptionEnabled: false,
@@ -156,6 +157,7 @@ describe("FeatureConfigProvider", () => {
         },
         userPreferences: {
           enabled: true,
+          dataTabEnabled: true,
           mcpServersTabEnabled: false,
         },
         cloudProviders: {
@@ -195,6 +197,7 @@ describe("FeatureConfigProvider", () => {
         messageFeedbackEnabled: false,
         messageFeedbackCommentsEnabled: false,
         userPreferencesEnabled: true,
+        userPreferencesDataTabEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
         maxUploadSizeBytes: 20971520,
         sidebarCollapsedMode: "hidden",
@@ -230,6 +233,7 @@ describe("FeatureConfigProvider", () => {
         messageFeedbackEnabled: false,
         messageFeedbackCommentsEnabled: false,
         userPreferencesEnabled: true,
+        userPreferencesDataTabEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
         maxUploadSizeBytes: 20971520,
         sidebarCollapsedMode: "hidden",
@@ -280,6 +284,7 @@ describe("FeatureConfigProvider", () => {
         messageFeedbackEnabled: false,
         messageFeedbackCommentsEnabled: false,
         userPreferencesEnabled: true,
+        userPreferencesDataTabEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
         maxUploadSizeBytes: 20971520,
         sidebarCollapsedMode: "hidden",
@@ -315,6 +320,7 @@ describe("FeatureConfigProvider", () => {
         messageFeedbackEnabled: false,
         messageFeedbackCommentsEnabled: false,
         userPreferencesEnabled: true,
+        userPreferencesDataTabEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
         maxUploadSizeBytes: 20971520,
         sidebarCollapsedMode: "hidden",
@@ -378,6 +384,7 @@ describe("FeatureConfigProvider", () => {
         messageFeedbackEnabled: false,
         messageFeedbackCommentsEnabled: false,
         userPreferencesEnabled: true,
+        userPreferencesDataTabEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
         maxUploadSizeBytes: 20971520,
         sidebarCollapsedMode: "hidden",
@@ -439,6 +446,7 @@ describe("FeatureConfigProvider", () => {
         messageFeedbackEnabled: false,
         messageFeedbackCommentsEnabled: false,
         userPreferencesEnabled: true,
+        userPreferencesDataTabEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
         maxUploadSizeBytes: 20971520,
         sidebarCollapsedMode: "hidden",
@@ -473,6 +481,7 @@ describe("FeatureConfigProvider", () => {
         messageFeedbackEnabled: false,
         messageFeedbackCommentsEnabled: false,
         userPreferencesEnabled: true,
+        userPreferencesDataTabEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
         maxUploadSizeBytes: 20971520,
         sidebarCollapsedMode: "hidden",
@@ -544,6 +553,7 @@ describe("FeatureConfigProvider", () => {
         messageFeedbackEnabled: false,
         messageFeedbackCommentsEnabled: false,
         userPreferencesEnabled: true,
+        userPreferencesDataTabEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
         audioTranscriptionEnabled: true,
         audioTranscriptionMaxRecordingDurationSeconds: 1200,
@@ -637,6 +647,7 @@ describe("FeatureConfigProvider", () => {
         messageFeedbackEnabled: false,
         messageFeedbackCommentsEnabled: false,
         userPreferencesEnabled: true,
+        userPreferencesDataTabEnabled: true,
         maxUploadSizeBytes: 20971520,
       });
 
@@ -685,6 +696,7 @@ describe("FeatureConfigProvider", () => {
         messageFeedbackEnabled: false,
         messageFeedbackCommentsEnabled: false,
         userPreferencesEnabled: true,
+        userPreferencesDataTabEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
         maxUploadSizeBytes: 20971520,
         sidebarCollapsedMode: "hidden",
@@ -735,6 +747,7 @@ describe("FeatureConfigProvider", () => {
         messageFeedbackEnabled: false,
         messageFeedbackCommentsEnabled: false,
         userPreferencesEnabled: true,
+        userPreferencesDataTabEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
         maxUploadSizeBytes: 20971520,
         audioTranscriptionEnabled: false,
@@ -809,6 +822,7 @@ describe("FeatureConfigProvider", () => {
         messageFeedbackEnabled: true,
         messageFeedbackCommentsEnabled: false,
         userPreferencesEnabled: true,
+        userPreferencesDataTabEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
         maxUploadSizeBytes: 20971520,
         sidebarCollapsedMode: "hidden",
@@ -844,6 +858,7 @@ describe("FeatureConfigProvider", () => {
         messageFeedbackEnabled: true,
         messageFeedbackCommentsEnabled: true,
         userPreferencesEnabled: true,
+        userPreferencesDataTabEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
         maxUploadSizeBytes: 20971520,
         sidebarCollapsedMode: "hidden",
@@ -908,6 +923,7 @@ describe("FeatureConfigProvider", () => {
         messageFeedbackEnabled: false,
         messageFeedbackCommentsEnabled: false,
         userPreferencesEnabled: true,
+        userPreferencesDataTabEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
         maxUploadSizeBytes: 20971520,
         sidebarCollapsedMode: "slim",
@@ -969,6 +985,7 @@ describe("FeatureConfigProvider", () => {
         messageFeedbackEnabled: false,
         messageFeedbackCommentsEnabled: false,
         userPreferencesEnabled: false,
+        userPreferencesDataTabEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
         maxUploadSizeBytes: 20971520,
         sidebarCollapsedMode: "hidden",
@@ -982,6 +999,43 @@ describe("FeatureConfigProvider", () => {
       });
 
       expect(result.current.enabled).toBe(false);
+      expect(result.current.dataTabEnabled).toBe(true);
+    });
+
+    it("should return user preferences data tab disabled when configured", () => {
+      mockEnv.mockReturnValue({
+        apiRootUrl: "/api/",
+        themeCustomerName: null,
+        themePath: null,
+        themeConfigPath: null,
+        themeLogoPath: null,
+        themeLogoDarkPath: null,
+        themeAssistantAvatarPath: null,
+        disableUpload: false,
+        disableChatInputAutofocus: false,
+        disableLogout: false,
+        assistantsEnabled: false,
+        assistantsShowRecentItems: false,
+        sharepointEnabled: false,
+        sharepointShowDisclaimer: false,
+        messageFeedbackEnabled: false,
+        messageFeedbackCommentsEnabled: false,
+        userPreferencesEnabled: true,
+        userPreferencesDataTabEnabled: false,
+        messageFeedbackEditTimeLimitSeconds: null,
+        maxUploadSizeBytes: 20971520,
+        sidebarCollapsedMode: "hidden",
+        sidebarLogoPath: null,
+        sidebarLogoDarkPath: null,
+        sidebarChatHistoryShowMetadata: true,
+      });
+
+      const { result } = renderHook(() => useUserPreferencesFeature(), {
+        wrapper: createWrapper(),
+      });
+
+      expect(result.current.enabled).toBe(true);
+      expect(result.current.dataTabEnabled).toBe(false);
     });
   });
 });
