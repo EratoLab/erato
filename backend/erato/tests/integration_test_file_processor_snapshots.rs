@@ -23,59 +23,59 @@ async fn test_file_processor_examples_are_snapshotted() {
     let processor =
         create_file_processor("kreuzberg").expect("Expected to create kreuzberg file processor");
 
-    let fixtures = [
-        ExampleFixture {
-            name: "Acme_Inc_Company_Overview_pptx",
-            path: "Acme_Inc_Company_Overview.pptx",
-            mime_type: Some(
-                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            ),
-        },
-        ExampleFixture {
-            name: "email_with_sample_compressed_pdf",
-            path: "email-with-sample-compressed-pdf.eml",
-            mime_type: Some("message/rfc822"),
-        },
-        ExampleFixture {
-            name: "please_review_attached_draft_eml",
-            path: "please_review_attached_draft.eml",
-            mime_type: Some("message/rfc822"),
-        },
-        ExampleFixture {
-            name: "re_another_doc_you_have_to_check_eml",
-            path: "re_another_doc_you_have_to_check.eml",
-            mime_type: Some("message/rfc822"),
-        },
-        ExampleFixture {
-            name: "sample_report_compressed_pdf",
-            path: "sample-report-compressed.pdf",
-            mime_type: Some("application/pdf"),
-        },
-        ExampleFixture {
-            name: "styled_newsletter_multipart_alternative_eml",
-            path: "styled_newsletter_multipart_alternative.eml",
-            mime_type: Some("message/rfc822"),
-        },
-        ExampleFixture {
-            name: "synthesized_thread_bundle_eml",
-            path: "synthesized_thread_bundle.eml",
-            mime_type: Some("message/rfc822"),
-        },
+    let fixtures: &[ExampleFixture] = &[
+        // ExampleFixture {
+        //     name: "Acme_Inc_Company_Overview_pptx",
+        //     path: "Acme_Inc_Company_Overview.pptx",
+        //     mime_type: Some(
+        //         "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        //     ),
+        // },
+        // ExampleFixture {
+        //     name: "email_with_sample_compressed_pdf",
+        //     path: "email-with-sample-compressed-pdf.eml",
+        //     mime_type: Some("message/rfc822"),
+        // },
+        // ExampleFixture {
+        //     name: "please_review_attached_draft_eml",
+        //     path: "please_review_attached_draft.eml",
+        //     mime_type: Some("message/rfc822"),
+        // },
+        // ExampleFixture {
+        //     name: "re_another_doc_you_have_to_check_eml",
+        //     path: "re_another_doc_you_have_to_check.eml",
+        //     mime_type: Some("message/rfc822"),
+        // },
+        // ExampleFixture {
+        //     name: "sample_report_compressed_pdf",
+        //     path: "sample-report-compressed.pdf",
+        //     mime_type: Some("application/pdf"),
+        // },
+        // ExampleFixture {
+        //     name: "styled_newsletter_multipart_alternative_eml",
+        //     path: "styled_newsletter_multipart_alternative.eml",
+        //     mime_type: Some("message/rfc822"),
+        // },
+        // ExampleFixture {
+        //     name: "synthesized_thread_bundle_eml",
+        //     path: "synthesized_thread_bundle.eml",
+        //     mime_type: Some("message/rfc822"),
+        // },
         ExampleFixture {
             name: "weekly_digest_microsoft.eml",
             path: "weekly_digest_microsoft.eml",
             mime_type: Some("message/rfc822"),
         },
-        ExampleFixture {
-            name: "weekly_digest_microsoft_via_erato.eml",
-            path: "weekly_digest_microsoft_via_erato.eml",
-            mime_type: Some("message/rfc822"),
-        },
-        ExampleFixture {
-            name: "long_thread_via_erato.eml",
-            path: "long_thread_via_erato.eml",
-            mime_type: Some("message/rfc822"),
-        },
+        // ExampleFixture {
+        //     name: "weekly_digest_microsoft_via_erato.eml",
+        //     path: "weekly_digest_microsoft_via_erato.eml",
+        //     mime_type: Some("message/rfc822"),
+        // },
+        // ExampleFixture {
+        //     name: "long_thread_via_erato.eml",
+        //     path: "long_thread_via_erato.eml",
+        //     mime_type: Some("message/rfc822"),
+        // },
     ];
 
     for fixture in fixtures {

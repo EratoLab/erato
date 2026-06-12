@@ -8,8 +8,12 @@ split-debuginfo = "packed"
 [profile.dev.package]
 insta.opt-level = 3
 similar.opt-level = 3
+pdf_oxide.opt-level = 3
 
 [profile.release]
 # Better stack traces in production deployments
 debug = "full"
 split-debuginfo = "packed"
+
+#[patch.crates-io]
+#html-to-markdown-rs = { path = "../../html-to-markdown-dfc0ce7/crates/html-to-markdown" }
