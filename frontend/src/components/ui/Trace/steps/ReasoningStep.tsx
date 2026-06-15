@@ -1,4 +1,5 @@
-import { t } from "@lingui/core/macro";
+import { msg, t } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react";
 
 import { TraceStep } from "../TraceStep";
 import { railIconFor } from "../icons";
@@ -10,6 +11,8 @@ interface ReasoningStepProps extends BaseStepProps {
   segment: ReasoningSegment;
   /** Pre-built markdown renderer from the parent. */
   renderMarkdown: (text: string) => React.ReactNode;
+  /** When true, model-generated title and body are replaced with the masked label. */
+  maskReasoningText?: boolean;
 }
 
 const STREAMING_CARET = "▊";
@@ -21,9 +24,27 @@ export const ReasoningStep = ({
   isCollapsed,
   isLastStep,
   renderMarkdown,
+  maskReasoningText = false,
 }: ReasoningStepProps) => {
+  const { _ } = useLingui();
   const fallbackTitle = t`Thinking`;
   const isRunning = status === "running" && isStreaming;
+
+  if (maskReasoningText) {
+    const maskedLabel = _(msg({ id: "trace.reasoning.masked", message: "Thinking…" }));
+    return (
+      <TraceStep
+        railIcon={railIconFor("reasoning", status)}
+        hasTrailingRailLine={!isLastStep}
+        title={<span className="animate-pulse italic text-theme-fg-muted">{maskedLabel}</span>}
+        defaultOpen={false}
+        autoCollapse={true}
+        isActive={isRunning}
+      >
+        {null}
+      </TraceStep>
+    );
+  }
 
   // The streaming caret only sits on the body when there IS a body to anchor
   // to. A header-only segment (body not arrived yet) just shows the title.

@@ -1,5 +1,7 @@
 import { useState } from "react";
 
+import { useTraceFeature } from "@/providers/FeatureConfigProvider";
+
 import { TraceClusterHeader } from "./TraceClusterHeader";
 import { TraceCollapse } from "./TraceCollapse";
 import { TraceConnector } from "./TraceConnector";
@@ -62,6 +64,7 @@ export const Trace = ({
   hasError = false,
 }: TraceProps) => {
   const logicalSteps = flattenToLogicalSteps(parts);
+  const { maskReasoningText } = useTraceFeature();
   // Hooks must run on every render path. The gap detector is internally
   // gated on streaming/hasLaterContent, so it returns false when irrelevant.
   const showThinkingPlaceholder = useThinkingGap(
@@ -86,6 +89,7 @@ export const Trace = ({
         renderMarkdown={renderMarkdown}
         showDoneMarker={!isTraceActive}
         showThinkingPlaceholder={showThinkingPlaceholder}
+        maskReasoningText={maskReasoningText}
       />
     );
   }
@@ -97,6 +101,7 @@ export const Trace = ({
       renderMarkdown={renderMarkdown}
       durationMs={durationMs}
       hasError={hasError}
+      maskReasoningText={maskReasoningText}
     />
   );
 };
@@ -107,6 +112,7 @@ interface ColdLoadTraceProps {
   renderMarkdown: (text: string) => ReactNode;
   durationMs: number | null;
   hasError: boolean;
+  maskReasoningText: boolean;
 }
 
 const ColdLoadTrace = ({
@@ -115,6 +121,7 @@ const ColdLoadTrace = ({
   renderMarkdown,
   durationMs,
   hasError,
+  maskReasoningText,
 }: ColdLoadTraceProps) => {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -134,6 +141,7 @@ const ColdLoadTrace = ({
           renderMarkdown={renderMarkdown}
           showDoneMarker
           showThinkingPlaceholder={false}
+          maskReasoningText={maskReasoningText}
         />
       </TraceCollapse>
     </div>
@@ -152,6 +160,8 @@ interface TraceTimelineProps {
    * step and the Done marker. Driven by `useThinkingGap` upstream.
    */
   showThinkingPlaceholder: boolean;
+  /** When true, reasoning step titles and bodies are replaced with the mask label. */
+  maskReasoningText: boolean;
 }
 
 const TraceTimeline = ({
@@ -161,6 +171,7 @@ const TraceTimeline = ({
   renderMarkdown,
   showDoneMarker,
   showThinkingPlaceholder,
+  maskReasoningText,
 }: TraceTimelineProps) => {
   const placeholderIsLastNode = !showDoneMarker;
 
@@ -183,6 +194,7 @@ const TraceTimeline = ({
           isCollapsed,
           isLastStep: isLastNodeInTimeline,
           renderMarkdown,
+          maskReasoningText,
         });
 
         return (
@@ -258,6 +270,7 @@ interface RenderStepArgs {
   isCollapsed: boolean;
   isLastStep: boolean;
   renderMarkdown: (text: string) => ReactNode;
+  maskReasoningText: boolean;
 }
 
 const renderStep = (args: RenderStepArgs): ReactNode => {
@@ -271,6 +284,7 @@ const renderStep = (args: RenderStepArgs): ReactNode => {
           isCollapsed={args.isCollapsed}
           isLastStep={args.isLastStep}
           renderMarkdown={args.renderMarkdown}
+          maskReasoningText={args.maskReasoningText}
         />
       );
     case "tool_use":

@@ -42,6 +42,7 @@ export type Env = {
   sidebarChatHistoryShowMetadata: boolean;
   msalClientId: string | null;
   msalAuthority: string | null;
+  maskReasoningTraceText: boolean;
 };
 
 declare global {
@@ -90,6 +91,7 @@ declare global {
     SIDEBAR_CHAT_HISTORY_SHOW_METADATA?: boolean;
     MSAL_CLIENT_ID?: string;
     MSAL_AUTHORITY?: string;
+    MASK_REASONING_TRACE_TEXT?: boolean;
     __E2E_COMPONENT_VARIANT__?: string;
     __E2E_FACET_ID__?: string;
   }
@@ -308,6 +310,10 @@ export const env = (): Env => {
     import.meta.env.VITE_MSAL_CLIENT_ID ?? window.MSAL_CLIENT_ID ?? null;
   const msalAuthority =
     import.meta.env.VITE_MSAL_AUTHORITY ?? window.MSAL_AUTHORITY ?? null;
+  const maskReasoningTraceText =
+    import.meta.env.VITE_MASK_REASONING_TRACE_TEXT === "true"
+      ? true
+      : (window.MASK_REASONING_TRACE_TEXT ?? false);
 
   return {
     apiRootUrl,
@@ -353,5 +359,6 @@ export const env = (): Env => {
     sidebarChatHistoryShowMetadata,
     msalClientId,
     msalAuthority,
+    maskReasoningTraceText,
   };
 };

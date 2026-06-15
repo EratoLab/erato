@@ -64,6 +64,7 @@ const FRONTEND_ENV_KEY_SIDEBAR_CHAT_HISTORY_SHOW_METADATA: &str =
     "SIDEBAR_CHAT_HISTORY_SHOW_METADATA";
 const FRONTEND_ENV_KEY_MSAL_CLIENT_ID: &str = "MSAL_CLIENT_ID";
 const FRONTEND_ENV_KEY_MSAL_AUTHORITY: &str = "MSAL_AUTHORITY";
+const FRONTEND_ENV_KEY_MASK_REASONING_TRACE_TEXT: &str = "MASK_REASONING_TRACE_TEXT";
 
 #[derive(Debug, Clone, Default)]
 /// Map of values that will be provided as environment-variable-like global variables to the frontend.
@@ -344,6 +345,11 @@ fn build_frontend_environment(
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_SIDEBAR_CHAT_HISTORY_SHOW_METADATA.to_string(),
         Value::Bool(config.frontend.sidebar_chat_history_show_metadata),
+    );
+
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_MASK_REASONING_TRACE_TEXT.to_string(),
+        Value::Bool(config.frontend.mask_reasoning_trace_text),
     );
 
     // Inject pairs from frontend.additional_environment

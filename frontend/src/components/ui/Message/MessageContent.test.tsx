@@ -1,3 +1,5 @@
+import { I18nProvider } from "@lingui/react";
+import { i18n } from "@lingui/core";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -5,18 +7,32 @@ import {
   THEME_MODE_LOCAL_STORAGE_KEY,
   ThemeProvider,
 } from "@/components/providers/ThemeProvider";
+import { messages as enMessages } from "@/locales/en/messages.json";
+import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { MessageContent } from "./MessageContent";
 
+import type { Messages } from "@lingui/core";
 import type {
   ContentPart,
   FileUploadItem,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type React from "react";
 
+beforeAll(() => {
+  i18n.load("en", enMessages as unknown as Messages);
+  i18n.activate("en");
+});
+
 const renderWithTheme = (ui: React.ReactElement) => {
-  return render(<ThemeProvider>{ui}</ThemeProvider>);
+  return render(
+    <I18nProvider i18n={i18n}>
+      <StaticFeatureConfigProvider>
+        <ThemeProvider>{ui}</ThemeProvider>
+      </StaticFeatureConfigProvider>
+    </I18nProvider>,
+  );
 };
 
 const textContent = (text: string): ContentPart[] => [
@@ -354,15 +370,19 @@ describe("MessageContent", () => {
     ).toHaveAttribute("aria-expanded", "true");
 
     rerender(
-      <ThemeProvider>
-        <MessageContent
-          isStreaming
-          content={[
-            reasoningContent("Inspecting context"),
-            { content_type: "text", text: "Final answer" },
-          ]}
-        />
-      </ThemeProvider>,
+      <I18nProvider i18n={i18n}>
+        <StaticFeatureConfigProvider>
+          <ThemeProvider>
+            <MessageContent
+              isStreaming
+              content={[
+                reasoningContent("Inspecting context"),
+                { content_type: "text", text: "Final answer" },
+              ]}
+            />
+          </ThemeProvider>
+        </StaticFeatureConfigProvider>
+      </I18nProvider>,
     );
 
     expect(
@@ -843,5 +863,53 @@ describe("MessageContent", () => {
     // rewrite facet, so the flag is absent → defaults to card).
     expect(screen.getByRole("button", { name: /Copy/ })).toBeInTheDocument();
     expect(screen.getByText(/vielen Dank/)).toBeInTheDocument();
+  });
+
+  describe("showRaw with maskReasoningTraceText", () => {
+    it("includes reasoning text in raw view when masking is disabled", () => {
+      const { container } = render(
+        <StaticFeatureConfigProvider config={{ trace: { maskReasoningText: false } }}>
+          <ThemeProvider>
+            <MessageContent
+              content={[
+                {
+                  content_type: "reasoning" as const,
+                  text: "secret model reasoning",
+                } as ContentPart,
+                { content_type: "text" as const, text: "Final answer" } as ContentPart,
+              ]}
+              showRaw
+            />
+          </ThemeProvider>
+        </StaticFeatureConfigProvider>,
+      );
+
+      const rawBlock = container.querySelector("pre.message-content-raw-block");
+      expect(rawBlock).toHaveTextContent("secret model reasoning");
+      expect(rawBlock).toHaveTextContent("Final answer");
+    });
+
+    it("omits reasoning text in raw view when masking is enabled", () => {
+      const { container } = render(
+        <StaticFeatureConfigProvider config={{ trace: { maskReasoningText: true } }}>
+          <ThemeProvider>
+            <MessageContent
+              content={[
+                {
+                  content_type: "reasoning" as const,
+                  text: "secret model reasoning",
+                } as ContentPart,
+                { content_type: "text" as const, text: "Final answer" } as ContentPart,
+              ]}
+              showRaw
+            />
+          </ThemeProvider>
+        </StaticFeatureConfigProvider>,
+      );
+
+      const rawBlock = container.querySelector("pre.message-content-raw-block");
+      expect(rawBlock).not.toHaveTextContent("secret model reasoning");
+      expect(rawBlock).toHaveTextContent("Final answer");
+    });
   });
 });

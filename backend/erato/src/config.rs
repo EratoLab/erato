@@ -2104,6 +2104,13 @@ pub struct FrontendConfig {
     // Defaults to `true`.
     #[serde(default = "default_sidebar_chat_history_show_metadata")]
     pub sidebar_chat_history_show_metadata: bool,
+
+    // Whether to mask model-generated reasoning trace text in the chat UI.
+    // When enabled, the visible reasoning title and body are replaced with a
+    // configurable translation string. Tool calls and final assistant output
+    // are unaffected. Defaults to `false`.
+    #[serde(default)]
+    pub mask_reasoning_trace_text: bool,
 }
 
 fn default_sidebar_collapsed_mode() -> String {

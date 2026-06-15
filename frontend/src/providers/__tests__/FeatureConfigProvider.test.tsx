@@ -22,6 +22,7 @@ import {
   useMessageFeedbackFeature,
   useSidebarFeature,
   useUserPreferencesFeature,
+  useTraceFeature,
 } from "../FeatureConfigProvider";
 
 import type { ReactNode } from "react";
@@ -87,6 +88,7 @@ describe("FeatureConfigProvider", () => {
       chatSharingEnabled: false,
       msalClientId: null,
       msalAuthority: null,
+      maskReasoningTraceText: false,
     });
   });
 
@@ -174,6 +176,9 @@ describe("FeatureConfigProvider", () => {
           logoPath: null,
           logoDarkPath: null,
           chatHistoryShowMetadata: true,
+        },
+        trace: {
+          maskReasoningText: false,
         },
       });
     });
@@ -1036,6 +1041,55 @@ describe("FeatureConfigProvider", () => {
 
       expect(result.current.enabled).toBe(true);
       expect(result.current.dataTabEnabled).toBe(false);
+    });
+  });
+
+  describe("useTraceFeature", () => {
+    it("should return maskReasoningText as false by default", () => {
+      const { result } = renderHook(() => useTraceFeature(), {
+        wrapper: createWrapper(),
+      });
+
+      expect(result.current.maskReasoningText).toBe(false);
+    });
+
+    it("should return maskReasoningText as true when env flag is set", () => {
+      mockEnv.mockReturnValue({
+        apiRootUrl: "/api/",
+        themeCustomerName: null,
+        themePath: null,
+        themeConfigPath: null,
+        themeLogoPath: null,
+        themeLogoDarkPath: null,
+        themeAssistantAvatarPath: null,
+        disableUpload: false,
+        disableChatInputAutofocus: false,
+        disableLogout: false,
+        assistantsEnabled: false,
+        assistantsShowRecentItems: false,
+        sharepointEnabled: false,
+        sharepointShowDisclaimer: false,
+        messageFeedbackEnabled: false,
+        messageFeedbackCommentsEnabled: false,
+        userPreferencesEnabled: true,
+        userPreferencesDataTabEnabled: true,
+        messageFeedbackEditTimeLimitSeconds: null,
+        maxUploadSizeBytes: 20971520,
+        sidebarCollapsedMode: "hidden",
+        sidebarLogoPath: null,
+        sidebarLogoDarkPath: null,
+        sidebarChatHistoryShowMetadata: true,
+        chatSharingEnabled: false,
+        msalClientId: null,
+        msalAuthority: null,
+        maskReasoningTraceText: true,
+      });
+
+      const { result } = renderHook(() => useTraceFeature(), {
+        wrapper: createWrapper(),
+      });
+
+      expect(result.current.maskReasoningText).toBe(true);
     });
   });
 });

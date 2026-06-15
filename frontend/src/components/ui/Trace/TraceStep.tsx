@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 
 import { ChevronRightIcon } from "@/components/ui/icons";
 
@@ -14,7 +14,7 @@ interface TraceStepProps {
   /** Whether the rail's vertical line continues below this step. */
   hasTrailingRailLine: boolean;
   /** A short, single-line label rendered in the step header. */
-  title: string;
+  title: React.ReactNode;
   /** Optional inline node next to the title (e.g. a tool status pill). */
   titleSlot?: ReactNode;
   /** Body content — collapsed by default after streaming finishes. */

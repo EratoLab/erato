@@ -148,6 +148,14 @@ interface ChatSharingFeatureConfig {
 }
 
 /**
+ * Configuration for trace/reasoning display features
+ */
+interface TraceFeatureConfig {
+  /** When true, model-generated reasoning title and body text are replaced with a masked label */
+  maskReasoningText: boolean;
+}
+
+/**
  * Complete feature configuration interface
  */
 export interface FeatureConfig {
@@ -177,6 +185,8 @@ export interface FeatureConfig {
   sidebar: SidebarFeatureConfig;
   /** Chat sharing feature flags */
   chatSharing: ChatSharingFeatureConfig;
+  /** Trace/reasoning display feature flags */
+  trace: TraceFeatureConfig;
 }
 
 type FeatureConfigOverrides = {
@@ -244,6 +254,9 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
   },
   chatSharing: {
     enabled: false,
+  },
+  trace: {
+    maskReasoningText: false,
   },
 };
 
@@ -336,6 +349,9 @@ function createFeatureConfig(
     chatSharing: {
       enabled: environment.chatSharingEnabled,
     },
+    trace: {
+      maskReasoningText: environment.maskReasoningTraceText,
+    },
   };
 }
 
@@ -390,6 +406,10 @@ function mergeFeatureConfig(
     chatSharing: {
       ...baseConfig.chatSharing,
       ...overrides.chatSharing,
+    },
+    trace: {
+      ...baseConfig.trace,
+      ...overrides.trace,
     },
   };
 }
@@ -649,4 +669,15 @@ export function useSidebarFeature(): SidebarFeatureConfig {
 export function useChatSharingFeature(): ChatSharingFeatureConfig {
   const config = useFeatureConfig();
   return config.chatSharing;
+}
+
+/**
+ * Convenience hook for accessing trace/reasoning display feature configuration.
+ *
+ * @returns Trace feature configuration
+ * @throws {Error} If used outside of FeatureConfigProvider
+ */
+export function useTraceFeature(): TraceFeatureConfig {
+  const config = useFeatureConfig();
+  return config.trace;
 }
