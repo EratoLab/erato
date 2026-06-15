@@ -868,7 +868,9 @@ describe("MessageContent", () => {
   describe("showRaw with maskReasoningTraceText", () => {
     it("includes reasoning text in raw view when masking is disabled", () => {
       const { container } = render(
-        <StaticFeatureConfigProvider config={{ trace: { maskReasoningText: false } }}>
+        <StaticFeatureConfigProvider
+          config={{ trace: { maskReasoningText: false } }}
+        >
           <ThemeProvider>
             <MessageContent
               content={[
@@ -891,7 +893,9 @@ describe("MessageContent", () => {
 
     it("omits reasoning text in raw view when masking is enabled", () => {
       const { container } = render(
-        <StaticFeatureConfigProvider config={{ trace: { maskReasoningText: true } }}>
+        <StaticFeatureConfigProvider
+          config={{ trace: { maskReasoningText: true } }}
+        >
           <ThemeProvider>
             <MessageContent
               content={[

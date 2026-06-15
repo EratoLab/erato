@@ -31,12 +31,18 @@ export const ReasoningStep = ({
   const isRunning = status === "running" && isStreaming;
 
   if (maskReasoningText) {
-    const maskedLabel = _(msg({ id: "trace.reasoning.masked", message: "Thinking…" }));
+    const maskedLabel = _(
+      msg({ id: "trace.reasoning.masked", message: "Thinking…" }),
+    );
     return (
       <TraceStep
         railIcon={railIconFor("reasoning", status)}
         hasTrailingRailLine={!isLastStep}
-        title={<span className="animate-pulse italic text-theme-fg-muted">{maskedLabel}</span>}
+        title={
+          <span className="animate-pulse italic text-theme-fg-muted">
+            {maskedLabel}
+          </span>
+        }
         defaultOpen={false}
         autoCollapse={true}
         isActive={isRunning}

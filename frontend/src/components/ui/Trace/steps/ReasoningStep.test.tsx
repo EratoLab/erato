@@ -9,7 +9,6 @@ import { ReasoningStep } from "./ReasoningStep";
 
 import type { Messages } from "@lingui/core";
 
-
 beforeAll(() => {
   i18n.load("en", enMessages as unknown as Messages);
   i18n.activate("en");
@@ -20,7 +19,9 @@ const defaultSegment = {
   body: "Model reasoning body text",
 };
 
-const renderReasoningStep = (props: Partial<Parameters<typeof ReasoningStep>[0]> = {}) => {
+const renderReasoningStep = (
+  props: Partial<Parameters<typeof ReasoningStep>[0]> = {},
+) => {
   return render(
     <I18nProvider i18n={i18n}>
       <ReasoningStep
@@ -73,7 +74,9 @@ describe("ReasoningStep — masked mode", () => {
 
   it("does not render model-generated body text when masked", () => {
     renderReasoningStep({ maskReasoningText: true });
-    expect(screen.queryByText("Model reasoning body text")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Model reasoning body text"),
+    ).not.toBeInTheDocument();
   });
 
   it("masked label has pulsing animation class", () => {

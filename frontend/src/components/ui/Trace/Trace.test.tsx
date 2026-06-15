@@ -10,7 +10,6 @@ import { Trace } from "./Trace";
 import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Messages } from "@lingui/core";
 
-
 beforeAll(() => {
   i18n.load("en", enMessages as unknown as Messages);
   i18n.activate("en");
@@ -23,27 +22,30 @@ vi.mock("@/providers/FeatureConfigProvider", () => ({
   useTraceFeature: () => mockUseTraceFeature(),
 }));
 
-const reasoningPart = (text: string): ContentPart =>
-  ({
-    content_type: "reasoning",
-    text,
-  });
+const reasoningPart = (text: string): ContentPart => ({
+  content_type: "reasoning",
+  text,
+});
 
-const toolUsePart = (): ContentPart =>
-  ({
-    content_type: "tool_use",
-    status: "success",
-    tool_call_id: "tool-abc",
-    tool_name: "web_search",
-    input: null,
-    output: null,
-    progress_message: null,
-    started_at: null,
-    ended_at: null,
-  });
+const toolUsePart = (): ContentPart => ({
+  content_type: "tool_use",
+  status: "success",
+  tool_call_id: "tool-abc",
+  tool_name: "web_search",
+  input: null,
+  output: null,
+  progress_message: null,
+  started_at: null,
+  ended_at: null,
+});
 
-const renderTrace = (parts: ContentPart[], overrides: { maskReasoningText?: boolean } = {}) => {
-  mockUseTraceFeature.mockReturnValue({ maskReasoningText: overrides.maskReasoningText ?? false });
+const renderTrace = (
+  parts: ContentPart[],
+  overrides: { maskReasoningText?: boolean } = {},
+) => {
+  mockUseTraceFeature.mockReturnValue({
+    maskReasoningText: overrides.maskReasoningText ?? false,
+  });
 
   return render(
     <I18nProvider i18n={i18n}>
@@ -60,12 +62,16 @@ const renderTrace = (parts: ContentPart[], overrides: { maskReasoningText?: bool
 
 describe("Trace — default (unmasked) mode", () => {
   it("renders reasoning segment title without masking", () => {
-    renderTrace([reasoningPart("**Analyzing the request**\n\nLet me think through this.")]);
+    renderTrace([
+      reasoningPart("**Analyzing the request**\n\nLet me think through this."),
+    ]);
     expect(screen.getByText("Analyzing the request")).toBeInTheDocument();
   });
 
   it("does not show the masked label when masking is disabled", () => {
-    renderTrace([reasoningPart("Some reasoning text")], { maskReasoningText: false });
+    renderTrace([reasoningPart("Some reasoning text")], {
+      maskReasoningText: false,
+    });
     expect(screen.queryByText("Thinking…")).not.toBeInTheDocument();
   });
 });
@@ -81,15 +87,18 @@ describe("Trace — masked mode", () => {
   });
 
   it("does not render model-generated reasoning body when masked", () => {
-    renderTrace(
-      [reasoningPart("Some reasoning body text")],
-      { maskReasoningText: true },
-    );
-    expect(screen.queryByText("Some reasoning body text")).not.toBeInTheDocument();
+    renderTrace([reasoningPart("Some reasoning body text")], {
+      maskReasoningText: true,
+    });
+    expect(
+      screen.queryByText("Some reasoning body text"),
+    ).not.toBeInTheDocument();
   });
 
   it("still renders tool call steps when masking is enabled", () => {
-    renderTrace([reasoningPart("Some reasoning"), toolUsePart()], { maskReasoningText: true });
+    renderTrace([reasoningPart("Some reasoning"), toolUsePart()], {
+      maskReasoningText: true,
+    });
     // The masked label is shown for the reasoning step
     expect(screen.getByText("Thinking…")).toBeInTheDocument();
     // The tool use step should still render (search tool)
