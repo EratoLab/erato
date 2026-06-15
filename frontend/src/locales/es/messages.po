@@ -1598,7 +1598,7 @@ msgstr "Usuario"
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ReasoningStep.tsx
 msgid "trace.reasoning.masked"
-msgstr ""
+msgstr "Pensando…"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ImageLightbox.tsx
