@@ -27,16 +27,6 @@ const CONTENT_DISPOSITION_FILENAME_ENCODE_SET: &AsciiSet = &CONTROLS
     .add(b'\'')
     .add(b';')
     .add(b'\\');
-const CONTENT_DISPOSITION_QUERY_ENCODE_SET: &AsciiSet = &CONTROLS
-    .add(b' ')
-    .add(b'"')
-    .add(b'%')
-    .add(b'&')
-    .add(b'\'')
-    .add(b'+')
-    .add(b';')
-    .add(b'=')
-    .add(b'\\');
 const PATH_ENCODE_SET: AsciiSet = NON_ALPHANUMERIC
     .remove(b'/')
     .remove(b'-')
@@ -519,6 +509,15 @@ impl OpenDalStorage {
         expires_in: Option<Duration>,
         download_filename: Option<&str>,
     ) -> Result<String, Report> {
+        if self.provider_kind == OpenDalProviderKind::AzBlob {
+            // OpenDAL 0.56 appends rscd but signs Azure response override fields as empty.
+            return self.generate_azblob_download_url_with_content_disposition(
+                path,
+                expires_in,
+                &build_content_disposition(ContentDispositionKind::Attachment, download_filename),
+            );
+        }
+
         self.generate_presigned_url(
             path,
             expires_in,
@@ -604,6 +603,39 @@ impl OpenDalStorage {
             duration,
         )
     }
+
+    fn generate_azblob_download_url_with_content_disposition(
+        &self,
+        path: &str,
+        expires_in: Option<Duration>,
+        content_disposition: &str,
+    ) -> Result<String, Report> {
+        let duration = expires_in.unwrap_or_else(|| Duration::from_secs(3600));
+        let config = self
+            .azblob_config
+            .as_ref()
+            .ok_or_eyre("Missing azblob config for download URL generation")?;
+        let account_name = config
+            .account_name
+            .as_deref()
+            .ok_or_eyre("Missing azblob account_name for download URL generation")?;
+        let account_key = config
+            .account_key
+            .as_ref()
+            .ok_or_eyre("Missing azblob account_key for download URL generation")?;
+
+        build_azblob_service_sas_url(
+            config,
+            account_name,
+            account_key.expose_secret(),
+            path,
+            AzBlobServiceSasResponseHeaders {
+                content_disposition: Some(content_disposition),
+                content_type: None,
+            },
+            duration,
+        )
+    }
 }
 
 fn build_azblob_service_sas_preview_url(
@@ -612,6 +644,32 @@ fn build_azblob_service_sas_preview_url(
     account_key: &str,
     path: &str,
     content_type: &str,
+    expires_in: Duration,
+) -> Result<String, Report> {
+    build_azblob_service_sas_url(
+        config,
+        account_name,
+        account_key,
+        path,
+        AzBlobServiceSasResponseHeaders {
+            content_disposition: None,
+            content_type: Some(content_type),
+        },
+        expires_in,
+    )
+}
+
+struct AzBlobServiceSasResponseHeaders<'a> {
+    content_disposition: Option<&'a str>,
+    content_type: Option<&'a str>,
+}
+
+fn build_azblob_service_sas_url(
+    config: &StorageProviderAzBlobConfig,
+    account_name: &str,
+    account_key: &str,
+    path: &str,
+    response_headers: AzBlobServiceSasResponseHeaders<'_>,
     expires_in: Duration,
 ) -> Result<String, Report> {
     let blob_path = build_azblob_blob_path(config.root.as_deref(), path);
@@ -634,25 +692,15 @@ fn build_azblob_service_sas_preview_url(
         format!("/blob{}", url.path())
     };
 
-    let string_to_sign = [
+    let string_to_sign = build_azblob_service_sas_string_to_sign(
         "r",
-        signed_start.as_str(),
-        signed_expiry.as_str(),
-        canonicalized_resource.as_str(),
-        "",
-        "",
-        "",
-        AZBLOB_SERVICE_SAS_VERSION,
+        &signed_start,
+        &signed_expiry,
+        &canonicalized_resource,
         signed_resource,
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        content_type,
-    ]
-    .join("\n");
+        response_headers.content_disposition.unwrap_or_default(),
+        response_headers.content_type.unwrap_or_default(),
+    );
 
     let decoded_key = STANDARD.decode(account_key)?;
     let mut mac = Hmac::<Sha256>::new_from_slice(&decoded_key)
@@ -667,11 +715,46 @@ fn build_azblob_service_sas_preview_url(
         query.append_pair("st", &signed_start);
         query.append_pair("se", &signed_expiry);
         query.append_pair("sr", signed_resource);
-        query.append_pair("rsct", content_type);
+        if let Some(content_disposition) = response_headers.content_disposition {
+            query.append_pair("rscd", content_disposition);
+        }
+        if let Some(content_type) = response_headers.content_type {
+            query.append_pair("rsct", content_type);
+        }
         query.append_pair("sig", &signature);
     }
 
     Ok(url.to_string())
+}
+
+fn build_azblob_service_sas_string_to_sign(
+    permissions: &str,
+    signed_start: &str,
+    signed_expiry: &str,
+    canonicalized_resource: &str,
+    signed_resource: &str,
+    response_content_disposition: &str,
+    response_content_type: &str,
+) -> String {
+    [
+        permissions,
+        signed_start,
+        signed_expiry,
+        canonicalized_resource,
+        "",
+        "",
+        "",
+        AZBLOB_SERVICE_SAS_VERSION,
+        signed_resource,
+        "",
+        "",
+        "",
+        response_content_disposition,
+        "",
+        "",
+        response_content_type,
+    ]
+    .join("\n")
 }
 
 fn build_azblob_blob_path(root: Option<&str>, path: &str) -> String {
@@ -719,9 +802,7 @@ fn build_presign_content_disposition(
 
     match provider_kind {
         OpenDalProviderKind::S3 => Some(header_value),
-        OpenDalProviderKind::AzBlob => Some(
-            utf8_percent_encode(&header_value, CONTENT_DISPOSITION_QUERY_ENCODE_SET).to_string(),
-        ),
+        OpenDalProviderKind::AzBlob => Some(header_value),
     }
 }
 
@@ -913,13 +994,21 @@ pub fn is_missing_permissions_error(error: &Report) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use super::AzBlobServiceSasResponseHeaders;
     use super::ContentDispositionKind;
     use super::OpenDalProviderKind;
     use super::SharepointStorage;
+    use super::build_azblob_service_sas_string_to_sign;
+    use super::build_azblob_service_sas_url;
     use super::build_content_disposition;
     use super::build_presign_content_disposition;
     use super::preview_content_type_for_filename;
+    use crate::config::StorageProviderAzBlobConfig;
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
     use serde_json::json;
+    use std::collections::HashMap;
+    use std::time::Duration;
+    use url::Url;
 
     #[test]
     fn content_disposition_uses_original_filename() {
@@ -953,7 +1042,7 @@ mod tests {
     }
 
     #[test]
-    fn azblob_presign_percent_encodes_content_disposition_for_query_string() {
+    fn azblob_presign_uses_raw_content_disposition_header_value() {
         assert_eq!(
             build_presign_content_disposition(
                 OpenDalProviderKind::AzBlob,
@@ -961,10 +1050,63 @@ mod tests {
                 Some("report final.pdf"),
             ),
             Some(
-                "attachment%3B%20filename%3D%22report%20final.pdf%22%3B%20filename*%3DUTF-8%27%27report%2520final.pdf"
+                "attachment; filename=\"report final.pdf\"; filename*=UTF-8''report%20final.pdf"
                     .to_string(),
             )
         );
+    }
+
+    #[test]
+    fn azblob_service_sas_string_to_sign_includes_raw_content_disposition() {
+        let content_disposition =
+            "attachment; filename=\"report final.pdf\"; filename*=UTF-8''report%20final.pdf";
+        let string_to_sign = build_azblob_service_sas_string_to_sign(
+            "r",
+            "2026-06-15T09:00:00Z",
+            "2026-06-15T10:00:00Z",
+            "/blob/account/container/uploads/report.pdf",
+            "b",
+            content_disposition,
+            "",
+        );
+        let lines = string_to_sign.split('\n').collect::<Vec<_>>();
+
+        assert_eq!(lines[12], content_disposition);
+        assert!(!lines[12].contains("%3B"));
+    }
+
+    #[test]
+    fn azblob_service_sas_url_does_not_double_encode_content_disposition() {
+        let config = StorageProviderAzBlobConfig {
+            root: None,
+            container: "container".to_string(),
+            endpoint: "https://account.blob.core.windows.net".to_string(),
+            account_name: Some("account".to_string()),
+            account_key: None,
+        };
+        let content_disposition =
+            "attachment; filename=\"report final.pdf\"; filename*=UTF-8''report%20final.pdf";
+        let url = build_azblob_service_sas_url(
+            &config,
+            "account",
+            &STANDARD.encode("key"),
+            "uploads/report.pdf",
+            AzBlobServiceSasResponseHeaders {
+                content_disposition: Some(content_disposition),
+                content_type: None,
+            },
+            Duration::from_secs(3600),
+        )
+        .unwrap();
+        let parsed = Url::parse(&url).unwrap();
+        let query = parsed.query_pairs().into_owned().collect::<HashMap<_, _>>();
+
+        assert_eq!(
+            query.get("rscd").map(String::as_str),
+            Some(content_disposition)
+        );
+        assert!(url.contains("rscd=attachment%3B"));
+        assert!(!url.contains("rscd=attachment%253B"));
     }
 
     #[test]
