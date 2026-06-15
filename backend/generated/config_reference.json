@@ -304,6 +304,7 @@
   "frontend.disable_upload": {},
   "frontend.enable_message_feedback": {},
   "frontend.enable_message_feedback_comments": {},
+  "frontend.mask_reasoning_trace_text": {},
   "frontend.message_feedback_edit_time_limit_seconds": {},
   "frontend.sidebar_chat_history_show_metadata": {},
   "frontend.sidebar_collapsed_mode": {},
