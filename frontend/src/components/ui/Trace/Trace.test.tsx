@@ -1,14 +1,15 @@
+import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
-import { i18n } from "@lingui/core";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
-import type { Messages } from "@lingui/core";
-import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
-
 import { Trace } from "./Trace";
+
+import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { Messages } from "@lingui/core";
+
 
 beforeAll(() => {
   i18n.load("en", enMessages as unknown as Messages);
@@ -26,7 +27,7 @@ const reasoningPart = (text: string): ContentPart =>
   ({
     content_type: "reasoning",
     text,
-  }) as ContentPart;
+  });
 
 const toolUsePart = (): ContentPart =>
   ({
@@ -39,7 +40,7 @@ const toolUsePart = (): ContentPart =>
     progress_message: null,
     started_at: null,
     ended_at: null,
-  }) as ContentPart;
+  });
 
 const renderTrace = (parts: ContentPart[], overrides: { maskReasoningText?: boolean } = {}) => {
   mockUseTraceFeature.mockReturnValue({ maskReasoningText: overrides.maskReasoningText ?? false });

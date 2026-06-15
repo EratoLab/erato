@@ -1,13 +1,14 @@
+import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { i18n } from "@lingui/core";
 import { messages as enMessages } from "@/locales/en/messages.json";
+
+import { ReasoningStep } from "./ReasoningStep";
 
 import type { Messages } from "@lingui/core";
 
-import { ReasoningStep } from "./ReasoningStep";
 
 beforeAll(() => {
   i18n.load("en", enMessages as unknown as Messages);

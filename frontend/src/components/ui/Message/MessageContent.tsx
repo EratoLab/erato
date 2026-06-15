@@ -879,12 +879,12 @@ export const MessageContent = memo(function MessageContent({
   // When reasoning text is masked, omit reasoning parts from raw display too.
   if (showRaw) {
     const rawText = content
-      .filter(
-        (part) =>
-          part.content_type === "text" ||
-          (!maskReasoningText && part.content_type === "reasoning"),
-      )
-      .map((part) => part.text)
+      .flatMap((part): string[] => {
+        if (part.content_type === "text") return [part.text];
+        if (!maskReasoningText && part.content_type === "reasoning")
+          return [part.text ?? ""];
+        return [];
+      })
       .join("\n\n");
 
     return (

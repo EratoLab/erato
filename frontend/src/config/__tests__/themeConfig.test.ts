@@ -65,6 +65,7 @@ describe("themeConfig", () => {
     sidebarChatHistoryShowMetadata: true,
     msalClientId: null,
     msalAuthority: null,
+    maskReasoningTraceText: false,
     ...overrides,
   });
 

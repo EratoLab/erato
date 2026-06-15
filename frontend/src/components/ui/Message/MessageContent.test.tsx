@@ -1,5 +1,5 @@
-import { I18nProvider } from "@lingui/react";
 import { i18n } from "@lingui/core";
+import { I18nProvider } from "@lingui/react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -13,11 +13,11 @@ import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { MessageContent } from "./MessageContent";
 
-import type { Messages } from "@lingui/core";
 import type {
   ContentPart,
   FileUploadItem,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { Messages } from "@lingui/core";
 import type React from "react";
 
 beforeAll(() => {
@@ -875,8 +875,8 @@ describe("MessageContent", () => {
                 {
                   content_type: "reasoning" as const,
                   text: "secret model reasoning",
-                } as ContentPart,
-                { content_type: "text" as const, text: "Final answer" } as ContentPart,
+                },
+                { content_type: "text" as const, text: "Final answer" },
               ]}
               showRaw
             />
@@ -898,8 +898,8 @@ describe("MessageContent", () => {
                 {
                   content_type: "reasoning" as const,
                   text: "secret model reasoning",
-                } as ContentPart,
-                { content_type: "text" as const, text: "Final answer" } as ContentPart,
+                },
+                { content_type: "text" as const, text: "Final answer" },
               ]}
               showRaw
             />
