@@ -12,8 +12,28 @@ use std::collections::HashMap;
 use tracing::instrument;
 use utoipa::ToSchema;
 
+pub fn proxied_preview_url_for_file(file_id: &Uuid) -> String {
+    format!("/api/v1beta/files/{file_id}/preview")
+}
+
 fn subject_user_id(subject: &Subject) -> String {
     subject.user_id().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::proxied_preview_url_for_file;
+    use sqlx::types::Uuid;
+
+    #[test]
+    fn proxied_preview_url_uses_file_preview_endpoint() {
+        let file_id = Uuid::parse_str("67e55044-10b1-426f-9247-bb680e5fe0c8").unwrap();
+
+        assert_eq!(
+            proxied_preview_url_for_file(&file_id),
+            "/api/v1beta/files/67e55044-10b1-426f-9247-bb680e5fe0c8/preview"
+        );
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -489,15 +509,7 @@ pub async fn get_file_upload_with_url_and_token(
             }
         };
 
-        let preview_url = file_storage
-            .generate_presigned_preview_url_with_context(
-                &file_storage_path,
-                None,
-                Some(&filename),
-                sharepoint_ctx.as_ref(),
-            )
-            .await
-            .ok();
+        let preview_url = Some(proxied_preview_url_for_file(&file_upload.id));
 
         (download_url, preview_url, false)
     };
@@ -619,15 +631,7 @@ pub async fn get_chat_file_uploads_with_urls_and_token(
                     }
                 };
 
-                let preview_url = file_storage
-                    .generate_presigned_preview_url_with_context(
-                        &file_storage_path,
-                        None,
-                        Some(&filename),
-                        sharepoint_ctx.as_ref(),
-                    )
-                    .await
-                    .ok();
+                let preview_url = Some(proxied_preview_url_for_file(&upload.id));
 
                 (download_url, preview_url, false)
             };

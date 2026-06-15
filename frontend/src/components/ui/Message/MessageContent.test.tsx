@@ -442,6 +442,28 @@ describe("MessageContent", () => {
     );
   });
 
+  it("does not use download URLs for erato-file previews", () => {
+    const onFileLinkPreview = vi.fn();
+    const file = makeFile({
+      preview_url: undefined,
+    });
+
+    renderWithTheme(
+      <MessageContent
+        content={textContent("[Link](erato-file://file_123#page=4)")}
+        filesById={{ [file.id]: file }}
+        onFileLinkPreview={onFileLinkPreview}
+      />,
+    );
+
+    const link = screen.getByRole("link", { name: "Link" });
+
+    expect(link).toHaveAttribute("href", "erato-file://file_123#page=4");
+
+    fireEvent.click(link);
+    expect(onFileLinkPreview).not.toHaveBeenCalled();
+  });
+
   it("keeps inaccessible erato-file links previewable so the modal can explain the permission issue", () => {
     const onFileLinkPreview = vi.fn();
     const file = makeFile({

@@ -65,7 +65,7 @@ enum OpenDalProviderKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ContentDispositionKind {
+pub(crate) enum ContentDispositionKind {
     Attachment,
     Inline,
 }
@@ -806,7 +806,7 @@ fn build_presign_content_disposition(
     }
 }
 
-fn build_content_disposition(
+pub(crate) fn build_content_disposition(
     disposition_kind: ContentDispositionKind,
     filename: Option<&str>,
 ) -> String {

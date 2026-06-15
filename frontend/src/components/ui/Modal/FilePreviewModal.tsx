@@ -28,18 +28,14 @@ const resolvePreviewSource = (
   const extension = getExtension(file.filename);
   const previewUrl = getPreviewUrl(file);
   const mimeType = file.file_capability.mime_types[0];
-  if (IMAGE_EXTENSIONS.includes(extension) || extension === "pdf") {
-    return { url: previewUrl ?? "", canPreview: Boolean(previewUrl) };
-  }
   if (
+    IMAGE_EXTENSIONS.includes(extension) ||
+    extension === "pdf" ||
     extension === "eml" ||
     extension === "docx" ||
     mimeType === DOCX_MIME_TYPE
   ) {
-    return {
-      url: file.download_url,
-      canPreview: Boolean(file.download_url),
-    };
+    return { url: previewUrl ?? "", canPreview: Boolean(previewUrl) };
   }
   return { url: "", canPreview: false };
 };

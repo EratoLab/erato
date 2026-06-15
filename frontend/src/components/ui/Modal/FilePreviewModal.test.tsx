@@ -43,7 +43,7 @@ const renderWithTheme = (ui: React.ReactElement) =>
   render(<ThemeProvider>{ui}</ThemeProvider>);
 
 describe("FilePreviewModal", () => {
-  it("previews DOCX files from the download URL", async () => {
+  it("previews DOCX files from the preview URL", async () => {
     global.fetch = vi.fn(async () => {
       return {
         ok: true,
@@ -58,8 +58,7 @@ describe("FilePreviewModal", () => {
         file={makeFile({
           filename: "meeting-notes.docx",
           download_url: "https://files.example.com/download/meeting-notes.docx",
-          preview_url:
-            "https://files.example.com/preview/meeting-notes-not-used",
+          preview_url: "https://files.example.com/preview/meeting-notes.docx",
           file_capability:
             FileTypeUtil.createMockFileCapability("meeting-notes.docx"),
         })}
@@ -69,7 +68,7 @@ describe("FilePreviewModal", () => {
     await screen.findByTestId("mock-react-docx-viewer");
 
     expect(global.fetch).toHaveBeenCalledWith(
-      "https://files.example.com/download/meeting-notes.docx",
+      "https://files.example.com/preview/meeting-notes.docx",
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
   });

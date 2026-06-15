@@ -1,5 +1,6 @@
 use crate::db::entity::messages;
 use crate::db::entity::prelude::*;
+use crate::models::file_upload::proxied_preview_url_for_file;
 use crate::models::pagination;
 use crate::policy::prelude::*;
 use crate::server::api::v1beta::message_streaming::FileContentsForGeneration;
@@ -1026,20 +1027,10 @@ pub async fn regenerate_image_urls_in_content(
                                 format!("/api/v1beta/files/{}", file.id)
                             }
                         };
-                        let preview_url = storage
-                            .generate_presigned_preview_url_with_context(
-                                &file.file_storage_path,
-                                None,
-                                Some(&file.filename),
-                                None,
-                            )
-                            .await
-                            .ok();
-
                         ContentPart::ImageFilePointer(ContentPartImageFilePointer {
                             file_upload_id: pointer.file_upload_id,
                             download_url: Some(download_url),
-                            preview_url,
+                            preview_url: Some(proxied_preview_url_for_file(&file.id)),
                         })
                     } else {
                         tracing::warn!(

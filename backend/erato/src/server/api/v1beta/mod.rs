@@ -26,7 +26,7 @@ use crate::models::chat::{
 use crate::models::file_capability::{
     FileCapability, FileOperation, find_file_capability_by_filename, get_file_capabilities,
 };
-use crate::models::file_upload::AudioTranscriptionMetadata;
+use crate::models::file_upload::{AudioTranscriptionMetadata, proxied_preview_url_for_file};
 use crate::models::message::{ContentPart, GenerationErrorType, GenerationMetadata, MessageSchema};
 use crate::models::permissions;
 use crate::policy::engine::PolicyEngine;
@@ -60,12 +60,14 @@ use crate::server::api::v1beta::share_links::{
     ShareLinkForResourceResponse, ShareLinkQuery, get_share_link_for_resource, resolve_share_link,
     set_share_link,
 };
-use crate::services::file_storage::SHAREPOINT_PROVIDER_ID;
+use crate::services::file_storage::{
+    ContentDispositionKind, SHAREPOINT_PROVIDER_ID, build_content_disposition,
+};
 use crate::services::genai::build_chat_options_for_completion;
 use crate::services::sentry::log_internal_server_error;
 use crate::state::{AppState, ChatProviderConfigWithId};
 use axum::extract::{DefaultBodyLimit, Path, State};
-use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE};
+use axum::http::header::{CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_TYPE};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::{get, post, put};
@@ -1102,7 +1104,7 @@ pub struct FileUploadItem {
     filename: String,
     /// Pre-signed URL for downloading the file directly from storage
     download_url: String,
-    /// Pre-signed URL for inline preview without forcing download when available
+    /// Proxied URL for inline preview without forcing download when available
     preview_url: Option<String>,
     /// Indicates that file contents are unavailable for the current user due to missing permissions.
     file_contents_unavailable_missing_permissions: bool,
@@ -1333,13 +1335,7 @@ pub async fn upload_file(
                 StatusCode::INTERNAL_SERVER_ERROR
             })?;
 
-        let preview_url = file_storage_provider
-            .generate_presigned_preview_url(&file_upload.file_storage_path, None, Some(&filename))
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to generate preview URL: {}", e);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?;
+        let preview_url = proxied_preview_url_for_file(&file_upload.id);
 
         tracing::info!(
             "User {} uploaded file '{}' with size {} bytes, assigned ID: {}",
@@ -1654,7 +1650,7 @@ async fn link_sharepoint_file_impl(
         files: vec![FileUploadItem {
             id: file_upload.id.to_string(),
             filename,
-            preview_url: Some(format!("/api/v1beta/files/{}/preview", file_upload.id)),
+            preview_url: Some(proxied_preview_url_for_file(&file_upload.id)),
             download_url,
             file_contents_unavailable_missing_permissions: false,
             is_sharepoint_file: true,
@@ -2262,7 +2258,7 @@ pub async fn frequent_assistants(
                         id: file.id.to_string(),
                         filename: file.filename,
                         download_url: Some(format!("/api/v1beta/files/{}", file.id)),
-                        preview_url: None,
+                        preview_url: Some(proxied_preview_url_for_file(&file.id)),
                         file_contents_unavailable_missing_permissions: false,
                         is_sharepoint_file: file.file_storage_provider_id == SHAREPOINT_PROVIDER_ID,
                         file_capability,
@@ -2593,6 +2589,7 @@ fn preview_content_type(filename: &str) -> &'static str {
         Some(ext) => match ext.as_str() {
             "eml" => "message/rfc822",
             "pdf" => "application/pdf",
+            "docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             "jpg" | "jpeg" => "image/jpeg",
             "png" => "image/png",
             "gif" => "image/gif",
@@ -2693,26 +2690,34 @@ pub async fn get_file_preview(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    if !file_storage.is_sharepoint() {
-        return Err(StatusCode::NOT_FOUND);
-    }
-
-    let access_token = me_user.access_token.as_deref().ok_or_else(|| {
-        tracing::error!("No access token available for Sharepoint preview");
-        StatusCode::UNAUTHORIZED
-    })?;
-
-    let sharepoint_ctx = crate::services::file_storage::SharepointContext { access_token };
+    let sharepoint_ctx = if file_storage.is_sharepoint() {
+        let access_token = me_user.access_token.as_deref().ok_or_else(|| {
+            tracing::error!("No access token available for Sharepoint preview");
+            StatusCode::UNAUTHORIZED
+        })?;
+        Some(crate::services::file_storage::SharepointContext { access_token })
+    } else {
+        None
+    };
     let bytes = file_storage
-        .read_file_to_bytes_with_context(&file_upload.file_storage_path, Some(&sharepoint_ctx))
+        .read_file_to_bytes_with_context(&file_upload.file_storage_path, sharepoint_ctx.as_ref())
         .await
         .map_err(|e| {
-            tracing::error!("Failed to read Sharepoint file preview: {}", e);
+            tracing::error!("Failed to read file preview: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
     let mut headers = HeaderMap::new();
     headers.insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
+    let content_disposition = build_content_disposition(
+        ContentDispositionKind::Inline,
+        Some(file_upload.filename.as_str()),
+    );
+    let content_disposition = HeaderValue::from_str(&content_disposition).map_err(|e| {
+        tracing::error!("Failed to build preview content disposition header: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    headers.insert(CONTENT_DISPOSITION, content_disposition);
     headers.insert(
         CONTENT_TYPE,
         HeaderValue::from_static(preview_content_type(&file_upload.filename)),

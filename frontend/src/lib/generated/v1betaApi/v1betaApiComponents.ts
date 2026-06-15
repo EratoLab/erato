@@ -5,8 +5,8 @@
  */
 import * as reactQuery from "@tanstack/react-query";
 import {
+  type V1betaApiContext,
   useV1betaApiContext,
-  V1betaApiContext,
   queryKeyFn,
 } from "./v1betaApiContext";
 import { deepMerge } from "./v1betaApiUtils";
@@ -854,6 +854,35 @@ export const useGetFilePreview = <TData = undefined,>(
     ),
     ...options,
     ...queryOptions,
+  });
+};
+
+export type EwsProxyError = Fetcher.ErrorWrapper<undefined>;
+
+export type EwsProxyVariables = V1betaApiContext["fetcherOptions"];
+
+export const fetchEwsProxy = (
+  variables: EwsProxyVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<undefined, EwsProxyError, undefined, {}, {}, {}>({
+    url: "/api/v1beta/integrations/ms-office/ews",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useEwsProxy = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<undefined, EwsProxyError, EwsProxyVariables>,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<undefined, EwsProxyError, EwsProxyVariables>({
+    mutationFn: (variables: EwsProxyVariables) =>
+      fetchEwsProxy(deepMerge(fetcherOptions, variables)),
+    ...options,
   });
 };
 
