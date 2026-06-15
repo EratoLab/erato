@@ -1603,7 +1603,7 @@ msgstr "Pensando…"
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ReasoningStep.tsx
 msgid "trace.reasoning.masked.done"
-msgstr "Pensado"
+msgstr "Pensamiento completado"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ImageLightbox.tsx

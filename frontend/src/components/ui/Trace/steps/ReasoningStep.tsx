@@ -1,5 +1,4 @@
-import { msg, t } from "@lingui/core/macro";
-import { useLingui } from "@lingui/react";
+import { t } from "@lingui/core/macro";
 
 import { TraceStep } from "../TraceStep";
 import { railIconFor } from "../icons";
@@ -26,15 +25,15 @@ export const ReasoningStep = ({
   renderMarkdown,
   maskReasoningText = false,
 }: ReasoningStepProps) => {
-  const { _ } = useLingui();
   const fallbackTitle = t`Thinking`;
   const isRunning = status === "running" && isStreaming;
 
   if (maskReasoningText) {
     if (isRunning) {
-      const maskedLabel = _(
-        msg({ id: "trace.reasoning.masked", message: "Thinking…" }),
-      );
+      const maskedLabel = t({
+        id: "trace.reasoning.masked",
+        message: "Thinking…",
+      });
       return (
         <TraceStep
           railIcon={railIconFor("reasoning", status)}
@@ -53,9 +52,10 @@ export const ReasoningStep = ({
       );
     }
 
-    const maskedDoneLabel = _(
-      msg({ id: "trace.reasoning.masked.done", message: "Thinking complete" }),
-    );
+    const maskedDoneLabel = t({
+      id: "trace.reasoning.masked.done",
+      message: "Thinking complete",
+    });
     return (
       <TraceStep
         railIcon={railIconFor("reasoning", status)}
