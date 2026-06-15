@@ -76,14 +76,17 @@ describe("Trace — default (unmasked) mode", () => {
   });
 });
 
-describe("Trace — masked mode", () => {
-  it("replaces reasoning title with the masked label", () => {
+describe("Trace — masked mode (cold-load / done state)", () => {
+  // isStreaming=false means all steps are in the "done" state,
+  // so the static "Thinking complete" label is shown rather than the pulsing "Thinking…".
+  it("shows the done label instead of model reasoning title when masked", () => {
     renderTrace(
       [reasoningPart("**Model reasoning title**\n\nModel reasoning body")],
       { maskReasoningText: true },
     );
-    expect(screen.getByText("Thinking…")).toBeInTheDocument();
+    expect(screen.getByText("Thinking complete")).toBeInTheDocument();
     expect(screen.queryByText("Model reasoning title")).not.toBeInTheDocument();
+    expect(screen.queryByText("Thinking…")).not.toBeInTheDocument();
   });
 
   it("does not render model-generated reasoning body when masked", () => {
@@ -99,9 +102,9 @@ describe("Trace — masked mode", () => {
     renderTrace([reasoningPart("Some reasoning"), toolUsePart()], {
       maskReasoningText: true,
     });
-    // The masked label is shown for the reasoning step
-    expect(screen.getByText("Thinking…")).toBeInTheDocument();
-    // The tool use step should still render (search tool)
+    // Done-state masked label for the reasoning step
+    expect(screen.getByText("Thinking complete")).toBeInTheDocument();
+    // Tool use step still renders normally
     expect(screen.getByText("web_search")).toBeInTheDocument();
   });
 });

@@ -1601,6 +1601,11 @@ msgid "trace.reasoning.masked"
 msgstr "Thinking…"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ReasoningStep.tsx
+msgid "trace.reasoning.masked.done"
+msgstr "Thinking complete"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/ImageLightbox.tsx
 msgid "ui.download"
 msgstr "Download"

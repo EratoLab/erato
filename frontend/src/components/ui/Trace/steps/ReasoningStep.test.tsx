@@ -61,28 +61,71 @@ describe("ReasoningStep — default (unmasked) mode", () => {
   });
 });
 
-describe("ReasoningStep — masked mode", () => {
-  it("renders the masked label instead of the segment title", () => {
+describe("ReasoningStep — masked mode (done state)", () => {
+  it("renders the done label when status is done and not streaming", () => {
     renderReasoningStep({ maskReasoningText: true });
-    expect(screen.getByText("Thinking…")).toBeInTheDocument();
+    expect(screen.getByText("Thinking complete")).toBeInTheDocument();
   });
 
-  it("does not render the model-generated title when masked", () => {
+  it("does not pulse the label when done", () => {
+    renderReasoningStep({ maskReasoningText: true });
+    // The done label itself must not have the animate-pulse class.
+    const label = screen.getByText("Thinking complete");
+    expect(label).not.toHaveClass("animate-pulse");
+  });
+
+  it("does not render the model-generated title when masked and done", () => {
     renderReasoningStep({ maskReasoningText: true });
     expect(screen.queryByText("Model reasoning title")).not.toBeInTheDocument();
   });
 
-  it("does not render model-generated body text when masked", () => {
+  it("does not render model-generated body text when masked and done", () => {
     renderReasoningStep({ maskReasoningText: true });
     expect(
       screen.queryByText("Model reasoning body text"),
     ).not.toBeInTheDocument();
   });
+});
 
-  it("masked label has pulsing animation class", () => {
-    const { container } = renderReasoningStep({ maskReasoningText: true });
-    const span = container.querySelector(".animate-pulse");
-    expect(span).toBeInTheDocument();
-    expect(span).toHaveTextContent("Thinking…");
+describe("ReasoningStep — masked mode (running/active state)", () => {
+  it("renders the active pulsing label when running", () => {
+    renderReasoningStep({
+      maskReasoningText: true,
+      status: "running",
+      isStreaming: true,
+    });
+    expect(screen.getByText("Thinking…")).toBeInTheDocument();
+  });
+
+  it("does not render the done label when actively running", () => {
+    renderReasoningStep({
+      maskReasoningText: true,
+      status: "running",
+      isStreaming: true,
+    });
+    expect(screen.queryByText("Thinking complete")).not.toBeInTheDocument();
+  });
+
+  it("active masked label has pulsing animation class", () => {
+    renderReasoningStep({
+      maskReasoningText: true,
+      status: "running",
+      isStreaming: true,
+    });
+    // The rail icon also gets animate-pulse when isActive; find the label span by text.
+    const label = screen.getByText("Thinking…");
+    expect(label).toHaveClass("animate-pulse");
+  });
+
+  it("does not render model-generated title or body when running and masked", () => {
+    renderReasoningStep({
+      maskReasoningText: true,
+      status: "running",
+      isStreaming: true,
+    });
+    expect(screen.queryByText("Model reasoning title")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Model reasoning body text"),
+    ).not.toBeInTheDocument();
   });
 });

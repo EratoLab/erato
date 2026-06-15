@@ -31,21 +31,41 @@ export const ReasoningStep = ({
   const isRunning = status === "running" && isStreaming;
 
   if (maskReasoningText) {
-    const maskedLabel = _(
-      msg({ id: "trace.reasoning.masked", message: "Thinking…" }),
+    if (isRunning) {
+      const maskedLabel = _(
+        msg({ id: "trace.reasoning.masked", message: "Thinking…" }),
+      );
+      return (
+        <TraceStep
+          railIcon={railIconFor("reasoning", status)}
+          hasTrailingRailLine={!isLastStep}
+          title={
+            <span className="animate-pulse italic text-theme-fg-muted">
+              {maskedLabel}
+            </span>
+          }
+          defaultOpen={false}
+          autoCollapse={true}
+          isActive={true}
+        >
+          {null}
+        </TraceStep>
+      );
+    }
+
+    const maskedDoneLabel = _(
+      msg({ id: "trace.reasoning.masked.done", message: "Thinking complete" }),
     );
     return (
       <TraceStep
         railIcon={railIconFor("reasoning", status)}
         hasTrailingRailLine={!isLastStep}
         title={
-          <span className="animate-pulse italic text-theme-fg-muted">
-            {maskedLabel}
-          </span>
+          <span className="italic text-theme-fg-muted">{maskedDoneLabel}</span>
         }
         defaultOpen={false}
         autoCollapse={true}
-        isActive={isRunning}
+        isActive={false}
       >
         {null}
       </TraceStep>
