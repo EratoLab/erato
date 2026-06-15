@@ -18,6 +18,7 @@ import {
   resolvePrismCodeTheme,
 } from "@/config/codeHighlightThemes";
 import { useOptionalTranslation } from "@/hooks/i18n";
+import { useTraceFeature } from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { EratoEmailSuggestion } from "./EratoEmailSuggestion";
@@ -389,6 +390,7 @@ export const MessageContent = memo(function MessageContent({
   outlookArtifact,
 }: MessageContentProps) {
   const imageAdvisory = useOptionalTranslation("chat.message.image_advisory");
+  const { maskReasoningText } = useTraceFeature();
 
   const resolveEratoFileLink = React.useCallback(
     (
@@ -874,13 +876,15 @@ export const MessageContent = memo(function MessageContent({
   );
 
   // If showing raw, just show text-like content without rendering markdown.
+  // When reasoning text is masked, omit reasoning parts from raw display too.
   if (showRaw) {
     const rawText = content
-      .filter(
-        (part) =>
-          part.content_type === "text" || part.content_type === "reasoning",
-      )
-      .map((part) => part.text)
+      .flatMap((part): string[] => {
+        if (part.content_type === "text") return [part.text];
+        if (!maskReasoningText && part.content_type === "reasoning")
+          return [part.text ?? ""];
+        return [];
+      })
       .join("\n\n");
 
     return (

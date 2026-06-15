@@ -1596,6 +1596,16 @@ msgid "sharing.type.user"
 msgstr "Użytkownik"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ReasoningStep.tsx
+msgid "trace.reasoning.masked"
+msgstr "Myślę…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ReasoningStep.tsx
+msgid "trace.reasoning.masked.done"
+msgstr "Myślenie zakończone"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/ImageLightbox.tsx
 msgid "ui.download"
 msgstr "Pobierz"
