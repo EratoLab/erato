@@ -2,6 +2,7 @@ use crate::db::entity::prelude::Users;
 use crate::models::file_capability::{
     FileCapability, find_file_capability_by_filename, get_file_capabilities,
 };
+use crate::models::file_upload::proxied_preview_url_for_file;
 use crate::models::{assistant, permissions, share_grant};
 use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
@@ -87,7 +88,7 @@ pub struct AssistantFile {
     /// Null when file contents are unavailable for the current user due to missing permissions.
     #[schema(nullable = true)]
     pub download_url: Option<String>,
-    /// Pre-signed URL for inline preview without forcing download when available.
+    /// Proxied URL for inline preview without forcing download when available.
     #[schema(nullable = true)]
     pub preview_url: Option<String>,
     /// Indicates that file contents are unavailable for the current user due to missing permissions.
@@ -243,7 +244,7 @@ async fn file_info_to_assistant_file(
             {
                 Ok(metadata) => (
                     Some(metadata.download_url),
-                    Some(format!("/api/v1beta/files/{}/preview", file.id)),
+                    Some(proxied_preview_url_for_file(&file.id)),
                     false,
                 ),
                 Err(e) if is_missing_permissions_error(&e) => {
@@ -273,18 +274,11 @@ async fn file_info_to_assistant_file(
                 )
                 .await
             {
-                Ok(url) => {
-                    let preview_url = file_storage_provider
-                        .generate_presigned_preview_url_with_context(
-                            &file.file_storage_path,
-                            None,
-                            Some(&file.filename),
-                            sharepoint_ctx.as_ref(),
-                        )
-                        .await
-                        .ok();
-                    (Some(url), preview_url, false)
-                }
+                Ok(url) => (
+                    Some(url),
+                    Some(proxied_preview_url_for_file(&file.id)),
+                    false,
+                ),
                 Err(e) if is_missing_permissions_error(&e) => {
                     tracing::warn!(
                         file_id = %file.id,

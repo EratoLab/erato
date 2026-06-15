@@ -203,9 +203,6 @@ export type AssistantFile = {
    * Null when file contents are unavailable for the current user due to missing permissions.
    */
   download_url?: string | null | undefined;
-  /**
-   * The file capability that was evaluated for this file
-   */
   file_capability: FileCapability;
   /**
    * Indicates that file contents are unavailable for the current user due to missing permissions.
@@ -224,7 +221,7 @@ export type AssistantFile = {
    */
   is_sharepoint_file: boolean;
   /**
-   * Pre-signed URL for inline preview without forcing download when available.
+   * Proxied URL for inline preview without forcing download when available.
    */
   preview_url?: string | null | undefined;
 };
@@ -356,9 +353,6 @@ export type BudgetCurrency = "EUR" | "USD";
  * Budget status information for the current user
  */
 export type BudgetStatusResponse = {
-  /**
-   * The currency configured for display purposes
-   */
   budget_currency?: BudgetCurrency;
   /**
    * The budget limit for the time period (unit-less)
@@ -426,13 +420,7 @@ export type ChatMessage = {
    * @format date-time
    */
   created_at: string;
-  /**
-   * Optional error information if generation failed
-   */
   error?: GenerationErrorType;
-  /**
-   * Optional feedback for this message
-   */
   feedback?: MessageFeedback;
   /**
    * Resolved file objects for all input_files_ids
@@ -511,9 +499,6 @@ export type ChatMessagesResponse = {
    * The list of messages
    */
   messages: ChatMessage[];
-  /**
-   * Statistics about the message list
-   */
   stats: ChatMessageStats;
 };
 
@@ -957,17 +942,11 @@ export type FileReference = {
  * Response for file upload
  */
 export type FileUploadItem = {
-  /**
-   * Optional audio transcription metadata for supported audio uploads.
-   */
   audio_transcription?: AudioTranscriptionMetadata;
   /**
    * Pre-signed URL for downloading the file directly from storage
    */
   download_url: string;
-  /**
-   * The file capability that was evaluated for this file
-   */
   file_capability: FileCapability;
   /**
    * Indicates that file contents are unavailable for the current user due to missing permissions.
@@ -986,7 +965,7 @@ export type FileUploadItem = {
    */
   is_sharepoint_file: boolean;
   /**
-   * Pre-signed URL for inline preview without forcing download when available
+   * Proxied URL for inline preview without forcing download when available
    */
   preview_url?: string | null | undefined;
 };
@@ -1104,9 +1083,6 @@ export type LinkFileRequest = {
    * Optional chat ID to associate the file with. If not provided, creates standalone files.
    */
   chat_id?: null | undefined;
-  /**
-   * Provider-specific metadata (e.g., drive_id, item_id for SharePoint)
-   */
   provider_metadata: SharepointProviderMetadata;
   /**
    * The source/provider type: "sharepoint" (future: "google_drive", etc.)
@@ -1161,9 +1137,6 @@ export type MessageFeedback = {
    * The unique ID of the feedback
    */
   id: string;
-  /**
-   * Sentiment of the feedback
-   */
   sentiment: FeedbackSentiment;
   /**
    * When the feedback was last updated
@@ -1181,9 +1154,6 @@ export type MessageFeedbackRequest = {
    * Optional comment text
    */
   comment?: null | undefined;
-  /**
-   * Sentiment of the feedback (positive or negative)
-   */
   sentiment: FeedbackSentiment;
 };
 
@@ -1498,9 +1468,6 @@ export type RecentChat = {
    * @format date-time
    */
   last_message_at: string;
-  /**
-   * The model information for the most recent message, if available
-   */
   last_model?: ChatModel;
   /**
    * The facets selected for the most recent message
@@ -1557,9 +1524,6 @@ export type RecentChatsResponse = {
    * The list of recent chats
    */
   chats: RecentChat[];
-  /**
-   * Statistics about the chat list
-   */
   stats: RecentChatStats;
 };
 
@@ -1858,9 +1822,6 @@ export type TokenUsageResponse = {
    * Detailed token usage for each file
    */
   file_details: TokenUsageResponseFileItem[];
-  /**
-   * Overall statistics about token usage
-   */
   stats: TokenUsageStats;
 };
 

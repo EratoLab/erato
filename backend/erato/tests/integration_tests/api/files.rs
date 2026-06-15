@@ -70,7 +70,13 @@ async fn upload_file_to_chat(
         .multipart(multipart_form)
         .await;
 
-    upload_response.assert_status_ok();
+    if upload_response.status_code() != StatusCode::OK {
+        panic!(
+            "Expected upload to return 200 OK, got {} with body: {}",
+            upload_response.status_code(),
+            upload_response.text()
+        );
+    }
     upload_response.json()
 }
 
@@ -411,6 +417,7 @@ async fn test_eml_upload_supports_rfc822_and_octet_stream_content_types(pool: Po
         let download_url = file["download_url"]
             .as_str()
             .expect("Expected download URL");
+        let preview_url = file["preview_url"].as_str().expect("Expected preview URL");
 
         assert_eq!(file["filename"], json!(filename));
         assert_eq!(file["file_capability"]["id"], json!("email"));
@@ -418,11 +425,23 @@ async fn test_eml_upload_supports_rfc822_and_octet_stream_content_types(pool: Po
             file["file_capability"]["operations"],
             json!(["extract_text"])
         );
-        assert!(
-            file["preview_url"].as_str().is_some(),
-            "Expected preview URL"
-        );
+        assert_eq!(preview_url, format!("/api/v1beta/files/{file_id}/preview"));
         assert_download_url_contains_filename(download_url, filename);
+
+        let preview_response = server
+            .get(preview_url)
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .await;
+
+        preview_response.assert_status_ok();
+        assert_eq!(
+            preview_response
+                .headers()
+                .get(http::header::CONTENT_TYPE)
+                .and_then(|value| value.to_str().ok()),
+            Some("message/rfc822")
+        );
+        assert!(preview_response.text().contains("Subject:"));
 
         let get_file_response = server
             .get(&format!("/api/v1beta/files/{}", file_id))
@@ -437,9 +456,9 @@ async fn test_eml_upload_supports_rfc822_and_octet_stream_content_types(pool: Po
             file_json["file_capability"]["operations"],
             json!(["extract_text"])
         );
-        assert!(
-            file_json["preview_url"].as_str().is_some(),
-            "Expected preview URL"
+        assert_eq!(
+            file_json["preview_url"],
+            json!(format!("/api/v1beta/files/{file_id}/preview"))
         );
     }
 }

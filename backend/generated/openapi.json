@@ -2653,7 +2653,7 @@
               "string",
               "null"
             ],
-            "description": "Pre-signed URL for inline preview without forcing download when available."
+            "description": "Proxied URL for inline preview without forcing download when available."
           }
         }
       },
@@ -4043,7 +4043,7 @@
               "string",
               "null"
             ],
-            "description": "Pre-signed URL for inline preview without forcing download when available"
+            "description": "Proxied URL for inline preview without forcing download when available"
           }
         }
       },
