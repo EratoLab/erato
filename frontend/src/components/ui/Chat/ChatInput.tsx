@@ -2188,7 +2188,7 @@ export const ChatInput = ({
                           data-testid="chat-input-dictation-loading-icon"
                         />
                       ) : (
-                        <VoiceIcon className="text-[var(--theme-fg-primary)]" />
+                        <VoiceIcon className="size-4 text-[var(--theme-fg-primary)]" />
                       )
                     }
                     onClick={toggleDictationForCurrentTarget}

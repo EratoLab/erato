@@ -144,7 +144,14 @@ export const ArrowUpIcon = ({ className, ...props }: IconProps) => (
 );
 
 export const StopIcon = ({ className, ...props }: IconProps) => (
-  <svg viewBox="0 0 24 24" fill="currentColor" className={className} {...props}>
+  <svg
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    className={className}
+    {...props}
+  >
     <rect x="3" y="3" width="18" height="18" rx="2" />
   </svg>
 );
@@ -209,6 +216,8 @@ export const MediaVideoIcon = ({ className, ...props }: IconProps) => (
 
 export const VoiceIcon = ({ className, ...props }: IconProps) => (
   <svg
+    width="24"
+    height="24"
     viewBox="0 0 24 24"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"

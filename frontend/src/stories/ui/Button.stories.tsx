@@ -133,3 +133,53 @@ export const ChatControls: Story = {
     </div>
   ),
 };
+
+export const Pill: Story = {
+  render: () => (
+    <div className="flex items-center gap-4">
+      <Button variant="secondary" shape="pill" size="sm" className="px-4">
+        Load older messages
+      </Button>
+      <Button
+        variant="icon-only"
+        shape="pill"
+        size="sm"
+        icon={<PlusIcon />}
+        aria-label="Add"
+      />
+    </div>
+  ),
+};
+
+export const Loading: Story = {
+  render: () => (
+    <div className="flex items-center gap-4">
+      <Button variant="secondary" loading>
+        Loading...
+      </Button>
+      <Button variant="primary" loading icon={<PlusIcon />}>
+        Saving
+      </Button>
+      <Button
+        variant="secondary"
+        shape="pill"
+        size="sm"
+        loading
+        className="px-4"
+      >
+        Loading...
+      </Button>
+    </div>
+  ),
+};
+
+export const Link: Story = {
+  render: () => (
+    <div className="flex items-center gap-4">
+      <Button variant="link">Breadcrumb segment</Button>
+      <Button variant="link" className="text-xs">
+        Show details
+      </Button>
+    </div>
+  ),
+};
