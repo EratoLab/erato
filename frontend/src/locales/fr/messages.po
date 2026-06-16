@@ -470,7 +470,7 @@ msgstr "Partagé"
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatShareDialog.tsx
 msgid "chat.share.copy.aria"
-msgstr ""
+msgstr "Copier le lien du chat"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatShareDialog.tsx
