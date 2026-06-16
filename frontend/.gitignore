@@ -32,6 +32,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+# Captured dev/browser console logs for the coding agent (just dev_logged)
+.agent-dev.log
 
 # env files (can opt-in for committing if needed)
 .env

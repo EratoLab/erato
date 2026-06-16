@@ -1,3 +1,6 @@
+# Path the coding agent (Claude Code) tails for captured dev/browser logs
+agent_log := justfile_directory() / ".agent-dev.log"
+
 default:
     just --list
 
@@ -38,6 +41,13 @@ dev_nginx_jwt:
     echo "Example: http://localhost:4180/?user=alice"
     echo "To logout: Visit http://localhost:4180/logout"
     pnpm run dev
+
+# Run any dev mode with console output captured to an agent-readable file.
+# Composes with every auth recipe; existing recipes are untouched.
+# Usage: `just dev_logged`  (defaults to `dev`)  |  `just dev_logged dev_entra_id`
+dev_logged mode="dev":
+    @echo "▶ capturing dev output → {{agent_log}} (Claude Code can tail this)"
+    just {{mode}} 2>&1 | tee {{agent_log}}
 
 start:
     pnpm run start
