@@ -2,6 +2,7 @@ import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { useState } from "react";
 
+import { Button } from "@/components/ui/Controls/Button";
 import { ResolvedIcon } from "@/components/ui/icons";
 import { useThemedIcon } from "@/hooks/ui/useThemedIcon";
 
@@ -78,15 +79,15 @@ export const ToolCallItem: React.FC<ToolCallItemProps> = ({
             {toolCall.name}
           </span>
         </div>
-        <button
+        <Button
+          variant="link"
+          className="text-xs"
           onClick={() => setShowDetails(!showDetails)}
-          className="text-xs text-theme-fg-muted hover:text-theme-fg-secondary"
-          type="button"
           aria-expanded={showDetails}
           aria-label={`${showDetails ? t`Hide` : t`Show`} ${t`details for`} ${toolCall.name}`}
         >
           {showDetails ? t`Hide details` : t`Show details`}
-        </button>
+        </Button>
       </div>
 
       {/* Progress Message */}

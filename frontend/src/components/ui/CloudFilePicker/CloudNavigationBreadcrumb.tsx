@@ -7,6 +7,7 @@
 import { t } from "@lingui/core/macro";
 import { memo } from "react";
 
+import { Button } from "../Controls/Button";
 import { ChevronRightIcon } from "../icons";
 
 import type { BreadcrumbSegment } from "@/lib/api/cloudProviders/types";
@@ -56,17 +57,16 @@ export const CloudNavigationBreadcrumb = memo<CloudNavigationBreadcrumbProps>(
                   {segment.name}
                 </span>
               ) : (
-                <button
-                  type="button"
+                <Button
+                  variant="link"
                   onClick={() => onNavigate(segment.id)}
-                  className="theme-transition text-theme-fg-muted hover:text-theme-fg-primary hover:underline"
                   aria-label={t({
                     id: "cloudNavigationBreadcrumb.navigateToParent",
                     message: "Navigate to parent",
                   })}
                 >
                   {segment.name}
-                </button>
+                </Button>
               )}
             </div>
           );

@@ -2,6 +2,7 @@ import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import React, { useCallback, useMemo } from "react";
 
+import { SpinnerIcon } from "../Feedback/SpinnerIcon";
 import { ConfirmationDialog } from "../Modal/ConfirmationDialog";
 
 // Create a type for variants to improve type safety
@@ -12,18 +13,31 @@ export type ButtonVariant =
   | "icon-only"
   | "sidebar-icon"
   | "list-item"
+  | "link"
   | "danger";
 
 type ButtonSize = "sm" | "md" | "lg";
+
+// Shape controls the corner geometry. "pill" yields a fully rounded button;
+// it replaces the ad-hoc `className="rounded-full"` overrides callers used to
+// pass. Utilities still win over this since geometry lives in @layer components.
+type ButtonShape = "default" | "pill";
 
 interface ButtonProps
   extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "aria-checked"> {
   variant?: ButtonVariant;
   size?: ButtonSize;
+  shape?: ButtonShape;
   icon?: React.ReactNode;
   iconClassName?: string;
   children?: React.ReactNode;
   showOnHover?: boolean;
+  /**
+   * When true, the button shows a spinner in place of its icon, is disabled,
+   * and is marked aria-busy. Replaces the manual "spinner-as-icon + disabled"
+   * pattern callers previously hand-rolled.
+   */
+  loading?: boolean;
   "aria-label"?: string;
   "aria-pressed"?: boolean;
   "aria-checked"?: boolean | "true" | "false" | "mixed";
@@ -50,6 +64,8 @@ const VARIANT_STYLES = {
     "w-full text-sm text-left text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary theme-transition",
   "icon-only":
     "text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary theme-transition",
+  // Text-only, inline link affordance — no background or control geometry.
+  link: "text-theme-fg-muted hover:text-theme-fg-primary hover:underline theme-transition",
 } as const;
 
 // Size geometry classes defined in globals.css @layer components
@@ -88,11 +104,14 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     {
       variant = "secondary",
       size = "md",
+      shape = "default",
       icon,
       iconClassName,
       children,
       className,
       showOnHover,
+      loading = false,
+      disabled,
       type = "button", // Default to "button" to prevent accidental form submissions
       onClick,
       "aria-pressed": ariaPressed,
@@ -180,7 +199,12 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
             ? "btn-geometry-list-item"
             : variant === "icon-only"
               ? ICON_SIZE_STYLES[size]
-              : CONTROL_SIZE_STYLES[size],
+              : // Link is a text affordance — it intentionally carries no control
+                // geometry (no padding, min-height, or radius).
+                variant === "link"
+                ? ""
+                : CONTROL_SIZE_STYLES[size],
+          shape === "pill" && "rounded-full",
           {
             "bg-theme-bg-selected": ariaPressed === true,
             "justify-center": variant === "icon-only",
@@ -189,7 +213,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           "disabled:cursor-not-allowed disabled:opacity-50",
           className,
         ),
-      [variant, size, ariaPressed, showOnHover, className],
+      [variant, size, shape, ariaPressed, showOnHover, className],
     );
 
     const iconClasses = useMemo(
@@ -204,6 +228,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       [iconClassName, variant],
     );
 
+    const isDisabled = loading || Boolean(disabled);
+
     return (
       <>
         <button
@@ -216,10 +242,12 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           className={buttonClasses}
           role={role}
           {...props}
+          disabled={isDisabled}
+          aria-busy={loading || undefined}
         >
-          {icon && (
+          {(loading || icon) && (
             <span className={iconClasses} aria-hidden="true">
-              {icon}
+              {loading ? <SpinnerIcon size="sm" /> : icon}
             </span>
           )}
           {children}

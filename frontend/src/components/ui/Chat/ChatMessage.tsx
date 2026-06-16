@@ -463,27 +463,17 @@ const AttachedFile = ({
   // Check if it's an image using centralized utility
   if (isImageFile(fileData.filename) && previewUrl) {
     return (
-      <div
+      <InteractiveContainer
+        useDiv={true}
+        fullWidth={false}
         className="relative inline-block cursor-pointer"
-        role="button"
-        tabIndex={0}
+        aria-label={`${t({ id: "chat.file.preview.aria", message: "Preview attached file:" })} ${fileData.filename}`}
         onClick={() => {
           // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
           if (onFilePreview && fileData) {
             onFilePreview(fileData);
           } else if (previewUrl) {
-            window.open(previewUrl, "_blank", "noopener,noreferrer");
-          }
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-            if (onFilePreview && fileData) {
-              onFilePreview(fileData);
-            } else if (previewUrl) {
-              window.open(previewUrl, "_blank", "noopener,noreferrer");
-            }
+            window.open(previewUrl, "_blank", "noopener,noreferrer"); // eslint-disable-line lingui/no-unlocalized-strings
           }
         }}
       >
@@ -495,7 +485,7 @@ const AttachedFile = ({
         <div className="mt-1 max-w-[96px] truncate text-xs text-theme-fg-muted">
           {fileData.filename}
         </div>
-      </div>
+      </InteractiveContainer>
     );
   }
 

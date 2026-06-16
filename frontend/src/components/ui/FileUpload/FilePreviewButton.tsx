@@ -69,7 +69,7 @@ export const FilePreviewButton = memo<FilePreviewButtonProps>(
           handleRemove();
         }}
         disabled={disabled}
-        className="rounded-full"
+        shape="pill"
       />
     );
 

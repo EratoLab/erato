@@ -2,6 +2,7 @@ import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { useMemo, useState } from "react";
 
+import { InteractiveContainer } from "@/components/ui/Container/InteractiveContainer";
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { Input } from "@/components/ui/Input/Input";
@@ -121,18 +122,15 @@ export function ChatShareDialog({
         </label>
 
         {shareLink?.enabled ? (
-          <div
-            role="button"
-            tabIndex={0}
+          <InteractiveContainer
+            useDiv={true}
             onClick={() => {
               void handleCopy();
             }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                void handleCopy();
-              }
-            }}
+            aria-label={t({
+              id: "chat.share.copy.aria",
+              message: "Copy chat link",
+            })}
             className={clsx(
               "flex w-full items-center gap-3 rounded-[var(--theme-radius-input)] border border-theme-border bg-theme-bg-secondary px-3 py-2 text-left",
               "theme-transition cursor-pointer hover:bg-theme-bg-hover",
@@ -155,7 +153,7 @@ export function ChatShareDialog({
                 <CopyIcon className="size-4" />
               )}
             </span>
-          </div>
+          </InteractiveContainer>
         ) : null}
 
         <div className="flex justify-end">

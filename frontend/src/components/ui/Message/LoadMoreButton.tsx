@@ -3,7 +3,6 @@ import clsx from "clsx";
 import { memo } from "react";
 
 import { Button } from "../Controls/Button";
-import { SpinnerIcon } from "../Feedback/SpinnerIcon";
 
 interface LoadMoreButtonProps {
   /**
@@ -63,9 +62,9 @@ export const LoadMoreButton = memo(
           variant="secondary"
           size="sm"
           onClick={onClick}
-          disabled={isPending}
-          className={clsx("rounded-full px-4")}
-          icon={isPending ? <SpinnerIcon size="sm" /> : undefined}
+          loading={isPending}
+          shape="pill"
+          className="px-4"
         >
           {isPending ? loadingLabel : label}
         </Button>
