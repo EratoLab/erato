@@ -11,6 +11,7 @@ import {
   type Plugin,
   type ViteDevServer,
 } from "vite";
+import { consoleForwardPlugin } from "vite-console-forward-plugin";
 
 import {
   cleanVoiceRuntimePackageAssetOutput,
@@ -268,6 +269,10 @@ const stagePublicLayoutPlugin = (): Plugin => {
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const silentLinkedBuildOutput = mode === "dev-linked";
+  // Dev-only: forward browser console.* + errors to the Vite terminal so they
+  // can be read off-device (e.g. iOS simulator) and by coding agents. Gated on
+  // mode so it is never added to a production `vite build` (ERMAIN-373).
+  const isProductionBuild = mode === "production";
 
   return {
     customLogger: createDevLinkedBuildLogger(silentLinkedBuildOutput),
@@ -280,6 +285,15 @@ export default defineConfig(({ mode }) => {
       lingui(),
       stagePublicLayoutPlugin(),
       copy404Plugin({ silent: silentLinkedBuildOutput }),
+      // Endpoint lives under "/" so oauth2-proxy routes it to Vite (:3000);
+      // it must NOT be under "/api/" which the proxy sends to the backend.
+      ...(isProductionBuild
+        ? []
+        : [
+            consoleForwardPlugin({
+              endpoint: "/__client-logs",
+            }),
+          ]),
     ],
     publicDir: false,
     server: {
