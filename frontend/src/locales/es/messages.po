@@ -469,6 +469,11 @@ msgstr "Compartido"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatShareDialog.tsx
+msgid "chat.share.copy.aria"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatShareDialog.tsx
 msgid "chat.share.dialog.title"
 msgstr "Compartir chat"
 

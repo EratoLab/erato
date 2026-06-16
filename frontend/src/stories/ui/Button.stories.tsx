@@ -160,7 +160,13 @@ export const Loading: Story = {
       <Button variant="primary" loading icon={<PlusIcon />}>
         Saving
       </Button>
-      <Button variant="secondary" shape="pill" size="sm" loading className="px-4">
+      <Button
+        variant="secondary"
+        shape="pill"
+        size="sm"
+        loading
+        className="px-4"
+      >
         Loading...
       </Button>
     </div>
