@@ -4,6 +4,7 @@ declare global {
   interface Window {
     ERATO_REACT?: typeof ReactModule & {
       createPortal?: unknown;
+      flushSync?: unknown;
     };
   }
 }

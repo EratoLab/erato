@@ -6,6 +6,8 @@ allowBuilds:
   unrs-resolver: true
 # 5 days delay
 minimumReleaseAge: 7200
+minimumReleaseAgeExclude:
+  - "@extend-ai/react-xlsx@0.10.2"
 overrides:
   # A lot of packages depend on it, they make a lot of major version bumps and most are just about build env/packaging.
   uuid: 14.0.0

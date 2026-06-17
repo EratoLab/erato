@@ -590,6 +590,9 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3000, // You can change this if needed
     },
+    worker: {
+      format: "es",
+    },
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),

@@ -6,6 +6,7 @@ import type * as ReactModule from "react";
 
 type HostReact = typeof ReactModule & {
   createPortal?: unknown;
+  flushSync?: unknown;
 };
 
 declare global {

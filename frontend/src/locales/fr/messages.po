@@ -1605,6 +1605,31 @@ msgid "filePreview.docxTheme.useLight"
 msgstr "Utiliser le thème clair du document"
 
 #. js-lingui-explicit-id
+#: src/components/ui/FilePreview/XlsxPreview.tsx
+msgid "filePreview.xlsxEmpty"
+msgstr "L'aperçu de la feuille de calcul est vide."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/XlsxPreview.tsx
+msgid "filePreview.xlsxLoading"
+msgstr "Chargement de l'aperçu de la feuille de calcul..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/XlsxPreview.tsx
+msgid "filePreview.xlsxPreviewUnavailable"
+msgstr "Aperçu indisponible : cette feuille de calcul n'a pas pu être chargée."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/XlsxPreview.tsx
+msgid "filePreview.xlsxTheme.useDark"
+msgstr "Utiliser le thème sombre de la feuille de calcul"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/XlsxPreview.tsx
+msgid "filePreview.xlsxTheme.useLight"
+msgstr "Utiliser le thème clair de la feuille de calcul"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Modal/FilePreviewModal.tsx
 msgid "filePreviewModal.unavailableMissingPermissions"
 msgstr ""

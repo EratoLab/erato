@@ -28,6 +28,14 @@ vi.mock("@extend-ai/react-docx", () => ({
   useDocxModel: useDocxModelMock,
 }));
 
+vi.mock("@extend-ai/react-xlsx", () => ({
+  XlsxViewer: ({ src }: { src?: string }) => (
+    <div data-src={src} data-testid="mock-react-xlsx-viewer">
+      XLSX rendered
+    </div>
+  ),
+}));
+
 const makeFile = (overrides: Partial<FileUploadItem> = {}): FileUploadItem => ({
   id: "file_123",
   filename: "shared-report.pdf",
@@ -70,6 +78,50 @@ describe("FilePreviewModal", () => {
     expect(global.fetch).toHaveBeenCalledWith(
       "https://files.example.com/preview/meeting-notes.docx",
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it("previews XLSX files from the preview URL", () => {
+    renderWithTheme(
+      <FilePreviewModal
+        isOpen={true}
+        onClose={vi.fn()}
+        file={makeFile({
+          filename: "budget.xlsx",
+          download_url: "https://files.example.com/download/budget.xlsx",
+          preview_url: "https://files.example.com/preview/budget.xlsx",
+          file_capability: FileTypeUtil.createMockFileCapability("budget.xlsx"),
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId("mock-react-xlsx-viewer")).toHaveAttribute(
+      "data-src",
+      "https://files.example.com/preview/budget.xlsx",
+    );
+  });
+
+  it("previews XLSX files when the MIME type identifies a spreadsheet", () => {
+    renderWithTheme(
+      <FilePreviewModal
+        isOpen={true}
+        onClose={vi.fn()}
+        file={makeFile({
+          filename: "download",
+          preview_url: "https://files.example.com/preview/budget",
+          file_capability: {
+            ...FileTypeUtil.createMockFileCapability("budget.xlsx"),
+            mime_types: [
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ],
+          },
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId("mock-react-xlsx-viewer")).toHaveAttribute(
+      "data-src",
+      "https://files.example.com/preview/budget",
     );
   });
 
