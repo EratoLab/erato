@@ -6,7 +6,7 @@ use axum_test::TestServer;
 use chrono::Utc;
 use erato::config::{
     ActionFacetConfig, ExperimentalFacetsConfig, FacetConfig, McpServerAuthenticationConfig,
-    McpServerConfig, ModelSettings, PromptSourceSpecification,
+    McpServerConfig, ModelSettings, PromptSourceSpecification, SecretConfigString,
 };
 use erato::db::entity::{chat_file_uploads, chats, file_uploads};
 use erato::models::message::{GenerationInputMessages, GenerationParameters};
@@ -26,11 +26,11 @@ use mocktail::mock_builder::Then;
 
 use crate::test_app_state;
 use crate::test_utils::{
-    BodyContainsMatcher, JwtTokenBuilder, RequestBodyRecorder, TEST_JWT_TOKEN, TEST_USER_ISSUER,
-    TEST_USER_SUBJECT, TestRequestAuthExt, build_openai_text_streaming_response,
-    build_openai_tool_calls_streaming_response, extract_chat_id, extract_full_text,
-    hermetic_app_config, parse_sse_events, read_integration_test_file_bytes, setup_mock_llm_server,
-    setup_mock_llm_server_with_mocks,
+    BodyContainsMatcher, JwtTokenBuilder, RequestBodyRecorder, RequestHeadersRecorder,
+    TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt,
+    build_openai_text_streaming_response, build_openai_tool_calls_streaming_response,
+    extract_chat_id, extract_full_text, hermetic_app_config, parse_sse_events,
+    read_integration_test_file_bytes, setup_mock_llm_server, setup_mock_llm_server_with_mocks,
 };
 
 fn mock_mcp_base_url() -> String {
@@ -546,6 +546,100 @@ async fn test_platform_persisted_for_regenerate_and_edit_generation_requests(poo
             .as_ref()
             .and_then(|context| context.platform.as_deref()),
         Some("ios")
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_summary_generation_sends_rendered_chat_provider_headers(pool: Pool<Postgres>) {
+    let summary_headers = RequestHeadersRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let summary_headers = summary_headers.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&["Generate a summary"], &[]))
+                .matcher(summary_headers);
+
+            then.status(http::StatusCode::OK)
+                .headers([("Content-Type", "application/json")])
+                .json(json!({
+                    "id": "chatcmpl-summary-header-test",
+                    "object": "chat.completion",
+                    "created": 1234567890,
+                    "model": "gpt-3.5-turbo",
+                    "choices": [{
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": "Rendered Summary"
+                        },
+                        "finish_reason": "stop"
+                    }],
+                    "usage": {
+                        "prompt_tokens": 1,
+                        "completion_tokens": 1,
+                        "total_tokens": 2
+                    }
+                }));
+        });
+    }
+    mocks.mock(|when, then| {
+        when.post().path("/v1/chat/completions");
+        mock_llm_sse_response(
+            then,
+            build_openai_text_streaming_response(&["Main response."]),
+        );
+    });
+
+    let (mut app_config, _mock_server) = setup_mock_llm_server_with_mocks(mocks).await;
+    let provider = app_config
+        .chat_providers
+        .as_mut()
+        .expect("Expected chat providers")
+        .providers
+        .get_mut("mock-llm")
+        .expect("Expected mock provider");
+    provider.additional_request_headers = Some(vec![
+        SecretConfigString::from("X-Erato-Summary-Email={{id_token.claims.email}}"),
+        SecretConfigString::from("X-Erato-Summary-User={{erato_user.id}}"),
+    ]);
+
+    let app_state = test_app_state(app_config, pool).await;
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let submit_response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "Summarize the header propagation path" }))
+        .await;
+    submit_response.assert_status_ok();
+
+    for _ in 0..50 {
+        if !summary_headers.headers().is_empty() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+
+    let recorded_headers = summary_headers.headers();
+    assert!(
+        recorded_headers.iter().any(|headers| headers
+            .iter()
+            .any(|(name, value)| name == "x-erato-summary-email" && value == "admin@example.com")),
+        "Expected rendered email header in summary provider request, got {recorded_headers:?}"
+    );
+    assert!(
+        recorded_headers.iter().any(|headers| headers
+            .iter()
+            .any(|(name, value)| name == "x-erato-summary-user"
+                && !value.is_empty()
+                && !value.contains("{{"))),
+        "Expected rendered user id header in summary provider request, got {recorded_headers:?}"
     );
 }
 
