@@ -5,6 +5,7 @@ use crate::models::file_upload::{
 };
 use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
+use crate::services::template_rendering::contexts::chat_provider_headers::ChatProviderHeadersContext;
 use crate::state::{AppState, ChatProviderConfigWithId};
 use axum::Extension;
 use axum::extract::State;
@@ -221,9 +222,10 @@ pub async fn audio_transcription_socket(
 #[instrument(skip_all)]
 pub async fn audio_dictation_socket(
     State(app_state): State<AppState>,
+    Extension(me_user): Extension<MeProfile>,
     ws: WebSocketUpgrade,
 ) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_dictation_socket(app_state, socket))
+    ws.on_upgrade(move |socket| handle_dictation_socket(app_state, me_user, socket))
 }
 
 async fn handle_socket(
@@ -235,6 +237,8 @@ async fn handle_socket(
     let (mut sender, mut receiver) = socket.split();
     let mut session: Option<AudioSession> = None;
     let mut pending_chunk: Option<PendingChunk> = None;
+    let chat_provider_headers_context =
+        ChatProviderHeadersContext::new(&me_user.id, &me_user.id_token_claims);
 
     while let Some(message_result) = receiver.next().await {
         let message = match message_result {
@@ -251,6 +255,7 @@ async fn handle_socket(
                     &app_state,
                     &policy,
                     &me_user,
+                    &chat_provider_headers_context,
                     &mut session,
                     &mut pending_chunk,
                     control_frame,
@@ -263,8 +268,14 @@ async fn handle_socket(
                 )),
             },
             Message::Binary(bytes) => {
-                handle_audio_bytes(&app_state, &mut session, &mut pending_chunk, bytes.to_vec())
-                    .await
+                handle_audio_bytes(
+                    &app_state,
+                    &chat_provider_headers_context,
+                    &mut session,
+                    &mut pending_chunk,
+                    bytes.to_vec(),
+                )
+                .await
             }
             Message::Close(_) => break,
             Message::Ping(_) | Message::Pong(_) => Ok(Vec::new()),
@@ -301,12 +312,14 @@ async fn send_frame(
     Ok(())
 }
 
-async fn handle_dictation_socket(app_state: AppState, socket: WebSocket) {
+async fn handle_dictation_socket(app_state: AppState, me_user: MeProfile, socket: WebSocket) {
     let (mut sender, mut receiver) = socket.split();
     let mut chunk_duration_ms: Option<u64> = None;
     let mut audio_feature: Option<AudioFeature> = None;
     let mut next_chunk_index = 0usize;
     let mut pending_chunk: Option<PendingChunk> = None;
+    let chat_provider_headers_context =
+        ChatProviderHeadersContext::new(&me_user.id, &me_user.id_token_claims);
 
     while let Some(message_result) = receiver.next().await {
         let message = match message_result {
@@ -338,6 +351,7 @@ async fn handle_dictation_socket(app_state: AppState, socket: WebSocket) {
             Message::Binary(bytes) => {
                 handle_dictation_audio_bytes(
                     &app_state,
+                    &chat_provider_headers_context,
                     audio_feature,
                     chunk_duration_ms,
                     &mut next_chunk_index,
@@ -439,6 +453,7 @@ async fn handle_dictation_control_frame(
 
 async fn handle_dictation_audio_bytes(
     app_state: &AppState,
+    chat_provider_headers_context: &ChatProviderHeadersContext<'_>,
     audio_feature: Option<AudioFeature>,
     chunk_duration_ms: Option<u64>,
     next_chunk_index: &mut usize,
@@ -473,6 +488,7 @@ async fn handle_dictation_audio_bytes(
     let transcribed_chunk = transcribe_audio_chunk_with_retry(
         app_state,
         audio_feature,
+        Some(chat_provider_headers_context),
         &pending,
         validated_chunk.provider_audio_bytes,
     )
@@ -492,6 +508,7 @@ async fn handle_control_frame(
     app_state: &AppState,
     policy: &PolicyEngine,
     me_user: &MeProfile,
+    chat_provider_headers_context: &ChatProviderHeadersContext<'_>,
     session: &mut Option<AudioSession>,
     pending_chunk: &mut Option<PendingChunk>,
     control_frame: ClientControlFrame,
@@ -621,7 +638,9 @@ async fn handle_control_frame(
             let session = session
                 .as_mut()
                 .ok_or_eyre("Start or resume audio transcription before retrying failed chunks")?;
-            retry_failed_chunks(app_state, session).await.map(Some)
+            retry_failed_chunks(app_state, chat_provider_headers_context, session)
+                .await
+                .map(Some)
         }
         ClientControlFrame::ChunkMetadata {
             chunk_index,
@@ -725,6 +744,7 @@ async fn handle_control_frame(
 
 async fn handle_audio_bytes(
     app_state: &AppState,
+    chat_provider_headers_context: &ChatProviderHeadersContext<'_>,
     session: &mut Option<AudioSession>,
     pending_chunk: &mut Option<PendingChunk>,
     bytes: Vec<u8>,
@@ -798,6 +818,7 @@ async fn handle_audio_bytes(
     let transcribed_chunk = match transcribe_audio_chunk_with_retry(
         app_state,
         AudioFeature::Transcription,
+        Some(chat_provider_headers_context),
         &pending,
         validated_chunk.provider_audio_bytes,
     )
@@ -1317,6 +1338,7 @@ fn build_wav_from_pcm(pcm: &[u8]) -> Vec<u8> {
 async fn transcribe_audio_chunk_with_retry(
     app_state: &AppState,
     audio_feature: AudioFeature,
+    chat_provider_headers_context: Option<&ChatProviderHeadersContext<'_>>,
     pending: &PendingChunk,
     audio_bytes: Vec<u8>,
 ) -> Result<TranscribedChunk, Report> {
@@ -1333,7 +1355,15 @@ async fn transcribe_audio_chunk_with_retry(
             audio_bytes = audio_bytes.len(),
             "Starting audio transcription provider attempt"
         );
-        match transcribe_audio_chunk(app_state, audio_feature, pending, audio_bytes.clone()).await {
+        match transcribe_audio_chunk(
+            app_state,
+            audio_feature,
+            chat_provider_headers_context,
+            pending,
+            audio_bytes.clone(),
+        )
+        .await
+        {
             Ok(transcript) => {
                 if looks_like_hallucination_loop(config, &transcript) {
                     warn!(
@@ -1388,6 +1418,7 @@ async fn transcribe_audio_chunk_with_retry(
 async fn transcribe_audio_chunk(
     app_state: &AppState,
     audio_feature: AudioFeature,
+    chat_provider_headers_context: Option<&ChatProviderHeadersContext<'_>>,
     pending: &PendingChunk,
     audio_bytes: Vec<u8>,
 ) -> Result<String, Report> {
@@ -1400,7 +1431,15 @@ async fn transcribe_audio_chunk(
         audio_bytes = audio_bytes.len(),
         "Selected audio transcription provider"
     );
-    transcribe_audio_chunk_genai(app_state, audio_feature, &provider, pending, audio_bytes).await
+    transcribe_audio_chunk_genai(
+        app_state,
+        audio_feature,
+        &provider,
+        chat_provider_headers_context,
+        pending,
+        audio_bytes,
+    )
+    .await
 }
 
 fn audio_provider(
@@ -1476,10 +1515,14 @@ async fn transcribe_audio_chunk_genai(
     app_state: &AppState,
     audio_feature: AudioFeature,
     provider: &ChatProviderConfigWithId,
+    chat_provider_headers_context: Option<&ChatProviderHeadersContext<'_>>,
     pending: &PendingChunk,
     audio_bytes: Vec<u8>,
 ) -> Result<String, Report> {
-    let client = AppState::build_genai_client(provider.chat_provider_config.clone())?;
+    let client = AppState::build_genai_client_with_headers_context(
+        provider.chat_provider_config.clone(),
+        chat_provider_headers_context,
+    )?;
     let max_output_tokens = max_output_tokens_for_chunk(app_state, audio_feature, pending);
     let audio_data_range = validate_canonical_wav(&audio_bytes).ok();
     let audio_pcm_bytes = audio_data_range
@@ -1618,6 +1661,7 @@ fn looks_like_hallucination_loop(
 
 async fn retry_failed_chunks(
     app_state: &AppState,
+    chat_provider_headers_context: &ChatProviderHeadersContext<'_>,
     session: &mut AudioSession,
 ) -> Result<ServerControlFrame, Report> {
     let failed_chunks = session
@@ -1669,6 +1713,7 @@ async fn retry_failed_chunks(
         match transcribe_audio_chunk_with_retry(
             app_state,
             AudioFeature::Transcription,
+            Some(chat_provider_headers_context),
             &pending,
             provider_audio_bytes,
         )

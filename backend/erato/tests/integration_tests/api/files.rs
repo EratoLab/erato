@@ -3,9 +3,11 @@
 use axum::Router;
 use axum::http;
 use axum::http::StatusCode;
-use axum_test::TestServer;
 use axum_test::multipart::{MultipartForm, Part};
+use axum_test::{TestServer, TestServerConfig, Transport, WsMessage};
+use erato::config::SecretConfigString;
 use erato::server::router::router;
+use mocktail::MockSet;
 use sea_orm::prelude::Uuid;
 use serde_json::{Value, json};
 use sqlx::Pool;
@@ -13,8 +15,8 @@ use sqlx::postgres::Postgres;
 
 use crate::test_app_state;
 use crate::test_utils::{
-    MockLlmConfig, TEST_JWT_TOKEN, TestRequestAuthExt, hermetic_app_config,
-    read_integration_test_file_bytes, setup_mock_llm_server,
+    MockLlmConfig, RequestHeadersRecorder, TEST_JWT_TOKEN, TestRequestAuthExt, hermetic_app_config,
+    read_integration_test_file_bytes, setup_mock_llm_server, setup_mock_llm_server_with_mocks,
 };
 
 const CANONICAL_AUDIO_SAMPLE_RATE_HZ: usize = 16_000;
@@ -622,6 +624,132 @@ async fn test_audio_upload_initializes_transcription_metadata_with_mock_llm(pool
         json!("processing")
     );
     assert_eq!(file_json["audio_transcription"]["progress"], json!(0.0));
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_audio_transcription_sends_rendered_chat_provider_headers(pool: Pool<Postgres>) {
+    let provider_headers = RequestHeadersRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let provider_headers = provider_headers.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(provider_headers);
+
+            then.status(StatusCode::OK)
+                .headers([("Content-Type", "application/json")])
+                .json(json!({
+                    "id": "chatcmpl-audio-transcription-test",
+                    "object": "chat.completion",
+                    "created": 1234567890,
+                    "model": "gpt-3.5-turbo",
+                    "choices": [{
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": "rendered header transcript"
+                        },
+                        "finish_reason": "stop"
+                    }],
+                    "usage": {
+                        "prompt_tokens": 1,
+                        "completion_tokens": 1,
+                        "total_tokens": 2
+                    }
+                }));
+        });
+    }
+
+    let (mut app_config, _mock_server) = setup_mock_llm_server_with_mocks(mocks).await;
+    let provider = app_config
+        .chat_providers
+        .as_mut()
+        .expect("Expected chat providers")
+        .providers
+        .get_mut("mock-llm")
+        .expect("Expected mock provider");
+    provider.model_capabilities.supports_audio_input = true;
+    provider.additional_request_headers = Some(vec![
+        SecretConfigString::from("X-Erato-Test-Email={{id_token.claims.email}}"),
+        SecretConfigString::from("X-Erato-Test-User={{erato_user.id}}"),
+    ]);
+    app_config.audio_transcription.enabled = true;
+
+    let app_state = test_app_state(app_config, pool).await;
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new_with_config(
+        app,
+        TestServerConfig {
+            transport: Some(Transport::HttpRandomPort),
+            ..Default::default()
+        },
+    )
+    .expect("Failed to create test server");
+    let chat_id = create_chat(&server).await;
+
+    let mut websocket = server
+        .get_websocket("/api/v1beta/me/files/audio-transcriptions/socket")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .into_websocket()
+        .await;
+
+    websocket
+        .send_json(&json!({
+            "type": "start",
+            "chat_id": chat_id,
+            "filename": "header-test.wav",
+            "content_type": "audio/wav",
+            "chunk_duration_ms": 1000
+        }))
+        .await;
+    let session_state: Value = websocket.receive_json().await;
+    assert_eq!(session_state["type"], json!("session_state"));
+
+    websocket
+        .send_json(&json!({
+            "type": "chunk_metadata",
+            "chunk_index": 0,
+            "start_ms": 0,
+            "end_ms": 1000,
+            "content_type": "audio/wav"
+        }))
+        .await;
+    websocket
+        .send_message(WsMessage::Binary(
+            build_canonical_wav_from_pcm(&[0, 0, 0, 0]).into(),
+        ))
+        .await;
+
+    let ack: Value = websocket.receive_json().await;
+    assert_eq!(ack["type"], json!("chunk_ack"));
+    let transcribed: Value = websocket.receive_json().await;
+    assert_eq!(transcribed["type"], json!("chunk_transcribed"));
+    assert_eq!(
+        transcribed["transcript"],
+        json!("rendered header transcript")
+    );
+    websocket.close().await;
+
+    let recorded_headers = provider_headers.headers();
+    assert!(
+        recorded_headers.iter().any(|headers| headers
+            .iter()
+            .any(|(name, value)| name == "x-erato-test-email" && value == "admin@example.com")),
+        "Expected rendered email header in provider request, got {recorded_headers:?}"
+    );
+    assert!(
+        recorded_headers.iter().any(|headers| headers
+            .iter()
+            .any(|(name, value)| name == "x-erato-test-user"
+                && !value.is_empty()
+                && !value.contains("{{"))),
+        "Expected rendered user id header in provider request, got {recorded_headers:?}"
+    );
 }
 
 /// Test retrieving file information by ID.

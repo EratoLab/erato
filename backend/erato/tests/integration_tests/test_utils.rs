@@ -926,3 +926,52 @@ impl Matcher for RequestBodyRecorder {
         true
     }
 }
+
+/// Always-matching matcher that records request headers it is evaluated
+/// against. Attach it last in a `when` chain so it only sees requests that
+/// passed the preceding matchers.
+#[derive(Debug, Clone, Default)]
+pub struct RequestHeadersRecorder {
+    headers: Arc<Mutex<RecordedRequestHeaders>>,
+}
+
+type RecordedHeader = (String, String);
+type RecordedRequestHeaders = Vec<Vec<RecordedHeader>>;
+
+impl RequestHeadersRecorder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn headers(&self) -> Vec<Vec<(String, String)>> {
+        self.headers.lock().unwrap().clone()
+    }
+}
+
+impl PartialEq for RequestHeadersRecorder {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.headers, &other.headers)
+    }
+}
+
+impl PartialOrd for RequestHeadersRecorder {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.eq(other).then_some(std::cmp::Ordering::Equal)
+    }
+}
+
+impl Matcher for RequestHeadersRecorder {
+    fn name(&self) -> &str {
+        "request_headers_recorder"
+    }
+
+    fn matches(&self, req: &Request) -> bool {
+        let headers = req
+            .headers()
+            .iter()
+            .map(|(name, value)| (name.to_string(), value.to_string()))
+            .collect::<Vec<_>>();
+        self.headers.lock().unwrap().push(headers);
+        true
+    }
+}
