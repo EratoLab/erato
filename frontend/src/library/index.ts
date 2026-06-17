@@ -23,6 +23,7 @@ export {
 export type { OutlookArtifact } from "@/types/chat";
 export { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 export { DefaultMessageControls } from "@/components/ui/Message/DefaultMessageControls";
+export { DefaultEratoEmailCodeBlock } from "@/components/ui/Message/EratoEmailSuggestion";
 export { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
 export { ModalBase } from "@/components/ui/Modal/ModalBase";
 export {
@@ -31,9 +32,33 @@ export {
 } from "@/components/ui/Message/ActionConfirmationCard";
 export { AppearanceTabContent } from "@/components/ui/Settings/AppearanceTabContent";
 export { AudioInputTabContent } from "@/components/ui/Settings/AudioInputTabContent";
+export {
+  AssistantWelcomeScreen,
+  type AssistantWelcomeScreenProps,
+} from "@/components/ui/Assistant/AssistantWelcomeScreen";
+export {
+  ChatHistoryList,
+  type ChatHistoryListProps,
+} from "@/components/ui/Chat/ChatHistoryList";
+export type { ChatTopLeftAccessoryProps } from "@/components/ui/Chat/ChatTopLeftAccessory";
 export { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton";
 export { FilePreviewLoading } from "@/components/ui/FileUpload/FilePreviewLoading";
-export { GroupedFileAttachmentsPreview } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
+export {
+  DefaultStarterPromptsSection,
+  type StarterPromptsRendererProps,
+} from "@/components/ui/Chat/StarterPromptsSection";
+export {
+  FileSourceSelector,
+  type FileSourceSelectorProps,
+} from "@/components/ui/FileUpload/FileSourceSelector";
+export {
+  DefaultGroupedFileAttachmentsPreview,
+  GroupedFileAttachmentsPreview,
+} from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
+export {
+  WelcomeScreen,
+  type WelcomeScreenProps,
+} from "@/components/ui/WelcomeScreen";
 export { AnchoredPopover } from "@/components/ui/Controls/AnchoredPopover";
 export { Button } from "@/components/ui/Controls/Button";
 export { RadioCard } from "@/components/ui/Controls/RadioCard";
@@ -181,6 +206,8 @@ export {
   componentRegistry,
   resolveComponentOverride,
   type ComponentRegistry,
+  type ComponentKitComponentRegistration,
+  type ComponentKitRegistration,
   type EratoEmailCodeBlockProps,
 } from "@/config/componentRegistry";
 export { createLogger } from "@/utils/debugLogger";
@@ -208,6 +235,7 @@ export type {
   MessageControlsContext,
 } from "@/types/message-controls";
 export type { ChatInputControlsHandle } from "@/components/ui/Chat/ChatInputControlsContext";
+export type { ChatInputAttachmentPreviewProps } from "@/types/chat-input-attachment-preview";
 export type {
   ActionFacetInfo,
   ActionFacetRequest,

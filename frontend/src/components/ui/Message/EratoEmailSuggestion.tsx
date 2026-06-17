@@ -13,7 +13,7 @@ import type { EratoEmailCodeBlockProps } from "@/config/componentRegistry";
  * The Office addin registers a richer version via componentRegistry that
  * adds "Replace Selection" and "Insert at Cursor" buttons.
  */
-function DefaultEratoEmailCodeBlock({
+export function DefaultEratoEmailCodeBlock({
   content,
   isHtml,
 }: EratoEmailCodeBlockProps) {

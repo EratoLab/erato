@@ -13,7 +13,10 @@
 # Temporary files
 tmp/
 frontend/tmp/
+frontend/component-kits
 office-addin/tmp/
+component-kit-example/dist/
+component-kit-example/node_modules/
 .pnpm-store/
 
 # LLM helper

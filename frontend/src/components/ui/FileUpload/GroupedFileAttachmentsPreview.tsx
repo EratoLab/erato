@@ -390,7 +390,7 @@ const StatusRow: React.FC<{
   );
 };
 
-const DefaultGroupedFileAttachmentsPreview: React.FC<
+export const DefaultGroupedFileAttachmentsPreview: React.FC<
   GroupedFileAttachmentsPreviewProps
 > = ({
   groups,

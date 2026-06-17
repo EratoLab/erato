@@ -1,0 +1,39 @@
+.erato-component-kit-example {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  color: var(--theme-fg-primary, #111827);
+}
+
+.erato-component-kit-example button {
+  border: 1px solid var(--theme-border, #d1d5db);
+  border-radius: 0.5rem;
+  background: var(--theme-bg-primary, #ffffff);
+  color: inherit;
+  padding: 0.35rem 0.6rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+.erato-component-kit-example button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.erato-component-kit-example-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.erato-component-kit-example-message {
+  align-items: flex-start;
+  flex-direction: column;
+  padding: 0.75rem;
+}
+
+.erato-component-kit-example-message p {
+  margin: 0;
+  white-space: pre-wrap;
+}

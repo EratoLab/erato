@@ -158,6 +158,11 @@ chat_provider_ids = ["test-token-limit"]
 # # When set, feedback can only be edited within this time window after creation
 # # Example: message_feedback_edit_time_limit_seconds = 300  # 5 minutes
 # message_feedback_edit_time_limit_seconds = 300
+#
+# Runtime component kit discovery. Each subdirectory is treated as one
+# component kit and may contain a root index-<hash>.js and optional .css file.
+# [frontend.component_kits]
+# directory = "/app/component-kits"
 
 # Chat sharing feature configuration
 # When enabled, chat owners can generate organization-internal share links for chats.

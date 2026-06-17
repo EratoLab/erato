@@ -308,6 +308,31 @@ This will be inejcted into the frontend as:
 window.FOO = "bar";
 ```
 
+#### `frontend.component_kits.directory`
+
+{/* erato_toml_config_key: frontend.component_kits.directory */}
+
+Directory containing runtime-loaded frontend component kits.
+
+Each direct subdirectory is treated as one component kit. For each kit, Erato
+serves files under `/public/component-kits/<kit-name>/` and injects a root-level
+`index-<hash>.js` module script before the main frontend bundle. If a root-level
+`.css` file is present, it is injected as a stylesheet in the same kit order.
+
+The backend infers kit metadata from files and directories. There is no manifest
+file in the current component-kit format.
+
+**Default value:** `/app/component-kits`
+
+**Type:** `string`
+
+**Example**
+
+```toml
+[frontend.component_kits]
+directory = "/app/component-kits"
+```
+
 ### `i18n`
 
 {/* erato_toml_config_key: i18n */}

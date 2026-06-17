@@ -97,10 +97,11 @@ See the [Theming](../features/theming) documentation for the full structure and 
 
 ### 3. Component registry overrides
 
-For deeper UI customization without modifying core code, the frontend exposes a component registry. Customer forks can replace specific UI components by providing custom implementations and registering them in the registry.
+For deeper UI customization without modifying core code, the frontend exposes a component registry. Deployments can load component kits at runtime, and custom frontend builds can still register compiled-in overrides.
 
 - Registry location: `frontend/src/config/componentRegistry.ts`
-- Custom components: `frontend/src/customer/components/`
+- Runtime kits: subdirectories under `frontend.component_kits.directory`, served from `/public/component-kits/<kit-name>/`
+- Custom build components: `frontend/src/customer/components/`
 
 See [Component Customization](../features/component_customization) for full instructions and examples.
 
@@ -114,7 +115,7 @@ See [Internationalization (i18n)](../features/internationalization_i18n) for det
 
 - Theme assets and theme translation overrides must exist **during the frontend build**.
 - The `frontend.theme` value (or `VITE_CUSTOMER_NAME`) must match the theme directory name.
-- Component overrides are compiled into the UI bundle, so changes require rebuilding the frontend.
+- Runtime component kits can be deployed independently of the main frontend bundle, while compiled-in overrides still require rebuilding the frontend.
 
 If you rely on runtime-injected environment values, make sure the backend injects them in production to avoid stale or missing configuration.
 

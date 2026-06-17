@@ -1,0 +1,20 @@
+default:
+    just --list
+
+install:
+    pnpm install --no-frozen-lockfile --lockfile=false
+
+build:
+    pnpm run build
+
+dev:
+    pnpm run dev
+
+type-check:
+    pnpm run typecheck
+
+format:
+    pnpm run format
+
+check-format:
+    pnpm run format:check

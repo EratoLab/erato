@@ -299,6 +299,7 @@
   "file_storage_providers.<provider-id>.provider_kind": {},
   "frontend.additional_environment": {},
   "frontend.chat_input_empty_state_layout": {},
+  "frontend.component_kits.directory": {},
   "frontend.disable_chat_input_autofocus": {},
   "frontend.disable_logout": {},
   "frontend.disable_upload": {},

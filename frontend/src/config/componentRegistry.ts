@@ -150,21 +150,36 @@ export interface ComponentRegistry {
   EratoEmailCodeBlock: ComponentType<EratoEmailCodeBlockProps> | null;
 }
 
+type ComponentRegistryComponent<TKey extends keyof ComponentRegistry> = Exclude<
+  ComponentRegistry[TKey],
+  null
+>;
+
+export type ComponentKitComponentRegistration = {
+  [TKey in keyof ComponentRegistry]: {
+    extensionPoint: TKey;
+    component: ComponentRegistryComponent<TKey>;
+    priority: number;
+  };
+}[keyof ComponentRegistry];
+
+export interface ComponentKitRegistration {
+  name: string;
+  components: ComponentKitComponentRegistration[];
+}
+
+declare global {
+  interface Window {
+    ERATO_COMPONENT_KITS?: ComponentKitRegistration[];
+  }
+}
+
 export const resolveComponentOverride = <TProps>(
   override: ComponentType<TProps> | null,
   fallback: ComponentType<TProps>,
 ): ComponentType<TProps> => override ?? fallback;
 
-/**
- * The component registry instance.
- *
- * In the main repo, all values are null (use defaults).
- * Customer forks modify this file to provide custom implementations.
- *
- * E2E test overrides are applied at startup via `initE2EOverrides()`
- * in `componentRegistryE2E.ts` (called from `main.tsx`).
- */
-export const componentRegistry: ComponentRegistry = {
+const emptyComponentRegistry = (): ComponentRegistry => ({
   AssistantFileSourceSelector: null,
   ChatFileSourceSelector: null,
   ChatInputAttachmentPreview: null,
@@ -177,4 +192,42 @@ export const componentRegistry: ComponentRegistry = {
   ChatMessageRenderer: null,
   ChatTopLeftAccessory: null,
   EratoEmailCodeBlock: null,
+});
+
+const buildComponentRegistry = (
+  componentKits: ComponentKitRegistration[] | undefined,
+): ComponentRegistry => {
+  const registry = emptyComponentRegistry();
+  const selectedPriorities: Partial<Record<keyof ComponentRegistry, number>> =
+    {};
+
+  for (const componentKit of componentKits ?? []) {
+    for (const registration of componentKit.components) {
+      const currentPriority = selectedPriorities[registration.extensionPoint];
+
+      if (
+        currentPriority === undefined ||
+        registration.priority <= currentPriority
+      ) {
+        registry[registration.extensionPoint] = registration.component as never;
+        selectedPriorities[registration.extensionPoint] = registration.priority;
+      }
+    }
+  }
+
+  return registry;
 };
+
+/**
+ * The component registry instance.
+ *
+ * In the main repo, values default to null (use defaults). Runtime component
+ * kits can register replacements in `window.ERATO_COMPONENT_KITS` before this
+ * module evaluates.
+ *
+ * E2E test overrides are applied at startup via `initE2EOverrides()`
+ * in `componentRegistryE2E.ts` (called from `main.tsx`).
+ */
+export const componentRegistry: ComponentRegistry = buildComponentRegistry(
+  typeof window === "undefined" ? undefined : window.ERATO_COMPONENT_KITS,
+);
