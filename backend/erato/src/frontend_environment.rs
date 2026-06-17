@@ -9,7 +9,7 @@ use serde_json::Value;
 use std::fmt::Write;
 use std::fs;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 // Default maximum body limit in bytes (20MB) - must match DEFAULT_MAX_BODY_LIMIT_BYTES in server/api/v1beta/mod.rs
 const DEFAULT_MAX_BODY_LIMIT_BYTES: u64 = 20 * 1024 * 1024;
@@ -65,6 +65,9 @@ const FRONTEND_ENV_KEY_SIDEBAR_CHAT_HISTORY_SHOW_METADATA: &str =
 const FRONTEND_ENV_KEY_MSAL_CLIENT_ID: &str = "MSAL_CLIENT_ID";
 const FRONTEND_ENV_KEY_MSAL_AUTHORITY: &str = "MSAL_AUTHORITY";
 const FRONTEND_ENV_KEY_MASK_REASONING_TRACE_TEXT: &str = "MASK_REASONING_TRACE_TEXT";
+const COMPONENT_KITS_PUBLIC_MOUNT_BASE: &str = "/public/component-kits";
+const COMPONENT_KIT_REACT_RUNTIME_SCRIPT_PATH: &str =
+    "/public/common/assets/component-kit-react-runtime.js";
 
 #[derive(Debug, Clone, Default)]
 /// Map of values that will be provided as environment-variable-like global variables to the frontend.
@@ -88,11 +91,23 @@ pub struct ServedFrontend {
     pub environment: FrontedEnvironment,
     pub mount_path: String,
     pub enabled: bool,
+    pub fallback_to_404: bool,
+    pub inject_environment: bool,
+    pub component_kit_assets: Vec<ComponentKitAsset>,
 }
 
 #[derive(Debug, Clone)]
 pub struct FrontendRegistry {
     frontends: Vec<ServedFrontend>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ComponentKitAsset {
+    pub name: String,
+    pub directory_path: String,
+    pub mount_path: String,
+    pub script_path: Option<String>,
+    pub stylesheet_path: Option<String>,
 }
 
 impl FrontendRegistry {
@@ -113,6 +128,7 @@ impl FrontendRegistry {
 }
 
 pub fn build_frontend_registry(config: &AppConfig) -> FrontendRegistry {
+    let component_kit_assets = discover_component_kits(&config.frontend.component_kits.directory);
     let mut frontends = vec![ServedFrontend {
         bundle_path: config
             .integrations
@@ -123,6 +139,9 @@ pub fn build_frontend_registry(config: &AppConfig) -> FrontendRegistry {
         environment: build_frontend_environment(config, FrontendKind::OfficeAddin),
         mount_path: "/public/platform-office-addin".to_string(),
         enabled: config.integrations.ms_office.addin.enabled,
+        fallback_to_404: true,
+        inject_environment: true,
+        component_kit_assets: component_kit_assets.clone(),
     }];
 
     if config.integrations.ms_office.addin.serve_bundle_legacy_path {
@@ -136,6 +155,9 @@ pub fn build_frontend_registry(config: &AppConfig) -> FrontendRegistry {
             environment: build_frontend_environment(config, FrontendKind::OfficeAddin),
             mount_path: "/office-addin".to_string(),
             enabled: config.integrations.ms_office.addin.enabled,
+            fallback_to_404: true,
+            inject_environment: true,
+            component_kit_assets: component_kit_assets.clone(),
         });
     }
 
@@ -144,9 +166,232 @@ pub fn build_frontend_registry(config: &AppConfig) -> FrontendRegistry {
         environment: build_frontend_environment(config, FrontendKind::Web),
         mount_path: "/".to_string(),
         enabled: true,
+        fallback_to_404: true,
+        inject_environment: true,
+        component_kit_assets: component_kit_assets.clone(),
     });
 
+    for component_kit in component_kit_assets {
+        frontends.push(ServedFrontend {
+            bundle_path: component_kit.directory_path,
+            environment: FrontedEnvironment::default(),
+            mount_path: component_kit.mount_path,
+            enabled: true,
+            fallback_to_404: false,
+            inject_environment: false,
+            component_kit_assets: Vec::new(),
+        });
+    }
+
     FrontendRegistry { frontends }
+}
+
+fn is_valid_component_kit_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'_'))
+        && name != "."
+        && name != ".."
+}
+
+fn is_valid_component_kit_asset_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'_'))
+        && !name.starts_with('.')
+}
+
+fn sorted_root_files(directory: &Path) -> io::Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    for entry in fs::read_dir(directory)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        if file_type.is_file() {
+            files.push(entry.path());
+        }
+    }
+    files.sort();
+    Ok(files)
+}
+
+fn root_file_name(path: &Path) -> Option<String> {
+    path.file_name()
+        .and_then(|file_name| file_name.to_str())
+        .map(ToOwned::to_owned)
+}
+
+fn discover_component_kit_entrypoint(directory: &Path) -> io::Result<Option<String>> {
+    let entrypoints = sorted_root_files(directory)?
+        .into_iter()
+        .filter_map(|path| {
+            let file_name = root_file_name(&path)?;
+            (file_name.starts_with("index-")
+                && file_name.ends_with(".js")
+                && is_valid_component_kit_asset_name(&file_name))
+            .then_some(file_name)
+        })
+        .collect::<Vec<_>>();
+
+    if entrypoints.len() > 1 {
+        tracing::warn!(
+            component_kit_path = %directory.display(),
+            entrypoints = ?entrypoints,
+            selected_entrypoint = %entrypoints[0],
+            "Component kit has multiple root index-*.js entrypoints; using the first sorted entrypoint"
+        );
+    }
+
+    Ok(entrypoints.into_iter().next())
+}
+
+fn discover_component_kit_stylesheet(directory: &Path) -> io::Result<Option<String>> {
+    let stylesheets = sorted_root_files(directory)?
+        .into_iter()
+        .filter_map(|path| {
+            let file_name = root_file_name(&path)?;
+            (file_name.ends_with(".css") && is_valid_component_kit_asset_name(&file_name))
+                .then_some(file_name)
+        })
+        .collect::<Vec<_>>();
+
+    if stylesheets.len() > 1 {
+        tracing::warn!(
+            component_kit_path = %directory.display(),
+            stylesheets = ?stylesheets,
+            selected_stylesheet = %stylesheets[0],
+            "Component kit has multiple root .css files; using the first sorted stylesheet"
+        );
+    }
+
+    Ok(stylesheets.into_iter().next())
+}
+
+fn discover_component_kits(directory: &str) -> Vec<ComponentKitAsset> {
+    let component_kits_directory = Path::new(directory);
+    if !component_kits_directory.exists() {
+        tracing::debug!(
+            component_kits_directory = %component_kits_directory.display(),
+            "Component kits directory does not exist; no component kits loaded"
+        );
+        return Vec::new();
+    }
+
+    let mut directories = match fs::read_dir(component_kits_directory) {
+        Ok(entries) => entries
+            .filter_map(|entry| match entry {
+                Ok(entry) => Some(entry),
+                Err(err) => {
+                    tracing::warn!(
+                        component_kits_directory = %component_kits_directory.display(),
+                        error = %err,
+                        "Failed to read component kit directory entry"
+                    );
+                    None
+                }
+            })
+            .filter_map(|entry| match entry.file_type() {
+                Ok(file_type) if file_type.is_dir() => Some(entry.path()),
+                Ok(_) => None,
+                Err(err) => {
+                    tracing::warn!(
+                        component_kit_path = %entry.path().display(),
+                        error = %err,
+                        "Failed to inspect component kit directory entry"
+                    );
+                    None
+                }
+            })
+            .collect::<Vec<_>>(),
+        Err(err) => {
+            tracing::warn!(
+                component_kits_directory = %component_kits_directory.display(),
+                error = %err,
+                "Failed to read component kits directory"
+            );
+            return Vec::new();
+        }
+    };
+    directories.sort();
+
+    directories
+        .into_iter()
+        .filter_map(|directory| {
+            let Some(name) = root_file_name(&directory) else {
+                tracing::warn!(
+                    component_kit_path = %directory.display(),
+                    "Skipping component kit with non-Unicode directory name"
+                );
+                return None;
+            };
+
+            if !is_valid_component_kit_name(&name) {
+                tracing::warn!(
+                    component_kit = %name,
+                    component_kit_path = %directory.display(),
+                    "Skipping component kit with URL-unsafe directory name"
+                );
+                return None;
+            }
+
+            let script_path = match discover_component_kit_entrypoint(&directory) {
+                Ok(entrypoint) => entrypoint.map(|file_name| {
+                    format!("{COMPONENT_KITS_PUBLIC_MOUNT_BASE}/{name}/{file_name}")
+                }),
+                Err(err) => {
+                    tracing::warn!(
+                        component_kit = %name,
+                        component_kit_path = %directory.display(),
+                        error = %err,
+                        "Failed to inspect component kit entrypoint"
+                    );
+                    None
+                }
+            };
+
+            if script_path.is_none() {
+                tracing::warn!(
+                    component_kit = %name,
+                    component_kit_path = %directory.display(),
+                    "Component kit is missing a root index-<hash>.js entrypoint"
+                );
+            }
+
+            let stylesheet_path = match discover_component_kit_stylesheet(&directory) {
+                Ok(stylesheet) => stylesheet.map(|file_name| {
+                    format!("{COMPONENT_KITS_PUBLIC_MOUNT_BASE}/{name}/{file_name}")
+                }),
+                Err(err) => {
+                    tracing::warn!(
+                        component_kit = %name,
+                        component_kit_path = %directory.display(),
+                        error = %err,
+                        "Failed to inspect component kit stylesheet"
+                    );
+                    None
+                }
+            };
+
+            let mount_path = format!("{COMPONENT_KITS_PUBLIC_MOUNT_BASE}/{name}");
+            tracing::info!(
+                component_kit = %name,
+                component_kit_path = %directory.display(),
+                mount_path = %mount_path,
+                script_path = ?script_path,
+                stylesheet_path = ?stylesheet_path,
+                "Discovered component kit"
+            );
+
+            Some(ComponentKitAsset {
+                name,
+                directory_path: directory.to_string_lossy().into_owned(),
+                mount_path,
+                script_path,
+                stylesheet_path,
+            })
+        })
+        .collect()
 }
 
 fn build_frontend_environment(
@@ -446,6 +691,7 @@ pub fn inject_environment_script_tag(
     input: &[u8],
     output: &mut Vec<u8>,
     frontend_env: &FrontedEnvironment,
+    component_kit_assets: &[ComponentKitAsset],
 ) -> io::Result<()> {
     let mut script_tag = String::new();
     script_tag.write_str("<script>\n").unwrap();
@@ -461,12 +707,70 @@ pub fn inject_environment_script_tag(
     }
     script_tag.write_str("</script>").unwrap();
 
+    let mut component_kit_styles = String::new();
+    let mut component_kit_scripts = String::new();
+    for component_kit in component_kit_assets {
+        if let Some(stylesheet_path) = &component_kit.stylesheet_path {
+            write!(
+                component_kit_styles,
+                "<link rel=\"stylesheet\" href=\"{}\">",
+                stylesheet_path
+            )
+            .unwrap();
+        }
+        if let Some(script_path) = &component_kit.script_path {
+            write!(
+                component_kit_scripts,
+                "<script type=\"module\" src=\"{}\"></script>",
+                script_path
+            )
+            .unwrap();
+        }
+    }
+    let component_kit_runtime_script = format!(
+        "<script type=\"module\" src=\"{}\"></script>",
+        COMPONENT_KIT_REACT_RUNTIME_SCRIPT_PATH
+    );
+    let component_kit_runtime_and_scripts =
+        format!("{component_kit_runtime_script}{component_kit_scripts}");
+
+    let inserted_component_kit_scripts = std::cell::Cell::new(false);
     let mut rewriter = HtmlRewriter::new(
         Settings {
-            element_content_handlers: vec![element!("head", |el| {
-                el.append(&script_tag, ContentType::Html);
-                Ok(())
-            })],
+            element_content_handlers: vec![
+                element!("head", |el| {
+                    el.append(&script_tag, ContentType::Html);
+                    if !component_kit_styles.is_empty() {
+                        el.append(&component_kit_styles, ContentType::Html);
+                    }
+                    Ok(())
+                }),
+                element!(
+                    "script[type=\"module\"][src][data-erato-component-kit-react-runtime]",
+                    |el| {
+                        if !component_kit_scripts.is_empty()
+                            && !inserted_component_kit_scripts.get()
+                        {
+                            el.after(&component_kit_scripts, ContentType::Html);
+                            inserted_component_kit_scripts.set(true);
+                        }
+                        Ok(())
+                    }
+                ),
+                element!("script[type=\"module\"][src]", |el| {
+                    let is_react_runtime_marker = el
+                        .get_attribute("data-erato-component-kit-react-runtime")
+                        .is_some();
+                    if !component_kit_scripts.is_empty()
+                        && !inserted_component_kit_scripts.get()
+                        && !is_react_runtime_marker
+                    {
+                        el.before(&component_kit_runtime_and_scripts, ContentType::Html);
+                        inserted_component_kit_scripts.set(true);
+                    }
+                    Ok(())
+                }),
+            ],
             ..Settings::default()
         },
         |c: &[u8]| output.extend_from_slice(c),
@@ -538,13 +842,17 @@ pub mod axum {
         };
 
         let frontend_environment = frontend.environment.clone();
+        let component_kit_assets = frontend.component_kit_assets.clone();
+        let should_inject_environment = frontend.inject_environment;
         let bundle_dir_path = PathBuf::from(frontend.bundle_path.clone())
             .canonicalize()
             .expect("Unable to normalize frontend bundle path");
-        let fallback_path = PathBuf::from(frontend.bundle_path.clone())
-            .join("404.html")
-            .canonicalize()
-            .expect("Unable to normalize frontend bundle path for 404.html");
+        let fallback_path = frontend.fallback_to_404.then(|| {
+            PathBuf::from(frontend.bundle_path.clone())
+                .join("404.html")
+                .canonicalize()
+                .expect("Unable to normalize frontend bundle path for 404.html")
+        });
 
         // Check if the client sent an If-None-Match header for ETag validation
         let client_etag = req.headers().get(http::header::IF_NONE_MATCH).cloned();
@@ -562,7 +870,7 @@ pub mod axum {
             stripped_path
         };
         let req = rewrite_request_path(req, &frontend.mount_path);
-        let rewritten_path =
+        let rewritten_path = if frontend.fallback_to_404 {
             if let Some(server_config) = load_server_config(frontend.bundle_path.clone()) {
                 let matching_rule = server_config
                     .rewrites
@@ -571,7 +879,10 @@ pub mod axum {
                 matching_rule.map(|rule| rule.destination.clone())
             } else {
                 None
-            };
+            }
+        } else {
+            None
+        };
 
         // Create the static files service with the rewritten path if applicable
         let res = if let Some(rewritten_path) = rewritten_path {
@@ -583,19 +894,21 @@ pub mod axum {
                 .try_call(req)
                 .await
                 .unwrap()
-        } else {
+        } else if let Some(fallback_path) = fallback_path {
             ServeDir::new(bundle_dir_path)
                 .not_found_service(ServeFile::new(fallback_path))
                 .try_call(req)
                 .await
                 .unwrap()
+        } else {
+            ServeDir::new(bundle_dir_path).try_call(req).await.unwrap()
         };
 
         let headers = res.headers().clone();
         let is_html =
             headers.get(http::header::CONTENT_TYPE) == Some(&HeaderValue::from_static("text/html"));
 
-        if is_html {
+        if is_html && should_inject_environment {
             // HTML files: inject environment variables and prevent caching (for auth)
             let mut res = res.map(move |body| {
                 let body_bytes = body.map_err(Into::into).boxed_unsync();
@@ -604,10 +917,16 @@ pub mod axum {
                     .map_frame(move |frame| {
                         frame.map_data({
                             let value = frontend_environment.clone();
+                            let component_kit_assets = component_kit_assets.clone();
                             move |bytes| {
                                 let mut output = Vec::with_capacity(bytes.len() * 2);
-                                inject_environment_script_tag(bytes.as_ref(), &mut output, &value)
-                                    .unwrap();
+                                inject_environment_script_tag(
+                                    bytes.as_ref(),
+                                    &mut output,
+                                    &value,
+                                    &component_kit_assets,
+                                )
+                                .unwrap();
                                 output.into()
                             }
                         })
@@ -686,28 +1005,25 @@ pub mod axum {
 mod tests {
     use super::*;
 
+    fn served_frontend(mount_path: &str, enabled: bool) -> ServedFrontend {
+        ServedFrontend {
+            bundle_path: "./public".to_string(),
+            environment: FrontedEnvironment::default(),
+            mount_path: mount_path.to_string(),
+            enabled,
+            fallback_to_404: true,
+            inject_environment: true,
+            component_kit_assets: Vec::new(),
+        }
+    }
+
     #[test]
     fn specific_mount_path_matches_before_root() {
         let registry = FrontendRegistry {
             frontends: vec![
-                ServedFrontend {
-                    bundle_path: "./public/platform-office-addin".to_string(),
-                    environment: FrontedEnvironment::default(),
-                    mount_path: "/public/platform-office-addin".to_string(),
-                    enabled: true,
-                },
-                ServedFrontend {
-                    bundle_path: "./public/platform-office-addin".to_string(),
-                    environment: FrontedEnvironment::default(),
-                    mount_path: "/office-addin".to_string(),
-                    enabled: true,
-                },
-                ServedFrontend {
-                    bundle_path: "./public".to_string(),
-                    environment: FrontedEnvironment::default(),
-                    mount_path: "/".to_string(),
-                    enabled: true,
-                },
+                served_frontend("/public/platform-office-addin", true),
+                served_frontend("/office-addin", true),
+                served_frontend("/", true),
             ],
         };
 
@@ -721,22 +1037,112 @@ mod tests {
     fn disabled_specific_mount_path_does_not_fall_back_to_root() {
         let registry = FrontendRegistry {
             frontends: vec![
-                ServedFrontend {
-                    bundle_path: "./public/platform-office-addin".to_string(),
-                    environment: FrontedEnvironment::default(),
-                    mount_path: "/office-addin".to_string(),
-                    enabled: false,
-                },
-                ServedFrontend {
-                    bundle_path: "./public".to_string(),
-                    environment: FrontedEnvironment::default(),
-                    mount_path: "/".to_string(),
-                    enabled: true,
-                },
+                served_frontend("/office-addin", false),
+                served_frontend("/", true),
             ],
         };
 
         assert!(registry.resolve("/office-addin").is_none());
+    }
+
+    #[test]
+    fn injects_component_kit_assets_before_main_module_script() {
+        let mut env = FrontedEnvironment::default();
+        env.additional_environment.insert(
+            "API_ROOT_URL".to_string(),
+            Value::String("/api/".to_string()),
+        );
+        let component_kit_assets = vec![ComponentKitAsset {
+            name: "example".to_string(),
+            directory_path: "/app/component-kits/example".to_string(),
+            mount_path: "/public/component-kits/example".to_string(),
+            script_path: Some("/public/component-kits/example/index-abc.js".to_string()),
+            stylesheet_path: Some("/public/component-kits/example/style.css".to_string()),
+        }];
+        let input = br#"<!doctype html><html><head></head><body><script type="module" src="/public/common/assets/index.js"></script></body></html>"#;
+        let mut output = Vec::new();
+
+        inject_environment_script_tag(input, &mut output, &env, &component_kit_assets)
+            .expect("html injection should succeed");
+
+        let output = String::from_utf8(output).expect("output should be utf8");
+        assert!(output.contains(r#"window.API_ROOT_URL = "/api/";"#));
+        assert!(output.contains(
+            r#"<link rel="stylesheet" href="/public/component-kits/example/style.css">"#
+        ));
+        let runtime_script_index = output
+            .find(r#"<script type="module" src="/public/common/assets/component-kit-react-runtime.js"></script>"#)
+            .expect("runtime script should be injected");
+        let kit_script_index = output
+            .find(r#"<script type="module" src="/public/component-kits/example/index-abc.js"></script>"#)
+            .expect("component kit script should be injected");
+        let main_script_index = output
+            .find(r#"<script type="module" src="/public/common/assets/index.js"></script>"#)
+            .expect("main script should remain");
+        assert!(runtime_script_index < kit_script_index);
+        assert!(kit_script_index < main_script_index);
+    }
+
+    #[test]
+    fn injects_component_kit_scripts_after_react_runtime_when_marker_exists() {
+        let component_kit_assets = vec![ComponentKitAsset {
+            name: "example".to_string(),
+            directory_path: "/app/component-kits/example".to_string(),
+            mount_path: "/public/component-kits/example".to_string(),
+            script_path: Some("/public/component-kits/example/index-abc.js".to_string()),
+            stylesheet_path: None,
+        }];
+        let input = br#"<!doctype html><html><head></head><body><script type="module" src="/public/common/assets/componentKitReactRuntime.js" data-erato-component-kit-react-runtime></script><script type="module" src="/public/common/assets/index.js"></script></body></html>"#;
+        let mut output = Vec::new();
+
+        inject_environment_script_tag(
+            input,
+            &mut output,
+            &FrontedEnvironment::default(),
+            &component_kit_assets,
+        )
+        .expect("html injection should succeed");
+
+        let output = String::from_utf8(output).expect("output should be utf8");
+        let runtime_script_index = output
+            .find(r#"<script type="module" src="/public/common/assets/componentKitReactRuntime.js" data-erato-component-kit-react-runtime></script>"#)
+            .expect("runtime script should remain");
+        let kit_script_index = output
+            .find(r#"<script type="module" src="/public/component-kits/example/index-abc.js"></script>"#)
+            .expect("component kit script should be injected");
+        let main_script_index = output
+            .find(r#"<script type="module" src="/public/common/assets/index.js"></script>"#)
+            .expect("main script should remain");
+
+        assert!(runtime_script_index < kit_script_index);
+        assert!(kit_script_index < main_script_index);
+    }
+
+    #[test]
+    fn discovers_component_kits_from_root_directory() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let kit_dir = tempdir.path().join("example");
+        std::fs::create_dir(&kit_dir).expect("kit dir should be created");
+        std::fs::write(kit_dir.join("index-abc123.js"), "").expect("entrypoint should be written");
+        std::fs::write(kit_dir.join("style.css"), "").expect("stylesheet should be written");
+
+        let component_kits = discover_component_kits(
+            tempdir
+                .path()
+                .to_str()
+                .expect("tempdir path should be unicode"),
+        );
+
+        assert_eq!(
+            component_kits,
+            vec![ComponentKitAsset {
+                name: "example".to_string(),
+                directory_path: kit_dir.to_string_lossy().into_owned(),
+                mount_path: "/public/component-kits/example".to_string(),
+                script_path: Some("/public/component-kits/example/index-abc123.js".to_string()),
+                stylesheet_path: Some("/public/component-kits/example/style.css".to_string()),
+            }]
+        );
     }
 
     #[test]

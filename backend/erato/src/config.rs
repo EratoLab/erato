@@ -2049,6 +2049,15 @@ pub struct FrontendConfig {
     #[facet(opaque)]
     pub additional_environment: HashMap<String, serde_json::Value>,
 
+    // Runtime-loaded frontend component kits.
+    //
+    // Each subdirectory of `directory` is treated as one component kit. The
+    // backend serves kit files under `/public/component-kits/<kit-name>/` and
+    // injects root-level `index-<hash>.js` and optional `.css` files into the
+    // frontend HTML.
+    #[serde(default)]
+    pub component_kits: FrontendComponentKitsConfig,
+
     // Whether to disable file upload functionality in the UI.
     // Defaults to `false`.
     #[serde(default)]
@@ -2111,6 +2120,26 @@ pub struct FrontendConfig {
     // are unaffected. Defaults to `false`.
     #[serde(default)]
     pub mask_reasoning_trace_text: bool,
+}
+
+fn default_component_kits_directory() -> String {
+    "/app/component-kits".to_string()
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct FrontendComponentKitsConfig {
+    // Directory containing component kit subdirectories.
+    // Defaults to `/app/component-kits`.
+    #[serde(default = "default_component_kits_directory")]
+    pub directory: String,
+}
+
+impl Default for FrontendComponentKitsConfig {
+    fn default() -> Self {
+        Self {
+            directory: default_component_kits_directory(),
+        }
+    }
 }
 
 fn default_sidebar_collapsed_mode() -> String {

@@ -11,6 +11,7 @@ on:
     paths:
       - '.github/workflows/docker-build.yml' 
       - 'backend/**'
+      - 'component-kit-example/**'
       - 'frontend/**'
       - 'office-addin/**'
       - 'e2e-tests/**'
@@ -25,6 +26,7 @@ on:
     paths:
       - '.github/workflows/docker-build.yml' 
       - 'backend/**'
+      - 'component-kit-example/**'
       - 'frontend/**'
       - 'office-addin/**'
       - 'e2e-tests/**'
@@ -41,6 +43,7 @@ env:
   MOCK_LLM_SERVER_IMAGE_NAME: erato/mock-llm-server
   MOCK_MCP_SERVER_IMAGE_NAME: erato/mock-mcp-server
   FRONTEND_IMAGE_NAME: erato/frontend
+  COMPONENT_KIT_EXAMPLE_IMAGE_NAME: erato/component-kit-example
   COMBINED_IMAGE_NAME: erato/app
   SHA_TAG: ${{ github.sha }}
   RELEASE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
@@ -67,6 +70,7 @@ jobs:
           cache: 'pnpm'
           cache-dependency-path: |
             ./frontend/pnpm-lock.yaml
+            ./component-kit-example/package.json
             ./office-addin/pnpm-lock.yaml
 
       - name: "Install frontend packages"
@@ -76,6 +80,14 @@ jobs:
       - name: "Build frontend library package"
         working-directory: ./frontend
         run: pnpm run build:lib
+
+      - name: "Install component-kit-example packages"
+        working-directory: ./component-kit-example
+        run: pnpm install --no-frozen-lockfile --lockfile=false
+
+      - name: "Build component-kit-example"
+        working-directory: ./component-kit-example
+        run: pnpm run build
 
       - name: "Install office-addin packages"
         working-directory: ./office-addin
@@ -100,7 +112,7 @@ jobs:
         uses: jbergstroem/hadolint-gh-action@v1.12.2
         if: success() || failure()
         with:
-          dockerfile: Dockerfile.combined backend/Dockerfile backend/Dockerfile.mock-llm-server backend/Dockerfile.mock-mcp-server backend/ollama-smol/Dockerfile frontend/Dockerfile
+          dockerfile: Dockerfile.combined backend/Dockerfile backend/Dockerfile.mock-llm-server backend/Dockerfile.mock-mcp-server backend/ollama-smol/Dockerfile frontend/Dockerfile component-kit-example/Dockerfile
           config_file: .hadolint.yaml
 
       - name: "rustfmt"
@@ -112,6 +124,11 @@ jobs:
         working-directory: ./frontend
         if: success() || failure()
         run: pnpm exec prettier . --check
+
+      - name: "Component kit example prettier"
+        working-directory: ./component-kit-example
+        if: success() || failure()
+        run: pnpm run format:check
 
       - name: "Compile i18n messages"
         working-directory: ./frontend
@@ -608,6 +625,20 @@ jobs:
           cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-amd64-buildcache
           cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-amd64-buildcache
 
+      - name: Build and push component-kit-example image
+        uses: docker/build-push-action@v6.15.0
+        with:
+          context: .
+          file: ./component-kit-example/Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.COMPONENT_KIT_EXAMPLE_IMAGE_NAME }}:latest-amd64
+            ${{ env.REGISTRY }}/${{ env.COMPONENT_KIT_EXAMPLE_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64
+            ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-amd64', env.REGISTRY, env.COMPONENT_KIT_EXAMPLE_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
+          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.COMPONENT_KIT_EXAMPLE_IMAGE_NAME }}:latest-amd64-buildcache
+          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.COMPONENT_KIT_EXAMPLE_IMAGE_NAME }}:latest-amd64-buildcache
+
       - name: Build and push Combined image
         uses: docker/build-push-action@v6.15.0
         with:
@@ -671,6 +702,20 @@ jobs:
             ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-arm64', env.REGISTRY, env.FRONTEND_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
           cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-arm64-buildcache
           cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-arm64-buildcache
+
+      - name: Build and push component-kit-example image
+        uses: docker/build-push-action@v6.15.0
+        with:
+          context: .
+          file: ./component-kit-example/Dockerfile
+          push: true
+          platforms: linux/arm64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.COMPONENT_KIT_EXAMPLE_IMAGE_NAME }}:latest-arm64
+            ${{ env.REGISTRY }}/${{ env.COMPONENT_KIT_EXAMPLE_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
+            ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-arm64', env.REGISTRY, env.COMPONENT_KIT_EXAMPLE_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
+          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.COMPONENT_KIT_EXAMPLE_IMAGE_NAME }}:latest-arm64-buildcache
+          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.COMPONENT_KIT_EXAMPLE_IMAGE_NAME }}:latest-arm64-buildcache
 
       - name: Build and push Combined image
         uses: docker/build-push-action@v6.15.0
@@ -783,6 +828,19 @@ jobs:
             docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.RELEASE_VERSION }} \
               ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.RELEASE_VERSION }}-amd64 \
               ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.RELEASE_VERSION }}-arm64
+          fi
+
+          # Component kit example manifest
+          docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.COMPONENT_KIT_EXAMPLE_IMAGE_NAME }}:latest \
+            ${{ env.REGISTRY }}/${{ env.COMPONENT_KIT_EXAMPLE_IMAGE_NAME }}:latest-amd64 \
+            ${{ env.REGISTRY }}/${{ env.COMPONENT_KIT_EXAMPLE_IMAGE_NAME }}:latest-arm64
+          docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.COMPONENT_KIT_EXAMPLE_IMAGE_NAME }}:${{ env.SHA_TAG }} \
+            ${{ env.REGISTRY }}/${{ env.COMPONENT_KIT_EXAMPLE_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64 \
+            ${{ env.REGISTRY }}/${{ env.COMPONENT_KIT_EXAMPLE_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
+          if [[ "${{ env.RELEASE_VERSION }}" != "" ]]; then
+            docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.COMPONENT_KIT_EXAMPLE_IMAGE_NAME }}:${{ env.RELEASE_VERSION }} \
+              ${{ env.REGISTRY }}/${{ env.COMPONENT_KIT_EXAMPLE_IMAGE_NAME }}:${{ env.RELEASE_VERSION }}-amd64 \
+              ${{ env.REGISTRY }}/${{ env.COMPONENT_KIT_EXAMPLE_IMAGE_NAME }}:${{ env.RELEASE_VERSION }}-arm64
           fi
 
           # Combined manifest

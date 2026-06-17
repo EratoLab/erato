@@ -1,13 +1,13 @@
 # Component Customization
 
-Erato provides a component registry system that allows customer forks to override specific UI components without modifying core application code. This enables deep customization while maintaining easy upstream synchronization.
+Erato provides a component registry system that allows deployments and custom builds to override specific UI components without modifying core application code. Runtime component kits are the preferred packaging mechanism for deployment-specific components, while customer forks can still register compiled-in overrides.
 
 ## Overview
 
 The component registry pattern provides:
 
-- **Zero dead code** - Custom components only exist in customer forks
-- **Minimal merge conflicts** - Only one file (`componentRegistry.ts`) differs between forks
+- **Runtime packaging** - Component kits can be deployed outside the main frontend bundle
+- **Minimal merge conflicts** - Custom builds can keep overrides isolated in `componentRegistry.ts`
 - **Type-safe contracts** - TypeScript ensures custom components match expected props
 - **Granular control** - Override individual components without touching any core files
 
@@ -19,24 +19,71 @@ flowchart TB
     MainRegistry["componentRegistry.ts<br/>All values: null (use defaults)"]
   end
 
+  subgraph ComponentKit[Runtime Component Kit]
+    KitBundle["index-<hash>.js<br/>registers window.ERATO_COMPONENT_KITS"]
+    KitComponents["Component implementations"]
+  end
+
   subgraph CustomerFork[Customer Fork]
     ForkRegistry["componentRegistry.ts<br/>MessageControls: CustomMessageControls<br/>ChatWelcomeScreen: CustomWelcome<br/>...rest: null"]
     CustomComponents["src/customer/components/<br/>CustomMessageControls.tsx<br/>CustomWelcome.tsx"]
   end
 
+  KitBundle --> KitComponents
+  KitBundle --> MainRegistry
   ForkRegistry --> CustomComponents
 ```
 
+## Runtime Component Kits
+
+Component kits are discovered by the backend from `frontend.component_kits.directory`.
+Each direct subdirectory is one kit. The backend serves kit files under
+`/public/component-kits/<kit-name>/`, injects a root `index-<hash>.js` module
+before the main frontend bundle, and injects a root `.css` file when present.
+
+Kits self-register by pushing a `ComponentKitRegistration` into
+`window.ERATO_COMPONENT_KITS`. Priorities are per component; lower numbers win.
+When priorities are equal, the last loaded component wins.
+
+```ts
+import type { ComponentKitRegistration } from "@erato/frontend/library";
+
+window.ERATO_COMPONENT_KITS ??= [];
+window.ERATO_COMPONENT_KITS.push({
+  name: "my-kit",
+  components: [
+    {
+      extensionPoint: "ChatWelcomeScreen",
+      component: MyWelcomeScreen,
+      priority: 50,
+    },
+  ],
+} satisfies ComponentKitRegistration);
+```
+
+The main frontend loads a small React runtime entrypoint first, then component
+kit entrypoints, then the main app entrypoint. Component kits can assume
+`window.ERATO_REACT` is set when their entrypoint evaluates and should use that
+host React singleton rather than bundling a separate React copy. The example
+package in `component-kit-example/` registers all current extension points and
+builds to the expected `index-<hash>.js` plus `style.css` layout.
+
 ## Available Override Points
 
-| Registry Key                  | Location         | Props Interface               | Description                                                    |
-| ----------------------------- | ---------------- | ----------------------------- | -------------------------------------------------------------- |
-| `AssistantFileSourceSelector` | Assistant form   | `FileSourceSelectorProps`     | File source selector when adding default files to an assistant |
-| `ChatFileSourceSelector`      | Chat input       | `FileSourceSelectorProps`     | File source selector when uploading files to a conversation    |
-| `ChatWelcomeScreen`           | Chat empty state | `WelcomeScreenProps`          | Empty state shown when a chat has no messages                  |
-| `AssistantWelcomeScreen`      | Assistant chat   | `AssistantWelcomeScreenProps` | Empty state shown when opening an assistant chat               |
-| `MessageControls`             | Every message    | `MessageControlsProps`        | Action buttons below each message (copy, edit, feedback, etc.) |
-| `ChatMessageRenderer`         | Every message    | `ChatMessageProps`            | Entire message layout (avatar, bubble, content, controls)      |
+| Registry Key                    | Location            | Props Interface                      | Description                                                    |
+| ------------------------------- | ------------------- | ------------------------------------ | -------------------------------------------------------------- |
+| `AssistantFileSourceSelector`   | Assistant form      | `FileSourceSelectorProps`            | File source selector when adding default files to an assistant |
+| `ChatFileSourceSelector`        | Chat input          | `FileSourceSelectorProps`            | File source selector when uploading files to a conversation    |
+| `ChatInputAttachmentPreview`    | Chat input          | `ChatInputAttachmentPreviewProps`    | Inline attachment preview inside the chat composer             |
+| `ChatGroupedAttachmentsPreview` | Attachment groups   | `GroupedFileAttachmentsPreviewProps` | Grouped attachment preview cards or chips                      |
+| `ChatHistoryList`               | Chat sidebar        | `ChatHistoryListProps`               | Chat history list rows and actions                             |
+| `ChatWelcomeScreen`             | Chat empty state    | `WelcomeScreenProps`                 | Empty state shown when a chat has no messages                  |
+| `StarterPrompts`                | Chat welcome screen | `StarterPromptsRendererProps`        | Starter prompt suggestion presentation                         |
+| `AssistantWelcomeScreen`        | Assistant chat      | `AssistantWelcomeScreenProps`        | Empty state shown when opening an assistant chat               |
+| `MessageControls`               | Every message       | `MessageControlsProps`               | Action buttons below each message                              |
+| `ChatMessageRenderer`           | Every message       | `ChatMessageProps`                   | Entire message layout                                          |
+| `ChatTopLeftAccessory`          | Chat shell          | `ChatTopLeftAccessoryProps`          | Chat-level accessory UI                                        |
+| `EratoEmailCodeBlock`           | Message code block  | `EratoEmailCodeBlockProps`           | Custom renderer for `erato-email` fenced code blocks           |
 
 Each example is available in `frontend/src/customer/examples/` and can be copied to `frontend/src/customer/components/` as a starting point.
 

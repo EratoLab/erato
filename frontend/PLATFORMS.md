@@ -21,6 +21,7 @@ The main web frontend is served from:
 - `/public/common/locales/<lang>/messages.json`
 - `/public/common/custom-theme/<theme>/...`
 - `/public/common/voice-runtime/...`
+- `/public/component-kits/<kit-name>/...`
 - `/public/favicon.ico`
 - `/public/favicon.svg`
 
@@ -116,6 +117,7 @@ It serves:
 
 - the main frontend from `/`
 - platform bundles from `/public/<platform>`
+- runtime component kits from `/public/component-kits/<kit-name>`
 - optional legacy bundle paths where configured
 - favicon requests via a dedicated resolver that prefers theme-specific favicons first
 
