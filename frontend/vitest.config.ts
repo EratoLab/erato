@@ -15,8 +15,15 @@ export default defineConfig({
     globals: true,
     include: ["**/*.test.{ts,tsx}"],
     setupFiles: ["./src/lib/setupTests.ts"],
-    deps: {
-      inline: ["@storybook/test"],
+    server: {
+      deps: {
+        inline: [
+          "@extend-ai/react-xlsx",
+          "@storybook/test",
+          "us-atlas",
+          "world-atlas",
+        ],
+      },
     },
   },
   resolve: {

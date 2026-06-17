@@ -26,6 +26,33 @@ vi.mock("@extend-ai/react-docx", () => ({
   useDocxModel: useDocxModelMock,
 }));
 
+vi.mock("@extend-ai/react-xlsx", () => ({
+  XlsxViewer: ({
+    fileName,
+    isDark,
+    readOnly,
+    src,
+    useWorker,
+  }: {
+    fileName?: string;
+    isDark?: boolean;
+    readOnly?: boolean;
+    src?: string;
+    useWorker?: boolean;
+  }) => (
+    <div
+      data-filename={fileName}
+      data-is-dark={isDark ? "true" : "false"}
+      data-read-only={readOnly ? "true" : "false"}
+      data-src={src}
+      data-testid="mock-react-xlsx-viewer"
+      data-use-worker={useWorker ? "true" : "false"}
+    >
+      XLSX rendered
+    </div>
+  ),
+}));
+
 const renderWithTheme = (ui: React.ReactElement) =>
   render(<ThemeProvider>{ui}</ThemeProvider>);
 
@@ -98,6 +125,73 @@ describe("FilePreviewContent", () => {
     expect(preview).toHaveAttribute("data-docx-theme", "dark");
     expect(
       screen.getByRole("button", { name: "Use light document theme" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("renders XLSX files through the XLSX viewer", () => {
+    renderWithTheme(
+      <FilePreviewContent
+        filename="budget.xlsx"
+        url="https://files.example.com/download/budget.xlsx"
+      />,
+    );
+
+    expect(screen.getByTestId("mock-react-xlsx-viewer")).toHaveAttribute(
+      "data-src",
+      "https://files.example.com/download/budget.xlsx",
+    );
+    expect(screen.getByTestId("mock-react-xlsx-viewer")).toHaveAttribute(
+      "data-filename",
+      "budget.xlsx",
+    );
+    expect(screen.getByTestId("mock-react-xlsx-viewer")).toHaveAttribute(
+      "data-read-only",
+      "true",
+    );
+    expect(screen.getByTestId("mock-react-xlsx-viewer")).toHaveAttribute(
+      "data-use-worker",
+      "false",
+    );
+  });
+
+  it("uses the XLSX viewer when the MIME type identifies a spreadsheet", () => {
+    renderWithTheme(
+      <FilePreviewContent
+        filename="download"
+        url="https://files.example.com/download/budget"
+        mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      />,
+    );
+
+    expect(screen.getByTestId("mock-react-xlsx-viewer")).toBeInTheDocument();
+  });
+
+  it("lets the XLSX preview theme toggle independently", () => {
+    renderWithTheme(
+      <FilePreviewContent
+        filename="budget.xlsx"
+        url="https://files.example.com/download/budget.xlsx"
+      />,
+    );
+
+    const preview = screen.getByTestId("file-preview-xlsx");
+    expect(preview).toHaveAttribute("data-xlsx-theme", "light");
+    expect(screen.getByTestId("mock-react-xlsx-viewer")).toHaveAttribute(
+      "data-is-dark",
+      "false",
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use dark spreadsheet theme" }),
+    );
+
+    expect(preview).toHaveAttribute("data-xlsx-theme", "dark");
+    expect(screen.getByTestId("mock-react-xlsx-viewer")).toHaveAttribute(
+      "data-is-dark",
+      "true",
+    );
+    expect(
+      screen.getByRole("button", { name: "Use light spreadsheet theme" }),
     ).toHaveAttribute("aria-pressed", "true");
   });
 });

@@ -1946,6 +1946,31 @@ msgid "filePreview.docxTheme.useLight"
 msgstr "Usar tema claro del documento"
 
 #. js-lingui-explicit-id
+#: src/components/ui/FilePreview/XlsxPreview.tsx
+msgid "filePreview.xlsxEmpty"
+msgstr "La vista previa de la hoja de cálculo está vacía."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/XlsxPreview.tsx
+msgid "filePreview.xlsxLoading"
+msgstr "Cargando vista previa de la hoja de cálculo..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/XlsxPreview.tsx
+msgid "filePreview.xlsxPreviewUnavailable"
+msgstr "Vista previa no disponible: no se pudo cargar esta hoja de cálculo."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/XlsxPreview.tsx
+msgid "filePreview.xlsxTheme.useDark"
+msgstr "Usar tema oscuro de la hoja de cálculo"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/XlsxPreview.tsx
+msgid "filePreview.xlsxTheme.useLight"
+msgstr "Usar tema claro de la hoja de cálculo"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Modal/FilePreviewModal.tsx
 msgid "filePreviewModal.unavailableMissingPermissions"
 msgstr ""

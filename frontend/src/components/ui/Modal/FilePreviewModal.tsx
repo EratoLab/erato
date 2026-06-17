@@ -13,6 +13,9 @@ const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp"];
 const DOCX_MIME_TYPE =
   // eslint-disable-next-line lingui/no-unlocalized-strings
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const XLSX_MIME_TYPE =
+  // eslint-disable-next-line lingui/no-unlocalized-strings
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 const getExtension = (filename: string): string =>
   filename.split(".").pop()?.toLowerCase() ?? "";
@@ -33,7 +36,9 @@ const resolvePreviewSource = (
     extension === "pdf" ||
     extension === "eml" ||
     extension === "docx" ||
-    mimeType === DOCX_MIME_TYPE
+    extension === "xlsx" ||
+    mimeType === DOCX_MIME_TYPE ||
+    mimeType === XLSX_MIME_TYPE
   ) {
     return { url: previewUrl ?? "", canPreview: Boolean(previewUrl) };
   }

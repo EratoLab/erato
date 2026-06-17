@@ -1946,6 +1946,31 @@ msgid "filePreview.docxTheme.useLight"
 msgstr "Helles Dokumentdesign verwenden"
 
 #. js-lingui-explicit-id
+#: src/components/ui/FilePreview/XlsxPreview.tsx
+msgid "filePreview.xlsxEmpty"
+msgstr "Tabellenvorschau ist leer."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/XlsxPreview.tsx
+msgid "filePreview.xlsxLoading"
+msgstr "Tabellenvorschau wird geladen..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/XlsxPreview.tsx
+msgid "filePreview.xlsxPreviewUnavailable"
+msgstr "Vorschau nicht verfügbar: Diese Tabelle konnte nicht geladen werden."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/XlsxPreview.tsx
+msgid "filePreview.xlsxTheme.useDark"
+msgstr "Dunkles Tabellendesign verwenden"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/XlsxPreview.tsx
+msgid "filePreview.xlsxTheme.useLight"
+msgstr "Helles Tabellendesign verwenden"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Modal/FilePreviewModal.tsx
 msgid "filePreviewModal.unavailableMissingPermissions"
 msgstr ""
