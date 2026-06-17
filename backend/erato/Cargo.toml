@@ -92,7 +92,8 @@ console-subscriber = { version = "0.5.0", optional = true }
 jemalloc_pprof = { version = "0.8.2", optional = true, features = ["flamegraph", "symbolize"] }
 tikv-jemallocator = { version = "0.6.1", optional = true, features = ["profiling", "unprefixed_malloc_on_supported_platforms"] }
 
-kreuzberg = { version = "=4.9.4",  features = ["bundled-pdfium", "excel", "office", "email", "html", "archives"]}
+kreuzberg = { version = "5.0.0-rc.18",  features = ["pdf", "excel", "office", "email", "html", "archives"]}
+html-to-markdown-rs = { version = "3.6.11" }
 ical = "0.11.0"
 
 [dependencies.sentry]

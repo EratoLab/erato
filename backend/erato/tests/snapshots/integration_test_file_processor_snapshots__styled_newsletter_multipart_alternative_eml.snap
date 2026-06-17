@@ -4,16 +4,23 @@ expression: extracted
 ---
 **Subject**: Weekly digest: Microsoft service updates
 
-**From**: "Microsoft 365 Message center" \<o365mc@synthetic.example.com\>
+**From**: o365mc@synthetic.example.com
 
-**To**: "Tenant Admin" \<admin@contoso.example\>
+**To**: admin@contoso.example
 
 **Date**: Mon, 08 Jun 2026 06:00:00 +0000
+
+**viewport**: width=device-width
 
 Synthetic preheader preview text
 
 Weekly digest readable item ONE about service retirement
 
+| Weekly digest readable item ONE about service retirement  |
+
+| Weekly digest readable item TWO about new admin controls  |
+
+| Weekly digest readable item THREE about rollout timing  |
 
 ## Email plain text body
 

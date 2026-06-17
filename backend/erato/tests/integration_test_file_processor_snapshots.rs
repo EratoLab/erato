@@ -23,7 +23,7 @@ async fn test_file_processor_examples_are_snapshotted() {
     let processor =
         create_file_processor("kreuzberg").expect("Expected to create kreuzberg file processor");
 
-    let fixtures = [
+    let fixtures: &[ExampleFixture] = &[
         ExampleFixture {
             name: "Acme_Inc_Company_Overview_pptx",
             path: "Acme_Inc_Company_Overview.pptx",
@@ -65,6 +65,11 @@ async fn test_file_processor_examples_are_snapshotted() {
             name: "weekly_digest_microsoft.eml",
             path: "weekly_digest_microsoft.eml",
             mime_type: Some("message/rfc822"),
+        },
+        ExampleFixture {
+            name: "weekly_digest_microsoft_inner_html.html",
+            path: "weekly_digest_microsoft_inner_html.html",
+            mime_type: Some("text/html"),
         },
         ExampleFixture {
             name: "weekly_digest_microsoft_via_erato.eml",

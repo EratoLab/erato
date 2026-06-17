@@ -7,14 +7,14 @@ use ical::{IcalParser, VcardParser, parser::Component, property::Property};
 use kreuzberg::plugins::{DocumentExtractor, Plugin};
 use kreuzberg::types::internal::InternalDocument;
 
-use super::normalize_mime_type;
+use super::{PLAIN_TEXT_MIME_TYPE, normalize_mime_type};
 
 // --- Calendar and vCard extractor wiring -----------------------------------
 
 const CALENDAR_VCARD_EXTRACTOR_NAME: &str = "calendar-vcard-extractor";
 
 pub(crate) fn register_calendar_vcard_extractor() -> Result<(), Report> {
-    kreuzberg::plugins::register_extractor(Arc::new(CalendarVcardExtractor))
+    kreuzberg::plugins::register_document_extractor(Arc::new(CalendarVcardExtractor))
         .wrap_err("failed to register calendar/vcard extractor")
 }
 
@@ -31,7 +31,7 @@ impl DocumentExtractor for CalendarVcardExtractor {
         _config: &kreuzberg::ExtractionConfig,
     ) -> kreuzberg::Result<InternalDocument> {
         let normalized_mime = normalize_mime_type(mime_type);
-        if normalized_mime != kreuzberg::PLAIN_TEXT_MIME_TYPE {
+        if normalized_mime != PLAIN_TEXT_MIME_TYPE {
             return Err(kreuzberg::KreuzbergError::UnsupportedFormat(
                 mime_type.to_string(),
             ));
@@ -61,20 +61,18 @@ impl DocumentExtractor for CalendarVcardExtractor {
 
         if !markdown.trim().is_empty() {
             let mut doc = InternalDocument::new("calendar-vcard");
-            doc.mime_type = std::borrow::Cow::Owned(normalized_mime);
+            doc.mime_type = normalized_mime;
             doc.metadata.output_format = Some("markdown".to_string());
             doc.pre_rendered_content = Some(markdown);
             return Ok(doc);
         }
 
         // Fallback to plain-text extraction when this isn't calendar/vCard data.
-        kreuzberg::extractors::PlainTextExtractor::new()
-            .extract_bytes(content, mime_type, _config)
-            .await
+        Ok(plain_text_document(content, mime_type))
     }
 
     fn supported_mime_types(&self) -> &[&str] {
-        &[kreuzberg::PLAIN_TEXT_MIME_TYPE]
+        &[PLAIN_TEXT_MIME_TYPE]
     }
 
     fn priority(&self) -> i32 {
@@ -98,6 +96,22 @@ impl Plugin for CalendarVcardExtractor {
     fn shutdown(&self) -> kreuzberg::Result<()> {
         Ok(())
     }
+}
+
+fn plain_text_document(content: &[u8], mime_type: &str) -> InternalDocument {
+    let text = String::from_utf8_lossy(content).into_owned();
+    let text = text
+        .trim_end_matches('\n')
+        .trim_end_matches('\r')
+        .to_string();
+
+    let mut doc = InternalDocument::new("text");
+    doc.mime_type = mime_type.to_string();
+    doc.metadata.output_format = Some("markdown".to_string());
+    if !text.is_empty() {
+        doc.pre_rendered_content = Some(text);
+    }
+    doc
 }
 
 /// Unescape RFC 5545 / RFC 6350 TEXT escaping: `\n`/`\N` -> newline, `\,` -> `,`,

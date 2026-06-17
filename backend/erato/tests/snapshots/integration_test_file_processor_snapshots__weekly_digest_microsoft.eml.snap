@@ -4,495 +4,332 @@ expression: extracted
 ---
 **Subject**: Weekly digest: Microsoft service updates
 
-**From**: "Microsoft 365 Message center" \<o365mc@microsoft.com\>
+**From**: o365mc@microsoft.com
 
 **To**: redacted-user@redacted.onmicrosoft.com
 
 **Date**: Mon, 18 May 2026 03:32:14 +0000
 
+**viewport**: width=device-width
+
+**eventId**: m365-message-center-digest-smb
+
+**messageId**: dede93a0-ab03-4617-8669-09b6b793a903
+
+**cloud**: AZ
+
 Weekly digest: Microsoft service updates
 
 View a summary of the updates.
 
+Microsoft
 
-## Email plain text body
+|  As a new admin to the Microsoft 365 admin center, you’ll get weekly emails from the message center about upcoming changes to your services until May 28, 2026. Update your preferences to continue getting emails like this one. Go to preferences  |
+
+|  Message center announcements May 11, 2026 - May 17, 2026 MAXREDACTED NAME (REDACTED COMPANY) REDACTED-TENANT-ID  |  |
+
+|  Major updates  |  |
+
+|  Security Detection Report in Teams Admin Center MC1311977 \| May 15 - A new Security Detection Report in the Teams admin center offers centralized visibility into messaging threats like impersonation, malicious URLs, and unsafe files. Available from late June 2026, it helps admins investigate, export data, and block malicious users, enhancing security operations and response workflows.View more  |
+
+|  Security Detection Report in Teams Admin Center MC1311977 \| May 15 - A new Security Detection Report in the Teams admin center offers centralized visibility into messaging threats like impersonation, malicious URLs, and unsafe files. Available from late June 2026, it helps admins investigate, export data, and block malicious users, enhancing security operations and response workflows.View more  |  |
+
+|  (Updated) Microsoft Teams: AI meeting recap without transcript to meet compliance policies MC1275312 \| May 14 - Microsoft Teams will offer AI meeting recaps without saving transcripts or recordings, supporting compliance policies. Available mid-2026 for M365 Copilot Premium users, admins control AI features tenant-wide, and organizers can enable/disable recaps before or during meetings. Summaries are stored temporarily in OneDrive.View more  |
+
+|  (Updated) Microsoft Teams: AI meeting recap without transcript to meet compliance policies MC1275312 \| May 14 - Microsoft Teams will offer AI meeting recaps without saving transcripts or recordings, supporting compliance policies. Available mid-2026 for M365 Copilot Premium users, admins control AI features tenant-wide, and organizers can enable/disable recaps before or during meetings. Summaries are stored temporarily in OneDrive.View more  |  |
+
+|  Microsoft SharePoint: Retirement of IDCRL authentication protocol and enforcement of OpenID Connect and OAuth protocols MC1184649 \| May 13 - Microsoft is retiring the legacy IDCRL authentication protocol in SharePoint Online and OneDrive for Business by May 1, 2026, enforcing modern protocols OpenID Connect and OAuth. Legacy authentication will be blocked starting February 16, 2026, with temporary re-enablement until April 30, 2026. Organizations must migrate promptly.View more  |
+
+|  Microsoft SharePoint: Retirement of IDCRL authentication protocol and enforcement of OpenID Connect and OAuth protocols MC1184649 \| May 13 - Microsoft is retiring the legacy IDCRL authentication protocol in SharePoint Online and OneDrive for Business by May 1, 2026, enforcing modern protocols OpenID Connect and OAuth. Legacy authentication will be blocked starting February 16, 2026, with temporary re-enablement until April 30, 2026. Organizations must migrate promptly.View more  |  |
+
+|  Action required: Upgrade macOS 13 devices to maintain Teams desktop access MC1308857 \| May 12 - Microsoft Teams will stop desktop client updates for macOS 13 starting May 2026, with upgrade notifications in June and blocking access by mid-July. Users must upgrade macOS or use Teams on the web. Organizations should identify affected devices, plan upgrades, and prepare users and support teams accordingly.View more  |
+
+|  Action required: Upgrade macOS 13 devices to maintain Teams desktop access MC1308857 \| May 12 - Microsoft Teams will stop desktop client updates for macOS 13 starting May 2026, with upgrade notifications in June and blocking access by mid-July. Users must upgrade macOS or use Teams on the web. Organizations should identify affected devices, plan upgrades, and prepare users and support teams accordingly.View more  |  |
+
+|  (Updated) Microsoft Teams: New chat sections for muted and meeting chats MC1269864 \| May 12 - Microsoft Teams will introduce two new chat sections—Muted chats (enabled by default) and Meeting chats (disabled by default)—to organize conversations. Rollout starts early May 2026, completing by month-end. Users can enable, disable, or reorder these sections; no admin action or controls are required.View more  |
+
+|  (Updated) Microsoft Teams: New chat sections for muted and meeting chats MC1269864 \| May 12 - Microsoft Teams will introduce two new chat sections—Muted chats (enabled by default) and Meeting chats (disabled by default)—to organize conversations. Rollout starts early May 2026, completing by month-end. Users can enable, disable, or reorder these sections; no admin action or controls are required.View more  |  |
+
+|  (Updated) Transitioning Teams Android Device Management from Teams admin Center to the Teams Rooms Pro Management portal MC1227622 \| May 12 - Teams Android device management is transitioning from the Teams admin center to the Teams Rooms Pro Management portal by mid-2026. This unifies management of all Teams devices in one portal, enhancing inventory, updates, health monitoring, and remote actions. No immediate action is needed until General Availability.View more  |
+
+|  (Updated) Transitioning Teams Android Device Management from Teams admin Center to the Teams Rooms Pro Management portal MC1227622 \| May 12 - Teams Android device management is transitioning from the Teams admin center to the Teams Rooms Pro Management portal by mid-2026. This unifies management of all Teams devices in one portal, enhancing inventory, updates, health monitoring, and remote actions. No immediate action is needed until General Availability.View more  |  |
+
+|  Additional updates  |  |
+
+|  Microsoft Teams: Digital signage support for Teams panels MC1311979 \| May 15 - Microsoft Teams will support digital signage on idle Teams panels starting June 2026, configurable by admins via the Teams Rooms Pro Management portal. It supports third-party providers like Appspace and XOGO, requires Teams Rooms Pro or Shared Spaces licenses, and allows tenant-wide or device-specific settings.View more  |
+
+|  Microsoft Teams: Digital signage support for Teams panels MC1311979 \| May 15 - Microsoft Teams will support digital signage on idle Teams panels starting June 2026, configurable by admins via the Teams Rooms Pro Management portal. It supports third-party providers like Appspace and XOGO, requires Teams Rooms Pro or Shared Spaces licenses, and allows tenant-wide or device-specific settings.View more  |  |
+
+|  Classic Outlook for Windows: User-initiated insights with Copilot MC1311978 \| May 15 - Classic Outlook for Windows will add User Initiated Insights with Copilot, letting users highlight email text to get contextual AI-generated insights. Rolling out May-June 2026, the feature is on by default for eligible users, integrates into Outlook without add-ins, and follows existing Microsoft 365 security policies.View more  |
+
+|  Classic Outlook for Windows: User-initiated insights with Copilot MC1311978 \| May 15 - Classic Outlook for Windows will add User Initiated Insights with Copilot, letting users highlight email text to get contextual AI-generated insights. Rolling out May-June 2026, the feature is on by default for eligible users, integrates into Outlook without add-ins, and follows existing Microsoft 365 security policies.View more  |  |
+
+|  Department billing for Microsoft 365 Backup MC1311976 \| May 15 - Microsoft 365 Backup now supports department billing, allowing admins to create up to 50 billing policies by department, geography, or unit, with delegated control via RBAC. Available to new customers from mid-May 2026; existing customers will get it later this year with no immediate changes.View more  |
+
+|  Department billing for Microsoft 365 Backup MC1311976 \| May 15 - Microsoft 365 Backup now supports department billing, allowing admins to create up to 50 billing policies by department, geography, or unit, with delegated control via RBAC. Available to new customers from mid-May 2026; existing customers will get it later this year with no immediate changes.View more  |  |
+
+|  Microsoft Purview compliance portal: Role groups user interface (UI) enhancements MC1311975 \| May 15 - Microsoft Purview compliance portal is enhancing the Role groups UI to let admins quickly view assignments by role, member, or their own permissions. Rolling out mid-June to mid-August 2026, this default-enabled update improves permission clarity without changing existing assignments or workflows. No action needed.View more  |
+
+|  Microsoft Purview compliance portal: Role groups user interface (UI) enhancements MC1311975 \| May 15 - Microsoft Purview compliance portal is enhancing the Role groups UI to let admins quickly view assignments by role, member, or their own permissions. Rolling out mid-June to mid-August 2026, this default-enabled update improves permission clarity without changing existing assignments or workflows. No action needed.View more  |  |
+
+|  PowerPoint for Windows: Create a presentation with Copilot directly from PowerPoint Home MC1311974 \| May 15 - PowerPoint for Windows will enable users with a Copilot license to create presentations directly from PowerPoint Home in the File menu, starting late May 2026. The feature is enabled by default, requires no admin changes, and helps users quickly draft presentations using Copilot.View more  |
+
+|  PowerPoint for Windows: Create a presentation with Copilot directly from PowerPoint Home MC1311974 \| May 15 - PowerPoint for Windows will enable users with a Copilot license to create presentations directly from PowerPoint Home in the File menu, starting late May 2026. The feature is enabled by default, requires no admin changes, and helps users quickly draft presentations using Copilot.View more  |  |
+
+|  PowerPoint for Mac: Create a presentation with Copilot directly from PowerPoint Home MC1311973 \| May 15 - PowerPoint for Mac will enable users with a Microsoft Copilot license to create presentations directly from PowerPoint Home in the File menu, starting late May 2026. The feature is enabled by default, requires no admin changes, and aims to streamline the workflow from idea to draft.View more  |
+
+|  PowerPoint for Mac: Create a presentation with Copilot directly from PowerPoint Home MC1311973 \| May 15 - PowerPoint for Mac will enable users with a Microsoft Copilot license to create presentations directly from PowerPoint Home in the File menu, starting late May 2026. The feature is enabled by default, requires no admin changes, and aims to streamline the workflow from idea to draft.View more  |  |
+
+|  PowerPoint for the web: Create a presentation with Copilot directly from the PowerPoint web app MC1311972 \| May 15 - Starting mid-May 2026, PowerPoint for the web will let users with a Microsoft Copilot license create presentations directly using Copilot. This feature is enabled by default, requires no admin changes, and is immediately available upon opening the app. No action is needed to prepare.View more  |
+
+|  PowerPoint for the web: Create a presentation with Copilot directly from the PowerPoint web app MC1311972 \| May 15 - Starting mid-May 2026, PowerPoint for the web will let users with a Microsoft Copilot license create presentations directly using Copilot. This feature is enabled by default, requires no admin changes, and is immediately available upon opening the app. No action is needed to prepare.View more  |  |
+
+|  Copilot in SharePoint will start rolling out to all tenants as an opt-out preview starting in mid-June 2026 MC1311968 \| May 15 - Copilot in SharePoint will roll out as an opt-out preview starting mid-June 2026 for Microsoft 365 Copilot licensed users. It enables AI-powered content creation and management via a chat interface, respects user permissions, and offers admin controls for tenant or site-level opt-in/out and customization.View more  |
+
+|  Copilot in SharePoint will start rolling out to all tenants as an opt-out preview starting in mid-June 2026 MC1311968 \| May 15 - Copilot in SharePoint will roll out as an opt-out preview starting mid-June 2026 for Microsoft 365 Copilot licensed users. It enables AI-powered content creation and management via a chat interface, respects user permissions, and offers admin controls for tenant or site-level opt-in/out and customization.View more  |  |
+
+|  (Updated) Microsoft 365 Copilot: Planner Agent rename and rollout to premium and basic plans MC1250279 \| May 15 - Starting mid-March 2026, the Project Manager agent in Microsoft Planner will be renamed Planner Agent, aligning with Microsoft 365 Copilot branding. It will be available to Copilot-licensed users in group-based Planner premium and basic plans, with no functional changes. Rollout completes by May 2026; no admin action required.View more  |
+
+|  (Updated) Microsoft 365 Copilot: Planner Agent rename and rollout to premium and basic plans MC1250279 \| May 15 - Starting mid-March 2026, the Project Manager agent in Microsoft Planner will be renamed Planner Agent, aligning with Microsoft 365 Copilot branding. It will be available to Copilot-licensed users in group-based Planner premium and basic plans, with no functional changes. Rollout completes by May 2026; no admin action required.View more  |  |
+
+|  (Updated) Microsoft Viva Engage: Flexible targeting of Storyline Announcements MC1183013 \| May 15 - Microsoft Viva Engage is introducing flexible, precise audience targeting for Storyline Announcements, allowing leaders to define custom audiences using organizational attributes, groups, or individuals at posting time. Public preview runs mid-November 2025 to mid-March 2026; general availability begins July 2026. Premium licensing is required.View more  |
+
+|  (Updated) Microsoft Viva Engage: Flexible targeting of Storyline Announcements MC1183013 \| May 15 - Microsoft Viva Engage is introducing flexible, precise audience targeting for Storyline Announcements, allowing leaders to define custom audiences using organizational attributes, groups, or individuals at posting time. Public preview runs mid-November 2025 to mid-March 2026; general availability begins July 2026. Premium licensing is required.View more  |  |
+
+|  (Updated) Viva Engage: Community feeds improvements MC1187781 \| May 15 - Viva Engage communities will default to viewing conversations by recent posts instead of recent activity, with unread indicators in both new and all feeds. This feature, rolling out worldwide from July 2026, includes sticky user preferences and requires no action or compliance changes.View more  |
+
+|  (Updated) Viva Engage: Community feeds improvements MC1187781 \| May 15 - Viva Engage communities will default to viewing conversations by recent posts instead of recent activity, with unread indicators in both new and all feeds. This feature, rolling out worldwide from July 2026, includes sticky user preferences and requires no action or compliance changes.View more  |  |
+
+|  (Updated) Create charts on pages with AI in SharePoint MC1282567 \| May 15 - SharePoint introduces an AI-assisted Charts web part, enabling page authors with a Microsoft 365 Copilot license to create and edit interactive charts using plain-language prompts. Rollout starts late May 2026 for Targeted Release and mid-June 2026 worldwide, with no required action for organizations.View more  |
+
+|  (Updated) Create charts on pages with AI in SharePoint MC1282567 \| May 15 - SharePoint introduces an AI-assisted Charts web part, enabling page authors with a Microsoft 365 Copilot license to create and edit interactive charts using plain-language prompts. Rollout starts late May 2026 for Targeted Release and mid-June 2026 worldwide, with no required action for organizations.View more  |  |
+
+|  (Updated) Purview Communication Compliance: Temporary delays in processing due to planned infrastructure migration MC1214183 \| May 15 - Microsoft Purview Communication Compliance is undergoing an infrastructure upgrade from January 5 to June 15, 2026, causing temporary processing delays, intermittent errors, outdated report data, and reduced responsiveness. No data loss will occur. Admins should inform teams; no action is required.View more  |
+
+|  (Updated) Purview Communication Compliance: Temporary delays in processing due to planned infrastructure migration MC1214183 \| May 15 - Microsoft Purview Communication Compliance is undergoing an infrastructure upgrade from January 5 to June 15, 2026, causing temporary processing delays, intermittent errors, outdated report data, and reduced responsiveness. No data loss will occur. Admins should inform teams; no action is required.View more  |  |
+
+|  (Updated) Microsoft Teams: AI-powered notes for in-person meetings with Facilitator in Teams Rooms on Windows MC1307512 \| May 15 - Microsoft Teams is expanding AI-powered meeting notes with the Facilitator agent to Teams Rooms on Windows for in-person meetings. Notes are captured in real-time, stored securely in tenant-owned SharePoint, and accessible via meeting recap. Rollout begins July 2026, requiring Teams Rooms Pro licenses and enabled Facilitator, Loop, and transcription settings.View more  |
+
+|  (Updated) Microsoft Teams: AI-powered notes for in-person meetings with Facilitator in Teams Rooms on Windows MC1307512 \| May 15 - Microsoft Teams is expanding AI-powered meeting notes with the Facilitator agent to Teams Rooms on Windows for in-person meetings. Notes are captured in real-time, stored securely in tenant-owned SharePoint, and accessible via meeting recap. Rollout begins July 2026, requiring Teams Rooms Pro licenses and enabled Facilitator, Loop, and transcription settings.View more  |  |
+
+|  Dynamics 365 Customer Service - Unlock Workforce Engagement capabilities with Customer Service Enterprise license MC1310832 \| May 14 - We are announcing the ability to unlock Workforce Engagement capabilities with the Customer Service Enterprise license in Dynamics 365 Customer Service. This feature will reach general availability on May 29, 2026.How does this affect me?Workforce Engagement capabilities are now included in the Dynamics 365 Customer Service Enterprise license, removing the prior dependency on higher-tier stock-keeping unit (SKU) subscriptions.These new engagement capabilities...View more  |
+
+|  Dynamics 365 Customer Service - Unlock Workforce Engagement capabilities with Customer Service Enterprise license MC1310832 \| May 14 - We are announcing the ability to unlock Workforce Engagement capabilities with the Customer Service Enterprise license in Dynamics 365 Customer Service. This feature will reach general availability on May 29, 2026.How does this affect me?Workforce Engagement capabilities are now included in the Dynamics 365 Customer Service Enterprise license, removing the prior dependency on higher-tier stock-keeping unit (SKU) subscriptions.These new engagement capabilities...View more  |  |
+
+|  Authoritative Sites for SharePoint in Microsoft Copilot MC1310687 \| May 14 - Authoritative Sites lets admins mark specific SharePoint sites as trusted, prioritizing their content in Microsoft Copilot Chat and Search to improve reliability and relevance. Rolling out May-June 2026, it requires a Microsoft 365 Copilot (Premium) license and is configurable via PowerShell without changing permissions.View more  |
+
+|  Authoritative Sites for SharePoint in Microsoft Copilot MC1310687 \| May 14 - Authoritative Sites lets admins mark specific SharePoint sites as trusted, prioritizing their content in Microsoft Copilot Chat and Search to improve reliability and relevance. Rolling out May-June 2026, it requires a Microsoft 365 Copilot (Premium) license and is configurable via PowerShell without changing permissions.View more  |  |
+
+|  SharePoint Online: Storage quota enforcement updated to align with license limits MC1310684 \| May 14 - SharePoint Online will update storage quota enforcement by late May to June 2026, aligning user quotas with license limits. Users exceeding licensed storage will enter read-only mode until usage is reduced or licenses upgraded. Admins should identify and address over-quota users; no action needed if users comply.View more  |
+
+|  SharePoint Online: Storage quota enforcement updated to align with license limits MC1310684 \| May 14 - SharePoint Online will update storage quota enforcement by late May to June 2026, aligning user quotas with license limits. Users exceeding licensed storage will enter read-only mode until usage is reduced or licenses upgraded. Admins should identify and address over-quota users; no action needed if users comply.View more  |  |
+
+|  Microsoft Teams: Standardized preview experience for PowerPoint, Excel, and Word files MC1310683 \| May 14 - Microsoft Teams will standardize the preview experience for Word, Excel, and PowerPoint files across desktop and mobile, improving speed and reliability. PowerPoint and Excel previews are on iOS and Android; Word preview is iOS only (Android later). Rollout completes by late June 2026, enabled by default with no admin action needed.View more  |
+
+|  Microsoft Teams: Standardized preview experience for PowerPoint, Excel, and Word files MC1310683 \| May 14 - Microsoft Teams will standardize the preview experience for Word, Excel, and PowerPoint files across desktop and mobile, improving speed and reliability. PowerPoint and Excel previews are on iOS and Android; Word preview is iOS only (Android later). Rollout completes by late June 2026, enabled by default with no admin action needed.View more  |  |
+
+|  New Outlook for Windows: LDAP support for S/MIME certificate lookup MC1310680 \| May 14 - New Outlook for Windows will support LDAP directories for S/MIME certificate lookup starting late May 2026, enabling admins and users to configure LDAP for finding recipients’ public encryption certificates when sending encrypted emails. LDAP endpoints must not require authentication. This benefits organizations collaborating with external partners.View more  |
+
+|  New Outlook for Windows: LDAP support for S/MIME certificate lookup MC1310680 \| May 14 - New Outlook for Windows will support LDAP directories for S/MIME certificate lookup starting late May 2026, enabling admins and users to configure LDAP for finding recipients’ public encryption certificates when sending encrypted emails. LDAP endpoints must not require authentication. This benefits organizations collaborating with external partners.View more  |  |
+
+|  Microsoft 365 Backup management through SharePoint Admin Center MC1310678 \| May 14 - Microsoft 365 Backup management for SharePoint and OneDrive will be integrated into the SharePoint Admin Center by mid-May 2026. This centralizes backup configuration without changing user experience or data handling. No action is required, but admins should update documentation and inform teams.View more  |
+
+|  Microsoft 365 Backup management through SharePoint Admin Center MC1310678 \| May 14 - Microsoft 365 Backup management for SharePoint and OneDrive will be integrated into the SharePoint Admin Center by mid-May 2026. This centralizes backup configuration without changing user experience or data handling. No action is required, but admins should update documentation and inform teams.View more  |  |
+
+|  Microsoft Purview: Update to ResultCount parameter in the Search-UnifiedAuditLog cmdlet MC1310672 \| May 14 - Microsoft Purview updates the Search-UnifiedAuditLog cmdlet's ResultCount parameter to show a running count of results in real time, adding a new boolean property, AuditSearchRequestMetadata.moreRecordsAvailable, to indicate if more records remain. This improves query progress visibility and affects scripts relying on ResultCount as a final total.View more  |
+
+|  Microsoft Purview: Update to ResultCount parameter in the Search-UnifiedAuditLog cmdlet MC1310672 \| May 14 - Microsoft Purview updates the Search-UnifiedAuditLog cmdlet's ResultCount parameter to show a running count of results in real time, adding a new boolean property, AuditSearchRequestMetadata.moreRecordsAvailable, to indicate if more records remain. This improves query progress visibility and affects scripts relying on ResultCount as a final total.View more  |  |
+
+|  (Updated) SharePoint News web part: New Filmstrip layout and multi-site news support MC1303716 \| May 14 - SharePoint News web part introduces a new "Filmstrip" layout for visually prominent news display and expands multi-site news aggregation to GCC, GCC High, and DoD environments. Rollout begins May 2026, affecting SharePoint editors and site owners with no required action but recommended communication and documentation updates.View more  |
+
+|  (Updated) SharePoint News web part: New Filmstrip layout and multi-site news support MC1303716 \| May 14 - SharePoint News web part introduces a new "Filmstrip" layout for visually prominent news display and expands multi-site news aggregation to GCC, GCC High, and DoD environments. Rollout begins May 2026, affecting SharePoint editors and site owners with no required action but recommended communication and documentation updates.View more  |  |
+
+|  Dynamics 365 Contact Center - Dynamics 365 Contact Center Certification for Windows 365 Virtual PCs MC1310509 \| May 14 - We are announcing Dynamics 365 Contact Center certification for Windows 365 virtual PCs in Dynamics 365 Contact Center. This feature will reach public preview on May 30, 2026. How does this affect me? This feature certifies Dynamics 365 Contact Center for use on Windows 365 virtual PCs, ensuring the solution delivers a reliable and supported experience when accessed from cloud-based Windows desktops. This certification provides the following capabilities:...View more  |
+
+|  Dynamics 365 Contact Center - Dynamics 365 Contact Center Certification for Windows 365 Virtual PCs MC1310509 \| May 14 - We are announcing Dynamics 365 Contact Center certification for Windows 365 virtual PCs in Dynamics 365 Contact Center. This feature will reach public preview on May 30, 2026. How does this affect me? This feature certifies Dynamics 365 Contact Center for use on Windows 365 virtual PCs, ensuring the solution delivers a reliable and supported experience when accessed from cloud-based Windows desktops. This certification provides the following capabilities:...View more  |  |
+
+|  Dynamics 365 Sales - Personalize opportunity research in Sales Close Agent MC1310427 \| May 14 - We are announcing the ability to personalize opportunity research in Sales Close Agent in Dynamics 365 Sales. This feature will reach public preview on May 29, 2026. How does this affect me? With this feature, users can personalize how insights and actions are organized, and can add notes, priorities, and approved inputs so the agent emphasizes what matters most for sellers. As a seller, you'll be able to: Personalize the layout: Personalize the...View more  |
+
+|  Dynamics 365 Sales - Personalize opportunity research in Sales Close Agent MC1310427 \| May 14 - We are announcing the ability to personalize opportunity research in Sales Close Agent in Dynamics 365 Sales. This feature will reach public preview on May 29, 2026. How does this affect me? With this feature, users can personalize how insights and actions are organized, and can add notes, priorities, and approved inputs so the agent emphasizes what matters most for sellers. As a seller, you'll be able to: Personalize the layout: Personalize the...View more  |  |
+
+|  Dynamics 365 Customer Service- Generate optimized schedule and shift plans using AI for workforce management (Preview) MC1310420 \| May 14 - We are announcing the ability to generate optimized schedule and shift plans using AI for workforce management in Dynamics 365 Customer Service. This feature will reach public preview on May 31, 2026. How does this affect me? With this feature, the Scheduling Agent automates and optimizes contact center scheduling, reducing manual work for supervisors and ensuring schedules are policy-compliant and responsive to real-time demand. Key functionality of this feature...View more  |
+
+|  Dynamics 365 Customer Service- Generate optimized schedule and shift plans using AI for workforce management (Preview) MC1310420 \| May 14 - We are announcing the ability to generate optimized schedule and shift plans using AI for workforce management in Dynamics 365 Customer Service. This feature will reach public preview on May 31, 2026. How does this affect me? With this feature, the Scheduling Agent automates and optimizes contact center scheduling, reducing manual work for supervisors and ensuring schedules are policy-compliant and responsive to real-time demand. Key functionality of this feature...View more  |  |
+
+|  Power Automate - Debug flows using variable default values MC1310384 \| May 14 - We are announcing the ability to debug flows using variable default values in Power Automate. This feature will reach general availability on June 15, 2026.How does this affect me?This feature allows makers to test and troubleshoot flows faster by setting variable default values directly in the designer, instead of restarting runs or manually preparing inputs each time. These default values are applied only during debug runs and do not affect production...View more  |
+
+|  Power Automate - Debug flows using variable default values MC1310384 \| May 14 - We are announcing the ability to debug flows using variable default values in Power Automate. This feature will reach general availability on June 15, 2026.How does this affect me?This feature allows makers to test and troubleshoot flows faster by setting variable default values directly in the designer, instead of restarting runs or manually preparing inputs each time. These default values are applied only during debug runs and do not affect production...View more  |  |
+
+|  Power Automate - Export object-centric process mining data to Microsoft Fabric semantic model MC1310402 \| May 14 - We are announcing the ability to export object-centric process mining data to the Microsoft Fabric semantic model in Power Automate. This feature will reach public preview on May 31, 2026. How does this affect me? This feature enables direct publishing of object-centric process mining (OCPM) results into Microsoft Fabric semantic models, making process intelligence data available throughout the Microsoft analytics ecosystem. What action do I need to take?...View more  |
+
+|  Power Automate - Export object-centric process mining data to Microsoft Fabric semantic model MC1310402 \| May 14 - We are announcing the ability to export object-centric process mining data to the Microsoft Fabric semantic model in Power Automate. This feature will reach public preview on May 31, 2026. How does this affect me? This feature enables direct publishing of object-centric process mining (OCPM) results into Microsoft Fabric semantic models, making process intelligence data available throughout the Microsoft analytics ecosystem. What action do I need to take?...View more  |  |
+
+|  Dynamics 365 Customer Insights - Data - Use Microsoft Fabric OneLake as a data source MC1310395 \| May 14 - We are announcing the ability to use Microsoft Fabric OneLake as a data source. This feature will reach public preview on May 29, 2026. How does this affect me? This feature enables users to bring customer data directly from Microsoft Fabric OneLake. Users can explore and select customer data stored in OneLake for processing in Customer Insights - Data. The OneLake connector reads directly from your OneLake data, eliminating the need to copy or stage data. Key...View more  |
+
+|  Dynamics 365 Customer Insights - Data - Use Microsoft Fabric OneLake as a data source MC1310395 \| May 14 - We are announcing the ability to use Microsoft Fabric OneLake as a data source. This feature will reach public preview on May 29, 2026. How does this affect me? This feature enables users to bring customer data directly from Microsoft Fabric OneLake. Users can explore and select customer data stored in OneLake for processing in Customer Insights - Data. The OneLake connector reads directly from your OneLake data, eliminating the need to copy or stage data. Key...View more  |  |
+
+|  Power Automate - Create and visualize custom KPIs in the process intelligence experience MC1310386 \| May 14 - We are announcing the ability to create and visualize custom KPIs in the process intelligence experience in Power Automate. This feature will reach public preview on May 31, 2026.How does this affect me?The process intelligence experience allows flexible metric creation with seamless visualization integration. You can create custom metrics using configurable formulas that can incorporate existing process data, standard KPIs, and mathematical operations. Key...View more  |
+
+|  Power Automate - Create and visualize custom KPIs in the process intelligence experience MC1310386 \| May 14 - We are announcing the ability to create and visualize custom KPIs in the process intelligence experience in Power Automate. This feature will reach public preview on May 31, 2026.How does this affect me?The process intelligence experience allows flexible metric creation with seamless visualization integration. You can create custom metrics using configurable formulas that can incorporate existing process data, standard KPIs, and mathematical operations. Key...View more  |  |
+
+|  Dynamics 365 Sales - Get lead research and next best actions in Sales Home MC1310377 \| May 14 - We are announcing the ability to get lead research and next best actions in Sales Home in Dynamics 365 Sales. This feature will reach public preview on June 1, 2026. How does this affect me? This feature helps sellers: Focus on the leads most likely to convert by bringing agent-led research, prioritization, and next best actions directly into Sales Home. Quickly review key insights. Understand why a lead matters. See the recommended...View more  |
+
+|  Dynamics 365 Sales - Get lead research and next best actions in Sales Home MC1310377 \| May 14 - We are announcing the ability to get lead research and next best actions in Sales Home in Dynamics 365 Sales. This feature will reach public preview on June 1, 2026. How does this affect me? This feature helps sellers: Focus on the leads most likely to convert by bringing agent-led research, prioritization, and next best actions directly into Sales Home. Quickly review key insights. Understand why a lead matters. See the recommended...View more  |  |
+
+|  Microsoft Power Automate - Support for normalized schema import for data ingestion MC1310375 \| May 14 - We are announcing the ability to ingest data in a normalized data structure format for process mining in Power Automate. This feature will reach public preview on May 31, 2026. How does this affect me? With this feature, Power Automate Process Mining supports the case-event entity-based data structure in addition to a normalized form of attributes. This accelerates the ingestion process and reduces storage capacity needed for the transformation and import to process model...View more  |
+
+|  Microsoft Power Automate - Support for normalized schema import for data ingestion MC1310375 \| May 14 - We are announcing the ability to ingest data in a normalized data structure format for process mining in Power Automate. This feature will reach public preview on May 31, 2026. How does this affect me? With this feature, Power Automate Process Mining supports the case-event entity-based data structure in addition to a normalized form of attributes. This accelerates the ingestion process and reduces storage capacity needed for the transformation and import to process model...View more  |  |
+
+|  Microsoft Power Automate - Build better forms with integrated Power Apps MC1310370 \| May 14 - We are announcing the ability to build better forms with integrated Power Apps in Power Automate. This feature will reach public preview on May 29, 2026. How does this affect me? This feature enables full Microsoft Power Apps experiences inside desktop flows. With integrated Power Apps, makers have the following capabilities: Invoke apps directly from a desktop flow. Pass inputs from the desktop flow into the app. Capture outputs from the...View more  |
+
+|  Microsoft Power Automate - Build better forms with integrated Power Apps MC1310370 \| May 14 - We are announcing the ability to build better forms with integrated Power Apps in Power Automate. This feature will reach public preview on May 29, 2026. How does this affect me? This feature enables full Microsoft Power Apps experiences inside desktop flows. With integrated Power Apps, makers have the following capabilities: Invoke apps directly from a desktop flow. Pass inputs from the desktop flow into the app. Capture outputs from the...View more  |  |
+
+|  Power Automate - Restore accidentally deleted flows MC1310368 \| May 14 - We are announcing the ability to restore accidentally deleted flows in Power Automate. This feature will reach public preview on June 1, 2026. How does this affect me? This feature allows flow owners, co-owners, and environment administrators to recover deleted flows quickly and easily within a set timeframe (21 days after deletion), eliminating the need to contact customer support for assistance. Users can restore flows by: Using the View more  |
+
+|  Power Automate - Restore accidentally deleted flows MC1310368 \| May 14 - We are announcing the ability to restore accidentally deleted flows in Power Automate. This feature will reach public preview on June 1, 2026. How does this affect me? This feature allows flow owners, co-owners, and environment administrators to recover deleted flows quickly and easily within a set timeframe (21 days after deletion), eliminating the need to contact customer support for assistance. Users can restore flows by: Using the View more  |  |
+
+|  Dynamics 365 Customer Service - Manage intraday operations with AI agent (preview) MC1310361 \| May 14 - We are announcing the ability to manage intraday operations with AI agent in Dynamics 365 Customer Service. This feature will be available for preview on May 29, 2026. How does this affect me? Users will be able to use Intraday Agent to monitor queue volumes and service representative adherence in real time, detect deviations from forecasts or schedules, and take automated corrective actions. Intraday Agent will provide proactive alerts, reforecast demand, and adjust...View more  |
+
+|  Dynamics 365 Customer Service - Manage intraday operations with AI agent (preview) MC1310361 \| May 14 - We are announcing the ability to manage intraday operations with AI agent in Dynamics 365 Customer Service. This feature will be available for preview on May 29, 2026. How does this affect me? Users will be able to use Intraday Agent to monitor queue volumes and service representative adherence in real time, detect deviations from forecasts or schedules, and take automated corrective actions. Intraday Agent will provide proactive alerts, reforecast demand, and adjust...View more  |  |
+
+|  Power Automate - Schedule desktop flows without a cloud flow requirement MC1310358 \| May 14 - We are announcing the ability to schedule desktop flows directly in Power Automate without requiring a cloud flow as an intermediary trigger. This feature will reach public preview on May 31, 2026. How does this affect me? This feature introduces a streamlined scheduling experience in Power Automate. Key capabilities include: Users can create schedules directly for desktop flows without needing a cloud flow as an intermediary trigger. A new...View more  |
+
+|  Power Automate - Schedule desktop flows without a cloud flow requirement MC1310358 \| May 14 - We are announcing the ability to schedule desktop flows directly in Power Automate without requiring a cloud flow as an intermediary trigger. This feature will reach public preview on May 31, 2026. How does this affect me? This feature introduces a streamlined scheduling experience in Power Automate. Key capabilities include: Users can create schedules directly for desktop flows without needing a cloud flow as an intermediary trigger. A new...View more  |  |
+
+|  Planner is now available in Outlook and Microsoft 365 Copilot MC1309747 \| May 13 - Microsoft Planner is now integrated into Outlook (web and new Windows version) and Microsoft 365 Copilot, allowing users to manage tasks alongside email and calendar. This rollout begins mid-May 2026, is enabled by default, requires no admin action, and respects existing permissions and settings.View more  |
+
+|  Planner is now available in Outlook and Microsoft 365 Copilot MC1309747 \| May 13 - Microsoft Planner is now integrated into Outlook (web and new Windows version) and Microsoft 365 Copilot, allowing users to manage tasks alongside email and calendar. This rollout begins mid-May 2026, is enabled by default, requires no admin action, and respects existing permissions and settings.View more  |  |
+
+|  Microsoft 365 Copilot: Copilot chat pane and Summary feature in OneNote Mobile (Android) MC1309746 \| May 13 - Microsoft 365 Copilot introduces a new chat pane and Summary feature in OneNote Mobile (Android) for Premium license users, enabling AI-generated summaries and note queries. Rollout starts mid-May 2026, completing by late June. Existing Copilot policies apply; no admin action needed before deployment.View more  |
+
+|  Microsoft 365 Copilot: Copilot chat pane and Summary feature in OneNote Mobile (Android) MC1309746 \| May 13 - Microsoft 365 Copilot introduces a new chat pane and Summary feature in OneNote Mobile (Android) for Premium license users, enabling AI-generated summaries and note queries. Rollout starts mid-May 2026, completing by late June. Existing Copilot policies apply; no admin action needed before deployment.View more  |  |
+
+|  Microsoft Teams: Report external users for security concerns MC1309744 \| May 13 - Microsoft Teams will enable users to report suspicious external users directly, with reports visible to admins in the Teams admin center for faster security response. This feature, rolling out June 2026, supports chats, meetings, and channels, is enabled by default, and integrates with existing messaging policies.View more  |
+
+|  Microsoft Teams: Report external users for security concerns MC1309744 \| May 13 - Microsoft Teams will enable users to report suspicious external users directly, with reports visible to admins in the Teams admin center for faster security response. This feature, rolling out June 2026, supports chats, meetings, and channels, is enabled by default, and integrates with existing messaging policies.View more  |  |
+
+|  Viva Engage: Email updates for frontline users without an active Exchange mailbox MC1309743 \| May 13 - Starting mid-June 2026, Viva Engage will stop sending email notifications to frontline users with F1 and F3 licenses who lack active Exchange mailboxes, reducing email system load and improving delivery reliability. Notifications via Teams remain unaffected. No action is required, but review licensing and notification strategies.View more  |
+
+|  Viva Engage: Email updates for frontline users without an active Exchange mailbox MC1309743 \| May 13 - Starting mid-June 2026, Viva Engage will stop sending email notifications to frontline users with F1 and F3 licenses who lack active Exchange mailboxes, reducing email system load and improving delivery reliability. Notifications via Teams remain unaffected. No action is required, but review licensing and notification strategies.View more  |  |
+
+|  Using groups to enable Frontier access in the Frontier Admin Control MC1309739 \| May 13 - Starting June 2026, Frontier Admin Control will support assigning access via Entra ID groups, enabling scalable pilot management with up to 10,000 enrolled users per tenant (except for All Users enrollment). Admins should prepare by creating groups and monitoring membership; no immediate action is required.View more  |
+
+|  Using groups to enable Frontier access in the Frontier Admin Control MC1309739 \| May 13 - Starting June 2026, Frontier Admin Control will support assigning access via Entra ID groups, enabling scalable pilot management with up to 10,000 enrolled users per tenant (except for All Users enrollment). Admins should prepare by creating groups and monitoring membership; no immediate action is required.View more  |  |
+
+|  PowerPoint for the web: "Review this presentation" skill in Copilot MC1309737 \| May 13 - The "Review this presentation" skill in PowerPoint for the web Copilot is now generally available. It analyzes slides and offers suggestions to improve structure, clarity, and storytelling without making automatic changes. No admin setup is needed; users with Copilot access can use this feature by default.View more  |
+
+|  PowerPoint for the web: "Review this presentation" skill in Copilot MC1309737 \| May 13 - The "Review this presentation" skill in PowerPoint for the web Copilot is now generally available. It analyzes slides and offers suggestions to improve structure, clarity, and storytelling without making automatic changes. No admin setup is needed; users with Copilot access can use this feature by default.View more  |  |
+
+|  PowerPoint for Mac: "Review this presentation" skill in Copilot MC1309736 \| May 13 - PowerPoint for Mac now includes the "Review this presentation" skill in Copilot, providing users with slide improvement suggestions for structure, clarity, and storytelling. Available worldwide by default for eligible users, it requires no admin setup and offers review-only recommendations without automatic changes.View more  |
+
+|  PowerPoint for Mac: "Review this presentation" skill in Copilot MC1309736 \| May 13 - PowerPoint for Mac now includes the "Review this presentation" skill in Copilot, providing users with slide improvement suggestions for structure, clarity, and storytelling. Available worldwide by default for eligible users, it requires no admin setup and offers review-only recommendations without automatic changes.View more  |  |
+
+|  PowerPoint for Windows desktop: "Review this presentation" skill in Copilot MC1309735 \| May 13 - The "Review this presentation" skill in PowerPoint Copilot for Windows desktop is now generally available. It analyzes slides and offers suggestions to improve structure, clarity, and storytelling without making automatic changes. No admin setup is needed; users with Copilot access can use it by default.View more  |
+
+|  PowerPoint for Windows desktop: "Review this presentation" skill in Copilot MC1309735 \| May 13 - The "Review this presentation" skill in PowerPoint Copilot for Windows desktop is now generally available. It analyzes slides and offers suggestions to improve structure, clarity, and storytelling without making automatic changes. No admin setup is needed; users with Copilot access can use it by default.View more  |  |
+
+|  PowerPoint for the web: “Visualize this slide” skill in Copilot MC1309733 \| May 13 - The "Visualize this slide" skill in Copilot for PowerPoint for the web launches worldwide in mid-May 2026. It transforms text-based slides into visually rich layouts, is enabled by default for eligible users, requires no admin action, and respects existing Copilot and compliance policies.View more  |
+
+|  PowerPoint for the web: “Visualize this slide” skill in Copilot MC1309733 \| May 13 - The "Visualize this slide" skill in Copilot for PowerPoint for the web launches worldwide in mid-May 2026. It transforms text-based slides into visually rich layouts, is enabled by default for eligible users, requires no admin action, and respects existing Copilot and compliance policies.View more  |  |
+
+|  PowerPoint for Mac: “Visualize this slide” skill in Copilot MC1309732 \| May 13 - The "Visualize this slide" skill in Copilot for PowerPoint on Mac, launching mid-May 2026, transforms text slides into polished visuals using generative AI. It’s enabled by default for eligible users, requires no admin action, and respects existing compliance and licensing policies.View more  |
+
+|  PowerPoint for Mac: “Visualize this slide” skill in Copilot MC1309732 \| May 13 - The "Visualize this slide" skill in Copilot for PowerPoint on Mac, launching mid-May 2026, transforms text slides into polished visuals using generative AI. It’s enabled by default for eligible users, requires no admin action, and respects existing compliance and licensing policies.View more  |  |
+
+|  PowerPoint for Windows desktop: “Visualize this slide” skill in Copilot MC1309731 \| May 13 - The "Visualize this slide" skill in Copilot for PowerPoint on Windows desktop launches mid-May 2026, enabling users to transform text-based slides into visually rich designs. It is enabled by default for eligible users, requires no admin action, and respects existing Copilot policies and compliance controls.View more  |
+
+|  PowerPoint for Windows desktop: “Visualize this slide” skill in Copilot MC1309731 \| May 13 - The "Visualize this slide" skill in Copilot for PowerPoint on Windows desktop launches mid-May 2026, enabling users to transform text-based slides into visually rich designs. It is enabled by default for eligible users, requires no admin action, and respects existing Copilot policies and compliance controls.View more  |  |
+
+|  (Updated) Outlook Mobile: Follow a meeting option MC1248393 \| May 13 - Outlook Mobile will add a "Follow" RSVP option for meetings with two or more participants, rolling out mid-June to mid-July 2026. It prompts organizers to record meetings and sends updates to followers. The feature is on by default, requires no admin action, and changes the RSVP menu layout.View more  |
+
+|  (Updated) Outlook Mobile: Follow a meeting option MC1248393 \| May 13 - Outlook Mobile will add a "Follow" RSVP option for meetings with two or more participants, rolling out mid-June to mid-July 2026. It prompts organizers to record meetings and sends updates to followers. The feature is on by default, requires no admin action, and changes the RSVP menu layout.View more  |  |
+
+|  (Updated) Microsoft 365 Copilot Mobile App: Capability to drive awareness via Notifications on M365 Admin Center MC1308856 \| May 13 - Microsoft 365 Admin Center now lets IT admins notify users about the Microsoft 365 Copilot mobile app via targeted notifications, guiding them to a secure, approved download. This admin-initiated feature helps reduce use of non-sanctioned AI apps and supports compliance with existing security controls.View more  |
+
+|  (Updated) Microsoft 365 Copilot Mobile App: Capability to drive awareness via Notifications on M365 Admin Center MC1308856 \| May 13 - Microsoft 365 Admin Center now lets IT admins notify users about the Microsoft 365 Copilot mobile app via targeted notifications, guiding them to a secure, approved download. This admin-initiated feature helps reduce use of non-sanctioned AI apps and supports compliance with existing security controls.View more  |  |
+
+|  (Updated) Microsoft Teams: External domains anomalies report MC1219794 \| May 13 - Microsoft Teams will roll out the External domains anomalies report by late May 2026, enabling admins to detect unusual external communication patterns. The report, in the Teams admin center, highlights anomalies and offers a block option. Admins can enable alerts for proactive notifications; no action is needed to access it.View more  |
+
+|  (Updated) Microsoft Teams: External domains anomalies report MC1219794 \| May 13 - Microsoft Teams will roll out the External domains anomalies report by late May 2026, enabling admins to detect unusual external communication patterns. The report, in the Teams admin center, highlights anomalies and offers a block option. Admins can enable alerts for proactive notifications; no action is needed to access it.View more  |  |
+
+|  (Updated) Microsoft Teams: Meeting Participants Can Request Collaborative Annotation Sessions MC1019312 \| May 13 - Microsoft Teams now allows meeting participants on Windows and macOS apps to request collaborative annotation during screen sharing, subject to presenter approval. Organizers can control who can start annotations via a new meeting option. Rollout begins May 2026, with no admin action required.View more  |
+
+|  (Updated) Microsoft Teams: Meeting Participants Can Request Collaborative Annotation Sessions MC1019312 \| May 13 - Microsoft Teams now allows meeting participants on Windows and macOS apps to request collaborative annotation during screen sharing, subject to presenter approval. Organizers can control who can start annotations via a new meeting option. Rollout begins May 2026, with no admin action required.View more  |  |
+
+|  (Updated) Microsoft Teams: Distinguish invites among Attendee, Presenter, and Co-organizer emails MC1009930 \| May 13 - Microsoft Teams will send separate event invite emails based on participant roles (Attendee, Presenter, Co-organizer). Organizers receive role-specific emails, enabling distinct invites for town hall attendees. Rollout begins mid-June 2026, completing by late August 2026, with no admin action required.View more  |
+
+|  (Updated) Microsoft Teams: Distinguish invites among Attendee, Presenter, and Co-organizer emails MC1009930 \| May 13 - Microsoft Teams will send separate event invite emails based on participant roles (Attendee, Presenter, Co-organizer). Organizers receive role-specific emails, enabling distinct invites for town hall attendees. Rollout begins mid-June 2026, completing by late August 2026, with no admin action required.View more  |  |
+
+|  Updates available for Microsoft 365 Apps for Monthly Enterprise Channel MC1309508 \| May 13 - We've released updates to the following update channel for Microsoft 365 Apps: Monthly Enterprise Channel View more  |
+
+|  Updates available for Microsoft 365 Apps for Monthly Enterprise Channel MC1309508 \| May 13 - We've released updates to the following update channel for Microsoft 365 Apps: Monthly Enterprise Channel View more  |  |
+
+|  Collect Diagnostics change to Get Diagnostics for Outlook Mobile and Mac MC1308855 \| May 12 - The Collect Diagnostics feature in Outlook Mobile and Outlook for Mac is renamed to Get Diagnostics, with diagnostic logs now routed through the Microsoft 365 diagnostics service instead of PowerLift. The rollout begins in June 2026, with no user workflow or admin changes required.View more  |
+
+|  Collect Diagnostics change to Get Diagnostics for Outlook Mobile and Mac MC1308855 \| May 12 - The Collect Diagnostics feature in Outlook Mobile and Outlook for Mac is renamed to Get Diagnostics, with diagnostic logs now routed through the Microsoft 365 diagnostics service instead of PowerLift. The rollout begins in June 2026, with no user workflow or admin changes required.View more  |  |
+
+|  Microsoft 365 Copilot: Admins can manage agents at scale with bulk lifecycle actions MC1308854 \| May 12 - Microsoft 365 Copilot now supports bulk lifecycle management of agents in the Microsoft 365 admin center, allowing admins to perform on-demand bulk actions like installing and reassigning agents to improve governance and reduce manual tasks. Rule-based automation is planned for a future update.View more  |
+
+|  Microsoft 365 Copilot: Admins can manage agents at scale with bulk lifecycle actions MC1308854 \| May 12 - Microsoft 365 Copilot now supports bulk lifecycle management of agents in the Microsoft 365 admin center, allowing admins to perform on-demand bulk actions like installing and reassigning agents to improve governance and reduce manual tasks. Rule-based automation is planned for a future update.View more  |  |
+
+|  (Updated) Microsoft 365 Copilot: Multimodal capture in Copilot Notebooks in the OneNote mobile app (iOS) MC1275566 \| May 12 - Microsoft 365 Copilot introduces multimodal capture in Copilot Notebooks on OneNote mobile (iOS), combining audio transcription, image capture, and typed notes in one session. Available now in preview, general rollout begins late May 2026. It requires Microsoft 365 Copilot and SharePoint or OneDrive licenses.View more  |
+
+|  (Updated) Microsoft 365 Copilot: Multimodal capture in Copilot Notebooks in the OneNote mobile app (iOS) MC1275566 \| May 12 - Microsoft 365 Copilot introduces multimodal capture in Copilot Notebooks on OneNote mobile (iOS), combining audio transcription, image capture, and typed notes in one session. Available now in preview, general rollout begins late May 2026. It requires Microsoft 365 Copilot and SharePoint or OneDrive licenses.View more  |  |
+
+|  (Updated) Outlook: Support for recommended and automatically applied sensitivity labels in Outlook for iOS and Android MC1247891 \| May 12 - Outlook for iOS and Android will support recommended and automatic sensitivity labels during email composition starting mid-April 2026, aligning with Microsoft Purview Information Protection policies. This feature is on by default for organizations with existing labeling policies and requires no changes to current Purview configurations.View more  |
+
+|  (Updated) Outlook: Support for recommended and automatically applied sensitivity labels in Outlook for iOS and Android MC1247891 \| May 12 - Outlook for iOS and Android will support recommended and automatic sensitivity labels during email composition starting mid-April 2026, aligning with Microsoft Purview Information Protection policies. This feature is on by default for organizations with existing labeling policies and requires no changes to current Purview configurations.View more  |  |
+
+|  (Updated) Events in Meet app – Introducing a redesigned, unified Events experience in Microsoft Teams MC1227087 \| May 12 - Microsoft Teams is redesigning the Meet app into a unified Events app for streamlined creation, discovery, and management of webinars, town halls, and custom events. Rollout begins late February 2026 with no admin action needed. Existing meetings and policies remain unchanged.View more  |
+
+|  (Updated) Events in Meet app – Introducing a redesigned, unified Events experience in Microsoft Teams MC1227087 \| May 12 - Microsoft Teams is redesigning the Meet app into a unified Events app for streamlined creation, discovery, and management of webinars, town halls, and custom events. Rollout begins late February 2026 with no admin action needed. Existing meetings and policies remain unchanged.View more  |  |
+
+|  Microsoft Teams Town halls (Teams Premium): Upload custom backgrounds in Manage what attendees see MC1307982 \| May 12 - Microsoft Teams Premium will allow organizers and presenters of town halls to upload custom background images in the "Manage what attendees see" feature, enhancing branded visuals. This rollout starts late May 2026, applies only to town halls with this feature enabled, and supports JPEG/PNG formats on Windows and Mac.View more  |
+
+|  Microsoft Teams Town halls (Teams Premium): Upload custom backgrounds in Manage what attendees see MC1307982 \| May 12 - Microsoft Teams Premium will allow organizers and presenters of town halls to upload custom background images in the "Manage what attendees see" feature, enhancing branded visuals. This rollout starts late May 2026, applies only to town halls with this feature enabled, and supports JPEG/PNG formats on Windows and Mac.View more  |  |
+
+|  Microsoft 365 Copilot: Copilot chat pane and Summary feature in OneNote Mobile (iPhone) MC1307979 \| May 12 - Microsoft 365 Copilot introduces a new chat pane and Summary feature in OneNote Mobile (iPhone) for licensed users, enabling AI-generated summaries and Q\&A on notes. Rolling out worldwide from mid-May to late June 2026, it requires no admin action but needs appropriate licensing and policy review.View more  |
+
+|  Microsoft 365 Copilot: Copilot chat pane and Summary feature in OneNote Mobile (iPhone) MC1307979 \| May 12 - Microsoft 365 Copilot introduces a new chat pane and Summary feature in OneNote Mobile (iPhone) for licensed users, enabling AI-generated summaries and Q\&A on notes. Rolling out worldwide from mid-May to late June 2026, it requires no admin action but needs appropriate licensing and policy review.View more  |  |
+
+|  Microsoft Teams: AI-powered notes for in-person meetings with Facilitator in Teams Rooms on Android MC1307888 \| May 11 - Microsoft Teams is expanding AI-powered meeting notes with the Facilitator agent to Teams Rooms on Android, enabling real-time note-taking during in-person meetings. Notes are securely stored in tenant-owned SharePoint and accessible via meeting recap. Rollout begins late June 2026, requiring Teams Rooms Pro licenses and specific tenant settings.View more  |
+
+|  Microsoft Teams: AI-powered notes for in-person meetings with Facilitator in Teams Rooms on Android MC1307888 \| May 11 - Microsoft Teams is expanding AI-powered meeting notes with the Facilitator agent to Teams Rooms on Android, enabling real-time note-taking during in-person meetings. Notes are securely stored in tenant-owned SharePoint and accessible via meeting recap. Rollout begins late June 2026, requiring Teams Rooms Pro licenses and specific tenant settings.View more  |  |
+
+|  HTML formatting now supported for Message center posts synced to Planner MC1307883 \| May 11 - Starting May 13, 2026, Message center posts synced to Planner will support HTML formatting, improving readability with rich text, links, and images. This update, enabled by default, ensures consistent display between Message center and Planner without requiring any action from admins. Existing synced items will update over time.View more  |
+
+|  HTML formatting now supported for Message center posts synced to Planner MC1307883 \| May 11 - Starting May 13, 2026, Message center posts synced to Planner will support HTML formatting, improving readability with rich text, links, and images. This update, enabled by default, ensures consistent display between Message center and Planner without requiring any action from admins. Existing synced items will update over time.View more  |  |
+
+|  (Updated) Microsoft Teams: Miracast support for Teams Rooms on Windows (Teams Rooms Pro only) MC1186374 \| May 11 - Microsoft Teams Rooms on Windows (Pro only) will support Miracast for wireless content sharing, rolling out from mid-May to late May 2026. The feature is off by default, enabled via IT admin portal, requires Miracast-compatible laptops, and has no impact unless activated by admins.View more  |
+
+|  (Updated) Microsoft Teams: Miracast support for Teams Rooms on Windows (Teams Rooms Pro only) MC1186374 \| May 11 - Microsoft Teams Rooms on Windows (Pro only) will support Miracast for wireless content sharing, rolling out from mid-May to late May 2026. The feature is off by default, enabled via IT admin portal, requires Miracast-compatible laptops, and has no impact unless activated by admins.View more  |  |
+
+|  (Updated) Microsoft Loop – Require Existing Microsoft 365 Group for New Loop workspaces MC929022 \| May 11 - A new Microsoft 365 Cloud Policy will block tenant-owned Loop workspace creation, requiring workspaces to be created only through existing Microsoft 365 Groups in Teams channels. This rollout begins late April 2026, aiming to align workspace management with existing governance but may limit some user scenarios.View more  |
+
+|  (Updated) Microsoft Loop – Require Existing Microsoft 365 Group for New Loop workspaces MC929022 \| May 11 - A new Microsoft 365 Cloud Policy will block tenant-owned Loop workspace creation, requiring workspaces to be created only through existing Microsoft 365 Groups in Teams channels. This rollout begins late April 2026, aiming to align workspace management with existing governance but may limit some user scenarios.View more  |  |
+
+|  (Updated) Updated UI for Copilot Chat entry point in Word, Excel and PowerPoint apps MC1189000 \| May 11 - Microsoft 365 is updating Copilot in Word, Excel, and PowerPoint with a new Dynamic Action Button on the canvas, contextual prompts, and improved keyboard/screen reader access. Rollout starts December 2025, completing by May 2026. No admin action required unless changing pin settings for Copilot Chat.View more  |
+
+|  (Updated) Updated UI for Copilot Chat entry point in Word, Excel and PowerPoint apps MC1189000 \| May 11 - Microsoft 365 is updating Copilot in Word, Excel, and PowerPoint with a new Dynamic Action Button on the canvas, contextual prompts, and improved keyboard/screen reader access. Rollout starts December 2025, completing by May 2026. No admin action required unless changing pin settings for Copilot Chat.View more  |  |
+
+|  (Updated) OneDrive: Simplified file transfer for departing employees MC1164381 \| May 11 - OneDrive is enhancing file management for departing employees with improved notifications, filtering, and bulk transfers that preserve sharing. Rollout starts mid-October 2025, completing by May 2026. Managers automatically gain access to deleted accounts’ files, with streamlined transfer steps and consolidated collaborator alerts.View more  |
+
+|  (Updated) OneDrive: Simplified file transfer for departing employees MC1164381 \| May 11 - OneDrive is enhancing file management for departing employees with improved notifications, filtering, and bulk transfers that preserve sharing. Rollout starts mid-October 2025, completing by May 2026. Managers automatically gain access to deleted accounts’ files, with streamlined transfer steps and consolidated collaborator alerts.View more  |  |
+
+|  Dynamics 365 Customer Service- Estimate AI credits for agents from forecasted demand MC1307183 \| May 11 - We are announcing the ability to estimate AI credits for agents from forecasted demand in Dynamics 365 Customer Service. This feature will reach general availability on May 20, 2026.How does this affect me?This feature enables workforce planners to translate forecasted service demand into AI credit requirements within Dynamics 365 Customer Service and Contact Center.To move from demand forecast to credit estimation:Step 1: As a supervisor, log in to the...View more  |
+
+|  Dynamics 365 Customer Service- Estimate AI credits for agents from forecasted demand MC1307183 \| May 11 - We are announcing the ability to estimate AI credits for agents from forecasted demand in Dynamics 365 Customer Service. This feature will reach general availability on May 20, 2026.How does this affect me?This feature enables workforce planners to translate forecasted service demand into AI credit requirements within Dynamics 365 Customer Service and Contact Center.To move from demand forecast to credit estimation:Step 1: As a supervisor, log in to the...View more  |  |
+
+|  Microsoft Power Automate - Automate administrator-level desktop applications in unattended runs MC1307177 \| May 11 - We are announcing the ability to automate administrator-level desktop applications in unattended runs in Microsoft Power Automate. This feature will reach general availability on May 18, 2026. How does this affect me? This feature enables support for automating desktop applications that require administrator rights when running desktop flows in unattended mode. By configuring a registry setting, you can extend unattended automation to interact with applications that...View more  |
+
+|  Microsoft Power Automate - Automate administrator-level desktop applications in unattended runs MC1307177 \| May 11 - We are announcing the ability to automate administrator-level desktop applications in unattended runs in Microsoft Power Automate. This feature will reach general availability on May 18, 2026. How does this affect me? This feature enables support for automating desktop applications that require administrator rights when running desktop flows in unattended mode. By configuring a registry setting, you can extend unattended automation to interact with applications that...View more  |  |
+
+|  To view all announcements, sign in to Microsoft 365 message center  |  |
+
+|  Did you find this email helpful? Yes No  |  |
+
+|  You're subscribed to this email using redacted-user@redacted.onmicrosoft.com. If you're an IT admin, you're subscribed by default, but you can unsubscribe at any time. If you're not an IT admin, ask your admin to remove your email address from Microsoft 365 message center preferences.This email might not include all Microsoft service updates from the past week. The content you see is based on the Microsoft services available to your organization, and the custom view and email options you (or your admin) select in Microsoft 365 message center preferences.How to view translated messagesSend us feedback about this email  |  |
 
 Microsoft
 
-As a new admin to the Microsoft 365 admin center, you’ll get weekly emails from the message center about upcoming changes to your services until May 28, 2026. Update your preferences to continue getting emails like this one. Go to preferences
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/mcpreferences
-
-Message center announcements
-============================
-
-** May 11, 2026 - May 17, 2026
-REDACTED NAME (REDACTED COMPANY)
-
-REDACTED-TENANT-ID
-
-** Major updates
-----------------
-Security Detection Report in Teams Admin Center
-
-MC1311977 | May 15 - A new Security Detection Report in the Teams admin center offers centralized visibility into messaging threats like impersonation, malicious URLs, and unsafe files. Available from late June 2026, it helps admins investigate, export data, and block malicious users, enhancing security operations and response workflows.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1311977?MCLinkSource=DigestMail
-
-(Updated) Microsoft Teams: AI meeting recap without transcript to meet compliance policies
-
-MC1275312 | May 14 - Microsoft Teams will offer AI meeting recaps without saving transcripts or recordings, supporting compliance policies. Available mid-2026 for M365 Copilot Premium users, admins control AI features tenant-wide, and organizers can enable/disable recaps before or during meetings. Summaries are stored temporarily in OneDrive.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1275312?MCLinkSource=DigestMail
-
-Microsoft SharePoint: Retirement of IDCRL authentication protocol and enforcement of OpenID Connect and OAuth protocols
-
-MC1184649 | May 13 - Microsoft is retiring the legacy IDCRL authentication protocol in SharePoint Online and OneDrive for Business by May 1, 2026, enforcing modern protocols OpenID Connect and OAuth. Legacy authentication will be blocked starting February 16, 2026, with temporary re-enablement until April 30, 2026. Organizations must migrate promptly.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1184649?MCLinkSource=DigestMail
-
-Action required: Upgrade macOS 13 devices to maintain Teams desktop access
-
-MC1308857 | May 12 - Microsoft Teams will stop desktop client updates for macOS 13 starting May 2026, with upgrade notifications in June and blocking access by mid-July. Users must upgrade macOS or use Teams on the web. Organizations should identify affected devices, plan upgrades, and prepare users and support teams accordingly.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1308857?MCLinkSource=DigestMail
-
-(Updated) Microsoft Teams: New chat sections for muted and meeting chats
-
-MC1269864 | May 12 - Microsoft Teams will introduce two new chat sections—Muted chats (enabled by default) and Meeting chats (disabled by default)—to organize conversations. Rollout starts early May 2026, completing by month-end. Users can enable, disable, or reorder these sections; no admin action or controls are required.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1269864?MCLinkSource=DigestMail
-
-(Updated) Transitioning Teams Android Device Management from Teams admin Center to the Teams Rooms Pro Management portal
-
-MC1227622 | May 12 - Teams Android device management is transitioning from the Teams admin center to the Teams Rooms Pro Management portal by mid-2026. This unifies management of all Teams devices in one portal, enhancing inventory, updates, health monitoring, and remote actions. No immediate action is needed until General Availability.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1227622?MCLinkSource=DigestMail
-
-** Additional updates
----------------------
-Microsoft Teams: Digital signage support for Teams panels
-
-MC1311979 | May 15 - Microsoft Teams will support digital signage on idle Teams panels starting June 2026, configurable by admins via the Teams Rooms Pro Management portal. It supports third-party providers like Appspace and XOGO, requires Teams Rooms Pro or Shared Spaces licenses, and allows tenant-wide or device-specific settings.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1311979?MCLinkSource=DigestMail
-
-Classic Outlook for Windows: User-initiated insights with Copilot
-
-MC1311978 | May 15 - Classic Outlook for Windows will add User Initiated Insights with Copilot, letting users highlight email text to get contextual AI-generated insights. Rolling out May-June 2026, the feature is on by default for eligible users, integrates into Outlook without add-ins, and follows existing Microsoft 365 security policies.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1311978?MCLinkSource=DigestMail
-
-Department billing for Microsoft 365 Backup
-
-MC1311976 | May 15 - Microsoft 365 Backup now supports department billing, allowing admins to create up to 50 billing policies by department, geography, or unit, with delegated control via RBAC. Available to new customers from mid-May 2026; existing customers will get it later this year with no immediate changes.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1311976?MCLinkSource=DigestMail
-
-Microsoft Purview compliance portal: Role groups user interface (UI) enhancements
-
-MC1311975 | May 15 - Microsoft Purview compliance portal is enhancing the Role groups UI to let admins quickly view assignments by role, member, or their own permissions. Rolling out mid-June to mid-August 2026, this default-enabled update improves permission clarity without changing existing assignments or workflows. No action needed.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1311975?MCLinkSource=DigestMail
-
-PowerPoint for Windows: Create a presentation with Copilot directly from PowerPoint Home
-
-MC1311974 | May 15 - PowerPoint for Windows will enable users with a Copilot license to create presentations directly from PowerPoint Home in the File menu, starting late May 2026. The feature is enabled by default, requires no admin changes, and helps users quickly draft presentations using Copilot.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1311974?MCLinkSource=DigestMail
-
-PowerPoint for Mac: Create a presentation with Copilot directly from PowerPoint Home
-
-MC1311973 | May 15 - PowerPoint for Mac will enable users with a Microsoft Copilot license to create presentations directly from PowerPoint Home in the File menu, starting late May 2026. The feature is enabled by default, requires no admin changes, and aims to streamline the workflow from idea to draft.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1311973?MCLinkSource=DigestMail
-
-PowerPoint for the web: Create a presentation with Copilot directly from the PowerPoint web app
-
-MC1311972 | May 15 - Starting mid-May 2026, PowerPoint for the web will let users with a Microsoft Copilot license create presentations directly using Copilot. This feature is enabled by default, requires no admin changes, and is immediately available upon opening the app. No action is needed to prepare.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1311972?MCLinkSource=DigestMail
-
-Copilot in SharePoint will start rolling out to all tenants as an opt-out preview starting in mid-June 2026
-
-MC1311968 | May 15 - Copilot in SharePoint will roll out as an opt-out preview starting mid-June 2026 for Microsoft 365 Copilot licensed users. It enables AI-powered content creation and management via a chat interface, respects user permissions, and offers admin controls for tenant or site-level opt-in/out and customization.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1311968?MCLinkSource=DigestMail
-
-(Updated) Microsoft 365 Copilot: Planner Agent rename and rollout to premium and basic plans
-
-MC1250279 | May 15 - Starting mid-March 2026, the Project Manager agent in Microsoft Planner will be renamed Planner Agent, aligning with Microsoft 365 Copilot branding. It will be available to Copilot-licensed users in group-based Planner premium and basic plans, with no functional changes. Rollout completes by May 2026; no admin action required.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1250279?MCLinkSource=DigestMail
-
-(Updated) Microsoft Viva Engage: Flexible targeting of Storyline Announcements
-
-MC1183013 | May 15 - Microsoft Viva Engage is introducing flexible, precise audience targeting for Storyline Announcements, allowing leaders to define custom audiences using organizational attributes, groups, or individuals at posting time. Public preview runs mid-November 2025 to mid-March 2026; general availability begins July 2026. Premium licensing is required.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1183013?MCLinkSource=DigestMail
-
-(Updated) Viva Engage: Community feeds improvements
-
-MC1187781 | May 15 - Viva Engage communities will default to viewing conversations by recent posts instead of recent activity, with unread indicators in both new and all feeds. This feature, rolling out worldwide from July 2026, includes sticky user preferences and requires no action or compliance changes.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1187781?MCLinkSource=DigestMail
-
-(Updated) Create charts on pages with AI in SharePoint
-
-MC1282567 | May 15 - SharePoint introduces an AI-assisted Charts web part, enabling page authors with a Microsoft 365 Copilot license to create and edit interactive charts using plain-language prompts. Rollout starts late May 2026 for Targeted Release and mid-June 2026 worldwide, with no required action for organizations.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1282567?MCLinkSource=DigestMail
-
-(Updated) Purview Communication Compliance: Temporary delays in processing due to planned infrastructure migration
-
-MC1214183 | May 15 - Microsoft Purview Communication Compliance is undergoing an infrastructure upgrade from January 5 to June 15, 2026, causing temporary processing delays, intermittent errors, outdated report data, and reduced responsiveness. No data loss will occur. Admins should inform teams; no action is required.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1214183?MCLinkSource=DigestMail
-
-(Updated) Microsoft Teams: AI-powered notes for in-person meetings with Facilitator in Teams Rooms on Windows
-
-MC1307512 | May 15 - Microsoft Teams is expanding AI-powered meeting notes with the Facilitator agent to Teams Rooms on Windows for in-person meetings. Notes are captured in real-time, stored securely in tenant-owned SharePoint, and accessible via meeting recap. Rollout begins July 2026, requiring Teams Rooms Pro licenses and enabled Facilitator, Loop, and transcription settings.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1307512?MCLinkSource=DigestMail
-
-Dynamics 365 Customer Service - Unlock Workforce Engagement capabilities with Customer Service Enterprise license
-
-MC1310832 | May 14 - We are announcing the ability to unlock Workforce Engagement capabilities with the Customer Service Enterprise license in Dynamics 365 Customer Service. This feature will reach general availability on May 29, 2026.How does this affect me?Workforce Engagement capabilities are now included in the Dynamics 365 Customer Service Enterprise license, removing the prior dependency on higher-tier stock-keeping unit (SKU) subscriptions.These new engagement capabilities...
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1310832?MCLinkSource=DigestMail
-
-Authoritative Sites for SharePoint in Microsoft Copilot
-
-MC1310687 | May 14 - Authoritative Sites lets admins mark specific SharePoint sites as trusted, prioritizing their content in Microsoft Copilot Chat and Search to improve reliability and relevance. Rolling out May-June 2026, it requires a Microsoft 365 Copilot (Premium) license and is configurable via PowerShell without changing permissions.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1310687?MCLinkSource=DigestMail
-
-SharePoint Online: Storage quota enforcement updated to align with license limits
-
-MC1310684 | May 14 - SharePoint Online will update storage quota enforcement by late May to June 2026, aligning user quotas with license limits. Users exceeding licensed storage will enter read-only mode until usage is reduced or licenses upgraded. Admins should identify and address over-quota users; no action needed if users comply.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1310684?MCLinkSource=DigestMail
-
-Microsoft Teams: Standardized preview experience for PowerPoint, Excel, and Word files
-
-MC1310683 | May 14 - Microsoft Teams will standardize the preview experience for Word, Excel, and PowerPoint files across desktop and mobile, improving speed and reliability. PowerPoint and Excel previews are on iOS and Android; Word preview is iOS only (Android later). Rollout completes by late June 2026, enabled by default with no admin action needed.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1310683?MCLinkSource=DigestMail
-
-New Outlook for Windows: LDAP support for S/MIME certificate lookup
-
-MC1310680 | May 14 - New Outlook for Windows will support LDAP directories for S/MIME certificate lookup starting late May 2026, enabling admins and users to configure LDAP for finding recipients’ public encryption certificates when sending encrypted emails. LDAP endpoints must not require authentication. This benefits organizations collaborating with external partners.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1310680?MCLinkSource=DigestMail
-
-Microsoft 365 Backup management through SharePoint Admin Center
-
-MC1310678 | May 14 - Microsoft 365 Backup management for SharePoint and OneDrive will be integrated into the SharePoint Admin Center by mid-May 2026. This centralizes backup configuration without changing user experience or data handling. No action is required, but admins should update documentation and inform teams.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1310678?MCLinkSource=DigestMail
-
-Microsoft Purview: Update to ResultCount parameter in the Search-UnifiedAuditLog cmdlet
-
-MC1310672 | May 14 - Microsoft Purview updates the Search-UnifiedAuditLog cmdlet's ResultCount parameter to show a running count of results in real time, adding a new boolean property, AuditSearchRequestMetadata.moreRecordsAvailable, to indicate if more records remain. This improves query progress visibility and affects scripts relying on ResultCount as a final total.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1310672?MCLinkSource=DigestMail
-
-(Updated) SharePoint News web part: New Filmstrip layout and multi-site news support
-
-MC1303716 | May 14 - SharePoint News web part introduces a new "Filmstrip" layout for visually prominent news display and expands multi-site news aggregation to GCC, GCC High, and DoD environments. Rollout begins May 2026, affecting SharePoint editors and site owners with no required action but recommended communication and documentation updates.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1303716?MCLinkSource=DigestMail
-
-Dynamics 365 Contact Center - Dynamics 365 Contact Center Certification for Windows 365 Virtual PCs
-
-MC1310509 | May 14 - We are announcing Dynamics 365 Contact Center certification for Windows 365 virtual PCs in Dynamics 365 Contact Center. This feature will reach public preview on May 30, 2026. How does this affect me? This feature certifies Dynamics 365 Contact Center for use on Windows 365 virtual PCs, ensuring the solution delivers a reliable and supported experience when accessed from cloud-based Windows desktops. This certification provides the following capabilities:...
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1310509?MCLinkSource=DigestMail
-
-Dynamics 365 Sales - Personalize opportunity research in Sales Close Agent
-
-MC1310427 | May 14 - We are announcing the ability to personalize opportunity research in Sales Close Agent in Dynamics 365 Sales. This feature will reach public preview on May 29, 2026. How does this affect me? With this feature, users can personalize how insights and actions are organized, and can add notes, priorities, and approved inputs so the agent emphasizes what matters most for sellers. As a seller, you'll be able to: Personalize the layout: Personalize the...
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1310427?MCLinkSource=DigestMail
-
-Dynamics 365 Customer Service- Generate optimized schedule and shift plans using AI for workforce management (Preview)
-
-MC1310420 | May 14 - We are announcing the ability to generate optimized schedule and shift plans using AI for workforce management in Dynamics 365 Customer Service. This feature will reach public preview on May 31, 2026. How does this affect me? With this feature, the Scheduling Agent automates and optimizes contact center scheduling, reducing manual work for supervisors and ensuring schedules are policy-compliant and responsive to real-time demand. Key functionality of this feature...
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1310420?MCLinkSource=DigestMail
-
-Power Automate - Debug flows using variable default values
-
-MC1310384 | May 14 - We are announcing the ability to debug flows using variable default values in Power Automate. This feature will reach general availability on June 15, 2026.How does this affect me?This feature allows makers to test and troubleshoot flows faster by setting variable default values directly in the designer, instead of restarting runs or manually preparing inputs each time. These default values are applied only during debug runs and do not affect production...
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1310384?MCLinkSource=DigestMail
-
-Power Automate - Export object-centric process mining data to Microsoft Fabric semantic model
-
-MC1310402 | May 14 - We are announcing the ability to export object-centric process mining data to the Microsoft Fabric semantic model in Power Automate. This feature will reach public preview on May 31, 2026. How does this affect me? This feature enables direct publishing of object-centric process mining (OCPM) results into Microsoft Fabric semantic models, making process intelligence data available throughout the Microsoft analytics ecosystem. What action do I need to take?...
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1310402?MCLinkSource=DigestMail
-
-Dynamics 365 Customer Insights - Data - Use Microsoft Fabric OneLake as a data source
-
-MC1310395 | May 14 - We are announcing the ability to use Microsoft Fabric OneLake as a data source. This feature will reach public preview on May 29, 2026. How does this affect me? This feature enables users to bring customer data directly from Microsoft Fabric OneLake. Users can explore and select customer data stored in OneLake for processing in Customer Insights - Data. The OneLake connector reads directly from your OneLake data, eliminating the need to copy or stage data. Key...
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1310395?MCLinkSource=DigestMail
-
-Power Automate - Create and visualize custom KPIs in the process intelligence experience
-
-MC1310386 | May 14 - We are announcing the ability to create and visualize custom KPIs in the process intelligence experience in Power Automate. This feature will reach public preview on May 31, 2026.How does this affect me?The process intelligence experience allows flexible metric creation with seamless visualization integration. You can create custom metrics using configurable formulas that can incorporate existing process data, standard KPIs, and mathematical operations. Key...
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1310386?MCLinkSource=DigestMail
-
-Dynamics 365 Sales - Get lead research and next best actions in Sales Home
-
-MC1310377 | May 14 - We are announcing the ability to get lead research and next best actions in Sales Home in Dynamics 365 Sales. This feature will reach public preview on June 1, 2026. How does this affect me? This feature helps sellers: Focus on the leads most likely to convert by bringing agent-led research, prioritization, and next best actions directly into Sales Home. Quickly review key insights. Understand why a lead matters. See the recommended...
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1310377?MCLinkSource=DigestMail
-
-Microsoft Power Automate - Support for normalized schema import for data ingestion
-
-MC1310375 | May 14 - We are announcing the ability to ingest data in a normalized data structure format for process mining in Power Automate. This feature will reach public preview on May 31, 2026. How does this affect me? With this feature, Power Automate Process Mining supports the case-event entity-based data structure in addition to a normalized form of attributes. This accelerates the ingestion process and reduces storage capacity needed for the transformation and import to process model...
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1310375?MCLinkSource=DigestMail
-
-Microsoft Power Automate - Build better forms with integrated Power Apps
-
-MC1310370 | May 14 - We are announcing the ability to build better forms with integrated Power Apps in Power Automate. This feature will reach public preview on May 29, 2026. How does this affect me? This feature enables full Microsoft Power Apps experiences inside desktop flows. With integrated Power Apps, makers have the following capabilities: Invoke apps directly from a desktop flow. Pass inputs from the desktop flow into the app. Capture outputs from the...
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1310370?MCLinkSource=DigestMail
-
-Power Automate - Restore accidentally deleted flows
-
-MC1310368 | May 14 - We are announcing the ability to restore accidentally deleted flows in Power Automate. This feature will reach public preview on June 1, 2026. How does this affect me? This feature allows flow owners, co-owners, and environment administrators to recover deleted flows quickly and easily within a set timeframe (21 days after deletion), eliminating the need to contact customer support for assistance. Users can restore flows by: Using the View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1310368?MCLinkSource=DigestMail
-
-Dynamics 365 Customer Service - Manage intraday operations with AI agent (preview)
-
-MC1310361 | May 14 - We are announcing the ability to manage intraday operations with AI agent in Dynamics 365 Customer Service. This feature will be available for preview on May 29, 2026. How does this affect me? Users will be able to use Intraday Agent to monitor queue volumes and service representative adherence in real time, detect deviations from forecasts or schedules, and take automated corrective actions. Intraday Agent will provide proactive alerts, reforecast demand, and adjust...
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1310361?MCLinkSource=DigestMail
-
-Power Automate - Schedule desktop flows without a cloud flow requirement
-
-MC1310358 | May 14 - We are announcing the ability to schedule desktop flows directly in Power Automate without requiring a cloud flow as an intermediary trigger. This feature will reach public preview on May 31, 2026. How does this affect me? This feature introduces a streamlined scheduling experience in Power Automate. Key capabilities include: Users can create schedules directly for desktop flows without needing a cloud flow as an intermediary trigger. A new...
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1310358?MCLinkSource=DigestMail
-
-Planner is now available in Outlook and Microsoft 365 Copilot
-
-MC1309747 | May 13 - Microsoft Planner is now integrated into Outlook (web and new Windows version) and Microsoft 365 Copilot, allowing users to manage tasks alongside email and calendar. This rollout begins mid-May 2026, is enabled by default, requires no admin action, and respects existing permissions and settings.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1309747?MCLinkSource=DigestMail
-
-Microsoft 365 Copilot: Copilot chat pane and Summary feature in OneNote Mobile (Android)
-
-MC1309746 | May 13 - Microsoft 365 Copilot introduces a new chat pane and Summary feature in OneNote Mobile (Android) for Premium license users, enabling AI-generated summaries and note queries. Rollout starts mid-May 2026, completing by late June. Existing Copilot policies apply; no admin action needed before deployment.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1309746?MCLinkSource=DigestMail
-
-Microsoft Teams: Report external users for security concerns
-
-MC1309744 | May 13 - Microsoft Teams will enable users to report suspicious external users directly, with reports visible to admins in the Teams admin center for faster security response. This feature, rolling out June 2026, supports chats, meetings, and channels, is enabled by default, and integrates with existing messaging policies.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1309744?MCLinkSource=DigestMail
-
-Viva Engage: Email updates for frontline users without an active Exchange mailbox
-
-MC1309743 | May 13 - Starting mid-June 2026, Viva Engage will stop sending email notifications to frontline users with F1 and F3 licenses who lack active Exchange mailboxes, reducing email system load and improving delivery reliability. Notifications via Teams remain unaffected. No action is required, but review licensing and notification strategies.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1309743?MCLinkSource=DigestMail
-
-Using groups to enable Frontier access in the Frontier Admin Control
-
-MC1309739 | May 13 - Starting June 2026, Frontier Admin Control will support assigning access via Entra ID groups, enabling scalable pilot management with up to 10,000 enrolled users per tenant (except for All Users enrollment). Admins should prepare by creating groups and monitoring membership; no immediate action is required.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1309739?MCLinkSource=DigestMail
-
-PowerPoint for the web: "Review this presentation" skill in Copilot
-
-MC1309737 | May 13 - The "Review this presentation" skill in PowerPoint for the web Copilot is now generally available. It analyzes slides and offers suggestions to improve structure, clarity, and storytelling without making automatic changes. No admin setup is needed; users with Copilot access can use this feature by default.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1309737?MCLinkSource=DigestMail
-
-PowerPoint for Mac: "Review this presentation" skill in Copilot
-
-MC1309736 | May 13 - PowerPoint for Mac now includes the "Review this presentation" skill in Copilot, providing users with slide improvement suggestions for structure, clarity, and storytelling. Available worldwide by default for eligible users, it requires no admin setup and offers review-only recommendations without automatic changes.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1309736?MCLinkSource=DigestMail
-
-PowerPoint for Windows desktop: "Review this presentation" skill in Copilot
-
-MC1309735 | May 13 - The "Review this presentation" skill in PowerPoint Copilot for Windows desktop is now generally available. It analyzes slides and offers suggestions to improve structure, clarity, and storytelling without making automatic changes. No admin setup is needed; users with Copilot access can use it by default.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1309735?MCLinkSource=DigestMail
-
-PowerPoint for the web: “Visualize this slide” skill in Copilot
-
-MC1309733 | May 13 - The "Visualize this slide" skill in Copilot for PowerPoint for the web launches worldwide in mid-May 2026. It transforms text-based slides into visually rich layouts, is enabled by default for eligible users, requires no admin action, and respects existing Copilot and compliance policies.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1309733?MCLinkSource=DigestMail
-
-PowerPoint for Mac: “Visualize this slide” skill in Copilot
-
-MC1309732 | May 13 - The "Visualize this slide" skill in Copilot for PowerPoint on Mac, launching mid-May 2026, transforms text slides into polished visuals using generative AI. It’s enabled by default for eligible users, requires no admin action, and respects existing compliance and licensing policies.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1309732?MCLinkSource=DigestMail
-
-PowerPoint for Windows desktop: “Visualize this slide” skill in Copilot
-
-MC1309731 | May 13 - The "Visualize this slide" skill in Copilot for PowerPoint on Windows desktop launches mid-May 2026, enabling users to transform text-based slides into visually rich designs. It is enabled by default for eligible users, requires no admin action, and respects existing Copilot policies and compliance controls.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1309731?MCLinkSource=DigestMail
-
-(Updated) Outlook Mobile: Follow a meeting option
-
-MC1248393 | May 13 - Outlook Mobile will add a "Follow" RSVP option for meetings with two or more participants, rolling out mid-June to mid-July 2026. It prompts organizers to record meetings and sends updates to followers. The feature is on by default, requires no admin action, and changes the RSVP menu layout.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1248393?MCLinkSource=DigestMail
-
-(Updated) Microsoft 365 Copilot Mobile App: Capability to drive awareness via Notifications on M365 Admin Center
-
-MC1308856 | May 13 - Microsoft 365 Admin Center now lets IT admins notify users about the Microsoft 365 Copilot mobile app via targeted notifications, guiding them to a secure, approved download. This admin-initiated feature helps reduce use of non-sanctioned AI apps and supports compliance with existing security controls.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1308856?MCLinkSource=DigestMail
-
-(Updated) Microsoft Teams: External domains anomalies report
-
-MC1219794 | May 13 - Microsoft Teams will roll out the External domains anomalies report by late May 2026, enabling admins to detect unusual external communication patterns. The report, in the Teams admin center, highlights anomalies and offers a block option. Admins can enable alerts for proactive notifications; no action is needed to access it.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1219794?MCLinkSource=DigestMail
-
-(Updated) Microsoft Teams: Meeting Participants Can Request Collaborative Annotation Sessions
-
-MC1019312 | May 13 - Microsoft Teams now allows meeting participants on Windows and macOS apps to request collaborative annotation during screen sharing, subject to presenter approval. Organizers can control who can start annotations via a new meeting option. Rollout begins May 2026, with no admin action required.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1019312?MCLinkSource=DigestMail
-
-(Updated) Microsoft Teams: Distinguish invites among Attendee, Presenter, and Co-organizer emails
-
-MC1009930 | May 13 - Microsoft Teams will send separate event invite emails based on participant roles (Attendee, Presenter, Co-organizer). Organizers receive role-specific emails, enabling distinct invites for town hall attendees. Rollout begins mid-June 2026, completing by late August 2026, with no admin action required.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1009930?MCLinkSource=DigestMail
-
-Updates available for Microsoft 365 Apps for Monthly Enterprise Channel
-
-MC1309508 | May 13 - We've released updates to the following update channel for Microsoft 365 Apps: Monthly Enterprise Channel
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1309508?MCLinkSource=DigestMail
-
-Collect Diagnostics change to Get Diagnostics for Outlook Mobile and Mac
-
-MC1308855 | May 12 - The Collect Diagnostics feature in Outlook Mobile and Outlook for Mac is renamed to Get Diagnostics, with diagnostic logs now routed through the Microsoft 365 diagnostics service instead of PowerLift. The rollout begins in June 2026, with no user workflow or admin changes required.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1308855?MCLinkSource=DigestMail
-
-Microsoft 365 Copilot: Admins can manage agents at scale with bulk lifecycle actions
-
-MC1308854 | May 12 - Microsoft 365 Copilot now supports bulk lifecycle management of agents in the Microsoft 365 admin center, allowing admins to perform on-demand bulk actions like installing and reassigning agents to improve governance and reduce manual tasks. Rule-based automation is planned for a future update.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1308854?MCLinkSource=DigestMail
-
-(Updated) Microsoft 365 Copilot: Multimodal capture in Copilot Notebooks in the OneNote mobile app (iOS)
-
-MC1275566 | May 12 - Microsoft 365 Copilot introduces multimodal capture in Copilot Notebooks on OneNote mobile (iOS), combining audio transcription, image capture, and typed notes in one session. Available now in preview, general rollout begins late May 2026. It requires Microsoft 365 Copilot and SharePoint or OneDrive licenses.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1275566?MCLinkSource=DigestMail
-
-(Updated) Outlook: Support for recommended and automatically applied sensitivity labels in Outlook for iOS and Android
-
-MC1247891 | May 12 - Outlook for iOS and Android will support recommended and automatic sensitivity labels during email composition starting mid-April 2026, aligning with Microsoft Purview Information Protection policies. This feature is on by default for organizations with existing labeling policies and requires no changes to current Purview configurations.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1247891?MCLinkSource=DigestMail
-
-(Updated) Events in Meet app – Introducing a redesigned, unified Events experience in Microsoft Teams
-
-MC1227087 | May 12 - Microsoft Teams is redesigning the Meet app into a unified Events app for streamlined creation, discovery, and management of webinars, town halls, and custom events. Rollout begins late February 2026 with no admin action needed. Existing meetings and policies remain unchanged.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1227087?MCLinkSource=DigestMail
-
-Microsoft Teams Town halls (Teams Premium): Upload custom backgrounds in Manage what attendees see
-
-MC1307982 | May 12 - Microsoft Teams Premium will allow organizers and presenters of town halls to upload custom background images in the "Manage what attendees see" feature, enhancing branded visuals. This rollout starts late May 2026, applies only to town halls with this feature enabled, and supports JPEG/PNG formats on Windows and Mac.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1307982?MCLinkSource=DigestMail
-
-Microsoft 365 Copilot: Copilot chat pane and Summary feature in OneNote Mobile (iPhone)
-
-MC1307979 | May 12 - Microsoft 365 Copilot introduces a new chat pane and Summary feature in OneNote Mobile (iPhone) for licensed users, enabling AI-generated summaries and Q&A on notes. Rolling out worldwide from mid-May to late June 2026, it requires no admin action but needs appropriate licensing and policy review.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1307979?MCLinkSource=DigestMail
-
-Microsoft Teams: AI-powered notes for in-person meetings with Facilitator in Teams Rooms on Android
-
-MC1307888 | May 11 - Microsoft Teams is expanding AI-powered meeting notes with the Facilitator agent to Teams Rooms on Android, enabling real-time note-taking during in-person meetings. Notes are securely stored in tenant-owned SharePoint and accessible via meeting recap. Rollout begins late June 2026, requiring Teams Rooms Pro licenses and specific tenant settings.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1307888?MCLinkSource=DigestMail
-
-HTML formatting now supported for Message center posts synced to Planner
-
-MC1307883 | May 11 - Starting May 13, 2026, Message center posts synced to Planner will support HTML formatting, improving readability with rich text, links, and images. This update, enabled by default, ensures consistent display between Message center and Planner without requiring any action from admins. Existing synced items will update over time.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1307883?MCLinkSource=DigestMail
-
-(Updated) Microsoft Teams: Miracast support for Teams Rooms on Windows (Teams Rooms Pro only)
-
-MC1186374 | May 11 - Microsoft Teams Rooms on Windows (Pro only) will support Miracast for wireless content sharing, rolling out from mid-May to late May 2026. The feature is off by default, enabled via IT admin portal, requires Miracast-compatible laptops, and has no impact unless activated by admins.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1186374?MCLinkSource=DigestMail
-
-(Updated) Microsoft Loop – Require Existing Microsoft 365 Group for New Loop workspaces
-
-MC929022 | May 11 - A new Microsoft 365 Cloud Policy will block tenant-owned Loop workspace creation, requiring workspaces to be created only through existing Microsoft 365 Groups in Teams channels. This rollout begins late April 2026, aiming to align workspace management with existing governance but may limit some user scenarios.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC929022?MCLinkSource=DigestMail
-
-(Updated) Updated UI for Copilot Chat entry point in Word, Excel and PowerPoint apps
-
-MC1189000 | May 11 - Microsoft 365 is updating Copilot in Word, Excel, and PowerPoint with a new Dynamic Action Button on the canvas, contextual prompts, and improved keyboard/screen reader access. Rollout starts December 2025, completing by May 2026. No admin action required unless changing pin settings for Copilot Chat.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1189000?MCLinkSource=DigestMail
-
-(Updated) OneDrive: Simplified file transfer for departing employees
-
-MC1164381 | May 11 - OneDrive is enhancing file management for departing employees with improved notifications, filtering, and bulk transfers that preserve sharing. Rollout starts mid-October 2025, completing by May 2026. Managers automatically gain access to deleted accounts’ files, with streamlined transfer steps and consolidated collaborator alerts.
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1164381?MCLinkSource=DigestMail
-
-Dynamics 365 Customer Service- Estimate AI credits for agents from forecasted demand
-
-MC1307183 | May 11 - We are announcing the ability to estimate AI credits for agents from forecasted demand in Dynamics 365 Customer Service. This feature will reach general availability on May 20, 2026.How does this affect me?This feature enables workforce planners to translate forecasted service demand into AI credit requirements within Dynamics 365 Customer Service and Contact Center.To move from demand forecast to credit estimation:Step 1: As a supervisor, log in to the...
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1307183?MCLinkSource=DigestMail
-
-Microsoft Power Automate - Automate administrator-level desktop applications in unattended runs
-
-MC1307177 | May 11 - We are announcing the ability to automate administrator-level desktop applications in unattended runs in Microsoft Power Automate. This feature will reach general availability on May 18, 2026. How does this affect me? This feature enables support for automating desktop applications that require administrator rights when running desktop flows in unattended mode. By configuring a registry setting, you can extend unattended automation to interact with applications that...
-View more
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/messages/MC1307177?MCLinkSource=DigestMail
-
-To view all announcements, sign in to Microsoft 365 message center
-https://admin.microsoft.com/AdminPortal/home#/MessageCenter
-
---------------------------------------------------
-
-
-Yes: https://eur.safelink.emails.azure.net/trackingfeedback/?p=bT1kZWRlOTNhMC1hYjAzLTQ2MTctODY2OS0wOWI2Yjc5M2E5MDMmZj1Qb3NpdGl2ZSZiPWVuLXVzJmE9NS8xOC8yMDI2IDM6MzE6NTAgQU0mdT1hZW8%3D
-No: https://eur.safelink.emails.azure.net/trackingfeedback/?p=bT1kZWRlOTNhMC1hYjAzLTQ2MTctODY2OS0wOWI2Yjc5M2E5MDMmZj1OZWdhdGl2ZSZiPWVuLXVzJmE9NS8xOC8yMDI2IDM6MzE6NTAgQU0mdT1hZW8%3D
-
-
-unsubscribe at any time: https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/mcpreferences
-
-
-Microsoft 365 message center preferences: https://admin.microsoft.com/AdminPortal/home#/MessageCenter/:/mcpreferences
-
-
-How to view translated messages: https://docs.microsoft.com/en-us/microsoft-365/admin/manage/language-translation-for-message-center-posts?view=o365-worldwide
-Send us feedback about this email: https://forms.office.com/Pages/ResponsePage.aspx?id=v4j5cvGGr0GRqy180BHbR-rMMzjkh-5MjuvzignA2eJUQURBR1k1MkRBUEY5MFRBSDNBWldWQlM4NC4u
-
-
-Privacy Statement: https://go.microsoft.com/fwlink/?LinkId=521839
-
-Microsoft Corporation, One Microsoft Way, Redmond, WA 98052
-
-Microsoft
+|  Privacy Statement Microsoft Corporation, One Microsoft Way, Redmond, WA 98052  |  |

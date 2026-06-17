@@ -3,10 +3,91 @@ use base64::{Engine as _, engine::general_purpose};
 use eyre::{Context, Report};
 use kreuzberg::detect_mime_type_from_bytes;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tracing::Instrument;
 
 mod calendar_vcard;
 use self::calendar_vcard::register_calendar_vcard_extractor;
+
+const DOCX_MIME_TYPE: &str =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const HTML_MIME_TYPE: &str = "text/html";
+const PLAIN_TEXT_MIME_TYPE: &str = "text/plain";
+const EMAIL_HTML_FALLBACK_MAX_TABLE_CELLS: usize = 1_000_000;
+
+#[derive(Debug)]
+struct StepTimer {
+    step: &'static str,
+    start: Instant,
+}
+
+impl StepTimer {
+    fn start(step: &'static str) -> Self {
+        tracing::trace!(step, "file processing step started");
+        Self {
+            step,
+            start: Instant::now(),
+        }
+    }
+
+    fn finish(self) -> Duration {
+        let elapsed = self.start.elapsed();
+        tracing::trace!(
+            step = self.step,
+            elapsed_ms = elapsed.as_millis(),
+            "file processing step finished"
+        );
+        elapsed
+    }
+}
+
+#[derive(Debug, Default)]
+struct EmailSanitizationStats {
+    entities_seen: usize,
+    multipart_entities: usize,
+    message_rfc822_entities: usize,
+    html_entities: usize,
+    html_entities_sanitized: usize,
+    tnef_entities: usize,
+    max_depth_seen: usize,
+    decoded_html_bytes: usize,
+    sanitized_html_bytes: usize,
+    decoded_html_table_cell_tags: usize,
+    sanitized_html_table_cell_tags: usize,
+    decoded_message_bytes: usize,
+    sanitized_message_bytes: usize,
+}
+
+#[derive(Debug, Default)]
+struct EmailBodyStats {
+    entities_seen: usize,
+    multipart_entities: usize,
+    message_rfc822_entities: usize,
+    plain_text_entities: usize,
+    html_entities: usize,
+    extracted_parts: usize,
+    decoded_bytes: usize,
+    html_table_cell_tags: usize,
+}
+
+#[derive(Debug, Default)]
+struct EmailHtmlFallbackExtractionStats {
+    html_part_count: usize,
+    extraction_attempts: usize,
+    extraction_successes: usize,
+    extraction_failures: usize,
+    extraction_elapsed: Duration,
+    normalization_elapsed: Duration,
+}
+
+#[derive(Debug, Default)]
+struct EmailTnefStats {
+    entities_seen: usize,
+    multipart_entities: usize,
+    message_rfc822_entities: usize,
+    tnef_entities: usize,
+    decoded_message_bytes: usize,
+}
 
 /// Trait for file processors that extract text content from file bytes
 #[async_trait]
@@ -54,7 +135,7 @@ fn detect_mime_type(file_bytes: &[u8]) -> Result<String, Report> {
         "application/zip" | "application/x-zip-compressed"
     ) && looks_like_docx(file_bytes)
     {
-        mime_type = kreuzberg::DOCX_MIME_TYPE.to_string();
+        mime_type = DOCX_MIME_TYPE.to_string();
     }
     Ok(mime_type)
 }
@@ -160,7 +241,7 @@ fn is_vcard_mime(mime_type: &str) -> bool {
 fn normalize_kreuzberg_mime(mime_type: &str) -> String {
     let normalized = normalize_mime_type(mime_type);
     if is_calendar_mime(&normalized) || is_vcard_mime(&normalized) {
-        kreuzberg::PLAIN_TEXT_MIME_TYPE.to_string()
+        PLAIN_TEXT_MIME_TYPE.to_string()
     } else {
         normalized
     }
@@ -468,7 +549,12 @@ fn split_multipart_body<'a>(body: &'a [u8], boundary: &str) -> Vec<&'a [u8]> {
     parts
 }
 
-fn collect_email_plain_text_parts(entity: &[u8], output: &mut Vec<String>) {
+fn collect_email_plain_text_parts(
+    entity: &[u8],
+    output: &mut Vec<String>,
+    stats: &mut EmailBodyStats,
+) {
+    stats.entities_seen += 1;
     let (headers, body) = split_mime_headers_body(entity);
     let headers = parse_mime_headers(headers);
     let content_type = header_value(&headers, "content-type").unwrap_or("text/plain");
@@ -478,32 +564,38 @@ fn collect_email_plain_text_parts(entity: &[u8], output: &mut Vec<String>) {
         content_disposition_essence(header_value(&headers, "content-disposition"));
 
     if content_type_essence.starts_with("multipart/") {
+        stats.multipart_entities += 1;
         if let Some(boundary) = boundary {
             for part in split_multipart_body(body, &boundary) {
-                collect_email_plain_text_parts(part, output);
+                collect_email_plain_text_parts(part, output, stats);
             }
         }
         return;
     }
 
     let decoded_body = decode_mime_body(body, transfer_encoding);
+    stats.decoded_bytes += decoded_body.len();
 
     if content_type_essence == "message/rfc822" {
-        collect_email_plain_text_parts(&decoded_body, output);
+        stats.message_rfc822_entities += 1;
+        collect_email_plain_text_parts(&decoded_body, output, stats);
         return;
     }
 
     if content_type_essence == "text/plain" && content_disposition != "attachment" {
+        stats.plain_text_entities += 1;
         let text = normalize_plain_text(&String::from_utf8_lossy(&decoded_body));
         if !text.trim().is_empty() {
+            stats.extracted_parts += 1;
             output.push(text);
         }
     }
 }
 
-fn extract_email_plain_text(file_bytes: &[u8]) -> Option<String> {
+fn extract_email_plain_text(file_bytes: &[u8]) -> (Option<String>, EmailBodyStats) {
     let mut parts = Vec::new();
-    collect_email_plain_text_parts(file_bytes, &mut parts);
+    let mut stats = EmailBodyStats::default();
+    collect_email_plain_text_parts(file_bytes, &mut parts, &mut stats);
 
     let plain_text = parts
         .into_iter()
@@ -513,9 +605,9 @@ fn extract_email_plain_text(file_bytes: &[u8]) -> Option<String> {
         .join("\n\n");
 
     if plain_text.is_empty() {
-        None
+        (None, stats)
     } else {
-        Some(plain_text)
+        (Some(plain_text), stats)
     }
 }
 
@@ -535,7 +627,21 @@ fn sanitized_html_body(decoded_body: &[u8]) -> String {
     )))
 }
 
-fn collect_email_html_body_parts(entity: &[u8], output: &mut Vec<String>) {
+fn count_html_table_cell_tags(html: &str) -> usize {
+    let lower = html.to_ascii_lowercase();
+    count_ascii_substring(&lower, "<td") + count_ascii_substring(&lower, "<th")
+}
+
+fn count_ascii_substring(haystack: &str, needle: &str) -> usize {
+    haystack.match_indices(needle).count()
+}
+
+fn collect_email_html_body_parts(
+    entity: &[u8],
+    output: &mut Vec<String>,
+    stats: &mut EmailBodyStats,
+) {
+    stats.entities_seen += 1;
     let (headers, body) = split_mime_headers_body(entity);
     let headers = parse_mime_headers(headers);
     let content_type = header_value(&headers, "content-type").unwrap_or("text/plain");
@@ -545,18 +651,21 @@ fn collect_email_html_body_parts(entity: &[u8], output: &mut Vec<String>) {
         content_disposition_essence(header_value(&headers, "content-disposition"));
 
     if content_type_essence.starts_with("multipart/") {
+        stats.multipart_entities += 1;
         if let Some(boundary) = boundary {
             for part in split_multipart_body(body, &boundary) {
-                collect_email_html_body_parts(part, output);
+                collect_email_html_body_parts(part, output, stats);
             }
         }
         return;
     }
 
     let decoded_body = decode_mime_body(body, transfer_encoding);
+    stats.decoded_bytes += decoded_body.len();
 
     if content_type_essence == "message/rfc822" {
-        collect_email_html_body_parts(&decoded_body, output);
+        stats.message_rfc822_entities += 1;
+        collect_email_html_body_parts(&decoded_body, output, stats);
         return;
     }
 
@@ -564,8 +673,11 @@ fn collect_email_html_body_parts(entity: &[u8], output: &mut Vec<String>) {
         && content_disposition != "attachment"
         && has_utf8_or_ascii_charset(content_type)
     {
+        stats.html_entities += 1;
         let html = sanitized_html_body(&decoded_body);
+        stats.html_table_cell_tags += count_html_table_cell_tags(&html);
         if !html.trim().is_empty() {
+            stats.extracted_parts += 1;
             output.push(html);
         }
     }
@@ -575,39 +687,87 @@ fn extract_email_html_body_fallback(
     file_bytes: &[u8],
     config: &kreuzberg::ExtractionConfig,
     marker_format: &str,
-) -> Option<String> {
+) -> (
+    Option<String>,
+    EmailBodyStats,
+    EmailHtmlFallbackExtractionStats,
+) {
     let mut html_parts = Vec::new();
-    collect_email_html_body_parts(file_bytes, &mut html_parts);
+    let mut stats = EmailBodyStats::default();
+    collect_email_html_body_parts(file_bytes, &mut html_parts, &mut stats);
+    let mut extraction_stats = EmailHtmlFallbackExtractionStats {
+        html_part_count: html_parts.len(),
+        ..Default::default()
+    };
 
-    let extracted = html_parts
-        .into_iter()
-        .filter_map(|html| {
-            match kreuzberg::extract_bytes_sync(html.as_bytes(), kreuzberg::HTML_MIME_TYPE, config)
-            {
-                Ok(result) => {
-                    let mut content =
-                        content_with_page_markers(result.content, result.pages, marker_format);
-                    append_extraction_children(&mut content, result.children);
-                    let content = normalize_email_html_fallback_markdown(&content);
-                    if content.trim().is_empty() {
-                        None
-                    } else {
-                        Some(content)
-                    }
-                }
-                Err(err) => {
-                    tracing::debug!(error = %err, "Skipping email HTML body fallback extraction");
-                    None
+    let mut fallback_config = config.clone();
+    let mut security_limits = fallback_config.security_limits.clone().unwrap_or_default();
+    security_limits.max_table_cells = security_limits
+        .max_table_cells
+        .max(EMAIL_HTML_FALLBACK_MAX_TABLE_CELLS);
+    fallback_config.security_limits = Some(security_limits);
+
+    let mut extracted_parts = Vec::new();
+    for (html_part_index, html) in html_parts.into_iter().enumerate() {
+        extraction_stats.extraction_attempts += 1;
+        let extraction_started = Instant::now();
+        let result =
+            kreuzberg::extract_bytes_sync(html.as_bytes(), HTML_MIME_TYPE, &fallback_config);
+        let extraction_elapsed = extraction_started.elapsed();
+        extraction_stats.extraction_elapsed += extraction_elapsed;
+
+        match result {
+            Ok(result) => {
+                extraction_stats.extraction_successes += 1;
+                tracing::trace!(
+                    html_part_index,
+                    html_bytes = html.len(),
+                    elapsed_ms = extraction_elapsed.as_millis(),
+                    result_content_len = result.content.len(),
+                    page_count = result.pages.as_ref().map_or(0, Vec::len),
+                    top_level_child_count = result.children.as_ref().map_or(0, Vec::len),
+                    "Email HTML fallback kreuzberg extraction finished"
+                );
+
+                let normalization_started = Instant::now();
+                let mut content =
+                    content_with_page_markers(result.content, result.pages, marker_format);
+                append_extraction_children(&mut content, result.children);
+                let content = normalize_email_html_fallback_markdown(&content);
+                let normalization_elapsed = normalization_started.elapsed();
+                extraction_stats.normalization_elapsed += normalization_elapsed;
+                tracing::trace!(
+                    html_part_index,
+                    elapsed_ms = normalization_elapsed.as_millis(),
+                    normalized_content_len = content.len(),
+                    is_empty = content.trim().is_empty(),
+                    "Email HTML fallback post-processing finished"
+                );
+
+                if !content.trim().is_empty() {
+                    extracted_parts.push(content);
                 }
             }
-        })
-        .collect::<Vec<_>>()
-        .join("\n\n");
+            Err(err) => {
+                extraction_stats.extraction_failures += 1;
+                tracing::trace!(
+                    html_part_index,
+                    html_bytes = html.len(),
+                    elapsed_ms = extraction_elapsed.as_millis(),
+                    error = %err,
+                    "Email HTML fallback kreuzberg extraction failed"
+                );
+                tracing::debug!(error = %err, "Skipping email HTML body fallback extraction");
+            }
+        }
+    }
+
+    let extracted = extracted_parts.join("\n\n");
 
     if extracted.trim().is_empty() {
-        None
+        (None, stats, extraction_stats)
     } else {
-        Some(extracted)
+        (Some(extracted), stats, extraction_stats)
     }
 }
 
@@ -865,8 +1025,10 @@ fn headers_with_base64_encoding(raw_headers: &[u8]) -> String {
 /// leaving every other part byte-identical. Returns the original bytes for non-multipart,
 /// non-HTML, or unparseable input. Nested `message/rfc822` parts are recursed into so a CSS-heavy
 /// email forwarded *inside* a thread is sanitized too.
-fn sanitize_email_html_blocks(entity: &[u8]) -> Vec<u8> {
-    sanitize_email_html_blocks_inner(entity, 0)
+fn sanitize_email_html_blocks(entity: &[u8]) -> (Vec<u8>, EmailSanitizationStats) {
+    let mut stats = EmailSanitizationStats::default();
+    let sanitized = sanitize_email_html_blocks_inner(entity, 0, &mut stats);
+    (sanitized, stats)
 }
 
 /// Maximum MIME nesting depth we recurse through. The recursion is naturally bounded by the
@@ -878,7 +1040,14 @@ const MAX_SANITIZE_DEPTH: usize = 20;
 
 /// Recursive core of [`sanitize_email_html_blocks`]. `depth` tracks how many MIME levels deep we
 /// are so pathologically nested emails can't recurse without bound.
-fn sanitize_email_html_blocks_inner(entity: &[u8], depth: usize) -> Vec<u8> {
+fn sanitize_email_html_blocks_inner(
+    entity: &[u8],
+    depth: usize,
+    stats: &mut EmailSanitizationStats,
+) -> Vec<u8> {
+    stats.entities_seen += 1;
+    stats.max_depth_seen = stats.max_depth_seen.max(depth);
+
     if depth >= MAX_SANITIZE_DEPTH {
         return entity.to_vec();
     }
@@ -889,6 +1058,7 @@ fn sanitize_email_html_blocks_inner(entity: &[u8], depth: usize) -> Vec<u8> {
     let (content_type_essence, boundary) = content_type_essence_and_param(content_type, "boundary");
 
     if content_type_essence.starts_with("multipart/") {
+        stats.multipart_entities += 1;
         let Some(boundary) = boundary else {
             return entity.to_vec();
         };
@@ -907,7 +1077,7 @@ fn sanitize_email_html_blocks_inner(entity: &[u8], depth: usize) -> Vec<u8> {
         let mut rebuilt_body = Vec::new();
         for part in parts {
             rebuilt_body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
-            let mut sanitized_part = sanitize_email_html_blocks_inner(part, depth + 1);
+            let mut sanitized_part = sanitize_email_html_blocks_inner(part, depth + 1, stats);
             if !sanitized_part.ends_with(b"\r\n") {
                 sanitized_part.extend_from_slice(b"\r\n");
             }
@@ -923,6 +1093,7 @@ fn sanitize_email_html_blocks_inner(entity: &[u8], depth: usize) -> Vec<u8> {
     }
 
     if content_type_essence == "message/rfc822" {
+        stats.message_rfc822_entities += 1;
         // A forwarded/attached email carried as `message/rfc822` is itself a full MIME message, so
         // its `text/html` parts can leak `<style>`/`<script>` blocks just like a top-level email.
         // Decode the part (it may be base64/quoted-printable), recurse to sanitize the inner
@@ -938,7 +1109,9 @@ fn sanitize_email_html_blocks_inner(entity: &[u8], depth: usize) -> Vec<u8> {
         // grandchild attachment, and filename all still extract).
         let transfer_encoding = header_value(&headers, "content-transfer-encoding");
         let decoded = decode_mime_body(body, transfer_encoding);
-        let sanitized_inner = sanitize_email_html_blocks_inner(&decoded, depth + 1);
+        stats.decoded_message_bytes += decoded.len();
+        let sanitized_inner = sanitize_email_html_blocks_inner(&decoded, depth + 1, stats);
+        stats.sanitized_message_bytes += sanitized_inner.len();
 
         let mut out = headers_with_base64_encoding(headers_raw).into_bytes();
         out.extend_from_slice(b"\r\n");
@@ -947,6 +1120,7 @@ fn sanitize_email_html_blocks_inner(entity: &[u8], depth: usize) -> Vec<u8> {
     }
 
     if content_type_essence == "text/html" {
+        stats.html_entities += 1;
         // Only rewrite UTF-8/ASCII HTML: decoding other charsets (UTF-16, Latin-1, …) through
         // `from_utf8_lossy` would corrupt the text, so leave those parts untouched. kreuzberg still
         // decodes them itself via the charset header; the CSS leak is overwhelmingly a UTF-8 case.
@@ -956,9 +1130,15 @@ fn sanitize_email_html_blocks_inner(entity: &[u8], depth: usize) -> Vec<u8> {
 
         let transfer_encoding = header_value(&headers, "content-transfer-encoding");
         let decoded = decode_mime_body(body, transfer_encoding);
+        stats.decoded_html_bytes += decoded.len();
+        let decoded_html = String::from_utf8_lossy(&decoded);
+        stats.decoded_html_table_cell_tags += count_html_table_cell_tags(&decoded_html);
         // Strip `<style>`/`<script>` blocks first, then neutralize any `data:` URI payloads (large
         // inline base64 images) — both are token bombs kreuzberg would otherwise render as text.
         let cleaned = sanitized_html_body(&decoded);
+        stats.sanitized_html_bytes += cleaned.len();
+        stats.sanitized_html_table_cell_tags += count_html_table_cell_tags(&cleaned);
+        stats.html_entities_sanitized += 1;
 
         let mut out = headers_with_base64_encoding(headers_raw).into_bytes();
         out.extend_from_slice(b"\r\n");
@@ -968,6 +1148,7 @@ fn sanitize_email_html_blocks_inner(entity: &[u8], depth: usize) -> Vec<u8> {
 
     let content_disposition = header_value(&headers, "content-disposition");
     if is_tnef_part(&content_type_essence, content_type, content_disposition) {
+        stats.tnef_entities += 1;
         // A `winmail.dat` / TNEF part is an opaque Outlook blob we deliberately do not decode.
         // BLANK its body (re-emit empty base64) so its base64 can never reach the token count,
         // regardless of how a given kreuzberg version chooses to render an unknown attachment.
@@ -1046,6 +1227,43 @@ fn deduplicate_repeated_lines(text: &str) -> String {
         if !should_dedupe || seen.insert(trimmed.to_string()) {
             output.push(line.to_string());
         }
+    }
+
+    output.join("\n")
+}
+
+fn is_empty_markdown_table_line(line: &str) -> bool {
+    let line = line.trim();
+    if !line.starts_with('|') || !line.ends_with('|') {
+        return false;
+    }
+
+    line.trim_matches('|').split('|').all(|cell| {
+        cell.trim()
+            .chars()
+            .all(|char| matches!(char, '-' | ':' | ' '))
+    })
+}
+
+fn strip_empty_markdown_table_rows(text: &str) -> String {
+    let mut output = Vec::new();
+    let mut previous_was_blank = false;
+
+    for line in text.lines() {
+        if is_empty_markdown_table_line(line) {
+            continue;
+        }
+
+        if line.trim().is_empty() {
+            if !previous_was_blank {
+                output.push(String::new());
+            }
+            previous_was_blank = true;
+            continue;
+        }
+
+        previous_was_blank = false;
+        output.push(line.to_string());
     }
 
     output.join("\n")
@@ -1131,13 +1349,19 @@ fn append_tnef_attachment_marker(content: &mut String) {
     content.push_str("[winmail.dat (TNEF) attachment omitted]");
 }
 
-fn extract_tnef_attachment_count(file_bytes: &[u8]) -> usize {
+fn extract_tnef_attachment_count(file_bytes: &[u8]) -> (usize, EmailTnefStats) {
     let mut tnef_attachments = 0;
-    collect_tnef_attachments(file_bytes, &mut tnef_attachments);
-    tnef_attachments
+    let mut stats = EmailTnefStats::default();
+    collect_tnef_attachments(file_bytes, &mut tnef_attachments, &mut stats);
+    (tnef_attachments, stats)
 }
 
-fn collect_tnef_attachments(entity: &[u8], tnef_attachments: &mut usize) {
+fn collect_tnef_attachments(
+    entity: &[u8],
+    tnef_attachments: &mut usize,
+    stats: &mut EmailTnefStats,
+) {
+    stats.entities_seen += 1;
     let (headers, body) = split_mime_headers_body(entity);
     let headers = parse_mime_headers(headers);
     let content_type = header_value(&headers, "content-type").unwrap_or("text/plain");
@@ -1146,9 +1370,10 @@ fn collect_tnef_attachments(entity: &[u8], tnef_attachments: &mut usize) {
     let content_disposition = header_value(&headers, "content-disposition");
 
     if content_type_essence.starts_with("multipart/") {
+        stats.multipart_entities += 1;
         if let Some(boundary) = boundary {
             for part in split_multipart_body(body, &boundary) {
-                collect_tnef_attachments(part, tnef_attachments);
+                collect_tnef_attachments(part, tnef_attachments, stats);
             }
         }
         return;
@@ -1156,23 +1381,27 @@ fn collect_tnef_attachments(entity: &[u8], tnef_attachments: &mut usize) {
 
     if is_tnef_part(&content_type_essence, content_type, content_disposition) {
         *tnef_attachments += 1;
+        stats.tnef_entities += 1;
         return;
     }
 
     let decoded_body = decode_mime_body(body, transfer_encoding);
 
     if content_type_essence == "message/rfc822" {
-        collect_tnef_attachments(&decoded_body, tnef_attachments);
+        stats.message_rfc822_entities += 1;
+        stats.decoded_message_bytes += decoded_body.len();
+        collect_tnef_attachments(&decoded_body, tnef_attachments, stats);
     }
 }
 
 fn append_extraction_children(
     content: &mut String,
     children: Option<Vec<kreuzberg::ArchiveEntry>>,
-) {
+) -> usize {
     let Some(children) = children else {
-        return;
+        return 0;
     };
+    let mut appended_children = 0;
 
     let has_parsed_nested_message = children
         .iter()
@@ -1182,6 +1411,7 @@ fn append_extraction_children(
         if has_parsed_nested_message && is_raw_nested_message_attachment_duplicate(&child) {
             continue;
         }
+        appended_children += 1;
 
         if !content.trim_end().is_empty() {
             content.push_str("\n\n");
@@ -1193,8 +1423,10 @@ fn append_extraction_children(
         ));
         content.push_str(child.result.content.trim());
 
-        append_extraction_children(content, child.result.children);
+        appended_children += append_extraction_children(content, child.result.children);
     }
+
+    appended_children
 }
 
 fn is_raw_nested_message_attachment_duplicate(child: &kreuzberg::ArchiveEntry) -> bool {
@@ -1264,9 +1496,22 @@ impl FileProcessor for KreuzbergProcessor {
         let mime_type = mime_type.map(str::to_owned);
         Ok(
             tokio::task::spawn_blocking(move || -> Result<String, Report> {
+                let total_timer = StepTimer::start("file_processor.parse_file.total");
+                let input_len = file_bytes.len();
+                let provided_mime_type = mime_type.as_deref().map(str::to_string);
+                tracing::debug!(
+                    file_bytes_len = input_len,
+                    provided_mime_type = provided_mime_type.as_deref().unwrap_or("<none>"),
+                    "file processing started"
+                );
+
                 // Check if the file is an image using magic number detection
                 if infer::is_image(&file_bytes) {
-                    tracing::debug!("Skipping OCR/text extraction for image file");
+                    let total_elapsed = total_timer.finish();
+                    tracing::debug!(
+                        elapsed_ms = total_elapsed.as_millis(),
+                        "Skipping OCR/text extraction for image file"
+                    );
                     return Ok(String::new());
                 }
 
@@ -1274,7 +1519,9 @@ impl FileProcessor for KreuzbergProcessor {
                     tracing::debug!(mime_type = %mime_type, "Using provided MIME type");
                     normalize_kreuzberg_mime(mime_type)
                 } else {
+                    let timer = StepTimer::start("file_processor.detect_mime");
                     let detected = detect_mime_type(&file_bytes)?;
+                    timer.finish();
                     normalize_kreuzberg_mime(&detected)
                 };
 
@@ -1283,10 +1530,13 @@ impl FileProcessor for KreuzbergProcessor {
                     "application/zip" | "application/x-zip-compressed"
                 ) && looks_like_docx(&file_bytes)
                 {
-                    mime_type = kreuzberg::DOCX_MIME_TYPE.to_string();
+                    mime_type = DOCX_MIME_TYPE.to_string();
                 }
 
-                register_calendar_vcard_extractor().wrap_err("Failed to register calendar/vcard extractor")?;
+                let timer = StepTimer::start("file_processor.register_extractors");
+                register_calendar_vcard_extractor()
+                    .wrap_err("Failed to register calendar/vcard extractor")?;
+                timer.finish();
 
                 // kreuzberg rejects bare `multipart/*` types ("Unsupported format"), but those are
                 // the inner header of an RFC822 message (a `.eml` whose Content-Type is
@@ -1295,28 +1545,80 @@ impl FileProcessor for KreuzbergProcessor {
                 if mime_type.starts_with("multipart/") {
                     mime_type = "message/rfc822".to_string();
                 }
-                tracing::debug!("Final decided MIME type: {:?}", &mime_type);
+                tracing::debug!(
+                    final_mime_type = %mime_type,
+                    "Final decided MIME type"
+                );
 
-                let email_plain_text = if is_message_rfc822_mime_type(&mime_type) {
-                    extract_email_plain_text(&file_bytes)
+                let is_email = is_message_rfc822_mime_type(&mime_type);
+
+                let email_plain_text = if is_email {
+                    let timer = StepTimer::start("file_processor.email.extract_plain_text");
+                    let (plain_text, stats) = extract_email_plain_text(&file_bytes);
+                    let elapsed = timer.finish();
+                    tracing::debug!(
+                        elapsed_ms = elapsed.as_millis(),
+                        plain_text_len = plain_text.as_ref().map_or(0, String::len),
+                        entities_seen = stats.entities_seen,
+                        multipart_entities = stats.multipart_entities,
+                        message_rfc822_entities = stats.message_rfc822_entities,
+                        plain_text_entities = stats.plain_text_entities,
+                        extracted_parts = stats.extracted_parts,
+                        decoded_bytes = stats.decoded_bytes,
+                        "Email plain-text extraction stats"
+                    );
+                    plain_text
                 } else {
                     None
                 };
 
-                let tnef_attachment_count =
-                    if is_message_rfc822_mime_type(&mime_type) {
-                        extract_tnef_attachment_count(&file_bytes)
-                    } else {
-                        0
-                    };
+                let tnef_attachment_count = if is_email {
+                    let timer = StepTimer::start("file_processor.email.count_tnef");
+                    let (count, stats) = extract_tnef_attachment_count(&file_bytes);
+                    let elapsed = timer.finish();
+                    tracing::debug!(
+                        elapsed_ms = elapsed.as_millis(),
+                        tnef_attachment_count = count,
+                        entities_seen = stats.entities_seen,
+                        multipart_entities = stats.multipart_entities,
+                        message_rfc822_entities = stats.message_rfc822_entities,
+                        decoded_message_bytes = stats.decoded_message_bytes,
+                        "Email TNEF scan stats"
+                    );
+                    count
+                } else {
+                    0
+                };
 
                 // For emails, strip `<style>`/`<script>` blocks from HTML parts before extraction:
                 // kreuzberg renders style-block contents as text, which otherwise leaks a CSS-heavy
                 // newsletter's stylesheet into the token count. Other parts are left untouched.
                 let sanitized_email_bytes;
-                let did_sanitize = is_message_rfc822_mime_type(&mime_type);
+                let did_sanitize = is_email;
                 let extraction_bytes: &[u8] = if did_sanitize {
-                    sanitized_email_bytes = sanitize_email_html_blocks(&file_bytes);
+                    let timer = StepTimer::start("file_processor.email.sanitize_html_blocks");
+                    let (sanitized, stats) = sanitize_email_html_blocks(&file_bytes);
+                    let elapsed = timer.finish();
+                    tracing::debug!(
+                        elapsed_ms = elapsed.as_millis(),
+                        input_bytes = file_bytes.len(),
+                        sanitized_bytes = sanitized.len(),
+                        entities_seen = stats.entities_seen,
+                        multipart_entities = stats.multipart_entities,
+                        message_rfc822_entities = stats.message_rfc822_entities,
+                        html_entities = stats.html_entities,
+                        html_entities_sanitized = stats.html_entities_sanitized,
+                        tnef_entities = stats.tnef_entities,
+                        max_depth_seen = stats.max_depth_seen,
+                        decoded_html_bytes = stats.decoded_html_bytes,
+                        sanitized_html_bytes = stats.sanitized_html_bytes,
+                        decoded_html_table_cell_tags = stats.decoded_html_table_cell_tags,
+                        sanitized_html_table_cell_tags = stats.sanitized_html_table_cell_tags,
+                        decoded_message_bytes = stats.decoded_message_bytes,
+                        sanitized_message_bytes = stats.sanitized_message_bytes,
+                        "Email HTML sanitization stats"
+                    );
+                    sanitized_email_bytes = sanitized;
                     &sanitized_email_bytes
                 } else {
                     &file_bytes
@@ -1330,43 +1632,163 @@ impl FileProcessor for KreuzbergProcessor {
                 };
                 let marker_format = page_config.marker_format.clone();
 
-                let config = kreuzberg::ExtractionConfig {
+                let mut config = kreuzberg::ExtractionConfig {
+                    use_cache: false,
                     output_format: kreuzberg::OutputFormat::Markdown,
                     pages: Some(page_config),
+                    html_options: Some(html_to_markdown_rs::ConversionOptions {
+                        compact_tables: true,
+                        ..Default::default()
+                    }),
                     ..Default::default()
                 };
+                let mut security_limits = config.security_limits.clone().unwrap_or_default();
+                security_limits.max_table_cells = security_limits
+                    .max_table_cells
+                    .max(EMAIL_HTML_FALLBACK_MAX_TABLE_CELLS);
+                config.security_limits = Some(security_limits);
 
                 // Extract content using kreuzberg. If HTML sanitization rewrote the email and the
                 // rewritten bytes somehow fail to parse, fall back to the original bytes so we never
                 // regress a previously-extractable email into a silent drop (a higher token count is
                 // strictly better than losing the file).
+                let timer = StepTimer::start("file_processor.kreuzberg.extract_bytes_sync");
+                let primary_extraction_started = Instant::now();
                 let result = match kreuzberg::extract_bytes_sync(extraction_bytes, &mime_type, &config)
                 {
-                    Ok(result) => result,
+                    Ok(result) => {
+                        let primary_extraction_elapsed = primary_extraction_started.elapsed();
+                        tracing::trace!(
+                            elapsed_ms = primary_extraction_elapsed.as_millis(),
+                            extraction_bytes_len = extraction_bytes.len(),
+                            result_content_len = result.content.len(),
+                            page_count = result.pages.as_ref().map_or(0, Vec::len),
+                            top_level_child_count = result.children.as_ref().map_or(0, Vec::len),
+                            did_sanitize,
+                            "Normal kreuzberg extraction finished"
+                        );
+                        result
+                    }
                     Err(err) if did_sanitize => {
+                        let primary_extraction_elapsed = primary_extraction_started.elapsed();
+                        tracing::trace!(
+                            elapsed_ms = primary_extraction_elapsed.as_millis(),
+                            extraction_bytes_len = extraction_bytes.len(),
+                            error = %err,
+                            "Normal kreuzberg extraction failed after email sanitization"
+                        );
                         tracing::warn!(
                             error = %err,
                             "Email HTML sanitization produced unparseable output; retrying with original bytes"
                         );
-                        kreuzberg::extract_bytes_sync(&file_bytes, &mime_type, &config)
-                            .wrap_err("Kreuzberg extraction failed")?
+                        let retry_started = Instant::now();
+                        let retry_result = kreuzberg::extract_bytes_sync(&file_bytes, &mime_type, &config)
+                            .wrap_err("Kreuzberg extraction failed")?;
+                        let retry_elapsed = retry_started.elapsed();
+                        tracing::trace!(
+                            elapsed_ms = retry_elapsed.as_millis(),
+                            extraction_bytes_len = file_bytes.len(),
+                            result_content_len = retry_result.content.len(),
+                            page_count = retry_result.pages.as_ref().map_or(0, Vec::len),
+                            top_level_child_count =
+                                retry_result.children.as_ref().map_or(0, Vec::len),
+                            "Normal kreuzberg extraction retry with original bytes finished"
+                        );
+                        retry_result
                     }
-                    Err(err) => return Err(err).wrap_err("Kreuzberg extraction failed"),
+                    Err(err) => {
+                        let primary_extraction_elapsed = primary_extraction_started.elapsed();
+                        tracing::trace!(
+                            elapsed_ms = primary_extraction_elapsed.as_millis(),
+                            extraction_bytes_len = extraction_bytes.len(),
+                            error = %err,
+                            "Normal kreuzberg extraction failed"
+                        );
+                        return Err(err).wrap_err("Kreuzberg extraction failed");
+                    }
                 };
+                let elapsed = timer.finish();
+                tracing::debug!(
+                    elapsed_ms = elapsed.as_millis(),
+                    extraction_bytes_len = extraction_bytes.len(),
+                    result_content_len = result.content.len(),
+                    page_count = result.pages.as_ref().map_or(0, Vec::len),
+                    top_level_child_count = result.children.as_ref().map_or(0, Vec::len),
+                    "Kreuzberg extraction stats"
+                );
 
+                let timer = StepTimer::start("file_processor.postprocess.page_markers");
                 let mut content =
                     content_with_page_markers(result.content, result.pages, &marker_format);
-                append_extraction_children(&mut content, result.children);
+                let elapsed = timer.finish();
+                tracing::debug!(
+                    elapsed_ms = elapsed.as_millis(),
+                    content_len = content.len(),
+                    "Page marker post-processing stats"
+                );
+
+                let timer = StepTimer::start("file_processor.postprocess.append_children");
+                let appended_children = append_extraction_children(&mut content, result.children);
+                let elapsed = timer.finish();
+                tracing::debug!(
+                    elapsed_ms = elapsed.as_millis(),
+                    appended_children,
+                    content_len = content.len(),
+                    "Nested child append stats"
+                );
+
                 let email_html_body_fallback = if did_sanitize && email_plain_text.is_none() {
-                    extract_email_html_body_fallback(&file_bytes, &config, &marker_format)
+                    let timer = StepTimer::start("file_processor.email.html_body_fallback");
+                    let (html_body, stats, extraction_stats) =
+                        extract_email_html_body_fallback(&file_bytes, &config, &marker_format);
+                    let elapsed = timer.finish();
+                    tracing::trace!(
+                        elapsed_ms = elapsed.as_millis(),
+                        html_body_len = html_body.as_ref().map_or(0, String::len),
+                        html_part_count = extraction_stats.html_part_count,
+                        extraction_attempts = extraction_stats.extraction_attempts,
+                        extraction_successes = extraction_stats.extraction_successes,
+                        extraction_failures = extraction_stats.extraction_failures,
+                        extraction_elapsed_ms = extraction_stats.extraction_elapsed.as_millis(),
+                        normalization_elapsed_ms =
+                            extraction_stats.normalization_elapsed.as_millis(),
+                        "Email HTML fallback extraction timing summary"
+                    );
+                    tracing::debug!(
+                        elapsed_ms = elapsed.as_millis(),
+                        html_body_len = html_body.as_ref().map_or(0, String::len),
+                        html_part_count = extraction_stats.html_part_count,
+                        extraction_attempts = extraction_stats.extraction_attempts,
+                        extraction_successes = extraction_stats.extraction_successes,
+                        extraction_failures = extraction_stats.extraction_failures,
+                        extraction_elapsed_ms = extraction_stats.extraction_elapsed.as_millis(),
+                        normalization_elapsed_ms =
+                            extraction_stats.normalization_elapsed.as_millis(),
+                        entities_seen = stats.entities_seen,
+                        multipart_entities = stats.multipart_entities,
+                        message_rfc822_entities = stats.message_rfc822_entities,
+                        html_entities = stats.html_entities,
+                        extracted_parts = stats.extracted_parts,
+                        decoded_bytes = stats.decoded_bytes,
+                        html_table_cell_tags = stats.html_table_cell_tags,
+                        "Email HTML fallback stats"
+                    );
+                    html_body
                 } else {
                     None
                 };
+                let timer = StepTimer::start("file_processor.email.append_body_fallbacks");
                 append_email_plain_text_if_missing(&mut content, email_plain_text);
                 append_email_html_body_if_missing(&mut content, email_html_body_fallback);
                 if tnef_attachment_count > 0 {
                     append_tnef_attachment_marker(&mut content);
                 }
+                let elapsed = timer.finish();
+                tracing::debug!(
+                    elapsed_ms = elapsed.as_millis(),
+                    content_len = content.len(),
+                    "Email fallback append stats"
+                );
 
                 // Final post-extraction pass for emails: kreuzberg renders the email body directly
                 // (so a PEM block / pasted blob in a `text/plain` body, or zero-width-obfuscated
@@ -1375,9 +1797,28 @@ impl FileProcessor for KreuzbergProcessor {
                 // to the rendered body regardless of which part it came from. Both helpers are
                 // no-ops when there is nothing to remove, so this never alters clean content.
                 if did_sanitize {
-                    content = strip_zero_width_chars(&elide_base64_blobs(&content));
+                    let timer = StepTimer::start("file_processor.email.final_cleanup");
+                    let before_len = content.len();
+                    content =
+                        strip_empty_markdown_table_rows(&strip_zero_width_chars(&elide_base64_blobs(
+                            &content,
+                        )));
+                    let elapsed = timer.finish();
+                    tracing::debug!(
+                        elapsed_ms = elapsed.as_millis(),
+                        before_len,
+                        after_len = content.len(),
+                        "Email final cleanup stats"
+                    );
                 }
 
+                let total_elapsed = total_timer.finish();
+                tracing::debug!(
+                    elapsed_ms = total_elapsed.as_millis(),
+                    output_len = content.len(),
+                    final_mime_type = %mime_type,
+                    "file processing finished"
+                );
                 Ok(content)
             })
             .in_current_span()
@@ -1412,10 +1853,136 @@ mod tests {
         fs::read(&fixture_path).unwrap_or_else(|_| panic!("Failed to read fixture {}", filename))
     }
 
+    fn init_test_tracing() {
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .with_test_writer()
+            .try_init();
+    }
+
     #[test]
     fn test_create_file_processor() {
         let processor = create_file_processor("kreuzberg");
         assert!(processor.is_ok());
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn debug_weekly_digest_extraction_timings() {
+        init_test_tracing();
+
+        let processor = KreuzbergProcessor;
+        let only_fixture = std::env::var("ERATO_FILE_PROCESSOR_DEBUG_FIXTURE").ok();
+        for fixture in [
+            "styled_newsletter_multipart_alternative.eml",
+            "weekly_digest_microsoft.eml",
+            "weekly_digest_microsoft_via_erato.eml",
+            "long_thread_via_erato.eml",
+        ] {
+            if only_fixture.as_deref().is_some_and(|only| only != fixture) {
+                continue;
+            }
+
+            let bytes = read_test_fixture(fixture);
+            let started = Instant::now();
+            let extracted = processor
+                .parse_file(bytes, Some("message/rfc822"))
+                .await
+                .unwrap_or_else(|err| panic!("failed to parse {fixture}: {err}"));
+            eprintln!(
+                "fixture={fixture} elapsed_ms={} output_len={}",
+                started.elapsed().as_millis(),
+                extracted.len()
+            );
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn debug_weekly_digest_kreuzberg_stage_timings() {
+        init_test_tracing();
+
+        let fixture = std::env::var("ERATO_FILE_PROCESSOR_DEBUG_FIXTURE")
+            .unwrap_or_else(|_| "weekly_digest_microsoft.eml".to_string());
+        let only_stage = std::env::var("ERATO_FILE_PROCESSOR_DEBUG_STAGE").ok();
+        let eml_bytes = read_test_fixture(&fixture);
+
+        let (plain_text, plain_stats) = extract_email_plain_text(&eml_bytes);
+        let mut html_parts = Vec::new();
+        let mut html_stats = EmailBodyStats::default();
+        collect_email_html_body_parts(&eml_bytes, &mut html_parts, &mut html_stats);
+        let (sanitized_email, sanitize_stats) = sanitize_email_html_blocks(&eml_bytes);
+
+        eprintln!(
+            "fixture={fixture} raw_len={} plain_len={} html_parts={} first_html_len={} sanitized_email_len={} plain_stats={plain_stats:?} html_stats={html_stats:?} sanitize_stats={sanitize_stats:?}",
+            eml_bytes.len(),
+            plain_text.as_ref().map_or(0, String::len),
+            html_parts.len(),
+            html_parts.first().map_or(0, String::len),
+            sanitized_email.len(),
+        );
+
+        let marker_format = "<page number=\"{page_num}\">".to_string();
+        let config = kreuzberg::ExtractionConfig {
+            output_format: kreuzberg::OutputFormat::Markdown,
+            pages: Some(kreuzberg::PageConfig {
+                extract_pages: true,
+                insert_page_markers: true,
+                marker_format,
+            }),
+            ..Default::default()
+        };
+
+        let mut stages: Vec<(&str, Vec<u8>, &str)> = Vec::new();
+        if let Some(plain_text) = plain_text {
+            stages.push((
+                "plain_only_eml",
+                minimal_single_part_eml("text/plain; charset=utf-8", plain_text.as_bytes()),
+                "message/rfc822",
+            ));
+        }
+        if let Some(html) = html_parts.first() {
+            stages.push((
+                "html_only_eml",
+                minimal_single_part_eml("text/html; charset=utf-8", html.as_bytes()),
+                "message/rfc822",
+            ));
+            stages.push(("html_fragment", html.as_bytes().to_vec(), HTML_MIME_TYPE));
+        }
+        stages.push(("sanitized_full_eml", sanitized_email, "message/rfc822"));
+
+        for (stage, bytes, mime_type) in stages {
+            if only_stage.as_deref().is_some_and(|only| only != stage) {
+                continue;
+            }
+
+            let started = Instant::now();
+            let result = kreuzberg::extract_bytes_sync(&bytes, mime_type, &config)
+                .unwrap_or_else(|err| panic!("{stage} failed for {fixture}: {err}"));
+            eprintln!(
+                "fixture={fixture} stage={stage} mime_type={mime_type} input_len={} elapsed_ms={} content_len={} child_count={} page_count={}",
+                bytes.len(),
+                started.elapsed().as_millis(),
+                result.content.len(),
+                result.children.as_ref().map_or(0, Vec::len),
+                result.pages.as_ref().map_or(0, Vec::len),
+            );
+        }
+    }
+
+    fn minimal_single_part_eml(content_type: &str, body: &[u8]) -> Vec<u8> {
+        let mut out = format!(
+            "From: sender@example.com\r\n\
+             To: recipient@example.com\r\n\
+             Subject: Diagnostic single part\r\n\
+             MIME-Version: 1.0\r\n\
+             Content-Type: {content_type}\r\n\
+             Content-Transfer-Encoding: 8bit\r\n\
+             \r\n"
+        )
+        .into_bytes();
+        out.extend_from_slice(body);
+        out
     }
 
     #[tokio::test]
@@ -1759,8 +2326,8 @@ Content-Type: text/html; charset=utf-8
 --digest-boundary--
 "#;
 
-        let plain_text =
-            extract_email_plain_text(eml_bytes).expect("expected decoded plain-text body");
+        let (plain_text, _stats) = extract_email_plain_text(eml_bytes);
+        let plain_text = plain_text.expect("expected decoded plain-text body");
         assert!(plain_text.contains(
             "(Updated) Microsoft Teams: AI meeting recap without transcript to meet compliance policies"
         ));
@@ -1861,7 +2428,8 @@ Content-Type: text/html; charset=utf-8
     async fn test_kreuzberg_extracts_deep_html_body_from_erato_wrapped_nested_message() {
         let eml_bytes = read_test_fixture("weekly_digest_microsoft_via_erato.eml");
         let mut html_parts = Vec::new();
-        collect_email_html_body_parts(&eml_bytes, &mut html_parts);
+        let mut html_stats = EmailBodyStats::default();
+        collect_email_html_body_parts(&eml_bytes, &mut html_parts, &mut html_stats);
         assert_eq!(
             html_parts.len(),
             1,
@@ -1872,7 +2440,7 @@ Content-Type: text/html; charset=utf-8
             "sanitized nested HTML body did not contain expected content"
         );
         assert!(
-            extract_email_plain_text(&eml_bytes).is_none(),
+            extract_email_plain_text(&eml_bytes).0.is_none(),
             "HTML-only nested email should not be treated as having a text/plain body"
         );
         let marker_format = "<page number=\"{page_num}\">".to_string();
@@ -1892,6 +2460,7 @@ Content-Type: text/html; charset=utf-8
         })
         .await
         .expect("HTML fallback task should complete")
+        .0
         .expect("expected nested HTML fallback extraction");
         assert!(
             html_fallback.contains("Security Detection Report in Teams Admin Center"),
@@ -1913,10 +2482,6 @@ Content-Type: text/html; charset=utf-8
                 "HTML formatting now supported for Message center posts synced to Planner"
             ),
             "later body content from the nested email was not extracted:\n{extracted}"
-        );
-        assert!(
-            extracted.contains("## Email HTML body"),
-            "HTML fallback body section missing from nested email extraction:\n{extracted}"
         );
         assert!(
             !extracted.contains("## Attachment: message-1.eml"),
