@@ -1,0 +1,38 @@
+{
+  "name": "@erato/frontend-utils",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.1.3",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "bin": {
+    "erato-frontend-i18n-keys": "./src/bin/generate-i18n-keys.mjs"
+  },
+  "exports": {
+    "./i18n-keys": {
+      "types": "./src/i18n-keys/index.d.ts",
+      "import": "./src/i18n-keys/index.mjs",
+      "require": "./src/i18n-keys/index.cjs"
+    },
+    "./lingui": {
+      "types": "./src/lingui/index.ts",
+      "import": "./src/lingui/index.ts"
+    },
+    "./lingui-extra": {
+      "types": "./src/lingui/lingui-extra.d.ts",
+      "default": "./src/lingui/lingui-extra.d.ts"
+    }
+  },
+  "dependencies": {
+    "@babel/core": "7.29.0",
+    "@lingui/cli": "5.9.4",
+    "@lingui/conf": "5.9.4",
+    "@lingui/format-po": "5.9.4",
+    "@lingui/message-utils": "5.9.4"
+  },
+  "devDependencies": {
+    "vitest": "4.1.7"
+  }
+}

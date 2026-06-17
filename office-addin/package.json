@@ -28,6 +28,7 @@
     "@azure/msal-browser": "^5.2.0",
     "@azure/msal-common": "^16.2.0",
     "@erato/frontend": "file:../frontend/dist-package/erato-frontend.tgz",
+    "@erato/frontend-utils": "file:../frontend-utils",
     "@lingui/core": "5.9.4",
     "@lingui/react": "5.9.4",
     "@remix-run/router": "1.23.2",

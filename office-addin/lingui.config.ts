@@ -5,7 +5,7 @@ import {
   CUSTOMER_COMPONENTS_GLOB,
   linguiExtraExtractor,
   sectionedPoFormatter,
-} from "../frontend/lingui-extractor";
+} from "@erato/frontend-utils/lingui";
 
 export default defineConfig({
   sourceLocale: "en",

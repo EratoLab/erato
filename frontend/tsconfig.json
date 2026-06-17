@@ -18,7 +18,6 @@
   },
   "include": [
     "src",
-    "lingui-extractor/**/*.d.ts",
     "vite-env.d.ts",
     "vite.config.ts",
     "vite.library.config.ts"

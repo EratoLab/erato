@@ -3,6 +3,7 @@ import type { ServerResponse } from "node:http";
 import path from "node:path";
 
 import { lingui } from "@lingui/vite-plugin";
+import { i18nKeysManifestPlugin } from "@erato/frontend-utils/i18n-keys";
 import react from "@vitejs/plugin-react";
 import {
   createLogger,
@@ -283,6 +284,7 @@ export default defineConfig(({ mode }) => {
         },
       }),
       lingui(),
+      i18nKeysManifestPlugin(),
       stagePublicLayoutPlugin(),
       copy404Plugin({ silent: silentLinkedBuildOutput }),
       // Endpoint lives under "/" so oauth2-proxy routes it to Vite (:3000);

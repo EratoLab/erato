@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { i18nKeysManifestPlugin } from "@erato/frontend-utils/i18n-keys";
 import { lingui } from "@lingui/vite-plugin";
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv, type Plugin, type ViteDevServer } from "vite";
@@ -526,6 +527,7 @@ export default defineConfig(({ mode }) => {
         },
       }),
       lingui(),
+      i18nKeysManifestPlugin(),
       serveRootPublicAssetAliasesPlugin(),
       stageFrontendLibraryAssetsPlugin(),
       stagePlatformLocalesPlugin(),
