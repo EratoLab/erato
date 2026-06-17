@@ -2,8 +2,8 @@
  * Frontend Lingui configuration for Erato.
  *
  * This file intentionally stays thin. The repository-specific formatter,
- * extractor, and catalog helper logic live in `frontend/lingui-extractor/`,
- * while this module only wires those pieces into Lingui's config shape.
+ * extractor, and catalog helper logic live in `@erato/frontend-utils`, while
+ * this module only wires those pieces into Lingui's config shape.
  */
 import { defineConfig } from "@lingui/cli";
 
@@ -13,7 +13,7 @@ import {
   CUSTOMER_COMPONENTS_GLOB,
   linguiExtraExtractor,
   sectionedPoFormatter,
-} from "./lingui-extractor";
+} from "@erato/frontend-utils/lingui";
 
 const ROOT_DIR = process.cwd();
 

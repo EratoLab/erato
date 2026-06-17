@@ -12,6 +12,9 @@ importers:
 
   .:
     dependencies:
+      '@erato/frontend-utils':
+        specifier: file:../frontend-utils
+        version: file:../frontend-utils(typescript@5.7.3)
       '@extend-ai/react-docx':
         specifier: 0.7.0-alpha.2
         version: 0.7.0-alpha.2(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
@@ -492,6 +495,10 @@ packages:
 
   '@emnapi/wasi-threads@1.0.2':
     resolution: {integrity: sha512-5n3nTJblwRi8LlXkJ9eBzu+kZR8Yxcc7ubakyQTFzPMtIhFpUBRbsnc2Dv88IZDIbCDlBiWrknhB4Lsz7mg6BA==}
+
+  '@erato/frontend-utils@file:../frontend-utils':
+    resolution: {directory: ../frontend-utils, type: directory}
+    hasBin: true
 
   '@esbuild/aix-ppc64@0.25.5':
     resolution: {integrity: sha512-9o3TMmpmftaCMepOdA5k/yDw8SfInyzWWTjYTFCX3kPSDJMROQTb8jg+h9Cnwnmm1vOzvxN7gIfB5V2ewpjtGA==}
@@ -5274,6 +5281,18 @@ snapshots:
     dependencies:
       tslib: 2.8.1
     optional: true
+
+  '@erato/frontend-utils@file:../frontend-utils(typescript@5.7.3)':
+    dependencies:
+      '@babel/core': 7.29.0
+      '@lingui/cli': 5.9.4(typescript@5.7.3)
+      '@lingui/conf': 5.9.4(typescript@5.7.3)
+      '@lingui/format-po': 5.9.4(typescript@5.7.3)
+      '@lingui/message-utils': 5.9.4
+    transitivePeerDependencies:
+      - babel-plugin-macros
+      - supports-color
+      - typescript
 
   '@esbuild/aix-ppc64@0.25.5':
     optional: true
