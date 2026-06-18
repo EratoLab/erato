@@ -18,58 +18,59 @@ name = "record-chat-provider-reqwest"
 path = "./src/record_chat_provider_reqwest.rs"
 
 [dependencies]
+# Dependencies: Server
 axum = { version = "0.8.4", features = ["macros", "ws"] }
 axum-extra = { version = "0.10.1", features = ["typed-header", "multipart"] }
 headers = "0.4.0"
 tower-http = { version = "0.6.2",  features = ["fs", "cors", "limit", "trace"] }
-sea-orm = { version = "2.0.0-rc.40",  features = ["runtime-tokio", "sqlx-postgres", "runtime-tokio-native-tls"]}
-sqlx = { version = "0.9.0", features=["postgres", "runtime-tokio", "tls-native-tls"] }
-serde = { version = "1.0.217", features = ["derive"] }
-serde_json = "1.0.138"
-regex = "1.12.3"
-secrecy = "0.10.3"
-tokio = { version = "1.43.0", features = ["rt-multi-thread"] }
-tracing-subscriber = { version = "0.3.19", features = ["env-filter", "json"] }
-tracing = "0.1.41"
-facet = "0.44.3"
-synonym = "0.1.5"
-regorus = "0.5.0"
-eyre = "0.6.12"
-color-eyre = "0.6.3"
-async-trait = "0.1.77"
-jsonwebtoken = "9.2.0"
-# OpenAPI handling
+http-body-util = "0.1.2"
+lol_html = "2.2.0"
+ordered-multimap = { version = "0.7.3",  features = ["serde"]}
+
+# Dependencies: OpenAPI handling
 utoipa = { version = "5.3.1", features = ["axum_extras", "uuid", "chrono"] }
 utoipa-axum = "0.2.0"
 utoipa-scalar = { version = "0.3.0", features = ["axum"] }
 
-dotenv-flow = "0.16.2"
-config = "0.15.6"
-http-body-util = "0.1.2"
-lol_html = "2.2.0"
-ordered-multimap = { version = "0.7.3",  features = ["serde"]}
-handlebars = "6"
-futures = "0.3"
-tokio-stream = { version = "0.1.17", features = ["sync"] }
-genai = { version = "0.6.0-beta.19-WIP", git = "https://github.com/EratoLab/rust-genai.git", rev = "eeb52ab1961dfd543564baa932ef3fffb1ee9ec2" }
+# Dependencies: Database
+sea-orm = { version = "2.0.0-rc.40",  features = ["runtime-tokio", "sqlx-postgres", "runtime-tokio-native-tls"]}
+sqlx = { version = "0.9.0", features=["postgres", "runtime-tokio", "tls-native-tls"] }
+
+# Dependencies: General I/O
+serde = { version = "1.0.217", features = ["derive"] }
+serde_json = "1.0.138"
+
+# Dependencies: Outgoing HTTP
 reqwest = { version = "0.13.1", features = ["multipart"] }
 reqwest-middleware = "0.5.1"
 reqwest-tracing = { version = "0.7.0", features = ["opentelemetry_0_31"] }
-opendal = { version = "0.56.0", features = ["services-s3", "services-azblob"] }
-percent-encoding = "2.3.1"
 
-# MS Graph API client for Sharepoint/OneDrive integration
-graph-rs-sdk = "3.0"
+# Dependencies: Security
+aes-gcm-siv = "0.11.1"
+hmac = "0.13.0"
+jsonwebtoken = "9.2.0"
+regorus = "0.5.0"
+secrecy = "0.10.3"
+sha2 = "0.11.0"
 
-infer = "0.19.0"
-tiktoken-rs = "0.6.0"
-moka = { version = "0.12.13", features = ["future"] }
+# Dependencies: Async runtime
+tokio = { version = "1.52.3", features = ["rt-multi-thread"] }
+tokio-stream = { version = "0.1.18", features = ["sync"] }
+async-trait = "0.1.89"
+futures = "0.3.32"
+
+# Dependencies: Background workers
+ractor = "0.15.13"
+ractor_actors = { version = "0.5.0", default-features = false, features = ["time"] }
+cron = "0.16.0"
+
+# Dependencies: LLM / GenAI
+genai = { version = "0.6.0-beta.19-WIP", git = "https://github.com/EratoLab/rust-genai.git", rev = "eeb52ab1961dfd543564baa932ef3fffb1ee9ec2" }
+tiktoken-rs = "0.12.0"
+
+# Dependencies: MCP
 rmcp = { version = "=1.7.0", features = ["auth", "client", "reqwest", "transport-streamable-http-client-reqwest"] }
 rmcp-sse = { path = "../rmcp-sse" }
-ractor = "0.15.9"
-ractor_actors = { version = "0.4.9", features = ["time"] }
-chrono = "0.4"
-cron = "0.12.1"
 
 # Dependencies: Observability
 sentry-tower = { version = "0.41.0", optional = true, features = ["http"] }
@@ -77,24 +78,45 @@ opentelemetry = "0.31.0"
 opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio-current-thread"] }
 opentelemetry-otlp = { version = "0.31.0", default-features = false, features = ["grpc-tonic", "http-proto", "http-json", "reqwest-blocking-client", "trace", "metrics", "logs", "internal-logs" ] }
 opentelemetry-semantic-conventions = { version = "0.29.0", features = ["semconv_experimental"] }
+tracing-subscriber = { version = "0.3.19", features = ["env-filter", "json"] }
+tracing = "0.1.41"
 tracing-opentelemetry = "0.32.0"
 axum-tracing-opentelemetry = "0.32.2"
 metrics = "0.24"
 metrics-exporter-prometheus = "0.17.2"
 tokio-metrics = { version = "0.4.7", features = ["metrics-rs-integration"] }
+eyre = "0.6.12"
+color-eyre = "0.6.3"
+
+# Dependencies: File storage & file handling
+opendal = { version = "0.56.0", features = ["services-s3", "services-azblob"] }
+infer = "0.19.0"
+kreuzberg = { version = "5.0.0-rc.18",  features = ["pdf", "excel", "office", "email", "html", "archives"]}
+html-to-markdown-rs = { version = "3.6.11" }
+ical = "0.11.0"
+
+# Dependencies: Integgration / MS Graph API client for Sharepoint/OneDrive
+graph-rs-sdk = "3.0"
+
+# Dependencies: Uncategorized
+regex = "1.12.3"
 base64 = "0.22.1"
-aes-gcm-siv = "0.11.1"
-hmac = "0.12.1"
-sha2 = "0.10.9"
+facet = "0.44.3"
+# Newtype utility
+synonym = "0.1.5"
+config = "0.15.6"
+dotenv-flow = "0.16.2"
+handlebars = "6"
+percent-encoding = "2.3.1"
+moka = { version = "0.12.13", features = ["future"] }
+chrono = "0.4"
 url = "2.5.8"
+
+# Dependencies: Optional feature: tokio-console / profiling
 # Tokio console for async debugging
 console-subscriber = { version = "0.5.0", optional = true }
 jemalloc_pprof = { version = "0.8.2", optional = true, features = ["flamegraph", "symbolize"] }
 tikv-jemallocator = { version = "0.6.1", optional = true, features = ["profiling", "unprefixed_malloc_on_supported_platforms"] }
-
-kreuzberg = { version = "5.0.0-rc.18",  features = ["pdf", "excel", "office", "email", "html", "archives"]}
-html-to-markdown-rs = { version = "3.6.11" }
-ical = "0.11.0"
 
 [dependencies.sentry]
 version = "0.41.0"
