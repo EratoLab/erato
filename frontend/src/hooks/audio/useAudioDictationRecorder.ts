@@ -15,6 +15,7 @@ import { useThrottledCallback } from "use-debounce";
 // share the same ESM contract on the file format side, so the worker
 // pipeline output is valid as an AudioWorklet module.
 import { createRicky0123VadEngine } from "@/lib/voice-runtime";
+import { createLogger } from "@/utils/debugLogger";
 
 import {
   createAudioDictationWebSocketUrl,
@@ -34,35 +35,24 @@ import {
   resampleMonoFloat32ToPcm16,
   type AudioDictationDiagnostics,
 } from "./audio-pcm-codec";
+import { getAudioEnvironment } from "./audioEnvironment";
+import { PRE_SPEECH_SILENCE_PRIMER_MS } from "./audioTuning";
+import {
+  createSpeechOnsetController,
+  type SpeechOnsetController,
+} from "./onsetFlipController";
+import { useAudioContextInterruptionRecovery } from "./useAudioContextInterruptionRecovery";
 import { useAudioInputDevicePreference } from "./useAudioInputDevicePreference";
 
 import type { VoiceVadEngine } from "@/lib/voice-runtime";
 
 const AUDIO_DICTATION_WORKLET_PROCESSOR_NAME = "audio-dictation-processor";
 
-/**
- * Synthetic silence prefix prepended to every dictation session before the
- * captured audio. Mirrors what production streaming-STT VADs require for
- * speech-onset calibration (OpenAI Realtime `prefix_padding_ms` defaults
- * to 300 ms; Silero `speech_pad_ms`, sherpa-onnx pre-speech padding all
- * land in the same range). Without it, the first dictation after browser
- * startup happens to ship hundreds of milliseconds of OS warm-up zeros
- * which double as the VAD calibration window — but a second dictation
- * back-to-back finds the OS audio device still hot, ships near-zero
- * leading silence, and the server's VAD trims the first word.
- */
-const PRE_SPEECH_SILENCE_PRIMER_MS = 300;
-
-/**
- * Floor between `source.connect(processor)` and the visible
- * `isCapturingAudio` flip. Belt-and-braces alongside the primer: on a
- * fully-warm audio device the worklet's first non-zero frame can arrive
- * in tens of milliseconds, fast enough that the spinner feels like a
- * blink and the user starts speaking before they've finished the priming
- * breath. Holding the spinner for at least this long gives them a
- * consistent visual rhythm across cold and warm dictations.
- */
-const MIN_AUDIO_CAPTURE_DELAY_MS = 150;
+// Dev-gated diagnostics (enable with `localStorage.DEBUG = "true"`). Used
+// for the ERMAIN-379 `[AUDIO_DICT]` validation pass (per-frame RMS + chosen
+// epsilon on Chrome / desktop Safari / a physical iPhone); strip once the
+// onset timing is signed off on real devices.
+const logger = createLogger("HOOK", "useAudioDictationRecorder");
 
 const DEFAULT_AUDIO_DICTATION_CHUNK_DURATION_MS = 30_000;
 
@@ -241,12 +231,11 @@ export function useAudioDictationRecorder({
   const audioLevelDataRef = useRef<Uint8Array | null>(null);
   const audioFrameRef = useRef<number | null>(null);
   /**
-   * Timer that defers the `isCapturingAudio` flip when the first non-zero
-   * frame arrives sooner than `MIN_AUDIO_CAPTURE_DELAY_MS` after the
-   * pipeline was wired. Cleared on any teardown so the deferred flip
+   * Per-session speech-onset controller (detector + deferred-flip timer).
+   * Disposed on any teardown so a pending deferred `isCapturingAudio` flip
    * doesn't fire after the user has already cancelled the session.
    */
-  const capturingFlipTimerRef = useRef<number | null>(null);
+  const onsetControllerRef = useRef<SpeechOnsetController | null>(null);
   const recordingDurationTimerRef = useRef<number | null>(null);
   const onTranscriptChunkRef = useRef(onTranscriptChunk);
   const vadEngineRef = useRef<VoiceVadEngine | null>(null);
@@ -319,10 +308,8 @@ export function useAudioDictationRecorder({
 
   const stopRecordingVisualizer = useCallback(
     (resetBars = true) => {
-      if (capturingFlipTimerRef.current !== null) {
-        window.clearTimeout(capturingFlipTimerRef.current);
-        capturingFlipTimerRef.current = null;
-      }
+      onsetControllerRef.current?.dispose();
+      onsetControllerRef.current = null;
       if (audioFrameRef.current !== null) {
         window.cancelAnimationFrame(audioFrameRef.current);
         audioFrameRef.current = null;
@@ -463,6 +450,11 @@ export function useAudioDictationRecorder({
    * Returns `null` when the host browser doesn't support Web Audio /
    * AudioWorkletNode at all.
    */
+  const { attachStateChangeListener } = useAudioContextInterruptionRecovery({
+    audioContextRef,
+    audioProcessorRef,
+  });
+
   const ensureAudioContextReady = useCallback(
     async (preferredSampleRate?: number): Promise<AudioContext | null> => {
       if (
@@ -488,6 +480,9 @@ export function useAudioDictationRecorder({
         }
         audioContextRef.current = audioContext;
         workletModuleLoadedRef.current = false;
+        // On WebKit, recover from mid-session interruptions. No-op on
+        // engines that auto-resume; idempotent + cleaned up on unmount.
+        attachStateChangeListener(audioContext);
       }
 
       if (!workletModuleLoadedRef.current) {
@@ -510,7 +505,7 @@ export function useAudioDictationRecorder({
 
       return audioContext;
     },
-    [],
+    [attachStateChangeListener],
   );
 
   const startLiveDictationSession = useCallback(
@@ -835,16 +830,15 @@ export function useAudioDictationRecorder({
         preSessionSamplesRef.current = primer;
         // The worklet posts every render quantum, including zero-filled
         // OS warm-up frames — we want those in the stream sent to the
-        // server too. The "speak now" UI cue should still wait for real
-        // audio though, so scan each incoming frame for a non-zero
-        // sample and flip the `isCapturingAudio` signal on the first one
-        // we see. Production STT clients (Deepgram, AssemblyAI, OpenAI
-        // Realtime) send the full stream and rely on server-side prefix
-        // padding — see
-        // https://developers.openai.com/api/docs/guides/realtime-vad
-        // (`prefix_padding_ms`, default 300 ms).
-        let audioFlowing = false;
-        const pipelineReadyAt = Date.now();
+        // server too (it stays dumb; server-side prefix padding handles
+        // onset — https://developers.openai.com/api/docs/guides/realtime-vad,
+        // `prefix_padding_ms` default 300 ms). The "speak now" UI cue is a
+        // separate, UI-only concern: an RMS onset detector flips
+        // `isCapturingAudio` on real speech-level energy. It replaced an
+        // exact-zero predicate (`sample !== 0`) that mistimed on WebKit,
+        // whose raw-capture warm-up emits a noise floor instead of bit-exact
+        // zeros (ERMAIN-379). The detector gates ONLY the cue; it never sees
+        // or alters streamed bytes.
         const flipCapturingAudio = () => {
           // Guard against late firings: if the pipeline was torn down
           // between scheduling and execution, the processor ref will be
@@ -854,29 +848,22 @@ export function useAudioDictationRecorder({
           }
           setIsCapturingAudio(true);
         };
+        const onsetController = createSpeechOnsetController({
+          sampleRate: audioContext.sampleRate,
+          onFlip: flipCapturingAudio,
+          log: (diagnostics) => logger.log("[AUDIO_DICT] frame", diagnostics),
+        });
+        onsetControllerRef.current = onsetController;
+        logger.log("[AUDIO_DICT] onset detector armed", {
+          sampleRate: audioContext.sampleRate,
+          engine: getAudioEnvironment().engine,
+        });
         processor.port.onmessage = (event: MessageEvent<Float32Array>) => {
           const input = event.data;
           const vadFrame = vadEngineRef.current
             ? new Float32Array(input)
             : null;
-          if (!audioFlowing) {
-            for (let index = 0; index < input.length; index += 1) {
-              if (input[index] !== 0) {
-                audioFlowing = true;
-                const elapsed = Date.now() - pipelineReadyAt;
-                const remaining = MIN_AUDIO_CAPTURE_DELAY_MS - elapsed;
-                if (remaining > 0) {
-                  capturingFlipTimerRef.current = window.setTimeout(() => {
-                    capturingFlipTimerRef.current = null;
-                    flipCapturingAudio();
-                  }, remaining);
-                } else {
-                  flipCapturingAudio();
-                }
-                break;
-              }
-            }
-          }
+          onsetController.acceptFrame(input);
           const session = liveSessionRef.current;
           if (session) {
             for (let index = 0; index < input.length; index += 1) {
