@@ -6,6 +6,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use chrono::{SecondsFormat, Utc};
 use eyre::{OptionExt, Report, WrapErr};
 use graph_rs_sdk::GraphClient;
+use hmac::KeyInit;
 use hmac::{Hmac, Mac};
 use opendal::{Operator, Reader, Writer};
 use percent_encoding::{AsciiSet, CONTROLS, NON_ALPHANUMERIC, utf8_percent_encode};

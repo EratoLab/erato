@@ -47,25 +47,26 @@ reqwest-tracing = { version = "0.7.0", features = ["opentelemetry_0_31"] }
 
 # Dependencies: Security
 aes-gcm-siv = "0.11.1"
-hmac = "0.12.1"
+hmac = "0.13.0"
 jsonwebtoken = "9.2.0"
 regorus = "0.5.0"
 secrecy = "0.10.3"
-sha2 = "0.10.9"
+sha2 = "0.11.0"
 
 # Dependencies: Async runtime
-tokio = { version = "1.43.0", features = ["rt-multi-thread"] }
-tokio-stream = { version = "0.1.17", features = ["sync"] }
-async-trait = "0.1.77"
-futures = "0.3"
+tokio = { version = "1.52.3", features = ["rt-multi-thread"] }
+tokio-stream = { version = "0.1.18", features = ["sync"] }
+async-trait = "0.1.89"
+futures = "0.3.32"
 
 # Dependencies: Background workers
-ractor = "0.15.9"
-ractor_actors = { version = "0.4.9", features = ["time"] }
+ractor = "0.15.13"
+ractor_actors = { version = "0.5.0", default-features = false, features = ["time"] }
+cron = "0.16.0"
 
 # Dependencies: LLM / GenAI
 genai = { version = "0.6.0-beta.19-WIP", git = "https://github.com/EratoLab/rust-genai.git", rev = "eeb52ab1961dfd543564baa932ef3fffb1ee9ec2" }
-tiktoken-rs = "0.6.0"
+tiktoken-rs = "0.12.0"
 
 # Dependencies: MCP
 rmcp = { version = "=1.7.0", features = ["auth", "client", "reqwest", "transport-streamable-http-client-reqwest"] }
@@ -109,7 +110,6 @@ handlebars = "6"
 percent-encoding = "2.3.1"
 moka = { version = "0.12.13", features = ["future"] }
 chrono = "0.4"
-cron = "0.12.1"
 url = "2.5.8"
 
 # Dependencies: Optional feature: tokio-console / profiling
