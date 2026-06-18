@@ -191,6 +191,17 @@ export function useAudioDictationRecorder({
    */
   const pendingSocketRef = useRef<WebSocket | null>(null);
   /**
+   * Set true immediately before any teardown-initiated socket close —
+   * successful completion, user cancel, or unmount. After the server sends
+   * `completed` it (or the oauth2-proxy) drops the WebSocket with an unclean
+   * 1006 close; WebKit dispatches a JS `error` event for that close while
+   * Chromium stays silent, so without this guard a fully successful dictation
+   * raises a spurious "connection failed" toast in Safari only. Reset to false
+   * whenever a fresh socket is opened, so a genuine mid-session drop is still
+   * reported.
+   */
+  const suppressSocketErrorRef = useRef(false);
+  /**
    * Per-session AbortController. Created at the start of every
    * dictation; aborted on user-stop-during-starting, on error, and on
    * hook unmount. The signal is plumbed through `waitForSocketOpen`
@@ -525,11 +536,15 @@ export function useAudioDictationRecorder({
       const socket = new WebSocket(createAudioDictationWebSocketUrl());
       socket.binaryType = "arraybuffer";
       pendingSocketRef.current = socket;
+      // Fresh socket: errors on it are meaningful again until we initiate
+      // our own teardown below.
+      suppressSocketErrorRef.current = false;
       // Abort during the handshake → close the socket so the protocol
       // helpers' close listeners (or signal listeners) fire promptly
       // and the awaits unwind.
       const handleAbortDuringStartup = () => {
         if (socket.readyState !== WebSocket.CLOSED) {
+          suppressSocketErrorRef.current = true;
           socket.close();
         }
       };
@@ -559,6 +574,12 @@ export function useAudioDictationRecorder({
       });
 
       socket.addEventListener("error", () => {
+        // A close we initiated (completion / cancel / unmount) is expected —
+        // WebKit raises `error` for the server's unclean 1006 close even on a
+        // fully successful session. Only surface unsolicited failures.
+        if (suppressSocketErrorRef.current) {
+          return;
+        }
         setDictationError(t`Audio dictation connection failed.`);
       });
 
@@ -631,6 +652,9 @@ export function useAudioDictationRecorder({
           : t`Failed to complete audio dictation.`,
       );
     } finally {
+      // We initiate this close; its `error`/`close` events are expected and
+      // must not raise a toast (see suppressSocketErrorRef).
+      suppressSocketErrorRef.current = true;
       liveSessionRef.current = null;
       session?.socket.close();
       if (isMounted()) {
@@ -1034,6 +1058,7 @@ export function useAudioDictationRecorder({
       dispatchSession({ type: "session_ready" });
       setDictationError(null);
     } catch (error) {
+      suppressSocketErrorRef.current = true;
       liveSessionRef.current?.socket.close();
       liveSessionRef.current = null;
       tearDownCaptureGraph();
@@ -1089,6 +1114,7 @@ export function useAudioDictationRecorder({
   useEffect(() => {
     return () => {
       startInFlightRef.current = false;
+      suppressSocketErrorRef.current = true;
 
       // Abort any in-flight startup; its signal listener closes the
       // pending socket as part of teardown.
