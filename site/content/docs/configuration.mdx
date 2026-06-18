@@ -2178,6 +2178,29 @@ The path must contain the Office add-in frontend artifacts including `manifest.x
 
 **Type:** `string`
 
+##### `integrations.ms_office.addin.manifest`
+
+{/* erato_toml_config_key: integrations.ms_office.addin.manifest.provider_name */}
+{/* erato_toml_config_key: integrations.ms_office.addin.manifest.display_name */}
+{/* erato_toml_config_key: integrations.ms_office.addin.manifest.description */}
+{/* erato_toml_config_key: integrations.ms_office.addin.manifest.support_url */}
+{/* erato_toml_config_key: integrations.ms_office.addin.manifest.group_label */}
+{/* erato_toml_config_key: integrations.ms_office.addin.manifest.button_label */}
+{/* erato_toml_config_key: integrations.ms_office.addin.manifest.button_description */}
+{/* erato_toml_config_key: integrations.ms_office.addin.manifest.icon_path */}
+{/* erato_toml_config_key: integrations.ms_office.addin.manifest.high_resolution_icon_path */}
+{/* erato_toml_config_key: integrations.ms_office.addin.manifest.icon_16_path */}
+{/* erato_toml_config_key: integrations.ms_office.addin.manifest.icon_32_path */}
+{/* erato_toml_config_key: integrations.ms_office.addin.manifest.icon_80_path */}
+
+Branding values used when rendering the Office add-in manifest.
+
+The string fields control the Office provider name, add-in display name, add-in description, support URL, ribbon group label, ribbon button label, and ribbon button description. Icon path fields control the top-level manifest icons and the 16px, 32px, and 80px ribbon icons.
+
+Icon paths can be absolute `http`/`https` URLs, deployment-root-relative paths such as `/public/common/custom-theme/contoso/icon.png`, or paths relative to the Office add-in bundle such as `assets/color-icon-192x192.png`.
+
+**Type:** `object`
+
 **Example:**
 
 ```toml
@@ -2192,6 +2215,20 @@ addin_id = "11111111-2222-3333-4444-555555555555"
 msal_authority = "https://login.microsoftonline.com/consumers"
 serve_bundle_legacy_path = true
 frontend_bundle_path = "./public/platform-office-addin"
+
+[integrations.ms_office.addin.manifest]
+provider_name = "Contoso"
+display_name = "Contoso Office Extension"
+description = "Contoso AI assistant for Outlook"
+support_url = "https://contoso.example.com/support"
+group_label = "Contoso"
+button_label = "Open Contoso"
+button_description = "Open the Contoso AI assistant in a task pane"
+icon_path = "/public/common/custom-theme/contoso/color-icon.png"
+high_resolution_icon_path = "/public/common/custom-theme/contoso/color-icon-hires.png"
+icon_16_path = "assets/contoso-outline-16.png"
+icon_32_path = "assets/contoso-outline-32.png"
+icon_80_path = "https://cdn.example.com/contoso/icon-80.png"
 ```
 
 #### `integrations.prometheus`

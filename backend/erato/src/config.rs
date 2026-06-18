@@ -2867,6 +2867,8 @@ pub struct MsOfficeAddinConfig {
     pub serve_bundle_legacy_path: bool,
     #[serde(default = "default_ms_office_addin_frontend_bundle_path")]
     pub frontend_bundle_path: String,
+    #[serde(default)]
+    pub manifest: MsOfficeAddinManifestConfig,
 }
 
 impl Default for MsOfficeAddinConfig {
@@ -2878,6 +2880,7 @@ impl Default for MsOfficeAddinConfig {
             msal_authority: default_ms_office_addin_msal_authority(),
             serve_bundle_legacy_path: default_ms_office_addin_serve_bundle_legacy_path(),
             frontend_bundle_path: default_ms_office_addin_frontend_bundle_path(),
+            manifest: MsOfficeAddinManifestConfig::default(),
         }
     }
 }
@@ -2888,6 +2891,107 @@ impl MsOfficeAddinConfig {
             return Err(eyre!(
                 "Microsoft Office add-in id cannot be empty when the add-in is configured."
             ));
+        }
+
+        self.manifest.validate()?;
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct MsOfficeAddinManifestConfig {
+    // Provider name shown in the Office add-in manifest.
+    #[serde(default = "default_ms_office_addin_manifest_provider_name")]
+    pub provider_name: String,
+
+    // Add-in display name shown by Office.
+    #[serde(default = "default_ms_office_addin_manifest_display_name")]
+    pub display_name: String,
+
+    // Add-in description shown by Office.
+    #[serde(default = "default_ms_office_addin_manifest_description")]
+    pub description: String,
+
+    // Support URL shown by Office.
+    #[serde(default = "default_ms_office_addin_manifest_support_url")]
+    pub support_url: String,
+
+    // Ribbon group label shown by Outlook.
+    #[serde(default = "default_ms_office_addin_manifest_group_label")]
+    pub group_label: String,
+
+    // Ribbon button label shown by Outlook.
+    #[serde(default = "default_ms_office_addin_manifest_button_label")]
+    pub button_label: String,
+
+    // Ribbon button supertip description shown by Outlook.
+    #[serde(default = "default_ms_office_addin_manifest_button_description")]
+    pub button_description: String,
+
+    // Icon path for the manifest IconUrl. Can be an absolute URL, a
+    // deployment-root-relative path like `/public/common/...`, or a path
+    // relative to the Office add-in bundle like `assets/icon.png`.
+    #[serde(default = "default_ms_office_addin_manifest_icon_path")]
+    pub icon_path: String,
+
+    // Icon path for the manifest HighResolutionIconUrl.
+    #[serde(default = "default_ms_office_addin_manifest_high_resolution_icon_path")]
+    pub high_resolution_icon_path: String,
+
+    // 16px ribbon icon path.
+    #[serde(default = "default_ms_office_addin_manifest_icon_16_path")]
+    pub icon_16_path: String,
+
+    // 32px ribbon icon path.
+    #[serde(default = "default_ms_office_addin_manifest_icon_32_path")]
+    pub icon_32_path: String,
+
+    // 80px ribbon icon path.
+    #[serde(default = "default_ms_office_addin_manifest_icon_80_path")]
+    pub icon_80_path: String,
+}
+
+impl Default for MsOfficeAddinManifestConfig {
+    fn default() -> Self {
+        Self {
+            provider_name: default_ms_office_addin_manifest_provider_name(),
+            display_name: default_ms_office_addin_manifest_display_name(),
+            description: default_ms_office_addin_manifest_description(),
+            support_url: default_ms_office_addin_manifest_support_url(),
+            group_label: default_ms_office_addin_manifest_group_label(),
+            button_label: default_ms_office_addin_manifest_button_label(),
+            button_description: default_ms_office_addin_manifest_button_description(),
+            icon_path: default_ms_office_addin_manifest_icon_path(),
+            high_resolution_icon_path: default_ms_office_addin_manifest_high_resolution_icon_path(),
+            icon_16_path: default_ms_office_addin_manifest_icon_16_path(),
+            icon_32_path: default_ms_office_addin_manifest_icon_32_path(),
+            icon_80_path: default_ms_office_addin_manifest_icon_80_path(),
+        }
+    }
+}
+
+impl MsOfficeAddinManifestConfig {
+    pub fn validate(&self) -> Result<(), Report> {
+        for (key, value) in [
+            ("provider_name", &self.provider_name),
+            ("display_name", &self.display_name),
+            ("description", &self.description),
+            ("support_url", &self.support_url),
+            ("group_label", &self.group_label),
+            ("button_label", &self.button_label),
+            ("button_description", &self.button_description),
+            ("icon_path", &self.icon_path),
+            ("high_resolution_icon_path", &self.high_resolution_icon_path),
+            ("icon_16_path", &self.icon_16_path),
+            ("icon_32_path", &self.icon_32_path),
+            ("icon_80_path", &self.icon_80_path),
+        ] {
+            if value.trim().is_empty() {
+                return Err(eyre!(
+                    "Microsoft Office add-in manifest field `{key}` cannot be empty."
+                ));
+            }
         }
 
         Ok(())
@@ -2908,6 +3012,54 @@ fn default_ms_office_addin_serve_bundle_legacy_path() -> bool {
 
 fn default_ms_office_addin_frontend_bundle_path() -> String {
     "./public/platform-office-addin".to_string()
+}
+
+fn default_ms_office_addin_manifest_provider_name() -> String {
+    "Erato".to_string()
+}
+
+fn default_ms_office_addin_manifest_display_name() -> String {
+    "Erato Office Extension".to_string()
+}
+
+fn default_ms_office_addin_manifest_description() -> String {
+    "Erato AI assistant for Outlook".to_string()
+}
+
+fn default_ms_office_addin_manifest_support_url() -> String {
+    "https://erato.chat".to_string()
+}
+
+fn default_ms_office_addin_manifest_group_label() -> String {
+    "Erato".to_string()
+}
+
+fn default_ms_office_addin_manifest_button_label() -> String {
+    "Open Erato".to_string()
+}
+
+fn default_ms_office_addin_manifest_button_description() -> String {
+    "Open the Erato AI assistant in a task pane".to_string()
+}
+
+fn default_ms_office_addin_manifest_icon_path() -> String {
+    "assets/color-icon-192x192.png".to_string()
+}
+
+fn default_ms_office_addin_manifest_high_resolution_icon_path() -> String {
+    "assets/color-icon-192x192.png".to_string()
+}
+
+fn default_ms_office_addin_manifest_icon_16_path() -> String {
+    "assets/outline-icon-32x32.png".to_string()
+}
+
+fn default_ms_office_addin_manifest_icon_32_path() -> String {
+    "assets/outline-icon-32x32.png".to_string()
+}
+
+fn default_ms_office_addin_manifest_icon_80_path() -> String {
+    "assets/color-icon-192x192.png".to_string()
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
