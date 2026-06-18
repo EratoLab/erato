@@ -434,10 +434,7 @@ pub async fn create_assistant(
     )
     .await?;
 
-    if let Some(max_prompt_length) = app_state
-        .config
-        .experimental_assistants
-        .max_system_prompt_length
+    if let Some(max_prompt_length) = app_state.config.assistants.max_system_prompt_length
         && request.prompt.len() > max_prompt_length
     {
         return Err(StatusCode::UNPROCESSABLE_ENTITY);
@@ -823,10 +820,7 @@ pub async fn update_assistant(
     )
     .await?;
 
-    if let Some(max_prompt_length) = app_state
-        .config
-        .experimental_assistants
-        .max_system_prompt_length
+    if let Some(max_prompt_length) = app_state.config.assistants.max_system_prompt_length
         && let Some(prompt) = &request.prompt
         && prompt.len() > max_prompt_length
     {

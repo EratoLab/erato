@@ -20,7 +20,7 @@ Configures budget tracking with an extremely low budget limit and artificially h
 
 **Configuration File:** `config/erato.scenario-assistants.toml`
 
-Enables the experimental assistants feature. This allows testing assistant creation, management, and usage workflows including file attachments and assistant-specific chat contexts.
+Enables the assistants feature. This allows testing assistant creation, management, and usage workflows including file attachments and assistant-specific chat contexts.
 
 ### `many-models` - Model Selector Testing
 

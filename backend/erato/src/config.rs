@@ -403,9 +403,9 @@ pub struct AppConfig {
     #[serde(default)]
     pub budget: BudgetConfig,
 
-    // Experimental assistants configuration.
-    #[serde(default)]
-    pub experimental_assistants: ExperimentalAssistantsConfig,
+    // Assistants configuration.
+    #[serde(default, alias = "experimental_assistants")]
+    pub assistants: AssistantsConfig,
 
     // Prompt optimizer configuration.
     #[serde(default)]
@@ -735,9 +735,9 @@ impl AppConfig {
             panic!("Invalid budget configuration: {}", e);
         }
 
-        // Validate experimental assistants configuration
-        if let Err(e) = config.experimental_assistants.validate() {
-            panic!("Invalid experimental assistants configuration: {}", e);
+        // Validate assistants configuration
+        if let Err(e) = config.assistants.validate() {
+            panic!("Invalid assistants configuration: {}", e);
         }
 
         // Validate file processor configuration
@@ -2159,8 +2159,8 @@ fn default_sidebar_chat_history_show_metadata() -> bool {
 }
 
 #[derive(Debug, Deserialize, PartialEq, Clone, Facet)]
-pub struct ExperimentalAssistantsConfig {
-    // Whether the experimental assistants feature is enabled.
+pub struct AssistantsConfig {
+    // Whether the assistants feature is enabled.
     // Defaults to `false`.
     #[serde(default)]
     pub enabled: bool,
@@ -2189,7 +2189,7 @@ pub struct ExperimentalAssistantsConfig {
     pub max_system_prompt_length: Option<usize>,
 }
 
-impl Default for ExperimentalAssistantsConfig {
+impl Default for AssistantsConfig {
     fn default() -> Self {
         Self {
             enabled: false,
@@ -2210,7 +2210,7 @@ fn default_assistant_context_file_contributor_threshold() -> f64 {
     0.05
 }
 
-impl ExperimentalAssistantsConfig {
+impl AssistantsConfig {
     pub fn validate(&self) -> Result<(), Report> {
         if !(0.0..=1.0).contains(&self.context_warning_threshold) {
             return Err(eyre!(

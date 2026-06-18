@@ -746,7 +746,7 @@ pub fn hermetic_app_config(
             "admin",
         )
         .unwrap()
-        .set_override("experimental_assistants.enabled", true)
+        .set_override("assistants.enabled", true)
         .unwrap();
 
     app_config.build().unwrap().try_deserialize().unwrap()
