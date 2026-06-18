@@ -61,12 +61,20 @@ window.ERATO_COMPONENT_KITS.push({
 } satisfies ComponentKitRegistration);
 ```
 
-The main frontend loads a small React runtime entrypoint first, then component
-kit entrypoints, then the main app entrypoint. Component kits can assume
-`window.ERATO_REACT` is set when their entrypoint evaluates and should use that
-host React singleton rather than bundling a separate React copy. The example
-package in `component-kit-example/` registers all current extension points and
-builds to the expected `index-<hash>.js` plus `style.css` layout.
+The main frontend loads a small runtime entrypoint first, then component kit
+entrypoints, then the main app entrypoint. Component kits can assume
+`window.ERATO_REACT` and `window.ERATO_LINGUI_REACT` are set when their
+entrypoint evaluates and should use those host singletons rather than bundling
+separate React or Lingui runtime copies. The example package in
+`component-kit-example/` registers all current extension points and builds to
+the expected `index-<hash>.js` plus `style.css` layout.
+
+Component kits can ship optional translation catalogs at
+`locales/<locale>/messages.json` inside their built directory. The frontend
+uses the registered kit names to load those catalogs from
+`/public/component-kits/<kit-name>/locales/<locale>/messages.json` and merges
+them into the same Lingui catalog as the main frontend before rendering custom
+components.
 
 ## Available Override Points
 

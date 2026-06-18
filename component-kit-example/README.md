@@ -21,6 +21,8 @@ pnpm run build:lib
 
 cd ../component-kit-example
 pnpm install --no-frozen-lockfile --lockfile=false
+pnpm run i18n:extract
+pnpm run i18n:compile
 pnpm run build
 ```
 
@@ -28,10 +30,19 @@ The output is written to `dist/` and includes:
 
 - `index-<hash>.js`
 - `style.css`
+- `locales/<locale>/messages.json`
 
-At runtime, Erato loads a small React runtime entrypoint before component kits.
-This sets `window.ERATO_REACT`, so kit entrypoints can use the host React
-singleton immediately and avoid bundling a separate React copy.
+At runtime, Erato loads a small runtime entrypoint before component kits. This
+sets `window.ERATO_REACT` and `window.ERATO_LINGUI_REACT`, so kit entrypoints
+can use the host React singleton and host Lingui provider immediately without
+bundling separate copies.
+
+The example locale source catalogs live under `src/locales/`. `pnpm run
+i18n:extract` updates the `.po` files, `pnpm run i18n:compile` generates
+`messages.json`, and the Vite build emits those compiled catalogs into
+`dist/locales/`. The main frontend loads them from
+`/public/component-kits/example/locales/<locale>/messages.json` based on the
+registered component kit name.
 
 ## Frontend Dev Server
 
@@ -41,7 +52,7 @@ mode, build the kit in watch mode:
 
 ```sh
 cd ../component-kit-example
-pnpm exec vite build --watch
+pnpm run dev
 ```
 
 Then create `frontend/component-kits` with one built kit directory per line. A

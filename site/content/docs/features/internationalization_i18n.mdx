@@ -36,18 +36,25 @@ If a language you are looking for is not currently supported, please reach out t
 - `fr` - French
 - `pl` - Polish
 
-## Translation strings / Theme overrides
+## Translation strings / Theme overrides / Component kits
 
 The translation strings are stored in `messages.po` files in the `frontend/src/locales/<LOCALE_CODE>` directories.
 
 Individual translation strings can also be overridden on a [per-theme basis](./theming), to allow for customization e.g. to fit organizational branding and communication style.
 
-### How Theme Translation Overrides Work
+Runtime component kits can add their own optional `messages.json` catalogs.
+Because kits register their names before the frontend app starts, Erato can load
+kit catalogs from `/public/component-kits/<kit-name>/locales/<LOCALE_CODE>/messages.json`
+and merge them into the same Lingui catalog used by the main frontend.
+
+### How Translation Layers Work
 
 1. **Default translations** are loaded from `frontend/src/locales/<LOCALE_CODE>/messages.po`
-2. **Custom theme translations** are loaded from `frontend/public/custom-theme/<THEME_NAME>/locales/<LOCALE_CODE>/messages.po`
-3. **Custom translations take precedence** - they override default translations for matching IDs
-4. **Merged at runtime** - the system combines both sets of translations dynamically
+2. **Platform translations** are loaded from the active frontend platform when present
+3. **Custom theme translations** are loaded from `frontend/public/custom-theme/<THEME_NAME>/locales/<LOCALE_CODE>/messages.po`
+4. **Component kit translations** are loaded from registered kit names when present
+5. **Later layers take precedence** - they override earlier translations for matching IDs
+6. **Merged at runtime** - the system combines all translation layers dynamically
 
 ### Creating Custom Theme Translations
 

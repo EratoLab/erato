@@ -1154,6 +1154,9 @@ mod tests {
         assert!(is_i18n_messages_json(
             "/public/custom-theme/example/locales/fr/messages.json"
         ));
+        assert!(is_i18n_messages_json(
+            "/public/component-kits/example/locales/en/messages.json"
+        ));
         assert!(!is_i18n_messages_json("/assets/app.js"));
         assert!(!is_i18n_messages_json("/public/locales/en/readme.txt"));
     }
