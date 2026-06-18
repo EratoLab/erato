@@ -1,4 +1,5 @@
 use super::api::v1beta::ApiV1ApiDoc;
+use crate::config::MsOfficeAddinManifestConfig;
 use crate::frontend_environment::DeploymentVersion;
 #[cfg(all(feature = "profiling", target_os = "linux"))]
 use crate::profiling::{memory_profile_flamegraph, memory_profile_pprof};
@@ -36,6 +37,7 @@ const OFFICE_ADDIN_MANIFEST_DEFAULT_ASSET_BASE_URL: &str =
     "https://localhost:3002/public/platform-office-addin/assets";
 const OFFICE_ADDIN_MANIFEST_FRONTEND_MOUNT_PATH: &str = "/office-addin";
 const OFFICE_ADDIN_MANIFEST_ASSET_MOUNT_PATH: &str = "/public/platform-office-addin/assets";
+const OFFICE_ADDIN_MANIFEST_BUNDLE_MOUNT_PATH: &str = "/public/platform-office-addin";
 const OFFICE_ADDIN_MANIFEST_VERSION_PLACEHOLDER: &str = "{{OFFICE_ADDIN_MANIFEST_VERSION}}";
 const OFFICE_ADDIN_ID_PLACEHOLDER: &str = "{{OFFICE_ADDIN_ID}}";
 
@@ -114,10 +116,46 @@ fn office_addin_manifest_version(deployment_version: Option<&str>) -> String {
     format!("{major}.{minor}.{patch}.{deployment}")
 }
 
+fn xml_escape(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for character in value.chars() {
+        match character {
+            '&' => escaped.push_str("&amp;"),
+            '<' => escaped.push_str("&lt;"),
+            '>' => escaped.push_str("&gt;"),
+            '"' => escaped.push_str("&quot;"),
+            '\'' => escaped.push_str("&apos;"),
+            _ => escaped.push(character),
+        }
+    }
+    escaped
+}
+
+fn office_addin_manifest_asset_url(base_url: &str, path_or_url: &str) -> String {
+    let trimmed = path_or_url.trim();
+    if Url::parse(trimmed)
+        .map(|url| matches!(url.scheme(), "http" | "https"))
+        .unwrap_or(false)
+    {
+        return trimmed.to_string();
+    }
+
+    let normalized_base_url = base_url.trim_end_matches('/');
+    if trimmed.starts_with('/') {
+        return format!("{normalized_base_url}{trimmed}");
+    }
+
+    format!(
+        "{normalized_base_url}{OFFICE_ADDIN_MANIFEST_BUNDLE_MOUNT_PATH}/{}",
+        trimmed.trim_start_matches('/')
+    )
+}
+
 fn render_office_addin_manifest(
     template: &str,
     base_url: &str,
     addin_id: &str,
+    manifest_config: &MsOfficeAddinManifestConfig,
     deployment_version: Option<&str>,
 ) -> String {
     let normalized_base_url = base_url.trim_end_matches('/');
@@ -145,6 +183,69 @@ fn render_office_addin_manifest(
             &office_addin_base_url,
         )
         .replace(OFFICE_ADDIN_MANIFEST_DEFAULT_BASE_URL, base_url)
+        .replace(
+            "{{OFFICE_ADDIN_MANIFEST_PROVIDER_NAME}}",
+            &xml_escape(&manifest_config.provider_name),
+        )
+        .replace(
+            "{{OFFICE_ADDIN_MANIFEST_DISPLAY_NAME}}",
+            &xml_escape(&manifest_config.display_name),
+        )
+        .replace(
+            "{{OFFICE_ADDIN_MANIFEST_DESCRIPTION}}",
+            &xml_escape(&manifest_config.description),
+        )
+        .replace(
+            "{{OFFICE_ADDIN_MANIFEST_SUPPORT_URL}}",
+            &xml_escape(&manifest_config.support_url),
+        )
+        .replace(
+            "{{OFFICE_ADDIN_MANIFEST_GROUP_LABEL}}",
+            &xml_escape(&manifest_config.group_label),
+        )
+        .replace(
+            "{{OFFICE_ADDIN_MANIFEST_BUTTON_LABEL}}",
+            &xml_escape(&manifest_config.button_label),
+        )
+        .replace(
+            "{{OFFICE_ADDIN_MANIFEST_BUTTON_DESCRIPTION}}",
+            &xml_escape(&manifest_config.button_description),
+        )
+        .replace(
+            "{{OFFICE_ADDIN_MANIFEST_ICON_URL}}",
+            &xml_escape(&office_addin_manifest_asset_url(
+                normalized_base_url,
+                &manifest_config.icon_path,
+            )),
+        )
+        .replace(
+            "{{OFFICE_ADDIN_MANIFEST_HIGH_RESOLUTION_ICON_URL}}",
+            &xml_escape(&office_addin_manifest_asset_url(
+                normalized_base_url,
+                &manifest_config.high_resolution_icon_path,
+            )),
+        )
+        .replace(
+            "{{OFFICE_ADDIN_MANIFEST_ICON_16_URL}}",
+            &xml_escape(&office_addin_manifest_asset_url(
+                normalized_base_url,
+                &manifest_config.icon_16_path,
+            )),
+        )
+        .replace(
+            "{{OFFICE_ADDIN_MANIFEST_ICON_32_URL}}",
+            &xml_escape(&office_addin_manifest_asset_url(
+                normalized_base_url,
+                &manifest_config.icon_32_path,
+            )),
+        )
+        .replace(
+            "{{OFFICE_ADDIN_MANIFEST_ICON_80_URL}}",
+            &xml_escape(&office_addin_manifest_asset_url(
+                normalized_base_url,
+                &manifest_config.icon_80_path,
+            )),
+        )
 }
 
 /// Get the Office add-in manifest with runtime URL substitutions.
@@ -214,6 +315,7 @@ async fn office_addin_manifest(
         &manifest_template,
         &base_url,
         &app_state.config.integrations.ms_office.addin.addin_id,
+        &app_state.config.integrations.ms_office.addin.manifest,
         deployment_version.0.as_deref(),
     );
     (
@@ -363,6 +465,7 @@ mod tests {
             template,
             "https://app.example.com/base",
             "custom-addin-id",
+            &MsOfficeAddinManifestConfig::default(),
             Some("42"),
         );
         let (major, minor, patch) = manifest_version_prefix();
@@ -387,6 +490,96 @@ mod tests {
         ));
         assert!(rendered.contains(&format!("<Version>{expected_version}</Version>")));
         assert!(!rendered.contains(OFFICE_ADDIN_MANIFEST_DEFAULT_BASE_URL));
+    }
+
+    #[test]
+    fn render_office_addin_manifest_applies_branding_and_escapes_xml() {
+        let template = r#"
+        <OfficeApp>
+          <ProviderName>{{OFFICE_ADDIN_MANIFEST_PROVIDER_NAME}}</ProviderName>
+          <DisplayName DefaultValue="{{OFFICE_ADDIN_MANIFEST_DISPLAY_NAME}}" />
+          <Description DefaultValue="{{OFFICE_ADDIN_MANIFEST_DESCRIPTION}}" />
+          <SupportUrl DefaultValue="{{OFFICE_ADDIN_MANIFEST_SUPPORT_URL}}" />
+          <bt:String id="groupLabel" DefaultValue="{{OFFICE_ADDIN_MANIFEST_GROUP_LABEL}}" />
+          <bt:String id="buttonLabel" DefaultValue="{{OFFICE_ADDIN_MANIFEST_BUTTON_LABEL}}" />
+          <bt:String id="buttonDesc" DefaultValue="{{OFFICE_ADDIN_MANIFEST_BUTTON_DESCRIPTION}}" />
+        </OfficeApp>
+        "#;
+        let manifest_config = MsOfficeAddinManifestConfig {
+            provider_name: "Contoso & Co".to_string(),
+            display_name: "Contoso \"Office\"".to_string(),
+            description: "Assistant <for> Outlook".to_string(),
+            support_url: "https://example.com/support?team=office&brand=contoso".to_string(),
+            group_label: "Contoso".to_string(),
+            button_label: "Open Contoso".to_string(),
+            button_description: "Open Contoso's assistant".to_string(),
+            ..MsOfficeAddinManifestConfig::default()
+        };
+
+        let rendered = render_office_addin_manifest(
+            template,
+            "https://app.example.com/base",
+            "custom-addin-id",
+            &manifest_config,
+            None,
+        );
+
+        assert!(rendered.contains("<ProviderName>Contoso &amp; Co</ProviderName>"));
+        assert!(rendered.contains(r#"DefaultValue="Contoso &quot;Office&quot;""#));
+        assert!(rendered.contains(r#"DefaultValue="Assistant &lt;for&gt; Outlook""#));
+        assert!(rendered.contains(
+            r#"DefaultValue="https://example.com/support?team=office&amp;brand=contoso""#
+        ));
+        assert!(rendered.contains(r#"DefaultValue="Open Contoso""#));
+        assert!(rendered.contains(r#"DefaultValue="Open Contoso&apos;s assistant""#));
+    }
+
+    #[test]
+    fn render_office_addin_manifest_resolves_brand_icon_paths() {
+        let template = r#"
+        <OfficeApp>
+          <IconUrl DefaultValue="{{OFFICE_ADDIN_MANIFEST_ICON_URL}}" />
+          <HighResolutionIconUrl DefaultValue="{{OFFICE_ADDIN_MANIFEST_HIGH_RESOLUTION_ICON_URL}}" />
+          <bt:Image id="icon16" DefaultValue="{{OFFICE_ADDIN_MANIFEST_ICON_16_URL}}" />
+          <bt:Image id="icon32" DefaultValue="{{OFFICE_ADDIN_MANIFEST_ICON_32_URL}}" />
+          <bt:Image id="icon80" DefaultValue="{{OFFICE_ADDIN_MANIFEST_ICON_80_URL}}" />
+        </OfficeApp>
+        "#;
+        let manifest_config = MsOfficeAddinManifestConfig {
+            icon_path: "assets/contoso-color.png".to_string(),
+            high_resolution_icon_path: "/public/common/custom-theme/contoso/contoso-hires.png"
+                .to_string(),
+            icon_16_path:
+                "https://localhost:3002/public/platform-office-addin/assets/absolute-16.png"
+                    .to_string(),
+            icon_32_path: "/public/platform-office-addin/assets/contoso-32.png".to_string(),
+            icon_80_path: "assets/contoso-80.png".to_string(),
+            ..MsOfficeAddinManifestConfig::default()
+        };
+
+        let rendered = render_office_addin_manifest(
+            template,
+            "https://app.example.com/base",
+            "custom-addin-id",
+            &manifest_config,
+            None,
+        );
+
+        assert!(rendered.contains(
+            r#"DefaultValue="https://app.example.com/base/public/platform-office-addin/assets/contoso-color.png""#
+        ));
+        assert!(rendered.contains(
+            r#"DefaultValue="https://app.example.com/base/public/common/custom-theme/contoso/contoso-hires.png""#
+        ));
+        assert!(rendered.contains(
+            r#"DefaultValue="https://localhost:3002/public/platform-office-addin/assets/absolute-16.png""#
+        ));
+        assert!(rendered.contains(
+            r#"DefaultValue="https://app.example.com/base/public/platform-office-addin/assets/contoso-32.png""#
+        ));
+        assert!(rendered.contains(
+            r#"DefaultValue="https://app.example.com/base/public/platform-office-addin/assets/contoso-80.png""#
+        ));
     }
 
     #[test]

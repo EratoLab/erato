@@ -6,13 +6,13 @@
   xsi:type="MailApp">
   <Id>{{OFFICE_ADDIN_ID}}</Id>
   <Version>{{OFFICE_ADDIN_MANIFEST_VERSION}}</Version>
-  <ProviderName>Erato</ProviderName>
+  <ProviderName>{{OFFICE_ADDIN_MANIFEST_PROVIDER_NAME}}</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
-  <DisplayName DefaultValue="Erato Office Extension" />
-  <Description DefaultValue="Erato AI assistant for Outlook" />
-  <IconUrl DefaultValue="https://localhost:3002/public/platform-office-addin/assets/color-icon-192x192.png" />
-  <HighResolutionIconUrl DefaultValue="https://localhost:3002/public/platform-office-addin/assets/color-icon-192x192.png" />
-  <SupportUrl DefaultValue="https://erato.chat" />
+  <DisplayName DefaultValue="{{OFFICE_ADDIN_MANIFEST_DISPLAY_NAME}}" />
+  <Description DefaultValue="{{OFFICE_ADDIN_MANIFEST_DESCRIPTION}}" />
+  <IconUrl DefaultValue="{{OFFICE_ADDIN_MANIFEST_ICON_URL}}" />
+  <HighResolutionIconUrl DefaultValue="{{OFFICE_ADDIN_MANIFEST_HIGH_RESOLUTION_ICON_URL}}" />
+  <SupportUrl DefaultValue="{{OFFICE_ADDIN_MANIFEST_SUPPORT_URL}}" />
   <Hosts>
     <Host Name="Mailbox" />
   </Hosts>
@@ -93,19 +93,19 @@
     </Hosts>
     <Resources>
       <bt:Images>
-        <bt:Image id="icon16" DefaultValue="https://localhost:3002/public/platform-office-addin/assets/outline-icon-32x32.png" />
-        <bt:Image id="icon32" DefaultValue="https://localhost:3002/public/platform-office-addin/assets/outline-icon-32x32.png" />
-        <bt:Image id="icon80" DefaultValue="https://localhost:3002/public/platform-office-addin/assets/color-icon-192x192.png" />
+        <bt:Image id="icon16" DefaultValue="{{OFFICE_ADDIN_MANIFEST_ICON_16_URL}}" />
+        <bt:Image id="icon32" DefaultValue="{{OFFICE_ADDIN_MANIFEST_ICON_32_URL}}" />
+        <bt:Image id="icon80" DefaultValue="{{OFFICE_ADDIN_MANIFEST_ICON_80_URL}}" />
       </bt:Images>
       <bt:Urls>
         <bt:Url id="taskPaneUrl" DefaultValue="https://localhost:3002/public/platform-office-addin/" />
       </bt:Urls>
       <bt:ShortStrings>
-        <bt:String id="groupLabel" DefaultValue="Erato" />
-        <bt:String id="buttonLabel" DefaultValue="Open Erato" />
+        <bt:String id="groupLabel" DefaultValue="{{OFFICE_ADDIN_MANIFEST_GROUP_LABEL}}" />
+        <bt:String id="buttonLabel" DefaultValue="{{OFFICE_ADDIN_MANIFEST_BUTTON_LABEL}}" />
       </bt:ShortStrings>
       <bt:LongStrings>
-        <bt:String id="buttonDesc" DefaultValue="Open the Erato AI assistant in a task pane" />
+        <bt:String id="buttonDesc" DefaultValue="{{OFFICE_ADDIN_MANIFEST_BUTTON_DESCRIPTION}}" />
       </bt:LongStrings>
     </Resources>
     <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides/1.1" xsi:type="VersionOverridesV1_1">
@@ -169,19 +169,19 @@
       </Hosts>
       <Resources>
         <bt:Images>
-          <bt:Image id="icon16" DefaultValue="https://localhost:3002/public/platform-office-addin/assets/outline-icon-32x32.png" />
-          <bt:Image id="icon32" DefaultValue="https://localhost:3002/public/platform-office-addin/assets/outline-icon-32x32.png" />
-          <bt:Image id="icon80" DefaultValue="https://localhost:3002/public/platform-office-addin/assets/color-icon-192x192.png" />
+          <bt:Image id="icon16" DefaultValue="{{OFFICE_ADDIN_MANIFEST_ICON_16_URL}}" />
+          <bt:Image id="icon32" DefaultValue="{{OFFICE_ADDIN_MANIFEST_ICON_32_URL}}" />
+          <bt:Image id="icon80" DefaultValue="{{OFFICE_ADDIN_MANIFEST_ICON_80_URL}}" />
         </bt:Images>
         <bt:Urls>
           <bt:Url id="taskPaneUrl" DefaultValue="https://localhost:3002/public/platform-office-addin/" />
         </bt:Urls>
         <bt:ShortStrings>
-          <bt:String id="groupLabel" DefaultValue="Erato" />
-          <bt:String id="buttonLabel" DefaultValue="Open Erato" />
+          <bt:String id="groupLabel" DefaultValue="{{OFFICE_ADDIN_MANIFEST_GROUP_LABEL}}" />
+          <bt:String id="buttonLabel" DefaultValue="{{OFFICE_ADDIN_MANIFEST_BUTTON_LABEL}}" />
         </bt:ShortStrings>
         <bt:LongStrings>
-          <bt:String id="buttonDesc" DefaultValue="Open the Erato AI assistant in a task pane" />
+          <bt:String id="buttonDesc" DefaultValue="{{OFFICE_ADDIN_MANIFEST_BUTTON_DESCRIPTION}}" />
         </bt:LongStrings>
       </Resources>
     </VersionOverrides>

@@ -90,6 +90,14 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
         config.integrations.ms_office.addin.msal_authority,
         "https://login.microsoftonline.com/common"
     );
+    assert_eq!(
+        config.integrations.ms_office.addin.manifest.display_name,
+        "Erato Office Extension"
+    );
+    assert_eq!(
+        config.integrations.ms_office.addin.manifest.icon_path,
+        "assets/color-icon-192x192.png"
+    );
     assert_eq!(config.integrations.ms_office.ews_api_endpoint, None);
     assert!(!config.integrations.ms_office.ews_skip_tls_validation);
     assert!(!config.cleanup_enabled);
@@ -121,6 +129,20 @@ ews_skip_tls_validation = true
 enabled = true
 addin_id = "f00ba5-1111-2222-3333-444444444444"
 msal_client_id = "00000000-0000-0000-0000-000000000000"
+
+[integrations.ms_office.addin.manifest]
+provider_name = "Contoso"
+display_name = "Contoso Office Extension"
+description = "Contoso AI assistant for Outlook"
+support_url = "https://contoso.example.com/support"
+group_label = "Contoso"
+button_label = "Open Contoso"
+button_description = "Open the Contoso AI assistant in a task pane"
+icon_path = "/public/common/custom-theme/contoso/color-icon.png"
+high_resolution_icon_path = "/public/common/custom-theme/contoso/color-icon-hires.png"
+icon_16_path = "assets/contoso-outline-16.png"
+icon_32_path = "assets/contoso-outline-32.png"
+icon_80_path = "https://cdn.example.com/contoso/icon-80.png"
 "#;
 
     temp_file
@@ -150,6 +172,23 @@ msal_client_id = "00000000-0000-0000-0000-000000000000"
         Some("https://outlook.office365.com/EWS/Exchange.asmx")
     );
     assert!(config.integrations.ms_office.ews_skip_tls_validation);
+    assert_eq!(
+        config.integrations.ms_office.addin.manifest.provider_name,
+        "Contoso"
+    );
+    assert_eq!(
+        config
+            .integrations
+            .ms_office
+            .addin
+            .manifest
+            .high_resolution_icon_path,
+        "/public/common/custom-theme/contoso/color-icon-hires.png"
+    );
+    assert_eq!(
+        config.integrations.ms_office.addin.manifest.icon_80_path,
+        "https://cdn.example.com/contoso/icon-80.png"
+    );
 }
 
 #[test]

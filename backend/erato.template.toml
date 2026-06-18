@@ -136,6 +136,30 @@ chat_provider_ids = ["test-token-limit"]
 # [integrations.ms_office]
 # ews_api_endpoint = "https://outlook.office365.com/EWS/Exchange.asmx"  # Optional Exchange EWS endpoint for the backend EWS proxy
 # ews_skip_tls_validation = false  # Skip TLS certificate validation for EWS proxy requests (unsafe; default: false)
+#
+# [integrations.ms_office.addin]
+# enabled = true
+# addin_id = "ee94d041-bd77-446c-8854-421648f50e7c"
+# msal_client_id = "00000000-0000-0000-0000-000000000000"
+# msal_authority = "https://login.microsoftonline.com/common"
+# frontend_bundle_path = "./public/platform-office-addin"
+#
+# [integrations.ms_office.addin.manifest]
+# provider_name = "Erato"
+# display_name = "Erato Office Extension"
+# description = "Erato AI assistant for Outlook"
+# support_url = "https://erato.chat"
+# group_label = "Erato"
+# button_label = "Open Erato"
+# button_description = "Open the Erato AI assistant in a task pane"
+# # Icon paths can be absolute URLs, deployment-root-relative paths such as
+# # "/public/common/custom-theme/contoso/icon.png", or paths relative to the
+# # Office add-in bundle such as "assets/color-icon-192x192.png".
+# icon_path = "assets/color-icon-192x192.png"
+# high_resolution_icon_path = "assets/color-icon-192x192.png"
+# icon_16_path = "assets/outline-icon-32x32.png"
+# icon_32_path = "assets/outline-icon-32x32.png"
+# icon_80_path = "assets/color-icon-192x192.png"
 
 # Frontend configuration options for embedded scenarios
 # [frontend]
