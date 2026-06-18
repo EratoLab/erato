@@ -1,9 +1,11 @@
 import { detect, fromNavigator } from "@lingui/detect-locale";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 import {
   detectLocale,
+  dynamicActivate,
   getValidLocale,
+  i18n,
   supportedLocales,
   defaultLocale,
 } from "./i18n";
@@ -17,6 +19,14 @@ vi.mock("@lingui/detect-locale", () => ({
 // Type the mocked functions
 const mockedDetect = detect as ReturnType<typeof vi.fn>;
 const mockedFromNavigator = fromNavigator as ReturnType<typeof vi.fn>;
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  delete (window as Window & { ERATO_COMPONENT_KITS?: unknown })
+    .ERATO_COMPONENT_KITS;
+  delete window.API_ROOT_URL;
+});
 
 describe("i18n Locale Detection (No Persistence)", () => {
   beforeEach(() => {
@@ -173,6 +183,75 @@ describe("i18n Locale Detection (No Persistence)", () => {
         expect.any(Function), // fromNavigator only
         expect.any(Function), // fallback only
       );
+    });
+  });
+});
+
+describe("i18n Component Kit Catalogs", () => {
+  beforeEach(() => {
+    window.API_ROOT_URL = "/api/";
+  });
+
+  it("loads registered component kit messages into the active catalog", async () => {
+    window.ERATO_COMPONENT_KITS = [
+      { name: "example", components: [] },
+      { name: "customer-kit", components: [] },
+      { name: "example", components: [] },
+    ];
+    const fetchMock = vi.fn(async (url: string) => {
+      const catalogs: Partial<
+        Record<string, { messages: Record<string, string> }>
+      > = {
+        "/public/common/locales/en/messages.json": {
+          messages: {
+            "core.title": "Core",
+            "shared.label": "Core shared",
+          },
+        },
+        "/public/component-kits/example/locales/en/messages.json": {
+          messages: {
+            "example.title": "Example kit",
+            "shared.label": "Example shared",
+          },
+        },
+        "/public/component-kits/customer-kit/locales/en/messages.json": {
+          messages: {
+            "customer.title": "Customer kit",
+            "shared.label": "Customer shared",
+          },
+        },
+      };
+      const catalog = catalogs[url];
+
+      return {
+        ok: !!catalog,
+        json: async () => catalog ?? { messages: {} },
+      } as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const loadAndActivateSpy = vi.spyOn(i18n, "loadAndActivate");
+
+    await dynamicActivate("en");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/public/component-kits/example/locales/en/messages.json",
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/public/component-kits/customer-kit/locales/en/messages.json",
+    );
+    expect(
+      fetchMock.mock.calls.filter(([url]) =>
+        url.includes("/public/component-kits/example/"),
+      ),
+    ).toHaveLength(1);
+    expect(loadAndActivateSpy).toHaveBeenLastCalledWith({
+      locale: "en",
+      messages: {
+        "core.title": "Core",
+        "example.title": "Example kit",
+        "customer.title": "Customer kit",
+        "shared.label": "Customer shared",
+      },
     });
   });
 });

@@ -22,6 +22,7 @@ The main web frontend is served from:
 - `/public/common/custom-theme/<theme>/...`
 - `/public/common/voice-runtime/...`
 - `/public/component-kits/<kit-name>/...`
+- `/public/component-kits/<kit-name>/locales/<lang>/messages.json`
 - `/public/favicon.ico`
 - `/public/favicon.svg`
 

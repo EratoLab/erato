@@ -1,3 +1,7 @@
+import type {
+  Trans as LinguiTrans,
+  useLingui as useHostLingui,
+} from "@lingui/react";
 import type { ComponentType, ReactNode } from "react";
 
 type HostReact = {
@@ -11,6 +15,10 @@ type HostReact = {
 declare global {
   interface Window {
     ERATO_REACT?: HostReact;
+    ERATO_LINGUI_REACT?: {
+      Trans: typeof LinguiTrans;
+      useLingui: typeof useHostLingui;
+    };
   }
 }
 
@@ -24,3 +32,11 @@ export const h = hostReact.createElement.bind(hostReact) as (
   props?: Record<string, unknown> | null,
   ...children: ReactNode[]
 ) => ReactNode;
+
+const hostLinguiReact = window.ERATO_LINGUI_REACT;
+if (!hostLinguiReact) {
+  throw new Error("ERATO_LINGUI_REACT is not available for component kits");
+}
+
+export const Trans: typeof LinguiTrans = hostLinguiReact.Trans;
+export const useLingui: typeof useHostLingui = hostLinguiReact.useLingui;

@@ -2,6 +2,7 @@ import "./styles.css";
 import "non.geist";
 import "non.geist/mono";
 
+export { Trans, useLingui } from "@lingui/react";
 export {
   ThemeProvider,
   useTheme,

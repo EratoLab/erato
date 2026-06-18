@@ -12,6 +12,10 @@ type CompiledCatalog = {
   messages: Messages;
 };
 
+type ComponentKitWithI18n = {
+  name: string;
+};
+
 // Validate detected locale
 export function getValidLocale(locale: string): string {
   // Exact match
@@ -126,12 +130,50 @@ async function loadMergedMessages({
             : null,
         ]
       : []),
+    ...(await loadComponentKitMessages(locale)),
   ];
 
   return messageLayers.reduce<Messages>(
     (merged, messages) => (messages ? { ...merged, ...messages } : merged),
     {},
   );
+}
+
+function getRegisteredComponentKitNames(): string[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  const componentKits = (
+    window as Window & {
+      ERATO_COMPONENT_KITS?: ComponentKitWithI18n[];
+    }
+  ).ERATO_COMPONENT_KITS;
+
+  return Array.from(
+    new Set(
+      (componentKits ?? [])
+        .map((componentKit) => componentKit.name)
+        .filter((name) => name.length > 0),
+    ),
+  );
+}
+
+async function loadComponentKitMessages(locale: string): Promise<Messages[]> {
+  const componentKitNames = getRegisteredComponentKitNames();
+  if (componentKitNames.length === 0) {
+    return [];
+  }
+
+  const messageLayers = await Promise.all(
+    componentKitNames.map((componentKitName) =>
+      loadOptionalMessages(
+        `/public/component-kits/${encodeURIComponent(componentKitName)}/locales/${locale}/messages.json`,
+      ),
+    ),
+  );
+
+  return messageLayers.filter((messages): messages is Messages => !!messages);
 }
 
 async function loadCommonLocaleMessages(
