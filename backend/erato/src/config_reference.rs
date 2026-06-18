@@ -300,6 +300,7 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert!(keys.contains(&"chat_providers.providers.<provider-id>.model_name".to_string()));
+        assert!(keys.contains(&"assistants.enabled".to_string()));
         assert!(keys.contains(&"experimental_facets.facets.<facet-id>.display_name".to_string()));
         assert!(keys.contains(&"model_permissions.rules.<rule-name>.rule_type".to_string()));
         assert!(keys.contains(&"server.encryption_key".to_string()));

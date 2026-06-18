@@ -2772,19 +2772,19 @@ availability of account data actions.
 data_tab_enabled = false
 ```
 
-### `experimental_assistants`
+### `assistants`
 
-{/* erato_toml_config_key: experimental_assistants */}
+{/* erato_toml_config_key: assistants */}
 
-Configuration for the experimental assistants feature. This allows enabling the assistants functionality in the frontend, which provides users with pre-configured chat assistants tuned for specific use-cases.
+Configuration for the assistants feature. This allows enabling the assistants functionality in the frontend, which provides users with pre-configured chat assistants tuned for specific use-cases.
 
-**Note:** This is an experimental feature that will be replaced with a stable `[assistants]` configuration section once the feature has stabilized.
+**Deprecated compatibility:** The previous `[experimental_assistants]` section is still accepted when parsing configuration, but it is deprecated. Use `[assistants]` instead. The deprecated section is planned to be removed in Erato `0.7.0`.
 
-#### `experimental_assistants.enabled`
+#### `assistants.enabled`
 
-{/* erato_toml_config_key: experimental_assistants.enabled */}
+{/* erato_toml_config_key: assistants.enabled */}
 
-Whether to enable the experimental assistants feature in the frontend. When enabled, the frontend will expose assistant-related functionality and UI components to users.
+Whether to enable the assistants feature in the frontend. When enabled, the frontend will expose assistant-related functionality and UI components to users.
 
 **Default value:** `false`
 
@@ -2793,13 +2793,13 @@ Whether to enable the experimental assistants feature in the frontend. When enab
 **Example:**
 
 ```toml
-[experimental_assistants]
+[assistants]
 enabled = true
 ```
 
-#### `experimental_assistants.show_recent_items`
+#### `assistants.show_recent_items`
 
-{/* erato_toml_config_key: experimental_assistants.show_recent_items */}
+{/* erato_toml_config_key: assistants.show_recent_items */}
 
 Whether to show recent assistant items in the chat sidebar.
 
@@ -2810,13 +2810,13 @@ Whether to show recent assistant items in the chat sidebar.
 **Example:**
 
 ```toml
-[experimental_assistants]
+[assistants]
 show_recent_items = true
 ```
 
-#### `experimental_assistants.context_warning_threshold`
+#### `assistants.context_warning_threshold`
 
-{/* erato_toml_config_key: experimental_assistants.context_warning_threshold */}
+{/* erato_toml_config_key: assistants.context_warning_threshold */}
 
 Threshold between `0.0` and `1.0` at or above which the assistant editor shows the overall context warning block.
 
@@ -2827,13 +2827,13 @@ Threshold between `0.0` and `1.0` at or above which the assistant editor shows t
 **Example:**
 
 ```toml
-[experimental_assistants]
+[assistants]
 context_warning_threshold = 0.6
 ```
 
-#### `experimental_assistants.context_file_contributor_threshold`
+#### `assistants.context_file_contributor_threshold`
 
-{/* erato_toml_config_key: experimental_assistants.context_file_contributor_threshold */}
+{/* erato_toml_config_key: assistants.context_file_contributor_threshold */}
 
 Threshold between `0.0` and `1.0` at or above which a file is included in the assistant editor's "largest file context contributors" list.
 
@@ -2844,17 +2844,25 @@ Threshold between `0.0` and `1.0` at or above which a file is included in the as
 **Example:**
 
 ```toml
-[experimental_assistants]
+[assistants]
 context_file_contributor_threshold = 0.01
 ```
 
-**Future Migration Plan:**
+#### `assistants.max_system_prompt_length`
 
-Once the assistants feature has stabilized, this configuration will be replaced by:
+{/* erato_toml_config_key: assistants.max_system_prompt_length */}
+
+Maximum number of characters allowed in an assistant system prompt. When not set, no server-side length limit is enforced and the frontend falls back to its built-in default for UI validation.
+
+**Default value:** unset
+
+**Type:** `integer`
+
+**Example:**
 
 ```toml
 [assistants]
-enabled = true  # Will default to true once stable
+max_system_prompt_length = 5000
 ```
 
 ### `starter_prompts`

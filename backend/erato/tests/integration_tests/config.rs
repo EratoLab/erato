@@ -2459,7 +2459,50 @@ data_tab_enabled = false
 }
 
 #[test]
-fn test_experimental_assistants_context_warning_threshold_can_be_configured() {
+fn test_assistants_context_warning_threshold_can_be_configured() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4.1"
+
+[file_storage_providers.test]
+provider_kind = "s3"
+config = { bucket = "test-bucket", endpoint = "http://localhost:8333", region = "us-east-1" }
+
+[assistants]
+enabled = true
+context_warning_threshold = 0.1
+context_file_contributor_threshold = 0.02
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let temp_path = temp_file.path().to_str().unwrap();
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let config: AppConfig = config_schema
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    assert!(config.assistants.enabled);
+    assert_eq!(config.assistants.context_warning_threshold, 0.1);
+    assert_eq!(config.assistants.context_file_contributor_threshold, 0.02);
+}
+
+#[test]
+fn test_deprecated_experimental_assistants_key_still_parses() {
     let mut temp_file = Builder::new()
         .suffix(".toml")
         .tempfile()
@@ -2496,22 +2539,14 @@ context_file_contributor_threshold = 0.02
         .try_deserialize()
         .expect("Failed to deserialize config");
 
-    assert!(config.experimental_assistants.enabled);
-    assert_eq!(
-        config.experimental_assistants.context_warning_threshold,
-        0.1
-    );
-    assert_eq!(
-        config
-            .experimental_assistants
-            .context_file_contributor_threshold,
-        0.02
-    );
+    assert!(config.assistants.enabled);
+    assert_eq!(config.assistants.context_warning_threshold, 0.1);
+    assert_eq!(config.assistants.context_file_contributor_threshold, 0.02);
 }
 
 #[test]
-#[should_panic(expected = "Invalid experimental assistants configuration")]
-fn test_experimental_assistants_context_warning_threshold_must_be_between_zero_and_one() {
+#[should_panic(expected = "Invalid assistants configuration")]
+fn test_assistants_context_warning_threshold_must_be_between_zero_and_one() {
     let mut temp_file = Builder::new()
         .suffix(".toml")
         .tempfile()
@@ -2525,7 +2560,7 @@ model_name = "gpt-4.1"
 provider_kind = "s3"
 config = { bucket = "test-bucket", endpoint = "http://localhost:8333", region = "us-east-1" }
 
-[experimental_assistants]
+[assistants]
 context_file_contributor_threshold = 1.1
 "#;
 

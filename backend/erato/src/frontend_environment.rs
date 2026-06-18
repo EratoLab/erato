@@ -448,25 +448,21 @@ fn build_frontend_environment(
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_ASSISTANTS_ENABLED.to_string(),
-        Value::Bool(config.experimental_assistants.enabled),
+        Value::Bool(config.assistants.enabled),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_ASSISTANTS_SHOW_RECENT_ITEMS.to_string(),
-        Value::Bool(config.experimental_assistants.show_recent_items),
+        Value::Bool(config.assistants.show_recent_items),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_ASSISTANTS_CONTEXT_WARNING_THRESHOLD.to_string(),
-        Value::from(config.experimental_assistants.context_warning_threshold),
+        Value::from(config.assistants.context_warning_threshold),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_ASSISTANTS_CONTEXT_FILE_CONTRIBUTOR_THRESHOLD.to_string(),
-        Value::from(
-            config
-                .experimental_assistants
-                .context_file_contributor_threshold,
-        ),
+        Value::from(config.assistants.context_file_contributor_threshold),
     );
-    if let Some(max_length) = config.experimental_assistants.max_system_prompt_length {
+    if let Some(max_length) = config.assistants.max_system_prompt_length {
         env.additional_environment.insert(
             FRONTEND_ENV_KEY_ASSISTANTS_MAX_SYSTEM_PROMPT_LENGTH.to_string(),
             Value::Number(max_length.into()),

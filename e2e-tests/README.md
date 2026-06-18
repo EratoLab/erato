@@ -68,7 +68,7 @@ See [Scenarios Documentation](../infrastructure/k3d/erato-local/Scenarios.md) fo
 
 - **`basic`** - Default scenario for general testing
 - **`tight-budget`** - Budget enforcement testing with low limits
-- **`assistants`** - Tests for the experimental assistants feature
+- **`assistants`** - Tests for the assistants feature
 
 ### Test File Naming Convention
 

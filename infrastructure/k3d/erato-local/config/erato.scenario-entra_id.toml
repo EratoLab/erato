@@ -6,8 +6,8 @@
 [frontend.additional_environment]
 K3D_TEST_SCENARIO = "entra_id"
 
-[experimental_assistants]
-# Whether to enable the experimental assistants feature in the frontend (default: false)
+[assistants]
+# Whether to enable the assistants feature in the frontend (default: false)
 enabled = true
 
 [integrations.experimental_entra_id]

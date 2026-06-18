@@ -176,7 +176,7 @@ pub async fn setup_mock_image_gen_server(
             "admin",
         )
         .unwrap()
-        .set_override("experimental_assistants.enabled", true)
+        .set_override("assistants.enabled", true)
         .unwrap();
 
     let app_config = app_config_builder

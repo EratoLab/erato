@@ -91,7 +91,7 @@ Check these alignment rules:
 - Rule: backend KB * 1024 should equal frontend bytes
 
 ### 2. Assistants Feature
-- Backend `erato.toml`: `[experimental_assistants]` section with `enabled = true/false`
+- Backend `erato.toml`: `[assistants]` section with `enabled = true/false`
 - Frontend: `VITE_ASSISTANTS_ENABLED=true/false`
 - Rule: Both should match
 
