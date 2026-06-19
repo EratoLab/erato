@@ -2180,18 +2180,50 @@ pub struct FrontendErrorReportConfig {
     // Defaults to `false`.
     #[serde(default = "default_show_verbose_assistant_errors")]
     pub show_verbose_assistant_errors: bool,
+
+    // Whether assistant error alerts should show a button to copy a rendered error report.
+    // Defaults to `true`.
+    #[serde(default = "default_show_copy_error_report")]
+    pub show_copy_error_report: bool,
+
+    // Handlebars template used to render copyable assistant error reports.
+    #[serde(default = "default_error_report_template")]
+    pub error_report_template: String,
 }
 
 impl Default for FrontendErrorReportConfig {
     fn default() -> Self {
         Self {
             show_verbose_assistant_errors: default_show_verbose_assistant_errors(),
+            show_copy_error_report: default_show_copy_error_report(),
+            error_report_template: default_error_report_template(),
         }
     }
 }
 
 fn default_show_verbose_assistant_errors() -> bool {
     false
+}
+
+fn default_show_copy_error_report() -> bool {
+    true
+}
+
+fn default_error_report_template() -> String {
+    r#"## Error Report
+
+- Environment: {{environment}}
+- Timestamp: {{timestamp}}
+- Chat ID: {{chat_id}}
+- Assistant ID: {{assistant_id}}
+- Platform: {{platform}}
+- Active facets: {{facets_active}}
+
+Error:
+```text
+{{error}}
+```"#
+        .to_string()
 }
 
 fn default_sidebar_collapsed_mode() -> String {

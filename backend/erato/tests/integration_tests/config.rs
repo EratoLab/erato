@@ -79,6 +79,14 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
     assert_eq!(config.http_port, 3130);
     assert_eq!(config.frontend.web_frontend_bundle_path, "./public");
     assert!(!config.frontend.error_report.show_verbose_assistant_errors);
+    assert!(config.frontend.error_report.show_copy_error_report);
+    assert!(
+        config
+            .frontend
+            .error_report
+            .error_report_template
+            .contains("{{environment}}")
+    );
     assert_eq!(
         config.integrations.ms_office.addin.frontend_bundle_path,
         "./public/platform-office-addin"
@@ -248,6 +256,8 @@ fn test_frontend_error_report_config_can_enable_verbose_assistant_errors() {
     let config_content = r#"
 [frontend.error_report]
 show_verbose_assistant_errors = true
+show_copy_error_report = false
+error_report_template = "env={{environment}} error={{error}}"
 
 [chat_provider]
 provider_kind = "openai"
@@ -276,6 +286,11 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
         .expect("Failed to deserialize config");
 
     assert!(config.frontend.error_report.show_verbose_assistant_errors);
+    assert!(!config.frontend.error_report.show_copy_error_report);
+    assert_eq!(
+        config.frontend.error_report.error_report_template,
+        "env={{environment}} error={{error}}"
+    );
 }
 
 #[test]

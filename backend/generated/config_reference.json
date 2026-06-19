@@ -306,6 +306,8 @@
   "frontend.disable_upload": {},
   "frontend.enable_message_feedback": {},
   "frontend.enable_message_feedback_comments": {},
+  "frontend.error_report.error_report_template": {},
+  "frontend.error_report.show_copy_error_report": {},
   "frontend.error_report.show_verbose_assistant_errors": {},
   "frontend.extra_frame_ancestors.[]": {},
   "frontend.mask_reasoning_trace_text": {},

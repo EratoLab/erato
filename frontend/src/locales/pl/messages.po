@@ -370,6 +370,21 @@ msgstr "wiadomość"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.message.error.copy_report"
+msgstr "Kopiuj raport błędu"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.message.error.copy_report.aria"
+msgstr "Kopiuj raport błędu"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.message.error.copy_report.copied"
+msgstr "Skopiowano"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
 msgid "chat.message.error.details"
 msgstr "Szczegóły"
 

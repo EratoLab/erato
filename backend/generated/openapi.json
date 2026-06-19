@@ -2942,6 +2942,10 @@
             "$ref": "#/components/schemas/GenerationErrorType",
             "description": "Optional error information if generation failed"
           },
+          "error_report": {
+            "type": "string",
+            "description": "Rendered copyable error report if generation failed"
+          },
           "feedback": {
             "$ref": "#/components/schemas/MessageFeedback",
             "description": "Optional feedback for this message"

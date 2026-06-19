@@ -131,6 +131,8 @@ export interface MessageFeedbackFeatureConfig {
 interface ErrorReportFeatureConfig {
   /** Whether assistant error alerts show backend-provided detailed error messages */
   showVerboseAssistantErrors: boolean;
+  /** Whether assistant error alerts show a button to copy a rendered error report */
+  showCopyErrorReport: boolean;
 }
 
 /**
@@ -255,6 +257,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
   },
   errorReport: {
     showVerboseAssistantErrors: false,
+    showCopyErrorReport: true,
   },
   sidebar: {
     collapsedMode: "hidden",
@@ -352,6 +355,7 @@ function createFeatureConfig(
     },
     errorReport: {
       showVerboseAssistantErrors: environment.showVerboseAssistantErrors,
+      showCopyErrorReport: environment.showCopyErrorReport,
     },
     sidebar: {
       collapsedMode: environment.sidebarCollapsedMode,

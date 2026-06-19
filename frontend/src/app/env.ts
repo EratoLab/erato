@@ -30,6 +30,7 @@ export type Env = {
   messageFeedbackCommentsEnabled: boolean;
   messageFeedbackEditTimeLimitSeconds: number | null;
   showVerboseAssistantErrors: boolean;
+  showCopyErrorReport: boolean;
   audioTranscriptionEnabled: boolean;
   audioTranscriptionMaxRecordingDurationSeconds: number;
   audioDictationEnabled: boolean;
@@ -80,6 +81,7 @@ declare global {
     MESSAGE_FEEDBACK_COMMENTS_ENABLED?: boolean;
     MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS?: number;
     SHOW_VERBOSE_ASSISTANT_ERRORS?: boolean;
+    SHOW_COPY_ERROR_REPORT?: boolean;
     MAX_UPLOAD_SIZE_BYTES?: number;
     SIDEBAR_COLLAPSED_MODE?: string;
     AUDIO_TRANSCRIPTION_ENABLED?: boolean;
@@ -254,6 +256,10 @@ export const env = (): Env => {
     import.meta.env.VITE_SHOW_VERBOSE_ASSISTANT_ERRORS === "true"
       ? true
       : (window.SHOW_VERBOSE_ASSISTANT_ERRORS ?? false);
+  const showCopyErrorReport =
+    import.meta.env.VITE_SHOW_COPY_ERROR_REPORT === "false"
+      ? false
+      : (window.SHOW_COPY_ERROR_REPORT ?? true);
   const maxUploadSizeBytes = import.meta.env.VITE_MAX_UPLOAD_SIZE_BYTES
     ? Number(import.meta.env.VITE_MAX_UPLOAD_SIZE_BYTES)
     : (window.MAX_UPLOAD_SIZE_BYTES ?? DEFAULT_MAX_BODY_LIMIT_BYTES);
@@ -353,6 +359,7 @@ export const env = (): Env => {
     messageFeedbackCommentsEnabled,
     messageFeedbackEditTimeLimitSeconds,
     showVerboseAssistantErrors,
+    showCopyErrorReport,
     audioTranscriptionEnabled,
     audioTranscriptionMaxRecordingDurationSeconds,
     audioDictationEnabled,

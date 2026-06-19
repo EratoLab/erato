@@ -51,6 +51,7 @@ describe("themeConfig", () => {
     messageFeedbackEnabled: false,
     messageFeedbackCommentsEnabled: false,
     showVerboseAssistantErrors: false,
+    showCopyErrorReport: true,
     userPreferencesEnabled: true,
     userPreferencesDataTabEnabled: true,
     mcpServersTabEnabled: false,

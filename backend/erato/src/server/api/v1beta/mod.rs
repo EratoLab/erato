@@ -15,7 +15,7 @@ pub mod share_links;
 pub mod sharepoint;
 pub mod token_usage;
 
-use crate::db::entity_ext::messages;
+use crate::db::entity_ext::{chats, messages};
 use crate::models;
 use crate::models::assistant::create_standalone_file_upload;
 use crate::models::chat::{
@@ -27,7 +27,9 @@ use crate::models::file_capability::{
     FileCapability, FileOperation, find_file_capability_by_filename, get_file_capabilities,
 };
 use crate::models::file_upload::{AudioTranscriptionMetadata, proxied_preview_url_for_file};
-use crate::models::message::{ContentPart, GenerationErrorType, GenerationMetadata, MessageSchema};
+use crate::models::message::{
+    ContentPart, GenerationErrorType, GenerationMetadata, GenerationParameters, MessageSchema,
+};
 use crate::models::permissions;
 use crate::policy::engine::PolicyEngine;
 use crate::policy::engine::authorize;
@@ -65,6 +67,8 @@ use crate::services::file_storage::{
 };
 use crate::services::genai::build_chat_options_for_completion;
 use crate::services::sentry::log_internal_server_error;
+use crate::services::template_rendering::consumers::error_report::ErrorReportRenderer;
+use crate::services::template_rendering::contexts::error_report::ErrorReportContext;
 use crate::state::{AppState, ChatProviderConfigWithId};
 use axum::extract::{DefaultBodyLimit, Path, State};
 use axum::http::header::{CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_TYPE};
@@ -76,6 +80,7 @@ use axum_extra::extract::Multipart;
 use chrono::{DateTime, FixedOffset};
 use eyre::{Report, WrapErr};
 use genai::chat::{ChatMessage as GenAiChatMessage, ChatRequest};
+use sea_orm::EntityTrait;
 use serde::{Deserialize, Deserializer, Serialize};
 use sqlx::types::{Uuid, chrono};
 use std::collections::{HashMap, HashSet};
@@ -990,6 +995,10 @@ pub struct ChatMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     error: Option<GenerationErrorType>,
+    /// Rendered copyable error report if generation failed
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    error_report: Option<String>,
     /// MCP server IDs that were unavailable while preparing this generation
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
@@ -1685,6 +1694,7 @@ impl ChatMessage {
             role: parsed_message.role.to_string(),
             content: parsed_message.content,
             error,
+            error_report: None,
             mcp_servers_unavailable,
             created_at: msg.created_at,
             updated_at: msg.updated_at,
@@ -1722,6 +1732,66 @@ impl ChatMessage {
                 })
                 .and_then(|p| p.action_facet_args),
         })
+    }
+}
+
+fn render_message_error_report(
+    config: &crate::config::AppConfig,
+    msg: &messages::Model,
+    assistant_id: Option<Uuid>,
+    error: &GenerationErrorType,
+) -> String {
+    let generation_parameters = msg.generation_parameters.as_ref().and_then(|parameters| {
+        serde_json::from_value::<GenerationParameters>(parameters.clone()).ok()
+    });
+    let platform = generation_parameters
+        .as_ref()
+        .and_then(|parameters| parameters.request_context.as_ref())
+        .and_then(|context| context.platform.clone());
+    let facets_active = generation_parameters
+        .as_ref()
+        .map(active_facets_from_generation_parameters)
+        .filter(|facets| !facets.is_empty());
+
+    let context = ErrorReportContext {
+        environment: ErrorReportContext::optional(Some(config.environment.clone())),
+        timestamp: ErrorReportContext::optional(Some(msg.created_at.to_rfc3339())),
+        chat_id: ErrorReportContext::optional(Some(msg.chat_id.to_string())),
+        assistant_id: ErrorReportContext::optional(assistant_id.map(|id| id.to_string())),
+        platform: ErrorReportContext::optional(platform),
+        facets_active: ErrorReportContext::optional(facets_active),
+        error: ErrorReportContext::optional(Some(error_description(error).to_string())),
+    };
+
+    ErrorReportRenderer::new().render(
+        &config.frontend.error_report.error_report_template,
+        &context,
+    )
+}
+
+fn active_facets_from_generation_parameters(parameters: &GenerationParameters) -> String {
+    let mut active_facets: Vec<&str> = parameters
+        .selected_facets
+        .iter()
+        .filter_map(|(facet_id, enabled)| enabled.then_some(facet_id.as_str()))
+        .collect();
+    active_facets.sort_unstable();
+    active_facets.join(", ")
+}
+
+fn error_description(error: &GenerationErrorType) -> &str {
+    match error {
+        GenerationErrorType::ContentFilter {
+            error_description, ..
+        }
+        | GenerationErrorType::RateLimit { error_description }
+        | GenerationErrorType::ModelUnavailable { error_description }
+        | GenerationErrorType::InvalidRequest { error_description }
+        | GenerationErrorType::ProviderError {
+            error_description, ..
+        }
+        | GenerationErrorType::HallucinationLoop { error_description }
+        | GenerationErrorType::InternalError { error_description } => error_description,
     }
 }
 
@@ -1936,12 +2006,22 @@ pub async fn chat_messages(
         }
     }
 
+    let chat = chats::Entity::find_by_id(chat_id)
+        .one(&app_state.db)
+        .await
+        .wrap_err("Failed to get chat for messages")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let assistant_id = chat.and_then(|chat| chat.assistant_id);
+
     // Convert the messages to the API response format with feedback and files
     let converted_messages: Result<Vec<ChatMessage>, Report> = messages
         .into_iter()
         .map(|msg| {
             let feedback = feedbacks.get(&msg.id).cloned();
             let mut chat_message = ChatMessage::from_model_with_feedback(msg.clone(), feedback)?;
+            chat_message.error_report = chat_message.error.as_ref().map(|error| {
+                render_message_error_report(&app_state.config, &msg, assistant_id, error)
+            });
 
             // Populate files for this message
             chat_message.files = msg

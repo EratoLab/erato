@@ -142,6 +142,7 @@ export interface Message {
   input_files_ids?: string[];
   status?: "sending" | "complete" | "error";
   error?: MessageError;
+  error_report?: string;
   mcp_servers_unavailable?: string[];
   previous_message_id?: string;
   // Whether this message is in the active thread per backend lineage logic
