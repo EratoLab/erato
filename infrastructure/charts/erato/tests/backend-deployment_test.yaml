@@ -304,6 +304,55 @@ tests:
             mountPath: /etc/secrets
             readOnly: true
 
+  - it: should support extraInitContainers for preparing extra volumes
+    set:
+      backend.extraInitContainers:
+        - name: copy-component-kit-trilux
+          image: registry.example.com/component-kit-trilux:v1
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - cp -a /app/component-kits/trilux/. /component-kit/
+          volumeMounts:
+            - name: component-kit-trilux
+              mountPath: /component-kit
+      backend.extraVolumes:
+        - name: component-kit-trilux
+          emptyDir: {}
+      backend.extraVolumeMounts:
+        - name: component-kit-trilux
+          mountPath: /app/component-kits/trilux
+          readOnly: true
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: run-migrations
+      - contains:
+          path: spec.template.spec.initContainers
+          content:
+            name: copy-component-kit-trilux
+            image: registry.example.com/component-kit-trilux:v1
+            command:
+              - /bin/sh
+              - -c
+            args:
+              - cp -a /app/component-kits/trilux/. /component-kit/
+            volumeMounts:
+              - name: component-kit-trilux
+                mountPath: /component-kit
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: component-kit-trilux
+            emptyDir: {}
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: component-kit-trilux
+            mountPath: /app/component-kits/trilux
+            readOnly: true
+
   - it: should support extraVolumeMounts without extraVolumes
     set:
       backend.extraVolumeMounts:

@@ -57,6 +57,8 @@ oauth2Proxy:
   extraEnvVarsCM: ""
   # -- Name of existing Secret containing extra env vars for oauth2-proxy
   extraEnvVarsSecret: ""
+  # -- Optionally specify extra init containers for the oauth2-proxy pod
+  extraInitContainers: []
   # -- Optionally specify extra list of additional volumes for the oauth2-proxy pod
   extraVolumes: []
   # -- Optionally specify extra list of additional volumeMounts for the oauth2-proxy container
@@ -193,6 +195,8 @@ backend:
   extraEnvVarsCM: ""
   # -- Name of existing Secret containing extra env vars for backend
   extraEnvVarsSecret: ""
+  # -- Optionally specify extra init containers for the backend pod
+  extraInitContainers: []
   # -- Optionally specify extra list of additional volumes for the backend pod
   extraVolumes: []
   # -- Optionally specify extra list of additional volumeMounts for the backend container
