@@ -128,6 +128,13 @@ export interface MessageFeedbackFeatureConfig {
   editTimeLimitSeconds: number | null;
 }
 
+interface ErrorReportFeatureConfig {
+  /** Whether assistant error alerts show backend-provided detailed error messages */
+  showVerboseAssistantErrors: boolean;
+  /** Whether assistant error alerts show a button to copy a rendered error report */
+  showCopyErrorReport: boolean;
+}
+
 /**
  * Configuration for sidebar feature
  */
@@ -181,6 +188,8 @@ export interface FeatureConfig {
   cloudProviders: CloudProvidersFeatureConfig;
   /** Message feedback feature flags */
   messageFeedback: MessageFeedbackFeatureConfig;
+  /** Error report display flags */
+  errorReport: ErrorReportFeatureConfig;
   /** Sidebar feature flags */
   sidebar: SidebarFeatureConfig;
   /** Chat sharing feature flags */
@@ -245,6 +254,10 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
     enabled: false,
     commentsEnabled: false,
     editTimeLimitSeconds: null,
+  },
+  errorReport: {
+    showVerboseAssistantErrors: false,
+    showCopyErrorReport: true,
   },
   sidebar: {
     collapsedMode: "hidden",
@@ -340,6 +353,10 @@ function createFeatureConfig(
       commentsEnabled: environment.messageFeedbackCommentsEnabled,
       editTimeLimitSeconds: environment.messageFeedbackEditTimeLimitSeconds,
     },
+    errorReport: {
+      showVerboseAssistantErrors: environment.showVerboseAssistantErrors,
+      showCopyErrorReport: environment.showCopyErrorReport,
+    },
     sidebar: {
       collapsedMode: environment.sidebarCollapsedMode,
       logoPath: environment.sidebarLogoPath,
@@ -401,6 +418,10 @@ function mergeFeatureConfig(
     messageFeedback: {
       ...baseConfig.messageFeedback,
       ...overrides.messageFeedback,
+    },
+    errorReport: {
+      ...baseConfig.errorReport,
+      ...overrides.errorReport,
     },
     sidebar: { ...baseConfig.sidebar, ...overrides.sidebar },
     chatSharing: {
@@ -647,6 +668,11 @@ export function useCloudProvidersFeature(): CloudProvidersFeatureConfig {
 export function useMessageFeedbackFeature(): MessageFeedbackFeatureConfig {
   const config = useFeatureConfig();
   return config.messageFeedback;
+}
+
+export function useErrorReportFeature(): ErrorReportFeatureConfig {
+  const config = useFeatureConfig();
+  return config.errorReport;
 }
 
 /**

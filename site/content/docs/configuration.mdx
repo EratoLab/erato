@@ -238,6 +238,103 @@ enable_message_feedback = true
 message_feedback_edit_time_limit_seconds = 300  # 5 minutes
 ```
 
+#### `frontend.error_report.show_verbose_assistant_errors`
+
+{/* erato_toml_config_key: frontend.error_report.show_verbose_assistant_errors */}
+
+Whether assistant error messages should include the detailed backend-provided error description in the chat UI.
+
+By default, users see a generic assistant error message unless Erato can resolve a more specific user-facing explanation. Enable this option in development or internal-support environments where technical users should see provider or server diagnostic details directly in the message.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+**Example**
+
+```toml
+[frontend.error_report]
+show_verbose_assistant_errors = true
+```
+
+#### `frontend.error_report.show_copy_error_report`
+
+{/* erato_toml_config_key: frontend.error_report.show_copy_error_report */}
+
+Whether assistant error messages should show a **Copy error report** button.
+
+When enabled and the backend can render an error report for an errored assistant message, the frontend shows a button that copies the report to the user's clipboard. This is intended to make bug reports and first-level support triage more consistent without exposing verbose error details inline.
+
+**Default value:** `true`
+
+**Type:** `boolean`
+
+**Example**
+
+```toml
+[frontend.error_report]
+show_copy_error_report = false
+```
+
+#### `frontend.error_report.error_report_template`
+
+{/* erato_toml_config_key: frontend.error_report.error_report_template */}
+
+Handlebars template used by the backend to render the copyable assistant error report.
+
+The template is rendered on backend `Message` items that have an assistant generation error. Missing optional values are rendered as `<none>`.
+
+Available template fields:
+
+- `environment`
+- `timestamp` - the errored chat message `created_at` timestamp
+- `chat_id`
+- `assistant_id`
+- `platform`
+- `facets_active`
+- `error`
+
+**Default value:**
+
+````md
+## Error Report
+
+- Environment: {{environment}}
+- Timestamp: {{timestamp}}
+- Chat ID: {{chat_id}}
+- Assistant ID: {{assistant_id}}
+- Platform: {{platform}}
+- Active facets: {{facets_active}}
+
+Error:
+
+```text
+{{error}}
+```
+````
+
+**Type:** `string`
+
+**Example**
+
+````toml
+[frontend.error_report]
+error_report_template = """
+## Assistant Error
+
+- Environment: {{environment}}
+- Timestamp: {{timestamp}}
+- Chat: {{chat_id}}
+- Assistant: {{assistant_id}}
+- Platform: {{platform}}
+- Active facets: {{facets_active}}
+
+```text
+{{error}}
+```
+"""
+````
+
 #### `frontend.sidebar_collapsed_mode`
 
 {/* erato_toml_config_key: frontend.sidebar_collapsed_mode */}

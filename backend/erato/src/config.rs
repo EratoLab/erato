@@ -2065,6 +2065,10 @@ pub struct FrontendConfig {
     #[serde(default)]
     pub component_kits: FrontendComponentKitsConfig,
 
+    // Error report display options.
+    #[serde(default)]
+    pub error_report: FrontendErrorReportConfig,
+
     // Whether to disable file upload functionality in the UI.
     // Defaults to `false`.
     #[serde(default)]
@@ -2168,6 +2172,58 @@ impl Default for FrontendComponentKitsConfig {
             directory: default_component_kits_directory(),
         }
     }
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct FrontendErrorReportConfig {
+    // Whether assistant error alerts should show the backend-provided detailed error message.
+    // Defaults to `false`.
+    #[serde(default = "default_show_verbose_assistant_errors")]
+    pub show_verbose_assistant_errors: bool,
+
+    // Whether assistant error alerts should show a button to copy a rendered error report.
+    // Defaults to `true`.
+    #[serde(default = "default_show_copy_error_report")]
+    pub show_copy_error_report: bool,
+
+    // Handlebars template used to render copyable assistant error reports.
+    #[serde(default = "default_error_report_template")]
+    pub error_report_template: String,
+}
+
+impl Default for FrontendErrorReportConfig {
+    fn default() -> Self {
+        Self {
+            show_verbose_assistant_errors: default_show_verbose_assistant_errors(),
+            show_copy_error_report: default_show_copy_error_report(),
+            error_report_template: default_error_report_template(),
+        }
+    }
+}
+
+fn default_show_verbose_assistant_errors() -> bool {
+    false
+}
+
+fn default_show_copy_error_report() -> bool {
+    true
+}
+
+fn default_error_report_template() -> String {
+    r#"## Error Report
+
+- Environment: {{environment}}
+- Timestamp: {{timestamp}}
+- Chat ID: {{chat_id}}
+- Assistant ID: {{assistant_id}}
+- Platform: {{platform}}
+- Active facets: {{facets_active}}
+
+Error:
+```text
+{{error}}
+```"#
+        .to_string()
 }
 
 fn default_sidebar_collapsed_mode() -> String {

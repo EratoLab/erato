@@ -78,6 +78,15 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
     assert_eq!(config.http_host, "127.0.0.1");
     assert_eq!(config.http_port, 3130);
     assert_eq!(config.frontend.web_frontend_bundle_path, "./public");
+    assert!(!config.frontend.error_report.show_verbose_assistant_errors);
+    assert!(config.frontend.error_report.show_copy_error_report);
+    assert!(
+        config
+            .frontend
+            .error_report
+            .error_report_template
+            .contains("{{environment}}")
+    );
     assert_eq!(
         config.integrations.ms_office.addin.frontend_bundle_path,
         "./public/platform-office-addin"
@@ -236,6 +245,52 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
         ]
     );
     assert!(config.frontend.allow_any_frame_ancestor);
+}
+
+#[test]
+fn test_frontend_error_report_config_can_enable_verbose_assistant_errors() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+[frontend.error_report]
+show_verbose_assistant_errors = true
+show_copy_error_report = false
+error_report_template = "env={{environment}} error={{error}}"
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "o4-mini"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let temp_path = temp_file.path().to_str().unwrap();
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let config: AppConfig = config_schema
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    assert!(config.frontend.error_report.show_verbose_assistant_errors);
+    assert!(!config.frontend.error_report.show_copy_error_report);
+    assert_eq!(
+        config.frontend.error_report.error_report_template,
+        "env={{environment}} error={{error}}"
+    );
 }
 
 #[test]

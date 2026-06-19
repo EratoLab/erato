@@ -192,6 +192,29 @@ chat_provider_ids = ["test-token-limit"]
 # # Whether to omit the frame-ancestors directive entirely (default: false)
 # allow_any_frame_ancestor = false
 #
+# # Error report display options.
+# [frontend.error_report]
+# # Whether assistant error alerts should show backend-provided detailed error messages (default: false)
+# show_verbose_assistant_errors = false
+# # Whether assistant error alerts should show a button to copy a rendered error report (default: true)
+# show_copy_error_report = true
+# # Handlebars template for the copyable assistant error report.
+# error_report_template = """
+# ## Error Report
+#
+# - Environment: {{environment}}
+# - Timestamp: {{timestamp}}
+# - Chat ID: {{chat_id}}
+# - Assistant ID: {{assistant_id}}
+# - Platform: {{platform}}
+# - Active facets: {{facets_active}}
+#
+# Error:
+# ```text
+# {{error}}
+# ```
+# """
+#
 # Runtime component kit discovery. Each subdirectory is treated as one
 # component kit and may contain a root index-<hash>.js and optional .css file.
 # [frontend.component_kits]

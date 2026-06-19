@@ -43,6 +43,8 @@ const createMockEnv = (overrides: Partial<Env> = {}): Env => ({
   chatSharingEnabled: false,
   messageFeedbackEnabled: false,
   messageFeedbackCommentsEnabled: false,
+  showVerboseAssistantErrors: false,
+  showCopyErrorReport: true,
   userPreferencesEnabled: true,
   userPreferencesDataTabEnabled: true,
   mcpServersTabEnabled: false,

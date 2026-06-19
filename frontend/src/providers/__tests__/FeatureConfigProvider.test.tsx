@@ -20,6 +20,7 @@ import {
   useAssistantsFeature,
   useCloudProvidersFeature,
   useMessageFeedbackFeature,
+  useErrorReportFeature,
   useSidebarFeature,
   useUserPreferencesFeature,
   useTraceFeature,
@@ -71,6 +72,8 @@ describe("FeatureConfigProvider", () => {
       sharepointShowDisclaimer: false,
       messageFeedbackEnabled: false,
       messageFeedbackCommentsEnabled: false,
+      showVerboseAssistantErrors: false,
+      showCopyErrorReport: true,
       userPreferencesEnabled: true,
       userPreferencesDataTabEnabled: true,
       messageFeedbackEditTimeLimitSeconds: null,
@@ -170,6 +173,10 @@ describe("FeatureConfigProvider", () => {
           enabled: false,
           commentsEnabled: false,
           editTimeLimitSeconds: null,
+        },
+        errorReport: {
+          showVerboseAssistantErrors: false,
+          showCopyErrorReport: true,
         },
         sidebar: {
           collapsedMode: "hidden",
@@ -340,6 +347,130 @@ describe("FeatureConfigProvider", () => {
       expect(result.current.upload.enabled).toBe(false);
       expect(result.current.chatInput.autofocus).toBe(false);
       expect(result.current.auth.showLogout).toBe(false);
+    });
+  });
+
+  describe("useErrorReportFeature", () => {
+    it("should expose verbose assistant errors as disabled by default", () => {
+      const { result } = renderHook(() => useErrorReportFeature(), {
+        wrapper: createWrapper(),
+      });
+
+      expect(result.current.showVerboseAssistantErrors).toBe(false);
+    });
+
+    it("should expose verbose assistant errors when enabled by environment", () => {
+      mockEnv.mockReturnValue({
+        apiRootUrl: "/api/",
+        frontendPlatform: "common",
+        frontendPublicBasePath: "/public/common",
+        commonPublicBasePath: "/public/common",
+        themeCustomerName: null,
+        themePath: null,
+        themeConfigPath: null,
+        themeLogoPath: null,
+        themeLogoDarkPath: null,
+        themeAssistantAvatarPath: null,
+        disableUpload: false,
+        disableChatInputAutofocus: false,
+        chatInputEmptyStateLayout: "bottom",
+        disableLogout: false,
+        assistantsEnabled: false,
+        assistantsShowRecentItems: false,
+        assistantContextWarningThreshold: 0.5,
+        assistantContextFileContributorThreshold: 0.05,
+        assistantsMaxSystemPromptLength: null,
+        starterPromptsEnabled: false,
+        promptOptimizerEnabled: false,
+        mcpServersTabEnabled: false,
+        sharepointEnabled: false,
+        sharepointShowDisclaimer: false,
+        messageFeedbackEnabled: false,
+        messageFeedbackCommentsEnabled: false,
+        userPreferencesEnabled: true,
+        userPreferencesDataTabEnabled: true,
+        messageFeedbackEditTimeLimitSeconds: null,
+        maxUploadSizeBytes: 20971520,
+        audioTranscriptionEnabled: false,
+        audioTranscriptionMaxRecordingDurationSeconds: 1200,
+        audioDictationEnabled: false,
+        audioDictationMaxRecordingDurationSeconds: 1200,
+        audioConversationalEnabled: false,
+        audioConversationalMaxRecordingDurationSeconds: 1200,
+        sidebarCollapsedMode: "hidden",
+        sidebarLogoPath: null,
+        sidebarLogoDarkPath: null,
+        sidebarChatHistoryShowMetadata: true,
+        chatSharingEnabled: false,
+        msalClientId: null,
+        msalAuthority: null,
+        maskReasoningTraceText: false,
+        showVerboseAssistantErrors: true,
+        showCopyErrorReport: true,
+      });
+
+      const { result } = renderHook(() => useErrorReportFeature(), {
+        wrapper: createWrapper(),
+      });
+
+      expect(result.current.showVerboseAssistantErrors).toBe(true);
+    });
+
+    it("should expose copy error report visibility from environment", () => {
+      mockEnv.mockReturnValue({
+        apiRootUrl: "/api/",
+        frontendPlatform: "common",
+        frontendPublicBasePath: "/public/common",
+        commonPublicBasePath: "/public/common",
+        themeCustomerName: null,
+        themePath: null,
+        themeConfigPath: null,
+        themeLogoPath: null,
+        themeLogoDarkPath: null,
+        themeAssistantAvatarPath: null,
+        disableUpload: false,
+        disableChatInputAutofocus: false,
+        chatInputEmptyStateLayout: "bottom",
+        disableLogout: false,
+        assistantsEnabled: false,
+        assistantsShowRecentItems: false,
+        assistantContextWarningThreshold: 0.5,
+        assistantContextFileContributorThreshold: 0.05,
+        assistantsMaxSystemPromptLength: null,
+        starterPromptsEnabled: false,
+        promptOptimizerEnabled: false,
+        mcpServersTabEnabled: false,
+        sharepointEnabled: false,
+        sharepointShowDisclaimer: false,
+        messageFeedbackEnabled: false,
+        messageFeedbackCommentsEnabled: false,
+        userPreferencesEnabled: true,
+        userPreferencesDataTabEnabled: true,
+        messageFeedbackEditTimeLimitSeconds: null,
+        maxUploadSizeBytes: 20971520,
+        audioTranscriptionEnabled: false,
+        audioTranscriptionMaxRecordingDurationSeconds: 1200,
+        audioDictationEnabled: false,
+        audioDictationMaxRecordingDurationSeconds: 1200,
+        audioConversationalEnabled: false,
+        audioConversationalMaxRecordingDurationSeconds: 1200,
+        sidebarCollapsedMode: "hidden",
+        sidebarLogoPath: null,
+        sidebarLogoDarkPath: null,
+        sidebarChatHistoryShowMetadata: true,
+        chatSharingEnabled: false,
+        msalClientId: null,
+        msalAuthority: null,
+        maskReasoningTraceText: false,
+        showVerboseAssistantErrors: false,
+        showCopyErrorReport: false,
+      });
+
+      const { result } = renderHook(() => useErrorReportFeature(), {
+        wrapper: createWrapper(),
+      });
+
+      expect(result.current.showCopyErrorReport).toBe(false);
     });
   });
 

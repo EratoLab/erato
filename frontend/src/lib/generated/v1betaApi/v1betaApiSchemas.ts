@@ -421,6 +421,10 @@ export type ChatMessage = {
    */
   created_at: string;
   error?: GenerationErrorType;
+  /**
+   * Rendered copyable error report if generation failed
+   */
+  error_report?: string;
   feedback?: MessageFeedback;
   /**
    * Resolved file objects for all input_files_ids

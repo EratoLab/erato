@@ -50,6 +50,8 @@ const FRONTEND_ENV_KEY_MESSAGE_FEEDBACK_COMMENTS_ENABLED: &str =
     "MESSAGE_FEEDBACK_COMMENTS_ENABLED";
 const FRONTEND_ENV_KEY_MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS: &str =
     "MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS";
+const FRONTEND_ENV_KEY_SHOW_VERBOSE_ASSISTANT_ERRORS: &str = "SHOW_VERBOSE_ASSISTANT_ERRORS";
+const FRONTEND_ENV_KEY_SHOW_COPY_ERROR_REPORT: &str = "SHOW_COPY_ERROR_REPORT";
 const FRONTEND_ENV_KEY_MAX_UPLOAD_SIZE_BYTES: &str = "MAX_UPLOAD_SIZE_BYTES";
 const FRONTEND_ENV_KEY_AUDIO_TRANSCRIPTION_ENABLED: &str = "AUDIO_TRANSCRIPTION_ENABLED";
 const FRONTEND_ENV_KEY_AUDIO_TRANSCRIPTION_MAX_RECORDING_DURATION_SECONDS: &str =
@@ -562,6 +564,14 @@ fn build_frontend_environment(
             Value::Number(limit.into()),
         );
     }
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_SHOW_VERBOSE_ASSISTANT_ERRORS.to_string(),
+        Value::Bool(config.frontend.error_report.show_verbose_assistant_errors),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_SHOW_COPY_ERROR_REPORT.to_string(),
+        Value::Bool(config.frontend.error_report.show_copy_error_report),
+    );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_AUDIO_TRANSCRIPTION_ENABLED.to_string(),
         Value::Bool(config.audio_transcription.enabled),
