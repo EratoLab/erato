@@ -308,6 +308,45 @@ This will be inejcted into the frontend as:
 window.FOO = "bar";
 ```
 
+#### `frontend.extra_frame_ancestors`
+
+{/* erato_toml_config_key: frontend.extra_frame_ancestors */}
+{/* erato_toml_config_key: frontend.extra_frame_ancestors.[] */}
+
+Additional `Content-Security-Policy` `frame-ancestors` sources that may embed the frontend.
+
+Erato always includes `'self'`. When the Microsoft Office add-in is enabled, Erato also includes `https://outlook.office.com`.
+
+**Default value:** `[]`
+
+**Type:** `array<string>`
+
+**Example**
+
+```toml
+[frontend]
+extra_frame_ancestors = ["https://outlook.cloud.microsoft"]
+```
+
+#### `frontend.allow_any_frame_ancestor`
+
+{/* erato_toml_config_key: frontend.allow_any_frame_ancestor */}
+
+Whether to omit the `frame-ancestors` directive from the frontend `Content-Security-Policy` header.
+
+Use this only when Erato must be embeddable from unrestricted parent pages.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+**Example**
+
+```toml
+[frontend]
+allow_any_frame_ancestor = true
+```
+
 #### `frontend.component_kits.directory`
 
 {/* erato_toml_config_key: frontend.component_kits.directory */}

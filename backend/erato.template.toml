@@ -182,6 +182,11 @@ chat_provider_ids = ["test-token-limit"]
 # # When set, feedback can only be edited within this time window after creation
 # # Example: message_feedback_edit_time_limit_seconds = 300  # 5 minutes
 # message_feedback_edit_time_limit_seconds = 300
+# # Additional Content-Security-Policy frame-ancestors sources for embedding the frontend.
+# # 'self' is always included. When the Office add-in is enabled, https://outlook.office.com is included.
+# extra_frame_ancestors = ["https://outlook.cloud.microsoft"]
+# # Whether to omit the frame-ancestors directive entirely (default: false)
+# allow_any_frame_ancestor = false
 #
 # Runtime component kit discovery. Each subdirectory is treated as one
 # component kit and may contain a root index-<hash>.js and optional .css file.

@@ -595,6 +595,7 @@ impl AppConfig {
                 .with_list_parse_key("experimental_facets.priority_order")
                 .with_list_parse_key("experimental_facets.tool_call_allowlist")
                 .with_list_parse_key("experimental_facets.default_selected_facets")
+                .with_list_parse_key("frontend.extra_frame_ancestors")
                 .with_list_parse_key("i18n.language.language_detection_priority")
                 .with_list_parse_key("integrations.experimental_sharepoint.all_drives_sources"),
         );
@@ -2120,6 +2121,17 @@ pub struct FrontendConfig {
     // are unaffected. Defaults to `false`.
     #[serde(default)]
     pub mask_reasoning_trace_text: bool,
+
+    // Additional CSP frame-ancestors sources to allow embedding the frontend.
+    // `'self'` is always included automatically. When the Office add-in is
+    // enabled, Outlook on the web is included automatically.
+    #[serde(default)]
+    pub extra_frame_ancestors: Vec<String>,
+
+    // Whether to omit the CSP frame-ancestors directive entirely.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub allow_any_frame_ancestor: bool,
 }
 
 fn default_component_kits_directory() -> String {

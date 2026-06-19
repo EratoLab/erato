@@ -192,6 +192,53 @@ icon_80_path = "https://cdn.example.com/contoso/icon-80.png"
 }
 
 #[test]
+fn test_frontend_frame_ancestor_config_can_be_configured() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+[frontend]
+extra_frame_ancestors = ["https://outlook.cloud.microsoft", "https://example.com"]
+allow_any_frame_ancestor = true
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "o4-mini"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let temp_path = temp_file.path().to_str().unwrap();
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let config: AppConfig = config_schema
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    assert_eq!(
+        config.frontend.extra_frame_ancestors,
+        vec![
+            "https://outlook.cloud.microsoft".to_string(),
+            "https://example.com".to_string(),
+        ]
+    );
+    assert!(config.frontend.allow_any_frame_ancestor);
+}
+
+#[test]
 #[should_panic(
     expected = "Microsoft Office add-in id cannot be empty when the add-in is configured."
 )]
