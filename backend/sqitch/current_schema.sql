@@ -10,7 +10,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict np6fMCKvEDxceIEhwPMvNotTcZpCy5hefQkwTPQqcdX1qxA3DZBZCfCWI21S8e8
+\restrict OgMyXiD0qMy8Yv6AS98scvu47rTgc9sOdcIoV5vqrwn2bY4RfVpb0slCZnesMTn
 
 -- Dumped from database version 17.2 (Debian 17.2-1.pgdg120+1)
 -- Dumped by pg_dump version 17.6
@@ -80,11 +80,11 @@ BEGIN
         WHERE active_count > 1
         LIMIT 1
     ) INTO violation_found;
-    
+
     IF violation_found THEN
         RAISE EXCEPTION 'Constraint violation: Multiple messages in the same sibling group are marked as active';
     END IF;
-    
+
     RETURN NULL;
 END;
 $$;
@@ -204,7 +204,8 @@ CREATE TABLE public.messages (
     generation_input_messages jsonb,
     input_file_uploads uuid[],
     generation_parameters jsonb,
-    generation_metadata jsonb
+    generation_metadata jsonb,
+    input_parameters jsonb
 );
 
 
@@ -235,7 +236,51 @@ CREATE TABLE public.file_uploads (
     file_storage_path text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    owner_user_id text NOT NULL
+    owner_user_id text NOT NULL,
+    audio_transcription text
+);
+
+
+--
+-- Name: mcp_server_oauth_authorization_states; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.mcp_server_oauth_authorization_states (
+    user_id uuid NOT NULL,
+    mcp_server_id text NOT NULL,
+    csrf_token text NOT NULL,
+    state_encrypted text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: mcp_server_oauth_clients; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.mcp_server_oauth_clients (
+    mcp_server_id text NOT NULL,
+    client_id text NOT NULL,
+    client_secret_encrypted text,
+    redirect_uri text NOT NULL,
+    registration_metadata jsonb,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: mcp_server_oauth_credentials; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.mcp_server_oauth_credentials (
+    user_id uuid NOT NULL,
+    mcp_server_id text NOT NULL,
+    credentials_encrypted text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    last_used_at timestamp with time zone
 );
 
 
@@ -266,6 +311,20 @@ CREATE TABLE public.share_grants (
     subject_id_type text NOT NULL,
     subject_id text NOT NULL,
     role text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: share_links; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.share_links (
+    id uuid DEFAULT public.uuidv7() NOT NULL,
+    resource_type text NOT NULL,
+    resource_id text NOT NULL,
+    enabled boolean DEFAULT true NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -382,6 +441,30 @@ ALTER TABLE ONLY public.file_uploads
 
 
 --
+-- Name: mcp_server_oauth_authorization_states mcp_server_oauth_authorization_states_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mcp_server_oauth_authorization_states
+    ADD CONSTRAINT mcp_server_oauth_authorization_states_pkey PRIMARY KEY (user_id, mcp_server_id, csrf_token);
+
+
+--
+-- Name: mcp_server_oauth_clients mcp_server_oauth_clients_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mcp_server_oauth_clients
+    ADD CONSTRAINT mcp_server_oauth_clients_pkey PRIMARY KEY (mcp_server_id);
+
+
+--
+-- Name: mcp_server_oauth_credentials mcp_server_oauth_credentials_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mcp_server_oauth_credentials
+    ADD CONSTRAINT mcp_server_oauth_credentials_pkey PRIMARY KEY (user_id, mcp_server_id);
+
+
+--
 -- Name: message_feedbacks message_feedbacks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -419,6 +502,22 @@ ALTER TABLE ONLY public.share_grants
 
 ALTER TABLE ONLY public.share_grants
     ADD CONSTRAINT share_grants_unique_grant UNIQUE (resource_type, resource_id, subject_type, subject_id_type, subject_id, role);
+
+
+--
+-- Name: share_links share_links_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.share_links
+    ADD CONSTRAINT share_links_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: share_links share_links_unique_resource; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.share_links
+    ADD CONSTRAINT share_links_unique_resource UNIQUE (resource_type, resource_id);
 
 
 --
@@ -494,6 +593,13 @@ CREATE INDEX idx_chats_assistant_configuration ON public.chats USING btree (((as
 
 
 --
+-- Name: idx_chats_resolved_title_search; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_chats_resolved_title_search ON public.chats USING gin (to_tsvector('simple'::regconfig, COALESCE(NULLIF(btrim(title_by_user_provided), ''::text), NULLIF(btrim(title_by_summary), ''::text), 'Untitled Chat'::text)));
+
+
+--
 -- Name: idx_file_uploads_owner_user_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -564,6 +670,20 @@ CREATE INDEX idx_share_grants_subject ON public.share_grants USING btree (subjec
 
 
 --
+-- Name: idx_share_links_enabled; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_share_links_enabled ON public.share_links USING btree (enabled);
+
+
+--
+-- Name: idx_share_links_resource; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_share_links_resource ON public.share_links USING btree (resource_type, resource_id);
+
+
+--
 -- Name: idx_users_issuer_subject; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -627,6 +747,27 @@ CREATE TRIGGER on_update_set_updated_columns_chat_file_uploads BEFORE UPDATE ON 
 
 
 --
+-- Name: mcp_server_oauth_authorization_states on_update_set_updated_columns_mcp_server_oauth_authorization_st; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER on_update_set_updated_columns_mcp_server_oauth_authorization_st BEFORE UPDATE ON public.mcp_server_oauth_authorization_states FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
+
+
+--
+-- Name: mcp_server_oauth_clients on_update_set_updated_columns_mcp_server_oauth_clients; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER on_update_set_updated_columns_mcp_server_oauth_clients BEFORE UPDATE ON public.mcp_server_oauth_clients FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
+
+
+--
+-- Name: mcp_server_oauth_credentials on_update_set_updated_columns_mcp_server_oauth_credentials; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER on_update_set_updated_columns_mcp_server_oauth_credentials BEFORE UPDATE ON public.mcp_server_oauth_credentials FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
+
+
+--
 -- Name: message_feedbacks on_update_set_updated_columns_message_feedbacks; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -638,6 +779,13 @@ CREATE TRIGGER on_update_set_updated_columns_message_feedbacks BEFORE UPDATE ON 
 --
 
 CREATE TRIGGER on_update_set_updated_columns_share_grants BEFORE UPDATE ON public.share_grants FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
+
+
+--
+-- Name: share_links on_update_set_updated_columns_share_links; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER on_update_set_updated_columns_share_links BEFORE UPDATE ON public.share_links FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
 
 
 --
@@ -696,6 +844,22 @@ ALTER TABLE ONLY public.chats
 
 
 --
+-- Name: mcp_server_oauth_authorization_states mcp_server_oauth_authorization_states_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mcp_server_oauth_authorization_states
+    ADD CONSTRAINT mcp_server_oauth_authorization_states_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: mcp_server_oauth_credentials mcp_server_oauth_credentials_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mcp_server_oauth_credentials
+    ADD CONSTRAINT mcp_server_oauth_credentials_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: message_feedbacks message_feedbacks_message_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -739,4 +903,5 @@ ALTER TABLE ONLY public.user_preferences
 -- PostgreSQL database dump complete
 --
 
-\unrestrict np6fMCKvEDxceIEhwPMvNotTcZpCy5hefQkwTPQqcdX1qxA3DZBZCfCWI21S8e8
+\unrestrict OgMyXiD0qMy8Yv6AS98scvu47rTgc9sOdcIoV5vqrwn2bY4RfVpb0slCZnesMTn
+

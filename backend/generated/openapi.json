@@ -1766,6 +1766,15 @@
             "schema": {
               "type": "boolean"
             }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Optional full-text search query for chat titles. User-provided titles take precedence over generated summary titles. Empty values are treated like an unfiltered recent chats list.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {

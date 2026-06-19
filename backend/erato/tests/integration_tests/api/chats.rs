@@ -3,7 +3,7 @@
 use axum::Router;
 use axum::http;
 use axum_test::TestServer;
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use erato::config::{
     ExperimentalFacetsConfig, FacetConfig, ModelSettings, PromptSourceSpecification,
 };
@@ -589,6 +589,188 @@ async fn test_recent_chats_prefers_title_by_user_provided(pool: Pool<Postgres>) 
     assert_eq!(
         chat_2_item["title_resolved"].as_str(),
         Some("User Override Name")
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_recent_chats_searches_resolved_title_with_pagination(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    let _user = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state.clone());
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    async fn create_chat_with_message(
+        server: &TestServer,
+        app_state: &erato::state::AppState,
+        title_by_summary: &str,
+        title_by_user_provided: Option<&str>,
+        message_created_at: chrono::DateTime<chrono::FixedOffset>,
+    ) -> Uuid {
+        let response = server
+            .post("/api/v1beta/me/messages/submitstream")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .add_header(http::header::CONTENT_TYPE, "application/json")
+            .json(&json!({
+                "user_message": "test message",
+                "selected_facet_ids": []
+            }))
+            .await;
+        response.assert_status_ok();
+
+        let response_text = response.text();
+        let chat_id = response_text
+            .lines()
+            .collect::<Vec<_>>()
+            .windows(2)
+            .find_map(|lines| {
+                if lines[0] == "event: chat_created" && lines[1].starts_with("data: ") {
+                    let payload: Value =
+                        serde_json::from_str(&lines[1][6..]).expect("Invalid chat_created JSON");
+                    payload["chat_id"].as_str().map(str::to_string)
+                } else {
+                    None
+                }
+            })
+            .expect("chat_created event not found in SSE response");
+        let chat_id = Uuid::parse_str(&chat_id).expect("Invalid created chat UUID");
+
+        let chat = chats::Entity::find_by_id(chat_id)
+            .one(&app_state.db)
+            .await
+            .expect("Failed to query chat")
+            .expect("Created chat should exist");
+        let mut chat_active: chats::ActiveModel = chat.into();
+        chat_active.title_by_summary = ActiveValue::Set(Some(title_by_summary.to_string()));
+        chat_active.title_by_user_provided =
+            ActiveValue::Set(title_by_user_provided.map(str::to_string));
+        chat_active
+            .update(&app_state.db)
+            .await
+            .expect("Failed to update chat titles");
+
+        let chat_messages = messages::Entity::find()
+            .filter(messages::Column::ChatId.eq(chat_id))
+            .all(&app_state.db)
+            .await
+            .expect("Failed to query created chat messages");
+        for message in chat_messages {
+            let mut message_active: messages::ActiveModel = message.into();
+            message_active.created_at = ActiveValue::Set(message_created_at);
+            message_active.updated_at = ActiveValue::Set(message_created_at);
+            message_active
+                .update(&app_state.db)
+                .await
+                .expect("Failed to update message timestamps");
+        }
+
+        chat_id
+    }
+
+    let now: chrono::DateTime<chrono::FixedOffset> = Utc::now().into();
+    let summary_match_chat_id = create_chat_with_message(
+        &server,
+        &app_state,
+        "Quarterly Roadmap",
+        None,
+        now - Duration::minutes(3),
+    )
+    .await;
+    let overridden_non_match_chat_id = create_chat_with_message(
+        &server,
+        &app_state,
+        "Quarterly Roadmap",
+        Some("Budget Planning"),
+        now - Duration::minutes(2),
+    )
+    .await;
+    let custom_match_chat_id = create_chat_with_message(
+        &server,
+        &app_state,
+        "Budget Notes",
+        Some("Roadmap Override"),
+        now - Duration::minutes(1),
+    )
+    .await;
+    let summary_match_chat_id = summary_match_chat_id.to_string();
+    let overridden_non_match_chat_id = overridden_non_match_chat_id.to_string();
+    let custom_match_chat_id = custom_match_chat_id.to_string();
+
+    let search_response = server
+        .get("/api/v1beta/me/recent_chats?q=roadmap&limit=1")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    search_response.assert_status_ok();
+    let search_body: Value = search_response.json();
+    let search_chats = search_body["chats"]
+        .as_array()
+        .expect("Expected chats array in search response");
+
+    assert_eq!(
+        search_body["stats"]["total_count"].as_i64(),
+        Some(2),
+        "Search total_count should include all matching resolved titles"
+    );
+    assert_eq!(search_body["stats"]["returned_count"].as_i64(), Some(1));
+    assert_eq!(search_body["stats"]["has_more"].as_bool(), Some(true));
+    assert_eq!(
+        search_chats[0]["id"].as_str(),
+        Some(custom_match_chat_id.as_str()),
+        "The newest matching chat should be returned first"
+    );
+
+    let search_page_2_response = server
+        .get("/api/v1beta/me/recent_chats?q=roadmap&limit=1&offset=1")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    search_page_2_response.assert_status_ok();
+    let search_page_2_body: Value = search_page_2_response.json();
+    let search_page_2_chats = search_page_2_body["chats"]
+        .as_array()
+        .expect("Expected chats array in second search response");
+    assert_eq!(
+        search_page_2_chats[0]["id"].as_str(),
+        Some(summary_match_chat_id.as_str())
+    );
+    assert_eq!(search_page_2_body["stats"]["total_count"].as_i64(), Some(2));
+    assert_eq!(
+        search_page_2_body["stats"]["has_more"].as_bool(),
+        Some(false)
+    );
+
+    let empty_query_response = server
+        .get("/api/v1beta/me/recent_chats?q=%20%20&limit=2")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    empty_query_response.assert_status_ok();
+    let empty_query_body: Value = empty_query_response.json();
+    let empty_query_chats = empty_query_body["chats"]
+        .as_array()
+        .expect("Expected chats array for empty query");
+    assert_eq!(
+        empty_query_body["stats"]["total_count"].as_i64(),
+        Some(3),
+        "Empty q should behave like the unfiltered recent chats list"
+    );
+    assert_eq!(
+        empty_query_chats[0]["id"].as_str(),
+        Some(custom_match_chat_id.as_str())
+    );
+    assert_eq!(
+        empty_query_chats[1]["id"].as_str(),
+        Some(overridden_non_match_chat_id.as_str())
     );
 }
 

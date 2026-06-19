@@ -3288,6 +3288,10 @@ export type RecentChatsQueryParams = {
    * Whether to include archived chats in results. Defaults to false if not provided.
    */
   include_archived?: boolean;
+  /**
+   * Optional full-text search query for chat titles. User-provided titles take precedence over generated summary titles. Empty values are treated like an unfiltered recent chats list.
+   */
+  q?: string;
 };
 
 export type RecentChatsError = Fetcher.ErrorWrapper<undefined>;

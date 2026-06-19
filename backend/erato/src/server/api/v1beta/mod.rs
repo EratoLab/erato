@@ -1995,7 +1995,8 @@ pub async fn chat_messages(
     params(
         ("limit" = Option<u64>, Query, description = "Maximum number of chats to return per page. Defaults to 30 if not provided. Larger values may impact performance."),
         ("offset" = Option<u64>, Query, description = "Number of chats to skip for pagination. Defaults to 0 if not provided."),
-        ("include_archived" = Option<bool>, Query, description = "Whether to include archived chats in results. Defaults to false if not provided.")
+        ("include_archived" = Option<bool>, Query, description = "Whether to include archived chats in results. Defaults to false if not provided."),
+        ("q" = Option<String>, Query, description = "Optional full-text search query for chat titles. User-provided titles take precedence over generated summary titles. Empty values are treated like an unfiltered recent chats list.")
     ),
     responses(
         (status = OK, body = RecentChatsResponse, description = "Successfully retrieved chats with pagination metadata"),
@@ -2024,6 +2025,7 @@ pub async fn recent_chats(
         .get("include_archived")
         .and_then(|a| a.parse::<bool>().ok())
         .unwrap_or(false);
+    let search_query = params.get("q").map(String::as_str);
 
     policy
         .rebuild_data_if_needed(&app_state.db, &app_state.config)
@@ -2045,6 +2047,7 @@ pub async fn recent_chats(
         limit,
         offset,
         include_archived,
+        search_query,
     )
     .await
     .map_err(log_internal_server_error)?;

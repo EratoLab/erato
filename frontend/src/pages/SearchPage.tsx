@@ -1,21 +1,26 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useDebounce } from "use-debounce";
 
 import { PageHeader } from "@/components/ui/Container/PageHeader";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 import { SearchIcon, CloseIcon } from "@/components/ui/icons";
 import { usePageAlignment } from "@/hooks/ui";
-import { useChatContext } from "@/providers/ChatProvider";
+import { useRecentChats } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useChatInputFeature } from "@/providers/FeatureConfigProvider";
+import { getChatUrl } from "@/utils/chat/urlUtils";
 import { createLogger } from "@/utils/debugLogger";
 
 const logger = createLogger("UI", "SearchPage");
+const RECENT_CHATS_LIMIT = 10;
+const SEARCH_RESULTS_LIMIT = 30;
 
 interface SearchResult {
   id: string;
   chatId: string;
+  assistantId?: string;
   chatTitle: string;
   messageContent: string;
   timestamp: string;
@@ -24,11 +29,7 @@ interface SearchResult {
 
 export default function SearchPage() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-
-  // Get chat data from context
-  const { chats: chatHistory, navigateToChat } = useChatContext();
+  const navigate = useNavigate();
 
   // Get feature configurations
   const { autofocus: shouldAutofocus } = useChatInputFeature();
@@ -41,16 +42,38 @@ export default function SearchPage() {
 
   // Debounce search query using use-debounce library for consistency
   const [debouncedSearchQuery] = useDebounce(searchQuery, 300);
+  const backendSearchQuery = debouncedSearchQuery.trim();
+  const isShowingRecent = backendSearchQuery === "";
+  const resultLimit = isShowingRecent ? RECENT_CHATS_LIMIT : SEARCH_RESULTS_LIMIT;
 
-  // Convert chat history to SearchResult format
-  const allChats = useMemo(() => {
-    if (!Array.isArray(chatHistory)) return [];
+  const {
+    data: recentChatsResponse,
+    isFetching: isSearching,
+    error: searchError,
+  } = useRecentChats({
+    queryParams: {
+      limit: resultLimit,
+      offset: 0,
+      ...(backendSearchQuery ? { q: backendSearchQuery } : {}),
+    },
+  });
 
-    return chatHistory
+  useEffect(() => {
+    if (searchError) {
+      logger.log("Search error:", searchError);
+    }
+  }, [searchError]);
+
+  // Convert backend response to SearchResult format
+  const searchResults = useMemo(() => {
+    const chats = recentChatsResponse?.chats ?? [];
+
+    return chats
       .map(
         (chat): SearchResult => ({
           id: chat.id,
           chatId: chat.id,
+          assistantId: chat.assistant_id,
           chatTitle: chat.title_resolved,
           messageContent: chat.title_resolved,
           timestamp: chat.last_message_at,
@@ -60,62 +83,10 @@ export default function SearchPage() {
         (a, b) =>
           new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
       );
-  }, [chatHistory]);
-
-  // Get last 10 chats for default display
-  const recentChats = useMemo(() => allChats.slice(0, 10), [allChats]);
-
-  // Search function
-  const handleSearch = useCallback(
-    async (query: string) => {
-      if (!query.trim()) {
-        setSearchResults(recentChats);
-        setIsSearching(false);
-        return;
-      }
-
-      setIsSearching(true);
-      logger.log("Performing search for:", query);
-
-      // Simulate slight delay for better UX
-      await new Promise<void>((resolve) => setTimeout(resolve, 100));
-
-      try {
-        // Search through chat titles
-        const filteredChats = allChats.filter((chat) =>
-          chat.chatTitle.toLowerCase().includes(query.toLowerCase()),
-        );
-
-        setSearchResults(filteredChats);
-      } catch (error) {
-        logger.log("Search error:", error);
-        setSearchResults([]);
-      } finally {
-        setIsSearching(false);
-      }
-    },
-    [allChats, recentChats],
-  );
-
-  // Effect to handle search when debounced query changes
-  useEffect(() => {
-    void handleSearch(debouncedSearchQuery);
-  }, [debouncedSearchQuery, handleSearch]);
-
-  // Initialize with recent chats only when there's no search query
-  useEffect(() => {
-    if (
-      searchQuery.trim() === "" &&
-      searchResults.length === 0 &&
-      recentChats.length > 0
-    ) {
-      setSearchResults(recentChats);
-    }
-  }, [recentChats, searchResults.length, searchQuery]);
+  }, [recentChatsResponse?.chats]);
 
   const clearSearch = () => {
     setSearchQuery("");
-    setSearchResults(recentChats);
   };
 
   const handleResultClick = (result: SearchResult) => {
@@ -124,11 +95,12 @@ export default function SearchPage() {
       return;
     }
 
-    navigateToChat(result.chatId);
+    navigate(getChatUrl(result.chatId, result.assistantId));
   };
 
-  const resultsCount = searchResults.length;
-  const isShowingRecent = !searchQuery.trim();
+  const resultsCount = isShowingRecent
+    ? (recentChatsResponse?.stats.returned_count ?? searchResults.length)
+    : (recentChatsResponse?.stats.total_count ?? searchResults.length);
 
   return (
     <div className="flex h-full flex-col bg-theme-bg-primary">

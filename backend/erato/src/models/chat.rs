@@ -252,6 +252,7 @@ pub async fn get_recent_chats(
     limit: u64,
     offset: u64,
     include_archived: bool,
+    search_query: Option<&str>,
 ) -> Result<(Vec<RecentChat>, ChatListStats), Report> {
     use crate::db::entity::assistants;
     use crate::db::entity::prelude::Assistants;
@@ -262,6 +263,26 @@ pub async fn get_recent_chats(
         "AND \"chats\".\"archived_at\" IS NULL"
     } else {
         ""
+    };
+    let resolved_title_search_vector = r#"to_tsvector(
+                'simple'::regconfig,
+                COALESCE(
+                    NULLIF(BTRIM("chats"."title_by_user_provided"), ''),
+                    NULLIF(BTRIM("chats"."title_by_summary"), ''),
+                    'Untitled Chat'
+                )
+            )"#;
+    let search_query = search_query
+        .map(str::trim)
+        .filter(|query| !query.is_empty());
+    let search_condition = |param_index: u8| {
+        if search_query.is_some() {
+            format!(
+                "AND {resolved_title_search_vector} @@ websearch_to_tsquery('simple'::regconfig, ${param_index})"
+            )
+        } else {
+            String::new()
+        }
     };
 
     // Query using INNER JOIN LATERAL for better performance
@@ -286,23 +307,30 @@ pub async fn get_recent_chats(
         ) latest_msg ON true
         WHERE "chats"."owner_user_id" = $1
             {}
+            {}
         ORDER BY latest_msg.created_at DESC
         LIMIT $2
         OFFSET $3
         "#,
-        archived_condition
+        archived_condition,
+        search_condition(4)
     );
+
+    let mut query_values = vec![
+        owner_user_id.into(),
+        sea_orm::Value::BigInt(Some(limit as i64)),
+        sea_orm::Value::BigInt(Some(offset as i64)),
+    ];
+    if let Some(search_query) = search_query {
+        query_values.push(search_query.into());
+    }
 
     let chats_with_messages: Vec<ChatWithLatestMessage> =
         ChatWithLatestMessage::find_by_statement(named_statement_from_sql_and_values(
             sea_orm::DatabaseBackend::Postgres,
             POSTGRES_QUERY_LIST_RECENT_CHATS,
             sql,
-            vec![
-                owner_user_id.into(),
-                sea_orm::Value::BigInt(Some(limit as i64)),
-                sea_orm::Value::BigInt(Some(offset as i64)),
-            ],
+            query_values,
         ))
         .all(conn)
         .await?;
@@ -325,9 +353,11 @@ pub async fn get_recent_chats(
                     ) latest_msg ON true
                     WHERE "chats"."owner_user_id" = $1
                         {}
+                        {}
                 ) AS sub_query
                 "#,
-                archived_condition
+                archived_condition,
+                search_condition(2)
             );
 
             #[derive(Debug, FromQueryResult)]
@@ -335,12 +365,17 @@ pub async fn get_recent_chats(
                 num_items: i64,
             }
 
+            let mut count_values = vec![owner_user_id.into()];
+            if let Some(search_query) = search_query {
+                count_values.push(search_query.into());
+            }
+
             let count_result: CountResult =
                 CountResult::find_by_statement(named_statement_from_sql_and_values(
                     sea_orm::DatabaseBackend::Postgres,
                     POSTGRES_QUERY_COUNT_RECENT_CHATS,
                     count_sql,
-                    vec![owner_user_id.into()],
+                    count_values,
                 ))
                 .one(conn)
                 .await
