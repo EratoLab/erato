@@ -107,6 +107,23 @@ If not provided, the default bundled theme will be used.
 theme = "my-theme"
 ```
 
+#### `frontend.translation_po_compilation_mode`
+
+{/* erato_toml_config_key: frontend.translation_po_compilation_mode */}
+
+Controls how frontend Lingui translation catalogs are served. `precompiled` serves existing `messages.json` files. `just_in_time` compiles sibling `messages.po` files when `messages.json` is requested and caches each compiled result for the server lifetime.
+
+**Default value:** `precompiled`
+
+**Type:** `precompiled | just_in_time`
+
+**Example**
+
+```toml
+[frontend]
+translation_po_compilation_mode = "just_in_time"
+```
+
 #### `frontend.disable_upload`
 
 {/* erato_toml_config_key: frontend.disable_upload */}

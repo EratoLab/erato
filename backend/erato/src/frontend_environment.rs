@@ -1,6 +1,7 @@
 //! Inlined version of the frontend-environment crate (to simplify dependency version alignment)
 pub use self::axum::serve_files_with_script;
-use crate::config::AppConfig;
+use crate::config::{AppConfig, TranslationPoCompilationMode};
+use crate::translation_po::TranslationPoCache;
 use ::axum::http::HeaderValue;
 use lol_html::html_content::ContentType;
 use lol_html::{HtmlRewriter, Settings, element};
@@ -11,6 +12,7 @@ use std::fmt::Write;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 // Default maximum body limit in bytes (20MB) - must match DEFAULT_MAX_BODY_LIMIT_BYTES in server/api/v1beta/mod.rs
 const DEFAULT_MAX_BODY_LIMIT_BYTES: u64 = 20 * 1024 * 1024;
@@ -102,6 +104,8 @@ pub struct ServedFrontend {
 #[derive(Debug, Clone)]
 pub struct FrontendRegistry {
     frontends: Vec<ServedFrontend>,
+    translation_po_compilation_mode: TranslationPoCompilationMode,
+    translation_po_cache: Arc<TranslationPoCache>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -191,7 +195,11 @@ pub fn build_frontend_registry(config: &AppConfig) -> FrontendRegistry {
         });
     }
 
-    FrontendRegistry { frontends }
+    FrontendRegistry {
+        frontends,
+        translation_po_compilation_mode: config.frontend.translation_po_compilation_mode,
+        translation_po_cache: Arc::new(TranslationPoCache::default()),
+    }
 }
 
 fn build_content_security_policy(config: &AppConfig) -> Option<HeaderValue> {
@@ -715,6 +723,30 @@ fn is_i18n_messages_json(path: &str) -> bool {
     path.ends_with("/messages.json") && path.contains("/locales/")
 }
 
+fn safe_request_file_path(bundle_dir_path: &Path, request_path: &str) -> Option<PathBuf> {
+    let mut file_path = bundle_dir_path.to_path_buf();
+    for segment in request_path.trim_start_matches('/').split('/') {
+        if segment.is_empty() || segment == "." || segment == ".." {
+            return None;
+        }
+        file_path.push(segment);
+    }
+    Some(file_path)
+}
+
+fn translation_po_path_for_messages_json(
+    bundle_dir_path: &Path,
+    request_path: &str,
+) -> Option<PathBuf> {
+    if !is_i18n_messages_json(request_path) {
+        return None;
+    }
+
+    let mut file_path = safe_request_file_path(bundle_dir_path, request_path)?;
+    file_path.set_extension("po");
+    file_path.exists().then_some(file_path)
+}
+
 /// Rewrites HTML to inject a `<script>` tag (which contains global JS variables that act like environment variables)
 /// into the `<head>` tag.
 pub fn inject_environment_script_tag(
@@ -815,7 +847,7 @@ pub mod axum {
     use super::*;
     use ::axum::body::{Body, Bytes};
 
-    use ::axum::http::{HeaderMap, HeaderName, Request, Uri};
+    use ::axum::http::{HeaderMap, HeaderName, HeaderValue, Request, StatusCode, Uri};
     use ::axum::response::Response;
     use ::axum::{BoxError, Extension, http};
     use http_body_util::BodyExt;
@@ -862,6 +894,83 @@ pub mod axum {
         Request::from_parts(parts, body)
     }
 
+    fn full_body(bytes: Bytes) -> UnsyncBoxBody<Bytes, BoxError> {
+        http_body_util::Full::from(bytes)
+            .map_err(|never| -> BoxError { match never {} })
+            .boxed_unsync()
+    }
+
+    fn not_found_response() -> Response<UnsyncBoxBody<Bytes, BoxError>> {
+        Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .header(http::header::CONTENT_TYPE, "text/plain; charset=utf-8")
+            .body(full_body(Bytes::from_static(b"Not Found")))
+            .unwrap()
+    }
+
+    fn internal_server_error_response() -> Response<UnsyncBoxBody<Bytes, BoxError>> {
+        Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .header(http::header::CONTENT_TYPE, "text/plain; charset=utf-8")
+            .body(full_body(Bytes::from_static(b"Internal Server Error")))
+            .unwrap()
+    }
+
+    fn not_modified_response(
+        etag_value: String,
+        cache_control: &'static str,
+        content_security_policy: Option<&HeaderValue>,
+    ) -> Response<UnsyncBoxBody<Bytes, BoxError>> {
+        let mut response = Response::builder()
+            .status(StatusCode::NOT_MODIFIED)
+            .header(http::header::ETAG, etag_value)
+            .header(http::header::CACHE_CONTROL, cache_control)
+            .body(
+                http_body_util::Empty::new()
+                    .map_err(|never| -> BoxError { match never {} })
+                    .boxed_unsync(),
+            )
+            .unwrap();
+        insert_content_security_policy(response.headers_mut(), content_security_policy);
+        response
+    }
+
+    fn cache_control_for_path(request_path: &str) -> &'static str {
+        if is_i18n_messages_json(request_path) {
+            "no-cache"
+        } else {
+            "public, max-age=3600, stale-while-revalidate=604800"
+        }
+    }
+
+    fn client_etag_matches(client_etag: Option<&HeaderValue>, etag_value: &str) -> bool {
+        client_etag.and_then(|etag| etag.to_str().ok()) == Some(etag_value)
+    }
+
+    fn apply_non_html_cache_headers(
+        res: &mut Response<UnsyncBoxBody<Bytes, BoxError>>,
+        deployment_version: &DeploymentVersion,
+        cache_control: &'static str,
+    ) {
+        if let Some(version) = &deployment_version.0 {
+            let etag_value = format!("\"{}\"", version);
+            res.headers_mut().insert(
+                http::header::ETAG,
+                HeaderValue::from_str(&etag_value).unwrap(),
+            );
+            res.headers_mut().insert(
+                http::header::CACHE_CONTROL,
+                HeaderValue::from_static(cache_control),
+            );
+        } else {
+            // No deployment version - use no-cache as a safe fallback
+            res.headers_mut().insert(
+                http::header::CACHE_CONTROL,
+                HeaderValue::from_static("no-cache"),
+            );
+        }
+    }
+
     /// Static file handler that injects a script tag with environment variables into HTML files.
     /// Also handles cache headers for static files based on deployment version.
     pub async fn serve_files_with_script(
@@ -871,16 +980,7 @@ pub mod axum {
     ) -> Result<Response<UnsyncBoxBody<Bytes, BoxError>>, Infallible> {
         let request_path = req.uri().path().to_string();
         let Some(frontend) = frontend_registry.resolve(&request_path) else {
-            let response = Response::builder()
-                .status(http::StatusCode::NOT_FOUND)
-                .header(http::header::CONTENT_TYPE, "text/plain; charset=utf-8")
-                .body(
-                    http_body_util::Full::from(Bytes::from_static(b"Not Found"))
-                        .map_err(|never| match never {})
-                        .boxed_unsync(),
-                )
-                .unwrap();
-            return Ok(response);
+            return Ok(not_found_response());
         };
 
         let frontend_environment = frontend.environment.clone();
@@ -913,6 +1013,52 @@ pub mod axum {
             stripped_path
         };
         let req = rewrite_request_path(req, &frontend.mount_path);
+        let rewritten_request_path = req.uri().path().to_string();
+
+        if frontend_registry.translation_po_compilation_mode
+            == TranslationPoCompilationMode::JustInTime
+            && let Some(po_path) =
+                translation_po_path_for_messages_json(&bundle_dir_path, &rewritten_request_path)
+        {
+            match frontend_registry
+                .translation_po_cache
+                .compile_messages_json(&po_path)
+            {
+                Ok(body) => {
+                    let cache_control = cache_control_for_path(&request_path);
+                    if let Some(version) = &deployment_version.0 {
+                        let etag_value = format!("\"{}\"", version);
+                        if client_etag_matches(client_etag.as_ref(), &etag_value) {
+                            return Ok(not_modified_response(
+                                etag_value,
+                                cache_control,
+                                content_security_policy.as_ref(),
+                            ));
+                        }
+                    }
+
+                    let mut res = Response::builder()
+                        .status(StatusCode::OK)
+                        .header(http::header::CONTENT_TYPE, "application/json")
+                        .body(full_body(Bytes::from(body)))
+                        .unwrap();
+                    apply_non_html_cache_headers(&mut res, &deployment_version, cache_control);
+                    insert_content_security_policy(
+                        res.headers_mut(),
+                        content_security_policy.as_ref(),
+                    );
+                    return Ok(res);
+                }
+                Err(error) => {
+                    tracing::error!(
+                        po_path = %po_path.display(),
+                        "Failed to compile translation PO catalog just in time: {error}"
+                    );
+                    return Ok(internal_server_error_response());
+                }
+            }
+        }
+
         let rewritten_path = if frontend.fallback_to_404 {
             if let Some(server_config) = load_server_config(frontend.bundle_path.clone()) {
                 let matching_rule = server_config
@@ -994,55 +1140,23 @@ pub mod axum {
         } else {
             // Non-HTML files (theme files, locales, etc.): add cache headers based on deployment version
             let mut res = res.map(|body| body.map_err(Into::into).boxed_unsync());
-            let is_messages_json = is_i18n_messages_json(&request_path);
-            let cache_control = if is_messages_json {
-                "no-cache"
-            } else {
-                "public, max-age=3600, stale-while-revalidate=604800"
-            };
+            let cache_control = cache_control_for_path(&request_path);
 
             if let Some(version) = &deployment_version.0 {
                 // We have a deployment version - use it for cache headers
                 let etag_value = format!("\"{}\"", version);
 
                 // Check if the client's ETag matches our current version
-                if let Some(client_etag) = client_etag
-                    && client_etag.to_str().ok() == Some(&etag_value)
-                {
+                if client_etag_matches(client_etag.as_ref(), &etag_value) {
                     // ETag matches - return 304 Not Modified
-                    let mut response = Response::builder()
-                        .status(http::StatusCode::NOT_MODIFIED)
-                        .header(http::header::ETAG, etag_value)
-                        .header(http::header::CACHE_CONTROL, cache_control)
-                        .body(
-                            http_body_util::Empty::new()
-                                .map_err(|never| match never {})
-                                .boxed_unsync(),
-                        )
-                        .unwrap();
-                    insert_content_security_policy(
-                        response.headers_mut(),
+                    return Ok(not_modified_response(
+                        etag_value,
+                        cache_control,
                         content_security_policy.as_ref(),
-                    );
-                    return Ok(response);
+                    ));
                 }
-
-                // Add cache headers with ETag (1 hour fresh, 1 week stale-while-revalidate)
-                res.headers_mut().insert(
-                    http::header::ETAG,
-                    HeaderValue::from_str(&etag_value).unwrap(),
-                );
-                res.headers_mut().insert(
-                    http::header::CACHE_CONTROL,
-                    HeaderValue::from_static(cache_control),
-                );
-            } else {
-                // No deployment version - use no-cache as a safe fallback
-                res.headers_mut().insert(
-                    http::header::CACHE_CONTROL,
-                    HeaderValue::from_static("no-cache"),
-                );
             }
+            apply_non_html_cache_headers(&mut res, &deployment_version, cache_control);
             insert_content_security_policy(res.headers_mut(), content_security_policy.as_ref());
 
             Ok(res)
@@ -1126,6 +1240,8 @@ mod tests {
                 served_frontend("/office-addin", true),
                 served_frontend("/", true),
             ],
+            translation_po_compilation_mode: TranslationPoCompilationMode::Precompiled,
+            translation_po_cache: Arc::new(TranslationPoCache::default()),
         };
 
         let frontend = registry
@@ -1141,6 +1257,8 @@ mod tests {
                 served_frontend("/office-addin", false),
                 served_frontend("/", true),
             ],
+            translation_po_compilation_mode: TranslationPoCompilationMode::Precompiled,
+            translation_po_cache: Arc::new(TranslationPoCache::default()),
         };
 
         assert!(registry.resolve("/office-addin").is_none());
@@ -1260,5 +1378,36 @@ mod tests {
         ));
         assert!(!is_i18n_messages_json("/assets/app.js"));
         assert!(!is_i18n_messages_json("/public/locales/en/readme.txt"));
+    }
+
+    #[test]
+    fn translation_po_path_maps_messages_json_inside_bundle() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let locale_dir = tempdir.path().join("public/common/locales/de");
+        std::fs::create_dir_all(&locale_dir).expect("locale dir should be created");
+        let po_path = locale_dir.join("messages.po");
+        std::fs::write(&po_path, "").expect("po file should be written");
+
+        assert_eq!(
+            translation_po_path_for_messages_json(
+                tempdir.path(),
+                "/public/common/locales/de/messages.json"
+            ),
+            Some(po_path)
+        );
+        assert_eq!(
+            translation_po_path_for_messages_json(
+                tempdir.path(),
+                "/public/common/locales/de/readme.json"
+            ),
+            None
+        );
+        assert_eq!(
+            translation_po_path_for_messages_json(
+                tempdir.path(),
+                "/public/common/locales/../messages.json"
+            ),
+            None
+        );
     }
 }
