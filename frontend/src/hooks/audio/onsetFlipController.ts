@@ -8,7 +8,7 @@
  * fire-once semantics — lives here.
  */
 
-import { MIN_AUDIO_CAPTURE_DELAY_MS } from "./audioTuning";
+import { MIN_AUDIO_CAPTURE_DELAY_MS, ONSET_TUNING } from "./audioTuning";
 import { createOnsetDetector } from "./onsetDetector";
 
 export type OnsetDiagnostics = {
@@ -35,6 +35,27 @@ export function createSpeechOnsetController(options: {
   const pipelineReadyAt = Date.now();
   let onsetReached = false;
   let flipTimerId: number | null = null;
+  let backstopTimerId: number | null = null;
+
+  const clearBackstop = () => {
+    if (backstopTimerId !== null) {
+      window.clearTimeout(backstopTimerId);
+      backstopTimerId = null;
+    }
+  };
+
+  // Wall-clock backstop (G1): the detector's max-hold is measured in audio
+  // time and only advances while frames arrive, so a capture that stalls
+  // before onset would hang the cue forever. This frame-independent timer
+  // guarantees the cue resolves regardless of frame delivery. It normally
+  // never fires — the audio-time path wins under live frame flow.
+  backstopTimerId = window.setTimeout(() => {
+    backstopTimerId = null;
+    if (!onsetReached) {
+      onsetReached = true;
+      options.onFlip();
+    }
+  }, ONSET_TUNING.wallClockBackstopMs);
 
   return {
     acceptFrame(frame) {
@@ -51,6 +72,8 @@ export function createSpeechOnsetController(options: {
         return;
       }
       onsetReached = true;
+      // Onset reached on its own — the backstop is no longer needed.
+      clearBackstop();
 
       // Honor the MIN_AUDIO_CAPTURE_DELAY_MS floor (ERMAIN-379 invariant):
       // hold the cue at least this long after pipeline-ready so a warm
@@ -69,6 +92,7 @@ export function createSpeechOnsetController(options: {
       }
     },
     dispose() {
+      clearBackstop();
       if (flipTimerId !== null) {
         window.clearTimeout(flipTimerId);
         flipTimerId = null;

@@ -35,8 +35,13 @@ export type AudioEnvironment = {
 
   /**
    * May hand back a stereo MediaStream even when `channelCount: { ideal: 1 }`
-   * is requested with echoCancellation disabled. The worklet down-mixes
-   * mean-of-channels unconditionally, so this is informational/diagnostic.
+   * is requested with echoCancellation disabled.
+   *
+   * DOCUMENTATION-ONLY: this flag has no runtime consumer. The worklet
+   * down-mixes mean-of-channels unconditionally (which is correct on every
+   * engine), so nothing branches on it; it exists to record the WebKit
+   * quirk that motivated the unconditional down-mix. If a future code path
+   * needs to branch on stereo capture, wire it here.
    *
    * Evidence: WebKit raw-capture behaviour, observed 2026-06 (ERMAIN-379
    * Step 2). Remove if WebKit honours the mono constraint with AEC off.
@@ -70,7 +75,11 @@ export function detectBrowserEngine(userAgent: string): BrowserEngine {
   if (ua.includes("firefox") || ua.includes("fxios")) {
     return isIos ? "webkit" : "firefox";
   }
-  if (ua.includes("chrome") || ua.includes("chromium") || ua.includes("crios")) {
+  if (
+    ua.includes("chrome") ||
+    ua.includes("chromium") ||
+    ua.includes("crios")
+  ) {
     return isIos ? "webkit" : "chromium";
   }
   // Any remaining Safari token classifies as WebKit. This also covers
@@ -80,6 +89,11 @@ export function detectBrowserEngine(userAgent: string): BrowserEngine {
   if (ua.includes("safari") || isIos) {
     return "webkit";
   }
+  // Fail open to "unknown" → all capability flags false → treated like
+  // Chromium (no WebKit hardening). A WebKit webview with a stripped custom
+  // UA (no Safari token, no ip(hone|ad|od) token) would miss the hardening,
+  // but every mainstream browser carries one of those tokens and the add-in
+  // already blocks audio on Mac WKWebView, so the practical risk is nil.
   return "unknown";
 }
 

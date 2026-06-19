@@ -107,7 +107,9 @@ export function createOnsetDetector(options: {
     // still let the clock advance so max-hold can fire. Web Audio capture
     // floats are spec'd finite, so this is belt-and-braces.
     if (!Number.isFinite(rms)) {
-      return elapsedMs() >= tuning.maxHoldMs ? ((phase = "fired"), true) : false;
+      return elapsedMs() >= tuning.maxHoldMs
+        ? ((phase = "fired"), true)
+        : false;
     }
     lastRms = Math.max(lastRms, rms);
 

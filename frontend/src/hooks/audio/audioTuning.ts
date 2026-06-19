@@ -75,7 +75,13 @@ export const ONSET_TUNING = {
   /** Lower clamp on epsilon (~−42 dBFS) — never trust a floor below this. */
   epsilonMin: 0.008,
 
-  /** Upper clamp on epsilon (~−34 dBFS) — a very noisy room still flips. */
+  /**
+   * Upper clamp on epsilon (~−34 dBFS) — a very noisy room still flips.
+   * Tradeoff (G6): in a room whose noise floor exceeds ~0.02 RMS, the cue
+   * can early-fire on background noise (epsilon is capped below the floor).
+   * Bounded and no worse than the old Chromium behaviour; revisit only if
+   * UX flags false-positive onsets in loud environments.
+   */
   epsilonMax: 0.02,
 
   /**
@@ -96,8 +102,28 @@ export const ONSET_TUNING = {
    * can never trip on a near-silent input, so without this the spinner
    * would hang forever (UI-only, no data loss, but looks broken). Force
    * the onset flip after this much flowing audio regardless.
+   *
+   * NOTE: this is measured in AUDIO time — it only advances while the
+   * worklet keeps posting frames. If frames stall entirely before onset
+   * (a missed interruption, a stalled/ended track), this never fires; the
+   * wall-clock backstop below is the frame-independent guarantee.
    */
   maxHoldMs: 800,
+
+  /**
+   * Frame-independent wall-clock backstop for the "speak now" cue (G1).
+   * `maxHoldMs` lives in audio time and freezes if frames stop arriving,
+   * so a stalled capture would hang the spinner forever. This timer is
+   * armed once at controller construction and force-flips the cue if
+   * onset still hasn't fired. Set above `maxHoldMs` + first-frame latency
+   * so the normal audio-time path always wins under live frame flow; it
+   * only fires when delivery has genuinely stalled.
+   *
+   * Caveat: this only resolves the *cue*; it cannot tell a dead capture
+   * from a flowing-but-quiet one — that needs track-health handling
+   * (tracked separately as the device-loss follow-up).
+   */
+  wallClockBackstopMs: 1_200,
 } as const;
 
 export type OnsetTuning = typeof ONSET_TUNING;
