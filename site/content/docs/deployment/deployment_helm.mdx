@@ -4,7 +4,7 @@ The primary way to deploy Erato is via the official Helm chart.
 
 ## Repository
 
-It is currently published to the repository `oci://harbor.imassage.me/erato-helm-dev`, and tagged with a fixed `0.1.0` version number followed by the Git commit hash.
+It is currently published to the repository `oci://registry.eratolabs.com/erato-helm-dev`, and tagged with a fixed `0.1.0` version number followed by the Git commit hash.
 A new version is published on every commit to the `main` branch.
 
 > [!WARNING]
@@ -19,7 +19,7 @@ To use as a subchart in a chart of your own, where you override the values in a 
 dependencies:
   - name: erato
     version: "0.1.0-5038d92f711a1aee7cfbeccfde6f17b15c5a9b95"
-    repository: "oci://harbor.imassage.me/erato-helm-dev"
+    repository: "oci://registry.eratolabs.com/erato-helm-dev"
 ```
 
 ## `values.yaml` reference

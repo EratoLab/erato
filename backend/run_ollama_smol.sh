@@ -35,7 +35,7 @@ docker run -d \
   --name erato-ollama-smol \
   --rm \
   -p 12434:11434 \
-  harbor.imassage.me/erato/ollama-smol:47bfa34ad02fd643fc00a794c5fabf74ce94402a
+  registry.eratolabs.com/erato/ollama-smol:47bfa34ad02fd643fc00a794c5fabf74ce94402a
 
 echo "Ollama container is running!"
 echo "API endpoint: http://localhost:12434"

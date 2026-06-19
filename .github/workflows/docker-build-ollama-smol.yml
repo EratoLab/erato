@@ -13,7 +13,7 @@ on:
         default: ''
 
 env:
-  REGISTRY: harbor.imassage.me
+  REGISTRY: registry.eratolabs.com
   OLLAMA_SMOL_IMAGE_NAME: erato/ollama-smol
   SHA_TAG: ${{ inputs.specific_sha != '' && inputs.specific_sha || github.sha }}
 
@@ -31,12 +31,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Log in to Harbor registry
+      - name: Log in to Erato Labs registry
         uses: docker/login-action@v3.6.0
         with:
-          registry: harbor.imassage.me
-          username: ${{ secrets.HARBOR_USERNAME }}
-          password: ${{ secrets.HARBOR_PASSWORD }}
+          registry: registry.eratolabs.com
+          username: ${{ secrets.ERATOLABS_REGISTRY_USERNAME }}
+          password: ${{ secrets.ERATOLABS_REGISTRY_PASSWORD }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -67,12 +67,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Log in to Harbor registry
+      - name: Log in to Erato Labs registry
         uses: docker/login-action@v3.6.0
         with:
-          registry: harbor.imassage.me
-          username: ${{ secrets.HARBOR_USERNAME }}
-          password: ${{ secrets.HARBOR_PASSWORD }}
+          registry: registry.eratolabs.com
+          username: ${{ secrets.ERATOLABS_REGISTRY_USERNAME }}
+          password: ${{ secrets.ERATOLABS_REGISTRY_PASSWORD }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -98,12 +98,12 @@ jobs:
         id: current-time
         run: echo "DATETIME=$(date +'%Y-%m-%d-%H-%M')" >> $GITHUB_OUTPUT
 
-      - name: Log in to Harbor registry
+      - name: Log in to Erato Labs registry
         uses: docker/login-action@v3.6.0
         with:
-          registry: harbor.imassage.me
-          username: ${{ secrets.HARBOR_USERNAME }}
-          password: ${{ secrets.HARBOR_PASSWORD }}
+          registry: registry.eratolabs.com
+          username: ${{ secrets.ERATOLABS_REGISTRY_USERNAME }}
+          password: ${{ secrets.ERATOLABS_REGISTRY_PASSWORD }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

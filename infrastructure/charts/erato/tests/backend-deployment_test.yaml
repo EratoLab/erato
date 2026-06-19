@@ -28,7 +28,7 @@ tests:
           value: erato-backend
       - equal:
           path: spec.template.spec.containers[0].image
-          value: harbor.imassage.me/erato/app:0.2.99
+          value: registry.eratolabs.com/erato/app:0.2.99
       - equal:
           path: spec.template.spec.containers[0].ports[0].containerPort
           value: 3130

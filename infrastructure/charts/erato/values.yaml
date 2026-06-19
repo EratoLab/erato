@@ -44,7 +44,7 @@ oauth2Proxy:
   enabled: true
   image:
     # -- OAuth2 Proxy image repository
-    repository: harbor.imassage.me/erato/oauth2-proxy
+    repository: registry.eratolabs.com/erato/oauth2-proxy
     # -- OAuth2 Proxy image tag
     tag: v7.15.2-erato.3
     # -- OAuth2 Proxy image pull policy
@@ -174,7 +174,7 @@ oauth2Proxy:
 backend:
   image:
     # -- Backend image repository
-    repository: harbor.imassage.me/erato/app
+    repository: registry.eratolabs.com/erato/app
     # -- Backend image tag (immutable tags are recommended)
     tag: ""
     # -- Backend image pull policy

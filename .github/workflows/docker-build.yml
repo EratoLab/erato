@@ -38,7 +38,7 @@ on:
       - '**/Dockerfile.*'
 
 env:
-  REGISTRY: harbor.imassage.me
+  REGISTRY: registry.eratolabs.com
   BACKEND_IMAGE_NAME: erato/backend
   MOCK_LLM_SERVER_IMAGE_NAME: erato/mock-llm-server
   MOCK_MCP_SERVER_IMAGE_NAME: erato/mock-mcp-server
@@ -438,12 +438,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Log in to Harbor registry
+      - name: Log in to Erato Labs registry
         uses: docker/login-action@v3.6.0
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.HARBOR_USERNAME }}
-          password: ${{ secrets.HARBOR_PASSWORD }}
+          username: ${{ secrets.ERATOLABS_REGISTRY_USERNAME }}
+          password: ${{ secrets.ERATOLABS_REGISTRY_PASSWORD }}
 
       - name: Install k3d
         run: curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
@@ -552,12 +552,12 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Log in to Harbor registry
+      - name: Log in to Erato Labs registry
         uses: docker/login-action@v3.6.0
         with:
-          registry: harbor.imassage.me
-          username: ${{ secrets.HARBOR_USERNAME }}
-          password: ${{ secrets.HARBOR_PASSWORD }}
+          registry: registry.eratolabs.com
+          username: ${{ secrets.ERATOLABS_REGISTRY_USERNAME }}
+          password: ${{ secrets.ERATOLABS_REGISTRY_PASSWORD }}
       - name: "Package and push Helm chart"
         run: ./infrastructure/scripts/release_erato_chart_dev.sh --git-sha=${{ env.SHA_TAG }}
 
@@ -570,12 +570,12 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Log in to Harbor registry
+      - name: Log in to Erato Labs registry
         uses: docker/login-action@v3.6.0
         with:
-          registry: harbor.imassage.me
-          username: ${{ secrets.HARBOR_USERNAME }}
-          password: ${{ secrets.HARBOR_PASSWORD }}
+          registry: registry.eratolabs.com
+          username: ${{ secrets.ERATOLABS_REGISTRY_USERNAME }}
+          password: ${{ secrets.ERATOLABS_REGISTRY_PASSWORD }}
       - name: "Package and push Helm chart"
         run: ./infrastructure/scripts/release_erato_chart_dev.sh --release
 
@@ -588,12 +588,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Log in to Harbor registry
+      - name: Log in to Erato Labs registry
         uses: docker/login-action@v3.6.0
         with:
-          registry: harbor.imassage.me
-          username: ${{ secrets.HARBOR_USERNAME }}
-          password: ${{ secrets.HARBOR_PASSWORD }}
+          registry: registry.eratolabs.com
+          username: ${{ secrets.ERATOLABS_REGISTRY_USERNAME }}
+          password: ${{ secrets.ERATOLABS_REGISTRY_PASSWORD }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -652,12 +652,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Log in to Harbor registry
+      - name: Log in to Erato Labs registry
         uses: docker/login-action@v3.6.0
         with:
-          registry: harbor.imassage.me
-          username: ${{ secrets.HARBOR_USERNAME }}
-          password: ${{ secrets.HARBOR_PASSWORD }}
+          registry: registry.eratolabs.com
+          username: ${{ secrets.ERATOLABS_REGISTRY_USERNAME }}
+          password: ${{ secrets.ERATOLABS_REGISTRY_PASSWORD }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -716,12 +716,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Log in to Harbor registry
+      - name: Log in to Erato Labs registry
         uses: docker/login-action@v3.6.0
         with:
-          registry: harbor.imassage.me
-          username: ${{ secrets.HARBOR_USERNAME }}
-          password: ${{ secrets.HARBOR_PASSWORD }}
+          registry: registry.eratolabs.com
+          username: ${{ secrets.ERATOLABS_REGISTRY_USERNAME }}
+          password: ${{ secrets.ERATOLABS_REGISTRY_PASSWORD }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -749,12 +749,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Log in to Harbor registry
+      - name: Log in to Erato Labs registry
         uses: docker/login-action@v3.6.0
         with:
-          registry: harbor.imassage.me
-          username: ${{ secrets.HARBOR_USERNAME }}
-          password: ${{ secrets.HARBOR_PASSWORD }}
+          registry: registry.eratolabs.com
+          username: ${{ secrets.ERATOLABS_REGISTRY_USERNAME }}
+          password: ${{ secrets.ERATOLABS_REGISTRY_PASSWORD }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -796,12 +796,12 @@ jobs:
     needs: [build-and-push-amd64, build-and-push-arm64]
     runs-on: ubuntu-24.04 # blacksmith-4vcpu-ubuntu-2404
     steps:
-      - name: Log in to Harbor registry
+      - name: Log in to Erato Labs registry
         uses: docker/login-action@v3.6.0
         with:
-          registry: harbor.imassage.me
-          username: ${{ secrets.HARBOR_USERNAME }}
-          password: ${{ secrets.HARBOR_PASSWORD }}
+          registry: registry.eratolabs.com
+          username: ${{ secrets.ERATOLABS_REGISTRY_USERNAME }}
+          password: ${{ secrets.ERATOLABS_REGISTRY_PASSWORD }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -856,12 +856,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Log in to Harbor registry
+      - name: Log in to Erato Labs registry
         uses: docker/login-action@v3.6.0
         with:
-          registry: harbor.imassage.me
-          username: ${{ secrets.HARBOR_USERNAME }}
-          password: ${{ secrets.HARBOR_PASSWORD }}
+          registry: registry.eratolabs.com
+          username: ${{ secrets.ERATOLABS_REGISTRY_USERNAME }}
+          password: ${{ secrets.ERATOLABS_REGISTRY_PASSWORD }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -889,12 +889,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Log in to Harbor registry
+      - name: Log in to Erato Labs registry
         uses: docker/login-action@v3.6.0
         with:
-          registry: harbor.imassage.me
-          username: ${{ secrets.HARBOR_USERNAME }}
-          password: ${{ secrets.HARBOR_PASSWORD }}
+          registry: registry.eratolabs.com
+          username: ${{ secrets.ERATOLABS_REGISTRY_USERNAME }}
+          password: ${{ secrets.ERATOLABS_REGISTRY_PASSWORD }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -917,12 +917,12 @@ jobs:
     needs: [build-and-push-mock-llm-server-amd64, build-and-push-mock-llm-server-arm64]
     runs-on: ubuntu-24.04 # blacksmith-4vcpu-ubuntu-2404
     steps:
-      - name: Log in to Harbor registry
+      - name: Log in to Erato Labs registry
         uses: docker/login-action@v3.6.0
         with:
-          registry: harbor.imassage.me
-          username: ${{ secrets.HARBOR_USERNAME }}
-          password: ${{ secrets.HARBOR_PASSWORD }}
+          registry: registry.eratolabs.com
+          username: ${{ secrets.ERATOLABS_REGISTRY_USERNAME }}
+          password: ${{ secrets.ERATOLABS_REGISTRY_PASSWORD }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -950,12 +950,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Log in to Harbor registry
+      - name: Log in to Erato Labs registry
         uses: docker/login-action@v3.6.0
         with:
-          registry: harbor.imassage.me
-          username: ${{ secrets.HARBOR_USERNAME }}
-          password: ${{ secrets.HARBOR_PASSWORD }}
+          registry: registry.eratolabs.com
+          username: ${{ secrets.ERATOLABS_REGISTRY_USERNAME }}
+          password: ${{ secrets.ERATOLABS_REGISTRY_PASSWORD }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -983,12 +983,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Log in to Harbor registry
+      - name: Log in to Erato Labs registry
         uses: docker/login-action@v3.6.0
         with:
-          registry: harbor.imassage.me
-          username: ${{ secrets.HARBOR_USERNAME }}
-          password: ${{ secrets.HARBOR_PASSWORD }}
+          registry: registry.eratolabs.com
+          username: ${{ secrets.ERATOLABS_REGISTRY_USERNAME }}
+          password: ${{ secrets.ERATOLABS_REGISTRY_PASSWORD }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -1011,12 +1011,12 @@ jobs:
     needs: [build-and-push-mock-mcp-server-amd64, build-and-push-mock-mcp-server-arm64]
     runs-on: ubuntu-24.04 # blacksmith-4vcpu-ubuntu-2404
     steps:
-      - name: Log in to Harbor registry
+      - name: Log in to Erato Labs registry
         uses: docker/login-action@v3.6.0
         with:
-          registry: harbor.imassage.me
-          username: ${{ secrets.HARBOR_USERNAME }}
-          password: ${{ secrets.HARBOR_PASSWORD }}
+          registry: registry.eratolabs.com
+          username: ${{ secrets.ERATOLABS_REGISTRY_USERNAME }}
+          password: ${{ secrets.ERATOLABS_REGISTRY_PASSWORD }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

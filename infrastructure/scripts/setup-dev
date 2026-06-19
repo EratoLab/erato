@@ -23,7 +23,7 @@ from k3d_common import get_helm_scenario_args, validate_scenario, VALID_SCENARIO
 class ScriptConfig(BaseModel):
     """Configuration for the setup script."""
     wait_flag: str = ""
-    erato_image_repository: str = "harbor.imassage.me/erato/app"
+    erato_image_repository: str = "registry.eratolabs.com/erato/app"
     erato_image_tag: Optional[str] = None
     mock_llm_server_image_tag: Optional[str] = None
     mock_mcp_server_image_tag: Optional[str] = None
@@ -54,7 +54,7 @@ class BuildConfig(BaseModel):
     """Configuration for local image build."""
     project_root: Path
     build_tag: str
-    local_registry: str = "harbor.imassage.me"
+    local_registry: str = "registry.eratolabs.com"
     frontend_image_name: str = "erato/frontend"
     repo_base: str
     tag_base: str
@@ -328,7 +328,7 @@ def perform_local_build(config: ScriptConfig) -> list[str]:
     project_root = Path(__file__).resolve().parent.parent.parent
     build_tag = str(int(datetime.now().timestamp()))
     
-    repo_base = config.erato_image_repository or "harbor.imassage.me/erato/app"
+    repo_base = config.erato_image_repository or "registry.eratolabs.com/erato/app"
     tag_base = config.erato_image_tag or "latest"
     
     backend_image_repo = repo_base.replace("/app", "/backend")
@@ -345,7 +345,7 @@ def perform_local_build(config: ScriptConfig) -> list[str]:
         backend_image_repo=backend_image_repo,
         base_backend_image=base_backend_image,
         combined_image_path=combined_image_path,
-        local_frontend_image=f"harbor.imassage.me/erato/frontend:{build_tag}",
+        local_frontend_image=f"registry.eratolabs.com/erato/frontend:{build_tag}",
         local_combined_image=f"k3d-registry.localhost:5000/{combined_image_path}:{build_tag}",
         backend_image_for_build_arg="/".join(base_backend_image.split("/")[1:])
     )
@@ -569,8 +569,8 @@ def main():
     )
     parser.add_argument(
         "--erato-image-repository",
-        default="harbor.imassage.me/erato/app",
-        help="Erato image repository (default: harbor.imassage.me/erato/app)"
+        default="registry.eratolabs.com/erato/app",
+        help="Erato image repository (default: registry.eratolabs.com/erato/app)"
     )
     parser.add_argument(
         "--erato-image-tag",

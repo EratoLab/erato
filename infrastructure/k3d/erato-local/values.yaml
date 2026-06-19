@@ -36,7 +36,7 @@ erato:
 
   backend:
     image:
-      repository: harbor.imassage.me/erato/app
+      repository: registry.eratolabs.com/erato/app
       tag: "adff59a50e3b78d0221a8a5bbb818a249fffb45a"
       pullPolicy: Always
     metrics:
@@ -116,7 +116,7 @@ erato:
 mockLlmServer:
   enabled: true
   image:
-    repository: harbor.imassage.me/erato/mock-llm-server
+    repository: registry.eratolabs.com/erato/mock-llm-server
     tag: "adff59a50e3b78d0221a8a5bbb818a249fffb45a"
     pullPolicy: Always
   service:
@@ -133,7 +133,7 @@ mockLlmServer:
 mockMcpServer:
   enabled: true
   image:
-    repository: harbor.imassage.me/erato/mock-mcp-server
+    repository: registry.eratolabs.com/erato/mock-mcp-server
     tag: "adff59a50e3b78d0221a8a5bbb818a249fffb45a"
     pullPolicy: Always
   service:

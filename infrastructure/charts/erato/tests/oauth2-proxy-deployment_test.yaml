@@ -28,7 +28,7 @@ tests:
           value: oauth2-proxy
       - equal:
           path: spec.template.spec.containers[0].image
-          value: harbor.imassage.me/erato/oauth2-proxy:v7.15.2-erato.3
+          value: registry.eratolabs.com/erato/oauth2-proxy:v7.15.2-erato.3
 
   - it: should not render when oauth2Proxy is disabled
     set:
