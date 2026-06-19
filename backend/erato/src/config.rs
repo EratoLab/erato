@@ -2038,6 +2038,12 @@ pub struct FrontendConfig {
     #[serde(default = "default_web_frontend_bundle_path")]
     pub web_frontend_bundle_path: String,
 
+    // How translation `.po` catalogs should be made available as compiled
+    // Lingui `.json` catalogs.
+    // Defaults to `precompiled`.
+    #[serde(default)]
+    pub translation_po_compilation_mode: TranslationPoCompilationMode,
+
     // The name of a theme to use for the frontend.
     // Themes can be placed in `frontend/public/custom-theme/<THEME_NAME>` directories
     // and are served from `/public/common/custom-theme/<THEME_NAME>`.
@@ -2132,6 +2138,16 @@ pub struct FrontendConfig {
     // Defaults to `false`.
     #[serde(default)]
     pub allow_any_frame_ancestor: bool,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
+#[serde(rename_all = "snake_case")]
+#[facet(rename_all = "snake_case")]
+#[repr(C)]
+pub enum TranslationPoCompilationMode {
+    #[default]
+    Precompiled,
+    JustInTime,
 }
 
 fn default_component_kits_directory() -> String {

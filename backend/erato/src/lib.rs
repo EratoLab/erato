@@ -24,6 +24,7 @@ pub mod services;
 pub mod startup_log;
 pub mod state;
 pub mod telemetry;
+pub mod translation_po;
 
 #[cfg(all(feature = "profiling", not(target_os = "linux")))]
 compile_error!("The `profiling` feature is only supported on Linux.");

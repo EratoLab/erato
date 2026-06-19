@@ -314,6 +314,7 @@
   "frontend.sidebar_logo_dark_path": {},
   "frontend.sidebar_logo_path": {},
   "frontend.theme": {},
+  "frontend.translation_po_compilation_mode": {},
   "frontend.web_frontend_bundle_path": {},
   "frontend_bundle_path": {
     "hide_in_docs": true,

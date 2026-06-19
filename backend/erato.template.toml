@@ -163,6 +163,10 @@ chat_provider_ids = ["test-token-limit"]
 
 # Frontend configuration options for embedded scenarios
 # [frontend]
+# # Translation catalog compilation mode: "precompiled" (default) serves existing
+# # messages.json files, "just_in_time" compiles sibling messages.po files on
+# # demand and caches the result for the server lifetime.
+# translation_po_compilation_mode = "precompiled"
 # # Whether to disable file upload functionality in the UI (default: false)
 # disable_upload = true
 # # Whether to disable automatic focusing of the chat input field (default: false)
