@@ -52,6 +52,9 @@ spec:
                 name: {{ .Values.backend.extraEnvVarsSecret }}
             {{- end }}
           {{- end }}
+        {{- if .Values.backend.extraInitContainers }}
+        {{- include "common.tplvalues.render" (dict "value" .Values.backend.extraInitContainers "context" $) | nindent 8 }}
+        {{- end }}
       containers:
         - name: erato-backend
           image: {{ include "common.images.image" ( dict "imageRoot" .Values.backend.image "global" .Values.global "chart" .Chart ) }}

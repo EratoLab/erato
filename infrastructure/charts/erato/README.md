@@ -135,6 +135,78 @@ backend:
         setting = "value"
 ```
 
+### Component Kits
+
+Component kits can be mounted into the backend container under `/app/component-kits/<name>`.
+Erato discovers component kits from `/app/component-kits`.
+
+For Kubernetes 1.36 and newer, use an `image` volume to mount the component-kit OCI image directly:
+
+```yaml
+backend:
+  extraVolumes:
+    - name: component-kit-example
+      image:
+        reference: registry.example.com/erato/component-kit-example:v1
+        pullPolicy: IfNotPresent
+  extraVolumeMounts:
+    - name: component-kit-example
+      mountPath: /app/component-kits/example
+      subPath: app/component-kits/example
+      readOnly: true
+```
+
+For older Kubernetes versions, use an init container to copy the component kit into an `emptyDir`.
+The component-kit image used as the init container must include a shell and copy utility, such as `sh` and `cp`.
+
+```yaml
+backend:
+  extraInitContainers:
+    - name: copy-component-kit-example
+      image: registry.example.com/erato/component-kit-example:v1
+      command:
+        - /bin/sh
+        - -c
+      args:
+        - cp -a /app/component-kits/example/. /component-kit/
+      volumeMounts:
+        - name: component-kit-example
+          mountPath: /component-kit
+  extraVolumes:
+    - name: component-kit-example
+      emptyDir: {}
+  extraVolumeMounts:
+    - name: component-kit-example
+      mountPath: /app/component-kits/example
+      readOnly: true
+```
+
+The same patterns are available for oauth2-proxy assets, such as future theme bundles, by using
+`oauth2Proxy.extraVolumes`, `oauth2Proxy.extraVolumeMounts`, and `oauth2Proxy.extraInitContainers`.
+For example, the older-cluster copy pattern can prepare a theme volume before oauth2-proxy starts:
+
+```yaml
+oauth2Proxy:
+  extraInitContainers:
+    - name: copy-oauth2-proxy-theme
+      image: registry.example.com/erato/oauth2-proxy-theme:v1
+      command:
+        - /bin/sh
+        - -c
+      args:
+        - cp -a /theme/. /oauth2-proxy-theme/
+      volumeMounts:
+        - name: oauth2-proxy-theme
+          mountPath: /oauth2-proxy-theme
+  extraVolumes:
+    - name: oauth2-proxy-theme
+      emptyDir: {}
+  extraVolumeMounts:
+    - name: oauth2-proxy-theme
+      mountPath: /etc/oauth2-proxy/theme
+      readOnly: true
+```
+
 ### OAuth2 Proxy
 
 The chart includes an optional OAuth2 Proxy for authentication. To enable it:
@@ -186,6 +258,7 @@ ingress:
 | backend.extraEnvVars | list | `[]` | Array with extra environment variables to add to backend |
 | backend.extraEnvVarsCM | string | `""` | Name of existing ConfigMap containing extra env vars for backend |
 | backend.extraEnvVarsSecret | string | `""` | Name of existing Secret containing extra env vars for backend |
+| backend.extraInitContainers | list | `[]` | Optionally specify extra init containers for the backend pod |
 | backend.extraVolumeMounts | list | `[]` | Optionally specify extra list of additional volumeMounts for the backend container |
 | backend.extraVolumes | list | `[]` | Optionally specify extra list of additional volumes for the backend pod |
 | backend.image.pullPolicy | string | `"IfNotPresent"` | Backend image pull policy |
@@ -241,6 +314,7 @@ ingress:
 | oauth2Proxy.extraEnvVars | list | `[]` | Array with extra environment variables to add to oauth2-proxy |
 | oauth2Proxy.extraEnvVarsCM | string | `""` | Name of existing ConfigMap containing extra env vars for oauth2-proxy |
 | oauth2Proxy.extraEnvVarsSecret | string | `""` | Name of existing Secret containing extra env vars for oauth2-proxy |
+| oauth2Proxy.extraInitContainers | list | `[]` | Optionally specify extra init containers for the oauth2-proxy pod |
 | oauth2Proxy.extraVolumeMounts | list | `[]` | Optionally specify extra list of additional volumeMounts for the oauth2-proxy container |
 | oauth2Proxy.extraVolumes | list | `[]` | Optionally specify extra list of additional volumes for the oauth2-proxy pod |
 | oauth2Proxy.image.pullPolicy | string | `"IfNotPresent"` | OAuth2 Proxy image pull policy |

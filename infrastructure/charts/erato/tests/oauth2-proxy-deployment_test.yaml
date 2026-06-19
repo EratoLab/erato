@@ -203,6 +203,52 @@ tests:
             mountPath: /etc/secrets
             readOnly: true
 
+  - it: should support extraInitContainers for preparing extra volumes
+    set:
+      oauth2Proxy.extraInitContainers:
+        - name: copy-oauth2-proxy-theme
+          image: registry.example.com/oauth2-proxy-theme:v1
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - cp -a /theme/. /oauth2-proxy-theme/
+          volumeMounts:
+            - name: oauth2-proxy-theme
+              mountPath: /oauth2-proxy-theme
+      oauth2Proxy.extraVolumes:
+        - name: oauth2-proxy-theme
+          emptyDir: {}
+      oauth2Proxy.extraVolumeMounts:
+        - name: oauth2-proxy-theme
+          mountPath: /etc/oauth2-proxy/theme
+          readOnly: true
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers
+          content:
+            name: copy-oauth2-proxy-theme
+            image: registry.example.com/oauth2-proxy-theme:v1
+            command:
+              - /bin/sh
+              - -c
+            args:
+              - cp -a /theme/. /oauth2-proxy-theme/
+            volumeMounts:
+              - name: oauth2-proxy-theme
+                mountPath: /oauth2-proxy-theme
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: oauth2-proxy-theme
+            emptyDir: {}
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: oauth2-proxy-theme
+            mountPath: /etc/oauth2-proxy/theme
+            readOnly: true
+
   - it: should support extraVolumeMounts without extraVolumes
     set:
       oauth2Proxy.extraVolumeMounts:
