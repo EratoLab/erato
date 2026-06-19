@@ -611,11 +611,11 @@ impl LangfuseClient {
             "Retrieving prompt from Langfuse"
         );
 
-        let mut url = reqwest::Url::parse(&format!(
-            "{}/api/public/v2/prompts/{}",
-            self.base_url, prompt_name
-        ))
-        .map_err(|e| eyre!("Failed to build Langfuse prompt URL: {}", e))?;
+        let mut url = reqwest::Url::parse(&format!("{}/api/public/v2/prompts", self.base_url))
+            .map_err(|e| eyre!("Failed to build Langfuse prompt URL: {}", e))?;
+        url.path_segments_mut()
+            .map_err(|_| eyre!("Failed to build Langfuse prompt URL: base URL cannot be a base"))?
+            .push(prompt_name);
         if let Some(label) = label {
             url.query_pairs_mut().append_pair("label", label);
         }
@@ -1668,16 +1668,20 @@ impl TracingLangfuseClient {
 mod tests {
     use super::*;
     use crate::config::LangfuseConfig;
+    use axum::Json;
+    use axum::Router;
     use axum::body::Bytes;
     use axum::extract::State;
     use axum::http::{HeaderMap, Uri};
-    use axum::{Router, routing::post};
+    use axum::response::IntoResponse;
+    use axum::routing::{get, post};
     use serde_json::json;
     use tokio::sync::mpsc;
 
     #[derive(Debug)]
     struct RecordedRequest {
         path: String,
+        query: Option<String>,
         headers: HeaderMap,
         body: Bytes,
     }
@@ -1691,6 +1695,7 @@ mod tests {
         sender
             .send(RecordedRequest {
                 path: uri.path().to_string(),
+                query: uri.query().map(ToString::to_string),
                 headers,
                 body,
             })
@@ -1699,11 +1704,44 @@ mod tests {
         "{}"
     }
 
+    async fn record_prompt_request(
+        State(sender): State<mpsc::Sender<RecordedRequest>>,
+        uri: Uri,
+        headers: HeaderMap,
+        body: Bytes,
+    ) -> impl IntoResponse {
+        sender
+            .send(RecordedRequest {
+                path: uri.path().to_string(),
+                query: uri.query().map(ToString::to_string),
+                headers,
+                body,
+            })
+            .await
+            .unwrap();
+
+        Json(json!({
+            "id": "prompt-1",
+            "name": "some_folder/some_prompt",
+            "version": 1,
+            "prompt": "Folder prompt content",
+            "type": "text",
+            "labels": ["production"],
+            "tags": [],
+            "createdAt": "2026-06-19T00:00:00.000Z",
+            "updatedAt": "2026-06-19T00:00:00.000Z"
+        }))
+    }
+
     async fn mock_langfuse_server() -> (String, mpsc::Receiver<RecordedRequest>) {
         let (sender, receiver) = mpsc::channel(8);
         let app = Router::new()
             .route("/api/public/ingestion", post(record_request))
             .route("/api/public/otel/v1/traces", post(record_request))
+            .route(
+                "/api/public/v2/prompts/{*prompt_name}",
+                get(record_prompt_request),
+            )
             .with_state(sender);
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
@@ -1803,6 +1841,28 @@ mod tests {
             headers.get("authorization").unwrap(),
             "Basic cGstbGYtdGVzdDpzay1sZi10ZXN0"
         );
+    }
+
+    #[tokio::test]
+    async fn encodes_folder_prompt_names_as_single_path_segment() {
+        let (base_url, mut receiver) = mock_langfuse_server().await;
+        let client = LangfuseClient::from_config(&enabled_config(base_url, false), None).unwrap();
+
+        let prompt = client
+            .get_prompt_with_label("some_folder/some_prompt", Some("production"))
+            .await
+            .unwrap()
+            .unwrap();
+
+        let request = receiver.recv().await.unwrap();
+        assert_eq!(
+            request.path,
+            "/api/public/v2/prompts/some_folder%2Fsome_prompt"
+        );
+        assert_eq!(request.query.as_deref(), Some("label=production"));
+        assert_basic_auth(&request.headers);
+        assert_eq!(prompt.name, "some_folder/some_prompt");
+        assert_eq!(prompt.prompt, json!("Folder prompt content"));
     }
 
     fn otel_attr<'a>(body: &'a serde_json::Value, key: &str) -> Option<&'a serde_json::Value> {
