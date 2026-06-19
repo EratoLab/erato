@@ -277,6 +277,7 @@ msgstr "Zum Hochladen ablegen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/pages/SearchPage.tsx
 msgid "chat.history.menu.rename"
 msgstr "Umbenennen"
 
@@ -293,6 +294,7 @@ msgstr "Chat umbenennen"
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
 #: src/components/ui/Chat/EditChatTitleDialog.tsx
+#: src/pages/SearchPage.tsx
 msgid "chat.history.rename.generated.fallback"
 msgstr "Unbenannter Chat"
 
@@ -459,6 +461,7 @@ msgstr "Dieser Entwurf ist zu lang, damit die KI ihn verarbeiten kann ({actualKb
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/pages/SearchPage.tsx
 msgid "chat.share.button"
 msgstr "Teilen"
 
@@ -1759,6 +1762,7 @@ msgid "Are you sure you want to proceed?"
 msgstr "Möchten Sie wirklich fortfahren?"
 
 #: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/pages/SearchPage.tsx
 msgid "Are you sure you want to remove this chat?"
 msgstr "Möchten Sie diesen Chat wirklich entfernen?"
 
@@ -2046,6 +2050,7 @@ msgid "Confirm Archive"
 msgstr "Archivierung bestätigen"
 
 #: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/pages/SearchPage.tsx
 msgid "Confirm Removal"
 msgstr "Entfernung bestätigen"
 
@@ -2429,9 +2434,11 @@ msgstr ""
 msgid "Loading file..."
 msgstr ""
 
+#: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/components/ui/Chat/ModelSelector.tsx
 #: src/components/ui/Feedback/SpinnerIcon.tsx
 #: src/components/ui/Message/LoadMoreButton.tsx
+#: src/pages/SearchPage.tsx
 msgid "Loading..."
 msgstr "Laden..."
 
@@ -2629,6 +2636,7 @@ msgstr "Verbleibender Kontext: {remainingContextPercentage}%"
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/components/ui/FileUpload/FilePreviewBase.tsx
 #: src/components/ui/FileUpload/FilePreviewButton.tsx
+#: src/pages/SearchPage.tsx
 msgid "Remove"
 msgstr "Entfernen"
 

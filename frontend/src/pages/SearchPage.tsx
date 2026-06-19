@@ -5,16 +5,29 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDebounce } from "use-debounce";
 
+import { ChatShareDialog } from "@/components/ui/Chat/ChatShareDialog";
+import { EditChatTitleDialog } from "@/components/ui/Chat/EditChatTitleDialog";
 import { PageHeader } from "@/components/ui/Container/PageHeader";
+import { DropdownMenu } from "@/components/ui/Controls/DropdownMenu";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
-import { SearchIcon, CloseIcon } from "@/components/ui/icons";
+import {
+  SearchIcon,
+  CloseIcon,
+  LogOutIcon,
+  MultiplePagesIcon,
+  ShareIcon,
+} from "@/components/ui/icons";
 import { usePageAlignment } from "@/hooks/ui";
 import {
   fetchRecentChats,
   recentChatsQuery,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext";
-import { useChatInputFeature } from "@/providers/FeatureConfigProvider";
+import { useChatContext } from "@/providers/ChatProvider";
+import {
+  useChatInputFeature,
+  useChatSharingFeature,
+} from "@/providers/FeatureConfigProvider";
 import { getChatUrl } from "@/utils/chat/urlUtils";
 import { createLogger } from "@/utils/debugLogger";
 
@@ -26,6 +39,9 @@ interface SearchResult {
   chatId: string;
   assistantId?: string;
   chatTitle: string;
+  titleBySummary?: string | null;
+  titleByUserProvided?: string | null;
+  canEdit: boolean;
   messageContent: string;
   timestamp: string;
   context?: string;
@@ -33,12 +49,21 @@ interface SearchResult {
 
 export default function SearchPage() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [titleDialogChatId, setTitleDialogChatId] = useState<string | null>(
+    null,
+  );
+  const [shareDialogChatId, setShareDialogChatId] = useState<string | null>(
+    null,
+  );
+  const [isUpdatingChatTitle, setIsUpdatingChatTitle] = useState(false);
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
   const { fetcherOptions } = useV1betaApiContext();
+  const { archiveChat, updateChatTitle, refetchHistory } = useChatContext();
 
   // Get feature configurations
   const { autofocus: shouldAutofocus } = useChatInputFeature();
+  const { enabled: chatSharingEnabled } = useChatSharingFeature();
 
   // Get alignment configuration for content
   const {
@@ -58,6 +83,7 @@ export default function SearchPage() {
     isFetchingNextPage,
     hasNextPage,
     fetchNextPage,
+    refetch: refetchSearchResults,
     error: searchError,
   } = useInfiniteQuery({
     queryKey: [
@@ -109,6 +135,9 @@ export default function SearchPage() {
           chatId: chat.id,
           assistantId: chat.assistant_id,
           chatTitle: chat.title_resolved,
+          titleBySummary: chat.title_by_summary,
+          titleByUserProvided: chat.title_by_user_provided,
+          canEdit: chat.can_edit,
           messageContent: chat.title_resolved,
           timestamp: chat.last_message_at,
         }),
@@ -134,7 +163,7 @@ export default function SearchPage() {
           void fetchNextPage();
         }
       },
-      { rootMargin: "240px" },
+      { rootMargin: "240px" }, // eslint-disable-line lingui/no-unlocalized-strings -- IntersectionObserver CSS length, not user-facing text
     );
 
     observer.observe(sentinel);
@@ -154,9 +183,41 @@ export default function SearchPage() {
     navigate(getChatUrl(result.chatId, result.assistantId));
   };
 
+  const activeTitleDialogResult =
+    searchResults.find((result) => result.chatId === titleDialogChatId) ?? null;
+
+  const handleArchiveResult = async (chatId: string) => {
+    await archiveChat(chatId);
+    await Promise.all([refetchHistory(), refetchSearchResults()]);
+  };
+
+  const handleSubmitEditTitleDialog = async (title: string) => {
+    if (!titleDialogChatId) {
+      return;
+    }
+
+    try {
+      setIsUpdatingChatTitle(true);
+      await updateChatTitle(titleDialogChatId, title);
+      await Promise.all([refetchHistory(), refetchSearchResults()]);
+      setTitleDialogChatId(null);
+    } finally {
+      setIsUpdatingChatTitle(false);
+    }
+  };
+
+  const handleCloseEditTitleDialog = () => {
+    if (isUpdatingChatTitle) {
+      return;
+    }
+    setTitleDialogChatId(null);
+  };
+
   const totalResultsCount =
     recentChatsPages?.pages[0]?.stats.total_count ?? searchResults.length;
-  const resultsCount = isShowingRecent ? searchResults.length : totalResultsCount;
+  const resultsCount = isShowingRecent
+    ? searchResults.length
+    : totalResultsCount;
   const showInitialLoading = isLoading && searchResults.length === 0;
 
   return (
@@ -251,6 +312,9 @@ export default function SearchPage() {
                       if (e.metaKey || e.ctrlKey) {
                         return;
                       }
+                      if (e.defaultPrevented) {
+                        return;
+                      }
                       // Prevent default navigation for normal clicks
                       e.preventDefault();
                       handleResultClick(result);
@@ -265,6 +329,53 @@ export default function SearchPage() {
                       <div className="shrink-0 text-xs text-theme-fg-muted">
                         <MessageTimestamp
                           createdAt={new Date(result.timestamp)}
+                        />
+                      </div>
+                      {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent anchor navigation from menu clicks */}
+                      <div
+                        className="shrink-0"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                      >
+                        <DropdownMenu
+                          items={[
+                            ...(chatSharingEnabled
+                              ? [
+                                  {
+                                    label: t({
+                                      id: "chat.share.button",
+                                      message: "Share",
+                                    }),
+                                    icon: <ShareIcon className="size-4" />,
+                                    onClick: () =>
+                                      setShareDialogChatId(result.chatId),
+                                    disabled: !result.canEdit,
+                                  },
+                                ]
+                              : []),
+                            {
+                              label: t({
+                                id: "chat.history.menu.rename",
+                                message: "Rename",
+                              }),
+                              icon: <MultiplePagesIcon className="size-4" />,
+                              onClick: () =>
+                                setTitleDialogChatId(result.chatId),
+                              disabled: !result.canEdit,
+                            },
+                            {
+                              label: t`Remove`,
+                              icon: <LogOutIcon className="size-4" />,
+                              onClick: () => {
+                                void handleArchiveResult(result.chatId);
+                              },
+                              confirmAction: true,
+                              confirmTitle: t`Confirm Removal`,
+                              confirmMessage: t`Are you sure you want to remove this chat?`,
+                            },
+                          ]}
                         />
                       </div>
                     </div>
@@ -288,6 +399,29 @@ export default function SearchPage() {
           )}
         </div>
       </div>
+
+      <EditChatTitleDialog
+        isOpen={titleDialogChatId !== null && activeTitleDialogResult !== null}
+        generatedTitle={
+          activeTitleDialogResult?.titleBySummary ??
+          t({
+            id: "chat.history.rename.generated.fallback",
+            message: "Untitled Chat",
+          })
+        }
+        initialUserProvidedTitle={
+          activeTitleDialogResult?.titleByUserProvided ?? null
+        }
+        isSubmitting={isUpdatingChatTitle}
+        onClose={handleCloseEditTitleDialog}
+        onSubmit={handleSubmitEditTitleDialog}
+      />
+
+      <ChatShareDialog
+        isOpen={shareDialogChatId !== null}
+        chatId={shareDialogChatId}
+        onClose={() => setShareDialogChatId(null)}
+      />
     </div>
   );
 }

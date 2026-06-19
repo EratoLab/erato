@@ -275,7 +275,7 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
             onLoadMore();
           }
         },
-        { rootMargin: "120px" },
+        { rootMargin: "120px" }, // eslint-disable-line lingui/no-unlocalized-strings -- IntersectionObserver CSS length, not user-facing text
       );
 
       observer.observe(sentinel);

@@ -23,6 +23,10 @@ vi.mock("@/utils/sse/sseClient", () => ({
 
 // Mock TanStack Query dependencies
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
+  fetchRecentChats: vi.fn(),
+  recentChatsQuery: vi.fn(() => ({
+    queryKey: ["recentChats"],
+  })),
   useChatMessages: vi.fn(),
   useMessageSubmitSse: vi.fn(),
   useRecentChats: vi.fn(),
@@ -32,6 +36,27 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
 
 // Mock React Query client
 vi.mock("@tanstack/react-query", () => ({
+  useInfiniteQuery: () => ({
+    data: {
+      pages: [
+        {
+          chats: [],
+          stats: {
+            total_count: 0,
+            returned_count: 0,
+            current_offset: 0,
+            has_more: false,
+          },
+        },
+      ],
+    },
+    isLoading: false,
+    error: null,
+    refetch: vi.fn(),
+    fetchNextPage: vi.fn(),
+    hasNextPage: false,
+    isFetchingNextPage: false,
+  }),
   useQueryClient: () => ({
     invalidateQueries: vi.fn().mockResolvedValue(undefined),
   }),

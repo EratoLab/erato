@@ -19,8 +19,8 @@ use crate::db::entity_ext::messages;
 use crate::models;
 use crate::models::assistant::create_standalone_file_upload;
 use crate::models::chat::{
-    archive_all_unarchived_chats_for_owner, archive_chat, get_frequent_assistants,
-    get_or_create_chat, get_recent_chats, resolve_chat_display_name,
+    RecentChatsFilter, archive_all_unarchived_chats_for_owner, archive_chat,
+    get_frequent_assistants, get_or_create_chat, get_recent_chats, resolve_chat_display_name,
     update_chat_title_by_user_provided,
 };
 use crate::models::file_capability::{
@@ -2044,10 +2044,12 @@ pub async fn recent_chats(
         &policy,
         &me_user.to_subject(),
         &user_id,
-        limit,
-        offset,
-        include_archived,
-        search_query,
+        RecentChatsFilter {
+            limit,
+            offset,
+            include_archived,
+            search_query,
+        },
     )
     .await
     .map_err(log_internal_server_error)?;

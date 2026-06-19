@@ -3,11 +3,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 
 import { ChatHistorySidebar } from "@/components/ui/Chat/ChatHistorySidebar";
+import { ChatShareDialog } from "@/components/ui/Chat/ChatShareDialog";
 import { EditChatTitleDialog } from "@/components/ui/Chat/EditChatTitleDialog";
 import { useSidebar } from "@/hooks/ui";
 import { useProfile } from "@/hooks/useProfile";
 import { useChatContext } from "@/providers/ChatProvider";
-import { useSidebarFeature } from "@/providers/FeatureConfigProvider";
+import {
+  useChatSharingFeature,
+  useSidebarFeature,
+} from "@/providers/FeatureConfigProvider";
 import { createLogger } from "@/utils/debugLogger";
 
 import type { ChatSession } from "@/types/chat";
@@ -41,6 +45,7 @@ export default function AssistantsPageStructure({
     collapsedMode,
   } = useSidebar();
   const { chatHistoryShowMetadata } = useSidebarFeature();
+  const { enabled: chatSharingEnabled } = useChatSharingFeature();
 
   const location = useLocation();
   const pathname = location.pathname;
@@ -75,6 +80,7 @@ export default function AssistantsPageStructure({
               fileCount: chat.file_uploads.length,
             },
             assistantId: chat.assistant_id,
+            canEdit: chat.can_edit,
           }))
         : [],
     [chatHistory],
@@ -96,10 +102,21 @@ export default function AssistantsPageStructure({
   const [titleDialogChatId, setTitleDialogChatId] = useState<string | null>(
     null,
   );
+  const [shareDialogChatId, setShareDialogChatId] = useState<string | null>(
+    null,
+  );
   const [isUpdatingChatTitle, setIsUpdatingChatTitle] = useState(false);
 
   const handleEditTitleSession = useCallback((sessionId: string) => {
     setTitleDialogChatId(sessionId);
+  }, []);
+
+  const handleOpenShareDialog = useCallback((sessionId: string) => {
+    setShareDialogChatId(sessionId);
+  }, []);
+
+  const handleCloseShareDialog = useCallback(() => {
+    setShareDialogChatId(null);
   }, []);
 
   const handleCloseEditTitleDialog = useCallback(() => {
@@ -156,6 +173,7 @@ export default function AssistantsPageStructure({
         onSessionSelect={handleSessionSelect}
         onSessionArchive={handleArchiveSession}
         onSessionEditTitle={handleEditTitleSession}
+        onSessionShare={chatSharingEnabled ? handleOpenShareDialog : undefined}
         showTimestamps={chatHistoryShowMetadata}
         isLoading={chatHistoryLoading}
         hasMoreSessions={hasNextHistoryPage}
@@ -194,6 +212,12 @@ export default function AssistantsPageStructure({
         isSubmitting={isUpdatingChatTitle}
         onClose={handleCloseEditTitleDialog}
         onSubmit={handleSubmitEditTitleDialog}
+      />
+
+      <ChatShareDialog
+        isOpen={shareDialogChatId !== null}
+        chatId={shareDialogChatId}
+        onClose={handleCloseShareDialog}
       />
     </div>
   );
