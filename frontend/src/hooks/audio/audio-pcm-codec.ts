@@ -106,6 +106,40 @@ export function resampleMonoFloat32ToPcm16(
   return pcmBytes;
 }
 
+/**
+ * Root-mean-square amplitude of a Float32 PCM window with its DC
+ * component (mean) removed first. DC removal matters on WebKit/Safari
+ * raw capture (echoCancellation/noiseSuppression/autoGainControl all
+ * off), whose warm-up emits a low-level DC bias rather than bit-exact
+ * zeros — a naive RMS would read that bias as energy and trip a
+ * speech-onset gate on silence. Returns a normalized amplitude in
+ * roughly [0, 1] for inputs in [-1, 1].
+ *
+ * Pure and allocation-free over a subarray view — safe to call per
+ * sub-window in a hot audio loop. Reused by the onset detector
+ * (ERMAIN-379) and the mic-quality probe (ERMAIN-380).
+ */
+export function removeDcAndRms(samples: Float32Array): number {
+  const sampleCount = samples.length;
+  if (sampleCount === 0) {
+    return 0;
+  }
+
+  let sum = 0;
+  for (let index = 0; index < sampleCount; index += 1) {
+    sum += samples[index];
+  }
+  const mean = sum / sampleCount;
+
+  let squaredTotal = 0;
+  for (let index = 0; index < sampleCount; index += 1) {
+    const centered = samples[index] - mean;
+    squaredTotal += centered * centered;
+  }
+
+  return Math.sqrt(squaredTotal / sampleCount);
+}
+
 export function mediaTrackSettingsToDiagnostics(
   settings: MediaTrackSettings,
 ): AudioDictationDiagnostics {

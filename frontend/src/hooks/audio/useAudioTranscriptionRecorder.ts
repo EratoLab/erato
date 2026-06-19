@@ -25,6 +25,13 @@ import {
   getAudioLevelBarsFromTimeDomainData,
   resampleMonoFloat32ToPcm16,
 } from "./audio-pcm-codec";
+import { getAudioEnvironment } from "./audioEnvironment";
+import { PRE_SPEECH_SILENCE_PRIMER_MS } from "./audioTuning";
+import {
+  createSpeechOnsetController,
+  type SpeechOnsetController,
+} from "./onsetFlipController";
+import { useAudioContextInterruptionRecovery } from "./useAudioContextInterruptionRecovery";
 import { useAudioInputDevicePreference } from "./useAudioInputDevicePreference";
 
 import type {
@@ -44,14 +51,6 @@ const VAD_DEBUG_FRAME_LOG_INTERVAL_MS = 2_000;
  * thread" behavior.
  */
 const AUDIO_TRANSCRIPTION_WORKLET_PROCESSOR_NAME = "audio-dictation-processor";
-
-/**
- * Synthetic silence prefix prepended before the captured audio, and the
- * floor between pipeline-ready and the visible `isCapturingAudio` flip.
- * Both mirror useAudioDictationRecorder — see the rationale there.
- */
-const PRE_SPEECH_SILENCE_PRIMER_MS = 300;
-const MIN_AUDIO_CAPTURE_DELAY_MS = 150;
 
 const logger = createLogger("HOOK", "useAudioTranscriptionRecorder");
 
@@ -435,9 +434,9 @@ export function useAudioTranscriptionRecorder({
   const audioProcessorRef = useRef<AudioWorkletNode | null>(null);
   const audioLevelDataRef = useRef<Uint8Array | null>(null);
   const audioFrameRef = useRef<number | null>(null);
-  /** Defers the isCapturingAudio flip when real audio arrives sooner
-   *  than MIN_AUDIO_CAPTURE_DELAY_MS; cleared on teardown. */
-  const capturingFlipTimerRef = useRef<number | null>(null);
+  /** Per-recording speech-onset controller (detector + deferred-flip
+   *  timer); disposed on teardown. */
+  const onsetControllerRef = useRef<SpeechOnsetController | null>(null);
   const startInFlightRef = useRef(false);
   const vadEngineRef = useRef<VoiceVadEngine | null>(null);
   const vadAutoStopTriggeredRef = useRef(false);
@@ -519,10 +518,8 @@ export function useAudioTranscriptionRecorder({
   );
 
   const stopRecordingVisualizer = useCallback(() => {
-    if (capturingFlipTimerRef.current !== null) {
-      window.clearTimeout(capturingFlipTimerRef.current);
-      capturingFlipTimerRef.current = null;
-    }
+    onsetControllerRef.current?.dispose();
+    onsetControllerRef.current = null;
     if (audioFrameRef.current !== null) {
       window.cancelAnimationFrame(audioFrameRef.current);
       audioFrameRef.current = null;
@@ -587,6 +584,11 @@ export function useAudioTranscriptionRecorder({
     stopRecordingVisualizer();
   }, [clearRecordingDurationTimer, stopRecordingVisualizer, stopVadEngine]);
 
+  const { attachStateChangeListener } = useAudioContextInterruptionRecovery({
+    audioContextRef,
+    audioProcessorRef,
+  });
+
   /**
    * Returns a ready-to-use AudioContext with the shared dictation
    * worklet module registered and the context in the `running` state.
@@ -617,6 +619,9 @@ export function useAudioTranscriptionRecorder({
         }
         audioContextRef.current = audioContext;
         workletModuleLoadedRef.current = false;
+        // On WebKit, recover from mid-session interruptions. No-op on
+        // engines that auto-resume; idempotent + cleaned up on unmount.
+        attachStateChangeListener(audioContext);
       }
 
       if (!workletModuleLoadedRef.current) {
@@ -639,7 +644,7 @@ export function useAudioTranscriptionRecorder({
 
       return audioContext;
     },
-    [],
+    [attachStateChangeListener],
   );
 
   const startLiveAudioTranscriptionSession = useCallback(
@@ -1334,11 +1339,11 @@ export function useAudioTranscriptionRecorder({
 
         // The worklet posts every render quantum, including zero-filled
         // OS warm-up frames — those belong in the stream sent to the
-        // server. The "speak now" UI cue waits for real audio though:
-        // scan each frame for a non-zero sample and flip
-        // isCapturingAudio on the first one.
-        let audioFlowing = false;
-        const pipelineReadyAt = Date.now();
+        // server (it stays dumb). The "speak now" UI cue is separate and
+        // UI-only: an RMS onset detector flips isCapturingAudio on real
+        // speech-level energy. It replaced an exact-zero predicate that
+        // mistimed on WebKit's noise-floor warm-up — see
+        // useAudioDictationRecorder and onsetDetector (ERMAIN-379).
         const flipCapturingAudio = () => {
           // Guard against late firings after teardown or unmount: the
           // processor ref will be null or point at a different node.
@@ -1347,29 +1352,22 @@ export function useAudioTranscriptionRecorder({
           }
           setIsCapturingAudio(true);
         };
+        const onsetController = createSpeechOnsetController({
+          sampleRate: audioContext.sampleRate,
+          onFlip: flipCapturingAudio,
+          log: (diagnostics) => logger.log("[AUDIO_DICT] frame", diagnostics),
+        });
+        onsetControllerRef.current = onsetController;
+        logger.log("[AUDIO_DICT] onset detector armed", {
+          sampleRate: audioContext.sampleRate,
+          engine: getAudioEnvironment().engine,
+        });
         processor.port.onmessage = (event: MessageEvent<Float32Array>) => {
           const input = event.data;
           const vadFrame = vadEngineRef.current
             ? new Float32Array(input)
             : null;
-          if (!audioFlowing) {
-            for (let index = 0; index < input.length; index += 1) {
-              if (input[index] !== 0) {
-                audioFlowing = true;
-                const elapsed = Date.now() - pipelineReadyAt;
-                const remaining = MIN_AUDIO_CAPTURE_DELAY_MS - elapsed;
-                if (remaining > 0) {
-                  capturingFlipTimerRef.current = window.setTimeout(() => {
-                    capturingFlipTimerRef.current = null;
-                    flipCapturingAudio();
-                  }, remaining);
-                } else {
-                  flipCapturingAudio();
-                }
-                break;
-              }
-            }
-          }
+          onsetController.acceptFrame(input);
           const session = liveSessionRef.current;
           if (session) {
             for (let index = 0; index < input.length; index += 1) {
