@@ -462,6 +462,7 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
 
   const isLoading = isHistoryLoading || isMessagingLoading;
   const error = historyError ?? messagingError;
+  const fetchNextHistoryPage = useCallback(async () => {}, []);
 
   const contextValue = useMemo<ChatContextValue>(() => {
     const transformedMessages = Object.entries(messages || {}).reduce(
@@ -517,6 +518,9 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
       updateChatTitle: async () => {},
       navigateToChat,
       refetchHistory,
+      fetchNextHistoryPage,
+      hasNextHistoryPage: false,
+      isFetchingNextHistoryPage: false,
       messages: transformedMessages,
       messageOrder,
       isMessagingLoading,
@@ -552,6 +556,7 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
     currentChatLastModel,
     editMessage,
     error,
+    fetchNextHistoryPage,
     historyError,
     isFinalizing,
     isHistoryLoading,

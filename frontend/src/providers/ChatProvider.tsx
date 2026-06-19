@@ -55,6 +55,9 @@ export interface ChatContextValue {
   ) => Promise<void>;
   navigateToChat: (chatId: string) => void;
   refetchHistory: () => Promise<unknown>;
+  fetchNextHistoryPage: () => Promise<unknown>;
+  hasNextHistoryPage: boolean;
+  isFetchingNextHistoryPage: boolean;
 
   // Messaging
   messages: Record<string, ChatMessage>;
@@ -153,6 +156,9 @@ export function ChatProvider({
     updateChatTitle,
     navigateToChat,
     refetch: refetchHistory,
+    fetchNextPage: fetchNextHistoryPage,
+    hasNextPage: hasNextHistoryPage,
+    isFetchingNextPage: isFetchingNextHistoryPage,
     isNewChatPending,
   } = useChatHistory();
 
@@ -309,6 +315,9 @@ export function ChatProvider({
       updateChatTitle,
       navigateToChat,
       refetchHistory,
+      fetchNextHistoryPage,
+      hasNextHistoryPage: Boolean(hasNextHistoryPage),
+      isFetchingNextHistoryPage,
 
       // Messaging
       messages: transformedMessages,
@@ -357,6 +366,9 @@ export function ChatProvider({
     updateChatTitle,
     navigateToChat,
     refetchHistory,
+    fetchNextHistoryPage,
+    hasNextHistoryPage,
+    isFetchingNextHistoryPage,
 
     // Messaging dependencies
     messages,

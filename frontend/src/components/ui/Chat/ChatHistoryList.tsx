@@ -1,7 +1,7 @@
 import { t } from "@lingui/core/macro";
 import { Plural } from "@lingui/react/macro";
 import clsx from "clsx";
-import { memo, useEffect } from "react";
+import { memo, useEffect, useRef } from "react";
 
 import { MessageTimestamp } from "@/components/ui";
 import { useThemedIcon } from "@/hooks/ui";
@@ -78,6 +78,9 @@ export interface ChatHistoryListProps {
    * @default false
    */
   isLoading?: boolean;
+  hasMore?: boolean;
+  isLoadingMore?: boolean;
+  onLoadMore?: () => void;
 }
 
 const ChatHistoryListItem = memo<{
@@ -243,10 +246,14 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
     className,
     layout = "default",
     isLoading = false,
+    hasMore = false,
+    isLoadingMore = false,
+    onLoadMore,
     showTimestamps = true,
   }) => {
     const currentSession = sessions.find((s) => s.id === currentSessionId);
     const currentSessionTitle = currentSession?.title;
+    const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
 
     useEffect(() => {
       if (typeof currentSessionTitle === "undefined") {
@@ -255,6 +262,25 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
       const pageTitle = t({ id: "branding.page_title_suffix" });
       document.title = `${currentSessionTitle} - ${pageTitle}`;
     }, [currentSessionTitle]);
+
+    useEffect(() => {
+      const sentinel = loadMoreSentinelRef.current;
+      if (!sentinel || !hasMore || !onLoadMore) {
+        return;
+      }
+
+      const observer = new IntersectionObserver(
+        (entries) => {
+          if (entries.some((entry) => entry.isIntersecting) && !isLoadingMore) {
+            onLoadMore();
+          }
+        },
+        { rootMargin: "120px" }, // eslint-disable-line lingui/no-unlocalized-strings -- IntersectionObserver CSS length, not user-facing text
+      );
+
+      observer.observe(sentinel);
+      return () => observer.disconnect();
+    }, [hasMore, isLoadingMore, onLoadMore]);
 
     if (isLoading) {
       return <ChatHistoryListSkeleton layout={layout} />;
@@ -297,6 +323,18 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
             }
           />
         ))}
+        {hasMore && (
+          <div
+            ref={loadMoreSentinelRef}
+            className="flex justify-center py-2"
+            data-ui="chat-history-load-more-sentinel"
+            aria-label={t`Loading...`}
+          >
+            {isLoadingMore && (
+              <div className="size-4 animate-spin rounded-full border-2 border-theme-border border-t-transparent" />
+            )}
+          </div>
+        )}
       </div>
     );
   },

@@ -238,6 +238,19 @@ struct ChatWithLatestMessage {
     latest_message_at: DateTimeWithTimeZone,
 }
 
+/// Filtering and pagination options for recent chat listing.
+#[derive(Debug, Clone, Copy)]
+pub struct RecentChatsFilter<'a> {
+    /// Maximum number of chats to return.
+    pub limit: u64,
+    /// Number of matching chats to skip.
+    pub offset: u64,
+    /// Whether archived chats should be included.
+    pub include_archived: bool,
+    /// Optional full-text search query for chat titles.
+    pub search_query: Option<&'a str>,
+}
+
 /// Get the most recent chats for a user.
 ///
 /// Returns a tuple of (chats, stats) where:
@@ -249,19 +262,38 @@ pub async fn get_recent_chats(
     policy: &PolicyEngine,
     subject: &Subject,
     owner_user_id: &str,
-    limit: u64,
-    offset: u64,
-    include_archived: bool,
+    filter: RecentChatsFilter<'_>,
 ) -> Result<(Vec<RecentChat>, ChatListStats), Report> {
     use crate::db::entity::assistants;
     use crate::db::entity::prelude::Assistants;
     use std::collections::HashMap;
 
     // Build the WHERE clause conditions
-    let archived_condition = if !include_archived {
+    let archived_condition = if !filter.include_archived {
         "AND \"chats\".\"archived_at\" IS NULL"
     } else {
         ""
+    };
+    let resolved_title_search_vector = r#"to_tsvector(
+                'simple'::regconfig,
+                COALESCE(
+                    NULLIF(BTRIM("chats"."title_by_user_provided"), ''),
+                    NULLIF(BTRIM("chats"."title_by_summary"), ''),
+                    'Untitled Chat'
+                )
+            )"#;
+    let search_query = filter
+        .search_query
+        .map(str::trim)
+        .filter(|query| !query.is_empty());
+    let search_condition = |param_index: u8| {
+        if search_query.is_some() {
+            format!(
+                "AND {resolved_title_search_vector} @@ websearch_to_tsquery('simple'::regconfig, ${param_index})"
+            )
+        } else {
+            String::new()
+        }
     };
 
     // Query using INNER JOIN LATERAL for better performance
@@ -286,30 +318,40 @@ pub async fn get_recent_chats(
         ) latest_msg ON true
         WHERE "chats"."owner_user_id" = $1
             {}
+            {}
         ORDER BY latest_msg.created_at DESC
         LIMIT $2
         OFFSET $3
         "#,
-        archived_condition
+        archived_condition,
+        search_condition(4)
     );
+
+    let mut query_values = vec![
+        owner_user_id.into(),
+        sea_orm::Value::BigInt(Some(filter.limit as i64)),
+        sea_orm::Value::BigInt(Some(filter.offset as i64)),
+    ];
+    if let Some(search_query) = search_query {
+        query_values.push(search_query.into());
+    }
 
     let chats_with_messages: Vec<ChatWithLatestMessage> =
         ChatWithLatestMessage::find_by_statement(named_statement_from_sql_and_values(
             sea_orm::DatabaseBackend::Postgres,
             POSTGRES_QUERY_LIST_RECENT_CHATS,
             sql,
-            vec![
-                owner_user_id.into(),
-                sea_orm::Value::BigInt(Some(limit as i64)),
-                sea_orm::Value::BigInt(Some(offset as i64)),
-            ],
+            query_values,
         ))
         .all(conn)
         .await?;
 
     // Use our pagination utility to efficiently calculate the total count
-    let (total_count, has_more) =
-        pagination::calculate_total_count(offset, limit, chats_with_messages.len(), || async {
+    let (total_count, has_more) = pagination::calculate_total_count(
+        filter.offset,
+        filter.limit,
+        chats_with_messages.len(),
+        || async {
             let count_sql = format!(
                 r#"
                 SELECT COUNT(*) AS num_items
@@ -325,9 +367,11 @@ pub async fn get_recent_chats(
                     ) latest_msg ON true
                     WHERE "chats"."owner_user_id" = $1
                         {}
+                        {}
                 ) AS sub_query
                 "#,
-                archived_condition
+                archived_condition,
+                search_condition(2)
             );
 
             #[derive(Debug, FromQueryResult)]
@@ -335,12 +379,17 @@ pub async fn get_recent_chats(
                 num_items: i64,
             }
 
+            let mut count_values = vec![owner_user_id.into()];
+            if let Some(search_query) = search_query {
+                count_values.push(search_query.into());
+            }
+
             let count_result: CountResult =
                 CountResult::find_by_statement(named_statement_from_sql_and_values(
                     sea_orm::DatabaseBackend::Postgres,
                     POSTGRES_QUERY_COUNT_RECENT_CHATS,
                     count_sql,
-                    vec![owner_user_id.into()],
+                    count_values,
                 ))
                 .one(conn)
                 .await
@@ -348,8 +397,9 @@ pub async fn get_recent_chats(
                 .ok_or_else(|| eyre!("Count query returned no results"))?;
 
             Ok::<u64, Report>(count_result.num_items as u64)
-        })
-        .await?;
+        },
+    )
+    .await?;
 
     // Should already be filtered to the correct user, but make sure to authorize.
     let mut authorized_chats = Vec::new();
@@ -474,7 +524,7 @@ pub async fn get_recent_chats(
     // Create the statistics object
     let stats = ChatListStats {
         total_count: pagination::u64_to_i64_count(total_count),
-        current_offset: offset,
+        current_offset: filter.offset,
         returned_count: recent_chats.len(),
         has_more,
     };

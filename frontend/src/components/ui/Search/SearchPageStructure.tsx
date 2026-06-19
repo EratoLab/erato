@@ -3,11 +3,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 
 import { ChatHistorySidebar } from "@/components/ui/Chat/ChatHistorySidebar";
+import { ChatShareDialog } from "@/components/ui/Chat/ChatShareDialog";
 import { EditChatTitleDialog } from "@/components/ui/Chat/EditChatTitleDialog";
 import { useSidebar } from "@/hooks/ui";
 import { useProfile } from "@/hooks/useProfile";
 import { useChatContext } from "@/providers/ChatProvider";
-import { useSidebarFeature } from "@/providers/FeatureConfigProvider";
+import {
+  useChatSharingFeature,
+  useSidebarFeature,
+} from "@/providers/FeatureConfigProvider";
 import { createLogger } from "@/utils/debugLogger";
 
 import type { ChatSession } from "@/types/chat";
@@ -27,6 +31,9 @@ export default function SearchPageStructure({
     createNewChat: createChat,
     updateChatTitle,
     refetchHistory,
+    fetchNextHistoryPage,
+    hasNextHistoryPage,
+    isFetchingNextHistoryPage,
     isHistoryLoading: chatHistoryLoading,
     historyError: chatHistoryError,
   } = useChatContext();
@@ -38,6 +45,7 @@ export default function SearchPageStructure({
     collapsedMode,
   } = useSidebar();
   const { chatHistoryShowMetadata } = useSidebarFeature();
+  const { enabled: chatSharingEnabled } = useChatSharingFeature();
   const location = useLocation();
   const pathname = location.pathname;
   const prevPathnameRef = useRef<string>(pathname);
@@ -61,6 +69,8 @@ export default function SearchPageStructure({
             titleResolved: chat.title_resolved,
             titleBySummary: chat.title_by_summary,
             titleByUserProvided: chat.title_by_user_provided,
+            assistantId: chat.assistant_id,
+            canEdit: chat.can_edit,
             updatedAt: chat.last_message_at,
             messages: [],
             metadata: {
@@ -91,10 +101,21 @@ export default function SearchPageStructure({
   const [titleDialogChatId, setTitleDialogChatId] = useState<string | null>(
     null,
   );
+  const [shareDialogChatId, setShareDialogChatId] = useState<string | null>(
+    null,
+  );
   const [isUpdatingChatTitle, setIsUpdatingChatTitle] = useState(false);
 
   const handleEditTitleSession = useCallback((sessionId: string) => {
     setTitleDialogChatId(sessionId);
+  }, []);
+
+  const handleOpenShareDialog = useCallback((sessionId: string) => {
+    setShareDialogChatId(sessionId);
+  }, []);
+
+  const handleCloseShareDialog = useCallback(() => {
+    setShareDialogChatId(null);
   }, []);
 
   const handleCloseEditTitleDialog = useCallback(() => {
@@ -151,8 +172,14 @@ export default function SearchPageStructure({
         onSessionSelect={handleSessionSelect}
         onSessionArchive={handleArchiveSession}
         onSessionEditTitle={handleEditTitleSession}
+        onSessionShare={chatSharingEnabled ? handleOpenShareDialog : undefined}
         showTimestamps={chatHistoryShowMetadata}
         isLoading={chatHistoryLoading}
+        hasMoreSessions={hasNextHistoryPage}
+        isLoadingMoreSessions={isFetchingNextHistoryPage}
+        onLoadMoreSessions={() => {
+          void fetchNextHistoryPage();
+        }}
         error={chatHistoryError instanceof Error ? chatHistoryError : undefined}
         userProfile={profile}
       />
@@ -184,6 +211,12 @@ export default function SearchPageStructure({
         isSubmitting={isUpdatingChatTitle}
         onClose={handleCloseEditTitleDialog}
         onSubmit={handleSubmitEditTitleDialog}
+      />
+
+      <ChatShareDialog
+        isOpen={shareDialogChatId !== null}
+        chatId={shareDialogChatId}
+        onClose={handleCloseShareDialog}
       />
     </div>
   );

@@ -14,6 +14,8 @@ import { createSSEConnection } from "@/utils/sse/sseClient";
 import { useChatHistory, useChatHistoryStore } from "../useChatHistory";
 import { useChatMessaging } from "../useChatMessaging";
 
+const mockUseInfiniteQuery = vi.hoisted(() => vi.fn());
+
 // Mock SSE Client
 vi.mock("@/utils/sse/sseClient", () => ({
   createSSEConnection: vi.fn(),
@@ -39,6 +41,7 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   useChatMessages: vi.fn(),
   useMessageSubmitSse: vi.fn(),
   useRecentChats: vi.fn(),
+  fetchRecentChats: vi.fn(),
   useArchiveChatEndpoint: vi.fn(),
   useUpdateChat: vi.fn(),
   chatMessagesQuery: vi.fn((variables: { pathParams: { chatId: string } }) => ({
@@ -48,6 +51,7 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
 }));
 
 vi.mock("@tanstack/react-query", () => ({
+  useInfiniteQuery: mockUseInfiniteQuery,
   useQueryClient: () => ({
     invalidateQueries: vi.fn().mockResolvedValue(undefined),
     clear: vi.fn(),
@@ -158,6 +162,27 @@ describe("Chat hooks integration", () => {
       isLoading: false,
       error: null,
       refetch: vi.fn(),
+    });
+    mockUseInfiniteQuery.mockReturnValue({
+      data: {
+        pages: [
+          {
+            chats: mockChats,
+            stats: {
+              total_count: mockChats.length,
+              returned_count: mockChats.length,
+              current_offset: 0,
+              has_more: false,
+            },
+          },
+        ],
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+      fetchNextPage: vi.fn(),
+      hasNextPage: false,
+      isFetchingNextPage: false,
     });
 
     // Mock useArchiveChatEndpoint for useChatHistory

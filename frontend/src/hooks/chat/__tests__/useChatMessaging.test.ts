@@ -114,6 +114,10 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
     queryKey: ["chatMessages", { chatId: variables.pathParams.chatId }],
   })),
   fetchChatMessages: vi.fn(),
+  fetchRecentChats: vi.fn(),
+  recentChatsQuery: vi.fn(() => ({
+    queryKey: ["recentChats"],
+  })),
   useChatMessages: vi.fn(),
   useMessageSubmitSse: vi.fn(),
   useRecentChats: vi.fn(),
@@ -143,6 +147,27 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tanstack/react-query")>();
   return {
     ...actual,
+    useInfiniteQuery: () => ({
+      data: {
+        pages: [
+          {
+            chats: [],
+            stats: {
+              total_count: 0,
+              returned_count: 0,
+              current_offset: 0,
+              has_more: false,
+            },
+          },
+        ],
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+      fetchNextPage: vi.fn(),
+      hasNextPage: false,
+      isFetchingNextPage: false,
+    }),
     useQueryClient: () => mockQueryClient,
   };
 });

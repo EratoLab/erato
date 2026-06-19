@@ -92,6 +92,9 @@ export interface ChatHistorySidebarProps {
   isLoading: boolean;
   error?: Error;
   userProfile?: UserProfile;
+  hasMoreSessions?: boolean;
+  isLoadingMoreSessions?: boolean;
+  onLoadMoreSessions?: () => void;
 }
 
 const SidebarLogo = memo<{
@@ -527,6 +530,9 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     isLoading,
     error,
     userProfile,
+    hasMoreSessions = false,
+    isLoadingMoreSessions = false,
+    onLoadMoreSessions,
   }) => {
     const ref = useRef<HTMLElement>(null);
     const [sidebarLogoPath, setSidebarLogoPath] = useState<string | null>(null);
@@ -768,6 +774,9 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                       onSessionEditTitle={onSessionEditTitle}
                       onSessionShare={onSessionShare}
                       showTimestamps={showTimestamps}
+                      hasMore={hasMoreSessions}
+                      isLoadingMore={isLoadingMoreSessions}
+                      onLoadMore={onLoadMoreSessions}
                     />
                   </CollapsibleSection>
                 )}

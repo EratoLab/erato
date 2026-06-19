@@ -23,7 +23,8 @@
     "deploy/0021_add_input_parameters_to_messages.sql",
     "deploy/0022_add_mcp_server_oauth_tables.sql",
     "deploy/0023_optimize_active_thread_siblings_constraint.sql",
-    "deploy/0024_add_audio_transcription_to_file_uploads.sql"
+    "deploy/0024_add_audio_transcription_to_file_uploads.sql",
+    "deploy/0025_add_chat_title_search_index.sql"
   ],
-  "latest_change": "19aff712f45ce25a3753613df90abd6c015bfd2d"
+  "latest_change": "f6ae442b5fbaa6434ccce5be55c66dd1157930d2"
 }

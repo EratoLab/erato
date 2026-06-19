@@ -237,6 +237,9 @@ export const Chat = ({
     isHistoryLoading: chatHistoryLoading,
     historyError: chatHistoryError,
     refetchHistory: refreshChats,
+    fetchNextHistoryPage,
+    hasNextHistoryPage,
+    isFetchingNextHistoryPage,
     currentChatLastModel,
   } = useChatContext();
 
@@ -719,6 +722,11 @@ export const Chat = ({
           }
           showTimestamps={chatHistoryShowMetadata}
           isLoading={chatHistoryLoading}
+          hasMoreSessions={hasNextHistoryPage}
+          isLoadingMoreSessions={isFetchingNextHistoryPage}
+          onLoadMoreSessions={() => {
+            void fetchNextHistoryPage();
+          }}
           error={
             chatHistoryError instanceof Error ? chatHistoryError : undefined
           }
