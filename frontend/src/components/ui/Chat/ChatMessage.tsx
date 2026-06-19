@@ -7,7 +7,10 @@ import { InteractiveContainer } from "@/components/ui/Container/InteractiveConta
 import { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton";
 import { useImageLightbox } from "@/hooks/ui/useImageLightbox";
 import { useGetFile } from "@/lib/generated/v1betaApi/v1betaApiComponents";
-import { useMessageFeedbackFeature } from "@/providers/FeatureConfigProvider";
+import {
+  useErrorReportFeature,
+  useMessageFeedbackFeature,
+} from "@/providers/FeatureConfigProvider";
 import { hasToolCalls as messageHasToolCalls } from "@/utils/adapters/toolCallAdapter";
 import { isImageFile } from "@/utils/file/fileTypeUtils";
 
@@ -110,6 +113,7 @@ export const ChatMessage = memo(function ChatMessage({
 
   // Get message feedback feature config
   const messageFeedbackConfig = useMessageFeedbackFeature();
+  const errorReportConfig = useErrorReportFeature();
 
   // Local state for raw markdown toggle
   const [showRawMarkdown, setShowRawMarkdown] = useState(false);
@@ -182,6 +186,11 @@ export const ChatMessage = memo(function ChatMessage({
               {renderContentFilterDetails(
                 message.error.error_type,
                 message.error.filter_details,
+              )}
+              {renderVerboseErrorDescription(
+                message.error.error_type,
+                message.error.error_description,
+                errorReportConfig.showVerboseAssistantErrors,
               )}
             </Alert>
           )}
@@ -295,6 +304,34 @@ const renderContentFilterDetails = (
           </li>
         ))}
       </ul>
+    </div>
+  );
+};
+
+const renderVerboseErrorDescription = (
+  errorType: string,
+  errorDescription: string | undefined,
+  showVerboseAssistantErrors: boolean,
+) => {
+  if (
+    !showVerboseAssistantErrors ||
+    errorType === "content_filter" ||
+    !errorDescription?.trim()
+  ) {
+    return null;
+  }
+
+  return (
+    <div className="mt-3 text-xs">
+      <div className="font-medium">
+        {t({
+          id: "chat.message.error.details",
+          message: "Details",
+        })}
+      </div>
+      <pre className="mt-1 whitespace-pre-wrap break-words font-sans">
+        {errorDescription}
+      </pre>
     </div>
   );
 };

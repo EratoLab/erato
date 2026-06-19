@@ -370,6 +370,11 @@ msgstr "mensaje"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.message.error.details"
+msgstr "Detalles"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
 msgid "chat.message.error.title"
 msgstr "Error del asistente"
 

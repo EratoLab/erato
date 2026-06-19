@@ -50,6 +50,7 @@ describe("themeConfig", () => {
     chatSharingEnabled: false,
     messageFeedbackEnabled: false,
     messageFeedbackCommentsEnabled: false,
+    showVerboseAssistantErrors: false,
     userPreferencesEnabled: true,
     userPreferencesDataTabEnabled: true,
     mcpServersTabEnabled: false,

@@ -2065,6 +2065,10 @@ pub struct FrontendConfig {
     #[serde(default)]
     pub component_kits: FrontendComponentKitsConfig,
 
+    // Error report display options.
+    #[serde(default)]
+    pub error_report: FrontendErrorReportConfig,
+
     // Whether to disable file upload functionality in the UI.
     // Defaults to `false`.
     #[serde(default)]
@@ -2168,6 +2172,26 @@ impl Default for FrontendComponentKitsConfig {
             directory: default_component_kits_directory(),
         }
     }
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct FrontendErrorReportConfig {
+    // Whether assistant error alerts should show the backend-provided detailed error message.
+    // Defaults to `false`.
+    #[serde(default = "default_show_verbose_assistant_errors")]
+    pub show_verbose_assistant_errors: bool,
+}
+
+impl Default for FrontendErrorReportConfig {
+    fn default() -> Self {
+        Self {
+            show_verbose_assistant_errors: default_show_verbose_assistant_errors(),
+        }
+    }
+}
+
+fn default_show_verbose_assistant_errors() -> bool {
+    false
 }
 
 fn default_sidebar_collapsed_mode() -> String {

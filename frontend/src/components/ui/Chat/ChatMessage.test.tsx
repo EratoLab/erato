@@ -10,6 +10,7 @@ import type { UiChatMessage } from "@/utils/adapters/messageAdapter";
 import type { Messages } from "@lingui/core";
 
 const messageContentMock = vi.hoisted(() => vi.fn());
+const showVerboseAssistantErrorsMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/hooks/chat/store/messagingStore", () => ({
   useMessagingStore: () => ({
@@ -30,7 +31,14 @@ vi.mock("@/hooks/ui/useImageLightbox", () => ({
   }),
 }));
 
+vi.mock("@/hooks/ui/useThemedIcon", () => ({
+  useThemedIcon: () => "status-error",
+}));
+
 vi.mock("@/providers/FeatureConfigProvider", () => ({
+  useErrorReportFeature: () => ({
+    showVerboseAssistantErrors: showVerboseAssistantErrorsMock(),
+  }),
   useMessageFeedbackFeature: () => ({
     enabled: false,
     commentsEnabled: false,
@@ -51,6 +59,7 @@ vi.mock("../Message/ImageLightbox", () => ({
 describe("ChatMessage", () => {
   beforeEach(() => {
     messageContentMock.mockClear();
+    showVerboseAssistantErrorsMock.mockReturnValue(false);
   });
 
   it("exposes stable message hooks for theme.css selectors", async () => {
@@ -143,5 +152,91 @@ describe("ChatMessage", () => {
     expect(messageContentMock).toHaveBeenCalledWith(
       expect.objectContaining({ preserveSoftLineBreaks: true }),
     );
+  });
+
+  it("hides verbose assistant error details by default", async () => {
+    const message: UiChatMessage = {
+      id: "msg_error_hidden",
+      content: [],
+      role: "assistant",
+      sender: "assistant",
+      authorId: "assistant_1",
+      createdAt: new Date("2025-01-01T12:00:00Z").toISOString(),
+      status: "error",
+      error: {
+        error_type: "provider_error",
+        error_description: "Provider returned diagnostic details",
+      },
+    };
+
+    const Controls = () => <div data-testid="message-controls-probe" />;
+
+    const { i18n } = await import("@lingui/core");
+    i18n.load("en", enMessages as unknown as Messages);
+    i18n.activate("en");
+
+    render(
+      <I18nProvider i18n={i18n}>
+        <ChatMessage
+          message={message}
+          controls={Controls}
+          controlsContext={{
+            currentUserId: "user_1",
+            dialogOwnerId: "user_1",
+            isSharedDialog: false,
+          }}
+          onMessageAction={async () => true}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText("The assistant was unable to respond.")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Provider returned diagnostic details"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows verbose assistant error details when enabled", async () => {
+    showVerboseAssistantErrorsMock.mockReturnValue(true);
+
+    const message: UiChatMessage = {
+      id: "msg_error_visible",
+      content: [],
+      role: "assistant",
+      sender: "assistant",
+      authorId: "assistant_1",
+      createdAt: new Date("2025-01-01T12:00:00Z").toISOString(),
+      status: "error",
+      error: {
+        error_type: "provider_error",
+        error_description: "Provider returned diagnostic details",
+      },
+    };
+
+    const Controls = () => <div data-testid="message-controls-probe" />;
+
+    const { i18n } = await import("@lingui/core");
+    i18n.load("en", enMessages as unknown as Messages);
+    i18n.activate("en");
+
+    render(
+      <I18nProvider i18n={i18n}>
+        <ChatMessage
+          message={message}
+          controls={Controls}
+          controlsContext={{
+            currentUserId: "user_1",
+            dialogOwnerId: "user_1",
+            isSharedDialog: false,
+          }}
+          onMessageAction={async () => true}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText("Details")).toBeInTheDocument();
+    expect(
+      screen.getByText("Provider returned diagnostic details"),
+    ).toBeInTheDocument();
   });
 });
