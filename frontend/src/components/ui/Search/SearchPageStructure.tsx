@@ -27,6 +27,9 @@ export default function SearchPageStructure({
     createNewChat: createChat,
     updateChatTitle,
     refetchHistory,
+    fetchNextHistoryPage,
+    hasNextHistoryPage,
+    isFetchingNextHistoryPage,
     isHistoryLoading: chatHistoryLoading,
     historyError: chatHistoryError,
   } = useChatContext();
@@ -153,6 +156,11 @@ export default function SearchPageStructure({
         onSessionEditTitle={handleEditTitleSession}
         showTimestamps={chatHistoryShowMetadata}
         isLoading={chatHistoryLoading}
+        hasMoreSessions={hasNextHistoryPage}
+        isLoadingMoreSessions={isFetchingNextHistoryPage}
+        onLoadMoreSessions={() => {
+          void fetchNextHistoryPage();
+        }}
         error={chatHistoryError instanceof Error ? chatHistoryError : undefined}
         userProfile={profile}
       />

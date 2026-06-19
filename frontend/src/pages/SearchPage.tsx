@@ -1,6 +1,7 @@
 import { t } from "@lingui/core/macro";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import clsx from "clsx";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDebounce } from "use-debounce";
 
@@ -8,14 +9,17 @@ import { PageHeader } from "@/components/ui/Container/PageHeader";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 import { SearchIcon, CloseIcon } from "@/components/ui/icons";
 import { usePageAlignment } from "@/hooks/ui";
-import { useRecentChats } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import {
+  fetchRecentChats,
+  recentChatsQuery,
+} from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext";
 import { useChatInputFeature } from "@/providers/FeatureConfigProvider";
 import { getChatUrl } from "@/utils/chat/urlUtils";
 import { createLogger } from "@/utils/debugLogger";
 
 const logger = createLogger("UI", "SearchPage");
-const RECENT_CHATS_LIMIT = 10;
-const SEARCH_RESULTS_LIMIT = 30;
+const SEARCH_PAGE_SIZE = 20;
 
 interface SearchResult {
   id: string;
@@ -29,7 +33,9 @@ interface SearchResult {
 
 export default function SearchPage() {
   const [searchQuery, setSearchQuery] = useState("");
+  const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
+  const { fetcherOptions } = useV1betaApiContext();
 
   // Get feature configurations
   const { autofocus: shouldAutofocus } = useChatInputFeature();
@@ -44,17 +50,45 @@ export default function SearchPage() {
   const [debouncedSearchQuery] = useDebounce(searchQuery, 300);
   const backendSearchQuery = debouncedSearchQuery.trim();
   const isShowingRecent = backendSearchQuery === "";
-  const resultLimit = isShowingRecent ? RECENT_CHATS_LIMIT : SEARCH_RESULTS_LIMIT;
 
   const {
-    data: recentChatsResponse,
+    data: recentChatsPages,
+    isLoading,
     isFetching: isSearching,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
     error: searchError,
-  } = useRecentChats({
-    queryParams: {
-      limit: resultLimit,
-      offset: 0,
-      ...(backendSearchQuery ? { q: backendSearchQuery } : {}),
+  } = useInfiniteQuery({
+    queryKey: [
+      ...recentChatsQuery({
+        queryParams: {
+          limit: SEARCH_PAGE_SIZE,
+          ...(backendSearchQuery ? { q: backendSearchQuery } : {}),
+        },
+      }).queryKey,
+      "search-infinite",
+    ],
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) => {
+      const offset = typeof pageParam === "number" ? pageParam : 0;
+      return fetchRecentChats(
+        {
+          ...fetcherOptions,
+          queryParams: {
+            limit: SEARCH_PAGE_SIZE,
+            offset,
+            ...(backendSearchQuery ? { q: backendSearchQuery } : {}),
+          },
+        },
+        signal,
+      );
+    },
+    getNextPageParam: (lastPage) => {
+      if (!lastPage.stats.has_more || lastPage.stats.returned_count === 0) {
+        return undefined;
+      }
+      return lastPage.stats.current_offset + lastPage.stats.returned_count;
     },
   });
 
@@ -66,7 +100,7 @@ export default function SearchPage() {
 
   // Convert backend response to SearchResult format
   const searchResults = useMemo(() => {
-    const chats = recentChatsResponse?.chats ?? [];
+    const chats = recentChatsPages?.pages.flatMap((page) => page.chats) ?? [];
 
     return chats
       .map(
@@ -83,7 +117,29 @@ export default function SearchPage() {
         (a, b) =>
           new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
       );
-  }, [recentChatsResponse?.chats]);
+  }, [recentChatsPages?.pages]);
+
+  useEffect(() => {
+    const sentinel = loadMoreSentinelRef.current;
+    if (!sentinel || !hasNextPage) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (
+          entries.some((entry) => entry.isIntersecting) &&
+          !isFetchingNextPage
+        ) {
+          void fetchNextPage();
+        }
+      },
+      { rootMargin: "240px" },
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   const clearSearch = () => {
     setSearchQuery("");
@@ -98,9 +154,10 @@ export default function SearchPage() {
     navigate(getChatUrl(result.chatId, result.assistantId));
   };
 
-  const resultsCount = isShowingRecent
-    ? (recentChatsResponse?.stats.returned_count ?? searchResults.length)
-    : (recentChatsResponse?.stats.total_count ?? searchResults.length);
+  const totalResultsCount =
+    recentChatsPages?.pages[0]?.stats.total_count ?? searchResults.length;
+  const resultsCount = isShowingRecent ? searchResults.length : totalResultsCount;
+  const showInitialLoading = isLoading && searchResults.length === 0;
 
   return (
     <div className="flex h-full flex-col bg-theme-bg-primary">
@@ -147,7 +204,7 @@ export default function SearchPage() {
       {/* Search Results */}
       <div className={clsx("flex-1 overflow-auto", contentHorizontalPadding)}>
         <div className={clsx("py-6", contentContainerClasses)}>
-          {isSearching && (
+          {showInitialLoading && (
             <div className="flex items-center justify-center py-8">
               <div className="text-center">
                 <div className="mx-auto mb-4 size-6 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
@@ -156,7 +213,7 @@ export default function SearchPage() {
             </div>
           )}
 
-          {!isSearching && searchResults.length === 0 && (
+          {!showInitialLoading && searchResults.length === 0 && (
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
                 <SearchIcon className="mx-auto mb-4 size-12 text-theme-fg-muted" />
@@ -170,7 +227,7 @@ export default function SearchPage() {
             </div>
           )}
 
-          {!isSearching && searchResults.length > 0 && (
+          {!showInitialLoading && searchResults.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-medium text-theme-fg-primary">
@@ -214,6 +271,19 @@ export default function SearchPage() {
                   </a>
                 ))}
               </div>
+
+              {hasNextPage && (
+                <div
+                  ref={loadMoreSentinelRef}
+                  className="flex justify-center py-6"
+                  data-ui="search-load-more-sentinel"
+                  aria-label={t`Loading...`}
+                >
+                  {(isFetchingNextPage || isSearching) && (
+                    <div className="size-5 animate-spin rounded-full border-2 border-theme-border border-t-transparent" />
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -4,7 +4,7 @@
  * Provides a clean interface for fetching, navigating and managing chat history.
  */
 /* eslint-disable lingui/no-unlocalized-strings */
-import { useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 // import { useRouter } from "next/navigation"; // Removed Next.js router
 import { useCallback, useMemo } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom"; // Added React Router hooks
@@ -12,14 +12,14 @@ import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 
 import {
-  useRecentChats,
+  fetchRecentChats,
   useArchiveChatEndpoint,
   useUpdateChat,
   recentChatsQuery,
   chatMessagesQuery,
+  type RecentChatsError,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
-// Import context and merge utility
-// import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext";
+import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext";
 import { deepMerge } from "@/lib/generated/v1betaApi/v1betaApiUtils";
 import { getChatUrl } from "@/utils/chat/urlUtils";
 import { createLogger } from "@/utils/debugLogger";
@@ -34,6 +34,7 @@ import { getStreamKey, useMessagingStore } from "./store/messagingStore";
 // } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 const logger = createLogger("HOOK", "useChatHistory");
+const CHAT_HISTORY_PAGE_SIZE = 30;
 
 interface ChatHistoryState {
   isNewChatPending: boolean; // Flag to indicate a new chat navigation is in progress
@@ -87,12 +88,47 @@ export function useChatHistory() {
     return params.chatId ?? params.id ?? null;
   }, [location.pathname, params.id, params.chatId]);
 
-  // Get context to access fetcherOptions - contextFetcherOptions removed as it was unused after introducing stableEmptyFetcherOptions
-  // const { fetcherOptions: contextFetcherOptions } = useV1betaApiContext();
+  const { fetcherOptions } = useV1betaApiContext();
   const { isNewChatPending, setNewChatPending } = useChatHistoryStore();
 
-  // Fetch chats using the generated API hook (passing empty object directly)
-  const { data, isLoading, error, refetch } = useRecentChats({});
+  const {
+    data,
+    isLoading,
+    error,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery<
+    Awaited<ReturnType<typeof fetchRecentChats>>,
+    RecentChatsError
+  >({
+    queryKey: [
+      ...recentChatsQuery({}).queryKey,
+      "infinite",
+      { limit: CHAT_HISTORY_PAGE_SIZE },
+    ],
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) => {
+      const offset = typeof pageParam === "number" ? pageParam : 0;
+      return fetchRecentChats(
+        {
+          ...fetcherOptions,
+          queryParams: {
+            limit: CHAT_HISTORY_PAGE_SIZE,
+            offset,
+          },
+        },
+        signal,
+      );
+    },
+    getNextPageParam: (lastPage) => {
+      if (!lastPage.stats.has_more || lastPage.stats.returned_count === 0) {
+        return undefined;
+      }
+      return lastPage.stats.current_offset + lastPage.stats.returned_count;
+    },
+  });
 
   // Generated hook for archiving a chat
   const { mutateAsync: archiveChatMutation } = useArchiveChatEndpoint();
@@ -105,8 +141,11 @@ export function useChatHistory() {
   // Create a stable empty object for fetcherOptions, reflecting what useV1betaApiContext currently returns
   const stableEmptyFetcherOptions = useMemo(() => ({}), []);
 
-  // Extract chats from the response structure, defaulting to a stable empty array reference
-  const chats = data?.chats ?? emptyChats;
+  // Extract chats from the paginated response structure, defaulting to a stable empty array reference
+  const chats = useMemo(
+    () => data?.pages.flatMap((page) => page.chats) ?? emptyChats,
+    [data?.pages, emptyChats],
+  );
 
   // Navigate to a specific chat (assistant-aware)
   const navigateToChat = useCallback(
@@ -265,6 +304,9 @@ export function useChatHistory() {
     isLoading,
     error,
     refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
     navigateToChat,
     createNewChat,
     archiveChat,
