@@ -1,6 +1,7 @@
 //! Inlined version of the frontend-environment crate (to simplify dependency version alignment)
 pub use self::axum::serve_files_with_script;
 use crate::config::AppConfig;
+use ::axum::http::HeaderValue;
 use lol_html::html_content::ContentType;
 use lol_html::{HtmlRewriter, Settings, element};
 use ordered_multimap::ListOrderedMultimap;
@@ -68,6 +69,7 @@ const FRONTEND_ENV_KEY_MASK_REASONING_TRACE_TEXT: &str = "MASK_REASONING_TRACE_T
 const COMPONENT_KITS_PUBLIC_MOUNT_BASE: &str = "/public/component-kits";
 const COMPONENT_KIT_REACT_RUNTIME_SCRIPT_PATH: &str =
     "/public/common/assets/component-kit-react-runtime.js";
+const OUTLOOK_OFFICE_FRAME_ANCESTOR: &str = "https://outlook.office.com";
 
 #[derive(Debug, Clone, Default)]
 /// Map of values that will be provided as environment-variable-like global variables to the frontend.
@@ -94,6 +96,7 @@ pub struct ServedFrontend {
     pub fallback_to_404: bool,
     pub inject_environment: bool,
     pub component_kit_assets: Vec<ComponentKitAsset>,
+    pub content_security_policy: Option<HeaderValue>,
 }
 
 #[derive(Debug, Clone)]
@@ -129,6 +132,7 @@ impl FrontendRegistry {
 
 pub fn build_frontend_registry(config: &AppConfig) -> FrontendRegistry {
     let component_kit_assets = discover_component_kits(&config.frontend.component_kits.directory);
+    let content_security_policy = build_content_security_policy(config);
     let mut frontends = vec![ServedFrontend {
         bundle_path: config
             .integrations
@@ -142,6 +146,7 @@ pub fn build_frontend_registry(config: &AppConfig) -> FrontendRegistry {
         fallback_to_404: true,
         inject_environment: true,
         component_kit_assets: component_kit_assets.clone(),
+        content_security_policy: content_security_policy.clone(),
     }];
 
     if config.integrations.ms_office.addin.serve_bundle_legacy_path {
@@ -158,6 +163,7 @@ pub fn build_frontend_registry(config: &AppConfig) -> FrontendRegistry {
             fallback_to_404: true,
             inject_environment: true,
             component_kit_assets: component_kit_assets.clone(),
+            content_security_policy: content_security_policy.clone(),
         });
     }
 
@@ -169,6 +175,7 @@ pub fn build_frontend_registry(config: &AppConfig) -> FrontendRegistry {
         fallback_to_404: true,
         inject_environment: true,
         component_kit_assets: component_kit_assets.clone(),
+        content_security_policy: content_security_policy.clone(),
     });
 
     for component_kit in component_kit_assets {
@@ -180,10 +187,37 @@ pub fn build_frontend_registry(config: &AppConfig) -> FrontendRegistry {
             fallback_to_404: false,
             inject_environment: false,
             component_kit_assets: Vec::new(),
+            content_security_policy: content_security_policy.clone(),
         });
     }
 
     FrontendRegistry { frontends }
+}
+
+fn build_content_security_policy(config: &AppConfig) -> Option<HeaderValue> {
+    if config.frontend.allow_any_frame_ancestor {
+        return None;
+    }
+
+    let mut frame_ancestors = vec!["'self'".to_string()];
+    if config.integrations.ms_office.addin.enabled {
+        frame_ancestors.push(OUTLOOK_OFFICE_FRAME_ANCESTOR.to_string());
+    }
+    frame_ancestors.extend(
+        config
+            .frontend
+            .extra_frame_ancestors
+            .iter()
+            .map(|ancestor| ancestor.trim())
+            .filter(|ancestor| !ancestor.is_empty())
+            .map(ToOwned::to_owned),
+    );
+
+    let content_security_policy = format!("frame-ancestors {}", frame_ancestors.join(" "));
+    Some(
+        HeaderValue::from_str(&content_security_policy)
+            .expect("generated Content-Security-Policy header should be valid"),
+    )
 }
 
 fn is_valid_component_kit_name(name: &str) -> bool {
@@ -781,7 +815,7 @@ pub mod axum {
     use super::*;
     use ::axum::body::{Body, Bytes};
 
-    use ::axum::http::{HeaderValue, Request, Uri};
+    use ::axum::http::{HeaderMap, HeaderName, Request, Uri};
     use ::axum::response::Response;
     use ::axum::{BoxError, Extension, http};
     use http_body_util::BodyExt;
@@ -789,6 +823,18 @@ pub mod axum {
     use std::convert::Infallible;
     use std::path::PathBuf;
     use tower_http::services::{ServeDir, ServeFile};
+
+    fn insert_content_security_policy(
+        headers: &mut HeaderMap,
+        content_security_policy: Option<&HeaderValue>,
+    ) {
+        if let Some(content_security_policy) = content_security_policy {
+            headers.insert(
+                HeaderName::from_static("content-security-policy"),
+                content_security_policy.clone(),
+            );
+        }
+    }
 
     fn rewrite_request_path(req: Request<Body>, mount_path: &str) -> Request<Body> {
         if mount_path == "/" {
@@ -839,6 +885,7 @@ pub mod axum {
 
         let frontend_environment = frontend.environment.clone();
         let component_kit_assets = frontend.component_kit_assets.clone();
+        let content_security_policy = frontend.content_security_policy.clone();
         let should_inject_environment = frontend.inject_environment;
         let bundle_dir_path = PathBuf::from(frontend.bundle_path.clone())
             .canonicalize()
@@ -941,6 +988,7 @@ pub mod axum {
                 .insert(http::header::PRAGMA, HeaderValue::from_static("no-cache"));
             res.headers_mut()
                 .insert(http::header::EXPIRES, HeaderValue::from_static("0"));
+            insert_content_security_policy(res.headers_mut(), content_security_policy.as_ref());
 
             Ok(res)
         } else {
@@ -962,7 +1010,7 @@ pub mod axum {
                     && client_etag.to_str().ok() == Some(&etag_value)
                 {
                     // ETag matches - return 304 Not Modified
-                    let response = Response::builder()
+                    let mut response = Response::builder()
                         .status(http::StatusCode::NOT_MODIFIED)
                         .header(http::header::ETAG, etag_value)
                         .header(http::header::CACHE_CONTROL, cache_control)
@@ -972,6 +1020,10 @@ pub mod axum {
                                 .boxed_unsync(),
                         )
                         .unwrap();
+                    insert_content_security_policy(
+                        response.headers_mut(),
+                        content_security_policy.as_ref(),
+                    );
                     return Ok(response);
                 }
 
@@ -991,6 +1043,7 @@ pub mod axum {
                     HeaderValue::from_static("no-cache"),
                 );
             }
+            insert_content_security_policy(res.headers_mut(), content_security_policy.as_ref());
 
             Ok(res)
         }
@@ -1010,7 +1063,59 @@ mod tests {
             fallback_to_404: true,
             inject_environment: true,
             component_kit_assets: Vec::new(),
+            content_security_policy: Some(HeaderValue::from_static("frame-ancestors 'self'")),
         }
+    }
+
+    fn content_security_policy_str(config: &AppConfig) -> Option<String> {
+        build_content_security_policy(config)
+            .and_then(|value| value.to_str().ok().map(ToOwned::to_owned))
+    }
+
+    #[test]
+    fn content_security_policy_defaults_to_self_frame_ancestor() {
+        let config = AppConfig::default();
+
+        assert_eq!(
+            content_security_policy_str(&config).as_deref(),
+            Some("frame-ancestors 'self'")
+        );
+    }
+
+    #[test]
+    fn content_security_policy_includes_outlook_when_office_addin_is_enabled() {
+        let mut config = AppConfig::default();
+        config.integrations.ms_office.addin.enabled = true;
+
+        assert_eq!(
+            content_security_policy_str(&config).as_deref(),
+            Some("frame-ancestors 'self' https://outlook.office.com")
+        );
+    }
+
+    #[test]
+    fn content_security_policy_includes_extra_frame_ancestors() {
+        let mut config = AppConfig::default();
+        config.frontend.extra_frame_ancestors = vec![
+            "https://outlook.cloud.microsoft".to_string(),
+            " https://example.com ".to_string(),
+            " ".to_string(),
+        ];
+
+        assert_eq!(
+            content_security_policy_str(&config).as_deref(),
+            Some("frame-ancestors 'self' https://outlook.cloud.microsoft https://example.com")
+        );
+    }
+
+    #[test]
+    fn content_security_policy_is_omitted_when_any_frame_ancestor_is_allowed() {
+        let mut config = AppConfig::default();
+        config.integrations.ms_office.addin.enabled = true;
+        config.frontend.extra_frame_ancestors = vec!["https://example.com".to_string()];
+        config.frontend.allow_any_frame_ancestor = true;
+
+        assert_eq!(build_content_security_policy(&config), None);
     }
 
     #[test]
