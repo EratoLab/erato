@@ -48,7 +48,7 @@ TMP_DIR="${PROJECT_ROOT}/tmp/helm"
 # Extract the original version from Chart.yaml
 ORIGINAL_VERSION=$(grep '^version:' "${CHART_DIR}/Chart.yaml" | awk '{print $2}')
 CHART_NAME="erato"
-OCI_REGISTRY="harbor.imassage.me"
+OCI_REGISTRY="registry.eratolabs.com"
 
 # Set chart version and OCI repository based on mode
 if [ "$RELEASE_MODE" = true ]; then

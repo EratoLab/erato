@@ -263,7 +263,7 @@ ingress:
 | backend.extraVolumes | list | `[]` | Optionally specify extra list of additional volumes for the backend pod |
 | backend.image.pullPolicy | string | `"IfNotPresent"` | Backend image pull policy |
 | backend.image.pullSecrets | list | `[]` | Backend image pull secrets |
-| backend.image.repository | string | `"harbor.imassage.me/erato/app"` | Backend image repository |
+| backend.image.repository | string | `"registry.eratolabs.com/erato/app"` | Backend image repository |
 | backend.image.tag | string | `""` | Backend image tag (immutable tags are recommended) |
 | backend.logJson | bool | `true` | Emit backend logs as JSON by setting LOGGING__FORMAT=json |
 | backend.metrics.configFile.enabled | bool | `true` | Render and mount an additional `*.auto.erato.toml` config file that enables `integrations.prometheus`. |
@@ -319,7 +319,7 @@ ingress:
 | oauth2Proxy.extraVolumes | list | `[]` | Optionally specify extra list of additional volumes for the oauth2-proxy pod |
 | oauth2Proxy.image.pullPolicy | string | `"IfNotPresent"` | OAuth2 Proxy image pull policy |
 | oauth2Proxy.image.pullSecrets | list | `[]` | OAuth2 Proxy image pull secrets |
-| oauth2Proxy.image.repository | string | `"harbor.imassage.me/erato/oauth2-proxy"` | OAuth2 Proxy image repository |
+| oauth2Proxy.image.repository | string | `"registry.eratolabs.com/erato/oauth2-proxy"` | OAuth2 Proxy image repository |
 | oauth2Proxy.image.tag | string | `"v7.15.2-erato.3"` | OAuth2 Proxy image tag |
 | oauth2Proxy.metrics.enabled | bool | `false` | Enable oauth2-proxy metrics exposure resources. |
 | oauth2Proxy.metrics.port | int | `44180` | oauth2-proxy metrics listener port. Must match oauth2-proxy config (e.g. metrics_address). |
