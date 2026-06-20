@@ -43,6 +43,10 @@ import {
 } from "./onsetFlipController";
 import { useAudioContextInterruptionRecovery } from "./useAudioContextInterruptionRecovery";
 import { useAudioInputDevicePreference } from "./useAudioInputDevicePreference";
+import {
+  useMediaStreamTrackWatchdog,
+  type TrackLossReason,
+} from "./useMediaStreamTrackWatchdog";
 
 import type { VoiceVadEngine } from "@/lib/voice-runtime";
 
@@ -275,6 +279,22 @@ export function useAudioDictationRecorder({
       enabled,
     });
 
+  /**
+   * Capture-track device-loss watchdog (ERMAIN-390). Delegated through a
+   * ref because the real handler stops dictation, which is defined further
+   * down — the ref keeps `watchTrack`/`unwatchTrack` available to the early
+   * teardown helpers while the handler is wired in an effect below.
+   */
+  const captureTrackLostHandlerRef = useRef<(reason: TrackLossReason) => void>(
+    () => {},
+  );
+  const { watchTrack: watchCaptureTrack, unwatchTrack: unwatchCaptureTrack } =
+    useMediaStreamTrackWatchdog({
+      onTrackLost: useCallback((reason: TrackLossReason) => {
+        captureTrackLostHandlerRef.current(reason);
+      }, []),
+    });
+
   useEffect(() => {
     onTranscriptChunkRef.current = onTranscriptChunk;
   }, [onTranscriptChunk]);
@@ -353,13 +373,23 @@ export function useAudioDictationRecorder({
   const tearDownCaptureGraph = useCallback(() => {
     clearRecordingDurationTimer();
     stopVadEngine();
+    // Detach the device-loss listeners before stopping the track. Our own
+    // `track.stop()` does not fire `ended`, but a `mute` grace timer may be
+    // pending — cancel it so an intentional teardown can't surface a
+    // spurious post-stop "muted" loss.
+    unwatchCaptureTrack();
 
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current = null;
     }
     stopRecordingVisualizer();
-  }, [clearRecordingDurationTimer, stopRecordingVisualizer, stopVadEngine]);
+  }, [
+    clearRecordingDurationTimer,
+    stopRecordingVisualizer,
+    stopVadEngine,
+    unwatchCaptureTrack,
+  ]);
 
   const sendLivePcmChunk = useCallback((pcmBytes: Uint8Array) => {
     const session = liveSessionRef.current;
@@ -693,6 +723,25 @@ export function useAudioDictationRecorder({
     tearDownCaptureGraph,
   ]);
 
+  // Wire the watchdog to a clean stop. A genuinely dead capture (`ended`,
+  // or a mute outliving the grace window) surfaces an actionable error and
+  // completes the session on whatever was captured before the mic died —
+  // no silent dead capture (ERMAIN-390). Defined here so it can reference
+  // `stopDictation`; the watchdog reads it through the delegating ref.
+  useEffect(() => {
+    captureTrackLostHandlerRef.current = (reason: TrackLossReason) => {
+      if (!isMounted()) {
+        return;
+      }
+      setDictationError(
+        reason === "ended"
+          ? t`The microphone was disconnected. Please check your microphone and start dictation again.`
+          : t`The microphone stopped sending audio. Please check your microphone and start dictation again.`,
+      );
+      stopDictation();
+    };
+  }, [isMounted, stopDictation]);
+
   const startDictation = useCallback(async () => {
     if (
       startInFlightRef.current ||
@@ -775,6 +824,9 @@ export function useAudioDictationRecorder({
 
       mediaStreamRef.current = stream;
       const audioTrack = stream.getAudioTracks()[0];
+      // Start watching for mid-session device-loss (AirPods route change,
+      // incoming call, unplug) as soon as the track exists (ERMAIN-390).
+      watchCaptureTrack(audioTrack);
       const trackSettings = audioTrack.getSettings();
       setDictationDiagnostics(mediaTrackSettingsToDiagnostics(trackSettings));
 
@@ -1087,6 +1139,7 @@ export function useAudioDictationRecorder({
     stopVadEngine,
     tearDownCaptureGraph,
     vadAutoStopEnabled,
+    watchCaptureTrack,
   ]);
 
   const toggleDictation = useCallback(() => {

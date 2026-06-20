@@ -35,6 +35,33 @@ export const PRE_SPEECH_SILENCE_PRIMER_MS = 300;
 export const MIN_AUDIO_CAPTURE_DELAY_MS = 150;
 
 /**
+ * Grace window before a sustained `mute` on the capture `MediaStreamTrack`
+ * is escalated to a device-loss (ERMAIN-390). `mute`/`unmute` fire
+ * (browser-controlled, distinct from the app-controlled `enabled`) when a
+ * source temporarily can't produce data — on iOS/WebKit this happens during
+ * route changes and interruptions (AirPods connect/disconnect, an incoming
+ * call, Siri), so a naive "mute → error" false-positives on a transient
+ * that recovers. An `unmute` inside this window cancels the escalation;
+ * only a mute that outlives it is treated as lost (`ended` remains the
+ * authoritative, immediate "dead" signal). Note `unmute` is NOT guaranteed
+ * to arrive — WebKit fires it only "sometimes" after an interruption, and
+ * a route change can mute with no unmute at all (WebKit bug 212040) — so
+ * grace-expiry escalation is the intended fallback, not an edge case.
+ *
+ * 5 s, not a sub-second value: WebKit's own capture pipeline budgets up to
+ * ~5 s for a Bluetooth reconfiguration to complete (WebKit commit 24cb5e2
+ * raised an internal capture-failure guard precisely because "Bluetooth
+ * reconfiguration sometimes took up to 5 seconds"), and the mature WebRTC
+ * SDKs debounce mute in the same band (LiveKit 5 s before pausing upstream,
+ * Jitsi 4 s of zero-signal before NO_AUDIO_INPUT). A shorter window risks
+ * declaring "lost" mid-handoff on a slow AirPods connect — one of this
+ * ticket's own acceptance scenarios. Tradeoff: answering an incoming call
+ * holds the mic past 5 s, so this surfaces a clean "interrupted" stop — the
+ * correct outcome, since dictation can't continue mid-call.
+ */
+export const MUTE_GRACE_MS = 5_000;
+
+/**
  * Tunables for the RMS-based speech-onset detector (ERMAIN-379). The
  * detector replaced an exact-zero predicate (`sample !== 0`) that
  * mistimed on WebKit/Safari, whose raw-capture path emits a low-level

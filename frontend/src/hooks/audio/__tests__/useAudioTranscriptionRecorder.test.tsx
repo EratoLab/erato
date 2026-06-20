@@ -94,8 +94,14 @@ function readCanonicalWavSamples(): Float32Array {
   return samples;
 }
 
-class MockMediaStreamTrack {
-  stop = vi.fn();
+class MockMediaStreamTrack extends EventTarget {
+  // Extends EventTarget so the ERMAIN-390 device-loss watchdog can attach
+  // its `ended`/`mute`/`unmute` listeners.
+  readyState: MediaStreamTrackState = "live";
+  muted = false;
+  stop = vi.fn(() => {
+    this.readyState = "ended";
+  });
 
   getSettings() {
     return {
