@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef } from "react";
 
 import { MUTE_GRACE_MS } from "./audioTuning";
 
@@ -26,9 +26,10 @@ export type TrackLossReason = "ended" | "muted";
  * the safe baseline is a clean stop with a surfaced error. Engine-agnostic —
  * `ended` is reliable everywhere and the grace window is harmless off-WebKit.
  *
- * `onTrackLost` is read through an internal ref, so the returned
- * `watchTrack` / `unwatchTrack` are stable and the consumer can pass a
- * freshly-bound handler each render without re-attaching listeners.
+ * `onTrackLost` is invoked through a stable Effect Event, so the returned
+ * `watchTrack` / `unwatchTrack` stay referentially stable and the consumer
+ * can pass a freshly-bound (inline) handler each render without re-attaching
+ * listeners or going stale.
  */
 export function useMediaStreamTrackWatchdog({
   onTrackLost,
@@ -46,11 +47,14 @@ export function useMediaStreamTrackWatchdog({
   // Backs both the mute grace timer and the deferred already-ended report,
   // so a teardown that lands first can cancel either via unwatchTrack.
   const pendingLossTimerRef = useRef<number | null>(null);
-  const onTrackLostRef = useRef(onTrackLost);
 
-  useEffect(() => {
-    onTrackLostRef.current = onTrackLost;
-  }, [onTrackLost]);
+  // Effect Event: always sees the latest `onTrackLost` without making it a
+  // reactive dependency, and is only ever called locally from the loss
+  // handlers below (never passed across a hook boundary), so it replaces the
+  // old `onTrackLostRef` + sync-effect trampoline.
+  const onTrackLostEvent = useEffectEvent((reason: TrackLossReason) => {
+    onTrackLost(reason);
+  });
 
   const clearPendingLossTimer = useCallback(() => {
     if (pendingLossTimerRef.current !== null) {
@@ -71,9 +75,13 @@ export function useMediaStreamTrackWatchdog({
       // Detach FIRST so a follow-up event on the same track (e.g. `ended`
       // arriving after a grace-window `muted`) can't fire onTrackLost twice.
       unwatchTrack();
-      onTrackLostRef.current(reason);
+      onTrackLostEvent(reason);
     },
-    [unwatchTrack],
+    // `onTrackLostEvent` is a stable Effect Event, so listing it never
+    // re-creates this callback; it's listed only because the loss path runs
+    // through this imperative `useCallback` (not a `useEffect`), where
+    // exhaustive-deps treats it as an ordinary reference.
+    [unwatchTrack, onTrackLostEvent],
   );
 
   const watchTrack = useCallback(
