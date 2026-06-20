@@ -2,7 +2,7 @@
  * Wires the pure `onsetDetector` to the UI "speak now" cue with the
  * `MIN_AUDIO_CAPTURE_DELAY_MS` deferral floor, so both recorder hooks
  * share one onset implementation instead of a copy-pasted message-handler
- * block (ERMAIN-379). The hook supplies the guarded `onFlip` (it knows
+ * block. The hook supplies the guarded `onFlip` (it knows
  * about `isMounted` / the live processor ref) and an optional diagnostics
  * sink; everything else — detection, debounce, the deferral timer, and
  * fire-once semantics — lives here.
@@ -44,7 +44,7 @@ export function createSpeechOnsetController(options: {
     }
   };
 
-  // Wall-clock backstop (G1): the detector's max-hold is measured in audio
+  // Wall-clock backstop: the detector's max-hold is measured in audio
   // time and only advances while frames arrive, so a capture that stalls
   // before onset would hang the cue forever. This frame-independent timer
   // guarantees the cue resolves regardless of frame delivery. It normally
@@ -75,8 +75,8 @@ export function createSpeechOnsetController(options: {
       // Onset reached on its own — the backstop is no longer needed.
       clearBackstop();
 
-      // Honor the MIN_AUDIO_CAPTURE_DELAY_MS floor (ERMAIN-379 invariant):
-      // hold the cue at least this long after pipeline-ready so a warm
+      // Honor the MIN_AUDIO_CAPTURE_DELAY_MS floor: hold the cue at least
+      // this long after pipeline-ready so a warm
       // device doesn't blink the spinner. In real-time delivery onset
       // already trails calibration past this floor; the deferral remains
       // for buffered-burst delivery and to keep the invariant intact.

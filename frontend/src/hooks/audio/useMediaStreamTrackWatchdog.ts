@@ -5,38 +5,26 @@ import { MUTE_GRACE_MS } from "./audioTuning";
 export type TrackLossReason = "ended" | "muted";
 
 /**
- * Watches the live capture `MediaStreamTrack` for device-loss mid-session
- * (ERMAIN-390) — the failure surface the ERMAIN-379 AudioContext
- * interruption recovery (`useAudioContextInterruptionRecovery`) does NOT
- * cover. On iOS/WebKit a Bluetooth route change (AirPods connect /
- * disconnect), an incoming call, or an unplugged device can end or mute
- * the capture track, after which the audio graph silently produces nothing
- * — no frames, no error, no recovery. The G1 wall-clock backstop landed in
- * ERMAIN-379 guarantees the "speak now" cue still resolves, but it can't
- * tell a dead mic from a flowing-but-quiet one; this watchdog is that
- * missing signal.
+ * Watches the live capture `MediaStreamTrack` for mid-session device-loss:
+ * a Bluetooth route change (AirPods connect/disconnect), an incoming call,
+ * or an unplugged device can end or mute the track, after which the audio
+ * graph silently produces nothing — no frames, no error, no recovery. This
+ * is the signal the AudioContext interruption recovery
+ * (`useAudioContextInterruptionRecovery`) does not cover.
  *
- * Signal handling, per the ERMAIN-390 caveats:
- *   - `ended` is the AUTHORITATIVE "dead" signal → reported immediately.
+ *   - `ended` is the authoritative "dead" signal → reported immediately.
  *   - `mute`/`unmute` are browser-controlled (distinct from the
- *     app-controlled `enabled`) and fire TRANSIENTLY on iOS during route
- *     changes and interruptions, so "mute → lost" would false-positive. A
- *     `mute` arms a grace timer (`MUTE_GRACE_MS`); an `unmute` inside the
- *     window cancels it (benign transient). Only a mute that outlives the
- *     window escalates to a loss — a track still muted that long is, in
- *     practice, the same silent-dead capture this ticket removes. `unmute`
- *     is not guaranteed to arrive (WebKit fires it only "sometimes" after
- *     an interruption), so this expiry path is the intended fallback. The
- *     timer re-reads live track state rather than trusting the stale event.
+ *     app-controlled `enabled`) and fire transiently on iOS during route
+ *     changes, so "mute → lost" would false-positive. A `mute` arms a grace
+ *     timer (`MUTE_GRACE_MS`); an `unmute` cancels it. Only a mute that
+ *     outlives the window is treated as lost. `unmute` is not guaranteed to
+ *     arrive, so grace-expiry escalation is the intended fallback; the timer
+ *     re-reads live track state rather than trusting the stale event.
  *
- * Re-acquire is intentionally NOT attempted here: re-running getUserMedia
- * can hand back a different sample rate that collides with the
- * rate-coupled `new AudioContext({ sampleRate })` and risks re-triggering
- * the ERMAIN-334 first-word truncation, so the safe baseline is a clean
- * stop with a surfaced error (ERMAIN-390 caveat 2). Engine-agnostic:
- * `ended` is reliable everywhere (a USB unplug ends the track on desktop
- * too) and the grace window is harmless off-WebKit, so — unlike
- * `useAudioContextInterruptionRecovery` — this is not gated to WebKit.
+ * No re-acquire: re-running getUserMedia can return a different sample rate
+ * that collides with the rate-coupled `new AudioContext({ sampleRate })`, so
+ * the safe baseline is a clean stop with a surfaced error. Engine-agnostic —
+ * `ended` is reliable everywhere and the grace window is harmless off-WebKit.
  *
  * `onTrackLost` is read through an internal ref, so the returned
  * `watchTrack` / `unwatchTrack` are stable and the consumer can pass a

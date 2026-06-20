@@ -92,10 +92,6 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
         <DropdownMenu
           items={dropdownItems}
           align="left"
-          // preferredOrientation={{
-          //   vertical: 'top',
-          //   horizontal: 'left'
-          // }}
           data-testid="user-profile-dropdown"
           triggerIcon={
             <Avatar

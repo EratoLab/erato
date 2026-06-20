@@ -23,10 +23,7 @@ export function mergeApiAuthHeaders(
   // the Office add-in currently leave this null and authenticate via the
   // oauth2-proxy session cookie (the add-in redeems its MSAL id token for that
   // cookie at /oauth2/redeem-external-token rather than sending it per request),
-  // so this branch is inert today. NOTE: do not assume the proxy would reject
-  // such a Bearer — with `skip_jwt_bearer_tokens` and a matching audience it can
-  // accept it; the store is left unused on purpose to keep the cookie the single
-  // source of truth.
+  // so this branch is inert today.
   const idToken = getIdToken();
   if (!idToken) {
     return definedHeaders;

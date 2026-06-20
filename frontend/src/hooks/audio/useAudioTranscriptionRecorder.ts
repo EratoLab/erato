@@ -662,9 +662,7 @@ export function useAudioTranscriptionRecorder({
       // resume() is a no-op when already running; it matters when
       // reusing a context suspended at the end of the prior recording,
       // and on hosts where a fresh context starts suspended (embedded
-      // webviews / lapsed user activation). The transcription recorder
-      // previously never resumed, which silently produced zero capture
-      // on suspended-start hosts (ERMAIN-334).
+      // webviews / lapsed user activation).
       try {
         await audioContext.resume();
       } catch {
@@ -1364,10 +1362,9 @@ export function useAudioTranscriptionRecorder({
           audioContext,
           AUDIO_TRANSCRIPTION_WORKLET_PROCESSOR_NAME,
         );
-        // Match the dictation recorder: time-domain sampling with a
-        // 256-sample FFT and a touch of smoothing reads voice energy
-        // across the whole window instead of bucketing it into one
-        // low-frequency bin, so all five bars react to speech.
+        // 256-sample FFT + light smoothing reads voice energy across the
+        // whole window so all five bars track speech (matches the
+        // dictation recorder).
         analyser.fftSize = 256;
         analyser.smoothingTimeConstant = 0.65;
         sourceSampleRate = audioContext.sampleRate;
@@ -1392,10 +1389,8 @@ export function useAudioTranscriptionRecorder({
         // The worklet posts every render quantum, including zero-filled
         // OS warm-up frames — those belong in the stream sent to the
         // server (it stays dumb). The "speak now" UI cue is separate and
-        // UI-only: an RMS onset detector flips isCapturingAudio on real
-        // speech-level energy. It replaced an exact-zero predicate that
-        // mistimed on WebKit's noise-floor warm-up — see
-        // useAudioDictationRecorder and onsetDetector (ERMAIN-379).
+        // UI-only (RMS onset detector) — see useAudioDictationRecorder and
+        // onsetDetector.
         const flipCapturingAudio = () => {
           // Guard against late firings after teardown or unmount: the
           // processor ref will be null or point at a different node.

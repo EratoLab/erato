@@ -5,8 +5,6 @@
  * with support for custom headers and event handling.
  *
  * Note: The native EventSource API doesn't support custom headers.
- * For production, consider using a polyfill like 'event-source-polyfill' or
- * a custom implementation for more advanced features.
  */
 
 import { mergeApiAuthHeaders } from "@/auth/apiRequestAuth";
@@ -122,20 +120,18 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
   abortController = new AbortController();
   const { signal } = abortController;
 
-  // Helper async generator to iterate over stream reader (alternative structure)
+  // Async generator over the stream reader
   async function* streamAsyncIterator(
     reader: ReadableStreamDefaultReader<Uint8Array>,
   ) {
     try {
-      let result = await reader.read(); // Initial read before the loop
+      let result = await reader.read();
       while (!result.done) {
-        // Loop condition based on 'done'
-        yield result.value; // Yield the current chunk
-        result = await reader.read(); // Read the next chunk at the end
+        yield result.value;
+        result = await reader.read();
       }
-      // Loop naturally terminates when result.done is true
     } finally {
-      reader.releaseLock(); // Ensure the lock is always released
+      reader.releaseLock();
     }
   }
 
@@ -143,16 +139,14 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
   const readSSEStream = async (stream: ReadableStream<Uint8Array>) => {
     let buffer = "";
     const decoder = new TextDecoder();
-    const reader = stream.getReader(); // Get the reader
+    const reader = stream.getReader();
 
     try {
       logger.log("Stream connected, starting to read using async generator");
       isConnected = true;
       onOpen?.();
 
-      // Use for await...of on the async generator helper
       for await (const value of streamAsyncIterator(reader)) {
-        // Decode chunk and add to buffer
         const chunk = decoder.decode(value, { stream: true });
         buffer += chunk;
 

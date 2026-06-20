@@ -71,7 +71,6 @@ const getAuthHeaders = (): Record<string, string> => {
 // Remove onChatCreated from parameters
 interface UseChatMessagingParams {
   chatId: string | null;
-  // onChatCreated?: (newChatId: string) => void;
   silentChatId?: string | null;
   /** Platform identifier sent via X-Erato-Platform header. Defaults to "web". */
   platform?: string;
@@ -153,17 +152,12 @@ function handleNullChatIdScenario(
 
 export function useChatMessaging(
   chatIdOrParams: string | null | UseChatMessagingParams,
-  // legacyOnChatCreated?: (newChatId: string) => void, // Remove legacy param
 ) {
   // Support both old and new function signatures for backward compatibility
   const chatId =
     typeof chatIdOrParams === "string" || chatIdOrParams === null
       ? chatIdOrParams
       : chatIdOrParams.chatId;
-
-  // Remove onChatCreated extraction
-  // const onChatCreated =
-  //   ...
 
   const silentChatId =
     typeof chatIdOrParams === "string" || chatIdOrParams === null
@@ -234,8 +228,6 @@ export function useChatMessaging(
   const resumeAttemptsByKeyRef = useRef<Record<string, number>>({});
   const lastResumeAttemptedChatIdRef = useRef<string | null>(null);
   const isUnmountingRef = useRef(false); // Track if we're unmounting to skip unnecessary refetch
-  // Remove pendingChatIdRef, use state instead
-  // const pendingChatIdRef = useRef<string | null>(null);
   const [newlyCreatedChatId, setNewlyCreatedChatId] = useState<string | null>(
     null,
   );
@@ -268,7 +260,6 @@ export function useChatMessaging(
   // Add explicit navigation hook
   const explicitNav = useExplicitNavigation();
 
-  // Log hook mounting and unmounting - keep this for debugging chat lifecycle
   useEffect(() => {
     const currentChatId = chatId; // Capture chatId for cleanup
     const isInTransition =
@@ -707,9 +698,6 @@ export function useChatMessaging(
 
   // Clean up any existing SSE connection on unmount or chatId change
   useEffect(() => {
-    // logger.log(
-    //   `[CHAT_FLOW_LIFECYCLE_DEBUG] Setting up cleanup effect for chatId: ${chatId ?? "null"}`,
-    // );
     const capturedChatIdForCleanup = chatId; // Capture chatId for the cleanup function
 
     return () => {
@@ -923,7 +911,6 @@ export function useChatMessaging(
             break;
 
           case "text_delta":
-            // logger.log("processStreamEvent: text_delta event. Delta:", responseData.delta); // Can be too noisy
             handleTextDelta(responseData, activeStreamKey);
             break;
 
@@ -1277,16 +1264,6 @@ export function useChatMessaging(
         "[DEBUG_STREAMING] sendMessage: isSubmittingRef.current set to true.",
       );
 
-      if (process.env.NODE_ENV === "development") {
-        // logger.log(
-        //   "[CHAT_FLOW] Added temporary user message:",
-        //   userMessage.id,
-        // );
-        // logger.log(
-        //   `[CHAT_FLOW_LIFECYCLE_DEBUG] sendMessage called with chatId: ${chatId ?? "null"}, silentChatId: ${silentChatId ?? "null"}`,
-        // );
-      }
-
       try {
         // Reset any previous streaming state FIRST
         logger.log(
@@ -1294,7 +1271,7 @@ export function useChatMessaging(
         );
         resetStreaming(streamKey);
 
-        // ERMAIN-88 FIX: Create optimistic assistant placeholder immediately
+        // Create optimistic assistant placeholder immediately
         // This provides instant UI feedback while the POST request is being processed
         const optimisticAssistantId = `temp-assistant-${Date.now()}`;
         const now = new Date().toISOString();
@@ -1319,9 +1296,6 @@ export function useChatMessaging(
           logger.log(
             "[DEBUG_STREAMING] sendMessage: Closing previous SSE connection before creating a new one.",
           );
-          // logger.log(
-          //   `[CHAT_FLOW_LIFECYCLE_DEBUG] sendMessage: Cleaning up existing sseCleanupRef for chatId: ${chatId ?? "null"} before new connection.`,
-          // );
           existingCleanup();
           setSSECleanupForKey(streamKey, null);
 
@@ -1371,9 +1345,6 @@ export function useChatMessaging(
         const sseUrl = `/api/v1beta/me/messages/submitstream`;
 
         // The SSE client will handle the POST request format
-        // logger.log(
-        //   `[CHAT_FLOW_LIFECYCLE_DEBUG] sendMessage: About to call createSSEConnection for chatId: ${chatId ?? "null"}. sseCleanupRef.current is currently ${sseCleanupRef.current ? "set" : "null"}.`,
-        // );
         logger.log(
           `[DEBUG_STREAMING] sendMessage: Calling createSSEConnection. Current stream-keyed cleanup is ${getSSECleanupForKey(streamKey) ? "set" : "null"}.`,
         );
@@ -1520,9 +1491,6 @@ export function useChatMessaging(
         setSSECleanupForKey(streamKey, cleanup);
         setSSEAbortCallback(cleanup, streamKey);
 
-        // logger.log(
-        //   `[CHAT_FLOW_LIFECYCLE_DEBUG] sendMessage: Assigned new cleanup to sseCleanupRef.current for chatId: ${chatId ?? "null"}.`,
-        // );
         logger.log(
           `[DEBUG_STREAMING] sendMessage: Assigned new cleanup to sseCleanupRef.current.`,
         );

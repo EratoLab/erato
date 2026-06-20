@@ -35,7 +35,7 @@ export type {
 } from "./fetchOutlookMessageGraph";
 
 /**
- * Environment dispatcher for Outlook message fetching (ERMAIN-353).
+ * Environment dispatcher for Outlook message fetching.
  *
  * The add-in talks to exactly one of two mutually exclusive mail backends,
  * selected by where the mailbox lives (NOT by auth mode — SE and EXO both

@@ -1,6 +1,5 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-// import Image from "next/image"; // Removed Next.js Image import
 import React, { useMemo, useState } from "react";
 
 import { defaultThemeConfig } from "@/config/themeConfig";
@@ -42,12 +41,6 @@ export const Avatar = React.memo<AvatarProps>(
         const nameParts = uiProfile.name.split(" ");
         return `${nameParts[0][0]}${nameParts[1] ? nameParts[1][0] : ""}`.toUpperCase();
       }
-      // if (userProfile?.firstName && userProfile.lastName) {
-      //   return `${userProfile.firstName[0]}${userProfile.lastName[0]}`.toUpperCase();
-      // }
-      // if (userProfile?.username) {
-      //   return userProfile.username[0].toUpperCase();
-      // }
       return "E"; // Default to 'E' for Erato
     };
 

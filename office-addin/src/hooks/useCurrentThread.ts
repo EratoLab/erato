@@ -19,7 +19,7 @@ export interface UseCurrentThreadResult {
    * True when the conversation fetch failed outright (first page errored, so
    * nothing was retrieved). Consumers surface this rather than silently
    * showing "no thread" — distinct from a genuinely empty conversation, which
-   * leaves `thread === null` with `error === false` (INV-7).
+   * leaves `thread === null` with `error === false`.
    */
   error: boolean;
 }

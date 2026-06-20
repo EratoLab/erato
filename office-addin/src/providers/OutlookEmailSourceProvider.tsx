@@ -123,7 +123,7 @@ interface OutlookEmailSourceContextValue {
   /**
    * True when the open conversation failed to load entirely (Graph fetch
    * errored on the first page). Surfaced so the UI can warn the user rather
-   * than silently presenting an empty thread (INV-7).
+   * than silently presenting an empty thread.
    */
   emailThreadLoadError: boolean;
   currentThread: ParsedThread | null;

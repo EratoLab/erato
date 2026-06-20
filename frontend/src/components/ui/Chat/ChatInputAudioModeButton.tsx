@@ -32,7 +32,7 @@ type ChatInputAudioModeButtonRecordingProps =
      * load, mic warm-up) — i.e. before real audio is captured. Shows a
      * loading spinner instead of a live-looking waveform so the user
      * isn't invited to speak before the microphone actually delivers
-     * audio (ERMAIN-334). Clicking still stops/cancels audio mode.
+     * audio. Clicking still stops/cancels audio mode.
      */
     isStarting?: boolean;
   };

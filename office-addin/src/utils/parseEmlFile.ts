@@ -18,7 +18,7 @@ export function isEmlFile(file: File): boolean {
  * Phase 1 transitional adapter — flattens a dropped `.eml` into the raw
  * RFC822 file plus one sibling `File` per non-inline, non-related attachment.
  *
- * Branch A (ERMAIN-273) replaces this output with a trimmed single `.eml`
+ * Branch A replaces this output with a trimmed single `.eml`
  * via surgical MIME removal — that swap lands in Phase 2. Until then we
  * keep the sibling-upload shape so the existing pipeline keeps working
  * while the selection UI / pre-upload validation is built on top of the

@@ -1,5 +1,5 @@
 /**
- * Pure speech-onset state machine (ERMAIN-379). Replaces the exact-zero
+ * Pure speech-onset state machine. Replaces the exact-zero
  * predicate (`sample !== 0`) that gated the UI "speak now" cue
  * (`isCapturingAudio`). Exact-zero detection assumes silence == digital
  * zero — true on Chromium's capture pipeline, but FALSE on WebKit/Safari

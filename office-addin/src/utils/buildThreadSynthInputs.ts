@@ -14,11 +14,10 @@
  *     provenance marker naming where the full copy lives. Three different
  *     versions of `Lastenheft.pdf` = three byte streams = all kept.
  *   - Attachments with no retrievable bytes (cloud references, un-fetchable
- *     items) are disclosed as markers, never silently dropped (INV-9).
+ *     items) are disclosed as markers, never silently dropped.
  *   - An image-only message (no body text, only inline images) gets a marker
  *     so it isn't invisibly empty.
- *   - A partial thread appends a synthetic note disclosing incompleteness
- *     (INV-7).
+ *   - A partial thread appends a synthetic note disclosing incompleteness.
  *
  * Bodies are never mutated for dedup — markers are appended, respecting the
  * message's html-vs-text body type.

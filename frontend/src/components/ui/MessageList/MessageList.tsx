@@ -14,7 +14,6 @@ import {
 } from "./MessageListUtils";
 import { StandardMessageList } from "./StandardMessageList";
 import { VirtualizedMessageList } from "./VirtualizedMessageList";
-// import { ConversationIndicator } from "../Message/ConversationIndicator";
 
 import type { ChatMessageProps } from "../Chat/ChatMessage";
 import type {
@@ -461,13 +460,6 @@ export const MessageList = memo<MessageListProps>(
     isTransitioning,
     emptyStateComponent,
   }) => {
-    // Debug logging for rendering
-    // debugLog("RENDER", "MessageList rendering", {
-    //   messageCount: messageOrder.length,
-    //   hasLoadingMessage: messageOrder.some((id) => !!messages[id].loading),
-    //   loadingMessageIds: messageOrder.filter((id) => !!messages[id].loading),
-    // });
-
     const lastMessageLoadingContent = useMemo(() => {
       const result =
         messageOrder.length > 0 &&
