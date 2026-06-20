@@ -43,10 +43,7 @@ import {
 } from "./onsetFlipController";
 import { useAudioContextInterruptionRecovery } from "./useAudioContextInterruptionRecovery";
 import { useAudioInputDevicePreference } from "./useAudioInputDevicePreference";
-import {
-  useMediaStreamTrackWatchdog,
-  type TrackLossReason,
-} from "./useMediaStreamTrackWatchdog";
+import { useMediaStreamTrackWatchdog } from "./useMediaStreamTrackWatchdog";
 
 import type { VoiceVadEngine } from "@/lib/voice-runtime";
 
@@ -277,20 +274,22 @@ export function useAudioDictationRecorder({
       enabled,
     });
 
-  /**
-   * Capture-track device-loss watchdog (ERMAIN-390). Delegated through a
-   * ref because the real handler stops dictation, which is defined further
-   * down — the ref keeps `watchTrack`/`unwatchTrack` available to the early
-   * teardown helpers while the handler is wired in an effect below.
-   */
-  const captureTrackLostHandlerRef = useRef<(reason: TrackLossReason) => void>(
-    () => {},
-  );
+  // Capture-track device-loss watchdog (ERMAIN-390). The inline handler
+  // references `stopDictation`, which is defined further down — fine, it's a
+  // closure only ever invoked post-render, and the watchdog re-reads the
+  // latest one each render via its own Effect Event. No mount guard needed:
+  // the watchdog removes all listeners and clears its timers on unmount, so
+  // this can't fire after teardown.
   const { watchTrack: watchCaptureTrack, unwatchTrack: unwatchCaptureTrack } =
     useMediaStreamTrackWatchdog({
-      onTrackLost: useCallback((reason: TrackLossReason) => {
-        captureTrackLostHandlerRef.current(reason);
-      }, []),
+      onTrackLost: (reason) => {
+        setDictationError(
+          reason === "ended"
+            ? t`The microphone was disconnected. Please check your microphone and start dictation again.`
+            : t`The microphone stopped sending audio. Please check your microphone and start dictation again.`,
+        );
+        stopDictation();
+      },
     });
 
   useEffect(() => {
@@ -719,25 +718,6 @@ export function useAudioDictationRecorder({
     isMounted,
     tearDownCaptureGraph,
   ]);
-
-  // Wire the watchdog to a clean stop. A genuinely dead capture (`ended`,
-  // or a mute outliving the grace window) surfaces an actionable error and
-  // completes the session on whatever was captured before the mic died —
-  // no silent dead capture (ERMAIN-390). Defined here so it can reference
-  // `stopDictation`; the watchdog reads it through the delegating ref.
-  useEffect(() => {
-    captureTrackLostHandlerRef.current = (reason: TrackLossReason) => {
-      if (!isMounted()) {
-        return;
-      }
-      setDictationError(
-        reason === "ended"
-          ? t`The microphone was disconnected. Please check your microphone and start dictation again.`
-          : t`The microphone stopped sending audio. Please check your microphone and start dictation again.`,
-      );
-      stopDictation();
-    };
-  }, [isMounted, stopDictation]);
 
   const startDictation = useCallback(async () => {
     if (
