@@ -68,12 +68,8 @@ export function mergeDisplayMessages(
     const content = extractTextFromContent(msg.content);
     const apiMessageTime = recentApiUserMessages.get(content);
 
-    // Check if this looks like a duplicate of a very recent API message
-    // A message is a duplicate if:
-    // 1. It has the same content as an API message
-    // 2. The API message is very recent (within 5 seconds)
-    // 3. The local message timestamp is very close to the API message (within 3 seconds)
-    // This tight window catches temp→confirmed transitions without blocking rapid re-sends
+    // A local user message is a duplicate when its content matches a recent API
+    // message (within the 5s window above) and their timestamps are within 3s.
     const isDuplicateOfRecentMessage =
       msg.role === "user" &&
       apiMessageTime &&
@@ -90,8 +86,6 @@ export function mergeDisplayMessages(
   return Object.fromEntries(messageMap.entries());
 }
 
-// Define a more specific type for the request body if available from your API schemas
-// For now, using a general structure.
 export interface SubmitStreamRequestBody {
   user_message: string;
   previous_message_id?: string;

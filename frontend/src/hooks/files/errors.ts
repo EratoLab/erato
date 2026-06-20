@@ -90,7 +90,7 @@ export function isUploadTooLarge(error: unknown): error is ApiUploadFileError {
     error !== null &&
     "message" in error &&
     // eslint-disable-next-line @typescript-eslint/no-explicit-any,lingui/no-unlocalized-strings
-    (error.message as any).includes("NetworkError") // More robust check
+    (error.message as any).includes("NetworkError")
   ) {
     console.warn(
       "A generic NetworkError was caught in a Firefox environment. This is likely due to the file size exceeding browser or server limits. Treating as UploadTooLargeError.",

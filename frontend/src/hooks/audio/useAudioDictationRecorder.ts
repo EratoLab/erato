@@ -43,15 +43,18 @@ import {
 } from "./onsetFlipController";
 import { useAudioContextInterruptionRecovery } from "./useAudioContextInterruptionRecovery";
 import { useAudioInputDevicePreference } from "./useAudioInputDevicePreference";
+import {
+  useMediaStreamTrackWatchdog,
+  type TrackLossReason,
+} from "./useMediaStreamTrackWatchdog";
 
 import type { VoiceVadEngine } from "@/lib/voice-runtime";
 
 const AUDIO_DICTATION_WORKLET_PROCESSOR_NAME = "audio-dictation-processor";
 
-// Dev-gated diagnostics (enable with `localStorage.DEBUG = "true"`). Used
-// for the ERMAIN-379 `[AUDIO_DICT]` validation pass (per-frame RMS + chosen
-// epsilon on Chrome / desktop Safari / a physical iPhone); strip once the
-// onset timing is signed off on real devices.
+// Dev-gated diagnostics (enable with `localStorage.DEBUG = "true"`):
+// per-frame `[AUDIO_DICT]` RMS + chosen epsilon. Strip once the onset
+// timing is signed off on real devices.
 const logger = createLogger("HOOK", "useAudioDictationRecorder");
 
 const DEFAULT_AUDIO_DICTATION_CHUNK_DURATION_MS = 30_000;
@@ -214,8 +217,7 @@ export function useAudioDictationRecorder({
    * state can't leak), but the context itself, its audio rendering
    * thread, and the registered worklet processor stay warm. Closing and
    * re-creating the context on every stop pays an audio-thread spin-up
-   * cost on every restart — which is most likely what was eating the
-   * first word on a "warm" second dictation.
+   * cost on every restart.
    */
   const audioContextRef = useRef<AudioContext | null>(null);
   /**
@@ -273,6 +275,22 @@ export function useAudioDictationRecorder({
   const { selectedAudioInputDeviceId, setSelectedAudioInputDeviceId } =
     useAudioInputDevicePreference({
       enabled,
+    });
+
+  /**
+   * Capture-track device-loss watchdog (ERMAIN-390). Delegated through a
+   * ref because the real handler stops dictation, which is defined further
+   * down — the ref keeps `watchTrack`/`unwatchTrack` available to the early
+   * teardown helpers while the handler is wired in an effect below.
+   */
+  const captureTrackLostHandlerRef = useRef<(reason: TrackLossReason) => void>(
+    () => {},
+  );
+  const { watchTrack: watchCaptureTrack, unwatchTrack: unwatchCaptureTrack } =
+    useMediaStreamTrackWatchdog({
+      onTrackLost: useCallback((reason: TrackLossReason) => {
+        captureTrackLostHandlerRef.current(reason);
+      }, []),
     });
 
   useEffect(() => {
@@ -333,9 +351,8 @@ export function useAudioDictationRecorder({
       // Suspend rather than close: each dictation gets fresh source /
       // analyser / worklet nodes (so per-session state can't leak), but
       // the AudioContext itself stays warm. Closing + re-creating pays an
-      // audio-thread spin-up cost on every restart which is most likely
-      // what was eating the first word on a warm second session. Close
-      // only happens on the hook's unmount cleanup.
+      // audio-thread spin-up cost on every restart. Close only happens on
+      // the hook's unmount cleanup.
       if (audioContextRef.current?.state === "running") {
         void audioContextRef.current.suspend();
       }
@@ -353,13 +370,23 @@ export function useAudioDictationRecorder({
   const tearDownCaptureGraph = useCallback(() => {
     clearRecordingDurationTimer();
     stopVadEngine();
+    // Detach the device-loss listeners before stopping the track. Our own
+    // `track.stop()` does not fire `ended`, but a `mute` grace timer may be
+    // pending — cancel it so an intentional teardown can't surface a
+    // spurious post-stop "muted" loss.
+    unwatchCaptureTrack();
 
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current = null;
     }
     stopRecordingVisualizer();
-  }, [clearRecordingDurationTimer, stopRecordingVisualizer, stopVadEngine]);
+  }, [
+    clearRecordingDurationTimer,
+    stopRecordingVisualizer,
+    stopVadEngine,
+    unwatchCaptureTrack,
+  ]);
 
   const sendLivePcmChunk = useCallback((pcmBytes: Uint8Array) => {
     const session = liveSessionRef.current;
@@ -494,7 +521,7 @@ export function useAudioDictationRecorder({
       // matters when we're reusing a session-2 context that was
       // suspended at the end of session 1, and on browsers where a
       // freshly-created context starts suspended after user activation
-      // has lapsed across the preceding awaits (Mozilla bug 1629478).
+      // has lapsed across the preceding awaits.
       try {
         await audioContext.resume();
       } catch {
@@ -693,6 +720,25 @@ export function useAudioDictationRecorder({
     tearDownCaptureGraph,
   ]);
 
+  // Wire the watchdog to a clean stop. A genuinely dead capture (`ended`,
+  // or a mute outliving the grace window) surfaces an actionable error and
+  // completes the session on whatever was captured before the mic died —
+  // no silent dead capture (ERMAIN-390). Defined here so it can reference
+  // `stopDictation`; the watchdog reads it through the delegating ref.
+  useEffect(() => {
+    captureTrackLostHandlerRef.current = (reason: TrackLossReason) => {
+      if (!isMounted()) {
+        return;
+      }
+      setDictationError(
+        reason === "ended"
+          ? t`The microphone was disconnected. Please check your microphone and start dictation again.`
+          : t`The microphone stopped sending audio. Please check your microphone and start dictation again.`,
+      );
+      stopDictation();
+    };
+  }, [isMounted, stopDictation]);
+
   const startDictation = useCallback(async () => {
     if (
       startInFlightRef.current ||
@@ -775,6 +821,9 @@ export function useAudioDictationRecorder({
 
       mediaStreamRef.current = stream;
       const audioTrack = stream.getAudioTracks()[0];
+      // Start watching for mid-session device-loss (AirPods route change,
+      // incoming call, unplug) as soon as the track exists (ERMAIN-390).
+      watchCaptureTrack(audioTrack);
       const trackSettings = audioTrack.getSettings();
       setDictationDiagnostics(mediaTrackSettingsToDiagnostics(trackSettings));
 
@@ -831,14 +880,13 @@ export function useAudioDictationRecorder({
         // The worklet posts every render quantum, including zero-filled
         // OS warm-up frames — we want those in the stream sent to the
         // server too (it stays dumb; server-side prefix padding handles
-        // onset — https://developers.openai.com/api/docs/guides/realtime-vad,
-        // `prefix_padding_ms` default 300 ms). The "speak now" UI cue is a
-        // separate, UI-only concern: an RMS onset detector flips
-        // `isCapturingAudio` on real speech-level energy. It replaced an
-        // exact-zero predicate (`sample !== 0`) that mistimed on WebKit,
-        // whose raw-capture warm-up emits a noise floor instead of bit-exact
-        // zeros (ERMAIN-379). The detector gates ONLY the cue; it never sees
-        // or alters streamed bytes.
+        // onset). The "speak now" UI cue is a separate, UI-only concern:
+        // an RMS onset detector flips `isCapturingAudio` on real
+        // speech-level energy. It replaced an exact-zero predicate
+        // (`sample !== 0`) that mistimed on WebKit, whose raw-capture
+        // warm-up emits a noise floor instead of bit-exact zeros. The
+        // detector gates ONLY the cue; it never sees or alters streamed
+        // bytes.
         const flipCapturingAudio = () => {
           // Guard against late firings: if the pipeline was torn down
           // between scheduling and execution, the processor ref will be
@@ -1087,6 +1135,7 @@ export function useAudioDictationRecorder({
     stopVadEngine,
     tearDownCaptureGraph,
     vadAutoStopEnabled,
+    watchCaptureTrack,
   ]);
 
   const toggleDictation = useCallback(() => {

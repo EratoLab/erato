@@ -134,7 +134,7 @@ export function handleUserMessageSaved(
               currentMessageId.startsWith("temp-user-"))) ||
           currentAnchoredMessage?.role === "user";
 
-        // ERMAIN-88 FIX: Only create optimistic assistant if one doesn't already exist
+        // Only create optimistic assistant if one doesn't already exist
         // The optimistic assistant is now created immediately in sendMessage()
         const hasOptimisticAssistant =
           currentMessageId?.startsWith("temp-assistant-") &&

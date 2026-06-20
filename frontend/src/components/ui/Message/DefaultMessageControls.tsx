@@ -52,7 +52,6 @@ export const DefaultMessageControls = memo(function DefaultMessageControls({
 
   // Chat-level edit permission from context; default true if unspecified
   const canEditChat = context.canEdit !== false; // default to true if unspecified
-  // const isDialogOwner = context.dialogOwnerId === profile.profile?.id;
 
   // Derive feedback state from initialFeedback prop
   // This avoids unnecessary re-renders from useEffect + useState combination

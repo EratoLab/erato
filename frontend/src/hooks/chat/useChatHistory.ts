@@ -5,7 +5,6 @@
  */
 /* eslint-disable lingui/no-unlocalized-strings */
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-// import { useRouter } from "next/navigation"; // Removed Next.js router
 import { useCallback, useMemo } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom"; // Added React Router hooks
 import { create } from "zustand";

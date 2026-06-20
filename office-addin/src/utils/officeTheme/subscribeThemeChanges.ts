@@ -8,8 +8,7 @@ import { detectTheme, type OfficeThemeSnapshot } from "./detectTheme";
  *
  * 1. `Office.EventType.OfficeThemeChanged` on the Outlook mailbox (Mailbox
  *    requirement set 1.14). Fires reliably on OWA. Fires unreliably with
- *    stale payload on Outlook for Windows / Mac — see
- *    https://github.com/OfficeDev/office-js/issues/6348.
+ *    stale payload on Outlook for Windows / Mac.
  *
  * 2. `prefers-color-scheme` media query. Reflects the OS dark-mode preference
  *    and fires immediately even when Outlook's `officeTheme` cache is stale

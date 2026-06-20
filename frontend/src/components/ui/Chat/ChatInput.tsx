@@ -2147,12 +2147,8 @@ export const ChatInput = ({
                 !isAudioMode &&
                 !isRecording &&
                 !isRecordingUpload &&
-                // The live waveform appears only once the session is ready
-                // AND real (non-zero) audio is flowing; until then the
-                // loading spinner stays. A single spinner → waveform
-                // transition is the "speak now" cue — showing the waveform
-                // during the mic's cold warm-up invited users to speak too
-                // early and lose their first words (ERMAIN-334).
+                // Spinner until capture is live; the waveform appears only
+                // once real audio is flowing.
                 (isCapturingAudio && isDictating ? (
                   <WaveformButton
                     onClick={toggleDictationForCurrentTarget}
@@ -2233,9 +2229,7 @@ export const ChatInput = ({
                   <ChatInputAudioModeButton
                     isRecording
                     recordingBars={dictationBars}
-                    // Spinner until the session is live AND real audio
-                    // flows — the waveform's appearance is the "speak
-                    // now" cue (ERMAIN-334).
+                    // Spinner until capture is live; waveform once real audio flows.
                     isStarting={!isCapturingAudio || !isDictating}
                     onToggle={handleAudioModeButtonToggle}
                     disabled={isAudioModeButtonDisabled}

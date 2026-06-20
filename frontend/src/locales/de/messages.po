@@ -2908,6 +2908,22 @@ msgstr "Das Mikrofon wird bereits von einer anderen Anwendung oder Aufnahme verw
 msgid "The microphone is already in use by another application."
 msgstr ""
 
+#: src/hooks/audio/useAudioDictationRecorder.ts
+msgid "The microphone stopped sending audio. Please check your microphone and start dictation again."
+msgstr "Das Mikrofon sendet kein Audio mehr. Bitte überprüfen Sie Ihr Mikrofon und starten Sie das Diktat erneut."
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+msgid "The microphone stopped sending audio. Please check your microphone and start recording again."
+msgstr "Das Mikrofon sendet kein Audio mehr. Bitte überprüfen Sie Ihr Mikrofon und starten Sie die Aufnahme erneut."
+
+#: src/hooks/audio/useAudioDictationRecorder.ts
+msgid "The microphone was disconnected. Please check your microphone and start dictation again."
+msgstr "Das Mikrofon wurde getrennt. Bitte überprüfen Sie Ihr Mikrofon und starten Sie das Diktat erneut."
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+msgid "The microphone was disconnected. Please check your microphone and start recording again."
+msgstr "Das Mikrofon wurde getrennt. Bitte überprüfen Sie Ihr Mikrofon und starten Sie die Aufnahme erneut."
+
 #: src/hooks/audio/useAudioInputLevelPreview.ts
 msgid "The selected microphone is not available. Refresh the device list and try again."
 msgstr "Das ausgewählte Mikrofon ist nicht verfügbar. Aktualisieren Sie die Geräteliste und versuchen Sie es erneut."

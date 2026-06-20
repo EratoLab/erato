@@ -33,6 +33,10 @@ import {
 } from "./onsetFlipController";
 import { useAudioContextInterruptionRecovery } from "./useAudioContextInterruptionRecovery";
 import { useAudioInputDevicePreference } from "./useAudioInputDevicePreference";
+import {
+  useMediaStreamTrackWatchdog,
+  type TrackLossReason,
+} from "./useMediaStreamTrackWatchdog";
 
 import type {
   AudioTranscriptionMetadata,
@@ -453,6 +457,22 @@ export function useAudioTranscriptionRecorder({
   const { selectedAudioInputDeviceId, setSelectedAudioInputDeviceId } =
     useAudioInputDevicePreference();
 
+  /**
+   * Capture-track device-loss watchdog (ERMAIN-390). Delegated through a
+   * ref because the real handler stops recording, which is defined further
+   * down — the ref keeps `watchTrack`/`unwatchTrack` available to the early
+   * teardown helpers while the handler is wired in an effect below.
+   */
+  const captureTrackLostHandlerRef = useRef<(reason: TrackLossReason) => void>(
+    () => {},
+  );
+  const { watchTrack: watchCaptureTrack, unwatchTrack: unwatchCaptureTrack } =
+    useMediaStreamTrackWatchdog({
+      onTrackLost: useCallback((reason: TrackLossReason) => {
+        captureTrackLostHandlerRef.current(reason);
+      }, []),
+    });
+
   useEffect(() => {
     fileFetchOptionsRef.current = fileFetchOptions;
   }, [fileFetchOptions]);
@@ -576,13 +596,23 @@ export function useAudioTranscriptionRecorder({
   const stopMediaRecordingStream = useCallback(() => {
     clearRecordingDurationTimer();
     stopVadEngine();
+    // Detach the device-loss listeners before stopping the track. Our own
+    // `track.stop()` does not fire `ended`, but a `mute` grace timer may be
+    // pending — cancel it so an intentional teardown can't surface a
+    // spurious post-stop "muted" loss.
+    unwatchCaptureTrack();
 
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current = null;
     }
     stopRecordingVisualizer();
-  }, [clearRecordingDurationTimer, stopRecordingVisualizer, stopVadEngine]);
+  }, [
+    clearRecordingDurationTimer,
+    stopRecordingVisualizer,
+    stopVadEngine,
+    unwatchCaptureTrack,
+  ]);
 
   const { attachStateChangeListener } = useAudioContextInterruptionRecovery({
     audioContextRef,
@@ -632,9 +662,7 @@ export function useAudioTranscriptionRecorder({
       // resume() is a no-op when already running; it matters when
       // reusing a context suspended at the end of the prior recording,
       // and on hosts where a fresh context starts suspended (embedded
-      // webviews / lapsed user activation). The transcription recorder
-      // previously never resumed, which silently produced zero capture
-      // on suspended-start hosts (ERMAIN-334).
+      // webviews / lapsed user activation).
       try {
         await audioContext.resume();
       } catch {
@@ -1208,6 +1236,25 @@ export function useAudioTranscriptionRecorder({
     void finalizeLiveTranscriptionSession(session);
   }, [finalizeLiveTranscriptionSession, stopMediaRecordingStream]);
 
+  // Wire the watchdog to a clean stop. A genuinely dead capture (`ended`,
+  // or a mute outliving the grace window) surfaces an actionable error and
+  // finalizes the session on whatever was captured before the mic died —
+  // no silent dead capture (ERMAIN-390). Defined here so it can reference
+  // `stopAudioRecording`; the watchdog reads it through the delegating ref.
+  useEffect(() => {
+    captureTrackLostHandlerRef.current = (reason: TrackLossReason) => {
+      if (!isMounted()) {
+        return;
+      }
+      setRecordingError(
+        reason === "ended"
+          ? t`The microphone was disconnected. Please check your microphone and start recording again.`
+          : t`The microphone stopped sending audio. Please check your microphone and start recording again.`,
+      );
+      stopAudioRecording();
+    };
+  }, [isMounted, stopAudioRecording]);
+
   const startAudioRecording = useCallback(async () => {
     if (!audioTranscriptionEnabled || !uploadEnabled) {
       setRecordingError(
@@ -1279,6 +1326,9 @@ export function useAudioTranscriptionRecorder({
 
       mediaStreamRef.current = stream;
       const audioTrack = stream.getAudioTracks()[0];
+      // Start watching for mid-session device-loss (AirPods route change,
+      // incoming call, unplug) as soon as the track exists (ERMAIN-390).
+      watchCaptureTrack(audioTrack);
       const trackSettings = audioTrack.getSettings();
       setRecordingDiagnostics(mediaTrackSettingsToDiagnostics(trackSettings));
 
@@ -1312,10 +1362,9 @@ export function useAudioTranscriptionRecorder({
           audioContext,
           AUDIO_TRANSCRIPTION_WORKLET_PROCESSOR_NAME,
         );
-        // Match the dictation recorder: time-domain sampling with a
-        // 256-sample FFT and a touch of smoothing reads voice energy
-        // across the whole window instead of bucketing it into one
-        // low-frequency bin, so all five bars react to speech.
+        // 256-sample FFT + light smoothing reads voice energy across the
+        // whole window so all five bars track speech (matches the
+        // dictation recorder).
         analyser.fftSize = 256;
         analyser.smoothingTimeConstant = 0.65;
         sourceSampleRate = audioContext.sampleRate;
@@ -1340,10 +1389,8 @@ export function useAudioTranscriptionRecorder({
         // The worklet posts every render quantum, including zero-filled
         // OS warm-up frames — those belong in the stream sent to the
         // server (it stays dumb). The "speak now" UI cue is separate and
-        // UI-only: an RMS onset detector flips isCapturingAudio on real
-        // speech-level energy. It replaced an exact-zero predicate that
-        // mistimed on WebKit's noise-floor warm-up — see
-        // useAudioDictationRecorder and onsetDetector (ERMAIN-379).
+        // UI-only (RMS onset detector) — see useAudioDictationRecorder and
+        // onsetDetector.
         const flipCapturingAudio = () => {
           // Guard against late firings after teardown or unmount: the
           // processor ref will be null or point at a different node.
@@ -1614,6 +1661,7 @@ export function useAudioTranscriptionRecorder({
     setRecordingBarsThrottled,
     stopVadEngine,
     vadAutoStopEnabled,
+    watchCaptureTrack,
   ]);
 
   const toggleAudioRecording = useCallback(() => {

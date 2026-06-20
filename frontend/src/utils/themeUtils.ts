@@ -67,15 +67,11 @@ export function deepMerge<T extends Record<string, unknown>>(
   target: T,
   source?: Partial<T>,
 ): T {
-  // If source is undefined or null, return the target
   if (!source) return target;
 
-  // Create a new object to avoid mutating the target
   const result = { ...target };
 
-  // Iterate through all source properties
   Object.keys(source).forEach((key) => {
-    // Get the key as a proper key of T
     const typedKey = key as keyof T;
     const sourceValue = source[typedKey];
     const targetValue = target[typedKey];
@@ -94,7 +90,6 @@ export function deepMerge<T extends Record<string, unknown>>(
         sourceValue as Record<string, unknown>,
       ) as T[keyof T];
     } else {
-      // Otherwise, use the source value directly
       result[typedKey] = sourceValue as T[keyof T];
     }
   });

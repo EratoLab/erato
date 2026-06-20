@@ -3,24 +3,19 @@
  * pipeline. These are properties of the browser onset-detection
  * algorithm — identical across every deployment — not cost/policy
  * levers, so they live here as frontend constants rather than being
- * plumbed through `erato.toml`. (Investigated on ERMAIN-379: the backend
- * `AudioTranscriptionConfig` carries only server-side STT/LLM tuning; no
- * onset/VAD/calibration field exists, and only `enabled` +
- * `max_recording_duration_seconds` ever reach the frontend.)
+ * plumbed through `erato.toml`.
  *
  * Pure data — no React, no DOM — shared by both recorder hooks and the
- * pure `onsetDetector` state machine. ERMAIN-380 (mic-quality probe)
- * reuses the same RMS/onset math, so keep the knobs in one place.
+ * pure `onsetDetector` state machine; the mic-quality probe reuses the
+ * same RMS/onset math, so keep the knobs in one place.
  */
 
 /**
  * Synthetic silence prefix prepended to every session before captured
- * audio. Mirrors what production streaming-STT VADs require for
- * speech-onset calibration (OpenAI Realtime `prefix_padding_ms` defaults
- * to 300 ms; Silero `speech_pad_ms` / sherpa-onnx pre-speech padding land
- * in the same range). Without it, a back-to-back second dictation finds
- * the OS audio device still hot, ships near-zero leading silence, and the
- * server's VAD trims the first word (ERMAIN-334).
+ * audio. Production streaming-STT VADs need ~300 ms of leading silence for
+ * speech-onset calibration. Without it, a back-to-back second dictation
+ * finds the OS audio device still hot, ships near-zero leading silence, and
+ * the server's VAD trims the first word.
  */
 export const PRE_SPEECH_SILENCE_PRIMER_MS = 300;
 
@@ -33,6 +28,27 @@ export const PRE_SPEECH_SILENCE_PRIMER_MS = 300;
  * visual rhythm across cold and warm sessions.
  */
 export const MIN_AUDIO_CAPTURE_DELAY_MS = 150;
+
+/**
+ * Grace window before a sustained `mute` on the capture `MediaStreamTrack`
+ * is escalated to a device-loss. `mute`/`unmute` fire (browser-controlled,
+ * distinct from the app-controlled `enabled`) when a source temporarily
+ * can't produce data — on iOS/WebKit this happens during route changes and
+ * interruptions (AirPods connect/disconnect, an incoming call, Siri), so a
+ * naive "mute → error" false-positives on a transient that recovers. An
+ * `unmute` inside this window cancels the escalation; only a mute that
+ * outlives it is treated as lost (`ended` remains the authoritative,
+ * immediate "dead" signal). `unmute` is not guaranteed to arrive — a route
+ * change can mute with no unmute at all — so grace-expiry escalation is the
+ * intended fallback, not an edge case.
+ *
+ * 5 s, not sub-second: a Bluetooth/AirPods reconfiguration can take up to
+ * ~5 s, so a shorter window risks declaring "lost" mid-handoff on a slow
+ * connect. Tradeoff: answering an incoming call holds the mic past 5 s, so
+ * this surfaces a clean "interrupted" stop — the correct outcome, since
+ * dictation can't continue mid-call.
+ */
+export const MUTE_GRACE_MS = 5_000;
 
 /**
  * Tunables for the RMS-based speech-onset detector (ERMAIN-379). The
@@ -77,7 +93,7 @@ export const ONSET_TUNING = {
 
   /**
    * Upper clamp on epsilon (~−34 dBFS) — a very noisy room still flips.
-   * Tradeoff (G6): in a room whose noise floor exceeds ~0.02 RMS, the cue
+   * Tradeoff: in a room whose noise floor exceeds ~0.02 RMS, the cue
    * can early-fire on background noise (epsilon is capped below the floor).
    * Bounded and no worse than the old Chromium behaviour; revisit only if
    * UX flags false-positive onsets in loud environments.
@@ -111,7 +127,7 @@ export const ONSET_TUNING = {
   maxHoldMs: 800,
 
   /**
-   * Frame-independent wall-clock backstop for the "speak now" cue (G1).
+   * Frame-independent wall-clock backstop for the "speak now" cue.
    * `maxHoldMs` lives in audio time and freezes if frames stop arriving,
    * so a stalled capture would hang the spinner forever. This timer is
    * armed once at controller construction and force-flips the cue if
@@ -121,7 +137,7 @@ export const ONSET_TUNING = {
    *
    * Caveat: this only resolves the *cue*; it cannot tell a dead capture
    * from a flowing-but-quiet one — that needs track-health handling
-   * (tracked separately as the device-loss follow-up).
+   * (the capture-track device-loss watchdog).
    */
   wallClockBackstopMs: 1_200,
 } as const;

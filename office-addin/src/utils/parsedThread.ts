@@ -38,7 +38,7 @@ export interface ThreadAttachment {
    * When `contentBytes` is null, a human-readable reason the bytes are
    * unavailable (cloud reference, un-retrievable item, unsupported subtype).
    * Surfaced to the LLM as a disclosure marker so the attachment's existence
-   * is never silently dropped (INV-9). Null when bytes are present.
+   * is never silently dropped. Null when bytes are present.
    */
   unavailableReason: string | null;
 }
@@ -67,7 +67,7 @@ export interface ParsedThread {
   /**
    * True when the conversation could not be fully fetched (a later page
    * failed or the page cap was hit). Consumers disclose this to the LLM
-   * (INV-7), and `chooseBody` suppresses the plaintext-body collapse so
+   * and `chooseBody` suppresses the plaintext-body collapse so
    * quoted history that may live only in an unfetched earlier message is
    * retained. (Attachment dedup stays safe even when incomplete: the
    * canonical copy a marker points to is always the first occurrence within
@@ -79,7 +79,7 @@ export interface ParsedThread {
 /**
  * Thrown when the conversation fetch fails on its very first page — i.e. we
  * have nothing, as opposed to a genuinely empty conversation. Callers must
- * surface this loudly rather than rendering "no thread" (INV-7).
+ * surface this loudly rather than rendering "no thread".
  */
 export class ThreadFetchError extends Error {
   constructor(conversationId: string) {
@@ -193,7 +193,7 @@ function chooseBody(
   let chosenContent: string | null;
   let chosenIsHtml: boolean;
   if (fullContent === null) {
-    // Full body empty → fall back to uniqueBody, reading its OWN type (INV-4).
+    // Full body empty → fall back to uniqueBody, reading its OWN type.
     chosenContent = uniqContent;
     chosenIsHtml = uniqContent !== null ? uniqIsHtml : false;
   } else if (uniqContent === null) {
@@ -270,7 +270,7 @@ function transformAttachment(
   }
 
   // No bytes available. Rather than the old silent `return null`, disclose the
-  // attachment's existence so its content is never invisibly dropped (INV-9).
+  // attachment's existence so its content is never invisibly dropped.
   const named = name ? `: ${name}` : "";
   let unavailableReason: string;
   switch (attachment["@odata.type"]) {

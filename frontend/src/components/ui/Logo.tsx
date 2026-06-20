@@ -1,6 +1,5 @@
 // "use client"; // Removed
 
-// import Image from "next/image"; // Removed Next.js Image import
 import { t } from "@lingui/core/macro";
 import { useState, useEffect } from "react";
 
@@ -45,9 +44,7 @@ export function Logo({
       width={width}
       height={height}
       className={className}
-      onError={() => {
-        // console.error("Failed to load logo:", logoPath); // Removed
-      }}
+      onError={() => {}}
     />
   );
 }

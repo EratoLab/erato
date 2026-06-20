@@ -12,7 +12,7 @@
  *     three replies — MIME structure preserves which version came from
  *     which message).
  *   - The frontend's EmlPreview already recurses into nested message
- *     attachments via FilePreviewContent (see commit a25a5966).
+ *     attachments via FilePreviewContent.
  *
  * Encoding choices kept deliberately simple:
  *   - Bodies: HTML when present, else plain text. UTF-8 + base64, line-

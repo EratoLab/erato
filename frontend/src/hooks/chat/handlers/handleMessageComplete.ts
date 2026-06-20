@@ -57,15 +57,6 @@ export const handleMessageComplete = (
   // Extract text for logging
   const finalTextContent = extractTextFromContent(finalContent);
 
-  if (process.env.NODE_ENV === "development") {
-    // logger.log(
-    //   "Assistant message completed. Real ID:",
-    //   realMessageId,
-    //   "Final content snippet:",
-    //   finalTextContent.substring(0, 50),
-    // );
-  }
-
   // Update streaming state to indicate completion
   // Set isFinalizing to true while refetch/cleanup happens
   logger.log(

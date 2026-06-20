@@ -77,19 +77,6 @@ export const FileSourceSelector = memo<FileSourceSelectorProps>(
       });
     }
 
-    // Future: Add Google Drive
-    // if (availableProviders.includes("googledrive")) {
-    //   menuItems.push({
-    //     label: t({
-    //       id: "fileSourceSelector.uploadFromGoogleDrive",
-    //       message: "Upload from Google Drive",
-    //     }),
-    //     icon: <Cloud className="size-4" />,
-    //     onClick: () => onSelectCloud("googledrive"),
-    //     disabled,
-    //   });
-    // }
-
     return (
       <DropdownMenu
         items={menuItems}

@@ -109,8 +109,7 @@ export async function fetchParentMessageInConversationViaGraph(
     // `and isDraft eq false` plus `$orderby=receivedDateTime desc` trips
     // Graph's `InefficientFilter` constraint: properties in `$orderby` must
     // also appear in `$filter`, in the same order, before non-orderby
-    // properties — see the rule at
-    // https://learn.microsoft.com/en-us/graph/api/user-list-messages.
+    // properties.
     // We instead pull the most recent ~thread-worth of messages and pick
     // the latest non-draft client-side.
     const filter = `conversationId eq '${escapeODataString(conversationId)}'`;
@@ -238,7 +237,7 @@ export interface FetchConversationOptions {
  *   - `ok`      — every page fetched successfully.
  *   - `partial` — at least one page succeeded but a later page failed or the
  *                 hard page cap was hit. Some messages may be missing; the
- *                 caller should mark the thread incomplete (INV-7).
+ *                 caller should mark the thread incomplete.
  *   - `error`   — the very first page failed; `messages` is empty and the
  *                 caller must surface a load error rather than silently
  *                 producing "no thread".
@@ -293,7 +292,6 @@ export async function fetchConversationMessagesViaGraph(
   // the row materializes as that subtype; itemAttachment and
   // referenceAttachment items still come back (without those fields), so
   // callers can discriminate on `@odata.type` and skip non-file rows.
-  // See microsoftgraph/microsoft-graph-explorer-v4#3916.
   const attachmentSelect = [
     "id",
     "name",
