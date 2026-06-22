@@ -78,6 +78,24 @@ export function ClipWaveform({
         1,
         Math.floor(samples.length / columns),
       );
+
+      // Normalize to the clip's own peak so the SHAPE is readable regardless
+      // of absolute capture level — raw (AGC-off) capture is much quieter on
+      // some browsers (e.g. WebKit), and a true-scale render would look flat
+      // and inconsistent with Chrome. Loudness is communicated by the verdict
+      // copy, not by the replay height. Below a small floor the clip is
+      // genuinely (near-)silent, so render at true scale rather than
+      // amplifying noise to full height.
+      let globalPeak = 0;
+      for (let index = 0; index < samples.length; index += 1) {
+        const magnitude = Math.abs(samples[index]);
+        if (magnitude > globalPeak) {
+          globalPeak = magnitude;
+        }
+      }
+      const SILENCE_PEAK_FLOOR = 0.02;
+      const normalize = globalPeak > SILENCE_PEAK_FLOOR ? 0.9 / globalPeak : 1;
+
       context.strokeStyle = waveColor;
       context.lineWidth = 1;
       context.beginPath();
@@ -91,7 +109,10 @@ export function ClipWaveform({
             peak = magnitude;
           }
         }
-        const barHeight = Math.max(1, peak * (cssHeight - 2));
+        const barHeight = Math.max(
+          1,
+          Math.min(1, peak * normalize) * (cssHeight - 2),
+        );
         context.moveTo(column + 0.5, midY - barHeight / 2);
         context.lineTo(column + 0.5, midY + barHeight / 2);
       }

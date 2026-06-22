@@ -6,6 +6,7 @@ import {
   createCanonicalWavBytesFromPcm,
   resampleMonoFloat32ToPcm16,
 } from "@/hooks/audio/audio-pcm-codec";
+import { logMicAssessment } from "@/hooks/audio/captureDiagnostics";
 import {
   analyzeMicQuality,
   type MicQualityAssessment,
@@ -222,6 +223,22 @@ export function GuidedMicCheck({
       sampleRate: result.sampleRate,
     });
   }, [result, speechSamples]);
+
+  // Dev-only: log the metrics behind the verdict so a "very quiet" / "noisy"
+  // result can be confirmed against actual dBFS and compared across browsers.
+  useEffect(() => {
+    if (!assessment) {
+      return;
+    }
+    logMicAssessment({
+      verdict: assessment.verdict,
+      primaryIssue: assessment.primaryIssue,
+      speechLevelDbfs: assessment.metrics.speechLevelDbfs,
+      noiseFloorDbfs: assessment.metrics.noiseFloorDbfs,
+      snrDb: assessment.metrics.snrDb,
+      clipEvents: assessment.metrics.clipping.events.length,
+    });
+  }, [assessment]);
 
   // Replay WAV blob for the captured speech.
   const replayUrl = useMemo(() => {

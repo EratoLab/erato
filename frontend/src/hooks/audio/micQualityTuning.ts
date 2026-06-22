@@ -99,6 +99,32 @@ export const LEVEL_TUNING: LevelTuning = {
   yellowDbfs: -30,
 } as const;
 
+export type ActiveLevelTuning = {
+  subWindowMs: number;
+  percentile: number;
+};
+
+/**
+ * Active-speech level estimation. Speech is bursty — natural pauses between
+ * words mean a whole-window RMS is dominated by silence and badly
+ * understates how loud the talker actually is, which would falsely flag a
+ * perfectly usable mic as "very quiet". Instead we measure short-time RMS
+ * over `subWindowMs` frames and take a high percentile, so the value
+ * reflects the voiced portions (a robust, simpler cousin of ITU-T P.56
+ * active speech level). Browser-agnostic, but it especially matters where
+ * raw (AGC-off) capture is quieter — e.g. WebKit.
+ */
+export const ACTIVE_LEVEL_TUNING: ActiveLevelTuning = {
+  /** Short-time window (~20 ms is the standard speech analysis frame). */
+  subWindowMs: 20,
+  /**
+   * Percentile of sub-window energies taken as the active level. 0.9 ignores
+   * inter-word silence and the odd transient while still requiring the
+   * voiced fraction to exceed ~10% of the phase (true for any real reading).
+   */
+  percentile: 0.9,
+};
+
 /**
  * Floor substituted for log10(0) so a silent window maps to a finite, very
  * negative dBFS instead of -Infinity. -120 dBFS is below any real capture.

@@ -32,7 +32,7 @@ export function logCaptureContextReady(info: {
   if (!devEnabled()) {
     return;
   }
-  console.debug(`${PREFIX} context ready`, {
+  console.info(`${PREFIX} context ready`, {
     deviceId: info.deviceId || "(default)",
     trackSampleRate: info.trackSampleRate ?? "(unknown)",
     contextSampleRate: info.contextSampleRate,
@@ -62,7 +62,7 @@ export function logCaptureComplete(info: {
     info.elapsedMs > 0
       ? Math.round((info.deliveredSamples / info.elapsedMs) * 1000)
       : 0;
-  console.debug(`${PREFIX} capture complete`, {
+  console.info(`${PREFIX} capture complete`, {
     contextSampleRate: info.contextSampleRate,
     measuredRate,
     rateDeltaPct:
@@ -85,5 +85,31 @@ export function logCaptureError(message: string): void {
   if (!devEnabled()) {
     return;
   }
-  console.debug(`${PREFIX} capture error: ${message}`);
+  console.info(`${PREFIX} capture error: ${message}`);
+}
+
+/**
+ * Logged after acoustic analysis. Surfaces the level/SNR numbers behind the
+ * traffic-light verdict so a "very quiet" / "noisy" result can be confirmed
+ * against the actual dBFS — and compared across browsers.
+ */
+export function logMicAssessment(info: {
+  verdict: string;
+  primaryIssue: string | null;
+  speechLevelDbfs: number;
+  noiseFloorDbfs: number;
+  snrDb: number;
+  clipEvents: number;
+}): void {
+  if (!devEnabled()) {
+    return;
+  }
+  console.info(`${PREFIX} assessment`, {
+    verdict: info.verdict,
+    primaryIssue: info.primaryIssue ?? "(none)",
+    speechLevelDbfs: +info.speechLevelDbfs.toFixed(1),
+    noiseFloorDbfs: +info.noiseFloorDbfs.toFixed(1),
+    snrDb: +info.snrDb.toFixed(1),
+    clipEvents: info.clipEvents,
+  });
 }

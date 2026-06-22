@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  activeRms,
   analyzeMicQuality,
   bandpassRms,
   computeSnrDb,
@@ -28,6 +29,30 @@ function sine(
   for (let index = 0; index < length; index += 1) {
     out[index] =
       amplitude * Math.sin((2 * Math.PI * frequencyHz * index) / sampleRate);
+  }
+  return out;
+}
+
+/**
+ * Bursty speech proxy: alternating voiced / silent 20 ms windows (50% duty),
+ * window-aligned so each window is either fully voiced or fully silent.
+ */
+function burstSpeech(
+  amplitude: number,
+  sampleRate = SAMPLE_RATE,
+  windows = 50,
+): Float32Array {
+  const windowSize = Math.round(0.02 * sampleRate);
+  const out = new Float32Array(windowSize * windows);
+  for (let w = 0; w < windows; w += 1) {
+    if (w % 2 !== 0) {
+      continue; // silent window
+    }
+    for (let i = 0; i < windowSize; i += 1) {
+      const index = w * windowSize + i;
+      out[index] =
+        amplitude * Math.sin((2 * Math.PI * 1000 * index) / sampleRate);
+    }
   }
   return out;
 }
@@ -183,5 +208,52 @@ describe("analyzeMicQuality", () => {
     });
     expect(result.primaryIssue).toBe("low-level");
     expect(result.metrics.speechLevelDbfs).toBeLessThan(LEVEL_TUNING.redDbfs);
+  });
+
+  it("does not flag low level when speech has silent gaps but voiced bursts are healthy", () => {
+    // 50% duty: alternating voiced/silent 20 ms windows. Whole-window RMS is
+    // dragged below the warn threshold by the silence; the active level (what
+    // we now measure) reflects the voiced bursts and stays usable.
+    const speech = burstSpeech(0.06);
+    let squaredTotal = 0;
+    for (let i = 0; i < speech.length; i += 1) squaredTotal += speech[i] ** 2;
+    const wholeWindowDbfs = rmsToDbfs(Math.sqrt(squaredTotal / speech.length));
+
+    const result = analyzeMicQuality({
+      quietSamples: quiet,
+      speechSamples: speech,
+      sampleRate: SAMPLE_RATE,
+    });
+
+    // The old whole-window measure would have warned…
+    expect(wholeWindowDbfs).toBeLessThan(LEVEL_TUNING.yellowDbfs);
+    // …but the active level does not, so the mic isn't wrongly blamed.
+    expect(result.metrics.speechLevelDbfs).toBeGreaterThan(
+      LEVEL_TUNING.yellowDbfs,
+    );
+    expect(result.primaryIssue).not.toBe("low-level");
+  });
+});
+
+describe("activeRms", () => {
+  it("matches whole-window RMS for a continuous tone", () => {
+    const tone = sine(0.2, 1000);
+    expect(activeRms(tone, SAMPLE_RATE)).toBeCloseTo(0.2 / Math.SQRT2, 2);
+  });
+
+  it("ignores silent gaps, reporting the voiced level for bursty speech", () => {
+    const burst = burstSpeech(0.06);
+    let squaredTotal = 0;
+    for (let i = 0; i < burst.length; i += 1) squaredTotal += burst[i] ** 2;
+    const wholeRms = Math.sqrt(squaredTotal / burst.length);
+    const active = activeRms(burst, SAMPLE_RATE);
+    // Active reflects the voiced bursts (~amp/√2); whole-window is diluted.
+    expect(active).toBeCloseTo(0.06 / Math.SQRT2, 2);
+    expect(active).toBeGreaterThan(wholeRms * 1.2);
+  });
+
+  it("returns 0 for empty input or invalid sample rate", () => {
+    expect(activeRms(new Float32Array(0), SAMPLE_RATE)).toBe(0);
+    expect(activeRms(sine(0.2, 1000), 0)).toBe(0);
   });
 });

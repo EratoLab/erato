@@ -12,10 +12,12 @@
  */
 
 import {
+  ACTIVE_LEVEL_TUNING,
   CLIPPING_TUNING,
   LEVEL_TUNING,
   SILENCE_FLOOR_DBFS,
   SNR_TUNING,
+  type ActiveLevelTuning,
   type ClippingTuning,
   type LevelTuning,
   type SnrTuning,
@@ -52,7 +54,10 @@ export type MicQualityMetrics = {
   snrDb: number;
   /** Band-passed quiet-phase RMS in dBFS (noise floor). */
   noiseFloorDbfs: number;
-  /** Full-band speech-phase RMS in dBFS. */
+  /**
+   * Active (voiced) speech level in dBFS — a high percentile of short-time
+   * RMS, so inter-word silence doesn't make a usable mic read as quiet.
+   */
   speechLevelDbfs: number;
 };
 
@@ -199,17 +204,17 @@ function rms(samples: Float32Array): number {
 }
 
 /**
- * RMS of `samples` restricted to the speech band via a high-pass +
- * low-pass biquad cascade. Out-of-band rumble (HVAC) and hiss are rejected
- * so the SNR reflects energy the transcription model actually uses.
+ * Restricts `samples` to the speech band via a high-pass + low-pass biquad
+ * cascade. Out-of-band rumble (HVAC) and hiss are rejected so SNR reflects
+ * energy the transcription model actually uses.
  */
-export function bandpassRms(
+function bandpass(
   samples: Float32Array,
   sampleRate: number,
   tuning: SnrTuning = SNR_TUNING,
-): number {
+): Float32Array {
   if (samples.length === 0 || !(sampleRate > 0)) {
-    return 0;
+    return new Float32Array(0);
   }
   // Cap the high edge below Nyquist so a 16 kHz canonical clip (Nyquist
   // 8 kHz) keeps a valid filter; a 3.4 kHz edge is always safe here, but
@@ -219,17 +224,67 @@ export function bandpassRms(
     samples,
     biquadCoefficients("highpass", tuning.bandLowHz, sampleRate),
   );
-  const bandPassed = applyBiquad(
+  return applyBiquad(
     highPassed,
     biquadCoefficients("lowpass", highHz, sampleRate),
   );
-  return rms(bandPassed);
+}
+
+/** RMS of the speech-band-limited signal. */
+export function bandpassRms(
+  samples: Float32Array,
+  sampleRate: number,
+  tuning: SnrTuning = SNR_TUNING,
+): number {
+  return rms(bandpass(samples, sampleRate, tuning));
 }
 
 /**
- * Band-passed SNR in dB: 20·log10(speechBandRms / noiseBandRms). A zero
- * noise floor (synthetic/silent fixtures) yields a large positive SNR
- * rather than +Infinity by substituting the silence floor.
+ * Active-speech RMS: the `percentile`-th value of the per-`subWindowMs`
+ * short-time RMS, so inter-word silence does not drag the estimate down.
+ * Falls back to whole-window RMS for inputs too short to window. See
+ * {@link ACTIVE_LEVEL_TUNING}.
+ */
+export function activeRms(
+  samples: Float32Array,
+  sampleRate: number,
+  tuning: ActiveLevelTuning = ACTIVE_LEVEL_TUNING,
+): number {
+  if (samples.length === 0 || !(sampleRate > 0)) {
+    return 0;
+  }
+  const windowSize = Math.max(
+    1,
+    Math.round((tuning.subWindowMs / 1000) * sampleRate),
+  );
+  if (samples.length < windowSize * 2) {
+    return rms(samples);
+  }
+  const energies: number[] = [];
+  for (
+    let start = 0;
+    start + windowSize <= samples.length;
+    start += windowSize
+  ) {
+    energies.push(rms(samples.subarray(start, start + windowSize)));
+  }
+  if (energies.length === 0) {
+    return rms(samples);
+  }
+  energies.sort((first, second) => first - second);
+  const index = Math.min(
+    energies.length - 1,
+    Math.floor(tuning.percentile * (energies.length - 1)),
+  );
+  return energies[index];
+}
+
+/**
+ * Band-passed SNR in dB: 20·log10(activeSpeechBandRms / noiseBandRms). The
+ * speech term uses the ACTIVE level (voiced portions only) so pauses don't
+ * understate it; the noise term is steady, so a whole-window RMS is right. A
+ * zero noise floor (synthetic/silent fixtures) yields a large positive SNR
+ * rather than +Infinity via the silence floor.
  */
 export function computeSnrDb(
   quietSamples: Float32Array,
@@ -237,8 +292,11 @@ export function computeSnrDb(
   sampleRate: number,
   tuning: SnrTuning = SNR_TUNING,
 ): number {
-  const noiseBandRms = bandpassRms(quietSamples, sampleRate, tuning);
-  const speechBandRms = bandpassRms(speechSamples, sampleRate, tuning);
+  const noiseBandRms = rms(bandpass(quietSamples, sampleRate, tuning));
+  const speechBandRms = activeRms(
+    bandpass(speechSamples, sampleRate, tuning),
+    sampleRate,
+  );
   return rmsToDbfs(speechBandRms) - rmsToDbfs(noiseBandRms);
 }
 
@@ -284,11 +342,13 @@ export function analyzeMicQuality(
     clipping?: ClippingTuning;
     snr?: SnrTuning;
     level?: LevelTuning;
+    active?: ActiveLevelTuning;
   } = {},
 ): MicQualityAssessment {
   const clippingTuning = tuning.clipping ?? CLIPPING_TUNING;
   const snrTuning = tuning.snr ?? SNR_TUNING;
   const levelTuning = tuning.level ?? LEVEL_TUNING;
+  const activeTuning = tuning.active ?? ACTIVE_LEVEL_TUNING;
 
   const clipping = detectClipping(input.speechSamples, clippingTuning);
   const snrDb = computeSnrDb(
@@ -301,7 +361,11 @@ export function analyzeMicQuality(
     clipping,
     snrDb,
     noiseFloorDbfs: rmsToDbfs(rms(input.quietSamples)),
-    speechLevelDbfs: rmsToDbfs(rms(input.speechSamples)),
+    // Active (voiced) level, not whole-window RMS: inter-word silence must
+    // not read as a quiet mic.
+    speechLevelDbfs: rmsToDbfs(
+      activeRms(input.speechSamples, input.sampleRate, activeTuning),
+    ),
   };
 
   // Impact-ranked: ties on severity resolve to the higher-leverage issue.
