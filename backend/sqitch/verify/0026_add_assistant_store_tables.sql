@@ -13,7 +13,6 @@ SELECT
     status,
     is_published,
     is_current_published_version,
-    featured,
     version_number,
     version_comment,
     creator_review_comment,

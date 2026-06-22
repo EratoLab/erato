@@ -178,6 +178,7 @@ async fn get_or_create_store_assistant(
         id: Set(Uuid::new_v4()),
         source_assistant_id: Set(source_assistant_id),
         owner_user_id: Set(source_assistant.owner_user_id),
+        featured: Set(false),
         created_at: Set(now),
         updated_at: Set(now),
     };
@@ -435,7 +436,6 @@ pub async fn submit_version(
         status: Set(STATUS_SUBMITTED.to_string()),
         is_published: Set(false),
         is_current_published_version: Set(false),
-        featured: Set(false),
         version_number: Set(profile.version_number),
         version_comment: Set(profile.version_comment),
         creator_review_comment: Set(profile.creator_review_comment),
@@ -597,12 +597,19 @@ pub async fn list_published_current_versions(
 
     let versions = AssistantStoreAssistantVersions::find()
         .filter(condition)
-        .order_by_desc(assistant_store_assistant_versions::Column::Featured)
         .order_by_desc(assistant_store_assistant_versions::Column::PublishedAt)
         .all(conn)
         .await?;
 
-    records_for_versions(conn, versions).await
+    let mut records = records_for_versions(conn, versions).await?;
+    records.sort_by(|left, right| {
+        right
+            .store_assistant
+            .featured
+            .cmp(&left.store_assistant.featured)
+            .then_with(|| right.version.published_at.cmp(&left.version.published_at))
+    });
+    Ok(records)
 }
 
 pub async fn get_published_current_version(
@@ -805,9 +812,15 @@ pub async fn set_featured(
         return Err(eyre!("Only review-accepted versions can be featured"));
     }
 
-    let mut active = version.into_active_model();
-    active.featured = Set(featured);
-    let version = active.update(conn).await?;
+    let store_assistant =
+        AssistantStoreAssistants::find_by_id(version.assistant_store_assistant_id)
+            .one(conn)
+            .await?
+            .wrap_err("Assistant store assistant not found")?;
+
+    let mut active_store_assistant = store_assistant.into_active_model();
+    active_store_assistant.featured = Set(featured);
+    active_store_assistant.update(conn).await?;
 
     records_for_versions(conn, vec![version])
         .await?

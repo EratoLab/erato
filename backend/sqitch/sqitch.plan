@@ -27,3 +27,4 @@
 0024_add_audio_transcription_to_file_uploads 2026-05-04T00:00:00Z System Administrator <root@localhost> # Add audio transcription state to file uploads
 0025_add_chat_title_search_index 2026-06-19T00:00:00Z System Administrator <root@localhost> # Add chat title search index
 0026_add_assistant_store_tables 2026-06-21T00:00:00Z System Administrator <root@localhost> # Add assistant store tables
+0027_assistant_store_featured_assistant_wide 2026-06-22T00:00:00Z System Administrator <root@localhost> # Make assistant store featured flag assistant-wide

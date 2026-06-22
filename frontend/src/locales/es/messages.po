@@ -233,7 +233,7 @@ msgid "assistantStore.action.reviewQueue"
 msgstr "Cola de revision"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantStoreDetailPage.tsx
+#: src/pages/assistantStoreUtils.tsx
 msgid "assistantStore.action.startChat"
 msgstr "Iniciar chat"
 
@@ -250,23 +250,8 @@ msgstr "Ver"
 
 #. js-lingui-explicit-id
 #: src/pages/assistantStoreUtils.tsx
-msgid "assistantStore.badge.current"
-msgstr "Actual"
-
-#. js-lingui-explicit-id
-#: src/pages/assistantStoreUtils.tsx
-msgid "assistantStore.badge.featured"
-msgstr "Destacado"
-
-#. js-lingui-explicit-id
-#: src/pages/assistantStoreUtils.tsx
-msgid "assistantStore.badge.published"
-msgstr "Publicado"
-
-#. js-lingui-explicit-id
-#: src/pages/assistantStoreUtils.tsx
 msgid "assistantStore.card.creator"
-msgstr "Por {creatorName}"
+msgstr "Por"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantStorePage.tsx
@@ -324,7 +309,7 @@ msgid "assistantStore.category.subtitle"
 msgstr "Explora asistentes filtrados por categoria"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantStoreDetailPage.tsx
+#: src/pages/assistantStoreUtils.tsx
 msgid "assistantStore.detail.configuration"
 msgstr "Configuracion"
 
@@ -339,12 +324,12 @@ msgid "assistantStore.detail.error"
 msgstr "No se pudo cargar el asistente de la tienda."
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantStoreDetailPage.tsx
+#: src/pages/assistantStoreUtils.tsx
 msgid "assistantStore.detail.facets"
-msgstr "Facetas"
+msgstr "Herramientas"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantStoreDetailPage.tsx
+#: src/pages/assistantStoreUtils.tsx
 msgid "assistantStore.detail.files"
 msgstr "Archivos"
 
@@ -354,12 +339,12 @@ msgid "assistantStore.detail.loading"
 msgstr "Cargando asistente de la tienda..."
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantStoreDetailPage.tsx
+#: src/pages/assistantStoreUtils.tsx
 msgid "assistantStore.detail.model"
 msgstr "Modelo predeterminado"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantStoreDetailPage.tsx
+#: src/pages/assistantStoreUtils.tsx
 msgid "assistantStore.detail.prompt"
 msgstr "Prompt del sistema"
 
@@ -370,11 +355,12 @@ msgstr "Tienda de asistentes"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantStoreDetailPage.tsx
-msgid "assistantStore.detail.tools"
-msgstr "Herramientas"
+#~ msgid "assistantStore.detail.tools"
+#~ msgstr "Herramientas"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantStoreDetailPage.tsx
+#: src/pages/AssistantStoreReviewPage.tsx
 msgid "assistantStore.detail.versionComment"
 msgstr "Comentario de version"
 
@@ -387,6 +373,11 @@ msgstr "Actual"
 #: src/pages/assistantStoreUtils.tsx
 msgid "assistantStore.diff.files"
 msgstr "Archivos"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreMyPage.tsx
+msgid "assistantStore.diff.firstVersion"
+msgstr "No existe una version anterior para este asistente."
 
 #. js-lingui-explicit-id
 #: src/pages/assistantStoreUtils.tsx
@@ -448,6 +439,11 @@ msgstr "Elegir asistente"
 #: src/pages/AssistantStoreMyPage.tsx
 msgid "assistantStore.my.creatorReviewComment"
 msgstr "Nota para el revisor"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantStoreUtils.tsx
+msgid "assistantStore.my.currentPublished"
+msgstr "Version publicada actual"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantStoreMyPage.tsx
@@ -592,7 +588,7 @@ msgstr "No se pudo actualizar el estado de revision de la tienda de asistentes."
 #. js-lingui-explicit-id
 #: src/pages/AssistantStoreReviewPage.tsx
 msgid "assistantStore.review.feature"
-msgstr "Destacar"
+msgstr "Destacar asistente"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantStoreReviewPage.tsx
@@ -636,8 +632,8 @@ msgstr "Comentario del revisor"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantStoreReviewPage.tsx
-msgid "assistantStore.review.subtitle"
-msgstr "Revisa versiones inmutables de asistentes antes de que puedan publicarse"
+#~ msgid "assistantStore.review.subtitle"
+#~ msgstr "Revisa versiones inmutables de asistentes antes de que puedan publicarse"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantStoreReviewPage.tsx
@@ -647,7 +643,7 @@ msgstr "Revision de la tienda de asistentes"
 #. js-lingui-explicit-id
 #: src/pages/AssistantStoreReviewPage.tsx
 msgid "assistantStore.review.unfeature"
-msgstr "Quitar destacado"
+msgstr "Quitar destacado del asistente"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantStoreReviewPage.tsx
@@ -722,7 +718,7 @@ msgstr "Categorias"
 #. js-lingui-explicit-id
 #: src/pages/AssistantStoreSubmitPage.tsx
 msgid "assistantStore.submit.currentPublishedVersion"
-msgstr "Version publicada actual: {versionNumber}"
+msgstr "Version publicada actual:"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantStoreSubmitPage.tsx
@@ -758,6 +754,11 @@ msgstr "Palabras clave"
 #: src/pages/AssistantStoreSubmitPage.tsx
 msgid "assistantStore.submit.keywordsHelp"
 msgstr "Separa las palabras clave con comas."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreSubmitPage.tsx
+msgid "assistantStore.submit.latestPublishedVersion"
+msgstr "No hay una version publicada actual seleccionada. Ultima version publicada:"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantStoreSubmitPage.tsx
@@ -2458,8 +2459,8 @@ msgid "Assistant created successfully!"
 msgstr ""
 
 #: src/pages/AssistantStoreDetailPage.tsx
-msgid "Assistant Store"
-msgstr ""
+#~ msgid "Assistant Store"
+#~ msgstr ""
 
 #: src/pages/AssistantEditPage.tsx
 msgid "Assistant updated successfully!"
@@ -3125,6 +3126,7 @@ msgstr ""
 #: src/components/ui/Chat/ModelSelector.tsx
 #: src/components/ui/Feedback/SpinnerIcon.tsx
 #: src/components/ui/Message/LoadMoreButton.tsx
+#: src/pages/assistantStoreUtils.tsx
 #: src/pages/SearchPage.tsx
 msgid "Loading..."
 msgstr "Cargando..."
@@ -3225,12 +3227,10 @@ msgstr ""
 msgid "noise suppression: {noiseSuppression}"
 msgstr "supresión de ruido: {noiseSuppression}"
 
-#: src/pages/AssistantStoreDetailPage.tsx
 #: src/pages/assistantStoreUtils.tsx
 msgid "None"
 msgstr ""
 
-#: src/pages/AssistantStoreDetailPage.tsx
 #: src/pages/assistantStoreUtils.tsx
 msgid "Not set"
 msgstr ""
@@ -3760,6 +3760,8 @@ msgstr "Usando herramientas"
 #~ msgstr ""
 
 #: src/pages/AssistantStoreDetailPage.tsx
+#: src/pages/AssistantStoreMyPage.tsx
+#: src/pages/AssistantStoreReviewPage.tsx
 #: src/pages/assistantStoreUtils.tsx
 msgid "Version {versionNumber}"
 msgstr "Version {versionNumber}"

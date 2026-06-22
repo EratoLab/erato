@@ -1,11 +1,20 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
+import { useMemo } from "react";
 
+import { getFacetDisplayName } from "@/components/ui/Chat/FacetSelector";
+import { ModelSelectorOptionContent } from "@/components/ui/Chat/ModelSelector";
 import { Button } from "@/components/ui/Controls/Button";
+import { FileTextIcon, ResolvedIcon } from "@/components/ui/icons";
+import {
+  useAvailableModels,
+  useFacets,
+} from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 import type {
   AssistantStoreCategory,
   AssistantStoreVersion,
+  AssistantWithFiles,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type React from "react";
 
@@ -51,6 +60,17 @@ export const getAssistantStoreStatusClassName = (status: string) =>
     status === "submitted" &&
       "border border-theme-warning-border bg-theme-warning-bg text-theme-warning-fg",
   );
+
+export function AssistantStoreCurrentPublishedIndicator() {
+  return (
+    <span className="inline-flex min-h-6 items-center rounded-full border border-theme-info-border bg-theme-info-bg px-2 py-0.5 text-xs font-medium text-theme-info-fg">
+      {t({
+        id: "assistantStore.my.currentPublished",
+        message: "Current published version",
+      })}
+    </span>
+  );
+}
 
 export function AssistantStoreBreadcrumb({
   children,
@@ -256,11 +276,15 @@ export function AssistantStoreVersionCard({
   categories,
   onOpen,
   actions,
+  showStatusBadge = false,
+  showCurrentPublishedIndicator = false,
 }: {
   version: AssistantStoreVersion;
   categories: AssistantStoreCategory[];
   onOpen?: () => void;
   actions?: React.ReactNode;
+  showStatusBadge?: boolean;
+  showCurrentPublishedIndicator?: boolean;
 }) {
   const categoryNames = version.category_ids
     .map((categoryId) =>
@@ -283,62 +307,260 @@ export function AssistantStoreVersionCard({
             <h3 className="text-base font-semibold text-theme-fg-primary">
               {version.assistant.name}
             </h3>
-            <span className={getAssistantStoreStatusClassName(version.status)}>
-              {getAssistantStoreStatusLabel(version.status)}
-            </span>
-            {version.featured && (
-              <span className="inline-flex items-center rounded-full border border-theme-border bg-theme-bg-secondary px-2 py-0.5 text-xs font-medium text-theme-fg-secondary">
-                {t({
-                  id: "assistantStore.badge.featured",
-                  message: "Featured",
-                })}
-              </span>
-            )}
-            {version.is_current_published_version && (
-              <span className="inline-flex items-center rounded-full border border-theme-border bg-theme-bg-secondary px-2 py-0.5 text-xs font-medium text-theme-fg-secondary">
-                {t({
-                  id: "assistantStore.badge.current",
-                  message: "Current",
-                })}
-              </span>
-            )}
-            {version.is_published && (
-              <span className="inline-flex items-center rounded-full border border-theme-border bg-theme-bg-secondary px-2 py-0.5 text-xs font-medium text-theme-fg-secondary">
-                {t({
-                  id: "assistantStore.badge.published",
-                  message: "Published",
-                })}
-              </span>
-            )}
           </div>
           <p className="line-clamp-2 text-sm text-theme-fg-secondary">
             {version.long_description.length > 0
               ? version.long_description
               : (version.assistant.description ?? "")}
           </p>
-          <div className="mt-3 flex flex-wrap gap-2 text-xs text-theme-fg-muted">
+          <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-theme-fg-muted">
             {(() => {
               const versionNumber = version.version_number;
 
-              return <span>{t`Version ${versionNumber}`}</span>;
+              return (
+                <span className="inline-flex min-h-6 items-center">
+                  {t`Version ${versionNumber}`}
+                </span>
+              );
             })()}
+            {showStatusBadge ? (
+              <span
+                className={getAssistantStoreStatusClassName(version.status)}
+              >
+                {getAssistantStoreStatusLabel(version.status)}
+              </span>
+            ) : (
+              <span className="inline-flex min-h-6 items-center">
+                {getAssistantStoreStatusLabel(version.status)}
+              </span>
+            )}
+            {showCurrentPublishedIndicator &&
+              version.is_current_published_version && (
+                <AssistantStoreCurrentPublishedIndicator />
+              )}
             {creatorName && (
-              <span>
-                {t({
+              <span className="inline-flex min-h-6 items-center">
+                {`${t({
                   id: "assistantStore.card.creator",
-                  message: "By {creatorName}",
-                  values: { creatorName },
-                })}
+                  message: "By",
+                })} ${creatorName}`}
               </span>
             )}
             {categoryNames.map((categoryName) => (
-              <span key={categoryName}>{categoryName}</span>
+              <span
+                key={categoryName}
+                className="inline-flex min-h-6 items-center"
+              >
+                {categoryName}
+              </span>
             ))}
           </div>
         </button>
         <div className="flex shrink-0 flex-wrap gap-2">{actions}</div>
       </div>
     </div>
+  );
+}
+
+export function AssistantStoreVersionOverviewSection({
+  version,
+  categories,
+  onStartChat,
+}: {
+  version: AssistantStoreVersion;
+  categories: AssistantStoreCategory[];
+  onStartChat?: () => void;
+}) {
+  const categoryNames = version.category_ids
+    .map((categoryId) =>
+      categories.find((category) => category.id === categoryId),
+    )
+    .filter(Boolean)
+    .map((category) => category?.display_name);
+  const creatorName = version.creator.display_name;
+
+  return (
+    <section className="rounded-lg border border-theme-border bg-theme-bg-primary p-6">
+      <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold text-theme-fg-primary">
+            {version.assistant.name}
+          </h1>
+          {version.assistant.description && (
+            <p className="mt-2 text-sm text-theme-fg-secondary">
+              {version.assistant.description}
+            </p>
+          )}
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-theme-fg-muted">
+            {creatorName && (
+              <span>
+                {`${t({
+                  id: "assistantStore.card.creator",
+                  message: "By",
+                })} ${creatorName}`}
+              </span>
+            )}
+            {categoryNames.map((categoryName) => (
+              <span key={categoryName}>{categoryName}</span>
+            ))}
+          </div>
+        </div>
+        {onStartChat && (
+          <Button variant="primary" size="lg" onClick={onStartChat}>
+            {t({
+              id: "assistantStore.action.startChat",
+              message: "Start chat",
+            })}
+          </Button>
+        )}
+      </div>
+
+      <p className="mt-5 whitespace-pre-wrap text-theme-fg-primary">
+        {version.long_description}
+      </p>
+      {version.keywords.length > 0 && (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {version.keywords.map((keyword) => (
+            <span
+              key={keyword}
+              className="rounded border border-theme-border bg-theme-bg-secondary px-2 py-1 text-xs text-theme-fg-secondary"
+            >
+              {keyword}
+            </span>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+export function AssistantStoreVersionConfigurationSection({
+  version,
+  assistantDetails,
+}: {
+  version: AssistantStoreVersion;
+  assistantDetails?: AssistantWithFiles;
+}) {
+  const { data: availableModels = [], isLoading: isLoadingModels } =
+    useAvailableModels({});
+  const { data: facetsData, isLoading: isLoadingFacets } = useFacets({});
+  const defaultModelId = version.assistant.default_chat_provider;
+  const defaultModel = useMemo(
+    () =>
+      defaultModelId
+        ? (availableModels.find(
+            (model) => model.chat_provider_id === defaultModelId,
+          ) ?? null)
+        : null,
+    [availableModels, defaultModelId],
+  );
+  const availableFacets = useMemo(() => facetsData?.facets ?? [], [facetsData]);
+  const configuredFacetIds = useMemo(
+    () => version.assistant.facet_ids ?? [],
+    [version.assistant.facet_ids],
+  );
+  const configuredFacets = useMemo(
+    () =>
+      configuredFacetIds.map((facetId) => ({
+        facetId,
+        facet:
+          availableFacets.find(
+            (availableFacet) => availableFacet.id === facetId,
+          ) ?? null,
+      })),
+    [availableFacets, configuredFacetIds],
+  );
+
+  return (
+    <section className="rounded-lg border border-theme-border bg-theme-bg-primary p-6">
+      <h2 className="mb-4 text-lg font-semibold text-theme-fg-primary">
+        {t({
+          id: "assistantStore.detail.configuration",
+          message: "Configuration",
+        })}
+      </h2>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div>
+          <div className="mb-1 text-sm font-medium text-theme-fg-primary">
+            {t({
+              id: "assistantStore.detail.model",
+              message: "Default model",
+            })}
+          </div>
+          <div className="text-sm text-theme-fg-secondary">
+            {defaultModel ? (
+              <ModelSelectorOptionContent model={defaultModel} compact />
+            ) : defaultModelId && isLoadingModels ? (
+              t`Loading...`
+            ) : (
+              (defaultModelId ?? t`Not set`)
+            )}
+          </div>
+        </div>
+        <div>
+          <div className="mb-1 text-sm font-medium text-theme-fg-primary">
+            {t({
+              id: "assistantStore.detail.facets",
+              message: "Tools",
+            })}
+          </div>
+          {configuredFacets.length > 0 ? (
+            <ul className="space-y-1 text-sm text-theme-fg-secondary">
+              {configuredFacets.map(({ facetId, facet }) => (
+                <li key={facetId} className="flex items-center gap-2">
+                  {facet?.icon ? (
+                    <ResolvedIcon
+                      iconId={facet.icon}
+                      className="size-4 shrink-0"
+                    />
+                  ) : null}
+                  <span>
+                    {facet
+                      ? getFacetDisplayName(facet)
+                      : isLoadingFacets
+                        ? t`Loading...`
+                        : facetId}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-theme-fg-secondary">{t`None`}</p>
+          )}
+        </div>
+        <div>
+          <div className="mb-1 text-sm font-medium text-theme-fg-primary">
+            {t({
+              id: "assistantStore.detail.files",
+              message: "Files",
+            })}
+          </div>
+          {assistantDetails?.files.length ? (
+            <ul className="space-y-1 text-sm text-theme-fg-secondary">
+              {assistantDetails.files.map((file) => (
+                <li key={file.id} className="flex items-center gap-2">
+                  <FileTextIcon className="size-4 shrink-0" />
+                  <span>{file.filename}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-theme-fg-secondary">{t`None`}</p>
+          )}
+        </div>
+      </div>
+      <div className="mt-6">
+        <div className="mb-2 text-sm font-medium text-theme-fg-primary">
+          {t({
+            id: "assistantStore.detail.prompt",
+            message: "System prompt",
+          })}
+        </div>
+        <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-theme-border bg-theme-bg-secondary p-4 text-sm text-theme-fg-primary">
+          {version.assistant.prompt}
+        </pre>
+      </div>
+    </section>
   );
 }
 

@@ -20,7 +20,7 @@ interface FacetSelectorProps {
   className?: string;
 }
 
-function getFacetDisplayName(facet: FacetInfo): string {
+export function getFacetDisplayName(facet: FacetInfo): string {
   // eslint-disable-next-line lingui/no-unlocalized-strings -- Translation key is dynamic by facet ID
   const translationId = `facets.${facet.id}.display_name`;
   // eslint-disable-next-line lingui/no-single-variables-to-translate

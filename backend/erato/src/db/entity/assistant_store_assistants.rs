@@ -9,6 +9,7 @@ pub struct Model {
     pub id: Uuid,
     pub source_assistant_id: Uuid,
     pub owner_user_id: Uuid,
+    pub featured: bool,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
 }

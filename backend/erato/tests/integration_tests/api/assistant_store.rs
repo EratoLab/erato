@@ -139,6 +139,193 @@ async fn test_assistant_store_rejects_duplicate_version_number(pool: Pool<Postgr
     assert_eq!(my_versions["versions"][0]["version_number"], "1.0.0");
 }
 
+/// Verifies that featuring is stored on the store assistant, not on an
+/// individual immutable version, so the flag carries forward when a newer
+/// version becomes current.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_assistant_store_featured_status_carries_across_versions(pool: Pool<Postgres>) {
+    let app_state = test_app_state(assistant_store_app_config(), pool).await;
+    let server = create_test_server(app_state.clone());
+
+    let owner_subject = "assistant-store-featured-owner";
+    let reviewer_subject = "assistant-store-featured-reviewer";
+
+    let owner_token = JwtTokenBuilder::new()
+        .subject(owner_subject)
+        .email("assistant-store-featured-owner@example.com")
+        .build();
+    let reviewer_token = JwtTokenBuilder::new()
+        .subject(reviewer_subject)
+        .email("assistant-store-featured-reviewer@example.com")
+        .groups(vec![REVIEWER_GROUP_ID.to_string()])
+        .build();
+
+    let owner = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        owner_subject,
+        Some("assistant-store-featured-owner@example.com"),
+    )
+    .await
+    .expect("failed to create owner");
+
+    let source_assistant = erato::models::assistant::create_assistant(
+        &app_state.db,
+        &PolicyEngine::new(),
+        &erato::policy::types::Subject::User(owner.id.to_string()),
+        "Featured Store Assistant".to_string(),
+        Some("Source draft description".to_string()),
+        "You are a featured assistant store test fixture.".to_string(),
+        None,
+        None,
+        Some("mock-llm".to_string()),
+        false,
+    )
+    .await
+    .expect("failed to create source assistant");
+
+    let first_submission_response = server
+        .post(&format!(
+            "/api/v1beta/assistant-store/assistants/{}/versions",
+            source_assistant.id
+        ))
+        .json(&json!({
+            "long_description": "A first reviewed assistant store version.",
+            "category_ids": [STORE_CATEGORY_ID],
+            "keywords": ["featured", "first"],
+            "version_number": "1.0.0",
+            "version_comment": "Initial store publication",
+            "creator_review_comment": "Ready for review",
+            "audience_grants": []
+        }))
+        .with_bearer_token(&owner_token)
+        .await;
+    assert_eq!(
+        first_submission_response.status_code(),
+        http::StatusCode::CREATED
+    );
+    let first_submission: Value = first_submission_response.json();
+    let first_version_id = first_submission["version"]["version_id"]
+        .as_str()
+        .expect("submitted version should include version_id")
+        .to_string();
+
+    let first_review_response = server
+        .post(&format!(
+            "/api/v1beta/assistant-store/versions/{first_version_id}/review"
+        ))
+        .json(&json!({
+            "accepted": true,
+            "reviewer_review_comment": "Accepted for publication"
+        }))
+        .with_bearer_token(&reviewer_token)
+        .await;
+    assert_eq!(first_review_response.status_code(), http::StatusCode::OK);
+
+    let first_publish_response = server
+        .put(&format!(
+            "/api/v1beta/assistant-store/versions/{first_version_id}/published"
+        ))
+        .json(&json!({ "is_published": true }))
+        .with_bearer_token(&owner_token)
+        .await;
+    assert_eq!(first_publish_response.status_code(), http::StatusCode::OK);
+
+    let first_current_response = server
+        .put(&format!(
+            "/api/v1beta/assistant-store/versions/{first_version_id}/current"
+        ))
+        .with_bearer_token(&owner_token)
+        .await;
+    assert_eq!(first_current_response.status_code(), http::StatusCode::OK);
+
+    let featured_response = server
+        .put(&format!(
+            "/api/v1beta/assistant-store/versions/{first_version_id}/featured"
+        ))
+        .json(&json!({ "featured": true }))
+        .with_bearer_token(&reviewer_token)
+        .await;
+    assert_eq!(featured_response.status_code(), http::StatusCode::OK);
+    let featured: Value = featured_response.json();
+    assert_eq!(featured["version"]["featured"], true);
+
+    let second_submission_response = server
+        .post(&format!(
+            "/api/v1beta/assistant-store/assistants/{}/versions",
+            source_assistant.id
+        ))
+        .json(&json!({
+            "long_description": "A second reviewed assistant store version.",
+            "category_ids": [STORE_CATEGORY_ID],
+            "keywords": ["featured", "second"],
+            "version_number": "1.1.0",
+            "version_comment": "Follow-up store publication",
+            "creator_review_comment": "Ready for second review",
+            "audience_grants": []
+        }))
+        .with_bearer_token(&owner_token)
+        .await;
+    assert_eq!(
+        second_submission_response.status_code(),
+        http::StatusCode::CREATED
+    );
+    let second_submission: Value = second_submission_response.json();
+    let second_version_id = second_submission["version"]["version_id"]
+        .as_str()
+        .expect("submitted version should include version_id")
+        .to_string();
+
+    let second_review_response = server
+        .post(&format!(
+            "/api/v1beta/assistant-store/versions/{second_version_id}/review"
+        ))
+        .json(&json!({
+            "accepted": true,
+            "reviewer_review_comment": "Accepted for publication"
+        }))
+        .with_bearer_token(&reviewer_token)
+        .await;
+    assert_eq!(second_review_response.status_code(), http::StatusCode::OK);
+
+    let second_publish_response = server
+        .put(&format!(
+            "/api/v1beta/assistant-store/versions/{second_version_id}/published"
+        ))
+        .json(&json!({ "is_published": true }))
+        .with_bearer_token(&owner_token)
+        .await;
+    assert_eq!(second_publish_response.status_code(), http::StatusCode::OK);
+
+    let second_current_response = server
+        .put(&format!(
+            "/api/v1beta/assistant-store/versions/{second_version_id}/current"
+        ))
+        .with_bearer_token(&owner_token)
+        .await;
+    assert_eq!(second_current_response.status_code(), http::StatusCode::OK);
+    let second_current: Value = second_current_response.json();
+    assert_eq!(second_current["version"]["featured"], true);
+
+    let owner_listing_response = server
+        .get("/api/v1beta/assistant-store/assistants")
+        .with_bearer_token(&owner_token)
+        .await;
+    assert_eq!(owner_listing_response.status_code(), http::StatusCode::OK);
+    let listed: Value = owner_listing_response.json();
+    let versions = listed["versions"]
+        .as_array()
+        .expect("assistant store response should contain versions array");
+    assert_eq!(versions.len(), 1);
+    assert_eq!(versions[0]["version_id"], second_version_id);
+    assert_eq!(versions[0]["version_number"], "1.1.0");
+    assert_eq!(versions[0]["featured"], true);
+}
+
 /// Verifies the full Assistant Store publication flow:
 /// submit immutable version with an audience grant, accept it, publish it,
 /// mark it as current, and then list it as an audience viewer.

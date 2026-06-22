@@ -42,6 +42,41 @@ const toAudienceGrantInput = (
   role: "viewer",
 });
 
+const incrementVersionNumber = (versionNumber: string) => {
+  const trimmedVersionNumber = versionNumber.trim();
+  const singleNumberMatch = /^(\d+)$/.exec(trimmedVersionNumber);
+  if (singleNumberMatch) {
+    return `${Number(singleNumberMatch[1]) + 1}`;
+  }
+
+  const semverMatch = /^(\d+)\.(\d+)\.(\d+)$/.exec(trimmedVersionNumber);
+  if (semverMatch) {
+    const major = Number(semverMatch[1]);
+    const minor = Number(semverMatch[2]);
+    return `${major}.${minor + 1}.0`;
+  }
+
+  return "1.0.0";
+};
+
+const suggestNextVersionNumber = (
+  baseVersionNumber: string | undefined,
+  existingVersionNumbers: string[],
+) => {
+  const existing = new Set(
+    existingVersionNumbers.map((versionNumber) => versionNumber.trim()),
+  );
+  let candidate = baseVersionNumber
+    ? incrementVersionNumber(baseVersionNumber)
+    : "1.0.0";
+
+  while (existing.has(candidate)) {
+    candidate = incrementVersionNumber(candidate);
+  }
+
+  return candidate;
+};
+
 export default function AssistantStoreSubmitPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -65,7 +100,7 @@ export default function AssistantStoreSubmitPage() {
   const previewDiff = usePreviewAssistantStoreSubmissionDiff();
   const submitVersion = useSubmitAssistantStoreVersion();
   const [longDescription, setLongDescription] = useState("");
-  const [versionNumber, setVersionNumber] = useState("1.0.0");
+  const [versionNumber, setVersionNumber] = useState("");
   const [versionComment, setVersionComment] = useState("");
   const [creatorReviewComment, setCreatorReviewComment] = useState("");
   const [keywords, setKeywords] = useState("");
@@ -77,27 +112,73 @@ export default function AssistantStoreSubmitPage() {
   const [prefilledFromVersionId, setPrefilledFromVersionId] = useState<
     string | null
   >(null);
+  const [
+    prefilledVersionNumberForSourceId,
+    setPrefilledVersionNumberForSourceId,
+  ] = useState<string | null>(null);
 
-  const latestSubmittedVersion = useMemo(() => {
-    if (!sourceAssistantId) return undefined;
+  const sourceVersions = useMemo(() => {
+    if (!sourceAssistantId || !myVersions) return undefined;
 
-    return [...(myVersions?.versions ?? [])]
+    return [...myVersions.versions]
       .filter((version) => version.source_assistant_id === sourceAssistantId)
       .sort(
         (left, right) =>
           new Date(right.submitted_at).getTime() -
           new Date(left.submitted_at).getTime(),
-      )[0];
-  }, [myVersions?.versions, sourceAssistantId]);
+      );
+  }, [myVersions, sourceAssistantId]);
+  const latestSubmittedVersion = sourceVersions?.[0];
   const currentPublishedVersion = useMemo(() => {
-    if (!sourceAssistantId) return undefined;
-
-    return (myVersions?.versions ?? []).find(
-      (version) =>
-        version.source_assistant_id === sourceAssistantId &&
-        version.is_current_published_version,
+    return sourceVersions?.find(
+      (version) => version.is_published && version.is_current_published_version,
     );
-  }, [myVersions?.versions, sourceAssistantId]);
+  }, [sourceVersions]);
+  const latestPublishedVersion = useMemo(() => {
+    return [...(sourceVersions ?? [])]
+      .filter((version) => version.is_published)
+      .sort((left, right) => {
+        const leftTime = left.published_at
+          ? new Date(left.published_at).getTime()
+          : new Date(left.submitted_at).getTime();
+        const rightTime = right.published_at
+          ? new Date(right.published_at).getTime()
+          : new Date(right.submitted_at).getTime();
+
+        return rightTime - leftTime;
+      })
+      .at(0);
+  }, [sourceVersions]);
+  const suggestedVersionNumber = useMemo(
+    () =>
+      suggestNextVersionNumber(
+        currentPublishedVersion?.version_number ??
+          latestPublishedVersion?.version_number ??
+          latestSubmittedVersion?.version_number,
+        sourceVersions?.map((version) => version.version_number) ?? [],
+      ),
+    [
+      currentPublishedVersion?.version_number,
+      latestPublishedVersion?.version_number,
+      latestSubmittedVersion?.version_number,
+      sourceVersions,
+    ],
+  );
+  const versionNumberHelpText = currentPublishedVersion
+    ? `${t({
+        id: "assistantStore.submit.currentPublishedVersion",
+        message: "Current published version:",
+      })} ${currentPublishedVersion.version_number}`
+    : latestPublishedVersion
+      ? `${t({
+          id: "assistantStore.submit.latestPublishedVersion",
+          message:
+            "No current published version is selected. Latest published version:",
+        })} ${latestPublishedVersion.version_number}`
+      : t({
+          id: "assistantStore.submit.noPublishedVersion",
+          message: "No published version exists for this assistant yet.",
+        });
 
   useEffect(() => {
     document.title = `${t({
@@ -122,6 +203,26 @@ export default function AssistantStoreSubmitPage() {
     setCategoryIds([...latestSubmittedVersion.category_ids]);
     setPrefilledFromVersionId(latestSubmittedVersion.version_id);
   }, [latestSubmittedVersion, prefilledFromVersionId]);
+
+  useEffect(() => {
+    if (
+      isLoadingMyVersions ||
+      !sourceVersions ||
+      !sourceAssistantId ||
+      prefilledVersionNumberForSourceId === sourceAssistantId
+    ) {
+      return;
+    }
+
+    setVersionNumber(suggestedVersionNumber);
+    setPrefilledVersionNumberForSourceId(sourceAssistantId);
+  }, [
+    prefilledVersionNumberForSourceId,
+    isLoadingMyVersions,
+    sourceAssistantId,
+    sourceVersions,
+    suggestedVersionNumber,
+  ]);
 
   const requestBody = useMemo<AssistantStoreSubmissionRequest>(() => {
     const trimmedVersionComment = versionComment.trim();
@@ -287,7 +388,7 @@ export default function AssistantStoreSubmitPage() {
             </Alert>
           )}
 
-          {assistant && config?.enabled && (
+          {!isLoading && assistant && config?.enabled && (
             <>
               <section className="rounded-lg border border-theme-border bg-theme-bg-primary p-6">
                 <h2 className="mb-2 text-lg font-semibold text-theme-fg-primary">
@@ -326,30 +427,20 @@ export default function AssistantStoreSubmitPage() {
                       message: "Version number",
                     })}
                     htmlFor="assistant-store-version-number"
-                    helpText={
-                      currentPublishedVersion
-                        ? t({
-                            id: "assistantStore.submit.currentPublishedVersion",
-                            message:
-                              "Current published version: {versionNumber}",
-                            values: {
-                              versionNumber:
-                                currentPublishedVersion.version_number,
-                            },
-                          })
-                        : t({
-                            id: "assistantStore.submit.noPublishedVersion",
-                            message:
-                              "No published version exists for this assistant yet.",
-                          })
-                    }
                     required
                   >
                     <Input
                       id="assistant-store-version-number"
+                      aria-describedby="assistant-store-version-number-help"
                       value={versionNumber}
                       onChange={(event) => setVersionNumber(event.target.value)}
                     />
+                    <p
+                      id="assistant-store-version-number-help"
+                      className="mt-2 text-sm text-theme-fg-secondary"
+                    >
+                      {versionNumberHelpText}
+                    </p>
                   </FormField>
                   <FormField
                     label={t({
@@ -415,7 +506,7 @@ export default function AssistantStoreSubmitPage() {
                 <FormField
                   label={t({
                     id: "assistantStore.submit.reviewComment",
-                    message: "Reviewer note",
+                    message: "Note for reviewer",
                   })}
                   htmlFor="assistant-store-review-comment"
                 >
