@@ -2936,6 +2936,10 @@ msgstr ""
 msgid "Copy code"
 msgstr ""
 
+#: src/hooks/audio/useGuidedAudioCapture.ts
+msgid "Could not capture audio from the microphone. Please try again."
+msgstr "No se pudo capturar el audio del micrófono. Inténtalo de nuevo."
+
 #: src/hooks/audio/useAudioDictationRecorder.ts
 #~ msgid "Could not complete audio dictation."
 #~ msgstr "No se pudo completar el dictado de audio."

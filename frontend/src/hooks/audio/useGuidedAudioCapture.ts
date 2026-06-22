@@ -7,6 +7,7 @@ import { useMountedState } from "react-use";
 // same import the dictation recorder uses (see its header note on why the
 // `new URL("./worklet.ts", import.meta.url)` pattern does not work here).
 import audioDictationWorkletUrl from "./audio-dictation-worklet.ts?worker&url";
+import { createRunningAudioContext } from "./createRunningAudioContext";
 
 const AUDIO_DICTATION_WORKLET_PROCESSOR_NAME = "audio-dictation-processor";
 
@@ -18,9 +19,21 @@ const CAPTURE_SAMPLE_RATE_HZ = 16_000;
  * Settle window discarded after the mic opens and before the quiet phase
  * begins measuring. The OS/driver warm-up emits zeros (Chromium) or a
  * low-level DC bias (WebKit) that would otherwise pollute the noise-floor
- * baseline. Mirrors the onset detector's calibration philosophy.
+ * baseline. Mirrors the onset detector's calibration philosophy. Measured
+ * in AUDIO time (delivered samples), not wall-clock — see the phase notes.
  */
 const SETTLE_MS = 350;
+
+/**
+ * Wall-clock multiple of the expected capture duration after which a capture
+ * that has not finished is treated as a stalled device. The phases advance
+ * on the audio sample clock, which never advances if frames stop flowing
+ * (dead mic, revoked track, suspended-forever context), so this is the
+ * frame-independent guarantee that the UI can't hang. Generous, since a
+ * late-resuming WebKit context legitimately stretches wall-clock time.
+ */
+const CAPTURE_BACKSTOP_FACTOR = 2;
+const CAPTURE_BACKSTOP_FLOOR_MS = 3_000;
 
 export type GuidedCapturePhase =
   | "idle"
@@ -37,7 +50,12 @@ export type CaptureSampleRange = {
 };
 
 export type GuidedCaptureResult = {
-  /** Full captured PCM at `sampleRate` (the AudioContext rate). */
+  /**
+   * Full captured PCM at `sampleRate`. The rate is read back from the live
+   * AudioContext (authoritative), not the requested 16 kHz — WebKit may
+   * ignore the requested rate, and resampling/encoding against the wrong
+   * value is what produces stretched, robotic playback.
+   */
   samples: Float32Array;
   sampleRate: number;
   /** Quiet (noise-floor) phase span. */
@@ -85,6 +103,9 @@ export type UseGuidedAudioCaptureOptions = {
   onStreamActive?: () => void;
 };
 
+/** Internal sample-clock state machine, distinct from the public phase. */
+type CaptureStage = "idle" | "settling" | "quiet" | "reading" | "done";
+
 /**
  * Reusable guided audio capture: a timed quiet → read-aloud sequence with a
  * visible countdown, returning the recorded PCM plus per-phase sample
@@ -100,6 +121,15 @@ export type UseGuidedAudioCaptureOptions = {
  * worklet which posts 4096-sample frames accumulated here for replay +
  * analysis. The buffer never leaves the device; the only network touch is
  * the optional transcript step, owned by the consumer.
+ *
+ * Timing is driven by the AUDIO SAMPLE CLOCK, not wall-clock: each phase
+ * advances once the required number of delivered samples
+ * (`durationMs * sampleRate`) has arrived, and the AudioContext is pinned to
+ * the track rate and confirmed `running` before counting starts. This keeps
+ * the captured buffer, the analysis windows, and the replay/transcript
+ * encoding consistent across browsers — notably on WebKit, where a
+ * wall-clock timer drifts from a late-resuming context and an unpinned
+ * context produces a rate mismatch.
  */
 export function useGuidedAudioCapture({
   deviceId,
@@ -128,26 +158,31 @@ export function useGuidedAudioCapture({
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const workletRef = useRef<AudioWorkletNode | null>(null);
 
-  // Accumulated frames and the running sample count. Frames are only pushed
-  // while `accumulatingRef` is true (i.e. from the quiet phase onward), so
-  // warm-up samples never enter the buffer.
+  // Captured frames and the running sample count, both measured from the
+  // start of the quiet phase (settle-phase frames are discarded, not pushed).
   const chunksRef = useRef<Float32Array[]>([]);
   const totalSamplesRef = useRef(0);
-  const accumulatingRef = useRef(false);
   const speechStartSampleRef = useRef(0);
 
-  const timeoutRef = useRef<number | null>(null);
+  // Sample-clock state machine. `stageRef` is the source of truth for which
+  // phase a delivered frame belongs to; the public `phase` is derived from it.
+  const stageRef = useRef<CaptureStage>("idle");
+  const sampleRateRef = useRef(CAPTURE_SAMPLE_RATE_HZ);
+  const settleTargetSamplesRef = useRef(0);
+  const quietTargetSamplesRef = useRef(0);
+  const readTargetSamplesRef = useRef(0);
+  const settleSamplesRef = useRef(0);
+
+  const backstopTimeoutRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
-  const phaseEndsAtRef = useRef(0);
-  const phaseDurationRef = useRef(0);
   // Bumped on every start()/cancel()/teardown so a late async acquire from a
   // superseded run can detect it was cancelled and bail.
   const runIdRef = useRef(0);
 
   const clearTimers = useCallback(() => {
-    if (timeoutRef.current !== null) {
-      window.clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
+    if (backstopTimeoutRef.current !== null) {
+      window.clearTimeout(backstopTimeoutRef.current);
+      backstopTimeoutRef.current = null;
     }
     if (rafRef.current !== null) {
       window.cancelAnimationFrame(rafRef.current);
@@ -169,7 +204,6 @@ export function useGuidedAudioCapture({
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
-    accumulatingRef.current = false;
   }, []);
 
   const teardown = useCallback(() => {
@@ -178,6 +212,9 @@ export function useGuidedAudioCapture({
     releaseAudioGraph();
     chunksRef.current = [];
     totalSamplesRef.current = 0;
+    settleSamplesRef.current = 0;
+    speechStartSampleRef.current = 0;
+    stageRef.current = "idle";
   }, [clearTimers, releaseAudioGraph]);
 
   useEffect(() => {
@@ -210,10 +247,9 @@ export function useGuidedAudioCapture({
   }, []);
 
   const finish = useCallback(() => {
-    accumulatingRef.current = false;
+    stageRef.current = "done";
     clearTimers();
-    const sampleRate =
-      audioContextRef.current?.sampleRate ?? CAPTURE_SAMPLE_RATE_HZ;
+    const sampleRate = sampleRateRef.current;
     const samples = assembleSamples();
     const speechStart = Math.min(speechStartSampleRef.current, samples.length);
     const captured: GuidedCaptureResult = {
@@ -235,55 +271,105 @@ export function useGuidedAudioCapture({
     onComplete?.(captured);
   }, [assembleSamples, clearTimers, isMounted, onComplete, releaseAudioGraph]);
 
-  const runCountdown = useCallback(() => {
+  // Smooth countdown for the ring, driven by the sample clock (not wall-clock)
+  // so the display honestly reflects audio progress — it slows/pauses if
+  // frames stall, instead of finishing while no audio has arrived.
+  const startCountdownLoop = useCallback(() => {
     const tick = () => {
       if (!isMounted()) {
         return;
       }
-      const remaining = Math.max(
-        0,
-        phaseEndsAtRef.current - window.performance.now(),
-      );
-      setSecondsRemaining(Math.ceil(remaining / 1000));
-      setPhaseProgress(
-        phaseDurationRef.current > 0
-          ? 1 - remaining / phaseDurationRef.current
-          : 1,
-      );
-      if (remaining > 0) {
+      const stage = stageRef.current;
+      if (stage === "quiet" || stage === "reading") {
+        const sampleRate = sampleRateRef.current || CAPTURE_SAMPLE_RATE_HZ;
+        const target =
+          stage === "quiet"
+            ? quietTargetSamplesRef.current
+            : readTargetSamplesRef.current;
+        const done =
+          stage === "quiet"
+            ? totalSamplesRef.current
+            : totalSamplesRef.current - speechStartSampleRef.current;
+        setSecondsRemaining(Math.ceil(Math.max(0, target - done) / sampleRate));
+        setPhaseProgress(target > 0 ? Math.min(1, done / target) : 1);
+      }
+      if (stage === "settling" || stage === "quiet" || stage === "reading") {
         rafRef.current = window.requestAnimationFrame(tick);
       }
     };
     rafRef.current = window.requestAnimationFrame(tick);
   }, [isMounted]);
 
-  const beginTimedPhase = useCallback(
-    (next: "quiet" | "reading", durationMs: number, onElapsed: () => void) => {
-      phaseDurationRef.current = durationMs;
-      phaseEndsAtRef.current = window.performance.now() + durationMs;
+  // Consumes one worklet frame and advances the sample-clock state machine.
+  // Stable across renders via a ref so the worklet handler never needs
+  // re-subscribing.
+  const handleFrame = useCallback(
+    (frame: Float32Array) => {
+      switch (stageRef.current) {
+        case "settling": {
+          settleSamplesRef.current += frame.length;
+          if (settleSamplesRef.current >= settleTargetSamplesRef.current) {
+            // Warm-up discarded — start measuring the noise floor at sample 0.
+            chunksRef.current = [];
+            totalSamplesRef.current = 0;
+            stageRef.current = "quiet";
+            if (isMounted()) {
+              setPhase("quiet");
+              setSecondsRemaining(Math.ceil(quietMs / 1000));
+              setPhaseProgress(0);
+            }
+          }
+          return;
+        }
+        case "quiet": {
+          chunksRef.current.push(frame);
+          totalSamplesRef.current += frame.length;
+          if (totalSamplesRef.current >= quietTargetSamplesRef.current) {
+            speechStartSampleRef.current = totalSamplesRef.current;
+            stageRef.current = "reading";
+            if (isMounted()) {
+              setPhase("reading");
+              setSecondsRemaining(Math.ceil(readMs / 1000));
+              setPhaseProgress(0);
+            }
+          }
+          return;
+        }
+        case "reading": {
+          chunksRef.current.push(frame);
+          totalSamplesRef.current += frame.length;
+          if (
+            totalSamplesRef.current - speechStartSampleRef.current >=
+            readTargetSamplesRef.current
+          ) {
+            finish();
+          }
+          return;
+        }
+        default:
+          // idle / done — ignore late frames.
+          return;
+      }
+    },
+    [finish, isMounted, quietMs, readMs],
+  );
+  const handleFrameRef = useRef(handleFrame);
+  handleFrameRef.current = handleFrame;
+
+  const failCapture = useCallback(
+    (message: string) => {
+      teardown();
       if (isMounted()) {
-        setPhase(next);
-        setSecondsRemaining(Math.ceil(durationMs / 1000));
+        setError(message);
+        setPhase("error");
+        setSecondsRemaining(0);
         setPhaseProgress(0);
       }
-      runCountdown();
-      timeoutRef.current = window.setTimeout(onElapsed, durationMs);
     },
-    [isMounted, runCountdown],
+    [isMounted, teardown],
   );
-
-  const beginReading = useCallback(() => {
-    speechStartSampleRef.current = totalSamplesRef.current;
-    beginTimedPhase("reading", readMs, finish);
-  }, [beginTimedPhase, finish, readMs]);
-
-  const beginQuiet = useCallback(() => {
-    // Reset the buffer so accumulation starts at the quiet phase (sample 0).
-    chunksRef.current = [];
-    totalSamplesRef.current = 0;
-    accumulatingRef.current = true;
-    beginTimedPhase("quiet", quietMs, beginReading);
-  }, [beginReading, beginTimedPhase, quietMs]);
+  const failCaptureRef = useRef(failCapture);
+  failCaptureRef.current = failCapture;
 
   const mapGetUserMediaError = useCallback((err: unknown): string => {
     const name = err instanceof DOMException ? err.name : undefined;
@@ -302,6 +388,7 @@ export function useGuidedAudioCapture({
   const start = useCallback(() => {
     teardown();
     const runId = runIdRef.current;
+    const isCurrent = () => runId === runIdRef.current && isMounted();
     setError(null);
     setResult(null);
     setPhase("preparing");
@@ -316,9 +403,10 @@ export function useGuidedAudioCapture({
               .mediaDevices;
 
       if (typeof mediaDevices?.getUserMedia !== "function") {
-        if (isMounted() && runId === runIdRef.current) {
-          setError(t`Audio recording is not supported in this browser.`);
-          setPhase("error");
+        if (isCurrent()) {
+          failCaptureRef.current(
+            t`Audio recording is not supported in this browser.`,
+          );
         }
         return;
       }
@@ -326,9 +414,10 @@ export function useGuidedAudioCapture({
         typeof AudioContext === "undefined" ||
         typeof AudioWorkletNode === "undefined"
       ) {
-        if (isMounted() && runId === runIdRef.current) {
-          setError(t`Audio analysis is not supported in this browser.`);
-          setPhase("error");
+        if (isCurrent()) {
+          failCaptureRef.current(
+            t`Audio analysis is not supported in this browser.`,
+          );
         }
         return;
       }
@@ -346,15 +435,14 @@ export function useGuidedAudioCapture({
           },
         });
       } catch (err) {
-        if (isMounted() && runId === runIdRef.current) {
-          setError(mapGetUserMediaError(err));
-          setPhase("error");
+        if (isCurrent()) {
+          failCaptureRef.current(mapGetUserMediaError(err));
         }
         return;
       }
 
       // Superseded or unmounted while awaiting the prompt — drop the stream.
-      if (runId !== runIdRef.current || !isMounted()) {
+      if (!isCurrent()) {
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
@@ -366,26 +454,38 @@ export function useGuidedAudioCapture({
       // and pick up real labels (the WebKit/Safari label-visibility fix).
       onStreamActiveRef.current?.();
 
-      const audioContext = new AudioContext();
-      if (audioContext.state === "suspended") {
-        void audioContext.resume();
-      }
+      // Pin the context to the track's actual rate so the mic feeds the graph
+      // without a cross-rate resample (the WebKit pitch/stretch trigger).
+      const preferredSampleRate = track.getSettings().sampleRate;
+      let audioContext: AudioContext;
       try {
+        audioContext = await createRunningAudioContext(preferredSampleRate);
         await audioContext.audioWorklet.addModule(audioDictationWorkletUrl);
       } catch {
-        if (isMounted() && runId === runIdRef.current) {
-          releaseAudioGraph();
-          setError(t`Could not start the microphone check.`);
-          setPhase("error");
+        if (isCurrent()) {
+          failCaptureRef.current(t`Could not start the microphone check.`);
+        } else {
+          stream.getTracks().forEach((track) => track.stop());
         }
         return;
       }
 
-      if (runId !== runIdRef.current || !isMounted()) {
+      if (!isCurrent()) {
         stream.getTracks().forEach((track) => track.stop());
         void audioContext.close();
         return;
       }
+
+      // Authoritative rate: what the context actually runs at (WebKit may
+      // ignore the requested rate). Everything downstream — phase targets,
+      // analysis, replay, transcript — is keyed off this one value.
+      const sampleRate = audioContext.sampleRate;
+      sampleRateRef.current = sampleRate;
+      settleTargetSamplesRef.current = Math.round(
+        (SETTLE_MS / 1000) * sampleRate,
+      );
+      quietTargetSamplesRef.current = Math.round((quietMs / 1000) * sampleRate);
+      readTargetSamplesRef.current = Math.round((readMs / 1000) * sampleRate);
 
       const source = audioContext.createMediaStreamSource(stream);
       const worklet = new AudioWorkletNode(
@@ -393,12 +493,7 @@ export function useGuidedAudioCapture({
         AUDIO_DICTATION_WORKLET_PROCESSOR_NAME,
       );
       worklet.port.onmessage = (event: MessageEvent<Float32Array>) => {
-        if (!accumulatingRef.current) {
-          return;
-        }
-        const frame = event.data;
-        chunksRef.current.push(frame);
-        totalSamplesRef.current += frame.length;
+        handleFrameRef.current(event.data);
       };
       source.connect(worklet);
       // The worklet has no audible output; do NOT connect to destination
@@ -409,21 +504,37 @@ export function useGuidedAudioCapture({
       sourceRef.current = source;
       workletRef.current = worklet;
 
-      // Discard the warm-up window, then begin measuring the noise floor.
-      timeoutRef.current = window.setTimeout(() => {
-        if (runId === runIdRef.current && isMounted()) {
-          beginQuiet();
+      // Begin counting: settle (discard warm-up) → quiet → reading, all on
+      // the sample clock inside `handleFrame`.
+      chunksRef.current = [];
+      totalSamplesRef.current = 0;
+      settleSamplesRef.current = 0;
+      speechStartSampleRef.current = 0;
+      stageRef.current = "settling";
+      startCountdownLoop();
+
+      // Frame-independent stall guard: if the sample clock never reaches the
+      // end (frames stop flowing), surface a clear error instead of hanging.
+      const backstopMs =
+        (SETTLE_MS + quietMs + readMs) * CAPTURE_BACKSTOP_FACTOR +
+        CAPTURE_BACKSTOP_FLOOR_MS;
+      backstopTimeoutRef.current = window.setTimeout(() => {
+        if (runId === runIdRef.current && stageRef.current !== "done") {
+          failCaptureRef.current(
+            t`Could not capture audio from the microphone. Please try again.`,
+          );
         }
-      }, SETTLE_MS);
+      }, backstopMs);
     };
 
     void acquire();
   }, [
-    beginQuiet,
     deviceId,
     isMounted,
     mapGetUserMediaError,
-    releaseAudioGraph,
+    quietMs,
+    readMs,
+    startCountdownLoop,
     teardown,
   ]);
 
