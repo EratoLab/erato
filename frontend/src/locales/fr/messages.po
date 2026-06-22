@@ -1803,8 +1803,13 @@ msgstr "Actualisation..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/AudioInputTabContent.tsx
+msgid "preferences.dialog.audio.input.revealDenied"
+msgstr "L'accès au microphone a été refusé, les noms des appareils ne peuvent donc pas être affichés. Vous pouvez quand même choisir un appareil, ou autoriser l'accès puis actualiser."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/AudioInputTabContent.tsx
 msgid "preferences.dialog.audio.input.revealHint"
-msgstr "Lancez le test du microphone ci-dessous pour afficher les noms de vos appareils."
+msgstr "Pour afficher les noms de vos appareils, actualisez les appareils ou lancez le test du microphone ci-dessous."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/GuidedMicCheck.tsx

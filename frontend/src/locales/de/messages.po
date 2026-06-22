@@ -1803,8 +1803,13 @@ msgstr "Aktualisieren..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/AudioInputTabContent.tsx
+msgid "preferences.dialog.audio.input.revealDenied"
+msgstr "Der Mikrofonzugriff wurde verweigert, daher können die Gerätenamen nicht angezeigt werden. Sie können dennoch ein Gerät auswählen oder den Zugriff erlauben und aktualisieren."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/AudioInputTabContent.tsx
 msgid "preferences.dialog.audio.input.revealHint"
-msgstr "Starten Sie unten den Mikrofontest, um Ihre Gerätenamen anzuzeigen."
+msgstr "Aktualisieren Sie die Geräte oder starten Sie unten den Mikrofontest, um Ihre Gerätenamen anzuzeigen."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/GuidedMicCheck.tsx

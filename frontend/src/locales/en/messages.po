@@ -1803,8 +1803,13 @@ msgstr "Refreshing..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/AudioInputTabContent.tsx
+msgid "preferences.dialog.audio.input.revealDenied"
+msgstr "Microphone access was denied, so device names can't be shown. You can still pick a device, or allow access and refresh."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/AudioInputTabContent.tsx
 msgid "preferences.dialog.audio.input.revealHint"
-msgstr "Start the microphone test below to show your device names."
+msgstr "To show your device names, refresh devices or start the microphone test below."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/GuidedMicCheck.tsx

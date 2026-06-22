@@ -34,7 +34,9 @@ export function AudioInputTabContent({ isActive }: AudioInputTabContentProps) {
     audioInputDevices,
     hasResolvedLabels,
     isLoadingAudioInputDevices,
+    labelRevealDenied,
     refreshAudioInputDevices,
+    revealAudioInputDeviceLabels,
     selectedAudioInputDeviceId,
     setSelectedAudioInputDeviceId,
   } = useAudioInputDevicePreference();
@@ -144,7 +146,10 @@ export function AudioInputTabContent({ isActive }: AudioInputTabContentProps) {
           type="button"
           disabled={isLoadingAudioInputDevices}
           onClick={() => {
-            void refreshAudioInputDevices();
+            // Reveal real device names on demand (opens a brief mic stream
+            // on WebKit/Safari when labels are still placeholders). This is
+            // the explicit user gesture that justifies the permission prompt.
+            void revealAudioInputDeviceLabels();
           }}
         >
           {isLoadingAudioInputDevices
@@ -174,11 +179,17 @@ export function AudioInputTabContent({ isActive }: AudioInputTabContentProps) {
           className="text-xs text-theme-fg-muted"
           data-testid="audio-input-reveal-hint"
         >
-          {t({
-            id: "preferences.dialog.audio.input.revealHint",
-            message:
-              "Start the microphone test below to show your device names.",
-          })}
+          {labelRevealDenied
+            ? t({
+                id: "preferences.dialog.audio.input.revealDenied",
+                message:
+                  "Microphone access was denied, so device names can't be shown. You can still pick a device, or allow access and refresh.",
+              })
+            : t({
+                id: "preferences.dialog.audio.input.revealHint",
+                message:
+                  "To show your device names, refresh devices or start the microphone test below.",
+              })}
         </p>
       ) : null}
 

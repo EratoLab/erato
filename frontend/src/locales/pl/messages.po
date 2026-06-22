@@ -1803,8 +1803,13 @@ msgstr "Odświeżanie..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/AudioInputTabContent.tsx
+msgid "preferences.dialog.audio.input.revealDenied"
+msgstr "Odmówiono dostępu do mikrofonu, więc nie można wyświetlić nazw urządzeń. Nadal możesz wybrać urządzenie albo zezwolić na dostęp i odświeżyć."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/AudioInputTabContent.tsx
 msgid "preferences.dialog.audio.input.revealHint"
-msgstr "Uruchom poniżej test mikrofonu, aby wyświetlić nazwy urządzeń."
+msgstr "Aby wyświetlić nazwy urządzeń, odśwież urządzenia lub uruchom poniżej test mikrofonu."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/GuidedMicCheck.tsx

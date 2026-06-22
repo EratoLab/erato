@@ -1803,8 +1803,13 @@ msgstr "Actualizando..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/AudioInputTabContent.tsx
+msgid "preferences.dialog.audio.input.revealDenied"
+msgstr "Se denegó el acceso al micrófono, por lo que no se pueden mostrar los nombres de los dispositivos. Aún puedes elegir un dispositivo, o permitir el acceso y actualizar."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/AudioInputTabContent.tsx
 msgid "preferences.dialog.audio.input.revealHint"
-msgstr "Inicia la prueba del micrófono de abajo para mostrar los nombres de tus dispositivos."
+msgstr "Para mostrar los nombres de tus dispositivos, actualiza los dispositivos o inicia la prueba del micrófono de abajo."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/GuidedMicCheck.tsx
