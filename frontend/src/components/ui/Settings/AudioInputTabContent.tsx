@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 import { useAudioInputDevicePreference } from "@/hooks/audio/useAudioInputDevicePreference";
 
+import { GuidedMicCheck } from "./GuidedMicCheck";
 import { MicTestPanel } from "./MicTestPanel";
 import { Button } from "../Controls/Button";
 import { DropdownMenu, type DropdownMenuItem } from "../Controls/DropdownMenu";
@@ -174,6 +175,26 @@ export function AudioInputTabContent({ isActive }: AudioInputTabContentProps) {
         </p>
       </div>
       <MicTestPanel
+        deviceId={selectedAudioInputDeviceId}
+        isAvailable={isActive}
+      />
+
+      <div className="space-y-1 border-t border-[var(--theme-border-subtle)] pt-4">
+        <h3 className="text-sm font-medium text-theme-fg-primary">
+          {t({
+            id: "preferences.dialog.audio.miccheck.heading",
+            message: "Probe your microphone quality",
+          })}
+        </h3>
+        <p className="text-sm text-theme-fg-secondary">
+          {t({
+            id: "preferences.dialog.audio.miccheck.description",
+            message:
+              "Check whether your microphone and room are good enough for accurate dictation.",
+          })}
+        </p>
+      </div>
+      <GuidedMicCheck
         deviceId={selectedAudioInputDeviceId}
         isAvailable={isActive}
       />

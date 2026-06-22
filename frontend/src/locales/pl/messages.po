@@ -1802,6 +1802,161 @@ msgid "preferences.dialog.audio.input.refreshing"
 msgstr "Odświeżanie..."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/GuidedMicCheck.tsx
+msgid "preferences.dialog.audio.miccheck.again"
+msgstr "Uruchom ponownie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/GuidedMicCheck.tsx
+msgid "preferences.dialog.audio.miccheck.cancel"
+msgstr "Anuluj"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/AudioInputTabContent.tsx
+msgid "preferences.dialog.audio.miccheck.description"
+msgstr "Sprawdź, czy Twój mikrofon i pomieszczenie są wystarczająco dobre do dokładnego dyktowania."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/AudioInputTabContent.tsx
+msgid "preferences.dialog.audio.miccheck.heading"
+msgstr "Sprawdź jakość mikrofonu"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/GuidedMicCheck.tsx
+msgid "preferences.dialog.audio.miccheck.intro"
+msgstr "Szybki test: zachowaj przez chwilę ciszę, a następnie przeczytaj na głos jedno krótkie zdanie. Zajmie to około 10 sekund."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/GuidedMicCheck.tsx
+msgid "preferences.dialog.audio.miccheck.issue.clipping.fix"
+msgstr "Zmniejsz poziom wejściowy lub odsuń się nieco. Zniekształcenia mogą obniżyć dokładność dyktowania."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/GuidedMicCheck.tsx
+msgid "preferences.dialog.audio.miccheck.issue.clipping.headline"
+msgstr "Twój mikrofon jest zbyt głośny i zniekształca dźwięk."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/GuidedMicCheck.tsx
+msgid "preferences.dialog.audio.miccheck.issue.level.fix"
+msgstr "Podejdź bliżej lub zwiększ poziom wejściowy, aby dyktowanie wyraźnie Cię słyszało."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/GuidedMicCheck.tsx
+msgid "preferences.dialog.audio.miccheck.issue.level.headline"
+msgstr "Twój mikrofon jest bardzo cichy."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/GuidedMicCheck.tsx
+msgid "preferences.dialog.audio.miccheck.issue.noise.fix"
+msgstr "Spróbuj w cichszym pomieszczeniu lub użyj zestawu słuchawkowego. Hałas może obniżyć dokładność dyktowania."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/GuidedMicCheck.tsx
+msgid "preferences.dialog.audio.miccheck.issue.noise.headline"
+msgstr "Hałas w tle jest wysoki."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/GuidedMicCheck.tsx
+msgid "preferences.dialog.audio.miccheck.issue.none.fix"
+msgstr "Czysty dźwięk z niskim poziomem szumów tła – dobry do dyktowania."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/GuidedMicCheck.tsx
+msgid "preferences.dialog.audio.miccheck.issue.none.headline"
+msgstr "Twój mikrofon brzmi dobrze."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/GuidedMicCheck.tsx
+msgid "preferences.dialog.audio.miccheck.preparing"
+msgstr "Przygotowywanie…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/GuidedMicCheck.tsx
+msgid "preferences.dialog.audio.miccheck.privacy"
+msgstr "To nagranie pozostaje na Twoim urządzeniu. Wysyłany jest tylko krótki fragment, który chcesz sprawdzić, i nie jest on przechowywany."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/GuidedMicCheck.tsx
+msgid "preferences.dialog.audio.miccheck.quiet.instruction"
+msgstr "Zachowaj przez chwilę ciszę…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/GuidedMicCheck.tsx
+msgid "preferences.dialog.audio.miccheck.read.instruction"
+msgstr "Przeczytaj to na głos:"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/GuidedMicCheck.tsx
+msgid "preferences.dialog.audio.miccheck.replay.clipmarkers"
+msgstr "Czerwone znaczniki pokazują, gdzie dźwięk uległ zniekształceniu."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/GuidedMicCheck.tsx
+msgid "preferences.dialog.audio.miccheck.replay.pause"
+msgstr "Wstrzymaj"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/GuidedMicCheck.tsx
+msgid "preferences.dialog.audio.miccheck.replay.play"
+msgstr "Posłuchaj siebie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/GuidedMicCheck.tsx
+msgid "preferences.dialog.audio.miccheck.retry"
+msgstr "Spróbuj ponownie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/GuidedMicCheck.tsx
+msgid "preferences.dialog.audio.miccheck.sentence"
+msgstr "Pchnąć w tę łódź jeża lub ośm skrzyń fig."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/GuidedMicCheck.tsx
+msgid "preferences.dialog.audio.miccheck.start"
+msgstr "Sprawdź jakość mikrofonu"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/GuidedMicCheck.tsx
+msgid "preferences.dialog.audio.miccheck.transcript.check"
+msgstr "Sprawdź, co usłyszeliśmy"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/GuidedMicCheck.tsx
+msgid "preferences.dialog.audio.miccheck.transcript.empty"
+msgstr "(Nie udało się rozpoznać wyraźnej mowy – nie musi to oznaczać, że Twój mikrofon jest zły.)"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/GuidedMicCheck.tsx
+msgid "preferences.dialog.audio.miccheck.transcript.heard"
+msgstr "Usłyszeliśmy:"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/GuidedMicCheck.tsx
+msgid "preferences.dialog.audio.miccheck.transcript.loading"
+msgstr "Transkrypcja…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/GuidedMicCheck.tsx
+msgid "preferences.dialog.audio.miccheck.transcript.read"
+msgstr "Przeczytałeś:"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/GuidedMicCheck.tsx
+msgid "preferences.dialog.audio.miccheck.verdict.fair"
+msgstr "Przeciętnie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/GuidedMicCheck.tsx
+msgid "preferences.dialog.audio.miccheck.verdict.good"
+msgstr "Dobrze"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/GuidedMicCheck.tsx
+msgid "preferences.dialog.audio.miccheck.verdict.poor"
+msgstr "Słabo"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/AudioInputTabContent.tsx
 msgid "preferences.dialog.audio.test.description"
 msgstr "Rozpocznij test i mów — paski powinny się poruszać, a aktywne urządzenie powinno odpowiadać wybranemu."
@@ -2488,6 +2643,7 @@ msgid "Attachments"
 msgstr "Załączniki"
 
 #: src/hooks/audio/useAudioInputLevelPreview.ts
+#: src/hooks/audio/useGuidedAudioCapture.ts
 msgid "Audio analysis is not supported in this browser."
 msgstr "Analiza dźwięku nie jest obsługiwana w tej przeglądarce."
 
@@ -2544,6 +2700,7 @@ msgstr "Nagranie audio - Status: {displayStatus}"
 #: src/hooks/audio/useAudioDictationRecorder.ts
 #: src/hooks/audio/useAudioInputLevelPreview.ts
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
+#: src/hooks/audio/useGuidedAudioCapture.ts
 msgid "Audio recording is not supported in this browser."
 msgstr "Nagrywanie audio nie jest obsługiwane w tej przeglądarce."
 
@@ -2794,6 +2951,10 @@ msgstr "Nie udało się odczytać odpowiedzi dyktowania audio."
 msgid "Could not read audio transcription response."
 msgstr "Nie można odczytać odpowiedzi transkrypcji audio."
 
+#: src/hooks/audio/transcribeClipOnce.ts
+msgid "Could not read the transcription response."
+msgstr ""
+
 #: src/hooks/audio/useAudioDictationRecorder.ts
 msgid "Could not start audio dictation."
 msgstr "Nie udało się uruchomić dyktowania audio."
@@ -2802,9 +2963,17 @@ msgstr "Nie udało się uruchomić dyktowania audio."
 msgid "Could not start audio recording."
 msgstr ""
 
+#: src/hooks/audio/useGuidedAudioCapture.ts
+msgid "Could not start the microphone check."
+msgstr ""
+
 #: src/hooks/audio/useAudioInputLevelPreview.ts
 msgid "Could not start the microphone test."
 msgstr "Nie można rozpocząć testu mikrofonu."
+
+#: src/components/ui/Settings/GuidedMicCheck.tsx
+msgid "Could not transcribe the clip."
+msgstr ""
 
 #: src/pages/AssistantsListPage.tsx
 msgid "Create and manage custom assistants with specific instructions and capabilities"
@@ -3157,6 +3326,10 @@ msgstr "Mikrofon {microphoneIndex}"
 #: src/components/ui/Chat/ChatInput.tsx
 #~ msgid "Microphone is starting — wait for the level meter before speaking"
 #~ msgstr "Mikrofon się uruchamia; zaczekaj na miernik poziomu, zanim zaczniesz mówić"
+
+#: src/hooks/audio/useGuidedAudioCapture.ts
+msgid "Microphone permission denied. Allow access to run the mic check."
+msgstr ""
 
 #: src/hooks/audio/useAudioInputLevelPreview.ts
 msgid "Microphone permission denied. Allow access to test the microphone."
@@ -3582,6 +3755,7 @@ msgid "The following files cannot be processed and were not uploaded: {filenames
 msgstr "Następujące pliki nie mogą być przetworzone i nie zostały przesłane: {filenames}"
 
 #: src/hooks/audio/useAudioInputLevelPreview.ts
+#: src/hooks/audio/useGuidedAudioCapture.ts
 msgid "The microphone is already in use by another application or recording."
 msgstr "Mikrofon jest już używany przez inną aplikację lub nagranie."
 
@@ -3606,6 +3780,7 @@ msgid "The microphone was disconnected. Please check your microphone and start r
 msgstr "Mikrofon został odłączony. Sprawdź mikrofon i ponownie rozpocznij nagrywanie."
 
 #: src/hooks/audio/useAudioInputLevelPreview.ts
+#: src/hooks/audio/useGuidedAudioCapture.ts
 msgid "The selected microphone is not available. Refresh the device list and try again."
 msgstr "Wybrany mikrofon jest niedostępny. Odśwież listę urządzeń i spróbuj ponownie."
 
