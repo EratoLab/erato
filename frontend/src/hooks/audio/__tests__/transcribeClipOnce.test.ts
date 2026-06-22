@@ -51,7 +51,10 @@ class MockWebSocket {
             });
           } else {
             this.emit("message", {
-              data: JSON.stringify({ type: "session_state", next_chunk_index: 0 }),
+              data: JSON.stringify({
+                type: "session_state",
+                next_chunk_index: 0,
+              }),
             });
           }
         }, 0);

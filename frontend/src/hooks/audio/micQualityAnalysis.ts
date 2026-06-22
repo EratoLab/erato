@@ -143,18 +143,18 @@ function biquadCoefficients(
   if (kind === "lowpass") {
     const b1 = (1 - cosW0) / a0;
     return {
-      b0: ((1 - cosW0) / 2) / a0,
+      b0: (1 - cosW0) / 2 / a0,
       b1,
-      b2: ((1 - cosW0) / 2) / a0,
+      b2: (1 - cosW0) / 2 / a0,
       a1: (-2 * cosW0) / a0,
       a2: (1 - alpha) / a0,
     };
   }
-  const b1 = (-(1 + cosW0)) / a0;
+  const b1 = -(1 + cosW0) / a0;
   return {
-    b0: ((1 + cosW0) / 2) / a0,
+    b0: (1 + cosW0) / 2 / a0,
     b1,
-    b2: ((1 + cosW0) / 2) / a0,
+    b2: (1 + cosW0) / 2 / a0,
     a1: (-2 * cosW0) / a0,
     a2: (1 - alpha) / a0,
   };

@@ -201,7 +201,8 @@ export function useGuidedAudioCapture({
   const finish = useCallback(() => {
     accumulatingRef.current = false;
     clearTimers();
-    const sampleRate = audioContextRef.current?.sampleRate ?? CAPTURE_SAMPLE_RATE_HZ;
+    const sampleRate =
+      audioContextRef.current?.sampleRate ?? CAPTURE_SAMPLE_RATE_HZ;
     const samples = assembleSamples();
     const speechStart = Math.min(speechStartSampleRef.current, samples.length);
     const captured: GuidedCaptureResult = {

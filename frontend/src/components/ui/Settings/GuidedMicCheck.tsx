@@ -42,11 +42,20 @@ function useReadAloudSentence(): string {
 function verdictLabel(tone: VerdictTone): string {
   switch (tone) {
     case "good":
-      return t({ id: "preferences.dialog.audio.miccheck.verdict.good", message: "Good" });
+      return t({
+        id: "preferences.dialog.audio.miccheck.verdict.good",
+        message: "Good",
+      });
     case "fair":
-      return t({ id: "preferences.dialog.audio.miccheck.verdict.fair", message: "Fair" });
+      return t({
+        id: "preferences.dialog.audio.miccheck.verdict.fair",
+        message: "Fair",
+      });
     case "poor":
-      return t({ id: "preferences.dialog.audio.miccheck.verdict.poor", message: "Poor" });
+      return t({
+        id: "preferences.dialog.audio.miccheck.verdict.poor",
+        message: "Poor",
+      });
   }
 }
 
@@ -100,7 +109,8 @@ function issueCopy(issue: MicQualityIssue | null): {
         }),
         fix: t({
           id: "preferences.dialog.audio.miccheck.issue.none.fix",
-          message: "Clear audio with low background noise — good for dictation.",
+          message:
+            "Clear audio with low background noise — good for dictation.",
         }),
       };
   }
@@ -135,7 +145,11 @@ function CountdownRing({
       role="timer"
       aria-live="off"
     >
-      <svg className="size-16 -rotate-90" viewBox="0 0 64 64" aria-hidden="true">
+      <svg
+        className="size-16 -rotate-90"
+        viewBox="0 0 64 64"
+        aria-hidden="true"
+      >
         <circle
           cx="32"
           cy="32"
@@ -412,7 +426,10 @@ export function GuidedMicCheck({ deviceId, isAvailable }: GuidedMicCheckProps) {
           data-verdict={tone}
         >
           <span
-            className={clsx("mt-1 size-3 shrink-0 rounded-full", TONE_DOT[tone])}
+            className={clsx(
+              "mt-1 size-3 shrink-0 rounded-full",
+              TONE_DOT[tone],
+            )}
             aria-hidden="true"
           />
           <div className="space-y-1">
@@ -469,7 +486,11 @@ export function GuidedMicCheck({ deviceId, isAvailable }: GuidedMicCheckProps) {
         {/* Transcript proof — display only. */}
         <div className="space-y-2">
           {transcriptStatus === "idle" ? (
-            <Button variant="secondary" size="sm" onClick={() => void checkTranscript()}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void checkTranscript()}
+            >
               {t({
                 id: "preferences.dialog.audio.miccheck.transcript.check",
                 message: "Check what we heard",

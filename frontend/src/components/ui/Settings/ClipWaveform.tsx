@@ -74,7 +74,10 @@ export function ClipWaveform({
 
       // Peak-per-column waveform.
       const columns = Math.max(1, Math.floor(cssWidth));
-      const samplesPerColumn = Math.max(1, Math.floor(samples.length / columns));
+      const samplesPerColumn = Math.max(
+        1,
+        Math.floor(samples.length / columns),
+      );
       context.strokeStyle = waveColor;
       context.lineWidth = 1;
       context.beginPath();
