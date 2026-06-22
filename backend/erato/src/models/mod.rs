@@ -1,4 +1,5 @@
 pub mod assistant;
+pub mod assistant_store;
 pub mod chat;
 pub mod file_capability;
 pub mod file_upload;

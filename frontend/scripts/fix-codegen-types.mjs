@@ -101,6 +101,46 @@ const schemaStringFieldFixes = [
     from: "preview_url?: null | undefined;",
     to: "preview_url?: string | null | undefined;",
   },
+  {
+    from: "creator_review_comment?: null | undefined;",
+    to: "creator_review_comment?: string | null | undefined;",
+  },
+  {
+    from: "reviewer_review_comment?: null | undefined;",
+    to: "reviewer_review_comment?: string | null | undefined;",
+  },
+  {
+    from: "version_comment?: null | undefined;",
+    to: "version_comment?: string | null | undefined;",
+  },
+  {
+    from: "default_chat_provider?: null | undefined;",
+    to: "default_chat_provider?: string | null | undefined;",
+  },
+  {
+    from: "description?: null | undefined;",
+    to: "description?: string | null | undefined;",
+  },
+  {
+    from: "facet_ids?: null | undefined;",
+    to: "facet_ids?: string[] | null | undefined;",
+  },
+  {
+    from: "mcp_server_ids?: null | undefined;",
+    to: "mcp_server_ids?: string[] | null | undefined;",
+  },
+  {
+    from: "reviewed_at?: null | undefined;",
+    to: "reviewed_at?: string | null | undefined;",
+  },
+  {
+    from: "withdrawn_at?: null | undefined;",
+    to: "withdrawn_at?: string | null | undefined;",
+  },
+  {
+    from: "published_at?: null | undefined;",
+    to: "published_at?: string | null | undefined;",
+  },
 ];
 
 async function patchVoidTypes(filePath) {

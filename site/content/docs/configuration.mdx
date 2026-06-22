@@ -3055,6 +3055,92 @@ Maximum number of characters allowed in an assistant system prompt. When not set
 max_system_prompt_length = 5000
 ```
 
+### `assistant_store`
+
+{/* erato_toml_config_key: assistant_store */}
+
+Configuration for the optional Assistant Store. The Assistant Store lets users submit immutable assistant snapshots for an organization-internal review process. Accepted versions can then be published to a configured audience without exposing the creator's editable draft assistant.
+
+The feature is disabled by default. It also depends on the regular assistants feature, so enable `assistants.enabled` when enabling the store.
+
+#### `assistant_store.enabled`
+
+{/* erato_toml_config_key: assistant_store.enabled */}
+
+Whether to enable Assistant Store backend APIs and frontend surfaces.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+**Example:**
+
+```toml
+[assistants]
+enabled = true
+
+[assistant_store]
+enabled = true
+```
+
+#### `assistant_store.categories`
+
+{/* erato_toml_config_key: assistant_store.categories */}
+
+A map of categories that creators can assign to submitted assistant versions. The map key is the stable category ID used by the backend. Categories are shown in the store for browsing and filtering.
+
+Each category has:
+
+{/* erato_toml_config_key: assistant_store.categories.<key>.display_name */}
+
+- **`display_name`** - User-facing category label.
+
+{/* erato_toml_config_key: assistant_store.categories.<key>.icon */}
+
+- **`icon`** - Icon identifier from the existing frontend icon system.
+
+**Type:** `object<string, AssistantStoreCategoryConfig>`
+
+**Example:**
+
+```toml
+[assistant_store.categories.productivity]
+display_name = "Productivity"
+icon = "Sparkles"
+
+[assistant_store.categories.engineering]
+display_name = "Engineering"
+icon = "Code"
+```
+
+#### `assistant_store.reviewers.rules`
+
+{/* erato_toml_config_key: assistant_store.reviewers.rules */}
+
+A map of reviewer rules. Reviewer access is based on the same group-membership model used by `model_permissions`, `mcp_server_permissions`, and `facet_permissions`.
+
+Assistant Store reviewer rules currently support only `allow-for-group-members`.
+
+{/* erato_toml_config_key: assistant_store.reviewers.rules.<rule-name>.rule_type */}
+
+- **`rule_type`** - Must be `"allow-for-group-members"`.
+
+{/* erato_toml_config_key: assistant_store.reviewers.rules.<rule-name>.groups.[] */}
+
+- **`groups`** - Group names or identifiers whose members can review assistant store submissions.
+
+**Type:** `object<string, AssistantStoreReviewerRule>`
+
+**Example:**
+
+```toml
+[assistant_store.reviewers.rules.default_reviewers]
+rule_type = "allow-for-group-members"
+groups = ["assistant-store-reviewers", "ai-governance"]
+```
+
+Reviewer group membership comes from the authenticated user's group information, for example through the OIDC `groups` claim. If no reviewer rule matches, the user can still browse published store assistants they can access, but cannot accept, decline, feature, or review submissions.
+
 ### `starter_prompts`
 
 {/* erato_toml_config_key: starter_prompts */}

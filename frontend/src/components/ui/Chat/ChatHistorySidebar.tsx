@@ -14,6 +14,7 @@ import {
 } from "@/config/componentRegistry";
 import { defaultThemeConfig } from "@/config/themeConfig";
 import { useResponsiveCollapsedMode, useThemedIcon } from "@/hooks/ui";
+import { useAssistantStoreConfig } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import {
   useAssistantsFeature,
   useSidebarFeature,
@@ -30,6 +31,7 @@ import {
   SidebarToggleIcon,
   SearchIcon,
   EditIcon,
+  FileTextIcon,
   ResolvedIcon,
   ChevronRightIcon,
 } from "../icons";
@@ -446,6 +448,120 @@ const AssistantsNavigationItem = memo<{
 // eslint-disable-next-line lingui/no-unlocalized-strings
 AssistantsNavigationItem.displayName = "AssistantsNavigationItem";
 
+const AssistantStoreNavigationItem = memo<{
+  onAssistantStore?: () => void;
+  isOnAssistantStorePage?: boolean;
+  isSlimMode?: boolean;
+}>(({ onAssistantStore, isOnAssistantStorePage, isSlimMode = false }) => {
+  const storeIconId = useThemedIcon("navigation", "assistantStore");
+
+  return (
+    <div className="px-2 py-1">
+      {isOnAssistantStorePage ? (
+        <InteractiveContainer
+          useDiv={true}
+          interactive={false}
+          className={clsx(
+            "flex items-center text-left",
+            isSlimMode ? "min-w-[44px] px-3 py-2" : "gap-3 px-3 py-2",
+          )}
+          style={activeSidebarItemStyle}
+          aria-label={t({
+            id: "assistantStore.title",
+            message: "Assistant Store",
+          })}
+          title={
+            isSlimMode
+              ? t({
+                  id: "assistantStore.title",
+                  message: "Assistant Store",
+                })
+              : undefined
+          }
+          data-ui="sidebar-assistant-store-item"
+        >
+          <ResolvedIcon
+            iconId={storeIconId}
+            fallbackIcon={FileTextIcon}
+            className="size-4 shrink-0 text-theme-fg-secondary"
+          />
+          <span
+            className={clsx(
+              "whitespace-nowrap font-medium text-theme-fg-primary transition-opacity duration-150",
+              isSlimMode
+                ? "w-0 overflow-hidden opacity-0"
+                : "opacity-100 delay-150",
+            )}
+          >
+            {t({
+              id: "assistantStore.title",
+              message: "Assistant Store",
+            })}
+          </span>
+        </InteractiveContainer>
+      ) : (
+        <a
+          href="/assistant-store"
+          onClick={(e) => {
+            if (e.metaKey || e.ctrlKey) {
+              return;
+            }
+            e.preventDefault();
+            logger.log("[ASSISTANT_STORE_FLOW] Store navigation item clicked");
+            onAssistantStore?.();
+          }}
+          className={sidebarLinkClassName}
+          aria-label={t({
+            id: "assistantStore.title",
+            message: "Assistant Store",
+          })}
+          title={
+            isSlimMode
+              ? t({
+                  id: "assistantStore.title",
+                  message: "Assistant Store",
+                })
+              : undefined
+          }
+        >
+          <InteractiveContainer
+            useDiv={true}
+            showFocusRing={false}
+            className={clsx(
+              "theme-transition flex items-center text-left hover:bg-[var(--theme-shell-sidebar-hover)]",
+              isSlimMode ? "min-w-[44px] px-3 py-2" : "gap-3 px-3 py-2",
+            )}
+            style={sidebarItemStyle}
+            data-ui="sidebar-assistant-store-item"
+          >
+            <ResolvedIcon
+              iconId={storeIconId}
+              fallbackIcon={FileTextIcon}
+              className="size-4 shrink-0 text-theme-fg-secondary"
+            />
+            <span
+              className={clsx(
+                "whitespace-nowrap font-medium text-theme-fg-primary transition-opacity duration-150",
+                isSlimMode
+                  ? "w-0 overflow-hidden opacity-0"
+                  : "opacity-100 delay-150",
+              )}
+            >
+              {t({
+                id: "assistantStore.title",
+                message: "Assistant Store",
+              })}
+            </span>
+          </InteractiveContainer>
+        </a>
+      )}
+    </div>
+  );
+});
+
+// eslint-disable-next-line lingui/no-unlocalized-strings
+AssistantStoreNavigationItem.displayName = "AssistantStoreNavigationItem";
+
 const CollapsibleSection = memo<{
   title: string;
   defaultExpanded?: boolean;
@@ -542,6 +658,10 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal route path
     const assistantsRoute = "/assistants";
     const isOnAssistantsPage = location.pathname.startsWith(assistantsRoute);
+    // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal route path
+    const assistantStoreRoute = "/assistant-store";
+    const isOnAssistantStorePage =
+      location.pathname.startsWith(assistantStoreRoute);
 
     // Get sidebar configuration
     const {
@@ -571,6 +691,10 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       enabled: assistantsEnabled,
       showRecentItems: assistantsShowRecent,
     } = useAssistantsFeature();
+    const { data: assistantStoreConfig } = useAssistantStoreConfig(
+      {},
+      { enabled: assistantsEnabled },
+    );
 
     // Only use ResizeObserver in the browser
     const isBrowser = typeof window !== "undefined";
@@ -627,6 +751,11 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       logger.log("[ASSISTANTS_FLOW] Navigating to assistants page");
       navigate(assistantsRoute);
     }, [assistantsRoute, navigate]);
+
+    const handleAssistantStoreClick = useCallback(() => {
+      logger.log("[ASSISTANT_STORE_FLOW] Navigating to assistant store page");
+      navigate(assistantStoreRoute);
+    }, [assistantStoreRoute, navigate]);
 
     const expandedSidebarWidth = useMemo(
       () =>
@@ -722,6 +851,14 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                 <AssistantsNavigationItem
                   onAssistants={handleAssistantsClick}
                   isOnAssistantsPage={isOnAssistantsPage}
+                  isSlimMode={isSlimMode}
+                />
+              )}
+
+              {assistantsEnabled && assistantStoreConfig?.enabled && (
+                <AssistantStoreNavigationItem
+                  onAssistantStore={handleAssistantStoreClick}
+                  isOnAssistantStorePage={isOnAssistantStorePage}
                   isSlimMode={isSlimMode}
                 />
               )}

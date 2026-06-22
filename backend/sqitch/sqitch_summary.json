@@ -24,7 +24,8 @@
     "deploy/0022_add_mcp_server_oauth_tables.sql",
     "deploy/0023_optimize_active_thread_siblings_constraint.sql",
     "deploy/0024_add_audio_transcription_to_file_uploads.sql",
-    "deploy/0025_add_chat_title_search_index.sql"
+    "deploy/0025_add_chat_title_search_index.sql",
+    "deploy/0026_add_assistant_store_tables.sql"
   ],
-  "latest_change": "f6ae442b5fbaa6434ccce5be55c66dd1157930d2"
+  "latest_change": "d5e32558d7478e1ec9559fe4391dc3485b441837"
 }

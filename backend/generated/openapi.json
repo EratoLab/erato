@@ -6,6 +6,553 @@
     "version": ""
   },
   "paths": {
+    "/api/v1beta/assistant-store/assistants": {
+      "get": {
+        "tags": [
+          "assistant_store"
+        ],
+        "operationId": "list_assistant_store_assistants",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantStoreVersionsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/assistant-store/assistants/{source_assistant_id}/submission-diff": {
+      "post": {
+        "tags": [
+          "assistant_store"
+        ],
+        "operationId": "preview_assistant_store_submission_diff",
+        "parameters": [
+          {
+            "name": "source_assistant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantStoreSubmissionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantStoreSubmissionDiffResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          },
+          "401": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/assistant-store/assistants/{source_assistant_id}/versions": {
+      "post": {
+        "tags": [
+          "assistant_store"
+        ],
+        "operationId": "submit_assistant_store_version",
+        "parameters": [
+          {
+            "name": "source_assistant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantStoreSubmissionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantStoreVersionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          },
+          "401": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/assistant-store/assistants/{store_assistant_id}": {
+      "get": {
+        "tags": [
+          "assistant_store"
+        ],
+        "operationId": "get_assistant_store_assistant",
+        "parameters": [
+          {
+            "name": "store_assistant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantStoreVersionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/assistant-store/config": {
+      "get": {
+        "tags": [
+          "assistant_store"
+        ],
+        "operationId": "assistant_store_config",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantStoreConfigResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/assistant-store/my/versions": {
+      "get": {
+        "tags": [
+          "assistant_store"
+        ],
+        "operationId": "list_my_assistant_store_versions",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantStoreVersionsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/assistant-store/review/versions": {
+      "get": {
+        "tags": [
+          "assistant_store"
+        ],
+        "operationId": "list_review_assistant_store_versions",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantStoreVersionsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/assistant-store/versions/{version_id}/current": {
+      "put": {
+        "tags": [
+          "assistant_store"
+        ],
+        "operationId": "set_assistant_store_version_current",
+        "parameters": [
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantStoreVersionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          },
+          "401": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/assistant-store/versions/{version_id}/featured": {
+      "put": {
+        "tags": [
+          "assistant_store"
+        ],
+        "operationId": "set_assistant_store_version_featured",
+        "parameters": [
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantStoreSetFeaturedRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantStoreVersionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          },
+          "401": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/assistant-store/versions/{version_id}/published": {
+      "put": {
+        "tags": [
+          "assistant_store"
+        ],
+        "operationId": "set_assistant_store_version_published",
+        "parameters": [
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantStoreSetPublishedRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantStoreVersionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          },
+          "401": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/assistant-store/versions/{version_id}/review": {
+      "post": {
+        "tags": [
+          "assistant_store"
+        ],
+        "operationId": "review_assistant_store_version",
+        "parameters": [
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantStoreReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantStoreVersionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          },
+          "401": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/assistant-store/versions/{version_id}/withdraw": {
+      "post": {
+        "tags": [
+          "assistant_store"
+        ],
+        "operationId": "withdraw_assistant_store_version",
+        "parameters": [
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantStoreVersionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          },
+          "401": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/assistants": {
       "get": {
         "tags": [
@@ -2663,6 +3210,403 @@
               "null"
             ],
             "description": "Proxied URL for inline preview without forcing download when available."
+          }
+        }
+      },
+      "AssistantStoreAssistantSnapshot": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "prompt",
+          "enforce_facet_settings",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "default_chat_provider": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "enforce_facet_settings": {
+            "type": "boolean"
+          },
+          "facet_ids": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "mcp_server_ids": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "name": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AssistantStoreAudienceGrantInput": {
+        "type": "object",
+        "required": [
+          "subject_type",
+          "subject_id_type",
+          "subject_id",
+          "role"
+        ],
+        "properties": {
+          "role": {
+            "type": "string"
+          },
+          "subject_id": {
+            "type": "string"
+          },
+          "subject_id_type": {
+            "type": "string"
+          },
+          "subject_type": {
+            "type": "string"
+          }
+        }
+      },
+      "AssistantStoreCategory": {
+        "type": "object",
+        "required": [
+          "id",
+          "display_name",
+          "icon"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          }
+        }
+      },
+      "AssistantStoreConfigResponse": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "can_review",
+          "categories"
+        ],
+        "properties": {
+          "can_review": {
+            "type": "boolean"
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssistantStoreCategory"
+            }
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AssistantStoreCreator": {
+        "type": "object",
+        "required": [
+          "id",
+          "display_name"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          }
+        }
+      },
+      "AssistantStoreReviewRequest": {
+        "type": "object",
+        "required": [
+          "accepted"
+        ],
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
+          "reviewer_review_comment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "AssistantStoreSetFeaturedRequest": {
+        "type": "object",
+        "required": [
+          "featured"
+        ],
+        "properties": {
+          "featured": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AssistantStoreSetPublishedRequest": {
+        "type": "object",
+        "required": [
+          "is_published"
+        ],
+        "properties": {
+          "is_published": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AssistantStoreSubmissionDiffResponse": {
+        "type": "object",
+        "required": [
+          "diff_summary"
+        ],
+        "properties": {
+          "diff_summary": {
+            "type": "object"
+          }
+        }
+      },
+      "AssistantStoreSubmissionRequest": {
+        "type": "object",
+        "required": [
+          "long_description",
+          "category_ids",
+          "keywords",
+          "version_number"
+        ],
+        "properties": {
+          "audience_grants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssistantStoreAudienceGrantInput"
+            }
+          },
+          "category_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "creator_review_comment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "long_description": {
+            "type": "string"
+          },
+          "version_comment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version_number": {
+            "type": "string"
+          }
+        }
+      },
+      "AssistantStoreVersion": {
+        "type": "object",
+        "required": [
+          "store_assistant_id",
+          "source_assistant_id",
+          "version_id",
+          "assistant_id",
+          "status",
+          "is_published",
+          "is_current_published_version",
+          "featured",
+          "version_number",
+          "long_description",
+          "category_ids",
+          "keywords",
+          "diff_summary",
+          "submitted_at",
+          "created_at",
+          "updated_at",
+          "assistant",
+          "creator"
+        ],
+        "properties": {
+          "assistant": {
+            "$ref": "#/components/schemas/AssistantStoreAssistantSnapshot"
+          },
+          "assistant_id": {
+            "type": "string"
+          },
+          "category_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "creator": {
+            "$ref": "#/components/schemas/AssistantStoreCreator"
+          },
+          "creator_review_comment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "diff_summary": {
+            "type": "object"
+          },
+          "featured": {
+            "type": "boolean"
+          },
+          "is_current_published_version": {
+            "type": "boolean"
+          },
+          "is_published": {
+            "type": "boolean"
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "long_description": {
+            "type": "string"
+          },
+          "published_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "reviewed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "reviewer_review_comment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source_assistant_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "store_assistant_id": {
+            "type": "string"
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version_comment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version_id": {
+            "type": "string"
+          },
+          "version_number": {
+            "type": "string"
+          },
+          "withdrawn_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "AssistantStoreVersionResponse": {
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "properties": {
+          "version": {
+            "$ref": "#/components/schemas/AssistantStoreVersion"
+          }
+        }
+      },
+      "AssistantStoreVersionsResponse": {
+        "type": "object",
+        "required": [
+          "versions"
+        ],
+        "properties": {
+          "versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssistantStoreVersion"
+            }
           }
         }
       },
