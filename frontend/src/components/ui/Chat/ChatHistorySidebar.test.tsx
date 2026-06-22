@@ -30,6 +30,10 @@ vi.mock("@/hooks/ui", () => ({
   useThemedIcon: () => null,
 }));
 
+vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
+  useAssistantStoreConfig: () => ({ data: undefined }),
+}));
+
 vi.mock("@/providers/FeatureConfigProvider", () => ({
   useAssistantsFeature: () => ({
     enabled: false,

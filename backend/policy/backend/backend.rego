@@ -57,6 +57,17 @@ package backend
 #     "enabled": true
 #   }
 # ]
+#
+# assistant_store_versions := [
+#   {
+#     "id": "some-version-id",
+#     "assistant_store_assistant_id": "some-store-assistant-id",
+#     "assistant_id": "some-assistant-id",
+#     "status": "review_accepted",
+#     "is_published": true,
+#     "is_current_published_version": true
+#   }
+# ]
 
 # `input` structure
 # {
@@ -149,6 +160,22 @@ can_read_assistant(assistant_id) if {
 	data.resource_attributes[resource_kind_assistant][assistant_id].owner_id == input.subject_id
 }
 
+assistant_store_version_for_assistant(assistant_id) := version if {
+	some version in data.assistant_store_versions
+	version.assistant_id == assistant_id
+}
+
+assistant_share_grant_active(assistant_id) if {
+	not assistant_store_version_for_assistant(assistant_id)
+}
+
+assistant_share_grant_active(assistant_id) if {
+	version := assistant_store_version_for_assistant(assistant_id)
+	version.status == "review_accepted"
+	version.is_published
+	version.is_current_published_version
+}
+
 can_read_assistant(assistant_id) if {
 	some grant in data.share_grants
 	grant.resource_type == "assistant"
@@ -156,6 +183,7 @@ can_read_assistant(assistant_id) if {
 	grant.subject_type == "user"
 	grant.subject_id == input.subject_id
 	grant.role == "viewer"
+	assistant_share_grant_active(assistant_id)
 }
 
 can_read_shared_chat(chat_id) if {
@@ -170,6 +198,7 @@ can_read_assistant(assistant_id) if {
 	grant.resource_id == assistant_id
 	grant.subject_type == "organization_group"
 	grant.role == "viewer"
+	assistant_share_grant_active(assistant_id)
 
 	some group_id in input.organization_group_ids
 	group_id == grant.subject_id
@@ -343,6 +372,7 @@ allow if {
 	grant.subject_type == "user"
 	grant.subject_id == input.subject_id
 	grant.role == "viewer"
+	assistant_share_grant_active(input.resource_id)
 }
 
 # A user who belongs to an organization_group (via share_grant) can read an assistant.
@@ -361,6 +391,7 @@ allow if {
 	grant.resource_id == input.resource_id
 	grant.subject_type == "organization_group"
 	grant.role == "viewer"
+	assistant_share_grant_active(input.resource_id)
 
 	# Check if the user belongs to this organization group
 	some group_id in input.organization_group_ids

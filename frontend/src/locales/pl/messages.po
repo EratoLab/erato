@@ -193,6 +193,659 @@ msgid "assistants.list.title.shared_with_user"
 msgstr "Udostępnione mi"
 
 #. js-lingui-explicit-id
+#: src/pages/AssistantStoreMyPage.tsx
+msgid "assistantStore.action.backToMySubmissions"
+msgstr "Wroc do moich zgloszen"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreReviewPage.tsx
+msgid "assistantStore.action.backToReviewQueue"
+msgstr "Wroc do kolejki recenzji"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreDetailPage.tsx
+#: src/pages/AssistantStoreMyPage.tsx
+#: src/pages/AssistantStorePage.tsx
+#: src/pages/AssistantStoreReviewPage.tsx
+msgid "assistantStore.action.backToStore"
+msgstr "Wroc do sklepu"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStorePage.tsx
+#: src/pages/AssistantStoreReviewPage.tsx
+msgid "assistantStore.action.mySubmissions"
+msgstr "Moje zgloszenia"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+#~ msgid "assistantStore.action.openStore"
+#~ msgstr "Sklep asystentow"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantStoreUtils.tsx
+msgid "assistantStore.action.refresh"
+msgstr "Odswiez"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreMyPage.tsx
+#: src/pages/AssistantStorePage.tsx
+msgid "assistantStore.action.reviewQueue"
+msgstr "Kolejka recenzji"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreDetailPage.tsx
+msgid "assistantStore.action.startChat"
+msgstr "Rozpocznij czat"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantEditPage.tsx
+#: src/pages/AssistantsListPage.tsx
+msgid "assistantStore.action.submit"
+msgstr "Zglos do sklepu"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStorePage.tsx
+msgid "assistantStore.action.view"
+msgstr "Zobacz"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantStoreUtils.tsx
+msgid "assistantStore.badge.current"
+msgstr "Aktualna"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantStoreUtils.tsx
+msgid "assistantStore.badge.featured"
+msgstr "Wyrozniona"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantStoreUtils.tsx
+msgid "assistantStore.badge.published"
+msgstr "Opublikowana"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantStoreUtils.tsx
+msgid "assistantStore.card.creator"
+msgstr "Autor: {creatorName}"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStorePage.tsx
+#~ msgid "assistantStore.categories.subtitle"
+#~ msgstr "Przegladaj asystentow wedlug skonfigurowanej kategorii"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStorePage.tsx
+msgid "assistantStore.categories.title"
+msgstr "Kategorie"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStorePage.tsx
+#~ msgid "assistantStore.category.all"
+#~ msgstr "Wszystkie"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStorePage.tsx
+msgid "assistantStore.category.count.many"
+msgstr "{count} asystentow"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStorePage.tsx
+msgid "assistantStore.category.count.one"
+msgstr "1 asystent"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStorePage.tsx
+#~ msgid "assistantStore.category.empty"
+#~ msgstr "Brak asystentow w tej kategorii."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStorePage.tsx
+#~ msgid "assistantStore.category.filter"
+#~ msgstr "Filtruj sklep asystentow wedlug kategorii"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStorePage.tsx
+msgid "assistantStore.category.notFound.description"
+msgstr "Ta kategoria sklepu asystentow nie jest obecnie skonfigurowana."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStorePage.tsx
+msgid "assistantStore.category.notFound.title"
+msgstr "Nie znaleziono kategorii"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStorePage.tsx
+msgid "assistantStore.category.results"
+msgstr "Asystenci"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStorePage.tsx
+msgid "assistantStore.category.subtitle"
+msgstr "Przegladaj asystentow filtrowanych wedlug kategorii"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreDetailPage.tsx
+msgid "assistantStore.detail.configuration"
+msgstr "Konfiguracja"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreDetailPage.tsx
+msgid "assistantStore.detail.diff"
+msgstr "Zmiany wzgledem poprzedniej wersji"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreDetailPage.tsx
+msgid "assistantStore.detail.error"
+msgstr "Nie udalo sie wczytac asystenta ze sklepu."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreDetailPage.tsx
+msgid "assistantStore.detail.facets"
+msgstr "Fasety"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreDetailPage.tsx
+msgid "assistantStore.detail.files"
+msgstr "Pliki"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreDetailPage.tsx
+msgid "assistantStore.detail.loading"
+msgstr "Wczytywanie asystenta ze sklepu..."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreDetailPage.tsx
+msgid "assistantStore.detail.model"
+msgstr "Model domyslny"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreDetailPage.tsx
+msgid "assistantStore.detail.prompt"
+msgstr "Prompt systemowy"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreDetailPage.tsx
+msgid "assistantStore.detail.title"
+msgstr "Sklep asystentow"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreDetailPage.tsx
+msgid "assistantStore.detail.tools"
+msgstr "Narzędzia"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreDetailPage.tsx
+msgid "assistantStore.detail.versionComment"
+msgstr "Komentarz wersji"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantStoreUtils.tsx
+msgid "assistantStore.diff.current"
+msgstr "Aktualna"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantStoreUtils.tsx
+msgid "assistantStore.diff.files"
+msgstr "Pliki"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantStoreUtils.tsx
+msgid "assistantStore.diff.noChanges"
+msgstr "Brak zmian wzgledem poprzedniej zaakceptowanej wersji."
+
+#. js-lingui-explicit-id
+#: src/pages/assistantStoreUtils.tsx
+msgid "assistantStore.diff.previous"
+msgstr "Poprzednia"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStorePage.tsx
+#: src/pages/AssistantStoreSubmitPage.tsx
+msgid "assistantStore.disabled"
+msgstr "Sklep asystentow nie jest wlaczony."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStorePage.tsx
+msgid "assistantStore.empty.description"
+msgstr "Zaakceptowane i opublikowane wersje asystentow pojawia sie tutaj."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStorePage.tsx
+msgid "assistantStore.empty.title"
+msgstr "Brak opublikowanych asystentow"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStorePage.tsx
+msgid "assistantStore.error.load"
+msgstr "Nie udalo sie wczytac sklepu asystentow."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStorePage.tsx
+msgid "assistantStore.featured.empty"
+msgstr "Brak wyroznionych asystentow."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStorePage.tsx
+#~ msgid "assistantStore.featured.subtitle"
+#~ msgstr "Asystenci wyroznieni przez recenzentow"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStorePage.tsx
+msgid "assistantStore.featured.title"
+msgstr "Wyroznieni asystenci"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStorePage.tsx
+msgid "assistantStore.loading"
+msgstr "Wczytywanie sklepu asystentow..."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreMyPage.tsx
+msgid "assistantStore.my.chooseAssistant"
+msgstr "Wybierz asystenta"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreMyPage.tsx
+msgid "assistantStore.my.creatorReviewComment"
+msgstr "Notatka dla recenzenta"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreMyPage.tsx
+msgid "assistantStore.my.diff"
+msgstr "Zmiany wzgledem poprzedniej wersji"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreMyPage.tsx
+msgid "assistantStore.my.editDraft"
+msgstr "Edytuj szkic"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreMyPage.tsx
+msgid "assistantStore.my.empty.description"
+msgstr "Zglos jednego ze swoich asystentow, aby utworzyc zrecenzowana wersje sklepowa."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreMyPage.tsx
+msgid "assistantStore.my.empty.title"
+msgstr "Brak zgloszonych wersji"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreMyPage.tsx
+msgid "assistantStore.my.error"
+msgstr "Nie udalo sie zaktualizowac zgloszen sklepowych."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreMyPage.tsx
+msgid "assistantStore.my.loading"
+msgstr "Wczytywanie zgloszen..."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreMyPage.tsx
+msgid "assistantStore.my.makeCurrent"
+msgstr "Ustaw jako aktualna"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreMyPage.tsx
+msgid "assistantStore.my.notFound.description"
+msgstr "To zgloszenie do sklepu asystentow nie jest dostepne."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreMyPage.tsx
+msgid "assistantStore.my.notFound.title"
+msgstr "Nie znaleziono zgloszenia"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreMyPage.tsx
+msgid "assistantStore.my.publish"
+msgstr "Opublikuj"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreMyPage.tsx
+msgid "assistantStore.my.reviewerReviewComment"
+msgstr "Odpowiedz recenzenta"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreMyPage.tsx
+msgid "assistantStore.my.submitNewVersion"
+msgstr "Zglos nowa wersje"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreMyPage.tsx
+msgid "assistantStore.my.subtitle"
+msgstr "Przegladaj zgloszone, zaakceptowane, odrzucone i wycofane wersje asystentow"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreMyPage.tsx
+msgid "assistantStore.my.title"
+msgstr "Moje zgloszenia do sklepu"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreMyPage.tsx
+msgid "assistantStore.my.unpublish"
+msgstr "Cofnij publikacje"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreMyPage.tsx
+msgid "assistantStore.my.versionComment"
+msgstr "Komentarz wersji"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreMyPage.tsx
+msgid "assistantStore.my.viewSubmission"
+msgstr "Zobacz zgloszenie"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreMyPage.tsx
+msgid "assistantStore.my.withdraw"
+msgstr "Wycofaj"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreMyPage.tsx
+msgid "assistantStore.my.withdrawConfirmMessage"
+msgstr "Wycofac te zgloszona wersje z recenzji?"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreMyPage.tsx
+msgid "assistantStore.my.withdrawConfirmTitle"
+msgstr "Wycofaj zgloszenie"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreReviewPage.tsx
+msgid "assistantStore.review.accept"
+msgstr "Akceptuj"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreReviewPage.tsx
+msgid "assistantStore.review.comment"
+msgstr "Komentarz recenzenta"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreReviewPage.tsx
+msgid "assistantStore.review.creatorComment"
+msgstr "Notatka autora"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreReviewPage.tsx
+msgid "assistantStore.review.decline"
+msgstr "Odrzuc"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreReviewPage.tsx
+msgid "assistantStore.review.diff"
+msgstr "Zmiany wzgledem poprzedniej wersji"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreReviewPage.tsx
+msgid "assistantStore.review.empty.description"
+msgstr "Zgloszone wersje asystentow pojawia sie tutaj do recenzji."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreReviewPage.tsx
+msgid "assistantStore.review.empty.title"
+msgstr "Brak wersji do recenzji"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreReviewPage.tsx
+msgid "assistantStore.review.error"
+msgstr "Nie udalo sie zaktualizowac stanu recenzji sklepu asystentow."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreReviewPage.tsx
+msgid "assistantStore.review.feature"
+msgstr "Wyroznij"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreReviewPage.tsx
+msgid "assistantStore.review.loading"
+msgstr "Wczytywanie kolejki recenzji..."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreReviewPage.tsx
+msgid "assistantStore.review.loadingConfig"
+msgstr "Wczytywanie uprawnien recenzji..."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreReviewPage.tsx
+msgid "assistantStore.review.makeCurrent"
+msgstr "Ustaw jako aktualna"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreReviewPage.tsx
+msgid "assistantStore.review.notAllowed"
+msgstr "Nie masz uprawnien do recenzowania zgloszen do sklepu asystentow."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreReviewPage.tsx
+msgid "assistantStore.review.notFound.description"
+msgstr "Ten element recenzji sklepu asystentow nie jest dostepny."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreReviewPage.tsx
+msgid "assistantStore.review.notFound.title"
+msgstr "Nie znaleziono elementu recenzji"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreReviewPage.tsx
+msgid "assistantStore.review.publish"
+msgstr "Opublikuj"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreReviewPage.tsx
+msgid "assistantStore.review.reviewerComment"
+msgstr "Komentarz recenzenta"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreReviewPage.tsx
+msgid "assistantStore.review.subtitle"
+msgstr "Recenzuj niezmienne wersje asystentow przed publikacja"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreReviewPage.tsx
+msgid "assistantStore.review.title"
+msgstr "Recenzja sklepu asystentow"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreReviewPage.tsx
+msgid "assistantStore.review.unfeature"
+msgstr "Usun wyroznienie"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreReviewPage.tsx
+msgid "assistantStore.review.unpublish"
+msgstr "Cofnij publikacje"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreReviewPage.tsx
+msgid "assistantStore.review.viewDetails"
+msgstr "Zobacz szczegoly"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStorePage.tsx
+msgid "assistantStore.search.aria"
+msgstr "Szukaj w sklepie asystentow"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStorePage.tsx
+msgid "assistantStore.search.empty.description"
+msgstr "Sprobuj innego wyszukiwania."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStorePage.tsx
+msgid "assistantStore.search.empty.title"
+msgstr "Brak pasujacych asystentow"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStorePage.tsx
+msgid "assistantStore.search.placeholder"
+msgstr "Szukaj asystentow..."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStorePage.tsx
+msgid "assistantStore.search.results"
+msgstr "Wyniki wyszukiwania"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantStoreUtils.tsx
+msgid "assistantStore.status.accepted"
+msgstr "Zaakceptowana"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantStoreUtils.tsx
+msgid "assistantStore.status.declined"
+msgstr "Odrzucona"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantStoreUtils.tsx
+msgid "assistantStore.status.submitted"
+msgstr "W recenzji"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantStoreUtils.tsx
+msgid "assistantStore.status.withdrawn"
+msgstr "Wycofana"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreSubmitPage.tsx
+msgid "assistantStore.submit.audience"
+msgstr "Odbiorcy sklepu"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreSubmitPage.tsx
+msgid "assistantStore.submit.audienceHelp"
+msgstr "Te uprawnienia udostepniania sa dolaczone do tej wersji sklepowej i zaczna dzialac dopiero po opublikowaniu zaakceptowanej wersji."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreSubmitPage.tsx
+msgid "assistantStore.submit.categories"
+msgstr "Kategorie"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreSubmitPage.tsx
+msgid "assistantStore.submit.currentPublishedVersion"
+msgstr "Aktualnie opublikowana wersja: {versionNumber}"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreSubmitPage.tsx
+msgid "assistantStore.submit.description"
+msgstr "Opis sklepowy"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreSubmitPage.tsx
+msgid "assistantStore.submit.diffPreview"
+msgstr "Podglad roznic"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreSubmitPage.tsx
+msgid "assistantStore.submit.error.load"
+msgstr "Nie udalo sie wczytac asystenta."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreSubmitPage.tsx
+msgid "assistantStore.submit.error.preview"
+msgstr "Nie udalo sie wyswietlic podgladu roznic zgloszenia."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreSubmitPage.tsx
+msgid "assistantStore.submit.error.submit"
+msgstr "Nie udalo sie zglosic wersji asystenta."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreSubmitPage.tsx
+msgid "assistantStore.submit.keywords"
+msgstr "Slowa kluczowe"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreSubmitPage.tsx
+msgid "assistantStore.submit.keywordsHelp"
+msgstr "Oddziel slowa kluczowe przecinkami."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreSubmitPage.tsx
+msgid "assistantStore.submit.loading"
+msgstr "Wczytywanie asystenta..."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreSubmitPage.tsx
+msgid "assistantStore.submit.noPublishedVersion"
+msgstr "Ten asystent nie ma jeszcze opublikowanej wersji."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreSubmitPage.tsx
+msgid "assistantStore.submit.preview"
+msgstr "Pokaz zmiany"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreSubmitPage.tsx
+msgid "assistantStore.submit.previewEmpty"
+msgstr "Wyswietl podglad zgloszenia, aby porownac je z poprzednia zaakceptowana wersja."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreSubmitPage.tsx
+msgid "assistantStore.submit.reviewComment"
+msgstr "Notatka dla recenzenta"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreSubmitPage.tsx
+msgid "assistantStore.submit.snapshotNotice"
+msgstr "Zgloszenie klonuje asystenta do niezmiennej migawki. Przyszle edycje wersji roboczej nie zmienia tej wersji sklepowej."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreSubmitPage.tsx
+msgid "assistantStore.submit.submit"
+msgstr "Zglos wersje"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreSubmitPage.tsx
+msgid "assistantStore.submit.subtitle"
+msgstr "Utworz niezmienna zrecenzowana wersje z aktualnej wersji roboczej asystenta"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreSubmitPage.tsx
+msgid "assistantStore.submit.title"
+msgstr "Zglos do sklepu"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreSubmitPage.tsx
+msgid "assistantStore.submit.validation.category"
+msgstr "Wybierz co najmniej jedna kategorie sklepu."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreSubmitPage.tsx
+msgid "assistantStore.submit.validation.description"
+msgstr "Dodaj opis sklepowy przed zgloszeniem."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreSubmitPage.tsx
+msgid "assistantStore.submit.validation.version"
+msgstr "Dodaj numer wersji przed zgloszeniem."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreSubmitPage.tsx
+msgid "assistantStore.submit.versionComment"
+msgstr "Komentarz wersji"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreSubmitPage.tsx
+msgid "assistantStore.submit.versionNumber"
+msgstr "Numer wersji"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStorePage.tsx
+msgid "assistantStore.subtitle"
+msgstr "Przegladaj zrecenzowanych asystentow dostepnych dla Twojej organizacji"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+#: src/pages/AssistantStorePage.tsx
+msgid "assistantStore.title"
+msgstr "Sklep asystentow"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStorePage.tsx
+#~ msgid "assistantStore.uncategorized.title"
+#~ msgstr "Inni asystenci"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
 #: src/pages/AssistantChatSpacePage.tsx
 msgid "branding.assistant_name"
@@ -204,6 +857,11 @@ msgstr "Asystent"
 #: src/pages/AssistantCreatePage.tsx
 #: src/pages/AssistantEditPage.tsx
 #: src/pages/AssistantsListPage.tsx
+#: src/pages/AssistantStoreDetailPage.tsx
+#: src/pages/AssistantStoreMyPage.tsx
+#: src/pages/AssistantStorePage.tsx
+#: src/pages/AssistantStoreReviewPage.tsx
+#: src/pages/AssistantStoreSubmitPage.tsx
 #: src/pages/HomePage.tsx
 #: src/pages/NewChatPage.tsx
 #: src/pages/SharedChatPage.tsx
@@ -801,6 +1459,11 @@ msgstr "Przejdź do folderu nadrzędnego"
 #: src/components/ui/CloudFilePicker/CloudNavigationBreadcrumb.tsx
 msgid "cloudNavigationBreadcrumb.selectDrive"
 msgstr "Wybierz dysk, aby przeglądać pliki"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantStoreSubmitPage.tsx
+msgid "common.cancel"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatShareDialog.tsx
@@ -1794,6 +2457,10 @@ msgstr "Awatar asystenta"
 msgid "Assistant created successfully!"
 msgstr ""
 
+#: src/pages/AssistantStoreDetailPage.tsx
+msgid "Assistant Store"
+msgstr ""
+
 #: src/pages/AssistantEditPage.tsx
 msgid "Assistant updated successfully!"
 msgstr ""
@@ -2521,6 +3188,10 @@ msgstr ""
 msgid "New Chat"
 msgstr "Nowy czat"
 
+#: src/pages/assistantStoreUtils.tsx
+msgid "No"
+msgstr ""
+
 #: src/pages/AssistantsListPage.tsx
 msgid "No assistants yet"
 msgstr ""
@@ -2553,6 +3224,16 @@ msgstr ""
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "noise suppression: {noiseSuppression}"
 msgstr "redukcja szumów: {noiseSuppression}"
+
+#: src/pages/AssistantStoreDetailPage.tsx
+#: src/pages/assistantStoreUtils.tsx
+msgid "None"
+msgstr ""
+
+#: src/pages/AssistantStoreDetailPage.tsx
+#: src/pages/assistantStoreUtils.tsx
+msgid "Not set"
+msgstr ""
 
 #: src/components/ui/MessageList/MessageListHeader.tsx
 msgid "of"
@@ -3073,9 +3754,23 @@ msgstr "Tak duże wykorzystanie kontekstu może ograniczyć sesję czatu i zmnie
 msgid "Using tools"
 msgstr "Używam narzędzi"
 
+#: src/pages/AssistantStoreDetailPage.tsx
+#: src/pages/assistantStoreUtils.tsx
+#~ msgid "Version {0}"
+#~ msgstr ""
+
+#: src/pages/AssistantStoreDetailPage.tsx
+#: src/pages/assistantStoreUtils.tsx
+msgid "Version {versionNumber}"
+msgstr "Wersja {versionNumber}"
+
 #: src/components/ui/Chat/FrequentAssistantsList.tsx
 #~ msgid "View all assistants"
 #~ msgstr ""
+
+#: src/pages/assistantStoreUtils.tsx
+msgid "Yes"
+msgstr ""
 
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
 msgid "You are using {percentUsed}% of your budget ({formattedSpending} of {formattedLimit})."

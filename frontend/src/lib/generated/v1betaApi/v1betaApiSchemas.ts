@@ -226,6 +226,130 @@ export type AssistantFile = {
   preview_url?: string | null | undefined;
 };
 
+export type AssistantStoreAssistantSnapshot = {
+  /**
+   * @format date-time
+   */
+  created_at: string;
+  default_chat_provider?: string | null | undefined;
+  description?: string | null | undefined;
+  enforce_facet_settings: boolean;
+  facet_ids?: string[] | null | undefined;
+  id: string;
+  mcp_server_ids?: string[] | null | undefined;
+  name: string;
+  prompt: string;
+  /**
+   * @format date-time
+   */
+  updated_at: string;
+};
+
+export type AssistantStoreAudienceGrantInput = {
+  role: string;
+  subject_id: string;
+  subject_id_type: string;
+  subject_type: string;
+};
+
+export type AssistantStoreCategory = {
+  display_name: string;
+  icon: string;
+  id: string;
+};
+
+export type AssistantStoreConfigResponse = {
+  can_review: boolean;
+  categories: AssistantStoreCategory[];
+  enabled: boolean;
+};
+
+export type AssistantStoreCreator = {
+  display_name: string;
+  email?: null | undefined;
+  id: string;
+};
+
+export type AssistantStoreReviewRequest = {
+  accepted: boolean;
+  reviewer_review_comment?: string | null | undefined;
+};
+
+export type AssistantStoreSetFeaturedRequest = {
+  featured: boolean;
+};
+
+export type AssistantStoreSetPublishedRequest = {
+  is_published: boolean;
+};
+
+export type AssistantStoreSubmissionDiffResponse = {
+  diff_summary: Record<string, any>;
+};
+
+export type AssistantStoreSubmissionRequest = {
+  audience_grants?: AssistantStoreAudienceGrantInput[];
+  category_ids: string[];
+  creator_review_comment?: string | null | undefined;
+  keywords: string[];
+  long_description: string;
+  version_comment?: string | null | undefined;
+  version_number: string;
+};
+
+export type AssistantStoreVersion = {
+  assistant: AssistantStoreAssistantSnapshot;
+  assistant_id: string;
+  category_ids: string[];
+  /**
+   * @format date-time
+   */
+  created_at: string;
+  creator: AssistantStoreCreator;
+  creator_review_comment?: string | null | undefined;
+  diff_summary: Record<string, any>;
+  featured: boolean;
+  is_current_published_version: boolean;
+  is_published: boolean;
+  keywords: string[];
+  long_description: string;
+  /**
+   * @format date-time
+   */
+  published_at?: string | null | undefined;
+  /**
+   * @format date-time
+   */
+  reviewed_at?: string | null | undefined;
+  reviewer_review_comment?: string | null | undefined;
+  source_assistant_id: string;
+  status: string;
+  store_assistant_id: string;
+  /**
+   * @format date-time
+   */
+  submitted_at: string;
+  /**
+   * @format date-time
+   */
+  updated_at: string;
+  version_comment?: string | null | undefined;
+  version_id: string;
+  version_number: string;
+  /**
+   * @format date-time
+   */
+  withdrawn_at?: string | null | undefined;
+};
+
+export type AssistantStoreVersionResponse = {
+  version: AssistantStoreVersion;
+};
+
+export type AssistantStoreVersionsResponse = {
+  versions: AssistantStoreVersion[];
+};
+
 /**
  * An assistant model
  */
@@ -618,11 +742,11 @@ export type CreateAssistantRequest = {
   /**
    * Default chat provider/model ID for this assistant
    */
-  default_chat_provider?: null | undefined;
+  default_chat_provider?: string | null | undefined;
   /**
    * Optional description of the assistant
    */
-  description?: null | undefined;
+  description?: string | null | undefined;
   /**
    * Whether chats derived from this assistant must use the configured facets
    */
@@ -630,7 +754,7 @@ export type CreateAssistantRequest = {
   /**
    * Optional list of facet IDs to configure for this assistant
    */
-  facet_ids?: null | undefined;
+  facet_ids?: string[] | null | undefined;
   /**
    * Optional list of file upload IDs to associate with this assistant
    */
@@ -638,7 +762,7 @@ export type CreateAssistantRequest = {
   /**
    * List of MCP server IDs available to this assistant
    */
-  mcp_server_ids?: null | undefined;
+  mcp_server_ids?: string[] | null | undefined;
   /**
    * The name of the assistant
    */
@@ -1969,11 +2093,11 @@ export type UpdateAssistantRequest = {
   /**
    * Optional new default chat provider
    */
-  default_chat_provider?: null | undefined;
+  default_chat_provider?: string | null | undefined;
   /**
    * Optional new description for the assistant
    */
-  description?: null | undefined;
+  description?: string | null | undefined;
   /**
    * Optional new enforcement flag for assistant facet settings
    */
@@ -1981,7 +2105,7 @@ export type UpdateAssistantRequest = {
   /**
    * Optional new list of facet IDs for this assistant
    */
-  facet_ids?: null | undefined;
+  facet_ids?: string[] | null | undefined;
   /**
    * Optional list of file upload IDs to associate with this assistant
    */
@@ -1989,7 +2113,7 @@ export type UpdateAssistantRequest = {
   /**
    * Optional new list of MCP server IDs
    */
-  mcp_server_ids?: null | undefined;
+  mcp_server_ids?: string[] | null | undefined;
   /**
    * Optional new name for the assistant
    */

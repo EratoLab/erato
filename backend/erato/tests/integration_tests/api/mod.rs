@@ -1,5 +1,6 @@
 //! API endpoint integration tests.
 
+pub mod assistant_store;
 pub mod assistants;
 pub mod auth;
 pub mod chats;

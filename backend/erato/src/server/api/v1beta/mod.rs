@@ -1,4 +1,5 @@
 #![allow(deprecated)]
+pub mod assistant_store;
 pub mod assistants;
 pub mod audio_transcription;
 pub mod budget;
@@ -34,6 +35,18 @@ use crate::models::permissions;
 use crate::policy::engine::PolicyEngine;
 use crate::policy::engine::authorize;
 use crate::policy::types::{Action, Resource, Subject};
+use crate::server::api::v1beta::assistant_store::{
+    AssistantStoreAssistantSnapshot, AssistantStoreCategory, AssistantStoreConfigResponse,
+    AssistantStoreReviewRequest, AssistantStoreSetFeaturedRequest,
+    AssistantStoreSetPublishedRequest, AssistantStoreSubmissionDiffResponse,
+    AssistantStoreSubmissionRequest, AssistantStoreVersion, AssistantStoreVersionResponse,
+    AssistantStoreVersionsResponse, assistant_store_config, get_assistant_store_assistant,
+    list_assistant_store_assistants, list_my_assistant_store_versions,
+    list_review_assistant_store_versions, preview_assistant_store_submission_diff,
+    review_assistant_store_version, set_assistant_store_version_current,
+    set_assistant_store_version_featured, set_assistant_store_version_published,
+    submit_assistant_store_version, withdraw_assistant_store_version,
+};
 use crate::server::api::v1beta::assistants::{
     ArchiveAssistantResponse, Assistant, AssistantFile, AssistantWithFiles, CreateAssistantRequest,
     CreateAssistantResponse, UpdateAssistantRequest, UpdateAssistantResponse, archive_assistant,
@@ -197,6 +210,51 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
             "/assistants/{assistant_id}/archive",
             post(archive_assistant),
         )
+        .route("/assistant-store/config", get(assistant_store_config))
+        .route(
+            "/assistant-store/assistants",
+            get(list_assistant_store_assistants),
+        )
+        .route(
+            "/assistant-store/assistants/{store_assistant_id}",
+            get(get_assistant_store_assistant),
+        )
+        .route(
+            "/assistant-store/assistants/{source_assistant_id}/submission-diff",
+            post(preview_assistant_store_submission_diff),
+        )
+        .route(
+            "/assistant-store/assistants/{source_assistant_id}/versions",
+            post(submit_assistant_store_version),
+        )
+        .route(
+            "/assistant-store/my/versions",
+            get(list_my_assistant_store_versions),
+        )
+        .route(
+            "/assistant-store/review/versions",
+            get(list_review_assistant_store_versions),
+        )
+        .route(
+            "/assistant-store/versions/{version_id}/review",
+            post(review_assistant_store_version),
+        )
+        .route(
+            "/assistant-store/versions/{version_id}/withdraw",
+            post(withdraw_assistant_store_version),
+        )
+        .route(
+            "/assistant-store/versions/{version_id}/published",
+            put(set_assistant_store_version_published),
+        )
+        .route(
+            "/assistant-store/versions/{version_id}/current",
+            put(set_assistant_store_version_current),
+        )
+        .route(
+            "/assistant-store/versions/{version_id}/featured",
+            put(set_assistant_store_version_featured),
+        )
         // Share grants routes
         .route("/share-grants", post(create_share_grant))
         .route("/share-grants", get(list_share_grants))
@@ -294,6 +352,18 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         assistants::get_assistant,
         assistants::update_assistant,
         assistants::archive_assistant,
+        assistant_store::assistant_store_config,
+        assistant_store::list_assistant_store_assistants,
+        assistant_store::get_assistant_store_assistant,
+        assistant_store::preview_assistant_store_submission_diff,
+        assistant_store::submit_assistant_store_version,
+        assistant_store::list_my_assistant_store_versions,
+        assistant_store::list_review_assistant_store_versions,
+        assistant_store::review_assistant_store_version,
+        assistant_store::withdraw_assistant_store_version,
+        assistant_store::set_assistant_store_version_published,
+        assistant_store::set_assistant_store_version_current,
+        assistant_store::set_assistant_store_version_featured,
         share_grants::create_share_grant,
         share_grants::list_share_grants,
         share_grants::delete_share_grant,
@@ -365,6 +435,17 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         UpdateAssistantRequest,
         UpdateAssistantResponse,
         ArchiveAssistantResponse,
+        AssistantStoreCategory,
+        AssistantStoreConfigResponse,
+        AssistantStoreAssistantSnapshot,
+        AssistantStoreSubmissionRequest,
+        AssistantStoreSubmissionDiffResponse,
+        AssistantStoreVersion,
+        AssistantStoreVersionResponse,
+        AssistantStoreVersionsResponse,
+        AssistantStoreReviewRequest,
+        AssistantStoreSetPublishedRequest,
+        AssistantStoreSetFeaturedRequest,
         ShareGrant,
         CreateShareGrantRequest,
         CreateShareGrantResponse,

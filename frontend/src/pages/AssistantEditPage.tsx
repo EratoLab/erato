@@ -10,9 +10,10 @@ import { PageHeader } from "@/components/ui/Container/PageHeader";
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { SharingDialog, SharingErrorBoundary } from "@/components/ui/Sharing";
-import { ShareIcon } from "@/components/ui/icons";
+import { CheckCircleIcon, ShareIcon } from "@/components/ui/icons";
 import { usePageAlignment } from "@/hooks/ui";
 import {
+  useAssistantStoreConfig,
   useAvailableModels,
   useGetAssistant,
   useUpdateAssistant,
@@ -74,6 +75,7 @@ export default function AssistantEditPage() {
   // Fetch available models
   const { data: modelsData } = useAvailableModels({});
   const availableModels = modelsData ?? [];
+  const { data: storeConfig } = useAssistantStoreConfig({});
 
   // Update assistant mutation
   const { mutateAsync: updateAssistant, isPending } = useUpdateAssistant();
@@ -224,7 +226,20 @@ export default function AssistantEditPage() {
       <div className={clsx("flex-1 overflow-auto", horizontalPadding)}>
         <div className={clsx("py-6", containerClasses)}>
           {/* Share button - always shown since we only reach this code if can_edit is true */}
-          <div className="mb-4 flex justify-end">
+          <div className="mb-4 flex justify-end gap-2">
+            {storeConfig?.enabled && (
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={<CheckCircleIcon className="size-4" />}
+                onClick={() => navigate(`/assistant-store/submit/${id}`)}
+              >
+                {t({
+                  id: "assistantStore.action.submit",
+                  message: "Submit to Store",
+                })}
+              </Button>
+            )}
             <Button
               variant="secondary"
               size="sm"

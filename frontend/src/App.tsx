@@ -11,6 +11,11 @@ import SearchLayout from "./layouts/SearchLayout";
 import AssistantChatSpacePage from "./pages/AssistantChatSpacePage";
 import AssistantCreatePage from "./pages/AssistantCreatePage";
 import AssistantEditPage from "./pages/AssistantEditPage";
+import AssistantStoreDetailPage from "./pages/AssistantStoreDetailPage";
+import AssistantStoreMyPage from "./pages/AssistantStoreMyPage";
+import AssistantStorePage from "./pages/AssistantStorePage";
+import AssistantStoreReviewPage from "./pages/AssistantStoreReviewPage";
+import AssistantStoreSubmitPage from "./pages/AssistantStoreSubmitPage";
 import AssistantsListPage from "./pages/AssistantsListPage";
 import ChatDetailPage from "./pages/ChatDetailPage";
 import HomePage from "./pages/HomePage";
@@ -87,6 +92,25 @@ function AppRoutes() {
           <Route index element={<AssistantsListPage />} />
           <Route path="new" element={<AssistantCreatePage />} />
           <Route path=":id/edit" element={<AssistantEditPage />} />
+        </Route>
+        <Route path="assistant-store" element={<AssistantsLayout />}>
+          <Route index element={<AssistantStorePage />} />
+          <Route path="my" element={<AssistantStoreMyPage />} />
+          <Route path="my/:versionId" element={<AssistantStoreMyPage />} />
+          <Route path="review" element={<AssistantStoreReviewPage />} />
+          <Route
+            path="review/:versionId"
+            element={<AssistantStoreReviewPage />}
+          />
+          <Route path="category/:categoryId" element={<AssistantStorePage />} />
+          <Route
+            path="submit/:sourceAssistantId"
+            element={<AssistantStoreSubmitPage />}
+          />
+          <Route
+            path=":storeAssistantId"
+            element={<AssistantStoreDetailPage />}
+          />
         </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Route>
