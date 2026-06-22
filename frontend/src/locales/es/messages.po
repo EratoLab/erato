@@ -1802,6 +1802,11 @@ msgid "preferences.dialog.audio.input.refreshing"
 msgstr "Actualizando..."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/AudioInputTabContent.tsx
+msgid "preferences.dialog.audio.input.revealHint"
+msgstr "Inicia la prueba del micrófono de abajo para mostrar los nombres de tus dispositivos."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/GuidedMicCheck.tsx
 msgid "preferences.dialog.audio.miccheck.again"
 msgstr "Volver a comprobar"

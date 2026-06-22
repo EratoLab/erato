@@ -1,6 +1,6 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { useAudioInputDevicePreference } from "@/hooks/audio/useAudioInputDevicePreference";
 
@@ -32,6 +32,7 @@ export function AudioInputTabContent({ isActive }: AudioInputTabContentProps) {
   const {
     audioInputDeviceError,
     audioInputDevices,
+    hasResolvedLabels,
     isLoadingAudioInputDevices,
     refreshAudioInputDevices,
     selectedAudioInputDeviceId,
@@ -39,6 +40,15 @@ export function AudioInputTabContent({ isActive }: AudioInputTabContentProps) {
   } = useAudioInputDevicePreference();
   const [isAudioInputDropdownOpen, setIsAudioInputDropdownOpen] =
     useState(false);
+
+  // When a mic stream opens (test or quality check), re-enumerate so
+  // WebKit/Safari — which only exposes device labels while a stream is
+  // live — upgrades the dropdown from generic "Microphone N" placeholders
+  // to real device names. A no-op on Chrome/Firefox, which already have
+  // labels. `refreshAudioInputDevices` is stable, so this is too.
+  const handleStreamActive = useCallback(() => {
+    void refreshAudioInputDevices();
+  }, [refreshAudioInputDevices]);
 
   const audioInputDefaultLabel = t({
     id: "preferences.dialog.audio.input.default",
@@ -159,6 +169,19 @@ export function AudioInputTabContent({ isActive }: AudioInputTabContentProps) {
         })}
       </p>
 
+      {inputDeviceCount > 0 && !hasResolvedLabels ? (
+        <p
+          className="text-xs text-theme-fg-muted"
+          data-testid="audio-input-reveal-hint"
+        >
+          {t({
+            id: "preferences.dialog.audio.input.revealHint",
+            message:
+              "Start the microphone test below to show your device names.",
+          })}
+        </p>
+      ) : null}
+
       <div className="space-y-1">
         <h3 className="text-sm font-medium text-theme-fg-primary">
           {t({
@@ -177,6 +200,7 @@ export function AudioInputTabContent({ isActive }: AudioInputTabContentProps) {
       <MicTestPanel
         deviceId={selectedAudioInputDeviceId}
         isAvailable={isActive}
+        onStreamActive={handleStreamActive}
       />
 
       <div className="space-y-1 border-t border-[var(--theme-border-subtle)] pt-4">
@@ -197,6 +221,7 @@ export function AudioInputTabContent({ isActive }: AudioInputTabContentProps) {
       <GuidedMicCheck
         deviceId={selectedAudioInputDeviceId}
         isAvailable={isActive}
+        onStreamActive={handleStreamActive}
       />
     </div>
   );

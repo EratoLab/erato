@@ -32,6 +32,14 @@ type UseAudioInputLevelPreviewOptions = {
   enabled: boolean;
   /** Selected device id; "" means the browser's default microphone. */
   deviceId: string;
+  /**
+   * Fired once each time a capture stream successfully opens. Lets the
+   * device-list owner re-enumerate while a stream is live so WebKit/Safari
+   * exposes real device labels (it returns empty labels with no active
+   * stream). Held in a ref internally so passing an unstable callback does
+   * not restart capture.
+   */
+  onStreamActive?: () => void;
 };
 
 /**
@@ -46,7 +54,10 @@ type UseAudioInputLevelPreviewOptions = {
 export function useAudioInputLevelPreview({
   enabled,
   deviceId,
+  onStreamActive,
 }: UseAudioInputLevelPreviewOptions): AudioInputLevelPreviewState {
+  const onStreamActiveRef = useRef(onStreamActive);
+  onStreamActiveRef.current = onStreamActive;
   const [bars, setBars] = useState<number[]>(createIdleBars);
   const [error, setError] = useState<string | null>(null);
   const [activeDeviceId, setActiveDeviceId] = useState<string | null>(null);
@@ -178,6 +189,9 @@ export function useAudioInputLevelPreview({
       const settings = track.getSettings();
       setActiveDeviceId(settings.deviceId ?? null);
       setActiveDeviceLabel(track.label);
+      // A stream is now live — notify so the device list can re-enumerate
+      // and pick up real labels (the WebKit/Safari label-visibility fix).
+      onStreamActiveRef.current?.();
 
       const audioContext = new AudioContext();
       // Safari may start the context suspended even after a user gesture; a

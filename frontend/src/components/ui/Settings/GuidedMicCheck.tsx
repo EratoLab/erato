@@ -26,6 +26,11 @@ interface GuidedMicCheckProps {
    * active). Forwarded to the capture hook to release the microphone.
    */
   isAvailable: boolean;
+  /**
+   * Called when the capture stream opens, so the parent can re-enumerate
+   * devices while a stream is live (reveals real labels on WebKit/Safari).
+   */
+  onStreamActive?: () => void;
 }
 
 type VerdictTone = "good" | "fair" | "poor";
@@ -178,10 +183,18 @@ function CountdownRing({
   );
 }
 
-export function GuidedMicCheck({ deviceId, isAvailable }: GuidedMicCheckProps) {
+export function GuidedMicCheck({
+  deviceId,
+  isAvailable,
+  onStreamActive,
+}: GuidedMicCheckProps) {
   const sentence = useReadAloudSentence();
 
-  const capture = useGuidedAudioCapture({ deviceId, enabled: isAvailable });
+  const capture = useGuidedAudioCapture({
+    deviceId,
+    enabled: isAvailable,
+    onStreamActive,
+  });
   const { result } = capture;
 
   // Slices reused by analysis, replay, and transcription.

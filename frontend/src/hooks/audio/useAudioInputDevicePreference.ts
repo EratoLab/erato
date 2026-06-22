@@ -26,6 +26,13 @@ export function useAudioInputDevicePreference({
   const [audioInputDeviceError, setAudioInputDeviceError] = useState<
     string | null
   >(null);
+  // True once enumeration returns at least one real (non-empty) device
+  // label. On WebKit/Safari, `enumerateDevices()` returns empty labels
+  // until a `getUserMedia` stream is active, so this stays false until the
+  // user runs the mic test / quality check and we re-enumerate while that
+  // stream is live. Consumers use it to show a "start the test to see
+  // device names" hint and to know labels are still placeholders.
+  const [hasResolvedLabels, setHasResolvedLabels] = useState(false);
 
   const setSelectedAudioInputDeviceId = useCallback(
     (deviceId: string) => {
@@ -54,10 +61,14 @@ export function useAudioInputDevicePreference({
 
     try {
       const devices = await mediaDevices.enumerateDevices();
+      let sawRealLabel = false;
       const audioInputs = devices
         .filter((device) => device.kind === "audioinput")
         .map((device, index) => {
           const microphoneIndex = index + 1;
+          if (device.label) {
+            sawRealLabel = true;
+          }
 
           return {
             deviceId: device.deviceId,
@@ -65,8 +76,10 @@ export function useAudioInputDevicePreference({
           };
         });
       setAudioInputDevices(audioInputs);
+      setHasResolvedLabels(sawRealLabel);
     } catch {
       setAudioInputDevices([]);
+      setHasResolvedLabels(false);
       setAudioInputDeviceError(t`Could not load audio input devices.`);
     } finally {
       setIsLoadingAudioInputDevices(false);
@@ -138,6 +151,7 @@ export function useAudioInputDevicePreference({
   return {
     audioInputDeviceError,
     audioInputDevices,
+    hasResolvedLabels,
     isLoadingAudioInputDevices,
     refreshAudioInputDevices,
     selectedAudioInputDevice,

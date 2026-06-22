@@ -76,6 +76,13 @@ export type UseGuidedAudioCaptureOptions = {
    */
   enabled?: boolean;
   onComplete?: (result: GuidedCaptureResult) => void;
+  /**
+   * Fired once when the capture stream successfully opens. Lets the device
+   * list re-enumerate while a stream is live so WebKit/Safari exposes real
+   * device labels. Held in a ref internally so an unstable callback does
+   * not affect the capture lifecycle.
+   */
+  onStreamActive?: () => void;
 };
 
 /**
@@ -100,7 +107,11 @@ export function useGuidedAudioCapture({
   readMs = DEFAULT_READ_MS,
   enabled = true,
   onComplete,
+  onStreamActive,
 }: UseGuidedAudioCaptureOptions): GuidedCaptureState {
+  const onStreamActiveRef = useRef(onStreamActive);
+  onStreamActiveRef.current = onStreamActive;
+
   const [phase, setPhase] = useState<GuidedCapturePhase>("idle");
   const [secondsRemaining, setSecondsRemaining] = useState(0);
   const [phaseProgress, setPhaseProgress] = useState(0);
@@ -351,6 +362,9 @@ export function useGuidedAudioCapture({
       streamRef.current = stream;
       const track = stream.getAudioTracks()[0];
       setActiveDeviceLabel(track.label || null);
+      // A stream is now live — notify so the device list can re-enumerate
+      // and pick up real labels (the WebKit/Safari label-visibility fix).
+      onStreamActiveRef.current?.();
 
       const audioContext = new AudioContext();
       if (audioContext.state === "suspended") {
