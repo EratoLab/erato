@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAudioInputDeviceStore } from "@/state/audioInputDeviceStore";
 
+import { logDeviceEnumeration, logDeviceReveal } from "./captureDiagnostics";
+
 export type AudioInputDeviceOption = {
   deviceId: string;
   label: string;
@@ -59,7 +61,7 @@ export function useAudioInputDevicePreference({
     [setSelectedDeviceIdInStore],
   );
 
-  const refreshAudioInputDevices = useCallback(async () => {
+  const refreshAudioInputDevices = useCallback(async (trigger = "manual") => {
     const mediaDevices = getMediaDevices();
 
     if (typeof mediaDevices?.enumerateDevices !== "function") {
@@ -91,6 +93,12 @@ export function useAudioInputDevicePreference({
         });
       setAudioInputDevices(audioInputs);
       setHasResolvedLabels(sawRealLabel);
+      logDeviceEnumeration({
+        trigger,
+        deviceCount: audioInputs.length,
+        hasResolvedLabels: sawRealLabel,
+        devices: audioInputs,
+      });
     } catch {
       setAudioInputDevices([]);
       setHasResolvedLabels(false);
@@ -125,7 +133,11 @@ export function useAudioInputDevicePreference({
     // Skipping the stream here also avoids opening a second one when a mic
     // test / quality check is already live (which set `hasResolvedLabels`).
     if (hasResolvedLabels || typeof mediaDevices?.getUserMedia !== "function") {
-      await refreshAudioInputDevices();
+      logDeviceReveal(
+        hasResolvedLabels ? "skip" : "unsupported",
+        hasResolvedLabels ? "labels already resolved" : undefined,
+      );
+      await refreshAudioInputDevices("reveal-skip");
       return;
     }
 
@@ -135,17 +147,22 @@ export function useAudioInputDevicePreference({
     let stream: MediaStream | null = null;
     try {
       // Minimal constraints — any live audio stream unlocks the labels.
+      logDeviceReveal("requesting");
       stream = await mediaDevices.getUserMedia({ audio: true });
+      logDeviceReveal("granted");
       // Enumerate while the stream is live so labels are populated.
-      await refreshAudioInputDevices();
+      await refreshAudioInputDevices("reveal-granted");
     } catch (error) {
       const name = error instanceof DOMException ? error.name : undefined;
       if (name === "NotAllowedError" || name === "SecurityError") {
         setLabelRevealDenied(true);
+        logDeviceReveal("denied", name);
+      } else {
+        logDeviceReveal("error", name ?? "unknown");
       }
       // Keep whatever the list currently is (placeholder names are fine);
       // refresh once more so a denial still reflects any device changes.
-      await refreshAudioInputDevices();
+      await refreshAudioInputDevices("reveal-error");
     } finally {
       stream?.getTracks().forEach((track) => track.stop());
       setIsLoadingAudioInputDevices(false);
@@ -157,7 +174,7 @@ export function useAudioInputDevicePreference({
       return;
     }
 
-    void refreshAudioInputDevices();
+    void refreshAudioInputDevices("mount");
 
     // Re-enumerate when the user plugs in / unplugs a microphone mid
     // session. Without this, the dropdown stays stale until the user
@@ -169,7 +186,7 @@ export function useAudioInputDevicePreference({
       return;
     }
     const onDeviceChange = () => {
-      void refreshAudioInputDevices();
+      void refreshAudioInputDevices("devicechange");
     };
     mediaDevices.addEventListener("devicechange", onDeviceChange);
     return () => {

@@ -49,7 +49,7 @@ export function AudioInputTabContent({ isActive }: AudioInputTabContentProps) {
   // to real device names. A no-op on Chrome/Firefox, which already have
   // labels. `refreshAudioInputDevices` is stable, so this is too.
   const handleStreamActive = useCallback(() => {
-    void refreshAudioInputDevices();
+    void refreshAudioInputDevices("stream-active");
   }, [refreshAudioInputDevices]);
 
   const audioInputDefaultLabel = t({

@@ -11,6 +11,7 @@
  * These intentionally log raw sample rates / counts (programmatic, not
  * user-facing) — hence the file-level lingui disable.
  */
+/* eslint-disable lingui/no-unlocalized-strings */
 
 const PREFIX = "[mic-check]";
 
@@ -86,6 +87,47 @@ export function logCaptureError(message: string): void {
     return;
   }
   console.info(`${PREFIX} capture error: ${message}`);
+}
+
+/**
+ * Logged after each `enumerateDevices()`. Proves whether the browser is
+ * exposing real device names (`hasResolvedLabels`) — and an empty `id` is the
+ * tell-tale of a pre-permission placeholder device. `trigger` distinguishes
+ * the mount load from a devicechange, a manual refresh, or the re-enumeration
+ * that runs while a stream is live (the WebKit label-reveal path).
+ */
+export function logDeviceEnumeration(info: {
+  trigger: string;
+  deviceCount: number;
+  hasResolvedLabels: boolean;
+  devices: { deviceId: string; label: string }[];
+}): void {
+  if (!devEnabled()) {
+    return;
+  }
+  console.info(`${PREFIX} devices [${info.trigger}]`, {
+    deviceCount: info.deviceCount,
+    hasResolvedLabels: info.hasResolvedLabels,
+    devices: info.devices.map((device) => ({
+      id: device.deviceId ? `${device.deviceId.slice(0, 8)}…` : "(empty)",
+      label: device.label,
+    })),
+  });
+}
+
+/**
+ * Traces the on-demand label reveal so we can see, in the log, whether the
+ * gesture opened a `getUserMedia` stream and how it resolved — i.e. whether
+ * the WebKit permission path is reached and granted/denied/blocked.
+ */
+export function logDeviceReveal(
+  phase: "skip" | "unsupported" | "requesting" | "granted" | "denied" | "error",
+  detail?: string,
+): void {
+  if (!devEnabled()) {
+    return;
+  }
+  console.info(`${PREFIX} reveal: ${phase}${detail ? ` — ${detail}` : ""}`);
 }
 
 /**
