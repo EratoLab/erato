@@ -7,11 +7,6 @@ import { useMountedState } from "react-use";
 // same import the dictation recorder uses (see its header note on why the
 // `new URL("./worklet.ts", import.meta.url)` pattern does not work here).
 import audioDictationWorkletUrl from "./audio-dictation-worklet.ts?worker&url";
-import {
-  logCaptureComplete,
-  logCaptureContextReady,
-  logCaptureError,
-} from "./captureDiagnostics";
 
 const AUDIO_DICTATION_WORKLET_PROCESSOR_NAME = "audio-dictation-processor";
 
@@ -177,16 +172,6 @@ export function useGuidedAudioCapture({
   const readTargetSamplesRef = useRef(0);
   const settleSamplesRef = useRef(0);
 
-  // Dev-diagnostics only: total frames delivered (incl. settle) and the
-  // wall-clock start, used to compute the measured frame rate vs the tagged
-  // context rate (the Safari stretch signal). See `captureDiagnostics`.
-  const deliveredSamplesRef = useRef(0);
-  const captureStartedAtRef = useRef(0);
-  const firstFrameAtRef = useRef(0);
-  // AudioContext.currentTime at capture start — lets the diagnostic compare
-  // the context's own audio clock against wall-clock (slow-clock vs drops).
-  const captureContextStartRef = useRef(0);
-
   const backstopTimeoutRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
   // Bumped on every start()/cancel()/teardown so a late async acquire from a
@@ -228,9 +213,6 @@ export function useGuidedAudioCapture({
     totalSamplesRef.current = 0;
     settleSamplesRef.current = 0;
     speechStartSampleRef.current = 0;
-    deliveredSamplesRef.current = 0;
-    firstFrameAtRef.current = 0;
-    captureContextStartRef.current = 0;
     stageRef.current = "idle";
   }, [clearTimers, releaseAudioGraph]);
 
@@ -275,21 +257,6 @@ export function useGuidedAudioCapture({
       quietRange: { startSample: 0, endSample: speechStart },
       speechRange: { startSample: speechStart, endSample: samples.length },
     };
-    logCaptureComplete({
-      contextSampleRate: sampleRate,
-      deliveredSamples: deliveredSamplesRef.current,
-      elapsedMs: window.performance.now() - captureStartedAtRef.current,
-      firstFrameDelayMs:
-        firstFrameAtRef.current > 0
-          ? firstFrameAtRef.current - captureStartedAtRef.current
-          : 0,
-      contextElapsedSec:
-        (audioContextRef.current?.currentTime ??
-          captureContextStartRef.current) - captureContextStartRef.current,
-      totalSamples: samples.length,
-      quietSamples: speechStart,
-      speechSamples: samples.length - speechStart,
-    });
     // Audio is fully captured — release the mic immediately; replay/analysis
     // work off the in-memory buffer.
     releaseAudioGraph();
@@ -337,16 +304,6 @@ export function useGuidedAudioCapture({
   // re-subscribing.
   const handleFrame = useCallback(
     (frame: Float32Array) => {
-      if (stageRef.current !== "idle" && stageRef.current !== "done") {
-        // Count every delivered frame (incl. settle) for the dev rate check,
-        // and stamp the first frame so the measured rate can be corrected for
-        // worklet startup latency (distinguishes a slow start from a genuine
-        // sub-realtime clock).
-        if (deliveredSamplesRef.current === 0) {
-          firstFrameAtRef.current = window.performance.now();
-        }
-        deliveredSamplesRef.current += frame.length;
-      }
       switch (stageRef.current) {
         case "settling": {
           settleSamplesRef.current += frame.length;
@@ -400,7 +357,6 @@ export function useGuidedAudioCapture({
 
   const failCapture = useCallback(
     (message: string) => {
-      logCaptureError(message);
       teardown();
       if (isMounted()) {
         setError(message);
@@ -542,13 +498,6 @@ export function useGuidedAudioCapture({
       quietTargetSamplesRef.current = Math.round((quietMs / 1000) * sampleRate);
       readTargetSamplesRef.current = Math.round((readMs / 1000) * sampleRate);
 
-      logCaptureContextReady({
-        deviceId,
-        trackSampleRate: track.getSettings().sampleRate,
-        contextSampleRate: sampleRate,
-        contextState: audioContext.state,
-      });
-
       const source = audioContext.createMediaStreamSource(stream);
       const worklet = new AudioWorkletNode(
         audioContext,
@@ -572,9 +521,6 @@ export function useGuidedAudioCapture({
       totalSamplesRef.current = 0;
       settleSamplesRef.current = 0;
       speechStartSampleRef.current = 0;
-      deliveredSamplesRef.current = 0;
-      captureStartedAtRef.current = window.performance.now();
-      captureContextStartRef.current = audioContext.currentTime;
       stageRef.current = "settling";
       startCountdownLoop();
 

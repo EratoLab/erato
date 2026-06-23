@@ -49,7 +49,7 @@ export function AudioInputTabContent({ isActive }: AudioInputTabContentProps) {
   // to real device names. A no-op on Chrome/Firefox, which already have
   // labels. `refreshAudioInputDevices` is stable, so this is too.
   const handleStreamActive = useCallback(() => {
-    void refreshAudioInputDevices("stream-active");
+    void refreshAudioInputDevices();
   }, [refreshAudioInputDevices]);
 
   const audioInputDefaultLabel = t({
@@ -64,8 +64,11 @@ export function AudioInputTabContent({ isActive }: AudioInputTabContentProps) {
         checked: selectedAudioInputDeviceId === "",
         onClick: () => setSelectedAudioInputDeviceId(""),
       },
+      // Namespace device items under `device-` so an enumerated device whose
+      // deviceId is literally "default" (Chrome/macOS returns one) can't
+      // collide with the static "audio-input-default" item's React key.
       ...audioInputDevices.map((device) => ({
-        id: `audio-input-${device.deviceId}`,
+        id: `audio-input-device-${device.deviceId}`,
         label: device.label,
         checked: device.deviceId === selectedAudioInputDeviceId,
         onClick: () => setSelectedAudioInputDeviceId(device.deviceId),
