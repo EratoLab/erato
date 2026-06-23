@@ -317,11 +317,30 @@ function snrSeverity(snrDb: number, tuning: SnrTuning): Severity {
   return snrDb < tuning.goodDb ? "warn" : "ok";
 }
 
-function levelSeverity(speechLevelDbfs: number, tuning: LevelTuning): Severity {
-  if (speechLevelDbfs <= tuning.redDbfs) {
+/**
+ * Level severity, gated on SNR. A quiet capture is only a problem when it
+ * also lacks headroom: with a strong SNR the audio is clean and usable, so we
+ * don't flag low level (this keeps the verdict consistent across browsers —
+ * Safari applies no AGC and reads much lower than Chrome for the same mic).
+ * Below `criticallyLowDbfs` the level is flagged regardless, as it's too near
+ * the floor for even clean audio.
+ */
+function levelSeverity(
+  speechLevelDbfs: number,
+  snrDb: number,
+  levelTuning: LevelTuning,
+  snrTuning: SnrTuning,
+): Severity {
+  if (speechLevelDbfs <= levelTuning.criticallyLowDbfs) {
     return "bad";
   }
-  return speechLevelDbfs <= tuning.yellowDbfs ? "warn" : "ok";
+  if (snrDb >= snrTuning.goodDb) {
+    return "ok";
+  }
+  if (speechLevelDbfs <= levelTuning.redDbfs) {
+    return "bad";
+  }
+  return speechLevelDbfs <= levelTuning.yellowDbfs ? "warn" : "ok";
 }
 
 const SEVERITY_RANK: Record<Severity, number> = { ok: 0, warn: 1, bad: 2 };
@@ -374,7 +393,12 @@ export function analyzeMicQuality(
     { issue: "background-noise", severity: snrSeverity(snrDb, snrTuning) },
     {
       issue: "low-level",
-      severity: levelSeverity(metrics.speechLevelDbfs, levelTuning),
+      severity: levelSeverity(
+        metrics.speechLevelDbfs,
+        snrDb,
+        levelTuning,
+        snrTuning,
+      ),
     },
   ];
 

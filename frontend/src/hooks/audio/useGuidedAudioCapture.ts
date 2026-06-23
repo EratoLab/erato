@@ -183,6 +183,7 @@ export function useGuidedAudioCapture({
   // context rate (the Safari stretch signal). See `captureDiagnostics`.
   const deliveredSamplesRef = useRef(0);
   const captureStartedAtRef = useRef(0);
+  const firstFrameAtRef = useRef(0);
 
   const backstopTimeoutRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -226,6 +227,7 @@ export function useGuidedAudioCapture({
     settleSamplesRef.current = 0;
     speechStartSampleRef.current = 0;
     deliveredSamplesRef.current = 0;
+    firstFrameAtRef.current = 0;
     stageRef.current = "idle";
   }, [clearTimers, releaseAudioGraph]);
 
@@ -274,6 +276,10 @@ export function useGuidedAudioCapture({
       contextSampleRate: sampleRate,
       deliveredSamples: deliveredSamplesRef.current,
       elapsedMs: window.performance.now() - captureStartedAtRef.current,
+      firstFrameDelayMs:
+        firstFrameAtRef.current > 0
+          ? firstFrameAtRef.current - captureStartedAtRef.current
+          : 0,
       totalSamples: samples.length,
       quietSamples: speechStart,
       speechSamples: samples.length - speechStart,
@@ -326,7 +332,13 @@ export function useGuidedAudioCapture({
   const handleFrame = useCallback(
     (frame: Float32Array) => {
       if (stageRef.current !== "idle" && stageRef.current !== "done") {
-        // Count every delivered frame (incl. settle) for the dev rate check.
+        // Count every delivered frame (incl. settle) for the dev rate check,
+        // and stamp the first frame so the measured rate can be corrected for
+        // worklet startup latency (distinguishes a slow start from a genuine
+        // sub-realtime clock).
+        if (deliveredSamplesRef.current === 0) {
+          firstFrameAtRef.current = window.performance.now();
+        }
         deliveredSamplesRef.current += frame.length;
       }
       switch (stageRef.current) {
@@ -456,7 +468,11 @@ export function useGuidedAudioCapture({
             noiseSuppression: false,
             autoGainControl: false,
             channelCount: { ideal: 1 },
-            sampleRate: { ideal: CAPTURE_SAMPLE_RATE_HZ },
+            // Do NOT request a 16 kHz capture rate. WebKit mishandles a
+            // forced low rate (cosmetically reports it, then under-delivers /
+            // glitches → robotic, time-stretched audio). Capture at the
+            // device-native rate and downsample to the canonical 16 kHz in
+            // `resampleMonoFloat32ToPcm16` instead.
           },
         });
       } catch (err) {
@@ -479,12 +495,12 @@ export function useGuidedAudioCapture({
       // and pick up real labels (the WebKit/Safari label-visibility fix).
       onStreamActiveRef.current?.();
 
-      // Pin the context to the track's actual rate so the mic feeds the graph
-      // without a cross-rate resample (the WebKit pitch/stretch trigger).
-      const preferredSampleRate = track.getSettings().sampleRate;
+      // Run the context at the device-native rate (no `{ sampleRate }` pin):
+      // forcing a low rate on WebKit produces glitchy, under-delivered audio.
+      // We read the actual rate back below and downsample to 16 kHz ourselves.
       let audioContext: AudioContext;
       try {
-        audioContext = await createRunningAudioContext(preferredSampleRate);
+        audioContext = await createRunningAudioContext();
         await audioContext.audioWorklet.addModule(audioDictationWorkletUrl);
       } catch {
         if (isCurrent()) {

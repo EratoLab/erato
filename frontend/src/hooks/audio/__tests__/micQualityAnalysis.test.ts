@@ -199,15 +199,39 @@ describe("analyzeMicQuality", () => {
     expect(result.verdict).toBe("poor");
   });
 
-  it("flags low level for very quiet speech", () => {
-    const speech = sine(0.003, 1000); // ~-53 dBFS
+  it("flags critically low speech regardless of SNR", () => {
+    const speech = sine(0.003, 1000); // ~-53 dBFS, below the critical floor
     const result = analyzeMicQuality({
       quietSamples: quiet,
       speechSamples: speech,
       sampleRate: SAMPLE_RATE,
     });
     expect(result.primaryIssue).toBe("low-level");
-    expect(result.metrics.speechLevelDbfs).toBeLessThan(LEVEL_TUNING.redDbfs);
+    expect(result.metrics.speechLevelDbfs).toBeLessThan(
+      LEVEL_TUNING.criticallyLowDbfs,
+    );
+  });
+
+  it("does not flag a quiet-but-clean capture (high SNR) as low level", () => {
+    // ~-35 dBFS speech in a quiet room — the Safari/AGC-off case. The old
+    // absolute-dBFS gate would warn; with SNR gating it grades good.
+    const speech = sine(0.025, 1000);
+    const result = analyzeMicQuality({
+      quietSamples: quiet,
+      speechSamples: speech,
+      sampleRate: SAMPLE_RATE,
+    });
+    // Genuinely quiet (would have tripped the old yellow threshold)…
+    expect(result.metrics.speechLevelDbfs).toBeLessThan(
+      LEVEL_TUNING.yellowDbfs,
+    );
+    expect(result.metrics.speechLevelDbfs).toBeGreaterThan(
+      LEVEL_TUNING.criticallyLowDbfs,
+    );
+    // …but clean (strong SNR), so it isn't blamed on the mic.
+    expect(result.metrics.snrDb).toBeGreaterThan(SNR_TUNING.goodDb);
+    expect(result.primaryIssue).not.toBe("low-level");
+    expect(result.verdict).toBe("good");
   });
 
   it("does not flag low level when speech has silent gaps but voiced bursts are healthy", () => {

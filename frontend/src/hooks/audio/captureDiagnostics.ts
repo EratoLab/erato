@@ -46,12 +46,19 @@ export function logCaptureContextReady(info: {
  * Logged on successful capture. The key signal is `measuredRate` vs
  * `contextSampleRate`: if they diverge, frames arrived at a different rate
  * than the buffer is tagged with → the buffer would play back stretched.
- * They should match closely when the fix is working.
+ *
+ * `measuredRate` is computed against raw wall-clock and so is contaminated by
+ * worklet startup latency. `correctedRate` subtracts the first-frame delay,
+ * isolating the true delivery clock: if `correctedRate ≈ contextSampleRate`
+ * the deficit was a slow start (harmless), whereas if it stays low the
+ * context clock is genuinely sub-realtime. They should both ≈ contextSampleRate
+ * when the fix is working.
  */
 export function logCaptureComplete(info: {
   contextSampleRate: number;
   deliveredSamples: number;
   elapsedMs: number;
+  firstFrameDelayMs: number;
   totalSamples: number;
   quietSamples: number;
   speechSamples: number;
@@ -59,17 +66,22 @@ export function logCaptureComplete(info: {
   if (!devEnabled()) {
     return;
   }
-  const measuredRate =
-    info.elapsedMs > 0
-      ? Math.round((info.deliveredSamples / info.elapsedMs) * 1000)
+  const rate = (denominatorMs: number) =>
+    denominatorMs > 0
+      ? Math.round((info.deliveredSamples / denominatorMs) * 1000)
       : 0;
+  const measuredRate = rate(info.elapsedMs);
+  const correctedRate = rate(info.elapsedMs - info.firstFrameDelayMs);
   console.info(`${PREFIX} capture complete`, {
     contextSampleRate: info.contextSampleRate,
     measuredRate,
+    correctedRate,
+    firstFrameDelayMs: Math.round(info.firstFrameDelayMs),
     rateDeltaPct:
       info.contextSampleRate > 0
         ? Math.round(
-            ((measuredRate - info.contextSampleRate) / info.contextSampleRate) *
+            ((correctedRate - info.contextSampleRate) /
+              info.contextSampleRate) *
               100,
           )
         : 0,

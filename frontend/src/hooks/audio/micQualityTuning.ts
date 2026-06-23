@@ -22,6 +22,7 @@ export type SnrTuning = {
   marginalDb: number;
 };
 export type LevelTuning = {
+  criticallyLowDbfs: number;
   redDbfs: number;
   yellowDbfs: number;
 };
@@ -81,20 +82,29 @@ export const SNR_TUNING: SnrTuning = {
 } as const;
 
 /**
- * Speech level. Too-quiet capture forces gain-up downstream (amplifying
- * noise) or drops below the model's effective floor. Reported in dBFS but
- * NEVER shown to the user as a number — it drives a plain-language hint.
+ * Speech level. A low level only matters when it threatens headroom — i.e.
+ * when the SNR is also weak. Clean speech that's merely quiet (low gain, high
+ * SNR) is perfectly usable for dictation, so the level verdict is gated on
+ * SNR (see `levelSeverity`) to avoid falsely flagging an honest, quiet
+ * capture — notably on WebKit, which applies no AGC and so reads much lower
+ * than Chrome for the same mic. Reported in dBFS but NEVER shown to the user
+ * as a number — it drives a plain-language hint.
  */
 export const LEVEL_TUNING: LevelTuning = {
   /**
+   * Speech RMS at/below which the level is flagged regardless of SNR — this
+   * close to the noise/quantization floor, even clean audio is at risk.
+   */
+  criticallyLowDbfs: -50,
+  /**
    * Speech RMS at/below which the verdict goes red ("move closer / raise
-   * gain"). ~-40 dBFS is the commonly cited "too low" floor (Twilio
-   * rtc-diagnostics low-audio test region).
+   * gain") WHEN the SNR is not strong. ~-40 dBFS is the commonly cited "too
+   * low" floor (Twilio rtc-diagnostics low-audio test region).
    */
   redDbfs: -40,
   /**
-   * Speech RMS at/below which the verdict goes yellow. Healthy dictation
-   * sits around -18…-12 dBFS; by -30 the headroom for noise is thin.
+   * Speech RMS at/below which the verdict goes yellow (again, only when SNR
+   * isn't strong). Healthy dictation sits around -18…-12 dBFS.
    */
   yellowDbfs: -30,
 } as const;
