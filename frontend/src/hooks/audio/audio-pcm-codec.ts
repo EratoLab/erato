@@ -158,9 +158,16 @@ export function mediaTrackSettingsToDiagnostics(
  * factors (rms × 8, peak × 3.5) are tuned for typical mic input —
  * neither so low that quiet speech looks dead, nor so high that
  * ambient noise clips.
+ *
+ * `gain` is an optional extra multiplier (default 1, a no-op) the caller can
+ * use to apply browser-agnostic adaptive auto-gain so a quiet capture (e.g.
+ * WebKit with AGC off) still reads as responsive. Callers should pass a
+ * boost-only factor (≥ 1) so a loud signal — already at full scale — is
+ * unaffected; the `Math.min(1, …)` clamp keeps the result in range.
  */
 export function getAudioLevelBarsFromTimeDomainData(
   audioLevelData: Uint8Array,
+  gain = 1,
 ): number[] {
   const samplesPerBar = Math.max(
     1,
@@ -185,7 +192,7 @@ export function getAudioLevelBarsFromTimeDomainData(
 
     const sampleCount = Math.max(1, endSample - startSample);
     const rms = Math.sqrt(squaredTotal / sampleCount);
-    const amplifiedLevel = Math.min(1, Math.max(rms * 8, peak * 3.5));
+    const amplifiedLevel = Math.min(1, Math.max(rms * 8, peak * 3.5) * gain);
 
     return Math.max(
       AUDIO_BAR_MIN_HEIGHT,
