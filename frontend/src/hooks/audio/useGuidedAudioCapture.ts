@@ -184,6 +184,9 @@ export function useGuidedAudioCapture({
   const deliveredSamplesRef = useRef(0);
   const captureStartedAtRef = useRef(0);
   const firstFrameAtRef = useRef(0);
+  // AudioContext.currentTime at capture start — lets the diagnostic compare
+  // the context's own audio clock against wall-clock (slow-clock vs drops).
+  const captureContextStartRef = useRef(0);
 
   const backstopTimeoutRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -228,6 +231,7 @@ export function useGuidedAudioCapture({
     speechStartSampleRef.current = 0;
     deliveredSamplesRef.current = 0;
     firstFrameAtRef.current = 0;
+    captureContextStartRef.current = 0;
     stageRef.current = "idle";
   }, [clearTimers, releaseAudioGraph]);
 
@@ -280,6 +284,9 @@ export function useGuidedAudioCapture({
         firstFrameAtRef.current > 0
           ? firstFrameAtRef.current - captureStartedAtRef.current
           : 0,
+      contextElapsedSec:
+        (audioContextRef.current?.currentTime ??
+          captureContextStartRef.current) - captureContextStartRef.current,
       totalSamples: samples.length,
       quietSamples: speechStart,
       speechSamples: samples.length - speechStart,
@@ -560,6 +567,7 @@ export function useGuidedAudioCapture({
       speechStartSampleRef.current = 0;
       deliveredSamplesRef.current = 0;
       captureStartedAtRef.current = window.performance.now();
+      captureContextStartRef.current = audioContext.currentTime;
       stageRef.current = "settling";
       startCountdownLoop();
 

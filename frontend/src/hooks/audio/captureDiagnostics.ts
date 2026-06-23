@@ -43,22 +43,39 @@ export function logCaptureContextReady(info: {
 }
 
 /**
- * Logged on successful capture. The key signal is `measuredRate` vs
- * `contextSampleRate`: if they diverge, frames arrived at a different rate
- * than the buffer is tagged with → the buffer would play back stretched.
+ * Logged on successful capture. Proves whether a wall-clock sample deficit is
+ * a benign artifact or a real time/pitch distortion, by reconciling THREE
+ * clocks:
+ *  - wall clock (`elapsedMs`, contaminated by worklet startup latency),
+ *  - the AudioContext's own audio clock (`contextElapsedSec` from
+ *    `audioContext.currentTime`), and
+ *  - the delivered sample count.
  *
- * `measuredRate` is computed against raw wall-clock and so is contaminated by
- * worklet startup latency. `correctedRate` subtracts the first-frame delay,
- * isolating the true delivery clock: if `correctedRate ≈ contextSampleRate`
- * the deficit was a slow start (harmless), whereas if it stays low the
- * context clock is genuinely sub-realtime. They should both ≈ contextSampleRate
- * when the fix is working.
+ * Derived signals:
+ *  - `correctedRate` — delivered/(wall − firstFrameDelay): startup-latency-
+ *    corrected throughput.
+ *  - `clockRatio` — contextElapsed / wall: ≈1 means the context audio clock
+ *    ran at real time; <1 means the render thread genuinely under-ran.
+ *  - `bufferVsClock` — totalSamples / (contextElapsed × rate): ≈1 means the
+ *    buffer holds every sample the context clock implies (no drops between
+ *    worklet and buffer); <1 means frames were dropped in our pipeline.
+ *
+ * `clockVerdict` reads these out:
+ *  - "faithful-realtime": clock ≈ wall AND buffer ≈ clock → samples are
+ *    correctly-spaced 1/rate audio; tagging+resampling is correct, NO pitch/
+ *    time distortion. The wall-clock `measuredRate` deficit was measurement
+ *    noise. (Case 1, benign.)
+ *  - "dropped-frames": clock ≈ wall but buffer < clock → gaps in the buffer
+ *    (glitchy/lossy), but retained audio is correct-pitch.
+ *  - "slow-context-clock": clock < wall → the context under-ran real time;
+ *    investigate, this is the case that can mislabel/distort. (Case 2 risk.)
  */
 export function logCaptureComplete(info: {
   contextSampleRate: number;
   deliveredSamples: number;
   elapsedMs: number;
   firstFrameDelayMs: number;
+  contextElapsedSec: number;
   totalSamples: number;
   quietSamples: number;
   speechSamples: number;
@@ -72,6 +89,20 @@ export function logCaptureComplete(info: {
       : 0;
   const measuredRate = rate(info.elapsedMs);
   const correctedRate = rate(info.elapsedMs - info.firstFrameDelayMs);
+  const wallSec = info.elapsedMs / 1000;
+  const clockRatio =
+    wallSec > 0 ? +(info.contextElapsedSec / wallSec).toFixed(2) : 0;
+  const expectedFromClock = info.contextElapsedSec * info.contextSampleRate;
+  const bufferVsClock =
+    expectedFromClock > 0
+      ? +(info.totalSamples / expectedFromClock).toFixed(2)
+      : 0;
+  const clockVerdict =
+    clockRatio < 0.95
+      ? "slow-context-clock"
+      : bufferVsClock < 0.95
+        ? "dropped-frames"
+        : "faithful-realtime";
   console.info(`${PREFIX} capture complete`, {
     contextSampleRate: info.contextSampleRate,
     measuredRate,
@@ -85,6 +116,9 @@ export function logCaptureComplete(info: {
               100,
           )
         : 0,
+    clockRatio,
+    bufferVsClock,
+    clockVerdict,
     durationSec:
       info.contextSampleRate > 0
         ? +(info.totalSamples / info.contextSampleRate).toFixed(2)
