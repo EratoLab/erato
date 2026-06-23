@@ -15,5 +15,11 @@ WORKDIR /app/component-kit-example
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --no-frozen-lockfile --lockfile=false --config.confirmModulesPurge=false
 RUN pnpm run build
 
-FROM scratch
+# Default to BusyBox so this image can also run as a Kubernetes init container
+# on clusters that copy component-kit assets into an emptyDir volume.
+FROM busybox:1.37.0@sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028
+
+# For newer Kubernetes clusters that mount component kits directly with image
+# volumes, a scratch final stage is sufficient and keeps the image minimal.
+# FROM scratch
 COPY --from=build /app/component-kit-example/dist /app/component-kits/example
