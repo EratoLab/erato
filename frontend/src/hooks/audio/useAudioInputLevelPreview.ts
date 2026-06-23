@@ -6,7 +6,6 @@ import {
   AUDIO_BARS_COUNT,
   getAudioLevelBarsFromTimeDomainData,
 } from "./audio-pcm-codec";
-import { createRunningAudioContext } from "./createRunningAudioContext";
 
 // Live-meter adaptive auto-gain (browser-agnostic): lift a quiet signal so
 // the bars stay responsive when raw capture is low (e.g. WebKit with AGC
@@ -209,18 +208,15 @@ export function useAudioInputLevelPreview({
       // and pick up real labels (the WebKit/Safari label-visibility fix).
       onStreamActiveRef.current?.();
 
-      // Await a confirmed-running context (Safari starts suspended / resumes
-      // late) so the meter doesn't poll a dead analyser at startup. Native
-      // rate — the meter doesn't resample.
-      const audioContext = await createRunningAudioContext();
-      // `cancelled` is flipped by the effect cleanup during this await (e.g. a
-      // deviceId change), but TS can't model a closure mutation across await,
-      // so it reports the check as always-falsy — the runtime guard is real.
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-      if (cancelled || !isMounted()) {
-        void audioContext.close();
-        stream.getTracks().forEach((track) => track.stop());
-        return;
+      // Build the graph and start polling IMMEDIATELY. A VU meter must never
+      // gate on the context reaching "running": if it starts suspended
+      // (Chrome/Safari autoplay), a fire-and-forget resume() wakes it and the
+      // rAF picks up real levels once it runs. (An earlier "await
+      // running-context" gate could hand back a still-suspended context on
+      // Chrome → a permanently flat, silent meter — never do that here.)
+      const audioContext = new AudioContext();
+      if (audioContext.state === "suspended") {
+        void audioContext.resume();
       }
       const source = audioContext.createMediaStreamSource(stream);
       const analyser = audioContext.createAnalyser();

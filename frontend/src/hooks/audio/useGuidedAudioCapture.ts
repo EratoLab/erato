@@ -12,7 +12,6 @@ import {
   logCaptureContextReady,
   logCaptureError,
 } from "./captureDiagnostics";
-import { createRunningAudioContext } from "./createRunningAudioContext";
 
 const AUDIO_DICTATION_WORKLET_PROCESSOR_NAME = "audio-dictation-processor";
 
@@ -505,9 +504,17 @@ export function useGuidedAudioCapture({
       // Run the context at the device-native rate (no `{ sampleRate }` pin):
       // forcing a low rate on WebKit produces glitchy, under-delivered audio.
       // We read the actual rate back below and downsample to 16 kHz ourselves.
+      // Create synchronously + fire-and-forget resume() (do NOT await/gate on
+      // "running": Chrome can hand back a still-suspended context, which then
+      // never produces worklet frames). Frames flow once it wakes; the
+      // sample-clock phases advance on delivered frames and the wall-clock
+      // backstop covers a context that never wakes.
       let audioContext: AudioContext;
       try {
-        audioContext = await createRunningAudioContext();
+        audioContext = new AudioContext();
+        if (audioContext.state === "suspended") {
+          void audioContext.resume();
+        }
         await audioContext.audioWorklet.addModule(audioDictationWorkletUrl);
       } catch {
         if (isCurrent()) {
