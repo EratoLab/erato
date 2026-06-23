@@ -13,7 +13,6 @@ pub struct Model {
     pub status: String,
     pub is_published: bool,
     pub is_current_published_version: bool,
-    pub featured: bool,
     #[sea_orm(column_type = "Text")]
     pub version_number: String,
     #[sea_orm(column_type = "Text", nullable)]

@@ -1,10 +1,9 @@
 import { t } from "@lingui/core/macro";
-import { useQueryClient } from "@tanstack/react-query";
+import { skipToken, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { PageHeader } from "@/components/ui/Container/PageHeader";
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { Textarea } from "@/components/ui/Input";
@@ -12,6 +11,7 @@ import { ArrowLeftIcon } from "@/components/ui/icons";
 import { usePageAlignment } from "@/hooks/ui";
 import {
   useAssistantStoreConfig,
+  useGetAssistant,
   useListReviewAssistantStoreVersions,
   useReviewAssistantStoreVersion,
   useSetAssistantStoreVersionCurrent,
@@ -23,6 +23,8 @@ import {
   AssistantStoreBreadcrumb,
   AssistantStoreDiff,
   AssistantStoreVersionCard,
+  AssistantStoreVersionConfigurationSection,
+  AssistantStoreVersionOverviewSection,
   EmptyAssistantStoreState,
   isAssistantStoreReviewAcceptedStatus,
 } from "./assistantStoreUtils";
@@ -111,6 +113,11 @@ export default function AssistantStoreReviewPage() {
     () => versions.find((version) => version.version_id === versionId),
     [versionId, versions],
   );
+  const { data: assistantDetails } = useGetAssistant(
+    selectedVersion
+      ? { pathParams: { assistantId: selectedVersion.assistant_id } }
+      : skipToken,
+  );
 
   const renderAcceptedVersionActions = (version: AssistantStoreVersion) =>
     isAssistantStoreReviewAcceptedStatus(version.status) ? (
@@ -159,11 +166,11 @@ export default function AssistantStoreReviewPage() {
           {version.featured
             ? t({
                 id: "assistantStore.review.unfeature",
-                message: "Unfeature",
+                message: "Unfeature assistant",
               })
             : t({
                 id: "assistantStore.review.feature",
-                message: "Feature",
+                message: "Feature assistant",
               })}
         </Button>
       </>
@@ -171,18 +178,6 @@ export default function AssistantStoreReviewPage() {
 
   return (
     <div className="flex h-full flex-col bg-theme-bg-primary">
-      <PageHeader
-        title={t({
-          id: "assistantStore.review.title",
-          message: "Assistant Store Review",
-        })}
-        subtitle={t({
-          id: "assistantStore.review.subtitle",
-          message:
-            "Review immutable assistant versions before they can be published",
-        })}
-      />
-
       <div className={clsx("flex-1 overflow-auto", horizontalPadding)}>
         <div className={clsx("space-y-6 py-6", containerClasses)}>
           <AssistantStoreBreadcrumb
@@ -303,15 +298,47 @@ export default function AssistantStoreReviewPage() {
             )}
 
           {config?.can_review && !isLoading && selectedVersion && (
-            <div className="space-y-4">
-              <AssistantStoreVersionCard
+            <div className="space-y-6">
+              <AssistantStoreVersionOverviewSection
                 version={selectedVersion}
                 categories={config.categories}
-                actions={renderAcceptedVersionActions(selectedVersion)}
+                onStartChat={() =>
+                  navigate(`/a/${selectedVersion.assistant_id}`)
+                }
               />
 
-              <div className="space-y-4 rounded-lg border border-theme-border bg-theme-bg-primary p-4">
-                <div className="space-y-3">
+              <AssistantStoreVersionConfigurationSection
+                version={selectedVersion}
+                assistantDetails={assistantDetails}
+              />
+
+              <section className="rounded-lg border border-theme-border bg-theme-bg-primary p-6">
+                <div className="mb-5">
+                  {(() => {
+                    const versionNumber = selectedVersion.version_number;
+
+                    return (
+                      <h2 className="text-lg font-semibold text-theme-fg-primary">
+                        {t`Version ${versionNumber}`}
+                      </h2>
+                    );
+                  })()}
+                  {selectedVersion.version_comment && (
+                    <div className="mt-3">
+                      <h3 className="mb-2 text-sm font-semibold text-theme-fg-primary">
+                        {t({
+                          id: "assistantStore.detail.versionComment",
+                          message: "Version comment",
+                        })}
+                      </h3>
+                      <p className="whitespace-pre-wrap text-sm text-theme-fg-secondary">
+                        {selectedVersion.version_comment}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-5">
                   {selectedVersion.creator_review_comment && (
                     <div>
                       <h3 className="mb-1 text-sm font-semibold text-theme-fg-primary">
@@ -325,19 +352,23 @@ export default function AssistantStoreReviewPage() {
                       </p>
                     </div>
                   )}
-                  <h3 className="mb-3 text-sm font-semibold text-theme-fg-primary">
-                    {t({
-                      id: "assistantStore.review.diff",
-                      message: "Changes from previous version",
-                    })}
-                  </h3>
-                  <AssistantStoreDiff
-                    diffSummary={selectedVersion.diff_summary}
-                  />
-                </div>
-                <div>
+
+                  <details open>
+                    <summary className="focus-ring theme-transition cursor-pointer text-lg font-semibold text-theme-fg-primary hover:text-theme-fg-secondary">
+                      {t({
+                        id: "assistantStore.review.diff",
+                        message: "Changes from previous version",
+                      })}
+                    </summary>
+                    <div className="mt-4">
+                      <AssistantStoreDiff
+                        diffSummary={selectedVersion.diff_summary}
+                      />
+                    </div>
+                  </details>
+
                   {selectedVersion.status === "submitted" ? (
-                    <div className="space-y-3">
+                    <div className="space-y-3 border-t border-theme-border pt-5">
                       <label
                         htmlFor="assistant-store-reviewer-comment"
                         className="block text-sm font-semibold text-theme-fg-primary"
@@ -388,22 +419,27 @@ export default function AssistantStoreReviewPage() {
                       </div>
                     </div>
                   ) : (
-                    selectedVersion.reviewer_review_comment && (
-                      <div>
-                        <h3 className="mb-1 text-sm font-semibold text-theme-fg-primary">
-                          {t({
-                            id: "assistantStore.review.reviewerComment",
-                            message: "Reviewer comment",
-                          })}
-                        </h3>
-                        <p className="whitespace-pre-wrap rounded border border-theme-border bg-theme-bg-secondary p-3 text-sm text-theme-fg-secondary">
-                          {selectedVersion.reviewer_review_comment}
-                        </p>
+                    <div className="space-y-4 border-t border-theme-border pt-5">
+                      {selectedVersion.reviewer_review_comment && (
+                        <div>
+                          <h3 className="mb-1 text-sm font-semibold text-theme-fg-primary">
+                            {t({
+                              id: "assistantStore.review.reviewerComment",
+                              message: "Reviewer comment",
+                            })}
+                          </h3>
+                          <p className="whitespace-pre-wrap rounded border border-theme-border bg-theme-bg-secondary p-3 text-sm text-theme-fg-secondary">
+                            {selectedVersion.reviewer_review_comment}
+                          </p>
+                        </div>
+                      )}
+                      <div className="flex flex-wrap justify-end gap-2">
+                        {renderAcceptedVersionActions(selectedVersion)}
                       </div>
-                    )
+                    </div>
                   )}
                 </div>
-              </div>
+              </section>
             </div>
           )}
 
@@ -415,6 +451,7 @@ export default function AssistantStoreReviewPage() {
                 key={version.version_id}
                 version={version}
                 categories={config.categories}
+                showStatusBadge
                 onOpen={() =>
                   navigate(`/assistant-store/review/${version.version_id}`)
                 }

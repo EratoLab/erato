@@ -180,20 +180,22 @@ async fn resolve_creator_display_names(
     me_user: &MeProfile,
     records: &[StoreVersionRecord],
 ) -> HashMap<String, String> {
-    if !entra_id_enabled(app_state) {
-        return HashMap::new();
-    }
-
-    let Some(access_token) = me_user.access_token.as_deref() else {
-        return HashMap::new();
-    };
-
-    let client = create_graph_client(access_token);
     let mut display_names = HashMap::new();
     let mut lookup_keys = HashMap::new();
 
     for record in records {
         let creator_id = record.creator.id.to_string();
+        if creator_id == me_user.id
+            && let Some(display_name) = me_user
+                .profile
+                .name
+                .clone()
+                .filter(|display_name| !display_name.trim().is_empty())
+        {
+            display_names.insert(creator_id, display_name);
+            continue;
+        }
+
         if lookup_keys.contains_key(&creator_id) {
             continue;
         }
@@ -205,6 +207,16 @@ async fn resolve_creator_display_names(
             .unwrap_or_else(|| record.creator.subject.clone());
         lookup_keys.insert(creator_id, lookup_key);
     }
+
+    if !entra_id_enabled(app_state) {
+        return display_names;
+    }
+
+    let Some(access_token) = me_user.access_token.as_deref() else {
+        return display_names;
+    };
+
+    let client = create_graph_client(access_token);
 
     for (creator_id, lookup_key) in lookup_keys {
         let response = match client
@@ -282,7 +294,7 @@ fn record_to_response(
         status: record.version.status,
         is_published: record.version.is_published,
         is_current_published_version: record.version.is_current_published_version,
-        featured: record.version.featured,
+        featured: record.store_assistant.featured,
         version_number: record.version.version_number,
         version_comment: record.version.version_comment,
         creator_review_comment: record.version.creator_review_comment,

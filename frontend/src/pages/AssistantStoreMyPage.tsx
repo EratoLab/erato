@@ -1,5 +1,5 @@
 import { t } from "@lingui/core/macro";
-import { useQueryClient } from "@tanstack/react-query";
+import { skipToken, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import { useEffect, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -11,6 +11,7 @@ import { ArrowLeftIcon, EditIcon, PlusIcon } from "@/components/ui/icons";
 import { usePageAlignment } from "@/hooks/ui";
 import {
   useAssistantStoreConfig,
+  useGetAssistant,
   useListMyAssistantStoreVersions,
   useSetAssistantStoreVersionCurrent,
   useSetAssistantStoreVersionPublished,
@@ -19,8 +20,11 @@ import {
 
 import {
   AssistantStoreBreadcrumb,
+  AssistantStoreCurrentPublishedIndicator,
   AssistantStoreDiff,
   AssistantStoreVersionCard,
+  AssistantStoreVersionConfigurationSection,
+  AssistantStoreVersionOverviewSection,
   EmptyAssistantStoreState,
   isAssistantStoreReviewAcceptedStatus,
 } from "./assistantStoreUtils";
@@ -114,6 +118,11 @@ export default function AssistantStoreMyPage() {
     () => versions.find((version) => version.version_id === versionId),
     [versionId, versions],
   );
+  const { data: assistantDetails } = useGetAssistant(
+    selectedVersion
+      ? { pathParams: { assistantId: selectedVersion.assistant_id } }
+      : skipToken,
+  );
   const selectedVersionSiblingCount = useMemo(() => {
     if (!selectedVersion) return 0;
 
@@ -123,18 +132,23 @@ export default function AssistantStoreMyPage() {
     ).length;
   }, [selectedVersion, versions]);
 
-  const renderVersionActions = (version: AssistantStoreVersion) => (
+  const renderVersionActions = (
+    version: AssistantStoreVersion,
+    { includeViewSubmission = true }: { includeViewSubmission?: boolean } = {},
+  ) => (
     <>
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={() => navigate(`/assistant-store/my/${version.version_id}`)}
-      >
-        {t({
-          id: "assistantStore.my.viewSubmission",
-          message: "View submission",
-        })}
-      </Button>
+      {includeViewSubmission && (
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => navigate(`/assistant-store/my/${version.version_id}`)}
+        >
+          {t({
+            id: "assistantStore.my.viewSubmission",
+            message: "View submission",
+          })}
+        </Button>
+      )}
       {version.status === "submitted" && (
         <Button
           variant="secondary"
@@ -313,12 +327,52 @@ export default function AssistantStoreMyPage() {
           )}
 
           {!isLoading && selectedVersion && (
-            <div className="space-y-4">
-              <AssistantStoreVersionCard
+            <div className="space-y-6">
+              <AssistantStoreVersionOverviewSection
                 version={selectedVersion}
                 categories={config?.categories ?? []}
-                actions={
-                  <>
+                onStartChat={() =>
+                  navigate(`/a/${selectedVersion.assistant_id}`)
+                }
+              />
+
+              <AssistantStoreVersionConfigurationSection
+                version={selectedVersion}
+                assistantDetails={assistantDetails}
+              />
+
+              <section className="rounded-lg border border-theme-border bg-theme-bg-primary p-6">
+                <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {(() => {
+                        const versionNumber = selectedVersion.version_number;
+
+                        return (
+                          <h2 className="text-lg font-semibold text-theme-fg-primary">
+                            {t`Version ${versionNumber}`}
+                          </h2>
+                        );
+                      })()}
+                      {selectedVersion.is_current_published_version && (
+                        <AssistantStoreCurrentPublishedIndicator />
+                      )}
+                    </div>
+                    {selectedVersion.version_comment && (
+                      <div className="mt-3">
+                        <h3 className="mb-2 text-sm font-semibold text-theme-fg-primary">
+                          {t({
+                            id: "assistantStore.my.versionComment",
+                            message: "Version comment",
+                          })}
+                        </h3>
+                        <p className="whitespace-pre-wrap text-sm text-theme-fg-secondary">
+                          {selectedVersion.version_comment}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 flex-wrap gap-2">
                     <Button
                       variant="secondary"
                       size="sm"
@@ -334,74 +388,65 @@ export default function AssistantStoreMyPage() {
                         message: "Edit draft",
                       })}
                     </Button>
-                    {renderVersionActions(selectedVersion)}
-                  </>
-                }
-              />
-              <div className="rounded-lg border border-theme-border bg-theme-bg-primary p-4">
-                {[
-                  selectedVersion.version_comment,
-                  selectedVersion.creator_review_comment,
-                  selectedVersion.reviewer_review_comment,
-                ].some((comment) => comment != null && comment.length > 0) && (
-                  <div className="mb-4 grid gap-3 md:grid-cols-3">
-                    {selectedVersion.version_comment && (
-                      <div>
-                        <h3 className="mb-1 text-sm font-semibold text-theme-fg-primary">
-                          {t({
-                            id: "assistantStore.my.versionComment",
-                            message: "Version comment",
-                          })}
-                        </h3>
-                        <p className="whitespace-pre-wrap text-sm text-theme-fg-secondary">
-                          {selectedVersion.version_comment}
-                        </p>
-                      </div>
-                    )}
-                    {selectedVersion.creator_review_comment && (
-                      <div>
-                        <h3 className="mb-1 text-sm font-semibold text-theme-fg-primary">
-                          {t({
-                            id: "assistantStore.my.creatorReviewComment",
-                            message: "Note to reviewer",
-                          })}
-                        </h3>
-                        <p className="whitespace-pre-wrap text-sm text-theme-fg-secondary">
-                          {selectedVersion.creator_review_comment}
-                        </p>
-                      </div>
-                    )}
-                    {selectedVersion.reviewer_review_comment && (
-                      <div>
-                        <h3 className="mb-1 text-sm font-semibold text-theme-fg-primary">
-                          {t({
-                            id: "assistantStore.my.reviewerReviewComment",
-                            message: "Reviewer response",
-                          })}
-                        </h3>
-                        <p className="whitespace-pre-wrap text-sm text-theme-fg-secondary">
-                          {selectedVersion.reviewer_review_comment}
-                        </p>
-                      </div>
-                    )}
+                    {renderVersionActions(selectedVersion, {
+                      includeViewSubmission: false,
+                    })}
                   </div>
-                )}
-                {selectedVersionSiblingCount > 1 && (
-                  <details className="rounded-lg border border-theme-border bg-theme-bg-secondary">
-                    <summary className="focus-ring theme-transition cursor-pointer px-4 py-3 text-sm font-semibold text-theme-fg-primary hover:bg-theme-bg-hover">
-                      {t({
-                        id: "assistantStore.my.diff",
-                        message: "Changes from previous version",
-                      })}
-                    </summary>
-                    <div className="border-t border-theme-border p-4">
-                      <AssistantStoreDiff
-                        diffSummary={selectedVersion.diff_summary}
-                      />
+                </div>
+
+                <div className="space-y-5">
+                  {selectedVersion.creator_review_comment && (
+                    <div>
+                      <h3 className="mb-1 text-sm font-semibold text-theme-fg-primary">
+                        {t({
+                          id: "assistantStore.my.creatorReviewComment",
+                          message: "Note to reviewer",
+                        })}
+                      </h3>
+                      <p className="whitespace-pre-wrap rounded border border-theme-border bg-theme-bg-secondary p-3 text-sm text-theme-fg-secondary">
+                        {selectedVersion.creator_review_comment}
+                      </p>
                     </div>
-                  </details>
-                )}
-              </div>
+                  )}
+                  {selectedVersion.reviewer_review_comment && (
+                    <div>
+                      <h3 className="mb-1 text-sm font-semibold text-theme-fg-primary">
+                        {t({
+                          id: "assistantStore.my.reviewerReviewComment",
+                          message: "Reviewer response",
+                        })}
+                      </h3>
+                      <p className="whitespace-pre-wrap rounded border border-theme-border bg-theme-bg-secondary p-3 text-sm text-theme-fg-secondary">
+                        {selectedVersion.reviewer_review_comment}
+                      </p>
+                    </div>
+                  )}
+                  {selectedVersionSiblingCount > 1 && (
+                    <details open>
+                      <summary className="focus-ring theme-transition cursor-pointer text-lg font-semibold text-theme-fg-primary hover:text-theme-fg-secondary">
+                        {t({
+                          id: "assistantStore.my.diff",
+                          message: "Changes from previous version",
+                        })}
+                      </summary>
+                      <div className="mt-4">
+                        <AssistantStoreDiff
+                          diffSummary={selectedVersion.diff_summary}
+                        />
+                      </div>
+                    </details>
+                  )}
+                  {selectedVersionSiblingCount <= 1 && (
+                    <p className="text-sm text-theme-fg-secondary">
+                      {t({
+                        id: "assistantStore.diff.firstVersion",
+                        message:
+                          "No previous version exists for this assistant.",
+                      })}
+                    </p>
+                  )}
+                </div>
+              </section>
             </div>
           )}
 
@@ -460,6 +505,8 @@ export default function AssistantStoreMyPage() {
                       key={version.version_id}
                       version={version}
                       categories={config?.categories ?? []}
+                      showStatusBadge
+                      showCurrentPublishedIndicator
                       onOpen={() =>
                         navigate(`/assistant-store/my/${version.version_id}`)
                       }
