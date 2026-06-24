@@ -780,13 +780,18 @@ msgstr "Nie udało się zapisać ustawień. Spróbuj ponownie."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.comingSoon"
+msgstr "Wkrotce"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.setup.copied"
 msgstr "Skopiowano"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.setup.copy"
-msgstr "Pobierz poniższy plik XML jako <0>manifest.xml</0>, a następnie prześlij go w centrum administracyjnym Microsoft 365 w sekcji Zintegrowane aplikacje."
+#~ msgid "officeAddin.setup.copy"
+#~ msgstr "Pobierz poniższy plik XML jako <0>manifest.xml</0>, a następnie prześlij go w centrum administracyjnym Microsoft 365 w sekcji Zintegrowane aplikacje."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
@@ -805,13 +810,48 @@ msgstr "Pobierz go jako <0>manifest.xml</0>."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.exchangeOnline.copy"
+msgstr "Pobierz ponizszy plik XML jako <0>manifest.xml</0>, a nastepnie przeslij go w centrum administracyjnym Microsoft 365 w sekcji Zintegrowane aplikacje."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.exchangeSelectorLabel"
+msgstr "Konfiguracja Exchange"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.exchangeServer.copy"
+msgstr "Pobierz ponizszy plik XML Exchange Server jako <0>manifest.xml</0>, a nastepnie zainstaluj go w centrum administracyjnym Exchange lub przy uzyciu Exchange Management Shell."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.exchangeServer.docsInstruction"
+msgstr "Postepuj zgodnie z <0>przewodnikiem instalacji dodatkow Exchange</0> firmy Microsoft. Aby ograniczyc dostepnosc do okreslonych uzytkownikow, uzyj <1>kontroli dostepu Exchange Management Shell</1>."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.exchangeServer.downloadManifest"
+msgstr "Pobierz go jako <0>manifest.xml</0>."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.exchangeServer.installInstruction"
+msgstr "W centrum administracyjnym Exchange przejdz do dodatkow organizacji, dodaj niestandardowy dodatek z pliku i przeslij pobrany manifest. Mozesz go tez zainstalowac przy uzyciu Exchange Management Shell."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.exchangeServer.reviewManifest"
+msgstr "Przejrzyj wygenerowany ponizej manifest XML Exchange Server."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.setup.eyebrow"
 msgstr "Konfiguracja dodatku Office"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.setup.integratedAppsLink"
-msgstr "Zintegrowane aplikacje"
+#~ msgid "officeAddin.setup.integratedAppsLink"
+#~ msgstr "Zintegrowane aplikacje"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
@@ -830,8 +870,28 @@ msgstr "Podgląd manifestu"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.openExchangeAccessDocs"
+msgstr "Ogranicz dostep uzytkownikow"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.openExchangeAddinDocs"
+msgstr "Otworz dokumentacje dodatkow Exchange"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.setup.openIntegratedApps"
 msgstr "Otwórz zintegrowane aplikacje"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.openIntegratedAppsInstruction"
+msgstr "Otworz <0>Zintegrowane aplikacje</0> i przeslij tam pobrany plik."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.productSelectorLabel"
+msgstr "Produkt"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
@@ -850,8 +910,8 @@ msgstr "Prześlij wygenerowany manifest"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.setup.uploadInstruction"
-msgstr "i prześlij tam pobrany plik."
+#~ msgid "officeAddin.setup.uploadInstruction"
+#~ msgstr "i prześlij tam pobrany plik."
 
 # ==============================
 # Unstable IDs

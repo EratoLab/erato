@@ -508,6 +508,11 @@ export default defineConfig(({ mode }) => {
             changeOrigin: true,
             secure: false,
           },
+          "/office-addin/manifest-exchange-server.xml": {
+            target: new URL(apiRootUrl).origin,
+            changeOrigin: true,
+            secure: false,
+          },
           "/api/": {
             target: new URL(apiRootUrl).origin,
             changeOrigin: true,

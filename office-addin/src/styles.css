@@ -163,6 +163,83 @@ body {
   line-height: 1.5;
 }
 
+.office-setup-selectors {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.office-setup-selector-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 160px) 1fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.office-setup-selector-label {
+  color: #334155;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.office-setup-selector-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.office-setup-selector-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+.office-setup-selector-option:hover {
+  border-color: #94a3b8;
+  background: #f1f5f9;
+}
+
+.office-setup-selector-option:focus-visible {
+  outline: 2px solid #0f62fe;
+  outline-offset: 2px;
+}
+
+.office-setup-selector-option[aria-pressed="true"] {
+  border-color: #0f62fe;
+  background: #0f62fe;
+  color: #fff;
+}
+
+.office-setup-selector-option[aria-disabled="true"] {
+  border-style: dashed;
+  color: #64748b;
+  cursor: help;
+}
+
+.office-setup-selector-option[aria-disabled="true"]:hover {
+  border-color: #cbd5e1;
+  background: #fff;
+}
+
 .office-setup-steps {
   list-style: decimal;
   margin: 0;
@@ -298,6 +375,10 @@ body {
 
   .office-setup-title {
     font-size: 1.4rem;
+  }
+
+  .office-setup-selector-row {
+    grid-template-columns: 1fr;
   }
 
   .office-setup-button {

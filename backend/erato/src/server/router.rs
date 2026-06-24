@@ -248,23 +248,16 @@ fn render_office_addin_manifest(
         )
 }
 
-/// Get the Office add-in manifest with runtime URL substitutions.
-#[utoipa::path(
-    get,
-    path = "office-addin/manifest.xml",
-    params(OfficeAddinManifestQuery),
-    responses(
-        (status = OK, description = "Rendered Office add-in manifest", body = str, content_type = "application/xml"),
-        (status = NOT_FOUND, description = "Office add-in is disabled or manifest is unavailable", body = str),
-        (status = BAD_REQUEST, description = "Invalid base_url query parameter", body = str),
-        (status = INTERNAL_SERVER_ERROR, description = "Failed to render manifest", body = str)
-    )
-)]
-async fn office_addin_manifest(
-    State(app_state): State<AppState>,
-    Extension(deployment_version): Extension<DeploymentVersion>,
+fn office_addin_manifest_path(frontend_bundle_path: &str, manifest_name: &str) -> PathBuf {
+    PathBuf::from(frontend_bundle_path).join(manifest_name)
+}
+
+async fn office_addin_manifest_response(
+    app_state: AppState,
+    deployment_version: DeploymentVersion,
     headers: HeaderMap,
-    Query(query): Query<OfficeAddinManifestQuery>,
+    query: OfficeAddinManifestQuery,
+    manifest_name: &'static str,
 ) -> Response {
     if !app_state.config.integrations.ms_office.addin.enabled {
         return (StatusCode::NOT_FOUND, "Office add-in is disabled").into_response();
@@ -281,15 +274,15 @@ async fn office_addin_manifest(
         },
     };
 
-    let manifest_path = PathBuf::from(
+    let manifest_path = office_addin_manifest_path(
         &app_state
             .config
             .integrations
             .ms_office
             .addin
             .frontend_bundle_path,
-    )
-    .join("manifest.xml");
+        manifest_name,
+    );
     let manifest_template = match std::fs::read_to_string(&manifest_path) {
         Ok(contents) => contents,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -326,6 +319,62 @@ async fn office_addin_manifest(
         rendered_manifest,
     )
         .into_response()
+}
+
+/// Get the Office add-in manifest with runtime URL substitutions.
+#[utoipa::path(
+    get,
+    path = "office-addin/manifest.xml",
+    params(OfficeAddinManifestQuery),
+    responses(
+        (status = OK, description = "Rendered Office add-in manifest", body = str, content_type = "application/xml"),
+        (status = NOT_FOUND, description = "Office add-in is disabled or manifest is unavailable", body = str),
+        (status = BAD_REQUEST, description = "Invalid base_url query parameter", body = str),
+        (status = INTERNAL_SERVER_ERROR, description = "Failed to render manifest", body = str)
+    )
+)]
+async fn office_addin_manifest(
+    State(app_state): State<AppState>,
+    Extension(deployment_version): Extension<DeploymentVersion>,
+    headers: HeaderMap,
+    Query(query): Query<OfficeAddinManifestQuery>,
+) -> Response {
+    office_addin_manifest_response(
+        app_state,
+        deployment_version,
+        headers,
+        query,
+        "manifest.xml",
+    )
+    .await
+}
+
+/// Get the Office add-in manifest for Exchange Server with runtime URL substitutions.
+#[utoipa::path(
+    get,
+    path = "office-addin/manifest-exchange-server.xml",
+    params(OfficeAddinManifestQuery),
+    responses(
+        (status = OK, description = "Rendered Exchange Server Office add-in manifest", body = str, content_type = "application/xml"),
+        (status = NOT_FOUND, description = "Office add-in is disabled or manifest is unavailable", body = str),
+        (status = BAD_REQUEST, description = "Invalid base_url query parameter", body = str),
+        (status = INTERNAL_SERVER_ERROR, description = "Failed to render manifest", body = str)
+    )
+)]
+async fn office_addin_exchange_server_manifest(
+    State(app_state): State<AppState>,
+    Extension(deployment_version): Extension<DeploymentVersion>,
+    headers: HeaderMap,
+    Query(query): Query<OfficeAddinManifestQuery>,
+) -> Response {
+    office_addin_manifest_response(
+        app_state,
+        deployment_version,
+        headers,
+        query,
+        "manifest-exchange-server.xml",
+    )
+    .await
 }
 
 fn favicon_candidate_paths(bundle_root: &Path, theme: Option<&str>, path: &str) -> Vec<PathBuf> {
@@ -410,6 +459,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/favicon.ico", get(favicon_ico))
         .route("/favicon.svg", get(favicon_svg))
         .route("/office-addin/manifest.xml", get(office_addin_manifest))
+        .route(
+            "/office-addin/manifest-exchange-server.xml",
+            get(office_addin_exchange_server_manifest),
+        )
         .nest("/api/v1beta", crate::server::api::v1beta::router(app_state));
 
     #[cfg(all(feature = "profiling", target_os = "linux"))]
@@ -425,7 +478,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(health, office_addin_manifest),
+    paths(health, office_addin_manifest, office_addin_exchange_server_manifest),
     nest(
         (path = "api/v1beta", api = ApiV1ApiDoc)
     )

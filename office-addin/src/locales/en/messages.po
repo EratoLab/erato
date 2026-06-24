@@ -780,13 +780,18 @@ msgstr "Could not save preferences. Please try again."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.comingSoon"
+msgstr "Coming soon"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.setup.copied"
 msgstr "Copied!"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.setup.copy"
-msgstr "Download the XML below as <0>manifest.xml</0>, then upload it in Microsoft 365 admin center under Integrated Apps."
+#~ msgid "officeAddin.setup.copy"
+#~ msgstr "Download the XML below as <0>manifest.xml</0>, then upload it in Microsoft 365 admin center under Integrated Apps."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
@@ -805,13 +810,48 @@ msgstr "Download it as <0>manifest.xml</0>."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.exchangeOnline.copy"
+msgstr "Download the XML below as <0>manifest.xml</0>, then upload it in Microsoft 365 admin center under Integrated Apps."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.exchangeSelectorLabel"
+msgstr "Exchange setup"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.exchangeServer.copy"
+msgstr "Download the Exchange Server XML below as <0>manifest.xml</0>, then install it in Exchange admin center or with Exchange Management Shell."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.exchangeServer.docsInstruction"
+msgstr "Follow Microsoft's <0>Exchange add-in installation guide</0>. To limit availability to specific users, use the <1>Exchange Management Shell access controls</1>."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.exchangeServer.downloadManifest"
+msgstr "Download it as <0>manifest.xml</0>."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.exchangeServer.installInstruction"
+msgstr "In Exchange admin center, go to organization add-ins, add a custom add-in from file, and upload the downloaded manifest. You can also install it with Exchange Management Shell."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.exchangeServer.reviewManifest"
+msgstr "Review the generated Exchange Server manifest XML below."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.setup.eyebrow"
 msgstr "Office Add-in Setup"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.setup.integratedAppsLink"
-msgstr "Integrated Apps"
+#~ msgid "officeAddin.setup.integratedAppsLink"
+#~ msgstr "Integrated Apps"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
@@ -830,8 +870,28 @@ msgstr "Manifest preview"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.openExchangeAccessDocs"
+msgstr "Limit user access"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.openExchangeAddinDocs"
+msgstr "Open Exchange add-in docs"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.setup.openIntegratedApps"
 msgstr "Open Integrated Apps"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.openIntegratedAppsInstruction"
+msgstr "Open <0>Integrated Apps</0> and upload the downloaded file there."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.productSelectorLabel"
+msgstr "Product"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
@@ -850,8 +910,8 @@ msgstr "Upload the generated manifest"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.setup.uploadInstruction"
-msgstr "and upload the downloaded file there."
+#~ msgid "officeAddin.setup.uploadInstruction"
+#~ msgstr "and upload the downloaded file there."
 
 # ==============================
 # Unstable IDs
