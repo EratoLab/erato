@@ -3,21 +3,22 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "assistant_store_assistants")]
+#[sea_orm(table_name = "assistant_hub_assistants")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
+    #[sea_orm(unique)]
     pub source_assistant_id: Uuid,
     pub owner_user_id: Uuid,
-    pub featured: bool,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
+    pub featured: bool,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    #[sea_orm(has_many = "super::assistant_store_assistant_versions::Entity")]
-    AssistantStoreAssistantVersions,
+    #[sea_orm(has_many = "super::assistant_hub_assistant_versions::Entity")]
+    AssistantHubAssistantVersions,
     #[sea_orm(
         belongs_to = "super::assistants::Entity",
         from = "Column::SourceAssistantId",
@@ -36,9 +37,9 @@ pub enum Relation {
     Users,
 }
 
-impl Related<super::assistant_store_assistant_versions::Entity> for Entity {
+impl Related<super::assistant_hub_assistant_versions::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::AssistantStoreAssistantVersions.def()
+        Relation::AssistantHubAssistantVersions.def()
     }
 }
 

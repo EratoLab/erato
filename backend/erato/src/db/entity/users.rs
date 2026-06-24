@@ -19,6 +19,8 @@ pub struct Model {
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
+    #[sea_orm(has_many = "super::assistant_hub_assistants::Entity")]
+    AssistantHubAssistants,
     #[sea_orm(has_many = "super::assistants::Entity")]
     Assistants,
     #[sea_orm(has_many = "super::mcp_server_oauth_authorization_states::Entity")]
@@ -27,6 +29,12 @@ pub enum Relation {
     McpServerOauthCredentials,
     #[sea_orm(has_one = "super::user_preferences::Entity")]
     UserPreferences,
+}
+
+impl Related<super::assistant_hub_assistants::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::AssistantHubAssistants.def()
+    }
 }
 
 impl Related<super::assistants::Entity> for Entity {

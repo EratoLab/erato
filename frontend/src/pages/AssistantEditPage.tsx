@@ -13,7 +13,7 @@ import { SharingDialog, SharingErrorBoundary } from "@/components/ui/Sharing";
 import { CheckCircleIcon, ShareIcon } from "@/components/ui/icons";
 import { usePageAlignment } from "@/hooks/ui";
 import {
-  useAssistantStoreConfig,
+  useAssistantHubConfig,
   useAvailableModels,
   useGetAssistant,
   useUpdateAssistant,
@@ -75,7 +75,7 @@ export default function AssistantEditPage() {
   // Fetch available models
   const { data: modelsData } = useAvailableModels({});
   const availableModels = modelsData ?? [];
-  const { data: storeConfig } = useAssistantStoreConfig({});
+  const { data: hubConfig } = useAssistantHubConfig({});
 
   // Update assistant mutation
   const { mutateAsync: updateAssistant, isPending } = useUpdateAssistant();
@@ -227,16 +227,16 @@ export default function AssistantEditPage() {
         <div className={clsx("py-6", containerClasses)}>
           {/* Share button - always shown since we only reach this code if can_edit is true */}
           <div className="mb-4 flex justify-end gap-2">
-            {storeConfig?.enabled && (
+            {hubConfig?.enabled && (
               <Button
                 variant="secondary"
                 size="sm"
                 icon={<CheckCircleIcon className="size-4" />}
-                onClick={() => navigate(`/assistant-store/submit/${id}`)}
+                onClick={() => navigate(`/assistant-hub/submit/${id}`)}
               >
                 {t({
-                  id: "assistantStore.action.submit",
-                  message: "Submit to Store",
+                  id: "assistantHub.action.submit",
+                  message: "Submit to Hub",
                 })}
               </Button>
             )}

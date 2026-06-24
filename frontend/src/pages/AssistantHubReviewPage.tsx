@@ -10,49 +10,49 @@ import { Textarea } from "@/components/ui/Input";
 import { ArrowLeftIcon } from "@/components/ui/icons";
 import { usePageAlignment } from "@/hooks/ui";
 import {
-  useAssistantStoreConfig,
+  useAssistantHubConfig,
   useGetAssistant,
-  useListReviewAssistantStoreVersions,
-  useReviewAssistantStoreVersion,
-  useSetAssistantStoreVersionCurrent,
-  useSetAssistantStoreVersionFeatured,
-  useSetAssistantStoreVersionPublished,
+  useListReviewAssistantHubVersions,
+  useReviewAssistantHubVersion,
+  useSetAssistantHubVersionCurrent,
+  useSetAssistantHubVersionFeatured,
+  useSetAssistantHubVersionPublished,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 import {
-  AssistantStoreBreadcrumb,
-  AssistantStoreDiff,
-  AssistantStoreVersionCard,
-  AssistantStoreVersionConfigurationSection,
-  AssistantStoreVersionOverviewSection,
-  EmptyAssistantStoreState,
-  isAssistantStoreReviewAcceptedStatus,
-} from "./assistantStoreUtils";
+  AssistantHubBreadcrumb,
+  AssistantHubDiff,
+  AssistantHubVersionCard,
+  AssistantHubVersionConfigurationSection,
+  AssistantHubVersionOverviewSection,
+  EmptyAssistantHubState,
+  isAssistantHubReviewAcceptedStatus,
+} from "./assistantHubUtils";
 
-import type { AssistantStoreVersion } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { AssistantHubVersion } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
-export default function AssistantStoreReviewPage() {
+export default function AssistantHubReviewPage() {
   const navigate = useNavigate();
   const { versionId } = useParams<{ versionId?: string }>();
   const queryClient = useQueryClient();
   const { containerClasses, horizontalPadding } =
     usePageAlignment("assistants");
-  const { data: config, isLoading: isLoadingConfig } = useAssistantStoreConfig(
+  const { data: config, isLoading: isLoadingConfig } = useAssistantHubConfig(
     {},
   );
-  const { data, isLoading, error } = useListReviewAssistantStoreVersions({});
-  const reviewVersion = useReviewAssistantStoreVersion();
-  const setPublished = useSetAssistantStoreVersionPublished();
-  const setCurrent = useSetAssistantStoreVersionCurrent();
-  const setFeatured = useSetAssistantStoreVersionFeatured();
+  const { data, isLoading, error } = useListReviewAssistantHubVersions({});
+  const reviewVersion = useReviewAssistantHubVersion();
+  const setPublished = useSetAssistantHubVersionPublished();
+  const setCurrent = useSetAssistantHubVersionCurrent();
+  const setFeatured = useSetAssistantHubVersionFeatured();
   const [reviewComments, setReviewComments] = useState<
     Partial<Record<string, string>>
   >({});
 
   useEffect(() => {
     document.title = `${t({
-      id: "assistantStore.review.title",
-      message: "Assistant Store Review",
+      id: "assistantHub.review.title",
+      message: "Assistant Hub Review",
     })} - ${t({ id: "branding.page_title_suffix" })}`;
   }, []);
 
@@ -61,7 +61,7 @@ export default function AssistantStoreReviewPage() {
   };
 
   const handleReview = async (
-    version: AssistantStoreVersion,
+    version: AssistantHubVersion,
     accepted: boolean,
   ) => {
     const reviewerReviewComment = reviewComments[version.version_id]?.trim();
@@ -80,7 +80,7 @@ export default function AssistantStoreReviewPage() {
   };
 
   const handleSetPublished = async (
-    version: AssistantStoreVersion,
+    version: AssistantHubVersion,
     isPublished: boolean,
   ) => {
     await setPublished.mutateAsync({
@@ -90,7 +90,7 @@ export default function AssistantStoreReviewPage() {
     await refresh();
   };
 
-  const handleSetCurrent = async (version: AssistantStoreVersion) => {
+  const handleSetCurrent = async (version: AssistantHubVersion) => {
     await setCurrent.mutateAsync({
       pathParams: { versionId: version.version_id },
     });
@@ -98,7 +98,7 @@ export default function AssistantStoreReviewPage() {
   };
 
   const handleSetFeatured = async (
-    version: AssistantStoreVersion,
+    version: AssistantHubVersion,
     featured: boolean,
   ) => {
     await setFeatured.mutateAsync({
@@ -119,8 +119,8 @@ export default function AssistantStoreReviewPage() {
       : skipToken,
   );
 
-  const renderAcceptedVersionActions = (version: AssistantStoreVersion) =>
-    isAssistantStoreReviewAcceptedStatus(version.status) ? (
+  const renderAcceptedVersionActions = (version: AssistantHubVersion) =>
+    isAssistantHubReviewAcceptedStatus(version.status) ? (
       <>
         <Button
           variant="secondary"
@@ -132,11 +132,11 @@ export default function AssistantStoreReviewPage() {
         >
           {version.is_published
             ? t({
-                id: "assistantStore.review.unpublish",
+                id: "assistantHub.review.unpublish",
                 message: "Unpublish",
               })
             : t({
-                id: "assistantStore.review.publish",
+                id: "assistantHub.review.publish",
                 message: "Publish",
               })}
         </Button>
@@ -150,7 +150,7 @@ export default function AssistantStoreReviewPage() {
             }}
           >
             {t({
-              id: "assistantStore.review.makeCurrent",
+              id: "assistantHub.review.makeCurrent",
               message: "Make current",
             })}
           </Button>
@@ -165,11 +165,11 @@ export default function AssistantStoreReviewPage() {
         >
           {version.featured
             ? t({
-                id: "assistantStore.review.unfeature",
+                id: "assistantHub.review.unfeature",
                 message: "Unfeature assistant",
               })
             : t({
-                id: "assistantStore.review.feature",
+                id: "assistantHub.review.feature",
                 message: "Feature assistant",
               })}
         </Button>
@@ -180,34 +180,32 @@ export default function AssistantStoreReviewPage() {
     <div className="flex h-full flex-col bg-theme-bg-primary">
       <div className={clsx("flex-1 overflow-auto", horizontalPadding)}>
         <div className={clsx("space-y-6 py-6", containerClasses)}>
-          <AssistantStoreBreadcrumb
+          <AssistantHubBreadcrumb
             icon={<ArrowLeftIcon className="size-4" />}
             onClick={() =>
-              navigate(
-                versionId ? "/assistant-store/review" : "/assistant-store",
-              )
+              navigate(versionId ? "/assistant-hub/review" : "/assistant-hub")
             }
           >
             {versionId
               ? t({
-                  id: "assistantStore.action.backToReviewQueue",
+                  id: "assistantHub.action.backToReviewQueue",
                   message: "Back to review queue",
                 })
               : t({
-                  id: "assistantStore.action.backToStore",
-                  message: "Back to store",
+                  id: "assistantHub.action.backToHub",
+                  message: "Back to hub",
                 })}
-          </AssistantStoreBreadcrumb>
+          </AssistantHubBreadcrumb>
 
           {!versionId && (
             <div className="flex justify-center">
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => navigate("/assistant-store/my")}
+                onClick={() => navigate("/assistant-hub/my")}
               >
                 {t({
-                  id: "assistantStore.action.mySubmissions",
+                  id: "assistantHub.action.mySubmissions",
                   message: "My submissions",
                 })}
               </Button>
@@ -220,7 +218,7 @@ export default function AssistantStoreReviewPage() {
                 <div className="mx-auto mb-4 size-8 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
                 <p className="text-sm text-theme-fg-secondary">
                   {t({
-                    id: "assistantStore.review.loadingConfig",
+                    id: "assistantHub.review.loadingConfig",
                     message: "Loading review permissions...",
                   })}
                 </p>
@@ -231,9 +229,9 @@ export default function AssistantStoreReviewPage() {
           {config && !config.can_review && (
             <Alert type="error">
               {t({
-                id: "assistantStore.review.notAllowed",
+                id: "assistantHub.review.notAllowed",
                 message:
-                  "You do not have permission to review assistant store submissions.",
+                  "You do not have permission to review assistant hub submissions.",
               })}
             </Alert>
           )}
@@ -247,8 +245,8 @@ export default function AssistantStoreReviewPage() {
           ].some(Boolean) && (
             <Alert type="error">
               {t({
-                id: "assistantStore.review.error",
-                message: "Failed to update assistant store review state.",
+                id: "assistantHub.review.error",
+                message: "Failed to update assistant hub review state.",
               })}
             </Alert>
           )}
@@ -259,7 +257,7 @@ export default function AssistantStoreReviewPage() {
                 <div className="mx-auto mb-4 size-8 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
                 <p className="text-sm text-theme-fg-secondary">
                   {t({
-                    id: "assistantStore.review.loading",
+                    id: "assistantHub.review.loading",
                     message: "Loading review queue...",
                   })}
                 </p>
@@ -268,13 +266,13 @@ export default function AssistantStoreReviewPage() {
           )}
 
           {config?.can_review && !isLoading && versions.length === 0 && (
-            <EmptyAssistantStoreState
+            <EmptyAssistantHubState
               title={t({
-                id: "assistantStore.review.empty.title",
+                id: "assistantHub.review.empty.title",
                 message: "No versions to review",
               })}
               description={t({
-                id: "assistantStore.review.empty.description",
+                id: "assistantHub.review.empty.description",
                 message:
                   "Submitted assistant versions will appear here for review.",
               })}
@@ -285,21 +283,21 @@ export default function AssistantStoreReviewPage() {
             !isLoading &&
             versionId &&
             !selectedVersion && (
-              <EmptyAssistantStoreState
+              <EmptyAssistantHubState
                 title={t({
-                  id: "assistantStore.review.notFound.title",
+                  id: "assistantHub.review.notFound.title",
                   message: "Review item not found",
                 })}
                 description={t({
-                  id: "assistantStore.review.notFound.description",
-                  message: "This assistant store review item is not available.",
+                  id: "assistantHub.review.notFound.description",
+                  message: "This assistant hub review item is not available.",
                 })}
               />
             )}
 
           {config?.can_review && !isLoading && selectedVersion && (
             <div className="space-y-6">
-              <AssistantStoreVersionOverviewSection
+              <AssistantHubVersionOverviewSection
                 version={selectedVersion}
                 categories={config.categories}
                 onStartChat={() =>
@@ -307,7 +305,7 @@ export default function AssistantStoreReviewPage() {
                 }
               />
 
-              <AssistantStoreVersionConfigurationSection
+              <AssistantHubVersionConfigurationSection
                 version={selectedVersion}
                 assistantDetails={assistantDetails}
               />
@@ -327,7 +325,7 @@ export default function AssistantStoreReviewPage() {
                     <div className="mt-3">
                       <h3 className="mb-2 text-sm font-semibold text-theme-fg-primary">
                         {t({
-                          id: "assistantStore.detail.versionComment",
+                          id: "assistantHub.detail.versionComment",
                           message: "Version comment",
                         })}
                       </h3>
@@ -343,7 +341,7 @@ export default function AssistantStoreReviewPage() {
                     <div>
                       <h3 className="mb-1 text-sm font-semibold text-theme-fg-primary">
                         {t({
-                          id: "assistantStore.review.creatorComment",
+                          id: "assistantHub.review.creatorComment",
                           message: "Creator note",
                         })}
                       </h3>
@@ -356,12 +354,12 @@ export default function AssistantStoreReviewPage() {
                   <details open>
                     <summary className="focus-ring theme-transition cursor-pointer text-lg font-semibold text-theme-fg-primary hover:text-theme-fg-secondary">
                       {t({
-                        id: "assistantStore.review.diff",
+                        id: "assistantHub.review.diff",
                         message: "Changes from previous version",
                       })}
                     </summary>
                     <div className="mt-4">
-                      <AssistantStoreDiff
+                      <AssistantHubDiff
                         diffSummary={selectedVersion.diff_summary}
                       />
                     </div>
@@ -370,16 +368,16 @@ export default function AssistantStoreReviewPage() {
                   {selectedVersion.status === "submitted" ? (
                     <div className="space-y-3 border-t border-theme-border pt-5">
                       <label
-                        htmlFor="assistant-store-reviewer-comment"
+                        htmlFor="assistant-hub-reviewer-comment"
                         className="block text-sm font-semibold text-theme-fg-primary"
                       >
                         {t({
-                          id: "assistantStore.review.comment",
+                          id: "assistantHub.review.comment",
                           message: "Reviewer comment",
                         })}
                       </label>
                       <Textarea
-                        id="assistant-store-reviewer-comment"
+                        id="assistant-hub-reviewer-comment"
                         rows={4}
                         value={reviewComments[selectedVersion.version_id] ?? ""}
                         onChange={(event) =>
@@ -399,7 +397,7 @@ export default function AssistantStoreReviewPage() {
                           }}
                         >
                           {t({
-                            id: "assistantStore.review.decline",
+                            id: "assistantHub.review.decline",
                             message: "Decline",
                           })}
                         </Button>
@@ -412,7 +410,7 @@ export default function AssistantStoreReviewPage() {
                           }}
                         >
                           {t({
-                            id: "assistantStore.review.accept",
+                            id: "assistantHub.review.accept",
                             message: "Accept",
                           })}
                         </Button>
@@ -424,7 +422,7 @@ export default function AssistantStoreReviewPage() {
                         <div>
                           <h3 className="mb-1 text-sm font-semibold text-theme-fg-primary">
                             {t({
-                              id: "assistantStore.review.reviewerComment",
+                              id: "assistantHub.review.reviewerComment",
                               message: "Reviewer comment",
                             })}
                           </h3>
@@ -447,13 +445,13 @@ export default function AssistantStoreReviewPage() {
             !isLoading &&
             !versionId &&
             versions.map((version) => (
-              <AssistantStoreVersionCard
+              <AssistantHubVersionCard
                 key={version.version_id}
                 version={version}
                 categories={config.categories}
                 showStatusBadge
                 onOpen={() =>
-                  navigate(`/assistant-store/review/${version.version_id}`)
+                  navigate(`/assistant-hub/review/${version.version_id}`)
                 }
                 actions={
                   <>
@@ -461,13 +459,11 @@ export default function AssistantStoreReviewPage() {
                       variant="secondary"
                       size="sm"
                       onClick={() =>
-                        navigate(
-                          `/assistant-store/review/${version.version_id}`,
-                        )
+                        navigate(`/assistant-hub/review/${version.version_id}`)
                       }
                     >
                       {t({
-                        id: "assistantStore.review.viewDetails",
+                        id: "assistantHub.review.viewDetails",
                         message: "View details",
                       })}
                     </Button>

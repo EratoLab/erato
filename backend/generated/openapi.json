@@ -6,19 +6,19 @@
     "version": ""
   },
   "paths": {
-    "/api/v1beta/assistant-store/assistants": {
+    "/api/v1beta/assistant-hub/assistants": {
       "get": {
         "tags": [
-          "assistant_store"
+          "assistant_hub"
         ],
-        "operationId": "list_assistant_store_assistants",
+        "operationId": "list_assistant_hub_assistants",
         "responses": {
           "200": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssistantStoreVersionsResponse"
+                  "$ref": "#/components/schemas/AssistantHubVersionsResponse"
                 }
               }
             }
@@ -37,12 +37,56 @@
         ]
       }
     },
-    "/api/v1beta/assistant-store/assistants/{source_assistant_id}/submission-diff": {
+    "/api/v1beta/assistant-hub/assistants/{hub_assistant_id}": {
+      "get": {
+        "tags": [
+          "assistant_hub"
+        ],
+        "operationId": "get_assistant_hub_assistant",
+        "parameters": [
+          {
+            "name": "hub_assistant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantHubVersionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/assistant-hub/assistants/{source_assistant_id}/submission-diff": {
       "post": {
         "tags": [
-          "assistant_store"
+          "assistant_hub"
         ],
-        "operationId": "preview_assistant_store_submission_diff",
+        "operationId": "preview_assistant_hub_submission_diff",
         "parameters": [
           {
             "name": "source_assistant_id",
@@ -57,7 +101,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AssistantStoreSubmissionRequest"
+                "$ref": "#/components/schemas/AssistantHubSubmissionRequest"
               }
             }
           },
@@ -69,7 +113,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssistantStoreSubmissionDiffResponse"
+                  "$ref": "#/components/schemas/AssistantHubSubmissionDiffResponse"
                 }
               }
             }
@@ -94,12 +138,12 @@
         ]
       }
     },
-    "/api/v1beta/assistant-store/assistants/{source_assistant_id}/versions": {
+    "/api/v1beta/assistant-hub/assistants/{source_assistant_id}/versions": {
       "post": {
         "tags": [
-          "assistant_store"
+          "assistant_hub"
         ],
-        "operationId": "submit_assistant_store_version",
+        "operationId": "submit_assistant_hub_version",
         "parameters": [
           {
             "name": "source_assistant_id",
@@ -114,7 +158,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AssistantStoreSubmissionRequest"
+                "$ref": "#/components/schemas/AssistantHubSubmissionRequest"
               }
             }
           },
@@ -126,7 +170,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssistantStoreVersionResponse"
+                  "$ref": "#/components/schemas/AssistantHubVersionResponse"
                 }
               }
             }
@@ -151,29 +195,78 @@
         ]
       }
     },
-    "/api/v1beta/assistant-store/assistants/{store_assistant_id}": {
+    "/api/v1beta/assistant-hub/config": {
       "get": {
         "tags": [
-          "assistant_store"
+          "assistant_hub"
         ],
-        "operationId": "get_assistant_store_assistant",
-        "parameters": [
-          {
-            "name": "store_assistant_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
+        "operationId": "assistant_hub_config",
         "responses": {
           "200": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssistantStoreVersionResponse"
+                  "$ref": "#/components/schemas/AssistantHubConfigResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/assistant-hub/my/versions": {
+      "get": {
+        "tags": [
+          "assistant_hub"
+        ],
+        "operationId": "list_my_assistant_hub_versions",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantHubVersionsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/assistant-hub/review/versions": {
+      "get": {
+        "tags": [
+          "assistant_hub"
+        ],
+        "operationId": "list_review_assistant_hub_versions",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantHubVersionsResponse"
                 }
               }
             }
@@ -195,105 +288,12 @@
         ]
       }
     },
-    "/api/v1beta/assistant-store/config": {
-      "get": {
-        "tags": [
-          "assistant_store"
-        ],
-        "operationId": "assistant_store_config",
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AssistantStoreConfigResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer_auth": []
-          }
-        ]
-      }
-    },
-    "/api/v1beta/assistant-store/my/versions": {
-      "get": {
-        "tags": [
-          "assistant_store"
-        ],
-        "operationId": "list_my_assistant_store_versions",
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AssistantStoreVersionsResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": ""
-          },
-          "404": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer_auth": []
-          }
-        ]
-      }
-    },
-    "/api/v1beta/assistant-store/review/versions": {
-      "get": {
-        "tags": [
-          "assistant_store"
-        ],
-        "operationId": "list_review_assistant_store_versions",
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AssistantStoreVersionsResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": ""
-          },
-          "403": {
-            "description": ""
-          },
-          "404": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer_auth": []
-          }
-        ]
-      }
-    },
-    "/api/v1beta/assistant-store/versions/{version_id}/current": {
+    "/api/v1beta/assistant-hub/versions/{version_id}/current": {
       "put": {
         "tags": [
-          "assistant_store"
+          "assistant_hub"
         ],
-        "operationId": "set_assistant_store_version_current",
+        "operationId": "set_assistant_hub_version_current",
         "parameters": [
           {
             "name": "version_id",
@@ -310,7 +310,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssistantStoreVersionResponse"
+                  "$ref": "#/components/schemas/AssistantHubVersionResponse"
                 }
               }
             }
@@ -335,12 +335,12 @@
         ]
       }
     },
-    "/api/v1beta/assistant-store/versions/{version_id}/featured": {
+    "/api/v1beta/assistant-hub/versions/{version_id}/featured": {
       "put": {
         "tags": [
-          "assistant_store"
+          "assistant_hub"
         ],
-        "operationId": "set_assistant_store_version_featured",
+        "operationId": "set_assistant_hub_version_featured",
         "parameters": [
           {
             "name": "version_id",
@@ -355,7 +355,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AssistantStoreSetFeaturedRequest"
+                "$ref": "#/components/schemas/AssistantHubSetFeaturedRequest"
               }
             }
           },
@@ -367,7 +367,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssistantStoreVersionResponse"
+                  "$ref": "#/components/schemas/AssistantHubVersionResponse"
                 }
               }
             }
@@ -392,12 +392,12 @@
         ]
       }
     },
-    "/api/v1beta/assistant-store/versions/{version_id}/published": {
+    "/api/v1beta/assistant-hub/versions/{version_id}/published": {
       "put": {
         "tags": [
-          "assistant_store"
+          "assistant_hub"
         ],
-        "operationId": "set_assistant_store_version_published",
+        "operationId": "set_assistant_hub_version_published",
         "parameters": [
           {
             "name": "version_id",
@@ -412,7 +412,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AssistantStoreSetPublishedRequest"
+                "$ref": "#/components/schemas/AssistantHubSetPublishedRequest"
               }
             }
           },
@@ -424,7 +424,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssistantStoreVersionResponse"
+                  "$ref": "#/components/schemas/AssistantHubVersionResponse"
                 }
               }
             }
@@ -449,12 +449,12 @@
         ]
       }
     },
-    "/api/v1beta/assistant-store/versions/{version_id}/review": {
+    "/api/v1beta/assistant-hub/versions/{version_id}/review": {
       "post": {
         "tags": [
-          "assistant_store"
+          "assistant_hub"
         ],
-        "operationId": "review_assistant_store_version",
+        "operationId": "review_assistant_hub_version",
         "parameters": [
           {
             "name": "version_id",
@@ -469,7 +469,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AssistantStoreReviewRequest"
+                "$ref": "#/components/schemas/AssistantHubReviewRequest"
               }
             }
           },
@@ -481,7 +481,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssistantStoreVersionResponse"
+                  "$ref": "#/components/schemas/AssistantHubVersionResponse"
                 }
               }
             }
@@ -506,12 +506,12 @@
         ]
       }
     },
-    "/api/v1beta/assistant-store/versions/{version_id}/withdraw": {
+    "/api/v1beta/assistant-hub/versions/{version_id}/withdraw": {
       "post": {
         "tags": [
-          "assistant_store"
+          "assistant_hub"
         ],
-        "operationId": "withdraw_assistant_store_version",
+        "operationId": "withdraw_assistant_hub_version",
         "parameters": [
           {
             "name": "version_id",
@@ -528,7 +528,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssistantStoreVersionResponse"
+                  "$ref": "#/components/schemas/AssistantHubVersionResponse"
                 }
               }
             }
@@ -3276,7 +3276,7 @@
           }
         }
       },
-      "AssistantStoreAssistantSnapshot": {
+      "AssistantHubAssistantSnapshot": {
         "type": "object",
         "required": [
           "id",
@@ -3339,7 +3339,7 @@
           }
         }
       },
-      "AssistantStoreAudienceGrantInput": {
+      "AssistantHubAudienceGrantInput": {
         "type": "object",
         "required": [
           "subject_type",
@@ -3362,7 +3362,7 @@
           }
         }
       },
-      "AssistantStoreCategory": {
+      "AssistantHubCategory": {
         "type": "object",
         "required": [
           "id",
@@ -3381,7 +3381,7 @@
           }
         }
       },
-      "AssistantStoreConfigResponse": {
+      "AssistantHubConfigResponse": {
         "type": "object",
         "required": [
           "enabled",
@@ -3395,7 +3395,7 @@
           "categories": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/AssistantStoreCategory"
+              "$ref": "#/components/schemas/AssistantHubCategory"
             }
           },
           "enabled": {
@@ -3403,7 +3403,7 @@
           }
         }
       },
-      "AssistantStoreCreator": {
+      "AssistantHubCreator": {
         "type": "object",
         "required": [
           "id",
@@ -3424,7 +3424,7 @@
           }
         }
       },
-      "AssistantStoreReviewRequest": {
+      "AssistantHubReviewRequest": {
         "type": "object",
         "required": [
           "accepted"
@@ -3441,7 +3441,7 @@
           }
         }
       },
-      "AssistantStoreSetFeaturedRequest": {
+      "AssistantHubSetFeaturedRequest": {
         "type": "object",
         "required": [
           "featured"
@@ -3452,7 +3452,7 @@
           }
         }
       },
-      "AssistantStoreSetPublishedRequest": {
+      "AssistantHubSetPublishedRequest": {
         "type": "object",
         "required": [
           "is_published"
@@ -3463,7 +3463,7 @@
           }
         }
       },
-      "AssistantStoreSubmissionDiffResponse": {
+      "AssistantHubSubmissionDiffResponse": {
         "type": "object",
         "required": [
           "diff_summary"
@@ -3474,7 +3474,7 @@
           }
         }
       },
-      "AssistantStoreSubmissionRequest": {
+      "AssistantHubSubmissionRequest": {
         "type": "object",
         "required": [
           "long_description",
@@ -3486,7 +3486,7 @@
           "audience_grants": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/AssistantStoreAudienceGrantInput"
+              "$ref": "#/components/schemas/AssistantHubAudienceGrantInput"
             }
           },
           "category_ids": {
@@ -3521,10 +3521,10 @@
           }
         }
       },
-      "AssistantStoreVersion": {
+      "AssistantHubVersion": {
         "type": "object",
         "required": [
-          "store_assistant_id",
+          "hub_assistant_id",
           "source_assistant_id",
           "version_id",
           "assistant_id",
@@ -3545,7 +3545,7 @@
         ],
         "properties": {
           "assistant": {
-            "$ref": "#/components/schemas/AssistantStoreAssistantSnapshot"
+            "$ref": "#/components/schemas/AssistantHubAssistantSnapshot"
           },
           "assistant_id": {
             "type": "string"
@@ -3561,7 +3561,7 @@
             "format": "date-time"
           },
           "creator": {
-            "$ref": "#/components/schemas/AssistantStoreCreator"
+            "$ref": "#/components/schemas/AssistantHubCreator"
           },
           "creator_review_comment": {
             "type": [
@@ -3574,6 +3574,9 @@
           },
           "featured": {
             "type": "boolean"
+          },
+          "hub_assistant_id": {
+            "type": "string"
           },
           "is_current_published_version": {
             "type": "boolean"
@@ -3616,9 +3619,6 @@
           "status": {
             "type": "string"
           },
-          "store_assistant_id": {
-            "type": "string"
-          },
           "submitted_at": {
             "type": "string",
             "format": "date-time"
@@ -3648,18 +3648,18 @@
           }
         }
       },
-      "AssistantStoreVersionResponse": {
+      "AssistantHubVersionResponse": {
         "type": "object",
         "required": [
           "version"
         ],
         "properties": {
           "version": {
-            "$ref": "#/components/schemas/AssistantStoreVersion"
+            "$ref": "#/components/schemas/AssistantHubVersion"
           }
         }
       },
-      "AssistantStoreVersionsResponse": {
+      "AssistantHubVersionsResponse": {
         "type": "object",
         "required": [
           "versions"
@@ -3668,7 +3668,7 @@
           "versions": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/AssistantStoreVersion"
+              "$ref": "#/components/schemas/AssistantHubVersion"
             }
           }
         }

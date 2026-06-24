@@ -8,26 +8,26 @@ import { Alert } from "@/components/ui/Feedback/Alert";
 import { ArrowLeftIcon } from "@/components/ui/icons";
 import { usePageAlignment } from "@/hooks/ui";
 import {
-  useAssistantStoreConfig,
+  useAssistantHubConfig,
   useGetAssistant,
-  useGetAssistantStoreAssistant,
+  useGetAssistantHubAssistant,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 import {
-  AssistantStoreBreadcrumb,
-  AssistantStoreDiff,
-  AssistantStoreVersionConfigurationSection,
-  AssistantStoreVersionOverviewSection,
-} from "./assistantStoreUtils";
+  AssistantHubBreadcrumb,
+  AssistantHubDiff,
+  AssistantHubVersionConfigurationSection,
+  AssistantHubVersionOverviewSection,
+} from "./assistantHubUtils";
 
-export default function AssistantStoreDetailPage() {
+export default function AssistantHubDetailPage() {
   const navigate = useNavigate();
-  const { storeAssistantId } = useParams<{ storeAssistantId: string }>();
+  const { hubAssistantId } = useParams<{ hubAssistantId: string }>();
   const { containerClasses, horizontalPadding } =
     usePageAlignment("assistants");
-  const { data: config } = useAssistantStoreConfig({});
-  const { data, isLoading, error } = useGetAssistantStoreAssistant(
-    storeAssistantId ? { pathParams: { storeAssistantId } } : skipToken,
+  const { data: config } = useAssistantHubConfig({});
+  const { data, isLoading, error } = useGetAssistantHubAssistant(
+    hubAssistantId ? { pathParams: { hubAssistantId } } : skipToken,
   );
   const version = data?.version;
   const { data: assistantDetails } = useGetAssistant(
@@ -38,8 +38,8 @@ export default function AssistantStoreDetailPage() {
     document.title = `${
       version?.assistant.name ??
       t({
-        id: "assistantStore.detail.title",
-        message: "Assistant Store",
+        id: "assistantHub.detail.title",
+        message: "Assistant Hub",
       })
     } - ${t({ id: "branding.page_title_suffix" })}`;
   }, [version?.assistant.name]);
@@ -48,15 +48,15 @@ export default function AssistantStoreDetailPage() {
     <div className="flex h-full flex-col bg-theme-bg-primary">
       <div className={clsx("flex-1 overflow-auto", horizontalPadding)}>
         <div className={clsx("space-y-6 py-6", containerClasses)}>
-          <AssistantStoreBreadcrumb
+          <AssistantHubBreadcrumb
             icon={<ArrowLeftIcon className="size-4" />}
-            onClick={() => navigate("/assistant-store")}
+            onClick={() => navigate("/assistant-hub")}
           >
             {t({
-              id: "assistantStore.action.backToStore",
-              message: "Back to store",
+              id: "assistantHub.action.backToHub",
+              message: "Back to hub",
             })}
-          </AssistantStoreBreadcrumb>
+          </AssistantHubBreadcrumb>
 
           {isLoading && (
             <div className="flex items-center justify-center py-12">
@@ -64,8 +64,8 @@ export default function AssistantStoreDetailPage() {
                 <div className="mx-auto mb-4 size-8 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
                 <p className="text-sm text-theme-fg-secondary">
                   {t({
-                    id: "assistantStore.detail.loading",
-                    message: "Loading store assistant...",
+                    id: "assistantHub.detail.loading",
+                    message: "Loading hub assistant...",
                   })}
                 </p>
               </div>
@@ -75,21 +75,21 @@ export default function AssistantStoreDetailPage() {
           {error && (
             <Alert type="error">
               {t({
-                id: "assistantStore.detail.error",
-                message: "Failed to load store assistant.",
+                id: "assistantHub.detail.error",
+                message: "Failed to load hub assistant.",
               })}
             </Alert>
           )}
 
           {version && (
             <>
-              <AssistantStoreVersionOverviewSection
+              <AssistantHubVersionOverviewSection
                 version={version}
                 categories={config?.categories ?? []}
                 onStartChat={() => navigate(`/a/${version.assistant_id}`)}
               />
 
-              <AssistantStoreVersionConfigurationSection
+              <AssistantHubVersionConfigurationSection
                 version={version}
                 assistantDetails={assistantDetails}
               />
@@ -109,7 +109,7 @@ export default function AssistantStoreDetailPage() {
                     <div className="mt-3">
                       <h3 className="mb-2 text-sm font-semibold text-theme-fg-primary">
                         {t({
-                          id: "assistantStore.detail.versionComment",
+                          id: "assistantHub.detail.versionComment",
                           message: "Version comment",
                         })}
                       </h3>
@@ -124,12 +124,12 @@ export default function AssistantStoreDetailPage() {
                   <details>
                     <summary className="focus-ring theme-transition cursor-pointer text-lg font-semibold text-theme-fg-primary hover:text-theme-fg-secondary">
                       {t({
-                        id: "assistantStore.detail.diff",
+                        id: "assistantHub.detail.diff",
                         message: "Changes from previous version",
                       })}
                     </summary>
                     <div className="mt-4">
-                      <AssistantStoreDiff diffSummary={version.diff_summary} />
+                      <AssistantHubDiff diffSummary={version.diff_summary} />
                     </div>
                   </details>
                 )}

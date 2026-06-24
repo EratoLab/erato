@@ -18,74 +18,74 @@ type QueryFnOptions = {
   signal?: AbortController["signal"];
 };
 
-export type ListAssistantStoreAssistantsError = Fetcher.ErrorWrapper<undefined>;
+export type ListAssistantHubAssistantsError = Fetcher.ErrorWrapper<undefined>;
 
-export type ListAssistantStoreAssistantsVariables =
+export type ListAssistantHubAssistantsVariables =
   V1betaApiContext["fetcherOptions"];
 
-export const fetchListAssistantStoreAssistants = (
-  variables: ListAssistantStoreAssistantsVariables,
+export const fetchListAssistantHubAssistants = (
+  variables: ListAssistantHubAssistantsVariables,
   signal?: AbortSignal,
 ) =>
   v1betaApiFetch<
-    Schemas.AssistantStoreVersionsResponse,
-    ListAssistantStoreAssistantsError,
+    Schemas.AssistantHubVersionsResponse,
+    ListAssistantHubAssistantsError,
     undefined,
     {},
     {},
     {}
   >({
-    url: "/api/v1beta/assistant-store/assistants",
+    url: "/api/v1beta/assistant-hub/assistants",
     method: "get",
     ...variables,
     signal,
   });
 
-export function listAssistantStoreAssistantsQuery(
-  variables: ListAssistantStoreAssistantsVariables,
+export function listAssistantHubAssistantsQuery(
+  variables: ListAssistantHubAssistantsVariables,
 ): {
   queryKey: reactQuery.QueryKey;
   queryFn: (
     options: QueryFnOptions,
-  ) => Promise<Schemas.AssistantStoreVersionsResponse>;
+  ) => Promise<Schemas.AssistantHubVersionsResponse>;
 };
 
-export function listAssistantStoreAssistantsQuery(
-  variables: ListAssistantStoreAssistantsVariables | reactQuery.SkipToken,
+export function listAssistantHubAssistantsQuery(
+  variables: ListAssistantHubAssistantsVariables | reactQuery.SkipToken,
 ): {
   queryKey: reactQuery.QueryKey;
   queryFn:
     | ((
         options: QueryFnOptions,
-      ) => Promise<Schemas.AssistantStoreVersionsResponse>)
+      ) => Promise<Schemas.AssistantHubVersionsResponse>)
     | reactQuery.SkipToken;
 };
 
-export function listAssistantStoreAssistantsQuery(
-  variables: ListAssistantStoreAssistantsVariables | reactQuery.SkipToken,
+export function listAssistantHubAssistantsQuery(
+  variables: ListAssistantHubAssistantsVariables | reactQuery.SkipToken,
 ) {
   return {
     queryKey: queryKeyFn({
-      path: "/api/v1beta/assistant-store/assistants",
-      operationId: "listAssistantStoreAssistants",
+      path: "/api/v1beta/assistant-hub/assistants",
+      operationId: "listAssistantHubAssistants",
       variables,
     }),
     queryFn:
       variables === reactQuery.skipToken
         ? reactQuery.skipToken
         : ({ signal }: QueryFnOptions) =>
-            fetchListAssistantStoreAssistants(variables, signal),
+            fetchListAssistantHubAssistants(variables, signal),
   };
 }
 
-export const useSuspenseListAssistantStoreAssistants = <
-  TData = Schemas.AssistantStoreVersionsResponse,
+export const useSuspenseListAssistantHubAssistants = <
+  TData = Schemas.AssistantHubVersionsResponse,
 >(
-  variables: ListAssistantStoreAssistantsVariables,
+  variables: ListAssistantHubAssistantsVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
-      Schemas.AssistantStoreVersionsResponse,
-      ListAssistantStoreAssistantsError,
+      Schemas.AssistantHubVersionsResponse,
+      ListAssistantHubAssistantsError,
       TData
     >,
     "queryKey" | "queryFn" | "initialData"
@@ -93,24 +93,24 @@ export const useSuspenseListAssistantStoreAssistants = <
 ) => {
   const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
   return reactQuery.useSuspenseQuery<
-    Schemas.AssistantStoreVersionsResponse,
-    ListAssistantStoreAssistantsError,
+    Schemas.AssistantHubVersionsResponse,
+    ListAssistantHubAssistantsError,
     TData
   >({
-    ...listAssistantStoreAssistantsQuery(deepMerge(fetcherOptions, variables)),
+    ...listAssistantHubAssistantsQuery(deepMerge(fetcherOptions, variables)),
     ...options,
     ...queryOptions,
   });
 };
 
-export const useListAssistantStoreAssistants = <
-  TData = Schemas.AssistantStoreVersionsResponse,
+export const useListAssistantHubAssistants = <
+  TData = Schemas.AssistantHubVersionsResponse,
 >(
-  variables: ListAssistantStoreAssistantsVariables | reactQuery.SkipToken,
+  variables: ListAssistantHubAssistantsVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
-      Schemas.AssistantStoreVersionsResponse,
-      ListAssistantStoreAssistantsError,
+      Schemas.AssistantHubVersionsResponse,
+      ListAssistantHubAssistantsError,
       TData
     >,
     "queryKey" | "queryFn" | "initialData"
@@ -118,11 +118,11 @@ export const useListAssistantStoreAssistants = <
 ) => {
   const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
   return reactQuery.useQuery<
-    Schemas.AssistantStoreVersionsResponse,
-    ListAssistantStoreAssistantsError,
+    Schemas.AssistantHubVersionsResponse,
+    ListAssistantHubAssistantsError,
     TData
   >({
-    ...listAssistantStoreAssistantsQuery(
+    ...listAssistantHubAssistantsQuery(
       variables === reactQuery.skipToken
         ? variables
         : deepMerge(fetcherOptions, variables),
@@ -132,297 +132,295 @@ export const useListAssistantStoreAssistants = <
   });
 };
 
-export type PreviewAssistantStoreSubmissionDiffPathParams = {
-  sourceAssistantId: string;
+export type GetAssistantHubAssistantPathParams = {
+  hubAssistantId: string;
 };
 
-export type PreviewAssistantStoreSubmissionDiffError =
-  Fetcher.ErrorWrapper<undefined>;
+export type GetAssistantHubAssistantError = Fetcher.ErrorWrapper<undefined>;
 
-export type PreviewAssistantStoreSubmissionDiffVariables = {
-  body: Schemas.AssistantStoreSubmissionRequest;
-  pathParams: PreviewAssistantStoreSubmissionDiffPathParams;
+export type GetAssistantHubAssistantVariables = {
+  pathParams: GetAssistantHubAssistantPathParams;
 } & V1betaApiContext["fetcherOptions"];
 
-export const fetchPreviewAssistantStoreSubmissionDiff = (
-  variables: PreviewAssistantStoreSubmissionDiffVariables,
+export const fetchGetAssistantHubAssistant = (
+  variables: GetAssistantHubAssistantVariables,
   signal?: AbortSignal,
 ) =>
   v1betaApiFetch<
-    Schemas.AssistantStoreSubmissionDiffResponse,
-    PreviewAssistantStoreSubmissionDiffError,
-    Schemas.AssistantStoreSubmissionRequest,
+    Schemas.AssistantHubVersionResponse,
+    GetAssistantHubAssistantError,
+    undefined,
     {},
     {},
-    PreviewAssistantStoreSubmissionDiffPathParams
+    GetAssistantHubAssistantPathParams
   >({
-    url: "/api/v1beta/assistant-store/assistants/{sourceAssistantId}/submission-diff",
+    url: "/api/v1beta/assistant-hub/assistants/{hubAssistantId}",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function getAssistantHubAssistantQuery(
+  variables: GetAssistantHubAssistantVariables,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (
+    options: QueryFnOptions,
+  ) => Promise<Schemas.AssistantHubVersionResponse>;
+};
+
+export function getAssistantHubAssistantQuery(
+  variables: GetAssistantHubAssistantVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((
+        options: QueryFnOptions,
+      ) => Promise<Schemas.AssistantHubVersionResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function getAssistantHubAssistantQuery(
+  variables: GetAssistantHubAssistantVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/assistant-hub/assistants/{hubAssistantId}",
+      operationId: "getAssistantHubAssistant",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchGetAssistantHubAssistant(variables, signal),
+  };
+}
+
+export const useSuspenseGetAssistantHubAssistant = <
+  TData = Schemas.AssistantHubVersionResponse,
+>(
+  variables: GetAssistantHubAssistantVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.AssistantHubVersionResponse,
+      GetAssistantHubAssistantError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.AssistantHubVersionResponse,
+    GetAssistantHubAssistantError,
+    TData
+  >({
+    ...getAssistantHubAssistantQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useGetAssistantHubAssistant = <
+  TData = Schemas.AssistantHubVersionResponse,
+>(
+  variables: GetAssistantHubAssistantVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.AssistantHubVersionResponse,
+      GetAssistantHubAssistantError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.AssistantHubVersionResponse,
+    GetAssistantHubAssistantError,
+    TData
+  >({
+    ...getAssistantHubAssistantQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export type PreviewAssistantHubSubmissionDiffPathParams = {
+  sourceAssistantId: string;
+};
+
+export type PreviewAssistantHubSubmissionDiffError =
+  Fetcher.ErrorWrapper<undefined>;
+
+export type PreviewAssistantHubSubmissionDiffVariables = {
+  body: Schemas.AssistantHubSubmissionRequest;
+  pathParams: PreviewAssistantHubSubmissionDiffPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchPreviewAssistantHubSubmissionDiff = (
+  variables: PreviewAssistantHubSubmissionDiffVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.AssistantHubSubmissionDiffResponse,
+    PreviewAssistantHubSubmissionDiffError,
+    Schemas.AssistantHubSubmissionRequest,
+    {},
+    {},
+    PreviewAssistantHubSubmissionDiffPathParams
+  >({
+    url: "/api/v1beta/assistant-hub/assistants/{sourceAssistantId}/submission-diff",
     method: "post",
     ...variables,
     signal,
   });
 
-export const usePreviewAssistantStoreSubmissionDiff = (
+export const usePreviewAssistantHubSubmissionDiff = (
   options?: Omit<
     reactQuery.UseMutationOptions<
-      Schemas.AssistantStoreSubmissionDiffResponse,
-      PreviewAssistantStoreSubmissionDiffError,
-      PreviewAssistantStoreSubmissionDiffVariables
+      Schemas.AssistantHubSubmissionDiffResponse,
+      PreviewAssistantHubSubmissionDiffError,
+      PreviewAssistantHubSubmissionDiffVariables
     >,
     "mutationFn"
   >,
 ) => {
   const { fetcherOptions } = useV1betaApiContext();
   return reactQuery.useMutation<
-    Schemas.AssistantStoreSubmissionDiffResponse,
-    PreviewAssistantStoreSubmissionDiffError,
-    PreviewAssistantStoreSubmissionDiffVariables
+    Schemas.AssistantHubSubmissionDiffResponse,
+    PreviewAssistantHubSubmissionDiffError,
+    PreviewAssistantHubSubmissionDiffVariables
   >({
-    mutationFn: (variables: PreviewAssistantStoreSubmissionDiffVariables) =>
-      fetchPreviewAssistantStoreSubmissionDiff(
+    mutationFn: (variables: PreviewAssistantHubSubmissionDiffVariables) =>
+      fetchPreviewAssistantHubSubmissionDiff(
         deepMerge(fetcherOptions, variables),
       ),
     ...options,
   });
 };
 
-export type SubmitAssistantStoreVersionPathParams = {
+export type SubmitAssistantHubVersionPathParams = {
   sourceAssistantId: string;
 };
 
-export type SubmitAssistantStoreVersionError = Fetcher.ErrorWrapper<undefined>;
+export type SubmitAssistantHubVersionError = Fetcher.ErrorWrapper<undefined>;
 
-export type SubmitAssistantStoreVersionVariables = {
-  body: Schemas.AssistantStoreSubmissionRequest;
-  pathParams: SubmitAssistantStoreVersionPathParams;
+export type SubmitAssistantHubVersionVariables = {
+  body: Schemas.AssistantHubSubmissionRequest;
+  pathParams: SubmitAssistantHubVersionPathParams;
 } & V1betaApiContext["fetcherOptions"];
 
-export const fetchSubmitAssistantStoreVersion = (
-  variables: SubmitAssistantStoreVersionVariables,
+export const fetchSubmitAssistantHubVersion = (
+  variables: SubmitAssistantHubVersionVariables,
   signal?: AbortSignal,
 ) =>
   v1betaApiFetch<
-    Schemas.AssistantStoreVersionResponse,
-    SubmitAssistantStoreVersionError,
-    Schemas.AssistantStoreSubmissionRequest,
+    Schemas.AssistantHubVersionResponse,
+    SubmitAssistantHubVersionError,
+    Schemas.AssistantHubSubmissionRequest,
     {},
     {},
-    SubmitAssistantStoreVersionPathParams
+    SubmitAssistantHubVersionPathParams
   >({
-    url: "/api/v1beta/assistant-store/assistants/{sourceAssistantId}/versions",
+    url: "/api/v1beta/assistant-hub/assistants/{sourceAssistantId}/versions",
     method: "post",
     ...variables,
     signal,
   });
 
-export const useSubmitAssistantStoreVersion = (
+export const useSubmitAssistantHubVersion = (
   options?: Omit<
     reactQuery.UseMutationOptions<
-      Schemas.AssistantStoreVersionResponse,
-      SubmitAssistantStoreVersionError,
-      SubmitAssistantStoreVersionVariables
+      Schemas.AssistantHubVersionResponse,
+      SubmitAssistantHubVersionError,
+      SubmitAssistantHubVersionVariables
     >,
     "mutationFn"
   >,
 ) => {
   const { fetcherOptions } = useV1betaApiContext();
   return reactQuery.useMutation<
-    Schemas.AssistantStoreVersionResponse,
-    SubmitAssistantStoreVersionError,
-    SubmitAssistantStoreVersionVariables
+    Schemas.AssistantHubVersionResponse,
+    SubmitAssistantHubVersionError,
+    SubmitAssistantHubVersionVariables
   >({
-    mutationFn: (variables: SubmitAssistantStoreVersionVariables) =>
-      fetchSubmitAssistantStoreVersion(deepMerge(fetcherOptions, variables)),
+    mutationFn: (variables: SubmitAssistantHubVersionVariables) =>
+      fetchSubmitAssistantHubVersion(deepMerge(fetcherOptions, variables)),
     ...options,
   });
 };
 
-export type GetAssistantStoreAssistantPathParams = {
-  storeAssistantId: string;
-};
+export type AssistantHubConfigError = Fetcher.ErrorWrapper<undefined>;
 
-export type GetAssistantStoreAssistantError = Fetcher.ErrorWrapper<undefined>;
+export type AssistantHubConfigVariables = V1betaApiContext["fetcherOptions"];
 
-export type GetAssistantStoreAssistantVariables = {
-  pathParams: GetAssistantStoreAssistantPathParams;
-} & V1betaApiContext["fetcherOptions"];
-
-export const fetchGetAssistantStoreAssistant = (
-  variables: GetAssistantStoreAssistantVariables,
+export const fetchAssistantHubConfig = (
+  variables: AssistantHubConfigVariables,
   signal?: AbortSignal,
 ) =>
   v1betaApiFetch<
-    Schemas.AssistantStoreVersionResponse,
-    GetAssistantStoreAssistantError,
-    undefined,
-    {},
-    {},
-    GetAssistantStoreAssistantPathParams
-  >({
-    url: "/api/v1beta/assistant-store/assistants/{storeAssistantId}",
-    method: "get",
-    ...variables,
-    signal,
-  });
-
-export function getAssistantStoreAssistantQuery(
-  variables: GetAssistantStoreAssistantVariables,
-): {
-  queryKey: reactQuery.QueryKey;
-  queryFn: (
-    options: QueryFnOptions,
-  ) => Promise<Schemas.AssistantStoreVersionResponse>;
-};
-
-export function getAssistantStoreAssistantQuery(
-  variables: GetAssistantStoreAssistantVariables | reactQuery.SkipToken,
-): {
-  queryKey: reactQuery.QueryKey;
-  queryFn:
-    | ((
-        options: QueryFnOptions,
-      ) => Promise<Schemas.AssistantStoreVersionResponse>)
-    | reactQuery.SkipToken;
-};
-
-export function getAssistantStoreAssistantQuery(
-  variables: GetAssistantStoreAssistantVariables | reactQuery.SkipToken,
-) {
-  return {
-    queryKey: queryKeyFn({
-      path: "/api/v1beta/assistant-store/assistants/{storeAssistantId}",
-      operationId: "getAssistantStoreAssistant",
-      variables,
-    }),
-    queryFn:
-      variables === reactQuery.skipToken
-        ? reactQuery.skipToken
-        : ({ signal }: QueryFnOptions) =>
-            fetchGetAssistantStoreAssistant(variables, signal),
-  };
-}
-
-export const useSuspenseGetAssistantStoreAssistant = <
-  TData = Schemas.AssistantStoreVersionResponse,
->(
-  variables: GetAssistantStoreAssistantVariables,
-  options?: Omit<
-    reactQuery.UseQueryOptions<
-      Schemas.AssistantStoreVersionResponse,
-      GetAssistantStoreAssistantError,
-      TData
-    >,
-    "queryKey" | "queryFn" | "initialData"
-  >,
-) => {
-  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
-  return reactQuery.useSuspenseQuery<
-    Schemas.AssistantStoreVersionResponse,
-    GetAssistantStoreAssistantError,
-    TData
-  >({
-    ...getAssistantStoreAssistantQuery(deepMerge(fetcherOptions, variables)),
-    ...options,
-    ...queryOptions,
-  });
-};
-
-export const useGetAssistantStoreAssistant = <
-  TData = Schemas.AssistantStoreVersionResponse,
->(
-  variables: GetAssistantStoreAssistantVariables | reactQuery.SkipToken,
-  options?: Omit<
-    reactQuery.UseQueryOptions<
-      Schemas.AssistantStoreVersionResponse,
-      GetAssistantStoreAssistantError,
-      TData
-    >,
-    "queryKey" | "queryFn" | "initialData"
-  >,
-) => {
-  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
-  return reactQuery.useQuery<
-    Schemas.AssistantStoreVersionResponse,
-    GetAssistantStoreAssistantError,
-    TData
-  >({
-    ...getAssistantStoreAssistantQuery(
-      variables === reactQuery.skipToken
-        ? variables
-        : deepMerge(fetcherOptions, variables),
-    ),
-    ...options,
-    ...queryOptions,
-  });
-};
-
-export type AssistantStoreConfigError = Fetcher.ErrorWrapper<undefined>;
-
-export type AssistantStoreConfigVariables = V1betaApiContext["fetcherOptions"];
-
-export const fetchAssistantStoreConfig = (
-  variables: AssistantStoreConfigVariables,
-  signal?: AbortSignal,
-) =>
-  v1betaApiFetch<
-    Schemas.AssistantStoreConfigResponse,
-    AssistantStoreConfigError,
+    Schemas.AssistantHubConfigResponse,
+    AssistantHubConfigError,
     undefined,
     {},
     {},
     {}
   >({
-    url: "/api/v1beta/assistant-store/config",
+    url: "/api/v1beta/assistant-hub/config",
     method: "get",
     ...variables,
     signal,
   });
 
-export function assistantStoreConfigQuery(
-  variables: AssistantStoreConfigVariables,
+export function assistantHubConfigQuery(
+  variables: AssistantHubConfigVariables,
 ): {
   queryKey: reactQuery.QueryKey;
   queryFn: (
     options: QueryFnOptions,
-  ) => Promise<Schemas.AssistantStoreConfigResponse>;
+  ) => Promise<Schemas.AssistantHubConfigResponse>;
 };
 
-export function assistantStoreConfigQuery(
-  variables: AssistantStoreConfigVariables | reactQuery.SkipToken,
+export function assistantHubConfigQuery(
+  variables: AssistantHubConfigVariables | reactQuery.SkipToken,
 ): {
   queryKey: reactQuery.QueryKey;
   queryFn:
-    | ((
-        options: QueryFnOptions,
-      ) => Promise<Schemas.AssistantStoreConfigResponse>)
+    | ((options: QueryFnOptions) => Promise<Schemas.AssistantHubConfigResponse>)
     | reactQuery.SkipToken;
 };
 
-export function assistantStoreConfigQuery(
-  variables: AssistantStoreConfigVariables | reactQuery.SkipToken,
+export function assistantHubConfigQuery(
+  variables: AssistantHubConfigVariables | reactQuery.SkipToken,
 ) {
   return {
     queryKey: queryKeyFn({
-      path: "/api/v1beta/assistant-store/config",
-      operationId: "assistantStoreConfig",
+      path: "/api/v1beta/assistant-hub/config",
+      operationId: "assistantHubConfig",
       variables,
     }),
     queryFn:
       variables === reactQuery.skipToken
         ? reactQuery.skipToken
         : ({ signal }: QueryFnOptions) =>
-            fetchAssistantStoreConfig(variables, signal),
+            fetchAssistantHubConfig(variables, signal),
   };
 }
 
-export const useSuspenseAssistantStoreConfig = <
-  TData = Schemas.AssistantStoreConfigResponse,
+export const useSuspenseAssistantHubConfig = <
+  TData = Schemas.AssistantHubConfigResponse,
 >(
-  variables: AssistantStoreConfigVariables,
+  variables: AssistantHubConfigVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
-      Schemas.AssistantStoreConfigResponse,
-      AssistantStoreConfigError,
+      Schemas.AssistantHubConfigResponse,
+      AssistantHubConfigError,
       TData
     >,
     "queryKey" | "queryFn" | "initialData"
@@ -430,24 +428,24 @@ export const useSuspenseAssistantStoreConfig = <
 ) => {
   const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
   return reactQuery.useSuspenseQuery<
-    Schemas.AssistantStoreConfigResponse,
-    AssistantStoreConfigError,
+    Schemas.AssistantHubConfigResponse,
+    AssistantHubConfigError,
     TData
   >({
-    ...assistantStoreConfigQuery(deepMerge(fetcherOptions, variables)),
+    ...assistantHubConfigQuery(deepMerge(fetcherOptions, variables)),
     ...options,
     ...queryOptions,
   });
 };
 
-export const useAssistantStoreConfig = <
-  TData = Schemas.AssistantStoreConfigResponse,
+export const useAssistantHubConfig = <
+  TData = Schemas.AssistantHubConfigResponse,
 >(
-  variables: AssistantStoreConfigVariables | reactQuery.SkipToken,
+  variables: AssistantHubConfigVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
-      Schemas.AssistantStoreConfigResponse,
-      AssistantStoreConfigError,
+      Schemas.AssistantHubConfigResponse,
+      AssistantHubConfigError,
       TData
     >,
     "queryKey" | "queryFn" | "initialData"
@@ -455,11 +453,11 @@ export const useAssistantStoreConfig = <
 ) => {
   const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
   return reactQuery.useQuery<
-    Schemas.AssistantStoreConfigResponse,
-    AssistantStoreConfigError,
+    Schemas.AssistantHubConfigResponse,
+    AssistantHubConfigError,
     TData
   >({
-    ...assistantStoreConfigQuery(
+    ...assistantHubConfigQuery(
       variables === reactQuery.skipToken
         ? variables
         : deepMerge(fetcherOptions, variables),
@@ -469,74 +467,74 @@ export const useAssistantStoreConfig = <
   });
 };
 
-export type ListMyAssistantStoreVersionsError = Fetcher.ErrorWrapper<undefined>;
+export type ListMyAssistantHubVersionsError = Fetcher.ErrorWrapper<undefined>;
 
-export type ListMyAssistantStoreVersionsVariables =
+export type ListMyAssistantHubVersionsVariables =
   V1betaApiContext["fetcherOptions"];
 
-export const fetchListMyAssistantStoreVersions = (
-  variables: ListMyAssistantStoreVersionsVariables,
+export const fetchListMyAssistantHubVersions = (
+  variables: ListMyAssistantHubVersionsVariables,
   signal?: AbortSignal,
 ) =>
   v1betaApiFetch<
-    Schemas.AssistantStoreVersionsResponse,
-    ListMyAssistantStoreVersionsError,
+    Schemas.AssistantHubVersionsResponse,
+    ListMyAssistantHubVersionsError,
     undefined,
     {},
     {},
     {}
   >({
-    url: "/api/v1beta/assistant-store/my/versions",
+    url: "/api/v1beta/assistant-hub/my/versions",
     method: "get",
     ...variables,
     signal,
   });
 
-export function listMyAssistantStoreVersionsQuery(
-  variables: ListMyAssistantStoreVersionsVariables,
+export function listMyAssistantHubVersionsQuery(
+  variables: ListMyAssistantHubVersionsVariables,
 ): {
   queryKey: reactQuery.QueryKey;
   queryFn: (
     options: QueryFnOptions,
-  ) => Promise<Schemas.AssistantStoreVersionsResponse>;
+  ) => Promise<Schemas.AssistantHubVersionsResponse>;
 };
 
-export function listMyAssistantStoreVersionsQuery(
-  variables: ListMyAssistantStoreVersionsVariables | reactQuery.SkipToken,
+export function listMyAssistantHubVersionsQuery(
+  variables: ListMyAssistantHubVersionsVariables | reactQuery.SkipToken,
 ): {
   queryKey: reactQuery.QueryKey;
   queryFn:
     | ((
         options: QueryFnOptions,
-      ) => Promise<Schemas.AssistantStoreVersionsResponse>)
+      ) => Promise<Schemas.AssistantHubVersionsResponse>)
     | reactQuery.SkipToken;
 };
 
-export function listMyAssistantStoreVersionsQuery(
-  variables: ListMyAssistantStoreVersionsVariables | reactQuery.SkipToken,
+export function listMyAssistantHubVersionsQuery(
+  variables: ListMyAssistantHubVersionsVariables | reactQuery.SkipToken,
 ) {
   return {
     queryKey: queryKeyFn({
-      path: "/api/v1beta/assistant-store/my/versions",
-      operationId: "listMyAssistantStoreVersions",
+      path: "/api/v1beta/assistant-hub/my/versions",
+      operationId: "listMyAssistantHubVersions",
       variables,
     }),
     queryFn:
       variables === reactQuery.skipToken
         ? reactQuery.skipToken
         : ({ signal }: QueryFnOptions) =>
-            fetchListMyAssistantStoreVersions(variables, signal),
+            fetchListMyAssistantHubVersions(variables, signal),
   };
 }
 
-export const useSuspenseListMyAssistantStoreVersions = <
-  TData = Schemas.AssistantStoreVersionsResponse,
+export const useSuspenseListMyAssistantHubVersions = <
+  TData = Schemas.AssistantHubVersionsResponse,
 >(
-  variables: ListMyAssistantStoreVersionsVariables,
+  variables: ListMyAssistantHubVersionsVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
-      Schemas.AssistantStoreVersionsResponse,
-      ListMyAssistantStoreVersionsError,
+      Schemas.AssistantHubVersionsResponse,
+      ListMyAssistantHubVersionsError,
       TData
     >,
     "queryKey" | "queryFn" | "initialData"
@@ -544,24 +542,24 @@ export const useSuspenseListMyAssistantStoreVersions = <
 ) => {
   const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
   return reactQuery.useSuspenseQuery<
-    Schemas.AssistantStoreVersionsResponse,
-    ListMyAssistantStoreVersionsError,
+    Schemas.AssistantHubVersionsResponse,
+    ListMyAssistantHubVersionsError,
     TData
   >({
-    ...listMyAssistantStoreVersionsQuery(deepMerge(fetcherOptions, variables)),
+    ...listMyAssistantHubVersionsQuery(deepMerge(fetcherOptions, variables)),
     ...options,
     ...queryOptions,
   });
 };
 
-export const useListMyAssistantStoreVersions = <
-  TData = Schemas.AssistantStoreVersionsResponse,
+export const useListMyAssistantHubVersions = <
+  TData = Schemas.AssistantHubVersionsResponse,
 >(
-  variables: ListMyAssistantStoreVersionsVariables | reactQuery.SkipToken,
+  variables: ListMyAssistantHubVersionsVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
-      Schemas.AssistantStoreVersionsResponse,
-      ListMyAssistantStoreVersionsError,
+      Schemas.AssistantHubVersionsResponse,
+      ListMyAssistantHubVersionsError,
       TData
     >,
     "queryKey" | "queryFn" | "initialData"
@@ -569,11 +567,11 @@ export const useListMyAssistantStoreVersions = <
 ) => {
   const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
   return reactQuery.useQuery<
-    Schemas.AssistantStoreVersionsResponse,
-    ListMyAssistantStoreVersionsError,
+    Schemas.AssistantHubVersionsResponse,
+    ListMyAssistantHubVersionsError,
     TData
   >({
-    ...listMyAssistantStoreVersionsQuery(
+    ...listMyAssistantHubVersionsQuery(
       variables === reactQuery.skipToken
         ? variables
         : deepMerge(fetcherOptions, variables),
@@ -583,75 +581,75 @@ export const useListMyAssistantStoreVersions = <
   });
 };
 
-export type ListReviewAssistantStoreVersionsError =
+export type ListReviewAssistantHubVersionsError =
   Fetcher.ErrorWrapper<undefined>;
 
-export type ListReviewAssistantStoreVersionsVariables =
+export type ListReviewAssistantHubVersionsVariables =
   V1betaApiContext["fetcherOptions"];
 
-export const fetchListReviewAssistantStoreVersions = (
-  variables: ListReviewAssistantStoreVersionsVariables,
+export const fetchListReviewAssistantHubVersions = (
+  variables: ListReviewAssistantHubVersionsVariables,
   signal?: AbortSignal,
 ) =>
   v1betaApiFetch<
-    Schemas.AssistantStoreVersionsResponse,
-    ListReviewAssistantStoreVersionsError,
+    Schemas.AssistantHubVersionsResponse,
+    ListReviewAssistantHubVersionsError,
     undefined,
     {},
     {},
     {}
   >({
-    url: "/api/v1beta/assistant-store/review/versions",
+    url: "/api/v1beta/assistant-hub/review/versions",
     method: "get",
     ...variables,
     signal,
   });
 
-export function listReviewAssistantStoreVersionsQuery(
-  variables: ListReviewAssistantStoreVersionsVariables,
+export function listReviewAssistantHubVersionsQuery(
+  variables: ListReviewAssistantHubVersionsVariables,
 ): {
   queryKey: reactQuery.QueryKey;
   queryFn: (
     options: QueryFnOptions,
-  ) => Promise<Schemas.AssistantStoreVersionsResponse>;
+  ) => Promise<Schemas.AssistantHubVersionsResponse>;
 };
 
-export function listReviewAssistantStoreVersionsQuery(
-  variables: ListReviewAssistantStoreVersionsVariables | reactQuery.SkipToken,
+export function listReviewAssistantHubVersionsQuery(
+  variables: ListReviewAssistantHubVersionsVariables | reactQuery.SkipToken,
 ): {
   queryKey: reactQuery.QueryKey;
   queryFn:
     | ((
         options: QueryFnOptions,
-      ) => Promise<Schemas.AssistantStoreVersionsResponse>)
+      ) => Promise<Schemas.AssistantHubVersionsResponse>)
     | reactQuery.SkipToken;
 };
 
-export function listReviewAssistantStoreVersionsQuery(
-  variables: ListReviewAssistantStoreVersionsVariables | reactQuery.SkipToken,
+export function listReviewAssistantHubVersionsQuery(
+  variables: ListReviewAssistantHubVersionsVariables | reactQuery.SkipToken,
 ) {
   return {
     queryKey: queryKeyFn({
-      path: "/api/v1beta/assistant-store/review/versions",
-      operationId: "listReviewAssistantStoreVersions",
+      path: "/api/v1beta/assistant-hub/review/versions",
+      operationId: "listReviewAssistantHubVersions",
       variables,
     }),
     queryFn:
       variables === reactQuery.skipToken
         ? reactQuery.skipToken
         : ({ signal }: QueryFnOptions) =>
-            fetchListReviewAssistantStoreVersions(variables, signal),
+            fetchListReviewAssistantHubVersions(variables, signal),
   };
 }
 
-export const useSuspenseListReviewAssistantStoreVersions = <
-  TData = Schemas.AssistantStoreVersionsResponse,
+export const useSuspenseListReviewAssistantHubVersions = <
+  TData = Schemas.AssistantHubVersionsResponse,
 >(
-  variables: ListReviewAssistantStoreVersionsVariables,
+  variables: ListReviewAssistantHubVersionsVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
-      Schemas.AssistantStoreVersionsResponse,
-      ListReviewAssistantStoreVersionsError,
+      Schemas.AssistantHubVersionsResponse,
+      ListReviewAssistantHubVersionsError,
       TData
     >,
     "queryKey" | "queryFn" | "initialData"
@@ -659,11 +657,11 @@ export const useSuspenseListReviewAssistantStoreVersions = <
 ) => {
   const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
   return reactQuery.useSuspenseQuery<
-    Schemas.AssistantStoreVersionsResponse,
-    ListReviewAssistantStoreVersionsError,
+    Schemas.AssistantHubVersionsResponse,
+    ListReviewAssistantHubVersionsError,
     TData
   >({
-    ...listReviewAssistantStoreVersionsQuery(
+    ...listReviewAssistantHubVersionsQuery(
       deepMerge(fetcherOptions, variables),
     ),
     ...options,
@@ -671,14 +669,14 @@ export const useSuspenseListReviewAssistantStoreVersions = <
   });
 };
 
-export const useListReviewAssistantStoreVersions = <
-  TData = Schemas.AssistantStoreVersionsResponse,
+export const useListReviewAssistantHubVersions = <
+  TData = Schemas.AssistantHubVersionsResponse,
 >(
-  variables: ListReviewAssistantStoreVersionsVariables | reactQuery.SkipToken,
+  variables: ListReviewAssistantHubVersionsVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
-      Schemas.AssistantStoreVersionsResponse,
-      ListReviewAssistantStoreVersionsError,
+      Schemas.AssistantHubVersionsResponse,
+      ListReviewAssistantHubVersionsError,
       TData
     >,
     "queryKey" | "queryFn" | "initialData"
@@ -686,11 +684,11 @@ export const useListReviewAssistantStoreVersions = <
 ) => {
   const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
   return reactQuery.useQuery<
-    Schemas.AssistantStoreVersionsResponse,
-    ListReviewAssistantStoreVersionsError,
+    Schemas.AssistantHubVersionsResponse,
+    ListReviewAssistantHubVersionsError,
     TData
   >({
-    ...listReviewAssistantStoreVersionsQuery(
+    ...listReviewAssistantHubVersionsQuery(
       variables === reactQuery.skipToken
         ? variables
         : deepMerge(fetcherOptions, variables),
@@ -700,265 +698,260 @@ export const useListReviewAssistantStoreVersions = <
   });
 };
 
-export type SetAssistantStoreVersionCurrentPathParams = {
+export type SetAssistantHubVersionCurrentPathParams = {
   versionId: string;
 };
 
-export type SetAssistantStoreVersionCurrentError =
+export type SetAssistantHubVersionCurrentError =
   Fetcher.ErrorWrapper<undefined>;
 
-export type SetAssistantStoreVersionCurrentVariables = {
-  pathParams: SetAssistantStoreVersionCurrentPathParams;
+export type SetAssistantHubVersionCurrentVariables = {
+  pathParams: SetAssistantHubVersionCurrentPathParams;
 } & V1betaApiContext["fetcherOptions"];
 
-export const fetchSetAssistantStoreVersionCurrent = (
-  variables: SetAssistantStoreVersionCurrentVariables,
+export const fetchSetAssistantHubVersionCurrent = (
+  variables: SetAssistantHubVersionCurrentVariables,
   signal?: AbortSignal,
 ) =>
   v1betaApiFetch<
-    Schemas.AssistantStoreVersionResponse,
-    SetAssistantStoreVersionCurrentError,
+    Schemas.AssistantHubVersionResponse,
+    SetAssistantHubVersionCurrentError,
     undefined,
     {},
     {},
-    SetAssistantStoreVersionCurrentPathParams
+    SetAssistantHubVersionCurrentPathParams
   >({
-    url: "/api/v1beta/assistant-store/versions/{versionId}/current",
+    url: "/api/v1beta/assistant-hub/versions/{versionId}/current",
     method: "put",
     ...variables,
     signal,
   });
 
-export const useSetAssistantStoreVersionCurrent = (
+export const useSetAssistantHubVersionCurrent = (
   options?: Omit<
     reactQuery.UseMutationOptions<
-      Schemas.AssistantStoreVersionResponse,
-      SetAssistantStoreVersionCurrentError,
-      SetAssistantStoreVersionCurrentVariables
+      Schemas.AssistantHubVersionResponse,
+      SetAssistantHubVersionCurrentError,
+      SetAssistantHubVersionCurrentVariables
     >,
     "mutationFn"
   >,
 ) => {
   const { fetcherOptions } = useV1betaApiContext();
   return reactQuery.useMutation<
-    Schemas.AssistantStoreVersionResponse,
-    SetAssistantStoreVersionCurrentError,
-    SetAssistantStoreVersionCurrentVariables
+    Schemas.AssistantHubVersionResponse,
+    SetAssistantHubVersionCurrentError,
+    SetAssistantHubVersionCurrentVariables
   >({
-    mutationFn: (variables: SetAssistantStoreVersionCurrentVariables) =>
-      fetchSetAssistantStoreVersionCurrent(
-        deepMerge(fetcherOptions, variables),
-      ),
+    mutationFn: (variables: SetAssistantHubVersionCurrentVariables) =>
+      fetchSetAssistantHubVersionCurrent(deepMerge(fetcherOptions, variables)),
     ...options,
   });
 };
 
-export type SetAssistantStoreVersionFeaturedPathParams = {
+export type SetAssistantHubVersionFeaturedPathParams = {
   versionId: string;
 };
 
-export type SetAssistantStoreVersionFeaturedError =
+export type SetAssistantHubVersionFeaturedError =
   Fetcher.ErrorWrapper<undefined>;
 
-export type SetAssistantStoreVersionFeaturedVariables = {
-  body: Schemas.AssistantStoreSetFeaturedRequest;
-  pathParams: SetAssistantStoreVersionFeaturedPathParams;
+export type SetAssistantHubVersionFeaturedVariables = {
+  body: Schemas.AssistantHubSetFeaturedRequest;
+  pathParams: SetAssistantHubVersionFeaturedPathParams;
 } & V1betaApiContext["fetcherOptions"];
 
-export const fetchSetAssistantStoreVersionFeatured = (
-  variables: SetAssistantStoreVersionFeaturedVariables,
+export const fetchSetAssistantHubVersionFeatured = (
+  variables: SetAssistantHubVersionFeaturedVariables,
   signal?: AbortSignal,
 ) =>
   v1betaApiFetch<
-    Schemas.AssistantStoreVersionResponse,
-    SetAssistantStoreVersionFeaturedError,
-    Schemas.AssistantStoreSetFeaturedRequest,
+    Schemas.AssistantHubVersionResponse,
+    SetAssistantHubVersionFeaturedError,
+    Schemas.AssistantHubSetFeaturedRequest,
     {},
     {},
-    SetAssistantStoreVersionFeaturedPathParams
+    SetAssistantHubVersionFeaturedPathParams
   >({
-    url: "/api/v1beta/assistant-store/versions/{versionId}/featured",
+    url: "/api/v1beta/assistant-hub/versions/{versionId}/featured",
     method: "put",
     ...variables,
     signal,
   });
 
-export const useSetAssistantStoreVersionFeatured = (
+export const useSetAssistantHubVersionFeatured = (
   options?: Omit<
     reactQuery.UseMutationOptions<
-      Schemas.AssistantStoreVersionResponse,
-      SetAssistantStoreVersionFeaturedError,
-      SetAssistantStoreVersionFeaturedVariables
+      Schemas.AssistantHubVersionResponse,
+      SetAssistantHubVersionFeaturedError,
+      SetAssistantHubVersionFeaturedVariables
     >,
     "mutationFn"
   >,
 ) => {
   const { fetcherOptions } = useV1betaApiContext();
   return reactQuery.useMutation<
-    Schemas.AssistantStoreVersionResponse,
-    SetAssistantStoreVersionFeaturedError,
-    SetAssistantStoreVersionFeaturedVariables
+    Schemas.AssistantHubVersionResponse,
+    SetAssistantHubVersionFeaturedError,
+    SetAssistantHubVersionFeaturedVariables
   >({
-    mutationFn: (variables: SetAssistantStoreVersionFeaturedVariables) =>
-      fetchSetAssistantStoreVersionFeatured(
-        deepMerge(fetcherOptions, variables),
-      ),
+    mutationFn: (variables: SetAssistantHubVersionFeaturedVariables) =>
+      fetchSetAssistantHubVersionFeatured(deepMerge(fetcherOptions, variables)),
     ...options,
   });
 };
 
-export type SetAssistantStoreVersionPublishedPathParams = {
+export type SetAssistantHubVersionPublishedPathParams = {
   versionId: string;
 };
 
-export type SetAssistantStoreVersionPublishedError =
+export type SetAssistantHubVersionPublishedError =
   Fetcher.ErrorWrapper<undefined>;
 
-export type SetAssistantStoreVersionPublishedVariables = {
-  body: Schemas.AssistantStoreSetPublishedRequest;
-  pathParams: SetAssistantStoreVersionPublishedPathParams;
+export type SetAssistantHubVersionPublishedVariables = {
+  body: Schemas.AssistantHubSetPublishedRequest;
+  pathParams: SetAssistantHubVersionPublishedPathParams;
 } & V1betaApiContext["fetcherOptions"];
 
-export const fetchSetAssistantStoreVersionPublished = (
-  variables: SetAssistantStoreVersionPublishedVariables,
+export const fetchSetAssistantHubVersionPublished = (
+  variables: SetAssistantHubVersionPublishedVariables,
   signal?: AbortSignal,
 ) =>
   v1betaApiFetch<
-    Schemas.AssistantStoreVersionResponse,
-    SetAssistantStoreVersionPublishedError,
-    Schemas.AssistantStoreSetPublishedRequest,
+    Schemas.AssistantHubVersionResponse,
+    SetAssistantHubVersionPublishedError,
+    Schemas.AssistantHubSetPublishedRequest,
     {},
     {},
-    SetAssistantStoreVersionPublishedPathParams
+    SetAssistantHubVersionPublishedPathParams
   >({
-    url: "/api/v1beta/assistant-store/versions/{versionId}/published",
+    url: "/api/v1beta/assistant-hub/versions/{versionId}/published",
     method: "put",
     ...variables,
     signal,
   });
 
-export const useSetAssistantStoreVersionPublished = (
+export const useSetAssistantHubVersionPublished = (
   options?: Omit<
     reactQuery.UseMutationOptions<
-      Schemas.AssistantStoreVersionResponse,
-      SetAssistantStoreVersionPublishedError,
-      SetAssistantStoreVersionPublishedVariables
+      Schemas.AssistantHubVersionResponse,
+      SetAssistantHubVersionPublishedError,
+      SetAssistantHubVersionPublishedVariables
     >,
     "mutationFn"
   >,
 ) => {
   const { fetcherOptions } = useV1betaApiContext();
   return reactQuery.useMutation<
-    Schemas.AssistantStoreVersionResponse,
-    SetAssistantStoreVersionPublishedError,
-    SetAssistantStoreVersionPublishedVariables
+    Schemas.AssistantHubVersionResponse,
+    SetAssistantHubVersionPublishedError,
+    SetAssistantHubVersionPublishedVariables
   >({
-    mutationFn: (variables: SetAssistantStoreVersionPublishedVariables) =>
-      fetchSetAssistantStoreVersionPublished(
+    mutationFn: (variables: SetAssistantHubVersionPublishedVariables) =>
+      fetchSetAssistantHubVersionPublished(
         deepMerge(fetcherOptions, variables),
       ),
     ...options,
   });
 };
 
-export type ReviewAssistantStoreVersionPathParams = {
+export type ReviewAssistantHubVersionPathParams = {
   versionId: string;
 };
 
-export type ReviewAssistantStoreVersionError = Fetcher.ErrorWrapper<undefined>;
+export type ReviewAssistantHubVersionError = Fetcher.ErrorWrapper<undefined>;
 
-export type ReviewAssistantStoreVersionVariables = {
-  body: Schemas.AssistantStoreReviewRequest;
-  pathParams: ReviewAssistantStoreVersionPathParams;
+export type ReviewAssistantHubVersionVariables = {
+  body: Schemas.AssistantHubReviewRequest;
+  pathParams: ReviewAssistantHubVersionPathParams;
 } & V1betaApiContext["fetcherOptions"];
 
-export const fetchReviewAssistantStoreVersion = (
-  variables: ReviewAssistantStoreVersionVariables,
+export const fetchReviewAssistantHubVersion = (
+  variables: ReviewAssistantHubVersionVariables,
   signal?: AbortSignal,
 ) =>
   v1betaApiFetch<
-    Schemas.AssistantStoreVersionResponse,
-    ReviewAssistantStoreVersionError,
-    Schemas.AssistantStoreReviewRequest,
+    Schemas.AssistantHubVersionResponse,
+    ReviewAssistantHubVersionError,
+    Schemas.AssistantHubReviewRequest,
     {},
     {},
-    ReviewAssistantStoreVersionPathParams
+    ReviewAssistantHubVersionPathParams
   >({
-    url: "/api/v1beta/assistant-store/versions/{versionId}/review",
+    url: "/api/v1beta/assistant-hub/versions/{versionId}/review",
     method: "post",
     ...variables,
     signal,
   });
 
-export const useReviewAssistantStoreVersion = (
+export const useReviewAssistantHubVersion = (
   options?: Omit<
     reactQuery.UseMutationOptions<
-      Schemas.AssistantStoreVersionResponse,
-      ReviewAssistantStoreVersionError,
-      ReviewAssistantStoreVersionVariables
+      Schemas.AssistantHubVersionResponse,
+      ReviewAssistantHubVersionError,
+      ReviewAssistantHubVersionVariables
     >,
     "mutationFn"
   >,
 ) => {
   const { fetcherOptions } = useV1betaApiContext();
   return reactQuery.useMutation<
-    Schemas.AssistantStoreVersionResponse,
-    ReviewAssistantStoreVersionError,
-    ReviewAssistantStoreVersionVariables
+    Schemas.AssistantHubVersionResponse,
+    ReviewAssistantHubVersionError,
+    ReviewAssistantHubVersionVariables
   >({
-    mutationFn: (variables: ReviewAssistantStoreVersionVariables) =>
-      fetchReviewAssistantStoreVersion(deepMerge(fetcherOptions, variables)),
+    mutationFn: (variables: ReviewAssistantHubVersionVariables) =>
+      fetchReviewAssistantHubVersion(deepMerge(fetcherOptions, variables)),
     ...options,
   });
 };
 
-export type WithdrawAssistantStoreVersionPathParams = {
+export type WithdrawAssistantHubVersionPathParams = {
   versionId: string;
 };
 
-export type WithdrawAssistantStoreVersionError =
-  Fetcher.ErrorWrapper<undefined>;
+export type WithdrawAssistantHubVersionError = Fetcher.ErrorWrapper<undefined>;
 
-export type WithdrawAssistantStoreVersionVariables = {
-  pathParams: WithdrawAssistantStoreVersionPathParams;
+export type WithdrawAssistantHubVersionVariables = {
+  pathParams: WithdrawAssistantHubVersionPathParams;
 } & V1betaApiContext["fetcherOptions"];
 
-export const fetchWithdrawAssistantStoreVersion = (
-  variables: WithdrawAssistantStoreVersionVariables,
+export const fetchWithdrawAssistantHubVersion = (
+  variables: WithdrawAssistantHubVersionVariables,
   signal?: AbortSignal,
 ) =>
   v1betaApiFetch<
-    Schemas.AssistantStoreVersionResponse,
-    WithdrawAssistantStoreVersionError,
+    Schemas.AssistantHubVersionResponse,
+    WithdrawAssistantHubVersionError,
     undefined,
     {},
     {},
-    WithdrawAssistantStoreVersionPathParams
+    WithdrawAssistantHubVersionPathParams
   >({
-    url: "/api/v1beta/assistant-store/versions/{versionId}/withdraw",
+    url: "/api/v1beta/assistant-hub/versions/{versionId}/withdraw",
     method: "post",
     ...variables,
     signal,
   });
 
-export const useWithdrawAssistantStoreVersion = (
+export const useWithdrawAssistantHubVersion = (
   options?: Omit<
     reactQuery.UseMutationOptions<
-      Schemas.AssistantStoreVersionResponse,
-      WithdrawAssistantStoreVersionError,
-      WithdrawAssistantStoreVersionVariables
+      Schemas.AssistantHubVersionResponse,
+      WithdrawAssistantHubVersionError,
+      WithdrawAssistantHubVersionVariables
     >,
     "mutationFn"
   >,
 ) => {
   const { fetcherOptions } = useV1betaApiContext();
   return reactQuery.useMutation<
-    Schemas.AssistantStoreVersionResponse,
-    WithdrawAssistantStoreVersionError,
-    WithdrawAssistantStoreVersionVariables
+    Schemas.AssistantHubVersionResponse,
+    WithdrawAssistantHubVersionError,
+    WithdrawAssistantHubVersionVariables
   >({
-    mutationFn: (variables: WithdrawAssistantStoreVersionVariables) =>
-      fetchWithdrawAssistantStoreVersion(deepMerge(fetcherOptions, variables)),
+    mutationFn: (variables: WithdrawAssistantHubVersionVariables) =>
+      fetchWithdrawAssistantHubVersion(deepMerge(fetcherOptions, variables)),
     ...options,
   });
 };
@@ -5236,6 +5229,126 @@ export const useHealth = <TData = undefined,>(
   });
 };
 
+export type OfficeAddinExchangeServerManifestQueryParams = {
+  /**
+   * Optional externally reachable deployment base URL used to rewrite the manifest.
+   * Example: https://app.example.com
+   */
+  base_url?: null | undefined;
+};
+
+export type OfficeAddinExchangeServerManifestError =
+  Fetcher.ErrorWrapper<undefined>;
+
+export type OfficeAddinExchangeServerManifestVariables = {
+  queryParams?: OfficeAddinExchangeServerManifestQueryParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchOfficeAddinExchangeServerManifest = (
+  variables: OfficeAddinExchangeServerManifestVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    undefined,
+    OfficeAddinExchangeServerManifestError,
+    undefined,
+    {},
+    OfficeAddinExchangeServerManifestQueryParams,
+    {}
+  >({
+    url: "/office-addin/manifest-exchange-server.xml",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function officeAddinExchangeServerManifestQuery(
+  variables: OfficeAddinExchangeServerManifestVariables,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<undefined>;
+};
+
+export function officeAddinExchangeServerManifestQuery(
+  variables: OfficeAddinExchangeServerManifestVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<undefined>)
+    | reactQuery.SkipToken;
+};
+
+export function officeAddinExchangeServerManifestQuery(
+  variables: OfficeAddinExchangeServerManifestVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/office-addin/manifest-exchange-server.xml",
+      operationId: "officeAddinExchangeServerManifest",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchOfficeAddinExchangeServerManifest(variables, signal),
+  };
+}
+
+export const useSuspenseOfficeAddinExchangeServerManifest = <
+  TData = undefined,
+>(
+  variables: OfficeAddinExchangeServerManifestVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      undefined,
+      OfficeAddinExchangeServerManifestError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    undefined,
+    OfficeAddinExchangeServerManifestError,
+    TData
+  >({
+    ...officeAddinExchangeServerManifestQuery(
+      deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useOfficeAddinExchangeServerManifest = <TData = undefined,>(
+  variables: OfficeAddinExchangeServerManifestVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      undefined,
+      OfficeAddinExchangeServerManifestError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    undefined,
+    OfficeAddinExchangeServerManifestError,
+    TData
+  >({
+    ...officeAddinExchangeServerManifestQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type OfficeAddinManifestQueryParams = {
   /**
    * Optional externally reachable deployment base URL used to rewrite the manifest.
@@ -5336,31 +5449,29 @@ export const useOfficeAddinManifest = <TData = undefined,>(
 
 export type QueryOperation =
   | {
-      path: "/api/v1beta/assistant-store/assistants";
-      operationId: "listAssistantStoreAssistants";
-      variables: ListAssistantStoreAssistantsVariables | reactQuery.SkipToken;
+      path: "/api/v1beta/assistant-hub/assistants";
+      operationId: "listAssistantHubAssistants";
+      variables: ListAssistantHubAssistantsVariables | reactQuery.SkipToken;
     }
   | {
-      path: "/api/v1beta/assistant-store/assistants/{storeAssistantId}";
-      operationId: "getAssistantStoreAssistant";
-      variables: GetAssistantStoreAssistantVariables | reactQuery.SkipToken;
+      path: "/api/v1beta/assistant-hub/assistants/{hubAssistantId}";
+      operationId: "getAssistantHubAssistant";
+      variables: GetAssistantHubAssistantVariables | reactQuery.SkipToken;
     }
   | {
-      path: "/api/v1beta/assistant-store/config";
-      operationId: "assistantStoreConfig";
-      variables: AssistantStoreConfigVariables | reactQuery.SkipToken;
+      path: "/api/v1beta/assistant-hub/config";
+      operationId: "assistantHubConfig";
+      variables: AssistantHubConfigVariables | reactQuery.SkipToken;
     }
   | {
-      path: "/api/v1beta/assistant-store/my/versions";
-      operationId: "listMyAssistantStoreVersions";
-      variables: ListMyAssistantStoreVersionsVariables | reactQuery.SkipToken;
+      path: "/api/v1beta/assistant-hub/my/versions";
+      operationId: "listMyAssistantHubVersions";
+      variables: ListMyAssistantHubVersionsVariables | reactQuery.SkipToken;
     }
   | {
-      path: "/api/v1beta/assistant-store/review/versions";
-      operationId: "listReviewAssistantStoreVersions";
-      variables:
-        | ListReviewAssistantStoreVersionsVariables
-        | reactQuery.SkipToken;
+      path: "/api/v1beta/assistant-hub/review/versions";
+      operationId: "listReviewAssistantHubVersions";
+      variables: ListReviewAssistantHubVersionsVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/assistants";
@@ -5496,6 +5607,13 @@ export type QueryOperation =
       path: "/health";
       operationId: "health";
       variables: HealthVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/office-addin/manifest-exchange-server.xml";
+      operationId: "officeAddinExchangeServerManifest";
+      variables:
+        | OfficeAddinExchangeServerManifestVariables
+        | reactQuery.SkipToken;
     }
   | {
       path: "/office-addin/manifest.xml";

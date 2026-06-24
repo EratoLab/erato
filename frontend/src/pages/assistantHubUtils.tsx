@@ -12,34 +12,34 @@ import {
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 import type {
-  AssistantStoreCategory,
-  AssistantStoreVersion,
+  AssistantHubCategory,
+  AssistantHubVersion,
   AssistantWithFiles,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type React from "react";
 
-export const isAssistantStoreReviewAcceptedStatus = (status: string) =>
+export const isAssistantHubReviewAcceptedStatus = (status: string) =>
   status === "review_accepted" || status === "accepted";
 
-export const isAssistantStoreReviewDeclinedStatus = (status: string) =>
+export const isAssistantHubReviewDeclinedStatus = (status: string) =>
   status === "review_declined" || status === "declined";
 
-export const getAssistantStoreStatusLabel = (status: string) => {
+export const getAssistantHubStatusLabel = (status: string) => {
   switch (status) {
     case "submitted":
       return t({
-        id: "assistantStore.status.submitted",
+        id: "assistantHub.status.submitted",
         message: "In review",
       });
     case "review_accepted":
     case "accepted":
-      return t({ id: "assistantStore.status.accepted", message: "Accepted" });
+      return t({ id: "assistantHub.status.accepted", message: "Accepted" });
     case "review_declined":
     case "declined":
-      return t({ id: "assistantStore.status.declined", message: "Declined" });
+      return t({ id: "assistantHub.status.declined", message: "Declined" });
     case "withdrawn":
       return t({
-        id: "assistantStore.status.withdrawn",
+        id: "assistantHub.status.withdrawn",
         message: "Withdrawn",
       });
     default:
@@ -47,13 +47,13 @@ export const getAssistantStoreStatusLabel = (status: string) => {
   }
 };
 
-export const getAssistantStoreStatusClassName = (status: string) =>
+export const getAssistantHubStatusClassName = (status: string) =>
   clsx(
     // eslint-disable-next-line lingui/no-unlocalized-strings -- Tailwind class list
     "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
-    isAssistantStoreReviewAcceptedStatus(status) &&
+    isAssistantHubReviewAcceptedStatus(status) &&
       "border border-theme-success-border bg-theme-success-bg text-theme-success-fg",
-    isAssistantStoreReviewDeclinedStatus(status) &&
+    isAssistantHubReviewDeclinedStatus(status) &&
       "border border-theme-error-border bg-theme-error-bg text-theme-error-fg",
     status === "withdrawn" &&
       "border border-theme-border bg-theme-bg-secondary text-theme-fg-muted",
@@ -61,18 +61,18 @@ export const getAssistantStoreStatusClassName = (status: string) =>
       "border border-theme-warning-border bg-theme-warning-bg text-theme-warning-fg",
   );
 
-export function AssistantStoreCurrentPublishedIndicator() {
+export function AssistantHubCurrentPublishedIndicator() {
   return (
     <span className="inline-flex min-h-6 items-center rounded-full border border-theme-info-border bg-theme-info-bg px-2 py-0.5 text-xs font-medium text-theme-info-fg">
       {t({
-        id: "assistantStore.my.currentPublished",
+        id: "assistantHub.my.currentPublished",
         message: "Current published version",
       })}
     </span>
   );
 }
 
-export function AssistantStoreBreadcrumb({
+export function AssistantHubBreadcrumb({
   children,
   icon,
   onClick,
@@ -139,7 +139,7 @@ const formatDiffValue = (value: unknown, field?: string): string => {
 
 const normalizeDiffLabel = (key: string) => {
   if (key === "files" || key === "file_ids") {
-    return t({ id: "assistantStore.diff.files", message: "Files" });
+    return t({ id: "assistantHub.diff.files", message: "Files" });
   }
 
   return key
@@ -209,7 +209,7 @@ const normalizeDiffChanges = (
     .filter((change) => change.changed);
 };
 
-export function AssistantStoreDiff({
+export function AssistantHubDiff({
   diffSummary,
 }: {
   diffSummary: Record<string, unknown>;
@@ -220,7 +220,7 @@ export function AssistantStoreDiff({
     return (
       <p className="text-sm text-theme-fg-secondary">
         {t({
-          id: "assistantStore.diff.noChanges",
+          id: "assistantHub.diff.noChanges",
           message: "No changes compared with the previous accepted version.",
         })}
       </p>
@@ -243,7 +243,7 @@ export function AssistantStoreDiff({
                 <div>
                   <div className="mb-1 text-xs font-medium uppercase text-theme-fg-muted">
                     {t({
-                      id: "assistantStore.diff.previous",
+                      id: "assistantHub.diff.previous",
                       message: "Previous",
                     })}
                   </div>
@@ -254,7 +254,7 @@ export function AssistantStoreDiff({
                 <div>
                   <div className="mb-1 text-xs font-medium uppercase text-theme-fg-muted">
                     {t({
-                      id: "assistantStore.diff.current",
+                      id: "assistantHub.diff.current",
                       message: "Current",
                     })}
                   </div>
@@ -271,7 +271,7 @@ export function AssistantStoreDiff({
   );
 }
 
-export function AssistantStoreVersionCard({
+export function AssistantHubVersionCard({
   version,
   categories,
   onOpen,
@@ -279,8 +279,8 @@ export function AssistantStoreVersionCard({
   showStatusBadge = false,
   showCurrentPublishedIndicator = false,
 }: {
-  version: AssistantStoreVersion;
-  categories: AssistantStoreCategory[];
+  version: AssistantHubVersion;
+  categories: AssistantHubCategory[];
   onOpen?: () => void;
   actions?: React.ReactNode;
   showStatusBadge?: boolean;
@@ -324,24 +324,22 @@ export function AssistantStoreVersionCard({
               );
             })()}
             {showStatusBadge ? (
-              <span
-                className={getAssistantStoreStatusClassName(version.status)}
-              >
-                {getAssistantStoreStatusLabel(version.status)}
+              <span className={getAssistantHubStatusClassName(version.status)}>
+                {getAssistantHubStatusLabel(version.status)}
               </span>
             ) : (
               <span className="inline-flex min-h-6 items-center">
-                {getAssistantStoreStatusLabel(version.status)}
+                {getAssistantHubStatusLabel(version.status)}
               </span>
             )}
             {showCurrentPublishedIndicator &&
               version.is_current_published_version && (
-                <AssistantStoreCurrentPublishedIndicator />
+                <AssistantHubCurrentPublishedIndicator />
               )}
             {creatorName && (
               <span className="inline-flex min-h-6 items-center">
                 {`${t({
-                  id: "assistantStore.card.creator",
+                  id: "assistantHub.card.creator",
                   message: "By",
                 })} ${creatorName}`}
               </span>
@@ -362,13 +360,13 @@ export function AssistantStoreVersionCard({
   );
 }
 
-export function AssistantStoreVersionOverviewSection({
+export function AssistantHubVersionOverviewSection({
   version,
   categories,
   onStartChat,
 }: {
-  version: AssistantStoreVersion;
-  categories: AssistantStoreCategory[];
+  version: AssistantHubVersion;
+  categories: AssistantHubCategory[];
   onStartChat?: () => void;
 }) {
   const categoryNames = version.category_ids
@@ -395,7 +393,7 @@ export function AssistantStoreVersionOverviewSection({
             {creatorName && (
               <span>
                 {`${t({
-                  id: "assistantStore.card.creator",
+                  id: "assistantHub.card.creator",
                   message: "By",
                 })} ${creatorName}`}
               </span>
@@ -408,7 +406,7 @@ export function AssistantStoreVersionOverviewSection({
         {onStartChat && (
           <Button variant="primary" size="lg" onClick={onStartChat}>
             {t({
-              id: "assistantStore.action.startChat",
+              id: "assistantHub.action.startChat",
               message: "Start chat",
             })}
           </Button>
@@ -434,11 +432,11 @@ export function AssistantStoreVersionOverviewSection({
   );
 }
 
-export function AssistantStoreVersionConfigurationSection({
+export function AssistantHubVersionConfigurationSection({
   version,
   assistantDetails,
 }: {
-  version: AssistantStoreVersion;
+  version: AssistantHubVersion;
   assistantDetails?: AssistantWithFiles;
 }) {
   const { data: availableModels = [], isLoading: isLoadingModels } =
@@ -475,7 +473,7 @@ export function AssistantStoreVersionConfigurationSection({
     <section className="rounded-lg border border-theme-border bg-theme-bg-primary p-6">
       <h2 className="mb-4 text-lg font-semibold text-theme-fg-primary">
         {t({
-          id: "assistantStore.detail.configuration",
+          id: "assistantHub.detail.configuration",
           message: "Configuration",
         })}
       </h2>
@@ -483,7 +481,7 @@ export function AssistantStoreVersionConfigurationSection({
         <div>
           <div className="mb-1 text-sm font-medium text-theme-fg-primary">
             {t({
-              id: "assistantStore.detail.model",
+              id: "assistantHub.detail.model",
               message: "Default model",
             })}
           </div>
@@ -500,7 +498,7 @@ export function AssistantStoreVersionConfigurationSection({
         <div>
           <div className="mb-1 text-sm font-medium text-theme-fg-primary">
             {t({
-              id: "assistantStore.detail.facets",
+              id: "assistantHub.detail.facets",
               message: "Tools",
             })}
           </div>
@@ -531,7 +529,7 @@ export function AssistantStoreVersionConfigurationSection({
         <div>
           <div className="mb-1 text-sm font-medium text-theme-fg-primary">
             {t({
-              id: "assistantStore.detail.files",
+              id: "assistantHub.detail.files",
               message: "Files",
             })}
           </div>
@@ -552,7 +550,7 @@ export function AssistantStoreVersionConfigurationSection({
       <div className="mt-6">
         <div className="mb-2 text-sm font-medium text-theme-fg-primary">
           {t({
-            id: "assistantStore.detail.prompt",
+            id: "assistantHub.detail.prompt",
             message: "System prompt",
           })}
         </div>
@@ -564,7 +562,7 @@ export function AssistantStoreVersionConfigurationSection({
   );
 }
 
-export function EmptyAssistantStoreState({
+export function EmptyAssistantHubState({
   title,
   description,
   action,
@@ -594,6 +592,6 @@ export const RefreshButton = ({
   loading?: boolean;
 }) => (
   <Button variant="secondary" size="sm" loading={loading} onClick={onClick}>
-    {t({ id: "assistantStore.action.refresh", message: "Refresh" })}
+    {t({ id: "assistantHub.action.refresh", message: "Refresh" })}
   </Button>
 );

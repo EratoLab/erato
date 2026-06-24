@@ -10,47 +10,47 @@ import { Alert } from "@/components/ui/Feedback/Alert";
 import { ArrowLeftIcon, EditIcon, PlusIcon } from "@/components/ui/icons";
 import { usePageAlignment } from "@/hooks/ui";
 import {
-  useAssistantStoreConfig,
+  useAssistantHubConfig,
   useGetAssistant,
-  useListMyAssistantStoreVersions,
-  useSetAssistantStoreVersionCurrent,
-  useSetAssistantStoreVersionPublished,
-  useWithdrawAssistantStoreVersion,
+  useListMyAssistantHubVersions,
+  useSetAssistantHubVersionCurrent,
+  useSetAssistantHubVersionPublished,
+  useWithdrawAssistantHubVersion,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 import {
-  AssistantStoreBreadcrumb,
-  AssistantStoreCurrentPublishedIndicator,
-  AssistantStoreDiff,
-  AssistantStoreVersionCard,
-  AssistantStoreVersionConfigurationSection,
-  AssistantStoreVersionOverviewSection,
-  EmptyAssistantStoreState,
-  isAssistantStoreReviewAcceptedStatus,
-} from "./assistantStoreUtils";
+  AssistantHubBreadcrumb,
+  AssistantHubCurrentPublishedIndicator,
+  AssistantHubDiff,
+  AssistantHubVersionCard,
+  AssistantHubVersionConfigurationSection,
+  AssistantHubVersionOverviewSection,
+  EmptyAssistantHubState,
+  isAssistantHubReviewAcceptedStatus,
+} from "./assistantHubUtils";
 
-import type { AssistantStoreVersion } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { AssistantHubVersion } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 type AssistantSubmissionGroup = {
-  storeAssistantId: string;
+  hubAssistantId: string;
   sourceAssistantId: string;
   name: string;
   description?: string | null;
-  versions: AssistantStoreVersion[];
+  versions: AssistantHubVersion[];
 };
 
 const groupVersionsByAssistant = (
-  versions: AssistantStoreVersion[],
+  versions: AssistantHubVersion[],
 ): AssistantSubmissionGroup[] => {
   const groups = new Map<string, AssistantSubmissionGroup>();
 
   for (const version of versions) {
-    const current = groups.get(version.store_assistant_id);
+    const current = groups.get(version.hub_assistant_id);
     if (current) {
       current.versions.push(version);
     } else {
-      groups.set(version.store_assistant_id, {
-        storeAssistantId: version.store_assistant_id,
+      groups.set(version.hub_assistant_id, {
+        hubAssistantId: version.hub_assistant_id,
         sourceAssistantId: version.source_assistant_id,
         name: version.assistant.name,
         description: version.assistant.description,
@@ -64,22 +64,22 @@ const groupVersionsByAssistant = (
   );
 };
 
-export default function AssistantStoreMyPage() {
+export default function AssistantHubMyPage() {
   const navigate = useNavigate();
   const { versionId } = useParams<{ versionId?: string }>();
   const queryClient = useQueryClient();
   const { containerClasses, horizontalPadding } =
     usePageAlignment("assistants");
-  const { data: config } = useAssistantStoreConfig({});
-  const { data, isLoading, error } = useListMyAssistantStoreVersions({});
-  const withdrawVersion = useWithdrawAssistantStoreVersion();
-  const setPublished = useSetAssistantStoreVersionPublished();
-  const setCurrent = useSetAssistantStoreVersionCurrent();
+  const { data: config } = useAssistantHubConfig({});
+  const { data, isLoading, error } = useListMyAssistantHubVersions({});
+  const withdrawVersion = useWithdrawAssistantHubVersion();
+  const setPublished = useSetAssistantHubVersionPublished();
+  const setCurrent = useSetAssistantHubVersionCurrent();
 
   useEffect(() => {
     document.title = `${t({
-      id: "assistantStore.my.title",
-      message: "My Store Submissions",
+      id: "assistantHub.my.title",
+      message: "My Hub Submissions",
     })} - ${t({ id: "branding.page_title_suffix" })}`;
   }, []);
 
@@ -87,7 +87,7 @@ export default function AssistantStoreMyPage() {
     await queryClient.invalidateQueries();
   };
 
-  const handleWithdraw = async (version: AssistantStoreVersion) => {
+  const handleWithdraw = async (version: AssistantHubVersion) => {
     await withdrawVersion.mutateAsync({
       pathParams: { versionId: version.version_id },
     });
@@ -95,7 +95,7 @@ export default function AssistantStoreMyPage() {
   };
 
   const handleSetPublished = async (
-    version: AssistantStoreVersion,
+    version: AssistantHubVersion,
     isPublished: boolean,
   ) => {
     await setPublished.mutateAsync({
@@ -105,7 +105,7 @@ export default function AssistantStoreMyPage() {
     await refresh();
   };
 
-  const handleSetCurrent = async (version: AssistantStoreVersion) => {
+  const handleSetCurrent = async (version: AssistantHubVersion) => {
     await setCurrent.mutateAsync({
       pathParams: { versionId: version.version_id },
     });
@@ -128,12 +128,12 @@ export default function AssistantStoreMyPage() {
 
     return versions.filter(
       (version) =>
-        version.store_assistant_id === selectedVersion.store_assistant_id,
+        version.hub_assistant_id === selectedVersion.hub_assistant_id,
     ).length;
   }, [selectedVersion, versions]);
 
   const renderVersionActions = (
-    version: AssistantStoreVersion,
+    version: AssistantHubVersion,
     { includeViewSubmission = true }: { includeViewSubmission?: boolean } = {},
   ) => (
     <>
@@ -141,10 +141,10 @@ export default function AssistantStoreMyPage() {
         <Button
           variant="secondary"
           size="sm"
-          onClick={() => navigate(`/assistant-store/my/${version.version_id}`)}
+          onClick={() => navigate(`/assistant-hub/my/${version.version_id}`)}
         >
           {t({
-            id: "assistantStore.my.viewSubmission",
+            id: "assistantHub.my.viewSubmission",
             message: "View submission",
           })}
         </Button>
@@ -156,11 +156,11 @@ export default function AssistantStoreMyPage() {
           loading={withdrawVersion.isPending}
           confirmAction
           confirmTitle={t({
-            id: "assistantStore.my.withdrawConfirmTitle",
+            id: "assistantHub.my.withdrawConfirmTitle",
             message: "Withdraw submission",
           })}
           confirmMessage={t({
-            id: "assistantStore.my.withdrawConfirmMessage",
+            id: "assistantHub.my.withdrawConfirmMessage",
             message: "Withdraw this submitted version from review?",
           })}
           onClick={() => {
@@ -168,12 +168,12 @@ export default function AssistantStoreMyPage() {
           }}
         >
           {t({
-            id: "assistantStore.my.withdraw",
+            id: "assistantHub.my.withdraw",
             message: "Withdraw",
           })}
         </Button>
       )}
-      {isAssistantStoreReviewAcceptedStatus(version.status) && (
+      {isAssistantHubReviewAcceptedStatus(version.status) && (
         <>
           <Button
             variant="secondary"
@@ -185,11 +185,11 @@ export default function AssistantStoreMyPage() {
           >
             {version.is_published
               ? t({
-                  id: "assistantStore.my.unpublish",
+                  id: "assistantHub.my.unpublish",
                   message: "Unpublish",
                 })
               : t({
-                  id: "assistantStore.my.publish",
+                  id: "assistantHub.my.publish",
                   message: "Publish",
                 })}
           </Button>
@@ -203,7 +203,7 @@ export default function AssistantStoreMyPage() {
               }}
             >
               {t({
-                id: "assistantStore.my.makeCurrent",
+                id: "assistantHub.my.makeCurrent",
                 message: "Make current",
               })}
             </Button>
@@ -217,43 +217,43 @@ export default function AssistantStoreMyPage() {
     <div className="flex h-full flex-col bg-theme-bg-primary">
       <PageHeader
         title={t({
-          id: "assistantStore.my.title",
-          message: "My Store Submissions",
+          id: "assistantHub.my.title",
+          message: "My Hub Submissions",
         })}
         subtitle={t({
-          id: "assistantStore.my.subtitle",
+          id: "assistantHub.my.subtitle",
           message:
             "Review submitted, accepted, declined, and withdrawn assistant versions",
         })}
       />
       <div className={clsx("flex-1 overflow-auto", horizontalPadding)}>
         <div className={clsx("space-y-6 py-6", containerClasses)}>
-          <AssistantStoreBreadcrumb
+          <AssistantHubBreadcrumb
             icon={<ArrowLeftIcon className="size-4" />}
             onClick={() =>
-              navigate(versionId ? "/assistant-store/my" : "/assistant-store")
+              navigate(versionId ? "/assistant-hub/my" : "/assistant-hub")
             }
           >
             {versionId
               ? t({
-                  id: "assistantStore.action.backToMySubmissions",
+                  id: "assistantHub.action.backToMySubmissions",
                   message: "Back to my submissions",
                 })
               : t({
-                  id: "assistantStore.action.backToStore",
-                  message: "Back to store",
+                  id: "assistantHub.action.backToHub",
+                  message: "Back to hub",
                 })}
-          </AssistantStoreBreadcrumb>
+          </AssistantHubBreadcrumb>
 
           {config?.can_review && !versionId && (
             <div className="flex justify-center">
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => navigate("/assistant-store/review")}
+                onClick={() => navigate("/assistant-hub/review")}
               >
                 {t({
-                  id: "assistantStore.action.reviewQueue",
+                  id: "assistantHub.action.reviewQueue",
                   message: "Review queue",
                 })}
               </Button>
@@ -268,8 +268,8 @@ export default function AssistantStoreMyPage() {
           ].some(Boolean) && (
             <Alert type="error">
               {t({
-                id: "assistantStore.my.error",
-                message: "Failed to update store submissions.",
+                id: "assistantHub.my.error",
+                message: "Failed to update hub submissions.",
               })}
             </Alert>
           )}
@@ -280,7 +280,7 @@ export default function AssistantStoreMyPage() {
                 <div className="mx-auto mb-4 size-8 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
                 <p className="text-sm text-theme-fg-secondary">
                   {t({
-                    id: "assistantStore.my.loading",
+                    id: "assistantHub.my.loading",
                     message: "Loading submissions...",
                   })}
                 </p>
@@ -289,15 +289,15 @@ export default function AssistantStoreMyPage() {
           )}
 
           {!isLoading && versions.length === 0 && (
-            <EmptyAssistantStoreState
+            <EmptyAssistantHubState
               title={t({
-                id: "assistantStore.my.empty.title",
+                id: "assistantHub.my.empty.title",
                 message: "No submitted versions",
               })}
               description={t({
-                id: "assistantStore.my.empty.description",
+                id: "assistantHub.my.empty.description",
                 message:
-                  "Submit one of your assistants to create a reviewed store version.",
+                  "Submit one of your assistants to create a reviewed hub version.",
               })}
               action={
                 <Button
@@ -305,7 +305,7 @@ export default function AssistantStoreMyPage() {
                   onClick={() => navigate("/assistants")}
                 >
                   {t({
-                    id: "assistantStore.my.chooseAssistant",
+                    id: "assistantHub.my.chooseAssistant",
                     message: "Choose assistant",
                   })}
                 </Button>
@@ -314,21 +314,21 @@ export default function AssistantStoreMyPage() {
           )}
 
           {!isLoading && versionId && !selectedVersion && (
-            <EmptyAssistantStoreState
+            <EmptyAssistantHubState
               title={t({
-                id: "assistantStore.my.notFound.title",
+                id: "assistantHub.my.notFound.title",
                 message: "Submission not found",
               })}
               description={t({
-                id: "assistantStore.my.notFound.description",
-                message: "This assistant store submission is not available.",
+                id: "assistantHub.my.notFound.description",
+                message: "This assistant hub submission is not available.",
               })}
             />
           )}
 
           {!isLoading && selectedVersion && (
             <div className="space-y-6">
-              <AssistantStoreVersionOverviewSection
+              <AssistantHubVersionOverviewSection
                 version={selectedVersion}
                 categories={config?.categories ?? []}
                 onStartChat={() =>
@@ -336,7 +336,7 @@ export default function AssistantStoreMyPage() {
                 }
               />
 
-              <AssistantStoreVersionConfigurationSection
+              <AssistantHubVersionConfigurationSection
                 version={selectedVersion}
                 assistantDetails={assistantDetails}
               />
@@ -355,14 +355,14 @@ export default function AssistantStoreMyPage() {
                         );
                       })()}
                       {selectedVersion.is_current_published_version && (
-                        <AssistantStoreCurrentPublishedIndicator />
+                        <AssistantHubCurrentPublishedIndicator />
                       )}
                     </div>
                     {selectedVersion.version_comment && (
                       <div className="mt-3">
                         <h3 className="mb-2 text-sm font-semibold text-theme-fg-primary">
                           {t({
-                            id: "assistantStore.my.versionComment",
+                            id: "assistantHub.my.versionComment",
                             message: "Version comment",
                           })}
                         </h3>
@@ -384,7 +384,7 @@ export default function AssistantStoreMyPage() {
                       }
                     >
                       {t({
-                        id: "assistantStore.my.editDraft",
+                        id: "assistantHub.my.editDraft",
                         message: "Edit draft",
                       })}
                     </Button>
@@ -399,7 +399,7 @@ export default function AssistantStoreMyPage() {
                     <div>
                       <h3 className="mb-1 text-sm font-semibold text-theme-fg-primary">
                         {t({
-                          id: "assistantStore.my.creatorReviewComment",
+                          id: "assistantHub.my.creatorReviewComment",
                           message: "Note to reviewer",
                         })}
                       </h3>
@@ -412,7 +412,7 @@ export default function AssistantStoreMyPage() {
                     <div>
                       <h3 className="mb-1 text-sm font-semibold text-theme-fg-primary">
                         {t({
-                          id: "assistantStore.my.reviewerReviewComment",
+                          id: "assistantHub.my.reviewerReviewComment",
                           message: "Reviewer response",
                         })}
                       </h3>
@@ -425,12 +425,12 @@ export default function AssistantStoreMyPage() {
                     <details open>
                       <summary className="focus-ring theme-transition cursor-pointer text-lg font-semibold text-theme-fg-primary hover:text-theme-fg-secondary">
                         {t({
-                          id: "assistantStore.my.diff",
+                          id: "assistantHub.my.diff",
                           message: "Changes from previous version",
                         })}
                       </summary>
                       <div className="mt-4">
-                        <AssistantStoreDiff
+                        <AssistantHubDiff
                           diffSummary={selectedVersion.diff_summary}
                         />
                       </div>
@@ -439,7 +439,7 @@ export default function AssistantStoreMyPage() {
                   {selectedVersionSiblingCount <= 1 && (
                     <p className="text-sm text-theme-fg-secondary">
                       {t({
-                        id: "assistantStore.diff.firstVersion",
+                        id: "assistantHub.diff.firstVersion",
                         message:
                           "No previous version exists for this assistant.",
                       })}
@@ -454,7 +454,7 @@ export default function AssistantStoreMyPage() {
             !versionId &&
             groups.map((group) => (
               <section
-                key={group.storeAssistantId}
+                key={group.hubAssistantId}
                 className="rounded-lg border border-theme-border bg-theme-bg-primary p-4"
               >
                 <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -478,7 +478,7 @@ export default function AssistantStoreMyPage() {
                       }
                     >
                       {t({
-                        id: "assistantStore.my.editDraft",
+                        id: "assistantHub.my.editDraft",
                         message: "Edit draft",
                       })}
                     </Button>
@@ -488,12 +488,12 @@ export default function AssistantStoreMyPage() {
                       icon={<PlusIcon className="size-4" />}
                       onClick={() =>
                         navigate(
-                          `/assistant-store/submit/${group.sourceAssistantId}`,
+                          `/assistant-hub/submit/${group.sourceAssistantId}`,
                         )
                       }
                     >
                       {t({
-                        id: "assistantStore.my.submitNewVersion",
+                        id: "assistantHub.my.submitNewVersion",
                         message: "Submit new version",
                       })}
                     </Button>
@@ -501,14 +501,14 @@ export default function AssistantStoreMyPage() {
                 </div>
                 <div className="space-y-3">
                   {group.versions.map((version) => (
-                    <AssistantStoreVersionCard
+                    <AssistantHubVersionCard
                       key={version.version_id}
                       version={version}
                       categories={config?.categories ?? []}
                       showStatusBadge
                       showCurrentPublishedIndicator
                       onOpen={() =>
-                        navigate(`/assistant-store/my/${version.version_id}`)
+                        navigate(`/assistant-hub/my/${version.version_id}`)
                       }
                       actions={renderVersionActions(version)}
                     />

@@ -28,6 +28,10 @@ pub struct Model {
 pub enum Relation {
     #[sea_orm(has_many = "super::assistant_file_uploads::Entity")]
     AssistantFileUploads,
+    #[sea_orm(has_one = "super::assistant_hub_assistant_versions::Entity")]
+    AssistantHubAssistantVersions,
+    #[sea_orm(has_one = "super::assistant_hub_assistants::Entity")]
+    AssistantHubAssistants,
     #[sea_orm(has_many = "super::chats::Entity")]
     Chats,
     #[sea_orm(
@@ -43,6 +47,18 @@ pub enum Relation {
 impl Related<super::assistant_file_uploads::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::AssistantFileUploads.def()
+    }
+}
+
+impl Related<super::assistant_hub_assistant_versions::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::AssistantHubAssistantVersions.def()
+    }
+}
+
+impl Related<super::assistant_hub_assistants::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::AssistantHubAssistants.def()
     }
 }
 

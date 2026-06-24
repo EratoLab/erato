@@ -31,7 +31,7 @@ vi.mock("@/hooks/ui", () => ({
 }));
 
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
-  useAssistantStoreConfig: () => ({ data: undefined }),
+  useAssistantHubConfig: () => ({ data: undefined }),
 }));
 
 vi.mock("@/providers/FeatureConfigProvider", () => ({

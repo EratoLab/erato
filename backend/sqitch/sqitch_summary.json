@@ -26,7 +26,8 @@
     "deploy/0024_add_audio_transcription_to_file_uploads.sql",
     "deploy/0025_add_chat_title_search_index.sql",
     "deploy/0026_add_assistant_store_tables.sql",
-    "deploy/0027_assistant_store_featured_assistant_wide.sql"
+    "deploy/0027_assistant_store_featured_assistant_wide.sql",
+    "deploy/0028_rename_assistant_store_to_assistant_hub.sql"
   ],
-  "latest_change": "0d42fe7cea90cb77a19971bd983806fe678af268"
+  "latest_change": "d02a4f3c23a96795fa143aa143882c3dc36e94a3"
 }
