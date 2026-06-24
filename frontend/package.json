@@ -42,7 +42,7 @@
   },
   "dependencies": {
     "@erato/frontend-utils": "file:../frontend-utils",
-    "@extend-ai/react-docx": "0.7.0-alpha.2",
+    "@extend-ai/react-docx": "0.7.1",
     "@lingui/detect-locale": "^5.9.4",
     "@lingui/format-po": "^5.9.4",
     "@react-hook/resize-observer": "^2.0.2",

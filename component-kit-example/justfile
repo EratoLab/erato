@@ -10,6 +10,18 @@ build:
 dev:
     pnpm run dev
 
+storybook-live:
+    pnpm run storybook:live
+
+storybook-built:
+    pnpm run storybook:built
+
+build-storybook-live:
+    pnpm run build-storybook:live
+
+build-storybook-built:
+    pnpm run build-storybook:built
+
 type-check:
     pnpm run typecheck
 

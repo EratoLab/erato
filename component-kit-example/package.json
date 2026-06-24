@@ -5,11 +5,15 @@
   "packageManager": "pnpm@11.8.0",
   "scripts": {
     "build": "pnpm i18n:compile && tsc && vite build",
+    "build-storybook:built": "pnpm build && STORYBOOK_COMPONENT_KIT_MODE=built storybook build -o storybook-static/built",
+    "build-storybook:live": "pnpm i18n:compile && storybook build -o storybook-static/live",
     "dev": "pnpm i18n:compile && vite build --watch --mode development",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
     "i18n:extract": "lingui extract",
     "i18n:compile": "lingui compile",
+    "storybook:built": "pnpm build && STORYBOOK_COMPONENT_KIT_MODE=built storybook dev -p 6008",
+    "storybook:live": "pnpm i18n:compile && storybook dev -p 6007",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -20,9 +24,13 @@
     "@lingui/cli": "^5.9.4",
     "@lingui/core": "5.9.4",
     "@lingui/react": "5.9.4",
+    "@storybook/react": "10.4.6",
+    "@storybook/react-vite": "10.4.6",
     "@types/node": "^20",
     "@types/react": "^19",
     "prettier": "3.5.0",
+    "react-dom": "19.2.7",
+    "storybook": "10.4.6",
     "typescript": "^5",
     "vite": "^6.4.2"
   },

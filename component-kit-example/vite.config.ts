@@ -36,6 +36,36 @@ const emitCompiledLocaleCatalogs = (): Plugin => {
 
 export default defineConfig({
   plugins: [emitCompiledLocaleCatalogs()],
+  resolve: {
+    alias: [
+      {
+        find: "react/jsx-runtime",
+        replacement: path.resolve(
+          __dirname,
+          "src/runtime/react-jsx-runtime.ts",
+        ),
+      },
+      {
+        find: "react/jsx-dev-runtime",
+        replacement: path.resolve(
+          __dirname,
+          "src/runtime/react-jsx-runtime.ts",
+        ),
+      },
+      {
+        find: /^react-dom\/server(?:\.browser)?$/,
+        replacement: path.resolve(__dirname, "src/runtime/react-dom-server.ts"),
+      },
+      {
+        find: "react-dom",
+        replacement: path.resolve(__dirname, "src/runtime/react-dom.ts"),
+      },
+      {
+        find: "react",
+        replacement: path.resolve(__dirname, "src/runtime/react.ts"),
+      },
+    ],
+  },
   esbuild: {
     jsxFactory: "h",
   },
