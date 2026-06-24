@@ -244,6 +244,40 @@ const sendFrontendLibraryAssetFile = (
   return true;
 };
 
+/**
+ * The @erato/frontend library bakes the audio worklet URL as "/assets/…"
+ * (its Vite build uses the default base "/"). In the office add-in production
+ * build, assets are served under "/public/platform-office-addin/", so the
+ * worklet lands at "/public/platform-office-addin/assets/…". The baked
+ * "/assets/…" URL therefore 404s at runtime.
+ *
+ * In dev mode the stageFrontendLibraryAssetsPlugin middleware intercepts
+ * "/assets/…" requests and serves the files correctly, so no rewrite is
+ * needed there.
+ */
+const rewriteLibraryWorkerUrlsPlugin = (isDevServer: boolean): Plugin => {
+  if (isDevServer) {
+    return { name: "rewrite-library-worker-urls" };
+  }
+
+  const PRODUCTION_BASE = "/public/platform-office-addin";
+
+  return {
+    name: "rewrite-library-worker-urls",
+    renderChunk(code) {
+      if (!code.includes("/assets/audio-dictation-worklet-")) {
+        return null;
+      }
+      const updated = code.replace(
+        /(['"])(\/assets\/audio-dictation-worklet-[^'"]+\.js)\1/g,
+        (_, quote, assetPath) =>
+          `${quote}${PRODUCTION_BASE}${assetPath}${quote}`,
+      );
+      return updated !== code ? updated : null;
+    },
+  };
+};
+
 const stageFrontendLibraryAssetsPlugin = (): Plugin => {
   return {
     name: "stage-frontend-library-assets",
@@ -537,6 +571,7 @@ export default defineConfig(({ mode }) => {
       stageFrontendLibraryAssetsPlugin(),
       stagePlatformLocalesPlugin(),
       stageFrontendVoiceRuntimeAssetsPlugin(),
+      rewriteLibraryWorkerUrlsPlugin(isDevServer),
       watchLinkedFrontendPublicOutputPlugin(linkedFrontend),
       copy404Plugin(),
     ],
