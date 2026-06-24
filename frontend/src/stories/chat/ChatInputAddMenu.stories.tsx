@@ -57,7 +57,11 @@ const fileSources = [
 const baseTools = [
   { id: "web", label: "Web search", icon: <SearchIcon className="size-4" /> },
   { id: "research", label: "Research", icon: <BrainIcon className="size-4" /> },
-  { id: "code", label: "Code interpreter", icon: <CodeIcon className="size-4" /> },
+  {
+    id: "code",
+    label: "Code interpreter",
+    icon: <CodeIcon className="size-4" />,
+  },
 ];
 
 /** Stateful wrapper so toggles actually flip in the canvas. */

@@ -1225,6 +1225,16 @@ msgid "chat.warning.budget.period_suffix"
 msgstr " This is for your {days}-day budget period."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInputAddMenu.tsx
+msgid "chatInput.addMenu.toolsHeader"
+msgstr "Tools"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInputAddMenu.tsx
+msgid "chatInput.addMenu.trigger"
+msgstr "Add files and tools"
+
+#. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudDriveList.tsx
 msgid "cloudDriveList.driveKind.businessLibrary"
 msgstr "Business library"
@@ -1611,15 +1621,18 @@ msgstr "This file is unavailable because you do not have permission to access it
 
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/FileSourceSelector.tsx
+#: src/hooks/files/useChatFileSources.tsx
 msgid "fileSourceSelector.uploadFromComputer"
 msgstr "Upload from Computer"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/FileSourceSelector.tsx
+#: src/hooks/files/useChatFileSources.tsx
 msgid "fileSourceSelector.uploadFromOneDrive"
 msgstr "Upload from Sharepoint"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInputAddControls.tsx
 #: src/components/ui/FileUpload/AssistantFileUploadSelector.tsx
 #: src/components/ui/FileUpload/FileUploadWithTokenCheck.tsx
 msgid "fileUpload.disk.ariaLabel"

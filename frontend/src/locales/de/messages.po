@@ -1225,6 +1225,16 @@ msgid "chat.warning.budget.period_suffix"
 msgstr " Dies gilt für deine {days}-Tage-Budgetperiode."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInputAddMenu.tsx
+msgid "chatInput.addMenu.toolsHeader"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInputAddMenu.tsx
+msgid "chatInput.addMenu.trigger"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudDriveList.tsx
 msgid "cloudDriveList.driveKind.businessLibrary"
 msgstr ""
@@ -1611,15 +1621,18 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/FileSourceSelector.tsx
+#: src/hooks/files/useChatFileSources.tsx
 msgid "fileSourceSelector.uploadFromComputer"
 msgstr "Vom Computer hochladen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/FileSourceSelector.tsx
+#: src/hooks/files/useChatFileSources.tsx
 msgid "fileSourceSelector.uploadFromOneDrive"
 msgstr "Von Sharepoint hochladen"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInputAddControls.tsx
 #: src/components/ui/FileUpload/AssistantFileUploadSelector.tsx
 #: src/components/ui/FileUpload/FileUploadWithTokenCheck.tsx
 msgid "fileUpload.disk.ariaLabel"
