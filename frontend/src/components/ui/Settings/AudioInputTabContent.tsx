@@ -1,9 +1,10 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { useAudioInputDevicePreference } from "@/hooks/audio/useAudioInputDevicePreference";
 
+import { GuidedMicCheck } from "./GuidedMicCheck";
 import { MicTestPanel } from "./MicTestPanel";
 import { Button } from "../Controls/Button";
 import { DropdownMenu, type DropdownMenuItem } from "../Controls/DropdownMenu";
@@ -31,13 +32,25 @@ export function AudioInputTabContent({ isActive }: AudioInputTabContentProps) {
   const {
     audioInputDeviceError,
     audioInputDevices,
+    hasResolvedLabels,
     isLoadingAudioInputDevices,
+    labelRevealDenied,
     refreshAudioInputDevices,
+    revealAudioInputDeviceLabels,
     selectedAudioInputDeviceId,
     setSelectedAudioInputDeviceId,
   } = useAudioInputDevicePreference();
   const [isAudioInputDropdownOpen, setIsAudioInputDropdownOpen] =
     useState(false);
+
+  // When a mic stream opens (test or quality check), re-enumerate so
+  // WebKit/Safari — which only exposes device labels while a stream is
+  // live — upgrades the dropdown from generic "Microphone N" placeholders
+  // to real device names. A no-op on Chrome/Firefox, which already have
+  // labels. `refreshAudioInputDevices` is stable, so this is too.
+  const handleStreamActive = useCallback(() => {
+    void refreshAudioInputDevices();
+  }, [refreshAudioInputDevices]);
 
   const audioInputDefaultLabel = t({
     id: "preferences.dialog.audio.input.default",
@@ -51,8 +64,11 @@ export function AudioInputTabContent({ isActive }: AudioInputTabContentProps) {
         checked: selectedAudioInputDeviceId === "",
         onClick: () => setSelectedAudioInputDeviceId(""),
       },
+      // Namespace device items under `device-` so an enumerated device whose
+      // deviceId is literally "default" (Chrome/macOS returns one) can't
+      // collide with the static "audio-input-default" item's React key.
       ...audioInputDevices.map((device) => ({
-        id: `audio-input-${device.deviceId}`,
+        id: `audio-input-device-${device.deviceId}`,
         label: device.label,
         checked: device.deviceId === selectedAudioInputDeviceId,
         onClick: () => setSelectedAudioInputDeviceId(device.deviceId),
@@ -133,7 +149,10 @@ export function AudioInputTabContent({ isActive }: AudioInputTabContentProps) {
           type="button"
           disabled={isLoadingAudioInputDevices}
           onClick={() => {
-            void refreshAudioInputDevices();
+            // Reveal real device names on demand (opens a brief mic stream
+            // on WebKit/Safari when labels are still placeholders). This is
+            // the explicit user gesture that justifies the permission prompt.
+            void revealAudioInputDeviceLabels();
           }}
         >
           {isLoadingAudioInputDevices
@@ -158,6 +177,25 @@ export function AudioInputTabContent({ isActive }: AudioInputTabContentProps) {
         })}
       </p>
 
+      {inputDeviceCount > 0 && !hasResolvedLabels ? (
+        <p
+          className="text-xs text-theme-fg-muted"
+          data-testid="audio-input-reveal-hint"
+        >
+          {labelRevealDenied
+            ? t({
+                id: "preferences.dialog.audio.input.revealDenied",
+                message:
+                  "Microphone access was denied, so device names can't be shown. You can still pick a device, or allow access and refresh.",
+              })
+            : t({
+                id: "preferences.dialog.audio.input.revealHint",
+                message:
+                  "To show your device names, refresh devices or start the microphone test below.",
+              })}
+        </p>
+      ) : null}
+
       <div className="space-y-1">
         <h3 className="text-sm font-medium text-theme-fg-primary">
           {t({
@@ -176,6 +214,28 @@ export function AudioInputTabContent({ isActive }: AudioInputTabContentProps) {
       <MicTestPanel
         deviceId={selectedAudioInputDeviceId}
         isAvailable={isActive}
+        onStreamActive={handleStreamActive}
+      />
+
+      <div className="space-y-1 border-t border-[var(--theme-border-subtle)] pt-4">
+        <h3 className="text-sm font-medium text-theme-fg-primary">
+          {t({
+            id: "preferences.dialog.audio.miccheck.heading",
+            message: "Probe your microphone quality",
+          })}
+        </h3>
+        <p className="text-sm text-theme-fg-secondary">
+          {t({
+            id: "preferences.dialog.audio.miccheck.description",
+            message:
+              "Check whether your microphone and room are good enough for accurate dictation.",
+          })}
+        </p>
+      </div>
+      <GuidedMicCheck
+        deviceId={selectedAudioInputDeviceId}
+        isAvailable={isActive}
+        onStreamActive={handleStreamActive}
       />
     </div>
   );

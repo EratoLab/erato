@@ -7,7 +7,18 @@ import {
   getAudioLevelBarsFromTimeDomainData,
 } from "./audio-pcm-codec";
 
-const PREVIEW_SAMPLE_RATE_HZ = 16_000;
+// Live-meter adaptive auto-gain (browser-agnostic): lift a quiet signal so
+// the bars stay responsive when raw capture is low (e.g. WebKit with AGC
+// off), without touching an already-loud signal. We track a fast-attack /
+// slow-release peak envelope of the raw amplitude and boost it toward a
+// reference; a loud signal (Chrome) clamps the boost to 1 → visually
+// unchanged. This is the live analogue of the replay waveform's static
+// peak-normalization, and needs no browser detection (it adapts to the
+// signal, never the user-agent).
+const METER_REFERENCE_PEAK = 0.2; // raw peak treated as "full scale" for bars
+const METER_MAX_GAIN = 8; // cap so a near-silent floor isn't blown up
+const METER_SILENCE_PEAK = 0.01; // below this the room is silent → no boost
+const METER_ENVELOPE_DECAY = 0.92; // per-frame release (~200 ms @ 60 fps)
 
 function createIdleBars(): number[] {
   return Array.from({ length: AUDIO_BARS_COUNT }, () => 2);
@@ -32,6 +43,14 @@ type UseAudioInputLevelPreviewOptions = {
   enabled: boolean;
   /** Selected device id; "" means the browser's default microphone. */
   deviceId: string;
+  /**
+   * Fired once each time a capture stream successfully opens. Lets the
+   * device-list owner re-enumerate while a stream is live so WebKit/Safari
+   * exposes real device labels (it returns empty labels with no active
+   * stream). Held in a ref internally so passing an unstable callback does
+   * not restart capture.
+   */
+  onStreamActive?: () => void;
 };
 
 /**
@@ -46,7 +65,10 @@ type UseAudioInputLevelPreviewOptions = {
 export function useAudioInputLevelPreview({
   enabled,
   deviceId,
+  onStreamActive,
 }: UseAudioInputLevelPreviewOptions): AudioInputLevelPreviewState {
+  const onStreamActiveRef = useRef(onStreamActive);
+  onStreamActiveRef.current = onStreamActive;
   const [bars, setBars] = useState<number[]>(createIdleBars);
   const [error, setError] = useState<string | null>(null);
   const [activeDeviceId, setActiveDeviceId] = useState<string | null>(null);
@@ -61,6 +83,8 @@ export function useAudioInputLevelPreview({
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const levelDataRef = useRef<Uint8Array | null>(null);
   const rafRef = useRef<number | null>(null);
+  // Running peak envelope for the adaptive auto-gain (reset on each start).
+  const peakEnvelopeRef = useRef(0);
   const isMounted = useMountedState();
 
   const stop = useCallback(
@@ -78,6 +102,7 @@ export function useAudioInputLevelPreview({
       analyserRef.current = null;
       sourceRef.current = null;
       levelDataRef.current = null;
+      peakEnvelopeRef.current = 0;
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
         streamRef.current = null;
@@ -139,7 +164,8 @@ export function useAudioInputLevelPreview({
             noiseSuppression: false,
             autoGainControl: false,
             channelCount: { ideal: 1 },
-            sampleRate: { ideal: PREVIEW_SAMPLE_RATE_HZ },
+            // No sampleRate constraint — WebKit mishandles a forced rate; the
+            // meter is analyser-only so the native rate is fine.
           },
         });
       } catch (err) {
@@ -178,11 +204,17 @@ export function useAudioInputLevelPreview({
       const settings = track.getSettings();
       setActiveDeviceId(settings.deviceId ?? null);
       setActiveDeviceLabel(track.label);
+      // A stream is now live — notify so the device list can re-enumerate
+      // and pick up real labels (the WebKit/Safari label-visibility fix).
+      onStreamActiveRef.current?.();
 
+      // Build the graph and start polling IMMEDIATELY. A VU meter must never
+      // gate on the context reaching "running": if it starts suspended
+      // (Chrome/Safari autoplay), a fire-and-forget resume() wakes it and the
+      // rAF picks up real levels once it runs. (An earlier "await
+      // running-context" gate could hand back a still-suspended context on
+      // Chrome → a permanently flat, silent meter — never do that here.)
       const audioContext = new AudioContext();
-      // Safari may start the context suspended even after a user gesture; a
-      // resume() call inside the same async chain wakes it without affecting
-      // browsers where the context is already running.
       if (audioContext.state === "suspended") {
         void audioContext.resume();
       }
@@ -205,7 +237,31 @@ export function useAudioInputLevelPreview({
           return;
         }
         analyserNode.getByteTimeDomainData(levelData);
-        setBars(getAudioLevelBarsFromTimeDomainData(levelData));
+
+        // Adaptive auto-gain: track a fast-attack / slow-release peak of the
+        // raw amplitude and boost quiet signals toward the reference. Loud
+        // signals yield gain 1 (clamped), so Chrome is visually unchanged.
+        let framePeak = 0;
+        for (let index = 0; index < levelData.length; index += 1) {
+          const magnitude = Math.abs((levelData[index] - 128) / 128);
+          if (magnitude > framePeak) {
+            framePeak = magnitude;
+          }
+        }
+        const envelope = Math.max(
+          framePeak,
+          peakEnvelopeRef.current * METER_ENVELOPE_DECAY,
+        );
+        peakEnvelopeRef.current = envelope;
+        const gain =
+          envelope > METER_SILENCE_PEAK
+            ? Math.min(
+                METER_MAX_GAIN,
+                Math.max(1, METER_REFERENCE_PEAK / envelope),
+              )
+            : 1;
+
+        setBars(getAudioLevelBarsFromTimeDomainData(levelData, gain));
         rafRef.current = window.requestAnimationFrame(tick);
       };
       rafRef.current = window.requestAnimationFrame(tick);

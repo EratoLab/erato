@@ -19,9 +19,18 @@ interface MicTestPanelProps {
    * use this prop to release the microphone on tab change / dialog close.
    */
   isAvailable: boolean;
+  /**
+   * Called when the test stream opens, so the parent can re-enumerate
+   * devices while a stream is live (reveals real labels on WebKit/Safari).
+   */
+  onStreamActive?: () => void;
 }
 
-export function MicTestPanel({ deviceId, isAvailable }: MicTestPanelProps) {
+export function MicTestPanel({
+  deviceId,
+  isAvailable,
+  onStreamActive,
+}: MicTestPanelProps) {
   const [isTesting, setIsTesting] = useState(false);
 
   useEffect(() => {
@@ -33,6 +42,7 @@ export function MicTestPanel({ deviceId, isAvailable }: MicTestPanelProps) {
   const preview = useAudioInputLevelPreview({
     enabled: isTesting && isAvailable,
     deviceId,
+    onStreamActive,
   });
 
   const isLive = isTesting && preview.isActive;
