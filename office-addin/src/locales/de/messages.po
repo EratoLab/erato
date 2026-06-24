@@ -780,13 +780,18 @@ msgstr "Einstellungen konnten nicht gespeichert werden. Bitte versuche es erneut
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.comingSoon"
+msgstr "Demnaechst verfuegbar"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.setup.copied"
 msgstr "Kopiert!"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.setup.copy"
-msgstr "Laden Sie die untenstehende XML-Datei als <0>manifest.xml</0> herunter und laden Sie sie anschließend im Microsoft 365 Admin Center unter Integrierte Apps hoch."
+#~ msgid "officeAddin.setup.copy"
+#~ msgstr "Laden Sie die untenstehende XML-Datei als <0>manifest.xml</0> herunter und laden Sie sie anschließend im Microsoft 365 Admin Center unter Integrierte Apps hoch."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
@@ -805,13 +810,48 @@ msgstr "Laden Sie sie als <0>manifest.xml</0> herunter."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.exchangeOnline.copy"
+msgstr "Laden Sie die untenstehende XML-Datei als <0>manifest.xml</0> herunter und laden Sie sie anschliessend im Microsoft 365 Admin Center unter Integrierte Apps hoch."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.exchangeSelectorLabel"
+msgstr "Exchange-Einrichtung"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.exchangeServer.copy"
+msgstr "Laden Sie die untenstehende Exchange Server-XML-Datei als <0>manifest.xml</0> herunter und installieren Sie sie im Exchange Admin Center oder mit der Exchange Management Shell."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.exchangeServer.docsInstruction"
+msgstr "Folgen Sie der <0>Exchange-Add-in-Installationsanleitung</0> von Microsoft. Um die Verfuegbarkeit auf bestimmte Benutzer zu beschraenken, verwenden Sie die <1>Zugriffssteuerungen der Exchange Management Shell</1>."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.exchangeServer.downloadManifest"
+msgstr "Laden Sie sie als <0>manifest.xml</0> herunter."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.exchangeServer.installInstruction"
+msgstr "Wechseln Sie im Exchange Admin Center zu Organisations-Add-ins, fuegen Sie ein benutzerdefiniertes Add-in aus einer Datei hinzu und laden Sie das heruntergeladene Manifest hoch. Sie koennen es auch mit der Exchange Management Shell installieren."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.exchangeServer.reviewManifest"
+msgstr "Pruefen Sie das unten generierte Exchange Server-Manifest-XML."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.setup.eyebrow"
 msgstr "Office-Add-in-Einrichtung"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.setup.integratedAppsLink"
-msgstr "Integrierte Apps"
+#~ msgid "officeAddin.setup.integratedAppsLink"
+#~ msgstr "Integrierte Apps"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
@@ -830,8 +870,28 @@ msgstr "Manifest-Vorschau"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.openExchangeAccessDocs"
+msgstr "Benutzerzugriff beschraenken"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.openExchangeAddinDocs"
+msgstr "Exchange-Add-in-Dokumentation oeffnen"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.setup.openIntegratedApps"
 msgstr "Integrierte Apps öffnen"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.openIntegratedAppsInstruction"
+msgstr "Oeffnen Sie <0>Integrierte Apps</0> und laden Sie dort die heruntergeladene Datei hoch."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.productSelectorLabel"
+msgstr "Produkt"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
@@ -850,8 +910,8 @@ msgstr "Generiertes Manifest hochladen"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.setup.uploadInstruction"
-msgstr "und laden Sie die heruntergeladene Datei dort hoch."
+#~ msgid "officeAddin.setup.uploadInstruction"
+#~ msgstr "und laden Sie die heruntergeladene Datei dort hoch."
 
 # ==============================
 # Unstable IDs
