@@ -40,8 +40,13 @@ const sampleMessage: UiChatMessage = {
   id: "message-1",
   role: "assistant",
   sender: "Assistant",
-  content: "This message is rendered through the component kit.",
-  created_at: new Date().toISOString(),
+  content: [
+    {
+      content_type: "text",
+      text: "This message is rendered through the component kit.",
+    },
+  ],
+  createdAt: new Date().toISOString(),
 } as unknown as UiChatMessage;
 
 const sampleFile = {

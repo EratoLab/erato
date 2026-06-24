@@ -1,3 +1,7 @@
+import {
+  StaticFeatureConfigProvider,
+  ThemeProvider,
+} from "@erato/frontend/library";
 import { i18n } from "@lingui/core";
 import { I18nProvider, Trans, useLingui } from "@lingui/react";
 import type { Preview } from "@storybook/react";
@@ -91,7 +95,15 @@ const withHostI18n = (Story: () => ReactNode) => {
 
   return (
     <I18nProvider i18n={i18n} key={locale}>
-      <Story />
+      <StaticFeatureConfigProvider>
+        <ThemeProvider
+          enableCustomTheme={false}
+          initialThemeMode="light"
+          persistThemeMode={false}
+        >
+          <Story />
+        </ThemeProvider>
+      </StaticFeatureConfigProvider>
     </I18nProvider>
   );
 };

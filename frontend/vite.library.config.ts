@@ -3,12 +3,14 @@ import react from "@vitejs/plugin-react";
 import { lingui } from "@lingui/vite-plugin";
 import path from "node:path";
 
+import { browserOnlyBuildPlugin } from "./vite.browser-only-build";
 import { createVoiceRuntimePackageAssetsPlugin } from "./vite.voice-runtime-assets";
 
 export default defineConfig(({ mode }) => {
   const isLibraryDevBuild = mode === "library-dev";
 
   return {
+    base: "./",
     plugins: [
       react({
         babel: {
@@ -20,6 +22,7 @@ export default defineConfig(({ mode }) => {
         rootDir: __dirname,
         outputBasePath: "voice-runtime",
       }),
+      browserOnlyBuildPlugin(),
     ],
     resolve: {
       alias: {
@@ -41,6 +44,7 @@ export default defineConfig(({ mode }) => {
         external: [
           "react",
           "react-dom",
+          "react-dom/client",
           "react/jsx-runtime",
           "react-router",
           "react-router-dom",

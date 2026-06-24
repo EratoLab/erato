@@ -5,11 +5,18 @@ import { fileURLToPath } from "node:url";
 import type { StorybookConfig } from "@storybook/react-vite";
 import type { Plugin } from "vite";
 
+type AliasEntry = {
+  find: string | RegExp;
+  replacement: string;
+};
+type AliasConfig = AliasEntry[] | Record<string, string> | undefined;
+
 const mode =
   process.env.STORYBOOK_COMPONENT_KIT_MODE === "built" ? "built" : "live";
 
 const storybookDir = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.resolve(storybookDir, "../dist");
+const componentKitRuntimeDir = path.resolve(storybookDir, "../src/runtime");
 
 const resolveDistFile = (matcher: RegExp): string => {
   if (!fs.existsSync(distDir)) {
@@ -79,6 +86,24 @@ document.head.append(style);
   };
 };
 
+const withoutComponentKitRuntimeAliases = (alias: AliasConfig): AliasConfig => {
+  if (Array.isArray(alias)) {
+    return alias.filter(
+      (entry) => !entry.replacement.startsWith(componentKitRuntimeDir),
+    );
+  }
+
+  if (alias && typeof alias === "object") {
+    return Object.fromEntries(
+      Object.entries(alias).filter(
+        ([, replacement]) => !replacement.startsWith(componentKitRuntimeDir),
+      ),
+    );
+  }
+
+  return alias;
+};
+
 const config: StorybookConfig = {
   stories: ["./*.stories.@(js|jsx|mjs|ts|tsx)"],
   addons: [],
@@ -95,6 +120,12 @@ const config: StorybookConfig = {
     define: {
       ...config.define,
       "import.meta.env.STORYBOOK_COMPONENT_KIT_MODE": JSON.stringify(mode),
+    },
+    resolve: {
+      ...config.resolve,
+      alias: withoutComponentKitRuntimeAliases(
+        config.resolve?.alias as AliasConfig,
+      ),
     },
     plugins: [...(config.plugins ?? []), builtComponentKitPlugin()],
   }),

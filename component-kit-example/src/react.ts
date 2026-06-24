@@ -2,14 +2,10 @@ import type {
   Trans as LinguiTrans,
   useLingui as useHostLingui,
 } from "@lingui/react";
-import type { ComponentType, ReactNode } from "react";
+import type * as ReactModule from "react";
 
-type HostReact = {
-  createElement: (
-    type: string | ComponentType<unknown>,
-    props?: Record<string, unknown> | null,
-    ...children: ReactNode[]
-  ) => ReactNode;
+type HostReact = typeof ReactModule & {
+  createPortal?: unknown;
 };
 
 declare global {
@@ -27,11 +23,9 @@ if (!hostReact) {
   throw new Error("ERATO_REACT is not available for component kits");
 }
 
-export const h = hostReact.createElement.bind(hostReact) as (
-  type: string | ComponentType<unknown>,
-  props?: Record<string, unknown> | null,
-  ...children: ReactNode[]
-) => ReactNode;
+export const h = hostReact.createElement.bind(
+  hostReact,
+) as typeof ReactModule.createElement;
 
 const hostLinguiReact = window.ERATO_LINGUI_REACT;
 if (!hostLinguiReact) {
