@@ -260,9 +260,14 @@ describe("useCurrentThread", () => {
 
       const { result, rerender } = renderHook(
         ({ conversationId }) =>
-          useCurrentThread("item-1", conversationId, fetchConversationMessages, {
-            transport,
-          }),
+          useCurrentThread(
+            "item-1",
+            conversationId,
+            fetchConversationMessages,
+            {
+              transport,
+            },
+          ),
         {
           initialProps: { conversationId: "conv-A" },
           wrapper: createWrapper(),

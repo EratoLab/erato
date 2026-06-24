@@ -127,10 +127,15 @@ export function useCurrentThread(
     return () => {
       globalThis.clearTimeout(timerId);
     };
-  }, [enabled, itemId, conversationId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [enabled, itemId, conversationId]);
 
   if (!enabled) {
-    return { thread: null, isLoading: false, error: false, isBlockingLoad: false };
+    return {
+      thread: null,
+      isLoading: false,
+      error: false,
+      isBlockingLoad: false,
+    };
   }
 
   return {
