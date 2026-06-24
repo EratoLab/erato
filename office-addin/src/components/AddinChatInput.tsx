@@ -206,6 +206,7 @@ export const AddinChatInput = forwardRef<
     emailBodyFile,
     emailSubject,
     isLoadingEmailBody,
+    isBlockingLoadEmailBody,
     emailThreadLoadError,
     selectedAttachmentItems,
     isLoadingAttachments,
@@ -233,10 +234,15 @@ export const AddinChatInput = forwardRef<
   const shouldUseSuggestedEmailSource =
     (showSuggestedEmailSource && hasSelectedEmailSource) ||
     hasDroppedStagedEmails;
+  // Gate the composer disabled state on the short blocking window only, not
+  // on the full fetch duration. `isBlockingLoadEmailBody` turns false after
+  // the UI-block deadline so a slow or stalled Graph request doesn't freeze
+  // the input for the whole 20-second thread fetch timeout. The loading chip
+  // (driven by `isLoadingEmailBody`) stays visible for the full duration.
   const isWaitingForSuggestedEmail =
     showSuggestedEmailSource &&
     !hasDroppedStagedEmails &&
-    isLoadingEmailBody &&
+    isBlockingLoadEmailBody &&
     !emailThreadLoadError;
   // Render the email-source preview whenever there is *something* to show:
   // a real attachment, an in-flight attachment fetch, or the reply-context

@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import {
   OUTLOOK_GRAPH_THREAD_TIMEOUT_MS,
+  OUTLOOK_GRAPH_THREAD_UI_BLOCK_DEADLINE_MS,
   runWithGraphTimeout,
 } from "../utils/graphRequestTimeout";
 import { fetchCurrentThread, type ParsedThread } from "../utils/parsedThread";
@@ -22,6 +23,16 @@ export interface UseCurrentThreadResult {
    * leaves `thread === null` with `error === false`.
    */
   error: boolean;
+  /**
+   * True while the conversation fetch is both in-flight AND within the short
+   * UI-block deadline ({@link OUTLOOK_GRAPH_THREAD_UI_BLOCK_DEADLINE_MS}).
+   *
+   * Distinct from {@link isLoading}: `isLoading` drives loading chips for the
+   * full fetch duration; `isBlockingLoad` gates the chat-input disabled state
+   * and turns false after the deadline so a slow or stalled Graph request
+   * does not freeze the composer for the entire 20-second fetch timeout.
+   */
+  isBlockingLoad: boolean;
 }
 
 /**
@@ -97,13 +108,35 @@ export function useCurrentThread(
     }
   }, [query.error, query.isError]);
 
+  // Tracks whether we're within the short UI-block window for this fetch.
+  // Starts true; the effect below sets a timer to flip it false after the
+  // deadline so the chat input unblocks even when the fetch is still running.
+  const [isWithinBlockDeadline, setIsWithinBlockDeadline] = useState(true);
+
+  // Reset the deadline and start the timer whenever the conversation key
+  // changes (new item or new conversation). The cleanup clears any pending
+  // timer so a fast success on conv-A doesn't accidentally unblock conv-B.
+  useEffect(() => {
+    if (!enabled) return;
+
+    setIsWithinBlockDeadline(true);
+    const timerId = globalThis.setTimeout(() => {
+      setIsWithinBlockDeadline(false);
+    }, OUTLOOK_GRAPH_THREAD_UI_BLOCK_DEADLINE_MS);
+
+    return () => {
+      globalThis.clearTimeout(timerId);
+    };
+  }, [enabled, itemId, conversationId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!enabled) {
-    return { thread: null, isLoading: false, error: false };
+    return { thread: null, isLoading: false, error: false, isBlockingLoad: false };
   }
 
   return {
     thread: query.data ?? null,
     isLoading: query.isPending,
     error: query.isError,
+    isBlockingLoad: query.isPending && isWithinBlockDeadline,
   };
 }

@@ -1,6 +1,21 @@
 export const OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS = 10_000;
 export const OUTLOOK_GRAPH_THREAD_TIMEOUT_MS = 20_000;
 
+/**
+ * How long the chat-input composer blocks waiting for an in-flight thread
+ * fetch before degrading gracefully.
+ *
+ * After this deadline the input is re-enabled even if the fetch is still
+ * running. The loading chip stays visible so the user knows the context
+ * is still being resolved; if the fetch eventually completes the email will
+ * be included when the user sends.
+ *
+ * Chosen to be well under the full {@link OUTLOOK_GRAPH_THREAD_TIMEOUT_MS}
+ * so a slow or stalled upstream request doesn't freeze the composer for the
+ * entire 20-second timeout.
+ */
+export const OUTLOOK_GRAPH_THREAD_UI_BLOCK_DEADLINE_MS = 5_000;
+
 export class OutlookGraphTimeoutError extends Error {
   constructor(message: string) {
     super(message);
