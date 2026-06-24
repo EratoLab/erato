@@ -68,6 +68,35 @@ The file is gitignored. The frontend dev server serves listed directories under
 `/public/component-kits/<id-or-directory-name>/` and injects their root
 `index-*.js`/`.css` files after the React runtime entrypoint.
 
+## Storybook
+
+This package has two Storybook configurations. Both install the same host
+runtime globals that Erato provides before loading component kits:
+`window.ERATO_REACT` and `window.ERATO_LINGUI_REACT`.
+
+Use the live configuration while developing the kit source:
+
+```sh
+cd ../component-kit-example
+pnpm run storybook:live
+```
+
+This compiles Lingui catalogs, starts Storybook on port 6007, and loads
+`src/index.tsx` plus `src/style.css` through Vite so component changes can
+live-reload.
+
+Use the built configuration to inspect the emitted component kit:
+
+```sh
+cd ../component-kit-example
+pnpm run storybook:built
+```
+
+This runs the normal kit build first, starts Storybook on port 6008, and loads
+the generated `dist/index-*.js`, `dist/style.css`, and compiled catalogs. That
+path mirrors the browser runtime path where the host app loads built kit files
+after the React runtime entrypoint.
+
 ## Backend Config
 
 Point the backend at a directory whose subdirectories are component kits:

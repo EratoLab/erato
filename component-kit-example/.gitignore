@@ -1,2 +1,3 @@
 # Compiled translation files
 src/locales/**/*.json
+storybook-static/
