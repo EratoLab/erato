@@ -270,7 +270,8 @@ const rewriteLibraryWorkerUrlsPlugin = (isDevServer: boolean): Plugin => {
       }
       const updated = code.replace(
         /(['"])(\/assets\/audio-dictation-worklet-[^'"]+\.js)\1/g,
-        (_, quote, assetPath) => `${quote}${PRODUCTION_BASE}${assetPath}${quote}`,
+        (_, quote, assetPath) =>
+          `${quote}${PRODUCTION_BASE}${assetPath}${quote}`,
       );
       return updated !== code ? updated : null;
     },
