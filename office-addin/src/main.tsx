@@ -6,13 +6,15 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import App from "./App";
 import { injectFrontendEnv } from "./app/env";
-import { AddinFileSourceSelector } from "./components/AddinFileSourceSelector";
+import { AddinChatAddMenuExtraContent } from "./components/AddinChatAddMenuExtraContent";
 import { OutlookEratoEmailRenderer } from "./components/OutlookEratoEmailRenderer";
 import { AddinSetupRoute } from "./pages/AddinSetupPage";
 
 injectFrontendEnv();
 
-componentRegistry.ChatFileSourceSelector = AddinFileSourceSelector;
+// The add-in's email-content sources ride into the shared "+" menu via the
+// ChatAddMenuExtraContent slot; file sources and tools come from the core menu.
+componentRegistry.ChatAddMenuExtraContent = AddinChatAddMenuExtraContent;
 componentRegistry.EratoEmailCodeBlock = OutlookEratoEmailRenderer;
 
 const rootElement = document.getElementById("root");

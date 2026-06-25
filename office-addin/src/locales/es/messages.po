@@ -370,81 +370,81 @@ msgstr "El borrador es demasiado grande para precompletar una respuesta. Usa Cop
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
-msgid "officeAddin.fileSource.addFiles"
-msgstr "Agregar archivos"
+#~ msgid "officeAddin.fileSource.addFiles"
+#~ msgstr "Agregar archivos"
 
 #. js-lingui-explicit-id
-#: src/components/AddinFileSourceSelector.tsx
+#: src/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.alreadyAdded"
 msgstr "Ya agregado"
 
 #. js-lingui-explicit-id
-#: src/components/AddinFileSourceSelector.tsx
+#: src/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.attachmentFallback"
 msgstr "Adjunto"
 
 #. js-lingui-explicit-id
-#: src/components/AddinFileSourceSelector.tsx
+#: src/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.cloudAttachmentUnsupported"
 msgstr "Los adjuntos en la nube no se pueden cargar desde Outlook"
 
 #. js-lingui-explicit-id
-#: src/components/AddinFileSourceSelector.tsx
+#: src/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.emailContent"
 msgstr "Contenido del correo"
 
 #. js-lingui-explicit-id
-#: src/components/AddinFileSourceSelector.tsx
+#: src/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.emailThread"
 msgstr "Hilo de correo"
 
 #. js-lingui-explicit-id
-#: src/components/AddinFileSourceSelector.tsx
+#: src/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.emailThreadLoadError"
 msgstr "No se pudo cargar esta conversación desde el servidor. Es posible que falten algunos mensajes o archivos adjuntos: prueba a volver a abrir el correo electrónico."
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
-msgid "officeAddin.fileSource.fromComputer"
-msgstr "Cargar desde el equipo"
+#~ msgid "officeAddin.fileSource.fromComputer"
+#~ msgstr "Cargar desde el equipo"
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
-msgid "officeAddin.fileSource.fromOneDrive"
-msgstr "Cargar desde Sharepoint"
+#~ msgid "officeAddin.fileSource.fromOneDrive"
+#~ msgstr "Cargar desde Sharepoint"
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
-msgid "officeAddin.fileSource.hide"
-msgstr "Ocultar"
+#~ msgid "officeAddin.fileSource.hide"
+#~ msgstr "Ocultar"
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
-msgid "officeAddin.fileSource.loading"
-msgstr "..."
+#~ msgid "officeAddin.fileSource.loading"
+#~ msgstr "..."
 
 #. js-lingui-explicit-id
-#: src/components/AddinFileSourceSelector.tsx
+#: src/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.loadingAttachments"
 msgstr "Cargando archivos adjuntos..."
 
 #. js-lingui-explicit-id
-#: src/components/AddinFileSourceSelector.tsx
+#: src/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.loadingEmailThread"
 msgstr "Cargando hilo de correo..."
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
-msgid "officeAddin.fileSource.noEmailContent"
-msgstr "No hay contenido de correo disponible para este elemento."
+#~ msgid "officeAddin.fileSource.noEmailContent"
+#~ msgstr "No hay contenido de correo disponible para este elemento."
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
-msgid "officeAddin.fileSource.show"
-msgstr "Mostrar"
+#~ msgid "officeAddin.fileSource.show"
+#~ msgstr "Mostrar"
 
 #. js-lingui-explicit-id
-#: src/components/AddinFileSourceSelector.tsx
+#: src/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.updatingThread"
 msgstr "Actualizando…"
 
