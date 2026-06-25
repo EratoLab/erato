@@ -1227,12 +1227,12 @@ msgstr " Dotyczy to Twojego {days}-dniowego okresu budżetowego."
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInputAddMenu.tsx
 msgid "chatInput.addMenu.toolsHeader"
-msgstr ""
+msgstr "Narzędzia"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInputAddMenu.tsx
 msgid "chatInput.addMenu.trigger"
-msgstr ""
+msgstr "Dodaj pliki i narzędzia"
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudDriveList.tsx
