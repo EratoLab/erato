@@ -144,46 +144,34 @@ export const ToolsOnly: Story = {
 
 /**
  * Simulates the Outlook add-in contributing an "Email content" section via
- * the `extraSection` seam — host injects nodes, the core menu keeps owning
- * file sources and tools.
+ * the `extraSections` seam — the host supplies item data, the core menu owns
+ * the rendering, dividers, and close-on-select while still owning file sources
+ * and tools.
  */
 export const WithEmailSection: Story = {
   name: "With host email section (Outlook)",
   render: () => (
     <InteractiveMenu
-      extraSection={
-        <>
-          <div className="px-3 pb-1 pt-2 text-xs font-medium uppercase tracking-wide text-theme-fg-muted">
-            Email content
-          </div>
-          <button
-            type="button"
-            onClick={action("select: email thread")}
-            className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm text-theme-fg-primary transition-colors hover:bg-theme-bg-hover"
-          >
-            <span className="min-w-0">
-              <span className="block truncate font-medium">Email thread</span>
-              <span className="block truncate text-xs text-theme-fg-muted">
-                Re: Q3 rollout (3 messages).eml
-              </span>
-            </span>
-            <span className="shrink-0 text-xs text-theme-fg-muted">42 KB</span>
-          </button>
-          <button
-            type="button"
-            onClick={action("select: attachment")}
-            className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm text-theme-fg-primary transition-colors hover:bg-theme-bg-hover"
-          >
-            <span className="min-w-0">
-              <span className="block truncate font-medium">proposal.pdf</span>
-              <span className="block truncate text-xs text-theme-fg-muted">
-                application/pdf
-              </span>
-            </span>
-            <span className="shrink-0 text-xs text-theme-fg-muted">1.2 MB</span>
-          </button>
-        </>
-      }
+      extraSections={[
+        {
+          id: "email-content",
+          header: "Email content",
+          items: [
+            {
+              id: "email-thread",
+              label: "Email thread",
+              description: "Re: Q3 rollout (3 messages).eml · 42 KB",
+              onSelect: action("select: email thread"),
+            },
+            {
+              id: "attachment-proposal",
+              label: "proposal.pdf",
+              description: "application/pdf · 1.2 MB",
+              onSelect: action("select: attachment"),
+            },
+          ],
+        },
+      ]}
     />
   ),
 };
