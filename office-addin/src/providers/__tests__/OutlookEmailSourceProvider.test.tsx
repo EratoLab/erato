@@ -116,6 +116,7 @@ describe("OutlookEmailSourceProvider — current-thread emailBodyFile", () => {
     mockUseCurrentThread.mockReturnValue({
       thread: makeThread(),
       isLoading: false,
+      isBlockingLoad: false,
       error: false,
     });
     mockUseOutlookMessageFetcher.mockReturnValue({
@@ -205,6 +206,72 @@ describe("OutlookEmailSourceProvider — current-thread emailBodyFile", () => {
   });
 });
 
+describe("OutlookEmailSourceProvider — isBlockingLoadEmailBody", () => {
+  it("forwards isBlockingLoad from useCurrentThread as isBlockingLoadEmailBody", () => {
+    mockUseOutlookMailItem.mockReturnValue({
+      itemIdentity: "id-1",
+      mailItem: {
+        itemId: "item-1",
+        conversationId: "conv-1",
+        internetMessageId: "<m1@x>",
+        subject: "Test",
+        isComposeMode: false,
+      },
+      attachments: [],
+      isLoadingAttachments: false,
+      getAttachmentFile: vi.fn(),
+    });
+    mockUseCurrentThread.mockReturnValue({
+      thread: null,
+      isLoading: true,
+      isBlockingLoad: true,
+      error: false,
+    });
+    mockUseOutlookMessageFetcher.mockReturnValue({
+      fetcher: null,
+      unavailableReason: "unsupported-mode",
+    });
+
+    renderProvider();
+
+    expect(captured!.isLoadingEmailBody).toBe(true);
+    expect(captured!.isBlockingLoadEmailBody).toBe(true);
+  });
+
+  it("exposes isBlockingLoadEmailBody=false when the block deadline has elapsed (isLoading still true)", () => {
+    mockUseOutlookMailItem.mockReturnValue({
+      itemIdentity: "id-1",
+      mailItem: {
+        itemId: "item-1",
+        conversationId: "conv-1",
+        internetMessageId: "<m1@x>",
+        subject: "Test",
+        isComposeMode: false,
+      },
+      attachments: [],
+      isLoadingAttachments: false,
+      getAttachmentFile: vi.fn(),
+    });
+    // Simulates the state after the UI-block deadline: still loading but
+    // isBlockingLoad=false so the chat input is no longer disabled.
+    mockUseCurrentThread.mockReturnValue({
+      thread: null,
+      isLoading: true,
+      isBlockingLoad: false,
+      error: false,
+    });
+    mockUseOutlookMessageFetcher.mockReturnValue({
+      fetcher: null,
+      unavailableReason: "unsupported-mode",
+    });
+
+    renderProvider();
+
+    expect(captured!.isLoadingEmailBody).toBe(true);
+    expect(captured!.isBlockingLoadEmailBody).toBe(false);
+  });
+});
+
 describe("OutlookEmailSourceProvider — compose reply-context via the dispatched fetcher", () => {
   function primeComposeMode() {
     mockUseOutlookMailItem.mockReturnValue({
@@ -224,6 +291,7 @@ describe("OutlookEmailSourceProvider — compose reply-context via the dispatche
     mockUseCurrentThread.mockReturnValue({
       thread: null,
       isLoading: false,
+      isBlockingLoad: false,
       error: false,
     });
   }

@@ -121,6 +121,15 @@ interface OutlookEmailSourceContextValue {
   isThreadEmlStale: boolean;
   isLoadingEmailBody: boolean;
   /**
+   * True while the conversation fetch is both in-flight AND within the short
+   * UI-block deadline. Use this (not {@link isLoadingEmailBody}) to gate the
+   * chat-input disabled state: `isLoadingEmailBody` drives the loading chip
+   * for the full fetch duration, while `isBlockingLoadEmailBody` unblocks the
+   * composer after the deadline so a slow or stalled Graph request does not
+   * freeze it for the entire 20-second fetch timeout.
+   */
+  isBlockingLoadEmailBody: boolean;
+  /**
    * True when the open conversation failed to load entirely (Graph fetch
    * errored on the first page). Surfaced so the UI can warn the user rather
    * than silently presenting an empty thread.
@@ -154,6 +163,7 @@ const defaultValue: OutlookEmailSourceContextValue = {
   emailBodyFile: null,
   isThreadEmlStale: false,
   isLoadingEmailBody: false,
+  isBlockingLoadEmailBody: false,
   emailThreadLoadError: false,
   currentThread: null,
   stagedEmails: [],
@@ -220,6 +230,7 @@ export function OutlookEmailSourceProvider({
   const {
     thread: currentThread,
     isLoading: isLoadingEmailBody,
+    isBlockingLoad: isBlockingLoadEmailBody,
     error: emailThreadLoadError,
   } = useCurrentThread(
     itemId,
@@ -566,6 +577,7 @@ export function OutlookEmailSourceProvider({
       emailBodyFile,
       isThreadEmlStale,
       isLoadingEmailBody,
+      isBlockingLoadEmailBody,
       emailThreadLoadError,
       currentThread,
       stagedEmails,
@@ -599,6 +611,7 @@ export function OutlookEmailSourceProvider({
       dismissedAttachmentIds,
       emailBodyFile,
       isThreadEmlStale,
+      isBlockingLoadEmailBody,
       isEmailBodyDismissed,
       emailThreadLoadError,
       isEmailBodyIncluded,
