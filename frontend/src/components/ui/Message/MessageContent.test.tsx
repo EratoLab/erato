@@ -86,6 +86,16 @@ const makeFile = (overrides: Partial<FileUploadItem> = {}): FileUploadItem => ({
   ...overrides,
 });
 
+const imagePointerContent = (
+  fileUploadId: string,
+  previewUrl = "https://files.example.com/preview/generated.png",
+): ContentPart => ({
+  content_type: "image_file_pointer",
+  file_upload_id: fileUploadId,
+  preview_url: previewUrl,
+  download_url: previewUrl.replace("/preview/", "/downloads/"),
+});
+
 beforeAll(() => {
   const store = new Map<string, string>();
   const stub: Storage = {
@@ -544,6 +554,70 @@ describe("MessageContent", () => {
         fileUploadId: "dog_123",
       }),
     );
+  });
+
+  it("does not render a standalone image part when text already renders the same generated image inline", () => {
+    i18n.load("en", {
+      ...(enMessages as unknown as Messages),
+      "chat.message.image_advisory": "AI-generated image advisory.",
+    });
+    i18n.activate("en");
+
+    const imageFile = makeFile({
+      id: "dog_123",
+      filename: "dog.png",
+      download_url: "https://files.example.com/downloads/dog.png",
+      preview_url: "https://files.example.com/preview/dog.png",
+      file_capability: FileTypeUtil.createMockFileCapability("dog.png"),
+    });
+
+    renderWithTheme(
+      <MessageContent
+        content={[
+          {
+            content_type: "text",
+            text: "Here is the image:\n\n![Generated dog](erato-file://dog_123)",
+          },
+          imagePointerContent("dog_123", imageFile.preview_url ?? ""),
+        ]}
+        filesById={{ [imageFile.id]: imageFile }}
+      />,
+    );
+
+    expect(screen.getAllByRole("img")).toHaveLength(1);
+    expect(
+      screen.getByRole("img", { name: "Generated dog" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("img", { name: "Message attachment" }),
+    ).toBeNull();
+    expect(
+      screen.getByText("AI-generated image advisory."),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps rendering a standalone image part when text does not reference it", () => {
+    const imageFile = makeFile({
+      id: "dog_123",
+      filename: "dog.png",
+      download_url: "https://files.example.com/downloads/dog.png",
+      preview_url: "https://files.example.com/preview/dog.png",
+      file_capability: FileTypeUtil.createMockFileCapability("dog.png"),
+    });
+
+    renderWithTheme(
+      <MessageContent
+        content={[
+          { content_type: "text", text: "Here is the generated image." },
+          imagePointerContent("dog_123", imageFile.preview_url ?? ""),
+        ]}
+        filesById={{ [imageFile.id]: imageFile }}
+      />,
+    );
+
+    expect(
+      screen.getByRole("img", { name: "Message attachment" }),
+    ).toHaveAttribute("src", imageFile.preview_url);
   });
 
   it("adds #unresolved-link when an inline erato-file markdown image cannot be resolved", () => {
