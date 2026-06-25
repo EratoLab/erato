@@ -284,6 +284,8 @@ const getPreviewUrl = (
 ): string | undefined =>
   typeof file.preview_url === "string" ? file.preview_url : undefined;
 
+const ERATO_FILE_URL_REGEX = /erato-file:\/\/[^\s)]+/g;
+
 const isImageFile = (file: FileUploadItem): boolean =>
   // eslint-disable-next-line lingui/no-unlocalized-strings
   file.file_capability.operations.includes("analyze_image") ||
@@ -298,9 +300,7 @@ const autolinkEratoFiles = (text: string): string => {
     return text;
   }
 
-  const urlRegex = /erato-file:\/\/[^\s)]+/g;
-
-  return text.replace(urlRegex, (match, offset) => {
+  return text.replace(ERATO_FILE_URL_REGEX, (match, offset) => {
     const prevChar = text.charAt(offset - 1);
     if (prevChar === "(") {
       return match;
@@ -375,6 +375,33 @@ const MARKDOWN_IMAGE_STYLE = {
 } as const;
 const UNRESOLVED_IMAGE_ANCHOR = "#unresolved-link";
 
+const getEratoFileIdFromUrl = (url: string): string | null => {
+  // eslint-disable-next-line lingui/no-unlocalized-strings
+  if (!url.startsWith("erato-file://")) {
+    return null;
+  }
+
+  try {
+    const urlObj = new URL(url);
+    return urlObj.hostname || urlObj.pathname.replace(/^\/\//, "");
+  } catch {
+    return null;
+  }
+};
+
+const extractReferencedEratoFileIds = (text: string): Set<string> => {
+  const fileIds = new Set<string>();
+
+  for (const match of text.matchAll(ERATO_FILE_URL_REGEX)) {
+    const fileId = getEratoFileIdFromUrl(match[0]);
+    if (fileId) {
+      fileIds.add(fileId);
+    }
+  }
+
+  return fileIds;
+};
+
 export const MessageContent = memo(function MessageContent({
   content,
   messageId,
@@ -392,18 +419,45 @@ export const MessageContent = memo(function MessageContent({
   const imageAdvisory = useOptionalTranslation("chat.message.image_advisory");
   const { maskReasoningText } = useTraceFeature();
 
+  const generatedImageFileIds = React.useMemo(() => {
+    const fileIds = new Set<string>();
+
+    content.forEach((part) => {
+      if (part.content_type === "image_file_pointer") {
+        fileIds.add(part.file_upload_id);
+      }
+    });
+
+    return fileIds;
+  }, [content]);
+
+  const textReferencedEratoFileIds = React.useMemo(() => {
+    const fileIds = new Set<string>();
+
+    content.forEach((part) => {
+      if (part.content_type !== "text") {
+        return;
+      }
+
+      extractReferencedEratoFileIds(part.text).forEach((fileId) => {
+        fileIds.add(fileId);
+      });
+    });
+
+    return fileIds;
+  }, [content]);
+
   const resolveEratoFileLink = React.useCallback(
     (
       url: string,
     ): { previewFile: FileUploadItem; resolvedHref: string } | null => {
-      // eslint-disable-next-line lingui/no-unlocalized-strings
-      if (!url.startsWith("erato-file://")) {
+      const fileId = getEratoFileIdFromUrl(url);
+      if (!fileId) {
         return null;
       }
 
       try {
         const urlObj = new URL(url);
-        const fileId = urlObj.hostname || urlObj.pathname.replace(/^\/\//, "");
         if (!(fileId in filesById)) {
           return null;
         }
@@ -553,6 +607,10 @@ export const MessageContent = memo(function MessageContent({
         id: resolvedEratoFile.previewFile.id,
         fileUploadId: resolvedEratoFile.previewFile.id,
       };
+      const shouldShowInlineImageAdvisory =
+        !!imageAdvisory &&
+        !!imagePart.fileUploadId &&
+        generatedImageFileIds.has(imagePart.fileUploadId);
 
       const imageElement = (
         <img
@@ -565,24 +623,41 @@ export const MessageContent = memo(function MessageContent({
         />
       );
 
+      const advisoryElement = shouldShowInlineImageAdvisory ? (
+        <span className="mt-2 block text-xs text-theme-fg-muted">
+          {imageAdvisory}
+        </span>
+      ) : null;
+
       if (onImageClick) {
         return (
-          <button
-            type="button"
-            className="my-4 block w-full cursor-pointer border-0 bg-transparent p-0"
-            onClick={() =>
-              onImageClick({
-                ...imagePart,
-                src: imagePart.src,
-              })
-            }
-          >
-            {imageElement}
-          </button>
+          <>
+            <button
+              type="button"
+              className={clsx(
+                "block w-full cursor-pointer border-0 bg-transparent p-0",
+                shouldShowInlineImageAdvisory ? "mt-4" : "my-4",
+              )}
+              onClick={() =>
+                onImageClick({
+                  ...imagePart,
+                  src: imagePart.src,
+                })
+              }
+            >
+              {imageElement}
+            </button>
+            {advisoryElement}
+          </>
         );
       }
 
-      return imageElement;
+      return (
+        <>
+          {imageElement}
+          {advisoryElement}
+        </>
+      );
     },
     // Custom table styling
     table({ children, node: _node, ...props }) {
@@ -961,6 +1036,13 @@ export const MessageContent = memo(function MessageContent({
 
         const image = contentPartToImage(part, index);
         if (image) {
+          if (
+            part.content_type === "image_file_pointer" &&
+            textReferencedEratoFileIds.has(part.file_upload_id)
+          ) {
+            return null;
+          }
+
           return (
             <React.Fragment key={`image-${index}`}>
               <ImageContentDisplay
