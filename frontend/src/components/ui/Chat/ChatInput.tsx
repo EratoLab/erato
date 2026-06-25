@@ -21,6 +21,7 @@ import { UnsupportedFileTypeError } from "@/hooks/files/errors";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { useOptionalTranslation } from "@/hooks/i18n";
 import { useChatInputHandlers } from "@/hooks/ui";
+import { useIsMobile } from "@/hooks/useResponsive";
 import {
   fetchGetFile,
   useFacets,
@@ -39,6 +40,7 @@ import { resolveChatSendErrorMessage } from "@/utils/chatSendErrorMessage";
 import { createLogger } from "@/utils/debugLogger";
 
 import { ArrowUpIcon, LoadingIcon, StopIcon, VoiceIcon } from "../icons";
+import { ChatInputAddControls } from "./ChatInputAddControls";
 import { ChatInputAudioModeButton } from "./ChatInputAudioModeButton";
 import { ChatInputTokenUsage } from "./ChatInputTokenUsage";
 import { FacetSelector } from "./FacetSelector";
@@ -1171,6 +1173,21 @@ export const ChatInput = ({
     isRecording || // Prevent edits while recording
     isRecordingUpload; // Prevent edits while uploading recording
 
+  // Collapse the file-upload button and the Tools dropdown into a single "+"
+  // menu (ChatInputAddControls): on mobile, or whenever a host registers extra
+  // add-menu content (e.g. the Outlook add-in's email-content sources, which
+  // ride in via componentRegistry.ChatAddMenuExtraContent regardless of width).
+  // Still skipped when a host overrides the whole selector (ChatFileSourceSelector).
+  const isMobile = useIsMobile();
+  const canUploadFiles = Boolean(handleFileAttachments) && uploadEnabled;
+  const hasFacets = availableFacets.length > 0;
+  const hasAddMenuExtraContent =
+    componentRegistry.ChatAddMenuExtraContent != null;
+  const useUnifiedMobileMenu =
+    (isMobile || hasAddMenuExtraContent) &&
+    componentRegistry.ChatFileSourceSelector == null &&
+    (canUploadFiles || hasFacets || hasAddMenuExtraContent);
+
   // Add token limit exceeded to disabled state for the send button
   const isSendDisabled =
     isDisabled ||
@@ -1964,60 +1981,89 @@ export const ChatInput = ({
             data-ui="chat-input-controls"
           >
             <div className="chat-input-controls-geometry flex min-w-0 flex-wrap items-center">
-              {showControls && (
-                <>
-                  {/* File Upload Button with Token Check */}
-                  {handleFileAttachments && uploadEnabled && (
-                    <FileUploadWithTokenCheck
-                      message={message}
-                      chatId={chatId}
-                      assistantId={assistantId}
-                      previousMessageId={previousMessageId}
-                      chatProviderId={selectedModel?.chat_provider_id}
-                      onFilesUploaded={handleFilesUploaded}
-                      onTokenLimitExceeded={handleFileTokenLimitExceeded}
-                      performFileUpload={uploadFiles}
-                      uploadError={
+              {showControls &&
+                (useUnifiedMobileMenu ? (
+                  <ChatInputAddControls
+                    canUpload={canUploadFiles}
+                    upload={{
+                      message,
+                      chatId,
+                      assistantId,
+                      previousMessageId,
+                      chatProviderId: selectedModel?.chat_provider_id,
+                      onFilesUploaded: handleFilesUploaded,
+                      onTokenLimitExceeded: handleFileTokenLimitExceeded,
+                      performFileUpload: uploadFiles,
+                      uploadError:
                         externalUploadError instanceof Error
                           ? externalUploadError
-                          : null
-                      }
-                      // Pass the callback for processing state
-                      onProcessingChange={handleFileButtonProcessingChange}
-                      acceptedFileTypes={acceptedFileTypes}
-                      multiple={maxFiles > 1}
-                      iconOnly
-                      className="p-1"
-                      disabled={
-                        attachedFiles.length >= maxFiles ||
-                        isLoading ||
-                        isPendingResponse ||
-                        disabled ||
-                        isUploading || // isUploading from context (drag & drop)
-                        isFileButtonProcessing // Add button processing state
-                      }
-                    />
-                  )}
-                  {availableFacets.length > 0 && (
-                    <FacetSelector
-                      facets={availableFacets}
-                      selectedFacetIds={selectedFacetIds}
-                      onSelectionChange={(nextSelectedFacetIds) => {
-                        setSelectedFacetIds(nextSelectedFacetIds);
-                        onFacetSelectionChange?.(nextSelectedFacetIds);
-                      }}
-                      onlySingleFacet={
-                        globalFacetSettings?.only_single_facet ?? false
-                      }
-                      showFacetIndicatorWithDisplayName={
-                        globalFacetSettings?.show_facet_indicator_with_display_name ??
-                        false
-                      }
-                      disabled={isDisabled || enforceSelectedFacetIds}
-                    />
-                  )}
-                </>
-              )}
+                          : null,
+                      onProcessingChange: handleFileButtonProcessingChange,
+                      acceptedFileTypes,
+                      multiple: maxFiles > 1,
+                      maxFiles,
+                    }}
+                    facets={availableFacets}
+                    selectedFacetIds={selectedFacetIds}
+                    onToggleFacet={toggleFacetId}
+                    disabled={isDisabled}
+                    uploadDisabled={attachedFiles.length >= maxFiles}
+                    toolsDisabled={enforceSelectedFacetIds}
+                  />
+                ) : (
+                  <>
+                    {/* File Upload Button with Token Check */}
+                    {handleFileAttachments && uploadEnabled && (
+                      <FileUploadWithTokenCheck
+                        message={message}
+                        chatId={chatId}
+                        assistantId={assistantId}
+                        previousMessageId={previousMessageId}
+                        chatProviderId={selectedModel?.chat_provider_id}
+                        onFilesUploaded={handleFilesUploaded}
+                        onTokenLimitExceeded={handleFileTokenLimitExceeded}
+                        performFileUpload={uploadFiles}
+                        uploadError={
+                          externalUploadError instanceof Error
+                            ? externalUploadError
+                            : null
+                        }
+                        // Pass the callback for processing state
+                        onProcessingChange={handleFileButtonProcessingChange}
+                        acceptedFileTypes={acceptedFileTypes}
+                        multiple={maxFiles > 1}
+                        iconOnly
+                        className="p-1"
+                        disabled={
+                          attachedFiles.length >= maxFiles ||
+                          isLoading ||
+                          isPendingResponse ||
+                          disabled ||
+                          isUploading || // isUploading from context (drag & drop)
+                          isFileButtonProcessing // Add button processing state
+                        }
+                      />
+                    )}
+                    {availableFacets.length > 0 && (
+                      <FacetSelector
+                        facets={availableFacets}
+                        selectedFacetIds={selectedFacetIds}
+                        onSelectionChange={(nextSelectedFacetIds) => {
+                          setSelectedFacetIds(nextSelectedFacetIds);
+                          onFacetSelectionChange?.(nextSelectedFacetIds);
+                        }}
+                        onlySingleFacet={
+                          globalFacetSettings?.only_single_facet ?? false
+                        }
+                        showFacetIndicatorWithDisplayName={
+                          globalFacetSettings?.show_facet_indicator_with_display_name ??
+                          false
+                        }
+                        disabled={isDisabled || enforceSelectedFacetIds}
+                      />
+                    )}
+                  </>
+                ))}
             </div>
 
             <div className="flex min-w-0 flex-wrap items-center gap-[var(--theme-spacing-control-gap)]">

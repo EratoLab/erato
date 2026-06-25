@@ -1210,7 +1210,7 @@ export type LinkFileRequest = {
   /**
    * Optional chat ID to associate the file with. If not provided, creates standalone files.
    */
-  chat_id?: null | undefined;
+  chat_id?: string | null | undefined;
   provider_metadata: SharepointProviderMetadata;
   /**
    * The source/provider type: "sharepoint" (future: "google_drive", etc.)

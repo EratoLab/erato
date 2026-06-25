@@ -141,6 +141,13 @@ const schemaStringFieldFixes = [
     from: "published_at?: null | undefined;",
     to: "published_at?: string | null | undefined;",
   },
+  // Keep the two-space indent: it pins the match to LinkFileRequest.chat_id and
+  // avoids the substring collision with `existing_chat_id?: null | undefined;`
+  // (which other, unindented entries would also rewrite via replaceAll).
+  {
+    from: "  chat_id?: null | undefined;",
+    to: "  chat_id?: string | null | undefined;",
+  },
 ];
 
 async function patchVoidTypes(filePath) {
@@ -331,6 +338,40 @@ async function fixSchemaStringFields(filePath) {
   return false;
 }
 
+// verbatimModuleSyntax requires type-only imports to use `import type`. Codegen
+// emits these as value imports, so re-mark them after each regeneration.
+const typeOnlyImportFixes = [
+  {
+    file: contextFile,
+    from: 'import { QueryOperation } from "./v1betaApiComponents";',
+    to: 'import type { QueryOperation } from "./v1betaApiComponents";',
+  },
+  {
+    file: fetcherFile,
+    from: 'import { V1betaApiContext } from "./v1betaApiContext";',
+    to: 'import type { V1betaApiContext } from "./v1betaApiContext";',
+  },
+];
+
+async function fixTypeOnlyImports() {
+  let changed = false;
+  for (const { file, from, to } of typeOnlyImportFixes) {
+    try {
+      const content = await fs.readFile(file, "utf8");
+      if (content.includes(from)) {
+        await fs.writeFile(file, content.replaceAll(from, to), "utf8");
+        console.log(
+          `Marked type-only import in: ${path.relative(process.cwd(), file)}`,
+        );
+        changed = true;
+      }
+    } catch (error) {
+      console.error(`Error fixing type-only imports in ${file}:`, error);
+    }
+  }
+  return changed;
+}
+
 async function run() {
   console.log(`Scanning ${targetDir} for post-processing...`);
   let changesMade = false;
@@ -373,6 +414,10 @@ async function run() {
     }
 
     if (await fixEnabledImport(contextFile)) {
+      changesMade = true;
+    }
+
+    if (await fixTypeOnlyImports()) {
       changesMade = true;
     }
 

@@ -370,81 +370,81 @@ msgstr "Der Entwurf ist zu groß zum Vorausfüllen einer Antwort. Verwenden Sie 
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
-msgid "officeAddin.fileSource.addFiles"
-msgstr "Dateien hinzufügen"
+#~ msgid "officeAddin.fileSource.addFiles"
+#~ msgstr "Dateien hinzufügen"
 
 #. js-lingui-explicit-id
-#: src/components/AddinFileSourceSelector.tsx
+#: src/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.alreadyAdded"
 msgstr "Bereits hinzugefügt"
 
 #. js-lingui-explicit-id
-#: src/components/AddinFileSourceSelector.tsx
+#: src/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.attachmentFallback"
 msgstr "Anhang"
 
 #. js-lingui-explicit-id
-#: src/components/AddinFileSourceSelector.tsx
+#: src/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.cloudAttachmentUnsupported"
 msgstr "Cloud-Anhänge können aus Outlook nicht hochgeladen werden"
 
 #. js-lingui-explicit-id
-#: src/components/AddinFileSourceSelector.tsx
+#: src/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.emailContent"
 msgstr "E-Mail-Inhalt"
 
 #. js-lingui-explicit-id
-#: src/components/AddinFileSourceSelector.tsx
+#: src/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.emailThread"
 msgstr "E-Mail-Verlauf"
 
 #. js-lingui-explicit-id
-#: src/components/AddinFileSourceSelector.tsx
+#: src/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.emailThreadLoadError"
 msgstr "Diese Unterhaltung konnte nicht vom Server geladen werden. Einige Nachrichten oder Anhänge fehlen möglicherweise – versuche, die E-Mail erneut zu öffnen."
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
-msgid "officeAddin.fileSource.fromComputer"
-msgstr "Vom Computer hochladen"
+#~ msgid "officeAddin.fileSource.fromComputer"
+#~ msgstr "Vom Computer hochladen"
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
-msgid "officeAddin.fileSource.fromOneDrive"
-msgstr "Von Sharepoint hochladen"
+#~ msgid "officeAddin.fileSource.fromOneDrive"
+#~ msgstr "Von Sharepoint hochladen"
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
-msgid "officeAddin.fileSource.hide"
-msgstr "Ausblenden"
+#~ msgid "officeAddin.fileSource.hide"
+#~ msgstr "Ausblenden"
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
-msgid "officeAddin.fileSource.loading"
-msgstr "..."
+#~ msgid "officeAddin.fileSource.loading"
+#~ msgstr "..."
 
 #. js-lingui-explicit-id
-#: src/components/AddinFileSourceSelector.tsx
+#: src/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.loadingAttachments"
 msgstr "Anhänge werden geladen..."
 
 #. js-lingui-explicit-id
-#: src/components/AddinFileSourceSelector.tsx
+#: src/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.loadingEmailThread"
 msgstr "E-Mail-Verlauf wird geladen..."
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
-msgid "officeAddin.fileSource.noEmailContent"
-msgstr "Für dieses Element sind keine E-Mail-Inhalte verfügbar."
+#~ msgid "officeAddin.fileSource.noEmailContent"
+#~ msgstr "Für dieses Element sind keine E-Mail-Inhalte verfügbar."
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
-msgid "officeAddin.fileSource.show"
-msgstr "Anzeigen"
+#~ msgid "officeAddin.fileSource.show"
+#~ msgstr "Anzeigen"
 
 #. js-lingui-explicit-id
-#: src/components/AddinFileSourceSelector.tsx
+#: src/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.updatingThread"
 msgstr "Wird aktualisiert…"
 

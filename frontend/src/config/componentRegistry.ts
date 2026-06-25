@@ -43,6 +43,23 @@ export interface EratoEmailCodeBlockProps {
 }
 
 /**
+ * Props for a host-contributed section rendered inside the unified chat "+"
+ * add menu (e.g. the Outlook add-in's email-content sources). The shared menu
+ * owns file sources and tools and provides the upload + close plumbing; the
+ * host renders its own rows.
+ */
+export interface ChatAddMenuExtraContentProps {
+  /** Upload already-resolved File objects (e.g. an email .eml or attachment). */
+  onSelectFiles?: (files: File[]) => Promise<void>;
+  /** Close the add menu — call after a selection has been handled. */
+  onClose: () => void;
+  /** Whether the composer is disabled. */
+  disabled?: boolean;
+  /** Whether an upload/link is currently in flight. */
+  isProcessing?: boolean;
+}
+
+/**
  * Registry of overridable components.
  * Each key maps to either a custom component or null (use default).
  */
@@ -63,6 +80,14 @@ export interface ComponentRegistry {
    * Set to a custom component to replace the default dropdown layout.
    */
   ChatFileSourceSelector: ComponentType<FileSourceSelectorProps> | null;
+
+  /**
+   * Host-contributed content rendered as an extra section inside the unified
+   * chat "+" add menu (e.g. the Outlook add-in's email-content sources).
+   * Unlike ChatFileSourceSelector (which overrides the whole selector), this
+   * injects rows into the shared menu so file sources and tools stay unified.
+   */
+  ChatAddMenuExtraContent: ComponentType<ChatAddMenuExtraContentProps> | null;
 
   /**
    * Override for the inline attachment preview shown in the chat composer.
@@ -182,6 +207,7 @@ export const resolveComponentOverride = <TProps>(
 const emptyComponentRegistry = (): ComponentRegistry => ({
   AssistantFileSourceSelector: null,
   ChatFileSourceSelector: null,
+  ChatAddMenuExtraContent: null,
   ChatInputAttachmentPreview: null,
   ChatGroupedAttachmentsPreview: null,
   ChatHistoryList: null,

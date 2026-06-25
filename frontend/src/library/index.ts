@@ -210,6 +210,7 @@ export {
   type ComponentKitComponentRegistration,
   type ComponentKitRegistration,
   type EratoEmailCodeBlockProps,
+  type ChatAddMenuExtraContentProps,
 } from "@/config/componentRegistry";
 export { createLogger } from "@/utils/debugLogger";
 export { sanitizeHtmlPreview } from "@/utils/sanitizeHtmlPreview";

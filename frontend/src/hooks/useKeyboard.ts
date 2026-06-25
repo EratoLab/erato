@@ -6,6 +6,10 @@ interface UseKeyboardProps {
   onEscape?: (e: KeyboardEvent) => void;
   onTab?: (e: KeyboardEvent) => void;
   onEnter?: (e: KeyboardEvent) => void;
+  onArrowDown?: (e: KeyboardEvent) => void;
+  onArrowUp?: (e: KeyboardEvent) => void;
+  onHome?: (e: KeyboardEvent) => void;
+  onEnd?: (e: KeyboardEvent) => void;
 }
 
 export const useKeyboard = ({
@@ -14,6 +18,10 @@ export const useKeyboard = ({
   onEscape,
   onTab,
   onEnter,
+  onArrowDown,
+  onArrowUp,
+  onHome,
+  onEnd,
 }: UseKeyboardProps) => {
   useEffect(() => {
     if (!enabled) return;
@@ -30,11 +38,33 @@ export const useKeyboard = ({
         case "Enter":
           onEnter?.(keyEvent);
           break;
+        case "ArrowDown":
+          onArrowDown?.(keyEvent);
+          break;
+        case "ArrowUp":
+          onArrowUp?.(keyEvent);
+          break;
+        case "Home":
+          onHome?.(keyEvent);
+          break;
+        case "End":
+          onEnd?.(keyEvent);
+          break;
       }
     };
 
     const element = target.current ?? document;
     element.addEventListener("keydown", handleKeyDown);
     return () => element.removeEventListener("keydown", handleKeyDown);
-  }, [target, enabled, onEscape, onTab, onEnter]);
+  }, [
+    target,
+    enabled,
+    onEscape,
+    onTab,
+    onEnter,
+    onArrowDown,
+    onArrowUp,
+    onHome,
+    onEnd,
+  ]);
 };
