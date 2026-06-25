@@ -133,6 +133,10 @@ function formatAuthenticationError(error: unknown): string {
       });
 }
 
+function isUnauthorizedRedeemError(error: unknown): boolean {
+  return error instanceof Oauth2ProxySessionRedeemError && error.status === 401;
+}
+
 /**
  * Host-agnostic auth core. Owns Layer-2: it redeems a {@link BootstrapToken}
  * (produced by the injected {@link AuthSource}) for an oauth2-proxy session
@@ -243,6 +247,9 @@ export function SessionAuthProvider({
             error: message,
           }));
           setError(message);
+          if (forced && isUnauthorizedRedeemError(redeemError)) {
+            setSignInRequired(true);
+          }
           throw redeemError;
         }
       })();
@@ -261,6 +268,51 @@ export function SessionAuthProvider({
     [],
   );
 
+  const acquireAndRedeemSession = useCallback(
+    async ({
+      allowInteraction,
+      status,
+      forceRefresh = false,
+      shouldContinue,
+    }: {
+      allowInteraction: boolean;
+      status: Extract<Oauth2ProxySessionStatus, "establishing" | "refreshing">;
+      forceRefresh?: boolean;
+      shouldContinue?: () => boolean;
+    }): Promise<void> => {
+      const token = await authSource.acquireBootstrapToken({
+        allowInteraction,
+        ...(forceRefresh ? { forceRefresh: true } : {}),
+      });
+      if (shouldContinue && !shouldContinue()) {
+        return;
+      }
+      setIsBootstrapAcquired(true);
+
+      try {
+        await redeemSessionForToken(token, status, forceRefresh);
+      } catch (redeemError) {
+        if (forceRefresh || !isUnauthorizedRedeemError(redeemError)) {
+          throw redeemError;
+        }
+
+        // A 401 from oauth2-proxy means the token we just redeemed was rejected,
+        // not that the user necessarily needs interaction. Bypass the MSAL cache
+        // once and retry the redeem with the fresh bootstrap token.
+        const freshToken = await authSource.acquireBootstrapToken({
+          allowInteraction,
+          forceRefresh: true,
+        });
+        if (shouldContinue && !shouldContinue()) {
+          return;
+        }
+        setIsBootstrapAcquired(true);
+        await redeemSessionForToken(freshToken, status, true);
+      }
+    },
+    [authSource, redeemSessionForToken],
+  );
+
   useEffect(() => {
     let cancelled = false;
 
@@ -277,14 +329,14 @@ export function SessionAuthProvider({
         setIsSourceInitialized(true);
 
         try {
-          const token = await authSource.acquireBootstrapToken({
+          await acquireAndRedeemSession({
             allowInteraction: false,
+            status: "establishing",
+            shouldContinue: () => !cancelled,
           });
           if (cancelled) {
             return;
           }
-          setIsBootstrapAcquired(true);
-          await redeemSessionForToken(token, "establishing");
         } catch (authenticationError) {
           if (cancelled) {
             return;
@@ -320,16 +372,15 @@ export function SessionAuthProvider({
     return () => {
       cancelled = true;
     };
-  }, [authSource, redeemSessionForToken, initNonce]);
+  }, [acquireAndRedeemSession, authSource, initNonce]);
 
   const refreshSession = useCallback(
     async (allowInteraction: boolean): Promise<void> => {
       try {
-        const token = await authSource.acquireBootstrapToken({
+        await acquireAndRedeemSession({
           allowInteraction,
+          status: "refreshing",
         });
-        setIsBootstrapAcquired(true);
-        await redeemSessionForToken(token, "refreshing");
       } catch (refreshError) {
         const message = formatAuthenticationError(refreshError);
         setOauth2ProxySession((previous) => ({
@@ -341,7 +392,7 @@ export function SessionAuthProvider({
         throw refreshError;
       }
     },
-    [authSource, redeemSessionForToken],
+    [acquireAndRedeemSession],
   );
 
   /**
@@ -359,12 +410,11 @@ export function SessionAuthProvider({
       }
       const recoverPromise = (async () => {
         try {
-          const token = await authSource.acquireBootstrapToken({
-            forceRefresh: true,
+          await acquireAndRedeemSession({
             allowInteraction: false,
+            status: "refreshing",
+            forceRefresh: true,
           });
-          setIsBootstrapAcquired(true);
-          await redeemSessionForToken(token, "refreshing", true);
           return true;
         } catch (recoverError) {
           const message = formatAuthenticationError(recoverError);
@@ -395,7 +445,7 @@ export function SessionAuthProvider({
       recoverInFlightRef.current = recoverPromise;
       return recoverPromise;
     },
-    [authSource, redeemSessionForToken],
+    [acquireAndRedeemSession],
   );
 
   useEffect(() => {
