@@ -73,7 +73,10 @@ const FRONTEND_ENV_KEY_MASK_REASONING_TRACE_TEXT: &str = "MASK_REASONING_TRACE_T
 const COMPONENT_KITS_PUBLIC_MOUNT_BASE: &str = "/public/component-kits";
 const COMPONENT_KIT_REACT_RUNTIME_SCRIPT_PATH: &str =
     "/public/common/assets/component-kit-react-runtime.js";
-const OUTLOOK_OFFICE_FRAME_ANCESTOR: &str = "https://outlook.office.com";
+const OUTLOOK_OFFICE_FRAME_ANCESTORS: &[&str] = &[
+    "https://outlook.office.com",
+    "https://outlook.cloud.microsoft",
+];
 
 #[derive(Debug, Clone, Default)]
 /// Map of values that will be provided as environment-variable-like global variables to the frontend.
@@ -211,7 +214,11 @@ fn build_content_security_policy(config: &AppConfig) -> Option<HeaderValue> {
 
     let mut frame_ancestors = vec!["'self'".to_string()];
     if config.integrations.ms_office.addin.enabled {
-        frame_ancestors.push(OUTLOOK_OFFICE_FRAME_ANCESTOR.to_string());
+        frame_ancestors.extend(
+            OUTLOOK_OFFICE_FRAME_ANCESTORS
+                .iter()
+                .map(ToString::to_string),
+        );
     }
     frame_ancestors.extend(
         config
@@ -1213,7 +1220,9 @@ mod tests {
 
         assert_eq!(
             content_security_policy_str(&config).as_deref(),
-            Some("frame-ancestors 'self' https://outlook.office.com")
+            Some(
+                "frame-ancestors 'self' https://outlook.office.com https://outlook.cloud.microsoft"
+            )
         );
     }
 
