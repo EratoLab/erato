@@ -1,4 +1,4 @@
-import { i18n, Messages } from "@lingui/core";
+import { i18n, type Messages } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";

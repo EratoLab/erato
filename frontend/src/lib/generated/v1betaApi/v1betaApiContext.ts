@@ -5,7 +5,7 @@ import {
   type QueryKey,
   type UseQueryOptions,
 } from "@tanstack/react-query";
-import { QueryOperation } from "./v1betaApiComponents";
+import type { QueryOperation } from "./v1betaApiComponents";
 import { getIdToken } from "@/auth/tokenStore";
 
 // Inlined from @tanstack/query-core (no longer exported publicly in @tanstack/react-query 5.100+).

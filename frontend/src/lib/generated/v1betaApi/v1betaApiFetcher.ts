@@ -1,4 +1,4 @@
-import { V1betaApiContext } from "./v1betaApiContext";
+import type { V1betaApiContext } from "./v1betaApiContext";
 import { tryRecoverAuth } from "../../../auth/authRecovery";
 import { mergeApiAuthHeaders } from "../../../auth/apiRequestAuth";
 
