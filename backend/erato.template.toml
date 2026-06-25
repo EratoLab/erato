@@ -187,8 +187,8 @@ chat_provider_ids = ["test-token-limit"]
 # # Example: message_feedback_edit_time_limit_seconds = 300  # 5 minutes
 # message_feedback_edit_time_limit_seconds = 300
 # # Additional Content-Security-Policy frame-ancestors sources for embedding the frontend.
-# # 'self' is always included. When the Office add-in is enabled, https://outlook.office.com is included.
-# extra_frame_ancestors = ["https://outlook.cloud.microsoft"]
+# # 'self' is always included. When the Office add-in is enabled, https://outlook.office.com and https://outlook.cloud.microsoft are included.
+# extra_frame_ancestors = ["https://example.com"]
 # # Whether to omit the frame-ancestors directive entirely (default: false)
 # allow_any_frame_ancestor = false
 #
