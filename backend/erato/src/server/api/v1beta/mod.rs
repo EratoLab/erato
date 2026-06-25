@@ -89,19 +89,24 @@ use axum::response::IntoResponse;
 use axum::routing::{get, post, put};
 use axum::{Extension, Json, Router, middleware};
 use axum_extra::extract::Multipart;
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use chrono::{DateTime, FixedOffset};
-use eyre::{Report, WrapErr};
+use eyre::{Report, WrapErr, eyre};
 use genai::chat::{ChatMessage as GenAiChatMessage, ChatRequest};
 use sea_orm::EntityTrait;
 use serde::{Deserialize, Deserializer, Serialize};
 use sqlx::types::{Uuid, chrono};
 use std::collections::{HashMap, HashSet};
+use std::time::Duration;
 use tower_http::limit::RequestBodyLimitLayer;
 use tracing::instrument;
 use utoipa::{OpenApi, ToSchema};
 use utoipa_axum::router::OpenApiRouter;
 
 const DEFAULT_MAX_BODY_LIMIT_BYTES: usize = 20 * 1024 * 1024; // 20MB
+const GRAPH_API_BASE_URL: &str = "https://graph.microsoft.com/v1.0";
+const MAX_PROFILE_PHOTO_BYTES: usize = 2 * 1024 * 1024;
+const PROFILE_PHOTO_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
 
 pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
     let max_upload_size = app_state
@@ -517,10 +522,131 @@ pub async fn fallback() -> impl IntoResponse {
     )
 )]
 pub async fn profile(
-    State(_app_state): State<AppState>,
+    State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
 ) -> Result<Json<UserProfile>, StatusCode> {
-    Ok(Json(me_user.profile.clone()))
+    let mut profile = me_user.profile.clone();
+    enrich_profile_with_entra_id_photo(&app_state, &me_user, &mut profile).await;
+    Ok(Json(profile))
+}
+
+async fn enrich_profile_with_entra_id_photo(
+    app_state: &AppState,
+    me_user: &MeProfile,
+    profile: &mut UserProfile,
+) {
+    if profile.picture.is_some() {
+        return;
+    }
+
+    if !app_state.config.integrations.experimental_entra_id.enabled {
+        return;
+    }
+
+    if !is_entra_id_profile(&me_user.id_token_claims) {
+        return;
+    }
+
+    let Some(access_token) = me_user.access_token.as_deref() else {
+        tracing::debug!(
+            "Skipping Entra ID profile photo enrichment because no forwarded access token is available"
+        );
+        return;
+    };
+
+    let http_client = match reqwest::Client::builder()
+        .timeout(PROFILE_PHOTO_REQUEST_TIMEOUT)
+        .build()
+    {
+        Ok(client) => client,
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "Failed to build HTTP client for Entra ID profile photo enrichment"
+            );
+            return;
+        }
+    };
+
+    match fetch_entra_id_profile_photo_data_url(&http_client, GRAPH_API_BASE_URL, access_token)
+        .await
+    {
+        Ok(Some(photo_data_url)) => {
+            profile.picture = Some(photo_data_url);
+        }
+        Ok(None) => {}
+        Err(error) => {
+            tracing::warn!(
+                error = ?error,
+                "Failed to enrich user profile with Entra ID profile photo"
+            );
+        }
+    }
+}
+
+fn is_entra_id_profile(id_token_claims: &serde_json::Value) -> bool {
+    let issuer_matches = id_token_claims
+        .get("iss")
+        .and_then(|issuer| issuer.as_str())
+        .is_some_and(|issuer| {
+            issuer.contains("login.microsoftonline.")
+                || issuer.contains("login.windows.net/")
+                || issuer.contains("sts.windows.net/")
+        });
+
+    issuer_matches || id_token_claims.get("tid").is_some() || id_token_claims.get("oid").is_some()
+}
+
+async fn fetch_entra_id_profile_photo_data_url(
+    http_client: &reqwest::Client,
+    graph_api_base_url: &str,
+    access_token: &str,
+) -> Result<Option<String>, Report> {
+    let photo_url = format!(
+        "{}/me/photo/$value",
+        graph_api_base_url.trim_end_matches('/')
+    );
+    let response = http_client
+        .get(photo_url)
+        .bearer_auth(access_token)
+        .send()
+        .await
+        .wrap_err("Failed to request signed-in user's profile photo from Microsoft Graph")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        tracing::debug!("No Entra ID profile photo is available in Microsoft Graph");
+        return Ok(None);
+    }
+
+    if !status.is_success() {
+        return Err(eyre!(
+            "Microsoft Graph returned unsuccessful profile photo status: {}",
+            status
+        ));
+    }
+
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .filter(|value| value.starts_with("image/"))
+        .unwrap_or("image/jpeg")
+        .to_string();
+    let photo_bytes = response
+        .bytes()
+        .await
+        .wrap_err("Failed to read signed-in user's profile photo from Microsoft Graph")?;
+
+    if photo_bytes.len() > MAX_PROFILE_PHOTO_BYTES {
+        return Err(eyre!(
+            "Microsoft Graph profile photo is too large: {} bytes",
+            photo_bytes.len()
+        ));
+    }
+
+    let photo_base64 = BASE64_STANDARD.encode(photo_bytes);
+    Ok(Some(format!("data:{content_type};base64,{photo_base64}")))
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
@@ -3232,7 +3358,14 @@ pub struct FileCapabilitiesQuery {
 
 #[cfg(test)]
 mod tests {
-    use super::{effective_upload_content_type, preview_content_type};
+    use super::{
+        effective_upload_content_type, fetch_entra_id_profile_photo_data_url, is_entra_id_profile,
+        preview_content_type,
+    };
+    use axum::http::StatusCode;
+    use axum::routing::get;
+    use axum::{Router, response::IntoResponse};
+    use serde_json::json;
 
     #[test]
     fn preview_content_type_supports_eml() {
@@ -3284,5 +3417,88 @@ mod tests {
             effective_upload_content_type("message.eml", Some("text/html; charset=utf-8")),
             Some("message/rfc822".to_string())
         );
+    }
+
+    #[test]
+    fn is_entra_id_profile_detects_microsoft_issuer() {
+        let claims = json!({
+            "iss": "https://login.microsoftonline.com/tenant-id/v2.0",
+            "sub": "subject",
+        });
+
+        assert!(is_entra_id_profile(&claims));
+    }
+
+    #[test]
+    fn is_entra_id_profile_detects_entra_specific_claims() {
+        let claims = json!({
+            "iss": "https://example.com/issuer",
+            "sub": "subject",
+            "oid": "organization-user-id",
+            "tid": "tenant-id",
+        });
+
+        assert!(is_entra_id_profile(&claims));
+    }
+
+    #[test]
+    fn is_entra_id_profile_rejects_other_oidc_providers() {
+        let claims = json!({
+            "iss": "https://accounts.example.com",
+            "sub": "subject",
+        });
+
+        assert!(!is_entra_id_profile(&claims));
+    }
+
+    #[tokio::test]
+    async fn fetch_entra_id_profile_photo_data_url_encodes_graph_photo() {
+        let app = Router::new().route(
+            "/me/photo/$value",
+            get(|| async {
+                (
+                    [(axum::http::header::CONTENT_TYPE, "image/png")],
+                    vec![1_u8, 2, 3],
+                )
+                    .into_response()
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let http_client = reqwest::Client::new();
+        let data_url = fetch_entra_id_profile_photo_data_url(
+            &http_client,
+            &format!("http://{addr}"),
+            "graph-access-token",
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(data_url, Some("data:image/png;base64,AQID".to_string()));
+    }
+
+    #[tokio::test]
+    async fn fetch_entra_id_profile_photo_data_url_treats_404_as_missing() {
+        let app = Router::new().route("/me/photo/$value", get(|| async { StatusCode::NOT_FOUND }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let http_client = reqwest::Client::new();
+        let data_url = fetch_entra_id_profile_photo_data_url(
+            &http_client,
+            &format!("http://{addr}"),
+            "graph-access-token",
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(data_url, None);
     }
 }

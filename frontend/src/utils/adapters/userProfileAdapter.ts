@@ -19,6 +19,7 @@ interface ExtendedUserProfile {
   id?: string;
   display_name?: string;
   name?: string;
+  picture?: string;
   avatar_url?: string;
   avatarUrl?: string;
   email?: string | null;
@@ -39,7 +40,7 @@ export function mapApiUserProfileToUiProfile(
   return {
     id: profile.id,
     name: profile.display_name ?? profile.name ?? profile.email ?? "",
-    avatarUrl: profile.avatar_url ?? profile.avatarUrl ?? "",
+    avatarUrl: profile.picture ?? profile.avatar_url ?? profile.avatarUrl ?? "",
     email: profile.email ?? "",
     username: profile.username ?? "",
   };
