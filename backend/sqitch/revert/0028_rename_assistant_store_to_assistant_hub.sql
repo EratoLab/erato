@@ -1,0 +1,50 @@
+-- Revert erato:0028_rename_assistant_store_to_assistant_hub from pg
+
+BEGIN;
+
+ALTER TABLE public.assistant_hub_assistants
+    RENAME CONSTRAINT assistant_hub_assistants_pkey TO assistant_store_assistants_pkey;
+ALTER TABLE public.assistant_hub_assistants
+    RENAME CONSTRAINT assistant_hub_assistants_source_assistant_id_key TO assistant_store_assistants_source_assistant_id_key;
+ALTER TABLE public.assistant_hub_assistants
+    RENAME CONSTRAINT assistant_hub_assistants_source_assistant_id_fkey TO assistant_store_assistants_source_assistant_id_fkey;
+ALTER TABLE public.assistant_hub_assistants
+    RENAME CONSTRAINT assistant_hub_assistants_owner_user_id_fkey TO assistant_store_assistants_owner_user_id_fkey;
+
+ALTER TABLE public.assistant_hub_assistant_versions
+    RENAME COLUMN assistant_hub_assistant_id TO assistant_store_assistant_id;
+ALTER TABLE public.assistant_hub_assistant_versions
+    RENAME CONSTRAINT assistant_hub_assistant_versions_status_check TO assistant_store_assistant_versions_status_check;
+ALTER TABLE public.assistant_hub_assistant_versions
+    RENAME CONSTRAINT assistant_hub_assistant_versions_published_status_check TO assistant_store_assistant_versions_published_status_check;
+ALTER TABLE public.assistant_hub_assistant_versions
+    RENAME CONSTRAINT assistant_hub_assistant_versions_current_published_check TO assistant_store_assistant_versions_current_published_check;
+ALTER TABLE public.assistant_hub_assistant_versions
+    RENAME CONSTRAINT assistant_hub_assistant_versions_pkey TO assistant_store_assistant_versions_pkey;
+ALTER TABLE public.assistant_hub_assistant_versions
+    RENAME CONSTRAINT assistant_hub_assistant_versions_assistant_id_key TO assistant_store_assistant_versions_assistant_id_key;
+ALTER TABLE public.assistant_hub_assistant_versions
+    RENAME CONSTRAINT assistant_hub_assistant_versions_hub_assistant_id_fkey TO assistant_store_assistant_versions_store_assistant_id_fkey;
+ALTER TABLE public.assistant_hub_assistant_versions
+    RENAME CONSTRAINT assistant_hub_assistant_versions_assistant_id_fkey TO assistant_store_assistant_versions_assistant_id_fkey;
+
+ALTER INDEX public.idx_assistant_hub_assistants_owner_user_id RENAME TO idx_assistant_store_assistants_owner_user_id;
+ALTER INDEX public.idx_assistant_hub_assistants_featured RENAME TO idx_assistant_store_assistants_featured;
+ALTER INDEX public.idx_assistant_hub_versions_current RENAME TO idx_assistant_store_versions_current;
+ALTER INDEX public.idx_assistant_hub_versions_hub_assistant_id RENAME TO idx_assistant_store_versions_store_assistant_id;
+ALTER INDEX public.idx_assistant_hub_versions_status RENAME TO idx_assistant_store_versions_status;
+ALTER INDEX public.idx_assistant_hub_versions_published RENAME TO idx_assistant_store_versions_published;
+ALTER INDEX public.idx_assistant_hub_versions_category_ids RENAME TO idx_assistant_store_versions_category_ids;
+ALTER INDEX public.idx_assistant_hub_versions_keywords RENAME TO idx_assistant_store_versions_keywords;
+
+ALTER TRIGGER on_update_set_updated_columns_assistant_hub_assistants
+    ON public.assistant_hub_assistants
+    RENAME TO on_update_set_updated_columns_assistant_store_assistants;
+ALTER TRIGGER on_update_set_updated_columns_assistant_hub_assistant_versions
+    ON public.assistant_hub_assistant_versions
+    RENAME TO on_update_set_updated_columns_assistant_store_assistant_versions;
+
+ALTER TABLE public.assistant_hub_assistant_versions RENAME TO assistant_store_assistant_versions;
+ALTER TABLE public.assistant_hub_assistants RENAME TO assistant_store_assistants;
+
+COMMIT;

@@ -407,9 +407,9 @@ pub struct AppConfig {
     #[serde(default, alias = "experimental_assistants")]
     pub assistants: AssistantsConfig,
 
-    // Assistant store configuration.
+    // Assistant hub configuration.
     #[serde(default)]
-    pub assistant_store: AssistantStoreConfig,
+    pub assistant_hub: AssistantHubConfig,
 
     // Prompt optimizer configuration.
     #[serde(default)]
@@ -745,8 +745,8 @@ impl AppConfig {
             panic!("Invalid assistants configuration: {}", e);
         }
 
-        if let Err(e) = config.assistant_store.validate() {
-            panic!("Invalid assistant store configuration: {}", e);
+        if let Err(e) = config.assistant_hub.validate() {
+            panic!("Invalid assistant hub configuration: {}", e);
         }
 
         // Validate file processor configuration
@@ -2323,68 +2323,68 @@ impl AssistantsConfig {
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
-pub struct AssistantStoreConfig {
-    // Whether the assistant store feature is enabled.
+pub struct AssistantHubConfig {
+    // Whether the assistant hub feature is enabled.
     // Defaults to `false`.
     #[serde(default)]
     pub enabled: bool,
 
     // Configured reviewer rules.
     #[serde(default)]
-    pub reviewers: AssistantStoreReviewerPermissionsConfig,
+    pub reviewers: AssistantHubReviewerPermissionsConfig,
 
-    // Categories available for assistant store submissions.
+    // Categories available for assistant hub submissions.
     //
     // The map key is the category ID used by the backend.
     #[serde(default)]
-    pub categories: HashMap<String, AssistantStoreCategoryConfig>,
+    pub categories: HashMap<String, AssistantHubCategoryConfig>,
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
-pub struct AssistantStoreReviewerPermissionsConfig {
+pub struct AssistantHubReviewerPermissionsConfig {
     // Map of rule name to reviewer rule configuration.
     #[serde(default)]
-    pub rules: HashMap<String, AssistantStoreReviewerRule>,
+    pub rules: HashMap<String, AssistantHubReviewerRule>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
 #[facet(tag = "rule_type")]
 #[serde(tag = "rule_type")]
 #[repr(C)]
-pub enum AssistantStoreReviewerRule {
+pub enum AssistantHubReviewerRule {
     #[serde(rename = "allow-for-group-members")]
     #[facet(rename = "allow-for-group-members")]
     AllowForGroupMembers {
-        // List of group identifiers whose members can review assistant store submissions.
+        // List of group identifiers whose members can review assistant hub submissions.
         groups: Vec<String>,
     },
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
-pub struct AssistantStoreCategoryConfig {
+pub struct AssistantHubCategoryConfig {
     pub display_name: String,
     pub icon: String,
 }
 
-impl AssistantStoreConfig {
+impl AssistantHubConfig {
     pub fn validate(&self) -> Result<(), Report> {
         self.reviewers.validate()?;
 
         for (category_id, category) in &self.categories {
             if category_id.trim().is_empty() {
-                return Err(eyre!("assistant_store category IDs must not be empty"));
+                return Err(eyre!("assistant_hub category IDs must not be empty"));
             }
 
             if category.display_name.trim().is_empty() {
                 return Err(eyre!(
-                    "assistant_store category '{}' must have a non-empty display_name",
+                    "assistant_hub category '{}' must have a non-empty display_name",
                     category_id
                 ));
             }
 
             if category.icon.trim().is_empty() {
                 return Err(eyre!(
-                    "assistant_store category '{}' must have a non-empty icon",
+                    "assistant_hub category '{}' must have a non-empty icon",
                     category_id
                 ));
             }
@@ -2402,12 +2402,12 @@ impl AssistantStoreConfig {
     }
 }
 
-impl AssistantStoreReviewerPermissionsConfig {
+impl AssistantHubReviewerPermissionsConfig {
     pub fn validate(&self) -> Result<(), Report> {
         for (rule_name, rule) in &self.rules {
             if let Err(e) = rule.validate() {
                 return Err(eyre!(
-                    "Invalid configuration for assistant store reviewer rule '{}': {}",
+                    "Invalid configuration for assistant hub reviewer rule '{}': {}",
                     rule_name,
                     e
                 ));
@@ -2424,10 +2424,10 @@ impl AssistantStoreReviewerPermissionsConfig {
     }
 }
 
-impl AssistantStoreReviewerRule {
+impl AssistantHubReviewerRule {
     pub fn validate(&self) -> Result<(), Report> {
         match self {
-            AssistantStoreReviewerRule::AllowForGroupMembers { groups } => {
+            AssistantHubReviewerRule::AllowForGroupMembers { groups } => {
                 if groups.is_empty() {
                     return Err(eyre!(
                         "Allow-for-group-members rule must specify at least one group"
@@ -2441,7 +2441,7 @@ impl AssistantStoreReviewerRule {
 
     pub fn allows_review(&self, user_groups: &[String]) -> bool {
         match self {
-            AssistantStoreReviewerRule::AllowForGroupMembers { groups } => user_groups
+            AssistantHubReviewerRule::AllowForGroupMembers { groups } => user_groups
                 .iter()
                 .any(|user_group| groups.contains(user_group)),
         }

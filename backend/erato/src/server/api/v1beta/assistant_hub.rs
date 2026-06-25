@@ -1,7 +1,5 @@
-use crate::models::assistant_store;
-use crate::models::assistant_store::{
-    StoreAudienceGrantInput, StoreSubmissionProfile, StoreVersionRecord,
-};
+use crate::models::assistant_hub;
+use crate::models::assistant_hub::{HubAudienceGrantInput, HubSubmissionProfile, HubVersionRecord};
 use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::services::sentry::log_internal_server_error;
@@ -18,21 +16,21 @@ use std::collections::HashMap;
 use utoipa::ToSchema;
 
 #[derive(Debug, Serialize, ToSchema)]
-pub struct AssistantStoreCategory {
+pub struct AssistantHubCategory {
     pub id: String,
     pub display_name: String,
     pub icon: String,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
-pub struct AssistantStoreConfigResponse {
+pub struct AssistantHubConfigResponse {
     pub enabled: bool,
     pub can_review: bool,
-    pub categories: Vec<AssistantStoreCategory>,
+    pub categories: Vec<AssistantHubCategory>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-pub struct AssistantStoreAudienceGrantInput {
+pub struct AssistantHubAudienceGrantInput {
     pub subject_type: String,
     pub subject_id_type: String,
     pub subject_id: String,
@@ -40,7 +38,7 @@ pub struct AssistantStoreAudienceGrantInput {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-pub struct AssistantStoreSubmissionRequest {
+pub struct AssistantHubSubmissionRequest {
     pub long_description: String,
     pub category_ids: Vec<String>,
     pub keywords: Vec<String>,
@@ -48,17 +46,17 @@ pub struct AssistantStoreSubmissionRequest {
     pub version_comment: Option<String>,
     pub creator_review_comment: Option<String>,
     #[serde(default)]
-    pub audience_grants: Vec<AssistantStoreAudienceGrantInput>,
+    pub audience_grants: Vec<AssistantHubAudienceGrantInput>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
-pub struct AssistantStoreSubmissionDiffResponse {
+pub struct AssistantHubSubmissionDiffResponse {
     #[schema(value_type = Object)]
     pub diff_summary: JsonValue,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
-pub struct AssistantStoreAssistantSnapshot {
+pub struct AssistantHubAssistantSnapshot {
     pub id: String,
     pub name: String,
     pub description: Option<String>,
@@ -72,15 +70,15 @@ pub struct AssistantStoreAssistantSnapshot {
 }
 
 #[derive(Debug, Serialize, ToSchema)]
-pub struct AssistantStoreCreator {
+pub struct AssistantHubCreator {
     pub id: String,
     pub display_name: String,
     pub email: Option<String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
-pub struct AssistantStoreVersion {
-    pub store_assistant_id: String,
+pub struct AssistantHubVersion {
+    pub hub_assistant_id: String,
     pub source_assistant_id: String,
     pub version_id: String,
     pub assistant_id: String,
@@ -103,38 +101,38 @@ pub struct AssistantStoreVersion {
     pub published_at: Option<DateTime<FixedOffset>>,
     pub created_at: DateTime<FixedOffset>,
     pub updated_at: DateTime<FixedOffset>,
-    pub assistant: AssistantStoreAssistantSnapshot,
-    pub creator: AssistantStoreCreator,
+    pub assistant: AssistantHubAssistantSnapshot,
+    pub creator: AssistantHubCreator,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
-pub struct AssistantStoreVersionResponse {
-    pub version: AssistantStoreVersion,
+pub struct AssistantHubVersionResponse {
+    pub version: AssistantHubVersion,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
-pub struct AssistantStoreVersionsResponse {
-    pub versions: Vec<AssistantStoreVersion>,
+pub struct AssistantHubVersionsResponse {
+    pub versions: Vec<AssistantHubVersion>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-pub struct AssistantStoreReviewRequest {
+pub struct AssistantHubReviewRequest {
     pub accepted: bool,
     pub reviewer_review_comment: Option<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-pub struct AssistantStoreSetPublishedRequest {
+pub struct AssistantHubSetPublishedRequest {
     pub is_published: bool,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-pub struct AssistantStoreSetFeaturedRequest {
+pub struct AssistantHubSetFeaturedRequest {
     pub featured: bool,
 }
 
-impl From<AssistantStoreAudienceGrantInput> for StoreAudienceGrantInput {
-    fn from(input: AssistantStoreAudienceGrantInput) -> Self {
+impl From<AssistantHubAudienceGrantInput> for HubAudienceGrantInput {
+    fn from(input: AssistantHubAudienceGrantInput) -> Self {
         Self {
             subject_type: input.subject_type,
             subject_id_type: input.subject_id_type,
@@ -144,8 +142,8 @@ impl From<AssistantStoreAudienceGrantInput> for StoreAudienceGrantInput {
     }
 }
 
-impl From<&AssistantStoreSubmissionRequest> for StoreSubmissionProfile {
-    fn from(request: &AssistantStoreSubmissionRequest) -> Self {
+impl From<&AssistantHubSubmissionRequest> for HubSubmissionProfile {
+    fn from(request: &AssistantHubSubmissionRequest) -> Self {
         Self {
             long_description: request.long_description.clone(),
             category_ids: request.category_ids.clone(),
@@ -178,7 +176,7 @@ fn create_graph_client(access_token: &str) -> GraphClient {
 async fn resolve_creator_display_names(
     app_state: &AppState,
     me_user: &MeProfile,
-    records: &[StoreVersionRecord],
+    records: &[HubVersionRecord],
 ) -> HashMap<String, String> {
     let mut display_names = HashMap::new();
     let mut lookup_keys = HashMap::new();
@@ -229,7 +227,7 @@ async fn resolve_creator_display_names(
             Ok(response) => response,
             Err(error) => {
                 tracing::warn!(
-                    "Failed to resolve assistant store creator {} via Graph API: {:?}",
+                    "Failed to resolve assistant hub creator {} via Graph API: {:?}",
                     lookup_key,
                     error
                 );
@@ -241,7 +239,7 @@ async fn resolve_creator_display_names(
             Ok(user_item) => user_item,
             Err(error) => {
                 tracing::warn!(
-                    "Failed to parse assistant store creator {} from Graph API: {:?}",
+                    "Failed to parse assistant hub creator {} from Graph API: {:?}",
                     lookup_key,
                     error
                 );
@@ -263,8 +261,8 @@ async fn resolve_creator_display_names(
 async fn records_to_response(
     app_state: &AppState,
     me_user: &MeProfile,
-    records: Vec<StoreVersionRecord>,
-) -> Vec<AssistantStoreVersion> {
+    records: Vec<HubVersionRecord>,
+) -> Vec<AssistantHubVersion> {
     let creator_display_names = resolve_creator_display_names(app_state, me_user, &records).await;
 
     records
@@ -279,22 +277,22 @@ async fn records_to_response(
 }
 
 fn record_to_response(
-    record: StoreVersionRecord,
+    record: HubVersionRecord,
     creator_display_name: Option<String>,
-) -> AssistantStoreVersion {
+) -> AssistantHubVersion {
     let creator_id = record.creator.id.to_string();
     let creator_email = record.creator.email.clone();
     let creator_fallback = creator_email.clone().unwrap_or_else(|| creator_id.clone());
 
-    AssistantStoreVersion {
-        store_assistant_id: record.store_assistant.id.to_string(),
-        source_assistant_id: record.store_assistant.source_assistant_id.to_string(),
+    AssistantHubVersion {
+        hub_assistant_id: record.hub_assistant.id.to_string(),
+        source_assistant_id: record.hub_assistant.source_assistant_id.to_string(),
         version_id: record.version.id.to_string(),
         assistant_id: record.version.assistant_id.to_string(),
         status: record.version.status,
         is_published: record.version.is_published,
         is_current_published_version: record.version.is_current_published_version,
-        featured: record.store_assistant.featured,
+        featured: record.hub_assistant.featured,
         version_number: record.version.version_number,
         version_comment: record.version.version_comment,
         creator_review_comment: record.version.creator_review_comment,
@@ -309,7 +307,7 @@ fn record_to_response(
         published_at: record.version.published_at,
         created_at: record.version.created_at,
         updated_at: record.version.updated_at,
-        assistant: AssistantStoreAssistantSnapshot {
+        assistant: AssistantHubAssistantSnapshot {
             id: record.assistant.id.to_string(),
             name: record.assistant.name,
             description: record.assistant.description,
@@ -321,7 +319,7 @@ fn record_to_response(
             created_at: record.assistant.created_at,
             updated_at: record.assistant.updated_at,
         },
-        creator: AssistantStoreCreator {
+        creator: AssistantHubCreator {
             id: creator_id,
             display_name: creator_display_name.unwrap_or(creator_fallback),
             email: creator_email,
@@ -352,24 +350,24 @@ fn model_error_to_status(error: eyre::Report) -> StatusCode {
 
 #[utoipa::path(
     get,
-    path = "/assistant-store/config",
-    tag = "assistant_store",
+    path = "/assistant-hub/config",
+    tag = "assistant_hub",
     responses(
-        (status = OK, body = AssistantStoreConfigResponse),
+        (status = OK, body = AssistantHubConfigResponse),
         (status = UNAUTHORIZED),
     ),
     security(("bearer_auth" = []))
 )]
-pub async fn assistant_store_config(
+pub async fn assistant_hub_config(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
-) -> Result<Json<AssistantStoreConfigResponse>, StatusCode> {
-    let mut categories: Vec<AssistantStoreCategory> = app_state
+) -> Result<Json<AssistantHubConfigResponse>, StatusCode> {
+    let mut categories: Vec<AssistantHubCategory> = app_state
         .config
-        .assistant_store
+        .assistant_hub
         .categories
         .iter()
-        .map(|(id, category)| AssistantStoreCategory {
+        .map(|(id, category)| AssistantHubCategory {
             id: id.clone(),
             display_name: category.display_name.clone(),
             icon: category.icon.clone(),
@@ -377,20 +375,20 @@ pub async fn assistant_store_config(
         .collect();
     categories.sort_by(|a, b| a.display_name.cmp(&b.display_name));
 
-    Ok(Json(AssistantStoreConfigResponse {
-        enabled: app_state.config.assistant_store.enabled,
-        can_review: app_state.config.assistant_store.can_review(&me_user.groups),
+    Ok(Json(AssistantHubConfigResponse {
+        enabled: app_state.config.assistant_hub.enabled,
+        can_review: app_state.config.assistant_hub.can_review(&me_user.groups),
         categories,
     }))
 }
 
 #[utoipa::path(
     post,
-    path = "/assistant-store/assistants/{source_assistant_id}/submission-diff",
-    tag = "assistant_store",
-    request_body = AssistantStoreSubmissionRequest,
+    path = "/assistant-hub/assistants/{source_assistant_id}/submission-diff",
+    tag = "assistant_hub",
+    request_body = AssistantHubSubmissionRequest,
     responses(
-        (status = OK, body = AssistantStoreSubmissionDiffResponse),
+        (status = OK, body = AssistantHubSubmissionDiffResponse),
         (status = BAD_REQUEST),
         (status = FORBIDDEN),
         (status = NOT_FOUND),
@@ -398,18 +396,18 @@ pub async fn assistant_store_config(
     ),
     security(("bearer_auth" = []))
 )]
-pub async fn preview_assistant_store_submission_diff(
+pub async fn preview_assistant_hub_submission_diff(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
     Path(source_assistant_id): Path<String>,
-    Json(request): Json<AssistantStoreSubmissionRequest>,
-) -> Result<Json<AssistantStoreSubmissionDiffResponse>, StatusCode> {
+    Json(request): Json<AssistantHubSubmissionRequest>,
+) -> Result<Json<AssistantHubSubmissionDiffResponse>, StatusCode> {
     let source_assistant_id =
         Uuid::parse_str(&source_assistant_id).map_err(|_| StatusCode::BAD_REQUEST)?;
-    let profile = StoreSubmissionProfile::from(&request);
-    let diff_summary = assistant_store::build_submission_diff(
+    let profile = HubSubmissionProfile::from(&request);
+    let diff_summary = assistant_hub::build_submission_diff(
         &app_state.db,
-        &app_state.config.assistant_store,
+        &app_state.config.assistant_hub,
         &me_user.to_subject(),
         source_assistant_id,
         &profile,
@@ -417,16 +415,16 @@ pub async fn preview_assistant_store_submission_diff(
     .await
     .map_err(model_error_to_status)?;
 
-    Ok(Json(AssistantStoreSubmissionDiffResponse { diff_summary }))
+    Ok(Json(AssistantHubSubmissionDiffResponse { diff_summary }))
 }
 
 #[utoipa::path(
     post,
-    path = "/assistant-store/assistants/{source_assistant_id}/versions",
-    tag = "assistant_store",
-    request_body = AssistantStoreSubmissionRequest,
+    path = "/assistant-hub/assistants/{source_assistant_id}/versions",
+    tag = "assistant_hub",
+    request_body = AssistantHubSubmissionRequest,
     responses(
-        (status = CREATED, body = AssistantStoreVersionResponse),
+        (status = CREATED, body = AssistantHubVersionResponse),
         (status = BAD_REQUEST),
         (status = FORBIDDEN),
         (status = NOT_FOUND),
@@ -434,25 +432,25 @@ pub async fn preview_assistant_store_submission_diff(
     ),
     security(("bearer_auth" = []))
 )]
-pub async fn submit_assistant_store_version(
+pub async fn submit_assistant_hub_version(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
     Extension(policy): Extension<PolicyEngine>,
     Path(source_assistant_id): Path<String>,
-    Json(request): Json<AssistantStoreSubmissionRequest>,
-) -> Result<(StatusCode, Json<AssistantStoreVersionResponse>), StatusCode> {
+    Json(request): Json<AssistantHubSubmissionRequest>,
+) -> Result<(StatusCode, Json<AssistantHubVersionResponse>), StatusCode> {
     let source_assistant_id =
         Uuid::parse_str(&source_assistant_id).map_err(|_| StatusCode::BAD_REQUEST)?;
-    let profile = StoreSubmissionProfile::from(&request);
+    let profile = HubSubmissionProfile::from(&request);
     let audience_grants = request
         .audience_grants
         .into_iter()
-        .map(StoreAudienceGrantInput::from)
+        .map(HubAudienceGrantInput::from)
         .collect();
-    let record = assistant_store::submit_version(
+    let record = assistant_hub::submit_version(
         &app_state.db,
         &policy,
-        &app_state.config.assistant_store,
+        &app_state.config.assistant_hub,
         &me_user.to_subject(),
         source_assistant_id,
         profile,
@@ -465,7 +463,7 @@ pub async fn submit_assistant_store_version(
 
     Ok((
         StatusCode::CREATED,
-        Json(AssistantStoreVersionResponse {
+        Json(AssistantHubVersionResponse {
             version: records_to_response(&app_state, &me_user, vec![record])
                 .await
                 .into_iter()
@@ -477,61 +475,61 @@ pub async fn submit_assistant_store_version(
 
 #[utoipa::path(
     get,
-    path = "/assistant-store/assistants",
-    tag = "assistant_store",
+    path = "/assistant-hub/assistants",
+    tag = "assistant_hub",
     responses(
-        (status = OK, body = AssistantStoreVersionsResponse),
+        (status = OK, body = AssistantHubVersionsResponse),
         (status = NOT_FOUND),
         (status = UNAUTHORIZED),
     ),
     security(("bearer_auth" = []))
 )]
-pub async fn list_assistant_store_assistants(
+pub async fn list_assistant_hub_assistants(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
-) -> Result<Json<AssistantStoreVersionsResponse>, StatusCode> {
-    let records = assistant_store::list_published_current_versions(
+) -> Result<Json<AssistantHubVersionsResponse>, StatusCode> {
+    let records = assistant_hub::list_published_current_versions(
         &app_state.db,
-        &app_state.config.assistant_store,
+        &app_state.config.assistant_hub,
         &me_user.to_subject(),
     )
     .await
     .map_err(model_error_to_status)?;
 
-    Ok(Json(AssistantStoreVersionsResponse {
+    Ok(Json(AssistantHubVersionsResponse {
         versions: records_to_response(&app_state, &me_user, records).await,
     }))
 }
 
 #[utoipa::path(
     get,
-    path = "/assistant-store/assistants/{store_assistant_id}",
-    tag = "assistant_store",
+    path = "/assistant-hub/assistants/{hub_assistant_id}",
+    tag = "assistant_hub",
     responses(
-        (status = OK, body = AssistantStoreVersionResponse),
+        (status = OK, body = AssistantHubVersionResponse),
         (status = FORBIDDEN),
         (status = NOT_FOUND),
         (status = UNAUTHORIZED),
     ),
     security(("bearer_auth" = []))
 )]
-pub async fn get_assistant_store_assistant(
+pub async fn get_assistant_hub_assistant(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
-    Path(store_assistant_id): Path<String>,
-) -> Result<Json<AssistantStoreVersionResponse>, StatusCode> {
-    let store_assistant_id =
-        Uuid::parse_str(&store_assistant_id).map_err(|_| StatusCode::BAD_REQUEST)?;
-    let record = assistant_store::get_published_current_version(
+    Path(hub_assistant_id): Path<String>,
+) -> Result<Json<AssistantHubVersionResponse>, StatusCode> {
+    let hub_assistant_id =
+        Uuid::parse_str(&hub_assistant_id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let record = assistant_hub::get_published_current_version(
         &app_state.db,
-        &app_state.config.assistant_store,
+        &app_state.config.assistant_hub,
         &me_user.to_subject(),
-        store_assistant_id,
+        hub_assistant_id,
     )
     .await
     .map_err(model_error_to_status)?;
 
-    Ok(Json(AssistantStoreVersionResponse {
+    Ok(Json(AssistantHubVersionResponse {
         version: records_to_response(&app_state, &me_user, vec![record])
             .await
             .into_iter()
@@ -542,68 +540,68 @@ pub async fn get_assistant_store_assistant(
 
 #[utoipa::path(
     get,
-    path = "/assistant-store/my/versions",
-    tag = "assistant_store",
+    path = "/assistant-hub/my/versions",
+    tag = "assistant_hub",
     responses(
-        (status = OK, body = AssistantStoreVersionsResponse),
+        (status = OK, body = AssistantHubVersionsResponse),
         (status = NOT_FOUND),
         (status = UNAUTHORIZED),
     ),
     security(("bearer_auth" = []))
 )]
-pub async fn list_my_assistant_store_versions(
+pub async fn list_my_assistant_hub_versions(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
-) -> Result<Json<AssistantStoreVersionsResponse>, StatusCode> {
-    let records = assistant_store::list_my_store_versions(
+) -> Result<Json<AssistantHubVersionsResponse>, StatusCode> {
+    let records = assistant_hub::list_my_hub_versions(
         &app_state.db,
-        &app_state.config.assistant_store,
+        &app_state.config.assistant_hub,
         &me_user.to_subject(),
     )
     .await
     .map_err(model_error_to_status)?;
 
-    Ok(Json(AssistantStoreVersionsResponse {
+    Ok(Json(AssistantHubVersionsResponse {
         versions: records_to_response(&app_state, &me_user, records).await,
     }))
 }
 
 #[utoipa::path(
     get,
-    path = "/assistant-store/review/versions",
-    tag = "assistant_store",
+    path = "/assistant-hub/review/versions",
+    tag = "assistant_hub",
     responses(
-        (status = OK, body = AssistantStoreVersionsResponse),
+        (status = OK, body = AssistantHubVersionsResponse),
         (status = FORBIDDEN),
         (status = NOT_FOUND),
         (status = UNAUTHORIZED),
     ),
     security(("bearer_auth" = []))
 )]
-pub async fn list_review_assistant_store_versions(
+pub async fn list_review_assistant_hub_versions(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
-) -> Result<Json<AssistantStoreVersionsResponse>, StatusCode> {
-    let records = assistant_store::list_review_versions(
+) -> Result<Json<AssistantHubVersionsResponse>, StatusCode> {
+    let records = assistant_hub::list_review_versions(
         &app_state.db,
-        &app_state.config.assistant_store,
+        &app_state.config.assistant_hub,
         &me_user.groups,
     )
     .await
     .map_err(model_error_to_status)?;
 
-    Ok(Json(AssistantStoreVersionsResponse {
+    Ok(Json(AssistantHubVersionsResponse {
         versions: records_to_response(&app_state, &me_user, records).await,
     }))
 }
 
 #[utoipa::path(
     post,
-    path = "/assistant-store/versions/{version_id}/review",
-    tag = "assistant_store",
-    request_body = AssistantStoreReviewRequest,
+    path = "/assistant-hub/versions/{version_id}/review",
+    tag = "assistant_hub",
+    request_body = AssistantHubReviewRequest,
     responses(
-        (status = OK, body = AssistantStoreVersionResponse),
+        (status = OK, body = AssistantHubVersionResponse),
         (status = BAD_REQUEST),
         (status = FORBIDDEN),
         (status = NOT_FOUND),
@@ -611,16 +609,16 @@ pub async fn list_review_assistant_store_versions(
     ),
     security(("bearer_auth" = []))
 )]
-pub async fn review_assistant_store_version(
+pub async fn review_assistant_hub_version(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
     Path(version_id): Path<String>,
-    Json(request): Json<AssistantStoreReviewRequest>,
-) -> Result<Json<AssistantStoreVersionResponse>, StatusCode> {
+    Json(request): Json<AssistantHubReviewRequest>,
+) -> Result<Json<AssistantHubVersionResponse>, StatusCode> {
     let version_id = Uuid::parse_str(&version_id).map_err(|_| StatusCode::BAD_REQUEST)?;
-    let record = assistant_store::review_version(
+    let record = assistant_hub::review_version(
         &app_state.db,
-        &app_state.config.assistant_store,
+        &app_state.config.assistant_hub,
         &me_user.groups,
         version_id,
         request.accepted,
@@ -631,7 +629,7 @@ pub async fn review_assistant_store_version(
 
     app_state.global_policy_engine.invalidate_data().await;
 
-    Ok(Json(AssistantStoreVersionResponse {
+    Ok(Json(AssistantHubVersionResponse {
         version: records_to_response(&app_state, &me_user, vec![record])
             .await
             .into_iter()
@@ -642,10 +640,10 @@ pub async fn review_assistant_store_version(
 
 #[utoipa::path(
     post,
-    path = "/assistant-store/versions/{version_id}/withdraw",
-    tag = "assistant_store",
+    path = "/assistant-hub/versions/{version_id}/withdraw",
+    tag = "assistant_hub",
     responses(
-        (status = OK, body = AssistantStoreVersionResponse),
+        (status = OK, body = AssistantHubVersionResponse),
         (status = BAD_REQUEST),
         (status = FORBIDDEN),
         (status = NOT_FOUND),
@@ -653,15 +651,15 @@ pub async fn review_assistant_store_version(
     ),
     security(("bearer_auth" = []))
 )]
-pub async fn withdraw_assistant_store_version(
+pub async fn withdraw_assistant_hub_version(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
     Path(version_id): Path<String>,
-) -> Result<Json<AssistantStoreVersionResponse>, StatusCode> {
+) -> Result<Json<AssistantHubVersionResponse>, StatusCode> {
     let version_id = Uuid::parse_str(&version_id).map_err(|_| StatusCode::BAD_REQUEST)?;
-    let record = assistant_store::withdraw_version(
+    let record = assistant_hub::withdraw_version(
         &app_state.db,
-        &app_state.config.assistant_store,
+        &app_state.config.assistant_hub,
         &me_user.to_subject(),
         version_id,
     )
@@ -670,7 +668,7 @@ pub async fn withdraw_assistant_store_version(
 
     app_state.global_policy_engine.invalidate_data().await;
 
-    Ok(Json(AssistantStoreVersionResponse {
+    Ok(Json(AssistantHubVersionResponse {
         version: records_to_response(&app_state, &me_user, vec![record])
             .await
             .into_iter()
@@ -681,11 +679,11 @@ pub async fn withdraw_assistant_store_version(
 
 #[utoipa::path(
     put,
-    path = "/assistant-store/versions/{version_id}/published",
-    tag = "assistant_store",
-    request_body = AssistantStoreSetPublishedRequest,
+    path = "/assistant-hub/versions/{version_id}/published",
+    tag = "assistant_hub",
+    request_body = AssistantHubSetPublishedRequest,
     responses(
-        (status = OK, body = AssistantStoreVersionResponse),
+        (status = OK, body = AssistantHubVersionResponse),
         (status = BAD_REQUEST),
         (status = FORBIDDEN),
         (status = NOT_FOUND),
@@ -693,16 +691,16 @@ pub async fn withdraw_assistant_store_version(
     ),
     security(("bearer_auth" = []))
 )]
-pub async fn set_assistant_store_version_published(
+pub async fn set_assistant_hub_version_published(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
     Path(version_id): Path<String>,
-    Json(request): Json<AssistantStoreSetPublishedRequest>,
-) -> Result<Json<AssistantStoreVersionResponse>, StatusCode> {
+    Json(request): Json<AssistantHubSetPublishedRequest>,
+) -> Result<Json<AssistantHubVersionResponse>, StatusCode> {
     let version_id = Uuid::parse_str(&version_id).map_err(|_| StatusCode::BAD_REQUEST)?;
-    let record = assistant_store::set_published(
+    let record = assistant_hub::set_published(
         &app_state.db,
-        &app_state.config.assistant_store,
+        &app_state.config.assistant_hub,
         &me_user.to_subject(),
         &me_user.groups,
         version_id,
@@ -713,7 +711,7 @@ pub async fn set_assistant_store_version_published(
 
     app_state.global_policy_engine.invalidate_data().await;
 
-    Ok(Json(AssistantStoreVersionResponse {
+    Ok(Json(AssistantHubVersionResponse {
         version: records_to_response(&app_state, &me_user, vec![record])
             .await
             .into_iter()
@@ -724,10 +722,10 @@ pub async fn set_assistant_store_version_published(
 
 #[utoipa::path(
     put,
-    path = "/assistant-store/versions/{version_id}/current",
-    tag = "assistant_store",
+    path = "/assistant-hub/versions/{version_id}/current",
+    tag = "assistant_hub",
     responses(
-        (status = OK, body = AssistantStoreVersionResponse),
+        (status = OK, body = AssistantHubVersionResponse),
         (status = BAD_REQUEST),
         (status = FORBIDDEN),
         (status = NOT_FOUND),
@@ -735,15 +733,15 @@ pub async fn set_assistant_store_version_published(
     ),
     security(("bearer_auth" = []))
 )]
-pub async fn set_assistant_store_version_current(
+pub async fn set_assistant_hub_version_current(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
     Path(version_id): Path<String>,
-) -> Result<Json<AssistantStoreVersionResponse>, StatusCode> {
+) -> Result<Json<AssistantHubVersionResponse>, StatusCode> {
     let version_id = Uuid::parse_str(&version_id).map_err(|_| StatusCode::BAD_REQUEST)?;
-    let record = assistant_store::set_current_published_version(
+    let record = assistant_hub::set_current_published_version(
         &app_state.db,
-        &app_state.config.assistant_store,
+        &app_state.config.assistant_hub,
         &me_user.to_subject(),
         &me_user.groups,
         version_id,
@@ -753,7 +751,7 @@ pub async fn set_assistant_store_version_current(
 
     app_state.global_policy_engine.invalidate_data().await;
 
-    Ok(Json(AssistantStoreVersionResponse {
+    Ok(Json(AssistantHubVersionResponse {
         version: records_to_response(&app_state, &me_user, vec![record])
             .await
             .into_iter()
@@ -764,11 +762,11 @@ pub async fn set_assistant_store_version_current(
 
 #[utoipa::path(
     put,
-    path = "/assistant-store/versions/{version_id}/featured",
-    tag = "assistant_store",
-    request_body = AssistantStoreSetFeaturedRequest,
+    path = "/assistant-hub/versions/{version_id}/featured",
+    tag = "assistant_hub",
+    request_body = AssistantHubSetFeaturedRequest,
     responses(
-        (status = OK, body = AssistantStoreVersionResponse),
+        (status = OK, body = AssistantHubVersionResponse),
         (status = BAD_REQUEST),
         (status = FORBIDDEN),
         (status = NOT_FOUND),
@@ -776,16 +774,16 @@ pub async fn set_assistant_store_version_current(
     ),
     security(("bearer_auth" = []))
 )]
-pub async fn set_assistant_store_version_featured(
+pub async fn set_assistant_hub_version_featured(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
     Path(version_id): Path<String>,
-    Json(request): Json<AssistantStoreSetFeaturedRequest>,
-) -> Result<Json<AssistantStoreVersionResponse>, StatusCode> {
+    Json(request): Json<AssistantHubSetFeaturedRequest>,
+) -> Result<Json<AssistantHubVersionResponse>, StatusCode> {
     let version_id = Uuid::parse_str(&version_id).map_err(|_| StatusCode::BAD_REQUEST)?;
-    let record = assistant_store::set_featured(
+    let record = assistant_hub::set_featured(
         &app_state.db,
-        &app_state.config.assistant_store,
+        &app_state.config.assistant_hub,
         &me_user.groups,
         version_id,
         request.featured,
@@ -793,7 +791,7 @@ pub async fn set_assistant_store_version_featured(
     .await
     .map_err(model_error_to_status)?;
 
-    Ok(Json(AssistantStoreVersionResponse {
+    Ok(Json(AssistantHubVersionResponse {
         version: records_to_response(&app_state, &me_user, vec![record])
             .await
             .into_iter()

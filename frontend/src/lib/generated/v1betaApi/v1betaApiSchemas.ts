@@ -226,7 +226,7 @@ export type AssistantFile = {
   preview_url?: string | null | undefined;
 };
 
-export type AssistantStoreAssistantSnapshot = {
+export type AssistantHubAssistantSnapshot = {
   /**
    * @format date-time
    */
@@ -245,50 +245,50 @@ export type AssistantStoreAssistantSnapshot = {
   updated_at: string;
 };
 
-export type AssistantStoreAudienceGrantInput = {
+export type AssistantHubAudienceGrantInput = {
   role: string;
   subject_id: string;
   subject_id_type: string;
   subject_type: string;
 };
 
-export type AssistantStoreCategory = {
+export type AssistantHubCategory = {
   display_name: string;
   icon: string;
   id: string;
 };
 
-export type AssistantStoreConfigResponse = {
+export type AssistantHubConfigResponse = {
   can_review: boolean;
-  categories: AssistantStoreCategory[];
+  categories: AssistantHubCategory[];
   enabled: boolean;
 };
 
-export type AssistantStoreCreator = {
+export type AssistantHubCreator = {
   display_name: string;
   email?: null | undefined;
   id: string;
 };
 
-export type AssistantStoreReviewRequest = {
+export type AssistantHubReviewRequest = {
   accepted: boolean;
   reviewer_review_comment?: string | null | undefined;
 };
 
-export type AssistantStoreSetFeaturedRequest = {
+export type AssistantHubSetFeaturedRequest = {
   featured: boolean;
 };
 
-export type AssistantStoreSetPublishedRequest = {
+export type AssistantHubSetPublishedRequest = {
   is_published: boolean;
 };
 
-export type AssistantStoreSubmissionDiffResponse = {
+export type AssistantHubSubmissionDiffResponse = {
   diff_summary: Record<string, any>;
 };
 
-export type AssistantStoreSubmissionRequest = {
-  audience_grants?: AssistantStoreAudienceGrantInput[];
+export type AssistantHubSubmissionRequest = {
+  audience_grants?: AssistantHubAudienceGrantInput[];
   category_ids: string[];
   creator_review_comment?: string | null | undefined;
   keywords: string[];
@@ -297,18 +297,19 @@ export type AssistantStoreSubmissionRequest = {
   version_number: string;
 };
 
-export type AssistantStoreVersion = {
-  assistant: AssistantStoreAssistantSnapshot;
+export type AssistantHubVersion = {
+  assistant: AssistantHubAssistantSnapshot;
   assistant_id: string;
   category_ids: string[];
   /**
    * @format date-time
    */
   created_at: string;
-  creator: AssistantStoreCreator;
+  creator: AssistantHubCreator;
   creator_review_comment?: string | null | undefined;
   diff_summary: Record<string, any>;
   featured: boolean;
+  hub_assistant_id: string;
   is_current_published_version: boolean;
   is_published: boolean;
   keywords: string[];
@@ -324,7 +325,6 @@ export type AssistantStoreVersion = {
   reviewer_review_comment?: string | null | undefined;
   source_assistant_id: string;
   status: string;
-  store_assistant_id: string;
   /**
    * @format date-time
    */
@@ -342,12 +342,12 @@ export type AssistantStoreVersion = {
   withdrawn_at?: string | null | undefined;
 };
 
-export type AssistantStoreVersionResponse = {
-  version: AssistantStoreVersion;
+export type AssistantHubVersionResponse = {
+  version: AssistantHubVersion;
 };
 
-export type AssistantStoreVersionsResponse = {
-  versions: AssistantStoreVersion[];
+export type AssistantHubVersionsResponse = {
+  versions: AssistantHubVersion[];
 };
 
 /**

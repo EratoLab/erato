@@ -28,6 +28,7 @@ const eslintConfig = [
       "dist-package/**/*", // Packed library tarball output
       "node_modules/**/*",
       "out/**/*",
+      "src/customer/components/**/*", // Local customer component overrides
       ".pnpm-store/**/*", // pnpm store directory
       "src/hooks/chat/__tests__/useChatHistory.test.tsx",
     ],

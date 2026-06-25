@@ -58,10 +58,10 @@ package backend
 #   }
 # ]
 #
-# assistant_store_versions := [
+# assistant_hub_versions := [
 #   {
 #     "id": "some-version-id",
-#     "assistant_store_assistant_id": "some-store-assistant-id",
+#     "assistant_hub_assistant_id": "some-hub-assistant-id",
 #     "assistant_id": "some-assistant-id",
 #     "status": "review_accepted",
 #     "is_published": true,
@@ -160,17 +160,17 @@ can_read_assistant(assistant_id) if {
 	data.resource_attributes[resource_kind_assistant][assistant_id].owner_id == input.subject_id
 }
 
-assistant_store_version_for_assistant(assistant_id) := version if {
-	some version in data.assistant_store_versions
+assistant_hub_version_for_assistant(assistant_id) := version if {
+	some version in data.assistant_hub_versions
 	version.assistant_id == assistant_id
 }
 
 assistant_share_grant_active(assistant_id) if {
-	not assistant_store_version_for_assistant(assistant_id)
+	not assistant_hub_version_for_assistant(assistant_id)
 }
 
 assistant_share_grant_active(assistant_id) if {
-	version := assistant_store_version_for_assistant(assistant_id)
+	version := assistant_hub_version_for_assistant(assistant_id)
 	version.status == "review_accepted"
 	version.is_published
 	version.is_current_published_version

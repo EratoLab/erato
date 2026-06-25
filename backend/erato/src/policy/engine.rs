@@ -1,7 +1,7 @@
 use crate::config::{AppConfig, FacetPermissionRule, McpServerPermissionRule, ModelPermissionRule};
 use crate::db::entity::prelude::*;
 use crate::db::entity::{
-    assistant_file_uploads, assistant_store_assistant_versions, assistants, chat_file_uploads,
+    assistant_file_uploads, assistant_hub_assistant_versions, assistants, chat_file_uploads,
     file_uploads, share_grants, share_links,
 };
 use crate::db::entity_ext::chats;
@@ -187,18 +187,18 @@ async fn fetch_share_grants_policy_data(db: &DatabaseConnection) -> Result<JsonV
     Ok(json!(grants_array))
 }
 
-async fn fetch_assistant_store_versions_policy_data(
+async fn fetch_assistant_hub_versions_policy_data(
     db: &DatabaseConnection,
 ) -> Result<JsonValue, Report> {
-    let versions: Vec<assistant_store_assistant_versions::Model> =
-        AssistantStoreAssistantVersions::find().all(db).await?;
+    let versions: Vec<assistant_hub_assistant_versions::Model> =
+        AssistantHubAssistantVersions::find().all(db).await?;
 
     let versions_array: Vec<JsonValue> = versions
         .into_iter()
         .map(|version| {
             json!({
                 "id": version.id.to_string(),
-                "assistant_store_assistant_id": version.assistant_store_assistant_id.to_string(),
+                "assistant_hub_assistant_id": version.assistant_hub_assistant_id.to_string(),
                 "assistant_id": version.assistant_id.to_string(),
                 "status": version.status,
                 "is_published": version.is_published,
@@ -400,7 +400,7 @@ impl PolicyEngine {
         let assistant_data = fetch_assistant_policy_data(db).await?;
         let file_upload_data = fetch_file_upload_policy_data(db).await?;
         let share_grants_data = fetch_share_grants_policy_data(db).await?;
-        let assistant_store_versions_data = fetch_assistant_store_versions_policy_data(db).await?;
+        let assistant_hub_versions_data = fetch_assistant_hub_versions_policy_data(db).await?;
         let share_links_data = fetch_share_links_policy_data(db).await?;
         let chat_provider_data = config_resources_policy_data(
             if let Some(chat_providers) = config.chat_providers.as_ref() {
@@ -427,7 +427,7 @@ impl PolicyEngine {
         let policy_data = json!({
             "resource_attributes": resource_attributes,
             "share_grants": share_grants_data,
-            "assistant_store_versions": assistant_store_versions_data,
+            "assistant_hub_versions": assistant_hub_versions_data,
             "share_links": share_links_data,
             "config": {
                 "chat_sharing": {

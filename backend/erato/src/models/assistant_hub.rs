@@ -1,8 +1,8 @@
-use crate::config::AssistantStoreConfig;
+use crate::config::AssistantHubConfig;
 use crate::db::entity::prelude::*;
 use crate::db::entity::{
-    assistant_file_uploads, assistant_store_assistant_versions, assistant_store_assistants,
-    assistants, users,
+    assistant_file_uploads, assistant_hub_assistant_versions, assistant_hub_assistants, assistants,
+    users,
 };
 use crate::models::share_grant;
 use crate::policy::engine::PolicyEngine;
@@ -23,7 +23,7 @@ pub const STATUS_REVIEW_DECLINED: &str = "review_declined";
 pub const STATUS_WITHDRAWN: &str = "withdrawn";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StoreAudienceGrantInput {
+pub struct HubAudienceGrantInput {
     pub subject_type: String,
     pub subject_id_type: String,
     pub subject_id: String,
@@ -31,7 +31,7 @@ pub struct StoreAudienceGrantInput {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StoreSubmissionProfile {
+pub struct HubSubmissionProfile {
     pub long_description: String,
     pub category_ids: Vec<String>,
     pub keywords: Vec<String>,
@@ -41,16 +41,16 @@ pub struct StoreSubmissionProfile {
 }
 
 #[derive(Debug, Clone)]
-pub struct StoreVersionRecord {
-    pub store_assistant: assistant_store_assistants::Model,
-    pub version: assistant_store_assistant_versions::Model,
+pub struct HubVersionRecord {
+    pub hub_assistant: assistant_hub_assistants::Model,
+    pub version: assistant_hub_assistant_versions::Model,
     pub assistant: assistants::Model,
     pub creator: users::Model,
 }
 
-fn ensure_enabled(config: &AssistantStoreConfig) -> Result<(), Report> {
+fn ensure_enabled(config: &AssistantHubConfig) -> Result<(), Report> {
     if !config.enabled {
-        return Err(eyre!("Assistant store is not enabled"));
+        return Err(eyre!("Assistant hub is not enabled"));
     }
 
     Ok(())
@@ -76,8 +76,8 @@ fn normalize_text_vec(values: Vec<String>) -> Option<Vec<String>> {
 }
 
 fn validate_profile(
-    config: &AssistantStoreConfig,
-    profile: &StoreSubmissionProfile,
+    config: &AssistantHubConfig,
+    profile: &HubSubmissionProfile,
 ) -> Result<(), Report> {
     if profile.long_description.trim().is_empty() {
         return Err(eyre!("long_description must not be empty"));
@@ -89,17 +89,17 @@ fn validate_profile(
 
     for category_id in &profile.category_ids {
         if !config.categories.contains_key(category_id) {
-            return Err(eyre!("Unknown assistant store category '{}'", category_id));
+            return Err(eyre!("Unknown assistant hub category '{}'", category_id));
         }
     }
 
     Ok(())
 }
 
-fn ensure_reviewer(config: &AssistantStoreConfig, groups: &[String]) -> Result<(), Report> {
+fn ensure_reviewer(config: &AssistantHubConfig, groups: &[String]) -> Result<(), Report> {
     if !config.can_review(groups) {
         return Err(eyre!(
-            "Access denied: User is not an assistant store reviewer"
+            "Access denied: User is not an assistant hub reviewer"
         ));
     }
 
@@ -108,23 +108,23 @@ fn ensure_reviewer(config: &AssistantStoreConfig, groups: &[String]) -> Result<(
 
 async fn ensure_creator_or_reviewer(
     conn: &DatabaseConnection,
-    config: &AssistantStoreConfig,
+    config: &AssistantHubConfig,
     subject: &Subject,
     groups: &[String],
-    store_assistant_id: Uuid,
-) -> Result<assistant_store_assistants::Model, Report> {
-    let store_assistant = AssistantStoreAssistants::find_by_id(store_assistant_id)
+    hub_assistant_id: Uuid,
+) -> Result<assistant_hub_assistants::Model, Report> {
+    let hub_assistant = AssistantHubAssistants::find_by_id(hub_assistant_id)
         .one(conn)
         .await?
-        .wrap_err("Assistant store assistant not found")?;
+        .wrap_err("Assistant hub assistant not found")?;
     let user_id = user_uuid(subject)?;
 
-    if store_assistant.owner_user_id == user_id || config.can_review(groups) {
-        return Ok(store_assistant);
+    if hub_assistant.owner_user_id == user_id || config.can_review(groups) {
+        return Ok(hub_assistant);
     }
 
     Err(eyre!(
-        "Access denied: User cannot manage this assistant store item"
+        "Access denied: User cannot manage this assistant hub item"
     ))
 }
 
@@ -143,30 +143,30 @@ async fn validate_source_assistant(
         return Err(eyre!("Access denied: User does not own source assistant"));
     }
 
-    let is_store_version = AssistantStoreAssistantVersions::find()
-        .filter(assistant_store_assistant_versions::Column::AssistantId.eq(source_assistant_id))
+    let is_hub_version = AssistantHubAssistantVersions::find()
+        .filter(assistant_hub_assistant_versions::Column::AssistantId.eq(source_assistant_id))
         .one(conn)
         .await?
         .is_some();
 
-    if is_store_version {
+    if is_hub_version {
         return Err(eyre!(
-            "Store version assistants cannot be used as source assistants"
+            "Hub version assistants cannot be used as source assistants"
         ));
     }
 
     Ok(source_assistant)
 }
 
-async fn get_or_create_store_assistant(
+async fn get_or_create_hub_assistant(
     conn: &DatabaseConnection,
     subject: &Subject,
     source_assistant_id: Uuid,
-) -> Result<assistant_store_assistants::Model, Report> {
+) -> Result<assistant_hub_assistants::Model, Report> {
     let source_assistant = validate_source_assistant(conn, subject, source_assistant_id).await?;
 
-    if let Some(existing) = AssistantStoreAssistants::find()
-        .filter(assistant_store_assistants::Column::SourceAssistantId.eq(source_assistant_id))
+    if let Some(existing) = AssistantHubAssistants::find()
+        .filter(assistant_hub_assistants::Column::SourceAssistantId.eq(source_assistant_id))
         .one(conn)
         .await?
     {
@@ -174,7 +174,7 @@ async fn get_or_create_store_assistant(
     }
 
     let now = Utc::now().into();
-    let store_assistant = assistant_store_assistants::ActiveModel {
+    let hub_assistant = assistant_hub_assistants::ActiveModel {
         id: Set(Uuid::new_v4()),
         source_assistant_id: Set(source_assistant_id),
         owner_user_id: Set(source_assistant.owner_user_id),
@@ -183,24 +183,24 @@ async fn get_or_create_store_assistant(
         updated_at: Set(now),
     };
 
-    Ok(AssistantStoreAssistants::insert(store_assistant)
+    Ok(AssistantHubAssistants::insert(hub_assistant)
         .exec_with_returning(conn)
         .await?)
 }
 
 async fn ensure_unique_version_number(
     conn: &DatabaseConnection,
-    store_assistant_id: Uuid,
+    hub_assistant_id: Uuid,
     version_number: &str,
 ) -> Result<(), Report> {
-    let existing = AssistantStoreAssistantVersions::find()
+    let existing = AssistantHubAssistantVersions::find()
         .filter(
             Condition::all()
                 .add(
-                    assistant_store_assistant_versions::Column::AssistantStoreAssistantId
-                        .eq(store_assistant_id),
+                    assistant_hub_assistant_versions::Column::AssistantHubAssistantId
+                        .eq(hub_assistant_id),
                 )
-                .add(assistant_store_assistant_versions::Column::VersionNumber.eq(version_number)),
+                .add(assistant_hub_assistant_versions::Column::VersionNumber.eq(version_number)),
         )
         .one(conn)
         .await?;
@@ -261,7 +261,7 @@ async fn clone_source_assistant(
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct StoreDiffFile {
+pub struct HubDiffFile {
     pub id: String,
     pub filename: String,
 }
@@ -269,7 +269,7 @@ pub struct StoreDiffFile {
 async fn files_for_assistant(
     conn: &DatabaseConnection,
     assistant_id: Uuid,
-) -> Result<Vec<StoreDiffFile>, Report> {
+) -> Result<Vec<HubDiffFile>, Report> {
     let links = AssistantFileUploads::find()
         .filter(assistant_file_uploads::Column::AssistantId.eq(assistant_id))
         .order_by_asc(assistant_file_uploads::Column::FileUploadId)
@@ -282,7 +282,7 @@ async fn files_for_assistant(
             .one(conn)
             .await?
             .wrap_err("Assistant file upload not found")?;
-        files.push(StoreDiffFile {
+        files.push(HubDiffFile {
             id: file.id.to_string(),
             filename: file.filename,
         });
@@ -303,23 +303,23 @@ fn diff_field<T: Serialize + PartialEq>(field: &str, before: Option<T>, after: T
 
 async fn previous_accepted_version(
     conn: &DatabaseConnection,
-    store_assistant_id: Uuid,
-) -> Result<Option<StoreVersionRecord>, Report> {
-    let Some(version) = AssistantStoreAssistantVersions::find()
+    hub_assistant_id: Uuid,
+) -> Result<Option<HubVersionRecord>, Report> {
+    let Some(version) = AssistantHubAssistantVersions::find()
         .filter(
             Condition::all()
                 .add(
-                    assistant_store_assistant_versions::Column::AssistantStoreAssistantId
-                        .eq(store_assistant_id),
+                    assistant_hub_assistant_versions::Column::AssistantHubAssistantId
+                        .eq(hub_assistant_id),
                 )
-                .add(assistant_store_assistant_versions::Column::Status.eq(STATUS_REVIEW_ACCEPTED)),
+                .add(assistant_hub_assistant_versions::Column::Status.eq(STATUS_REVIEW_ACCEPTED)),
         )
         .order_by(
-            assistant_store_assistant_versions::Column::ReviewedAt,
+            assistant_hub_assistant_versions::Column::ReviewedAt,
             Order::Desc,
         )
         .order_by(
-            assistant_store_assistant_versions::Column::SubmittedAt,
+            assistant_hub_assistant_versions::Column::SubmittedAt,
             Order::Desc,
         )
         .one(conn)
@@ -328,22 +328,21 @@ async fn previous_accepted_version(
         return Ok(None);
     };
 
-    let store_assistant =
-        AssistantStoreAssistants::find_by_id(version.assistant_store_assistant_id)
-            .one(conn)
-            .await?
-            .wrap_err("Assistant store assistant not found")?;
+    let hub_assistant = AssistantHubAssistants::find_by_id(version.assistant_hub_assistant_id)
+        .one(conn)
+        .await?
+        .wrap_err("Assistant hub assistant not found")?;
     let assistant = Assistants::find_by_id(version.assistant_id)
         .one(conn)
         .await?
         .wrap_err("Version assistant not found")?;
-    let creator = Users::find_by_id(store_assistant.owner_user_id)
+    let creator = Users::find_by_id(hub_assistant.owner_user_id)
         .one(conn)
         .await?
-        .wrap_err("Assistant store creator not found")?;
+        .wrap_err("Assistant hub creator not found")?;
 
-    Ok(Some(StoreVersionRecord {
-        store_assistant,
+    Ok(Some(HubVersionRecord {
+        hub_assistant,
         version,
         assistant,
         creator,
@@ -352,22 +351,22 @@ async fn previous_accepted_version(
 
 pub async fn build_submission_diff(
     conn: &DatabaseConnection,
-    config: &AssistantStoreConfig,
+    config: &AssistantHubConfig,
     subject: &Subject,
     source_assistant_id: Uuid,
-    profile: &StoreSubmissionProfile,
+    profile: &HubSubmissionProfile,
 ) -> Result<JsonValue, Report> {
     ensure_enabled(config)?;
     validate_profile(config, profile)?;
 
     let source = validate_source_assistant(conn, subject, source_assistant_id).await?;
-    let store_assistant = AssistantStoreAssistants::find()
-        .filter(assistant_store_assistants::Column::SourceAssistantId.eq(source_assistant_id))
+    let hub_assistant = AssistantHubAssistants::find()
+        .filter(assistant_hub_assistants::Column::SourceAssistantId.eq(source_assistant_id))
         .one(conn)
         .await?;
     let source_files = files_for_assistant(conn, source_assistant_id).await?;
-    let previous = if let Some(store_assistant) = store_assistant {
-        previous_accepted_version(conn, store_assistant.id).await?
+    let previous = if let Some(hub_assistant) = hub_assistant {
+        previous_accepted_version(conn, hub_assistant.id).await?
     } else {
         None
     };
@@ -410,28 +409,28 @@ pub async fn build_submission_diff(
 pub async fn submit_version(
     conn: &DatabaseConnection,
     policy: &PolicyEngine,
-    config: &AssistantStoreConfig,
+    config: &AssistantHubConfig,
     subject: &Subject,
     source_assistant_id: Uuid,
-    profile: StoreSubmissionProfile,
-    audience_grants: Vec<StoreAudienceGrantInput>,
-) -> Result<StoreVersionRecord, Report> {
+    profile: HubSubmissionProfile,
+    audience_grants: Vec<HubAudienceGrantInput>,
+) -> Result<HubVersionRecord, Report> {
     ensure_enabled(config)?;
     let mut profile = profile;
     profile.version_number = profile.version_number.trim().to_string();
     validate_profile(config, &profile)?;
 
-    let store_assistant = get_or_create_store_assistant(conn, subject, source_assistant_id).await?;
-    ensure_unique_version_number(conn, store_assistant.id, &profile.version_number).await?;
+    let hub_assistant = get_or_create_hub_assistant(conn, subject, source_assistant_id).await?;
+    ensure_unique_version_number(conn, hub_assistant.id, &profile.version_number).await?;
     let cloned = clone_source_assistant(conn, source_assistant_id).await?;
     policy.invalidate_data().await;
 
     let diff_summary =
         build_submission_diff(conn, config, subject, source_assistant_id, &profile).await?;
     let now = Utc::now().into();
-    let version = assistant_store_assistant_versions::ActiveModel {
+    let version = assistant_hub_assistant_versions::ActiveModel {
         id: Set(Uuid::new_v4()),
-        assistant_store_assistant_id: Set(store_assistant.id),
+        assistant_hub_assistant_id: Set(hub_assistant.id),
         assistant_id: Set(cloned.id),
         status: Set(STATUS_SUBMITTED.to_string()),
         is_published: Set(false),
@@ -452,13 +451,13 @@ pub async fn submit_version(
         updated_at: Set(now),
     };
 
-    let version = AssistantStoreAssistantVersions::insert(version)
+    let version = AssistantHubAssistantVersions::insert(version)
         .exec_with_returning(conn)
         .await?;
-    let creator = Users::find_by_id(store_assistant.owner_user_id)
+    let creator = Users::find_by_id(hub_assistant.owner_user_id)
         .one(conn)
         .await?
-        .wrap_err("Assistant store creator not found")?;
+        .wrap_err("Assistant hub creator not found")?;
 
     for grant in audience_grants {
         share_grant::create_share_grant(
@@ -475,36 +474,34 @@ pub async fn submit_version(
         .await?;
     }
 
-    Ok(StoreVersionRecord {
-        store_assistant,
+    Ok(HubVersionRecord {
+        hub_assistant,
         version,
         assistant: cloned,
         creator,
     })
 }
 
-pub async fn list_my_store_versions(
+pub async fn list_my_hub_versions(
     conn: &DatabaseConnection,
-    config: &AssistantStoreConfig,
+    config: &AssistantHubConfig,
     subject: &Subject,
-) -> Result<Vec<StoreVersionRecord>, Report> {
+) -> Result<Vec<HubVersionRecord>, Report> {
     ensure_enabled(config)?;
     let user_id = user_uuid(subject)?;
-    let store_assistants = AssistantStoreAssistants::find()
-        .filter(assistant_store_assistants::Column::OwnerUserId.eq(user_id))
+    let hub_assistants = AssistantHubAssistants::find()
+        .filter(assistant_hub_assistants::Column::OwnerUserId.eq(user_id))
         .all(conn)
         .await?;
-    let store_ids: Vec<Uuid> = store_assistants.iter().map(|store| store.id).collect();
+    let hub_ids: Vec<Uuid> = hub_assistants.iter().map(|hub| hub.id).collect();
 
-    if store_ids.is_empty() {
+    if hub_ids.is_empty() {
         return Ok(Vec::new());
     }
 
-    let versions = AssistantStoreAssistantVersions::find()
-        .filter(
-            assistant_store_assistant_versions::Column::AssistantStoreAssistantId.is_in(store_ids),
-        )
-        .order_by_desc(assistant_store_assistant_versions::Column::SubmittedAt)
+    let versions = AssistantHubAssistantVersions::find()
+        .filter(assistant_hub_assistant_versions::Column::AssistantHubAssistantId.is_in(hub_ids))
+        .order_by_desc(assistant_hub_assistant_versions::Column::SubmittedAt)
         .all(conn)
         .await?;
 
@@ -513,14 +510,14 @@ pub async fn list_my_store_versions(
 
 pub async fn list_review_versions(
     conn: &DatabaseConnection,
-    config: &AssistantStoreConfig,
+    config: &AssistantHubConfig,
     groups: &[String],
-) -> Result<Vec<StoreVersionRecord>, Report> {
+) -> Result<Vec<HubVersionRecord>, Report> {
     ensure_enabled(config)?;
     ensure_reviewer(config, groups)?;
 
-    let versions = AssistantStoreAssistantVersions::find()
-        .order_by_desc(assistant_store_assistant_versions::Column::SubmittedAt)
+    let versions = AssistantHubAssistantVersions::find()
+        .order_by_desc(assistant_hub_assistant_versions::Column::SubmittedAt)
         .all(conn)
         .await?;
 
@@ -529,25 +526,24 @@ pub async fn list_review_versions(
 
 async fn records_for_versions(
     conn: &DatabaseConnection,
-    versions: Vec<assistant_store_assistant_versions::Model>,
-) -> Result<Vec<StoreVersionRecord>, Report> {
+    versions: Vec<assistant_hub_assistant_versions::Model>,
+) -> Result<Vec<HubVersionRecord>, Report> {
     let mut records = Vec::with_capacity(versions.len());
     for version in versions {
-        let store_assistant =
-            AssistantStoreAssistants::find_by_id(version.assistant_store_assistant_id)
-                .one(conn)
-                .await?
-                .wrap_err("Assistant store assistant not found")?;
+        let hub_assistant = AssistantHubAssistants::find_by_id(version.assistant_hub_assistant_id)
+            .one(conn)
+            .await?
+            .wrap_err("Assistant hub assistant not found")?;
         let assistant = Assistants::find_by_id(version.assistant_id)
             .one(conn)
             .await?
             .wrap_err("Version assistant not found")?;
-        let creator = Users::find_by_id(store_assistant.owner_user_id)
+        let creator = Users::find_by_id(hub_assistant.owner_user_id)
             .one(conn)
             .await?
-            .wrap_err("Assistant store creator not found")?;
-        records.push(StoreVersionRecord {
-            store_assistant,
+            .wrap_err("Assistant hub creator not found")?;
+        records.push(HubVersionRecord {
+            hub_assistant,
             version,
             assistant,
             creator,
@@ -559,9 +555,9 @@ async fn records_for_versions(
 
 pub async fn list_published_current_versions(
     conn: &DatabaseConnection,
-    config: &AssistantStoreConfig,
+    config: &AssistantHubConfig,
     subject: &Subject,
-) -> Result<Vec<StoreVersionRecord>, Report> {
+) -> Result<Vec<HubVersionRecord>, Report> {
     ensure_enabled(config)?;
     let user_id = user_uuid(subject)?;
     let grants = share_grant::get_resources_shared_with_subject_and_groups(
@@ -578,35 +574,35 @@ pub async fn list_published_current_versions(
         .collect();
 
     let mut condition = Condition::all()
-        .add(assistant_store_assistant_versions::Column::Status.eq(STATUS_REVIEW_ACCEPTED))
-        .add(assistant_store_assistant_versions::Column::IsPublished.eq(true))
-        .add(assistant_store_assistant_versions::Column::IsCurrentPublishedVersion.eq(true));
+        .add(assistant_hub_assistant_versions::Column::Status.eq(STATUS_REVIEW_ACCEPTED))
+        .add(assistant_hub_assistant_versions::Column::IsPublished.eq(true))
+        .add(assistant_hub_assistant_versions::Column::IsCurrentPublishedVersion.eq(true));
 
     let access_condition = Condition::any()
-        .add(assistant_store_assistant_versions::Column::AssistantId.is_in(shared_assistant_ids))
+        .add(assistant_hub_assistant_versions::Column::AssistantId.is_in(shared_assistant_ids))
         .add(
-            assistant_store_assistant_versions::Column::AssistantStoreAssistantId.in_subquery(
-                AssistantStoreAssistants::find()
+            assistant_hub_assistant_versions::Column::AssistantHubAssistantId.in_subquery(
+                AssistantHubAssistants::find()
                     .select_only()
-                    .column(assistant_store_assistants::Column::Id)
-                    .filter(assistant_store_assistants::Column::OwnerUserId.eq(user_id))
+                    .column(assistant_hub_assistants::Column::Id)
+                    .filter(assistant_hub_assistants::Column::OwnerUserId.eq(user_id))
                     .into_query(),
             ),
         );
     condition = condition.add(access_condition);
 
-    let versions = AssistantStoreAssistantVersions::find()
+    let versions = AssistantHubAssistantVersions::find()
         .filter(condition)
-        .order_by_desc(assistant_store_assistant_versions::Column::PublishedAt)
+        .order_by_desc(assistant_hub_assistant_versions::Column::PublishedAt)
         .all(conn)
         .await?;
 
     let mut records = records_for_versions(conn, versions).await?;
     records.sort_by(|left, right| {
         right
-            .store_assistant
+            .hub_assistant
             .featured
-            .cmp(&left.store_assistant.featured)
+            .cmp(&left.hub_assistant.featured)
             .then_with(|| right.version.published_at.cmp(&left.version.published_at))
     });
     Ok(records)
@@ -614,32 +610,32 @@ pub async fn list_published_current_versions(
 
 pub async fn get_published_current_version(
     conn: &DatabaseConnection,
-    config: &AssistantStoreConfig,
+    config: &AssistantHubConfig,
     subject: &Subject,
-    store_assistant_id: Uuid,
-) -> Result<StoreVersionRecord, Report> {
+    hub_assistant_id: Uuid,
+) -> Result<HubVersionRecord, Report> {
     let versions = list_published_current_versions(conn, config, subject).await?;
     versions
         .into_iter()
-        .find(|record| record.store_assistant.id == store_assistant_id)
-        .wrap_err("Assistant store item not found or not accessible")
+        .find(|record| record.hub_assistant.id == hub_assistant_id)
+        .wrap_err("Assistant hub item not found or not accessible")
 }
 
 pub async fn review_version(
     conn: &DatabaseConnection,
-    config: &AssistantStoreConfig,
+    config: &AssistantHubConfig,
     groups: &[String],
     version_id: Uuid,
     accepted: bool,
     reviewer_review_comment: Option<String>,
-) -> Result<StoreVersionRecord, Report> {
+) -> Result<HubVersionRecord, Report> {
     ensure_enabled(config)?;
     ensure_reviewer(config, groups)?;
 
-    let version = AssistantStoreAssistantVersions::find_by_id(version_id)
+    let version = AssistantHubAssistantVersions::find_by_id(version_id)
         .one(conn)
         .await?
-        .wrap_err("Assistant store version not found")?;
+        .wrap_err("Assistant hub version not found")?;
 
     if version.status != STATUS_SUBMITTED {
         return Err(eyre!("Only submitted versions can be reviewed"));
@@ -659,27 +655,26 @@ pub async fn review_version(
         .await?
         .into_iter()
         .next()
-        .wrap_err("Updated assistant store version not found")
+        .wrap_err("Updated assistant hub version not found")
 }
 
 pub async fn withdraw_version(
     conn: &DatabaseConnection,
-    config: &AssistantStoreConfig,
+    config: &AssistantHubConfig,
     subject: &Subject,
     version_id: Uuid,
-) -> Result<StoreVersionRecord, Report> {
+) -> Result<HubVersionRecord, Report> {
     ensure_enabled(config)?;
-    let version = AssistantStoreAssistantVersions::find_by_id(version_id)
+    let version = AssistantHubAssistantVersions::find_by_id(version_id)
         .one(conn)
         .await?
-        .wrap_err("Assistant store version not found")?;
-    let store_assistant =
-        AssistantStoreAssistants::find_by_id(version.assistant_store_assistant_id)
-            .one(conn)
-            .await?
-            .wrap_err("Assistant store assistant not found")?;
+        .wrap_err("Assistant hub version not found")?;
+    let hub_assistant = AssistantHubAssistants::find_by_id(version.assistant_hub_assistant_id)
+        .one(conn)
+        .await?
+        .wrap_err("Assistant hub assistant not found")?;
 
-    if store_assistant.owner_user_id != user_uuid(subject)? {
+    if hub_assistant.owner_user_id != user_uuid(subject)? {
         return Err(eyre!(
             "Access denied: Only the creator can withdraw a submission"
         ));
@@ -698,28 +693,28 @@ pub async fn withdraw_version(
         .await?
         .into_iter()
         .next()
-        .wrap_err("Updated assistant store version not found")
+        .wrap_err("Updated assistant hub version not found")
 }
 
 pub async fn set_published(
     conn: &DatabaseConnection,
-    config: &AssistantStoreConfig,
+    config: &AssistantHubConfig,
     subject: &Subject,
     groups: &[String],
     version_id: Uuid,
     is_published: bool,
-) -> Result<StoreVersionRecord, Report> {
+) -> Result<HubVersionRecord, Report> {
     ensure_enabled(config)?;
-    let version = AssistantStoreAssistantVersions::find_by_id(version_id)
+    let version = AssistantHubAssistantVersions::find_by_id(version_id)
         .one(conn)
         .await?
-        .wrap_err("Assistant store version not found")?;
+        .wrap_err("Assistant hub version not found")?;
     ensure_creator_or_reviewer(
         conn,
         config,
         subject,
         groups,
-        version.assistant_store_assistant_id,
+        version.assistant_hub_assistant_id,
     )
     .await?;
 
@@ -739,27 +734,27 @@ pub async fn set_published(
         .await?
         .into_iter()
         .next()
-        .wrap_err("Updated assistant store version not found")
+        .wrap_err("Updated assistant hub version not found")
 }
 
 pub async fn set_current_published_version(
     conn: &DatabaseConnection,
-    config: &AssistantStoreConfig,
+    config: &AssistantHubConfig,
     subject: &Subject,
     groups: &[String],
     version_id: Uuid,
-) -> Result<StoreVersionRecord, Report> {
+) -> Result<HubVersionRecord, Report> {
     ensure_enabled(config)?;
-    let version = AssistantStoreAssistantVersions::find_by_id(version_id)
+    let version = AssistantHubAssistantVersions::find_by_id(version_id)
         .one(conn)
         .await?
-        .wrap_err("Assistant store version not found")?;
+        .wrap_err("Assistant hub version not found")?;
     ensure_creator_or_reviewer(
         conn,
         config,
         subject,
         groups,
-        version.assistant_store_assistant_id,
+        version.assistant_hub_assistant_id,
     )
     .await?;
 
@@ -769,15 +764,15 @@ pub async fn set_current_published_version(
         ));
     }
 
-    let clear_current = assistant_store_assistant_versions::ActiveModel {
+    let clear_current = assistant_hub_assistant_versions::ActiveModel {
         is_current_published_version: Set(false),
         ..Default::default()
     };
-    AssistantStoreAssistantVersions::update_many()
+    AssistantHubAssistantVersions::update_many()
         .set(clear_current)
         .filter(
-            assistant_store_assistant_versions::Column::AssistantStoreAssistantId
-                .eq(version.assistant_store_assistant_id),
+            assistant_hub_assistant_versions::Column::AssistantHubAssistantId
+                .eq(version.assistant_hub_assistant_id),
         )
         .exec(conn)
         .await?;
@@ -790,76 +785,74 @@ pub async fn set_current_published_version(
         .await?
         .into_iter()
         .next()
-        .wrap_err("Updated assistant store version not found")
+        .wrap_err("Updated assistant hub version not found")
 }
 
 pub async fn set_featured(
     conn: &DatabaseConnection,
-    config: &AssistantStoreConfig,
+    config: &AssistantHubConfig,
     groups: &[String],
     version_id: Uuid,
     featured: bool,
-) -> Result<StoreVersionRecord, Report> {
+) -> Result<HubVersionRecord, Report> {
     ensure_enabled(config)?;
     ensure_reviewer(config, groups)?;
 
-    let version = AssistantStoreAssistantVersions::find_by_id(version_id)
+    let version = AssistantHubAssistantVersions::find_by_id(version_id)
         .one(conn)
         .await?
-        .wrap_err("Assistant store version not found")?;
+        .wrap_err("Assistant hub version not found")?;
 
     if version.status != STATUS_REVIEW_ACCEPTED {
         return Err(eyre!("Only review-accepted versions can be featured"));
     }
 
-    let store_assistant =
-        AssistantStoreAssistants::find_by_id(version.assistant_store_assistant_id)
-            .one(conn)
-            .await?
-            .wrap_err("Assistant store assistant not found")?;
+    let hub_assistant = AssistantHubAssistants::find_by_id(version.assistant_hub_assistant_id)
+        .one(conn)
+        .await?
+        .wrap_err("Assistant hub assistant not found")?;
 
-    let mut active_store_assistant = store_assistant.into_active_model();
-    active_store_assistant.featured = Set(featured);
-    active_store_assistant.update(conn).await?;
+    let mut active_hub_assistant = hub_assistant.into_active_model();
+    active_hub_assistant.featured = Set(featured);
+    active_hub_assistant.update(conn).await?;
 
     records_for_versions(conn, vec![version])
         .await?
         .into_iter()
         .next()
-        .wrap_err("Updated assistant store version not found")
+        .wrap_err("Updated assistant hub version not found")
 }
 
-pub async fn is_store_version_assistant(
+pub async fn is_hub_version_assistant(
     conn: &DatabaseConnection,
     assistant_id: Uuid,
 ) -> Result<bool, Report> {
-    Ok(AssistantStoreAssistantVersions::find()
-        .filter(assistant_store_assistant_versions::Column::AssistantId.eq(assistant_id))
+    Ok(AssistantHubAssistantVersions::find()
+        .filter(assistant_hub_assistant_versions::Column::AssistantId.eq(assistant_id))
         .one(conn)
         .await?
         .is_some())
 }
 
-pub async fn store_version_allows_generic_assistant_read(
+pub async fn hub_version_allows_generic_assistant_read(
     conn: &DatabaseConnection,
     subject: &Subject,
     assistant_id: Uuid,
 ) -> Result<bool, Report> {
-    let Some(version) = AssistantStoreAssistantVersions::find()
-        .filter(assistant_store_assistant_versions::Column::AssistantId.eq(assistant_id))
+    let Some(version) = AssistantHubAssistantVersions::find()
+        .filter(assistant_hub_assistant_versions::Column::AssistantId.eq(assistant_id))
         .one(conn)
         .await?
     else {
         return Ok(true);
     };
 
-    let store_assistant =
-        AssistantStoreAssistants::find_by_id(version.assistant_store_assistant_id)
-            .one(conn)
-            .await?
-            .wrap_err("Assistant store assistant not found")?;
+    let hub_assistant = AssistantHubAssistants::find_by_id(version.assistant_hub_assistant_id)
+        .one(conn)
+        .await?
+        .wrap_err("Assistant hub assistant not found")?;
 
-    if store_assistant.owner_user_id == user_uuid(subject)? {
+    if hub_assistant.owner_user_id == user_uuid(subject)? {
         return Ok(true);
     }
 

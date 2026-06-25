@@ -15,22 +15,22 @@ import {
 } from "@/components/ui/icons";
 import { usePageAlignment } from "@/hooks/ui";
 import {
-  useAssistantStoreConfig,
-  useListAssistantStoreAssistants,
+  useAssistantHubConfig,
+  useListAssistantHubAssistants,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 import {
-  AssistantStoreBreadcrumb,
-  AssistantStoreVersionCard,
-  EmptyAssistantStoreState,
-} from "./assistantStoreUtils";
+  AssistantHubBreadcrumb,
+  AssistantHubVersionCard,
+  EmptyAssistantHubState,
+} from "./assistantHubUtils";
 
 import type {
-  AssistantStoreCategory,
-  AssistantStoreVersion,
+  AssistantHubCategory,
+  AssistantHubVersion,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
-const sortStoreVersions = (versions: AssistantStoreVersion[]) =>
+const sortHubVersions = (versions: AssistantHubVersion[]) =>
   [...versions].sort((left, right) => {
     if (left.featured !== right.featured) return left.featured ? -1 : 1;
     return (
@@ -40,8 +40,8 @@ const sortStoreVersions = (versions: AssistantStoreVersion[]) =>
   });
 
 const versionMatchesSearch = (
-  version: AssistantStoreVersion,
-  categories: AssistantStoreCategory[],
+  version: AssistantHubVersion,
+  categories: AssistantHubCategory[],
   searchQuery: string,
 ) => {
   const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
@@ -73,7 +73,7 @@ function CategoryTile({
   count,
   onOpen,
 }: {
-  category: AssistantStoreCategory;
+  category: AssistantHubCategory;
   count: number;
   onOpen: () => void;
 }) {
@@ -96,11 +96,11 @@ function CategoryTile({
       <p className="text-sm text-theme-fg-secondary">
         {count === 1
           ? t({
-              id: "assistantStore.category.count.one",
+              id: "assistantHub.category.count.one",
               message: "1 assistant",
             })
           : t({
-              id: "assistantStore.category.count.many",
+              id: "assistantHub.category.count.many",
               message: `${count} assistants`,
             })}
       </p>
@@ -108,7 +108,7 @@ function CategoryTile({
   );
 }
 
-function StoreSearch({
+function HubSearch({
   searchQuery,
   setSearchQuery,
 }: {
@@ -122,32 +122,32 @@ function StoreSearch({
         value={searchQuery}
         onChange={(event) => setSearchQuery(event.target.value)}
         placeholder={t({
-          id: "assistantStore.search.placeholder",
+          id: "assistantHub.search.placeholder",
           message: "Search assistants...",
         })}
         aria-label={t({
-          id: "assistantStore.search.aria",
-          message: "Search assistant store",
+          id: "assistantHub.search.aria",
+          message: "Search assistant hub",
         })}
       />
     </div>
   );
 }
 
-export default function AssistantStorePage() {
+export default function AssistantHubPage() {
   const navigate = useNavigate();
   const { categoryId } = useParams<{ categoryId?: string }>();
   const { containerClasses, horizontalPadding } =
     usePageAlignment("assistants");
   const [searchQuery, setSearchQuery] = useState("");
-  const { data: config, isLoading: isLoadingConfig } = useAssistantStoreConfig(
+  const { data: config, isLoading: isLoadingConfig } = useAssistantHubConfig(
     {},
   );
   const {
     data,
     isLoading: isLoadingAssistants,
     error,
-  } = useListAssistantStoreAssistants({});
+  } = useListAssistantHubAssistants({});
 
   const selectedCategory = useMemo(
     () => config?.categories.find((category) => category.id === categoryId),
@@ -159,14 +159,14 @@ export default function AssistantStorePage() {
     document.title = `${
       selectedCategory?.display_name ??
       t({
-        id: "assistantStore.title",
-        message: "Assistant Store",
+        id: "assistantHub.title",
+        message: "Assistant Hub",
       })
     } - ${t({ id: "branding.page_title_suffix" })}`;
   }, [selectedCategory?.display_name]);
 
   const versions = useMemo(() => data?.versions ?? [], [data?.versions]);
-  const sortedVersions = useMemo(() => sortStoreVersions(versions), [versions]);
+  const sortedVersions = useMemo(() => sortHubVersions(versions), [versions]);
   const featuredVersions = useMemo(
     () => sortedVersions.filter((version) => version.featured),
     [sortedVersions],
@@ -202,16 +202,16 @@ export default function AssistantStorePage() {
       <PageHeader
         title={
           selectedCategory?.display_name ??
-          t({ id: "assistantStore.title", message: "Assistant Store" })
+          t({ id: "assistantHub.title", message: "Assistant Hub" })
         }
         subtitle={
           isCategoryPage
             ? t({
-                id: "assistantStore.category.subtitle",
+                id: "assistantHub.category.subtitle",
                 message: "Browse assistants filtered by category",
               })
             : t({
-                id: "assistantStore.subtitle",
+                id: "assistantHub.subtitle",
                 message:
                   "Browse reviewed assistants that are available to your organization",
               })
@@ -220,15 +220,15 @@ export default function AssistantStorePage() {
       <div className={clsx("flex-1 overflow-auto", horizontalPadding)}>
         <div className={clsx("space-y-8 py-6", containerClasses)}>
           {isCategoryPage && (
-            <AssistantStoreBreadcrumb
+            <AssistantHubBreadcrumb
               icon={<ArrowLeftIcon className="size-4" />}
-              onClick={() => navigate("/assistant-store")}
+              onClick={() => navigate("/assistant-hub")}
             >
               {t({
-                id: "assistantStore.action.backToStore",
-                message: "Back to store",
+                id: "assistantHub.action.backToHub",
+                message: "Back to hub",
               })}
-            </AssistantStoreBreadcrumb>
+            </AssistantHubBreadcrumb>
           )}
 
           {!isCategoryPage && (
@@ -236,10 +236,10 @@ export default function AssistantStorePage() {
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => navigate("/assistant-store/my")}
+                onClick={() => navigate("/assistant-hub/my")}
               >
                 {t({
-                  id: "assistantStore.action.mySubmissions",
+                  id: "assistantHub.action.mySubmissions",
                   message: "My submissions",
                 })}
               </Button>
@@ -247,10 +247,10 @@ export default function AssistantStorePage() {
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() => navigate("/assistant-store/review")}
+                  onClick={() => navigate("/assistant-hub/review")}
                 >
                   {t({
-                    id: "assistantStore.action.reviewQueue",
+                    id: "assistantHub.action.reviewQueue",
                     message: "Review queue",
                   })}
                 </Button>
@@ -258,7 +258,7 @@ export default function AssistantStorePage() {
             </div>
           )}
 
-          <StoreSearch
+          <HubSearch
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}
           />
@@ -266,8 +266,8 @@ export default function AssistantStorePage() {
           {config && !config.enabled && (
             <Alert type="info">
               {t({
-                id: "assistantStore.disabled",
-                message: "The assistant store is not enabled.",
+                id: "assistantHub.disabled",
+                message: "The assistant hub is not enabled.",
               })}
             </Alert>
           )}
@@ -278,8 +278,8 @@ export default function AssistantStorePage() {
                 <div className="mx-auto mb-4 size-8 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
                 <p className="text-sm text-theme-fg-secondary">
                   {t({
-                    id: "assistantStore.loading",
-                    message: "Loading assistant store...",
+                    id: "assistantHub.loading",
+                    message: "Loading assistant hub...",
                   })}
                 </p>
               </div>
@@ -289,20 +289,20 @@ export default function AssistantStorePage() {
           {error && (
             <Alert type="error">
               {t({
-                id: "assistantStore.error.load",
-                message: "Failed to load assistant store.",
+                id: "assistantHub.error.load",
+                message: "Failed to load assistant hub.",
               })}
             </Alert>
           )}
 
           {!isLoading && !error && config?.enabled && versions.length === 0 && (
-            <EmptyAssistantStoreState
+            <EmptyAssistantHubState
               title={t({
-                id: "assistantStore.empty.title",
+                id: "assistantHub.empty.title",
                 message: "No published assistants yet",
               })}
               description={t({
-                id: "assistantStore.empty.description",
+                id: "assistantHub.empty.description",
                 message:
                   "Accepted and published assistant versions will appear here.",
               })}
@@ -314,15 +314,15 @@ export default function AssistantStorePage() {
             config?.enabled &&
             isCategoryPage &&
             selectedCategory == null && (
-              <EmptyAssistantStoreState
+              <EmptyAssistantHubState
                 title={t({
-                  id: "assistantStore.category.notFound.title",
+                  id: "assistantHub.category.notFound.title",
                   message: "Category not found",
                 })}
                 description={t({
-                  id: "assistantStore.category.notFound.description",
+                  id: "assistantHub.category.notFound.description",
                   message:
-                    "This assistant store category is not currently configured.",
+                    "This assistant hub category is not currently configured.",
                 })}
               />
             )}
@@ -334,13 +334,13 @@ export default function AssistantStorePage() {
             (!isCategoryPage || selectedCategory != null) &&
             versions.length > 0 &&
             filteredVersions.length === 0 && (
-              <EmptyAssistantStoreState
+              <EmptyAssistantHubState
                 title={t({
-                  id: "assistantStore.search.empty.title",
+                  id: "assistantHub.search.empty.title",
                   message: "No matching assistants",
                 })}
                 description={t({
-                  id: "assistantStore.search.empty.description",
+                  id: "assistantHub.search.empty.description",
                   message: "Try a different search term.",
                 })}
               />
@@ -357,7 +357,7 @@ export default function AssistantStorePage() {
                   <div className="mb-4">
                     <h2 className="text-lg font-semibold text-theme-fg-primary">
                       {t({
-                        id: "assistantStore.featured.title",
+                        id: "assistantHub.featured.title",
                         message: "Featured assistants",
                       })}
                     </h2>
@@ -365,13 +365,13 @@ export default function AssistantStorePage() {
                   {featuredVersions.length > 0 ? (
                     <div className="grid gap-3">
                       {featuredVersions.map((version) => (
-                        <AssistantStoreVersionCard
+                        <AssistantHubVersionCard
                           key={version.version_id}
                           version={version}
                           categories={config.categories}
                           onOpen={() =>
                             navigate(
-                              `/assistant-store/${version.store_assistant_id}`,
+                              `/assistant-hub/${version.hub_assistant_id}`,
                             )
                           }
                           actions={
@@ -380,12 +380,12 @@ export default function AssistantStorePage() {
                               size="sm"
                               onClick={() =>
                                 navigate(
-                                  `/assistant-store/${version.store_assistant_id}`,
+                                  `/assistant-hub/${version.hub_assistant_id}`,
                                 )
                               }
                             >
                               {t({
-                                id: "assistantStore.action.view",
+                                id: "assistantHub.action.view",
                                 message: "View",
                               })}
                             </Button>
@@ -396,7 +396,7 @@ export default function AssistantStorePage() {
                   ) : (
                     <p className="rounded-lg border border-theme-border bg-theme-bg-secondary p-4 text-sm text-theme-fg-secondary">
                       {t({
-                        id: "assistantStore.featured.empty",
+                        id: "assistantHub.featured.empty",
                         message: "No assistants are featured yet.",
                       })}
                     </p>
@@ -408,7 +408,7 @@ export default function AssistantStorePage() {
                     <div className="mb-4">
                       <h2 className="text-lg font-semibold text-theme-fg-primary">
                         {t({
-                          id: "assistantStore.categories.title",
+                          id: "assistantHub.categories.title",
                           message: "Categories",
                         })}
                       </h2>
@@ -420,7 +420,7 @@ export default function AssistantStorePage() {
                           category={category}
                           count={count}
                           onOpen={() =>
-                            navigate(`/assistant-store/category/${category.id}`)
+                            navigate(`/assistant-hub/category/${category.id}`)
                           }
                         />
                       ))}
@@ -442,25 +442,23 @@ export default function AssistantStorePage() {
                   <h2 className="text-lg font-semibold text-theme-fg-primary">
                     {isCategoryPage
                       ? t({
-                          id: "assistantStore.category.results",
+                          id: "assistantHub.category.results",
                           message: "Assistants",
                         })
                       : t({
-                          id: "assistantStore.search.results",
+                          id: "assistantHub.search.results",
                           message: "Search results",
                         })}
                   </h2>
                 </div>
                 <div className="grid gap-3">
                   {filteredVersions.map((version) => (
-                    <AssistantStoreVersionCard
+                    <AssistantHubVersionCard
                       key={version.version_id}
                       version={version}
                       categories={config.categories}
                       onOpen={() =>
-                        navigate(
-                          `/assistant-store/${version.store_assistant_id}`,
-                        )
+                        navigate(`/assistant-hub/${version.hub_assistant_id}`)
                       }
                       actions={
                         <Button
@@ -468,12 +466,12 @@ export default function AssistantStorePage() {
                           size="sm"
                           onClick={() =>
                             navigate(
-                              `/assistant-store/${version.store_assistant_id}`,
+                              `/assistant-hub/${version.hub_assistant_id}`,
                             )
                           }
                         >
                           {t({
-                            id: "assistantStore.action.view",
+                            id: "assistantHub.action.view",
                             message: "View",
                           })}
                         </Button>

@@ -1,8 +1,8 @@
 use crate::db::entity::prelude::*;
 use crate::db::entity::{
-    assistant_file_uploads, assistant_store_assistant_versions, assistants, file_uploads,
+    assistant_file_uploads, assistant_hub_assistant_versions, assistants, file_uploads,
 };
-use crate::models::assistant_store;
+use crate::models::assistant_hub;
 use crate::models::file_upload;
 use crate::models::share_grant;
 use crate::policy::prelude::*;
@@ -220,13 +220,13 @@ pub async fn get_user_assistants(
         }
     };
 
-    let store_version_assistant_ids: Vec<Uuid> = AssistantStoreAssistantVersions::find()
+    let hub_version_assistant_ids: Vec<Uuid> = AssistantHubAssistantVersions::find()
         .select_only()
-        .column(assistant_store_assistant_versions::Column::AssistantId)
+        .column(assistant_hub_assistant_versions::Column::AssistantId)
         .into_tuple::<Uuid>()
         .all(conn)
         .await?;
-    all_assistants.retain(|assistant| !store_version_assistant_ids.contains(&assistant.id));
+    all_assistants.retain(|assistant| !hub_version_assistant_ids.contains(&assistant.id));
 
     // Sort by updated_at desc
     all_assistants.sort_by_key(|assistant| std::cmp::Reverse(assistant.updated_at));
@@ -268,14 +268,14 @@ async fn get_assistant_by_id_internal(
 
     // Check if the user is the owner of the assistant
     if assistant.owner_user_id == user.id {
-        if assistant_store::store_version_allows_generic_assistant_read(conn, subject, assistant_id)
+        if assistant_hub::hub_version_allows_generic_assistant_read(conn, subject, assistant_id)
             .await?
         {
             return Ok(assistant);
         }
 
         return Err(eyre::eyre!(
-            "Access denied: Assistant store version is not available through the generic assistant API"
+            "Access denied: Assistant hub version is not available through the generic assistant API"
         ));
     }
 
@@ -294,7 +294,7 @@ async fn get_assistant_by_id_internal(
         .any(|grant| grant.resource_id == assistant_id.to_string() && grant.role == "viewer");
 
     if has_viewer_access
-        && assistant_store::store_version_allows_generic_assistant_read(conn, subject, assistant_id)
+        && assistant_hub::hub_version_allows_generic_assistant_read(conn, subject, assistant_id)
             .await?
     {
         return Ok(assistant);
@@ -342,9 +342,9 @@ async fn get_assistant_by_id_for_modification(
         "Assistant not found or archived"
     })?;
 
-    if assistant_store::is_store_version_assistant(conn, assistant_id).await? {
+    if assistant_hub::is_hub_version_assistant(conn, assistant_id).await? {
         return Err(eyre::eyre!(
-            "Access denied: Assistant store version assistants are immutable"
+            "Access denied: Assistant hub version assistants are immutable"
         ));
     }
 

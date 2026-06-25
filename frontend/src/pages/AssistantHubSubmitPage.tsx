@@ -11,18 +11,18 @@ import { FormField, Input, Textarea } from "@/components/ui/Input";
 import { SubjectSelector } from "@/components/ui/Sharing/SubjectSelector";
 import { usePageAlignment } from "@/hooks/ui";
 import {
-  useAssistantStoreConfig,
+  useAssistantHubConfig,
   useGetAssistant,
-  useListMyAssistantStoreVersions,
-  usePreviewAssistantStoreSubmissionDiff,
-  useSubmitAssistantStoreVersion,
+  useListMyAssistantHubVersions,
+  usePreviewAssistantHubSubmissionDiff,
+  useSubmitAssistantHubVersion,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
-import { AssistantStoreDiff } from "./assistantStoreUtils";
+import { AssistantHubDiff } from "./assistantHubUtils";
 
 import type {
-  AssistantStoreAudienceGrantInput,
-  AssistantStoreSubmissionRequest,
+  AssistantHubAudienceGrantInput,
+  AssistantHubSubmissionRequest,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { OrganizationMember } from "@/types/sharing";
 
@@ -34,7 +34,7 @@ const toKeywordList = (value: string) =>
 
 const toAudienceGrantInput = (
   subject: OrganizationMember,
-): AssistantStoreAudienceGrantInput => ({
+): AssistantHubAudienceGrantInput => ({
   // eslint-disable-next-line lingui/no-unlocalized-strings -- API discriminator values
   subject_type: subject.type === "user" ? "user" : "organization_group",
   subject_id_type: subject.subject_type_id,
@@ -77,13 +77,13 @@ const suggestNextVersionNumber = (
   return candidate;
 };
 
-export default function AssistantStoreSubmitPage() {
+export default function AssistantHubSubmitPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { sourceAssistantId } = useParams<{ sourceAssistantId: string }>();
   const { containerClasses, horizontalPadding } =
     usePageAlignment("assistants");
-  const { data: config, isLoading: isLoadingConfig } = useAssistantStoreConfig(
+  const { data: config, isLoading: isLoadingConfig } = useAssistantHubConfig(
     {},
   );
   const {
@@ -96,9 +96,9 @@ export default function AssistantStoreSubmitPage() {
       : skipToken,
   );
   const { data: myVersions, isLoading: isLoadingMyVersions } =
-    useListMyAssistantStoreVersions(sourceAssistantId ? {} : skipToken);
-  const previewDiff = usePreviewAssistantStoreSubmissionDiff();
-  const submitVersion = useSubmitAssistantStoreVersion();
+    useListMyAssistantHubVersions(sourceAssistantId ? {} : skipToken);
+  const previewDiff = usePreviewAssistantHubSubmissionDiff();
+  const submitVersion = useSubmitAssistantHubVersion();
   const [longDescription, setLongDescription] = useState("");
   const [versionNumber, setVersionNumber] = useState("");
   const [versionComment, setVersionComment] = useState("");
@@ -166,24 +166,24 @@ export default function AssistantStoreSubmitPage() {
   );
   const versionNumberHelpText = currentPublishedVersion
     ? `${t({
-        id: "assistantStore.submit.currentPublishedVersion",
+        id: "assistantHub.submit.currentPublishedVersion",
         message: "Current published version:",
       })} ${currentPublishedVersion.version_number}`
     : latestPublishedVersion
       ? `${t({
-          id: "assistantStore.submit.latestPublishedVersion",
+          id: "assistantHub.submit.latestPublishedVersion",
           message:
             "No current published version is selected. Latest published version:",
         })} ${latestPublishedVersion.version_number}`
       : t({
-          id: "assistantStore.submit.noPublishedVersion",
+          id: "assistantHub.submit.noPublishedVersion",
           message: "No published version exists for this assistant yet.",
         });
 
   useEffect(() => {
     document.title = `${t({
-      id: "assistantStore.submit.title",
-      message: "Submit to Store",
+      id: "assistantHub.submit.title",
+      message: "Submit to Hub",
     })} - ${t({ id: "branding.page_title_suffix" })}`;
   }, []);
 
@@ -224,7 +224,7 @@ export default function AssistantStoreSubmitPage() {
     suggestedVersionNumber,
   ]);
 
-  const requestBody = useMemo<AssistantStoreSubmissionRequest>(() => {
+  const requestBody = useMemo<AssistantHubSubmissionRequest>(() => {
     const trimmedVersionComment = versionComment.trim();
     const trimmedCreatorReviewComment = creatorReviewComment.trim();
 
@@ -270,20 +270,20 @@ export default function AssistantStoreSubmitPage() {
   const validate = () => {
     if (longDescription.trim().length === 0) {
       return t({
-        id: "assistantStore.submit.validation.description",
-        message: "Add a store description before submitting.",
+        id: "assistantHub.submit.validation.description",
+        message: "Add a hub description before submitting.",
       });
     }
     if (versionNumber.trim().length === 0) {
       return t({
-        id: "assistantStore.submit.validation.version",
+        id: "assistantHub.submit.validation.version",
         message: "Add a version number before submitting.",
       });
     }
     if (categoryIds.length === 0) {
       return t({
-        id: "assistantStore.submit.validation.category",
-        message: "Select at least one store category.",
+        id: "assistantHub.submit.validation.category",
+        message: "Select at least one hub category.",
       });
     }
     return "";
@@ -316,7 +316,7 @@ export default function AssistantStoreSubmitPage() {
       body: requestBody,
     });
     await queryClient.invalidateQueries();
-    navigate("/assistant-store/my");
+    navigate("/assistant-hub/my");
   };
 
   const isLoading =
@@ -326,11 +326,11 @@ export default function AssistantStoreSubmitPage() {
     <div className="flex h-full flex-col bg-theme-bg-secondary">
       <PageHeader
         title={t({
-          id: "assistantStore.submit.title",
-          message: "Submit to Store",
+          id: "assistantHub.submit.title",
+          message: "Submit to Hub",
         })}
         subtitle={t({
-          id: "assistantStore.submit.subtitle",
+          id: "assistantHub.submit.subtitle",
           message:
             "Create an immutable reviewed version from the current assistant draft",
         })}
@@ -344,7 +344,7 @@ export default function AssistantStoreSubmitPage() {
                 <div className="mx-auto mb-4 size-8 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
                 <p className="text-sm text-theme-fg-secondary">
                   {t({
-                    id: "assistantStore.submit.loading",
+                    id: "assistantHub.submit.loading",
                     message: "Loading assistant...",
                   })}
                 </p>
@@ -355,7 +355,7 @@ export default function AssistantStoreSubmitPage() {
           {assistantError && (
             <Alert type="error">
               {t({
-                id: "assistantStore.submit.error.load",
+                id: "assistantHub.submit.error.load",
                 message: "Failed to load assistant.",
               })}
             </Alert>
@@ -364,8 +364,8 @@ export default function AssistantStoreSubmitPage() {
           {config && !config.enabled && (
             <Alert type="info">
               {t({
-                id: "assistantStore.disabled",
-                message: "The assistant store is not enabled.",
+                id: "assistantHub.disabled",
+                message: "The assistant hub is not enabled.",
               })}
             </Alert>
           )}
@@ -374,7 +374,7 @@ export default function AssistantStoreSubmitPage() {
           {previewDiff.error && (
             <Alert type="error">
               {t({
-                id: "assistantStore.submit.error.preview",
+                id: "assistantHub.submit.error.preview",
                 message: "Failed to preview the submission diff.",
               })}
             </Alert>
@@ -382,7 +382,7 @@ export default function AssistantStoreSubmitPage() {
           {submitVersion.error && (
             <Alert type="error">
               {t({
-                id: "assistantStore.submit.error.submit",
+                id: "assistantHub.submit.error.submit",
                 message: "Failed to submit the assistant version.",
               })}
             </Alert>
@@ -396,9 +396,9 @@ export default function AssistantStoreSubmitPage() {
                 </h2>
                 <p className="text-sm text-theme-fg-secondary">
                   {t({
-                    id: "assistantStore.submit.snapshotNotice",
+                    id: "assistantHub.submit.snapshotNotice",
                     message:
-                      "Submission clones the assistant into an immutable snapshot. Future edits to the draft assistant will not change this store version.",
+                      "Submission clones the assistant into an immutable snapshot. Future edits to the draft assistant will not change this hub version.",
                   })}
                 </p>
               </section>
@@ -406,14 +406,14 @@ export default function AssistantStoreSubmitPage() {
               <section className="space-y-5 rounded-lg border border-theme-border bg-theme-bg-primary p-6">
                 <FormField
                   label={t({
-                    id: "assistantStore.submit.description",
-                    message: "Store description",
+                    id: "assistantHub.submit.description",
+                    message: "Hub description",
                   })}
-                  htmlFor="assistant-store-long-description"
+                  htmlFor="assistant-hub-long-description"
                   required
                 >
                   <Textarea
-                    id="assistant-store-long-description"
+                    id="assistant-hub-long-description"
                     value={longDescription}
                     rows={5}
                     onChange={(event) => setLongDescription(event.target.value)}
@@ -423,20 +423,20 @@ export default function AssistantStoreSubmitPage() {
                 <div className="grid gap-5 md:grid-cols-2">
                   <FormField
                     label={t({
-                      id: "assistantStore.submit.versionNumber",
+                      id: "assistantHub.submit.versionNumber",
                       message: "Version number",
                     })}
-                    htmlFor="assistant-store-version-number"
+                    htmlFor="assistant-hub-version-number"
                     required
                   >
                     <Input
-                      id="assistant-store-version-number"
-                      aria-describedby="assistant-store-version-number-help"
+                      id="assistant-hub-version-number"
+                      aria-describedby="assistant-hub-version-number-help"
                       value={versionNumber}
                       onChange={(event) => setVersionNumber(event.target.value)}
                     />
                     <p
-                      id="assistant-store-version-number-help"
+                      id="assistant-hub-version-number-help"
                       className="mt-2 text-sm text-theme-fg-secondary"
                     >
                       {versionNumberHelpText}
@@ -444,17 +444,17 @@ export default function AssistantStoreSubmitPage() {
                   </FormField>
                   <FormField
                     label={t({
-                      id: "assistantStore.submit.keywords",
+                      id: "assistantHub.submit.keywords",
                       message: "Keywords",
                     })}
-                    htmlFor="assistant-store-keywords"
+                    htmlFor="assistant-hub-keywords"
                     helpText={t({
-                      id: "assistantStore.submit.keywordsHelp",
+                      id: "assistantHub.submit.keywordsHelp",
                       message: "Separate keywords with commas.",
                     })}
                   >
                     <Input
-                      id="assistant-store-keywords"
+                      id="assistant-hub-keywords"
                       value={keywords}
                       onChange={(event) => setKeywords(event.target.value)}
                     />
@@ -464,7 +464,7 @@ export default function AssistantStoreSubmitPage() {
                 <div>
                   <div className="mb-2 text-base font-semibold text-theme-fg-primary">
                     {t({
-                      id: "assistantStore.submit.categories",
+                      id: "assistantHub.submit.categories",
                       message: "Categories",
                     })}
                     <span className="ml-1 text-theme-error-fg">*</span>
@@ -490,13 +490,13 @@ export default function AssistantStoreSubmitPage() {
 
                 <FormField
                   label={t({
-                    id: "assistantStore.submit.versionComment",
+                    id: "assistantHub.submit.versionComment",
                     message: "Version comment",
                   })}
-                  htmlFor="assistant-store-version-comment"
+                  htmlFor="assistant-hub-version-comment"
                 >
                   <Textarea
-                    id="assistant-store-version-comment"
+                    id="assistant-hub-version-comment"
                     value={versionComment}
                     rows={3}
                     onChange={(event) => setVersionComment(event.target.value)}
@@ -505,13 +505,13 @@ export default function AssistantStoreSubmitPage() {
 
                 <FormField
                   label={t({
-                    id: "assistantStore.submit.reviewComment",
+                    id: "assistantHub.submit.reviewComment",
                     message: "Note for reviewer",
                   })}
-                  htmlFor="assistant-store-review-comment"
+                  htmlFor="assistant-hub-review-comment"
                 >
                   <Textarea
-                    id="assistant-store-review-comment"
+                    id="assistant-hub-review-comment"
                     value={creatorReviewComment}
                     rows={3}
                     onChange={(event) =>
@@ -524,15 +524,15 @@ export default function AssistantStoreSubmitPage() {
               <section className="rounded-lg border border-theme-border bg-theme-bg-primary p-6">
                 <h2 className="mb-2 text-lg font-semibold text-theme-fg-primary">
                   {t({
-                    id: "assistantStore.submit.audience",
-                    message: "Store audience",
+                    id: "assistantHub.submit.audience",
+                    message: "Hub audience",
                   })}
                 </h2>
                 <p className="mb-4 text-sm text-theme-fg-secondary">
                   {t({
-                    id: "assistantStore.submit.audienceHelp",
+                    id: "assistantHub.submit.audienceHelp",
                     message:
-                      "These share grants are attached to this store version and become effective only when the accepted version is published.",
+                      "These share grants are attached to this hub version and become effective only when the accepted version is published.",
                   })}
                 </p>
                 <SubjectSelector
@@ -545,7 +545,7 @@ export default function AssistantStoreSubmitPage() {
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                   <h2 className="text-lg font-semibold text-theme-fg-primary">
                     {t({
-                      id: "assistantStore.submit.diffPreview",
+                      id: "assistantHub.submit.diffPreview",
                       message: "Diff preview",
                     })}
                   </h2>
@@ -558,19 +558,19 @@ export default function AssistantStoreSubmitPage() {
                     }}
                   >
                     {t({
-                      id: "assistantStore.submit.preview",
+                      id: "assistantHub.submit.preview",
                       message: "Preview changes",
                     })}
                   </Button>
                 </div>
                 {previewDiff.data ? (
-                  <AssistantStoreDiff
+                  <AssistantHubDiff
                     diffSummary={previewDiff.data.diff_summary}
                   />
                 ) : (
                   <p className="text-sm text-theme-fg-secondary">
                     {t({
-                      id: "assistantStore.submit.previewEmpty",
+                      id: "assistantHub.submit.previewEmpty",
                       message:
                         "Preview the submission to compare it with the previous accepted version.",
                     })}
@@ -593,7 +593,7 @@ export default function AssistantStoreSubmitPage() {
                   }}
                 >
                   {t({
-                    id: "assistantStore.submit.submit",
+                    id: "assistantHub.submit.submit",
                     message: "Submit version",
                   })}
                 </Button>

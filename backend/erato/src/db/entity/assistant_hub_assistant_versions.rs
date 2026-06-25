@@ -3,11 +3,12 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "assistant_store_assistant_versions")]
+#[sea_orm(table_name = "assistant_hub_assistant_versions")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
-    pub assistant_store_assistant_id: Uuid,
+    pub assistant_hub_assistant_id: Uuid,
+    #[sea_orm(unique)]
     pub assistant_id: Uuid,
     #[sea_orm(column_type = "Text")]
     pub status: String,
@@ -38,6 +39,14 @@ pub struct Model {
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(
+        belongs_to = "super::assistant_hub_assistants::Entity",
+        from = "Column::AssistantHubAssistantId",
+        to = "super::assistant_hub_assistants::Column::Id",
+        on_update = "NoAction",
+        on_delete = "Cascade"
+    )]
+    AssistantHubAssistants,
+    #[sea_orm(
         belongs_to = "super::assistants::Entity",
         from = "Column::AssistantId",
         to = "super::assistants::Column::Id",
@@ -45,25 +54,17 @@ pub enum Relation {
         on_delete = "Cascade"
     )]
     Assistants,
-    #[sea_orm(
-        belongs_to = "super::assistant_store_assistants::Entity",
-        from = "Column::AssistantStoreAssistantId",
-        to = "super::assistant_store_assistants::Column::Id",
-        on_update = "NoAction",
-        on_delete = "Cascade"
-    )]
-    AssistantStoreAssistants,
+}
+
+impl Related<super::assistant_hub_assistants::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::AssistantHubAssistants.def()
+    }
 }
 
 impl Related<super::assistants::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Assistants.def()
-    }
-}
-
-impl Related<super::assistant_store_assistants::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::AssistantStoreAssistants.def()
     }
 }
 

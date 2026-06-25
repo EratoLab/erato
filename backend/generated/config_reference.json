@@ -15,11 +15,11 @@
       "planned_removal_version": "0.6.0"
     }
   },
-  "assistant_store.categories.<key>.display_name": {},
-  "assistant_store.categories.<key>.icon": {},
-  "assistant_store.enabled": {},
-  "assistant_store.reviewers.rules.<rule-name>.groups.[]": {},
-  "assistant_store.reviewers.rules.<rule-name>.rule_type": {},
+  "assistant_hub.categories.<key>.display_name": {},
+  "assistant_hub.categories.<key>.icon": {},
+  "assistant_hub.enabled": {},
+  "assistant_hub.reviewers.rules.<rule-name>.groups.[]": {},
+  "assistant_hub.reviewers.rules.<rule-name>.rule_type": {},
   "assistants.context_file_contributor_threshold": {},
   "assistants.context_warning_threshold": {},
   "assistants.enabled": {},

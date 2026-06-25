@@ -9,7 +9,7 @@ user_3_id := "user-3"
 chat_1_id := "chat-1"
 assistant_1_id := "assistant-1"
 assistant_2_id := "assistant-2"
-assistant_store_version_1_id := "assistant-store-version-1"
+assistant_hub_version_1_id := "assistant-hub-version-1"
 file_upload_1_id := "file-upload-1"
 file_upload_2_id := "file-upload-2"
 file_upload_3_id := "file-upload-3"
@@ -39,8 +39,8 @@ resource_attributes := {
 			"id": assistant_2_id,
 			"owner_id": user_2_id,
 		},
-		assistant_store_version_1_id: {
-			"id": assistant_store_version_1_id,
+		assistant_hub_version_1_id: {
+			"id": assistant_hub_version_1_id,
 			"owner_id": user_1_id,
 		},
 	},
@@ -73,7 +73,7 @@ resource_attributes := {
 			"id": file_upload_5_id,
 			"owner_id": user_3_id,
 			"linked_chat_ids": [],
-			"linked_assistant_ids": [assistant_store_version_1_id],
+			"linked_assistant_ids": [assistant_hub_version_1_id],
 		},
 	},
 	"chat_provider": {
@@ -139,11 +139,11 @@ share_grants := [
 	},
 ]
 
-share_grants_store_version := [
+share_grants_hub_version := [
 	{
-		"id": "grant-store-version-1",
+		"id": "grant-hub-version-1",
 		"resource_type": "assistant",
-		"resource_id": assistant_store_version_1_id,
+		"resource_id": assistant_hub_version_1_id,
 		"subject_type": "user",
 		"subject_id_type": "id",
 		"subject_id": user_2_id,
@@ -151,46 +151,46 @@ share_grants_store_version := [
 	},
 ]
 
-assistant_store_versions_submitted := [{
-	"id": "assistant-store-version-record-1",
-	"assistant_store_assistant_id": "assistant-store-assistant-1",
-	"assistant_id": assistant_store_version_1_id,
+assistant_hub_versions_submitted := [{
+	"id": "assistant-hub-version-record-1",
+	"assistant_hub_assistant_id": "assistant-hub-assistant-1",
+	"assistant_id": assistant_hub_version_1_id,
 	"status": "submitted",
 	"is_published": false,
 	"is_current_published_version": false,
 }]
 
-assistant_store_versions_review_accepted_unpublished := [{
-	"id": "assistant-store-version-record-1",
-	"assistant_store_assistant_id": "assistant-store-assistant-1",
-	"assistant_id": assistant_store_version_1_id,
+assistant_hub_versions_review_accepted_unpublished := [{
+	"id": "assistant-hub-version-record-1",
+	"assistant_hub_assistant_id": "assistant-hub-assistant-1",
+	"assistant_id": assistant_hub_version_1_id,
 	"status": "review_accepted",
 	"is_published": false,
 	"is_current_published_version": false,
 }]
 
-assistant_store_versions_review_accepted_published_not_current := [{
-	"id": "assistant-store-version-record-1",
-	"assistant_store_assistant_id": "assistant-store-assistant-1",
-	"assistant_id": assistant_store_version_1_id,
+assistant_hub_versions_review_accepted_published_not_current := [{
+	"id": "assistant-hub-version-record-1",
+	"assistant_hub_assistant_id": "assistant-hub-assistant-1",
+	"assistant_id": assistant_hub_version_1_id,
 	"status": "review_accepted",
 	"is_published": true,
 	"is_current_published_version": false,
 }]
 
-assistant_store_versions_review_accepted_current_published := [{
-	"id": "assistant-store-version-record-1",
-	"assistant_store_assistant_id": "assistant-store-assistant-1",
-	"assistant_id": assistant_store_version_1_id,
+assistant_hub_versions_review_accepted_current_published := [{
+	"id": "assistant-hub-version-record-1",
+	"assistant_hub_assistant_id": "assistant-hub-assistant-1",
+	"assistant_id": assistant_hub_version_1_id,
 	"status": "review_accepted",
 	"is_published": true,
 	"is_current_published_version": true,
 }]
 
-assistant_store_versions_review_declined := [{
-	"id": "assistant-store-version-record-1",
-	"assistant_store_assistant_id": "assistant-store-assistant-1",
-	"assistant_id": assistant_store_version_1_id,
+assistant_hub_versions_review_declined := [{
+	"id": "assistant-hub-version-record-1",
+	"assistant_hub_assistant_id": "assistant-hub-assistant-1",
+	"assistant_id": assistant_hub_version_1_id,
 	"status": "review_declined",
 	"is_published": false,
 	"is_current_published_version": false,
@@ -473,88 +473,88 @@ test_viewer_cannot_share_shared_assistant if {
 		with data.share_grants as share_grants
 }
 
-# --- Assistant Store Review / Publication Workflow Tests ---
+# --- Assistant Hub Review / Publication Workflow Tests ---
 
-# The creator can read a submitted immutable store-version assistant they own.
-test_assistant_store_creator_can_read_submitted_version if {
+# The creator can read a submitted immutable hub-version assistant they own.
+test_assistant_hub_creator_can_read_submitted_version if {
 	backend.allow with input as {
 		"subject_kind": "user",
 		"subject_id": user_1_id,
 		"resource_kind": "assistant",
-		"resource_id": assistant_store_version_1_id,
+		"resource_id": assistant_hub_version_1_id,
 		"action": "read",
 	} with data.resource_attributes as resource_attributes
-		with data.share_grants as share_grants_store_version
-		with data.assistant_store_versions as assistant_store_versions_submitted
+		with data.share_grants as share_grants_hub_version
+		with data.assistant_hub_versions as assistant_hub_versions_submitted
 }
 
 # A submitted version already has audience share grants, but viewers cannot read it before review.
-test_assistant_store_viewer_cannot_read_submitted_version if {
+test_assistant_hub_viewer_cannot_read_submitted_version if {
 	not backend.allow with input as {
 		"subject_kind": "user",
 		"subject_id": user_2_id,
 		"resource_kind": "assistant",
-		"resource_id": assistant_store_version_1_id,
+		"resource_id": assistant_hub_version_1_id,
 		"action": "read",
 	} with data.resource_attributes as resource_attributes
-		with data.share_grants as share_grants_store_version
-		with data.assistant_store_versions as assistant_store_versions_submitted
+		with data.share_grants as share_grants_hub_version
+		with data.assistant_hub_versions as assistant_hub_versions_submitted
 }
 
 # Review acceptance alone is insufficient; rollout can be deferred via unpublished state.
-test_assistant_store_viewer_cannot_read_accepted_unpublished_version if {
+test_assistant_hub_viewer_cannot_read_accepted_unpublished_version if {
 	not backend.allow with input as {
 		"subject_kind": "user",
 		"subject_id": user_2_id,
 		"resource_kind": "assistant",
-		"resource_id": assistant_store_version_1_id,
+		"resource_id": assistant_hub_version_1_id,
 		"action": "read",
 	} with data.resource_attributes as resource_attributes
-		with data.share_grants as share_grants_store_version
-		with data.assistant_store_versions as assistant_store_versions_review_accepted_unpublished
+		with data.share_grants as share_grants_hub_version
+		with data.assistant_hub_versions as assistant_hub_versions_review_accepted_unpublished
 }
 
 # Publishing without marking the version current is also insufficient.
-test_assistant_store_viewer_cannot_read_published_non_current_version if {
+test_assistant_hub_viewer_cannot_read_published_non_current_version if {
 	not backend.allow with input as {
 		"subject_kind": "user",
 		"subject_id": user_2_id,
 		"resource_kind": "assistant",
-		"resource_id": assistant_store_version_1_id,
+		"resource_id": assistant_hub_version_1_id,
 		"action": "read",
 	} with data.resource_attributes as resource_attributes
-		with data.share_grants as share_grants_store_version
-		with data.assistant_store_versions as assistant_store_versions_review_accepted_published_not_current
+		with data.share_grants as share_grants_hub_version
+		with data.assistant_hub_versions as assistant_hub_versions_review_accepted_published_not_current
 }
 
 # A declined version remains inaccessible to audience viewers.
-test_assistant_store_viewer_cannot_read_declined_version if {
+test_assistant_hub_viewer_cannot_read_declined_version if {
 	not backend.allow with input as {
 		"subject_kind": "user",
 		"subject_id": user_2_id,
 		"resource_kind": "assistant",
-		"resource_id": assistant_store_version_1_id,
+		"resource_id": assistant_hub_version_1_id,
 		"action": "read",
 	} with data.resource_attributes as resource_attributes
-		with data.share_grants as share_grants_store_version
-		with data.assistant_store_versions as assistant_store_versions_review_declined
+		with data.share_grants as share_grants_hub_version
+		with data.assistant_hub_versions as assistant_hub_versions_review_declined
 }
 
 # Audience viewers can read only after the version is accepted, published, and current.
-test_assistant_store_viewer_can_read_current_published_version if {
+test_assistant_hub_viewer_can_read_current_published_version if {
 	backend.allow with input as {
 		"subject_kind": "user",
 		"subject_id": user_2_id,
 		"resource_kind": "assistant",
-		"resource_id": assistant_store_version_1_id,
+		"resource_id": assistant_hub_version_1_id,
 		"action": "read",
 	} with data.resource_attributes as resource_attributes
-		with data.share_grants as share_grants_store_version
-		with data.assistant_store_versions as assistant_store_versions_review_accepted_current_published
+		with data.share_grants as share_grants_hub_version
+		with data.assistant_hub_versions as assistant_hub_versions_review_accepted_current_published
 }
 
-# Linked files follow the same store-version visibility gate for viewers.
-test_assistant_store_viewer_cannot_read_file_for_submitted_version if {
+# Linked files follow the same hub-version visibility gate for viewers.
+test_assistant_hub_viewer_cannot_read_file_for_submitted_version if {
 	not backend.allow with input as {
 		"subject_kind": "user",
 		"subject_id": user_2_id,
@@ -562,11 +562,11 @@ test_assistant_store_viewer_cannot_read_file_for_submitted_version if {
 		"resource_id": file_upload_5_id,
 		"action": "read",
 	} with data.resource_attributes as resource_attributes
-		with data.share_grants as share_grants_store_version
-		with data.assistant_store_versions as assistant_store_versions_submitted
+		with data.share_grants as share_grants_hub_version
+		with data.assistant_hub_versions as assistant_hub_versions_submitted
 }
 
-test_assistant_store_viewer_can_read_file_for_current_published_version if {
+test_assistant_hub_viewer_can_read_file_for_current_published_version if {
 	backend.allow with input as {
 		"subject_kind": "user",
 		"subject_id": user_2_id,
@@ -574,8 +574,8 @@ test_assistant_store_viewer_can_read_file_for_current_published_version if {
 		"resource_id": file_upload_5_id,
 		"action": "read",
 	} with data.resource_attributes as resource_attributes
-		with data.share_grants as share_grants_store_version
-		with data.assistant_store_versions as assistant_store_versions_review_accepted_current_published
+		with data.share_grants as share_grants_hub_version
+		with data.assistant_hub_versions as assistant_hub_versions_review_accepted_current_published
 }
 
 # --- File Upload Ownership Tests ---

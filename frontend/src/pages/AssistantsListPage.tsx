@@ -20,7 +20,7 @@ import {
 import { usePageAlignment } from "@/hooks/ui";
 import { useDateFnsLocale } from "@/hooks/useDateFnsLocale";
 import {
-  useAssistantStoreConfig,
+  useAssistantHubConfig,
   useListAssistants,
   useArchiveAssistant,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
@@ -40,7 +40,7 @@ export default function AssistantsListPage() {
   const { data, isLoading, error, refetch } = useListAssistants({
     queryParams: { sharing_relation: selectedTab },
   });
-  const { data: storeConfig } = useAssistantStoreConfig({});
+  const { data: hubConfig } = useAssistantHubConfig({});
 
   // Archive assistant mutation
   const archiveAssistantMutation = useArchiveAssistant();
@@ -297,19 +297,19 @@ export default function AssistantsListPage() {
                                         icon: <EditIcon className="size-4" />,
                                         onClick: () => handleEdit(assistant.id),
                                       },
-                                      ...(storeConfig?.enabled
+                                      ...(hubConfig?.enabled
                                         ? [
                                             {
                                               label: t({
-                                                id: "assistantStore.action.submit",
-                                                message: "Submit to Store",
+                                                id: "assistantHub.action.submit",
+                                                message: "Submit to Hub",
                                               }),
                                               icon: (
                                                 <CheckCircleIcon className="size-4" />
                                               ),
                                               onClick: () =>
                                                 navigate(
-                                                  `/assistant-store/submit/${assistant.id}`,
+                                                  `/assistant-hub/submit/${assistant.id}`,
                                                 ),
                                             },
                                           ]

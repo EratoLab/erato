@@ -11,11 +11,11 @@ import SearchLayout from "./layouts/SearchLayout";
 import AssistantChatSpacePage from "./pages/AssistantChatSpacePage";
 import AssistantCreatePage from "./pages/AssistantCreatePage";
 import AssistantEditPage from "./pages/AssistantEditPage";
-import AssistantStoreDetailPage from "./pages/AssistantStoreDetailPage";
-import AssistantStoreMyPage from "./pages/AssistantStoreMyPage";
-import AssistantStorePage from "./pages/AssistantStorePage";
-import AssistantStoreReviewPage from "./pages/AssistantStoreReviewPage";
-import AssistantStoreSubmitPage from "./pages/AssistantStoreSubmitPage";
+import AssistantHubDetailPage from "./pages/AssistantHubDetailPage";
+import AssistantHubMyPage from "./pages/AssistantHubMyPage";
+import AssistantHubPage from "./pages/AssistantHubPage";
+import AssistantHubReviewPage from "./pages/AssistantHubReviewPage";
+import AssistantHubSubmitPage from "./pages/AssistantHubSubmitPage";
 import AssistantsListPage from "./pages/AssistantsListPage";
 import ChatDetailPage from "./pages/ChatDetailPage";
 import HomePage from "./pages/HomePage";
@@ -93,24 +93,21 @@ function AppRoutes() {
           <Route path="new" element={<AssistantCreatePage />} />
           <Route path=":id/edit" element={<AssistantEditPage />} />
         </Route>
-        <Route path="assistant-store" element={<AssistantsLayout />}>
-          <Route index element={<AssistantStorePage />} />
-          <Route path="my" element={<AssistantStoreMyPage />} />
-          <Route path="my/:versionId" element={<AssistantStoreMyPage />} />
-          <Route path="review" element={<AssistantStoreReviewPage />} />
+        <Route path="assistant-hub" element={<AssistantsLayout />}>
+          <Route index element={<AssistantHubPage />} />
+          <Route path="my" element={<AssistantHubMyPage />} />
+          <Route path="my/:versionId" element={<AssistantHubMyPage />} />
+          <Route path="review" element={<AssistantHubReviewPage />} />
           <Route
             path="review/:versionId"
-            element={<AssistantStoreReviewPage />}
+            element={<AssistantHubReviewPage />}
           />
-          <Route path="category/:categoryId" element={<AssistantStorePage />} />
+          <Route path="category/:categoryId" element={<AssistantHubPage />} />
           <Route
             path="submit/:sourceAssistantId"
-            element={<AssistantStoreSubmitPage />}
+            element={<AssistantHubSubmitPage />}
           />
-          <Route
-            path=":storeAssistantId"
-            element={<AssistantStoreDetailPage />}
-          />
+          <Route path=":hubAssistantId" element={<AssistantHubDetailPage />} />
         </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Route>
