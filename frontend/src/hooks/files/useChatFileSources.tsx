@@ -12,15 +12,21 @@
  */
 import { t } from "@lingui/core/macro";
 import { Cloud, Computer } from "iconoir-react";
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useTransition,
+} from "react";
 import { useDropzone } from "react-dropzone";
 
 import { UploadTooLargeError } from "@/hooks/files/errors";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { useFileUploadWithTokenCheck } from "@/hooks/files/useFileUploadWithTokenCheck";
 import {
-  fetchLinkFile,
   useCreateChat,
+  useLinkFile,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import {
   useCloudProvidersFeature,
@@ -34,10 +40,7 @@ import type {
   CloudProvider,
   SelectedCloudFile,
 } from "@/lib/api/cloudProviders/types";
-import type {
-  FileUploadItem,
-  LinkFileRequest,
-} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FileType } from "@/utils/fileTypes";
 import type { DropzoneInputProps, DropzoneRootProps } from "react-dropzone";
 
@@ -111,12 +114,15 @@ export function useChatFileSources({
 
   const [selectedCloudProvider, setSelectedCloudProvider] =
     useState<CloudProvider | null>(null);
-  const [cloudPickerOpen, setCloudPickerOpen] = useState(false);
-  const [isLinkingFiles, setIsLinkingFiles] = useState(false);
   const [cloudLinkError, setCloudLinkError] = useState<Error | null>(null);
+  // Linking runs as a React 19 Action: `isLinkingFiles` is the transition's
+  // pending flag, so there is no manual setIsLinkingFiles bookkeeping. The
+  // cloud picker's open state is derived from it (see cloudPickerProps below).
+  const [isLinkingFiles, startLinkTransition] = useTransition();
 
   const { setSilentChatId, setError } = useFileUploadStore();
   const createChatMutation = useCreateChat();
+  const linkFileMutation = useLinkFile();
 
   const {
     uploadFiles,
@@ -200,23 +206,23 @@ export function useChatFileSources({
 
   const handleSelectCloud = useCallback((provider: CloudProvider) => {
     setSelectedCloudProvider(provider);
-    setCloudPickerOpen(true);
   }, []);
 
   const handleCloudFilesSelected = useCallback(
     (files: SelectedCloudFile[]) => {
-      void (async () => {
-        if (files.length === 0 || !selectedCloudProvider) {
-          setCloudPickerOpen(false);
-          setSelectedCloudProvider(null);
-          return;
-        }
+      // The empty-selection guard must run synchronously, before the transition
+      // starts — otherwise an empty pick would needlessly flip the pending flag.
+      if (files.length === 0 || !selectedCloudProvider) {
+        setSelectedCloudProvider(null);
+        return;
+      }
 
+      const provider = selectedCloudProvider;
+      setCloudLinkError(null);
+
+      startLinkTransition(async () => {
+        const allLinkedFiles: FileUploadItem[] = [];
         try {
-          setIsLinkingFiles(true);
-          setCloudLinkError(null);
-          setCloudPickerOpen(false);
-
           let linkChatId = chatId;
 
           if (!linkChatId) {
@@ -230,41 +236,44 @@ export function useChatFileSources({
             setSilentChatId(linkChatId);
           }
 
-          const allLinkedFiles: FileUploadItem[] = [];
-
-          for (const file of files) {
-            const response = await fetchLinkFile({
-              body: {
-                source: selectedCloudProvider,
-                chat_id: linkChatId,
-                provider_metadata: {
-                  drive_id: file.drive_id,
-                  item_id: file.item_id,
+          try {
+            for (const file of files) {
+              const response = await linkFileMutation.mutateAsync({
+                body: {
+                  source: provider,
+                  chat_id: linkChatId,
+                  provider_metadata: {
+                    drive_id: file.drive_id,
+                    item_id: file.item_id,
+                  },
                 },
-              } as unknown as LinkFileRequest,
-            });
+              });
 
-            allLinkedFiles.push(
-              ...response.files.map((f) => {
-                const previewUrl = getPreviewUrl(f);
+              allLinkedFiles.push(
+                ...response.files.map((f) => {
+                  const previewUrl = getPreviewUrl(f);
 
-                return {
-                  id: f.id,
-                  filename: f.filename,
-                  download_url: f.download_url,
-                  file_contents_unavailable_missing_permissions:
-                    f.file_contents_unavailable_missing_permissions,
-                  audio_transcription: f.audio_transcription,
-                  is_sharepoint_file: selectedCloudProvider === "sharepoint",
-                  ...(previewUrl ? { preview_url: previewUrl } : {}),
-                  file_capability: f.file_capability,
-                };
-              }),
-            );
-          }
-
-          if (allLinkedFiles.length > 0 && onFilesUploaded) {
-            onFilesUploaded(allLinkedFiles);
+                  return {
+                    id: f.id,
+                    filename: f.filename,
+                    download_url: f.download_url,
+                    file_contents_unavailable_missing_permissions:
+                      f.file_contents_unavailable_missing_permissions,
+                    audio_transcription: f.audio_transcription,
+                    is_sharepoint_file: provider === "sharepoint",
+                    ...(previewUrl ? { preview_url: previewUrl } : {}),
+                    file_capability: f.file_capability,
+                  };
+                }),
+              );
+            }
+          } finally {
+            // Flush files linked before any mid-loop failure so partial
+            // successes still attach (and feed token estimation) rather than
+            // being discarded along with the failed file.
+            if (allLinkedFiles.length > 0) {
+              onFilesUploaded?.(allLinkedFiles);
+            }
           }
         } catch (error) {
           console.error("Error linking cloud files:", error);
@@ -275,9 +284,8 @@ export function useChatFileSources({
           );
         } finally {
           setSelectedCloudProvider(null);
-          setIsLinkingFiles(false);
         }
-      })();
+      });
     },
     [
       selectedCloudProvider,
@@ -286,12 +294,12 @@ export function useChatFileSources({
       assistantId,
       chatProviderId,
       createChatMutation,
+      linkFileMutation,
       setSilentChatId,
     ],
   );
 
   const handleCloudPickerClose = useCallback(() => {
-    setCloudPickerOpen(false);
     setSelectedCloudProvider(null);
   }, []);
 
@@ -303,36 +311,44 @@ export function useChatFileSources({
     onTokenLimitExceeded?.(exceedsTokenLimit);
   }, [exceedsTokenLimit, onTokenLimitExceeded]);
 
-  const fileSourceItems: AddMenuActionItem[] = [
-    {
-      id: "computer",
-      label: t({
-        id: "fileSourceSelector.uploadFromComputer",
-        message: "Upload from Computer",
-      }),
-      icon: <Computer className="size-4" />,
-      onSelect: handleSelectDisk,
-      disabled,
-    },
-  ];
-
-  if (availableProviders.includes("sharepoint")) {
-    fileSourceItems.push({
-      id: "sharepoint",
-      label: t({
-        id: "fileSourceSelector.uploadFromOneDrive",
-        message: "Upload from Sharepoint",
-      }),
-      icon: <Cloud className="size-4" />,
-      onSelect: () => handleSelectCloud("sharepoint"),
-      disabled,
-    });
-  }
+  const hasSharepoint = availableProviders.includes("sharepoint");
+  const fileSourceItems: AddMenuActionItem[] = useMemo(
+    () => [
+      {
+        id: "computer",
+        label: t({
+          id: "fileSourceSelector.uploadFromComputer",
+          message: "Upload from Computer",
+        }),
+        icon: <Computer className="size-4" />,
+        onSelect: handleSelectDisk,
+        disabled,
+      },
+      ...(hasSharepoint
+        ? [
+            {
+              id: "sharepoint",
+              label: t({
+                id: "fileSourceSelector.uploadFromOneDrive",
+                message: "Upload from Sharepoint",
+              }),
+              icon: <Cloud className="size-4" />,
+              onSelect: () => handleSelectCloud("sharepoint"),
+              disabled,
+            } satisfies AddMenuActionItem,
+          ]
+        : []),
+    ],
+    [hasSharepoint, disabled, handleSelectDisk, handleSelectCloud],
+  );
 
   const cloudPickerProps: CloudFilePickerModalProps | null =
     selectedCloudProvider != null
       ? {
-          isOpen: cloudPickerOpen,
+          // Close the modal the moment linking begins; setSelectedCloudProvider
+          // stays non-null through the Action so these props don't collapse to
+          // null mid-flight while the picker animates out.
+          isOpen: !isLinkingFiles,
           onClose: handleCloudPickerClose,
           provider: selectedCloudProvider,
           acceptedFileTypes,
