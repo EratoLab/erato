@@ -14,7 +14,8 @@ function stubMatchMedia(isMobile: boolean) {
     media: "",
     onchange: null,
     addEventListener: (_type: string, cb: () => void) => listeners.add(cb),
-    removeEventListener: (_type: string, cb: () => void) => listeners.delete(cb),
+    removeEventListener: (_type: string, cb: () => void) =>
+      listeners.delete(cb),
     addListener: (cb: () => void) => listeners.add(cb),
     removeListener: (cb: () => void) => listeners.delete(cb),
     dispatchEvent: () => true,

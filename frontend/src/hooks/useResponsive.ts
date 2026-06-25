@@ -121,5 +121,9 @@ function getMobileSnapshot(): boolean {
  * resize pixel, and (like useResponsive) is first-paint-correct.
  */
 export function useIsMobile(): boolean {
-  return useSyncExternalStore(subscribeToMobile, getMobileSnapshot, () => false);
+  return useSyncExternalStore(
+    subscribeToMobile,
+    getMobileSnapshot,
+    () => false,
+  );
 }

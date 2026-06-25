@@ -287,7 +287,10 @@ export function ChatInputAddMenu({
     // "belowTools" renders here.
     (s) => s.placement !== "belowTools",
   )) {
-    blocks.push({ key: `extra-${section.id}`, node: renderExtraSection(section) });
+    blocks.push({
+      key: `extra-${section.id}`,
+      node: renderExtraSection(section),
+    });
   }
 
   if (hasTools) {
@@ -343,7 +346,10 @@ export function ChatInputAddMenu({
   for (const section of extraSections.filter(
     (s) => s.placement === "belowTools",
   )) {
-    blocks.push({ key: `extra-${section.id}`, node: renderExtraSection(section) });
+    blocks.push({
+      key: `extra-${section.id}`,
+      node: renderExtraSection(section),
+    });
   }
 
   return (
