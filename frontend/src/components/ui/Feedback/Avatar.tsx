@@ -1,6 +1,6 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 import { defaultThemeConfig } from "@/config/themeConfig";
 import { mapApiUserProfileToUiProfile } from "@/utils/adapters/userProfileAdapter";
@@ -24,6 +24,7 @@ export const Avatar = React.memo<AvatarProps>(
     );
 
     const [imageLoadFailed, setImageLoadFailed] = useState(false);
+    const avatarUrl = uiProfile?.avatarUrl ?? null;
 
     // Compute assistant avatar path once
     const assistantAvatarPath = useMemo(() => {
@@ -32,6 +33,10 @@ export const Avatar = React.memo<AvatarProps>(
       }
       return null;
     }, [userOrAssistant]);
+
+    useEffect(() => {
+      setImageLoadFailed(false);
+    }, [assistantAvatarPath, avatarUrl]);
 
     const getInitials = () => {
       if (typeof userOrAssistant !== "undefined" && !userOrAssistant) {
@@ -63,11 +68,12 @@ export const Avatar = React.memo<AvatarProps>(
         data-testid="avatar-identity"
         aria-label={!userOrAssistant ? t`Assistant avatar` : t`User avatar`}
       >
-        {uiProfile?.avatarUrl && userOrAssistant ? (
+        {avatarUrl && userOrAssistant && !imageLoadFailed ? (
           <img
-            src={uiProfile.avatarUrl}
+            src={avatarUrl}
             alt={t`User avatar`}
             className="size-full rounded-full object-cover"
+            onError={() => setImageLoadFailed(true)}
           />
         ) : assistantAvatarPath && !imageLoadFailed && !userOrAssistant ? (
           <img

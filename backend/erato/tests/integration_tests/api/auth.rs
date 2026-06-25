@@ -86,6 +86,29 @@ async fn test_profile_endpoint_uses_preferred_language_claim_when_supported(pool
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_profile_endpoint_returns_picture_claim(pool: Pool<Postgres>) {
+    let app_state = test_app_state(hermetic_app_config(None, None), pool).await;
+    let profile_picture_url = "https://example.com/profile/avatar.png";
+    let jwt = JwtTokenBuilder::new().picture(profile_picture_url).build();
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let response = server
+        .get("/api/v1beta/me/profile")
+        .with_bearer_token(&jwt)
+        .await;
+
+    response.assert_status_ok();
+
+    let profile: Value = response.json();
+    assert_eq!(profile["picture"].as_str().unwrap(), profile_picture_url);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_profile_endpoint_respects_configured_language_priority(pool: Pool<Postgres>) {
     let mut app_config = hermetic_app_config(None, None);
     app_config.i18n.language.language_detection_priority =

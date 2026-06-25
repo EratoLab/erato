@@ -162,6 +162,7 @@ pub struct JwtTokenBuilder {
     subject: String,
     email: Option<String>,
     name: Option<String>,
+    picture: Option<String>,
     preferred_language: Option<String>,
     tenant_preferred_language: Option<String>,
     organization_user_id: Option<String>,
@@ -175,6 +176,7 @@ impl Default for JwtTokenBuilder {
             subject: TEST_USER_SUBJECT.to_string(),
             email: Some("admin@example.com".to_string()),
             name: Some("admin".to_string()),
+            picture: None,
             preferred_language: None,
             tenant_preferred_language: None,
             organization_user_id: None,
@@ -210,6 +212,12 @@ impl JwtTokenBuilder {
     /// Set the name claim
     pub fn name(mut self, name: impl Into<String>) -> Self {
         self.name = Some(name.into());
+        self
+    }
+
+    /// Set the picture claim
+    pub fn picture(mut self, picture: impl Into<String>) -> Self {
+        self.picture = Some(picture.into());
         self
     }
 
@@ -258,6 +266,10 @@ impl JwtTokenBuilder {
 
         if let Some(name) = self.name {
             claims["name"] = Value::String(name);
+        }
+
+        if let Some(picture) = self.picture {
+            claims["picture"] = Value::String(picture);
         }
 
         if let Some(preferred_language) = self.preferred_language {
