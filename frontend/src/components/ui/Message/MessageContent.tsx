@@ -309,6 +309,56 @@ const autolinkEratoFiles = (text: string): string => {
   });
 };
 
+type MarkdownAstNode = {
+  type: string;
+  children?: MarkdownAstNode[];
+  label?: string;
+  url?: string;
+  title?: string | null;
+  value?: string;
+};
+
+const isMarkdownDefinitionNode = (
+  node: MarkdownAstNode,
+): node is MarkdownAstNode & { label: string; url: string } =>
+  node.type === "definition" &&
+  typeof node.label === "string" &&
+  typeof node.url === "string";
+
+const definitionToText = (definition: MarkdownAstNode): string => {
+  const title =
+    typeof definition.title === "string" ? ` "${definition.title}"` : "";
+  return `[${definition.label ?? ""}]: ${definition.url ?? ""}${title}`;
+};
+
+function preserveListItemDefinitions() {
+  return (tree: MarkdownAstNode) => {
+    const visit = (node: MarkdownAstNode) => {
+      if (node.type === "listItem" && node.children?.length) {
+        const definitions = node.children.filter(isMarkdownDefinitionNode);
+        if (definitions.length === node.children.length) {
+          node.children = [
+            {
+              type: "paragraph",
+              children: [
+                {
+                  type: "text",
+                  value: definitions.map(definitionToText).join("\n"),
+                },
+              ],
+            },
+          ];
+          return;
+        }
+      }
+
+      node.children?.forEach(visit);
+    };
+
+    visit(tree);
+  };
+}
+
 const FOOTNOTE_DEFINITION_ID_REGEX = /^(?:user-content-)?fn-(.+)$/;
 const FOOTNOTE_REFERENCE_ID_REGEX = /^(?:user-content-)?fnref-(.+)$/;
 
@@ -797,7 +847,7 @@ export const MessageContent = memo(function MessageContent({
     return (
       <OutlookArtifactContext.Provider value={outlookArtifact ?? null}>
         <Markdown
-          remarkPlugins={[remarkGfm]}
+          remarkPlugins={[remarkGfm, preserveListItemDefinitions]}
           components={components}
           urlTransform={(url) =>
             // eslint-disable-next-line lingui/no-unlocalized-strings

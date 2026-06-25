@@ -287,6 +287,29 @@ describe("MessageContent", () => {
     expect(screen.getByText("Two").tagName).toBe("LI");
   });
 
+  it("renders bracket-label bullet points instead of treating them as link definitions", () => {
+    const markdown = [
+      "Can you change the prompt such that the scene shows two colleagues walking slowly mid-ground, natural expressions, sharp and in focus, not anonymized, secondary to architecture?",
+      "The prompt should be formatted like this:",
+      "- [APPLICATION]: office",
+      "- [SCENE]: e.g., lobby",
+      "- [HERO_PRODUCT]: specific anonymized luminaire or family (as the visual hero)",
+      "- [TIME_OF_DAY]: morning daylight",
+      "- [CAMERA_VIEW]: eye-level",
+    ].join("\n");
+
+    renderWithTheme(<MessageContent content={textContent(markdown)} />);
+
+    const listItems = screen.getAllByRole("listitem");
+    expect(listItems.map((item) => item.textContent)).toEqual([
+      "[APPLICATION]: office",
+      "[SCENE]: e.g., lobby",
+      "[HERO_PRODUCT]: specific anonymized luminaire or family (as the visual hero)",
+      "[TIME_OF_DAY]: morning daylight",
+      "[CAMERA_VIEW]: eye-level",
+    ]);
+  });
+
   it("renders cold-load reasoning behind a 'Thought for' pill that toggles the timeline", () => {
     renderWithTheme(
       <MessageContent
