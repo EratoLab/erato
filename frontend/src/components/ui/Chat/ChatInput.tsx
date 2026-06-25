@@ -21,7 +21,7 @@ import { UnsupportedFileTypeError } from "@/hooks/files/errors";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { useOptionalTranslation } from "@/hooks/i18n";
 import { useChatInputHandlers } from "@/hooks/ui";
-import { useResponsive } from "@/hooks/useResponsive";
+import { useIsMobile } from "@/hooks/useResponsive";
 import {
   fetchGetFile,
   useFacets,
@@ -1177,7 +1177,7 @@ export const ChatInput = ({
   // single "+" menu (ChatInputAddControls). Skipped when a host has registered
   // a custom file-source selector (e.g. the Outlook add-in keeps its own "+");
   // unifying that path is a follow-up that routes its sections through the menu.
-  const { isMobile } = useResponsive();
+  const isMobile = useIsMobile();
   const canUploadFiles = Boolean(handleFileAttachments) && uploadEnabled;
   const hasFacets = availableFacets.length > 0;
   const useUnifiedMobileMenu =
@@ -1982,23 +1982,24 @@ export const ChatInput = ({
                 (useUnifiedMobileMenu ? (
                   <ChatInputAddControls
                     canUpload={canUploadFiles}
-                    message={message}
-                    chatId={chatId}
-                    assistantId={assistantId}
-                    previousMessageId={previousMessageId}
-                    chatProviderId={selectedModel?.chat_provider_id}
-                    onFilesUploaded={handleFilesUploaded}
-                    onTokenLimitExceeded={handleFileTokenLimitExceeded}
-                    performFileUpload={uploadFiles}
-                    uploadError={
-                      externalUploadError instanceof Error
-                        ? externalUploadError
-                        : null
-                    }
-                    onProcessingChange={handleFileButtonProcessingChange}
-                    acceptedFileTypes={acceptedFileTypes}
-                    multiple={maxFiles > 1}
-                    maxFiles={maxFiles}
+                    upload={{
+                      message,
+                      chatId,
+                      assistantId,
+                      previousMessageId,
+                      chatProviderId: selectedModel?.chat_provider_id,
+                      onFilesUploaded: handleFilesUploaded,
+                      onTokenLimitExceeded: handleFileTokenLimitExceeded,
+                      performFileUpload: uploadFiles,
+                      uploadError:
+                        externalUploadError instanceof Error
+                          ? externalUploadError
+                          : null,
+                      onProcessingChange: handleFileButtonProcessingChange,
+                      acceptedFileTypes,
+                      multiple: maxFiles > 1,
+                      maxFiles,
+                    }}
                     facets={availableFacets}
                     selectedFacetIds={selectedFacetIds}
                     onToggleFacet={toggleFacetId}

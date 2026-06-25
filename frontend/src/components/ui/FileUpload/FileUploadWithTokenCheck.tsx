@@ -15,7 +15,6 @@ import { FileUploadButton } from "./FileUploadButton";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FileType } from "@/utils/fileTypes";
-import type React from "react";
 
 interface FileUploadWithTokenCheckProps {
   /** Current message text to use for token estimation */
@@ -58,9 +57,7 @@ interface FileUploadWithTokenCheckProps {
  * File upload button with integrated token usage checking
  * Note: Does not display its own warnings, defers to ChatInputTokenUsage
  */
-export const FileUploadWithTokenCheck: React.FC<
-  FileUploadWithTokenCheckProps
-> = ({
+export function FileUploadWithTokenCheck({
   message,
   chatId,
   assistantId,
@@ -78,7 +75,7 @@ export const FileUploadWithTokenCheck: React.FC<
   className = "",
   disabled = false,
   onProcessingChange,
-}) => {
+}: FileUploadWithTokenCheckProps) {
   const hasCustomSelector = componentRegistry.ChatFileSourceSelector != null;
 
   const {
@@ -171,4 +168,4 @@ export const FileUploadWithTokenCheck: React.FC<
       {cloudPickerProps && <CloudFilePickerModal {...cloudPickerProps} />}
     </div>
   );
-};
+}
