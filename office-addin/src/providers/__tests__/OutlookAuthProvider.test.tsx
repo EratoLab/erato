@@ -131,7 +131,7 @@ function createPcaMock(
 }
 
 function stubFetch(response: Response) {
-  const fetcher = vi.fn(async () => response);
+  const fetcher = vi.fn(async (..._args: Parameters<typeof fetch>) => response);
   Object.defineProperty(window, "fetch", {
     configurable: true,
     value: fetcher,
@@ -144,7 +144,7 @@ function stubFetch(response: Response) {
 // repeating the last one. Factories avoid sharing an already-consumed body.
 function stubFetchSequence(factories: Array<() => Response>) {
   let index = 0;
-  const fetcher = vi.fn(async () => {
+  const fetcher = vi.fn(async (..._args: Parameters<typeof fetch>) => {
     const factory = factories[Math.min(index, factories.length - 1)];
     index += 1;
     return factory();
@@ -269,6 +269,66 @@ describe("OutlookAuthProvider", () => {
     expect(screen.getByTestId("status")).toHaveTextContent("error");
     expect(screen.getByTestId("error")).toHaveTextContent(
       "Could not establish a secure Erato session.",
+    );
+  });
+
+  it("force-refreshes the bootstrap token and retries when initial redemption returns 401", async () => {
+    const staleResult = {
+      ...authenticationResult,
+      idToken: "stale-id-token",
+      accessToken: "stale-access-token",
+    } as AuthenticationResult;
+    const freshResult = {
+      ...authenticationResult,
+      idToken: "fresh-id-token",
+      accessToken: "fresh-access-token",
+    } as AuthenticationResult;
+    const pca = createPcaMock();
+    (pca.acquireTokenSilent as Mock).mockImplementation(
+      async (request: { forceRefresh?: boolean }) =>
+        request.forceRefresh ? freshResult : staleResult,
+    );
+    vi.mocked(createNestablePublicClientApplication).mockResolvedValue(pca);
+    const fetcher = stubFetchSequence([
+      () => new Response("Unauthorized", { status: 401 }),
+      () => new Response("{}", { status: 202 }),
+    ]);
+
+    render(
+      <OutlookAuthProvider>
+        <AuthProbe />
+      </OutlookAuthProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("authenticated")).toHaveTextContent("true"),
+    );
+
+    expect(screen.getByTestId("status")).toHaveTextContent("ready");
+    expect(pca.acquireTokenSilent).toHaveBeenNthCalledWith(
+      1,
+      expect.not.objectContaining({ forceRefresh: true }),
+    );
+    expect(pca.acquireTokenSilent).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ forceRefresh: true }),
+    );
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher.mock.calls[0][1]).toEqual(
+      expect.objectContaining({
+        body: JSON.stringify({
+          id_token: "stale-id-token",
+          access_token: "stale-access-token",
+        }),
+      }),
+    );
+    expect(fetcher.mock.calls[1][1]).toEqual(
+      expect.objectContaining({
+        body: JSON.stringify({
+          id_token: "fresh-id-token",
+          access_token: "fresh-access-token",
+        }),
+      }),
     );
   });
 

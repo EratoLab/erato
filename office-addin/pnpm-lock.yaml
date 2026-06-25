@@ -322,7 +322,7 @@ packages:
     hasBin: true
 
   '@erato/frontend@file:../frontend/dist-package/erato-frontend.tgz':
-    resolution: {integrity: sha512-p5je1byhzWbFofN5p+J2bslc2jJMiBkFPmm4AZTkHR8kxC9wbroN9jNQeW0LhXtTTsmolVIsoPem5M/mS/JBZg==, tarball: file:../frontend/dist-package/erato-frontend.tgz}
+    resolution: {integrity: sha512-dV10zK1dFisFgqdliwHTds2S4opsX134eak3Az2KD0GFzZ3uMEN7ZnT+/xLr4fRi7/yBTPtrU3YUKOTn+x4kUQ==, tarball: file:../frontend/dist-package/erato-frontend.tgz}
     version: 0.1.0
     peerDependencies:
       '@lingui/core': ^5.9.4
@@ -538,8 +538,8 @@ packages:
       '@noble/hashes':
         optional: true
 
-  '@extend-ai/react-docx@0.7.0-alpha.2':
-    resolution: {integrity: sha512-Fl1OhL5v08IKTilwhfm538KhwiGM/kSzqSsX67BQJcSkUSzalNJi6icTfVwo4yp76FJNf2FZV/ywSqni6kdXdg==}
+  '@extend-ai/react-docx@0.7.1':
+    resolution: {integrity: sha512-2TwYuTJsdAJkRTo/1IyKPDF1oQ96mq7/fWgPLSAng8voRtO1ZJ/0ICgVrsusMAGxYWFvhl1SaQAh6/VO4rqf9A==}
     peerDependencies:
       react: '>=18'
       react-dom: '>=18'
@@ -3896,7 +3896,7 @@ snapshots:
   '@erato/frontend@file:../frontend/dist-package/erato-frontend.tgz(@lingui/core@5.9.4(@lingui/babel-plugin-lingui-macro@5.9.4(typescript@5.9.3)))(@lingui/react@5.9.4(@lingui/babel-plugin-lingui-macro@5.9.4(typescript@5.9.3))(react@19.2.7))(@tanstack/query-core@5.100.10)(@tanstack/react-query-devtools@5.100.10(@tanstack/react-query@5.100.10(react@19.2.7))(react@19.2.7))(@tanstack/react-query@5.100.10(react@19.2.7))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react-router-dom@6.30.3(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react-router@6.30.3(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.1)(typescript@5.9.3)':
     dependencies:
       '@erato/frontend-utils': file:../frontend-utils(typescript@5.9.3)
-      '@extend-ai/react-docx': 0.7.0-alpha.2(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@extend-ai/react-docx': 0.7.1(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@lingui/core': 5.9.4(@lingui/babel-plugin-lingui-macro@5.9.4(typescript@5.9.3))
       '@lingui/detect-locale': 5.9.5
       '@lingui/format-po': 5.9.5(typescript@5.9.3)
@@ -4069,7 +4069,7 @@ snapshots:
 
   '@exodus/bytes@1.15.1': {}
 
-  '@extend-ai/react-docx@0.7.0-alpha.2(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+  '@extend-ai/react-docx@0.7.1(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@chenglou/pretext': 0.0.5
       '@tanstack/react-virtual': 3.14.2(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
