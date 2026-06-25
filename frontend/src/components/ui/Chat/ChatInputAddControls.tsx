@@ -1,6 +1,7 @@
 import { t } from "@lingui/core/macro";
 import { useMemo } from "react";
 
+import { componentRegistry } from "@/config/componentRegistry";
 import { useChatFileSources } from "@/hooks/files/useChatFileSources";
 
 import { CloudFilePickerModal } from "../FileUpload/CloudFilePickerModal";
@@ -55,6 +56,7 @@ export function ChatInputAddControls({
   const {
     isProcessing,
     fileSourceItems,
+    onSelectFiles,
     dropzoneRootProps,
     dropzoneInputProps,
     cloudPickerProps,
@@ -63,6 +65,10 @@ export function ChatInputAddControls({
     // When upload is off, keep the hook inert (no estimation/dropzone work).
     disabled: disabled || uploadDisabled || !canUpload,
   });
+
+  // A host (e.g. the Outlook add-in) can inject its own rows — email content,
+  // attachments — into the shared menu instead of overriding the whole selector.
+  const ExtraContent = componentRegistry.ChatAddMenuExtraContent;
 
   const selectedFacetIdSet = useMemo(
     () => new Set(selectedFacetIds),
@@ -99,6 +105,18 @@ export function ChatInputAddControls({
       <ChatInputAddMenu
         fileSources={canUpload ? fileSourceItems : []}
         tools={tools}
+        extraContent={
+          ExtraContent
+            ? ({ close }) => (
+                <ExtraContent
+                  onSelectFiles={onSelectFiles}
+                  onClose={close}
+                  disabled={disabled}
+                  isProcessing={isProcessing}
+                />
+              )
+            : undefined
+        }
         selectedCount={selectedFacetIds.length}
         isProcessing={isProcessing}
         disabled={disabled}

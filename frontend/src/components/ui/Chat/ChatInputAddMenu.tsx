@@ -63,6 +63,13 @@ export interface ChatInputAddMenuProps {
    * contribute extra sources without replacing the whole menu.
    */
   extraSections?: AddMenuSection[];
+  /**
+   * Host-rendered content injected as its own section (between file sources and
+   * tools). Unlike `extraSections` (static data), this is a render-prop so a
+   * stateful host — e.g. the Outlook add-in's email-content accordion — can run
+   * its own hooks and close the menu via the provided `close` callback.
+   */
+  extraContent?: (api: { close: () => void }) => React.ReactNode;
   /** Disable the whole trigger. */
   disabled?: boolean;
   /** Show a spinner in the trigger while files are uploading/linking. */
@@ -113,6 +120,7 @@ export function ChatInputAddMenu({
   fileSources = [],
   tools = [],
   extraSections = [],
+  extraContent,
   disabled = false,
   isProcessing = false,
   selectedCount = 0,
@@ -277,6 +285,17 @@ export function ChatInputAddMenu({
           {fileSources.map((item) =>
             renderActionRow(item, `chat-input-add-menu-source-${item.id}`),
           )}
+        </div>
+      ),
+    });
+  }
+
+  if (extraContent) {
+    blocks.push({
+      key: "extra-content",
+      node: (
+        <div className="flex flex-col">
+          {extraContent({ close: () => setIsOpen(false) })}
         </div>
       ),
     });

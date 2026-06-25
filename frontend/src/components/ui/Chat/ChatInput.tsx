@@ -1173,17 +1173,20 @@ export const ChatInput = ({
     isRecording || // Prevent edits while recording
     isRecordingUpload; // Prevent edits while uploading recording
 
-  // On mobile, collapse the file-upload button and the Tools dropdown into a
-  // single "+" menu (ChatInputAddControls). Skipped when a host has registered
-  // a custom file-source selector (e.g. the Outlook add-in keeps its own "+");
-  // unifying that path is a follow-up that routes its sections through the menu.
+  // Collapse the file-upload button and the Tools dropdown into a single "+"
+  // menu (ChatInputAddControls): on mobile, or whenever a host registers extra
+  // add-menu content (e.g. the Outlook add-in's email-content sources, which
+  // ride in via componentRegistry.ChatAddMenuExtraContent regardless of width).
+  // Still skipped when a host overrides the whole selector (ChatFileSourceSelector).
   const isMobile = useIsMobile();
   const canUploadFiles = Boolean(handleFileAttachments) && uploadEnabled;
   const hasFacets = availableFacets.length > 0;
+  const hasAddMenuExtraContent =
+    componentRegistry.ChatAddMenuExtraContent != null;
   const useUnifiedMobileMenu =
-    isMobile &&
+    (isMobile || hasAddMenuExtraContent) &&
     componentRegistry.ChatFileSourceSelector == null &&
-    (canUploadFiles || hasFacets);
+    (canUploadFiles || hasFacets || hasAddMenuExtraContent);
 
   // Add token limit exceeded to disabled state for the send button
   const isSendDisabled =
