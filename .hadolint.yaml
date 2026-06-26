@@ -13,4 +13,5 @@ failure-threshold: error # only fail on error-level rules
 # Trusted registries
 trustedRegistries:
   - docker.io
-  - gcr.io 
+  - gcr.io
+  - registry.eratolabs.com
