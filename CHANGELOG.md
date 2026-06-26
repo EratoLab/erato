@@ -22,6 +22,153 @@ Typical "Notable changes" categories to copy & paste:
 
 -->
 
+## [0.6.2] - 2026-06-26
+
+### Notable changes
+
+#### Features and enhancements
+
+**Assistant Hub**: Add Assistant Hub system that allows for controlled review, publish and highlighting of assistants
+in an organization ([#770][repo-pr-770], [#764][repo-pr-764], [#730][repo-pr-730])
+
+**Outlook addin + Exchange Server**: Built out support for using the Outlook addin in an environment that uses
+Exchange Server (in contrast to Exchange Online) ([#722][repo-pr-722], [#723][repo-pr-723], [#768][repo-pr-768], [#727][repo-pr-727], [#728][repo-pr-728], [#720][repo-pr-720])
+
+**Component Kits**: Add mechanism of "component kit"s that allow for runtime loading of custom components ([#746][repo-pr-746], [#747][repo-pr-747], [#749][repo-pr-749], [#773][repo-pr-773], [#767][repo-pr-767])
+  - **Breaking change**: If you previously used custom components via the `componentRegistry.ts`, you have to transition to use a component kit instead.
+
+**JIT-compiled translation files**: .po files can now be ingested at runtime, allowing a whole custom-theme including translations to be mounted without a required build step. ([#756][repo-pr-756], [#745][repo-pr-745])
+
+**Guided microphone quality check**: Add guided microphone quality check in Audio settings tab ([#765][repo-pr-765])
+
+**Improved error reporting**: Add "copy error report" button for errors, as well as option to display more verbose errors ([#759][repo-pr-759])
+
+- Added search and endless scrolling over all historic chats ([#757][repo-pr-757])
+- Add language-file-driven hover titles to audio dictation and conversational mode buttons ([#683][repo-pr-683])
+- Improved parsing and preview of `.eml` files ([#713][repo-pr-713], [#716][repo-pr-716])
+- Add preview of `.docx` files ([#733][repo-pr-733])
+- Add copy button to markdown code snippets ([#724][repo-pr-724])
+- Mobile chat: unified "+" add/tools menu ([#771][repo-pr-771])
+- Don't render generated image twice if mentioned in output text ([#774][repo-pr-774])
+- Retrieve profile picture from Graph API [#777][repo-pr-777]
+- Also pass additional headers for audio & summary generation [#743][repo-pr-743]
+- Make all strings and asset paths for office manifest configurable [#748][repo-pr-748]
+- Make assistant system prompt character limit configurable via erato.toml [#729][repo-pr-729]
+- Outlook read-mode reply via client-action proposals [#725][repo-pr-725]
+- Add backend-configured toggle for displaying Settings > Data tab [#735][repo-pr-735]
+- Add optional config to mask reasoning trace text in chat UI [#739][repo-pr-739]
+
+#### Stability improvements
+
+- Improved audio input handling: RMS speech-onset cue + WebKit/iOS; WebKit/iOS device loss ([#753][repo-pr-753], [#734][repo-pr-734], [#761][repo-pr-761])
+- Improve auto-scroll interruption and resumption ([#731][repo-pr-731])
+- Proxy preview URLs via backend to fix file previews in certain file provider scenarios [#740][repo-pr-740]
+- Email token-leak hardening: data-URI images, nested forwards, malformed MIME [#715][repo-pr-715]
+
+#### Bug fixes
+
+- Fixed loading of Outlook addin in web version of Outlook ([#755][repo-pr-755], [#776][repo-pr-776])
+- Fix persisted EML MIME detection [#711][repo-pr-711]
+- Fix .eml extraction special case; Use ical crate for ical/vcard parsing [#721][repo-pr-721]
+- Fix Outlook thread content loss; add attachment-byte dedup [#712][repo-pr-712]
+- Fix .eml token-estimate bloat from unstripped HTML/CSS [#714][repo-pr-714]
+- Fix loading of audio worklet 404 in office-addin [#772][repo-pr-772]
+- Fix Langfuse prompts IDs that are in folders not resolving [#758][repo-pr-758]
+- Fix mount time outlook addin reload loop with stale token [#778][repo-pr-778]
+- Fix generation of AZBlob download URL with Content-Disposition [#738][repo-pr-738]
+- Fix read-mode reply card gating [#736][repo-pr-736]
+- Fix stale newlyCreatedChatId redirect undoing New chat in add-in [#737][repo-pr-737]
+- Fix rendering of  dictation/stop mic icons on mobile Safari [#742][repo-pr-742]
+- Supress spurious audio dictation error toast on Safari after successful completion [#751][repo-pr-751]
+
+#### Dependency changes
+
+- Update Redis in Helm chart to version 8.8.0 [#718][repo-pr-718]
+- Update `kreuzberg` to 5.0.0-rc.18 [#726][repo-pr-726]
+- Update backend dependencies; Reduce optional features [#752][repo-pr-752]
+- Update React 19.0.0 -> 19.2.7 (frontend + office-addin) [#762][repo-pr-762]
+- JS toolchain & version hygiene — Storybook 8.6.18, faker v10, pnpm 11.8.0, office-addin dep pins [#763][repo-pr-763]
+ 
+ 
+#### Chores & Developer experience
+
+- Adjust usage to new registry `registry.eratolabs.com` [#760][repo-pr-760]
+- Set up storybook for component-kit-example 
+- Adjust component-kit-example to use busybox as base image 
+- Promote config keys `experimental_assistants` -> `assistants` [#750][repo-pr-750]
+- Add dev-only console forwarding + dev_logged recipe [#741][repo-pr-741]
+ 
+#### Other
+
+- Add option to use extraInitContainers for backend / oauth2-proxy [#754][repo-pr-754]
+
+### Full list of changes
+
+- feat: add language-file-driven hover titles to audio dictation and conversational mode buttons [#683][repo-pr-683]
+- Fix persisted EML MIME detection [#711][repo-pr-711]
+- Fix Outlook thread content loss; add attachment-byte dedup [#712][repo-pr-712]
+- Defer thread .eml synthesis off the render path [#713][repo-pr-713]
+- Fix .eml token-estimate bloat from unstripped HTML/CSS [#714][repo-pr-714]
+- Email token-leak hardening: data-URI images, nested forwards, malformed MIME [#715][repo-pr-715]
+- Recover calendar (ICS) + vCard content and filter email noise [#716][repo-pr-716]
+- Update Redis in Helm chart to version 8.8.0 [#718][repo-pr-718]
+- Improve add-in email context loading [#720][repo-pr-720]
+- Fix .eml extraction special case; Use ical crate for ical/vcard parsing [#721][repo-pr-721]
+- Extract host-agnostic auth seam from MsalNaaProvider [#722][repo-pr-722]
+- Extract host-agnostic auth seam from MsalNaaProvider [#723][repo-pr-723]
+- feat: add copy button to markdown code snippets (ERMAIN-340) [#724][repo-pr-724]
+- Outlook read-mode reply via client-action proposals [#725][repo-pr-725]
+- Kreuzberg update to 5.0.0-rc.18 [#726][repo-pr-726]
+- Add Exchange server proxy for office addin [#727][repo-pr-727]
+- ERMAIN-350: Emit on-prem (≤1.5) funnel manifest for Exchange SE [#728][repo-pr-728]
+- feat: make assistant system prompt character limit configurable via erato.toml [#729][repo-pr-729]
+- Veto NAA for on-prem mailboxes despite host support [#730][repo-pr-730]
+- Improve auto-scroll interruption and resumption [#731][repo-pr-731]
+- Update changelog for version 0.6.1, 0.6.0, 0.5.2 [#732][repo-pr-732]
+- Add support for previewing DOCX files [#733][repo-pr-733]
+- Fix start/end-of-speech truncation in audio recorders (ERMAIN-334) [#734][repo-pr-734]
+- Add backend-configured toggle for Settings data tab [#735][repo-pr-735]
+- Fix read-mode reply card gating (ERMAIN-364) [#736][repo-pr-736]
+- Fix stale newlyCreatedChatId redirect undoing New chat in add-in [#737][repo-pr-737]
+- Fix generation of AZBlob download URL with Content-Disposition [#738][repo-pr-738]
+- Add optional config to mask reasoning trace text in chat UI [#739][repo-pr-739]
+- Proxy preview URLs via backend to resolve CORS incompatibilities [#740][repo-pr-740]
+- feat(frontend): dev-only console forwarding + dev_logged recipe [#741][repo-pr-741]
+- fix(frontend): render dictation/stop mic icons on mobile Safari [#742][repo-pr-742]
+- Also pass additional headers for audio & summary generation [#743][repo-pr-743]
+- Add dumping of i18n_keys.json [#745][repo-pr-745]
+- Set up component kit mechanism [#746][repo-pr-746]
+- Make lingui i18n mechansim work with component kits [#747][repo-pr-747]
+- Make all strings and asset paths for office manifest configurable [#748][repo-pr-748]
+- Build component-kit-example image in seperate CI job [#749][repo-pr-749]
+- Promote config keys `experimental_assistants` -> `assistants` [#750][repo-pr-750]
+- fix(frontend): suppress spurious audio dictation error toast on Safari after successful completion [#751][repo-pr-751]
+- Update dependencies; Reduce optional features [#752][repo-pr-752]
+- ERMAIN-379: RMS speech-onset cue + WebKit/iOS audio hardening [#753][repo-pr-753]
+- Add option to use extraInitContaines for backend / oauth2-proxy [#754][repo-pr-754]
+- Add usage of frame-ancestors CSP directive [#755][repo-pr-755]
+- Add ability to JIT compile .po files for translations [#756][repo-pr-756]
+- Add backend-based search for chats [#757][repo-pr-757]
+- Fix Langfuse prompts IDs that are in folders not resolving [#758][repo-pr-758]
+- Add `show_verbose_assistant_errors` option; Add "copy error report" button [#759][repo-pr-759]
+- Adjust usage to new registry `registry.eratolabs.com` [#760][repo-pr-760]
+- ERMAIN-390: capture-track device-loss watchdog (ended/mute/unmute) [#761][repo-pr-761]
+- ERMAIN-394: upgrade React 19.0.0 -> 19.2.7 (frontend + addin) [#762][repo-pr-762]
+- chore: JS toolchain & version hygiene — Storybook 8.6.18, faker v10, pnpm 11.8.0, office-addin dep pins [#763][repo-pr-763]
+- Add Assistant Store system [#764][repo-pr-764]
+- ERMAIN-380: guided microphone-quality check (replay + transcript proof) [#765][repo-pr-765]
+- Polish some assistant store interactions [#766][repo-pr-766]
+- Adjust component-kit-example to use busybox as base image [#767][repo-pr-767]
+- Extend office-addin setup page for Exchange server [#768][repo-pr-768]
+- Rename Assistant Store -> Assistant Hub [#770][repo-pr-770]
+- Mobile chat: unified "+" add/tools menu [#771][repo-pr-771]
+- fix(office-addin): fix audio worklet 404 in production (ERMAIN-399) [#772][repo-pr-772]
+- Set up storbyook for component-kit-example [#773][repo-pr-773]
+- Don't render generated image twice if mentioned in output text [#774][repo-pr-774]
+- Add https://outlook.cloud.microsoft as default frame-ancestor [#776][repo-pr-776]
+- Retrieve profile picture from Graph API [#777][repo-pr-777]
+- Fix mount time outlook addin reload loop with stale token [#778][repo-pr-778]
+
 ## [0.6.1] - 2026-06-08
 
 ### Notable changes
@@ -1605,6 +1752,7 @@ First tagged release
 [repo-pr-680]: https://github.com/EratoLab/erato/pull/680
 [repo-pr-681]: https://github.com/EratoLab/erato/pull/681
 [repo-pr-682]: https://github.com/EratoLab/erato/pull/682
+[repo-pr-683]: https://github.com/EratoLab/erato/pull/683
 [repo-pr-684]: https://github.com/EratoLab/erato/pull/684
 [repo-pr-685]: https://github.com/EratoLab/erato/pull/685
 [repo-pr-686]: https://github.com/EratoLab/erato/pull/686
@@ -1632,6 +1780,69 @@ First tagged release
 [repo-pr-708]: https://github.com/EratoLab/erato/pull/708
 [repo-pr-709]: https://github.com/EratoLab/erato/pull/709
 [repo-pr-710]: https://github.com/EratoLab/erato/pull/710
+[repo-pr-711]: https://github.com/EratoLab/erato/pull/711
+[repo-pr-712]: https://github.com/EratoLab/erato/pull/712
+[repo-pr-713]: https://github.com/EratoLab/erato/pull/713
+[repo-pr-714]: https://github.com/EratoLab/erato/pull/714
+[repo-pr-715]: https://github.com/EratoLab/erato/pull/715
+[repo-pr-716]: https://github.com/EratoLab/erato/pull/716
+[repo-pr-718]: https://github.com/EratoLab/erato/pull/718
+[repo-pr-720]: https://github.com/EratoLab/erato/pull/720
+[repo-pr-721]: https://github.com/EratoLab/erato/pull/721
+[repo-pr-722]: https://github.com/EratoLab/erato/pull/722
+[repo-pr-723]: https://github.com/EratoLab/erato/pull/723
+[repo-pr-724]: https://github.com/EratoLab/erato/pull/724
+[repo-pr-725]: https://github.com/EratoLab/erato/pull/725
+[repo-pr-726]: https://github.com/EratoLab/erato/pull/726
+[repo-pr-727]: https://github.com/EratoLab/erato/pull/727
+[repo-pr-728]: https://github.com/EratoLab/erato/pull/728
+[repo-pr-729]: https://github.com/EratoLab/erato/pull/729
+[repo-pr-730]: https://github.com/EratoLab/erato/pull/730
+[repo-pr-731]: https://github.com/EratoLab/erato/pull/731
+[repo-pr-732]: https://github.com/EratoLab/erato/pull/732
+[repo-pr-733]: https://github.com/EratoLab/erato/pull/733
+[repo-pr-734]: https://github.com/EratoLab/erato/pull/734
+[repo-pr-735]: https://github.com/EratoLab/erato/pull/735
+[repo-pr-736]: https://github.com/EratoLab/erato/pull/736
+[repo-pr-737]: https://github.com/EratoLab/erato/pull/737
+[repo-pr-738]: https://github.com/EratoLab/erato/pull/738
+[repo-pr-739]: https://github.com/EratoLab/erato/pull/739
+[repo-pr-740]: https://github.com/EratoLab/erato/pull/740
+[repo-pr-741]: https://github.com/EratoLab/erato/pull/741
+[repo-pr-742]: https://github.com/EratoLab/erato/pull/742
+[repo-pr-743]: https://github.com/EratoLab/erato/pull/743
+[repo-pr-745]: https://github.com/EratoLab/erato/pull/745
+[repo-pr-746]: https://github.com/EratoLab/erato/pull/746
+[repo-pr-747]: https://github.com/EratoLab/erato/pull/747
+[repo-pr-748]: https://github.com/EratoLab/erato/pull/748
+[repo-pr-749]: https://github.com/EratoLab/erato/pull/749
+[repo-pr-750]: https://github.com/EratoLab/erato/pull/750
+[repo-pr-751]: https://github.com/EratoLab/erato/pull/751
+[repo-pr-752]: https://github.com/EratoLab/erato/pull/752
+[repo-pr-753]: https://github.com/EratoLab/erato/pull/753
+[repo-pr-754]: https://github.com/EratoLab/erato/pull/754
+[repo-pr-755]: https://github.com/EratoLab/erato/pull/755
+[repo-pr-756]: https://github.com/EratoLab/erato/pull/756
+[repo-pr-757]: https://github.com/EratoLab/erato/pull/757
+[repo-pr-758]: https://github.com/EratoLab/erato/pull/758
+[repo-pr-759]: https://github.com/EratoLab/erato/pull/759
+[repo-pr-760]: https://github.com/EratoLab/erato/pull/760
+[repo-pr-761]: https://github.com/EratoLab/erato/pull/761
+[repo-pr-762]: https://github.com/EratoLab/erato/pull/762
+[repo-pr-763]: https://github.com/EratoLab/erato/pull/763
+[repo-pr-764]: https://github.com/EratoLab/erato/pull/764
+[repo-pr-765]: https://github.com/EratoLab/erato/pull/765
+[repo-pr-766]: https://github.com/EratoLab/erato/pull/766
+[repo-pr-767]: https://github.com/EratoLab/erato/pull/767
+[repo-pr-768]: https://github.com/EratoLab/erato/pull/768
+[repo-pr-770]: https://github.com/EratoLab/erato/pull/770
+[repo-pr-771]: https://github.com/EratoLab/erato/pull/771
+[repo-pr-772]: https://github.com/EratoLab/erato/pull/772
+[repo-pr-773]: https://github.com/EratoLab/erato/pull/773
+[repo-pr-774]: https://github.com/EratoLab/erato/pull/774
+[repo-pr-776]: https://github.com/EratoLab/erato/pull/776
+[repo-pr-777]: https://github.com/EratoLab/erato/pull/777
+[repo-pr-778]: https://github.com/EratoLab/erato/pull/778
 
 ---
 
