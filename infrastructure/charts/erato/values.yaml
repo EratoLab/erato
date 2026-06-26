@@ -181,6 +181,14 @@ backend:
     pullPolicy: IfNotPresent
     # -- Backend image pull secrets
     pullSecrets: []
+  migrations:
+    image:
+      # -- Sqitch migrator image repository
+      repository: registry.eratolabs.com/erato/app-sqitch-migrator
+      # -- Sqitch migrator image tag. Defaults to backend.image.tag when empty.
+      tag: ""
+      # -- Sqitch migrator image pull policy
+      pullPolicy: IfNotPresent
   # -- Optional deployment version for cache headers on static files (falls back to image tag if not set)
   deploymentVersion: ""
   # -- Backend RUST_LOG filter. Set to an empty string to omit the RUST_LOG env var.

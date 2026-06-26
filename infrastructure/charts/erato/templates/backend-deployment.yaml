@@ -31,7 +31,8 @@ spec:
       {{- include "erato.imagePullSecrets" . | nindent 6 }}
       initContainers:
         - name: run-migrations
-          image: {{ include "common.images.image" ( dict "imageRoot" .Values.backend.image "global" .Values.global "chart" .Chart ) }}
+          image: {{ include "erato.migrationsImage" . }}
+          imagePullPolicy: {{ .Values.backend.migrations.image.pullPolicy }}
           command: ["/bin/bash"]
           args:
             - "-c"

@@ -78,7 +78,15 @@ value: {{ .Values.postgresql.external.connectionString.value }}
 Return the proper Docker Image Registry Secret Names
 */}}
 {{- define "erato.imagePullSecrets" -}}
-{{- include "common.images.renderPullSecrets" (dict "images" (list .Values.oauth2Proxy.image .Values.backend.image) "context" $) -}}
+{{- include "common.images.renderPullSecrets" (dict "images" (list .Values.oauth2Proxy.image .Values.backend.image .Values.backend.migrations.image) "context" $) -}}
+{{- end -}}
+
+{{/*
+Return the Sqitch migrator image, defaulting its tag to the backend image tag.
+*/}}
+{{- define "erato.migrationsImage" -}}
+{{- $imageRoot := dict "repository" .Values.backend.migrations.image.repository "tag" (default .Values.backend.image.tag .Values.backend.migrations.image.tag) -}}
+{{- include "common.images.image" ( dict "imageRoot" $imageRoot "global" .Values.global "chart" .Chart ) -}}
 {{- end -}}
 
 {{/*

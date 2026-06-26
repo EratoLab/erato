@@ -30,6 +30,9 @@ tests:
           path: spec.template.spec.containers[0].image
           value: registry.eratolabs.com/erato/app:0.2.99
       - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: registry.eratolabs.com/erato/app-sqitch-migrator:0.2.99
+      - equal:
           path: spec.template.spec.containers[0].ports[0].containerPort
           value: 3130
 
@@ -75,6 +78,23 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].image
           value: my-registry/erato:v1.2.3
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: registry.eratolabs.com/erato/app-sqitch-migrator:v1.2.3
+
+  - it: should use custom migrator image repository and tag
+    set:
+      backend.image.tag: v1.2.3
+      backend.migrations.image.repository: my-registry/erato-migrator
+      backend.migrations.image.tag: v4.5.6
+      backend.migrations.image.pullPolicy: Always
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: my-registry/erato-migrator:v4.5.6
+      - equal:
+          path: spec.template.spec.initContainers[0].imagePullPolicy
+          value: Always
 
   - it: should set environment variables correctly
     set:

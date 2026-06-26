@@ -45,6 +45,7 @@ env:
   FRONTEND_IMAGE_NAME: erato/frontend
   COMPONENT_KIT_EXAMPLE_IMAGE_NAME: erato/component-kit-example
   COMBINED_IMAGE_NAME: erato/app
+  SQITCH_MIGRATOR_IMAGE_NAME: erato/app-sqitch-migrator
   SHA_TAG: ${{ github.sha }}
   RELEASE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
 
@@ -112,7 +113,7 @@ jobs:
         uses: jbergstroem/hadolint-gh-action@v1.12.2
         if: success() || failure()
         with:
-          dockerfile: Dockerfile.combined backend/Dockerfile backend/Dockerfile.mock-llm-server backend/Dockerfile.mock-mcp-server backend/ollama-smol/Dockerfile frontend/Dockerfile component-kit-example/Dockerfile
+          dockerfile: Dockerfile.combined backend/Dockerfile backend/Dockerfile.sqitch-migrator backend/Dockerfile.mock-llm-server backend/Dockerfile.mock-mcp-server backend/ollama-smol/Dockerfile frontend/Dockerfile component-kit-example/Dockerfile
           config_file: .hadolint.yaml
 
       - name: "rustfmt"
@@ -643,6 +644,20 @@ jobs:
           cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:latest-amd64-buildcache
           cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:latest-amd64-buildcache
 
+      - name: Build and push Sqitch migrator image
+        uses: docker/build-push-action@v6.15.0
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.sqitch-migrator
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.SQITCH_MIGRATOR_IMAGE_NAME }}:latest-amd64
+            ${{ env.REGISTRY }}/${{ env.SQITCH_MIGRATOR_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64
+            ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-amd64', env.REGISTRY, env.SQITCH_MIGRATOR_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
+          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.SQITCH_MIGRATOR_IMAGE_NAME }}:latest-amd64-buildcache
+          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.SQITCH_MIGRATOR_IMAGE_NAME }}:latest-amd64-buildcache
+
   build-and-push-arm64:
     runs-on: ubuntu-24.04-arm64-custom-large # blacksmith-8vcpu-ubuntu-2404-arm
     permissions:
@@ -706,6 +721,20 @@ jobs:
             FRONTEND_IMAGE=${{ env.FRONTEND_IMAGE_NAME }}:${{ env.RELEASE_VERSION != '' && format('{0}-arm64', env.RELEASE_VERSION) || format('{0}-arm64', env.SHA_TAG) }}
           cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:latest-arm64-buildcache
           cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:latest-arm64-buildcache
+
+      - name: Build and push Sqitch migrator image
+        uses: docker/build-push-action@v6.15.0
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.sqitch-migrator
+          push: true
+          platforms: linux/arm64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.SQITCH_MIGRATOR_IMAGE_NAME }}:latest-arm64
+            ${{ env.REGISTRY }}/${{ env.SQITCH_MIGRATOR_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
+            ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-arm64', env.REGISTRY, env.SQITCH_MIGRATOR_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
+          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.SQITCH_MIGRATOR_IMAGE_NAME }}:latest-arm64-buildcache
+          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.SQITCH_MIGRATOR_IMAGE_NAME }}:latest-arm64-buildcache
 
   build-and-push-component-kit-example:
     runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
@@ -845,6 +874,19 @@ jobs:
             docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:${{ env.RELEASE_VERSION }} \
               ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:${{ env.RELEASE_VERSION }}-amd64 \
               ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:${{ env.RELEASE_VERSION }}-arm64
+          fi
+
+          # Sqitch migrator manifest
+          docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.SQITCH_MIGRATOR_IMAGE_NAME }}:latest \
+            ${{ env.REGISTRY }}/${{ env.SQITCH_MIGRATOR_IMAGE_NAME }}:latest-amd64 \
+            ${{ env.REGISTRY }}/${{ env.SQITCH_MIGRATOR_IMAGE_NAME }}:latest-arm64
+          docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.SQITCH_MIGRATOR_IMAGE_NAME }}:${{ env.SHA_TAG }} \
+            ${{ env.REGISTRY }}/${{ env.SQITCH_MIGRATOR_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64 \
+            ${{ env.REGISTRY }}/${{ env.SQITCH_MIGRATOR_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
+          if [[ "${{ env.RELEASE_VERSION }}" != "" ]]; then
+            docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.SQITCH_MIGRATOR_IMAGE_NAME }}:${{ env.RELEASE_VERSION }} \
+              ${{ env.REGISTRY }}/${{ env.SQITCH_MIGRATOR_IMAGE_NAME }}:${{ env.RELEASE_VERSION }}-amd64 \
+              ${{ env.REGISTRY }}/${{ env.SQITCH_MIGRATOR_IMAGE_NAME }}:${{ env.RELEASE_VERSION }}-arm64
           fi
 
   build-and-push-mock-llm-server-amd64:

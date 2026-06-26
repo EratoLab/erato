@@ -61,8 +61,10 @@ class BuildConfig(BaseModel):
     backend_image_repo: str
     base_backend_image: str
     combined_image_path: str
+    sqitch_migrator_image_path: str
     local_frontend_image: str
     local_combined_image: str
+    local_sqitch_migrator_image: str
     backend_image_for_build_arg: str
 
 
@@ -266,15 +268,27 @@ def update_chart_dependencies(config: ScriptConfig, cluster_config: ClusterConfi
         run_command(["helm", "dependency", "update", "--skip-refresh", str(cluster_config.chart_path)])
 
 
+def derive_sqitch_migrator_repository(erato_image_repository: str) -> str:
+    """Derive the Sqitch migrator image repository from the Erato app image repository."""
+    if erato_image_repository.endswith("/app"):
+        return f"{erato_image_repository[:-4]}/app-sqitch-migrator"
+    return f"{erato_image_repository}-sqitch-migrator"
+
+
 def configure_helm_args(config: ScriptConfig) -> list[str]:
     """Configure Helm arguments based on script config."""
     helm_args = config.helm_set_args.copy()
     
     if config.erato_image_repository:
         helm_args.extend(["--set", f"erato.backend.image.repository={config.erato_image_repository}"])
+        helm_args.extend([
+            "--set",
+            f"erato.backend.migrations.image.repository={derive_sqitch_migrator_repository(config.erato_image_repository)}",
+        ])
     
     if config.erato_image_tag:
         helm_args.extend(["--set", f"erato.backend.image.tag={config.erato_image_tag}"])
+        helm_args.extend(["--set", f"erato.backend.migrations.image.tag={config.erato_image_tag}"])
 
     return helm_args
 
@@ -336,6 +350,9 @@ def perform_local_build(config: ScriptConfig) -> list[str]:
     print(f"Using base backend image: {base_backend_image}")
     
     combined_image_path = "/".join(repo_base.split("/")[1:])
+    sqitch_migrator_image_path = "/".join(
+        derive_sqitch_migrator_repository(repo_base).split("/")[1:]
+    )
     
     build_config = BuildConfig(
         project_root=project_root,
@@ -345,8 +362,12 @@ def perform_local_build(config: ScriptConfig) -> list[str]:
         backend_image_repo=backend_image_repo,
         base_backend_image=base_backend_image,
         combined_image_path=combined_image_path,
+        sqitch_migrator_image_path=sqitch_migrator_image_path,
         local_frontend_image=f"registry.eratolabs.com/erato/frontend:{build_tag}",
         local_combined_image=f"k3d-registry.localhost:5000/{combined_image_path}:{build_tag}",
+        local_sqitch_migrator_image=(
+            f"k3d-registry.localhost:5000/{sqitch_migrator_image_path}:{build_tag}"
+        ),
         backend_image_for_build_arg="/".join(base_backend_image.split("/")[1:])
     )
     
@@ -372,10 +393,26 @@ def perform_local_build(config: ScriptConfig) -> list[str]:
         "--platform=linux/amd64"
     ])
     run_command(["docker", "push", build_config.local_combined_image])
+
+    print(f"Building Sqitch migrator image: {build_config.local_sqitch_migrator_image}")
+    run_command([
+        "docker", "build",
+        "-t", build_config.local_sqitch_migrator_image,
+        "-f", str(build_config.project_root / "backend" / "Dockerfile.sqitch-migrator"),
+        str(build_config.project_root / "backend"),
+        "--platform=linux/amd64"
+    ])
+    run_command(["docker", "push", build_config.local_sqitch_migrator_image])
     
     return [
         "--set", f"erato.backend.image.repository=k3d-registry.localhost:5000/{build_config.combined_image_path}",
-        "--set", f"erato.backend.image.tag={build_config.build_tag}"
+        "--set", f"erato.backend.image.tag={build_config.build_tag}",
+        "--set",
+        (
+            "erato.backend.migrations.image.repository="
+            f"k3d-registry.localhost:5000/{build_config.sqitch_migrator_image_path}"
+        ),
+        "--set", f"erato.backend.migrations.image.tag={build_config.build_tag}"
     ]
 
 
