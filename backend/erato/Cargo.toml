@@ -33,15 +33,15 @@ utoipa-axum = "0.2.0"
 utoipa-scalar = { version = "0.3.0", features = ["axum"] }
 
 # Dependencies: Database
-sea-orm = { version = "2.0.0-rc.40",  features = ["runtime-tokio", "sqlx-postgres", "runtime-tokio-native-tls"]}
-sqlx = { version = "0.9.0", features=["postgres", "runtime-tokio", "tls-native-tls"] }
+sea-orm = { version = "2.0.0-rc.40", default-features = false, features = ["macros", "with-json", "with-chrono", "with-rust_decimal", "with-uuid", "with-time", "sqlite-use-returning-for-3_35", "runtime-tokio-rustls", "sqlx-postgres"] }
+sqlx = { version = "0.9.0", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls", "json", "macros", "migrate", "chrono", "uuid"] }
 
 # Dependencies: General I/O
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.138"
 
 # Dependencies: Outgoing HTTP
-reqwest = { version = "0.13.1", features = ["multipart"] }
+reqwest = { version = "0.13.1", default-features = false, features = ["rustls", "charset", "http2", "system-proxy", "multipart"] }
 reqwest-middleware = "0.5.1"
 reqwest-tracing = { version = "0.7.0", features = ["opentelemetry_0_31"] }
 
@@ -76,7 +76,7 @@ rmcp-sse = { path = "../rmcp-sse" }
 sentry-tower = { version = "0.41.0", optional = true, features = ["http"] }
 opentelemetry = "0.31.0"
 opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio-current-thread"] }
-opentelemetry-otlp = { version = "0.31.0", default-features = false, features = ["grpc-tonic", "http-proto", "http-json", "reqwest-blocking-client", "trace", "metrics", "logs", "internal-logs" ] }
+opentelemetry-otlp = { version = "0.31.0", default-features = false, features = ["grpc-tonic", "http-proto", "http-json", "reqwest-blocking-client", "reqwest-rustls", "trace", "metrics", "logs", "internal-logs" ] }
 opentelemetry-semantic-conventions = { version = "0.29.0", features = ["semconv_experimental"] }
 tracing-subscriber = { version = "0.3.19", features = ["env-filter", "json"] }
 tracing = "0.1.41"
@@ -96,7 +96,7 @@ html-to-markdown-rs = { version = "3.6.11" }
 ical = "0.11.0"
 
 # Dependencies: Integgration / MS Graph API client for Sharepoint/OneDrive
-graph-rs-sdk = "3.0"
+graph-rs-sdk = { version = "3.0", default-features = false, features = ["rustls-tls"] }
 
 # Dependencies: Uncategorized
 regex = "1.12.3"
@@ -123,7 +123,7 @@ version = "0.41.0"
 optional = true
 default-features = false
 # Default features, except for `debug-images`; See https://github.com/getsentry/sentry-rust/issues/574
-features = ["backtrace", "contexts", "panic", "transport", "reqwest", "native-tls"]
+features = ["backtrace", "contexts", "panic", "reqwest", "rustls"]
 
 [dev-dependencies]
 test-log = "0.2.14"
