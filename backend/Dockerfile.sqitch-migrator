@@ -1,0 +1,22 @@
+# Trixie = Debian 13 -> LTS support until 2030
+# Pinned for security & build performance reasons
+FROM debian:trixie-slim@sha256:5cf544fad978371b3df255b61e209b373583cb88b733475c86e49faa15ac2104
+
+WORKDIR /app
+
+# Install Sqitch runtime dependencies
+# ca-certificates -> Certificates for HTTPS
+# sqitch + libdbd-pg-perl + postgresql-client -> sqitch PostgreSQL migrations
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    ca-certificates \
+    sqitch \
+    libdbd-pg-perl \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY sqitch /app/sqitch
+
+WORKDIR /app/sqitch
+
+CMD ["./deploy_distributed.sh"]

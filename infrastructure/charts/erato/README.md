@@ -284,6 +284,9 @@ ingress:
 | backend.metrics.serviceMonitor.namespace | string | `""` | Namespace for ServiceMonitor. Defaults to the chart namespace (or namespaceOverride when set) when empty. |
 | backend.metrics.serviceMonitor.relabelings | list | `[]` | Relabel configs for ServiceMonitor endpoint. |
 | backend.metrics.serviceMonitor.scrapeTimeout | string | `""` | Optional scrape timeout for ServiceMonitor endpoint. |
+| backend.migrations.image.pullPolicy | string | `"IfNotPresent"` | Sqitch migrator image pull policy |
+| backend.migrations.image.repository | string | `"registry.eratolabs.com/erato/app-sqitch-migrator"` | Sqitch migrator image repository |
+| backend.migrations.image.tag | string | `""` | Sqitch migrator image tag. Defaults to backend.image.tag when empty. |
 | backend.networkPolicy.enabled | bool | `true` | Enable NetworkPolicy for backend pods |
 | backend.podAnnotations | object | `{}` | Annotations to add to the backend pod |
 | backend.replicaCount | int | `1` | Number of backend replicas to deploy |
