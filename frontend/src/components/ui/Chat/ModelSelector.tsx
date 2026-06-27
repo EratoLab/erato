@@ -28,6 +28,13 @@ interface ModelSelectorProps {
   disabled?: boolean;
   /** Additional CSS classes */
   className?: string;
+  /**
+   * Which edge the dropdown menu aligns to. Defaults to "right" (the selector
+   * normally sits at the right edge of the input toolbar). Set to "left" when
+   * the selector is rendered on the left (e.g. the collapsed mobile/add-in
+   * layout) so the menu opens flush-left instead of clipping.
+   */
+  align?: "left" | "right";
 }
 
 function resolveModelDescription(model: ChatModel): string | null {
@@ -98,6 +105,7 @@ export const ModelSelector = ({
   onClearSelection,
   disabled = false,
   className = "",
+  align = "right",
 }: ModelSelectorProps) => {
   // Keep this marker so Lingui extracts the dynamic model description keys.
   const _modelDescriptionMarker = t`chat_models.<chat-provider-id>.description`;
@@ -175,7 +183,7 @@ export const ModelSelector = ({
     <div className={`flex items-center ${className}`}>
       <DropdownMenu
         items={dropdownItems}
-        align="right"
+        align={align}
         onOpenChange={setIsDropdownOpen}
         matchContentWidth
         triggerButtonVariant="secondary"
