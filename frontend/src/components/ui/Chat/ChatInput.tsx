@@ -1747,6 +1747,14 @@ export const ChatInput = ({
   const hasTopLeftAccessoryOverride =
     componentRegistry.ChatTopLeftAccessory !== null;
 
+  // Whether the model selector should render at all. When the controls are
+  // collapsed into the unified "+" menu (mobile / add-in), the selector is
+  // rendered in the left control group so it left-aligns next to the "+";
+  // otherwise it stays in the right group, right-aligned next to Send.
+  const showModelSelector =
+    !hasTopLeftAccessoryOverride &&
+    !(isAudioMode && !showModelSelectorInAudioMode);
+
   const shellWrapperStyle = {
     maxWidth: "var(--theme-layout-chat-input-max-width)",
   } as const;
@@ -2064,6 +2072,16 @@ export const ChatInput = ({
                     )}
                   </>
                 ))}
+              {useUnifiedMobileMenu && showModelSelector && (
+                <ModelSelector
+                  availableModels={availableModels}
+                  selectedModel={selectedModel}
+                  onModelChange={setSelectedModel}
+                  disabled={!isSelectionReady}
+                  align="left"
+                  className="ms-[var(--theme-spacing-control-gap)]"
+                />
+              )}
             </div>
 
             <div className="flex min-w-0 flex-wrap items-center gap-[var(--theme-spacing-control-gap)]">
@@ -2091,15 +2109,14 @@ export const ChatInput = ({
                   {t`Exit audio mode`}
                 </Button>
               )}
-              {!hasTopLeftAccessoryOverride &&
-                !(isAudioMode && !showModelSelectorInAudioMode) && (
-                  <ModelSelector
-                    availableModels={availableModels}
-                    selectedModel={selectedModel}
-                    onModelChange={setSelectedModel}
-                    disabled={!isSelectionReady}
-                  />
-                )}
+              {!useUnifiedMobileMenu && showModelSelector && (
+                <ModelSelector
+                  availableModels={availableModels}
+                  selectedModel={selectedModel}
+                  onModelChange={setSelectedModel}
+                  disabled={!isSelectionReady}
+                />
+              )}
               {isAudioMode &&
                 isPendingResponse &&
                 isConversationalAudioActive &&
