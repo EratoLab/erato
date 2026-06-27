@@ -10,15 +10,6 @@ import {
 import { isMessageRead } from "../sessionPolicy";
 import { callOfficeAsync } from "../utils/officeAsync";
 
-// Settling window before a previously-open READ message whose Office item
-// silently went undefined (office-js #5575 on new Outlook for Mac: opening the
-// inline new-mail editor leaves the pinned read pane bound to no item, yet
-// `ItemChanged` fires) is surfaced as a lost-context recovery state. Sized to
-// outlast the normal read→reply / inline-compose item null-flap (mirrors
-// `useOutlookComposeSelection`'s NULL_GRACE_MS) so ordinary transitions never
-// trip the banner. See ERMAIN-411.
-const DEAD_STATE_SETTLE_MS = 2500;
-
 interface EmailAddress {
   displayName: string;
   emailAddress: string;
@@ -61,12 +52,6 @@ interface OutlookMailItemContextValue {
   attachments: OutlookAttachmentData[];
   isLoading: boolean;
   isLoadingAttachments: boolean;
-  // True only when a previously-open READ message's Office item silently went
-  // undefined and stayed gone past `DEAD_STATE_SETTLE_MS` (the office-js #5575
-  // dead state). Distinct from the legitimate no-item state (cold-open / no
-  // message selected), which never sets this. Consumers surface a dismissible
-  // recovery affordance; the chat itself stays usable.
-  itemContextLost: boolean;
   refresh: () => void;
   getAttachmentFile: (attachmentId: string) => Promise<File>;
 }
@@ -77,7 +62,6 @@ const OutlookMailItemContext = createContext<OutlookMailItemContextValue>({
   attachments: [],
   isLoading: true,
   isLoadingAttachments: false,
-  itemContextLost: false,
   refresh: () => {},
   getAttachmentFile: async () => {
     throw new Error("Outlook mail item provider unavailable");
@@ -325,20 +309,10 @@ export function OutlookMailItemProvider({
   const [attachments, setAttachments] = useState<OutlookAttachmentData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingAttachments, setIsLoadingAttachments] = useState(true);
-  const [itemContextLost, setItemContextLost] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const currentItemRef = useRef<
     Office.MessageRead | Office.MessageCompose | null
   >(null);
-  // The most recent non-null READ item. Persists across falsy reads (unlike
-  // `currentItemRef`, which is nulled on every falsy item), so a #5575 drop can
-  // be told apart from a cold-open: only a falsy read that *follows* a real
-  // read item arms recovery. Cleared when a compose item loads, so the
-  // reply/inline-compose null-flap is never mistaken for the dead state.
-  const lastReadItemRef = useRef<Office.MessageRead | null>(null);
-  // Pending dead-state settle timer (see `DEAD_STATE_SETTLE_MS`). Ref-stored so
-  // it can be cancelled when a new selection supersedes it or on unmount.
-  const deadStateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectionVersionRef = useRef(0);
 
   const refresh = useCallback(() => {
@@ -370,23 +344,12 @@ export function OutlookMailItemProvider({
   );
 
   useEffect(() => {
-    // Cancel any in-flight dead-state settle from a prior selection; the
-    // branches below re-arm it only if this selection is itself a dead state.
-    if (deadStateTimerRef.current !== null) {
-      clearTimeout(deadStateTimerRef.current);
-      deadStateTimerRef.current = null;
-    }
-
     const item = Office.context.mailbox.item as
       | Office.MessageRead
       | Office.MessageCompose
       | null;
     const selectionVersion = selectionVersionRef.current + 1;
     selectionVersionRef.current = selectionVersion;
-    // The last READ item observed *before* this run — the truthy branch below
-    // is the only writer of `lastReadItemRef`, so in the falsy branch it still
-    // holds the prior value.
-    const hadReadItem = lastReadItemRef.current !== null;
     currentItemRef.current = item;
     const canCommit = () => selectionVersionRef.current === selectionVersion;
     const nextItemIdentity = buildMailItemIdentity(item);
@@ -397,39 +360,8 @@ export function OutlookMailItemProvider({
       setAttachments([]);
       setIsLoading(false);
       setIsLoadingAttachments(false);
-
-      // Disambiguate the office-js #5575 dead state from the legitimate
-      // contextless state. Only a falsy read that follows a real READ item
-      // arms recovery; cold-open / no-message-selected (no prior read item)
-      // and the compose null-flap (a compose item clears `lastReadItemRef`)
-      // keep today's silent behavior. The settle timer re-reads the live
-      // Office item when it fires: a still-falsy item surfaces the recovery
-      // banner, while an item that quietly came back is loaded instead.
-      if (hadReadItem) {
-        deadStateTimerRef.current = setTimeout(() => {
-          deadStateTimerRef.current = null;
-          const live = Office.context.mailbox.item as
-            | Office.MessageRead
-            | Office.MessageCompose
-            | null;
-          if (live) {
-            setItemContextLost(false);
-            setRefreshKey((previous) => previous + 1);
-          } else {
-            setItemContextLost(true);
-          }
-        }, DEAD_STATE_SETTLE_MS);
-      } else {
-        setItemContextLost(false);
-      }
       return;
     }
-
-    // A real item is in context: clear any recovery state and remember the
-    // last READ item so a later silent #5575 drop can be told apart from a
-    // cold-open. Compose items clear it (their null-flap is handled elsewhere).
-    setItemContextLost(false);
-    lastReadItemRef.current = isMessageRead(item) ? item : null;
 
     setAttachments([]);
     setIsLoadingAttachments(true);
@@ -509,18 +441,6 @@ export function OutlookMailItemProvider({
     }
   }, [refreshKey]);
 
-  // Cancel a pending dead-state settle on unmount so its callback can't fire
-  // after teardown (the timer also survives React StrictMode's mount/unmount/
-  // mount probe, where this cleanup clears the first mount's timer).
-  useEffect(() => {
-    return () => {
-      if (deadStateTimerRef.current !== null) {
-        clearTimeout(deadStateTimerRef.current);
-        deadStateTimerRef.current = null;
-      }
-    };
-  }, []);
-
   useEffect(() => {
     const mailbox = Office.context.mailbox;
 
@@ -579,7 +499,6 @@ export function OutlookMailItemProvider({
         attachments,
         isLoading,
         isLoadingAttachments,
-        itemContextLost,
         refresh,
         getAttachmentFile,
       }}

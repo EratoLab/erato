@@ -1,5 +1,10 @@
 import { t } from "@lingui/core/macro";
 
+// NOTE (ERMAIN-411): currently unwired. The #5575 dead-state detection that fed
+// this was reverted in favor of the manifest auto-pin prototype; the component
+// is kept as the reusable, dismissible banner for the planned Mac "pin the
+// add-in to follow this email" hint. Copy will be re-pointed when that lands.
+
 export interface AddinContextLostBannerProps {
   /**
    * Re-read the current Office item. Wired to the mail-item provider's
