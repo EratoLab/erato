@@ -234,6 +234,26 @@ msgid "officeAddin.clientActions.replyAll"
 msgstr "Répondre à tous les destinataires"
 
 #. js-lingui-explicit-id
+#: src/components/AddinContextLostBanner.tsx
+msgid "officeAddin.contextLost.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/AddinContextLostBanner.tsx
+msgid "officeAddin.contextLost.dismiss"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/AddinContextLostBanner.tsx
+msgid "officeAddin.contextLost.retry"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/AddinContextLostBanner.tsx
+msgid "officeAddin.contextLost.title"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.signedIn.title"
 msgstr ""

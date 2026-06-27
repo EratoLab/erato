@@ -37,6 +37,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AddinChatInput } from "./AddinChatInput";
+import { AddinContextLostBanner } from "./AddinContextLostBanner";
 import { AddinSettingsDialog } from "./AddinSettingsDialog";
 import { useActionFacetClientActions } from "../hooks/useAvailableActionFacets";
 import { useEmailDedupSet } from "../hooks/useEmailDedupSet";
@@ -152,7 +153,24 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
   // drops keep working since they parse without a backend.
   const { fetcher: messageFetcher } = useOutlookMessageFetcher();
 
-  const { mailItem } = useOutlookMailItem();
+  const {
+    mailItem,
+    itemContextLost,
+    refresh: refreshMailItem,
+  } = useOutlookMailItem();
+
+  // Dismissible recovery banner for the office-js #5575 dead state (new Outlook
+  // for Mac). The provider only sets `itemContextLost` after its settle window,
+  // so this is already debounced; we just let the user dismiss it. Reset the
+  // dismissal when the flag clears so a later, distinct dead state re-shows.
+  const [isContextLostDismissed, setIsContextLostDismissed] = useState(false);
+  useEffect(() => {
+    if (!itemContextLost) {
+      setIsContextLostDismissed(false);
+    }
+  }, [itemContextLost]);
+  const showContextLostBanner = itemContextLost && !isContextLostDismissed;
+
   const {
     hasSelectedEmailSource,
     isEmailBodyIncluded,
@@ -878,6 +896,12 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
                 </div>
               </div>
             )}
+            {showContextLostBanner ? (
+              <AddinContextLostBanner
+                onRetry={refreshMailItem}
+                onDismiss={() => setIsContextLostDismissed(true)}
+              />
+            ) : null}
             {TopLeftAccessory ? (
               <TopLeftAccessory
                 availableModels={availableModels}
