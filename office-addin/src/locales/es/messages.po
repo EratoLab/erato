@@ -234,26 +234,6 @@ msgid "officeAddin.clientActions.replyAll"
 msgstr "Responder a todos los destinatarios"
 
 #. js-lingui-explicit-id
-#: src/components/AddinContextLostBanner.tsx
-msgid "officeAddin.contextLost.description"
-msgstr ""
-
-#. js-lingui-explicit-id
-#: src/components/AddinContextLostBanner.tsx
-msgid "officeAddin.contextLost.dismiss"
-msgstr ""
-
-#. js-lingui-explicit-id
-#: src/components/AddinContextLostBanner.tsx
-msgid "officeAddin.contextLost.retry"
-msgstr ""
-
-#. js-lingui-explicit-id
-#: src/components/AddinContextLostBanner.tsx
-msgid "officeAddin.contextLost.title"
-msgstr ""
-
-#. js-lingui-explicit-id
 #: src/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.signedIn.title"
 msgstr ""
@@ -477,6 +457,21 @@ msgstr "Configuración"
 #: src/providers/OfficeProvider.tsx
 msgid "officeAddin.office.loading"
 msgstr "Cargando complemento de Office..."
+
+#. js-lingui-explicit-id
+#: src/components/AddinPinHintBanner.tsx
+msgid "officeAddin.pinHint.description"
+msgstr "Hasta que no esté anclado, este complemento permanece en el mensaje desde el que lo abriste. Selecciona el icono de anclar para mantenerlo sincronizado mientras lees."
+
+#. js-lingui-explicit-id
+#: src/components/AddinPinHintBanner.tsx
+msgid "officeAddin.pinHint.dismiss"
+msgstr "Descartar"
+
+#. js-lingui-explicit-id
+#: src/components/AddinPinHintBanner.tsx
+msgid "officeAddin.pinHint.title"
+msgstr "Ánclalo para seguir tu correo"
 
 #. js-lingui-explicit-id
 #: src/components/sessionAskToast.tsx

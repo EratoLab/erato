@@ -21,6 +21,7 @@ import {
   useFilePreviewModal,
   useFileUploadWithTokenCheck,
   useMessageFeedback,
+  usePersistedState,
   useProfile,
   useStandardMessageActions,
   type ActionFacetRequest,
@@ -31,18 +32,21 @@ import {
   type MessageAction,
   type MessageControlsComponent,
   type MessageControlsContext,
+  type PersistedStateOptions,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AddinChatInput } from "./AddinChatInput";
+import { AddinPinHintBanner } from "./AddinPinHintBanner";
 import { AddinSettingsDialog } from "./AddinSettingsDialog";
 import { useActionFacetClientActions } from "../hooks/useAvailableActionFacets";
 import { useEmailDedupSet } from "../hooks/useEmailDedupSet";
 import { useOfficeDragAndDrop } from "../hooks/useOfficeDragAndDrop";
 import { useOutlookMailListDrag } from "../hooks/useOutlookMailListDrag";
 import { useOutlookMessageFetcher } from "../hooks/useOutlookMessageFetcher";
+import { useOffice } from "../providers/OfficeProvider";
 import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
 import { FreshCompletionTracker } from "../utils/freshCompletionTracker";
@@ -70,6 +74,11 @@ const EML_MIME_TYPES: Record<string, string[]> = {
 const EMAIL_MIME_TYPES: Record<string, string[]> = {
   ...EML_MIME_TYPES,
   "application/vnd.ms-outlook": [".msg"],
+};
+
+const PIN_HINT_DISMISSED_KEY = "erato.outlookAddin.pinHintDismissed";
+const pinHintDismissedPersistedOptions: PersistedStateOptions<boolean> = {
+  parse: (value) => (typeof value === "boolean" ? value : null),
 };
 
 interface AddinChatProps {
@@ -152,7 +161,24 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
   // drops keep working since they parse without a backend.
   const { fetcher: messageFetcher } = useOutlookMessageFetcher();
 
-  const { mailItem } = useOutlookMailItem();
+  const { mailItem, hasItemChangedFired } = useOutlookMailItem();
+  const { platform } = useOffice();
+
+  // "Pin this add-in" hint (office-js #1691 heuristic). On new Outlook for Mac
+  // an unpinned task pane stays open but never receives ItemChanged, so the
+  // chat freezes on the message it was opened from; pinning fixes it but can't
+  // be forced or detected. Nudge only on Mac desktop, only until the host
+  // delivers its first item-change event (proof it's tracking), and let the
+  // user dismiss it for good. `platform === "Mac"` is the desktop client only
+  // (OWA reports "OfficeOnline", Windows "PC"/"OfficeOnline").
+  const [pinHintDismissed, setPinHintDismissed] = usePersistedState<boolean>(
+    PIN_HINT_DISMISSED_KEY,
+    false,
+    pinHintDismissedPersistedOptions,
+  );
+  const showPinHint =
+    platform === "Mac" && !hasItemChangedFired && !pinHintDismissed;
+
   const {
     hasSelectedEmailSource,
     isEmailBodyIncluded,
@@ -878,6 +904,9 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
                 </div>
               </div>
             )}
+            {showPinHint ? (
+              <AddinPinHintBanner onDismiss={() => setPinHintDismissed(true)} />
+            ) : null}
             {TopLeftAccessory ? (
               <TopLeftAccessory
                 availableModels={availableModels}
