@@ -234,26 +234,6 @@ msgid "officeAddin.clientActions.replyAll"
 msgstr "Reply to all recipients"
 
 #. js-lingui-explicit-id
-#: src/components/AddinContextLostBanner.tsx
-msgid "officeAddin.contextLost.description"
-msgstr "Re-select the email, or close and reopen the add-in to continue."
-
-#. js-lingui-explicit-id
-#: src/components/AddinContextLostBanner.tsx
-msgid "officeAddin.contextLost.dismiss"
-msgstr "Dismiss"
-
-#. js-lingui-explicit-id
-#: src/components/AddinContextLostBanner.tsx
-msgid "officeAddin.contextLost.retry"
-msgstr "Retry"
-
-#. js-lingui-explicit-id
-#: src/components/AddinContextLostBanner.tsx
-msgid "officeAddin.contextLost.title"
-msgstr "Message context lost"
-
-#. js-lingui-explicit-id
 #: src/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.signedIn.title"
 msgstr "Signed in. Add the email again to attach it."
@@ -477,6 +457,21 @@ msgstr "Settings"
 #: src/providers/OfficeProvider.tsx
 msgid "officeAddin.office.loading"
 msgstr "Loading Office Add-in..."
+
+#. js-lingui-explicit-id
+#: src/components/AddinPinHintBanner.tsx
+msgid "officeAddin.pinHint.description"
+msgstr "Until it's pinned, this add-in stays on the message you opened it from. Select the pin icon to keep it in sync as you read."
+
+#. js-lingui-explicit-id
+#: src/components/AddinPinHintBanner.tsx
+msgid "officeAddin.pinHint.dismiss"
+msgstr "Dismiss"
+
+#. js-lingui-explicit-id
+#: src/components/AddinPinHintBanner.tsx
+msgid "officeAddin.pinHint.title"
+msgstr "Pin to follow your mail"
 
 #. js-lingui-explicit-id
 #: src/components/sessionAskToast.tsx

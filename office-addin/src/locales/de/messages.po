@@ -234,26 +234,6 @@ msgid "officeAddin.clientActions.replyAll"
 msgstr "Allen Empfängern antworten"
 
 #. js-lingui-explicit-id
-#: src/components/AddinContextLostBanner.tsx
-msgid "officeAddin.contextLost.description"
-msgstr ""
-
-#. js-lingui-explicit-id
-#: src/components/AddinContextLostBanner.tsx
-msgid "officeAddin.contextLost.dismiss"
-msgstr ""
-
-#. js-lingui-explicit-id
-#: src/components/AddinContextLostBanner.tsx
-msgid "officeAddin.contextLost.retry"
-msgstr ""
-
-#. js-lingui-explicit-id
-#: src/components/AddinContextLostBanner.tsx
-msgid "officeAddin.contextLost.title"
-msgstr ""
-
-#. js-lingui-explicit-id
 #: src/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.signedIn.title"
 msgstr ""
@@ -477,6 +457,21 @@ msgstr "Einstellungen"
 #: src/providers/OfficeProvider.tsx
 msgid "officeAddin.office.loading"
 msgstr "Office-Add-in wird geladen..."
+
+#. js-lingui-explicit-id
+#: src/components/AddinPinHintBanner.tsx
+msgid "officeAddin.pinHint.description"
+msgstr "Solange es nicht angeheftet ist, bleibt dieses Add-in bei der E-Mail, aus der du es geöffnet hast. Hefte es über das Stecknadelsymbol an, damit es beim Lesen synchron bleibt."
+
+#. js-lingui-explicit-id
+#: src/components/AddinPinHintBanner.tsx
+msgid "officeAddin.pinHint.dismiss"
+msgstr "Schließen"
+
+#. js-lingui-explicit-id
+#: src/components/AddinPinHintBanner.tsx
+msgid "officeAddin.pinHint.title"
+msgstr "Anheften, um deinen E-Mails zu folgen"
 
 #. js-lingui-explicit-id
 #: src/components/sessionAskToast.tsx

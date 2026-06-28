@@ -110,6 +110,10 @@ vi.mock("@erato/frontend/library", () => ({
     switchToEditMode: vi.fn(),
     canEditFeedback: vi.fn(() => false),
   }),
+  usePersistedState: (_key: string, defaultValue: unknown) => [
+    defaultValue,
+    vi.fn(),
+  ],
   useProfile: () => ({ profile: undefined }),
   useStandardMessageActions: () => vi.fn(),
 }));

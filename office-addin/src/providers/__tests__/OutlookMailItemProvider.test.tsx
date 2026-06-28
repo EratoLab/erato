@@ -79,6 +79,30 @@ describe("OutlookMailItemProvider", () => {
     expect(captured?.mailItem).toBeNull();
   });
 
+  // Drives the "pin this add-in" hint: stays false on the host's initial
+  // same-item selection event (which would otherwise flash-and-clear the hint),
+  // and only flips true on a real navigation to a different item.
+  it("flags hasItemChangedFired only when the selected item actually changes", async () => {
+    mailbox.item = makeReadItem();
+    await renderProvider();
+    expect(captured?.hasItemChangedFired).toBe(false);
+
+    const handler = mailbox.addHandlerAsync.mock.calls[0][1] as () => void;
+
+    // Initial-bind / same-item event — must NOT flip it.
+    await act(async () => {
+      handler();
+    });
+    expect(captured?.hasItemChangedFired).toBe(false);
+
+    // Real navigation to a different message — flips it true.
+    mailbox.item = makeReadItem({ internetMessageId: "<read-2@x>" });
+    await act(async () => {
+      handler();
+    });
+    expect(captured?.hasItemChangedFired).toBe(true);
+  });
+
   // Regression: cleanup must remove the *registered* handler, not a throwaway
   // closure (which removes nothing and leaks the handler under StrictMode).
   it("unsubscribes with the registered handler", async () => {

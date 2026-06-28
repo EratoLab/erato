@@ -52,6 +52,13 @@ interface OutlookMailItemContextValue {
   attachments: OutlookAttachmentData[];
   isLoading: boolean;
   isLoadingAttachments: boolean;
+  // True once the resolved item has actually CHANGED to a different one — a
+  // real navigation, which only a pinned/tracking pane observes. The host's
+  // initial same-item selection event does NOT count (it would otherwise clear
+  // the hint the instant the first message loads). On new Outlook for Mac an
+  // unpinned pane never sees a real change, so this stays false. Drives the
+  // "pin this add-in" hint's self-clear.
+  hasItemChangedFired: boolean;
   refresh: () => void;
   getAttachmentFile: (attachmentId: string) => Promise<File>;
 }
@@ -62,6 +69,7 @@ const OutlookMailItemContext = createContext<OutlookMailItemContextValue>({
   attachments: [],
   isLoading: true,
   isLoadingAttachments: false,
+  hasItemChangedFired: false,
   refresh: () => {},
   getAttachmentFile: async () => {
     throw new Error("Outlook mail item provider unavailable");
@@ -309,11 +317,16 @@ export function OutlookMailItemProvider({
   const [attachments, setAttachments] = useState<OutlookAttachmentData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingAttachments, setIsLoadingAttachments] = useState(true);
+  const [hasItemChangedFired, setHasItemChangedFired] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const currentItemRef = useRef<
     Office.MessageRead | Office.MessageCompose | null
   >(null);
   const selectionVersionRef = useRef(0);
+  // Identity of the last resolved item — lets us tell a real navigation (the
+  // pin-hint tracking signal) from the host's initial same-item selection
+  // event.
+  const lastItemIdentityRef = useRef<string | null>(null);
 
   const refresh = useCallback(() => {
     setRefreshKey((previous) => previous + 1);
@@ -353,7 +366,21 @@ export function OutlookMailItemProvider({
     currentItemRef.current = item;
     const canCommit = () => selectionVersionRef.current === selectionVersion;
     const nextItemIdentity = buildMailItemIdentity(item);
+    const previousItemIdentity = lastItemIdentityRef.current;
+    lastItemIdentityRef.current = nextItemIdentity;
     setItemIdentity(nextItemIdentity);
+    // The pane is effectively pinned/tracking only once the selected item
+    // actually changes to a *different* one (a real navigation). The host also
+    // fires a selection event on the initial bind with the SAME item — that
+    // must not count, or the pin hint clears the instant the first message
+    // loads and is never seen. See ERMAIN-411.
+    if (
+      previousItemIdentity !== null &&
+      nextItemIdentity !== null &&
+      nextItemIdentity !== previousItemIdentity
+    ) {
+      setHasItemChangedFired(true);
+    }
 
     if (!item) {
       setMailItem(null);
@@ -499,6 +526,7 @@ export function OutlookMailItemProvider({
         attachments,
         isLoading,
         isLoadingAttachments,
+        hasItemChangedFired,
         refresh,
         getAttachmentFile,
       }}
