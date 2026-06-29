@@ -1,6 +1,12 @@
 import { toast } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
-import { createContext, useCallback, useContext, useMemo } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+} from "react";
 
 import { useSessionRedeem } from "./SessionAuthProvider";
 import {
@@ -135,6 +141,32 @@ export function EntraGraphTokenProvider({
     () => ({ acquireToken }),
     [acquireToken],
   );
+
+  // DEV-only manual-validation hook for the EXO Graph calendar fetch (SI-2 /
+  // ERMAIN-384): exposes `window.__eratoCalendarGraph()` in the taskpane so the
+  // normalized availability shape can be inspected live before the facet prompt
+  // is authored. Dynamic import → zero production bundle/footprint; `import.meta`
+  // gates it out of prod entirely. Remove (or keep, it is inert) before merge.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const devWindow = window as Window & {
+      __eratoCalendarGraph?: () => Promise<unknown>;
+    };
+    devWindow.__eratoCalendarGraph = async () => {
+      const { fetchOutlookCalendarViaGraph } = await import(
+        "../utils/fetchOutlookCalendarGraph"
+      );
+      return fetchOutlookCalendarViaGraph((options) =>
+        acquireToken(["Calendars.Read"], {
+          ...options,
+          allowInteraction: true,
+        }),
+      );
+    };
+    return () => {
+      delete devWindow.__eratoCalendarGraph;
+    };
+  }, [acquireToken]);
 
   return (
     <GraphTokenContext.Provider value={value}>
