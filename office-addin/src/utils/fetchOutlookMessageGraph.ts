@@ -14,7 +14,7 @@
  * MSAL NAA; see `AddinChat.tsx` for the wiring.
  */
 
-const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
+export const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
 
 interface GraphMessageMetadata {
   id?: string;
@@ -588,12 +588,12 @@ function convertEwsIdToGraphId(ewsItemId: string): string {
  * multi-request fetch still acquires only once) while allowing a forced refresh
  * when a request comes back 401.
  */
-interface GraphTokenSource {
+export interface GraphTokenSource {
   get(): Promise<string>;
   refresh(): Promise<string>;
 }
 
-function makeGraphTokenSource(
+export function makeGraphTokenSource(
   acquireToken: AcquireGraphToken,
 ): GraphTokenSource {
   // The current in-flight/resolved token promise, and the in-flight FORCED
@@ -641,7 +641,7 @@ function makeGraphTokenSource(
  * from the proxy-session bootstrap token, hence handled here rather than via the
  * shared recovery handler.
  */
-async function graphFetch(
+export async function graphFetch(
   url: string,
   tokenSource: GraphTokenSource,
   accept: string,

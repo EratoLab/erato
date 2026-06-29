@@ -105,8 +105,9 @@ import type { Attachment as MimeAttachment } from "postal-mime";
  */
 
 const SOAP_NS = "http://schemas.xmlsoap.org/soap/envelope/";
-const TYPES_NS = "http://schemas.microsoft.com/exchange/services/2006/types";
-const MESSAGES_NS =
+export const TYPES_NS =
+  "http://schemas.microsoft.com/exchange/services/2006/types";
+export const MESSAGES_NS =
   "http://schemas.microsoft.com/exchange/services/2006/messages";
 
 /**
@@ -230,7 +231,7 @@ interface EwsRequestOptions extends GraphRequestOptions {
 
 /** `ewsUrl` is the absolute SOAP endpoint (`https://host/EWS/Exchange.asmx`).
  * Errors if absent so the conversation fetch can report `state: "error"`. */
-function getEwsUrl(): string {
+export function getEwsUrl(): string {
   const ewsUrl = Office.context.mailbox.ewsUrl;
   if (!ewsUrl) {
     throw new EwsRequestError(
@@ -432,7 +433,7 @@ async function ewsFetch(
  * Unlike {@link ewsFetch} there is no proxy, no `X-EWS-Authentication` header,
  * and no 401 retry: the host owns the Exchange credential and round-trip.
  */
-function ewsHostFetch(soapXml: string): Promise<Document> {
+export function ewsHostFetch(soapXml: string): Promise<Document> {
   // makeEwsRequestAsync does NOT accept a UTF-8 XML declaration (per the office.js
   // docs, a `<?xml … encoding="utf-8"?>` request is rejected for EWS, and classic
   // Outlook expects iso-8859-1). The shared builder emits one for the direct/proxy
@@ -477,7 +478,7 @@ function ewsHostFetch(soapXml: string): Promise<Document> {
  * call sites, since which codes are tolerable (e.g. ErrorItemNotFound) is
  * operation-specific.
  */
-function parseEwsSoap(text: string): Document {
+export function parseEwsSoap(text: string): Document {
   const doc = new DOMParser().parseFromString(text, "text/xml");
   const parserError = doc.getElementsByTagName("parsererror")[0];
   if (parserError) {
@@ -507,7 +508,7 @@ function getCurrentItemId(): string | undefined {
  * Standard EWS SOAP 1.1 envelope with a `RequestServerVersion` header. One
  * builder per operation calls this with its `<m:…>` request body.
  */
-function buildSoapEnvelope(body: string): string {
+export function buildSoapEnvelope(body: string): string {
   return (
     '<?xml version="1.0" encoding="utf-8"?>' +
     `<soap:Envelope xmlns:soap="${SOAP_NS}" xmlns:t="${TYPES_NS}" xmlns:m="${MESSAGES_NS}">` +
@@ -521,7 +522,7 @@ function buildSoapEnvelope(body: string): string {
 
 /** Escape the five XML-significant characters for safe interpolation into
  * attribute values and element text. */
-function escapeXml(value: string): string {
+export function escapeXml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -581,7 +582,9 @@ const PARENT_METADATA_FIELD_URIS = [
   "item:IsDraft",
 ] as const;
 
-function buildAdditionalPropertiesXml(fieldUris: readonly string[]): string {
+export function buildAdditionalPropertiesXml(
+  fieldUris: readonly string[],
+): string {
   if (fieldUris.length === 0) return "";
   return (
     "<t:AdditionalProperties>" +
@@ -739,23 +742,42 @@ function buildFindByConversationIdBody(
 // recipients, attachments, `MimeContent`, …) lives in the `t:` types namespace.
 
 /** First descendant in the EWS types (`t:`) namespace, or null. */
-function firstTypesEl(
+export function firstTypesEl(
   parent: Element | Document,
   local: string,
 ): Element | null {
   return parent.getElementsByTagNameNS(TYPES_NS, local)[0] ?? null;
 }
 
-function typesText(parent: Element, local: string): string | undefined {
+export function typesText(parent: Element, local: string): string | undefined {
   return firstTypesEl(parent, local)?.textContent ?? undefined;
 }
 
+/** All descendants in the EWS types (`t:`) namespace — e.g. every
+ * `t:CalendarEvent` / `t:WorkingPeriod` / `t:CalendarItem` (`firstTypesEl`
+ * returns only the first). */
+export function allTypesEls(
+  parent: Element | Document,
+  local: string,
+): Element[] {
+  return Array.from(parent.getElementsByTagNameNS(TYPES_NS, local));
+}
+
 /** First descendant in the EWS messages (`m:`) namespace, or null. */
-function firstMessagesEl(
+export function firstMessagesEl(
   parent: Element | Document,
   local: string,
 ): Element | null {
   return parent.getElementsByTagNameNS(MESSAGES_NS, local)[0] ?? null;
+}
+
+/** All descendants in the EWS messages (`m:`) namespace — e.g. every
+ * `m:FreeBusyResponse` / `m:FindItemResponseMessage`. */
+export function allMessagesEls(
+  parent: Element | Document,
+  local: string,
+): Element[] {
+  return Array.from(parent.getElementsByTagNameNS(MESSAGES_NS, local));
 }
 
 /**
@@ -763,7 +785,7 @@ function firstMessagesEl(
  * `EwsRequestError` on a hard error (other than the codes in `tolerate`, which
  * the caller handles — e.g. ErrorItemNotFound → null).
  */
-function assertResponseOk(
+export function assertResponseOk(
   responseMessage: Element,
   tolerate: ReadonlySet<string> = new Set(),
 ): { responseClass: string; responseCode: string | undefined } {
@@ -1748,7 +1770,7 @@ function mimeContentToBase64(
  * (`makeEwsRequestAsync`) cannot be cancelled mid-flight, so abort is honored
  * by checking between round-trips; the direct transport additionally threads
  * the signal into fetch itself. */
-function throwIfAborted(signal: AbortSignal | undefined): void {
+export function throwIfAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted) {
     throw signal.reason ?? new DOMException("Aborted", "AbortError");
   }
