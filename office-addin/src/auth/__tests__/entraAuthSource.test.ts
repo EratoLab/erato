@@ -125,7 +125,10 @@ describe("createEntraAuthSource", () => {
     );
     const pca = createPcaMock({
       acquireTokenSilent: vi.fn(async () => {
-        throw new InteractionRequiredAuthError("interaction required");
+        throw new InteractionRequiredAuthError(
+          "interaction required",
+          "test-correlation-id",
+        );
       }),
     });
     const { source } = await initializedSource(pca);
@@ -148,7 +151,10 @@ describe("createEntraAuthSource", () => {
     );
     const pca = createPcaMock({
       acquireTokenSilent: vi.fn(async () => {
-        throw new InteractionRequiredAuthError("interaction required");
+        throw new InteractionRequiredAuthError(
+          "interaction required",
+          "test-correlation-id",
+        );
       }),
     });
     const { source } = await initializedSource(pca);
