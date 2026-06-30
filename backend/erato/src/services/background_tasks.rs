@@ -80,8 +80,11 @@ impl Default for BackgroundTaskManager {
 
 /// A streaming task that manages event broadcasting and history
 pub struct StreamingTask {
-    /// The message ID being generated
-    pub message_id: Uuid,
+    /// The id of the assistant message being generated. Set to a placeholder at
+    /// construction (the real id is only known once the generation task creates
+    /// the message) and updated via `set_message_id`. Behind a lock so it can be
+    /// corrected after the task is shared. Read via `message_id()`.
+    message_id: std::sync::RwLock<Uuid>,
     /// Broadcast sender for live events
     event_tx: broadcast::Sender<StreamingEvent>,
     /// Storage for all events (for replay)
@@ -103,7 +106,7 @@ pub struct StreamingTask {
 impl std::fmt::Debug for StreamingTask {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("StreamingTask")
-            .field("message_id", &self.message_id)
+            .field("message_id", &self.message_id())
             .field("subscriber_count", &self.event_tx.receiver_count())
             .field("completed", &self.completed.load(Ordering::SeqCst))
             .field(
@@ -121,7 +124,7 @@ impl StreamingTask {
         let (event_tx, _) = broadcast::channel(1000);
 
         Self {
-            message_id,
+            message_id: std::sync::RwLock::new(message_id),
             event_tx,
             event_history: Arc::new(RwLock::new(Vec::new())),
             completed: Arc::new(AtomicBool::new(false)),
@@ -129,6 +132,18 @@ impl StreamingTask {
             abort_notify: Arc::new(Notify::new()),
             pending_client_tools: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    /// The id of the assistant message this task is generating.
+    pub fn message_id(&self) -> Uuid {
+        *self.message_id.read().expect("message_id lock poisoned")
+    }
+
+    /// Record the real assistant message id once the generation task has created
+    /// it. Client-tool results are routed to a task by this id, so it must match
+    /// the id the client received in the `client_tool_call` event.
+    pub fn set_message_id(&self, message_id: Uuid) {
+        *self.message_id.write().expect("message_id lock poisoned") = message_id;
     }
 
     /// Subscribe to live events from this task
@@ -146,7 +161,7 @@ impl StreamingTask {
         if history.len() >= MAX_EVENT_HISTORY {
             tracing::warn!(
                 "Event history for message {} has reached maximum size of {}",
-                self.message_id,
+                self.message_id(),
                 MAX_EVENT_HISTORY
             );
             // Don't add more events to history, but still broadcast
@@ -366,7 +381,7 @@ mod tests {
 
         let (_receiver, task) = manager.start_task(chat_id, message_id).await;
 
-        assert_eq!(task.message_id, message_id);
+        assert_eq!(task.message_id(), message_id);
         assert!(!task.is_completed());
         assert_eq!(task.subscriber_count(), 1); // One receiver created
         assert!(!task.is_abort_requested());
@@ -421,11 +436,11 @@ mod tests {
         let (_receiver2, task2) = manager.start_task(chat_id, message_id_2).await;
 
         // Task 2 should have replaced task 1
-        assert_ne!(task1.message_id, task2.message_id);
+        assert_ne!(task1.message_id(), task2.message_id());
 
         // Getting the task should return task 2
         let retrieved = manager.get_task(&chat_id).await.unwrap();
-        assert_eq!(retrieved.message_id, message_id_2);
+        assert_eq!(retrieved.message_id(), message_id_2);
     }
 
     #[tokio::test]
@@ -460,5 +475,62 @@ mod tests {
         task.request_abort();
 
         assert!(task.is_abort_requested());
+    }
+
+    #[tokio::test]
+    async fn set_message_id_updates_the_routing_id() {
+        let task = StreamingTask::new(Uuid::new_v4());
+        let real_id = Uuid::new_v4();
+        task.set_message_id(real_id);
+        assert_eq!(task.message_id(), real_id);
+    }
+
+    #[tokio::test]
+    async fn client_tool_result_delivery_round_trip() {
+        let task = StreamingTask::new(Uuid::new_v4());
+        let mut rx = task.register_client_tool_call("call-1".to_string()).await;
+
+        let delivery = task
+            .deliver_client_tool_result(
+                "call-1",
+                ClientToolOutcome::Result(serde_json::json!({ "ok": true })),
+            )
+            .await;
+        assert_eq!(delivery, ClientToolDelivery::Delivered);
+        match rx.try_recv() {
+            Ok(ClientToolOutcome::Result(value)) => {
+                assert_eq!(value, serde_json::json!({ "ok": true }))
+            }
+            other => panic!("expected the delivered result, got {other:?}"),
+        }
+
+        // Deliver-once: a second delivery for the same id is a benign no-op.
+        let again = task
+            .deliver_client_tool_result("call-1", ClientToolOutcome::Error("late".to_string()))
+            .await;
+        assert_eq!(again, ClientToolDelivery::Unknown);
+    }
+
+    #[tokio::test]
+    async fn deliver_unknown_tool_call_id_is_noop() {
+        let task = StreamingTask::new(Uuid::new_v4());
+        let delivery = task
+            .deliver_client_tool_result("never-registered", ClientToolOutcome::Error("x".to_string()))
+            .await;
+        assert_eq!(delivery, ClientToolDelivery::Unknown);
+    }
+
+    #[tokio::test]
+    async fn remove_pending_client_tool_drops_the_waiter() {
+        let task = StreamingTask::new(Uuid::new_v4());
+        let mut rx = task.register_client_tool_call("call-1".to_string()).await;
+        task.remove_pending_client_tool("call-1").await;
+        // The sender was dropped, so the receiver observes a closed channel and a
+        // later delivery finds nothing to deliver to.
+        assert!(rx.try_recv().is_err());
+        let delivery = task
+            .deliver_client_tool_result("call-1", ClientToolOutcome::Error("x".to_string()))
+            .await;
+        assert_eq!(delivery, ClientToolDelivery::Unknown);
     }
 }

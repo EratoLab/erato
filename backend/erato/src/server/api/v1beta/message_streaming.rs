@@ -1155,6 +1155,19 @@ pub struct AbortStreamResponse {
     abort_requested: bool,
 }
 
+/// Deserialize a present field (including an explicit JSON `null`) as `Some`.
+/// Plain `Option<JsonValue>` + `#[serde(default)]` maps BOTH an absent field and
+/// an explicit `null` to `None`; this preserves the difference, so a legitimate
+/// `null` client-tool result is treated as a result, not a missing one. (serde
+/// skips a `deserialize_with` for an absent field when `default` is also set.)
+fn deserialize_present_json<'de, D>(deserializer: D) -> Result<Option<JsonValue>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::Deserialize;
+    JsonValue::deserialize(deserializer).map(Some)
+}
+
 #[derive(serde::Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct ClientToolResultRequest {
@@ -1168,8 +1181,10 @@ pub struct ClientToolResultRequest {
     message_id: Uuid,
     /// The `tool_call_id` from the `client_tool_call` event being answered.
     tool_call_id: String,
-    /// The tool's JSON result. Provide this OR `error`.
-    #[serde(default)]
+    /// The tool's JSON result (any JSON value, including `null`). Provide this
+    /// OR `error`. An absent field is treated as "no result"; an explicit
+    /// `null` is a valid result.
+    #[serde(default, deserialize_with = "deserialize_present_json")]
     #[schema(nullable = false)]
     result: Option<JsonValue>,
     /// An error message if the client could not execute the tool. Provide this
@@ -2213,6 +2228,14 @@ async fn stream_generate_chat_completion<
     streaming_task: Option<&Arc<StreamingTask>>,
     assistant_id: Option<Uuid>,
 ) -> Result<(Vec<ContentPart>, Option<GenerationMetadata>), ()> {
+    // Record the real assistant message id on the streaming task. `start_task`
+    // only had a placeholder id; client-tool results are routed to a task by
+    // message_id (the id the client receives in `client_tool_call`), so it must
+    // be the real one before any client tool can be called.
+    if let Some(task) = streaming_task {
+        task.set_message_id(assistant_message_id);
+    }
+
     // Initialize Langfuse tracing if enabled
     let langfuse_enabled = app_state.config.integrations.langfuse.enabled
         && app_state.config.integrations.langfuse.tracing_enabled;
@@ -2608,45 +2631,61 @@ async fn stream_generate_chat_completion<
                     input: Some(tool_input.clone()),
                 };
                 let call_message: MSG = call_event.into();
-                call_message.send_event(tx.clone()).await?;
+                // Best-effort on the typed stream: the client is, by design,
+                // away executing the tool and POSTing to a separate endpoint
+                // during the park, so a dropped SSE connection here must NOT
+                // abort the generation. The broadcast + resume history is the
+                // durable signal path.
+                let _ = call_message.send_event(tx.clone()).await;
 
                 // Park until the client POSTs a result, an abort arrives, or the
                 // bounded timeout fires.
-                let park_outcome = tokio::select! {
+                enum Park {
+                    Delivered(ClientToolOutcome),
+                    Aborted,
+                    TimedOut,
+                }
+                let park = tokio::select! {
                     received = &mut result_rx => match received {
-                        Ok(outcome) => Some(outcome),
-                        // Sender dropped without delivering (e.g. task replaced):
-                        // surface an error the model can recover from.
-                        Err(_) => Some(ClientToolOutcome::Error(
-                            "client tool result channel closed".to_string(),
-                        )),
+                        Ok(outcome) => Park::Delivered(outcome),
+                        // Sender dropped without delivering (e.g. task replaced).
+                        Err(_) => Park::TimedOut,
                     },
-                    _ = task.wait_for_abort() => None,
+                    _ = task.wait_for_abort() => Park::Aborted,
                     _ = tokio::time::sleep(tokio::time::Duration::from_millis(
                         client_tool_park_timeout_ms,
-                    )) => Some(ClientToolOutcome::Error(
-                        "client tool timed out".to_string(),
-                    )),
+                    )) => Park::TimedOut,
                 };
 
-                // Drop any lingering pending entry so a late POST is a no-op.
+                // Drop the pending entry, then settle the timeout/abort-vs-
+                // delivery boundary race: if the client's result landed just as
+                // we gave up, prefer it over discarding (and over the endpoint
+                // having reported a spurious success).
                 task.remove_pending_client_tool(&call_id).await;
+                let raced_in = result_rx.try_recv().ok();
 
-                let Some(outcome) = park_outcome else {
-                    // Aborted while parked: mirror the drain's abort exit.
-                    let generation_metadata = build_generation_metadata(
-                        total_prompt_tokens,
-                        total_completion_tokens,
-                        total_total_tokens,
-                        total_reasoning_tokens,
-                        langfuse_trace_id.clone(),
-                        true,
-                        None,
-                        non_empty_string(&captured_reasoning_summary),
-                        non_empty_vec(&captured_reasoning_items),
-                        non_empty_vec(&captured_reasoning_item_encrypted_content),
-                    );
-                    break 'loop_call_turns Ok((current_message_content, generation_metadata));
+                let outcome = match park {
+                    Park::Delivered(outcome) => outcome,
+                    Park::TimedOut => raced_in.unwrap_or_else(|| {
+                        ClientToolOutcome::Error("client tool timed out".to_string())
+                    }),
+                    Park::Aborted => {
+                        // User cancelled: discard any raced-in result and mirror
+                        // the drain's abort exit.
+                        let generation_metadata = build_generation_metadata(
+                            total_prompt_tokens,
+                            total_completion_tokens,
+                            total_total_tokens,
+                            total_reasoning_tokens,
+                            langfuse_trace_id.clone(),
+                            true,
+                            None,
+                            non_empty_string(&captured_reasoning_summary),
+                            non_empty_vec(&captured_reasoning_items),
+                            non_empty_vec(&captured_reasoning_item_encrypted_content),
+                        );
+                        break 'loop_call_turns Ok((current_message_content, generation_metadata));
+                    }
                 };
 
                 let (status, bg_status, message_status, output_value, response_text) = match &outcome
@@ -2693,7 +2732,10 @@ async fn stream_generate_chat_completion<
                     output: Some(output_value.clone()),
                 };
                 let update_message: MSG = update_event.into();
-                update_message.send_event(tx.clone()).await?;
+                // Best-effort (see the call event above): a dropped SSE
+                // connection after the park must not abort the turn — the result
+                // is already recorded to history (broadcast) and persisted below.
+                let _ = update_message.send_event(tx.clone()).await;
 
                 current_message_content.push(ContentPart::ToolUse(ToolUse {
                     tool_call_id: call_id.clone(),
@@ -7269,7 +7311,7 @@ pub async fn client_tool_result(
 
     // Route by task identity, not chat_id alone: a concurrent submit/regenerate
     // replaces the task (new message_id), so refuse to deliver to the wrong turn.
-    if task.message_id != request.message_id {
+    if task.message_id() != request.message_id {
         return Err((
             axum::http::StatusCode::NOT_FOUND,
             "No suspended generation matches this message".to_string(),
@@ -7394,4 +7436,34 @@ pub async fn resume_message_sse(
             .interval(Duration::from_secs(1))
             .text("keep-alive-text"),
     ))
+}
+
+#[cfg(test)]
+mod client_tool_result_request_tests {
+    use super::ClientToolResultRequest;
+
+    #[test]
+    fn distinguishes_null_result_from_absent() {
+        let base = serde_json::json!({
+            "chat_id": "00000000-0000-0000-0000-000000000000",
+            "message_id": "00000000-0000-0000-0000-000000000000",
+            "tool_call_id": "c1",
+        });
+
+        // Absent `result` => None ("no result").
+        let absent: ClientToolResultRequest = serde_json::from_value(base.clone()).unwrap();
+        assert_eq!(absent.result, None);
+
+        // Explicit JSON null => Some(Null), a valid result (the serde gotcha).
+        let mut with_null = base.clone();
+        with_null["result"] = serde_json::Value::Null;
+        let with_null: ClientToolResultRequest = serde_json::from_value(with_null).unwrap();
+        assert_eq!(with_null.result, Some(serde_json::Value::Null));
+
+        // A concrete value round-trips.
+        let mut with_value = base;
+        with_value["result"] = serde_json::json!({ "slots": 3 });
+        let with_value: ClientToolResultRequest = serde_json::from_value(with_value).unwrap();
+        assert_eq!(with_value.result, Some(serde_json::json!({ "slots": 3 })));
+    }
 }
