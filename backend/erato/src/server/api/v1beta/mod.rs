@@ -58,12 +58,13 @@ use crate::server::api::v1beta::mcp_servers::{
 };
 use crate::server::api::v1beta::me_profile_middleware::{MeProfile, UserProfile};
 use crate::server::api::v1beta::message_streaming::{
-    __path_abort_message_stream, __path_edit_message_sse, __path_message_submit_sse,
-    __path_regenerate_message_sse, __path_resume_message_sse, AbortStreamRequest,
-    AbortStreamResponse, ActionFacetRequest, EditMessageRequest,
-    EditMessageStreamingResponseMessage, MessageSubmitRequest,
-    MessageSubmitStreamingResponseMessage, ResumeStreamRequest, abort_message_stream,
-    edit_message_sse, message_submit_sse, regenerate_message_sse, resume_message_sse,
+    __path_abort_message_stream, __path_client_tool_result, __path_edit_message_sse,
+    __path_message_submit_sse, __path_regenerate_message_sse, __path_resume_message_sse,
+    AbortStreamRequest, AbortStreamResponse, ActionFacetRequest, ClientToolResultRequest,
+    ClientToolResultResponse, EditMessageRequest, EditMessageStreamingResponseMessage,
+    MessageSubmitRequest, MessageSubmitStreamingResponseMessage, ResumeStreamRequest,
+    abort_message_stream, client_tool_result, edit_message_sse, message_submit_sse,
+    regenerate_message_sse, resume_message_sse,
 };
 use crate::server::api::v1beta::share_grants::{
     CreateShareGrantRequest, CreateShareGrantResponse, ListShareGrantsResponse, ShareGrant,
@@ -131,6 +132,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/messages/editstream", post(edit_message_sse))
         .route("/messages/abortstream", post(abort_message_stream))
         .route("/messages/resumestream", post(resume_message_sse))
+        .route("/messages/clienttoolresult", post(client_tool_result))
         .route("/recent_chats", get(recent_chats))
         .route("/frequent_assistants", get(frequent_assistants))
         .route("/chats", post(create_chat))
@@ -338,6 +340,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         edit_message_sse,
         abort_message_stream,
         resume_message_sse,
+        client_tool_result,
         create_chat,
         update_chat,
         archive_all_chats_endpoint,
@@ -411,6 +414,8 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         AbortStreamRequest,
         AbortStreamResponse,
         ResumeStreamRequest,
+        ClientToolResultRequest,
+        ClientToolResultResponse,
         CreateChatRequest,
         CreateChatResponse,
         UpdateChatRequest,

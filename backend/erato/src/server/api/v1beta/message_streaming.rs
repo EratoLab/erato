@@ -30,7 +30,7 @@ use crate::server::api::v1beta::message_streaming_file_extraction::{
 use crate::services::background_tasks::{
     StreamingEvent, StreamingTask, ToolCallStatus as BgToolCallStatus,
 };
-use crate::services::client_tools::ClientToolOutcome;
+use crate::services::client_tools::{ClientToolDelivery, ClientToolOutcome};
 use crate::services::genai::{build_chat_options_for_completion, build_chat_options_for_summary};
 use crate::services::genai_langfuse::{
     TracedGenerationBuilder, create_tool_call_span_from_chat, create_trace_metadata,
@@ -1153,6 +1153,38 @@ pub struct AbortStreamRequest {
 #[serde(rename_all = "snake_case")]
 pub struct AbortStreamResponse {
     abort_requested: bool,
+}
+
+#[derive(serde::Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct ClientToolResultRequest {
+    #[schema(example = "00000000-0000-0000-0000-000000000000")]
+    /// The chat whose suspended generation is awaiting this result.
+    chat_id: Uuid,
+    #[schema(example = "00000000-0000-0000-0000-000000000000")]
+    /// The id of the assistant message whose generation emitted the client
+    /// tool call. Disambiguates a result from a task that has since been
+    /// replaced by a concurrent generation on the same chat.
+    message_id: Uuid,
+    /// The `tool_call_id` from the `client_tool_call` event being answered.
+    tool_call_id: String,
+    /// The tool's JSON result. Provide this OR `error`.
+    #[serde(default)]
+    #[schema(nullable = false)]
+    result: Option<JsonValue>,
+    /// An error message if the client could not execute the tool. Provide this
+    /// OR `result`.
+    #[serde(default)]
+    #[schema(nullable = false)]
+    error: Option<String>,
+}
+
+#[derive(Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct ClientToolResultResponse {
+    /// True if a suspended generation received this result; false if it was a
+    /// benign no-op (already delivered, timed out, aborted, or unknown id).
+    delivered: bool,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -7182,6 +7214,86 @@ pub async fn abort_message_stream(
 
     Ok(Json(AbortStreamResponse {
         abort_requested: true,
+    }))
+}
+
+#[utoipa::path(
+    post,
+    path = "/me/messages/clienttoolresult",
+    request_body = ClientToolResultRequest,
+    responses(
+        (status = OK, body = ClientToolResultResponse),
+        (status = NOT_FOUND, description = "No suspended generation matches this chat and message"),
+        (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
+        (status = FORBIDDEN, description = "When the user has no access to the chat"),
+        (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn client_tool_result(
+    State(app_state): State<AppState>,
+    Extension(policy): Extension<PolicyEngine>,
+    Extension(me_user): Extension<MeProfile>,
+    Json(request): Json<ClientToolResultRequest>,
+) -> Result<Json<ClientToolResultResponse>, (axum::http::StatusCode, String)> {
+    // Per-chat ownership gate, identical to abort/resume — middleware alone does
+    // not enforce per-chat access.
+    let _chat = get_or_create_chat(
+        &app_state.db,
+        &policy,
+        &me_user.to_subject(),
+        Some(&request.chat_id),
+        &me_user.id,
+        None,
+        None,
+    )
+    .await
+    .map_err(|e| {
+        (
+            axum::http::StatusCode::FORBIDDEN,
+            format!("Access denied to chat: {}", e),
+        )
+    })?
+    .0;
+
+    let task = app_state
+        .background_tasks
+        .get_task(&request.chat_id)
+        .await
+        .ok_or((
+            axum::http::StatusCode::NOT_FOUND,
+            "No active generation task found for this chat".to_string(),
+        ))?;
+
+    // Route by task identity, not chat_id alone: a concurrent submit/regenerate
+    // replaces the task (new message_id), so refuse to deliver to the wrong turn.
+    if task.message_id != request.message_id {
+        return Err((
+            axum::http::StatusCode::NOT_FOUND,
+            "No suspended generation matches this message".to_string(),
+        ));
+    }
+
+    // `error` takes precedence if present; otherwise a result; neither is itself
+    // surfaced to the model as an error.
+    let outcome = match (request.result, request.error) {
+        (_, Some(error)) => ClientToolOutcome::Error(error),
+        (Some(result), None) => ClientToolOutcome::Result(result),
+        (None, None) => {
+            ClientToolOutcome::Error("client tool returned neither a result nor an error".to_string())
+        }
+    };
+
+    let delivery = task
+        .deliver_client_tool_result(&request.tool_call_id, outcome)
+        .await;
+
+    // An unknown/already-consumed tool_call_id (already delivered, timed out,
+    // aborted) is a benign idempotent no-op — never a 4xx/5xx.
+    Ok(Json(ClientToolResultResponse {
+        delivered: matches!(delivery, ClientToolDelivery::Delivered),
     }))
 }
 
