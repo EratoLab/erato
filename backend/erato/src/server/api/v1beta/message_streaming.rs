@@ -30,6 +30,7 @@ use crate::server::api::v1beta::message_streaming_file_extraction::{
 use crate::services::background_tasks::{
     StreamingEvent, StreamingTask, ToolCallStatus as BgToolCallStatus,
 };
+use crate::services::client_tools::ClientToolOutcome;
 use crate::services::genai::{build_chat_options_for_completion, build_chat_options_for_summary};
 use crate::services::genai_langfuse::{
     TracedGenerationBuilder, create_tool_call_span_from_chat, create_trace_metadata,
@@ -405,6 +406,20 @@ pub struct MessageSubmitStreamingResponseToolCallProposed {
     input: Option<JsonValue>,
 }
 
+/// Sent when the model calls a facet `client_tool`: the generation is suspended
+/// until the client executes the tool and POSTs the result back to the
+/// continuation endpoint. Distinct from `tool_call_proposed` (which fires for
+/// every proposed tool call) — this is the signal to execute on the client.
+#[derive(Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct MessageSubmitStreamingResponseClientToolCall {
+    message_id: Uuid,
+    content_index: usize,
+    tool_call_id: String,
+    tool_name: String,
+    input: Option<JsonValue>,
+}
+
 #[derive(Serialize, ToSchema, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 #[allow(dead_code)]
@@ -547,6 +562,10 @@ pub enum MessageSubmitStreamingResponseMessage {
     #[serde(rename = "tool_call_update")]
     /// Sent to update the status of a tool call execution by the backend.
     ToolCallUpdate(MessageSubmitStreamingResponseToolCallUpdate),
+    #[serde(rename = "client_tool_call")]
+    /// Sent when the model calls a facet client tool: the turn is suspended
+    /// until the client executes it and POSTs the result back.
+    ClientToolCall(MessageSubmitStreamingResponseClientToolCall),
     #[serde(rename = "error")]
     /// Sent when an error occurs during message generation.
     Error(MessageSubmitStreamingResponseError),
@@ -563,6 +582,7 @@ impl SendAsSseEvent for MessageSubmitStreamingResponseMessage {
             Self::ReasoningDelta(_) => "reasoning_delta",
             Self::ToolCallProposed(_) => "tool_call_proposed",
             Self::ToolCallUpdate(_) => "tool_call_update",
+            Self::ClientToolCall(_) => "client_tool_call",
             Self::Error(_) => "error",
         }
     }
@@ -621,6 +641,14 @@ impl From<MessageSubmitStreamingResponseToolCallProposed>
 {
     fn from(value: MessageSubmitStreamingResponseToolCallProposed) -> Self {
         MessageSubmitStreamingResponseMessage::ToolCallProposed(value)
+    }
+}
+
+impl From<MessageSubmitStreamingResponseClientToolCall>
+    for MessageSubmitStreamingResponseMessage
+{
+    fn from(value: MessageSubmitStreamingResponseClientToolCall) -> Self {
+        MessageSubmitStreamingResponseMessage::ClientToolCall(value)
     }
 }
 
@@ -991,6 +1019,10 @@ pub enum RegenerateMessageStreamingResponseMessage {
     #[serde(rename = "tool_call_update")]
     /// Sent to update the status of a tool call execution by the backend.
     ToolCallUpdate(MessageSubmitStreamingResponseToolCallUpdate),
+    #[serde(rename = "client_tool_call")]
+    /// Sent when the model calls a facet client tool: the turn is suspended
+    /// until the client executes it and POSTs the result back.
+    ClientToolCall(MessageSubmitStreamingResponseClientToolCall),
     #[serde(rename = "error")]
     /// Sent when an error occurs during message generation.
     Error(MessageSubmitStreamingResponseError),
@@ -1005,6 +1037,7 @@ impl SendAsSseEvent for RegenerateMessageStreamingResponseMessage {
             Self::ReasoningDelta(_) => "reasoning_delta",
             Self::ToolCallProposed(_) => "tool_call_proposed",
             Self::ToolCallUpdate(_) => "tool_call_update",
+            Self::ClientToolCall(_) => "client_tool_call",
             Self::Error(_) => "error",
         }
     }
@@ -1051,6 +1084,14 @@ impl From<MessageSubmitStreamingResponseToolCallProposed>
 {
     fn from(value: MessageSubmitStreamingResponseToolCallProposed) -> Self {
         RegenerateMessageStreamingResponseMessage::ToolCallProposed(value)
+    }
+}
+
+impl From<MessageSubmitStreamingResponseClientToolCall>
+    for RegenerateMessageStreamingResponseMessage
+{
+    fn from(value: MessageSubmitStreamingResponseClientToolCall) -> Self {
+        RegenerateMessageStreamingResponseMessage::ClientToolCall(value)
     }
 }
 
@@ -1135,6 +1176,10 @@ pub enum EditMessageStreamingResponseMessage {
     #[serde(rename = "tool_call_update")]
     /// Sent to update the status of a tool call execution by the backend.
     ToolCallUpdate(MessageSubmitStreamingResponseToolCallUpdate),
+    #[serde(rename = "client_tool_call")]
+    /// Sent when the model calls a facet client tool: the turn is suspended
+    /// until the client executes it and POSTs the result back.
+    ClientToolCall(MessageSubmitStreamingResponseClientToolCall),
     #[serde(rename = "error")]
     /// Sent when an error occurs during message generation.
     Error(MessageSubmitStreamingResponseError),
@@ -1152,6 +1197,7 @@ impl SendAsSseEvent for EditMessageStreamingResponseMessage {
             Self::ReasoningDelta(_) => "reasoning_delta",
             Self::ToolCallProposed(_) => "tool_call_proposed",
             Self::ToolCallUpdate(_) => "tool_call_update",
+            Self::ClientToolCall(_) => "client_tool_call",
             Self::Error(_) => "error",
             Self::UserMessageSaved(_) => "user_message_saved",
         }
@@ -1199,6 +1245,12 @@ impl From<MessageSubmitStreamingResponseMessageReasoningDelta>
 impl From<MessageSubmitStreamingResponseToolCallProposed> for EditMessageStreamingResponseMessage {
     fn from(value: MessageSubmitStreamingResponseToolCallProposed) -> Self {
         EditMessageStreamingResponseMessage::ToolCallProposed(value)
+    }
+}
+
+impl From<MessageSubmitStreamingResponseClientToolCall> for EditMessageStreamingResponseMessage {
+    fn from(value: MessageSubmitStreamingResponseClientToolCall) -> Self {
+        EditMessageStreamingResponseMessage::ClientToolCall(value)
     }
 }
 
@@ -2106,6 +2158,7 @@ async fn stream_generate_chat_completion<
         + From<MessageSubmitStreamingResponseMessageReasoningDelta>
         + From<MessageSubmitStreamingResponseToolCallProposed>
         + From<MessageSubmitStreamingResponseToolCallUpdate>
+        + From<MessageSubmitStreamingResponseClientToolCall>
         + From<MessageSubmitStreamingResponseError>,
 >(
     tx: Sender<Result<Event, Report>>,
@@ -2161,6 +2214,14 @@ async fn stream_generate_chat_completion<
         .as_ref()
         .map(|client| client.trace_id().to_string());
     let max_tool_call_iterations = 15;
+    // How long the loop holds a turn open awaiting a client tool's result
+    // before giving up with an error tool response (the backstop that prevents
+    // a never-answering client from leaking the parked turn). A client tool
+    // counts as one normal iteration against `max_tool_call_iterations`, but
+    // this park time is NOT a generation wall-clock budget.
+    // TODO(ERMAIN-413): honor the per-facet `client_tool.timeout_ms` override
+    // (needs threading the facet's tool config into this function).
+    let client_tool_park_timeout_ms: u64 = 60_000;
     let mut unfinished_tool_calls: std::collections::VecDeque<genai::chat::ToolCall> =
         std::collections::VecDeque::new();
     let mut current_turn = 0;
@@ -2446,6 +2507,174 @@ async fn stream_generate_chat_completion<
                 }));
                 current_turn_tool_responses.push(genai::chat::ToolResponse {
                     call_id: unfinished_tool_call.call_id.clone(),
+                    content: response_text,
+                });
+                continue;
+            }
+
+            // Client tool (returning round-trip): the model called a tool the
+            // active facet declared as a `client_tool`. It is neither an MCP
+            // tool nor the client-action tool, so it must be EXECUTED ON THE
+            // CLIENT. We emit a `client_tool_call`, SUSPEND this turn on a
+            // per-call channel, and resume when the client POSTs the result —
+            // like an MCP tool, but executed on the client. By construction
+            // anything offered that is not an MCP tool and not the client
+            // action is a client tool; hallucinated names were already rejected
+            // by the `allowed_tool_names` check above.
+            if !available_mcp_tools_by_name.contains_key(unfinished_tool_call.fn_name.as_str()) {
+                let call_id = unfinished_tool_call.call_id.clone();
+                let tool_name = unfinished_tool_call.fn_name.clone();
+                let content_index = current_message_content.len();
+                let tool_input = unfinished_tool_call.fn_arguments.clone();
+                let tool_call_started = tool_call_started_at
+                    .remove(&call_id)
+                    .unwrap_or_else(now_timestamp);
+                tool_call_parent_observation_ids.remove(&call_id);
+
+                let Some(task) = streaming_task else {
+                    // No streaming task to park on (non-streaming caller):
+                    // answer the model with an error so it can recover.
+                    let response_text =
+                        "Client tool execution is unavailable for this request.".to_string();
+                    current_message_content.push(ContentPart::ToolUse(ToolUse {
+                        tool_call_id: call_id.clone(),
+                        status: MessageToolCallStatus::Error,
+                        tool_name: tool_name.clone(),
+                        input: Some(tool_input.clone()),
+                        progress_message: None,
+                        output: Some(json!({ "status": "error", "error": response_text })),
+                        started_at: Some(tool_call_started),
+                        ended_at: Some(now_timestamp()),
+                    }));
+                    current_turn_tool_responses.push(genai::chat::ToolResponse {
+                        call_id,
+                        content: response_text,
+                    });
+                    continue;
+                };
+
+                // Register interest BEFORE emitting the call event, so a result
+                // POSTed immediately cannot race ahead of the registered waiter.
+                let mut result_rx = task.register_client_tool_call(call_id.clone()).await;
+
+                // Signal the client to execute: broadcast (submit path + resume
+                // replay) AND the typed tx stream (regenerate/edit path).
+                let _ = task
+                    .send_event(StreamingEvent::ClientToolCall {
+                        message_id: assistant_message_id,
+                        content_index,
+                        tool_call_id: call_id.clone(),
+                        tool_name: tool_name.clone(),
+                        input: Some(tool_input.clone()),
+                    })
+                    .await;
+                let call_event = MessageSubmitStreamingResponseClientToolCall {
+                    message_id: assistant_message_id,
+                    content_index,
+                    tool_call_id: call_id.clone(),
+                    tool_name: tool_name.clone(),
+                    input: Some(tool_input.clone()),
+                };
+                let call_message: MSG = call_event.into();
+                call_message.send_event(tx.clone()).await?;
+
+                // Park until the client POSTs a result, an abort arrives, or the
+                // bounded timeout fires.
+                let park_outcome = tokio::select! {
+                    received = &mut result_rx => match received {
+                        Ok(outcome) => Some(outcome),
+                        // Sender dropped without delivering (e.g. task replaced):
+                        // surface an error the model can recover from.
+                        Err(_) => Some(ClientToolOutcome::Error(
+                            "client tool result channel closed".to_string(),
+                        )),
+                    },
+                    _ = task.wait_for_abort() => None,
+                    _ = tokio::time::sleep(tokio::time::Duration::from_millis(
+                        client_tool_park_timeout_ms,
+                    )) => Some(ClientToolOutcome::Error(
+                        "client tool timed out".to_string(),
+                    )),
+                };
+
+                // Drop any lingering pending entry so a late POST is a no-op.
+                task.remove_pending_client_tool(&call_id).await;
+
+                let Some(outcome) = park_outcome else {
+                    // Aborted while parked: mirror the drain's abort exit.
+                    let generation_metadata = build_generation_metadata(
+                        total_prompt_tokens,
+                        total_completion_tokens,
+                        total_total_tokens,
+                        total_reasoning_tokens,
+                        langfuse_trace_id.clone(),
+                        true,
+                        None,
+                        non_empty_string(&captured_reasoning_summary),
+                        non_empty_vec(&captured_reasoning_items),
+                        non_empty_vec(&captured_reasoning_item_encrypted_content),
+                    );
+                    break 'loop_call_turns Ok((current_message_content, generation_metadata));
+                };
+
+                let (status, bg_status, message_status, output_value, response_text) = match &outcome
+                {
+                    ClientToolOutcome::Result(result) => (
+                        ToolCallStatus::Success,
+                        BgToolCallStatus::Success,
+                        MessageToolCallStatus::Success,
+                        json!({ "status": "success", "result": result }),
+                        result.to_string(),
+                    ),
+                    ClientToolOutcome::Error(error) => (
+                        ToolCallStatus::Error,
+                        BgToolCallStatus::Error,
+                        MessageToolCallStatus::Error,
+                        json!({ "status": "error", "error": error }),
+                        format!("Client tool error: {error}"),
+                    ),
+                };
+
+                // In-band resolution: write the outcome into history so a resume
+                // replay is self-consistent (the client sees the call answered
+                // and does not re-execute the tool).
+                let _ = task
+                    .send_event(StreamingEvent::ToolCallUpdate {
+                        message_id: assistant_message_id,
+                        content_index,
+                        tool_call_id: call_id.clone(),
+                        tool_name: tool_name.clone(),
+                        input: Some(tool_input.clone()),
+                        status: bg_status,
+                        progress_message: None,
+                        output: Some(output_value.clone()),
+                    })
+                    .await;
+                let update_event = MessageSubmitStreamingResponseToolCallUpdate {
+                    message_id: assistant_message_id,
+                    content_index,
+                    tool_call_id: call_id.clone(),
+                    tool_name: tool_name.clone(),
+                    input: Some(tool_input.clone()),
+                    status,
+                    progress_message: None,
+                    output: Some(output_value.clone()),
+                };
+                let update_message: MSG = update_event.into();
+                update_message.send_event(tx.clone()).await?;
+
+                current_message_content.push(ContentPart::ToolUse(ToolUse {
+                    tool_call_id: call_id.clone(),
+                    status: message_status,
+                    tool_name: tool_name.clone(),
+                    input: Some(tool_input),
+                    progress_message: None,
+                    output: Some(output_value),
+                    started_at: Some(tool_call_started),
+                    ended_at: Some(now_timestamp()),
+                }));
+                current_turn_tool_responses.push(genai::chat::ToolResponse {
+                    call_id,
                     content: response_text,
                 });
                 continue;
