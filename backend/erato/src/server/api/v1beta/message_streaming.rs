@@ -1901,6 +1901,48 @@ pub(crate) async fn prepare_chat_request_with_adapters(
             ));
         }
     }
+    // Offer this facet's client tools (returning round-trip tools) whenever the
+    // active facet declares any — independently of `client_actions`. Like the
+    // client-action tool these are NOT dispatched to an MCP server; the tool
+    // call loop suspends for a client-supplied result instead. Skip any whose
+    // name collides with an MCP tool or the reserved client-action tool name (a
+    // duplicate tool name is ambiguous to dispatch and rejected by providers);
+    // intra-facet name uniqueness is already enforced at config load.
+    if let Some(action_facet) = user_input.action_facet.as_ref()
+        && let Some(facet_config) = app_state.config.action_facets.facets.get(&action_facet.id)
+    {
+        for client_tool in &facet_config.client_tools {
+            let name = client_tool.name.as_str();
+            if name == crate::services::client_actions::CLIENT_ACTION_TOOL_NAME
+                || generation_mcp_tools.iter().any(|mcp| mcp.tool.name == name)
+            {
+                tracing::warn!(
+                    "Not offering client tool '{}' for action facet '{}': the name is reserved or already used by an MCP tool",
+                    name,
+                    action_facet.id
+                );
+                continue;
+            }
+            let schema = match serde_json::from_str::<serde_json::Value>(&client_tool.parameters) {
+                Ok(schema) => schema,
+                Err(error) => {
+                    tracing::warn!(
+                        "Not offering client tool '{}' for action facet '{}': parameters are not valid JSON: {}",
+                        name,
+                        action_facet.id,
+                        error
+                    );
+                    continue;
+                }
+            };
+            chat_request_tools.push(crate::services::client_tools::build_client_tool(
+                name,
+                &client_tool.description,
+                schema,
+                effective_model_settings.compat_omit_strict,
+            ));
+        }
+    }
     if !chat_request_tools.is_empty() {
         chat_request.tools = Some(chat_request_tools);
     } else {

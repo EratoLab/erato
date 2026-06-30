@@ -1,5 +1,6 @@
 pub mod background_tasks;
 pub mod client_actions;
+pub mod client_tools;
 pub mod file_parsing;
 pub mod file_processing_cached;
 pub mod file_processor;
