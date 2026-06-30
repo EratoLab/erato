@@ -2825,6 +2825,169 @@ allowed_args = ["content"]
     assert_eq!(generic.allowed_args, vec!["content"]);
 }
 
+/// Build an `AppConfig` from inline action-facet TOML and run `migrate()`
+/// (which performs load-time validation). Mirrors the temp-file pattern the
+/// other config tests use; shared by the `client_tools` validation tests.
+fn migrate_config_with_action_facets(action_facet_toml: &str) -> AppConfig {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = format!(
+        r#"
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-3.5-turbo"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = {{ endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }}
+
+{action_facet_toml}
+"#
+    );
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let temp_path = temp_file.path().to_str().unwrap();
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let config: AppConfig = config_schema
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    config.migrate()
+}
+
+#[test]
+fn test_action_facet_with_valid_client_tools_loads() {
+    let config = migrate_config_with_action_facets(
+        r#"
+[action_facets.facets.outlook_schedule]
+display_name = "Outlook Schedule"
+platform = "outlook"
+template = "Find a time. Now is {{now_iso}}."
+allowed_args = ["now_iso"]
+
+[[action_facets.facets.outlook_schedule.client_tools]]
+name = "outlook.fetch_availability"
+description = "Fetch the user's calendar free/busy in a window."
+parameters = '{ "type": "object", "properties": {}, "additionalProperties": false }'
+timeout_ms = 30000
+"#,
+    );
+
+    let facet = &config.action_facets.facets["outlook_schedule"];
+    assert_eq!(facet.client_tools.len(), 1);
+    let tool = &facet.client_tools[0];
+    assert_eq!(tool.name, "outlook.fetch_availability");
+    assert_eq!(tool.timeout_ms, Some(30000));
+    assert!(tool.parameters.contains("\"type\": \"object\""));
+}
+
+#[test]
+#[should_panic(expected = "which is reserved")]
+fn test_action_facet_client_tool_reserved_name_rejected() {
+    migrate_config_with_action_facets(
+        r#"
+[action_facets.facets.bad]
+display_name = "Bad"
+template = "x {{a}}"
+allowed_args = ["a"]
+
+[[action_facets.facets.bad.client_tools]]
+name = "propose_client_action"
+description = "collides with the reserved client-action tool name"
+parameters = '{ "type": "object" }'
+"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "duplicate client tool name")]
+fn test_action_facet_client_tool_duplicate_name_rejected() {
+    migrate_config_with_action_facets(
+        r#"
+[action_facets.facets.bad]
+display_name = "Bad"
+template = "x {{a}}"
+allowed_args = ["a"]
+
+[[action_facets.facets.bad.client_tools]]
+name = "dup"
+description = "first"
+parameters = '{ "type": "object" }'
+
+[[action_facets.facets.bad.client_tools]]
+name = "dup"
+description = "second"
+parameters = '{ "type": "object" }'
+"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "must be a JSON object")]
+fn test_action_facet_client_tool_non_object_parameters_rejected() {
+    migrate_config_with_action_facets(
+        r#"
+[action_facets.facets.bad]
+display_name = "Bad"
+template = "x {{a}}"
+allowed_args = ["a"]
+
+[[action_facets.facets.bad.client_tools]]
+name = "tool"
+description = "schema is a JSON array, not an object"
+parameters = '[1, 2, 3]'
+"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "unparseable JSON parameters")]
+fn test_action_facet_client_tool_invalid_json_parameters_rejected() {
+    migrate_config_with_action_facets(
+        r#"
+[action_facets.facets.bad]
+display_name = "Bad"
+template = "x {{a}}"
+allowed_args = ["a"]
+
+[[action_facets.facets.bad.client_tools]]
+name = "tool"
+description = "not valid json at all"
+parameters = 'this is not json'
+"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "empty name")]
+fn test_action_facet_client_tool_empty_name_rejected() {
+    migrate_config_with_action_facets(
+        r#"
+[action_facets.facets.bad]
+display_name = "Bad"
+template = "x {{a}}"
+allowed_args = ["a"]
+
+[[action_facets.facets.bad.client_tools]]
+name = "   "
+description = "blank name after trim"
+parameters = '{ "type": "object" }'
+"#,
+    );
+}
+
 #[test]
 fn test_config_with_legacy_action_facets_shape_still_loads() {
     let mut temp_file = Builder::new()

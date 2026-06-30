@@ -830,6 +830,48 @@ impl AppConfig {
                     );
                 }
             }
+            // Validate client_tools (client-executed returning tools). Names
+            // must be non-empty, untrimmed-free, reserved-name-free, unique
+            // within the facet, and carry a JSON-object parameter schema. The
+            // collision check against runtime MCP tool names cannot run here
+            // (MCP servers are not known at config load) and stays at request
+            // assembly.
+            let mut seen_tool_names = std::collections::HashSet::new();
+            for tool in &action_facet.client_tools {
+                let name = tool.name.trim();
+                if name.is_empty() {
+                    panic!("Action facet '{}' has a client tool with an empty name.", id);
+                }
+                if name != tool.name {
+                    panic!(
+                        "Action facet '{}' has a client tool name '{}' with leading or trailing whitespace.",
+                        id, tool.name
+                    );
+                }
+                if name == crate::services::client_actions::CLIENT_ACTION_TOOL_NAME {
+                    panic!(
+                        "Action facet '{}' has a client tool named '{}', which is reserved.",
+                        id, name
+                    );
+                }
+                if !seen_tool_names.insert(name) {
+                    panic!(
+                        "Action facet '{}' has a duplicate client tool name '{}'.",
+                        id, name
+                    );
+                }
+                match serde_json::from_str::<serde_json::Value>(&tool.parameters) {
+                    Ok(value) if value.is_object() => {}
+                    Ok(_) => panic!(
+                        "Action facet '{}' client tool '{}' parameters must be a JSON object (a JSON Schema).",
+                        id, name
+                    ),
+                    Err(e) => panic!(
+                        "Action facet '{}' client tool '{}' has unparseable JSON parameters: {}",
+                        id, name, e
+                    ),
+                }
+            }
         }
 
         validate_audio_feature_config(&config, "audio_transcription", &config.audio_transcription);
@@ -2612,6 +2654,7 @@ impl ActionFacetsConfig {
                 client_actions: vec![],
                 presentation: None,
                 client_actions_always_ask: vec![],
+                client_tools: vec![],
             });
 
         self.facets
@@ -2624,6 +2667,7 @@ impl ActionFacetsConfig {
                 client_actions: vec![],
                 presentation: None,
                 client_actions_always_ask: vec![],
+                client_tools: vec![],
             });
     }
 }
@@ -2695,10 +2739,50 @@ pub struct ActionFacetConfig {
     // still deny them entirely.
     #[serde(default)]
     pub client_actions_always_ask: Vec<String>,
+
+    // Client-executed tools (returning round-trip) the model may CALL when
+    // this facet is active. Unlike `client_actions` (terminal, one-way,
+    // user-confirmed), a client tool's result is fed back into the SAME
+    // agentic turn — like an MCP tool, but executed on the client. Dormant
+    // unless declared: no client tool is offered when this list is empty.
+    #[serde(default)]
+    pub client_tools: Vec<ClientToolConfig>,
 }
 
 /// Valid values for `ActionFacetConfig::presentation`.
 pub const ACTION_FACET_PRESENTATIONS: [&str; 2] = ["render_buttons", "auto_prompt"];
+
+/// A client-executed tool declared on an action facet. The model may CALL it
+/// mid-turn; the client (add-in / web app) executes it and POSTs the result
+/// back, which the backend feeds into the same agentic loop as a tool response
+/// — like an MCP tool, but executed on the client. Distinct from
+/// `client_actions`, which are terminal, one-way, user-confirmed mutations.
+///
+/// Returning client tools MUST be read-only / idempotent: a backend restart
+/// drops the parked turn, so a client may re-execute on recovery. Mutations
+/// must use the terminal `client_actions` (`propose_client_action`) path.
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+pub struct ClientToolConfig {
+    /// Tool name exposed to the model (e.g. "outlook.fetch_availability").
+    /// Must be unique within the facet's `client_tools` and must not collide
+    /// with the reserved `propose_client_action` name.
+    pub name: String,
+
+    /// Human-readable description surfaced to the model as the tool description.
+    pub description: String,
+
+    /// JSON Schema (as a JSON string) for the tool's input parameters. Parsed
+    /// and validated at config load; surfaced to the model as the tool schema.
+    /// Kept as a string (not a structured value) so `ActionFacetConfig` can
+    /// keep deriving `Eq` (`serde_json::Value` is not `Eq`).
+    pub parameters: String,
+
+    /// Optional per-tool park timeout in milliseconds. The agentic loop holds
+    /// open at most this long awaiting the client's result before injecting an
+    /// error tool response and continuing.
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
+}
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct CachesConfig {

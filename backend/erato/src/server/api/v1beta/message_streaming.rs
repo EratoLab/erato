@@ -4452,6 +4452,7 @@ mod tests {
                     client_actions: vec![],
                     presentation: None,
                     client_actions_always_ask: vec![],
+                    client_tools: vec![],
                 },
             );
             let af = ActionFacetRequest {
@@ -4474,6 +4475,7 @@ mod tests {
                     client_actions: vec![],
                     presentation: None,
                     client_actions_always_ask: vec![],
+                    client_tools: vec![],
                 },
             );
             let af = ActionFacetRequest {
@@ -4497,6 +4499,7 @@ mod tests {
                     client_actions: vec![],
                     presentation: None,
                     client_actions_always_ask: vec![],
+                    client_tools: vec![],
                 },
             );
             let af = ActionFacetRequest {
@@ -4518,6 +4521,7 @@ mod tests {
                     client_actions: vec![],
                     presentation: None,
                     client_actions_always_ask: vec![],
+                    client_tools: vec![],
                 },
             );
             let af = ActionFacetRequest {
@@ -4541,6 +4545,7 @@ mod tests {
                     client_actions: vec![],
                     presentation: None,
                     client_actions_always_ask: vec![],
+                    client_tools: vec![],
                 },
             );
             let af = ActionFacetRequest {
@@ -4562,6 +4567,7 @@ mod tests {
                     client_actions: vec![],
                     presentation: None,
                     client_actions_always_ask: vec![],
+                    client_tools: vec![],
                 },
             );
             let oversized = "x".repeat(ACTION_FACET_ARG_MAX_SIZE + 1);
@@ -4586,6 +4592,7 @@ mod tests {
                     client_actions: vec![],
                     presentation: None,
                     client_actions_always_ask: vec![],
+                    client_tools: vec![],
                 },
             );
             let at_limit = "x".repeat(ACTION_FACET_ARG_MAX_SIZE);
@@ -4613,6 +4620,7 @@ mod tests {
                     client_actions: vec![],
                     presentation: None,
                     client_actions_always_ask: vec![],
+                    client_tools: vec![],
                 },
             );
             config
@@ -4670,6 +4678,7 @@ mod tests {
                     client_actions: vec![],
                     presentation: None,
                     client_actions_always_ask: vec![],
+                    client_tools: vec![],
                 },
             );
             assert!(is_known_platform(&config, "web"));

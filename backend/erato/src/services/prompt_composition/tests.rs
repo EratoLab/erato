@@ -2546,6 +2546,7 @@ mod test_cases {
                 client_actions: vec![],
                 presentation: None,
                 client_actions_always_ask: vec![],
+                client_tools: vec![],
             },
         )]);
 
@@ -2680,6 +2681,7 @@ mod test_cases {
                 client_actions: vec![],
                 presentation: None,
                 client_actions_always_ask: vec![],
+                client_tools: vec![],
             },
         )]);
 
