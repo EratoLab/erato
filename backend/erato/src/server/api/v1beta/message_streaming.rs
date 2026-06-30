@@ -890,6 +890,23 @@ fn streaming_event_to_sse(event: &StreamingEvent) -> Result<Event, Report> {
             }))?;
             ("tool_call_update", data)
         }
+        StreamingEvent::ClientToolCall {
+            message_id,
+            content_index,
+            tool_call_id,
+            tool_name,
+            input,
+        } => {
+            let data = serde_json::to_string(&serde_json::json!({
+                "message_type": "client_tool_call",
+                "message_id": message_id.to_string(),
+                "content_index": content_index,
+                "tool_call_id": tool_call_id,
+                "tool_name": tool_name,
+                "input": input
+            }))?;
+            ("client_tool_call", data)
+        }
         StreamingEvent::AssistantMessageCompleted {
             message_id,
             content,

@@ -34,6 +34,25 @@ pub fn build_client_tool(
     }
 }
 
+/// The result of a client-executed tool, delivered back to the suspended
+/// agentic loop. Either a successful JSON result (becomes the tool response the
+/// model reasons over) or an error message (the model sees it and can recover).
+#[derive(Debug, Clone)]
+pub enum ClientToolOutcome {
+    Result(Value),
+    Error(String),
+}
+
+/// Outcome of attempting to deliver a client-tool result into a parked loop.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClientToolDelivery {
+    /// The result was handed to the waiting loop.
+    Delivered,
+    /// No loop is waiting for this tool_call_id — already delivered, timed out,
+    /// aborted, or never issued. The delivery is a benign no-op (idempotent).
+    Unknown,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
