@@ -1,6 +1,7 @@
 import { t } from "@lingui/core/macro";
 import { skipToken, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
+import { Star } from "iconoir-react";
 import { useEffect, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -12,6 +13,7 @@ import { usePageAlignment } from "@/hooks/ui";
 import {
   useAssistantHubConfig,
   useGetAssistant,
+  useListAssistantHubReviews,
   useListMyAssistantHubVersions,
   useSetAssistantHubVersionCurrent,
   useSetAssistantHubVersionPublished,
@@ -29,7 +31,10 @@ import {
   isAssistantHubReviewAcceptedStatus,
 } from "./assistantHubUtils";
 
-import type { AssistantHubVersion } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  AssistantHubUserReview,
+  AssistantHubVersion,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 type AssistantSubmissionGroup = {
   hubAssistantId: string;
@@ -63,6 +68,111 @@ const groupVersionsByAssistant = (
     left.name.localeCompare(right.name),
   );
 };
+
+const REVIEW_SCORE_VALUES = Array.from({ length: 10 }, (_, index) => index + 1);
+
+function ReviewScoreStars({ score }: { score: number }) {
+  return (
+    <div className="flex gap-0.5" aria-hidden="true">
+      {REVIEW_SCORE_VALUES.map((value) => {
+        const isSelected = value <= Math.round(score);
+
+        return (
+          <Star
+            key={value}
+            className={clsx(
+              "size-4 text-theme-fg-muted",
+              isSelected && "fill-current text-theme-warning-fg",
+            )}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function AssistantHubSubmittedReviewItem({
+  review,
+}: {
+  review: AssistantHubUserReview;
+}) {
+  const score = review.score;
+  const versionNumber = review.version_number;
+  const reviewerName = review.reviewer.display_name;
+
+  return (
+    <article className="p-4">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+        <span className="font-medium text-theme-fg-primary">
+          {reviewerName}
+        </span>
+        <ReviewScoreStars score={score} />
+        <span className="text-theme-fg-muted">
+          {t({
+            id: "assistantHub.my.submittedReviews.scoreValue",
+            message: `${score} / 10`,
+          })}
+        </span>
+        <span className="text-theme-fg-muted">
+          {t({
+            id: "assistantHub.my.submittedReviews.versionValue",
+            message: `Version ${versionNumber}`,
+          })}
+        </span>
+      </div>
+      {review.comment && (
+        <p className="mt-2 whitespace-pre-wrap text-sm text-theme-fg-secondary">
+          {review.comment}
+        </p>
+      )}
+    </article>
+  );
+}
+
+function AssistantHubSubmittedReviewsSection({
+  reviews,
+  isLoading,
+}: {
+  reviews: AssistantHubUserReview[];
+  isLoading: boolean;
+}) {
+  return (
+    <section className="rounded-lg border border-theme-border bg-theme-bg-primary p-6">
+      <h2 className="text-lg font-semibold text-theme-fg-primary">
+        {t({
+          id: "assistantHub.my.submittedReviews.title",
+          message: "Submitted reviews",
+        })}
+      </h2>
+      <div className="mt-4">
+        {isLoading ? (
+          <p className="text-sm text-theme-fg-secondary">
+            {t({
+              id: "assistantHub.my.submittedReviews.loading",
+              message: "Loading reviews...",
+            })}
+          </p>
+        ) : reviews.length === 0 ? (
+          <p className="text-sm text-theme-fg-secondary">
+            {t({
+              id: "assistantHub.my.submittedReviews.empty",
+              message: "No reviews submitted yet.",
+            })}
+          </p>
+        ) : (
+          <div className="divide-y divide-theme-border rounded-lg border border-theme-border">
+            {reviews.map((review) => (
+              <AssistantHubSubmittedReviewItem
+                key={review.id}
+                review={review}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
 
 export default function AssistantHubMyPage() {
   const navigate = useNavigate();
@@ -122,6 +232,18 @@ export default function AssistantHubMyPage() {
     selectedVersion
       ? { pathParams: { assistantId: selectedVersion.assistant_id } }
       : skipToken,
+  );
+  const { data: selectedVersionReviewsData, isLoading: isLoadingReviews } =
+    useListAssistantHubReviews(
+      selectedVersion
+        ? {
+            pathParams: { hubAssistantId: selectedVersion.hub_assistant_id },
+          }
+        : skipToken,
+    );
+  const selectedVersionReviews = useMemo(
+    () => selectedVersionReviewsData?.reviews ?? [],
+    [selectedVersionReviewsData?.reviews],
   );
   const selectedVersionSiblingCount = useMemo(() => {
     if (!selectedVersion) return 0;
@@ -339,6 +461,11 @@ export default function AssistantHubMyPage() {
               <AssistantHubVersionConfigurationSection
                 version={selectedVersion}
                 assistantDetails={assistantDetails}
+              />
+
+              <AssistantHubSubmittedReviewsSection
+                reviews={selectedVersionReviews}
+                isLoading={isLoadingReviews}
               />
 
               <section className="rounded-lg border border-theme-border bg-theme-bg-primary p-6">

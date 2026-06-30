@@ -275,6 +275,12 @@ export type AssistantHubReviewRequest = {
   reviewer_review_comment?: string | null | undefined;
 };
 
+export type AssistantHubReviewUser = {
+  display_name: string;
+  email?: null | undefined;
+  id: string;
+};
+
 export type AssistantHubSetFeaturedRequest = {
   featured: boolean;
 };
@@ -295,6 +301,43 @@ export type AssistantHubSubmissionRequest = {
   long_description: string;
   version_comment?: string | null | undefined;
   version_number: string;
+};
+
+export type AssistantHubUserReview = {
+  comment?: string | null | undefined;
+  /**
+   * @format date-time
+   */
+  created_at: string;
+  hub_assistant_id: string;
+  id: string;
+  reviewer: AssistantHubReviewUser;
+  /**
+   * @format int32
+   */
+  score: number;
+  /**
+   * @format date-time
+   */
+  updated_at: string;
+  version_id: string;
+  version_number: string;
+};
+
+export type AssistantHubUserReviewRequest = {
+  comment?: string | null | undefined;
+  /**
+   * @format int32
+   */
+  score: number;
+};
+
+export type AssistantHubUserReviewResponse = {
+  review: AssistantHubUserReview;
+};
+
+export type AssistantHubUserReviewsResponse = {
+  reviews: AssistantHubUserReview[];
 };
 
 export type AssistantHubVersion = {
@@ -318,6 +361,15 @@ export type AssistantHubVersion = {
    * @format date-time
    */
   published_at?: string | null | undefined;
+  /**
+   * @format double
+   */
+  review_average_score?: number | null | undefined;
+  /**
+   * @format int64
+   * @minimum 0
+   */
+  review_count: number;
   /**
    * @format date-time
    */
@@ -1254,7 +1306,7 @@ export type MessageFeedback = {
   /**
    * Optional comment text
    */
-  comment?: null | undefined;
+  comment?: string | null | undefined;
   /**
    * When the feedback was created
    *
@@ -1281,7 +1333,7 @@ export type MessageFeedbackRequest = {
   /**
    * Optional comment text
    */
-  comment?: null | undefined;
+  comment?: string | null | undefined;
   sentiment: FeedbackSentiment;
 };
 

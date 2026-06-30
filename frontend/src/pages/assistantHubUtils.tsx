@@ -61,6 +61,32 @@ export const getAssistantHubStatusClassName = (status: string) =>
       "border border-theme-warning-border bg-theme-warning-bg text-theme-warning-fg",
   );
 
+export const getAssistantHubRatingLabel = (version: AssistantHubVersion) => {
+  const averageScore = version.review_average_score;
+
+  if (version.review_count === 0 || averageScore == null) {
+    return t({
+      id: "assistantHub.rating.none",
+      message: "No ratings yet",
+    });
+  }
+
+  const formattedScore = averageScore.toFixed(1);
+  const reviewCount = version.review_count;
+
+  if (reviewCount === 1) {
+    return t({
+      id: "assistantHub.rating.summary.one",
+      message: `${formattedScore} / 10 (1 rating)`,
+    });
+  }
+
+  return t({
+    id: "assistantHub.rating.summary.many",
+    message: `${formattedScore} / 10 (${reviewCount} ratings)`,
+  });
+};
+
 export function AssistantHubCurrentPublishedIndicator() {
   return (
     <span className="inline-flex min-h-6 items-center rounded-full border border-theme-info-border bg-theme-info-bg px-2 py-0.5 text-xs font-medium text-theme-info-fg">
@@ -352,6 +378,9 @@ export function AssistantHubVersionCard({
                 {categoryName}
               </span>
             ))}
+            <span className="inline-flex min-h-6 items-center font-medium text-theme-fg-secondary">
+              {getAssistantHubRatingLabel(version)}
+            </span>
           </div>
         </button>
         <div className="flex shrink-0 flex-wrap gap-2">{actions}</div>
@@ -401,6 +430,9 @@ export function AssistantHubVersionOverviewSection({
             {categoryNames.map((categoryName) => (
               <span key={categoryName}>{categoryName}</span>
             ))}
+            <span className="font-medium text-theme-fg-secondary">
+              {getAssistantHubRatingLabel(version)}
+            </span>
           </div>
         </div>
         {onStartChat && (

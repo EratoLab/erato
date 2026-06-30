@@ -37,14 +37,17 @@ use crate::policy::engine::authorize;
 use crate::policy::types::{Action, Resource, Subject};
 use crate::server::api::v1beta::assistant_hub::{
     AssistantHubAssistantSnapshot, AssistantHubCategory, AssistantHubConfigResponse,
-    AssistantHubReviewRequest, AssistantHubSetFeaturedRequest, AssistantHubSetPublishedRequest,
-    AssistantHubSubmissionDiffResponse, AssistantHubSubmissionRequest, AssistantHubVersion,
+    AssistantHubReviewRequest, AssistantHubReviewUser, AssistantHubSetFeaturedRequest,
+    AssistantHubSetPublishedRequest, AssistantHubSubmissionDiffResponse,
+    AssistantHubSubmissionRequest, AssistantHubUserReview, AssistantHubUserReviewRequest,
+    AssistantHubUserReviewResponse, AssistantHubUserReviewsResponse, AssistantHubVersion,
     AssistantHubVersionResponse, AssistantHubVersionsResponse, assistant_hub_config,
-    get_assistant_hub_assistant, list_assistant_hub_assistants, list_my_assistant_hub_versions,
-    list_review_assistant_hub_versions, preview_assistant_hub_submission_diff,
-    review_assistant_hub_version, set_assistant_hub_version_current,
-    set_assistant_hub_version_featured, set_assistant_hub_version_published,
-    submit_assistant_hub_version, withdraw_assistant_hub_version,
+    get_assistant_hub_assistant, list_assistant_hub_assistants, list_assistant_hub_reviews,
+    list_my_assistant_hub_versions, list_review_assistant_hub_versions,
+    preview_assistant_hub_submission_diff, review_assistant_hub_version,
+    set_assistant_hub_version_current, set_assistant_hub_version_featured,
+    set_assistant_hub_version_published, submit_assistant_hub_review, submit_assistant_hub_version,
+    withdraw_assistant_hub_version,
 };
 use crate::server::api::v1beta::assistants::{
     ArchiveAssistantResponse, Assistant, AssistantFile, AssistantWithFiles, CreateAssistantRequest,
@@ -224,6 +227,14 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
             get(get_assistant_hub_assistant),
         )
         .route(
+            "/assistant-hub/assistants/{hub_assistant_id}/reviews",
+            get(list_assistant_hub_reviews),
+        )
+        .route(
+            "/assistant-hub/assistants/{hub_assistant_id}/review",
+            put(submit_assistant_hub_review),
+        )
+        .route(
             "/assistant-hub/assistants/{source_assistant_id}/submission-diff",
             post(preview_assistant_hub_submission_diff),
         )
@@ -359,6 +370,8 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         assistant_hub::assistant_hub_config,
         assistant_hub::list_assistant_hub_assistants,
         assistant_hub::get_assistant_hub_assistant,
+        assistant_hub::list_assistant_hub_reviews,
+        assistant_hub::submit_assistant_hub_review,
         assistant_hub::preview_assistant_hub_submission_diff,
         assistant_hub::submit_assistant_hub_version,
         assistant_hub::list_my_assistant_hub_versions,
@@ -448,6 +461,11 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         AssistantHubVersionResponse,
         AssistantHubVersionsResponse,
         AssistantHubReviewRequest,
+        AssistantHubUserReviewRequest,
+        AssistantHubReviewUser,
+        AssistantHubUserReview,
+        AssistantHubUserReviewResponse,
+        AssistantHubUserReviewsResponse,
         AssistantHubSetPublishedRequest,
         AssistantHubSetFeaturedRequest,
         ShareGrant,

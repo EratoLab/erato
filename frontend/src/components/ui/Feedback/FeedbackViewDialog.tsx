@@ -62,7 +62,6 @@ export const FeedbackViewDialog: React.FC<FeedbackViewDialogProps> = ({
         </div>
 
         {/* Comment display (if present) */}
-        {/* eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- comment type is incorrectly generated as null|undefined */}
         {feedback.comment && (
           <div>
             <p className="mb-1 block text-sm font-medium text-theme-fg-primary">

@@ -29,3 +29,4 @@
 0026_add_assistant_store_tables 2026-06-21T00:00:00Z System Administrator <root@localhost> # Add assistant store tables
 0027_assistant_store_featured_assistant_wide 2026-06-22T00:00:00Z System Administrator <root@localhost> # Make assistant store featured flag assistant-wide
 0028_rename_assistant_store_to_assistant_hub 2026-06-24T00:00:00Z System Administrator <root@localhost> # Rename assistant store database objects to assistant hub
+0029_add_assistant_hub_reviews 2026-06-30T00:00:00Z System Administrator <root@localhost> # Add assistant hub reviews
