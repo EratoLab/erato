@@ -459,6 +459,21 @@ msgid "officeAddin.office.loading"
 msgstr "Loading Office Add-in..."
 
 #. js-lingui-explicit-id
+#: src/components/AddinPinHintBanner.tsx
+msgid "officeAddin.pinHint.description"
+msgstr "Until it's pinned, this add-in stays on the message you opened it from. Select the pin icon to keep it in sync as you read."
+
+#. js-lingui-explicit-id
+#: src/components/AddinPinHintBanner.tsx
+msgid "officeAddin.pinHint.dismiss"
+msgstr "Dismiss"
+
+#. js-lingui-explicit-id
+#: src/components/AddinPinHintBanner.tsx
+msgid "officeAddin.pinHint.title"
+msgstr "Pin to follow your mail"
+
+#. js-lingui-explicit-id
 #: src/components/sessionAskToast.tsx
 msgid "officeAddin.sessionAsk.actions.continue"
 msgstr "Continue"

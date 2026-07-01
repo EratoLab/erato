@@ -13,11 +13,11 @@ importers:
   .:
     dependencies:
       '@azure/msal-browser':
-        specifier: ^5.2.0
-        version: 5.13.0
+        specifier: 5.15.0
+        version: 5.15.0
       '@azure/msal-common':
-        specifier: ^16.2.0
-        version: 16.8.0
+        specifier: 16.10.0
+        version: 16.10.0
       '@erato/frontend':
         specifier: file:../frontend/dist-package/erato-frontend.tgz
         version: file:../frontend/dist-package/erato-frontend.tgz(@lingui/core@5.9.4(@lingui/babel-plugin-lingui-macro@5.9.4(typescript@5.9.3)))(@lingui/react@5.9.4(@lingui/babel-plugin-lingui-macro@5.9.4(typescript@5.9.3))(react@19.2.7))(@tanstack/query-core@5.100.10)(@tanstack/react-query-devtools@5.100.10(@tanstack/react-query@5.100.10(react@19.2.7))(react@19.2.7))(@tanstack/react-query@5.100.10(react@19.2.7))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react-router-dom@6.30.3(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react-router@6.30.3(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.1)(typescript@5.9.3)
@@ -166,12 +166,12 @@ packages:
   '@asamuzakjp/nwsapi@2.3.9':
     resolution: {integrity: sha512-n8GuYSrI9bF7FFZ/SjhwevlHc8xaVlb/7HmHelnc/PZXBD2ZR49NnN9sMMuDdEGPeeRQ5d0hqlSlEpgCX3Wl0Q==}
 
-  '@azure/msal-browser@5.13.0':
-    resolution: {integrity: sha512-Ea23x0U8XNFY+qJ9T44zO2BbY+AHdb+WdjmYnx36OhJ/KO+PGU5pmsNHf1DCElYX+6wyVRJz1HFeCPC/cHbRug==}
+  '@azure/msal-browser@5.15.0':
+    resolution: {integrity: sha512-2NYT6v+eeQn8kmNddr9LnbXSvXbVELpmFMmfFvtRxD7I/5+5GlkMlncApeuRFj+mY6C9syOwQip1a0Y+TIbyiA==}
     engines: {node: '>=0.8.0'}
 
-  '@azure/msal-common@16.8.0':
-    resolution: {integrity: sha512-5S4RHOcInL2Nu2U217tDZbWGI6StMfcWCrA7TWvWdJmXQ+cYrrIqr84AsN62fGh2MDBysiBJPt6CfWceJfloEA==}
+  '@azure/msal-common@16.10.0':
+    resolution: {integrity: sha512-iYtjpanlv6963Jprs0MvzIap07V+QhultjQctfbEDQCflsDAEeO3R7XnVA5gk30fhoBFLdgJT7VqO0TGsEsN9w==}
     engines: {node: '>=0.8.0'}
 
   '@babel/code-frame@7.29.7':
@@ -322,7 +322,7 @@ packages:
     hasBin: true
 
   '@erato/frontend@file:../frontend/dist-package/erato-frontend.tgz':
-    resolution: {integrity: sha512-dV10zK1dFisFgqdliwHTds2S4opsX134eak3Az2KD0GFzZ3uMEN7ZnT+/xLr4fRi7/yBTPtrU3YUKOTn+x4kUQ==, tarball: file:../frontend/dist-package/erato-frontend.tgz}
+    resolution: {integrity: sha512-g0mvA0D9lghUf5ZN+0UKo6DFYkGyzE6q2h8meeK48+d2xWZahLpw25IWwzLZDtSLz+lxBSNYTQxxYyUdsywKsA==, tarball: file:../frontend/dist-package/erato-frontend.tgz}
     version: 0.1.0
     peerDependencies:
       '@lingui/core': ^5.9.4
@@ -3686,11 +3686,11 @@ snapshots:
 
   '@asamuzakjp/nwsapi@2.3.9': {}
 
-  '@azure/msal-browser@5.13.0':
+  '@azure/msal-browser@5.15.0':
     dependencies:
-      '@azure/msal-common': 16.8.0
+      '@azure/msal-common': 16.10.0
 
-  '@azure/msal-common@16.8.0': {}
+  '@azure/msal-common@16.10.0': {}
 
   '@babel/code-frame@7.29.7':
     dependencies:
