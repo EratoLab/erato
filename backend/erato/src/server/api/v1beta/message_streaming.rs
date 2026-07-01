@@ -2225,6 +2225,10 @@ async fn stream_generate_chat_completion<
     chat_provider_headers_context: &'a ChatProviderHeadersContext<'a>,
     streaming_task: Option<&Arc<StreamingTask>>,
     assistant_id: Option<Uuid>,
+    // Id of the active action facet, if any. Used to resolve per-facet
+    // `client_tool.timeout_ms` overrides at park time (the facet's tool config
+    // is not otherwise reachable from the prepared `chat_request`).
+    action_facet_id: Option<String>,
 ) -> Result<(Vec<ContentPart>, Option<GenerationMetadata>), ()> {
     // Record the real assistant message id on the streaming task. `start_task`
     // only had a placeholder id; client-tool results are routed to a task by
@@ -2267,14 +2271,13 @@ async fn stream_generate_chat_completion<
         .as_ref()
         .map(|client| client.trace_id().to_string());
     let max_tool_call_iterations = 15;
-    // How long the loop holds a turn open awaiting a client tool's result
-    // before giving up with an error tool response (the backstop that prevents
-    // a never-answering client from leaking the parked turn). A client tool
-    // counts as one normal iteration against `max_tool_call_iterations`, but
-    // this park time is NOT a generation wall-clock budget.
-    // TODO(ERMAIN-413): honor the per-facet `client_tool.timeout_ms` override
-    // (needs threading the facet's tool config into this function).
-    let client_tool_park_timeout_ms: u64 = 60_000;
+    // Default time the loop holds a turn open awaiting a client tool's result
+    // before giving up (the backstop that prevents a never-answering client
+    // from leaking the parked turn). A client tool counts as one normal
+    // iteration against `max_tool_call_iterations`, but this park time is NOT a
+    // generation wall-clock budget. A per-facet `client_tool.timeout_ms` (see
+    // the park below) overrides this default per tool.
+    const DEFAULT_CLIENT_TOOL_PARK_TIMEOUT_MS: u64 = 60_000;
     let mut unfinished_tool_calls: std::collections::VecDeque<genai::chat::ToolCall> =
         std::collections::VecDeque::new();
     let mut current_turn = 0;
@@ -2636,6 +2639,20 @@ async fn stream_generate_chat_completion<
                 // durable signal path.
                 let _ = call_message.send_event(tx.clone()).await;
 
+                // Resolve this tool's park budget: the active facet's
+                // `client_tool.timeout_ms` override if set, else the default.
+                let park_timeout_ms = action_facet_id
+                    .as_deref()
+                    .and_then(|id| app_state.config.action_facets.facets.get(id))
+                    .and_then(|facet| {
+                        facet
+                            .client_tools
+                            .iter()
+                            .find(|tool| tool.name == tool_name)
+                    })
+                    .and_then(|tool| tool.timeout_ms)
+                    .unwrap_or(DEFAULT_CLIENT_TOOL_PARK_TIMEOUT_MS);
+
                 // Park until the client POSTs a result, an abort arrives, or the
                 // bounded timeout fires.
                 enum Park {
@@ -2651,7 +2668,7 @@ async fn stream_generate_chat_completion<
                     },
                     _ = task.wait_for_abort() => Park::Aborted,
                     _ = tokio::time::sleep(tokio::time::Duration::from_millis(
-                        client_tool_park_timeout_ms,
+                        park_timeout_ms,
                     )) => Park::TimedOut,
                 };
 
@@ -2664,8 +2681,8 @@ async fn stream_generate_chat_completion<
 
                 let outcome = match park {
                     Park::Delivered(outcome) => outcome,
-                    Park::TimedOut => raced_in.unwrap_or_else(|| {
-                        ClientToolOutcome::Error("client tool timed out".to_string())
+                    Park::TimedOut => raced_in.unwrap_or_else(|| ClientToolOutcome::Cancelled {
+                        reason: "timeout".to_string(),
                     }),
                     Park::Aborted => {
                         // User cancelled: discard any raced-in result and mirror
@@ -2701,6 +2718,20 @@ async fn stream_generate_chat_completion<
                             MessageToolCallStatus::Error,
                             json!({ "status": "error", "error": error }),
                             format!("Client tool error: {error}"),
+                        ),
+                        // Backend-produced (e.g. park timeout): a typed,
+                        // tool_call_id-correlated resolution the client can tell
+                        // apart from a genuine tool error (its output carries
+                        // `status: "cancelled"` + a machine-readable reason),
+                        // while the model still gets a recoverable error string.
+                        ClientToolOutcome::Cancelled { reason } => (
+                            ToolCallStatus::Error,
+                            BgToolCallStatus::Error,
+                            MessageToolCallStatus::Error,
+                            json!({ "status": "cancelled", "reason": reason }),
+                            format!(
+                                "Client tool was not completed (reason: {reason}); the client did not return a result in time."
+                            ),
                         ),
                     };
 
@@ -6465,6 +6496,7 @@ async fn run_message_submit_task(
         &chat_provider_headers_context,
         Some(task),
         chat.assistant_id,
+        request.action_facet.as_ref().map(|af| af.id.clone()),
     );
 
     let (end_content, generation_metadata) = generation_task
@@ -6789,6 +6821,7 @@ pub async fn regenerate_message_sse(
                     &chat_provider_headers_context,
                     Some(&task_for_stream),
                     chat.assistant_id,
+                    request.action_facet.as_ref().map(|af| af.id.clone()),
                 )
                 .await?;
 
@@ -7138,6 +7171,7 @@ pub async fn edit_message_sse(
                     &chat_provider_headers_context,
                     Some(&task_for_stream),
                     chat.assistant_id,
+                    request.action_facet.as_ref().map(|af| af.id.clone()),
                 )
                 .await?;
 

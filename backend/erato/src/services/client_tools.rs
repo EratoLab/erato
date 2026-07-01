@@ -36,11 +36,18 @@ pub fn build_client_tool(
 
 /// The result of a client-executed tool, delivered back to the suspended
 /// agentic loop. Either a successful JSON result (becomes the tool response the
-/// model reasons over) or an error message (the model sees it and can recover).
+/// model reasons over), an error message (the model sees it and can recover), or
+/// a `Cancelled` marker produced by the backend itself when the park ends
+/// without a client result (e.g. the timeout fires). `Cancelled` is never sent
+/// by the client — it exists so the loop can emit a typed, `tool_call_id`
+/// -correlated resolution the client can distinguish from a genuine tool error
+/// (so a still-executing client learns its work was abandoned rather than
+/// discovering it via a benign 404 on a late POST).
 #[derive(Debug, Clone)]
 pub enum ClientToolOutcome {
     Result(Value),
     Error(String),
+    Cancelled { reason: String },
 }
 
 /// Outcome of attempting to deliver a client-tool result into a parked loop.
