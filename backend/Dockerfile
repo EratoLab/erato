@@ -24,16 +24,9 @@ RUN if [ -n "$ERATO_FEATURES" ]; then \
     fi
 
 # Pinned for security & build performance reasons
-FROM debian:trixie-slim@sha256:5cf544fad978371b3df255b61e209b373583cb88b733475c86e49faa15ac2104
+FROM registry.eratolabs.com/erato/chainguard-glibc-dynamic:2026-06-25-dev
 
 WORKDIR /app
-
-# Install dependencies
-# ca-certificates -> Certificates for HTTPS
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
 
 # Copy the binary from builder
 COPY --from=builder /app/target/release/erato /app/erato
