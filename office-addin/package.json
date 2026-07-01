@@ -25,8 +25,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@azure/msal-browser": "^5.2.0",
-    "@azure/msal-common": "^16.2.0",
+    "@azure/msal-browser": "^5.15.0",
+    "@azure/msal-common": "^16.10.0",
     "@erato/frontend": "file:../frontend/dist-package/erato-frontend.tgz",
     "@erato/frontend-utils": "file:../frontend-utils",
     "@lingui/core": "5.9.4",

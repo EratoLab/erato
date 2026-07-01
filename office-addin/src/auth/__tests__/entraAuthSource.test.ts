@@ -24,8 +24,8 @@ vi.mock("@azure/msal-browser", () => {
     }
   }
   class InteractionRequiredAuthError extends AuthError {
-    constructor(message?: string) {
-      super("interaction_required", message);
+    constructor(errorCode = "interaction_required", errorMessage?: string) {
+      super(errorCode, errorMessage);
     }
   }
 
@@ -125,7 +125,10 @@ describe("createEntraAuthSource", () => {
     );
     const pca = createPcaMock({
       acquireTokenSilent: vi.fn(async () => {
-        throw new InteractionRequiredAuthError("interaction required");
+        throw new InteractionRequiredAuthError(
+          "interaction_required",
+          "interaction required",
+        );
       }),
     });
     const { source } = await initializedSource(pca);
@@ -148,7 +151,10 @@ describe("createEntraAuthSource", () => {
     );
     const pca = createPcaMock({
       acquireTokenSilent: vi.fn(async () => {
-        throw new InteractionRequiredAuthError("interaction required");
+        throw new InteractionRequiredAuthError(
+          "interaction_required",
+          "interaction required",
+        );
       }),
     });
     const { source } = await initializedSource(pca);
