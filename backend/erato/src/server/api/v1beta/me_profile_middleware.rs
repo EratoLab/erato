@@ -10,7 +10,7 @@ use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::Response;
 use headers::authorization::{Bearer, Credentials};
-use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
+use jsonwebtoken::dangerous::insecure_decode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::instrument;
@@ -201,18 +201,9 @@ pub async fn user_profile_from_token(
     token: &str,
     accept_language_header: Option<&str>,
 ) -> Result<(UserProfile, Value), StatusCode> {
-    // Placeholder secret, as we don't validate signature anyway
-    let secret = b"placeholder";
-
+    // Decode the token
     // We don't validate anything, as we always run behind oauth2-proxy which handles verification
-    let mut validation = Validation::new(Algorithm::HS256);
-    validation.insecure_disable_signature_validation();
-    validation.validate_exp = false;
-    validation.validate_aud = false;
-    validation.validate_nbf = false;
-
-    // Decode and validate the token
-    let token_data = match decode::<Value>(token, &DecodingKey::from_secret(secret), &validation) {
+    let token_data = match insecure_decode::<Value>(token) {
         Ok(data) => data,
         Err(_) => return Err(StatusCode::UNAUTHORIZED),
     };

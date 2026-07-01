@@ -944,16 +944,6 @@ fn otel_observation_span(
         LANGFUSE_OBSERVATION_OUTPUT,
         request.output.clone(),
     );
-    push_json_string_attr(
-        &mut attributes,
-        opentelemetry_semantic_conventions::attribute::GEN_AI_PROMPT,
-        request.input,
-    );
-    push_json_string_attr(
-        &mut attributes,
-        opentelemetry_semantic_conventions::attribute::GEN_AI_COMPLETION,
-        request.output,
-    );
 
     if let Some(model) = request.model {
         attributes.push(KeyValue::new(LANGFUSE_OBSERVATION_MODEL, model.clone()));
