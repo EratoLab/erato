@@ -644,9 +644,7 @@ impl From<MessageSubmitStreamingResponseToolCallProposed>
     }
 }
 
-impl From<MessageSubmitStreamingResponseClientToolCall>
-    for MessageSubmitStreamingResponseMessage
-{
+impl From<MessageSubmitStreamingResponseClientToolCall> for MessageSubmitStreamingResponseMessage {
     fn from(value: MessageSubmitStreamingResponseClientToolCall) -> Self {
         MessageSubmitStreamingResponseMessage::ClientToolCall(value)
     }
@@ -2688,23 +2686,23 @@ async fn stream_generate_chat_completion<
                     }
                 };
 
-                let (status, bg_status, message_status, output_value, response_text) = match &outcome
-                {
-                    ClientToolOutcome::Result(result) => (
-                        ToolCallStatus::Success,
-                        BgToolCallStatus::Success,
-                        MessageToolCallStatus::Success,
-                        json!({ "status": "success", "result": result }),
-                        result.to_string(),
-                    ),
-                    ClientToolOutcome::Error(error) => (
-                        ToolCallStatus::Error,
-                        BgToolCallStatus::Error,
-                        MessageToolCallStatus::Error,
-                        json!({ "status": "error", "error": error }),
-                        format!("Client tool error: {error}"),
-                    ),
-                };
+                let (status, bg_status, message_status, output_value, response_text) =
+                    match &outcome {
+                        ClientToolOutcome::Result(result) => (
+                            ToolCallStatus::Success,
+                            BgToolCallStatus::Success,
+                            MessageToolCallStatus::Success,
+                            json!({ "status": "success", "result": result }),
+                            result.to_string(),
+                        ),
+                        ClientToolOutcome::Error(error) => (
+                            ToolCallStatus::Error,
+                            BgToolCallStatus::Error,
+                            MessageToolCallStatus::Error,
+                            json!({ "status": "error", "error": error }),
+                            format!("Client tool error: {error}"),
+                        ),
+                    };
 
                 // In-band resolution: write the outcome into history so a resume
                 // replay is self-consistent (the client sees the call answered
@@ -7323,9 +7321,9 @@ pub async fn client_tool_result(
     let outcome = match (request.result, request.error) {
         (_, Some(error)) => ClientToolOutcome::Error(error),
         (Some(result), None) => ClientToolOutcome::Result(result),
-        (None, None) => {
-            ClientToolOutcome::Error("client tool returned neither a result nor an error".to_string())
-        }
+        (None, None) => ClientToolOutcome::Error(
+            "client tool returned neither a result nor an error".to_string(),
+        ),
     };
 
     let delivery = task

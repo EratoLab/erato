@@ -246,11 +246,7 @@ impl StreamingTask {
         tool_call_id: &str,
         outcome: ClientToolOutcome,
     ) -> ClientToolDelivery {
-        let sender = self
-            .pending_client_tools
-            .write()
-            .await
-            .remove(tool_call_id);
+        let sender = self.pending_client_tools.write().await.remove(tool_call_id);
         match sender {
             // Receiver dropped => the loop already gave up (timeout/abort); the
             // late result is harmless to discard.
@@ -515,7 +511,10 @@ mod tests {
     async fn deliver_unknown_tool_call_id_is_noop() {
         let task = StreamingTask::new(Uuid::new_v4());
         let delivery = task
-            .deliver_client_tool_result("never-registered", ClientToolOutcome::Error("x".to_string()))
+            .deliver_client_tool_result(
+                "never-registered",
+                ClientToolOutcome::Error("x".to_string()),
+            )
             .await;
         assert_eq!(delivery, ClientToolDelivery::Unknown);
     }

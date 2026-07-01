@@ -840,7 +840,10 @@ impl AppConfig {
             for tool in &action_facet.client_tools {
                 let name = tool.name.trim();
                 if name.is_empty() {
-                    panic!("Action facet '{}' has a client tool with an empty name.", id);
+                    panic!(
+                        "Action facet '{}' has a client tool with an empty name.",
+                        id
+                    );
                 }
                 if name != tool.name {
                     panic!(

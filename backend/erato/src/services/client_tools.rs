@@ -71,7 +71,10 @@ mod tests {
             GenaiToolName::Custom(name) => assert_eq!(name, "outlook.fetch_availability"),
             other => panic!("expected a custom tool name, got {other:?}"),
         }
-        assert_eq!(tool.description.as_deref(), Some("Fetch the user's free/busy."));
+        assert_eq!(
+            tool.description.as_deref(),
+            Some("Fetch the user's free/busy.")
+        );
         assert_eq!(tool.schema, Some(schema));
         assert_eq!(tool.strict, Some(false));
     }
