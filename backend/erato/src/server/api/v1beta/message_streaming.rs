@@ -2015,17 +2015,26 @@ pub(crate) async fn prepare_chat_request_with_adapters(
             ));
         }
     }
-    // Offer this facet's client tools (returning round-trip tools) whenever the
-    // active facet declares any — independently of `client_actions`. Like the
+    // Offer top-level `client_tools` (returning round-trip tools) selected by
+    // the active action facet's `tool_call_allowlist` — the same namespaced
+    // pattern mechanism used for MCP tools (e.g. `outlook/*`). Like the
     // client-action tool these are NOT dispatched to an MCP server; the tool
     // call loop suspends for a client-supplied result instead. Skip any whose
-    // name collides with an MCP tool or the reserved client-action tool name (a
-    // duplicate tool name is ambiguous to dispatch and rejected by providers);
-    // intra-facet name uniqueness is already enforced at config load.
+    // model-facing name collides with an MCP tool or the reserved client-action
+    // tool name (a duplicate name is ambiguous to dispatch and rejected by
+    // providers); `namespace/name` uniqueness is already enforced at config load.
     if let Some(action_facet) = user_input.action_facet.as_ref()
         && let Some(facet_config) = app_state.config.action_facets.facets.get(&action_facet.id)
+        && !facet_config.tool_call_allowlist.is_empty()
     {
-        for client_tool in &facet_config.client_tools {
+        for client_tool in &app_state.config.client_tools {
+            if !is_qualified_tool_allowed(
+                client_tool.namespace_or_default(),
+                &client_tool.name,
+                &facet_config.tool_call_allowlist,
+            ) {
+                continue;
+            }
             let name = client_tool.name.as_str();
             if name == crate::services::client_actions::CLIENT_ACTION_TOOL_NAME
                 || generation_mcp_tools.iter().any(|mcp| mcp.tool.name == name)
@@ -2225,10 +2234,6 @@ async fn stream_generate_chat_completion<
     chat_provider_headers_context: &'a ChatProviderHeadersContext<'a>,
     streaming_task: Option<&Arc<StreamingTask>>,
     assistant_id: Option<Uuid>,
-    // Id of the active action facet, if any. Used to resolve per-facet
-    // `client_tool.timeout_ms` overrides at park time (the facet's tool config
-    // is not otherwise reachable from the prepared `chat_request`).
-    action_facet_id: Option<String>,
 ) -> Result<(Vec<ContentPart>, Option<GenerationMetadata>), ()> {
     // Record the real assistant message id on the streaming task. `start_task`
     // only had a placeholder id; client-tool results are routed to a task by
@@ -2639,17 +2644,13 @@ async fn stream_generate_chat_completion<
                 // durable signal path.
                 let _ = call_message.send_event(tx.clone()).await;
 
-                // Resolve this tool's park budget: the active facet's
-                // `client_tool.timeout_ms` override if set, else the default.
-                let park_timeout_ms = action_facet_id
-                    .as_deref()
-                    .and_then(|id| app_state.config.action_facets.facets.get(id))
-                    .and_then(|facet| {
-                        facet
-                            .client_tools
-                            .iter()
-                            .find(|tool| tool.name == tool_name)
-                    })
+                // Resolve this tool's park budget: the top-level client tool's
+                // `timeout_ms` override if set, else the default.
+                let park_timeout_ms = app_state
+                    .config
+                    .client_tools
+                    .iter()
+                    .find(|tool| tool.name == tool_name)
                     .and_then(|tool| tool.timeout_ms)
                     .unwrap_or(DEFAULT_CLIENT_TOOL_PARK_TIMEOUT_MS);
 
@@ -4719,7 +4720,15 @@ fn is_tool_allowed_by_allowlist(
     tool: &crate::services::mcp_session_manager::ManagedTool,
     allowlist: &[String],
 ) -> bool {
-    let qualified_name = format!("{}/{}", tool.server_id, tool.tool.name);
+    is_qualified_tool_allowed(&tool.server_id, &tool.tool.name, allowlist)
+}
+
+/// Core allowlist matcher shared by MCP tools (`server_id/tool_name`) and
+/// client tools (`namespace/tool_name`). A `namespace` here is the MCP server
+/// id or the client-tool namespace. Patterns: `*` (all), a bare namespace (all
+/// of that namespace), `namespace/*` (prefix), or an exact `namespace/name`.
+fn is_qualified_tool_allowed(namespace: &str, tool_name: &str, allowlist: &[String]) -> bool {
+    let qualified_name = format!("{}/{}", namespace, tool_name);
 
     allowlist.iter().any(|pattern| {
         if pattern == "*" {
@@ -4727,7 +4736,7 @@ fn is_tool_allowed_by_allowlist(
         }
 
         if !pattern.contains('/') {
-            return pattern == &tool.server_id;
+            return pattern == namespace;
         }
 
         if let Some(prefix) = pattern.strip_suffix("/*") {
@@ -4843,7 +4852,7 @@ mod tests {
                     client_actions: vec![],
                     presentation: None,
                     client_actions_always_ask: vec![],
-                    client_tools: vec![],
+                    tool_call_allowlist: vec![],
                 },
             );
             let af = ActionFacetRequest {
@@ -4866,7 +4875,7 @@ mod tests {
                     client_actions: vec![],
                     presentation: None,
                     client_actions_always_ask: vec![],
-                    client_tools: vec![],
+                    tool_call_allowlist: vec![],
                 },
             );
             let af = ActionFacetRequest {
@@ -4890,7 +4899,7 @@ mod tests {
                     client_actions: vec![],
                     presentation: None,
                     client_actions_always_ask: vec![],
-                    client_tools: vec![],
+                    tool_call_allowlist: vec![],
                 },
             );
             let af = ActionFacetRequest {
@@ -4912,7 +4921,7 @@ mod tests {
                     client_actions: vec![],
                     presentation: None,
                     client_actions_always_ask: vec![],
-                    client_tools: vec![],
+                    tool_call_allowlist: vec![],
                 },
             );
             let af = ActionFacetRequest {
@@ -4936,7 +4945,7 @@ mod tests {
                     client_actions: vec![],
                     presentation: None,
                     client_actions_always_ask: vec![],
-                    client_tools: vec![],
+                    tool_call_allowlist: vec![],
                 },
             );
             let af = ActionFacetRequest {
@@ -4958,7 +4967,7 @@ mod tests {
                     client_actions: vec![],
                     presentation: None,
                     client_actions_always_ask: vec![],
-                    client_tools: vec![],
+                    tool_call_allowlist: vec![],
                 },
             );
             let oversized = "x".repeat(ACTION_FACET_ARG_MAX_SIZE + 1);
@@ -4983,7 +4992,7 @@ mod tests {
                     client_actions: vec![],
                     presentation: None,
                     client_actions_always_ask: vec![],
-                    client_tools: vec![],
+                    tool_call_allowlist: vec![],
                 },
             );
             let at_limit = "x".repeat(ACTION_FACET_ARG_MAX_SIZE);
@@ -5011,7 +5020,7 @@ mod tests {
                     client_actions: vec![],
                     presentation: None,
                     client_actions_always_ask: vec![],
-                    client_tools: vec![],
+                    tool_call_allowlist: vec![],
                 },
             );
             config
@@ -5069,7 +5078,7 @@ mod tests {
                     client_actions: vec![],
                     presentation: None,
                     client_actions_always_ask: vec![],
-                    client_tools: vec![],
+                    tool_call_allowlist: vec![],
                 },
             );
             assert!(is_known_platform(&config, "web"));
@@ -6496,7 +6505,6 @@ async fn run_message_submit_task(
         &chat_provider_headers_context,
         Some(task),
         chat.assistant_id,
-        request.action_facet.as_ref().map(|af| af.id.clone()),
     );
 
     let (end_content, generation_metadata) = generation_task
@@ -6821,7 +6829,6 @@ pub async fn regenerate_message_sse(
                     &chat_provider_headers_context,
                     Some(&task_for_stream),
                     chat.assistant_id,
-                    request.action_facet.as_ref().map(|af| af.id.clone()),
                 )
                 .await?;
 
@@ -7171,7 +7178,6 @@ pub async fn edit_message_sse(
                     &chat_provider_headers_context,
                     Some(&task_for_stream),
                     chat.assistant_id,
-                    request.action_facet.as_ref().map(|af| af.id.clone()),
                 )
                 .await?;
 

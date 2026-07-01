@@ -3215,7 +3215,7 @@ fn add_action_facets(app_config: &mut erato::config::AppConfig) {
             client_actions: vec![],
             presentation: None,
             client_actions_always_ask: vec![],
-            client_tools: vec![],
+            tool_call_allowlist: vec![],
         },
     );
     app_config.action_facets.facets.insert(
@@ -3230,7 +3230,7 @@ fn add_action_facets(app_config: &mut erato::config::AppConfig) {
             client_actions: vec!["outlook.reply".to_string(), "outlook.reply_all".to_string()],
             presentation: None,
             client_actions_always_ask: vec![],
-            client_tools: vec![],
+            tool_call_allowlist: vec![],
         },
     );
 }
