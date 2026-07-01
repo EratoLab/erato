@@ -1865,6 +1865,16 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         &app_state.config.experimental_facets,
         &effective_selected_facet_ids,
     );
+    // The active action facet's `tool_call_allowlist` selects MCP tools too
+    // (same pattern space as regular facets), so an action facet activates both
+    // its client tools and MCP tools through one field.
+    let facet_allowlist = if let Some(action_facet) = user_input.action_facet.as_ref()
+        && let Some(facet_config) = app_state.config.action_facets.facets.get(&action_facet.id)
+    {
+        merge_action_facet_into_mcp_allowlist(facet_allowlist, &facet_config.tool_call_allowlist)
+    } else {
+        facet_allowlist
+    };
     let server_filter_from_allowlist = derive_requested_server_ids_from_allowlist(
         facet_allowlist.as_deref(),
         !app_state.config.experimental_facets.facets.is_empty(),
@@ -4747,11 +4757,30 @@ fn is_qualified_tool_allowed(namespace: &str, tool_name: &str, allowlist: &[Stri
     })
 }
 
+/// Merge an active action facet's `tool_call_allowlist` into the MCP tool
+/// allowlist. Additive by design: it only extends an already-active (`Some`)
+/// allowlist, so an action facet *adds* selectable MCP tools without turning a
+/// deployment that had no MCP allowlisting (`None` = all tools allowed) into a
+/// restrictive one. Patterns naming a client-tool namespace (e.g. `outlook/*`)
+/// simply match no MCP server and are harmless here.
+fn merge_action_facet_into_mcp_allowlist(
+    facet_allowlist: Option<Vec<String>>,
+    action_facet_patterns: &[String],
+) -> Option<Vec<String>> {
+    let mut allowlist = facet_allowlist?;
+    for pattern in action_facet_patterns {
+        if !allowlist.contains(pattern) {
+            allowlist.push(pattern.clone());
+        }
+    }
+    Some(allowlist)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         apply_assistant_server_filter, derive_requested_server_ids_from_allowlist,
-        expand_tool_patterns_with_discovered_tools,
+        expand_tool_patterns_with_discovered_tools, merge_action_facet_into_mcp_allowlist,
     };
     use std::collections::HashSet;
 
@@ -4805,6 +4834,38 @@ mod tests {
                 "server_b/tool_3".to_string(),
             ]
         );
+    }
+
+    #[test]
+    fn merge_action_facet_allowlist_leaves_none_unrestricted() {
+        // No MCP allowlist active (all tools allowed): an action facet must not
+        // turn that into a restrictive allowlist.
+        let merged = merge_action_facet_into_mcp_allowlist(None, &["outlook/*".to_string()]);
+        assert!(merged.is_none());
+    }
+
+    #[test]
+    fn merge_action_facet_allowlist_extends_active_allowlist_deduped() {
+        let base = Some(vec!["server_a/*".to_string(), "outlook/*".to_string()]);
+        let merged = merge_action_facet_into_mcp_allowlist(
+            base,
+            &["outlook/*".to_string(), "server_b/tool_x".to_string()],
+        );
+        assert_eq!(
+            merged,
+            Some(vec![
+                "server_a/*".to_string(),
+                "outlook/*".to_string(),
+                "server_b/tool_x".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn merge_action_facet_allowlist_noop_for_empty_patterns() {
+        let base = Some(vec!["server_a/*".to_string()]);
+        let merged = merge_action_facet_into_mcp_allowlist(base.clone(), &[]);
+        assert_eq!(merged, base);
     }
 
     // ========================================================================
