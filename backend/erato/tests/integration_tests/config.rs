@@ -412,6 +412,7 @@ priority_order = ["mock", "override"]
 [chat_providers.all_providers.guardrails.filter_input_prompt_injection]
 enabled = true
 filter_pattern_tags = ["input"]
+exclude_pattern_ids = ["leak_data"]
 
 [chat_providers.providers.mock]
 provider_kind = "openai"
@@ -459,6 +460,12 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
             .filter_pattern_tags,
         vec!["input"]
     );
+    assert_eq!(
+        mock_guardrails
+            .filter_input_prompt_injection
+            .exclude_pattern_ids,
+        vec!["leak_data"]
+    );
 
     let override_guardrails = config.chat_provider_guardrails(Some("override"));
     assert_eq!(
@@ -473,6 +480,55 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
             .filter_pattern_tags
             .is_empty()
     );
+}
+
+#[test]
+#[should_panic(expected = "exclude_pattern_ids references unknown prompt pattern")]
+fn test_prompt_guardrail_unknown_exclude_pattern_id_is_rejected() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+[guardrails.prompt_patterns.ignore_previous]
+type = "fixed"
+pattern = "ignore all previous instructions"
+tags = ["input"]
+
+[chat_providers]
+priority_order = ["mock"]
+
+[chat_providers.all_providers.guardrails.filter_input_prompt_injection]
+enabled = true
+filter_pattern_tags = ["input"]
+exclude_pattern_ids = ["missing"]
+
+[chat_providers.providers.mock]
+provider_kind = "openai"
+model_name = "mock-model"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let temp_path = temp_file.path().to_str().unwrap();
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let _config: AppConfig = config_schema
+        .try_deserialize::<AppConfig>()
+        .expect("Failed to deserialize config")
+        .migrate();
 }
 
 #[test]
