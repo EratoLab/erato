@@ -100,6 +100,7 @@ graph-rs-sdk = { version = "3.0", default-features = false, features = ["rustls-
 
 # Dependencies: Uncategorized
 regex = "1.12.3"
+rand = "0.9.4"
 base64 = "0.22.1"
 facet = "0.44.3"
 # Newtype utility
