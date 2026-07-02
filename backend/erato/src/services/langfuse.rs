@@ -542,6 +542,8 @@ impl LangfuseClient {
             "Creating Langfuse score"
         );
 
+        let trace_id = score_trace_id_for_transport(self.use_otel, &request.trace_id);
+
         let timestamp_iso = system_time_to_iso_string(SystemTime::now());
 
         // Generate unique event ID by appending timestamp-derived suffix
@@ -559,7 +561,7 @@ impl LangfuseClient {
             timestamp: timestamp_iso,
             body: IngestionEventBody::ScoreCreate(CreateScoreEvent {
                 id: request.id,
-                trace_id: request.trace_id,
+                trace_id,
                 name: request.name,
                 value: request.value,
                 comment: request.comment,
@@ -1144,6 +1146,14 @@ fn trace_id_from_langfuse_id(id: &str) -> TraceId {
         .ok()
         .filter(|id| *id != TraceId::INVALID)
         .unwrap_or_else(|| TraceId::from_bytes(first_hash_bytes::<16>(id)))
+}
+
+fn score_trace_id_for_transport(use_otel: bool, trace_id: &str) -> String {
+    if use_otel {
+        trace_id_from_langfuse_id(trace_id).to_string()
+    } else {
+        trace_id.to_string()
+    }
 }
 
 fn observation_span_id(observation_id: &str) -> SpanId {
@@ -2175,5 +2185,26 @@ mod tests {
         assert_eq!(body["batch"][0]["type"], "score-create");
         assert_eq!(body["batch"][0]["body"]["name"], "user_feedback");
         assert_eq!(body["batch"][0]["body"]["value"], 1.0);
+        assert_eq!(
+            body["batch"][0]["body"]["traceId"],
+            "trace_58406520a006649127e371903a2de979"
+        );
+    }
+
+    #[tokio::test]
+    async fn sends_score_with_otel_trace_id_when_otel_enabled() {
+        let (base_url, mut receiver) = mock_langfuse_server().await;
+        let client = LangfuseClient::from_config(&enabled_config(base_url, true), None).unwrap();
+
+        client.create_score(test_score_request()).await.unwrap();
+
+        let (request, body) = recv_json(&mut receiver).await;
+        assert_eq!(request.path, "/api/public/ingestion");
+        assert_eq!(body["batch"][0]["type"], "score-create");
+        assert_eq!(body["batch"][0]["body"]["id"], "score-1");
+        assert_eq!(
+            body["batch"][0]["body"]["traceId"],
+            "58406520a006649127e371903a2de979"
+        );
     }
 }
