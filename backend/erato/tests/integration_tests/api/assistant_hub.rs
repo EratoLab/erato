@@ -243,14 +243,11 @@ async fn test_assistant_hub_featured_status_carries_across_versions(pool: Pool<P
         .with_bearer_token(&owner_token)
         .await;
     assert_eq!(first_publish_response.status_code(), http::StatusCode::OK);
-
-    let first_current_response = server
-        .put(&format!(
-            "/api/v1beta/assistant-hub/versions/{first_version_id}/current"
-        ))
-        .with_bearer_token(&owner_token)
-        .await;
-    assert_eq!(first_current_response.status_code(), http::StatusCode::OK);
+    let first_published: Value = first_publish_response.json();
+    assert_eq!(
+        first_published["version"]["is_current_published_version"],
+        true
+    );
 
     let featured_response = server
         .put(&format!(
@@ -309,16 +306,12 @@ async fn test_assistant_hub_featured_status_carries_across_versions(pool: Pool<P
         .with_bearer_token(&owner_token)
         .await;
     assert_eq!(second_publish_response.status_code(), http::StatusCode::OK);
-
-    let second_current_response = server
-        .put(&format!(
-            "/api/v1beta/assistant-hub/versions/{second_version_id}/current"
-        ))
-        .with_bearer_token(&owner_token)
-        .await;
-    assert_eq!(second_current_response.status_code(), http::StatusCode::OK);
-    let second_current: Value = second_current_response.json();
-    assert_eq!(second_current["version"]["featured"], true);
+    let second_published: Value = second_publish_response.json();
+    assert_eq!(second_published["version"]["featured"], true);
+    assert_eq!(
+        second_published["version"]["is_current_published_version"],
+        true
+    );
 
     let owner_listing_response = server
         .get("/api/v1beta/assistant-hub/assistants")
@@ -825,7 +818,7 @@ async fn test_published_current_assistant_hub_version_is_listed_for_audience_vie
     assert_eq!(publish_response.status_code(), http::StatusCode::OK);
     let published: Value = publish_response.json();
     assert_eq!(published["version"]["is_published"], true);
-    assert_eq!(published["version"]["is_current_published_version"], false);
+    assert_eq!(published["version"]["is_current_published_version"], true);
 
     let viewer_after_publish_response = server
         .get("/api/v1beta/assistant-hub/assistants")
@@ -835,32 +828,7 @@ async fn test_published_current_assistant_hub_version_is_listed_for_audience_vie
         viewer_after_publish_response.status_code(),
         http::StatusCode::OK
     );
-    assert_eq!(
-        version_count(&viewer_after_publish_response.json()),
-        0,
-        "published versions are intentionally hidden until marked current"
-    );
-
-    let current_response = server
-        .put(&format!(
-            "/api/v1beta/assistant-hub/versions/{version_id}/current"
-        ))
-        .with_bearer_token(&owner_token)
-        .await;
-    assert_eq!(current_response.status_code(), http::StatusCode::OK);
-    let current: Value = current_response.json();
-    assert_eq!(current["version"]["is_published"], true);
-    assert_eq!(current["version"]["is_current_published_version"], true);
-
-    let viewer_after_current_response = server
-        .get("/api/v1beta/assistant-hub/assistants")
-        .with_bearer_token(&viewer_token)
-        .await;
-    assert_eq!(
-        viewer_after_current_response.status_code(),
-        http::StatusCode::OK
-    );
-    let listed: Value = viewer_after_current_response.json();
+    let listed: Value = viewer_after_publish_response.json();
     let versions = listed["versions"]
         .as_array()
         .expect("assistant hub response should contain versions array");
