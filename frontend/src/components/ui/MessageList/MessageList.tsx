@@ -2,6 +2,7 @@ import clsx from "clsx";
 import { debounce } from "lodash";
 import { memo, useCallback, useMemo, useEffect, useRef, useState } from "react";
 
+import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { useMessageListVirtualization, useScrollEvents } from "@/hooks/ui";
 import { usePaginatedData } from "@/hooks/ui/usePaginatedData";
 import { useScrollToBottom } from "@/hooks/useScrollToBottom";
@@ -460,6 +461,8 @@ export const MessageList = memo<MessageListProps>(
     isTransitioning,
     emptyStateComponent,
   }) => {
+    const uploadedFiles = useFileUploadStore((state) => state.uploadedFiles);
+
     const lastMessageLoadingContent = useMemo(() => {
       const result =
         messageOrder.length > 0 &&
@@ -725,13 +728,19 @@ export const MessageList = memo<MessageListProps>(
       handleLoadMore,
     });
 
-    // Collect all file download URLs from message files and assistant default files
-    // for erato-file:// link resolution.
+    // Collect all known file records for attachment previews and
+    // erato-file:// link resolution.
     const allFilesById = useMemo(() => {
       const fileMap: Record<string, FileUploadItem> = {};
 
       // Assistant files are available even before they appear in message payloads.
       assistantFiles.forEach((file) => {
+        fileMap[file.id] = file;
+      });
+
+      // Newly uploaded files may be referenced by an optimistic user message
+      // before that message is rehydrated with full file metadata from the API.
+      uploadedFiles.forEach((file) => {
         fileMap[file.id] = file;
       });
 
@@ -750,7 +759,7 @@ export const MessageList = memo<MessageListProps>(
         });
       });
       return fileMap;
-    }, [assistantFiles, messageOrder, messages]);
+    }, [assistantFiles, messageOrder, messages, uploadedFiles]);
 
     // Check if there are no messages to display
     const showEmptyState = messageOrder.length === 0 && !isPending;
