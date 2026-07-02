@@ -97,6 +97,9 @@
   "chat_provider.guardrails.filter_input_prompt_injection.enabled": {
     "hide_in_docs": true
   },
+  "chat_provider.guardrails.filter_input_prompt_injection.exclude_pattern_ids.[]": {
+    "hide_in_docs": true
+  },
   "chat_provider.guardrails.filter_input_prompt_injection.filter_pattern_ids.[]": {
     "hide_in_docs": true
   },
@@ -197,6 +200,7 @@
     "hide_in_docs": true
   },
   "chat_providers.all_providers.guardrails.filter_input_prompt_injection.enabled": {},
+  "chat_providers.all_providers.guardrails.filter_input_prompt_injection.exclude_pattern_ids.[]": {},
   "chat_providers.all_providers.guardrails.filter_input_prompt_injection.filter_pattern_ids.[]": {},
   "chat_providers.all_providers.guardrails.filter_input_prompt_injection.filter_pattern_tags.[]": {},
   "chat_providers.priority_order.[]": {},
@@ -206,6 +210,7 @@
   "chat_providers.providers.<provider-id>.api_version": {},
   "chat_providers.providers.<provider-id>.base_url": {},
   "chat_providers.providers.<provider-id>.guardrails.filter_input_prompt_injection.enabled": {},
+  "chat_providers.providers.<provider-id>.guardrails.filter_input_prompt_injection.exclude_pattern_ids.[]": {},
   "chat_providers.providers.<provider-id>.guardrails.filter_input_prompt_injection.filter_pattern_ids.[]": {},
   "chat_providers.providers.<provider-id>.guardrails.filter_input_prompt_injection.filter_pattern_tags.[]": {},
   "chat_providers.providers.<provider-id>.hallucination_suppression.enabled": {},

@@ -603,6 +603,7 @@ An ordered list of provider IDs that defines the priority for provider selection
 {/* erato_toml_config_key: chat_providers.all_providers.guardrails.filter_input_prompt_injection.enabled */}
 {/* erato_toml_config_key: chat_providers.all_providers.guardrails.filter_input_prompt_injection.filter_pattern_ids.[] */}
 {/* erato_toml_config_key: chat_providers.all_providers.guardrails.filter_input_prompt_injection.filter_pattern_tags.[] */}
+{/* erato_toml_config_key: chat_providers.all_providers.guardrails.filter_input_prompt_injection.exclude_pattern_ids.[] */}
 
 Default prompt-injection filtering settings for all configured chat providers.
 
@@ -615,6 +616,7 @@ If `chat_providers.providers.<provider-id>.guardrails` is configured for a provi
 - **`enabled`** _(default: false)_ - Enables prompt-injection filtering before requests are sent to the model.
 - **`filter_pattern_ids`** _(default: [])_ - Explicit pattern IDs from `guardrails.prompt_patterns` to apply.
 - **`filter_pattern_tags`** _(default: [])_ - Pattern tags to apply.
+- **`exclude_pattern_ids`** _(default: [])_ - Explicit pattern IDs to skip after applying `filter_pattern_ids` and `filter_pattern_tags`. Use this to opt out of individual patterns from a broader tag-based rule set.
 
 **Example:**
 
@@ -622,6 +624,7 @@ If `chat_providers.providers.<provider-id>.guardrails` is configured for a provi
 [chat_providers.all_providers.guardrails.filter_input_prompt_injection]
 enabled = true
 filter_pattern_tags = ["input"]
+exclude_pattern_ids = ["customer_specific_false_positive"]
 ```
 
 #### `chat_providers.providers.<provider-id>`
@@ -880,6 +883,7 @@ Lower values are more aggressive and may truncate responses earlier; higher valu
 {/* erato_toml_config_key: chat_providers.providers.<provider-id>.guardrails.filter_input_prompt_injection.enabled */}
 {/* erato_toml_config_key: chat_providers.providers.<provider-id>.guardrails.filter_input_prompt_injection.filter_pattern_ids.[] */}
 {/* erato_toml_config_key: chat_providers.providers.<provider-id>.guardrails.filter_input_prompt_injection.filter_pattern_tags.[] */}
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.guardrails.filter_input_prompt_injection.exclude_pattern_ids.[] */}
 
 Provider-specific prompt-injection filtering settings.
 
@@ -894,6 +898,7 @@ If a match is found, generation is aborted with a content-filter-style error tha
 - **`enabled`** _(default: false)_ - Enables prompt-injection filtering for this provider.
 - **`filter_pattern_ids`** _(default: [])_ - Explicit pattern IDs from `guardrails.prompt_patterns` to apply.
 - **`filter_pattern_tags`** _(default: [])_ - Pattern tags to apply.
+- **`exclude_pattern_ids`** _(default: [])_ - Explicit pattern IDs to skip after applying `filter_pattern_ids` and `filter_pattern_tags`. Use this to opt out of individual patterns from a broader tag-based rule set.
 
 **Example:**
 
@@ -908,6 +913,7 @@ tags = ["input", "prompt_injection"]
 enabled = true
 filter_pattern_ids = ["ignore_previous_instructions"]
 filter_pattern_tags = []
+exclude_pattern_ids = []
 ```
 
 ##### `chat_providers.providers.<provider-id>.model_capabilities`

@@ -318,6 +318,14 @@ fn validate_prompt_injection_filter_config(
         }
     }
 
+    for pattern_id in &filter_config.exclude_pattern_ids {
+        if !prompt_patterns.contains_key(pattern_id) {
+            return Err(eyre!(
+                "{config_key}.exclude_pattern_ids references unknown prompt pattern '{pattern_id}'"
+            ));
+        }
+    }
+
     for (pattern_id, pattern_config) in prompt_patterns {
         if pattern_config.pattern.is_empty() {
             return Err(eyre!(
@@ -1483,12 +1491,21 @@ pub struct ChatProviderGuardrailsConfig {
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct PromptInjectionFilterConfig {
+    // Enables prompt-injection filtering before requests are sent to the model.
+    // Defaults to `false`.
     #[serde(default)]
     pub enabled: bool,
+    // Explicit pattern IDs from `guardrails.prompt_patterns` to apply.
     #[serde(default)]
     pub filter_pattern_ids: Vec<String>,
+    // Pattern tags to apply.
     #[serde(default)]
     pub filter_pattern_tags: Vec<String>,
+    // Explicit pattern IDs to skip after applying `filter_pattern_ids` and
+    // `filter_pattern_tags`. Use this to opt out of individual patterns from
+    // a broader tag-based rule set.
+    #[serde(default)]
+    pub exclude_pattern_ids: Vec<String>,
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
