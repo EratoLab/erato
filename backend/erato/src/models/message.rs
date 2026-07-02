@@ -58,6 +58,15 @@ pub struct GenerationRequestContext {
     /// The originating Erato platform for the request.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub platform: Option<String>,
+
+    /// Client tools (by model-facing name) the connected client advertised it
+    /// can execute, from the `X-Erato-Supported-Client-Tools` header. Gates
+    /// which facet-selected client tools are offered to the model, so the model
+    /// is never handed a client tool this client can't run (which would only
+    /// park until timeout). `None` = the client advertised nothing → no client
+    /// tools are offered (capability must be explicit).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supported_client_tools: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

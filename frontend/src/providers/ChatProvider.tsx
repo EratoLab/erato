@@ -11,6 +11,7 @@ import {
 import { useFileDropzone, useFileUploadStore } from "@/hooks/files";
 import { mapMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 import { getSupportedFileTypes } from "@/utils/capabilitiesToFileTypes";
+import { IMPLEMENTED_CLIENT_TOOLS } from "@/utils/client/clientTools";
 
 import { useFileCapabilitiesContext } from "./FileCapabilitiesProvider";
 
@@ -206,6 +207,7 @@ export function ChatProvider({
   } = useChatMessaging({
     chatId: isNewChatPending ? null : currentChatId,
     silentChatId: silentChatId,
+    clientTools: IMPLEMENTED_CLIENT_TOOLS,
   });
 
   // Removed newlyCreatedChatId store access - now handled in explicit navigation

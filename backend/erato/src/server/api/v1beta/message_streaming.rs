@@ -308,6 +308,8 @@ pub struct ActionFacetRequest {
 }
 
 const X_ERATO_PLATFORM_HEADER: &str = "X-Erato-Platform";
+/// Comma-separated list of client-tool names the connected client can execute.
+const X_ERATO_SUPPORTED_CLIENT_TOOLS_HEADER: &str = "X-Erato-Supported-Client-Tools";
 const DEFAULT_ERATO_PLATFORM: &str = "web";
 
 /// Input parameters extracted from MeProfile for chat request preparation.
@@ -1517,8 +1519,24 @@ fn generation_request_context_from_headers(headers: &HeaderMap) -> GenerationReq
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| DEFAULT_ERATO_PLATFORM.to_string());
 
+    // Comma-separated client-tool names the client can execute. Present (even
+    // if empty) => the client speaks the protocol; absent => `None` (offer no
+    // client tools). Blank/whitespace entries are dropped.
+    let supported_client_tools = headers
+        .get(X_ERATO_SUPPORTED_CLIENT_TOOLS_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| {
+            value
+                .split(',')
+                .map(str::trim)
+                .filter(|entry| !entry.is_empty())
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>()
+        });
+
     GenerationRequestContext {
         platform: Some(platform),
+        supported_client_tools,
     }
 }
 
@@ -2043,6 +2061,22 @@ pub(crate) async fn prepare_chat_request_with_adapters(
                 &client_tool.name,
                 &facet_config.tool_call_allowlist,
             ) {
+                continue;
+            }
+            // Capability gate: only offer a tool the connected client advertised
+            // it can execute (via `X-Erato-Supported-Client-Tools`). Absent
+            // advertisement => offer nothing, so the model is never handed a
+            // tool that would only park until timeout.
+            let client_can_execute = generation_request_context
+                .supported_client_tools
+                .as_ref()
+                .is_some_and(|supported| supported.iter().any(|t| t == &client_tool.name));
+            if !client_can_execute {
+                tracing::debug!(
+                    "Not offering client tool '{}' for action facet '{}': the connected client did not advertise it in X-Erato-Supported-Client-Tools",
+                    client_tool.name,
+                    action_facet.id
+                );
                 continue;
             }
             let name = client_tool.name.as_str();
@@ -4866,6 +4900,40 @@ mod tests {
         let base = Some(vec!["server_a/*".to_string()]);
         let merged = merge_action_facet_into_mcp_allowlist(base.clone(), &[]);
         assert_eq!(merged, base);
+    }
+
+    #[test]
+    fn parses_supported_client_tools_header() {
+        use axum::http::{HeaderMap, HeaderValue};
+
+        // Absent => None (client advertised nothing → offer no client tools).
+        let ctx = super::generation_request_context_from_headers(&HeaderMap::new());
+        assert_eq!(ctx.supported_client_tools, None);
+
+        // Present with entries: trimmed, blank entries dropped.
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            super::X_ERATO_SUPPORTED_CLIENT_TOOLS_HEADER,
+            HeaderValue::from_static("outlook.fetch_availability, , ping "),
+        );
+        let ctx = super::generation_request_context_from_headers(&headers);
+        assert_eq!(
+            ctx.supported_client_tools,
+            Some(vec![
+                "outlook.fetch_availability".to_string(),
+                "ping".to_string(),
+            ])
+        );
+
+        // Present but empty => Some(empty): client speaks the protocol but
+        // supports no tools (still offers nothing, distinct from absent).
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            super::X_ERATO_SUPPORTED_CLIENT_TOOLS_HEADER,
+            HeaderValue::from_static(""),
+        );
+        let ctx = super::generation_request_context_from_headers(&headers);
+        assert_eq!(ctx.supported_client_tools, Some(vec![]));
     }
 
     // ========================================================================
