@@ -1615,6 +1615,31 @@ msgid "filePreview.docxTheme.useLight"
 msgstr "Use light document theme"
 
 #. js-lingui-explicit-id
+#: src/components/ui/FilePreview/XlsxPreview.tsx
+msgid "filePreview.xlsxEmpty"
+msgstr "Spreadsheet preview is empty."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/XlsxPreview.tsx
+msgid "filePreview.xlsxLoading"
+msgstr "Loading spreadsheet preview..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/XlsxPreview.tsx
+msgid "filePreview.xlsxPreviewUnavailable"
+msgstr "Preview unavailable: this spreadsheet could not be loaded."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/XlsxPreview.tsx
+msgid "filePreview.xlsxTheme.useDark"
+msgstr "Use dark spreadsheet theme"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/XlsxPreview.tsx
+msgid "filePreview.xlsxTheme.useLight"
+msgstr "Use light spreadsheet theme"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Modal/FilePreviewModal.tsx
 msgid "filePreviewModal.unavailableMissingPermissions"
 msgstr "This file is unavailable because you do not have permission to access it."

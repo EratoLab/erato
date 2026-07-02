@@ -1615,6 +1615,31 @@ msgid "filePreview.docxTheme.useLight"
 msgstr "Użyj jasnego motywu dokumentu"
 
 #. js-lingui-explicit-id
+#: src/components/ui/FilePreview/XlsxPreview.tsx
+msgid "filePreview.xlsxEmpty"
+msgstr "Podgląd arkusza kalkulacyjnego jest pusty."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/XlsxPreview.tsx
+msgid "filePreview.xlsxLoading"
+msgstr "Wczytywanie podglądu arkusza kalkulacyjnego..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/XlsxPreview.tsx
+msgid "filePreview.xlsxPreviewUnavailable"
+msgstr "Podgląd niedostępny: nie można wczytać tego arkusza kalkulacyjnego."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/XlsxPreview.tsx
+msgid "filePreview.xlsxTheme.useDark"
+msgstr "Użyj ciemnego motywu arkusza kalkulacyjnego"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/XlsxPreview.tsx
+msgid "filePreview.xlsxTheme.useLight"
+msgstr "Użyj jasnego motywu arkusza kalkulacyjnego"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Modal/FilePreviewModal.tsx
 msgid "filePreviewModal.unavailableMissingPermissions"
 msgstr ""
