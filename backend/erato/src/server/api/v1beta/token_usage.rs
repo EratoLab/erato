@@ -583,7 +583,10 @@ pub async fn token_usage_estimate(
             &policy,
             chat,
             user_input,
-            GenerationRequestContext { platform: None },
+            GenerationRequestContext {
+                platform: None,
+                supported_client_tools: None,
+            },
             &me_profile_input,
             assistant_config.clone(),
             &message_repo,

@@ -2009,6 +2009,51 @@
         ]
       }
     },
+    "/api/v1beta/me/messages/clienttoolresult": {
+      "post": {
+        "tags": [],
+        "operationId": "client_tool_result",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientToolResultRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientToolResultResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "403": {
+            "description": "When the user has no access to the chat"
+          },
+          "404": {
+            "description": "No suspended generation matches this chat and message"
+          },
+          "500": {
+            "description": "When an internal server error occurs"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/messages/editstream": {
       "post": {
         "tags": [],
@@ -4316,6 +4361,52 @@
           }
         }
       },
+      "ClientToolResultRequest": {
+        "type": "object",
+        "required": [
+          "chat_id",
+          "message_id",
+          "tool_call_id"
+        ],
+        "properties": {
+          "chat_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The chat whose suspended generation is awaiting this result.",
+            "example": "00000000-0000-0000-0000-000000000000"
+          },
+          "error": {
+            "type": "string",
+            "description": "An error message if the client could not execute the tool. Provide this\nOR `result`."
+          },
+          "message_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The id of the assistant message whose generation emitted the client\ntool call. Disambiguates a result from a task that has since been\nreplaced by a concurrent generation on the same chat.",
+            "example": "00000000-0000-0000-0000-000000000000"
+          },
+          "result": {
+            "$ref": "#/components/schemas/Value",
+            "description": "The tool's JSON result (any JSON value, including `null`). Provide this\nOR `error`. An absent field is treated as \"no result\"; an explicit\n`null` is a valid result."
+          },
+          "tool_call_id": {
+            "type": "string",
+            "description": "The `tool_call_id` from the `client_tool_call` event being answered."
+          }
+        }
+      },
+      "ClientToolResultResponse": {
+        "type": "object",
+        "required": [
+          "delivered"
+        ],
+        "properties": {
+          "delivered": {
+            "type": "boolean",
+            "description": "True if a suspended generation received this result; false if it was a\nbenign no-op (already delivered, timed out, aborted, or unknown id)."
+          }
+        }
+      },
       "CompleteMcpServerOauthResponse": {
         "type": "object",
         "required": [
@@ -5075,6 +5166,29 @@
           {
             "allOf": [
               {
+                "$ref": "#/components/schemas/MessageSubmitStreamingResponseClientToolCall",
+                "description": "Sent when the model calls a facet client tool: the turn is suspended\nuntil the client executes it and POSTs the result back."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "message_type"
+                ],
+                "properties": {
+                  "message_type": {
+                    "type": "string",
+                    "enum": [
+                      "client_tool_call"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "Sent when the model calls a facet client tool: the turn is suspended\nuntil the client executes it and POSTs the result back."
+          },
+          {
+            "allOf": [
+              {
                 "$ref": "#/components/schemas/MessageSubmitStreamingResponseError",
                 "description": "Sent when an error occurs during message generation."
               },
@@ -5776,6 +5890,42 @@
           }
         }
       },
+      "MessageSubmitStreamingResponseClientToolCall": {
+        "type": "object",
+        "description": "Sent when the model calls a facet `client_tool`: the generation is suspended\nuntil the client executes the tool and POSTs the result back to the\ncontinuation endpoint. Distinct from `tool_call_proposed` (which fires for\nevery proposed tool call) — this is the signal to execute on the client.",
+        "required": [
+          "message_id",
+          "content_index",
+          "tool_call_id",
+          "tool_name"
+        ],
+        "properties": {
+          "content_index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "input": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Value"
+              }
+            ]
+          },
+          "message_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tool_call_id": {
+            "type": "string"
+          },
+          "tool_name": {
+            "type": "string"
+          }
+        }
+      },
       "MessageSubmitStreamingResponseError": {
         "allOf": [
           {
@@ -5982,6 +6132,29 @@
               }
             ],
             "description": "Sent to update the status of a tool call execution by the backend."
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MessageSubmitStreamingResponseClientToolCall",
+                "description": "Sent when the model calls a facet client tool: the turn is suspended\nuntil the client executes it and POSTs the result back."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "message_type"
+                ],
+                "properties": {
+                  "message_type": {
+                    "type": "string",
+                    "enum": [
+                      "client_tool_call"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "Sent when the model calls a facet client tool: the turn is suspended\nuntil the client executes it and POSTs the result back."
           },
           {
             "allOf": [
@@ -6617,6 +6790,29 @@
               }
             ],
             "description": "Sent to update the status of a tool call execution by the backend."
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MessageSubmitStreamingResponseClientToolCall",
+                "description": "Sent when the model calls a facet client tool: the turn is suspended\nuntil the client executes it and POSTs the result back."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "message_type"
+                ],
+                "properties": {
+                  "message_type": {
+                    "type": "string",
+                    "enum": [
+                      "client_tool_call"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "Sent when the model calls a facet client tool: the turn is suspended\nuntil the client executes it and POSTs the result back."
           },
           {
             "allOf": [

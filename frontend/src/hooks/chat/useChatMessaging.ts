@@ -61,6 +61,13 @@ const COMPLETION_CLOSE_DEDUP_MS = 5000;
 const MAX_RESUME_ATTEMPTS_PER_KEY = 3;
 
 const X_ERATO_PLATFORM_HEADER = "X-Erato-Platform";
+/**
+ * Comma-separated list of client-tool names this client can execute. The
+ * backend offers the model only client tools present here, so it is never
+ * handed a tool this client can't run. Sent on every generation request (even
+ * when empty) so capability is always explicit.
+ */
+const X_ERATO_SUPPORTED_CLIENT_TOOLS_HEADER = "X-Erato-Supported-Client-Tools";
 
 const getAuthHeaders = (): Record<string, string> => {
   const idToken = getIdToken();
@@ -74,6 +81,12 @@ interface UseChatMessagingParams {
   silentChatId?: string | null;
   /** Platform identifier sent via X-Erato-Platform header. Defaults to "web". */
   platform?: string;
+  /**
+   * Client-tool names this client can execute, sent via the
+   * X-Erato-Supported-Client-Tools header. The backend offers the model only
+   * client tools listed here. Defaults to `[]` (this client executes none).
+   */
+  clientTools?: readonly string[];
 }
 
 function resolveStreamAlias(
@@ -167,6 +180,10 @@ export function useChatMessaging(
     typeof chatIdOrParams === "object" && chatIdOrParams !== null
       ? (chatIdOrParams.platform ?? "web")
       : "web";
+  const supportedClientToolsHeader =
+    typeof chatIdOrParams === "object" && chatIdOrParams !== null
+      ? (chatIdOrParams.clientTools ?? []).join(",")
+      : "";
   const streamKey = useMemo(
     () => getStreamKey(chatId ?? silentChatId),
     [chatId, silentChatId],
@@ -1087,6 +1104,7 @@ export function useChatMessaging(
           method: "POST",
           headers: {
             [X_ERATO_PLATFORM_HEADER]: platform,
+            [X_ERATO_SUPPORTED_CLIENT_TOOLS_HEADER]: supportedClientToolsHeader,
           },
           body: JSON.stringify({ chat_id: effectiveChatId }),
           onMessage: (sseEvent) =>
@@ -1481,6 +1499,7 @@ export function useChatMessaging(
           headers: {
             "Content-Type": "application/json",
             [X_ERATO_PLATFORM_HEADER]: platform,
+            [X_ERATO_SUPPORTED_CLIENT_TOOLS_HEADER]: supportedClientToolsHeader,
             ...getAuthHeaders(),
           },
           body: JSON.stringify(requestBody),
@@ -1737,6 +1756,7 @@ export function useChatMessaging(
           headers: {
             "Content-Type": "application/json",
             [X_ERATO_PLATFORM_HEADER]: platform,
+            [X_ERATO_SUPPORTED_CLIENT_TOOLS_HEADER]: supportedClientToolsHeader,
             ...getAuthHeaders(),
           },
           body: JSON.stringify(requestBody),
@@ -1884,6 +1904,7 @@ export function useChatMessaging(
           headers: {
             "Content-Type": "application/json",
             [X_ERATO_PLATFORM_HEADER]: platform,
+            [X_ERATO_SUPPORTED_CLIENT_TOOLS_HEADER]: supportedClientToolsHeader,
             ...getAuthHeaders(),
           },
           body: JSON.stringify(requestBody),

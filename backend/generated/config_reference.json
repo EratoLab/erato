@@ -7,6 +7,7 @@
   "action_facets.facets.<facet-id>.platform": {},
   "action_facets.facets.<facet-id>.presentation": {},
   "action_facets.facets.<facet-id>.template": {},
+  "action_facets.facets.<facet-id>.tool_call_allowlist.[]": {},
   "additional_frontend_environment": {
     "hide_in_docs": true,
     "deprecated": {
@@ -259,6 +260,11 @@
   "cleanup_enabled": {
     "needs_scoped_replacement": true
   },
+  "client_tools.[].description": {},
+  "client_tools.[].name": {},
+  "client_tools.[].namespace": {},
+  "client_tools.[].parameters": {},
+  "client_tools.[].timeout_ms": {},
   "database_url": {},
   "default_file_storage_provider": {},
   "environment": {

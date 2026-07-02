@@ -39,6 +39,7 @@ import {
   type OutlookSessionAnchor,
   type OutlookSessionStorageValue,
 } from "../sessionPolicy";
+import { IMPLEMENTED_CLIENT_TOOLS } from "../utils/outlookClientTools";
 
 import type { ReactNode } from "react";
 
@@ -421,6 +422,7 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
     chatId: effectiveChatId,
     silentChatId,
     platform: host?.toLowerCase() ?? "office-addin",
+    clientTools: IMPLEMENTED_CLIENT_TOOLS,
   });
   clearNewlyCreatedChatIdRef.current = clearNewlyCreatedChatId;
 

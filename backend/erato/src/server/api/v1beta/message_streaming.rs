@@ -30,6 +30,7 @@ use crate::server::api::v1beta::message_streaming_file_extraction::{
 use crate::services::background_tasks::{
     StreamingEvent, StreamingTask, ToolCallStatus as BgToolCallStatus,
 };
+use crate::services::client_tools::{ClientToolDelivery, ClientToolOutcome};
 use crate::services::genai::{build_chat_options_for_completion, build_chat_options_for_summary};
 use crate::services::genai_langfuse::{
     TracedGenerationBuilder, create_tool_call_span_from_chat, create_trace_metadata,
@@ -307,6 +308,8 @@ pub struct ActionFacetRequest {
 }
 
 const X_ERATO_PLATFORM_HEADER: &str = "X-Erato-Platform";
+/// Comma-separated list of client-tool names the connected client can execute.
+const X_ERATO_SUPPORTED_CLIENT_TOOLS_HEADER: &str = "X-Erato-Supported-Client-Tools";
 const DEFAULT_ERATO_PLATFORM: &str = "web";
 
 /// Input parameters extracted from MeProfile for chat request preparation.
@@ -398,6 +401,20 @@ pub struct MessageSubmitStreamingResponseMessageReasoningDelta {
 #[derive(Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct MessageSubmitStreamingResponseToolCallProposed {
+    message_id: Uuid,
+    content_index: usize,
+    tool_call_id: String,
+    tool_name: String,
+    input: Option<JsonValue>,
+}
+
+/// Sent when the model calls a facet `client_tool`: the generation is suspended
+/// until the client executes the tool and POSTs the result back to the
+/// continuation endpoint. Distinct from `tool_call_proposed` (which fires for
+/// every proposed tool call) — this is the signal to execute on the client.
+#[derive(Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct MessageSubmitStreamingResponseClientToolCall {
     message_id: Uuid,
     content_index: usize,
     tool_call_id: String,
@@ -547,6 +564,10 @@ pub enum MessageSubmitStreamingResponseMessage {
     #[serde(rename = "tool_call_update")]
     /// Sent to update the status of a tool call execution by the backend.
     ToolCallUpdate(MessageSubmitStreamingResponseToolCallUpdate),
+    #[serde(rename = "client_tool_call")]
+    /// Sent when the model calls a facet client tool: the turn is suspended
+    /// until the client executes it and POSTs the result back.
+    ClientToolCall(MessageSubmitStreamingResponseClientToolCall),
     #[serde(rename = "error")]
     /// Sent when an error occurs during message generation.
     Error(MessageSubmitStreamingResponseError),
@@ -563,6 +584,7 @@ impl SendAsSseEvent for MessageSubmitStreamingResponseMessage {
             Self::ReasoningDelta(_) => "reasoning_delta",
             Self::ToolCallProposed(_) => "tool_call_proposed",
             Self::ToolCallUpdate(_) => "tool_call_update",
+            Self::ClientToolCall(_) => "client_tool_call",
             Self::Error(_) => "error",
         }
     }
@@ -621,6 +643,12 @@ impl From<MessageSubmitStreamingResponseToolCallProposed>
 {
     fn from(value: MessageSubmitStreamingResponseToolCallProposed) -> Self {
         MessageSubmitStreamingResponseMessage::ToolCallProposed(value)
+    }
+}
+
+impl From<MessageSubmitStreamingResponseClientToolCall> for MessageSubmitStreamingResponseMessage {
+    fn from(value: MessageSubmitStreamingResponseClientToolCall) -> Self {
+        MessageSubmitStreamingResponseMessage::ClientToolCall(value)
     }
 }
 
@@ -890,6 +918,23 @@ fn streaming_event_to_sse(event: &StreamingEvent) -> Result<Event, Report> {
             }))?;
             ("tool_call_update", data)
         }
+        StreamingEvent::ClientToolCall {
+            message_id,
+            content_index,
+            tool_call_id,
+            tool_name,
+            input,
+        } => {
+            let data = serde_json::to_string(&serde_json::json!({
+                "message_type": "client_tool_call",
+                "message_id": message_id.to_string(),
+                "content_index": content_index,
+                "tool_call_id": tool_call_id,
+                "tool_name": tool_name,
+                "input": input
+            }))?;
+            ("client_tool_call", data)
+        }
         StreamingEvent::AssistantMessageCompleted {
             message_id,
             content,
@@ -974,6 +1019,10 @@ pub enum RegenerateMessageStreamingResponseMessage {
     #[serde(rename = "tool_call_update")]
     /// Sent to update the status of a tool call execution by the backend.
     ToolCallUpdate(MessageSubmitStreamingResponseToolCallUpdate),
+    #[serde(rename = "client_tool_call")]
+    /// Sent when the model calls a facet client tool: the turn is suspended
+    /// until the client executes it and POSTs the result back.
+    ClientToolCall(MessageSubmitStreamingResponseClientToolCall),
     #[serde(rename = "error")]
     /// Sent when an error occurs during message generation.
     Error(MessageSubmitStreamingResponseError),
@@ -988,6 +1037,7 @@ impl SendAsSseEvent for RegenerateMessageStreamingResponseMessage {
             Self::ReasoningDelta(_) => "reasoning_delta",
             Self::ToolCallProposed(_) => "tool_call_proposed",
             Self::ToolCallUpdate(_) => "tool_call_update",
+            Self::ClientToolCall(_) => "client_tool_call",
             Self::Error(_) => "error",
         }
     }
@@ -1034,6 +1084,14 @@ impl From<MessageSubmitStreamingResponseToolCallProposed>
 {
     fn from(value: MessageSubmitStreamingResponseToolCallProposed) -> Self {
         RegenerateMessageStreamingResponseMessage::ToolCallProposed(value)
+    }
+}
+
+impl From<MessageSubmitStreamingResponseClientToolCall>
+    for RegenerateMessageStreamingResponseMessage
+{
+    fn from(value: MessageSubmitStreamingResponseClientToolCall) -> Self {
+        RegenerateMessageStreamingResponseMessage::ClientToolCall(value)
     }
 }
 
@@ -1097,6 +1155,53 @@ pub struct AbortStreamResponse {
     abort_requested: bool,
 }
 
+/// Deserialize a present field (including an explicit JSON `null`) as `Some`.
+/// Plain `Option<JsonValue>` + `#[serde(default)]` maps BOTH an absent field and
+/// an explicit `null` to `None`; this preserves the difference, so a legitimate
+/// `null` client-tool result is treated as a result, not a missing one. (serde
+/// skips a `deserialize_with` for an absent field when `default` is also set.)
+fn deserialize_present_json<'de, D>(deserializer: D) -> Result<Option<JsonValue>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::Deserialize;
+    JsonValue::deserialize(deserializer).map(Some)
+}
+
+#[derive(serde::Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct ClientToolResultRequest {
+    #[schema(example = "00000000-0000-0000-0000-000000000000")]
+    /// The chat whose suspended generation is awaiting this result.
+    chat_id: Uuid,
+    #[schema(example = "00000000-0000-0000-0000-000000000000")]
+    /// The id of the assistant message whose generation emitted the client
+    /// tool call. Disambiguates a result from a task that has since been
+    /// replaced by a concurrent generation on the same chat.
+    message_id: Uuid,
+    /// The `tool_call_id` from the `client_tool_call` event being answered.
+    tool_call_id: String,
+    /// The tool's JSON result (any JSON value, including `null`). Provide this
+    /// OR `error`. An absent field is treated as "no result"; an explicit
+    /// `null` is a valid result.
+    #[serde(default, deserialize_with = "deserialize_present_json")]
+    #[schema(nullable = false)]
+    result: Option<JsonValue>,
+    /// An error message if the client could not execute the tool. Provide this
+    /// OR `result`.
+    #[serde(default)]
+    #[schema(nullable = false)]
+    error: Option<String>,
+}
+
+#[derive(Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct ClientToolResultResponse {
+    /// True if a suspended generation received this result; false if it was a
+    /// benign no-op (already delivered, timed out, aborted, or unknown id).
+    delivered: bool,
+}
+
 #[derive(Serialize, ToSchema)]
 #[serde(tag = "message_type")]
 pub enum EditMessageStreamingResponseMessage {
@@ -1118,6 +1223,10 @@ pub enum EditMessageStreamingResponseMessage {
     #[serde(rename = "tool_call_update")]
     /// Sent to update the status of a tool call execution by the backend.
     ToolCallUpdate(MessageSubmitStreamingResponseToolCallUpdate),
+    #[serde(rename = "client_tool_call")]
+    /// Sent when the model calls a facet client tool: the turn is suspended
+    /// until the client executes it and POSTs the result back.
+    ClientToolCall(MessageSubmitStreamingResponseClientToolCall),
     #[serde(rename = "error")]
     /// Sent when an error occurs during message generation.
     Error(MessageSubmitStreamingResponseError),
@@ -1135,6 +1244,7 @@ impl SendAsSseEvent for EditMessageStreamingResponseMessage {
             Self::ReasoningDelta(_) => "reasoning_delta",
             Self::ToolCallProposed(_) => "tool_call_proposed",
             Self::ToolCallUpdate(_) => "tool_call_update",
+            Self::ClientToolCall(_) => "client_tool_call",
             Self::Error(_) => "error",
             Self::UserMessageSaved(_) => "user_message_saved",
         }
@@ -1182,6 +1292,12 @@ impl From<MessageSubmitStreamingResponseMessageReasoningDelta>
 impl From<MessageSubmitStreamingResponseToolCallProposed> for EditMessageStreamingResponseMessage {
     fn from(value: MessageSubmitStreamingResponseToolCallProposed) -> Self {
         EditMessageStreamingResponseMessage::ToolCallProposed(value)
+    }
+}
+
+impl From<MessageSubmitStreamingResponseClientToolCall> for EditMessageStreamingResponseMessage {
+    fn from(value: MessageSubmitStreamingResponseClientToolCall) -> Self {
+        EditMessageStreamingResponseMessage::ClientToolCall(value)
     }
 }
 
@@ -1403,8 +1519,24 @@ fn generation_request_context_from_headers(headers: &HeaderMap) -> GenerationReq
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| DEFAULT_ERATO_PLATFORM.to_string());
 
+    // Comma-separated client-tool names the client can execute. Present (even
+    // if empty) => the client speaks the protocol; absent => `None` (offer no
+    // client tools). Blank/whitespace entries are dropped.
+    let supported_client_tools = headers
+        .get(X_ERATO_SUPPORTED_CLIENT_TOOLS_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| {
+            value
+                .split(',')
+                .map(str::trim)
+                .filter(|entry| !entry.is_empty())
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>()
+        });
+
     GenerationRequestContext {
         platform: Some(platform),
+        supported_client_tools,
     }
 }
 
@@ -1751,6 +1883,16 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         &app_state.config.experimental_facets,
         &effective_selected_facet_ids,
     );
+    // The active action facet's `tool_call_allowlist` selects MCP tools too
+    // (same pattern space as regular facets), so an action facet activates both
+    // its client tools and MCP tools through one field.
+    let facet_allowlist = if let Some(action_facet) = user_input.action_facet.as_ref()
+        && let Some(facet_config) = app_state.config.action_facets.facets.get(&action_facet.id)
+    {
+        merge_action_facet_into_mcp_allowlist(facet_allowlist, &facet_config.tool_call_allowlist)
+    } else {
+        facet_allowlist
+    };
     let server_filter_from_allowlist = derive_requested_server_ids_from_allowlist(
         facet_allowlist.as_deref(),
         !app_state.config.experimental_facets.facets.is_empty(),
@@ -1901,6 +2043,73 @@ pub(crate) async fn prepare_chat_request_with_adapters(
             ));
         }
     }
+    // Offer top-level `client_tools` (returning round-trip tools) selected by
+    // the active action facet's `tool_call_allowlist` — the same namespaced
+    // pattern mechanism used for MCP tools (e.g. `outlook/*`). Like the
+    // client-action tool these are NOT dispatched to an MCP server; the tool
+    // call loop suspends for a client-supplied result instead. Skip any whose
+    // model-facing name collides with an MCP tool or the reserved client-action
+    // tool name (a duplicate name is ambiguous to dispatch and rejected by
+    // providers); `namespace/name` uniqueness is already enforced at config load.
+    if let Some(action_facet) = user_input.action_facet.as_ref()
+        && let Some(facet_config) = app_state.config.action_facets.facets.get(&action_facet.id)
+        && !facet_config.tool_call_allowlist.is_empty()
+    {
+        for client_tool in &app_state.config.client_tools {
+            if !is_qualified_tool_allowed(
+                client_tool.namespace_or_default(),
+                &client_tool.name,
+                &facet_config.tool_call_allowlist,
+            ) {
+                continue;
+            }
+            // Capability gate: only offer a tool the connected client advertised
+            // it can execute (via `X-Erato-Supported-Client-Tools`). Absent
+            // advertisement => offer nothing, so the model is never handed a
+            // tool that would only park until timeout.
+            let client_can_execute = generation_request_context
+                .supported_client_tools
+                .as_ref()
+                .is_some_and(|supported| supported.iter().any(|t| t == &client_tool.name));
+            if !client_can_execute {
+                tracing::debug!(
+                    "Not offering client tool '{}' for action facet '{}': the connected client did not advertise it in X-Erato-Supported-Client-Tools",
+                    client_tool.name,
+                    action_facet.id
+                );
+                continue;
+            }
+            let name = client_tool.name.as_str();
+            if name == crate::services::client_actions::CLIENT_ACTION_TOOL_NAME
+                || generation_mcp_tools.iter().any(|mcp| mcp.tool.name == name)
+            {
+                tracing::warn!(
+                    "Not offering client tool '{}' for action facet '{}': the name is reserved or already used by an MCP tool",
+                    name,
+                    action_facet.id
+                );
+                continue;
+            }
+            let schema = match serde_json::from_str::<serde_json::Value>(&client_tool.parameters) {
+                Ok(schema) => schema,
+                Err(error) => {
+                    tracing::warn!(
+                        "Not offering client tool '{}' for action facet '{}': parameters are not valid JSON: {}",
+                        name,
+                        action_facet.id,
+                        error
+                    );
+                    continue;
+                }
+            };
+            chat_request_tools.push(crate::services::client_tools::build_client_tool(
+                name,
+                &client_tool.description,
+                schema,
+                effective_model_settings.compat_omit_strict,
+            ));
+        }
+    }
     if !chat_request_tools.is_empty() {
         chat_request.tools = Some(chat_request_tools);
     } else {
@@ -2047,6 +2256,7 @@ async fn stream_generate_chat_completion<
         + From<MessageSubmitStreamingResponseMessageReasoningDelta>
         + From<MessageSubmitStreamingResponseToolCallProposed>
         + From<MessageSubmitStreamingResponseToolCallUpdate>
+        + From<MessageSubmitStreamingResponseClientToolCall>
         + From<MessageSubmitStreamingResponseError>,
 >(
     tx: Sender<Result<Event, Report>>,
@@ -2069,6 +2279,14 @@ async fn stream_generate_chat_completion<
     streaming_task: Option<&Arc<StreamingTask>>,
     assistant_id: Option<Uuid>,
 ) -> Result<(Vec<ContentPart>, Option<GenerationMetadata>), ()> {
+    // Record the real assistant message id on the streaming task. `start_task`
+    // only had a placeholder id; client-tool results are routed to a task by
+    // message_id (the id the client receives in `client_tool_call`), so it must
+    // be the real one before any client tool can be called.
+    if let Some(task) = streaming_task {
+        task.set_message_id(assistant_message_id);
+    }
+
     // Initialize Langfuse tracing if enabled
     let langfuse_enabled = app_state.config.integrations.langfuse.enabled
         && app_state.config.integrations.langfuse.tracing_enabled;
@@ -2102,6 +2320,13 @@ async fn stream_generate_chat_completion<
         .as_ref()
         .map(|client| client.trace_id().to_string());
     let max_tool_call_iterations = 15;
+    // Default time the loop holds a turn open awaiting a client tool's result
+    // before giving up (the backstop that prevents a never-answering client
+    // from leaking the parked turn). A client tool counts as one normal
+    // iteration against `max_tool_call_iterations`, but this park time is NOT a
+    // generation wall-clock budget. A per-facet `client_tool.timeout_ms` (see
+    // the park below) overrides this default per tool.
+    const DEFAULT_CLIENT_TOOL_PARK_TIMEOUT_MS: u64 = 60_000;
     let mut unfinished_tool_calls: std::collections::VecDeque<genai::chat::ToolCall> =
         std::collections::VecDeque::new();
     let mut current_turn = 0;
@@ -2387,6 +2612,217 @@ async fn stream_generate_chat_completion<
                 }));
                 current_turn_tool_responses.push(genai::chat::ToolResponse {
                     call_id: unfinished_tool_call.call_id.clone(),
+                    content: response_text,
+                });
+                continue;
+            }
+
+            // Client tool (returning round-trip): the model called a tool the
+            // active facet declared as a `client_tool`. It is neither an MCP
+            // tool nor the client-action tool, so it must be EXECUTED ON THE
+            // CLIENT. We emit a `client_tool_call`, SUSPEND this turn on a
+            // per-call channel, and resume when the client POSTs the result —
+            // like an MCP tool, but executed on the client. By construction
+            // anything offered that is not an MCP tool and not the client
+            // action is a client tool; hallucinated names were already rejected
+            // by the `allowed_tool_names` check above.
+            if !available_mcp_tools_by_name.contains_key(unfinished_tool_call.fn_name.as_str()) {
+                let call_id = unfinished_tool_call.call_id.clone();
+                let tool_name = unfinished_tool_call.fn_name.clone();
+                let content_index = current_message_content.len();
+                let tool_input = unfinished_tool_call.fn_arguments.clone();
+                let tool_call_started = tool_call_started_at
+                    .remove(&call_id)
+                    .unwrap_or_else(now_timestamp);
+                tool_call_parent_observation_ids.remove(&call_id);
+
+                let Some(task) = streaming_task else {
+                    // No streaming task to park on (non-streaming caller):
+                    // answer the model with an error so it can recover.
+                    let response_text =
+                        "Client tool execution is unavailable for this request.".to_string();
+                    current_message_content.push(ContentPart::ToolUse(ToolUse {
+                        tool_call_id: call_id.clone(),
+                        status: MessageToolCallStatus::Error,
+                        tool_name: tool_name.clone(),
+                        input: Some(tool_input.clone()),
+                        progress_message: None,
+                        output: Some(json!({ "status": "error", "error": response_text })),
+                        started_at: Some(tool_call_started),
+                        ended_at: Some(now_timestamp()),
+                    }));
+                    current_turn_tool_responses.push(genai::chat::ToolResponse {
+                        call_id,
+                        content: response_text,
+                    });
+                    continue;
+                };
+
+                // Register interest BEFORE emitting the call event, so a result
+                // POSTed immediately cannot race ahead of the registered waiter.
+                let mut result_rx = task.register_client_tool_call(call_id.clone()).await;
+
+                // Signal the client to execute: broadcast (submit path + resume
+                // replay) AND the typed tx stream (regenerate/edit path).
+                let _ = task
+                    .send_event(StreamingEvent::ClientToolCall {
+                        message_id: assistant_message_id,
+                        content_index,
+                        tool_call_id: call_id.clone(),
+                        tool_name: tool_name.clone(),
+                        input: Some(tool_input.clone()),
+                    })
+                    .await;
+                let call_event = MessageSubmitStreamingResponseClientToolCall {
+                    message_id: assistant_message_id,
+                    content_index,
+                    tool_call_id: call_id.clone(),
+                    tool_name: tool_name.clone(),
+                    input: Some(tool_input.clone()),
+                };
+                let call_message: MSG = call_event.into();
+                // Best-effort on the typed stream: the client is, by design,
+                // away executing the tool and POSTing to a separate endpoint
+                // during the park, so a dropped SSE connection here must NOT
+                // abort the generation. The broadcast + resume history is the
+                // durable signal path.
+                let _ = call_message.send_event(tx.clone()).await;
+
+                // Resolve this tool's park budget: the top-level client tool's
+                // `timeout_ms` override if set, else the default.
+                let park_timeout_ms = app_state
+                    .config
+                    .client_tools
+                    .iter()
+                    .find(|tool| tool.name == tool_name)
+                    .and_then(|tool| tool.timeout_ms)
+                    .unwrap_or(DEFAULT_CLIENT_TOOL_PARK_TIMEOUT_MS);
+
+                // Park until the client POSTs a result, an abort arrives, or the
+                // bounded timeout fires.
+                enum Park {
+                    Delivered(ClientToolOutcome),
+                    Aborted,
+                    TimedOut,
+                }
+                let park = tokio::select! {
+                    received = &mut result_rx => match received {
+                        Ok(outcome) => Park::Delivered(outcome),
+                        // Sender dropped without delivering (e.g. task replaced).
+                        Err(_) => Park::TimedOut,
+                    },
+                    _ = task.wait_for_abort() => Park::Aborted,
+                    _ = tokio::time::sleep(tokio::time::Duration::from_millis(
+                        park_timeout_ms,
+                    )) => Park::TimedOut,
+                };
+
+                // Drop the pending entry, then settle the timeout/abort-vs-
+                // delivery boundary race: if the client's result landed just as
+                // we gave up, prefer it over discarding (and over the endpoint
+                // having reported a spurious success).
+                task.remove_pending_client_tool(&call_id).await;
+                let raced_in = result_rx.try_recv().ok();
+
+                let outcome = match park {
+                    Park::Delivered(outcome) => outcome,
+                    Park::TimedOut => raced_in.unwrap_or_else(|| ClientToolOutcome::Cancelled {
+                        reason: "timeout".to_string(),
+                    }),
+                    Park::Aborted => {
+                        // User cancelled: discard any raced-in result and mirror
+                        // the drain's abort exit.
+                        let generation_metadata = build_generation_metadata(
+                            total_prompt_tokens,
+                            total_completion_tokens,
+                            total_total_tokens,
+                            total_reasoning_tokens,
+                            langfuse_trace_id.clone(),
+                            true,
+                            None,
+                            non_empty_string(&captured_reasoning_summary),
+                            non_empty_vec(&captured_reasoning_items),
+                            non_empty_vec(&captured_reasoning_item_encrypted_content),
+                        );
+                        break 'loop_call_turns Ok((current_message_content, generation_metadata));
+                    }
+                };
+
+                let (status, bg_status, message_status, output_value, response_text) =
+                    match &outcome {
+                        ClientToolOutcome::Result(result) => (
+                            ToolCallStatus::Success,
+                            BgToolCallStatus::Success,
+                            MessageToolCallStatus::Success,
+                            json!({ "status": "success", "result": result }),
+                            result.to_string(),
+                        ),
+                        ClientToolOutcome::Error(error) => (
+                            ToolCallStatus::Error,
+                            BgToolCallStatus::Error,
+                            MessageToolCallStatus::Error,
+                            json!({ "status": "error", "error": error }),
+                            format!("Client tool error: {error}"),
+                        ),
+                        // Backend-produced (e.g. park timeout): a typed,
+                        // tool_call_id-correlated resolution the client can tell
+                        // apart from a genuine tool error (its output carries
+                        // `status: "cancelled"` + a machine-readable reason),
+                        // while the model still gets a recoverable error string.
+                        ClientToolOutcome::Cancelled { reason } => (
+                            ToolCallStatus::Error,
+                            BgToolCallStatus::Error,
+                            MessageToolCallStatus::Error,
+                            json!({ "status": "cancelled", "reason": reason }),
+                            format!(
+                                "Client tool was not completed (reason: {reason}); the client did not return a result in time."
+                            ),
+                        ),
+                    };
+
+                // In-band resolution: write the outcome into history so a resume
+                // replay is self-consistent (the client sees the call answered
+                // and does not re-execute the tool).
+                let _ = task
+                    .send_event(StreamingEvent::ToolCallUpdate {
+                        message_id: assistant_message_id,
+                        content_index,
+                        tool_call_id: call_id.clone(),
+                        tool_name: tool_name.clone(),
+                        input: Some(tool_input.clone()),
+                        status: bg_status,
+                        progress_message: None,
+                        output: Some(output_value.clone()),
+                    })
+                    .await;
+                let update_event = MessageSubmitStreamingResponseToolCallUpdate {
+                    message_id: assistant_message_id,
+                    content_index,
+                    tool_call_id: call_id.clone(),
+                    tool_name: tool_name.clone(),
+                    input: Some(tool_input.clone()),
+                    status,
+                    progress_message: None,
+                    output: Some(output_value.clone()),
+                };
+                let update_message: MSG = update_event.into();
+                // Best-effort (see the call event above): a dropped SSE
+                // connection after the park must not abort the turn — the result
+                // is already recorded to history (broadcast) and persisted below.
+                let _ = update_message.send_event(tx.clone()).await;
+
+                current_message_content.push(ContentPart::ToolUse(ToolUse {
+                    tool_call_id: call_id.clone(),
+                    status: message_status,
+                    tool_name: tool_name.clone(),
+                    input: Some(tool_input),
+                    progress_message: None,
+                    output: Some(output_value),
+                    started_at: Some(tool_call_started),
+                    ended_at: Some(now_timestamp()),
+                }));
+                current_turn_tool_responses.push(genai::chat::ToolResponse {
+                    call_id,
                     content: response_text,
                 });
                 continue;
@@ -4328,7 +4764,15 @@ fn is_tool_allowed_by_allowlist(
     tool: &crate::services::mcp_session_manager::ManagedTool,
     allowlist: &[String],
 ) -> bool {
-    let qualified_name = format!("{}/{}", tool.server_id, tool.tool.name);
+    is_qualified_tool_allowed(&tool.server_id, &tool.tool.name, allowlist)
+}
+
+/// Core allowlist matcher shared by MCP tools (`server_id/tool_name`) and
+/// client tools (`namespace/tool_name`). A `namespace` here is the MCP server
+/// id or the client-tool namespace. Patterns: `*` (all), a bare namespace (all
+/// of that namespace), `namespace/*` (prefix), or an exact `namespace/name`.
+fn is_qualified_tool_allowed(namespace: &str, tool_name: &str, allowlist: &[String]) -> bool {
+    let qualified_name = format!("{}/{}", namespace, tool_name);
 
     allowlist.iter().any(|pattern| {
         if pattern == "*" {
@@ -4336,7 +4780,7 @@ fn is_tool_allowed_by_allowlist(
         }
 
         if !pattern.contains('/') {
-            return pattern == &tool.server_id;
+            return pattern == namespace;
         }
 
         if let Some(prefix) = pattern.strip_suffix("/*") {
@@ -4347,11 +4791,30 @@ fn is_tool_allowed_by_allowlist(
     })
 }
 
+/// Merge an active action facet's `tool_call_allowlist` into the MCP tool
+/// allowlist. Additive by design: it only extends an already-active (`Some`)
+/// allowlist, so an action facet *adds* selectable MCP tools without turning a
+/// deployment that had no MCP allowlisting (`None` = all tools allowed) into a
+/// restrictive one. Patterns naming a client-tool namespace (e.g. `outlook/*`)
+/// simply match no MCP server and are harmless here.
+fn merge_action_facet_into_mcp_allowlist(
+    facet_allowlist: Option<Vec<String>>,
+    action_facet_patterns: &[String],
+) -> Option<Vec<String>> {
+    let mut allowlist = facet_allowlist?;
+    for pattern in action_facet_patterns {
+        if !allowlist.contains(pattern) {
+            allowlist.push(pattern.clone());
+        }
+    }
+    Some(allowlist)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         apply_assistant_server_filter, derive_requested_server_ids_from_allowlist,
-        expand_tool_patterns_with_discovered_tools,
+        expand_tool_patterns_with_discovered_tools, merge_action_facet_into_mcp_allowlist,
     };
     use std::collections::HashSet;
 
@@ -4407,6 +4870,72 @@ mod tests {
         );
     }
 
+    #[test]
+    fn merge_action_facet_allowlist_leaves_none_unrestricted() {
+        // No MCP allowlist active (all tools allowed): an action facet must not
+        // turn that into a restrictive allowlist.
+        let merged = merge_action_facet_into_mcp_allowlist(None, &["outlook/*".to_string()]);
+        assert!(merged.is_none());
+    }
+
+    #[test]
+    fn merge_action_facet_allowlist_extends_active_allowlist_deduped() {
+        let base = Some(vec!["server_a/*".to_string(), "outlook/*".to_string()]);
+        let merged = merge_action_facet_into_mcp_allowlist(
+            base,
+            &["outlook/*".to_string(), "server_b/tool_x".to_string()],
+        );
+        assert_eq!(
+            merged,
+            Some(vec![
+                "server_a/*".to_string(),
+                "outlook/*".to_string(),
+                "server_b/tool_x".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn merge_action_facet_allowlist_noop_for_empty_patterns() {
+        let base = Some(vec!["server_a/*".to_string()]);
+        let merged = merge_action_facet_into_mcp_allowlist(base.clone(), &[]);
+        assert_eq!(merged, base);
+    }
+
+    #[test]
+    fn parses_supported_client_tools_header() {
+        use axum::http::{HeaderMap, HeaderValue};
+
+        // Absent => None (client advertised nothing → offer no client tools).
+        let ctx = super::generation_request_context_from_headers(&HeaderMap::new());
+        assert_eq!(ctx.supported_client_tools, None);
+
+        // Present with entries: trimmed, blank entries dropped.
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            super::X_ERATO_SUPPORTED_CLIENT_TOOLS_HEADER,
+            HeaderValue::from_static("outlook.fetch_availability, , ping "),
+        );
+        let ctx = super::generation_request_context_from_headers(&headers);
+        assert_eq!(
+            ctx.supported_client_tools,
+            Some(vec![
+                "outlook.fetch_availability".to_string(),
+                "ping".to_string(),
+            ])
+        );
+
+        // Present but empty => Some(empty): client speaks the protocol but
+        // supports no tools (still offers nothing, distinct from absent).
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            super::X_ERATO_SUPPORTED_CLIENT_TOOLS_HEADER,
+            HeaderValue::from_static(""),
+        );
+        let ctx = super::generation_request_context_from_headers(&headers);
+        assert_eq!(ctx.supported_client_tools, Some(vec![]));
+    }
+
     // ========================================================================
     // validate_action_facet tests
     // ========================================================================
@@ -4452,6 +4981,7 @@ mod tests {
                     client_actions: vec![],
                     presentation: None,
                     client_actions_always_ask: vec![],
+                    tool_call_allowlist: vec![],
                 },
             );
             let af = ActionFacetRequest {
@@ -4474,6 +5004,7 @@ mod tests {
                     client_actions: vec![],
                     presentation: None,
                     client_actions_always_ask: vec![],
+                    tool_call_allowlist: vec![],
                 },
             );
             let af = ActionFacetRequest {
@@ -4497,6 +5028,7 @@ mod tests {
                     client_actions: vec![],
                     presentation: None,
                     client_actions_always_ask: vec![],
+                    tool_call_allowlist: vec![],
                 },
             );
             let af = ActionFacetRequest {
@@ -4518,6 +5050,7 @@ mod tests {
                     client_actions: vec![],
                     presentation: None,
                     client_actions_always_ask: vec![],
+                    tool_call_allowlist: vec![],
                 },
             );
             let af = ActionFacetRequest {
@@ -4541,6 +5074,7 @@ mod tests {
                     client_actions: vec![],
                     presentation: None,
                     client_actions_always_ask: vec![],
+                    tool_call_allowlist: vec![],
                 },
             );
             let af = ActionFacetRequest {
@@ -4562,6 +5096,7 @@ mod tests {
                     client_actions: vec![],
                     presentation: None,
                     client_actions_always_ask: vec![],
+                    tool_call_allowlist: vec![],
                 },
             );
             let oversized = "x".repeat(ACTION_FACET_ARG_MAX_SIZE + 1);
@@ -4586,6 +5121,7 @@ mod tests {
                     client_actions: vec![],
                     presentation: None,
                     client_actions_always_ask: vec![],
+                    tool_call_allowlist: vec![],
                 },
             );
             let at_limit = "x".repeat(ACTION_FACET_ARG_MAX_SIZE);
@@ -4613,6 +5149,7 @@ mod tests {
                     client_actions: vec![],
                     presentation: None,
                     client_actions_always_ask: vec![],
+                    tool_call_allowlist: vec![],
                 },
             );
             config
@@ -4670,6 +5207,7 @@ mod tests {
                     client_actions: vec![],
                     presentation: None,
                     client_actions_always_ask: vec![],
+                    tool_call_allowlist: vec![],
                 },
             );
             assert!(is_known_platform(&config, "web"));
@@ -6890,6 +7428,86 @@ pub async fn abort_message_stream(
 
 #[utoipa::path(
     post,
+    path = "/me/messages/clienttoolresult",
+    request_body = ClientToolResultRequest,
+    responses(
+        (status = OK, body = ClientToolResultResponse),
+        (status = NOT_FOUND, description = "No suspended generation matches this chat and message"),
+        (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
+        (status = FORBIDDEN, description = "When the user has no access to the chat"),
+        (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn client_tool_result(
+    State(app_state): State<AppState>,
+    Extension(policy): Extension<PolicyEngine>,
+    Extension(me_user): Extension<MeProfile>,
+    Json(request): Json<ClientToolResultRequest>,
+) -> Result<Json<ClientToolResultResponse>, (axum::http::StatusCode, String)> {
+    // Per-chat ownership gate, identical to abort/resume — middleware alone does
+    // not enforce per-chat access.
+    let _chat = get_or_create_chat(
+        &app_state.db,
+        &policy,
+        &me_user.to_subject(),
+        Some(&request.chat_id),
+        &me_user.id,
+        None,
+        None,
+    )
+    .await
+    .map_err(|e| {
+        (
+            axum::http::StatusCode::FORBIDDEN,
+            format!("Access denied to chat: {}", e),
+        )
+    })?
+    .0;
+
+    let task = app_state
+        .background_tasks
+        .get_task(&request.chat_id)
+        .await
+        .ok_or((
+            axum::http::StatusCode::NOT_FOUND,
+            "No active generation task found for this chat".to_string(),
+        ))?;
+
+    // Route by task identity, not chat_id alone: a concurrent submit/regenerate
+    // replaces the task (new message_id), so refuse to deliver to the wrong turn.
+    if task.message_id() != request.message_id {
+        return Err((
+            axum::http::StatusCode::NOT_FOUND,
+            "No suspended generation matches this message".to_string(),
+        ));
+    }
+
+    // `error` takes precedence if present; otherwise a result; neither is itself
+    // surfaced to the model as an error.
+    let outcome = match (request.result, request.error) {
+        (_, Some(error)) => ClientToolOutcome::Error(error),
+        (Some(result), None) => ClientToolOutcome::Result(result),
+        (None, None) => ClientToolOutcome::Error(
+            "client tool returned neither a result nor an error".to_string(),
+        ),
+    };
+
+    let delivery = task
+        .deliver_client_tool_result(&request.tool_call_id, outcome)
+        .await;
+
+    // An unknown/already-consumed tool_call_id (already delivered, timed out,
+    // aborted) is a benign idempotent no-op — never a 4xx/5xx.
+    Ok(Json(ClientToolResultResponse {
+        delivered: matches!(delivery, ClientToolDelivery::Delivered),
+    }))
+}
+
+#[utoipa::path(
+    post,
     path = "/me/messages/resumestream",
     request_body = ResumeStreamRequest,
     responses(
@@ -6985,4 +7603,34 @@ pub async fn resume_message_sse(
             .interval(Duration::from_secs(1))
             .text("keep-alive-text"),
     ))
+}
+
+#[cfg(test)]
+mod client_tool_result_request_tests {
+    use super::ClientToolResultRequest;
+
+    #[test]
+    fn distinguishes_null_result_from_absent() {
+        let base = serde_json::json!({
+            "chat_id": "00000000-0000-0000-0000-000000000000",
+            "message_id": "00000000-0000-0000-0000-000000000000",
+            "tool_call_id": "c1",
+        });
+
+        // Absent `result` => None ("no result").
+        let absent: ClientToolResultRequest = serde_json::from_value(base.clone()).unwrap();
+        assert_eq!(absent.result, None);
+
+        // Explicit JSON null => Some(Null), a valid result (the serde gotcha).
+        let mut with_null = base.clone();
+        with_null["result"] = serde_json::Value::Null;
+        let with_null: ClientToolResultRequest = serde_json::from_value(with_null).unwrap();
+        assert_eq!(with_null.result, Some(serde_json::Value::Null));
+
+        // A concrete value round-trips.
+        let mut with_value = base;
+        with_value["result"] = serde_json::json!({ "slots": 3 });
+        let with_value: ClientToolResultRequest = serde_json::from_value(with_value).unwrap();
+        assert_eq!(with_value.result, Some(serde_json::json!({ "slots": 3 })));
+    }
 }

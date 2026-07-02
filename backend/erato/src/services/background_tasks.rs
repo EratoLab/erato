@@ -12,7 +12,9 @@ use sqlx::types::Uuid;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use tokio::sync::{Notify, RwLock, broadcast};
+use tokio::sync::{Notify, RwLock, broadcast, oneshot};
+
+use crate::services::client_tools::{ClientToolDelivery, ClientToolOutcome};
 
 /// Maximum number of events to store in history per task
 const MAX_EVENT_HISTORY: usize = 10_000;
@@ -78,8 +80,11 @@ impl Default for BackgroundTaskManager {
 
 /// A streaming task that manages event broadcasting and history
 pub struct StreamingTask {
-    /// The message ID being generated
-    pub message_id: Uuid,
+    /// The id of the assistant message being generated. Set to a placeholder at
+    /// construction (the real id is only known once the generation task creates
+    /// the message) and updated via `set_message_id`. Behind a lock so it can be
+    /// corrected after the task is shared. Read via `message_id()`.
+    message_id: std::sync::RwLock<Uuid>,
     /// Broadcast sender for live events
     event_tx: broadcast::Sender<StreamingEvent>,
     /// Storage for all events (for replay)
@@ -90,12 +95,18 @@ pub struct StreamingTask {
     abort_requested: Arc<AtomicBool>,
     /// Notifies waiters when an abort is requested
     abort_notify: Arc<Notify>,
+    /// Senders for in-flight client-executed tool calls, keyed by tool_call_id.
+    /// The agentic loop registers an entry and awaits its receiver while the
+    /// client executes the tool; the result endpoint delivers into it. Lives in
+    /// memory only — a backend restart drops parked turns (returning client
+    /// tools must be read/idempotent).
+    pending_client_tools: Arc<RwLock<HashMap<String, oneshot::Sender<ClientToolOutcome>>>>,
 }
 
 impl std::fmt::Debug for StreamingTask {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("StreamingTask")
-            .field("message_id", &self.message_id)
+            .field("message_id", &self.message_id())
             .field("subscriber_count", &self.event_tx.receiver_count())
             .field("completed", &self.completed.load(Ordering::SeqCst))
             .field(
@@ -113,13 +124,26 @@ impl StreamingTask {
         let (event_tx, _) = broadcast::channel(1000);
 
         Self {
-            message_id,
+            message_id: std::sync::RwLock::new(message_id),
             event_tx,
             event_history: Arc::new(RwLock::new(Vec::new())),
             completed: Arc::new(AtomicBool::new(false)),
             abort_requested: Arc::new(AtomicBool::new(false)),
             abort_notify: Arc::new(Notify::new()),
+            pending_client_tools: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    /// The id of the assistant message this task is generating.
+    pub fn message_id(&self) -> Uuid {
+        *self.message_id.read().expect("message_id lock poisoned")
+    }
+
+    /// Record the real assistant message id once the generation task has created
+    /// it. Client-tool results are routed to a task by this id, so it must match
+    /// the id the client received in the `client_tool_call` event.
+    pub fn set_message_id(&self, message_id: Uuid) {
+        *self.message_id.write().expect("message_id lock poisoned") = message_id;
     }
 
     /// Subscribe to live events from this task
@@ -137,7 +161,7 @@ impl StreamingTask {
         if history.len() >= MAX_EVENT_HISTORY {
             tracing::warn!(
                 "Event history for message {} has reached maximum size of {}",
-                self.message_id,
+                self.message_id(),
                 MAX_EVENT_HISTORY
             );
             // Don't add more events to history, but still broadcast
@@ -182,10 +206,62 @@ impl StreamingTask {
 
     /// Wait until cancellation has been requested.
     pub async fn wait_for_abort(&self) {
+        // Register as a waiter BEFORE re-checking the flag. `request_abort` uses
+        // `notify_waiters()`, which stores no permit, so an abort requested in
+        // the gap between the check and the await would otherwise be lost.
+        // `Notified::enable()` registers interest immediately, closing that
+        // window — load-bearing for a long client-tool park, which (unlike the
+        // streaming loop) does not re-poll `wait_for_abort` frequently.
+        let notified = self.abort_notify.notified();
+        tokio::pin!(notified);
+        notified.as_mut().enable();
         if self.is_abort_requested() {
             return;
         }
-        self.abort_notify.notified().await;
+        notified.await;
+    }
+
+    /// Register interest in a client-executed tool's result, returning a
+    /// receiver the agentic loop awaits while the client runs the tool. The
+    /// matching sender is stored in `pending_client_tools` keyed by
+    /// `tool_call_id` and consumed once by `deliver_client_tool_result`.
+    pub async fn register_client_tool_call(
+        &self,
+        tool_call_id: String,
+    ) -> oneshot::Receiver<ClientToolOutcome> {
+        let (tx, rx) = oneshot::channel();
+        self.pending_client_tools
+            .write()
+            .await
+            .insert(tool_call_id, tx);
+        rx
+    }
+
+    /// Deliver a client tool's result to the waiting loop. The pending entry is
+    /// removed first (deliver-once), so duplicate or late POSTs are benign
+    /// no-ops. The guard is dropped BEFORE the (synchronous) send so the result
+    /// endpoint never holds the lock across delivery.
+    pub async fn deliver_client_tool_result(
+        &self,
+        tool_call_id: &str,
+        outcome: ClientToolOutcome,
+    ) -> ClientToolDelivery {
+        let sender = self.pending_client_tools.write().await.remove(tool_call_id);
+        match sender {
+            // Receiver dropped => the loop already gave up (timeout/abort); the
+            // late result is harmless to discard.
+            Some(sender) => match sender.send(outcome) {
+                Ok(()) => ClientToolDelivery::Delivered,
+                Err(_) => ClientToolDelivery::Unknown,
+            },
+            None => ClientToolDelivery::Unknown,
+        }
+    }
+
+    /// Drop any pending entry for a client tool call (on timeout/abort) so a
+    /// late client result cannot be delivered to a finished or replaced turn.
+    pub async fn remove_pending_client_tool(&self, tool_call_id: &str) {
+        self.pending_client_tools.write().await.remove(tool_call_id);
     }
 
     /// Get the number of active subscribers
@@ -249,6 +325,19 @@ pub enum StreamingEvent {
         #[serde(skip_serializing_if = "Option::is_none")]
         output: Option<JsonValue>,
     },
+    /// The model called a facet `client_tool`: the loop is now SUSPENDED
+    /// awaiting the client to execute it and POST the result back. Distinct
+    /// from `tool_call_proposed` (which fires for every proposed tool call):
+    /// this signals the client to execute and that the turn is parked.
+    #[serde(rename = "client_tool_call")]
+    ClientToolCall {
+        message_id: Uuid,
+        content_index: usize,
+        tool_call_id: String,
+        tool_name: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        input: Option<JsonValue>,
+    },
     /// Assistant message was completed
     #[serde(rename = "assistant_message_completed")]
     AssistantMessageCompleted {
@@ -288,7 +377,7 @@ mod tests {
 
         let (_receiver, task) = manager.start_task(chat_id, message_id).await;
 
-        assert_eq!(task.message_id, message_id);
+        assert_eq!(task.message_id(), message_id);
         assert!(!task.is_completed());
         assert_eq!(task.subscriber_count(), 1); // One receiver created
         assert!(!task.is_abort_requested());
@@ -343,11 +432,11 @@ mod tests {
         let (_receiver2, task2) = manager.start_task(chat_id, message_id_2).await;
 
         // Task 2 should have replaced task 1
-        assert_ne!(task1.message_id, task2.message_id);
+        assert_ne!(task1.message_id(), task2.message_id());
 
         // Getting the task should return task 2
         let retrieved = manager.get_task(&chat_id).await.unwrap();
-        assert_eq!(retrieved.message_id, message_id_2);
+        assert_eq!(retrieved.message_id(), message_id_2);
     }
 
     #[tokio::test]
@@ -382,5 +471,65 @@ mod tests {
         task.request_abort();
 
         assert!(task.is_abort_requested());
+    }
+
+    #[tokio::test]
+    async fn set_message_id_updates_the_routing_id() {
+        let task = StreamingTask::new(Uuid::new_v4());
+        let real_id = Uuid::new_v4();
+        task.set_message_id(real_id);
+        assert_eq!(task.message_id(), real_id);
+    }
+
+    #[tokio::test]
+    async fn client_tool_result_delivery_round_trip() {
+        let task = StreamingTask::new(Uuid::new_v4());
+        let mut rx = task.register_client_tool_call("call-1".to_string()).await;
+
+        let delivery = task
+            .deliver_client_tool_result(
+                "call-1",
+                ClientToolOutcome::Result(serde_json::json!({ "ok": true })),
+            )
+            .await;
+        assert_eq!(delivery, ClientToolDelivery::Delivered);
+        match rx.try_recv() {
+            Ok(ClientToolOutcome::Result(value)) => {
+                assert_eq!(value, serde_json::json!({ "ok": true }))
+            }
+            other => panic!("expected the delivered result, got {other:?}"),
+        }
+
+        // Deliver-once: a second delivery for the same id is a benign no-op.
+        let again = task
+            .deliver_client_tool_result("call-1", ClientToolOutcome::Error("late".to_string()))
+            .await;
+        assert_eq!(again, ClientToolDelivery::Unknown);
+    }
+
+    #[tokio::test]
+    async fn deliver_unknown_tool_call_id_is_noop() {
+        let task = StreamingTask::new(Uuid::new_v4());
+        let delivery = task
+            .deliver_client_tool_result(
+                "never-registered",
+                ClientToolOutcome::Error("x".to_string()),
+            )
+            .await;
+        assert_eq!(delivery, ClientToolDelivery::Unknown);
+    }
+
+    #[tokio::test]
+    async fn remove_pending_client_tool_drops_the_waiter() {
+        let task = StreamingTask::new(Uuid::new_v4());
+        let mut rx = task.register_client_tool_call("call-1".to_string()).await;
+        task.remove_pending_client_tool("call-1").await;
+        // The sender was dropped, so the receiver observes a closed channel and a
+        // later delivery finds nothing to deliver to.
+        assert!(rx.try_recv().is_err());
+        let delivery = task
+            .deliver_client_tool_result("call-1", ClientToolOutcome::Error("x".to_string()))
+            .await;
+        assert_eq!(delivery, ClientToolDelivery::Unknown);
     }
 }
