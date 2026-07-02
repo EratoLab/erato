@@ -892,12 +892,26 @@ pub async fn set_published(
         return Err(eyre!("Only review-accepted versions can be published"));
     }
 
+    let should_mark_current = is_published;
+    if should_mark_current {
+        let clear_current = assistant_hub_assistant_versions::ActiveModel {
+            is_current_published_version: Set(false),
+            ..Default::default()
+        };
+        AssistantHubAssistantVersions::update_many()
+            .set(clear_current)
+            .filter(
+                assistant_hub_assistant_versions::Column::AssistantHubAssistantId
+                    .eq(version.assistant_hub_assistant_id),
+            )
+            .exec(conn)
+            .await?;
+    }
+
     let mut active = version.into_active_model();
     active.is_published = Set(is_published);
     active.published_at = Set(is_published.then(|| Utc::now().into()));
-    if !is_published {
-        active.is_current_published_version = Set(false);
-    }
+    active.is_current_published_version = Set(should_mark_current);
     let version = active.update(conn).await?;
 
     records_for_versions(conn, vec![version])
