@@ -675,15 +675,42 @@ fn build_frontend_environment(
 }
 
 #[derive(Debug, Clone)]
-pub struct DeploymentVersion(pub Option<String>);
+pub struct DeploymentVersion(pub Option<String>, pub String);
 
 impl DeploymentVersion {
     /// Read the deployment version from the ERATO_DEPLOYMENT_VERSION environment variable.
     /// This bypasses the config.rs mechanism and reads directly from the environment.
     pub fn from_env() -> Self {
         let version = std::env::var("ERATO_DEPLOYMENT_VERSION").ok();
-        Self(version)
+        Self(version, random_hex_string())
     }
+
+    fn etag_value_for_path(
+        &self,
+        request_path: &str,
+        translation_po_compilation_mode: TranslationPoCompilationMode,
+    ) -> Option<String> {
+        self.0.as_ref().map(|version| {
+            let etag_seed = if translation_po_compilation_mode
+                == TranslationPoCompilationMode::JustInTime
+                && is_i18n_messages_json(request_path)
+            {
+                format!("{version}-{}", self.1)
+            } else {
+                version.clone()
+            };
+            format!("\"{etag_seed}\"")
+        })
+    }
+}
+
+fn random_hex_string() -> String {
+    let bytes: [u8; 16] = rand::random();
+    let mut hex = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        write!(hex, "{byte:02x}").unwrap();
+    }
+    hex
 }
 
 #[derive(Debug, Deserialize)]
@@ -966,14 +993,13 @@ pub mod axum {
 
     fn apply_non_html_cache_headers(
         res: &mut Response<UnsyncBoxBody<Bytes, BoxError>>,
-        deployment_version: &DeploymentVersion,
+        etag_value: Option<&str>,
         cache_control: &'static str,
     ) {
-        if let Some(version) = &deployment_version.0 {
-            let etag_value = format!("\"{}\"", version);
+        if let Some(etag_value) = etag_value {
             res.headers_mut().insert(
                 http::header::ETAG,
-                HeaderValue::from_str(&etag_value).unwrap(),
+                HeaderValue::from_str(etag_value).unwrap(),
             );
             res.headers_mut().insert(
                 http::header::CACHE_CONTROL,
@@ -1043,15 +1069,18 @@ pub mod axum {
             {
                 Ok(body) => {
                     let cache_control = cache_control_for_path(&request_path);
-                    if let Some(version) = &deployment_version.0 {
-                        let etag_value = format!("\"{}\"", version);
-                        if client_etag_matches(client_etag.as_ref(), &etag_value) {
-                            return Ok(not_modified_response(
-                                etag_value,
-                                cache_control,
-                                content_security_policy.as_ref(),
-                            ));
-                        }
+                    let etag_value = deployment_version.etag_value_for_path(
+                        &request_path,
+                        frontend_registry.translation_po_compilation_mode,
+                    );
+                    if let Some(etag_value) = &etag_value
+                        && client_etag_matches(client_etag.as_ref(), etag_value)
+                    {
+                        return Ok(not_modified_response(
+                            etag_value.clone(),
+                            cache_control,
+                            content_security_policy.as_ref(),
+                        ));
                     }
 
                     let mut res = Response::builder()
@@ -1059,7 +1088,7 @@ pub mod axum {
                         .header(http::header::CONTENT_TYPE, "application/json")
                         .body(full_body(Bytes::from(body)))
                         .unwrap();
-                    apply_non_html_cache_headers(&mut res, &deployment_version, cache_control);
+                    apply_non_html_cache_headers(&mut res, etag_value.as_deref(), cache_control);
                     insert_content_security_policy(
                         res.headers_mut(),
                         content_security_policy.as_ref(),
@@ -1158,22 +1187,23 @@ pub mod axum {
             // Non-HTML files (theme files, locales, etc.): add cache headers based on deployment version
             let mut res = res.map(|body| body.map_err(Into::into).boxed_unsync());
             let cache_control = cache_control_for_path(&request_path);
+            let etag_value = deployment_version.etag_value_for_path(
+                &request_path,
+                frontend_registry.translation_po_compilation_mode,
+            );
 
-            if let Some(version) = &deployment_version.0 {
-                // We have a deployment version - use it for cache headers
-                let etag_value = format!("\"{}\"", version);
-
+            if let Some(etag_value) = &etag_value {
                 // Check if the client's ETag matches our current version
-                if client_etag_matches(client_etag.as_ref(), &etag_value) {
+                if client_etag_matches(client_etag.as_ref(), etag_value) {
                     // ETag matches - return 304 Not Modified
                     return Ok(not_modified_response(
-                        etag_value,
+                        etag_value.clone(),
                         cache_control,
                         content_security_policy.as_ref(),
                     ));
                 }
             }
-            apply_non_html_cache_headers(&mut res, &deployment_version, cache_control);
+            apply_non_html_cache_headers(&mut res, etag_value.as_deref(), cache_control);
             insert_content_security_policy(res.headers_mut(), content_security_policy.as_ref());
 
             Ok(res)
@@ -1427,6 +1457,40 @@ mod tests {
                 "/public/common/locales/../messages.json"
             ),
             None
+        );
+    }
+
+    #[test]
+    fn deployment_version_etag_for_jit_i18n_messages_json_uses_runtime_cache_buster() {
+        let deployment_version =
+            DeploymentVersion(Some("deployment-123".to_string()), "abcdef".to_string());
+
+        assert_eq!(
+            deployment_version
+                .etag_value_for_path(
+                    "/public/common/locales/de/messages.json",
+                    TranslationPoCompilationMode::JustInTime
+                )
+                .as_deref(),
+            Some("\"deployment-123-abcdef\"")
+        );
+        assert_eq!(
+            deployment_version
+                .etag_value_for_path(
+                    "/public/common/locales/de/messages.json",
+                    TranslationPoCompilationMode::Precompiled
+                )
+                .as_deref(),
+            Some("\"deployment-123\"")
+        );
+        assert_eq!(
+            deployment_version
+                .etag_value_for_path(
+                    "/public/common/assets/index.js",
+                    TranslationPoCompilationMode::JustInTime
+                )
+                .as_deref(),
+            Some("\"deployment-123\"")
         );
     }
 }
