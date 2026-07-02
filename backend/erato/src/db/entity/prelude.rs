@@ -3,6 +3,7 @@
 pub use super::assistant_file_uploads::Entity as AssistantFileUploads;
 pub use super::assistant_hub_assistant_versions::Entity as AssistantHubAssistantVersions;
 pub use super::assistant_hub_assistants::Entity as AssistantHubAssistants;
+pub use super::assistant_hub_reviews::Entity as AssistantHubReviews;
 pub use super::assistants::Entity as Assistants;
 pub use super::chat_file_uploads::Entity as ChatFileUploads;
 pub use super::chats::Entity as Chats;

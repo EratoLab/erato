@@ -81,6 +81,107 @@
         ]
       }
     },
+    "/api/v1beta/assistant-hub/assistants/{hub_assistant_id}/review": {
+      "put": {
+        "tags": [
+          "assistant_hub"
+        ],
+        "operationId": "submit_assistant_hub_review",
+        "parameters": [
+          {
+            "name": "hub_assistant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantHubUserReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantHubUserReviewResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          },
+          "401": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/assistant-hub/assistants/{hub_assistant_id}/reviews": {
+      "get": {
+        "tags": [
+          "assistant_hub"
+        ],
+        "operationId": "list_assistant_hub_reviews",
+        "parameters": [
+          {
+            "name": "hub_assistant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantHubUserReviewsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/assistant-hub/assistants/{source_assistant_id}/submission-diff": {
       "post": {
         "tags": [
@@ -3441,6 +3542,27 @@
           }
         }
       },
+      "AssistantHubReviewUser": {
+        "type": "object",
+        "required": [
+          "id",
+          "display_name"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          }
+        }
+      },
       "AssistantHubSetFeaturedRequest": {
         "type": "object",
         "required": [
@@ -3521,6 +3643,97 @@
           }
         }
       },
+      "AssistantHubUserReview": {
+        "type": "object",
+        "required": [
+          "id",
+          "hub_assistant_id",
+          "version_id",
+          "version_number",
+          "reviewer",
+          "score",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "comment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "hub_assistant_id": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "reviewer": {
+            "$ref": "#/components/schemas/AssistantHubReviewUser"
+          },
+          "score": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version_id": {
+            "type": "string"
+          },
+          "version_number": {
+            "type": "string"
+          }
+        }
+      },
+      "AssistantHubUserReviewRequest": {
+        "type": "object",
+        "required": [
+          "score"
+        ],
+        "properties": {
+          "comment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "score": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "AssistantHubUserReviewResponse": {
+        "type": "object",
+        "required": [
+          "review"
+        ],
+        "properties": {
+          "review": {
+            "$ref": "#/components/schemas/AssistantHubUserReview"
+          }
+        }
+      },
+      "AssistantHubUserReviewsResponse": {
+        "type": "object",
+        "required": [
+          "reviews"
+        ],
+        "properties": {
+          "reviews": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssistantHubUserReview"
+            }
+          }
+        }
+      },
       "AssistantHubVersion": {
         "type": "object",
         "required": [
@@ -3540,6 +3753,7 @@
           "submitted_at",
           "created_at",
           "updated_at",
+          "review_count",
           "assistant",
           "creator"
         ],
@@ -3599,6 +3813,18 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "review_average_score": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "review_count": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
           },
           "reviewed_at": {
             "type": [

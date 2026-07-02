@@ -251,6 +251,176 @@ export const useGetAssistantHubAssistant = <
   });
 };
 
+export type SubmitAssistantHubReviewPathParams = {
+  hubAssistantId: string;
+};
+
+export type SubmitAssistantHubReviewError = Fetcher.ErrorWrapper<undefined>;
+
+export type SubmitAssistantHubReviewVariables = {
+  body: Schemas.AssistantHubUserReviewRequest;
+  pathParams: SubmitAssistantHubReviewPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchSubmitAssistantHubReview = (
+  variables: SubmitAssistantHubReviewVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.AssistantHubUserReviewResponse,
+    SubmitAssistantHubReviewError,
+    Schemas.AssistantHubUserReviewRequest,
+    {},
+    {},
+    SubmitAssistantHubReviewPathParams
+  >({
+    url: "/api/v1beta/assistant-hub/assistants/{hubAssistantId}/review",
+    method: "put",
+    ...variables,
+    signal,
+  });
+
+export const useSubmitAssistantHubReview = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.AssistantHubUserReviewResponse,
+      SubmitAssistantHubReviewError,
+      SubmitAssistantHubReviewVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.AssistantHubUserReviewResponse,
+    SubmitAssistantHubReviewError,
+    SubmitAssistantHubReviewVariables
+  >({
+    mutationFn: (variables: SubmitAssistantHubReviewVariables) =>
+      fetchSubmitAssistantHubReview(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type ListAssistantHubReviewsPathParams = {
+  hubAssistantId: string;
+};
+
+export type ListAssistantHubReviewsError = Fetcher.ErrorWrapper<undefined>;
+
+export type ListAssistantHubReviewsVariables = {
+  pathParams: ListAssistantHubReviewsPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchListAssistantHubReviews = (
+  variables: ListAssistantHubReviewsVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.AssistantHubUserReviewsResponse,
+    ListAssistantHubReviewsError,
+    undefined,
+    {},
+    {},
+    ListAssistantHubReviewsPathParams
+  >({
+    url: "/api/v1beta/assistant-hub/assistants/{hubAssistantId}/reviews",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function listAssistantHubReviewsQuery(
+  variables: ListAssistantHubReviewsVariables,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (
+    options: QueryFnOptions,
+  ) => Promise<Schemas.AssistantHubUserReviewsResponse>;
+};
+
+export function listAssistantHubReviewsQuery(
+  variables: ListAssistantHubReviewsVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((
+        options: QueryFnOptions,
+      ) => Promise<Schemas.AssistantHubUserReviewsResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function listAssistantHubReviewsQuery(
+  variables: ListAssistantHubReviewsVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/assistant-hub/assistants/{hubAssistantId}/reviews",
+      operationId: "listAssistantHubReviews",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchListAssistantHubReviews(variables, signal),
+  };
+}
+
+export const useSuspenseListAssistantHubReviews = <
+  TData = Schemas.AssistantHubUserReviewsResponse,
+>(
+  variables: ListAssistantHubReviewsVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.AssistantHubUserReviewsResponse,
+      ListAssistantHubReviewsError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.AssistantHubUserReviewsResponse,
+    ListAssistantHubReviewsError,
+    TData
+  >({
+    ...listAssistantHubReviewsQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useListAssistantHubReviews = <
+  TData = Schemas.AssistantHubUserReviewsResponse,
+>(
+  variables: ListAssistantHubReviewsVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.AssistantHubUserReviewsResponse,
+      ListAssistantHubReviewsError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.AssistantHubUserReviewsResponse,
+    ListAssistantHubReviewsError,
+    TData
+  >({
+    ...listAssistantHubReviewsQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type PreviewAssistantHubSubmissionDiffPathParams = {
   sourceAssistantId: string;
 };
@@ -5457,6 +5627,11 @@ export type QueryOperation =
       path: "/api/v1beta/assistant-hub/assistants/{hubAssistantId}";
       operationId: "getAssistantHubAssistant";
       variables: GetAssistantHubAssistantVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/assistant-hub/assistants/{hubAssistantId}/reviews";
+      operationId: "listAssistantHubReviews";
+      variables: ListAssistantHubReviewsVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/assistant-hub/config";

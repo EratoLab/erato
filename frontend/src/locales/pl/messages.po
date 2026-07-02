@@ -462,6 +462,31 @@ msgstr "Zglos nowa wersje"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.submittedReviews.empty"
+msgstr "Brak przeslanych recenzji."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.submittedReviews.loading"
+msgstr "Wczytywanie recenzji..."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.submittedReviews.scoreValue"
+msgstr "{score} / 10"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.submittedReviews.title"
+msgstr "Przeslane recenzje"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.submittedReviews.versionValue"
+msgstr "Wersja {versionNumber}"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
 msgid "assistantHub.my.subtitle"
 msgstr "Przegladaj zgloszone, zaakceptowane, odrzucone i wycofane wersje asystentow"
 
@@ -499,6 +524,21 @@ msgstr "Wycofac te zgloszona wersje z recenzji?"
 #: src/pages/AssistantHubMyPage.tsx
 msgid "assistantHub.my.withdrawConfirmTitle"
 msgstr "Wycofaj zgloszenie"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantHubUtils.tsx
+msgid "assistantHub.rating.none"
+msgstr "Brak ocen"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantHubUtils.tsx
+msgid "assistantHub.rating.summary.many"
+msgstr "{formattedScore} / 10 ({reviewCount} ocen)"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantHubUtils.tsx
+msgid "assistantHub.rating.summary.one"
+msgstr "{formattedScore} / 10 (1 ocena)"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
@@ -609,6 +649,86 @@ msgstr "Cofnij publikacje"
 #: src/pages/AssistantHubReviewPage.tsx
 msgid "assistantHub.review.viewDetails"
 msgstr "Zobacz szczegoly"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.aggregateScore"
+msgstr "Srednia ocena"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.comment"
+msgstr "Komentarz"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.commentHelp"
+msgstr "Opcjonalnie: dodaj kontekst do swojej oceny."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.empty"
+msgstr "Brak widocznych komentarzy recenzji."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+#~ msgid "assistantHub.reviews.error.load"
+#~ msgstr "Nie udalo sie wczytac recenzji."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.error.submit"
+msgstr "Nie udalo sie wyslac recenzji."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.loading"
+msgstr "Wczytywanie recenzji..."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.score"
+msgstr "Ocena"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.scoreOption"
+msgstr "{scoreLabel} z 10"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.scoreSelector"
+msgstr "Ocena recenzji"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.scoreValue"
+msgstr "{0} / 10"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.submit"
+msgstr "Przeslij recenzje"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.title"
+msgstr "Recenzje"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.update"
+msgstr "Zaktualizuj recenzje"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.versionValue"
+msgstr "Wersja {0}"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.visibleComments"
+msgstr "Widoczne komentarze"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubPage.tsx

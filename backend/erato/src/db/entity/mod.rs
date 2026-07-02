@@ -5,6 +5,7 @@ pub mod prelude;
 pub mod assistant_file_uploads;
 pub mod assistant_hub_assistant_versions;
 pub mod assistant_hub_assistants;
+pub mod assistant_hub_reviews;
 pub mod assistants;
 pub mod chat_file_uploads;
 pub mod chats;

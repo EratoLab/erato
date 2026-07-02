@@ -462,6 +462,31 @@ msgstr "Soumettre une nouvelle version"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.submittedReviews.empty"
+msgstr "Aucune revue soumise pour le moment."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.submittedReviews.loading"
+msgstr "Chargement des revues..."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.submittedReviews.scoreValue"
+msgstr "{score} / 10"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.submittedReviews.title"
+msgstr "Revues soumises"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.submittedReviews.versionValue"
+msgstr "Version {versionNumber}"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
 msgid "assistantHub.my.subtitle"
 msgstr "Consulter les versions d'assistants soumises, acceptees, refusees et retirees"
 
@@ -499,6 +524,21 @@ msgstr "Retirer cette version soumise de la revue ?"
 #: src/pages/AssistantHubMyPage.tsx
 msgid "assistantHub.my.withdrawConfirmTitle"
 msgstr "Retirer la soumission"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantHubUtils.tsx
+msgid "assistantHub.rating.none"
+msgstr "Aucune note pour le moment"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantHubUtils.tsx
+msgid "assistantHub.rating.summary.many"
+msgstr "{formattedScore} / 10 ({reviewCount} notes)"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantHubUtils.tsx
+msgid "assistantHub.rating.summary.one"
+msgstr "{formattedScore} / 10 (1 note)"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
@@ -609,6 +649,86 @@ msgstr "Depublier"
 #: src/pages/AssistantHubReviewPage.tsx
 msgid "assistantHub.review.viewDetails"
 msgstr "Voir les details"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.aggregateScore"
+msgstr "Note agregee"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.comment"
+msgstr "Commentaire"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.commentHelp"
+msgstr "Facultatif : ajoutez du contexte a votre note."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.empty"
+msgstr "Aucun commentaire de revue visible pour le moment."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+#~ msgid "assistantHub.reviews.error.load"
+#~ msgstr "Impossible de charger les revues."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.error.submit"
+msgstr "Impossible d'envoyer la revue."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.loading"
+msgstr "Chargement des revues..."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.score"
+msgstr "Note"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.scoreOption"
+msgstr "{scoreLabel} sur 10"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.scoreSelector"
+msgstr "Note de revue"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.scoreValue"
+msgstr "{0} / 10"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.submit"
+msgstr "Envoyer la revue"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.title"
+msgstr "Revues"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.update"
+msgstr "Mettre a jour la revue"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.versionValue"
+msgstr "Version {0}"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.visibleComments"
+msgstr "Commentaires visibles"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubPage.tsx

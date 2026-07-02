@@ -462,6 +462,31 @@ msgstr "Neue Version einreichen"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.submittedReviews.empty"
+msgstr "Noch keine Reviews eingereicht."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.submittedReviews.loading"
+msgstr "Reviews werden geladen..."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.submittedReviews.scoreValue"
+msgstr "{score} / 10"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.submittedReviews.title"
+msgstr "Eingereichte Reviews"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.submittedReviews.versionValue"
+msgstr "Version {versionNumber}"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
 msgid "assistantHub.my.subtitle"
 msgstr "Eingereichte, akzeptierte, abgelehnte und zurueckgezogene Assistant-Versionen pruefen"
 
@@ -499,6 +524,21 @@ msgstr "Diese eingereichte Version aus dem Review zurueckziehen?"
 #: src/pages/AssistantHubMyPage.tsx
 msgid "assistantHub.my.withdrawConfirmTitle"
 msgstr "Einreichung zurueckziehen"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantHubUtils.tsx
+msgid "assistantHub.rating.none"
+msgstr "Keine Bewertungen"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantHubUtils.tsx
+msgid "assistantHub.rating.summary.many"
+msgstr "{formattedScore} / 10 ({reviewCount} Bewertungen)"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantHubUtils.tsx
+msgid "assistantHub.rating.summary.one"
+msgstr "{formattedScore} / 10 (1 Bewertung)"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
@@ -609,6 +649,86 @@ msgstr "Veroeffentlichung aufheben"
 #: src/pages/AssistantHubReviewPage.tsx
 msgid "assistantHub.review.viewDetails"
 msgstr "Details anzeigen"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.aggregateScore"
+msgstr "Aggregierte Punktzahl"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.comment"
+msgstr "Kommentar"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.commentHelp"
+msgstr "Optional: Kontext zu deiner Punktzahl hinzufuegen."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.empty"
+msgstr "Noch keine sichtbaren Review-Kommentare."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+#~ msgid "assistantHub.reviews.error.load"
+#~ msgstr "Reviews konnten nicht geladen werden."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.error.submit"
+msgstr "Review konnte nicht gesendet werden."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.loading"
+msgstr "Reviews werden geladen..."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.score"
+msgstr "Punktzahl"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.scoreOption"
+msgstr "{scoreLabel} von 10"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.scoreSelector"
+msgstr "Review-Punktzahl"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.scoreValue"
+msgstr "{0} / 10"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.submit"
+msgstr "Review senden"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.title"
+msgstr "Reviews"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.update"
+msgstr "Review aktualisieren"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.versionValue"
+msgstr "Version {0}"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.visibleComments"
+msgstr "Sichtbare Kommentare"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubPage.tsx

@@ -1,8 +1,8 @@
 use crate::config::AssistantHubConfig;
 use crate::db::entity::prelude::*;
 use crate::db::entity::{
-    assistant_file_uploads, assistant_hub_assistant_versions, assistant_hub_assistants, assistants,
-    users,
+    assistant_file_uploads, assistant_hub_assistant_versions, assistant_hub_assistants,
+    assistant_hub_reviews, assistants, users,
 };
 use crate::models::share_grant;
 use crate::policy::engine::PolicyEngine;
@@ -16,6 +16,7 @@ use sea_orm::{
 use serde::{Deserialize, Serialize};
 use serde_json::{Value as JsonValue, json};
 use sqlx::types::Uuid;
+use std::collections::HashMap;
 
 pub const STATUS_SUBMITTED: &str = "submitted";
 pub const STATUS_REVIEW_ACCEPTED: &str = "review_accepted";
@@ -46,6 +47,25 @@ pub struct HubVersionRecord {
     pub version: assistant_hub_assistant_versions::Model,
     pub assistant: assistants::Model,
     pub creator: users::Model,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HubReviewInput {
+    pub score: i32,
+    pub comment: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct HubReviewRecord {
+    pub review: assistant_hub_reviews::Model,
+    pub version: assistant_hub_assistant_versions::Model,
+    pub reviewer: users::Model,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct HubReviewSummary {
+    pub average_score: Option<f64>,
+    pub review_count: usize,
 }
 
 fn ensure_enabled(config: &AssistantHubConfig) -> Result<(), Report> {
@@ -94,6 +114,19 @@ fn validate_profile(
     }
 
     Ok(())
+}
+
+fn validate_review_input(input: &HubReviewInput) -> Result<Option<String>, Report> {
+    if !(1..=10).contains(&input.score) {
+        return Err(eyre!("score must be between 1 and 10"));
+    }
+
+    Ok(input
+        .comment
+        .as_deref()
+        .map(str::trim)
+        .filter(|comment| !comment.is_empty())
+        .map(ToString::to_string))
 }
 
 fn ensure_reviewer(config: &AssistantHubConfig, groups: &[String]) -> Result<(), Report> {
@@ -548,6 +581,143 @@ async fn records_for_versions(
             assistant,
             creator,
         });
+    }
+
+    Ok(records)
+}
+
+pub async fn review_summaries_for_hub_assistant_ids(
+    conn: &DatabaseConnection,
+    hub_assistant_ids: &[Uuid],
+) -> Result<HashMap<Uuid, HubReviewSummary>, Report> {
+    let mut summaries = HashMap::new();
+
+    for hub_assistant_id in hub_assistant_ids {
+        let reviews = AssistantHubReviews::find()
+            .filter(assistant_hub_reviews::Column::AssistantHubAssistantId.eq(*hub_assistant_id))
+            .all(conn)
+            .await?;
+
+        if reviews.is_empty() {
+            summaries.insert(*hub_assistant_id, HubReviewSummary::default());
+            continue;
+        }
+
+        let score_sum: i32 = reviews.iter().map(|review| review.score).sum();
+        summaries.insert(
+            *hub_assistant_id,
+            HubReviewSummary {
+                average_score: Some(score_sum as f64 / reviews.len() as f64),
+                review_count: reviews.len(),
+            },
+        );
+    }
+
+    Ok(summaries)
+}
+
+async fn review_record(
+    conn: &DatabaseConnection,
+    review: assistant_hub_reviews::Model,
+) -> Result<HubReviewRecord, Report> {
+    let version =
+        AssistantHubAssistantVersions::find_by_id(review.assistant_hub_assistant_version_id)
+            .one(conn)
+            .await?
+            .wrap_err("Assistant hub review version not found")?;
+    let reviewer = Users::find_by_id(review.reviewer_user_id)
+        .one(conn)
+        .await?
+        .wrap_err("Assistant hub review user not found")?;
+
+    Ok(HubReviewRecord {
+        review,
+        version,
+        reviewer,
+    })
+}
+
+pub async fn submit_review(
+    conn: &DatabaseConnection,
+    config: &AssistantHubConfig,
+    subject: &Subject,
+    hub_assistant_id: Uuid,
+    input: HubReviewInput,
+) -> Result<HubReviewRecord, Report> {
+    ensure_enabled(config)?;
+    let comment = validate_review_input(&input)?;
+    let current_version =
+        get_published_current_version(conn, config, subject, hub_assistant_id).await?;
+    let reviewer_user_id = user_uuid(subject)?;
+    let now = Utc::now().into();
+
+    let review = if let Some(existing) = AssistantHubReviews::find()
+        .filter(
+            Condition::all()
+                .add(assistant_hub_reviews::Column::AssistantHubAssistantId.eq(hub_assistant_id))
+                .add(assistant_hub_reviews::Column::ReviewerUserId.eq(reviewer_user_id)),
+        )
+        .one(conn)
+        .await?
+    {
+        let mut active = existing.into_active_model();
+        active.assistant_hub_assistant_version_id = Set(current_version.version.id);
+        active.score = Set(input.score);
+        active.comment = Set(comment);
+        active.update(conn).await?
+    } else {
+        let active = assistant_hub_reviews::ActiveModel {
+            id: Set(Uuid::new_v4()),
+            assistant_hub_assistant_id: Set(hub_assistant_id),
+            assistant_hub_assistant_version_id: Set(current_version.version.id),
+            reviewer_user_id: Set(reviewer_user_id),
+            score: Set(input.score),
+            comment: Set(comment),
+            created_at: Set(now),
+            updated_at: Set(now),
+        };
+        AssistantHubReviews::insert(active)
+            .exec_with_returning(conn)
+            .await?
+    };
+
+    review_record(conn, review).await
+}
+
+pub async fn list_visible_reviews(
+    conn: &DatabaseConnection,
+    config: &AssistantHubConfig,
+    subject: &Subject,
+    hub_assistant_id: Uuid,
+) -> Result<Vec<HubReviewRecord>, Report> {
+    ensure_enabled(config)?;
+    let user_id = user_uuid(subject)?;
+    let hub_assistant = AssistantHubAssistants::find_by_id(hub_assistant_id)
+        .one(conn)
+        .await?
+        .wrap_err("Assistant hub assistant not found")?;
+    let is_creator = hub_assistant.owner_user_id == user_id;
+
+    if !is_creator {
+        get_published_current_version(conn, config, subject, hub_assistant_id).await?;
+    }
+
+    let mut condition = Condition::all()
+        .add(assistant_hub_reviews::Column::AssistantHubAssistantId.eq(hub_assistant_id));
+
+    if !is_creator {
+        condition = condition.add(assistant_hub_reviews::Column::ReviewerUserId.eq(user_id));
+    }
+
+    let reviews = AssistantHubReviews::find()
+        .filter(condition)
+        .order_by_desc(assistant_hub_reviews::Column::UpdatedAt)
+        .all(conn)
+        .await?;
+    let mut records = Vec::with_capacity(reviews.len());
+
+    for review in reviews {
+        records.push(review_record(conn, review).await?);
     }
 
     Ok(records)

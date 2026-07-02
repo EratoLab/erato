@@ -27,7 +27,8 @@
     "deploy/0025_add_chat_title_search_index.sql",
     "deploy/0026_add_assistant_store_tables.sql",
     "deploy/0027_assistant_store_featured_assistant_wide.sql",
-    "deploy/0028_rename_assistant_store_to_assistant_hub.sql"
+    "deploy/0028_rename_assistant_store_to_assistant_hub.sql",
+    "deploy/0029_add_assistant_hub_reviews.sql"
   ],
-  "latest_change": "d02a4f3c23a96795fa143aa143882c3dc36e94a3"
+  "latest_change": "740c91259d71ff014a7c6c711040acdb44ade429"
 }

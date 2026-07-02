@@ -47,6 +47,16 @@ fn version_count(response: &Value) -> usize {
         .len()
 }
 
+fn assert_average_score(value: &Value, expected: f64) {
+    let actual = value
+        .as_f64()
+        .expect("review_average_score should be a number");
+    assert!(
+        (actual - expected).abs() < f64::EPSILON,
+        "expected average score {expected}, got {actual}"
+    );
+}
+
 /// Verifies that an assistant cannot submit two hub versions with the same
 /// version number.
 ///
@@ -323,6 +333,368 @@ async fn test_assistant_hub_featured_status_carries_across_versions(pool: Pool<P
     assert_eq!(versions[0]["version_id"], second_version_id);
     assert_eq!(versions[0]["version_number"], "1.1.0");
     assert_eq!(versions[0]["featured"], true);
+}
+
+/// Verifies assistant hub user reviews:
+/// each user can create one review per hub assistant and update it, ratings are
+/// summarized in the list response, comments are visible only to the reviewer
+/// and assistant creator, and the review version follows the latest update.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_assistant_hub_user_reviews_are_upserted_summarized_and_visibility_filtered(
+    pool: Pool<Postgres>,
+) {
+    let app_state = test_app_state(assistant_hub_app_config(), pool).await;
+    let server = create_test_server(app_state.clone());
+
+    let owner_subject = "assistant-hub-review-owner";
+    let first_viewer_subject = "assistant-hub-review-viewer-one";
+    let second_viewer_subject = "assistant-hub-review-viewer-two";
+    let reviewer_subject = "assistant-hub-review-admin";
+
+    let owner_token = JwtTokenBuilder::new()
+        .subject(owner_subject)
+        .email("assistant-hub-review-owner@example.com")
+        .build();
+    let first_viewer_token = JwtTokenBuilder::new()
+        .subject(first_viewer_subject)
+        .email("assistant-hub-review-viewer-one@example.com")
+        .build();
+    let second_viewer_token = JwtTokenBuilder::new()
+        .subject(second_viewer_subject)
+        .email("assistant-hub-review-viewer-two@example.com")
+        .build();
+    let reviewer_token = JwtTokenBuilder::new()
+        .subject(reviewer_subject)
+        .email("assistant-hub-review-admin@example.com")
+        .groups(vec![REVIEWER_GROUP_ID.to_string()])
+        .build();
+
+    let owner = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        owner_subject,
+        Some("assistant-hub-review-owner@example.com"),
+    )
+    .await
+    .expect("failed to create owner");
+    let first_viewer = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        first_viewer_subject,
+        Some("assistant-hub-review-viewer-one@example.com"),
+    )
+    .await
+    .expect("failed to create first viewer");
+    let second_viewer = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        second_viewer_subject,
+        Some("assistant-hub-review-viewer-two@example.com"),
+    )
+    .await
+    .expect("failed to create second viewer");
+
+    let source_assistant = erato::models::assistant::create_assistant(
+        &app_state.db,
+        &PolicyEngine::new(),
+        &erato::policy::types::Subject::User(owner.id.to_string()),
+        "Reviewed Hub Assistant".to_string(),
+        Some("Source review description".to_string()),
+        "You are a reviewed assistant hub test fixture.".to_string(),
+        None,
+        None,
+        Some("mock-llm".to_string()),
+        false,
+    )
+    .await
+    .expect("failed to create source assistant");
+
+    let first_submission_response = server
+        .post(&format!(
+            "/api/v1beta/assistant-hub/assistants/{}/versions",
+            source_assistant.id
+        ))
+        .json(&json!({
+            "long_description": "A first reviewed assistant hub version.",
+            "category_ids": [STORE_CATEGORY_ID],
+            "keywords": ["reviews", "first"],
+            "version_number": "1.0.0",
+            "version_comment": "Initial hub publication",
+            "creator_review_comment": "Ready for review",
+            "audience_grants": [
+                {
+                    "subject_type": "user",
+                    "subject_id_type": "id",
+                    "subject_id": first_viewer.id.to_string(),
+                    "role": "viewer"
+                },
+                {
+                    "subject_type": "user",
+                    "subject_id_type": "id",
+                    "subject_id": second_viewer.id.to_string(),
+                    "role": "viewer"
+                }
+            ]
+        }))
+        .with_bearer_token(&owner_token)
+        .await;
+    assert_eq!(
+        first_submission_response.status_code(),
+        http::StatusCode::CREATED
+    );
+    let first_submission: Value = first_submission_response.json();
+    let hub_assistant_id = first_submission["version"]["hub_assistant_id"]
+        .as_str()
+        .expect("submitted version should include hub_assistant_id")
+        .to_string();
+    let first_version_id = first_submission["version"]["version_id"]
+        .as_str()
+        .expect("submitted version should include version_id")
+        .to_string();
+
+    assert_eq!(
+        server
+            .post(&format!(
+                "/api/v1beta/assistant-hub/versions/{first_version_id}/review"
+            ))
+            .json(&json!({
+                "accepted": true,
+                "reviewer_review_comment": "Accepted for publication"
+            }))
+            .with_bearer_token(&reviewer_token)
+            .await
+            .status_code(),
+        http::StatusCode::OK
+    );
+    assert_eq!(
+        server
+            .put(&format!(
+                "/api/v1beta/assistant-hub/versions/{first_version_id}/published"
+            ))
+            .json(&json!({ "is_published": true }))
+            .with_bearer_token(&owner_token)
+            .await
+            .status_code(),
+        http::StatusCode::OK
+    );
+    assert_eq!(
+        server
+            .put(&format!(
+                "/api/v1beta/assistant-hub/versions/{first_version_id}/current"
+            ))
+            .with_bearer_token(&owner_token)
+            .await
+            .status_code(),
+        http::StatusCode::OK
+    );
+
+    let first_review_response = server
+        .put(&format!(
+            "/api/v1beta/assistant-hub/assistants/{hub_assistant_id}/review"
+        ))
+        .json(&json!({
+            "score": 8,
+            "comment": "Useful first impression"
+        }))
+        .with_bearer_token(&first_viewer_token)
+        .await;
+    assert_eq!(first_review_response.status_code(), http::StatusCode::OK);
+
+    let first_review_update_response = server
+        .put(&format!(
+            "/api/v1beta/assistant-hub/assistants/{hub_assistant_id}/review"
+        ))
+        .json(&json!({
+            "score": 6,
+            "comment": "Updated first impression"
+        }))
+        .with_bearer_token(&first_viewer_token)
+        .await;
+    assert_eq!(
+        first_review_update_response.status_code(),
+        http::StatusCode::OK
+    );
+
+    let second_review_response = server
+        .put(&format!(
+            "/api/v1beta/assistant-hub/assistants/{hub_assistant_id}/review"
+        ))
+        .json(&json!({
+            "score": 10,
+            "comment": null
+        }))
+        .with_bearer_token(&second_viewer_token)
+        .await;
+    assert_eq!(second_review_response.status_code(), http::StatusCode::OK);
+
+    let listed_response = server
+        .get("/api/v1beta/assistant-hub/assistants")
+        .with_bearer_token(&first_viewer_token)
+        .await;
+    assert_eq!(listed_response.status_code(), http::StatusCode::OK);
+    let listed: Value = listed_response.json();
+    assert_eq!(listed["versions"][0]["review_count"], 2);
+    assert_average_score(&listed["versions"][0]["review_average_score"], 8.0);
+
+    let first_viewer_reviews_response = server
+        .get(&format!(
+            "/api/v1beta/assistant-hub/assistants/{hub_assistant_id}/reviews"
+        ))
+        .with_bearer_token(&first_viewer_token)
+        .await;
+    assert_eq!(
+        first_viewer_reviews_response.status_code(),
+        http::StatusCode::OK
+    );
+    let first_viewer_reviews: Value = first_viewer_reviews_response.json();
+    assert_eq!(first_viewer_reviews["reviews"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        first_viewer_reviews["reviews"][0]["comment"],
+        "Updated first impression"
+    );
+
+    let owner_reviews_response = server
+        .get(&format!(
+            "/api/v1beta/assistant-hub/assistants/{hub_assistant_id}/reviews"
+        ))
+        .with_bearer_token(&owner_token)
+        .await;
+    assert_eq!(owner_reviews_response.status_code(), http::StatusCode::OK);
+    let owner_reviews: Value = owner_reviews_response.json();
+    assert_eq!(owner_reviews["reviews"].as_array().unwrap().len(), 2);
+    assert!(
+        owner_reviews["reviews"]
+            .as_array()
+            .expect("reviews response should contain reviews")
+            .iter()
+            .any(|review| review["score"] == 10 && review["comment"].is_null())
+    );
+
+    let second_submission_response = server
+        .post(&format!(
+            "/api/v1beta/assistant-hub/assistants/{}/versions",
+            source_assistant.id
+        ))
+        .json(&json!({
+            "long_description": "A second reviewed assistant hub version.",
+            "category_ids": [STORE_CATEGORY_ID],
+            "keywords": ["reviews", "second"],
+            "version_number": "2.0.0",
+            "version_comment": "Second hub publication",
+            "creator_review_comment": "Ready for another review",
+            "audience_grants": [
+                {
+                    "subject_type": "user",
+                    "subject_id_type": "id",
+                    "subject_id": first_viewer.id.to_string(),
+                    "role": "viewer"
+                },
+                {
+                    "subject_type": "user",
+                    "subject_id_type": "id",
+                    "subject_id": second_viewer.id.to_string(),
+                    "role": "viewer"
+                }
+            ]
+        }))
+        .with_bearer_token(&owner_token)
+        .await;
+    assert_eq!(
+        second_submission_response.status_code(),
+        http::StatusCode::CREATED
+    );
+    let second_submission: Value = second_submission_response.json();
+    let second_version_id = second_submission["version"]["version_id"]
+        .as_str()
+        .expect("submitted version should include version_id")
+        .to_string();
+
+    assert_eq!(
+        server
+            .post(&format!(
+                "/api/v1beta/assistant-hub/versions/{second_version_id}/review"
+            ))
+            .json(&json!({
+                "accepted": true,
+                "reviewer_review_comment": "Accepted for publication"
+            }))
+            .with_bearer_token(&reviewer_token)
+            .await
+            .status_code(),
+        http::StatusCode::OK
+    );
+    assert_eq!(
+        server
+            .put(&format!(
+                "/api/v1beta/assistant-hub/versions/{second_version_id}/published"
+            ))
+            .json(&json!({ "is_published": true }))
+            .with_bearer_token(&owner_token)
+            .await
+            .status_code(),
+        http::StatusCode::OK
+    );
+    assert_eq!(
+        server
+            .put(&format!(
+                "/api/v1beta/assistant-hub/versions/{second_version_id}/current"
+            ))
+            .with_bearer_token(&owner_token)
+            .await
+            .status_code(),
+        http::StatusCode::OK
+    );
+
+    let second_version_review_response = server
+        .put(&format!(
+            "/api/v1beta/assistant-hub/assistants/{hub_assistant_id}/review"
+        ))
+        .json(&json!({
+            "score": 9,
+            "comment": "Still helpful on version two"
+        }))
+        .with_bearer_token(&first_viewer_token)
+        .await;
+    assert_eq!(
+        second_version_review_response.status_code(),
+        http::StatusCode::OK
+    );
+    let second_version_review: Value = second_version_review_response.json();
+    assert_eq!(second_version_review["review"]["version_number"], "2.0.0");
+
+    let updated_listing_response = server
+        .get("/api/v1beta/assistant-hub/assistants")
+        .with_bearer_token(&first_viewer_token)
+        .await;
+    assert_eq!(updated_listing_response.status_code(), http::StatusCode::OK);
+    let updated_listing: Value = updated_listing_response.json();
+    assert_eq!(updated_listing["versions"][0]["review_count"], 2);
+    assert_average_score(&updated_listing["versions"][0]["review_average_score"], 9.5);
+
+    let owner_reviews_after_version_update_response = server
+        .get(&format!(
+            "/api/v1beta/assistant-hub/assistants/{hub_assistant_id}/reviews"
+        ))
+        .with_bearer_token(&owner_token)
+        .await;
+    assert_eq!(
+        owner_reviews_after_version_update_response.status_code(),
+        http::StatusCode::OK
+    );
+    let owner_reviews_after_version_update: Value =
+        owner_reviews_after_version_update_response.json();
+    let review_versions: Vec<&str> = owner_reviews_after_version_update["reviews"]
+        .as_array()
+        .expect("reviews response should contain reviews")
+        .iter()
+        .map(|review| review["version_number"].as_str().unwrap())
+        .collect();
+    assert!(review_versions.contains(&"1.0.0"));
+    assert!(review_versions.contains(&"2.0.0"));
 }
 
 /// Verifies the full Assistant Hub publication flow:

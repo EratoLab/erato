@@ -1,5 +1,7 @@
 use crate::models::assistant_hub;
-use crate::models::assistant_hub::{HubAudienceGrantInput, HubSubmissionProfile, HubVersionRecord};
+use crate::models::assistant_hub::{
+    HubAudienceGrantInput, HubReviewInput, HubReviewRecord, HubSubmissionProfile, HubVersionRecord,
+};
 use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::services::sentry::log_internal_server_error;
@@ -101,6 +103,8 @@ pub struct AssistantHubVersion {
     pub published_at: Option<DateTime<FixedOffset>>,
     pub created_at: DateTime<FixedOffset>,
     pub updated_at: DateTime<FixedOffset>,
+    pub review_average_score: Option<f64>,
+    pub review_count: u64,
     pub assistant: AssistantHubAssistantSnapshot,
     pub creator: AssistantHubCreator,
 }
@@ -119,6 +123,42 @@ pub struct AssistantHubVersionsResponse {
 pub struct AssistantHubReviewRequest {
     pub accepted: bool,
     pub reviewer_review_comment: Option<String>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct AssistantHubUserReviewRequest {
+    pub score: i32,
+    pub comment: Option<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AssistantHubReviewUser {
+    pub id: String,
+    pub display_name: String,
+    pub email: Option<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AssistantHubUserReview {
+    pub id: String,
+    pub hub_assistant_id: String,
+    pub version_id: String,
+    pub version_number: String,
+    pub reviewer: AssistantHubReviewUser,
+    pub score: i32,
+    pub comment: Option<String>,
+    pub created_at: DateTime<FixedOffset>,
+    pub updated_at: DateTime<FixedOffset>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AssistantHubUserReviewResponse {
+    pub review: AssistantHubUserReview,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AssistantHubUserReviewsResponse {
+    pub reviews: Vec<AssistantHubUserReview>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -156,7 +196,7 @@ impl From<&AssistantHubSubmissionRequest> for HubSubmissionProfile {
 }
 
 #[derive(Debug, Deserialize)]
-struct GraphCreatorUserItem {
+struct GraphUserItem {
     #[serde(rename = "displayName")]
     display_name: Option<String>,
 }
@@ -235,7 +275,7 @@ async fn resolve_creator_display_names(
             }
         };
 
-        let user_item = match response.json::<GraphCreatorUserItem>().await {
+        let user_item = match response.json::<GraphUserItem>().await {
             Ok(user_item) => user_item,
             Err(error) => {
                 tracing::warn!(
@@ -258,12 +298,116 @@ async fn resolve_creator_display_names(
     display_names
 }
 
+async fn resolve_review_user_display_names(
+    app_state: &AppState,
+    me_user: &MeProfile,
+    records: &[HubReviewRecord],
+) -> HashMap<String, String> {
+    let mut display_names = HashMap::new();
+    let mut lookup_keys = HashMap::new();
+
+    for record in records {
+        let reviewer_id = record.reviewer.id.to_string();
+        if reviewer_id == me_user.id
+            && let Some(display_name) = me_user
+                .profile
+                .name
+                .clone()
+                .filter(|display_name| !display_name.trim().is_empty())
+        {
+            display_names.insert(reviewer_id, display_name);
+            continue;
+        }
+
+        if lookup_keys.contains_key(&reviewer_id) {
+            continue;
+        }
+
+        let lookup_key = record
+            .reviewer
+            .email
+            .clone()
+            .unwrap_or_else(|| record.reviewer.subject.clone());
+        lookup_keys.insert(reviewer_id, lookup_key);
+    }
+
+    if !entra_id_enabled(app_state) {
+        return display_names;
+    }
+
+    let Some(access_token) = me_user.access_token.as_deref() else {
+        return display_names;
+    };
+
+    let client = create_graph_client(access_token);
+
+    for (reviewer_id, lookup_key) in lookup_keys {
+        let response = match client
+            .user(&lookup_key)
+            .get_user()
+            .select(&["displayName"])
+            .send()
+            .await
+        {
+            Ok(response) => response,
+            Err(error) => {
+                tracing::warn!(
+                    "Failed to resolve assistant hub review user {} via Graph API: {:?}",
+                    lookup_key,
+                    error
+                );
+                continue;
+            }
+        };
+
+        let user_item = match response.json::<GraphUserItem>().await {
+            Ok(user_item) => user_item,
+            Err(error) => {
+                tracing::warn!(
+                    "Failed to parse assistant hub review user {} from Graph API: {:?}",
+                    lookup_key,
+                    error
+                );
+                continue;
+            }
+        };
+
+        if let Some(display_name) = user_item
+            .display_name
+            .filter(|display_name| !display_name.trim().is_empty())
+        {
+            display_names.insert(reviewer_id, display_name);
+        }
+    }
+
+    display_names
+}
+
 async fn records_to_response(
     app_state: &AppState,
     me_user: &MeProfile,
     records: Vec<HubVersionRecord>,
 ) -> Vec<AssistantHubVersion> {
     let creator_display_names = resolve_creator_display_names(app_state, me_user, &records).await;
+    let hub_assistant_ids: Vec<Uuid> = records
+        .iter()
+        .map(|record| record.hub_assistant.id)
+        .collect();
+    let review_summaries = match assistant_hub::review_summaries_for_hub_assistant_ids(
+        &app_state.db,
+        &hub_assistant_ids,
+    )
+    .await
+    {
+        Ok(summaries) => summaries,
+        Err(error) => {
+            tracing::warn!(
+                "Failed to load assistant hub review summaries for response: {:?}",
+                error
+            );
+            HashMap::new()
+        }
+    };
 
     records
         .into_iter()
@@ -271,7 +415,8 @@ async fn records_to_response(
             let creator_display_name = creator_display_names
                 .get(&record.creator.id.to_string())
                 .cloned();
-            record_to_response(record, creator_display_name)
+            let review_summary = review_summaries.get(&record.hub_assistant.id);
+            record_to_response(record, creator_display_name, review_summary)
         })
         .collect()
 }
@@ -279,6 +424,7 @@ async fn records_to_response(
 fn record_to_response(
     record: HubVersionRecord,
     creator_display_name: Option<String>,
+    review_summary: Option<&assistant_hub::HubReviewSummary>,
 ) -> AssistantHubVersion {
     let creator_id = record.creator.id.to_string();
     let creator_email = record.creator.email.clone();
@@ -307,6 +453,8 @@ fn record_to_response(
         published_at: record.version.published_at,
         created_at: record.version.created_at,
         updated_at: record.version.updated_at,
+        review_average_score: review_summary.and_then(|summary| summary.average_score),
+        review_count: review_summary.map_or(0, |summary| summary.review_count as u64),
         assistant: AssistantHubAssistantSnapshot {
             id: record.assistant.id.to_string(),
             name: record.assistant.name,
@@ -327,6 +475,33 @@ fn record_to_response(
     }
 }
 
+fn review_record_to_response(
+    record: HubReviewRecord,
+    reviewer_display_name: Option<String>,
+) -> AssistantHubUserReview {
+    let reviewer_id = record.reviewer.id.to_string();
+    let reviewer_email = record.reviewer.email.clone();
+    let reviewer_fallback = reviewer_email
+        .clone()
+        .unwrap_or_else(|| reviewer_id.clone());
+
+    AssistantHubUserReview {
+        id: record.review.id.to_string(),
+        hub_assistant_id: record.review.assistant_hub_assistant_id.to_string(),
+        version_id: record.review.assistant_hub_assistant_version_id.to_string(),
+        version_number: record.version.version_number,
+        reviewer: AssistantHubReviewUser {
+            id: reviewer_id,
+            display_name: reviewer_display_name.unwrap_or(reviewer_fallback),
+            email: reviewer_email,
+        },
+        score: record.review.score,
+        comment: record.review.comment,
+        created_at: record.review.created_at,
+        updated_at: record.review.updated_at,
+    }
+}
+
 fn model_error_to_status(error: eyre::Report) -> StatusCode {
     let message = error.to_string();
     if message.contains("not enabled") {
@@ -337,6 +512,7 @@ fn model_error_to_status(error: eyre::Report) -> StatusCode {
         StatusCode::NOT_FOUND
     } else if message.contains("Unknown")
         || message.contains("must not be empty")
+        || message.contains("must be between")
         || message.contains("Only")
         || message.contains("cannot")
         || message.contains("Invalid")
@@ -535,6 +711,104 @@ pub async fn get_assistant_hub_assistant(
             .into_iter()
             .next()
             .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?,
+    }))
+}
+
+#[utoipa::path(
+    get,
+    path = "/assistant-hub/assistants/{hub_assistant_id}/reviews",
+    tag = "assistant_hub",
+    responses(
+        (status = OK, body = AssistantHubUserReviewsResponse),
+        (status = FORBIDDEN),
+        (status = NOT_FOUND),
+        (status = UNAUTHORIZED),
+    ),
+    security(("bearer_auth" = []))
+)]
+pub async fn list_assistant_hub_reviews(
+    State(app_state): State<AppState>,
+    Extension(me_user): Extension<MeProfile>,
+    Path(hub_assistant_id): Path<String>,
+) -> Result<Json<AssistantHubUserReviewsResponse>, StatusCode> {
+    let hub_assistant_id =
+        Uuid::parse_str(&hub_assistant_id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let records = assistant_hub::list_visible_reviews(
+        &app_state.db,
+        &app_state.config.assistant_hub,
+        &me_user.to_subject(),
+        hub_assistant_id,
+    )
+    .await
+    .map_err(model_error_to_status)?;
+
+    let reviewer_display_names =
+        resolve_review_user_display_names(&app_state, &me_user, &records).await;
+
+    Ok(Json(AssistantHubUserReviewsResponse {
+        reviews: records
+            .into_iter()
+            .map(|record| {
+                let reviewer_display_name = reviewer_display_names
+                    .get(&record.reviewer.id.to_string())
+                    .cloned();
+                review_record_to_response(record, reviewer_display_name)
+            })
+            .collect(),
+    }))
+}
+
+#[utoipa::path(
+    put,
+    path = "/assistant-hub/assistants/{hub_assistant_id}/review",
+    tag = "assistant_hub",
+    request_body = AssistantHubUserReviewRequest,
+    responses(
+        (status = OK, body = AssistantHubUserReviewResponse),
+        (status = BAD_REQUEST),
+        (status = FORBIDDEN),
+        (status = NOT_FOUND),
+        (status = UNAUTHORIZED),
+    ),
+    security(("bearer_auth" = []))
+)]
+pub async fn submit_assistant_hub_review(
+    State(app_state): State<AppState>,
+    Extension(me_user): Extension<MeProfile>,
+    Path(hub_assistant_id): Path<String>,
+    Json(request): Json<AssistantHubUserReviewRequest>,
+) -> Result<Json<AssistantHubUserReviewResponse>, StatusCode> {
+    let hub_assistant_id =
+        Uuid::parse_str(&hub_assistant_id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let record = assistant_hub::submit_review(
+        &app_state.db,
+        &app_state.config.assistant_hub,
+        &me_user.to_subject(),
+        hub_assistant_id,
+        HubReviewInput {
+            score: request.score,
+            comment: request.comment,
+        },
+    )
+    .await
+    .map_err(model_error_to_status)?;
+
+    let reviewer_display_name = record
+        .reviewer
+        .id
+        .to_string()
+        .eq(&me_user.id)
+        .then(|| {
+            me_user
+                .profile
+                .name
+                .clone()
+                .filter(|display_name| !display_name.trim().is_empty())
+        })
+        .flatten();
+
+    Ok(Json(AssistantHubUserReviewResponse {
+        review: review_record_to_response(record, reviewer_display_name),
     }))
 }
 

@@ -110,15 +110,12 @@ export function useMessageFeedback(options: UseMessageFeedbackOptions = {}) {
       comment?: string,
     ): Promise<{ success: boolean; errorType?: string }> => {
       try {
-        // Note: OpenAPI spec has comment as string|null but codegen quirk creates null|undefined
-        // We use type assertion since the backend correctly accepts string|null
-        // TODO: Fix OpenAPI spec or codegen to properly handle string|null
         const trimmedComment = comment?.trim();
         await submitFeedbackMutation.mutateAsync({
           pathParams: { messageId },
           body: {
             sentiment,
-            comment: (trimmedComment ?? undefined) as null | undefined,
+            comment: trimmedComment ?? undefined,
           },
         });
         logger.log(
@@ -265,7 +262,6 @@ export function useMessageFeedback(options: UseMessageFeedbackOptions = {}) {
           messageId: feedbackViewDialogState.messageId,
           sentiment,
           mode: "edit",
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- comment type is incorrectly generated as null|undefined
           initialComment: feedback.comment ?? "",
           error: null,
         });

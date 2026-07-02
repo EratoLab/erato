@@ -462,6 +462,31 @@ msgstr "Submit new version"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.submittedReviews.empty"
+msgstr "No reviews submitted yet."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.submittedReviews.loading"
+msgstr "Loading reviews..."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.submittedReviews.scoreValue"
+msgstr "{score} / 10"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.submittedReviews.title"
+msgstr "Submitted reviews"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.submittedReviews.versionValue"
+msgstr "Version {versionNumber}"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
 msgid "assistantHub.my.subtitle"
 msgstr "Review submitted, accepted, declined, and withdrawn assistant versions"
 
@@ -499,6 +524,21 @@ msgstr "Withdraw this submitted version from review?"
 #: src/pages/AssistantHubMyPage.tsx
 msgid "assistantHub.my.withdrawConfirmTitle"
 msgstr "Withdraw submission"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantHubUtils.tsx
+msgid "assistantHub.rating.none"
+msgstr "No ratings yet"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantHubUtils.tsx
+msgid "assistantHub.rating.summary.many"
+msgstr "{formattedScore} / 10 ({reviewCount} ratings)"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantHubUtils.tsx
+msgid "assistantHub.rating.summary.one"
+msgstr "{formattedScore} / 10 (1 rating)"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
@@ -609,6 +649,86 @@ msgstr "Unpublish"
 #: src/pages/AssistantHubReviewPage.tsx
 msgid "assistantHub.review.viewDetails"
 msgstr "View details"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.aggregateScore"
+msgstr "Aggregated score"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.comment"
+msgstr "Comment"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.commentHelp"
+msgstr "Optional: add context for your score."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.empty"
+msgstr "No visible review comments yet."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+#~ msgid "assistantHub.reviews.error.load"
+#~ msgstr "Failed to load reviews."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.error.submit"
+msgstr "Failed to submit review."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.loading"
+msgstr "Loading reviews..."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.score"
+msgstr "Score"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.scoreOption"
+msgstr "{scoreLabel} out of 10"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.scoreSelector"
+msgstr "Review score"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.scoreValue"
+msgstr "{0} / 10"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.submit"
+msgstr "Submit review"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.title"
+msgstr "Reviews"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.update"
+msgstr "Update review"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.versionValue"
+msgstr "Version {0}"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.visibleComments"
+msgstr "Visible comments"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubPage.tsx

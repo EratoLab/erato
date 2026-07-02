@@ -462,6 +462,31 @@ msgstr "Enviar nueva version"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.submittedReviews.empty"
+msgstr "Aun no se han enviado valoraciones."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.submittedReviews.loading"
+msgstr "Cargando valoraciones..."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.submittedReviews.scoreValue"
+msgstr "{score} / 10"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.submittedReviews.title"
+msgstr "Valoraciones enviadas"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.submittedReviews.versionValue"
+msgstr "Version {versionNumber}"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
 msgid "assistantHub.my.subtitle"
 msgstr "Revisa versiones de asistentes enviadas, aceptadas, rechazadas y retiradas"
 
@@ -499,6 +524,21 @@ msgstr "Retirar esta version enviada de la revision?"
 #: src/pages/AssistantHubMyPage.tsx
 msgid "assistantHub.my.withdrawConfirmTitle"
 msgstr "Retirar envio"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantHubUtils.tsx
+msgid "assistantHub.rating.none"
+msgstr "Sin valoraciones"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantHubUtils.tsx
+msgid "assistantHub.rating.summary.many"
+msgstr "{formattedScore} / 10 ({reviewCount} valoraciones)"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantHubUtils.tsx
+msgid "assistantHub.rating.summary.one"
+msgstr "{formattedScore} / 10 (1 valoracion)"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
@@ -609,6 +649,86 @@ msgstr "Retirar publicacion"
 #: src/pages/AssistantHubReviewPage.tsx
 msgid "assistantHub.review.viewDetails"
 msgstr "Ver detalles"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.aggregateScore"
+msgstr "Puntuacion agregada"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.comment"
+msgstr "Comentario"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.commentHelp"
+msgstr "Opcional: anade contexto a tu puntuacion."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.empty"
+msgstr "Aun no hay comentarios de valoracion visibles."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+#~ msgid "assistantHub.reviews.error.load"
+#~ msgstr "No se pudieron cargar las valoraciones."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.error.submit"
+msgstr "No se pudo enviar la valoracion."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.loading"
+msgstr "Cargando valoraciones..."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.score"
+msgstr "Puntuacion"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.scoreOption"
+msgstr "{scoreLabel} de 10"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.scoreSelector"
+msgstr "Puntuacion de la valoracion"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.scoreValue"
+msgstr "{0} / 10"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.submit"
+msgstr "Enviar valoracion"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.title"
+msgstr "Valoraciones"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.update"
+msgstr "Actualizar valoracion"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.versionValue"
+msgstr "Version {0}"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.visibleComments"
+msgstr "Comentarios visibles"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubPage.tsx
