@@ -97,7 +97,9 @@ test.describe("Assistant Management", () => {
       name: string;
       default_chat_provider?: string | null;
     }>;
-    const createdAssistant = assistants.find((item) => item.name === assistantName);
+    const createdAssistant = assistants.find(
+      (item) => item.name === assistantName,
+    );
     expect(createdAssistant).toBeDefined();
     expect(createdAssistant?.default_chat_provider ?? null).toBeNull();
   });

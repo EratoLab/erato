@@ -32,6 +32,9 @@ export interface SSEOptions {
 
 const logger = createLogger("NETWORK", "SSE_CLIENT");
 
+const isAbortError = (error: unknown) =>
+  error instanceof Error && error.name === "AbortError";
+
 /**
  * Creates an SSE connection to the specified URL
  *
@@ -212,6 +215,13 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
       isConnected = false;
       closeOnce();
     } catch (err) {
+      if (signal.aborted || isAbortError(err)) {
+        logger.log("Stream aborted");
+        isConnected = false;
+        closeOnce();
+        return;
+      }
+
       // Catch errors during stream processing or generator execution
       const error = err instanceof Error ? err : new Error(String(err));
       logger.log("Stream error:", error.message);
@@ -296,7 +306,7 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
       // Read the stream using the updated function with the async generator
       await readSSEStream(response.body); // Pass the stream directly
     } catch (err) {
-      if (err instanceof Error && err.name === "AbortError") {
+      if (signal.aborted || isAbortError(err)) {
         // This is just a normal abort, not an error
         logger.log("Request aborted");
         isConnected = false;

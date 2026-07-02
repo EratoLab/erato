@@ -6,10 +6,8 @@ import {
 } from "./shared";
 import { TAG_CI } from "./tags";
 
-const createDexAuthenticatedContext = async (
-  browser: Browser,
-  email: string,
-) => createAuthenticatedContext(browser, email);
+const createDexAuthenticatedContext = async (browser: Browser, email: string) =>
+  createAuthenticatedContext(browser, email);
 
 test(
   "Mock-LLM chat succeeds when an authorized MCP server is unavailable",
@@ -30,7 +28,9 @@ test(
       await textbox.fill("hello resilient mcp");
       await textbox.press("Enter");
 
-      const latestAssistantMessage = page.getByTestId("message-assistant").last();
+      const latestAssistantMessage = page
+        .getByTestId("message-assistant")
+        .last();
       await expect(latestAssistantMessage).toBeVisible();
 
       await chatIsReadyToChat(page, {
@@ -69,9 +69,9 @@ test(
 
       expect(assistantMessageWithMetadata).toBeTruthy();
       expect(assistantMessageWithMetadata.error).toBeFalsy();
-      expect(
-        assistantMessageWithMetadata.mcp_servers_unavailable,
-      ).toContain("mock_mcp_unavailable_500");
+      expect(assistantMessageWithMetadata.mcp_servers_unavailable).toContain(
+        "mock_mcp_unavailable_500",
+      );
     } finally {
       await context.close();
     }

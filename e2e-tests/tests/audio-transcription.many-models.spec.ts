@@ -17,10 +17,13 @@ test.skip(
   { tag: TAG_CI },
   async ({ page }) => {
     const submitstreamRequests: string[] = [];
-    await page.route("**/api/v1beta/me/messages/submitstream*", async (route) => {
-      submitstreamRequests.push(route.request().url());
-      await route.continue();
-    });
+    await page.route(
+      "**/api/v1beta/me/messages/submitstream*",
+      async (route) => {
+        submitstreamRequests.push(route.request().url());
+        await route.continue();
+      },
+    );
 
     await page.route("**/api/v1beta/me/files*", async (route) => {
       await route.fulfill({
@@ -61,7 +64,9 @@ test.skip(
       buffer: Buffer.from("fake audio content"),
     });
 
-    await expect(page.getByTestId("chat-audio-transcription-blocker")).toBeVisible();
+    await expect(
+      page.getByTestId("chat-audio-transcription-blocker"),
+    ).toBeVisible();
     await expect(page.getByText("interview-recording.mp3")).toBeVisible();
     await expect(page.getByTestId("chat-input-send-message")).toBeDisabled();
 
