@@ -35,11 +35,22 @@ export function getClientToolExecutor(
   return executors.get(name);
 }
 
-// tool_call_ids handled this session, so a resumestream replay never re-runs a tool.
+// tool_call_ids handled this session, so a resumestream replay never re-runs a
+// tool. Capped — idempotent executors make evicting the oldest safe.
+const MAX_ANSWERED_TOOL_CALLS = 500;
 const answeredToolCallIds = new Set<string>();
 
 export function markClientToolCallAnswered(toolCallId: string): void {
   answeredToolCallIds.add(toolCallId);
+  if (answeredToolCallIds.size > MAX_ANSWERED_TOOL_CALLS) {
+    const oldest = answeredToolCallIds.values().next().value;
+    if (oldest !== undefined) answeredToolCallIds.delete(oldest);
+  }
+}
+
+/** Un-mark after a failed delivery so a resumestream replay can retry. */
+export function unmarkClientToolCallAnswered(toolCallId: string): void {
+  answeredToolCallIds.delete(toolCallId);
 }
 
 export function hasClientToolCallBeenAnswered(toolCallId: string): boolean {

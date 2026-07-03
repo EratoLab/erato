@@ -115,4 +115,53 @@ describe("handleClientToolCall", () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("execute-once holds under a concurrent (unawaited) double-fire", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const executor = vi.fn(async () => {
+      await gate;
+      return { ok: true as const, result: 1 };
+    });
+    registerClientToolExecutor("outlook.fetch_availability", executor);
+
+    // Fire both before the first resolves; the pre-await guard must block the
+    // second (this would fail if the mark moved after the await).
+    const p1 = handleClientToolCall(makeEvent(), deps);
+    const p2 = handleClientToolCall(makeEvent(), deps);
+    release();
+    await Promise.all([p1, p2]);
+
+    expect(executor).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("un-marks on a failed POST so a later replay retries", async () => {
+    const executor = vi.fn(async () => ({ ok: true as const, result: 1 }));
+    registerClientToolExecutor("outlook.fetch_availability", executor);
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 503 });
+
+    await handleClientToolCall(makeEvent(), deps);
+    expect(executor).toHaveBeenCalledTimes(1);
+
+    // The failed delivery un-marked the id, so the replay runs + POSTs again.
+    await handleClientToolCall(makeEvent(), deps);
+    expect(executor).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("delivers an empty success as an explicit null result", async () => {
+    registerClientToolExecutor("outlook.fetch_availability", async () => ({
+      ok: true as const,
+      result: undefined,
+    }));
+
+    await handleClientToolCall(makeEvent(), deps);
+
+    const body = lastPostBody(fetchMock);
+    expect(body).toHaveProperty("result", null);
+    expect(body).not.toHaveProperty("error");
+  });
 });

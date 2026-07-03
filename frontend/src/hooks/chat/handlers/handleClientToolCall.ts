@@ -2,6 +2,7 @@ import {
   getClientToolExecutor,
   hasClientToolCallBeenAnswered,
   markClientToolCallAnswered,
+  unmarkClientToolCallAnswered,
 } from "../clientToolExecutors";
 
 import type {
@@ -55,7 +56,9 @@ export async function handleClientToolCall(
     try {
       const outcome = await executor(input ?? null);
       body = outcome.ok
-        ? { ...base, result: outcome.result as Value }
+        ? // Coalesce to explicit null so an empty success is delivered as a
+          // result, not treated by the backend as "no result → tool error".
+          { ...base, result: (outcome.result ?? null) as unknown as Value }
         : { ...base, error: outcome.error };
     } catch (error) {
       body = {
@@ -76,11 +79,14 @@ export async function handleClientToolCall(
       body: JSON.stringify(body),
     });
     if (!response.ok) {
+      // Un-mark so a resumestream replay can retry (executors are idempotent).
+      unmarkClientToolCallAnswered(tool_call_id);
       console.warn(
         `[client_tool_call] result POST returned ${response.status}`,
       );
     }
   } catch (error) {
+    unmarkClientToolCallAnswered(tool_call_id);
     console.warn("[client_tool_call] result POST failed", error);
   }
 }

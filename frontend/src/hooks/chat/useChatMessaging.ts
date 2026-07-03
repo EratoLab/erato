@@ -966,12 +966,17 @@ export function useChatMessaging(
 
           case "client_tool_call":
             // Run the registered executor and POST the result to resume the
-            // backend's parked turn.
+            // backend's parked turn. Route by this stream's own key (rebound to
+            // the real chat id on chat_created) like every sibling handler — NOT
+            // the global newlyCreatedChatId slot, which a concurrent new chat
+            // would clobber and mis-route the result.
             void handleClientToolCall(responseData, {
               chatId:
-                chatId ??
-                useMessagingStore.getState().newlyCreatedChatId ??
-                null,
+                activeStreamKey !== NEW_CHAT_STREAM_KEY
+                  ? activeStreamKey
+                  : (chatId ??
+                    useMessagingStore.getState().newlyCreatedChatId ??
+                    null),
               getAuthHeaders,
               extraHeaders: { [X_ERATO_PLATFORM_HEADER]: platform },
             });
