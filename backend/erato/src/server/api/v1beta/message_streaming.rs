@@ -4796,10 +4796,10 @@ fn effective_client_tool_allowlist(
             allowlist.extend(facet.tool_call_allowlist.iter().cloned());
         }
     }
-    if let Some(id) = action_facet_id {
-        if let Some(facet) = action_facets.facets.get(id) {
-            allowlist.extend(facet.tool_call_allowlist.iter().cloned());
-        }
+    if let Some(id) = action_facet_id
+        && let Some(facet) = action_facets.facets.get(id)
+    {
+        allowlist.extend(facet.tool_call_allowlist.iter().cloned());
     }
     allowlist
 }
