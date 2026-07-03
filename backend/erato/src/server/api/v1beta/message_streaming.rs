@@ -2026,22 +2026,29 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         }
     }
     // Offer top-level `client_tools` (returning round-trip tools) selected by
-    // the active action facet's `tool_call_allowlist` — the same namespaced
-    // pattern mechanism used for MCP tools (e.g. `outlook/*`). Like the
-    // client-action tool these are NOT dispatched to an MCP server; the tool
-    // call loop suspends for a client-supplied result instead. Skip any whose
-    // model-facing name collides with an MCP tool or the reserved client-action
-    // tool name (a duplicate name is ambiguous to dispatch and rejected by
-    // providers); `namespace/name` uniqueness is already enforced at config load.
-    if let Some(action_facet) = user_input.action_facet.as_ref()
-        && let Some(facet_config) = app_state.config.action_facets.facets.get(&action_facet.id)
-        && !facet_config.tool_call_allowlist.is_empty()
-    {
+    // any active `tool_call_allowlist` — the GLOBAL
+    // `experimental_facets.tool_call_allowlist` (so a client tool can be
+    // globally active with no facet at all), plus any selected regular facets,
+    // plus the active action facet — using the same namespaced pattern
+    // mechanism as MCP tools (e.g. `outlook/*`). Like the client-action tool
+    // these are NOT dispatched to an MCP server; the tool call loop suspends for
+    // a client-supplied result instead. Skip any whose model-facing name
+    // collides with an MCP tool or the reserved client-action tool name (a
+    // duplicate name is ambiguous to dispatch and rejected by providers);
+    // `namespace/name` uniqueness is already enforced at config load. An empty
+    // effective allowlist offers nothing — client tools are strictly opt-in.
+    let client_tool_allowlist = effective_client_tool_allowlist(
+        &app_state.config.experimental_facets,
+        &app_state.config.action_facets,
+        &effective_selected_facet_ids,
+        user_input.action_facet.as_ref().map(|af| af.id.as_str()),
+    );
+    if !client_tool_allowlist.is_empty() {
         for client_tool in app_state.config.client_tools.tools.values() {
             if !is_qualified_tool_allowed(
                 client_tool.namespace_or_default(),
                 &client_tool.name,
-                &facet_config.tool_call_allowlist,
+                &client_tool_allowlist,
             ) {
                 continue;
             }
@@ -2050,9 +2057,8 @@ pub(crate) async fn prepare_chat_request_with_adapters(
                 || generation_mcp_tools.iter().any(|mcp| mcp.tool.name == name)
             {
                 tracing::warn!(
-                    "Not offering client tool '{}' for action facet '{}': the name is reserved or already used by an MCP tool",
-                    name,
-                    action_facet.id
+                    "Not offering client tool '{}': the name is reserved or already used by an MCP tool",
+                    name
                 );
                 continue;
             }
@@ -2060,9 +2066,8 @@ pub(crate) async fn prepare_chat_request_with_adapters(
                 Ok(schema) => schema,
                 Err(error) => {
                     tracing::warn!(
-                        "Not offering client tool '{}' for action facet '{}': parameters are not valid JSON: {}",
+                        "Not offering client tool '{}': parameters are not valid JSON: {}",
                         name,
-                        action_facet.id,
                         error
                     );
                     continue;
@@ -4758,6 +4763,33 @@ fn is_qualified_tool_allowed(namespace: &str, tool_name: &str, allowlist: &[Stri
     })
 }
 
+/// The combined allowlist that can select top-level `client_tools` on this
+/// request, using the same namespaced `tool_call_allowlist` pattern syntax as
+/// MCP tools: the GLOBAL `experimental_facets.tool_call_allowlist` (applied
+/// regardless of selected facets), plus any selected regular facets, plus the
+/// active action facet. Unlike MCP filtering, an empty result means "offer no
+/// client tools" — they are strictly opt-in, so `None`/all-allowed semantics do
+/// not apply here.
+fn effective_client_tool_allowlist(
+    experimental_facets: &crate::config::ExperimentalFacetsConfig,
+    action_facets: &crate::config::ActionFacetsConfig,
+    selected_facet_ids: &[String],
+    action_facet_id: Option<&str>,
+) -> Vec<String> {
+    let mut allowlist: Vec<String> = experimental_facets.tool_call_allowlist.clone();
+    for facet_id in selected_facet_ids {
+        if let Some(facet) = experimental_facets.facets.get(facet_id) {
+            allowlist.extend(facet.tool_call_allowlist.iter().cloned());
+        }
+    }
+    if let Some(id) = action_facet_id {
+        if let Some(facet) = action_facets.facets.get(id) {
+            allowlist.extend(facet.tool_call_allowlist.iter().cloned());
+        }
+    }
+    allowlist
+}
+
 /// Merge an active action facet's `tool_call_allowlist` into the MCP tool
 /// allowlist. Additive by design: it only extends an already-active (`Some`)
 /// allowlist, so an action facet *adds* selectable MCP tools without turning a
@@ -4781,7 +4813,8 @@ fn merge_action_facet_into_mcp_allowlist(
 mod tests {
     use super::{
         apply_assistant_server_filter, derive_requested_server_ids_from_allowlist,
-        expand_tool_patterns_with_discovered_tools, merge_action_facet_into_mcp_allowlist,
+        effective_client_tool_allowlist, expand_tool_patterns_with_discovered_tools,
+        merge_action_facet_into_mcp_allowlist,
     };
     use std::collections::HashSet;
 
@@ -4834,6 +4867,72 @@ mod tests {
                 "server_a/tool_2".to_string(),
                 "server_b/tool_3".to_string(),
             ]
+        );
+    }
+
+    #[test]
+    fn effective_client_tool_allowlist_unions_global_facets_and_action_facet() {
+        use crate::config::{
+            ActionFacetConfig, ActionFacetsConfig, ExperimentalFacetsConfig, FacetConfig,
+        };
+        use std::collections::HashMap;
+
+        let experimental = ExperimentalFacetsConfig {
+            tool_call_allowlist: vec!["client/*".to_string()], // global, regardless of facet
+            facets: HashMap::from([(
+                "web_search".to_string(),
+                FacetConfig {
+                    display_name: "Web".to_string(),
+                    tool_call_allowlist: vec!["some_mcp/*".to_string()],
+                    ..Default::default()
+                },
+            )]),
+            ..Default::default()
+        };
+        let action_facets = ActionFacetsConfig {
+            facets: HashMap::from([(
+                "outlook_schedule".to_string(),
+                ActionFacetConfig {
+                    display_name: "Sched".to_string(),
+                    template: "t".to_string(),
+                    tool_call_allowlist: vec!["outlook/*".to_string()],
+                    ..Default::default()
+                },
+            )]),
+            ..Default::default()
+        };
+
+        // Global allowlist alone selects client tools — no facet, no action
+        // facet needed (globally active).
+        assert_eq!(
+            effective_client_tool_allowlist(&experimental, &action_facets, &[], None),
+            vec!["client/*".to_string()]
+        );
+
+        // Union of global + selected regular facet + active action facet.
+        assert_eq!(
+            effective_client_tool_allowlist(
+                &experimental,
+                &action_facets,
+                &["web_search".to_string()],
+                Some("outlook_schedule"),
+            ),
+            vec![
+                "client/*".to_string(),
+                "some_mcp/*".to_string(),
+                "outlook/*".to_string(),
+            ]
+        );
+
+        // Unknown facet ids contribute nothing.
+        assert_eq!(
+            effective_client_tool_allowlist(
+                &experimental,
+                &action_facets,
+                &["missing".to_string()],
+                Some("missing"),
+            ),
+            vec!["client/*".to_string()]
         );
     }
 
