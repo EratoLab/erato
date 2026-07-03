@@ -59,6 +59,7 @@ vi.mock("@erato/frontend/library", () => ({
   chatMessagesQuery: vi.fn(() => ({ queryKey: ["chat-messages"] })),
   componentRegistry: {},
   extractTextFromContent: vi.fn(() => ""),
+  transformEmailFencesForCopy: (text: string) => text,
   getSupportedFileTypes: vi.fn(() => ({})),
   resolveComponentOverride: (override: unknown, fallback: unknown) =>
     override ?? fallback,

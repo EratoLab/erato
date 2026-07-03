@@ -6,6 +6,7 @@ import { ChatEmptyState } from "@/components/ui/Chat/ChatEmptyState";
 import { useChatContext } from "@/providers/ChatProvider";
 import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 import { createLogger } from "@/utils/debugLogger";
+import { transformEmailFencesForCopy } from "@/utils/emailClipboard";
 
 import type { MessageAction } from "@/types/message-controls";
 
@@ -63,7 +64,9 @@ export default function ChatPageStructure({
           logger.log("Handling message action in ChatPageStructure:", action);
           if (action.type === "copy") {
             const messageToCopy = displayMessages[action.messageId];
-            const textContent = extractTextFromContent(messageToCopy.content);
+            const textContent = transformEmailFencesForCopy(
+              extractTextFromContent(messageToCopy.content),
+            );
             if (textContent) {
               try {
                 await navigator.clipboard.writeText(textContent);

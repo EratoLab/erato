@@ -1,5 +1,6 @@
 import {
   ActionConfirmationCard,
+  copyEmailToClipboard,
   sanitizeHtmlPreview,
   useChatContext,
   useOutlookArtifact,
@@ -402,8 +403,7 @@ export function OutlookEratoEmailRenderer({
   ]);
 
   const handleCopy = useCallback(() => {
-    void navigator.clipboard
-      .writeText(content)
+    void copyEmailToClipboard(content, isHtml ?? false)
       .then(() => {
         setStatus("copied");
         scheduleStatusReset(2000);
@@ -411,7 +411,7 @@ export function OutlookEratoEmailRenderer({
       .catch(() => {
         // ignore clipboard errors
       });
-  }, [content, scheduleStatusReset]);
+  }, [content, isHtml, scheduleStatusReset]);
 
   const insertLabel = (() => {
     if (status === "done")

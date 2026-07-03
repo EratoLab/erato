@@ -1,6 +1,6 @@
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
@@ -740,6 +740,127 @@ describe("MessageContent", () => {
 
     // body_format drives HTML rendering even though the tag isn't `-html`.
     expect(container.querySelector("b")).toHaveTextContent("Bold reply");
+  });
+
+  it("renders a CANONICAL erato-email fence as HTML when the facet body_format is html", () => {
+    const { container } = renderWithTheme(
+      <MessageContent
+        content={textContent("```erato-email\n<b>Bold reply</b>\n```")}
+        outlookArtifact={{
+          facetId: "outlook_rewrite_selection",
+          bodyFormat: "html",
+          renderMode: "body",
+        }}
+      />,
+    );
+
+    // "-html suffix dropped" drift: rescued because the facet asked for html
+    // AND the content demonstrably contains markup.
+    expect(container.querySelector("b")).toHaveTextContent("Bold reply");
+  });
+
+  it("keeps a plain-text draft under the canonical tag as text even when the facet says html", () => {
+    const { container } = renderWithTheme(
+      <MessageContent
+        content={textContent(
+          "```erato-email\nHallo <Name>,\n\nvielen Dank.\n\nViele Grüße\n```",
+        )}
+        outlookArtifact={{
+          facetId: "outlook_rewrite_selection",
+          bodyFormat: "html",
+          renderMode: "body",
+        }}
+      />,
+    );
+
+    // Must use the pre-wrap text branch: the html branch collapses newlines
+    // and DOMPurify deletes the "<Name>" placeholder.
+    const pre = container.querySelector(".whitespace-pre-wrap");
+    expect(pre?.textContent).toContain("Hallo <Name>,");
+    expect(pre?.textContent).toContain("vielen Dank.\n\nViele Grüße");
+  });
+
+  it("demotes an erato-email-html fence whose content is actually plain text", () => {
+    const { container } = renderWithTheme(
+      <MessageContent
+        content={textContent(
+          "```erato-email-html\nHallo Frau Berger,\n\nvielen Dank.\n```",
+        )}
+      />,
+    );
+
+    const pre = container.querySelector(".whitespace-pre-wrap");
+    expect(pre?.textContent).toContain("Hallo Frau Berger,\n\nvielen Dank.");
+  });
+
+  it("keeps a drifted-tag plain draft as text when the facet says html", () => {
+    const { container } = renderWithTheme(
+      <MessageContent
+        content={textContent("```email\nHallo,\n\nvielen Dank.\n```")}
+        outlookArtifact={{
+          facetId: "outlook_rewrite_selection",
+          bodyFormat: "html",
+          renderMode: "body",
+        }}
+      />,
+    );
+
+    expect(
+      container.querySelector(".whitespace-pre-wrap")?.textContent,
+    ).toContain("Hallo,\n\nvielen Dank.");
+  });
+
+  it("renders an unfenced plain reply draft as text even when the reply facet says html", () => {
+    const { container } = renderWithTheme(
+      <MessageContent
+        content={textContent(
+          "Hallo Frau Berger,\n\nvielen Dank für Ihre Nachricht.",
+        )}
+        outlookArtifact={{
+          facetId: "outlook_reply_from_read",
+          bodyFormat: "html",
+          renderMode: "body",
+          allowedClientActions: ["outlook.reply"],
+          proposedClientAction: "outlook.reply",
+        }}
+      />,
+    );
+
+    expect(
+      container.querySelector(".whitespace-pre-wrap")?.textContent,
+    ).toContain("Hallo Frau Berger,\n\nvielen Dank");
+  });
+
+  it("copies an HTML draft as text/html plus text/plain clipboard flavors", async () => {
+    class ClipboardItemStub {
+      constructor(public data: Record<string, Blob>) {}
+    }
+    const write = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, {
+      clipboard: { write, writeText: vi.fn() },
+    });
+    vi.stubGlobal("ClipboardItem", ClipboardItemStub);
+
+    try {
+      renderWithTheme(
+        <MessageContent
+          content={textContent("```erato-email-html\n<p>Hi</p>\n```")}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: /Copy/ }));
+
+      await waitFor(() => expect(write).toHaveBeenCalledTimes(1));
+      const item = write.mock.calls[0][0][0] as InstanceType<
+        typeof ClipboardItemStub
+      >;
+      expect(Object.keys(item.data).sort()).toEqual([
+        "text/html",
+        "text/plain",
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("falls back to the whole body as the artifact for an unfenced rewrite_selection response", () => {

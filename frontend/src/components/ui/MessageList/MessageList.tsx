@@ -876,7 +876,6 @@ export const MessageList = memo<MessageListProps>(
         event.clipboardData.setData("text/plain", selectedText);
         const sanitizedHtml = htmlContainer.innerHTML.trim();
         if (sanitizedHtml) {
-          // eslint-disable-next-line lingui/no-unlocalized-strings -- MIME type constant
           event.clipboardData.setData("text/html", sanitizedHtml);
         }
       },

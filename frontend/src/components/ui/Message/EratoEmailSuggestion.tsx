@@ -2,6 +2,7 @@ import { t } from "@lingui/core/macro";
 import { useCallback, useMemo, useState } from "react";
 
 import { componentRegistry } from "@/config/componentRegistry";
+import { copyEmailToClipboard } from "@/utils/emailClipboard";
 import { sanitizeHtmlPreview } from "@/utils/sanitizeHtmlPreview";
 
 import type { EratoEmailCodeBlockProps } from "@/config/componentRegistry";
@@ -21,8 +22,7 @@ export function DefaultEratoEmailCodeBlock({
   const previewHtml = useMemo(() => sanitizeHtmlPreview(content), [content]);
 
   const handleCopy = useCallback(() => {
-    void navigator.clipboard
-      .writeText(content)
+    void copyEmailToClipboard(content, isHtml ?? false)
       .then(() => {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
@@ -30,7 +30,7 @@ export function DefaultEratoEmailCodeBlock({
       .catch(() => {
         // Fallback: ignore clipboard errors
       });
-  }, [content]);
+  }, [content, isHtml]);
 
   return (
     <div className="my-2 rounded-lg border border-theme-border bg-theme-bg-secondary p-3">

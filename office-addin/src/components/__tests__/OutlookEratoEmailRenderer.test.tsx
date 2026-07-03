@@ -20,6 +20,7 @@ const mockUseChatContext = vi.fn();
 const mockUsePersistedState = vi.fn();
 const mockOpenReplyForm = vi.fn();
 const mockGetReadModeRecipientSummary = vi.fn();
+const mockCopyEmailToClipboard = vi.fn();
 
 vi.mock("@erato/frontend/library", () => ({
   // Mirrors the real card's lifecycle contract: decision buttons only while
@@ -63,6 +64,10 @@ vi.mock("@erato/frontend/library", () => ({
     </div>
   ),
   sanitizeHtmlPreview: (html: string) => html,
+  copyEmailToClipboard: (...args: unknown[]) =>
+    Promise.resolve(mockCopyEmailToClipboard(...args)),
+  htmlToPlainText: (html: string) =>
+    new DOMParser().parseFromString(html, "text/html").body.textContent ?? "",
   useChatContext: () => mockUseChatContext(),
   useOutlookArtifact: () => mockUseOutlookArtifact(),
   usePersistedState: () => mockUsePersistedState(),
@@ -606,5 +611,31 @@ describe("OutlookEratoEmailRenderer — read-reply gate tracks the reactive item
     render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
 
     expect(screen.queryByRole("button", { name: "Reply" })).toBeNull();
+  });
+});
+
+describe("OutlookEratoEmailRenderer — copy", () => {
+  it("delegates an HTML draft to the shared clipboard helper", async () => {
+    prime({
+      artifact: makeArtifact({ bodyFormat: "html" }),
+      currentItemIdentity: null,
+    });
+    render(<OutlookEratoEmailRenderer content="<p>Hi</p>" isHtml={true} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+
+    expect(mockCopyEmailToClipboard).toHaveBeenCalledWith("<p>Hi</p>", true);
+    expect(
+      await screen.findByRole("button", { name: "Copied!" }),
+    ).toBeInTheDocument();
+  });
+
+  it("passes isHtml=false for plain drafts", () => {
+    prime({ artifact: makeArtifact(), currentItemIdentity: null });
+    render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+
+    expect(mockCopyEmailToClipboard).toHaveBeenCalledWith("Draft body", false);
   });
 });

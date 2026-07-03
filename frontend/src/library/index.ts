@@ -218,6 +218,11 @@ export {
   type ClientToolExecutionResult,
 } from "@/hooks/chat/clientToolExecutors";
 export { createLogger } from "@/utils/debugLogger";
+export {
+  copyEmailToClipboard,
+  htmlToPlainText,
+  transformEmailFencesForCopy,
+} from "@/utils/emailClipboard";
 export { sanitizeHtmlPreview } from "@/utils/sanitizeHtmlPreview";
 export {
   extractTextFromContent,
