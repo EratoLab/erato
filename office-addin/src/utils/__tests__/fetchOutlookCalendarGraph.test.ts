@@ -48,11 +48,15 @@ const BUSY_PAGE_1 = {
       end: { dateTime: "2026-07-02T07:00:00.0000000", timeZone: "UTC" },
       isAllDay: false,
       showAs: "busy",
+      // Authored in a non-UTC zone → authoringTimeZone should resolve to IANA.
+      originalStartTimeZone: "W. Europe Standard Time",
     },
     {
+      // All-day: Graph labels the midnights `Z` but does NOT offset-shift them, so
+      // the floating date is taken directly (2026-07-03 / -04), never localized.
       subject: "Conference (out of office)",
-      start: { dateTime: "2026-07-03T00:00:00.0000000", timeZone: "UTC" },
-      end: { dateTime: "2026-07-04T00:00:00.0000000", timeZone: "UTC" },
+      start: { dateTime: "2026-07-03T00:00:00.0000000Z", timeZone: "UTC" },
+      end: { dateTime: "2026-07-04T00:00:00.0000000Z", timeZone: "UTC" },
       isAllDay: true,
       showAs: "oof",
     },
@@ -153,7 +157,8 @@ describe("fetchOutlookCalendarViaGraph", () => {
       transport,
     });
 
-    expect(calendar.timezone).toBe("W. Europe Standard Time");
+    // resolveTimezone maps the mailbox's Windows zone name to canonical IANA.
+    expect(calendar.displayTimeZone).toBe("Europe/Berlin");
     expect(calendar.workingHours).toEqual({
       daysOfWeek: ["monday", "tuesday", "wednesday", "thursday", "friday"],
       startMinutes: 480,
@@ -167,11 +172,26 @@ describe("fetchOutlookCalendarViaGraph", () => {
       "OOF",
       "Tentative",
     ]);
-    expect(calendar.busyBlocks.map((block) => block.isAllDay)).toEqual([
-      false,
-      true,
-      false,
+    // Timed events land on the date-time arm as UTC instants; the all-day event
+    // lands on the date arm as a floating half-open date range.
+    expect(calendar.busyBlocks.map((block) => block.when.kind)).toEqual([
+      "date-time",
+      "date",
+      "date-time",
     ]);
+    expect(calendar.busyBlocks[0].when).toEqual({
+      kind: "date-time",
+      startUtc: "2026-07-02T06:00:00Z",
+      endUtc: "2026-07-02T07:00:00Z",
+    });
+    expect(calendar.busyBlocks[1].when).toEqual({
+      kind: "date",
+      startDate: "2026-07-03",
+      endDateExclusive: "2026-07-04",
+    });
+    // originalStartTimeZone → IANA on the first block; absent → null.
+    expect(calendar.busyBlocks[0].authoringTimeZone).toBe("Europe/Berlin");
+    expect(calendar.busyBlocks[1].authoringTimeZone).toBeNull();
 
     // historyMeetings: attendeeCount excludes resource rooms (3 people, 1 room
     // → 3), undefined when absent.
@@ -181,18 +201,26 @@ describe("fetchOutlookCalendarViaGraph", () => {
     ]);
     expect(calendar.historyMeetings[0].attendeeCount).toBe(3);
     expect(calendar.historyMeetings[1].attendeeCount).toBeUndefined();
-    expect(calendar.historyMeetings[0].isAllDay).toBe(false);
-    expect(calendar.historyMeetings[1].isAllDay).toBe(true);
+    expect(calendar.historyMeetings[0].when.kind).toBe("date-time");
+    expect(calendar.historyMeetings[1].when).toEqual({
+      kind: "date",
+      startDate: "2026-06-15",
+      endDateExclusive: "2026-06-16",
+    });
     // isRecurring derived from Graph's event `type` (occurrence → true).
     expect(calendar.historyMeetings[0].isRecurring).toBe(true);
     expect(calendar.historyMeetings[1].isRecurring).toBe(false);
 
-    // Load-bearing: every emitted start/end is a millis-free UTC `…Z`.
+    // Load-bearing: timed events are millis-free UTC `…Z`; date events are bare
+    // `YYYY-MM-DD` with no time/zone designator.
     for (const event of [...calendar.busyBlocks, ...calendar.historyMeetings]) {
-      expect(event.start.endsWith("Z")).toBe(true);
-      expect(event.end.endsWith("Z")).toBe(true);
-      expect(event.start).not.toContain(".");
-      expect(event.end).not.toContain(".");
+      if (event.when.kind === "date-time") {
+        expect(event.when.startUtc).toMatch(/^\d{4}-\d{2}-\d{2}T[\d:]+Z$/);
+        expect(event.when.endUtc).toMatch(/^\d{4}-\d{2}-\d{2}T[\d:]+Z$/);
+      } else {
+        expect(event.when.startDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+        expect(event.when.endDateExclusive).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      }
     }
 
     // The bearer token from acquireToken reaches the transport.

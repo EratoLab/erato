@@ -14,29 +14,41 @@ export interface NormalizedWorkingHours {
 }
 
 /**
+ * When an event happens, discriminated by TYPE — never by an `isAllDay` flag on
+ * an instant. This is the iCalendar RFC 5545 DATE-vs-DATE-TIME model both
+ * backends normalize onto: an all-day event is a floating civil date and can
+ * never be offset-shifted or mistaken for a UTC moment.
+ * - `date-time`: a timed event, as true UTC instants (`…Z`).
+ * - `date`: an all-day event, as floating dates (`YYYY-MM-DD`, no time/zone),
+ *   half-open — `endDateExclusive` is the day AFTER the last all-day date.
+ * Consumers branch on `kind`; treat `date` as a whole-day block in
+ * `displayTimeZone`, never as a `[midnightZ, midnightZ]` interval.
+ */
+export type NormalizedEventWhen =
+  | { kind: "date-time"; startUtc: string; endUtc: string }
+  | { kind: "date"; startDate: string; endDateExclusive: string };
+
+/**
  * Unified `busyType` vocabulary both backends normalize onto:
  * "Free" | "Tentative" | "Busy" | "OOF" | "WorkingElsewhere". EWS emits it from
  * `LegacyFreeBusyStatus`, Graph maps `showAs`; absent/unknown/NoData → "Busy"
  * (a block occupying time must never read as free).
  */
 export interface NormalizedBusyBlock {
-  /** UTC ISO-8601 (`…Z`); looks forward from now. */
-  start: string;
-  end: string;
+  when: NormalizedEventWhen;
   busyType: string;
   subject?: string;
-  isAllDay?: boolean;
+  /** IANA zone the event was authored in, when known; null otherwise. */
+  authoringTimeZone?: string | null;
 }
 
 export interface NormalizedHistoryMeeting {
-  /** UTC ISO-8601 (`…Z`); a past meeting (looks backward from now). */
-  start: string;
-  end: string;
+  when: NormalizedEventWhen;
   subject: string;
   isRecurring?: boolean;
-  isAllDay?: boolean;
   /** Invitee count when the backend reports it. */
   attendeeCount?: number;
+  authoringTimeZone?: string | null;
 }
 
 export interface NormalizedCalendar {
@@ -44,8 +56,12 @@ export interface NormalizedCalendar {
   workingHours: NormalizedWorkingHours | null;
   busyBlocks: NormalizedBusyBlock[];
   historyMeetings: NormalizedHistoryMeeting[];
-  /** IANA / Windows zone id the times should be displayed in. */
-  timezone: string;
+  /**
+   * Canonical IANA id (e.g. `Europe/Berlin`) to display times in and the anchor
+   * used to project `date` events onto the timeline. Always present (falls back
+   * to the client zone when the mailbox zone can't be resolved).
+   */
+  displayTimeZone: string;
 }
 
 export interface CalendarFetchOptions {

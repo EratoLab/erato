@@ -1,3 +1,4 @@
+import { utcInstantToCivilDate } from "./calendarTime";
 import {
   allMessagesEls,
   allTypesEls,
@@ -12,11 +13,13 @@ import {
   throwIfAborted,
   typesText,
 } from "./fetchOutlookMessageEws";
+import { toIana } from "./windowsZones";
 
 import type {
   CalendarFetchOptions,
   NormalizedBusyBlock,
   NormalizedCalendar,
+  NormalizedEventWhen,
   NormalizedHistoryMeeting,
   NormalizedWorkingHours,
 } from "./fetchOutlookCalendar";
@@ -27,11 +30,14 @@ import type {
  * history come from FindItem + CalendarView over the signed-in user's OWN
  * `calendar` distinguished folder — PROVEN against a live SE box (Exchange 2019 /
  * SE 15.2.2562) at RequestServerVersion Exchange2013_SP1. Each `t:CalendarItem`
- * returns Subject/Start/End/IsRecurring/LegacyFreeBusyStatus, with Start/End
+ * returns Subject/Start/End/IsRecurring/LegacyFreeBusyStatus, with timed Start/End
  * already in UTC (`…Z`); CalendarView expands recurring series into their
  * occurrences inside the requested window (exactly what busy / history want). We
- * also request IsAllDayEvent + Required/Optional attendees for best-effort
- * `isAllDay` / `attendeeCount` enrichment (an item without them omits the field).
+ * also request IsAllDayEvent, StartTimeZone (the authoring zone, returned inline by
+ * FindItem — CONFIRMED on the live SE box), and Required/Optional attendees.
+ * All-day events are stored as the UTC instant of authoring-zone midnight, so they
+ * are localized back to that zone and emitted as floating dates — never `.slice`d
+ * off the raw `Z` string (the classic off-by-one all-day bug).
  *
  * Working hours come from GetUserAvailability over the same (own) mailbox as a
  * BEST-EFFORT leg that degrades to `workingHours: null` on ANY failure, keeping a
@@ -66,6 +72,8 @@ interface RawCalendarItem {
   isRecurring: boolean;
   legacyFreeBusyStatus: string | undefined;
   isAllDay: boolean;
+  /** The `Id` of the item's StartTimeZone (a Windows zone name), when present. */
+  startTimeZoneId: string | undefined;
   attendeeCount: number;
 }
 
@@ -92,6 +100,7 @@ export function buildCalendarViewFindItemBody(
       "calendar:IsRecurring",
       "calendar:LegacyFreeBusyStatus",
       "calendar:IsAllDayEvent",
+      "calendar:StartTimeZone",
       "calendar:RequiredAttendees",
       "calendar:OptionalAttendees",
     ]) +
@@ -203,6 +212,9 @@ export function parseCalendarView(doc: Document): RawCalendarItem[] {
         isRecurring: typesText(calendarItem, "IsRecurring") === "true",
         legacyFreeBusyStatus: typesText(calendarItem, "LegacyFreeBusyStatus"),
         isAllDay: typesText(calendarItem, "IsAllDayEvent") === "true",
+        startTimeZoneId:
+          firstTypesEl(calendarItem, "StartTimeZone")?.getAttribute("Id") ??
+          undefined,
         attendeeCount,
       });
     }
@@ -251,11 +263,52 @@ export function parseAvailability(
 // --- Normalization helpers -------------------------------------------------
 
 /**
- * CalendarView already returns UTC (`…Z`); normalize to a millis-free `…Z` ISO-8601.
- * A value that lacks the designator is assumed UTC and gets a `Z` appended.
+ * Normalize an EWS dateTime to a millis-free UTC `…Z` instant. CalendarView
+ * returns UTC (`…Z`) on our path, but a value carrying an explicit offset
+ * (`…+02:00`, as a TimeZoneContext'd box would emit) is an equally valid instant —
+ * both are parsed and re-serialized as UTC. Only a bare value (no designator) is
+ * assumed already-UTC and gets a `Z` appended.
  */
 function toUtcIso(value: string): string {
-  return value.endsWith("Z") ? value.replace(/\.\d{3}Z$/, "Z") : `${value}Z`;
+  if (/(Z|[+-]\d{2}:\d{2})$/.test(value)) {
+    return new Date(value).toISOString().replace(/\.\d{3}Z$/, "Z");
+  }
+  return `${value}Z`;
+}
+
+/**
+ * Projects a raw item's start/end onto the {@link NormalizedEventWhen} union.
+ * Timed events are true UTC instants; all-day events are floating civil dates
+ * recovered by localizing the UTC instant to the item's AUTHORING zone (its
+ * StartTimeZone, falling back to the mailbox `displayTimeZone`). `authoringTimeZone`
+ * is the IANA form of that zone, or null when EWS didn't report one.
+ */
+function normalizeWhen(
+  item: RawCalendarItem,
+  displayTimeZone: string,
+): { when: NormalizedEventWhen; authoringTimeZone: string | null } {
+  const authoringTimeZone = item.startTimeZoneId
+    ? toIana(item.startTimeZoneId)
+    : null;
+  if (item.isAllDay) {
+    const anchor = authoringTimeZone ?? displayTimeZone;
+    return {
+      when: {
+        kind: "date",
+        startDate: utcInstantToCivilDate(toUtcIso(item.start), anchor),
+        endDateExclusive: utcInstantToCivilDate(toUtcIso(item.end), anchor),
+      },
+      authoringTimeZone,
+    };
+  }
+  return {
+    when: {
+      kind: "date-time",
+      startUtc: toUtcIso(item.start),
+      endUtc: toUtcIso(item.end),
+    },
+    authoringTimeZone,
+  };
 }
 
 /** A `Date` as an EWS dateTime string: millis-free UTC ISO-8601 (`…Z`). */
@@ -263,12 +316,13 @@ function toEwsDateTime(date: Date): string {
   return date.toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
-/** The mailbox's own time zone: Office user profile, else the runtime's resolved zone. */
+/**
+ * The mailbox's own time zone as a canonical IANA id. `userProfile.timeZone` is a
+ * Windows zone name on desktop hosts (e.g. "W. Europe Standard Time"), so it is run
+ * through {@link toIana}, which also falls back to the client OS zone.
+ */
 function resolveTimezone(): string {
-  return (
-    Office.context.mailbox.userProfile?.timeZone ??
-    Intl.DateTimeFormat().resolvedOptions().timeZone
-  );
+  return toIana(Office.context.mailbox.userProfile?.timeZone);
 }
 
 /**
@@ -296,19 +350,22 @@ export async function fetchCalendarHistoryViaEws(
   options: CalendarFetchOptions = {},
 ): Promise<NormalizedHistoryMeeting[]> {
   throwIfAborted(options.signal);
+  const displayTimeZone = resolveTimezone();
   const doc = await ewsHostFetch(
     buildSoapEnvelope(
       buildCalendarViewFindItemBody(range.startUtc, range.endUtc),
     ),
   );
-  return parseCalendarView(doc).map((item) => ({
-    start: toUtcIso(item.start),
-    end: toUtcIso(item.end),
-    subject: item.subject,
-    isRecurring: item.isRecurring,
-    isAllDay: item.isAllDay,
-    attendeeCount: item.attendeeCount,
-  }));
+  return parseCalendarView(doc).map((item) => {
+    const { when, authoringTimeZone } = normalizeWhen(item, displayTimeZone);
+    return {
+      when,
+      subject: item.subject,
+      isRecurring: item.isRecurring,
+      attendeeCount: item.attendeeCount,
+      authoringTimeZone,
+    };
+  });
 }
 
 /**
@@ -320,18 +377,21 @@ export async function fetchCalendarBusyViaEws(
   options: CalendarFetchOptions = {},
 ): Promise<NormalizedBusyBlock[]> {
   throwIfAborted(options.signal);
+  const displayTimeZone = resolveTimezone();
   const doc = await ewsHostFetch(
     buildSoapEnvelope(
       buildCalendarViewFindItemBody(range.startUtc, range.endUtc),
     ),
   );
-  return parseCalendarView(doc).map((item) => ({
-    start: toUtcIso(item.start),
-    end: toUtcIso(item.end),
-    busyType: mapBusyType(item.legacyFreeBusyStatus),
-    subject: item.subject || undefined,
-    isAllDay: item.isAllDay,
-  }));
+  return parseCalendarView(doc).map((item) => {
+    const { when, authoringTimeZone } = normalizeWhen(item, displayTimeZone);
+    return {
+      when,
+      busyType: mapBusyType(item.legacyFreeBusyStatus),
+      subject: item.subject || undefined,
+      authoringTimeZone,
+    };
+  });
 }
 
 /**
@@ -397,7 +457,7 @@ export async function fetchOutlookCalendarViaEws(
     ),
   };
 
-  const timezone = resolveTimezone();
+  const displayTimeZone = resolveTimezone();
 
   let historyMeetings: NormalizedHistoryMeeting[] = [];
   try {
@@ -432,5 +492,5 @@ export async function fetchOutlookCalendarViaEws(
     );
   }
 
-  return { workingHours, busyBlocks, historyMeetings, timezone };
+  return { workingHours, busyBlocks, historyMeetings, displayTimeZone };
 }

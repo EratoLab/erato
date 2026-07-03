@@ -41,9 +41,14 @@ const CALENDAR_VIEW_SOAP =
   '<?xml version="1.0" encoding="utf-8"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Header><h:ServerVersionInfo MajorVersion="15" MinorVersion="2" MajorBuildNumber="2562" MinorBuildNumber="17" Version="V2017_07_11" xmlns:h="http://schemas.microsoft.com/exchange/services/2006/types" xmlns="http://schemas.microsoft.com/exchange/services/2006/types" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"/></s:Header><s:Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema"><m:FindItemResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"><m:ResponseMessages><m:FindItemResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:RootFolder TotalItemsInView="2" IncludesLastItemInRange="true"><t:Items><t:CalendarItem><t:ItemId Id="AAA1" ChangeKey="CK1"/><t:Subject>Meeting A</t:Subject><t:Start>2026-07-02T06:00:00Z</t:Start><t:End>2026-07-02T06:30:00Z</t:End><t:IsRecurring>false</t:IsRecurring></t:CalendarItem><t:CalendarItem><t:ItemId Id="AAA2" ChangeKey="CK2"/><t:Subject>Our second meeting</t:Subject><t:Start>2026-07-09T06:00:00Z</t:Start><t:End>2026-07-09T06:30:00Z</t:End><t:IsRecurring>false</t:IsRecurring></t:CalendarItem></t:Items></m:RootFolder></m:FindItemResponseMessage></m:ResponseMessages></m:FindItemResponse></s:Body></s:Envelope>';
 
 /** A CalendarView response carrying the SI-2/SI-3 enrichment fields:
- * IsAllDayEvent plus Required/Optional attendee collections. The first item is
- * all-day with 2 required + 1 optional attendee (attendeeCount 3); the second is
- * a timed solo block with no attendees (attendeeCount 0). */
+ * IsAllDayEvent, StartTimeZone, plus Required/Optional attendee collections. The
+ * first item is all-day with 2 required + 1 optional attendee (attendeeCount 3);
+ * the second is a timed solo block with no attendees (attendeeCount 0).
+ *
+ * The all-day item's Start/End are on the wire as the UTC instant of W. Europe
+ * (UTC+2 in July) LOCAL midnight — i.e. `…T22:00:00Z` the day BEFORE — exactly the
+ * shape that naive `.slice(0,10)` would mis-date by a day. Localizing to the
+ * StartTimeZone must recover the true civil dates 2026-07-02 / 2026-07-03. */
 const CALENDAR_VIEW_ENRICHED_SOAP =
   '<?xml version="1.0" encoding="utf-8"?>' +
   '<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">' +
@@ -56,11 +61,12 @@ const CALENDAR_VIEW_ENRICHED_SOAP =
   "<t:CalendarItem>" +
   '<t:ItemId Id="ENR1" ChangeKey="CK1"/>' +
   "<t:Subject>All-day offsite</t:Subject>" +
-  "<t:Start>2026-07-02T00:00:00Z</t:Start>" +
-  "<t:End>2026-07-03T00:00:00Z</t:End>" +
+  "<t:Start>2026-07-01T22:00:00Z</t:Start>" +
+  "<t:End>2026-07-02T22:00:00Z</t:End>" +
   "<t:IsRecurring>false</t:IsRecurring>" +
   "<t:LegacyFreeBusyStatus>OOF</t:LegacyFreeBusyStatus>" +
   "<t:IsAllDayEvent>true</t:IsAllDayEvent>" +
+  '<t:StartTimeZone Id="W. Europe Standard Time"/>' +
   "<t:RequiredAttendees>" +
   "<t:Attendee><t:Mailbox><t:Name>Alice</t:Name><t:EmailAddress>alice@x</t:EmailAddress></t:Mailbox></t:Attendee>" +
   "<t:Attendee><t:Mailbox><t:Name>Bob</t:Name><t:EmailAddress>bob@x</t:EmailAddress></t:Mailbox></t:Attendee>" +
@@ -182,7 +188,8 @@ describe("fetchOutlookCalendarViaEws", () => {
 
     const calendar = await fetchOutlookCalendarViaEws();
 
-    expect(calendar.timezone).toBe("W. Europe Standard Time");
+    // resolveTimezone maps the mailbox's Windows zone name to canonical IANA.
+    expect(calendar.displayTimeZone).toBe("Europe/Berlin");
     expect(calendar.workingHours).toEqual({
       daysOfWeek: ["monday", "tuesday", "wednesday", "thursday", "friday"],
       startMinutes: 480,
@@ -198,10 +205,14 @@ describe("fetchOutlookCalendarViaEws", () => {
       "Our second meeting",
     ]);
 
-    // Load-bearing: every emitted start/end is UTC (ends with Z).
+    // These fixtures are all timed, so every event lands on the date-time arm as
+    // a UTC `…Z` instant.
     for (const event of [...calendar.historyMeetings, ...calendar.busyBlocks]) {
-      expect(event.start.endsWith("Z")).toBe(true);
-      expect(event.end.endsWith("Z")).toBe(true);
+      expect(event.when.kind).toBe("date-time");
+      if (event.when.kind === "date-time") {
+        expect(event.when.startUtc.endsWith("Z")).toBe(true);
+        expect(event.when.endUtc.endsWith("Z")).toBe(true);
+      }
     }
 
     // The FindItem leg targets the user's OWN calendar folder at
@@ -214,6 +225,7 @@ describe("fetchOutlookCalendarViaEws", () => {
     expect(findBody).not.toContain("<?xml");
     // The enrichment fields (SI-2/SI-3 parity) are requested alongside the core.
     expect(findBody).toContain("calendar:IsAllDayEvent");
+    expect(findBody).toContain("calendar:StartTimeZone");
     expect(findBody).toContain("calendar:RequiredAttendees");
     expect(findBody).toContain("calendar:OptionalAttendees");
   });
@@ -232,31 +244,42 @@ describe("fetchOutlookCalendarViaEws", () => {
 
     const calendar = await fetchOutlookCalendarViaEws();
 
-    // historyMeetings carry isAllDay + attendeeCount + isRecurring.
+    // historyMeetings: the all-day item decodes to floating civil dates via its
+    // StartTimeZone (the off-by-one regression), the timed item to a UTC instant.
     expect(calendar.historyMeetings[0]).toMatchObject({
       subject: "All-day offsite",
-      isAllDay: true,
+      when: {
+        kind: "date",
+        startDate: "2026-07-02",
+        endDateExclusive: "2026-07-03",
+      },
       attendeeCount: 3,
       isRecurring: false,
+      authoringTimeZone: "Europe/Berlin",
     });
     expect(calendar.historyMeetings[1]).toMatchObject({
       subject: "Solo focus block",
-      isAllDay: false,
+      when: { kind: "date-time" },
       attendeeCount: 0,
       isRecurring: true,
+      authoringTimeZone: null,
     });
 
-    // busyBlocks carry isAllDay + the unified busyType (OOF preserved), but NOT
-    // attendeeCount.
+    // busyBlocks carry the same `when` + the unified busyType (OOF preserved), but
+    // NOT attendeeCount.
     expect(calendar.busyBlocks[0]).toMatchObject({
       subject: "All-day offsite",
-      isAllDay: true,
+      when: {
+        kind: "date",
+        startDate: "2026-07-02",
+        endDateExclusive: "2026-07-03",
+      },
       busyType: "OOF",
     });
     expect(calendar.busyBlocks[0]).not.toHaveProperty("attendeeCount");
     expect(calendar.busyBlocks[1]).toMatchObject({
       subject: "Solo focus block",
-      isAllDay: false,
+      when: { kind: "date-time" },
       busyType: "Busy",
     });
     warnSpy.mockRestore();
@@ -287,7 +310,7 @@ describe("fetchOutlookCalendarViaEws", () => {
       workingHours: null,
       busyBlocks: [],
       historyMeetings: [],
-      timezone: "W. Europe Standard Time",
+      displayTimeZone: "Europe/Berlin",
     });
     warnSpy.mockRestore();
   });

@@ -1,13 +1,16 @@
+import { graphFloatingDate } from "./calendarTime";
 import {
   GRAPH_BASE,
   graphFetch,
   makeGraphTokenSource,
 } from "./fetchOutlookMessageGraph";
+import { toIana } from "./windowsZones";
 
 import type {
   CalendarFetchOptions,
   NormalizedBusyBlock,
   NormalizedCalendar,
+  NormalizedEventWhen,
   NormalizedHistoryMeeting,
   NormalizedWorkingHours,
 } from "./fetchOutlookCalendar";
@@ -19,7 +22,8 @@ import type {
 /**
  * Microsoft Graph calendar sourcing for Exchange Online (SI-2 / ERMAIN-384) —
  * the cloud sibling of the on-prem EWS backend, emitting an identical {@link
- * NormalizedCalendar} (all times UTC `…Z`). v1 scope is the SIGNED-IN USER's OWN
+ * NormalizedCalendar} (timed events as UTC `…Z` instants, all-day events as
+ * floating civil dates). v1 scope is the SIGNED-IN USER's OWN
  * calendar only; `acquireToken` is expected to be bound to the `Calendars.Read`
  * scope (the location dispatcher binds it). The calendar reads are Graph GETs via
  * the shared {@link graphFetch} + {@link makeGraphTokenSource} plumbing (one
@@ -76,6 +80,9 @@ interface GraphEvent {
   /** singleInstance | occurrence | exception | seriesMaster. */
   type?: string;
   attendees?: { type?: string }[];
+  /** The event's authoring zone (Windows or IANA); Graph returns it inline. */
+  originalStartTimeZone?: string;
+  originalEndTimeZone?: string;
 }
 
 /** One page of a calendarView response. */
@@ -166,10 +173,32 @@ function clockStringToMinutes(clock: string | undefined): number | null {
  * back to the runtime's resolved zone (mirrors the EWS sibling).
  */
 function resolveTimezone(): string {
-  return (
-    Office.context.mailbox.userProfile?.timeZone ??
-    Intl.DateTimeFormat().resolvedOptions().timeZone
-  );
+  return toIana(Office.context.mailbox.userProfile?.timeZone);
+}
+
+/** Build the normalized `when` from a Graph event (all-day → floating date). */
+function graphEventWhen(event: GraphEvent): NormalizedEventWhen | null {
+  if (event.isAllDay === true) {
+    const start = event.start?.dateTime;
+    const end = event.end?.dateTime;
+    if (!start || !end) return null;
+    return {
+      kind: "date",
+      startDate: graphFloatingDate(start),
+      endDateExclusive: graphFloatingDate(end),
+    };
+  }
+  const startUtc = toUtcIso(event.start);
+  const endUtc = toUtcIso(event.end);
+  if (!startUtc || !endUtc) return null;
+  return { kind: "date-time", startUtc, endUtc };
+}
+
+/** The event's authoring zone (IANA) when Graph reports it; null for UTC/absent. */
+function graphAuthoringTimeZone(event: GraphEvent): string | null {
+  const zone = event.originalStartTimeZone;
+  if (!zone || zone === "UTC") return null;
+  return toIana(zone);
 }
 
 /**
@@ -239,22 +268,22 @@ export async function fetchCalendarBusyViaGraph(
 ): Promise<NormalizedBusyBlock[]> {
   throwIfAborted(options.signal);
   const tokenSource = makeGraphTokenSource(acquireToken);
-  const url = buildCalendarViewUrl(range, "subject,start,end,isAllDay,showAs");
+  const url = buildCalendarViewUrl(
+    range,
+    "subject,start,end,isAllDay,showAs,originalStartTimeZone,originalEndTimeZone",
+  );
   const events = await fetchCalendarViewPages(url, tokenSource, options);
 
   const blocks: NormalizedBusyBlock[] = [];
   for (const event of events) {
-    const start = toUtcIso(event.start);
-    const end = toUtcIso(event.end);
-    // start/end are mandatory on a calendarView event; skip a malformed row
-    // rather than emit an interval with missing bounds.
-    if (!start || !end) continue;
+    const when = graphEventWhen(event);
+    // start/end are mandatory; skip a malformed row rather than emit bad bounds.
+    if (!when) continue;
     blocks.push({
-      start,
-      end,
+      when,
       busyType: mapShowAs(event.showAs),
       subject: event.subject || undefined,
-      isAllDay: event.isAllDay === true,
+      authoringTimeZone: graphAuthoringTimeZone(event),
     });
   }
   return blocks;
@@ -273,20 +302,17 @@ export async function fetchCalendarHistoryViaGraph(
   const tokenSource = makeGraphTokenSource(acquireToken);
   const url = buildCalendarViewUrl(
     range,
-    "subject,start,end,isAllDay,attendees,type",
+    "subject,start,end,isAllDay,attendees,type,originalStartTimeZone,originalEndTimeZone",
   );
   const events = await fetchCalendarViewPages(url, tokenSource, options);
 
   const meetings: NormalizedHistoryMeeting[] = [];
   for (const event of events) {
-    const start = toUtcIso(event.start);
-    const end = toUtcIso(event.end);
-    if (!start || !end) continue;
+    const when = graphEventWhen(event);
+    if (!when) continue;
     meetings.push({
-      start,
-      end,
+      when,
       subject: event.subject ?? "",
-      isAllDay: event.isAllDay === true,
       isRecurring:
         event.type === "occurrence" ||
         event.type === "exception" ||
@@ -295,6 +321,7 @@ export async function fetchCalendarHistoryViaGraph(
       attendeeCount: Array.isArray(event.attendees)
         ? event.attendees.filter((a) => a.type !== "resource").length
         : undefined,
+      authoringTimeZone: graphAuthoringTimeZone(event),
     });
   }
   return meetings;
@@ -415,7 +442,7 @@ export async function fetchOutlookCalendarViaGraph(
     ),
   };
 
-  const timezone = resolveTimezone();
+  const displayTimeZone = resolveTimezone();
 
   let historyMeetings: NormalizedHistoryMeeting[] = [];
   try {
@@ -458,5 +485,5 @@ export async function fetchOutlookCalendarViaGraph(
     );
   }
 
-  return { workingHours, busyBlocks, historyMeetings, timezone };
+  return { workingHours, busyBlocks, historyMeetings, displayTimeZone };
 }
