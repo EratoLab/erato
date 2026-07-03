@@ -40,27 +40,21 @@ import type {
  *
  * The error contract mirrors the EWS sibling: the top-level
  * {@link fetchOutlookCalendarViaGraph} degrades each leg to `[]` / `null` and
- * NEVER throws except to propagate an abort; the granular per-leg helpers THROW
- * on a hard failure so a direct caller can distinguish "empty" from "failed".
- *
- * The environment dispatcher + shared `Normalized*` types live in
- * `./fetchOutlookCalendar.ts`; the on-prem EWS sibling (SI-3) lives in
- * `./fetchOutlookCalendarEws.ts`.
+ * NEVER throws except to propagate an abort; the per-leg helpers THROW on a hard
+ * failure so a caller can distinguish "empty" from "failed". The dispatcher +
+ * shared `Normalized*` types live in `./fetchOutlookCalendar.ts`; the on-prem EWS
+ * sibling (SI-3) in `./fetchOutlookCalendarEws.ts`.
  */
 
 /** Default look-back (history) and look-forward (busy) window, in days. */
 const DEFAULT_WINDOW_DAYS = 21;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
-/** Page size for each calendarView request. */
 const CALENDAR_VIEW_PAGE_SIZE = 100;
 /** Follow `@odata.nextLink` up to this many pages before stopping (mirrors the
  * mail fetcher's `MAX_CONVERSATION_PAGES` cap). */
 const MAX_CALENDAR_VIEW_PAGES = 20;
 
-/**
- * A UTC time range for a single calendarView query. Both bounds are UTC ISO-8601
- * strings ending in `Z`.
- */
+/** A UTC time range for a single calendarView query; both bounds are ISO-8601 `…Z`. */
 interface CalendarRange {
   startUtc: string;
   endUtc: string;
@@ -106,8 +100,7 @@ interface GraphGetScheduleResponse {
 
 // --- Abort + normalization helpers -----------------------------------------
 
-/** Throws the signal's reason (or an AbortError) when already aborted — the
- * Graph-side analogue of the EWS module's `throwIfAborted`. */
+/** Throws when `signal` is already aborted (Graph analogue of the EWS `throwIfAborted`). */
 function throwIfAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted) {
     throw signal.reason ?? new DOMException("Aborted", "AbortError");
@@ -120,10 +113,10 @@ function toGraphUtc(date: Date): string {
 }
 
 /**
- * Normalizes a Graph `dateTimeTimeZone` to a millis-free UTC `…Z` ISO-8601.
- * calendarView returns UTC by default (no `Prefer: outlook.timezone` header is
- * sent), so a value lacking the `Z` designator is assumed UTC and gets one; any
- * fractional seconds are stripped. Returns null when the dateTime is absent.
+ * Normalizes a Graph `dateTimeTimeZone` to a millis-free UTC `…Z` ISO-8601 (null
+ * when absent). calendarView returns UTC by default (no `Prefer: outlook.timezone`
+ * header sent), so a value lacking the `Z` designator is assumed UTC and given
+ * one; fractional seconds are stripped.
  */
 function toUtcIso(value: GraphDateTimeTimeZone | undefined): string | null {
   const dateTime = value?.dateTime?.trim();
@@ -300,9 +293,8 @@ export async function fetchCalendarHistoryViaGraph(
  * token as busy/history (NOT `/me/mailboxSettings`, which would need an extra
  * `MailboxSettings.Read` consent per tenant). Issued as a direct POST through the
  * injected transport, since the shared {@link graphFetch} is GET-only by design.
- * BEST-EFFORT: returns null on ANY failure (non-OK status, absent workingHours,
- * unparseable clock strings) so a restricted mailbox can never break the busy /
- * history core. An abort is the one thing it re-throws.
+ * BEST-EFFORT: returns null on ANY failure so a restricted mailbox can never break
+ * the busy / history core. An abort is the one thing it re-throws.
  */
 export async function fetchWorkingHoursViaGraph(
   acquireToken: AcquireGraphToken,
@@ -372,8 +364,7 @@ export async function fetchWorkingHoursViaGraph(
  * NormalizedCalendar}: busy blocks (now → +freeBusyWindowDays) and meeting
  * history (now-historyWindowDays → now) from calendarView, plus best-effort
  * working hours. NEVER throws except to propagate an abort — a restricted or
- * failed leg degrades to `[]` / null so a single unavailable capability can't
- * sink the whole snapshot.
+ * failed leg degrades to `[]` / null.
  */
 export async function fetchOutlookCalendarViaGraph(
   acquireToken: AcquireGraphToken,

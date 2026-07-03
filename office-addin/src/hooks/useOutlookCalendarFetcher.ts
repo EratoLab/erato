@@ -30,16 +30,12 @@ export interface UseOutlookCalendarFetcherResult {
  * mutually exclusive). Both Entra sources authenticate as `entra-msal`, so the
  * backend can no longer be chosen by auth mode — it follows the mailbox:
  *
- *   - not authenticated (mode !== `entra-msal`) → `fetcher: null` +
- *     `unsupported-mode`.
  *   - on-prem mailbox (`detectExchangeOnPrem`) → direct EWS SOAP fetcher;
  *     Graph can't reach on-prem mailboxes, so it reads the calendar via the
  *     host-brokered EWS transport (no React context needed).
  *   - cloud mailbox (EXO) with the Graph token context mounted → Graph fetcher,
  *     bound to a silent `Calendars.Read` acquirer (`forceRefresh` passes through
  *     for the fetch layer's 401-retry).
- *   - cloud mailbox without the Graph context → `fetcher: null` +
- *     `graph-unavailable`.
  *
  * NEVER throws — mirrors `useOutlookMessageFetcher`; consumers must degrade
  * gracefully when `fetcher` is null by skipping calendar-backed features.
@@ -47,8 +43,7 @@ export interface UseOutlookCalendarFetcherResult {
 export function useOutlookCalendarFetcher(): UseOutlookCalendarFetcherResult {
   const { mode } = useSessionAuth();
   const graph = useGraphTokenOptional();
-  // The mailbox host can't change within a session, so the probe is stable —
-  // compute it once and feed the stable value into the dispatch memo.
+  // The mailbox host can't change within a session, so the probe is stable.
   const isOnPrem = useMemo(() => detectExchangeOnPrem(), []);
 
   return useMemo<UseOutlookCalendarFetcherResult>(() => {

@@ -142,11 +142,7 @@ export function EntraGraphTokenProvider({
     [acquireToken],
   );
 
-  // DEV-only manual-validation hook for the EXO Graph calendar fetch (SI-2 /
-  // ERMAIN-384): exposes `window.__eratoCalendarGraph()` in the taskpane so the
-  // normalized availability shape can be inspected live before the facet prompt
-  // is authored. Dynamic import → zero production bundle/footprint; `import.meta`
-  // gates it out of prod entirely. Remove (or keep, it is inert) before merge.
+  // DEV-only hook: exposes `window.__eratoCalendarGraph()` to inspect the normalized EXO calendar shape live (SI-2 / ERMAIN-384); gated out of prod by `import.meta.env.DEV`.
   useEffect(() => {
     if (!import.meta.env.DEV) return;
     const devWindow = window as Window & {
