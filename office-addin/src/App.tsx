@@ -7,7 +7,6 @@ import {
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 
-import { CalendarDevProbe } from "./components/CalendarDevProbe";
 import { AddinChatPage } from "./pages/AddinChatPage";
 import { OfficeProvider, useOffice } from "./providers/OfficeProvider";
 import { OfficeThemeProvider } from "./providers/OfficeThemeProvider";
@@ -124,7 +123,6 @@ export default function App() {
                     </OutlookWrapper>
                   </AuthGate>
                   <Toaster placement="bottom-center" />
-                  <CalendarDevProbe />
                 </OutlookAuthProvider>
               </OfficeThemeProvider>
             </ApiProvider>
