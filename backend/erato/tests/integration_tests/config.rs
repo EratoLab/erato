@@ -2881,6 +2881,172 @@ allowed_args = ["content"]
     assert_eq!(generic.allowed_args, vec!["content"]);
 }
 
+/// Build an `AppConfig` from inline action-facet TOML and run `migrate()`
+/// (which performs load-time validation). Mirrors the temp-file pattern the
+/// other config tests use; shared by the `client_tools` validation tests.
+fn migrate_config_with_action_facets(action_facet_toml: &str) -> AppConfig {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = format!(
+        r#"
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-3.5-turbo"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = {{ endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }}
+
+{action_facet_toml}
+"#
+    );
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let temp_path = temp_file.path().to_str().unwrap();
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let config: AppConfig = config_schema
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    config.migrate()
+}
+
+#[test]
+fn test_top_level_client_tools_load_with_namespace() {
+    let config = migrate_config_with_action_facets(
+        r#"
+[client_tools.tools.fetch_availability]
+name = "outlook.fetch_availability"
+namespace = "outlook"
+description = "Fetch the user's calendar free/busy in a window."
+parameters = '{ "type": "object", "properties": {}, "additionalProperties": false }'
+timeout_ms = 30000
+
+[client_tools.tools.ping]
+name = "ping"
+description = "Default-namespaced client tool."
+parameters = '{ "type": "object" }'
+"#,
+    );
+
+    assert_eq!(config.client_tools.tools.len(), 2);
+    let tool = &config.client_tools.tools["fetch_availability"];
+    assert_eq!(tool.name, "outlook.fetch_availability");
+    assert_eq!(tool.namespace_or_default(), "outlook");
+    assert_eq!(tool.qualified_name(), "outlook/outlook.fetch_availability");
+    assert_eq!(tool.timeout_ms, Some(30000));
+    assert!(tool.parameters.contains("\"type\": \"object\""));
+    // Defaults to the `client` namespace when unset.
+    let ping = &config.client_tools.tools["ping"];
+    assert_eq!(ping.namespace_or_default(), "client");
+    assert_eq!(ping.qualified_name(), "client/ping");
+}
+
+#[test]
+#[should_panic(expected = "is reserved")]
+fn test_client_tool_reserved_name_rejected() {
+    migrate_config_with_action_facets(
+        r#"
+[client_tools.tools.bad]
+name = "propose_client_action"
+description = "collides with the reserved client-action tool name"
+parameters = '{ "type": "object" }'
+"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "Duplicate client tool")]
+fn test_client_tool_duplicate_qualified_name_rejected() {
+    // Two distinct tool ids resolving to the SAME namespace/name.
+    migrate_config_with_action_facets(
+        r#"
+[client_tools.tools.first]
+name = "dup"
+namespace = "outlook"
+description = "first"
+parameters = '{ "type": "object" }'
+
+[client_tools.tools.second]
+name = "dup"
+namespace = "outlook"
+description = "second (same namespace/name)"
+parameters = '{ "type": "object" }'
+"#,
+    );
+}
+
+#[test]
+fn test_client_tool_same_name_different_namespace_allowed() {
+    let config = migrate_config_with_action_facets(
+        r#"
+[client_tools.tools.first]
+name = "dup"
+namespace = "outlook"
+description = "first"
+parameters = '{ "type": "object" }'
+
+[client_tools.tools.second]
+name = "dup"
+namespace = "client"
+description = "second (different namespace)"
+parameters = '{ "type": "object" }'
+"#,
+    );
+    assert_eq!(config.client_tools.tools.len(), 2);
+}
+
+#[test]
+#[should_panic(expected = "must be a JSON object")]
+fn test_client_tool_non_object_parameters_rejected() {
+    migrate_config_with_action_facets(
+        r#"
+[client_tools.tools.tool]
+name = "tool"
+description = "schema is a JSON array, not an object"
+parameters = '[1, 2, 3]'
+"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "unparseable JSON parameters")]
+fn test_client_tool_invalid_json_parameters_rejected() {
+    migrate_config_with_action_facets(
+        r#"
+[client_tools.tools.tool]
+name = "tool"
+description = "not valid json at all"
+parameters = 'this is not json'
+"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "empty name")]
+fn test_client_tool_empty_name_rejected() {
+    migrate_config_with_action_facets(
+        r#"
+[client_tools.tools.tool]
+name = "   "
+description = "blank name after trim"
+parameters = '{ "type": "object" }'
+"#,
+    );
+}
+
 #[test]
 fn test_config_with_legacy_action_facets_shape_still_loads() {
     let mut temp_file = Builder::new()

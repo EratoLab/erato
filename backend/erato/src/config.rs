@@ -439,6 +439,14 @@ pub struct AppConfig {
     #[serde(default)]
     pub action_facets: ActionFacetsConfig,
 
+    // Client-executed tools (returning round-trip), declared top-level under
+    // `[client_tools.tools.<id>]` and selected into a context via
+    // `tool_call_allowlist` patterns — namespaced (default `client`, e.g.
+    // `outlook/*`), the same mechanism used for MCP tools. Dormant until an
+    // active facet's `tool_call_allowlist` selects one.
+    #[serde(default)]
+    pub client_tools: ClientToolsConfig,
+
     #[serde(default)]
     pub chat_sharing: ChatSharingConfig,
 
@@ -837,6 +845,53 @@ impl AppConfig {
                         id, enforced
                     );
                 }
+            }
+        }
+
+        // Validate top-level `client_tools` (client-executed returning tools).
+        // Each tool's selection identity is `namespace/name`; that qualified
+        // name must be unique, the bare name (exposed to the model) must be
+        // non-empty, untrimmed-free, and reserved-name-free, the namespace must
+        // be non-empty/untrimmed, and the parameters must be a JSON-object
+        // schema. The collision check against runtime MCP tool names cannot run
+        // here (MCP servers are not known at config load) and stays at request
+        // assembly.
+        let mut seen_qualified_names = std::collections::HashSet::new();
+        for tool in config.client_tools.tools.values() {
+            let name = tool.name.trim();
+            if name.is_empty() {
+                panic!("A client tool has an empty name.");
+            }
+            if name != tool.name {
+                panic!(
+                    "Client tool name '{}' has leading or trailing whitespace.",
+                    tool.name
+                );
+            }
+            if name == crate::services::client_actions::CLIENT_ACTION_TOOL_NAME {
+                panic!("Client tool named '{}' is reserved.", name);
+            }
+            let namespace = tool.namespace_or_default();
+            if namespace.is_empty() || namespace != namespace.trim() {
+                panic!(
+                    "Client tool '{}' has an empty or untrimmed namespace '{}'.",
+                    name, namespace
+                );
+            }
+            let qualified = format!("{}/{}", namespace, name);
+            if !seen_qualified_names.insert(qualified.clone()) {
+                panic!("Duplicate client tool '{}'.", qualified);
+            }
+            match serde_json::from_str::<serde_json::Value>(&tool.parameters) {
+                Ok(value) if value.is_object() => {}
+                Ok(_) => panic!(
+                    "Client tool '{}' parameters must be a JSON object (a JSON Schema).",
+                    qualified
+                ),
+                Err(e) => panic!(
+                    "Client tool '{}' has unparseable JSON parameters: {}",
+                    qualified, e
+                ),
             }
         }
 
@@ -2629,6 +2684,7 @@ impl ActionFacetsConfig {
                 client_actions: vec![],
                 presentation: None,
                 client_actions_always_ask: vec![],
+                tool_call_allowlist: vec![],
             });
 
         self.facets
@@ -2641,6 +2697,7 @@ impl ActionFacetsConfig {
                 client_actions: vec![],
                 presentation: None,
                 client_actions_always_ask: vec![],
+                tool_call_allowlist: vec![],
             });
     }
 }
@@ -2712,10 +2769,88 @@ pub struct ActionFacetConfig {
     // still deny them entirely.
     #[serde(default)]
     pub client_actions_always_ask: Vec<String>,
+
+    // Allowlist of tools the model may call when this action facet is active,
+    // using the same `namespace/*` / `server/tool` pattern syntax as regular
+    // facets' `tool_call_allowlist`. Selects both top-level `client_tools` (by
+    // their `namespace/name`, e.g. `outlook/*`) and MCP tools. Empty = none.
+    #[serde(default)]
+    pub tool_call_allowlist: Vec<String>,
 }
 
 /// Valid values for `ActionFacetConfig::presentation`.
 pub const ACTION_FACET_PRESENTATIONS: [&str; 2] = ["render_buttons", "auto_prompt"];
+
+/// Top-level `[client_tools]` configuration. Tools live in a map keyed by a
+/// config tool id (`[client_tools.tools.<id>]`) rather than an array, so they
+/// are overrideable / composable across multiple config files (like
+/// `chat_providers`). The intermediate `tools` level leaves room for future
+/// `[client_tools]` sibling keys that set global settings for all client tools.
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+pub struct ClientToolsConfig {
+    /// Client tools keyed by config tool id. The id is the override handle; the
+    /// model-facing name is each tool's `name` field.
+    #[serde(default)]
+    pub tools: HashMap<String, ClientToolConfig>,
+}
+
+/// A client-executed tool, declared top-level in `[client_tools.tools.<id>]` and
+/// selected into a context by an action facet's `tool_call_allowlist` (via its
+/// `namespace/name`). The model may CALL it mid-turn; the client (add-in / web
+/// app) executes it and POSTs the result back, which the backend feeds into the
+/// same agentic loop as a tool response — like an MCP tool, but executed on the
+/// client. Distinct from `client_actions`, which are terminal, one-way,
+/// user-confirmed mutations.
+///
+/// Returning client tools MUST be read-only / idempotent: a backend restart
+/// drops the parked turn, so a client may re-execute on recovery. Mutations
+/// must use the terminal `client_actions` (`propose_client_action`) path.
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+pub struct ClientToolConfig {
+    /// Tool name exposed to the model (e.g. "outlook.fetch_availability").
+    /// Must be non-empty and must not collide with the reserved
+    /// `propose_client_action` name; the `namespace/name` pair must be unique.
+    pub name: String,
+
+    /// Namespace used for `tool_call_allowlist` selection (e.g. `outlook` →
+    /// selectable as `outlook/<name>` and in bulk via `outlook/*`). Defaults to
+    /// `client`. Purely a selection identity — the model still sees `name`.
+    #[serde(default)]
+    pub namespace: Option<String>,
+
+    /// Human-readable description surfaced to the model as the tool description.
+    pub description: String,
+
+    /// JSON Schema (as a JSON string) for the tool's input parameters. Parsed
+    /// and validated at config load; surfaced to the model as the tool schema.
+    /// Kept as a string (not a structured value) so the config can keep
+    /// deriving `Eq` (`serde_json::Value` is not `Eq`).
+    pub parameters: String,
+
+    /// Optional per-tool park timeout in milliseconds. The agentic loop holds
+    /// open at most this long awaiting the client's result before injecting an
+    /// error tool response and continuing.
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
+}
+
+/// Default namespace for a client tool when none is configured.
+pub const DEFAULT_CLIENT_TOOL_NAMESPACE: &str = "client";
+
+impl ClientToolConfig {
+    /// The tool's namespace, or the `client` default.
+    pub fn namespace_or_default(&self) -> &str {
+        self.namespace
+            .as_deref()
+            .unwrap_or(DEFAULT_CLIENT_TOOL_NAMESPACE)
+    }
+
+    /// The tool's `namespace/name` selection identity (matched against
+    /// `tool_call_allowlist` patterns).
+    pub fn qualified_name(&self) -> String {
+        format!("{}/{}", self.namespace_or_default(), self.name)
+    }
+}
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct CachesConfig {
