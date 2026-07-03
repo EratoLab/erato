@@ -114,11 +114,18 @@ interface GraphGetScheduleResponse {
  * Normalizes a Graph `dateTimeTimeZone` to a millis-free UTC `…Z` ISO-8601 (null
  * when absent). calendarView returns UTC by default (no `Prefer: outlook.timezone`
  * header sent), so a value lacking the `Z` designator is assumed UTC and given
- * one; fractional seconds are stripped.
+ * one; fractional seconds are stripped. A non-UTC `timeZone` throws — degrading
+ * the leg loudly — because relabeling a local time as UTC would silently shift
+ * every event by the zone offset (a `Prefer` header added later must not do that).
  */
 function toUtcIso(value: GraphDateTimeTimeZone | undefined): string | null {
   const dateTime = value?.dateTime?.trim();
   if (!dateTime) return null;
+  if (value?.timeZone && value.timeZone !== "UTC") {
+    throw new Error(
+      `Graph returned a non-UTC dateTimeTimeZone (${value.timeZone}); expected UTC`,
+    );
+  }
   const stripped = dateTime.replace(/\.\d+Z?$/, "");
   return stripped.endsWith("Z") ? stripped : `${stripped}Z`;
 }

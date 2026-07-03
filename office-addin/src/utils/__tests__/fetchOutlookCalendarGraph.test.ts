@@ -274,6 +274,44 @@ describe("fetchOutlookCalendarViaGraph", () => {
     warnSpy.mockRestore();
   });
 
+  it("degrades the busy leg when calendarView returns non-UTC times instead of relabeling them as UTC", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const acquireToken = vi.fn().mockResolvedValue("graph-tok");
+    const transport = makeTransport((url) => {
+      if (url.includes("/me/calendarView") && url.includes("showAs")) {
+        // A `Prefer: outlook.timezone` header added upstream would produce this
+        // shape; treating it as UTC would shift every event by the zone offset.
+        return jsonResponse({
+          value: [
+            {
+              subject: "Local-time meeting",
+              start: {
+                dateTime: "2026-07-02T08:00:00.0000000",
+                timeZone: "W. Europe Standard Time",
+              },
+              end: {
+                dateTime: "2026-07-02T09:00:00.0000000",
+                timeZone: "W. Europe Standard Time",
+              },
+              isAllDay: false,
+              showAs: "busy",
+            },
+          ],
+        });
+      }
+      return happyRouter(url);
+    });
+
+    const calendar = await fetchOutlookCalendarViaGraph(acquireToken, {
+      transport,
+    });
+
+    expect(calendar.busyBlocks).toEqual([]);
+    expect(calendar.degradedLegs).toEqual(["busy"]);
+    expect(calendar.historyMeetings).toHaveLength(2);
+    warnSpy.mockRestore();
+  });
+
   it("degrades working hours to null when getSchedule returns HTTP 500", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const acquireToken = vi.fn().mockResolvedValue("graph-tok");
