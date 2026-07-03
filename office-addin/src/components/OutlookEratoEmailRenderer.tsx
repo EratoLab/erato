@@ -24,6 +24,7 @@ import {
   offerableClientActions,
   type OutlookClientAction,
 } from "../utils/outlookClientActions";
+import { stripHtmlTags } from "../utils/htmlStrip";
 import { replaceComposeSelection } from "../utils/outlookComposeWrite";
 import {
   ReplyBodyTooLargeError,
@@ -402,8 +403,28 @@ export function OutlookEratoEmailRenderer({
   ]);
 
   const handleCopy = useCallback(() => {
-    void navigator.clipboard
-      .writeText(content)
+    const writeToClipboard = async () => {
+      if (isHtml) {
+        // For HTML content, write as text/html so paste targets (e.g. Outlook
+        // compose) receive formatted text instead of raw markup. Provide a
+        // stripped plain-text fallback for targets that only accept text/plain.
+        if (typeof ClipboardItem !== "undefined") {
+          await navigator.clipboard.write([
+            new ClipboardItem({
+              "text/html": new Blob([content], { type: "text/html" }),
+              "text/plain": new Blob([stripHtmlTags(content)], {
+                type: "text/plain",
+              }),
+            }),
+          ]);
+        } else {
+          await navigator.clipboard.writeText(stripHtmlTags(content));
+        }
+      } else {
+        await navigator.clipboard.writeText(content);
+      }
+    };
+    void writeToClipboard()
       .then(() => {
         setStatus("copied");
         scheduleStatusReset(2000);
@@ -411,7 +432,7 @@ export function OutlookEratoEmailRenderer({
       .catch(() => {
         // ignore clipboard errors
       });
-  }, [content, scheduleStatusReset]);
+  }, [content, isHtml, scheduleStatusReset]);
 
   const insertLabel = (() => {
     if (status === "done")
