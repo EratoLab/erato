@@ -73,7 +73,9 @@ interface GraphEvent {
   end?: GraphDateTimeTimeZone;
   isAllDay?: boolean;
   showAs?: string;
-  attendees?: unknown[];
+  /** singleInstance | occurrence | exception | seriesMaster. */
+  type?: string;
+  attendees?: { type?: string }[];
 }
 
 /** One page of a calendarView response. */
@@ -87,6 +89,7 @@ interface GraphWorkingHours {
   daysOfWeek?: string[];
   startTime?: string;
   endTime?: string;
+  timeZone?: { name?: string };
 }
 
 /** One `scheduleInformation` entry from `POST /me/calendar/getSchedule`. */
@@ -201,6 +204,11 @@ async function fetchCalendarViewPages(
     nextUrl = payload["@odata.nextLink"] ?? null;
     pages += 1;
   }
+  if (nextUrl) {
+    console.warn(
+      `[fetchCalendarViewPages] hit the ${MAX_CALENDAR_VIEW_PAGES}-page cap with more pages remaining; results are truncated`,
+    );
+  }
   return events;
 }
 
@@ -245,7 +253,7 @@ export async function fetchCalendarBusyViaGraph(
       start,
       end,
       busyType: mapShowAs(event.showAs),
-      subject: event.subject ?? undefined,
+      subject: event.subject || undefined,
       isAllDay: event.isAllDay === true,
     });
   }
@@ -265,7 +273,7 @@ export async function fetchCalendarHistoryViaGraph(
   const tokenSource = makeGraphTokenSource(acquireToken);
   const url = buildCalendarViewUrl(
     range,
-    "subject,start,end,isAllDay,attendees",
+    "subject,start,end,isAllDay,attendees,type",
   );
   const events = await fetchCalendarViewPages(url, tokenSource, options);
 
@@ -279,8 +287,13 @@ export async function fetchCalendarHistoryViaGraph(
       end,
       subject: event.subject ?? "",
       isAllDay: event.isAllDay === true,
+      isRecurring:
+        event.type === "occurrence" ||
+        event.type === "exception" ||
+        event.type === "seriesMaster",
+      // Exclude resource rooms/equipment so the count matches the EWS backend.
       attendeeCount: Array.isArray(event.attendees)
-        ? event.attendees.length
+        ? event.attendees.filter((a) => a.type !== "resource").length
         : undefined,
     });
   }
@@ -337,6 +350,19 @@ export async function fetchWorkingHoursViaGraph(
     const payload = (await response.json()) as GraphGetScheduleResponse;
     const workingHours = payload.value?.[0]?.workingHours;
     if (!workingHours) return null;
+    // getSchedule reports start/end as clock times in workingHours.timeZone; if
+    // that differs from the mailbox zone the calendar is labeled with, the
+    // minutes would be wrong — degrade rather than mislead.
+    const scheduleZone = workingHours.timeZone?.name;
+    const mailboxZone = Office.context.mailbox.userProfile?.timeZone;
+    if (scheduleZone && mailboxZone && scheduleZone !== mailboxZone) {
+      console.warn(
+        "[fetchWorkingHoursViaGraph] getSchedule zone differs from mailbox zone; degrading working hours to null:",
+        scheduleZone,
+        mailboxZone,
+      );
+      return null;
+    }
     const startMinutes = clockStringToMinutes(workingHours.startTime);
     const endMinutes = clockStringToMinutes(workingHours.endTime);
     if (startMinutes === null || endMinutes === null) return null;

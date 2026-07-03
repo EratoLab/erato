@@ -74,7 +74,7 @@ const CALENDAR_VIEW_ENRICHED_SOAP =
   "<t:Subject>Solo focus block</t:Subject>" +
   "<t:Start>2026-07-09T06:00:00Z</t:Start>" +
   "<t:End>2026-07-09T07:00:00Z</t:End>" +
-  "<t:IsRecurring>false</t:IsRecurring>" +
+  "<t:IsRecurring>true</t:IsRecurring>" +
   "<t:LegacyFreeBusyStatus>Busy</t:LegacyFreeBusyStatus>" +
   "<t:IsAllDayEvent>false</t:IsAllDayEvent>" +
   "</t:CalendarItem>" +
@@ -184,7 +184,7 @@ describe("fetchOutlookCalendarViaEws", () => {
 
     expect(calendar.timezone).toBe("W. Europe Standard Time");
     expect(calendar.workingHours).toEqual({
-      daysOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+      daysOfWeek: ["monday", "tuesday", "wednesday", "thursday", "friday"],
       startMinutes: 480,
       endMinutes: 1020,
     });
@@ -232,16 +232,18 @@ describe("fetchOutlookCalendarViaEws", () => {
 
     const calendar = await fetchOutlookCalendarViaEws();
 
-    // historyMeetings carry isAllDay + attendeeCount.
+    // historyMeetings carry isAllDay + attendeeCount + isRecurring.
     expect(calendar.historyMeetings[0]).toMatchObject({
       subject: "All-day offsite",
       isAllDay: true,
       attendeeCount: 3,
+      isRecurring: false,
     });
     expect(calendar.historyMeetings[1]).toMatchObject({
       subject: "Solo focus block",
       isAllDay: false,
       attendeeCount: 0,
+      isRecurring: true,
     });
 
     // busyBlocks carry isAllDay + the unified busyType (OOF preserved), but NOT
@@ -313,5 +315,15 @@ describe("fetchOutlookCalendarViaEws", () => {
     expect(calendar.historyMeetings[0].subject).toBe("Meeting A");
     expect(calendar.busyBlocks[0].subject).toBe("Meeting A");
     warnSpy.mockRestore();
+  });
+
+  it("rethrows the abort reason when the signal is already aborted", async () => {
+    const controller = new AbortController();
+    const reason = new Error("calendar fetch aborted");
+    controller.abort(reason);
+
+    await expect(
+      fetchOutlookCalendarViaEws({ signal: controller.signal }),
+    ).rejects.toBe(reason);
   });
 });

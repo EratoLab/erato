@@ -181,6 +181,12 @@ export function parseCalendarView(doc: Document): RawCalendarItem[] {
     "FindItemResponseMessage",
   )) {
     assertResponseOk(responseMessage);
+    const rootFolder = firstMessagesEl(responseMessage, "RootFolder");
+    if (rootFolder?.getAttribute("IncludesLastItemInRange") === "false") {
+      console.warn(
+        "[parseCalendarView] FindItem results truncated (IncludesLastItemInRange=false); some calendar items were dropped",
+      );
+    }
     for (const calendarItem of allTypesEls(responseMessage, "CalendarItem")) {
       const start = typesText(calendarItem, "Start");
       const end = typesText(calendarItem, "End");
@@ -227,14 +233,18 @@ export function parseAvailability(
   const daysOfWeek = new Set<string>();
   for (const period of periods) {
     for (const day of (typesText(period, "DayOfWeek") ?? "").split(/\s+/)) {
-      if (day) daysOfWeek.add(day);
+      // Lowercase to match the Graph backend's day names (unified contract).
+      if (day) daysOfWeek.add(day.toLowerCase());
     }
   }
   const first = periods[0];
+  const startMinutes = Number(typesText(first, "StartTimeInMinutes"));
+  const endMinutes = Number(typesText(first, "EndTimeInMinutes"));
+  if (Number.isNaN(startMinutes) || Number.isNaN(endMinutes)) return null;
   return {
     daysOfWeek: Array.from(daysOfWeek),
-    startMinutes: Number(typesText(first, "StartTimeInMinutes")),
-    endMinutes: Number(typesText(first, "EndTimeInMinutes")),
+    startMinutes,
+    endMinutes,
   };
 }
 

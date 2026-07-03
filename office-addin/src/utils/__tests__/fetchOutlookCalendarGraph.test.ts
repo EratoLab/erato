@@ -80,10 +80,13 @@ const HISTORY_PAGE = {
       start: { dateTime: "2026-06-10T08:00:00.0000000", timeZone: "UTC" },
       end: { dateTime: "2026-06-10T09:00:00.0000000", timeZone: "UTC" },
       isAllDay: false,
+      type: "occurrence",
       attendees: [
         { type: "required" },
         { type: "optional" },
         { type: "required" },
+        // A resource room must NOT count toward attendeeCount (EWS parity).
+        { type: "resource" },
       ],
     },
     {
@@ -103,7 +106,9 @@ const GET_SCHEDULE_RESPONSE = {
         daysOfWeek: ["monday", "tuesday", "wednesday", "thursday", "friday"],
         startTime: "08:00:00.0000000",
         endTime: "17:00:00.0000000",
-        timeZone: { name: "UTC" },
+        // Matches the mock mailbox zone so the minutes are meaningful; the
+        // zone-divergence degrade is covered by its own test below.
+        timeZone: { name: "W. Europe Standard Time" },
       },
     },
   ],
@@ -168,7 +173,8 @@ describe("fetchOutlookCalendarViaGraph", () => {
       false,
     ]);
 
-    // historyMeetings: attendeeCount = attendees.length, undefined when absent.
+    // historyMeetings: attendeeCount excludes resource rooms (3 people, 1 room
+    // → 3), undefined when absent.
     expect(calendar.historyMeetings.map((m) => m.subject)).toEqual([
       "Project kickoff",
       "Company holiday",
@@ -177,6 +183,9 @@ describe("fetchOutlookCalendarViaGraph", () => {
     expect(calendar.historyMeetings[1].attendeeCount).toBeUndefined();
     expect(calendar.historyMeetings[0].isAllDay).toBe(false);
     expect(calendar.historyMeetings[1].isAllDay).toBe(true);
+    // isRecurring derived from Graph's event `type` (occurrence → true).
+    expect(calendar.historyMeetings[0].isRecurring).toBe(true);
+    expect(calendar.historyMeetings[1].isRecurring).toBe(false);
 
     // Load-bearing: every emitted start/end is a millis-free UTC `…Z`.
     for (const event of [...calendar.busyBlocks, ...calendar.historyMeetings]) {
@@ -253,6 +262,72 @@ describe("fetchOutlookCalendarViaGraph", () => {
     expect(calendar.workingHours).toBeNull();
     expect(calendar.busyBlocks).toHaveLength(3);
     expect(calendar.historyMeetings).toHaveLength(2);
+    warnSpy.mockRestore();
+  });
+
+  it("degrades working hours to null when getSchedule's zone differs from the mailbox zone", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const acquireToken = vi.fn().mockResolvedValue("graph-tok");
+    // Mailbox mock is "W. Europe Standard Time"; a UTC schedule zone would make
+    // the clock-time minutes wrong, so working hours must degrade rather than lie.
+    const transport = makeTransport((url) => {
+      if (url.includes("getSchedule")) {
+        return jsonResponse({
+          value: [
+            {
+              workingHours: {
+                daysOfWeek: ["monday"],
+                startTime: "08:00:00.0000000",
+                endTime: "17:00:00.0000000",
+                timeZone: { name: "UTC" },
+              },
+            },
+          ],
+        });
+      }
+      return happyRouter(url);
+    });
+
+    const calendar = await fetchOutlookCalendarViaGraph(acquireToken, {
+      transport,
+    });
+
+    expect(calendar.workingHours).toBeNull();
+    expect(calendar.busyBlocks).toHaveLength(3);
+    warnSpy.mockRestore();
+  });
+
+  it("stops at the page cap (and warns) when calendarView never stops paginating", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const acquireToken = vi.fn().mockResolvedValue("graph-tok");
+    let busyPages = 0;
+    const transport = makeTransport((url) => {
+      // Match both the first busy page (showAs) and every follow-up page (whose
+      // nextLink carries only a skiptoken), always handing back another nextLink
+      // → an unbounded loop without the cap.
+      if (
+        (url.includes("/me/calendarView") && url.includes("showAs")) ||
+        url.includes("skiptoken=PAGE_")
+      ) {
+        busyPages += 1;
+        return jsonResponse({
+          value: [],
+          "@odata.nextLink": `${GRAPH_BASE}/me/calendarView?%24skiptoken=PAGE_${busyPages}`,
+        });
+      }
+      return happyRouter(url);
+    });
+
+    const calendar = await fetchOutlookCalendarViaGraph(acquireToken, {
+      transport,
+    });
+
+    // Terminated (didn't hang) at a finite cap and warned about truncation.
+    expect(calendar.busyBlocks).toEqual([]);
+    expect(busyPages).toBeLessThanOrEqual(21);
+    expect(
+      warnSpy.mock.calls.some((call) => String(call[0]).includes("page cap")),
+    ).toBe(true);
     warnSpy.mockRestore();
   });
 
