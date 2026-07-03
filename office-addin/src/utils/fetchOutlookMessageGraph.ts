@@ -639,7 +639,8 @@ export function makeGraphTokenSource(
  * force-refreshes the token and retries exactly once. The add-in-side analogue
  * of the session `recoverAuth`, scoped to the Graph token — a separate cache
  * from the proxy-session bootstrap token, hence handled here rather than via the
- * shared recovery handler.
+ * shared recovery handler. `init` opts a non-GET request (method/body/extra
+ * headers) into the same retry semantics; Authorization/Accept stay owned here.
  */
 export async function graphFetch(
   url: string,
@@ -647,11 +648,17 @@ export async function graphFetch(
   accept: string,
   signal: AbortSignal | undefined,
   transport: GraphTransport = globalThis.fetch.bind(globalThis),
+  init?: { method?: string; headers?: Record<string, string>; body?: string },
 ): Promise<Response> {
   const request = (token: string) =>
     transport(url, {
+      ...init,
       signal,
-      headers: { Authorization: `Bearer ${token}`, Accept: accept },
+      headers: {
+        ...init?.headers,
+        Authorization: `Bearer ${token}`,
+        Accept: accept,
+      },
     });
   const response = await request(await tokenSource.get());
   if (response.status !== 401) {

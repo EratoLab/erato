@@ -176,29 +176,6 @@ export function windowsToIana(name: string): string | undefined {
   return WINDOWS_TO_IANA[name];
 }
 
-/**
- * Reverse index (IANA id -> Windows display name), built once at module load.
- * Because the mapping is lossy, the first Windows name encountered for a given
- * IANA id wins (in the territory="001" set the relation is effectively 1:1).
- */
-const IANA_TO_WINDOWS: Record<string, string> = (() => {
-  const reverse: Record<string, string> = {};
-  for (const [windowsName, iana] of Object.entries(WINDOWS_TO_IANA)) {
-    if (!(iana in reverse)) {
-      reverse[iana] = windowsName;
-    }
-  }
-  return reverse;
-})();
-
-/**
- * Reverse lookup: the (first) Windows display name whose territory="001" IANA id
- * equals `iana`. Returns undefined if there is no representative Windows zone.
- */
-export function ianaToWindows(iana: string): string | undefined {
-  return IANA_TO_WINDOWS[iana];
-}
-
 /** True if `zone` is accepted by the runtime as an IANA time-zone id. */
 function isValidIana(zone: string): boolean {
   try {
@@ -220,25 +197,27 @@ function localZone(): string {
 }
 
 /**
- * Resolve an arbitrary time-zone string (IANA id, Windows display name, or a
- * bare Windows name) to a valid IANA id. Never throws; always returns a usable
- * IANA id.
+ * Strict resolution of an arbitrary time-zone string (IANA id, Windows display
+ * name, or a bare Windows name) to a valid IANA id, or null when it cannot be
+ * genuinely resolved. Use this wherever "unknown" must stay unknown — the
+ * {@link toIana} fallback would silently substitute the VIEWER's OS zone, which
+ * is a different mailbox's zone entirely.
  *
  * Resolution order:
  *   1. If `zone` already looks like a valid IANA id, return it as-is.
  *   2. If `zone` is a known Windows display name, return its mapped IANA id.
  *   3. python-o365 heuristic: some sources pass a bare name without the trailing
  *      " Standard Time" (e.g. "W. Europe"); retry with that suffix appended.
- *   4. Fall back to the host's local zone.
+ *   4. Return null.
  */
-export function toIana(zone: string | null | undefined): string {
+export function toIanaStrict(zone: string | null | undefined): string | null {
   if (zone == null) {
-    return localZone();
+    return null;
   }
 
   const trimmed = zone.trim();
   if (trimmed === "") {
-    return localZone();
+    return null;
   }
 
   // 1) Already a valid IANA id (this also accepts Intl aliases such as "UTC").
@@ -258,6 +237,13 @@ export function toIana(zone: string | null | undefined): string {
     return mappedStd;
   }
 
-  // 4) Give up and use the host's local zone.
-  return localZone();
+  return null;
+}
+
+/**
+ * Like {@link toIanaStrict}, but never gives up: an unresolvable zone falls back
+ * to the host's local zone, so the result is always a usable IANA id.
+ */
+export function toIana(zone: string | null | undefined): string {
+  return toIanaStrict(zone) ?? localZone();
 }

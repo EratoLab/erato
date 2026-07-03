@@ -29,14 +29,20 @@ export type NormalizedEventWhen =
   | { kind: "date"; startDate: string; endDateExclusive: string };
 
 /**
- * Unified `busyType` vocabulary both backends normalize onto:
- * "Free" | "Tentative" | "Busy" | "OOF" | "WorkingElsewhere". EWS emits it from
+ * Unified `busyType` vocabulary both backends normalize onto. EWS emits it from
  * `LegacyFreeBusyStatus`, Graph maps `showAs`; absent/unknown/NoData → "Busy"
  * (a block occupying time must never read as free).
  */
+export type NormalizedBusyType =
+  | "Free"
+  | "Tentative"
+  | "Busy"
+  | "OOF"
+  | "WorkingElsewhere";
+
 export interface NormalizedBusyBlock {
   when: NormalizedEventWhen;
-  busyType: string;
+  busyType: NormalizedBusyType;
   subject?: string;
   /** IANA zone the event was authored in, when known; null otherwise. */
   authoringTimeZone?: string | null;
@@ -46,7 +52,8 @@ export interface NormalizedHistoryMeeting {
   when: NormalizedEventWhen;
   subject: string;
   isRecurring?: boolean;
-  /** Invitee count when the backend reports it. */
+  /** Invitee count when the backend reports it (Graph only — EWS FindItem
+   * cannot return recipient lists, so the EWS backend omits it). */
   attendeeCount?: number;
   authoringTimeZone?: string | null;
 }

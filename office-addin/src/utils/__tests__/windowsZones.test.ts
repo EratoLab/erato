@@ -1,21 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { ianaToWindows, toIana, windowsToIana } from "../windowsZones";
+import { toIana, toIanaStrict, windowsToIana } from "../windowsZones";
 
 const LOCAL_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-describe("windowsToIana / ianaToWindows", () => {
+describe("windowsToIana", () => {
   it("maps representative Windows zones to their territory=001 IANA id", () => {
     expect(windowsToIana("W. Europe Standard Time")).toBe("Europe/Berlin");
     expect(windowsToIana("Eastern Standard Time")).toBe("America/New_York");
     expect(windowsToIana("Tokyo Standard Time")).toBe("Asia/Tokyo");
     expect(windowsToIana("Not A Windows Zone")).toBeUndefined();
-  });
-
-  it("reverse-maps an IANA id back to a representative Windows name", () => {
-    expect(ianaToWindows("Europe/Berlin")).toBe("W. Europe Standard Time");
-    expect(ianaToWindows("Asia/Tokyo")).toBe("Tokyo Standard Time");
-    expect(ianaToWindows("Nowhere/Nozone")).toBeUndefined();
   });
 });
 
@@ -41,5 +35,22 @@ describe("toIana resolution ladder", () => {
     expect(toIana(undefined)).toBe(LOCAL_ZONE);
     expect(toIana("   ")).toBe(LOCAL_ZONE);
     expect(toIana("Definitely Not A Zone")).toBe(LOCAL_ZONE);
+  });
+});
+
+describe("toIanaStrict", () => {
+  it("resolves like toIana when the zone is genuinely resolvable", () => {
+    expect(toIanaStrict("Europe/Berlin")).toBe("Europe/Berlin");
+    expect(toIanaStrict("W. Europe Standard Time")).toBe("Europe/Berlin");
+    expect(toIanaStrict("W. Europe")).toBe("Europe/Berlin");
+  });
+
+  it("returns null (NOT the host zone) for null/empty/unmappable input", () => {
+    expect(toIanaStrict(null)).toBeNull();
+    expect(toIanaStrict(undefined)).toBeNull();
+    expect(toIanaStrict("   ")).toBeNull();
+    // The classic unmappable EWS StartTimeZone id.
+    expect(toIanaStrict("Customized Time Zone")).toBeNull();
+    expect(toIanaStrict("Definitely Not A Zone")).toBeNull();
   });
 });

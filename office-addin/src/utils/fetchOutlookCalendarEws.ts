@@ -1,3 +1,8 @@
+import {
+  computeCalendarRanges,
+  resolveTimezone,
+  runCalendarLegs,
+} from "./calendarLegs";
 import { utcInstantToCivilDate } from "./calendarTime";
 import {
   allMessagesEls,
@@ -13,17 +18,20 @@ import {
   throwIfAborted,
   typesText,
 } from "./fetchOutlookMessageEws";
-import { toIana } from "./windowsZones";
+import { toIanaStrict } from "./windowsZones";
 
+import type { CalendarRange } from "./calendarLegs";
 import type {
   CalendarFetchOptions,
-  CalendarLeg,
   NormalizedBusyBlock,
+  NormalizedBusyType,
   NormalizedCalendar,
   NormalizedEventWhen,
   NormalizedHistoryMeeting,
   NormalizedWorkingHours,
 } from "./fetchOutlookCalendar";
+
+export type { CalendarRange } from "./calendarLegs";
 
 /**
  * EWS SOAP calendar sourcing for Exchange on-premises / Subscription Edition
@@ -34,8 +42,8 @@ import type {
  * returns Subject/Start/End/IsRecurring/LegacyFreeBusyStatus, with timed Start/End
  * already in UTC (`…Z`); CalendarView expands recurring series into their
  * occurrences inside the requested window (exactly what busy / history want). We
- * also request IsAllDayEvent, StartTimeZone (the authoring zone, returned inline by
- * FindItem — CONFIRMED on the live SE box), and Required/Optional attendees.
+ * also request IsAllDayEvent and StartTimeZone (the authoring zone, returned inline
+ * by FindItem — CONFIRMED on the live SE box).
  * All-day events are stored as the UTC instant of authoring-zone midnight, so they
  * are localized back to that zone and emitted as floating dates — never `.slice`d
  * off the raw `Z` string (the classic off-by-one all-day bug).
@@ -55,16 +63,6 @@ import type {
  * `./fetchOutlookCalendarGraph.ts`.
  */
 
-/** Default look-back (history) and look-forward (busy) window, in days. */
-const DEFAULT_WINDOW_DAYS = 21;
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-/** A UTC time range for one CalendarView / availability query; bounds are EWS dateTime strings (`…Z`). */
-export interface CalendarRange {
-  startUtc: string;
-  endUtc: string;
-}
-
 /** A CalendarItem parsed straight off a CalendarView FindItem response, pre-normalization. */
 interface RawCalendarItem {
   start: string;
@@ -75,7 +73,6 @@ interface RawCalendarItem {
   isAllDay: boolean;
   /** The `Id` of the item's StartTimeZone (a Windows zone name), when present. */
   startTimeZoneId: string | undefined;
-  attendeeCount: number;
 }
 
 // --- SOAP body builders ----------------------------------------------------
@@ -102,8 +99,6 @@ export function buildCalendarViewFindItemBody(
       "calendar:LegacyFreeBusyStatus",
       "calendar:IsAllDayEvent",
       "calendar:StartTimeZone",
-      "calendar:RequiredAttendees",
-      "calendar:OptionalAttendees",
     ]) +
     "</m:ItemShape>" +
     `<m:CalendarView MaxEntriesReturned="1000" StartDate="${startUtc}" EndDate="${endUtc}"/>` +
@@ -203,9 +198,6 @@ export function parseCalendarView(doc: Document): RawCalendarItem[] {
       // Start/End are mandatory on a CalendarItem; skip malformed rows rather than
       // emitting an interval with missing bounds.
       if (!start || !end) continue;
-      // `t:Attendee` lives under both Required/OptionalAttendees; `allTypesEls`
-      // walks all descendants, so this counts invitees across both collections.
-      const attendeeCount = allTypesEls(calendarItem, "Attendee").length;
       items.push({
         start,
         end,
@@ -216,7 +208,6 @@ export function parseCalendarView(doc: Document): RawCalendarItem[] {
         startTimeZoneId:
           firstTypesEl(calendarItem, "StartTimeZone")?.getAttribute("Id") ??
           undefined,
-        attendeeCount,
       });
     }
   }
@@ -226,8 +217,12 @@ export function parseCalendarView(doc: Document): RawCalendarItem[] {
 /**
  * Parses WorkingHours out of a GetUserAvailability response. `DayOfWeek` inside a
  * WorkingPeriod is a SPACE-SEPARATED list and there may be several WorkingPeriods,
- * so days are split on whitespace and unioned; the start/end-minute window is read
- * from the FIRST period. Returns null when the response carries no WorkingHours.
+ * but {@link NormalizedWorkingHours} carries a SINGLE start/end window (as does
+ * Graph), so the collapse is lossy by necessity: the window comes from the FIRST
+ * period and only days from periods with the SAME window are kept. Days with
+ * different hours are dropped — understating availability is safe; unioning them
+ * under the first window would propose hours the user doesn't work. Returns null
+ * when the response carries no WorkingHours.
  */
 export function parseAvailability(
   doc: Document,
@@ -243,17 +238,31 @@ export function parseAvailability(
   const periods = allTypesEls(workingHours, "WorkingPeriod");
   if (periods.length === 0) return null;
 
+  const first = periods[0];
+  const startMinutes = Number(typesText(first, "StartTimeInMinutes"));
+  const endMinutes = Number(typesText(first, "EndTimeInMinutes"));
+  if (Number.isNaN(startMinutes) || Number.isNaN(endMinutes)) return null;
+
   const daysOfWeek = new Set<string>();
+  let droppedPeriods = 0;
   for (const period of periods) {
+    if (
+      Number(typesText(period, "StartTimeInMinutes")) !== startMinutes ||
+      Number(typesText(period, "EndTimeInMinutes")) !== endMinutes
+    ) {
+      droppedPeriods += 1;
+      continue;
+    }
     for (const day of (typesText(period, "DayOfWeek") ?? "").split(/\s+/)) {
       // Lowercase to match the Graph backend's day names (unified contract).
       if (day) daysOfWeek.add(day.toLowerCase());
     }
   }
-  const first = periods[0];
-  const startMinutes = Number(typesText(first, "StartTimeInMinutes"));
-  const endMinutes = Number(typesText(first, "EndTimeInMinutes"));
-  if (Number.isNaN(startMinutes) || Number.isNaN(endMinutes)) return null;
+  if (droppedPeriods > 0) {
+    console.warn(
+      `[parseAvailability] dropped ${droppedPeriods} WorkingPeriod(s) with hours differing from the first; workingHours understates availability`,
+    );
+  }
   return {
     daysOfWeek: Array.from(daysOfWeek),
     startMinutes,
@@ -282,15 +291,15 @@ function toUtcIso(value: string): string {
  * Timed events are true UTC instants; all-day events are floating civil dates
  * recovered by localizing the UTC instant to the item's AUTHORING zone (its
  * StartTimeZone, falling back to the mailbox `displayTimeZone`). `authoringTimeZone`
- * is the IANA form of that zone, or null when EWS didn't report one.
+ * is the IANA form of that zone, or null when EWS didn't report one or it can't
+ * be mapped — strict resolution, because the {@link toIana} fallback would
+ * anchor to the VIEWER's OS zone and shift all-day dates by ±1 day.
  */
 function normalizeWhen(
   item: RawCalendarItem,
   displayTimeZone: string,
 ): { when: NormalizedEventWhen; authoringTimeZone: string | null } {
-  const authoringTimeZone = item.startTimeZoneId
-    ? toIana(item.startTimeZoneId)
-    : null;
+  const authoringTimeZone = toIanaStrict(item.startTimeZoneId);
   if (item.isAllDay) {
     const anchor = authoringTimeZone ?? displayTimeZone;
     return {
@@ -312,31 +321,27 @@ function normalizeWhen(
   };
 }
 
-/** A `Date` as an EWS dateTime string: millis-free UTC ISO-8601 (`…Z`). */
-function toEwsDateTime(date: Date): string {
-  return date.toISOString().replace(/\.\d{3}Z$/, "Z");
-}
-
-/**
- * The mailbox's own time zone as a canonical IANA id. `userProfile.timeZone` is a
- * Windows zone name on desktop hosts (e.g. "W. Europe Standard Time"), so it is run
- * through {@link toIana}, which also falls back to the client OS zone.
- */
-function resolveTimezone(): string {
-  return toIana(Office.context.mailbox.userProfile?.timeZone);
-}
+const BUSY_TYPES: ReadonlySet<string> = new Set([
+  "Free",
+  "Tentative",
+  "Busy",
+  "OOF",
+  "WorkingElsewhere",
+] satisfies NormalizedBusyType[]);
 
 /**
  * `LegacyFreeBusyStatus` is already the unified vocabulary (Free / Tentative / Busy
  * / OOF / WorkingElsewhere), bar EWS's extra `NoData`. Pass unified values through;
- * map `NoData` and any absent value to `Busy` conservatively (a block with no status
- * still occupies time). See the busyType vocab note in `fetchOutlookCalendar.ts`.
+ * map absent / `NoData` / anything off-vocabulary to `Busy` conservatively (a block
+ * with no status still occupies time). See the busyType vocab note in
+ * `fetchOutlookCalendar.ts`.
  */
-function mapBusyType(legacyFreeBusyStatus: string | undefined): string {
-  if (!legacyFreeBusyStatus || legacyFreeBusyStatus === "NoData") {
-    return "Busy";
-  }
-  return legacyFreeBusyStatus;
+function mapBusyType(
+  legacyFreeBusyStatus: string | undefined,
+): NormalizedBusyType {
+  return legacyFreeBusyStatus && BUSY_TYPES.has(legacyFreeBusyStatus)
+    ? (legacyFreeBusyStatus as NormalizedBusyType)
+    : "Busy";
 }
 
 // --- Public per-leg fetchers -----------------------------------------------
@@ -359,11 +364,12 @@ export async function fetchCalendarHistoryViaEws(
   );
   return parseCalendarView(doc).map((item) => {
     const { when, authoringTimeZone } = normalizeWhen(item, displayTimeZone);
+    // No attendeeCount: FindItem never returns recipient lists (GetItem-only),
+    // so a count derived here would always read 0 — a false "solo meeting" claim.
     return {
       when,
       subject: item.subject,
       isRecurring: item.isRecurring,
-      attendeeCount: item.attendeeCount,
       authoringTimeZone,
     };
   });
@@ -421,10 +427,11 @@ export async function fetchWorkingHoursViaEws(
  * Sources the signed-in user's own calendar via EWS into a
  * {@link NormalizedCalendar}: busy blocks (now → +freeBusyWindowDays) and meeting
  * history (now-historyWindowDays → now) from the PROVEN CalendarView path, plus
- * working hours. After the `getEwsUrl()` precheck this NEVER throws except to
- * propagate an abort — a failed leg degrades to `[]` / null AND is named in
- * `degradedLegs` so a single unavailable capability can't sink the whole snapshot
- * (nor be mistaken for a genuinely empty one).
+ * working hours. The three legs run concurrently via {@link runCalendarLegs}.
+ * After the `getEwsUrl()` precheck this NEVER throws except to propagate an
+ * abort — a failed leg degrades to `[]` / null AND is named in `degradedLegs`
+ * so a single unavailable capability can't sink the whole snapshot (nor be
+ * mistaken for a genuinely empty one).
  */
 export async function fetchOutlookCalendarViaEws(
   options: CalendarFetchOptions = {},
@@ -432,60 +439,22 @@ export async function fetchOutlookCalendarViaEws(
   // Precheck: EWS must be reachable on this mailbox (throws if `ewsUrl` absent).
   getEwsUrl();
 
-  const { signal } = options;
-  const historyWindowDays = options.historyWindowDays ?? DEFAULT_WINDOW_DAYS;
-  const freeBusyWindowDays = options.freeBusyWindowDays ?? DEFAULT_WINDOW_DAYS;
-
-  const now = new Date();
-  const historyRange: CalendarRange = {
-    startUtc: toEwsDateTime(
-      new Date(now.getTime() - historyWindowDays * MS_PER_DAY),
-    ),
-    endUtc: toEwsDateTime(now),
-  };
-  const busyRange: CalendarRange = {
-    startUtc: toEwsDateTime(now),
-    endUtc: toEwsDateTime(
-      new Date(now.getTime() + freeBusyWindowDays * MS_PER_DAY),
-    ),
-  };
-
+  const { historyRange, busyRange } = computeCalendarRanges(
+    new Date(),
+    options,
+  );
   const displayTimeZone = resolveTimezone();
-  const degradedLegs: CalendarLeg[] = [];
 
-  let historyMeetings: NormalizedHistoryMeeting[] = [];
-  try {
-    historyMeetings = await fetchCalendarHistoryViaEws(historyRange, options);
-  } catch (error) {
-    if (signal?.aborted) throw signal.reason ?? error;
-    degradedLegs.push("history");
-    console.warn("[fetchOutlookCalendarViaEws] history leg degraded:", error);
-  }
-
-  throwIfAborted(signal);
-
-  let busyBlocks: NormalizedBusyBlock[] = [];
-  try {
-    busyBlocks = await fetchCalendarBusyViaEws(busyRange, options);
-  } catch (error) {
-    if (signal?.aborted) throw signal.reason ?? error;
-    degradedLegs.push("busy");
-    console.warn("[fetchOutlookCalendarViaEws] busy leg degraded:", error);
-  }
-
-  throwIfAborted(signal);
-
-  let workingHours: NormalizedWorkingHours | null = null;
-  try {
-    workingHours = await fetchWorkingHoursViaEws(busyRange, options);
-  } catch (error) {
-    if (signal?.aborted) throw signal.reason ?? error;
-    degradedLegs.push("workingHours");
-    console.warn(
-      "[fetchOutlookCalendarViaEws] working-hours leg degraded:",
-      error,
+  const { historyMeetings, busyBlocks, workingHours, degradedLegs } =
+    await runCalendarLegs(
+      {
+        history: () => fetchCalendarHistoryViaEws(historyRange, options),
+        busy: () => fetchCalendarBusyViaEws(busyRange, options),
+        workingHours: () => fetchWorkingHoursViaEws(busyRange, options),
+      },
+      options.signal,
+      "[fetchOutlookCalendarViaEws]",
     );
-  }
 
   return {
     workingHours,

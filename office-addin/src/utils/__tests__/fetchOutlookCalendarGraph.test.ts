@@ -89,7 +89,7 @@ const HISTORY_PAGE = {
         { type: "required" },
         { type: "optional" },
         { type: "required" },
-        // A resource room must NOT count toward attendeeCount (EWS parity).
+        // A resource room must NOT count toward attendeeCount (people only).
         { type: "resource" },
       ],
     },
@@ -299,6 +299,55 @@ describe("fetchOutlookCalendarViaGraph", () => {
     warnSpy.mockRestore();
   });
 
+  it("force-refreshes the token and retries the getSchedule POST once on a 401", async () => {
+    const acquireToken = vi.fn(async (options?: { forceRefresh?: boolean }) =>
+      options?.forceRefresh ? "fresh-token" : "stale-token",
+    );
+    const transport = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes("getSchedule")) {
+        const auth = (init?.headers as Record<string, string> | undefined)
+          ?.Authorization;
+        // The stale cached token is rejected once (CAE-style mid-snapshot revoke).
+        if (auth === "Bearer stale-token") {
+          return jsonResponse(
+            {},
+            { ok: false, status: 401, statusText: "Unauthorized" },
+          );
+        }
+        return jsonResponse(GET_SCHEDULE_RESPONSE);
+      }
+      return happyRouter(url);
+    });
+
+    const calendar = await fetchOutlookCalendarViaGraph(acquireToken, {
+      transport,
+    });
+
+    // The retry succeeded → the leg is populated, not degraded.
+    expect(calendar.workingHours).toEqual({
+      daysOfWeek: ["monday", "tuesday", "wednesday", "thursday", "friday"],
+      startMinutes: 480,
+      endMinutes: 1020,
+    });
+    expect(calendar.degradedLegs).toEqual([]);
+    expect(acquireToken).toHaveBeenCalledWith({ forceRefresh: true });
+
+    const scheduleCalls = transport.mock.calls.filter(([url]) =>
+      String(url).includes("getSchedule"),
+    );
+    expect(scheduleCalls).toHaveLength(2);
+    for (const [, init] of scheduleCalls) {
+      expect(init?.method).toBe("POST");
+      expect(typeof init?.body).toBe("string");
+      const headers = init?.headers as Record<string, string>;
+      expect(headers["Content-Type"]).toBe("application/json");
+    }
+    const scheduleAuths = scheduleCalls.map(
+      ([, init]) => (init?.headers as Record<string, string>).Authorization,
+    );
+    expect(scheduleAuths).toEqual(["Bearer stale-token", "Bearer fresh-token"]);
+  });
+
   it("degrades working hours to null when getSchedule's zone differs from the mailbox zone", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const acquireToken = vi.fn().mockResolvedValue("graph-tok");
@@ -330,6 +379,107 @@ describe("fetchOutlookCalendarViaGraph", () => {
     expect(calendar.busyBlocks).toHaveLength(3);
     // Zone divergence is a data-trust degrade, NOT a fetch failure — the leg
     // fetched fine, so it is deliberately not listed in degradedLegs.
+    expect(calendar.degradedLegs).toEqual([]);
+    warnSpy.mockRestore();
+  });
+
+  it("emits authoringTimeZone null for an unmappable originalStartTimeZone", async () => {
+    const acquireToken = vi.fn().mockResolvedValue("graph-tok");
+    const transport = makeTransport((url) => {
+      if (url.includes("/me/calendarView") && url.includes("showAs")) {
+        return jsonResponse({
+          value: [
+            {
+              subject: "Custom-zone meeting",
+              start: { dateTime: "2026-07-02T06:00:00Z", timeZone: "UTC" },
+              end: { dateTime: "2026-07-02T07:00:00Z", timeZone: "UTC" },
+              isAllDay: false,
+              showAs: "busy",
+              // Cannot resolve to IANA → "when known; null otherwise", never
+              // the viewer's OS zone.
+              originalStartTimeZone: "Customized Time Zone",
+            },
+          ],
+        });
+      }
+      return happyRouter(url);
+    });
+
+    const calendar = await fetchOutlookCalendarViaGraph(acquireToken, {
+      transport,
+    });
+
+    expect(calendar.busyBlocks[0].authoringTimeZone).toBeNull();
+  });
+
+  it("keeps working hours when getSchedule spells the mailbox zone as IANA (Windows vs IANA parity)", async () => {
+    const acquireToken = vi.fn().mockResolvedValue("graph-tok");
+    // Mailbox mock says "W. Europe Standard Time"; getSchedule saying
+    // "Europe/Berlin" is the SAME zone, so the minutes are trustworthy.
+    const transport = makeTransport((url) => {
+      if (url.includes("getSchedule")) {
+        return jsonResponse({
+          value: [
+            {
+              workingHours: {
+                daysOfWeek: ["monday"],
+                startTime: "08:00:00.0000000",
+                endTime: "17:00:00.0000000",
+                timeZone: { name: "Europe/Berlin" },
+              },
+            },
+          ],
+        });
+      }
+      return happyRouter(url);
+    });
+
+    const calendar = await fetchOutlookCalendarViaGraph(acquireToken, {
+      transport,
+    });
+
+    expect(calendar.workingHours).toEqual({
+      daysOfWeek: ["monday"],
+      startMinutes: 480,
+      endMinutes: 1020,
+    });
+    expect(calendar.degradedLegs).toEqual([]);
+  });
+
+  it("still degrades working hours when both zones are unresolvable and differ", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const acquireToken = vi.fn().mockResolvedValue("graph-tok");
+    // Neither zone resolves to IANA; with a fallback comparison both would
+    // become the viewer's zone and spuriously match — strict must keep them
+    // divergent and the minutes untrusted.
+    (Office.context.mailbox as unknown as MailboxMock).userProfile = {
+      emailAddress: "chris@ms-test.eratolabs.com",
+      timeZone: "Customized Time Zone",
+    };
+    const transport = makeTransport((url) => {
+      if (url.includes("getSchedule")) {
+        return jsonResponse({
+          value: [
+            {
+              workingHours: {
+                daysOfWeek: ["monday"],
+                startTime: "08:00:00.0000000",
+                endTime: "17:00:00.0000000",
+                timeZone: { name: "Another Custom Zone" },
+              },
+            },
+          ],
+        });
+      }
+      return happyRouter(url);
+    });
+
+    const calendar = await fetchOutlookCalendarViaGraph(acquireToken, {
+      transport,
+    });
+
+    expect(calendar.workingHours).toBeNull();
+    // Data-trust degrade, not a fetch failure — stays out of degradedLegs.
     expect(calendar.degradedLegs).toEqual([]);
     warnSpy.mockRestore();
   });
@@ -366,6 +516,38 @@ describe("fetchOutlookCalendarViaGraph", () => {
       warnSpy.mock.calls.some((call) => String(call[0]).includes("page cap")),
     ).toBe(true);
     warnSpy.mockRestore();
+  });
+
+  it("launches the three legs concurrently instead of awaiting them in sequence", async () => {
+    const acquireToken = vi.fn().mockResolvedValue("graph-tok");
+    const started: string[] = [];
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    // Hold every round-trip open; if the legs ran sequentially, only the first
+    // leg's request would ever start and the waits below would time out.
+    const transport = vi.fn(async (url: string) => {
+      started.push(url);
+      await gate;
+      return happyRouter(url);
+    });
+
+    const resultPromise = fetchOutlookCalendarViaGraph(acquireToken, {
+      transport,
+    });
+    await vi.waitFor(() => {
+      expect(started.some((url) => url.includes("attendees"))).toBe(true);
+      expect(started.some((url) => url.includes("showAs"))).toBe(true);
+      expect(started.some((url) => url.includes("getSchedule"))).toBe(true);
+    });
+    release();
+
+    const calendar = await resultPromise;
+    expect(calendar.degradedLegs).toEqual([]);
+    expect(calendar.busyBlocks).toHaveLength(3);
+    expect(calendar.historyMeetings).toHaveLength(2);
+    expect(calendar.workingHours).not.toBeNull();
   });
 
   it("rethrows the abort reason when the signal is already aborted", async () => {

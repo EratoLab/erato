@@ -41,9 +41,8 @@ const CALENDAR_VIEW_SOAP =
   '<?xml version="1.0" encoding="utf-8"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Header><h:ServerVersionInfo MajorVersion="15" MinorVersion="2" MajorBuildNumber="2562" MinorBuildNumber="17" Version="V2017_07_11" xmlns:h="http://schemas.microsoft.com/exchange/services/2006/types" xmlns="http://schemas.microsoft.com/exchange/services/2006/types" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"/></s:Header><s:Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema"><m:FindItemResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"><m:ResponseMessages><m:FindItemResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:RootFolder TotalItemsInView="2" IncludesLastItemInRange="true"><t:Items><t:CalendarItem><t:ItemId Id="AAA1" ChangeKey="CK1"/><t:Subject>Meeting A</t:Subject><t:Start>2026-07-02T06:00:00Z</t:Start><t:End>2026-07-02T06:30:00Z</t:End><t:IsRecurring>false</t:IsRecurring></t:CalendarItem><t:CalendarItem><t:ItemId Id="AAA2" ChangeKey="CK2"/><t:Subject>Our second meeting</t:Subject><t:Start>2026-07-09T06:00:00Z</t:Start><t:End>2026-07-09T06:30:00Z</t:End><t:IsRecurring>false</t:IsRecurring></t:CalendarItem></t:Items></m:RootFolder></m:FindItemResponseMessage></m:ResponseMessages></m:FindItemResponse></s:Body></s:Envelope>';
 
 /** A CalendarView response carrying the SI-2/SI-3 enrichment fields:
- * IsAllDayEvent, StartTimeZone, plus Required/Optional attendee collections. The
- * first item is all-day with 2 required + 1 optional attendee (attendeeCount 3);
- * the second is a timed solo block with no attendees (attendeeCount 0).
+ * IsAllDayEvent and StartTimeZone. The first item is all-day; the second is a
+ * timed solo block. No attendee collections — FindItem never returns them.
  *
  * The all-day item's Start/End are on the wire as the UTC instant of W. Europe
  * (UTC+2 in July) LOCAL midnight — i.e. `…T22:00:00Z` the day BEFORE — exactly the
@@ -67,13 +66,6 @@ const CALENDAR_VIEW_ENRICHED_SOAP =
   "<t:LegacyFreeBusyStatus>OOF</t:LegacyFreeBusyStatus>" +
   "<t:IsAllDayEvent>true</t:IsAllDayEvent>" +
   '<t:StartTimeZone Id="W. Europe Standard Time"/>' +
-  "<t:RequiredAttendees>" +
-  "<t:Attendee><t:Mailbox><t:Name>Alice</t:Name><t:EmailAddress>alice@x</t:EmailAddress></t:Mailbox></t:Attendee>" +
-  "<t:Attendee><t:Mailbox><t:Name>Bob</t:Name><t:EmailAddress>bob@x</t:EmailAddress></t:Mailbox></t:Attendee>" +
-  "</t:RequiredAttendees>" +
-  "<t:OptionalAttendees>" +
-  "<t:Attendee><t:Mailbox><t:Name>Carol</t:Name><t:EmailAddress>carol@x</t:EmailAddress></t:Mailbox></t:Attendee>" +
-  "</t:OptionalAttendees>" +
   "</t:CalendarItem>" +
   "<t:CalendarItem>" +
   '<t:ItemId Id="ENR2" ChangeKey="CK2"/>' +
@@ -123,6 +115,28 @@ const AVAILABILITY_SOAP =
   "</m:FreeBusyResponseArray>" +
   "</m:GetUserAvailabilityResponse>" +
   "</s:Body></s:Envelope>";
+
+/** Mon-Fri 480..1020 plus a Saturday period with DIFFERENT hours (540..720). */
+const AVAILABILITY_MIXED_PERIODS_SOAP = AVAILABILITY_SOAP.replace(
+  "</t:WorkingPeriodArray>",
+  "<t:WorkingPeriod>" +
+    "<t:DayOfWeek>Saturday</t:DayOfWeek>" +
+    "<t:StartTimeInMinutes>540</t:StartTimeInMinutes>" +
+    "<t:EndTimeInMinutes>720</t:EndTimeInMinutes>" +
+    "</t:WorkingPeriod>" +
+    "</t:WorkingPeriodArray>",
+);
+
+/** Mon-Fri 480..1020 plus a Saturday period with IDENTICAL hours. */
+const AVAILABILITY_MATCHING_PERIODS_SOAP = AVAILABILITY_SOAP.replace(
+  "</t:WorkingPeriodArray>",
+  "<t:WorkingPeriod>" +
+    "<t:DayOfWeek>Saturday</t:DayOfWeek>" +
+    "<t:StartTimeInMinutes>480</t:StartTimeInMinutes>" +
+    "<t:EndTimeInMinutes>1020</t:EndTimeInMinutes>" +
+    "</t:WorkingPeriod>" +
+    "</t:WorkingPeriodArray>",
+);
 
 function installOutlookMailboxMock(): MailboxMock {
   const mailbox = installMockMailbox() as MailboxMock;
@@ -228,11 +242,70 @@ describe("fetchOutlookCalendarViaEws", () => {
     // The enrichment fields (SI-2/SI-3 parity) are requested alongside the core.
     expect(findBody).toContain("calendar:IsAllDayEvent");
     expect(findBody).toContain("calendar:StartTimeZone");
-    expect(findBody).toContain("calendar:RequiredAttendees");
-    expect(findBody).toContain("calendar:OptionalAttendees");
+    // Attendee collections must NOT be requested: FindItem cannot return
+    // recipient lists, so asking would only feed an always-0 count.
+    expect(findBody).not.toContain("calendar:RequiredAttendees");
+    expect(findBody).not.toContain("calendar:OptionalAttendees");
   });
 
-  it("parses isAllDay and attendeeCount from the CalendarView enrichment fields", async () => {
+  it("drops WorkingPeriod days whose hours differ from the first period (never overstate)", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    installHostMock((body) => {
+      if (body.includes("<m:GetUserAvailabilityRequest")) {
+        return { status: "succeeded", value: AVAILABILITY_MIXED_PERIODS_SOAP };
+      }
+      if (body.includes("<m:FindItem")) {
+        return { status: "succeeded", value: CALENDAR_VIEW_SOAP };
+      }
+      return { status: "failed", error: { code: 0, message: "unexpected op" } };
+    });
+
+    const calendar = await fetchOutlookCalendarViaEws();
+
+    // Saturday works 540..720, not the Mon-Fri 480..1020 window — including it
+    // under the first window would propose Saturday hours the user doesn't work.
+    expect(calendar.workingHours).toEqual({
+      daysOfWeek: ["monday", "tuesday", "wednesday", "thursday", "friday"],
+      startMinutes: 480,
+      endMinutes: 1020,
+    });
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("[parseAvailability] dropped 1 WorkingPeriod"),
+    );
+    warnSpy.mockRestore();
+  });
+
+  it("unions days across WorkingPeriods that share the first period's hours", async () => {
+    installHostMock((body) => {
+      if (body.includes("<m:GetUserAvailabilityRequest")) {
+        return {
+          status: "succeeded",
+          value: AVAILABILITY_MATCHING_PERIODS_SOAP,
+        };
+      }
+      if (body.includes("<m:FindItem")) {
+        return { status: "succeeded", value: CALENDAR_VIEW_SOAP };
+      }
+      return { status: "failed", error: { code: 0, message: "unexpected op" } };
+    });
+
+    const calendar = await fetchOutlookCalendarViaEws();
+
+    expect(calendar.workingHours).toEqual({
+      daysOfWeek: [
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+      ],
+      startMinutes: 480,
+      endMinutes: 1020,
+    });
+  });
+
+  it("parses isAllDay from the CalendarView enrichment fields and omits attendeeCount", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     installHostMock((body) => {
       if (body.includes("<m:GetUserAvailabilityRequest")) {
@@ -255,17 +328,20 @@ describe("fetchOutlookCalendarViaEws", () => {
         startDate: "2026-07-02",
         endDateExclusive: "2026-07-03",
       },
-      attendeeCount: 3,
       isRecurring: false,
       authoringTimeZone: "Europe/Berlin",
     });
     expect(calendar.historyMeetings[1]).toMatchObject({
       subject: "Solo focus block",
       when: { kind: "date-time" },
-      attendeeCount: 0,
       isRecurring: true,
       authoringTimeZone: null,
     });
+    // EWS never emits attendeeCount (FindItem can't return recipient lists);
+    // absent must mean "backend doesn't report it", never an affirmative 0.
+    for (const meeting of calendar.historyMeetings) {
+      expect(meeting).not.toHaveProperty("attendeeCount");
+    }
 
     // busyBlocks carry the same `when` + the unified busyType (OOF preserved), but
     // NOT attendeeCount.
@@ -283,6 +359,68 @@ describe("fetchOutlookCalendarViaEws", () => {
       subject: "Solo focus block",
       when: { kind: "date-time" },
       busyType: "Busy",
+    });
+    warnSpy.mockRestore();
+  });
+
+  it('maps NoData and off-vocabulary LegacyFreeBusyStatus to "Busy"', async () => {
+    // NoData is EWS-only vocabulary; a future off-vocabulary value must not leak
+    // through either — both normalize to the conservative "Busy".
+    const offVocabSoap = CALENDAR_VIEW_ENRICHED_SOAP.replace(
+      "<t:LegacyFreeBusyStatus>OOF</t:LegacyFreeBusyStatus>",
+      "<t:LegacyFreeBusyStatus>NoData</t:LegacyFreeBusyStatus>",
+    ).replace(
+      "<t:LegacyFreeBusyStatus>Busy</t:LegacyFreeBusyStatus>",
+      "<t:LegacyFreeBusyStatus>SomeFutureStatus</t:LegacyFreeBusyStatus>",
+    );
+    installHostMock((body) => {
+      if (body.includes("<m:GetUserAvailabilityRequest")) {
+        return { status: "succeeded", value: AVAILABILITY_SOAP };
+      }
+      if (body.includes("<m:FindItem")) {
+        return { status: "succeeded", value: offVocabSoap };
+      }
+      return { status: "failed", error: { code: 0, message: "unexpected op" } };
+    });
+
+    const calendar = await fetchOutlookCalendarViaEws();
+
+    expect(calendar.busyBlocks.map((block) => block.busyType)).toEqual([
+      "Busy",
+      "Busy",
+    ]);
+  });
+
+  it("anchors an all-day item with an unmappable StartTimeZone to the mailbox zone, not the client OS zone", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // "Customized Time Zone" cannot resolve to IANA. The anchor must fall back
+    // to the mailbox displayTimeZone (Europe/Berlin) — NOT the client OS zone,
+    // which would shift the civil dates by ±1 day on a mismatched viewer.
+    const unmappableSoap = CALENDAR_VIEW_ENRICHED_SOAP.replace(
+      '<t:StartTimeZone Id="W. Europe Standard Time"/>',
+      '<t:StartTimeZone Id="Customized Time Zone"/>',
+    );
+    installHostMock((body) => {
+      if (body.includes("<m:GetUserAvailabilityRequest")) {
+        return { status: "succeeded", value: AVAILABILITY_SOAP };
+      }
+      if (body.includes("<m:FindItem")) {
+        return { status: "succeeded", value: unmappableSoap };
+      }
+      return { status: "failed", error: { code: 0, message: "unexpected op" } };
+    });
+
+    const calendar = await fetchOutlookCalendarViaEws();
+
+    expect(calendar.historyMeetings[0]).toMatchObject({
+      subject: "All-day offsite",
+      when: {
+        kind: "date",
+        startDate: "2026-07-02",
+        endDateExclusive: "2026-07-03",
+      },
+      // Unmappable → unknown stays unknown.
+      authoringTimeZone: null,
     });
     warnSpy.mockRestore();
   });
