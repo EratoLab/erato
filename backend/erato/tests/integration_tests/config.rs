@@ -2871,30 +2871,31 @@ config = {{ endpoint = "https://xxx.blob.core.windows.net", container = "xxx", a
 fn test_top_level_client_tools_load_with_namespace() {
     let config = migrate_config_with_action_facets(
         r#"
-[[client_tools]]
+[client_tools.tools.fetch_availability]
 name = "outlook.fetch_availability"
 namespace = "outlook"
 description = "Fetch the user's calendar free/busy in a window."
 parameters = '{ "type": "object", "properties": {}, "additionalProperties": false }'
 timeout_ms = 30000
 
-[[client_tools]]
+[client_tools.tools.ping]
 name = "ping"
 description = "Default-namespaced client tool."
 parameters = '{ "type": "object" }'
 "#,
     );
 
-    assert_eq!(config.client_tools.len(), 2);
-    let tool = &config.client_tools[0];
+    assert_eq!(config.client_tools.tools.len(), 2);
+    let tool = &config.client_tools.tools["fetch_availability"];
     assert_eq!(tool.name, "outlook.fetch_availability");
     assert_eq!(tool.namespace_or_default(), "outlook");
     assert_eq!(tool.qualified_name(), "outlook/outlook.fetch_availability");
     assert_eq!(tool.timeout_ms, Some(30000));
     assert!(tool.parameters.contains("\"type\": \"object\""));
     // Defaults to the `client` namespace when unset.
-    assert_eq!(config.client_tools[1].namespace_or_default(), "client");
-    assert_eq!(config.client_tools[1].qualified_name(), "client/ping");
+    let ping = &config.client_tools.tools["ping"];
+    assert_eq!(ping.namespace_or_default(), "client");
+    assert_eq!(ping.qualified_name(), "client/ping");
 }
 
 #[test]
@@ -2902,7 +2903,7 @@ parameters = '{ "type": "object" }'
 fn test_client_tool_reserved_name_rejected() {
     migrate_config_with_action_facets(
         r#"
-[[client_tools]]
+[client_tools.tools.bad]
 name = "propose_client_action"
 description = "collides with the reserved client-action tool name"
 parameters = '{ "type": "object" }'
@@ -2913,15 +2914,16 @@ parameters = '{ "type": "object" }'
 #[test]
 #[should_panic(expected = "Duplicate client tool")]
 fn test_client_tool_duplicate_qualified_name_rejected() {
+    // Two distinct tool ids resolving to the SAME namespace/name.
     migrate_config_with_action_facets(
         r#"
-[[client_tools]]
+[client_tools.tools.first]
 name = "dup"
 namespace = "outlook"
 description = "first"
 parameters = '{ "type": "object" }'
 
-[[client_tools]]
+[client_tools.tools.second]
 name = "dup"
 namespace = "outlook"
 description = "second (same namespace/name)"
@@ -2934,20 +2936,20 @@ parameters = '{ "type": "object" }'
 fn test_client_tool_same_name_different_namespace_allowed() {
     let config = migrate_config_with_action_facets(
         r#"
-[[client_tools]]
+[client_tools.tools.first]
 name = "dup"
 namespace = "outlook"
 description = "first"
 parameters = '{ "type": "object" }'
 
-[[client_tools]]
+[client_tools.tools.second]
 name = "dup"
 namespace = "client"
 description = "second (different namespace)"
 parameters = '{ "type": "object" }'
 "#,
     );
-    assert_eq!(config.client_tools.len(), 2);
+    assert_eq!(config.client_tools.tools.len(), 2);
 }
 
 #[test]
@@ -2955,7 +2957,7 @@ parameters = '{ "type": "object" }'
 fn test_client_tool_non_object_parameters_rejected() {
     migrate_config_with_action_facets(
         r#"
-[[client_tools]]
+[client_tools.tools.tool]
 name = "tool"
 description = "schema is a JSON array, not an object"
 parameters = '[1, 2, 3]'
@@ -2968,7 +2970,7 @@ parameters = '[1, 2, 3]'
 fn test_client_tool_invalid_json_parameters_rejected() {
     migrate_config_with_action_facets(
         r#"
-[[client_tools]]
+[client_tools.tools.tool]
 name = "tool"
 description = "not valid json at all"
 parameters = 'this is not json'
@@ -2981,7 +2983,7 @@ parameters = 'this is not json'
 fn test_client_tool_empty_name_rejected() {
     migrate_config_with_action_facets(
         r#"
-[[client_tools]]
+[client_tools.tools.tool]
 name = "   "
 description = "blank name after trim"
 parameters = '{ "type": "object" }'

@@ -431,12 +431,13 @@ pub struct AppConfig {
     #[serde(default)]
     pub action_facets: ActionFacetsConfig,
 
-    // Client-executed tools (returning round-trip), declared top-level and
-    // selected into a context via `tool_call_allowlist` patterns — namespaced
-    // (default `client`, e.g. `outlook/*`), the same mechanism used for MCP
-    // tools. Dormant until an active facet's `tool_call_allowlist` selects one.
+    // Client-executed tools (returning round-trip), declared top-level under
+    // `[client_tools.tools.<id>]` and selected into a context via
+    // `tool_call_allowlist` patterns — namespaced (default `client`, e.g.
+    // `outlook/*`), the same mechanism used for MCP tools. Dormant until an
+    // active facet's `tool_call_allowlist` selects one.
     #[serde(default)]
-    pub client_tools: Vec<ClientToolConfig>,
+    pub client_tools: ClientToolsConfig,
 
     #[serde(default)]
     pub chat_sharing: ChatSharingConfig,
@@ -848,7 +849,7 @@ impl AppConfig {
         // here (MCP servers are not known at config load) and stays at request
         // assembly.
         let mut seen_qualified_names = std::collections::HashSet::new();
-        for tool in &config.client_tools {
+        for tool in config.client_tools.tools.values() {
             let name = tool.name.trim();
             if name.is_empty() {
                 panic!("A client tool has an empty name.");
@@ -2763,8 +2764,21 @@ pub struct ActionFacetConfig {
 /// Valid values for `ActionFacetConfig::presentation`.
 pub const ACTION_FACET_PRESENTATIONS: [&str; 2] = ["render_buttons", "auto_prompt"];
 
-/// A client-executed tool, declared top-level in `[client_tools]` and selected
-/// into a context by an action facet's `tool_call_allowlist` (via its
+/// Top-level `[client_tools]` configuration. Tools live in a map keyed by a
+/// config tool id (`[client_tools.tools.<id>]`) rather than an array, so they
+/// are overrideable / composable across multiple config files (like
+/// `chat_providers`). The intermediate `tools` level leaves room for future
+/// `[client_tools]` sibling keys that set global settings for all client tools.
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+pub struct ClientToolsConfig {
+    /// Client tools keyed by config tool id. The id is the override handle; the
+    /// model-facing name is each tool's `name` field.
+    #[serde(default)]
+    pub tools: HashMap<String, ClientToolConfig>,
+}
+
+/// A client-executed tool, declared top-level in `[client_tools.tools.<id>]` and
+/// selected into a context by an action facet's `tool_call_allowlist` (via its
 /// `namespace/name`). The model may CALL it mid-turn; the client (add-in / web
 /// app) executes it and POSTs the result back, which the backend feeds into the
 /// same agentic loop as a tool response — like an MCP tool, but executed on the

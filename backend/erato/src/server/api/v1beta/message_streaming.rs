@@ -2037,7 +2037,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         && let Some(facet_config) = app_state.config.action_facets.facets.get(&action_facet.id)
         && !facet_config.tool_call_allowlist.is_empty()
     {
-        for client_tool in &app_state.config.client_tools {
+        for client_tool in app_state.config.client_tools.tools.values() {
             if !is_qualified_tool_allowed(
                 client_tool.namespace_or_default(),
                 &client_tool.name,
@@ -2659,7 +2659,8 @@ async fn stream_generate_chat_completion<
                 let park_timeout_ms = app_state
                     .config
                     .client_tools
-                    .iter()
+                    .tools
+                    .values()
                     .find(|tool| tool.name == tool_name)
                     .and_then(|tool| tool.timeout_ms)
                     .unwrap_or(DEFAULT_CLIENT_TOOL_PARK_TIMEOUT_MS);

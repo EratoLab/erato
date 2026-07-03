@@ -255,11 +255,11 @@
   "cleanup_enabled": {
     "needs_scoped_replacement": true
   },
-  "client_tools.[].description": {},
-  "client_tools.[].name": {},
-  "client_tools.[].namespace": {},
-  "client_tools.[].parameters": {},
-  "client_tools.[].timeout_ms": {},
+  "client_tools.tools.<key>.description": {},
+  "client_tools.tools.<key>.name": {},
+  "client_tools.tools.<key>.namespace": {},
+  "client_tools.tools.<key>.parameters": {},
+  "client_tools.tools.<key>.timeout_ms": {},
   "database_url": {},
   "default_file_storage_provider": {},
   "environment": {
