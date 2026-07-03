@@ -1,5 +1,6 @@
+import { htmlToPlainText } from "@erato/frontend/library";
+
 import { plainTextToHtml } from "./htmlConvert";
-import { stripHtmlTags } from "./htmlStrip";
 import { callOfficeAsync } from "./officeAsync";
 
 export type BodyFormat = "html" | "text";
@@ -125,7 +126,7 @@ export async function replaceComposeSelection(
       ? [
           {
             coercionType: Office.CoercionType.Text,
-            data: stripHtmlTags(data),
+            data: htmlToPlainText(data),
           },
           { coercionType: Office.CoercionType.Html, data },
         ]
@@ -133,7 +134,7 @@ export async function replaceComposeSelection(
           { coercionType: Office.CoercionType.Html, data },
           {
             coercionType: Office.CoercionType.Text,
-            data: stripHtmlTags(data),
+            data: htmlToPlainText(data),
           },
         ]
     : bodyFormat === "html"
@@ -177,10 +178,16 @@ export async function prependComposeBody(data: string): Promise<void> {
     bodyFormat === "html"
       ? [
           { coercionType: Office.CoercionType.Html, data },
-          { coercionType: Office.CoercionType.Text, data: stripHtmlTags(data) },
+          {
+            coercionType: Office.CoercionType.Text,
+            data: htmlToPlainText(data),
+          },
         ]
       : [
-          { coercionType: Office.CoercionType.Text, data: stripHtmlTags(data) },
+          {
+            coercionType: Office.CoercionType.Text,
+            data: htmlToPlainText(data),
+          },
           { coercionType: Office.CoercionType.Html, data },
         ];
 

@@ -87,7 +87,12 @@ function classifyEratoEmailBlock(
   // Canonical tags always render as the artifact — back-compat for both web and
   // addin, independent of any facet context.
   if (language === "erato-email") {
-    return { isEmail: true, isHtml: false };
+    // Dropping the `-html` suffix is the model's most common drift, so a
+    // facet's body_format outranks the bare tag (like the whole-body path).
+    return {
+      isEmail: true,
+      isHtml: artifact ? artifact.bodyFormat === "html" : false,
+    };
   }
   if (language === "erato-email-html") {
     return { isEmail: true, isHtml: true };

@@ -213,6 +213,10 @@ export {
   type ChatAddMenuExtraContentProps,
 } from "@/config/componentRegistry";
 export { createLogger } from "@/utils/debugLogger";
+export {
+  copyEmailToClipboard,
+  htmlToPlainText,
+} from "@/utils/emailClipboard";
 export { sanitizeHtmlPreview } from "@/utils/sanitizeHtmlPreview";
 export {
   extractTextFromContent,

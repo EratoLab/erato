@@ -1,6 +1,6 @@
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
@@ -740,6 +740,55 @@ describe("MessageContent", () => {
 
     // body_format drives HTML rendering even though the tag isn't `-html`.
     expect(container.querySelector("b")).toHaveTextContent("Bold reply");
+  });
+
+  it("renders a CANONICAL erato-email fence as HTML when the facet body_format is html", () => {
+    const { container } = renderWithTheme(
+      <MessageContent
+        content={textContent("```erato-email\n<b>Bold reply</b>\n```")}
+        outlookArtifact={{
+          facetId: "outlook_rewrite_selection",
+          bodyFormat: "html",
+          renderMode: "body",
+        }}
+      />,
+    );
+
+    // Dropping the `-html` suffix is the model's most common drift; the
+    // facet's body_format must win over the bare canonical tag too.
+    expect(container.querySelector("b")).toHaveTextContent("Bold reply");
+  });
+
+  it("copies an HTML draft as text/html plus text/plain clipboard flavors", async () => {
+    class ClipboardItemStub {
+      constructor(public data: Record<string, Blob>) {}
+    }
+    const write = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, {
+      clipboard: { write, writeText: vi.fn() },
+    });
+    vi.stubGlobal("ClipboardItem", ClipboardItemStub);
+
+    try {
+      renderWithTheme(
+        <MessageContent
+          content={textContent("```erato-email-html\n<p>Hi</p>\n```")}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: /Copy/ }));
+
+      await waitFor(() => expect(write).toHaveBeenCalledTimes(1));
+      const item = write.mock.calls[0][0][0] as InstanceType<
+        typeof ClipboardItemStub
+      >;
+      expect(Object.keys(item.data).sort()).toEqual([
+        "text/html",
+        "text/plain",
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("falls back to the whole body as the artifact for an unfenced rewrite_selection response", () => {

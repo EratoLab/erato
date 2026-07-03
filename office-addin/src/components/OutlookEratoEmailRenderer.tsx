@@ -1,5 +1,6 @@
 import {
   ActionConfirmationCard,
+  copyEmailToClipboard,
   sanitizeHtmlPreview,
   useChatContext,
   useOutlookArtifact,
@@ -19,7 +20,6 @@ import {
   resolveAutoPromptBehavior,
   resolveClickBehavior,
 } from "../utils/clientActionPolicy";
-import { stripHtmlTags } from "../utils/htmlStrip";
 import {
   clientActionDisplayLabel,
   offerableClientActions,
@@ -403,28 +403,7 @@ export function OutlookEratoEmailRenderer({
   ]);
 
   const handleCopy = useCallback(() => {
-    const writeToClipboard = async () => {
-      if (isHtml) {
-        // For HTML content, write as text/html so paste targets (e.g. Outlook
-        // compose) receive formatted text instead of raw markup. Provide a
-        // stripped plain-text fallback for targets that only accept text/plain.
-        if (typeof ClipboardItem !== "undefined") {
-          await navigator.clipboard.write([
-            new ClipboardItem({
-              "text/html": new Blob([content], { type: "text/html" }),
-              "text/plain": new Blob([stripHtmlTags(content)], {
-                type: "text/plain",
-              }),
-            }),
-          ]);
-        } else {
-          await navigator.clipboard.writeText(stripHtmlTags(content));
-        }
-      } else {
-        await navigator.clipboard.writeText(content);
-      }
-    };
-    void writeToClipboard()
+    void copyEmailToClipboard(content, isHtml ?? false)
       .then(() => {
         setStatus("copied");
         scheduleStatusReset(2000);

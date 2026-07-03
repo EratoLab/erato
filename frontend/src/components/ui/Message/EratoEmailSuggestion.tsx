@@ -2,6 +2,7 @@ import { t } from "@lingui/core/macro";
 import { useCallback, useMemo, useState } from "react";
 
 import { componentRegistry } from "@/config/componentRegistry";
+import { copyEmailToClipboard } from "@/utils/emailClipboard";
 import { sanitizeHtmlPreview } from "@/utils/sanitizeHtmlPreview";
 
 import type { EratoEmailCodeBlockProps } from "@/config/componentRegistry";
@@ -13,17 +14,6 @@ import type { EratoEmailCodeBlockProps } from "@/config/componentRegistry";
  * The Office addin registers a richer version via componentRegistry that
  * adds "Replace Selection" and "Insert at Cursor" buttons.
  */
-function stripHtml(html: string): string {
-  if (typeof DOMParser !== "undefined") {
-    return (
-      new DOMParser().parseFromString(html, "text/html").body.textContent ?? ""
-    );
-  }
-  // DOMParser is always available in browser environments where this component
-  // runs; return empty string rather than a regex fallback to avoid ReDoS risk.
-  return "";
-}
-
 export function DefaultEratoEmailCodeBlock({
   content,
   isHtml,
@@ -32,28 +22,7 @@ export function DefaultEratoEmailCodeBlock({
   const previewHtml = useMemo(() => sanitizeHtmlPreview(content), [content]);
 
   const handleCopy = useCallback(() => {
-    const writeToClipboard = async () => {
-      if (isHtml) {
-        // For HTML content, write as text/html so paste targets receive
-        // formatted text instead of raw markup. Provide a stripped plain-text
-        // fallback for targets that only accept text/plain.
-        if (typeof ClipboardItem !== "undefined") {
-          await navigator.clipboard.write([
-            new ClipboardItem({
-              "text/html": new Blob([content], { type: "text/html" }),
-              "text/plain": new Blob([stripHtml(content)], {
-                type: "text/plain",
-              }),
-            }),
-          ]);
-        } else {
-          await navigator.clipboard.writeText(stripHtml(content));
-        }
-      } else {
-        await navigator.clipboard.writeText(content);
-      }
-    };
-    void writeToClipboard()
+    void copyEmailToClipboard(content, isHtml ?? false)
       .then(() => {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
