@@ -80,27 +80,46 @@ const DRIFTED_EMAIL_TAGS = new Set([
   "html",
 ]);
 
+// Element tags model-produced HTML fragments reliably contain. Deliberately
+// narrow: plain German business text with `<Name>`, `<mail@firma.de>` or
+// `<30 T€` must not match.
+const HTML_FRAGMENT_TAG_RE =
+  /<\/?(?:p|br|div|span|a|ul|ol|li|blockquote|h[1-6]|b|i|em|strong|u|s|table|thead|tbody|tr|td|th|pre|code|hr|img)(?:\s[^<>]*)?\/?>/i;
+
+function looksLikeHtmlFragment(text: string): boolean {
+  return HTML_FRAGMENT_TAG_RE.test(text);
+}
+
 function classifyEratoEmailBlock(
   language: string,
   artifact: OutlookArtifact | null,
+  content: string,
 ): { isEmail: boolean; isHtml: boolean } {
-  // Canonical tags always render as the artifact — back-compat for both web and
-  // addin, independent of any facet context.
+  // isHtml drives data-lossy paths (innerHTML render, text/html clipboard,
+  // Html coercion, reply prefill), where plain text loses its newlines and
+  // DOMPurify deletes <angle-bracket> content. Treating HTML as text is merely
+  // ugly. So: never classify html without markup evidence in the content;
+  // body_format alone (the DESTINATION format, not the produced one) never
+  // promotes.
   if (language === "erato-email") {
-    // Dropping the `-html` suffix is the model's most common drift, so a
-    // facet's body_format outranks the bare tag (like the whole-body path).
+    // Rescue the "-html suffix dropped" drift only when the facet asked for
+    // html AND the content actually contains markup.
     return {
       isEmail: true,
-      isHtml: artifact ? artifact.bodyFormat === "html" : false,
+      isHtml:
+        artifact?.bodyFormat === "html" && looksLikeHtmlFragment(content),
     };
   }
   if (language === "erato-email-html") {
-    return { isEmail: true, isHtml: true };
+    return { isEmail: true, isHtml: looksLikeHtmlFragment(content) };
   }
-  // Only when we KNOW a facet produced this message do we accept drifted tags,
-  // and we trust the facet's body_format over the (unreliable) tag.
+  // Only when we KNOW a facet produced this message do we accept drifted tags.
   if (artifact && DRIFTED_EMAIL_TAGS.has(language.toLowerCase())) {
-    return { isEmail: true, isHtml: artifact.bodyFormat === "html" };
+    return {
+      isEmail: true,
+      isHtml:
+        artifact.bodyFormat === "html" && looksLikeHtmlFragment(content),
+    };
   }
   return { isEmail: false, isHtml: false };
 }
@@ -149,7 +168,8 @@ function isEratoEmailCodeChild(
   const cls = child.props.className ?? "";
   const match = /language-([\w-]+)/.exec(cls);
   const language = match ? match[1] : "";
-  return classifyEratoEmailBlock(language, artifact).isEmail;
+  // Only isEmail is consumed here; it doesn't depend on content.
+  return classifyEratoEmailBlock(language, artifact, "").isEmail;
 }
 
 function MarkdownPre({
@@ -241,7 +261,7 @@ function MarkdownCode({
   const codeContent = String(children).replace(/\n$/, "");
   const match = /language-([\w-]+)/.exec(className ?? "");
   const language = match ? match[1] : "";
-  const emailBlock = classifyEratoEmailBlock(language, artifact);
+  const emailBlock = classifyEratoEmailBlock(language, artifact, codeContent);
   const fallbackPreset =
     effectiveTheme === "dark"
       ? DEFAULT_DARK_CODE_HIGHLIGHT_PRESET
@@ -1022,7 +1042,10 @@ export const MessageContent = memo(function MessageContent({
               <EratoEmailSuggestion
                 key={`email-body-${index}`}
                 content={textForArtifact}
-                isHtml={wholeBodyArtifact.bodyFormat === "html"}
+                isHtml={
+                  wholeBodyArtifact.bodyFormat === "html" &&
+                  looksLikeHtmlFragment(textForArtifact)
+                }
               />
             );
           }
