@@ -171,7 +171,6 @@ export const WINDOWS_TO_IANA: Record<string, string> = {
   "Line Islands Standard Time": "Pacific/Kiritimati",
 };
 
-/** Look up the canonical IANA id for a Windows time-zone display name. */
 export function windowsToIana(name: string): string | undefined {
   return WINDOWS_TO_IANA[name];
 }
@@ -219,24 +218,17 @@ export function toIanaStrict(zone: string | null | undefined): string | null {
   if (trimmed === "") {
     return null;
   }
-
-  // 1) Already a valid IANA id (this also accepts Intl aliases such as "UTC").
   if (isValidIana(trimmed)) {
     return trimmed;
   }
-
-  // 2) Known Windows display name.
   const mapped = windowsToIana(trimmed);
   if (mapped && isValidIana(mapped)) {
     return mapped;
   }
-
-  // 3) Bare Windows name missing the conventional " Standard Time" suffix.
   const mappedStd = windowsToIana(`${trimmed} Standard Time`);
   if (mappedStd && isValidIana(mappedStd)) {
     return mappedStd;
   }
-
   return null;
 }
 

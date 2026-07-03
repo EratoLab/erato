@@ -34,36 +34,20 @@ import type {
 export type { CalendarRange } from "./calendarLegs";
 
 /**
- * EWS SOAP calendar sourcing for Exchange on-premises / Subscription Edition
- * (SI-3 / ERMAIN-385), where Microsoft Graph does not exist. Busy blocks + meeting
- * history come from FindItem + CalendarView over the signed-in user's OWN
- * `calendar` distinguished folder — PROVEN against a live SE box (Exchange 2019 /
- * SE 15.2.2562) at RequestServerVersion Exchange2013_SP1. Each `t:CalendarItem`
- * returns Subject/Start/End/IsRecurring/LegacyFreeBusyStatus, with timed Start/End
- * already in UTC (`…Z`); CalendarView expands recurring series into their
- * occurrences inside the requested window (exactly what busy / history want). We
- * also request IsAllDayEvent and StartTimeZone (the authoring zone, returned inline
- * by FindItem — CONFIRMED on the live SE box).
- * All-day events are stored as the UTC instant of authoring-zone midnight, so they
- * are localized back to that zone and emitted as floating dates — never `.slice`d
- * off the raw `Z` string (the classic off-by-one all-day bug).
- *
- * Working hours come from GetUserAvailability over the same (own) mailbox. A hard
- * failure there degrades to `workingHours: null` + a `degradedLegs` flag rather
- * than breaking the proven busy / history core; every leg degrades independently.
- *
- * v1 scope is the SIGNED-IN USER's OWN calendar only. Every operation goes through
- * the HOST transport ({@link ewsHostFetch} → `makeEwsRequestAsync`), NOT the
- * item-scoped callback-token proxy: calendar / availability reads are mailbox-wide,
- * which the item-scoped callback token does not authorize. Emitted start/end values
- * are UTC ISO-8601 ending in `Z` (we only strip millis if present).
- *
- * The environment dispatcher + shared `Normalized*` types live in
- * `./fetchOutlookCalendar.ts`; the Graph sibling (SI-2) in
- * `./fetchOutlookCalendarGraph.ts`.
+ * EWS SOAP calendar sourcing for Exchange on-prem / Subscription Edition
+ * (SI-3 / ERMAIN-385), where Graph does not exist; Graph sibling in
+ * `./fetchOutlookCalendarGraph.ts`, shared contract in `./fetchOutlookCalendar.ts`.
+ * v1 reads the SIGNED-IN USER's OWN calendar, proven live against SE 15.2.2562
+ * at RequestServerVersion Exchange2013_SP1. Every operation uses the HOST
+ * transport ({@link ewsHostFetch} → `makeEwsRequestAsync`) — calendar /
+ * availability reads are mailbox-wide, which the item-scoped callback token
+ * does not authorize. CalendarView expands recurring series into occurrences;
+ * all-day events arrive as the UTC instant of authoring-zone midnight and are
+ * localized back to that zone (never `.slice`d off the raw `Z` string — the
+ * classic off-by-one all-day bug). Per-leg fetchers THROW on hard failure; the
+ * top-level fetcher degrades each leg independently.
  */
 
-/** A CalendarItem parsed straight off a CalendarView FindItem response, pre-normalization. */
 interface RawCalendarItem {
   start: string;
   end: string;
@@ -71,18 +55,14 @@ interface RawCalendarItem {
   isRecurring: boolean;
   legacyFreeBusyStatus: string | undefined;
   isAllDay: boolean;
-  /** The `Id` of the item's StartTimeZone (a Windows zone name), when present. */
+  /** StartTimeZone `Id` (a Windows zone name), when present. */
   startTimeZoneId: string | undefined;
 }
 
 // --- SOAP body builders ----------------------------------------------------
 
-/**
- * FindItem + CalendarView over the user's OWN `calendar` distinguished folder —
- * the PROVEN path. IdOnly shape plus the calendar fields we normalize. We
- * deliberately do NOT reuse the mail `buildParentFolderIdsXml`, which fans out
- * over the well-known MAIL folders.
- */
+/** Deliberately does NOT reuse the mail `buildParentFolderIdsXml`, which fans
+ * out over the well-known MAIL folders. */
 export function buildCalendarViewFindItemBody(
   startUtc: string,
   endUtc: string,
@@ -110,16 +90,10 @@ export function buildCalendarViewFindItemBody(
 }
 
 /**
- * A no-DST, UTC `SerializableTimeZone` for GetUserAvailability.
- *
- * CONFIRMED LIVE on Exchange 2019/SE (build 15.2.2562, 2026-06-19): both
- * transitions carry `Month=0` / `DayOrder=0`, which signals "no transition" (a
- * flat UTC zone) and is ACCEPTED — GetUserAvailability returns a clean
- * FreeBusyView + WorkingHours. (SI-1 had earlier seen a DEGENERATE TimeZone with
- * StandardTime & DaylightTime sharing the same Jan-1 transition rejected as "The
- * specified time zone isn't valid"; `Month=0` / `DayOrder=0` avoids that.) Even
- * so, a GetUserAvailability failure only degrades the working-hours leg (null +
- * `degradedLegs`), never the busy / history core.
+ * A no-DST, UTC `SerializableTimeZone` for GetUserAvailability. `Month=0` /
+ * `DayOrder=0` signals "no transition" and is confirmed accepted on live SE;
+ * a StandardTime/DaylightTime pair sharing the same Jan-1 transition is
+ * REJECTED as "The specified time zone isn't valid" — don't "simplify" to that.
  */
 function buildSerializableUtcTimeZone(): string {
   const noTransition =
@@ -137,12 +111,9 @@ function buildSerializableUtcTimeZone(): string {
   );
 }
 
-/**
- * GetUserAvailability for a single mailbox (the signed-in user). Element order is
- * STRICT per the schema: TimeZone → MailboxDataArray → FreeBusyViewOptions, and
- * inside FreeBusyViewOptions: TimeWindow → MergedFreeBusyIntervalInMinutes →
- * RequestedView. RequestedView is `Detailed` so the response carries WorkingHours.
- */
+/** Element order is STRICT per the schema (TimeZone → MailboxDataArray →
+ * FreeBusyViewOptions; TimeWindow → Interval → RequestedView). RequestedView
+ * `Detailed` makes the response carry WorkingHours. */
 export function buildGetUserAvailabilityBody(
   smtpAddress: string,
   startUtc: string,
@@ -174,11 +145,6 @@ export function buildGetUserAvailabilityBody(
 
 // --- Response parsing ------------------------------------------------------
 
-/**
- * Parses a CalendarView FindItem response into raw calendar items. EWS returns one
- * FindItemResponseMessage for the single `calendar` folder. Throws (via
- * {@link assertResponseOk}) on a hard response error.
- */
 export function parseCalendarView(doc: Document): RawCalendarItem[] {
   const items: RawCalendarItem[] = [];
   for (const responseMessage of allMessagesEls(
@@ -195,8 +161,7 @@ export function parseCalendarView(doc: Document): RawCalendarItem[] {
     for (const calendarItem of allTypesEls(responseMessage, "CalendarItem")) {
       const start = typesText(calendarItem, "Start");
       const end = typesText(calendarItem, "End");
-      // Start/End are mandatory on a CalendarItem; skip malformed rows rather than
-      // emitting an interval with missing bounds.
+      // Skip malformed rows rather than emit an interval with missing bounds.
       if (!start || !end) continue;
       items.push({
         start,
@@ -215,14 +180,10 @@ export function parseCalendarView(doc: Document): RawCalendarItem[] {
 }
 
 /**
- * Parses WorkingHours out of a GetUserAvailability response. `DayOfWeek` inside a
- * WorkingPeriod is a SPACE-SEPARATED list and there may be several WorkingPeriods,
- * but {@link NormalizedWorkingHours} carries a SINGLE start/end window (as does
- * Graph), so the collapse is lossy by necessity: the window comes from the FIRST
- * period and only days from periods with the SAME window are kept. Days with
- * different hours are dropped — understating availability is safe; unioning them
- * under the first window would propose hours the user doesn't work. Returns null
- * when the response carries no WorkingHours.
+ * `NormalizedWorkingHours` carries a SINGLE window (as does Graph), so multiple
+ * WorkingPeriods collapse lossily: the window comes from the FIRST period and
+ * only days of same-window periods are kept — dropping a day understates
+ * availability, which is safe; unioning it under the wrong hours is not.
  */
 export function parseAvailability(
   doc: Document,
@@ -253,8 +214,8 @@ export function parseAvailability(
       droppedPeriods += 1;
       continue;
     }
+    // DayOfWeek is a space-separated list; lowercased to match Graph's day names.
     for (const day of (typesText(period, "DayOfWeek") ?? "").split(/\s+/)) {
-      // Lowercase to match the Graph backend's day names (unified contract).
       if (day) daysOfWeek.add(day.toLowerCase());
     }
   }
@@ -272,13 +233,9 @@ export function parseAvailability(
 
 // --- Normalization helpers -------------------------------------------------
 
-/**
- * Normalize an EWS dateTime to a millis-free UTC `…Z` instant. CalendarView
- * returns UTC (`…Z`) on our path, but a value carrying an explicit offset
- * (`…+02:00`, as a TimeZoneContext'd box would emit) is an equally valid instant —
- * both are parsed and re-serialized as UTC. Only a bare value (no designator) is
- * assumed already-UTC and gets a `Z` appended.
- */
+/** EWS dateTime → millis-free UTC `…Z`. Values with an explicit offset (as a
+ * TimeZoneContext'd box would emit) are re-serialized as UTC; only a bare value
+ * (no designator) is assumed already-UTC. */
 function toUtcIso(value: string): string {
   if (/(Z|[+-]\d{2}:\d{2})$/.test(value)) {
     return new Date(value).toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -286,15 +243,10 @@ function toUtcIso(value: string): string {
   return `${value}Z`;
 }
 
-/**
- * Projects a raw item's start/end onto the {@link NormalizedEventWhen} union.
- * Timed events are true UTC instants; all-day events are floating civil dates
- * recovered by localizing the UTC instant to the item's AUTHORING zone (its
- * StartTimeZone, falling back to the mailbox `displayTimeZone`). `authoringTimeZone`
- * is the IANA form of that zone, or null when EWS didn't report one or it can't
- * be mapped — strict resolution, because the {@link toIana} fallback would
- * anchor to the VIEWER's OS zone and shift all-day dates by ±1 day.
- */
+/** All-day civil dates are recovered by localizing the UTC instant to the
+ * item's authoring zone, falling back to the mailbox `displayTimeZone`.
+ * Resolution is strict — the `toIana` fallback would anchor to the VIEWER's OS
+ * zone and shift all-day dates by ±1 day. */
 function normalizeWhen(
   item: RawCalendarItem,
   displayTimeZone: string,
@@ -329,13 +281,6 @@ const BUSY_TYPES: ReadonlySet<string> = new Set([
   "WorkingElsewhere",
 ] satisfies NormalizedBusyType[]);
 
-/**
- * `LegacyFreeBusyStatus` is already the unified vocabulary (Free / Tentative / Busy
- * / OOF / WorkingElsewhere), bar EWS's extra `NoData`. Pass unified values through;
- * map absent / `NoData` / anything off-vocabulary to `Busy` conservatively (a block
- * with no status still occupies time). See the busyType vocab note in
- * `fetchOutlookCalendar.ts`.
- */
 function mapBusyType(
   legacyFreeBusyStatus: string | undefined,
 ): NormalizedBusyType {
@@ -346,11 +291,7 @@ function mapBusyType(
 
 // --- Public per-leg fetchers -----------------------------------------------
 
-/**
- * Past meetings in `range` (look-back window) from the user's own calendar. THROWS
- * `EwsRequestError` on a hard EWS failure — the dispatcher
- * {@link fetchOutlookCalendarViaEws} decides whether to degrade.
- */
+/** Past meetings in `range` (the look-back window). */
 export async function fetchCalendarHistoryViaEws(
   range: CalendarRange,
   options: CalendarFetchOptions = {},
@@ -375,10 +316,8 @@ export async function fetchCalendarHistoryViaEws(
   });
 }
 
-/**
- * Busy blocks in `range` (look-forward window) from the user's own calendar. THROWS
- * `EwsRequestError` on a hard EWS failure.
- */
+/** Busy blocks in `range`. busyType is faithful (Free included); the prompt
+ * decides policy. */
 export async function fetchCalendarBusyViaEws(
   range: CalendarRange,
   options: CalendarFetchOptions = {},
@@ -401,13 +340,8 @@ export async function fetchCalendarBusyViaEws(
   });
 }
 
-/**
- * Working hours from GetUserAvailability over the user's own mailbox. Returns null
- * when working hours are genuinely absent (no mailbox address, or a successful
- * response carrying no WorkingHours). THROWS on a hard EWS failure so the
- * dispatcher can flag the `workingHours` leg degraded; only an abort is re-thrown
- * verbatim.
- */
+/** Working hours from GetUserAvailability. Returns null when genuinely absent;
+ * THROWS on a hard EWS failure. */
 export async function fetchWorkingHoursViaEws(
   range: CalendarRange,
   options: CalendarFetchOptions = {},
@@ -423,16 +357,9 @@ export async function fetchWorkingHoursViaEws(
   return parseAvailability(doc);
 }
 
-/**
- * Sources the signed-in user's own calendar via EWS into a
- * {@link NormalizedCalendar}: busy blocks (now → +freeBusyWindowDays) and meeting
- * history (now-historyWindowDays → now) from the PROVEN CalendarView path, plus
- * working hours. The three legs run concurrently via {@link runCalendarLegs}.
- * After the `getEwsUrl()` precheck this NEVER throws except to propagate an
- * abort — a failed leg degrades to `[]` / null AND is named in `degradedLegs`
- * so a single unavailable capability can't sink the whole snapshot (nor be
- * mistaken for a genuinely empty one).
- */
+/** The full EWS calendar snapshot. After the `getEwsUrl()` precheck this NEVER
+ * throws except to propagate an abort — a failed leg degrades to `[]` / null
+ * and is named in `degradedLegs`. */
 export async function fetchOutlookCalendarViaEws(
   options: CalendarFetchOptions = {},
 ): Promise<NormalizedCalendar> {

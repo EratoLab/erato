@@ -10,34 +10,28 @@ import type {
 } from "./fetchOutlookCalendar";
 
 /**
- * Backend-agnostic scaffolding shared by the Graph and EWS calendar backends:
- * window/range computation, the mailbox-zone resolver, and the concurrent
- * leg-runner that implements the shared degrade contract. Deliberately a
+ * Scaffolding shared by the Graph and EWS calendar backends. Deliberately a
  * SIBLING of `fetchOutlookCalendar.ts`, never part of it — that file
  * runtime-imports both backends for its factories, so runtime exports there
  * that the backends import back would close a cycle.
  */
 
-/** Default look-back (history) and look-forward (busy) window, in days. */
 export const DEFAULT_WINDOW_DAYS = 21;
 export const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-/** A UTC time range for one calendar query; both bounds are ISO-8601 `…Z`. */
 export interface CalendarRange {
   startUtc: string;
   endUtc: string;
 }
 
-// Both backends honor aborts by checking between round-trips.
 export { throwIfAborted };
 
-/** A `Date` as a millis-free UTC ISO-8601 (`…Z`) — the query-bound format both
- * Graph calendarView and EWS dateTime accept. */
+/** Millis-free UTC ISO-8601 (`…Z`) — the query-bound format both Graph
+ * calendarView and EWS dateTime accept. */
 export function toUtcNoMillis(date: Date): string {
   return date.toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
-/** The look-back (history) and look-forward (busy) windows around `now`. */
 export function computeCalendarRanges(
   now: Date,
   options: CalendarFetchOptions,
@@ -61,16 +55,12 @@ export function computeCalendarRanges(
   };
 }
 
-/**
- * The mailbox's own time zone as a canonical IANA id. `userProfile.timeZone` is
- * a Windows zone name on desktop hosts (e.g. "W. Europe Standard Time"), so it
- * is run through {@link toIana}, which also falls back to the client OS zone.
- */
+/** The mailbox zone as IANA — `userProfile.timeZone` is a Windows zone name on
+ * desktop hosts; `toIana` falls back to the client OS zone when unmappable. */
 export function resolveTimezone(): string {
   return toIana(Office.context.mailbox.userProfile?.timeZone);
 }
 
-/** The three independent legs of a calendar snapshot, as fetch thunks. */
 export interface CalendarLegThunks {
   history: () => Promise<NormalizedHistoryMeeting[]>;
   busy: () => Promise<NormalizedBusyBlock[]>;
@@ -85,11 +75,9 @@ export interface CalendarLegResults {
 }
 
 /**
- * Runs the three legs CONCURRENTLY (snapshot latency = the slowest leg, not the
- * sum) and applies the shared degrade contract: an abort propagates — never
- * degrades; any other rejection degrades that leg to `[]` / null and names it
- * in `degradedLegs`, warning under the caller's `warnPrefix` so per-backend
- * logs stay greppable.
+ * Runs the three legs concurrently under the shared degrade contract: an abort
+ * propagates — never degrades; any other rejection degrades that leg to
+ * `[]` / null and names it in `degradedLegs`.
  */
 export async function runCalendarLegs(
   thunks: CalendarLegThunks,

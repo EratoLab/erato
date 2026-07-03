@@ -30,34 +30,14 @@ import type {
 } from "./fetchOutlookMessageGraph";
 
 /**
- * Microsoft Graph calendar sourcing for Exchange Online (SI-2 / ERMAIN-384) —
- * the cloud sibling of the on-prem EWS backend, emitting an identical {@link
- * NormalizedCalendar} (timed events as UTC `…Z` instants, all-day events as
- * floating civil dates). v1 scope is the SIGNED-IN USER's OWN
- * calendar only; `acquireToken` is expected to be bound to the `Calendars.Read`
- * scope (the location dispatcher binds it). All legs ride the shared
- * {@link graphFetch} + {@link makeGraphTokenSource} plumbing (one cached token
- * per leg, force-refreshed once on a 401):
- *
- *   - busyBlocks + historyMeetings: paginate `GET /me/calendarView`
- *     (`startDateTime` / `endDateTime` the look-forward / look-back windows),
- *     following `@odata.nextLink` under a sane page cap. calendarView returns UTC
- *     by default and expands recurring series into their occurrences inside the
- *     window — exactly what busy / history want. `showAs` maps onto the unified
- *     busyType vocabulary (see `fetchOutlookCalendar.ts`).
- *   - workingHours: `POST /me/calendar/getSchedule` for the signed-in user (the
- *     cloud analog of SE's GetUserAvailability), reading the `workingHours` block.
- *     Deliberately NOT `/me/mailboxSettings`: getSchedule rides the SAME
- *     `Calendars.Read` token as busy/history, avoiding an extra
- *     `MailboxSettings.Read` consent in every customer tenant.
- *
- * The error contract mirrors the EWS sibling: the top-level
- * {@link fetchOutlookCalendarViaGraph} degrades each leg to `[]` / `null` and
- * NEVER throws except to propagate an abort; the per-leg helpers THROW on a hard
- * failure, which the dispatcher records in `degradedLegs` so a consumer can tell
- * "empty" from "failed" (see `fetchOutlookCalendar.ts`). The dispatcher + shared
- * `Normalized*` types live in `./fetchOutlookCalendar.ts`; the on-prem EWS sibling
- * (SI-3) in `./fetchOutlookCalendarEws.ts`.
+ * Microsoft Graph calendar sourcing for Exchange Online (SI-2 / ERMAIN-384);
+ * on-prem EWS sibling in `./fetchOutlookCalendarEws.ts`, shared contract in
+ * `./fetchOutlookCalendar.ts`. v1 reads the SIGNED-IN USER's OWN calendar only;
+ * `acquireToken` must be bound to `Calendars.Read` (the dispatcher binds it).
+ * calendarView returns UTC by default and expands recurring series into
+ * occurrences inside the window — exactly what busy / history want. Per-leg
+ * fetchers THROW on hard failure; the top-level fetcher degrades each leg
+ * independently and never throws except to propagate an abort.
  */
 
 const CALENDAR_VIEW_PAGE_SIZE = 100;
@@ -65,13 +45,11 @@ const CALENDAR_VIEW_PAGE_SIZE = 100;
  * mail fetcher's `MAX_CONVERSATION_PAGES` cap). */
 const MAX_CALENDAR_VIEW_PAGES = 20;
 
-/** Graph's `dateTimeTimeZone` value (e.g. an event's `start` / `end`). */
 interface GraphDateTimeTimeZone {
   dateTime?: string;
   timeZone?: string;
 }
 
-/** A calendarView event, pared to the fields we normalize. */
 interface GraphEvent {
   subject?: string;
   start?: GraphDateTimeTimeZone;
@@ -81,17 +59,15 @@ interface GraphEvent {
   /** singleInstance | occurrence | exception | seriesMaster. */
   type?: string;
   attendees?: { type?: string }[];
-  /** The event's authoring zone (Windows or IANA); Graph returns it inline. */
+  /** The event's authoring zone (Windows or IANA name). */
   originalStartTimeZone?: string;
 }
 
-/** One page of a calendarView response. */
 interface GraphCalendarViewPage {
   value?: GraphEvent[];
   "@odata.nextLink"?: string;
 }
 
-/** The `workingHours` block off a getSchedule `scheduleInformation`. */
 interface GraphWorkingHours {
   daysOfWeek?: string[];
   startTime?: string;
@@ -99,7 +75,6 @@ interface GraphWorkingHours {
   timeZone?: { name?: string };
 }
 
-/** One `scheduleInformation` entry from `POST /me/calendar/getSchedule`. */
 interface GraphScheduleInformation {
   workingHours?: GraphWorkingHours;
 }
@@ -111,12 +86,10 @@ interface GraphGetScheduleResponse {
 // --- Normalization helpers ---------------------------------------------------
 
 /**
- * Normalizes a Graph `dateTimeTimeZone` to a millis-free UTC `…Z` ISO-8601 (null
- * when absent). calendarView returns UTC by default (no `Prefer: outlook.timezone`
- * header sent), so a value lacking the `Z` designator is assumed UTC and given
- * one; fractional seconds are stripped. A non-UTC `timeZone` throws — degrading
- * the leg loudly — because relabeling a local time as UTC would silently shift
- * every event by the zone offset (a `Prefer` header added later must not do that).
+ * Graph `dateTimeTimeZone` → millis-free UTC `…Z` (null when absent). No
+ * `Prefer: outlook.timezone` header is sent, so values arrive UTC; a non-UTC
+ * `timeZone` throws — relabeling a local time as UTC would silently shift every
+ * event by the zone offset.
  */
 function toUtcIso(value: GraphDateTimeTimeZone | undefined): string | null {
   const dateTime = value?.dateTime?.trim();
@@ -130,11 +103,6 @@ function toUtcIso(value: GraphDateTimeTimeZone | undefined): string | null {
   return stripped.endsWith("Z") ? stripped : `${stripped}Z`;
 }
 
-/**
- * Maps Graph's `showAs` (free / tentative / busy / oof / workingElsewhere) onto
- * the unified busyType vocabulary; anything unknown degrades to `Busy` (a block
- * occupying time should never read as free). See `fetchOutlookCalendar.ts`.
- */
 function mapShowAs(showAs: string | undefined): NormalizedBusyType {
   switch (showAs) {
     case "free":
@@ -152,10 +120,6 @@ function mapShowAs(showAs: string | undefined): NormalizedBusyType {
   }
 }
 
-/**
- * Parses a mailboxSettings clock string (`"HH:MM:SS(.fff…)"`) into minutes from
- * midnight, or null when it can't be parsed.
- */
 function clockStringToMinutes(clock: string | undefined): number | null {
   if (!clock) return null;
   const match = /^(\d{1,2}):(\d{2})/.exec(clock);
@@ -163,15 +127,16 @@ function clockStringToMinutes(clock: string | undefined): number | null {
   return Number(match[1]) * 60 + Number(match[2]);
 }
 
-/** True when two zone strings name the same zone: raw-equal, or both strictly
- * resolving to the same IANA id (Windows vs IANA spellings of one zone). */
+/** Same zone iff raw-equal or both strictly resolve to one IANA id (Windows vs
+ * IANA spellings). Strict on purpose: with the `toIana` fallback, two
+ * unknown-but-different zones would both become the viewer's zone and compare
+ * equal. */
 function sameZone(a: string, b: string): boolean {
   if (a === b) return true;
   const ianaA = toIanaStrict(a);
   return ianaA !== null && ianaA === toIanaStrict(b);
 }
 
-/** Build the normalized `when` from a Graph event (all-day → floating date). */
 function graphEventWhen(event: GraphEvent): NormalizedEventWhen | null {
   if (event.isAllDay === true) {
     const start = event.start?.dateTime;
@@ -189,20 +154,14 @@ function graphEventWhen(event: GraphEvent): NormalizedEventWhen | null {
   return { kind: "date-time", startUtc, endUtc };
 }
 
-/** The event's authoring zone (IANA) when Graph reports it; null for
- * UTC/absent/unmappable (strict — the {@link toIana} fallback would claim the
- * VIEWER's OS zone as the authoring zone). */
+/** Authoring zone as IANA; null for UTC/absent/unmappable — strict, because the
+ * `toIana` fallback would claim the VIEWER's OS zone as the authoring zone. */
 function graphAuthoringTimeZone(event: GraphEvent): string | null {
   const zone = event.originalStartTimeZone;
   if (!zone || zone === "UTC") return null;
   return toIanaStrict(zone);
 }
 
-/**
- * Pages through a calendarView query following `@odata.nextLink` up to {@link
- * MAX_CALENDAR_VIEW_PAGES}, checking the abort signal between round-trips.
- * THROWS on a non-OK status — the per-leg callers turn that into a hard failure.
- */
 async function fetchCalendarViewPages(
   initialUrl: string,
   tokenSource: GraphTokenSource,
@@ -238,7 +197,6 @@ async function fetchCalendarViewPages(
   return events;
 }
 
-/** Builds a calendarView URL for `range` with the requested `$select` fields. */
 function buildCalendarViewUrl(range: CalendarRange, select: string): string {
   return (
     `${GRAPH_BASE}/me/calendarView` +
@@ -252,12 +210,8 @@ function buildCalendarViewUrl(range: CalendarRange, select: string): string {
 
 // --- Public per-leg fetchers -----------------------------------------------
 
-/**
- * Busy blocks in `range` (the look-forward window) from the user's own calendar.
- * Carries EVERY event including `showAs: free` (busyType faithful, mirroring the
- * EWS sibling); the prompt decides policy. THROWS on a hard Graph failure — the
- * dispatcher {@link fetchOutlookCalendarViaGraph} decides whether to degrade.
- */
+/** Busy blocks in `range`. Carries EVERY event including `showAs: free` —
+ * busyType is faithful; the prompt decides policy. */
 export async function fetchCalendarBusyViaGraph(
   acquireToken: AcquireGraphToken,
   range: CalendarRange,
@@ -273,8 +227,8 @@ export async function fetchCalendarBusyViaGraph(
 
   const blocks: NormalizedBusyBlock[] = [];
   for (const event of events) {
+    // Skip malformed rows rather than emit an interval with missing bounds.
     const when = graphEventWhen(event);
-    // start/end are mandatory; skip a malformed row rather than emit bad bounds.
     if (!when) continue;
     blocks.push({
       when,
@@ -286,10 +240,7 @@ export async function fetchCalendarBusyViaGraph(
   return blocks;
 }
 
-/**
- * Past meetings in `range` (the look-back window) from the user's own calendar.
- * THROWS on a hard Graph failure.
- */
+/** Past meetings in `range` (the look-back window). */
 export async function fetchCalendarHistoryViaGraph(
   acquireToken: AcquireGraphToken,
   range: CalendarRange,
@@ -314,8 +265,7 @@ export async function fetchCalendarHistoryViaGraph(
         event.type === "occurrence" ||
         event.type === "exception" ||
         event.type === "seriesMaster",
-      // Exclude resource rooms/equipment — invitee count means people. Graph-only
-      // enrichment: the EWS backend omits attendeeCount (FindItem can't return it).
+      // Resource rooms/equipment excluded — invitee count means people.
       attendeeCount: Array.isArray(event.attendees)
         ? event.attendees.filter((a) => a.type !== "resource").length
         : undefined,
@@ -326,16 +276,11 @@ export async function fetchCalendarHistoryViaGraph(
 }
 
 /**
- * Working hours for the signed-in user via `POST /me/calendar/getSchedule` — the
- * cloud analog of SE's GetUserAvailability, readable with the SAME `Calendars.Read`
- * token as busy/history (NOT `/me/mailboxSettings`, which would need an extra
- * `MailboxSettings.Read` consent per tenant). Rides the shared {@link graphFetch}
- * so the POST gets the same 401 → force-refresh → single-retry as the other legs.
- *
- * Returns null when working hours are genuinely absent or untrustworthy (no
- * mailbox, no `workingHours` block, or a zone that would make the minutes wrong).
- * THROWS on a hard fetch failure (non-OK status / network error) so the dispatcher
- * can flag the `workingHours` leg degraded; only an abort is re-thrown verbatim.
+ * Working hours via `POST /me/calendar/getSchedule` — deliberately NOT
+ * `/me/mailboxSettings`, which would need an extra `MailboxSettings.Read`
+ * consent per tenant while getSchedule rides the same `Calendars.Read` token.
+ * Returns null when working hours are genuinely absent or untrustworthy;
+ * THROWS on a hard fetch failure.
  */
 export async function fetchWorkingHoursViaGraph(
   acquireToken: AcquireGraphToken,
@@ -374,13 +319,8 @@ export async function fetchWorkingHoursViaGraph(
   const payload = (await response.json()) as GraphGetScheduleResponse;
   const workingHours = payload.value?.[0]?.workingHours;
   if (!workingHours) return null;
-  // getSchedule reports start/end as clock times in workingHours.timeZone; if
-  // that names a different zone than the mailbox zone the calendar is labeled
-  // with, the minutes would be wrong — degrade rather than mislead. The two
-  // sources may spell the SAME zone differently (Windows vs IANA), so zones
-  // count as equivalent when raw-equal or when BOTH strictly resolve to one
-  // IANA id. Strict on purpose: with the toIana fallback, two unknown-but-
-  // different zones would both become the viewer's zone and compare equal.
+  // start/end are clock times in workingHours.timeZone; under a different zone
+  // than the mailbox's the minutes would be wrong — degrade rather than mislead.
   const scheduleZone = workingHours.timeZone?.name;
   const mailboxZone = Office.context.mailbox.userProfile?.timeZone;
   if (scheduleZone && mailboxZone && !sameZone(scheduleZone, mailboxZone)) {
@@ -403,14 +343,8 @@ export async function fetchWorkingHoursViaGraph(
   };
 }
 
-/**
- * Sources the signed-in user's own calendar via Graph into a {@link
- * NormalizedCalendar}: busy blocks (now → +freeBusyWindowDays) and meeting
- * history (now-historyWindowDays → now) from calendarView, plus best-effort
- * working hours. The three legs run concurrently via {@link runCalendarLegs}.
- * NEVER throws except to propagate an abort — a restricted or failed leg
- * degrades to `[]` / null.
- */
+/** The full Graph calendar snapshot; NEVER throws except to propagate an
+ * abort — a failed leg degrades to `[]` / null and is named in `degradedLegs`. */
 export async function fetchOutlookCalendarViaGraph(
   acquireToken: AcquireGraphToken,
   options: CalendarFetchOptions = {},
