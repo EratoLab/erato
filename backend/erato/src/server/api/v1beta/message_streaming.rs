@@ -4767,9 +4767,23 @@ fn is_qualified_tool_allowed(namespace: &str, tool_name: &str, allowlist: &[Stri
 /// request, using the same namespaced `tool_call_allowlist` pattern syntax as
 /// MCP tools: the GLOBAL `experimental_facets.tool_call_allowlist` (applied
 /// regardless of selected facets), plus any selected regular facets, plus the
-/// active action facet. Unlike MCP filtering, an empty result means "offer no
-/// client tools" — they are strictly opt-in, so `None`/all-allowed semantics do
-/// not apply here.
+/// active action facet.
+///
+/// This is deliberately a SEPARATE function from the MCP path
+/// (`build_mcp_tool_allowlist` + `merge_action_facet_into_mcp_allowlist`), not
+/// shared plumbing, because client tools invert three of its policies — sharing
+/// a collector would silently regress MCP:
+/// 1. **Empty policy is opposite.** Client tools are strictly opt-in: an empty
+///    result offers nothing. MCP collapses empty → `None` = all-tools-allowed
+///    (opt-out). Reusing the MCP path would offer ALL client tools when none
+///    are allowlisted.
+/// 2. **No facets-empty gate.** The MCP path short-circuits to `None` when
+///    `experimental_facets.facets` is empty; client tools intentionally do not,
+///    so a global allowlist can activate a client tool with no facets at all.
+/// 3. **Action facet is a flat union member here.** MCP folds it in
+///    additively-only-on-`Some` (never resurrects a `None`/all-allowed base),
+///    whereas here it is a first-class selector — action facets are the primary
+///    client-tool path and live in a separate `action_facets` map.
 fn effective_client_tool_allowlist(
     experimental_facets: &crate::config::ExperimentalFacetsConfig,
     action_facets: &crate::config::ActionFacetsConfig,
