@@ -492,6 +492,7 @@ const eslintConfig = [
             "^Cache-Control$",
             "^multipart/form-data$",
             "^application/json$",
+            "^text/html$",
             "^text/plain$",
             "^application/x-www-form-urlencoded$",
 

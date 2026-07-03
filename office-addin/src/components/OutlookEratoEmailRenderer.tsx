@@ -19,12 +19,12 @@ import {
   resolveAutoPromptBehavior,
   resolveClickBehavior,
 } from "../utils/clientActionPolicy";
+import { stripHtmlTags } from "../utils/htmlStrip";
 import {
   clientActionDisplayLabel,
   offerableClientActions,
   type OutlookClientAction,
 } from "../utils/outlookClientActions";
-import { stripHtmlTags } from "../utils/htmlStrip";
 import { replaceComposeSelection } from "../utils/outlookComposeWrite";
 import {
   ReplyBodyTooLargeError,
