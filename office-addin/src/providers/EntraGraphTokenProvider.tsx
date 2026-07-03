@@ -1,12 +1,6 @@
 import { toast } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-} from "react";
+import { createContext, useCallback, useContext, useMemo } from "react";
 
 import { useSessionRedeem } from "./SessionAuthProvider";
 import {
@@ -15,8 +9,6 @@ import {
   type GraphCapableSource,
 } from "../auth/AuthSource";
 import { shouldRefreshOauth2ProxySession } from "../auth/oauth2ProxySession";
-
-import type { AcquireGraphToken } from "../utils/fetchOutlookMessageGraph";
 
 /** Dedupe key so repeated failed email drops replace (not stack) the prompt. */
 const GRAPH_SIGNIN_TOAST_KEY = "graph-email-signin";
@@ -143,47 +135,6 @@ export function EntraGraphTokenProvider({
     () => ({ acquireToken }),
     [acquireToken],
   );
-
-  // DEV-only hooks, gated out of prod by `import.meta.env.DEV`:
-  // `window.__eratoCalendar()` runs the production backend selection
-  // (on-prem probe → EWS or Graph) so live validation exercises the same path
-  // consumers get; `window.__eratoCalendarGraph()` pins the Graph backend
-  // (SI-2 / ERMAIN-384).
-  useEffect(() => {
-    if (!import.meta.env.DEV) return;
-    const devWindow = window as Window & {
-      __eratoCalendar?: () => Promise<unknown>;
-      __eratoCalendarGraph?: () => Promise<unknown>;
-    };
-    const acquireCalendarToken: AcquireGraphToken = (options) =>
-      acquireToken(["Calendars.Read"], {
-        ...options,
-        allowInteraction: true,
-      });
-    devWindow.__eratoCalendar = async () => {
-      const [{ detectExchangeOnPrem }, factories] = await Promise.all([
-        import("../utils/detectExchangeOnPrem"),
-        import("../utils/fetchOutlookCalendar"),
-      ]);
-      const backend = detectExchangeOnPrem() ? "ews" : "graph";
-      const fetcher =
-        backend === "ews"
-          ? factories.createEwsOutlookCalendarFetcher()
-          : factories.createGraphOutlookCalendarFetcher(acquireCalendarToken);
-      console.info(`[__eratoCalendar] backend: ${backend}`);
-      return { backend, calendar: await fetcher.fetchCalendar() };
-    };
-    devWindow.__eratoCalendarGraph = async () => {
-      const { fetchOutlookCalendarViaGraph } = await import(
-        "../utils/fetchOutlookCalendarGraph"
-      );
-      return fetchOutlookCalendarViaGraph(acquireCalendarToken);
-    };
-    return () => {
-      delete devWindow.__eratoCalendar;
-      delete devWindow.__eratoCalendarGraph;
-    };
-  }, [acquireToken]);
 
   return (
     <GraphTokenContext.Provider value={value}>
