@@ -415,6 +415,48 @@ chat_provider_ids = ["test-token-limit"]
 # the reply body in an erato-email / erato-email-html fenced block and call the
 # propose_client_action tool exactly once with the recommended action>
 # """
+#
+# Client-executed tools (returning round-trip): declared top-level under
+# [client_tools.tools.<id>] and selected into a turn by `tool_call_allowlist`
+# patterns (namespaced, e.g. "outlook/*") on a facet — the same mechanism used
+# for MCP tools. Unlike propose_client_action (terminal, user-confirmed), a
+# client tool's result is fed back inline and the SAME turn continues, so
+# executors must be read-only/idempotent. Example: the Outlook add-in's
+# calendar read for appointment scheduling.
+#
+# [client_tools.tools.outlook_fetch_availability]
+# # Model-facing name; keep it dot-free (OpenAI/Anthropic reject "." in tool
+# # names). The namespace exists purely for allowlist selection ("outlook/*").
+# name = "fetch_availability"
+# namespace = "outlook"
+# description = "Read the signed-in user's own Outlook calendar (working hours, busy times, recent meetings). All returned times are local to the user's time zone."
+# parameters = """
+# {
+#   "type": "object",
+#   "properties": {
+#     "lookahead_days": { "type": "integer", "minimum": 1, "maximum": 62 }
+#   },
+#   "additionalProperties": false
+# }
+# """
+# # Optional per-tool park timeout (default 60000 ms).
+# # timeout_ms = 30000
+#
+# The scheduling workflow facet that selects the tool. The Outlook add-in
+# attaches it in neutral contexts and on follow-ups of a scheduling exchange;
+# adding `tool_call_allowlist = ["outlook/*"]` to outlook_reply_from_read and
+# compose_email additionally makes the tool reachable from read/compose turns.
+#
+# [action_facets.facets.outlook_schedule]
+# display_name = "Outlook Appointment Scheduling"
+# platform = "outlook"
+# tool_call_allowlist = ["outlook/*"]
+# allowed_args = ["now_iso", "timezone"]
+# template = """
+# FOR THIS MESSAGE ONLY: <your scheduling instructions; have the model call the
+# fetch_availability tool before stating any availability, reason over the
+# returned data in the user's local time zone, and present valid free slots>
+# """
 
 # Experimental facets feature configuration
 # [experimental_facets]
