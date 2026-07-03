@@ -212,6 +212,11 @@ export {
   type EratoEmailCodeBlockProps,
   type ChatAddMenuExtraContentProps,
 } from "@/config/componentRegistry";
+export {
+  registerClientToolExecutor,
+  type ClientToolExecutor,
+  type ClientToolExecutionResult,
+} from "@/hooks/chat/clientToolExecutors";
 export { createLogger } from "@/utils/debugLogger";
 export { sanitizeHtmlPreview } from "@/utils/sanitizeHtmlPreview";
 export {

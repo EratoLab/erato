@@ -37,6 +37,7 @@ import { createSSEConnection, type SSEEvent } from "@/utils/sse/sseClient";
 
 import { handleAssistantMessageStarted } from "./handlers/handleAssistantMessageStarted";
 import { handleChatCreated } from "./handlers/handleChatCreated";
+import { handleClientToolCall } from "./handlers/handleClientToolCall";
 import { handleMessageComplete as externalHandleMessageComplete } from "./handlers/handleMessageComplete";
 import { handleReasoningDelta } from "./handlers/handleReasoningDelta";
 import { handleTextDelta } from "./handlers/handleTextDelta";
@@ -961,6 +962,19 @@ export function useChatMessaging(
               responseData,
             );
             handleToolCallUpdate(responseData, activeStreamKey);
+            break;
+
+          case "client_tool_call":
+            // Run the registered executor and POST the result to resume the
+            // backend's parked turn.
+            void handleClientToolCall(responseData, {
+              chatId:
+                chatId ??
+                useMessagingStore.getState().newlyCreatedChatId ??
+                null,
+              getAuthHeaders,
+              extraHeaders: { [X_ERATO_PLATFORM_HEADER]: platform },
+            });
             break;
 
           case "error": {
