@@ -34,9 +34,9 @@ describe("htmlToPlainText", () => {
   });
 
   it("separates adjacent block elements", () => {
-    expect(htmlToPlainText("<p>Hi Anna,</p><p>Thanks for the update.</p>")).toBe(
-      "Hi Anna,\n\nThanks for the update.",
-    );
+    expect(
+      htmlToPlainText("<p>Hi Anna,</p><p>Thanks for the update.</p>"),
+    ).toBe("Hi Anna,\n\nThanks for the update.");
   });
 
   it("separates list items", () => {
@@ -53,7 +53,9 @@ describe("htmlToPlainText", () => {
 
   it("skips style and script content", () => {
     expect(
-      htmlToPlainText("<style>p{margin:0}</style><p>Hello</p><script>x()</script>"),
+      htmlToPlainText(
+        "<style>p{margin:0}</style><p>Hello</p><script>x()</script>",
+      ),
     ).toBe("Hello");
   });
 
@@ -82,7 +84,8 @@ describe("transformEmailFencesForCopy", () => {
   });
 
   it("leaves messages without email fences unchanged", () => {
-    const text = "Just a normal answer with `inline code`.\n\n```ts\nconst x = 1;\n```";
+    const text =
+      "Just a normal answer with `inline code`.\n\n```ts\nconst x = 1;\n```";
     expect(transformEmailFencesForCopy(text)).toBe(text);
   });
 

@@ -106,8 +106,7 @@ function classifyEratoEmailBlock(
     // html AND the content actually contains markup.
     return {
       isEmail: true,
-      isHtml:
-        artifact?.bodyFormat === "html" && looksLikeHtmlFragment(content),
+      isHtml: artifact?.bodyFormat === "html" && looksLikeHtmlFragment(content),
     };
   }
   if (language === "erato-email-html") {
@@ -117,8 +116,7 @@ function classifyEratoEmailBlock(
   if (artifact && DRIFTED_EMAIL_TAGS.has(language.toLowerCase())) {
     return {
       isEmail: true,
-      isHtml:
-        artifact.bodyFormat === "html" && looksLikeHtmlFragment(content),
+      isHtml: artifact.bodyFormat === "html" && looksLikeHtmlFragment(content),
     };
   }
   return { isEmail: false, isHtml: false };

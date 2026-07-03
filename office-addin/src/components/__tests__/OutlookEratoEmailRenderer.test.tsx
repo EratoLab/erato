@@ -66,7 +66,8 @@ vi.mock("@erato/frontend/library", () => ({
   sanitizeHtmlPreview: (html: string) => html,
   copyEmailToClipboard: (...args: unknown[]) =>
     Promise.resolve(mockCopyEmailToClipboard(...args)),
-  htmlToPlainText: (html: string) => html.replace(/<[^>]*>/g, ""),
+  htmlToPlainText: (html: string) =>
+    new DOMParser().parseFromString(html, "text/html").body.textContent ?? "",
   useChatContext: () => mockUseChatContext(),
   useOutlookArtifact: () => mockUseOutlookArtifact(),
   usePersistedState: () => mockUsePersistedState(),
