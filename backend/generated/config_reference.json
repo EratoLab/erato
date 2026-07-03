@@ -347,6 +347,13 @@
   "guardrails.prompt_patterns.<pattern-id>.pattern": {},
   "guardrails.prompt_patterns.<pattern-id>.tags.[]": {},
   "guardrails.prompt_patterns.<pattern-id>.type": {},
+  "hidden_facets.facets.<facet-id>.additional_system_prompt": {},
+  "hidden_facets.facets.<facet-id>.additional_system_prompt.fallback": {},
+  "hidden_facets.facets.<facet-id>.additional_system_prompt.label": {},
+  "hidden_facets.facets.<facet-id>.additional_system_prompt.prompt": {},
+  "hidden_facets.facets.<facet-id>.additional_system_prompt.prompt_name": {},
+  "hidden_facets.facets.<facet-id>.additional_system_prompt.source": {},
+  "hidden_facets.facets.<facet-id>.platform": {},
   "http_host": {
     "hide_in_docs": true
   },

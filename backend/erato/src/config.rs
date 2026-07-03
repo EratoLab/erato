@@ -439,6 +439,13 @@ pub struct AppConfig {
     #[serde(default)]
     pub action_facets: ActionFacetsConfig,
 
+    // Hidden facets: platform-specific, always-on system-prompt injections that
+    // are NOT user-selectable and never appear in the facet pool. Injected once
+    // at conversation start (like the base system prompt) for requests whose
+    // platform matches (or for a facet declaring no platform).
+    #[serde(default)]
+    pub hidden_facets: HiddenFacetsConfig,
+
     // Client-executed tools (returning round-trip), declared top-level under
     // `[client_tools.tools.<id>]` and selected into a context via
     // `tool_call_allowlist` patterns — namespaced (default `client`, e.g.
@@ -2802,6 +2809,35 @@ pub struct ActionFacetConfig {
 
 /// Valid values for `ActionFacetConfig::presentation`.
 pub const ACTION_FACET_PRESENTATIONS: [&str; 2] = ["render_buttons", "auto_prompt"];
+
+/// Top-level `[hidden_facets]` configuration. Hidden facets are platform-scoped,
+/// always-on system-prompt injections that users cannot select or remove and
+/// that never appear in the facet pool. Map-keyed by facet id
+/// (`[hidden_facets.facets.<id>]`) for override/composability across config
+/// files, like the other facet sections.
+#[derive(Debug, Deserialize, PartialEq, Clone, Default, Facet)]
+pub struct HiddenFacetsConfig {
+    /// Hidden facets keyed by facet id.
+    #[serde(default)]
+    pub facets: HashMap<String, HiddenFacetConfig>,
+}
+
+/// A single hidden facet: an always-on baseline system prompt scoped to a
+/// platform. Distinct from regular facets (user-selected) and action facets
+/// (per-turn, request-scoped) — this is a persistent baseline injected once at
+/// conversation start.
+#[derive(Debug, Deserialize, PartialEq, Clone, Default, Facet)]
+pub struct HiddenFacetConfig {
+    /// Platform this facet applies to, matched against the request's
+    /// `X-Erato-Platform` (e.g. "outlook"). `None` applies on all platforms.
+    #[serde(default)]
+    pub platform: Option<String>,
+
+    /// System prompt injected as a baseline for matching requests. Same prompt
+    /// source spec as regular facets (static or Langfuse-backed).
+    #[serde(default)]
+    pub additional_system_prompt: Option<PromptSourceSpecification>,
+}
 
 /// Top-level `[client_tools]` configuration. Tools live in a map keyed by a
 /// config tool id (`[client_tools.tools.<id>]`) rather than an array, so they

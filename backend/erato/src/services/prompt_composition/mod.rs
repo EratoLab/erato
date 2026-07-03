@@ -90,6 +90,8 @@ pub async fn compose_prompt_messages(
     user_preference_assistant_additional_information: Option<&str>,
     facet_tool_expansions: Option<&HashMap<String, Vec<String>>>,
     action_facet_configs: &HashMap<String, ActionFacetConfig>,
+    hidden_facets: &crate::config::HiddenFacetsConfig,
+    platform: Option<&str>,
 ) -> Result<GenerationInputMessages, Report> {
     // Phase 1: Build abstract sequence
     let abstract_seq = transforms::build_abstract_sequence_with_facet_tool_expansions(
@@ -109,6 +111,8 @@ pub async fn compose_prompt_messages(
         facet_tool_expansions,
         user_input.action_facet.as_ref(),
         action_facet_configs,
+        hidden_facets,
+        platform,
     )
     .await?;
 

@@ -1961,6 +1961,8 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         me_profile_input.user_preference_assistant_additional_information,
         Some(&facet_tool_expansions),
         &app_state.config.action_facets.facets,
+        &app_state.config.hidden_facets,
+        generation_request_context.platform.as_deref(),
     )
     .await?;
 

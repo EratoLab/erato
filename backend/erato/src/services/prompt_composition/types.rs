@@ -71,6 +71,11 @@ pub enum AbstractChatSequencePart {
     /// Facet-specific additional system prompt
     FacetAdditionalSystemPrompt { spec: PromptSpec, facet_id: String },
 
+    /// Hidden-facet baseline system prompt: platform-scoped, always-on, not
+    /// user-selectable. Injected once at conversation start alongside the base
+    /// system prompt, then persisted in history like any other system prompt.
+    HiddenFacetSystemPrompt { spec: PromptSpec, facet_id: String },
+
     /// Action-facet directive (request-scoped, parameterized). Carries the
     /// facet identity + invocation args; rendering happens later in the
     /// resolver step so persisted history stores a metadata-only marker
