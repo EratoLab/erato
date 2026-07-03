@@ -17,7 +17,9 @@ function stripHtml(html: string): string {
   if (typeof DOMParser !== "undefined") {
     return new DOMParser().parseFromString(html, "text/html").body.textContent ?? "";
   }
-  return html.replace(/<[^>]*>/g, "");
+  // DOMParser is always available in browser environments where this component
+  // runs; return empty string rather than a regex fallback to avoid ReDoS risk.
+  return "";
 }
 
 export function DefaultEratoEmailCodeBlock({
