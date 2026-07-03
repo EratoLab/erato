@@ -14,6 +14,19 @@ const makeStream = (chunks: string[]) => {
   });
 };
 
+const makeAbortablePendingStream = (signal: AbortSignal) =>
+  new ReadableStream<Uint8Array>({
+    start(controller) {
+      signal.addEventListener(
+        "abort",
+        () => {
+          controller.error(new DOMException("Aborted", "AbortError"));
+        },
+        { once: true },
+      );
+    },
+  });
+
 const waitForAsyncWork = async () => {
   await Promise.resolve();
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -82,6 +95,37 @@ describe("sseClient fetch parser", () => {
     cleanup();
     await waitForAsyncWork();
 
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not fire onError when cleanup aborts an active fetch stream", async () => {
+    const onError = vi.fn();
+    const onClose = vi.fn();
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((_url, init: RequestInit) =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          body: makeAbortablePendingStream(init.signal as AbortSignal),
+        }),
+      ),
+    );
+
+    const cleanup = createSSEConnection("/api/test", {
+      method: "POST",
+      onMessage: vi.fn(),
+      onError,
+      onClose,
+    });
+
+    await waitForAsyncWork();
+    cleanup();
+    await waitForAsyncWork();
+
+    expect(onError).not.toHaveBeenCalled();
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 

@@ -48,6 +48,21 @@ const messageIsNotPresent = async (page: Page, messageId: string) => {
     .toBe(0);
 };
 
+const expectNoSSEConnectionError = async (page: Page) => {
+  await expect(
+    page.getByText("SSE connection error", { exact: true }),
+  ).toHaveCount(0);
+};
+
+const navigateToNewChatViaSidebar = async (page: Page) => {
+  await ensureOpenSidebar(page);
+  await page
+    .getByRole("complementary")
+    .getByRole("button", { name: "New Chat", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/chat\/new$/);
+};
+
 test(
   "Mock-LLM hallucination loop is aborted with a user-facing error",
   { tag: TAG_CI },
@@ -129,6 +144,7 @@ test(
     // Start second long-running chat
     await page.goto("/chat/new");
     await chatIsReadyToChat(page);
+    await expectNoSSEConnectionError(page);
     await selectMockModel(page);
 
     await textbox.fill("long running 25");
@@ -149,6 +165,7 @@ test(
       .locator(`[data-chat-id="${firstChatId}"]`)
       .click();
     await expect(page).toHaveURL(new RegExp(`/chat/${firstChatId}$`));
+    await expectNoSSEConnectionError(page);
 
     await expect(page.getByText("Complete!")).toHaveCount(0);
     await expect(page.getByTestId("message-assistant").last()).toContainText(
@@ -171,6 +188,96 @@ test(
       .locator(`[data-chat-id="${secondChatId}"]`)
       .click();
     await expect(page).toHaveURL(new RegExp(`/chat/${secondChatId}$`));
+    await expectNoSSEConnectionError(page);
+
+    await expect(page.getByText("Complete!")).toHaveCount(0);
+    await expect(page.getByTestId("message-assistant").last()).toContainText(
+      "Second 25 passed",
+      {
+        timeout: 50000,
+      },
+    );
+    await expect(page.getByTestId("message-assistant").last()).toContainText(
+      "Complete!",
+      {
+        timeout: 50000,
+      },
+    );
+  },
+);
+
+test(
+  "Mock-LLM long-running streams continue independently across two chats when new chat is opened via sidebar",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    test.setTimeout(120000);
+
+    await page.goto("/");
+    await chatIsReadyToChat(page);
+    await selectMockModel(page);
+
+    const textbox = page.getByRole("textbox", { name: "Type a message..." });
+    await expect(textbox).toBeVisible();
+
+    // Start first long-running chat
+    await textbox.fill("long running 20");
+    await textbox.press("Enter");
+    await expect(page).toHaveURL(/\/chat\/[0-9a-fA-F-]+/, { timeout: 10000 });
+    const firstChatId = page.url().split("/").pop();
+    expect(firstChatId).toBeTruthy();
+
+    await expect(page.getByText("Second 5 passed")).toBeVisible({
+      timeout: 20000,
+    });
+
+    // Start second long-running chat via client-side navigation.
+    await navigateToNewChatViaSidebar(page);
+    await chatIsReadyToChat(page);
+    await expectNoSSEConnectionError(page);
+    await selectMockModel(page);
+
+    await textbox.fill("long running 25");
+    await textbox.press("Enter");
+    await expect(page).toHaveURL(/\/chat\/[0-9a-fA-F-]+/, { timeout: 10000 });
+    const secondChatId = page.url().split("/").pop();
+    expect(secondChatId).toBeTruthy();
+    expect(secondChatId).not.toBe(firstChatId);
+
+    await expect(page.getByText("Second 5 passed")).toBeVisible({
+      timeout: 20000,
+    });
+
+    // Switch back to first chat; it should not be complete yet, then complete.
+    await ensureOpenSidebar(page);
+    await page
+      .getByRole("complementary")
+      .locator(`[data-chat-id="${firstChatId}"]`)
+      .click();
+    await expect(page).toHaveURL(new RegExp(`/chat/${firstChatId}$`));
+    await expectNoSSEConnectionError(page);
+
+    await expect(page.getByText("Complete!")).toHaveCount(0);
+    await expect(page.getByTestId("message-assistant").last()).toContainText(
+      "Second 20 passed",
+      {
+        timeout: 40000,
+      },
+    );
+    await expect(page.getByTestId("message-assistant").last()).toContainText(
+      "Complete!",
+      {
+        timeout: 40000,
+      },
+    );
+
+    // Switch to second chat; it should not be complete yet, then complete.
+    await ensureOpenSidebar(page);
+    await page
+      .getByRole("complementary")
+      .locator(`[data-chat-id="${secondChatId}"]`)
+      .click();
+    await expect(page).toHaveURL(new RegExp(`/chat/${secondChatId}$`));
+    await expectNoSSEConnectionError(page);
 
     await expect(page.getByText("Complete!")).toHaveCount(0);
     await expect(page.getByTestId("message-assistant").last()).toContainText(
