@@ -42,7 +42,7 @@ targets = [
 # If true, metadata will be collected with `--all-features`. Note that this can't
 # be toggled off if true, if you want to conditionally enable `--all-features` it
 # is recommended to pass `--all-features` on the cmd line instead
-all-features = false
+all-features = true
 # If true, metadata will be collected with `--no-default-features`. The same
 # caveat with `all-features` applies
 no-default-features = false
@@ -89,23 +89,23 @@ ignore = [
 # See https://spdx.org/licenses/ for list of possible licenses
 # [possible values: any SPDX 3.11 short identifier (+ optional exception)].
 allow = [
-    "Apache-2.0",
+    # OSI-approved licenses
+    "0BSD",
     "Apache-2.0 WITH LLVM-exception",
+    "Apache-2.0",
     "BSD-2-Clause",
     "BSD-3-Clause",
-    "BSL-1.0",
-    "CC0-1.0",
-    # Permissive data license
-    "CDLA-Permissive-2.0",
+    "BSL-1.0", # Boost Software License (not to be confused with Business Source License)
+    "CDDL-1.0",
     "ISC",
     "MIT",
-    "MIT-0",
+    "MIT-0", # Same as MIT but without attribution requirement
+    "MPL-2.0", # Weak copyleft; Only requires changes on the libraries itself to be specified
     "Unicode-3.0",
     "Zlib",
+    "Unicode-DFS-2016", # OSI-approved data license
+    # Special-case; Requires attribution & reproduction in documentation.
     "bzip2-1.0.6",
-    "OpenSSL",
-    # TODO: Bake sources for libraries under MPL-2.0
-    "MPL-2.0",
 ]
 # The confidence threshold for detecting a license from license text.
 # The higher the value, the more closely the license text must be to the
@@ -117,14 +117,28 @@ confidence-threshold = 0.8
 exceptions = [
     # Each entry is the crate and version constraint, and its specific allow
     # list
+
+    # First-party Erato Labs crates
     { allow = ["AGPL-3.0-or-later"], crate = "erato" },
     { allow = ["AGPL-3.0-or-later"], crate = "mock-llm-server" },
     { allow = ["AGPL-3.0-or-later"], crate = "mock-mcp-server" },
-    # Transitive dependency of jemalloc_pprof used for profiling flamegraph rendering.
-    { allow = ["CDDL-1.0"], crate = "inferno" },
-    # Transitive dependency of kreuzberg via comrak for Unicode data tables.
-    { allow = ["Unicode-DFS-2016"], crate = "finl_unicode" },
+
+    #
+    # Reviewed crates
+    #
+
+    # Section: Data licenses; Normally don't apply to source code; Need to be checked for compliance regarding patents.
+
+    # CC0-1.0 - Meant for data/creative works; Need to be checked for compliance regarding patents.
+    { allow = ["CC0-1.0"], crate = "axum-tracing-opentelemetry" }, # No indication for patent usage
+    { allow = ["CC0-1.0"], crate = "tracing-opentelemetry-instrumentation-sdk" }, # No indication for patent usage
+    { allow = ["CC0-1.0"], crate = "tiny-keccak" },  # No indication for patent usage; Implements open standard specifications
+    # CDLA-Permissive-2.0 - Data license - Only contains data (root certificates)
+    { allow = ["CDLA-Permissive-2.0"], crate = "webpki-roots" },
+    { allow = ["CDLA-Permissive-2.0"], crate = "webpki-root-certs" },
+
     # Document extraction library used for parsing uploaded files.
+    # TODO: Update to xberg, which is MIT
     { allow = ["Elastic-2.0"], crate = "kreuzberg" },
 ]
 
@@ -145,6 +159,18 @@ exceptions = [
 # Each entry is a crate relative path, and the (opaque) hash of its contents
 #{ path = "LICENSE", hash = 0xbd0eed23 }
 #]
+
+# See https://github.com/Peltoche/ical-rs/blob/a2048c70695218e0e0423e7774dd5c6a002853f2/LICENSE
+[[licenses.clarify]]
+crate = "ical"
+expression = "Apache-2.0"
+license-files = []
+
+# See https://github.com/synek317/synonym/blob/4bbb4b851e242096a306e3fa90e6142c262455b2/LICENSE
+[[licenses.clarify]]
+crate = "synonym"
+expression = "MIT"
+license-files = []
 
 [licenses.private]
 # If true, ignores workspace crates that aren't published, or are only
