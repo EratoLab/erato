@@ -3640,6 +3640,52 @@ export const useAbortMessageStream = (
   });
 };
 
+export type ClientToolResultError = Fetcher.ErrorWrapper<undefined>;
+
+export type ClientToolResultVariables = {
+  body: Schemas.ClientToolResultRequest;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchClientToolResult = (
+  variables: ClientToolResultVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ClientToolResultResponse,
+    ClientToolResultError,
+    Schemas.ClientToolResultRequest,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/messages/clienttoolresult",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useClientToolResult = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.ClientToolResultResponse,
+      ClientToolResultError,
+      ClientToolResultVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.ClientToolResultResponse,
+    ClientToolResultError,
+    ClientToolResultVariables
+  >({
+    mutationFn: (variables: ClientToolResultVariables) =>
+      fetchClientToolResult(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
 export type EditMessageSseError = Fetcher.ErrorWrapper<undefined>;
 
 export type EditMessageSseVariables = {

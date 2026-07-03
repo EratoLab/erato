@@ -704,6 +704,43 @@ export type ChatModel = {
   model_icon?: string | null | undefined;
 };
 
+export type ClientToolResultRequest = {
+  /**
+   * The chat whose suspended generation is awaiting this result.
+   *
+   * @format uuid
+   * @example 00000000-0000-0000-0000-000000000000
+   */
+  chat_id: string;
+  /**
+   * An error message if the client could not execute the tool. Provide this
+   * OR `result`.
+   */
+  error?: string;
+  /**
+   * The id of the assistant message whose generation emitted the client
+   * tool call. Disambiguates a result from a task that has since been
+   * replaced by a concurrent generation on the same chat.
+   *
+   * @format uuid
+   * @example 00000000-0000-0000-0000-000000000000
+   */
+  message_id: string;
+  result?: Value;
+  /**
+   * The `tool_call_id` from the `client_tool_call` event being answered.
+   */
+  tool_call_id: string;
+};
+
+export type ClientToolResultResponse = {
+  /**
+   * True if a suspended generation received this result; false if it was a
+   * benign no-op (already delivered, timed out, aborted, or unknown id).
+   */
+  delivered: boolean;
+};
+
 export type CompleteMcpServerOauthResponse = {
   connection_status: McpServerStatusValue;
 };
@@ -1045,6 +1082,9 @@ export type EditMessageStreamingResponseMessage =
     })
   | (MessageSubmitStreamingResponseToolCallUpdate & {
       message_type: "tool_call_update";
+    })
+  | (MessageSubmitStreamingResponseClientToolCall & {
+      message_type: "client_tool_call";
     })
   | (MessageSubmitStreamingResponseError & {
       message_type: "error";
@@ -1407,6 +1447,26 @@ export type MessageSubmitStreamingResponseChatCreated = {
 };
 
 /**
+ * Sent when the model calls a facet `client_tool`: the generation is suspended
+ * until the client executes the tool and POSTs the result back to the
+ * continuation endpoint. Distinct from `tool_call_proposed` (which fires for
+ * every proposed tool call) — this is the signal to execute on the client.
+ */
+export type MessageSubmitStreamingResponseClientToolCall = {
+  /**
+   * @minimum 0
+   */
+  content_index: number;
+  input?: null | Value;
+  /**
+   * @format uuid
+   */
+  message_id: string;
+  tool_call_id: string;
+  tool_name: string;
+};
+
+/**
  * Represents different types of errors that can occur during message generation.
  */
 export type MessageSubmitStreamingResponseError = GenerationErrorType & {
@@ -1442,6 +1502,9 @@ export type MessageSubmitStreamingResponseMessage =
     })
   | (MessageSubmitStreamingResponseToolCallUpdate & {
       message_type: "tool_call_update";
+    })
+  | (MessageSubmitStreamingResponseClientToolCall & {
+      message_type: "client_tool_call";
     })
   | (MessageSubmitStreamingResponseError & {
       message_type: "error";
@@ -1746,6 +1809,9 @@ export type RegenerateMessageStreamingResponseMessage =
     })
   | (MessageSubmitStreamingResponseToolCallUpdate & {
       message_type: "tool_call_update";
+    })
+  | (MessageSubmitStreamingResponseClientToolCall & {
+      message_type: "client_tool_call";
     })
   | (MessageSubmitStreamingResponseError & {
       message_type: "error";
