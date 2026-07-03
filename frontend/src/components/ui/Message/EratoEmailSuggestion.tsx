@@ -15,7 +15,9 @@ import type { EratoEmailCodeBlockProps } from "@/config/componentRegistry";
  */
 function stripHtml(html: string): string {
   if (typeof DOMParser !== "undefined") {
-    return new DOMParser().parseFromString(html, "text/html").body.textContent ?? "";
+    return (
+      new DOMParser().parseFromString(html, "text/html").body.textContent ?? ""
+    );
   }
   // DOMParser is always available in browser environments where this component
   // runs; return empty string rather than a regex fallback to avoid ReDoS risk.
