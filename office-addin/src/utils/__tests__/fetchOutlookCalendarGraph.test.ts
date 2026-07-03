@@ -159,6 +159,8 @@ describe("fetchOutlookCalendarViaGraph", () => {
 
     // resolveTimezone maps the mailbox's Windows zone name to canonical IANA.
     expect(calendar.displayTimeZone).toBe("Europe/Berlin");
+    // Every leg sourced cleanly → nothing degraded.
+    expect(calendar.degradedLegs).toEqual([]);
     expect(calendar.workingHours).toEqual({
       daysOfWeek: ["monday", "tuesday", "wednesday", "thursday", "friday"],
       startMinutes: 480,
@@ -267,6 +269,8 @@ describe("fetchOutlookCalendarViaGraph", () => {
     // The other legs still populate — one failed leg can't sink the snapshot.
     expect(calendar.historyMeetings).toHaveLength(2);
     expect(calendar.workingHours).not.toBeNull();
+    // ...but the busy leg's emptiness is flagged as unauthoritative.
+    expect(calendar.degradedLegs).toEqual(["busy"]);
     warnSpy.mockRestore();
   });
 
@@ -290,6 +294,8 @@ describe("fetchOutlookCalendarViaGraph", () => {
     expect(calendar.workingHours).toBeNull();
     expect(calendar.busyBlocks).toHaveLength(3);
     expect(calendar.historyMeetings).toHaveLength(2);
+    // A hard getSchedule failure flags the workingHours leg degraded.
+    expect(calendar.degradedLegs).toEqual(["workingHours"]);
     warnSpy.mockRestore();
   });
 
@@ -322,6 +328,9 @@ describe("fetchOutlookCalendarViaGraph", () => {
 
     expect(calendar.workingHours).toBeNull();
     expect(calendar.busyBlocks).toHaveLength(3);
+    // Zone divergence is a data-trust degrade, NOT a fetch failure — the leg
+    // fetched fine, so it is deliberately not listed in degradedLegs.
+    expect(calendar.degradedLegs).toEqual([]);
     warnSpy.mockRestore();
   });
 

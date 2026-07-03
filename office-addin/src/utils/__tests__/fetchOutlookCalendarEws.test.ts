@@ -190,6 +190,8 @@ describe("fetchOutlookCalendarViaEws", () => {
 
     // resolveTimezone maps the mailbox's Windows zone name to canonical IANA.
     expect(calendar.displayTimeZone).toBe("Europe/Berlin");
+    // Every leg sourced cleanly → nothing degraded.
+    expect(calendar.degradedLegs).toEqual([]);
     expect(calendar.workingHours).toEqual({
       daysOfWeek: ["monday", "tuesday", "wednesday", "thursday", "friday"],
       startMinutes: 480,
@@ -311,6 +313,8 @@ describe("fetchOutlookCalendarViaEws", () => {
       busyBlocks: [],
       historyMeetings: [],
       displayTimeZone: "Europe/Berlin",
+      // Every leg hard-failed → all three flagged (in dispatch order).
+      degradedLegs: ["history", "busy", "workingHours"],
     });
     warnSpy.mockRestore();
   });
@@ -337,6 +341,8 @@ describe("fetchOutlookCalendarViaEws", () => {
     expect(calendar.busyBlocks).toHaveLength(2);
     expect(calendar.historyMeetings[0].subject).toBe("Meeting A");
     expect(calendar.busyBlocks[0].subject).toBe("Meeting A");
+    // Only the working-hours leg failed; busy/history stay authoritative.
+    expect(calendar.degradedLegs).toEqual(["workingHours"]);
     warnSpy.mockRestore();
   });
 

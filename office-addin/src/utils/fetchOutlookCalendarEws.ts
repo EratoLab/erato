@@ -17,6 +17,7 @@ import { toIana } from "./windowsZones";
 
 import type {
   CalendarFetchOptions,
+  CalendarLeg,
   NormalizedBusyBlock,
   NormalizedCalendar,
   NormalizedEventWhen,
@@ -39,9 +40,9 @@ import type {
  * are localized back to that zone and emitted as floating dates — never `.slice`d
  * off the raw `Z` string (the classic off-by-one all-day bug).
  *
- * Working hours come from GetUserAvailability over the same (own) mailbox as a
- * BEST-EFFORT leg that degrades to `workingHours: null` on ANY failure, keeping a
- * restricted or older mailbox from ever breaking the proven busy / history core.
+ * Working hours come from GetUserAvailability over the same (own) mailbox. A hard
+ * failure there degrades to `workingHours: null` + a `degradedLegs` flag rather
+ * than breaking the proven busy / history core; every leg degrades independently.
  *
  * v1 scope is the SIGNED-IN USER's OWN calendar only. Every operation goes through
  * the HOST transport ({@link ewsHostFetch} → `makeEwsRequestAsync`), NOT the
@@ -122,8 +123,8 @@ export function buildCalendarViewFindItemBody(
  * FreeBusyView + WorkingHours. (SI-1 had earlier seen a DEGENERATE TimeZone with
  * StandardTime & DaylightTime sharing the same Jan-1 transition rejected as "The
  * specified time zone isn't valid"; `Month=0` / `DayOrder=0` avoids that.) Even
- * so, {@link fetchWorkingHoursViaEws} still degrades working hours to null on ANY
- * failure.
+ * so, a GetUserAvailability failure only degrades the working-hours leg (null +
+ * `degradedLegs`), never the busy / history core.
  */
 function buildSerializableUtcTimeZone(): string {
   const noTransition =
@@ -395,9 +396,11 @@ export async function fetchCalendarBusyViaEws(
 }
 
 /**
- * Working hours from GetUserAvailability over the user's own mailbox. BEST-EFFORT:
- * returns null on ANY failure so a restricted/older mailbox can never break the
- * proven busy / history core. An abort is the one thing it re-throws.
+ * Working hours from GetUserAvailability over the user's own mailbox. Returns null
+ * when working hours are genuinely absent (no mailbox address, or a successful
+ * response carrying no WorkingHours). THROWS on a hard EWS failure so the
+ * dispatcher can flag the `workingHours` leg degraded; only an abort is re-thrown
+ * verbatim.
  */
 export async function fetchWorkingHoursViaEws(
   range: CalendarRange,
@@ -405,33 +408,23 @@ export async function fetchWorkingHoursViaEws(
 ): Promise<NormalizedWorkingHours | null> {
   const smtpAddress = Office.context.mailbox.userProfile?.emailAddress;
   if (!smtpAddress) return null;
-  try {
-    throwIfAborted(options.signal);
-    const doc = await ewsHostFetch(
-      buildSoapEnvelope(
-        buildGetUserAvailabilityBody(smtpAddress, range.startUtc, range.endUtc),
-      ),
-    );
-    return parseAvailability(doc);
-  } catch (error) {
-    if (options.signal?.aborted) {
-      throw options.signal.reason ?? error;
-    }
-    console.warn(
-      "[fetchWorkingHoursViaEws] working hours unavailable (best-effort):",
-      error,
-    );
-    return null;
-  }
+  throwIfAborted(options.signal);
+  const doc = await ewsHostFetch(
+    buildSoapEnvelope(
+      buildGetUserAvailabilityBody(smtpAddress, range.startUtc, range.endUtc),
+    ),
+  );
+  return parseAvailability(doc);
 }
 
 /**
  * Sources the signed-in user's own calendar via EWS into a
  * {@link NormalizedCalendar}: busy blocks (now → +freeBusyWindowDays) and meeting
  * history (now-historyWindowDays → now) from the PROVEN CalendarView path, plus
- * best-effort working hours. After the `getEwsUrl()` precheck this NEVER throws
- * except to propagate an abort — a failed leg degrades to `[]` / null so a single
- * unavailable capability can't sink the whole snapshot.
+ * working hours. After the `getEwsUrl()` precheck this NEVER throws except to
+ * propagate an abort — a failed leg degrades to `[]` / null AND is named in
+ * `degradedLegs` so a single unavailable capability can't sink the whole snapshot
+ * (nor be mistaken for a genuinely empty one).
  */
 export async function fetchOutlookCalendarViaEws(
   options: CalendarFetchOptions = {},
@@ -458,12 +451,14 @@ export async function fetchOutlookCalendarViaEws(
   };
 
   const displayTimeZone = resolveTimezone();
+  const degradedLegs: CalendarLeg[] = [];
 
   let historyMeetings: NormalizedHistoryMeeting[] = [];
   try {
     historyMeetings = await fetchCalendarHistoryViaEws(historyRange, options);
   } catch (error) {
     if (signal?.aborted) throw signal.reason ?? error;
+    degradedLegs.push("history");
     console.warn("[fetchOutlookCalendarViaEws] history leg degraded:", error);
   }
 
@@ -474,23 +469,29 @@ export async function fetchOutlookCalendarViaEws(
     busyBlocks = await fetchCalendarBusyViaEws(busyRange, options);
   } catch (error) {
     if (signal?.aborted) throw signal.reason ?? error;
+    degradedLegs.push("busy");
     console.warn("[fetchOutlookCalendarViaEws] busy leg degraded:", error);
   }
 
   throwIfAborted(signal);
 
-  // GetUserAvailability is already best-effort (resolves null on failure); keep
-  // the try/catch so an abort it re-throws still propagates as an abort.
   let workingHours: NormalizedWorkingHours | null = null;
   try {
     workingHours = await fetchWorkingHoursViaEws(busyRange, options);
   } catch (error) {
     if (signal?.aborted) throw signal.reason ?? error;
+    degradedLegs.push("workingHours");
     console.warn(
       "[fetchOutlookCalendarViaEws] working-hours leg degraded:",
       error,
     );
   }
 
-  return { workingHours, busyBlocks, historyMeetings, displayTimeZone };
+  return {
+    workingHours,
+    busyBlocks,
+    historyMeetings,
+    displayTimeZone,
+    degradedLegs,
+  };
 }

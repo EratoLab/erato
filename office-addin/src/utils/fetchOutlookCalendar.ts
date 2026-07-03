@@ -51,6 +51,9 @@ export interface NormalizedHistoryMeeting {
   authoringTimeZone?: string | null;
 }
 
+/** The independently-sourced legs of a calendar snapshot. */
+export type CalendarLeg = "busy" | "history" | "workingHours";
+
 export interface NormalizedCalendar {
   /** null when it couldn't be sourced (the EWS working-hours leg is best-effort). */
   workingHours: NormalizedWorkingHours | null;
@@ -62,6 +65,15 @@ export interface NormalizedCalendar {
    * to the client zone when the mailbox zone can't be resolved).
    */
   displayTimeZone: string;
+  /**
+   * Legs whose FETCH HARD-FAILED — their `[]` / `null` is NOT authoritative and
+   * must not be read as "nothing there". Load-bearing for availability: an empty
+   * `busyBlocks` with `"busy"` degraded means "busy data unavailable", NOT "free",
+   * so a consumer must refuse to assert freedom rather than propose an occupied
+   * slot. Empty array = every leg was sourced cleanly. (A leg that fetched fine
+   * but had nothing to report — e.g. no working hours configured — is NOT listed.)
+   */
+  degradedLegs: CalendarLeg[];
 }
 
 export interface CalendarFetchOptions {

@@ -8,6 +8,7 @@ import { toIana } from "./windowsZones";
 
 import type {
   CalendarFetchOptions,
+  CalendarLeg,
   NormalizedBusyBlock,
   NormalizedCalendar,
   NormalizedEventWhen,
@@ -36,18 +37,18 @@ import type {
  *     window — exactly what busy / history want. `showAs` maps onto the unified
  *     busyType vocabulary (see `fetchOutlookCalendar.ts`).
  *   - workingHours: `POST /me/calendar/getSchedule` for the signed-in user (the
- *     cloud analog of SE's GetUserAvailability), reading the `workingHours` block
- *     BEST-EFFORT — degrades to `null` on ANY failure so a restricted mailbox can
- *     never sink the busy / history core. Deliberately NOT `/me/mailboxSettings`:
- *     getSchedule rides the SAME `Calendars.Read` token as busy/history, avoiding
- *     an extra `MailboxSettings.Read` consent in every customer tenant.
+ *     cloud analog of SE's GetUserAvailability), reading the `workingHours` block.
+ *     Deliberately NOT `/me/mailboxSettings`: getSchedule rides the SAME
+ *     `Calendars.Read` token as busy/history, avoiding an extra
+ *     `MailboxSettings.Read` consent in every customer tenant.
  *
  * The error contract mirrors the EWS sibling: the top-level
  * {@link fetchOutlookCalendarViaGraph} degrades each leg to `[]` / `null` and
  * NEVER throws except to propagate an abort; the per-leg helpers THROW on a hard
- * failure so a caller can distinguish "empty" from "failed". The dispatcher +
- * shared `Normalized*` types live in `./fetchOutlookCalendar.ts`; the on-prem EWS
- * sibling (SI-3) in `./fetchOutlookCalendarEws.ts`.
+ * failure, which the dispatcher records in `degradedLegs` so a consumer can tell
+ * "empty" from "failed" (see `fetchOutlookCalendar.ts`). The dispatcher + shared
+ * `Normalized*` types live in `./fetchOutlookCalendar.ts`; the on-prem EWS sibling
+ * (SI-3) in `./fetchOutlookCalendarEws.ts`.
  */
 
 /** Default look-back (history) and look-forward (busy) window, in days. */
@@ -333,8 +334,11 @@ export async function fetchCalendarHistoryViaGraph(
  * token as busy/history (NOT `/me/mailboxSettings`, which would need an extra
  * `MailboxSettings.Read` consent per tenant). Issued as a direct POST through the
  * injected transport, since the shared {@link graphFetch} is GET-only by design.
- * BEST-EFFORT: returns null on ANY failure so a restricted mailbox can never break
- * the busy / history core. An abort is the one thing it re-throws.
+ *
+ * Returns null when working hours are genuinely absent or untrustworthy (no
+ * mailbox, no `workingHours` block, or a zone that would make the minutes wrong).
+ * THROWS on a hard fetch failure (non-OK status / network error) so the dispatcher
+ * can flag the `workingHours` leg degraded; only an abort is re-thrown verbatim.
  */
 export async function fetchWorkingHoursViaGraph(
   acquireToken: AcquireGraphToken,
@@ -367,12 +371,9 @@ export async function fetchWorkingHoursViaGraph(
       body,
     });
     if (!response.ok) {
-      console.warn(
-        "[fetchWorkingHoursViaGraph] non-OK status (best-effort):",
-        response.status,
-        response.statusText,
+      throw new Error(
+        `Graph getSchedule failed: ${response.status} ${response.statusText}`,
       );
-      return null;
     }
     const payload = (await response.json()) as GraphGetScheduleResponse;
     const workingHours = payload.value?.[0]?.workingHours;
@@ -404,11 +405,8 @@ export async function fetchWorkingHoursViaGraph(
     if (options.signal?.aborted) {
       throw options.signal.reason ?? error;
     }
-    console.warn(
-      "[fetchWorkingHoursViaGraph] working hours unavailable (best-effort):",
-      error,
-    );
-    return null;
+    // Hard failure — let the dispatcher degrade the workingHours leg.
+    throw error;
   }
 }
 
@@ -443,6 +441,7 @@ export async function fetchOutlookCalendarViaGraph(
   };
 
   const displayTimeZone = resolveTimezone();
+  const degradedLegs: CalendarLeg[] = [];
 
   let historyMeetings: NormalizedHistoryMeeting[] = [];
   try {
@@ -453,6 +452,7 @@ export async function fetchOutlookCalendarViaGraph(
     );
   } catch (error) {
     if (signal?.aborted) throw signal.reason ?? error;
+    degradedLegs.push("history");
     console.warn("[fetchOutlookCalendarViaGraph] history leg degraded:", error);
   }
 
@@ -467,23 +467,29 @@ export async function fetchOutlookCalendarViaGraph(
     );
   } catch (error) {
     if (signal?.aborted) throw signal.reason ?? error;
+    degradedLegs.push("busy");
     console.warn("[fetchOutlookCalendarViaGraph] busy leg degraded:", error);
   }
 
   throwIfAborted(signal);
 
-  // mailboxSettings is already best-effort (resolves null on failure); keep the
-  // try/catch so an abort it re-throws still propagates as an abort.
   let workingHours: NormalizedWorkingHours | null = null;
   try {
     workingHours = await fetchWorkingHoursViaGraph(acquireToken, options);
   } catch (error) {
     if (signal?.aborted) throw signal.reason ?? error;
+    degradedLegs.push("workingHours");
     console.warn(
       "[fetchOutlookCalendarViaGraph] working-hours leg degraded:",
       error,
     );
   }
 
-  return { workingHours, busyBlocks, historyMeetings, displayTimeZone };
+  return {
+    workingHours,
+    busyBlocks,
+    historyMeetings,
+    displayTimeZone,
+    degradedLegs,
+  };
 }
