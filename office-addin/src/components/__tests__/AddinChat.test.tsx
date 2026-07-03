@@ -38,6 +38,8 @@ vi.mock("@erato/frontend/library", () => ({
   // Transitive needs of the real SessionAuthProvider / EntraGraphTokenProvider
   // modules (imported via useOutlookMessageFetcher, not mounted here).
   setAuthRecoveryHandler: vi.fn(),
+  // Client-tool registry used by useOutlookClientTools; returns an unregister.
+  registerClientToolExecutor: vi.fn(() => vi.fn()),
   toast: {
     info: vi.fn(),
     success: vi.fn(),

@@ -1,4 +1,5 @@
 import { OUTLOOK_REPLY_FROM_READ_FACET_ID } from "./outlookClientActions";
+import { OUTLOOK_SCHEDULE_FACET_ID } from "./outlookScheduleTool";
 
 import type { ActionFacetRequest } from "@erato/frontend/library";
 
@@ -51,6 +52,28 @@ export interface OutlookActionFacetInput {
    * gated exactly like `compose_email`: never attached unless advertised.
    */
   replyFromReadAvailable: boolean;
+  /**
+   * Whether the backend reports the `outlook_schedule` facet as available
+   * (from `GET /me/facets`). Config-defined and gated like the others.
+   */
+  scheduleFacetAvailable: boolean;
+  /**
+   * A calendar fetch backend applies to this session (see
+   * `useOutlookCalendarFetcher`). Without one the `fetch_availability` client
+   * tool could only ever error, so the scheduling facet is never attached.
+   */
+  calendarAvailable: boolean;
+  /**
+   * The previous assistant message read the calendar (`fetch_availability`
+   * tool use) — the user's follow-up most likely picks one of the presented
+   * slots, so the scheduling facet must claim the single facet slot even in
+   * read/compose contexts that normally attach an email facet.
+   */
+  schedulingThreadActive: boolean;
+  /** Send-time "now" as a local, offset-bearing ISO string (facet arg). */
+  nowIso: string;
+  /** The user's IANA time zone id (facet arg). */
+  timezone: string;
 }
 
 export interface OutlookActionFacetResult {
@@ -77,6 +100,16 @@ export interface OutlookActionFacetResult {
 export function resolveOutlookActionFacet(
   input: OutlookActionFacetInput,
 ): OutlookActionFacetResult {
+  const scheduleReady = input.scheduleFacetAvailable && input.calendarAvailable;
+  const scheduleFacet = (): OutlookActionFacetResult => ({
+    facet: {
+      id: OUTLOOK_SCHEDULE_FACET_ID,
+      args: { now_iso: input.nowIso, timezone: input.timezone },
+    },
+    // A scheduling send never touches the draft dedup marker.
+    sentDraftBody: null,
+  });
+
   if (input.hasActiveSelection) {
     return {
       facet: {
@@ -90,6 +123,17 @@ export function resolveOutlookActionFacet(
       // A selection send never touches the draft dedup marker.
       sentDraftBody: null,
     };
+  }
+
+  // Sticky scheduling: an in-flight scheduling exchange (the model just read
+  // the calendar) outranks the email facets — the follow-up is the user
+  // picking a slot, and only the schedule facet's template handles that. One
+  // rung below selection: highlighting text is a stronger, explicit gesture.
+  // Known v1 trade-off (one facet per turn until ERMAIN-414): asking for a
+  // reply draft immediately after a scheduling exchange misses the reply
+  // facet for that one turn; the ladder self-heals on the following send.
+  if (scheduleReady && input.schedulingThreadActive) {
+    return scheduleFacet();
   }
 
   if (
@@ -141,6 +185,15 @@ export function resolveOutlookActionFacet(
       },
       sentDraftBody: null,
     };
+  }
+
+  // Ambient scheduling: a NEUTRAL context (no Outlook item — e.g. the pinned
+  // taskpane with nothing selected) attaches the schedule facet so "find me a
+  // slot" works from a blank chat. Read/compose contexts are deliberately
+  // excluded: their email facets own those turns, and the fetch tool is still
+  // reachable there via those facets' `tool_call_allowlist`.
+  if (scheduleReady && !input.isComposeMode && !input.isReadMode) {
+    return scheduleFacet();
   }
 
   return { facet: undefined, sentDraftBody: null };

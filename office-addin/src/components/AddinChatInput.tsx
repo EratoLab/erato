@@ -18,6 +18,7 @@ import { t } from "@lingui/core/macro";
 import { forwardRef, useCallback, useMemo, useRef, useState } from "react";
 
 import { useAvailableActionFacetIds } from "../hooks/useAvailableActionFacets";
+import { useOutlookCalendarFetcher } from "../hooks/useOutlookCalendarFetcher";
 import { useOutlookComposeSelection } from "../hooks/useOutlookComposeSelection";
 import { useOffice } from "../providers/OfficeProvider";
 import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
@@ -25,6 +26,10 @@ import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
 import { resolveOutlookActionFacet } from "../utils/outlookActionFacet";
 import { OUTLOOK_REPLY_FROM_READ_FACET_ID } from "../utils/outlookClientActions";
 import { getComposeBodyType } from "../utils/outlookComposeWrite";
+import {
+  OUTLOOK_SCHEDULE_FACET_ID,
+  toLocalOffsetIso,
+} from "../utils/outlookScheduleTool";
 
 function validateAttachment(
   filename: string,
@@ -126,6 +131,13 @@ interface AddinChatInputProps {
   controlledSelectedModel?: ChatModel | null;
   onControlledSelectedModelChange?: (model: ChatModel) => void;
   controlledIsModelSelectionReady?: boolean;
+  /**
+   * The previous assistant message read the calendar via the
+   * `fetch_availability` client tool (computed in `AddinChat`, which owns the
+   * message stream) — makes the next send carry the `outlook_schedule` facet
+   * so the model can handle the user's slot pick.
+   */
+  schedulingThreadActive?: boolean;
 }
 
 export const AddinChatInput = forwardRef<
@@ -139,6 +151,7 @@ export const AddinChatInput = forwardRef<
     editInitialFiles,
     isExpandingDroppedEmails = false,
     onEmailSourceDropsSent,
+    schedulingThreadActive = false,
     ...chatInputProps
   },
   ref,
@@ -149,6 +162,10 @@ export const AddinChatInput = forwardRef<
   const replyFromReadAvailable = availableFacetIds.has(
     OUTLOOK_REPLY_FROM_READ_FACET_ID,
   );
+  const scheduleFacetAvailable = availableFacetIds.has(
+    OUTLOOK_SCHEDULE_FACET_ID,
+  );
+  const { fetcher: calendarFetcher } = useOutlookCalendarFetcher();
   const [isUploadingEmail, setIsUploadingEmail] = useState(false);
   const composeSelection = useOutlookComposeSelection();
   const { mailItem, itemIdentity } = useOutlookMailItem();
@@ -646,6 +663,11 @@ export const AddinChatInput = forwardRef<
         composeEmailAvailable,
         isReadMode: !!mailItem && !mailItem.isComposeMode,
         replyFromReadAvailable,
+        scheduleFacetAvailable,
+        calendarAvailable: calendarFetcher !== null,
+        schedulingThreadActive,
+        nowIso: toLocalOffsetIso(new Date().toISOString()),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       });
       if (sentDraftBody !== null) {
         // Remember what we sent so an unchanged follow-up de-dupes (#4).
@@ -748,6 +770,7 @@ export const AddinChatInput = forwardRef<
       }
     },
     [
+      calendarFetcher,
       chatId,
       chatInputProps,
       composeEmailAvailable,
@@ -761,6 +784,8 @@ export const AddinChatInput = forwardRef<
       onEmailSourceDropsSent,
       replyFromReadAvailable,
       resolveSelectedFilesForSend,
+      scheduleFacetAvailable,
+      schedulingThreadActive,
       shouldUseSuggestedEmailSource,
       stagedEmails,
     ],

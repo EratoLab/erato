@@ -42,6 +42,7 @@ import { AddinSettingsDialog } from "./AddinSettingsDialog";
 import { useActionFacetClientActions } from "../hooks/useAvailableActionFacets";
 import { useEmailDedupSet } from "../hooks/useEmailDedupSet";
 import { useOfficeDragAndDrop } from "../hooks/useOfficeDragAndDrop";
+import { useOutlookClientTools } from "../hooks/useOutlookClientTools";
 import { useOutlookMailListDrag } from "../hooks/useOutlookMailListDrag";
 import { useOutlookMessageFetcher } from "../hooks/useOutlookMessageFetcher";
 import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
@@ -55,6 +56,7 @@ import {
   computeShouldRenderEmailCard,
   extractProposedClientAction,
 } from "../utils/outlookClientActions";
+import { containsFetchAvailabilityToolUse } from "../utils/outlookScheduleTool";
 import { parseDroppedFiles } from "../utils/parseDroppedFiles";
 import { parseEmlBytes } from "../utils/parsedEmail";
 
@@ -119,6 +121,24 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
   } = useChatContext();
   const { profile } = useProfile();
   const { capabilities } = useFileCapabilitiesContext();
+
+  // Register this add-in's client-tool executors (e.g. `fetch_availability`)
+  // with the shared streaming loop for the lifetime of the chat surface.
+  useOutlookClientTools();
+
+  // A scheduling exchange is in flight when the LATEST assistant message read
+  // the calendar — the next send then carries the `outlook_schedule` facet
+  // (sticky rung in `resolveOutlookActionFacet`) so the model can handle the
+  // user's slot pick.
+  const schedulingThreadActive = useMemo(() => {
+    for (let i = messageOrder.length - 1; i >= 0; i--) {
+      const message = messages[messageOrder[i]];
+      if (message?.role === "assistant") {
+        return containsFetchAvailabilityToolUse(message.content);
+      }
+    }
+    return false;
+  }, [messages, messageOrder]);
 
   const { availableModels, selectedModel, setSelectedModel, isSelectionReady } =
     useActiveModelSelection({ initialModel: currentChatLastModel });
@@ -948,6 +968,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
               // so the web default of 5 fills up after a single multi-attachment
               // drop. The add-in lifts the cap; web stays at 5.
               maxFiles={50}
+              schedulingThreadActive={schedulingThreadActive}
             />
           </div>
         </ChatErrorBoundary>

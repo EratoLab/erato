@@ -17,6 +17,22 @@ const base: OutlookActionFacetInput = {
   composeEmailAvailable: false,
   isReadMode: false,
   replyFromReadAvailable: false,
+  scheduleFacetAvailable: false,
+  calendarAvailable: false,
+  schedulingThreadActive: false,
+  nowIso: "2026-07-03T14:00:00+02:00",
+  timezone: "Europe/Berlin",
+};
+
+/** Scheduling feature fully available (facet advertised + calendar backend). */
+const scheduleReady = {
+  scheduleFacetAvailable: true,
+  calendarAvailable: true,
+} as const;
+
+const scheduleArgs = {
+  now_iso: "2026-07-03T14:00:00+02:00",
+  timezone: "Europe/Berlin",
 };
 
 describe("resolveOutlookActionFacet", () => {
@@ -213,5 +229,99 @@ describe("resolveOutlookActionFacet", () => {
     });
 
     expect(result).toEqual({ facet: undefined, sentDraftBody: null });
+  });
+
+  it("attaches outlook_schedule ambiently in a NEUTRAL context (no item)", () => {
+    const result = resolveOutlookActionFacet({ ...base, ...scheduleReady });
+
+    expect(result.facet).toEqual({
+      id: "outlook_schedule",
+      args: scheduleArgs,
+    });
+    expect(result.sentDraftBody).toBeNull();
+  });
+
+  it("does NOT attach outlook_schedule ambiently in read or compose contexts", () => {
+    // Read mode belongs to reply_from_read (or nothing when unavailable) …
+    expect(
+      resolveOutlookActionFacet({ ...base, ...scheduleReady, isReadMode: true })
+        .facet,
+    ).toBeUndefined();
+    // … and compose (here: unchanged deduped draft) keeps its email facets.
+    expect(
+      resolveOutlookActionFacet({
+        ...base,
+        ...scheduleReady,
+        isComposeMode: true,
+        draftContextIncluded: true,
+        draftBody: "same body",
+        lastSentDraftBody: "same body",
+      }).facet,
+    ).toBeUndefined();
+  });
+
+  it("gates outlook_schedule on facet availability AND a calendar backend", () => {
+    expect(
+      resolveOutlookActionFacet({ ...base, scheduleFacetAvailable: true })
+        .facet,
+    ).toBeUndefined();
+    expect(
+      resolveOutlookActionFacet({ ...base, calendarAvailable: true }).facet,
+    ).toBeUndefined();
+  });
+
+  it("sticky: an in-flight scheduling exchange claims the slot over reply_from_read", () => {
+    const result = resolveOutlookActionFacet({
+      ...base,
+      ...scheduleReady,
+      schedulingThreadActive: true,
+      isReadMode: true,
+      replyFromReadAvailable: true,
+    });
+
+    expect(result.facet).toEqual({
+      id: "outlook_schedule",
+      args: scheduleArgs,
+    });
+  });
+
+  it("sticky: outranks review_draft and compose_email but never a selection", () => {
+    const sticky = {
+      ...base,
+      ...scheduleReady,
+      schedulingThreadActive: true,
+    };
+
+    expect(
+      resolveOutlookActionFacet({
+        ...sticky,
+        isComposeMode: true,
+        composeEmailAvailable: true,
+        draftContextIncluded: true,
+        draftBody: "a changed draft",
+      }).facet?.id,
+    ).toBe("outlook_schedule");
+
+    expect(
+      resolveOutlookActionFacet({
+        ...sticky,
+        hasActiveSelection: true,
+        selectionData: "picked text",
+      }).facet?.id,
+    ).toBe("outlook_rewrite_selection");
+  });
+
+  it("sticky does not fire without an available facet or calendar backend", () => {
+    const result = resolveOutlookActionFacet({
+      ...base,
+      schedulingThreadActive: true,
+      scheduleFacetAvailable: true,
+      calendarAvailable: false,
+      isReadMode: true,
+      replyFromReadAvailable: true,
+    });
+
+    // Falls through to the normal read-mode rung.
+    expect(result.facet?.id).toBe("outlook_reply_from_read");
   });
 });
