@@ -14,7 +14,7 @@
  * MSAL NAA; see `AddinChat.tsx` for the wiring.
  */
 
-const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
+export const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
 
 interface GraphMessageMetadata {
   id?: string;
@@ -588,12 +588,12 @@ function convertEwsIdToGraphId(ewsItemId: string): string {
  * multi-request fetch still acquires only once) while allowing a forced refresh
  * when a request comes back 401.
  */
-interface GraphTokenSource {
+export interface GraphTokenSource {
   get(): Promise<string>;
   refresh(): Promise<string>;
 }
 
-function makeGraphTokenSource(
+export function makeGraphTokenSource(
   acquireToken: AcquireGraphToken,
 ): GraphTokenSource {
   // The current in-flight/resolved token promise, and the in-flight FORCED
@@ -639,19 +639,26 @@ function makeGraphTokenSource(
  * force-refreshes the token and retries exactly once. The add-in-side analogue
  * of the session `recoverAuth`, scoped to the Graph token — a separate cache
  * from the proxy-session bootstrap token, hence handled here rather than via the
- * shared recovery handler.
+ * shared recovery handler. `init` opts a non-GET request (method/body/extra
+ * headers) into the same retry semantics; Authorization/Accept stay owned here.
  */
-async function graphFetch(
+export async function graphFetch(
   url: string,
   tokenSource: GraphTokenSource,
   accept: string,
   signal: AbortSignal | undefined,
   transport: GraphTransport = globalThis.fetch.bind(globalThis),
+  init?: { method?: string; headers?: Record<string, string>; body?: string },
 ): Promise<Response> {
   const request = (token: string) =>
     transport(url, {
+      ...init,
       signal,
-      headers: { Authorization: `Bearer ${token}`, Accept: accept },
+      headers: {
+        ...init?.headers,
+        Authorization: `Bearer ${token}`,
+        Accept: accept,
+      },
     });
   const response = await request(await tokenSource.get());
   if (response.status !== 401) {
