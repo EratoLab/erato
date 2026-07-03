@@ -11,6 +11,7 @@ import { useChatMessages } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { RootProvider } from "@/providers/RootProvider";
 import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 import { mapApiMessageToUiMessage } from "@/utils/adapters/messageAdapter";
+import { transformEmailFencesForCopy } from "@/utils/emailClipboard";
 
 import type {
   MessageAction,
@@ -195,7 +196,9 @@ export default function SharedChatPage() {
             }
 
             const message = messages[action.messageId];
-            const textContent = extractTextFromContent(message.content);
+            const textContent = transformEmailFencesForCopy(
+              extractTextFromContent(message.content),
+            );
             if (!textContent) {
               return false;
             }

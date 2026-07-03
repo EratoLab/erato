@@ -14,6 +14,7 @@ import {
   extractTextFromContent,
   getSupportedFileTypes,
   resolveComponentOverride,
+  transformEmailFencesForCopy,
   useActiveModelSelection,
   useChatContext,
   useConversationDropzone,
@@ -649,7 +650,9 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
         return false;
       }
       const messageToCopy = messages[action.messageId];
-      const textContent = extractTextFromContent(messageToCopy?.content);
+      const textContent = transformEmailFencesForCopy(
+        extractTextFromContent(messageToCopy?.content),
+      );
       if (!textContent) {
         return false;
       }

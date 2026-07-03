@@ -77,6 +77,21 @@ export function htmlToPlainText(html: string): string {
     .trim();
 }
 
+const EMAIL_FENCE_RE =
+  /^[ \t]*```erato-email(-html)?[ \t]*\r?\n([\s\S]*?)^[ \t]*```[ \t]*$/gm;
+
+/**
+ * Rewrites canonical erato-email fences in a raw message to the draft text
+ * the user sees rendered (the card shows the draft, not fence markers), for
+ * message-level copy. Drifted tags are left untouched — classifying them
+ * needs the facet context that copy handlers don't have.
+ */
+export function transformEmailFencesForCopy(text: string): string {
+  return text.replace(EMAIL_FENCE_RE, (_match, htmlSuffix, body: string) =>
+    htmlSuffix ? htmlToPlainText(body) : body.replace(/\r?\n$/, ""),
+  );
+}
+
 /**
  * Copies an email draft to the clipboard. HTML drafts are written as
  * text/html — sanitized the same way as the on-screen preview, so the

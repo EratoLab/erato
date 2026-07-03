@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { copyEmailToClipboard, htmlToPlainText } from "./emailClipboard";
+import {
+  copyEmailToClipboard,
+  htmlToPlainText,
+  transformEmailFencesForCopy,
+} from "./emailClipboard";
 
 describe("htmlToPlainText", () => {
   it("strips simple HTML tags", () => {
@@ -55,6 +59,44 @@ describe("htmlToPlainText", () => {
 
   it("collapses excess blank lines from pretty-printed markup", () => {
     expect(htmlToPlainText("<p>A</p>\n\n  <p>B</p>")).toBe("A\n\nB");
+  });
+});
+
+describe("transformEmailFencesForCopy", () => {
+  it("unwraps a plain erato-email fence to its body", () => {
+    expect(
+      transformEmailFencesForCopy(
+        "Here is your draft:\n\n```erato-email\nHallo Frau Berger,\n\nvielen Dank.\n```\n\nLet me know.",
+      ),
+    ).toBe(
+      "Here is your draft:\n\nHallo Frau Berger,\n\nvielen Dank.\n\nLet me know.",
+    );
+  });
+
+  it("converts an erato-email-html fence to readable plain text", () => {
+    expect(
+      transformEmailFencesForCopy(
+        "```erato-email-html\n<p>Hi Anna,</p><p>Thanks</p>\n```",
+      ),
+    ).toBe("Hi Anna,\n\nThanks");
+  });
+
+  it("leaves messages without email fences unchanged", () => {
+    const text = "Just a normal answer with `inline code`.\n\n```ts\nconst x = 1;\n```";
+    expect(transformEmailFencesForCopy(text)).toBe(text);
+  });
+
+  it("leaves drifted tags untouched (classification needs facet context)", () => {
+    const text = "```email\n<b>Bold reply</b>\n```";
+    expect(transformEmailFencesForCopy(text)).toBe(text);
+  });
+
+  it("transforms multiple fences independently", () => {
+    expect(
+      transformEmailFencesForCopy(
+        "```erato-email\nfirst\n```\nand\n```erato-email-html\n<p>second</p>\n```",
+      ),
+    ).toBe("first\nand\nsecond");
   });
 });
 
