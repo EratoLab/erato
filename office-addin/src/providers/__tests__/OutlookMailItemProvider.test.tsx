@@ -34,6 +34,27 @@ function makeReadItem(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function makeComposeItem(overrides: Record<string, unknown> = {}) {
+  const asyncField = (value: unknown) => ({
+    getAsync: (cb: (r: unknown) => void) => cb(createMockAsyncResult(value)),
+  });
+  return {
+    // Compose items have an async subject (`isMessageRead` keys on string).
+    subject: asyncField(""),
+    to: asyncField([]),
+    cc: asyncField([]),
+    // Null until the draft is first saved.
+    conversationId: null,
+    body: {
+      getAsync: (_coercion: unknown, cb: (r: unknown) => void) =>
+        cb(createMockAsyncResult("")),
+    },
+    getAttachmentsAsync: (cb: (r: unknown) => void) =>
+      cb(createMockAsyncResult([])),
+    ...overrides,
+  };
+}
+
 let mailbox: Mailbox;
 let captured: ContextValue | null;
 
@@ -103,18 +124,57 @@ describe("OutlookMailItemProvider", () => {
     expect(captured?.hasItemChangedFired).toBe(true);
   });
 
-  // Regression: cleanup must remove the *registered* handler, not a throwaway
-  // closure (which removes nothing and leaks the handler under StrictMode).
-  it("unsubscribes with the registered handler", async () => {
+  // Unsaved drafts get a freshly minted identity on every resolve, so a
+  // same-draft re-resolve (e.g. the host's initial-bind event) must not count
+  // as a navigation.
+  it("does not flag hasItemChangedFired for a same-draft compose re-resolve", async () => {
+    mailbox.item = makeComposeItem();
+    await renderProvider();
+    expect(captured?.mailItem?.isComposeMode).toBe(true);
+    expect(captured?.hasItemChangedFired).toBe(false);
+
+    const handler = mailbox.addHandlerAsync.mock.calls[0][1] as () => void;
+    await act(async () => {
+      handler();
+    });
+    expect(captured?.hasItemChangedFired).toBe(false);
+  });
+
+  // A → no selection → B is a real navigation (only a tracking pane sees the
+  // null-item event at all) and must still flip the flag.
+  it("flags hasItemChangedFired across a null-selection gap", async () => {
+    mailbox.item = makeReadItem();
+    await renderProvider();
+
+    const handler = mailbox.addHandlerAsync.mock.calls[0][1] as () => void;
+
+    mailbox.item = null;
+    await act(async () => {
+      handler();
+    });
+    expect(captured?.hasItemChangedFired).toBe(false);
+
+    mailbox.item = makeReadItem({ internetMessageId: "<read-2@x>" });
+    await act(async () => {
+      handler();
+    });
+    expect(captured?.hasItemChangedFired).toBe(true);
+  });
+
+  // Mailbox.removeHandlerAsync removes ALL handlers for the event type; its
+  // optional second arg is a completion callback that Office invokes — the
+  // registered handler must never be passed there.
+  it("unsubscribes without passing the handler as a callback", async () => {
     mailbox.item = makeReadItem();
     const { unmount } = await renderProvider();
 
-    const registered = mailbox.addHandlerAsync.mock.calls[0][1];
     act(() => {
       unmount();
     });
 
     expect(mailbox.removeHandlerAsync).toHaveBeenCalled();
-    expect(mailbox.removeHandlerAsync.mock.calls[0][1]).toBe(registered);
+    for (const call of mailbox.removeHandlerAsync.mock.calls) {
+      expect(call[1]).toBeUndefined();
+    }
   });
 });

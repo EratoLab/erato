@@ -163,22 +163,23 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
   const { fetcher: messageFetcher } = useOutlookMessageFetcher();
 
   const { mailItem, hasItemChangedFired } = useOutlookMailItem();
-  const { platform } = useOffice();
+  const { itemTrackingRequiresPin } = useOffice();
 
-  // "Pin this add-in" hint (office-js #1691 heuristic). On new Outlook for Mac
-  // an unpinned task pane stays open but never receives ItemChanged, so the
-  // chat freezes on the message it was opened from; pinning fixes it but can't
-  // be forced or detected. Nudge only on Mac desktop, only until the host
-  // delivers its first item-change event (proof it's tracking), and let the
-  // user dismiss it for good. `platform === "Mac"` is the desktop client only
-  // (OWA reports "OfficeOnline", Windows "PC"/"OfficeOnline").
+  // "Pin this add-in" hint (office-js #1691 heuristic): nudge until the host
+  // delivers its first real item change (proof the pane is tracking) or the
+  // user dismisses for good. Compose panes are excluded — pinning doesn't
+  // carry across modes, so pinning there can't fix the read-mode freeze, and
+  // dismissing there would permanently burn the hint where it matters.
   const [pinHintDismissed, setPinHintDismissed] = usePersistedState<boolean>(
     PIN_HINT_DISMISSED_KEY,
     false,
     pinHintDismissedPersistedOptions,
   );
   const showPinHint =
-    platform === "Mac" && !hasItemChangedFired && !pinHintDismissed;
+    itemTrackingRequiresPin &&
+    !mailItem?.isComposeMode &&
+    !hasItemChangedFired &&
+    !pinHintDismissed;
 
   const {
     hasSelectedEmailSource,

@@ -106,7 +106,17 @@ function buildMailItemIdentity(
 
   return (
     item.conversationId ??
-    `compose:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`
+    `${UNSAVED_COMPOSE_IDENTITY_PREFIX}${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`
+  );
+}
+
+const UNSAVED_COMPOSE_IDENTITY_PREFIX = "compose:";
+
+// Minted fallbacks differ on every resolve of the SAME unsaved draft, so
+// comparing two of them can't prove a navigation happened.
+function isStableItemIdentity(identity: string | null): identity is string {
+  return (
+    identity !== null && !identity.startsWith(UNSAVED_COMPOSE_IDENTITY_PREFIX)
   );
 }
 
@@ -367,7 +377,12 @@ export function OutlookMailItemProvider({
     const canCommit = () => selectionVersionRef.current === selectionVersion;
     const nextItemIdentity = buildMailItemIdentity(item);
     const previousItemIdentity = lastItemIdentityRef.current;
-    lastItemIdentityRef.current = nextItemIdentity;
+    if (nextItemIdentity !== null) {
+      // Keep the last real identity across null-item events (pinned panes
+      // receive ItemChanged with item == null on deselect), so A → null → B
+      // still registers as a navigation.
+      lastItemIdentityRef.current = nextItemIdentity;
+    }
     setItemIdentity(nextItemIdentity);
     // The pane is effectively pinned/tracking only once the selected item
     // actually changes to a *different* one (a real navigation). The host also
@@ -375,8 +390,8 @@ export function OutlookMailItemProvider({
     // must not count, or the pin hint clears the instant the first message
     // loads and is never seen. See ERMAIN-411.
     if (
-      previousItemIdentity !== null &&
-      nextItemIdentity !== null &&
+      isStableItemIdentity(previousItemIdentity) &&
+      isStableItemIdentity(nextItemIdentity) &&
       nextItemIdentity !== previousItemIdentity
     ) {
       setHasItemChangedFired(true);
@@ -503,10 +518,10 @@ export function OutlookMailItemProvider({
     return () => {
       function unsubscribe(eventType: Office.EventType) {
         try {
-          // Pass the registered handler so Office removes exactly this
-          // subscription. A throwaway closure here removes nothing, leaking the
-          // handler across React StrictMode's mount/unmount/mount probe.
-          mailbox.removeHandlerAsync(eventType, onSelectionChanged);
+          // Mailbox.removeHandlerAsync removes ALL handlers for the event
+          // type; its optional second arg is a completion callback, not a
+          // handler filter — passing a handler there gets it invoked.
+          mailbox.removeHandlerAsync(eventType);
         } catch {
           // Best-effort cleanup.
         }

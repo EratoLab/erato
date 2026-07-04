@@ -1,6 +1,8 @@
 import { t } from "@lingui/core/macro";
 import { createContext, useContext, useEffect, useState } from "react";
 
+import { detectExchangeOnPrem } from "../utils/detectExchangeOnPrem";
+
 interface MailboxUser {
   emailAddress: string;
   displayName: string;
@@ -18,6 +20,16 @@ interface OfficeContextValue {
    * blocked regardless of permissions. See {@link isAudioCaptureSupportedPlatform}.
    */
   supportsAudioCapture: boolean;
+  /**
+   * True when the task pane only follows mail navigation while pinned AND a
+   * pin control actually exists. New Outlook on Mac never delivers
+   * `ItemChanged` to an unpinned pane (office-js #5575), so pinning is the
+   * only tracking mechanism there — but the Exchange SE manifest declares no
+   * `SupportsPinning` (a V1_1 block gated at Mailbox 1.5 would be needed), so
+   * on-prem mailboxes have no pin to point at. Windows/OWA panes track
+   * without pinning.
+   */
+  itemTrackingRequiresPin: boolean;
 }
 
 const OfficeContext = createContext<OfficeContextValue>({
@@ -26,6 +38,7 @@ const OfficeContext = createContext<OfficeContextValue>({
   platform: null,
   mailboxUser: null,
   supportsAudioCapture: false,
+  itemTrackingRequiresPin: false,
 });
 
 const OFFICE_JS_CDN =
@@ -97,6 +110,7 @@ export function OfficeProvider({ children }: { children: React.ReactNode }) {
     platform: null,
     mailboxUser: null,
     supportsAudioCapture: false,
+    itemTrackingRequiresPin: false,
   });
 
   useEffect(() => {
@@ -126,6 +140,8 @@ export function OfficeProvider({ children }: { children: React.ReactNode }) {
             platform,
             mailboxUser,
             supportsAudioCapture: isAudioCaptureSupportedPlatform(platform),
+            itemTrackingRequiresPin:
+              platform === "Mac" && !detectExchangeOnPrem(),
           });
         });
       })
@@ -136,6 +152,7 @@ export function OfficeProvider({ children }: { children: React.ReactNode }) {
           platform: null,
           mailboxUser: null,
           supportsAudioCapture: false,
+          itemTrackingRequiresPin: false,
         });
       });
   }, []);
