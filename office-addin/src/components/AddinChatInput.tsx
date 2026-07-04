@@ -28,6 +28,7 @@ import { OUTLOOK_REPLY_FROM_READ_FACET_ID } from "../utils/outlookClientActions"
 import { getComposeBodyType } from "../utils/outlookComposeWrite";
 import {
   OUTLOOK_SCHEDULE_FACET_ID,
+  isSchedulingThreadFresh,
   toLocalOffsetIso,
 } from "../utils/outlookScheduleTool";
 
@@ -132,12 +133,12 @@ interface AddinChatInputProps {
   onControlledSelectedModelChange?: (model: ChatModel) => void;
   controlledIsModelSelectionReady?: boolean;
   /**
-   * The previous assistant message read the calendar via the
-   * `fetch_availability` client tool (computed in `AddinChat`, which owns the
-   * message stream) — makes the next send carry the `outlook_schedule` facet
-   * so the model can handle the user's slot pick.
+   * `createdAt` of the latest assistant message IF it read the calendar via
+   * the `fetch_availability` client tool, else null (computed in `AddinChat`,
+   * which owns the message stream). When fresh at send time, the send carries
+   * the `outlook_schedule` facet so the model can handle the user's slot pick.
    */
-  schedulingThreadActive?: boolean;
+  lastSchedulingToolUseAt?: string | null;
 }
 
 export const AddinChatInput = forwardRef<
@@ -151,7 +152,7 @@ export const AddinChatInput = forwardRef<
     editInitialFiles,
     isExpandingDroppedEmails = false,
     onEmailSourceDropsSent,
-    schedulingThreadActive = false,
+    lastSchedulingToolUseAt = null,
     ...chatInputProps
   },
   ref,
@@ -665,7 +666,10 @@ export const AddinChatInput = forwardRef<
         replyFromReadAvailable,
         scheduleFacetAvailable,
         calendarAvailable: calendarFetcher !== null,
-        schedulingThreadActive,
+        schedulingThreadActive: isSchedulingThreadFresh(
+          lastSchedulingToolUseAt,
+          Date.now(),
+        ),
         nowIso: toLocalOffsetIso(new Date().toISOString()),
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       });
@@ -780,12 +784,12 @@ export const AddinChatInput = forwardRef<
       hasActiveSelection,
       isDraftContextIncluded,
       itemIdentity,
+      lastSchedulingToolUseAt,
       mailItem,
       onEmailSourceDropsSent,
       replyFromReadAvailable,
       resolveSelectedFilesForSend,
       scheduleFacetAvailable,
-      schedulingThreadActive,
       shouldUseSuggestedEmailSource,
       stagedEmails,
     ],

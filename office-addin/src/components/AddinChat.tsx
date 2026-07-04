@@ -129,15 +129,19 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
   // A scheduling exchange is in flight when the LATEST assistant message read
   // the calendar — the next send then carries the `outlook_schedule` facet
   // (sticky rung in `resolveOutlookActionFacet`) so the model can handle the
-  // user's slot pick.
-  const schedulingThreadActive = useMemo(() => {
+  // user's slot pick. This memo yields that message's TIMESTAMP (not a
+  // verdict): recency must be judged at send time, and a memo only recomputes
+  // when messages change, so a boolean here would freeze while the user idles.
+  const lastSchedulingToolUseAt = useMemo(() => {
     for (let i = messageOrder.length - 1; i >= 0; i--) {
       const message = messages[messageOrder[i]];
       if (message?.role === "assistant") {
-        return containsFetchAvailabilityToolUse(message.content);
+        return containsFetchAvailabilityToolUse(message.content)
+          ? message.createdAt
+          : null;
       }
     }
-    return false;
+    return null;
   }, [messages, messageOrder]);
 
   const { availableModels, selectedModel, setSelectedModel, isSelectionReady } =
@@ -968,7 +972,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
               // so the web default of 5 fills up after a single multi-attachment
               // drop. The add-in lifts the cap; web stays at 5.
               maxFiles={50}
-              schedulingThreadActive={schedulingThreadActive}
+              lastSchedulingToolUseAt={lastSchedulingToolUseAt}
             />
           </div>
         </ChatErrorBoundary>

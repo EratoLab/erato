@@ -419,10 +419,14 @@ chat_provider_ids = ["test-token-limit"]
 # Client-executed tools (returning round-trip): declared top-level under
 # [client_tools.tools.<id>] and selected into a turn by `tool_call_allowlist`
 # patterns (namespaced, e.g. "outlook/*") on a facet — the same mechanism used
-# for MCP tools. Unlike propose_client_action (terminal, user-confirmed), a
-# client tool's result is fed back inline and the SAME turn continues, so
-# executors must be read-only/idempotent. Example: the Outlook add-in's
-# calendar read for appointment scheduling.
+# for MCP tools. CAUTION: allowlist patterns select client tools as well as
+# MCP tools, and the global experimental_facets.tool_call_allowlist has no
+# platform axis — a bare "*" (global or on a regular facet) activates ALL
+# client tools on EVERY platform, including ones the client cannot execute;
+# prefer namespace-scoped patterns. Unlike propose_client_action (terminal,
+# user-confirmed), a client tool's result is fed back inline and the SAME turn
+# continues, so executors must be read-only/idempotent. Example: the Outlook
+# add-in's calendar read for appointment scheduling.
 #
 # [client_tools.tools.outlook_fetch_availability]
 # # Model-facing name; keep it dot-free (OpenAI/Anthropic reject "." in tool
@@ -451,6 +455,8 @@ chat_provider_ids = ["test-token-limit"]
 # display_name = "Outlook Appointment Scheduling"
 # platform = "outlook"
 # tool_call_allowlist = ["outlook/*"]
+# # Do not declare client_actions here until the add-in implements the action
+# # (ERMAIN-387): the model would announce a confirmation the UI never shows.
 # allowed_args = ["now_iso", "timezone"]
 # template = """
 # FOR THIS MESSAGE ONLY: <your scheduling instructions; have the model call the

@@ -64,10 +64,12 @@ export interface OutlookActionFacetInput {
    */
   calendarAvailable: boolean;
   /**
-   * The previous assistant message read the calendar (`fetch_availability`
-   * tool use) — the user's follow-up most likely picks one of the presented
-   * slots, so the scheduling facet must claim the single facet slot even in
-   * read/compose contexts that normally attach an email facet.
+   * The latest assistant message RECENTLY read the calendar
+   * (`fetch_availability` tool use; recency is judged by the caller at send
+   * time via `isSchedulingThreadFresh`) — the user's follow-up most likely
+   * picks one of the presented slots, so the scheduling facet must claim the
+   * single facet slot even in read/compose contexts that normally attach an
+   * email facet.
    */
   schedulingThreadActive: boolean;
   /** Send-time "now" as a local, offset-bearing ISO string (facet arg). */
@@ -125,13 +127,17 @@ export function resolveOutlookActionFacet(
     };
   }
 
-  // Sticky scheduling: an in-flight scheduling exchange (the model just read
-  // the calendar) outranks the email facets — the follow-up is the user
-  // picking a slot, and only the schedule facet's template handles that. One
-  // rung below selection: highlighting text is a stronger, explicit gesture.
-  // Known v1 trade-off (one facet per turn until ERMAIN-414): asking for a
-  // reply draft immediately after a scheduling exchange misses the reply
-  // facet for that one turn; the ladder self-heals on the following send.
+  // Sticky scheduling: a FRESH scheduling exchange (the model recently read
+  // the calendar — recency-bounded upstream) outranks the email facets — the
+  // follow-up is the user picking a slot, and only the schedule facet's
+  // template handles that. One rung below selection: highlighting text is a
+  // stronger, explicit gesture. Known v1 trade-offs (one facet per turn until
+  // ERMAIN-414), both self-healing on the following send: (a) asking for a
+  // reply draft right after a scheduling exchange misses the reply facet for
+  // that turn; (b) worse, a sticky-claimed "review this" turn is BLIND to the
+  // draft — the draft body only ever rides as the review facet's `full_body`
+  // arg, so the model doesn't just lose the review template, it never sees
+  // the draft at all.
   if (scheduleReady && input.schedulingThreadActive) {
     return scheduleFacet();
   }
@@ -190,8 +196,11 @@ export function resolveOutlookActionFacet(
   // Ambient scheduling: a NEUTRAL context (no Outlook item — e.g. the pinned
   // taskpane with nothing selected) attaches the schedule facet so "find me a
   // slot" works from a blank chat. Read/compose contexts are deliberately
-  // excluded: their email facets own those turns, and the fetch tool is still
-  // reachable there via those facets' `tool_call_allowlist`.
+  // excluded: their email facets own those turns, and the fetch tool is
+  // reachable there via the `tool_call_allowlist` on `outlook_reply_from_read`
+  // (read mode), `compose_email` (empty compose) and `outlook_review_draft`
+  // (draft review). Not covered: a selection-rewrite turn, and an
+  // unchanged-deduped-draft compose turn, which attaches no facet at all.
   if (scheduleReady && !input.isComposeMode && !input.isReadMode) {
     return scheduleFacet();
   }

@@ -44,6 +44,7 @@ const CALENDAR_LEGEND =
   "How to read this data: all times are local to `timezone`. " +
   "busyType semantics: Busy, OOF and Tentative BLOCK a time; Free and WorkingElsewhere do NOT block. " +
   "An allDay entry with a blocking busyType blocks the entire day(s). " +
+  "Never propose, or describe as free, any time that overlaps a blocking interval, and only propose times inside workingHours. " +
   'If "degraded" contains "busy", busy data failed to load — you must NOT claim any time is free; say the calendar could not be read. ' +
   "If workingHours is null none are configured — assume Mon-Fri 09:00-17:00 and say you assumed it. " +
   "recentMeetings are PAST meetings, only useful to calibrate a typical duration. " +
@@ -315,7 +316,9 @@ export function createFetchAvailabilityExecutor(
  * scheduling exchange is in flight, so the NEXT send should carry the
  * `outlook_schedule` facet (the user's follow-up is most likely picking a
  * slot). Any status counts: after a failed fetch the follow-up is usually
- * "try again", which still belongs to the scheduling thread.
+ * "try again", which still belongs to the scheduling thread. Note the match
+ * is by persisted tool NAME only — a same-named MCP tool's use would also
+ * trigger it (compound of the backend's MCP-wins-with-a-warn collision rule).
  */
 export function containsFetchAvailabilityToolUse(
   content: ContentPart[] | undefined,
@@ -325,4 +328,34 @@ export function containsFetchAvailabilityToolUse(
       part.content_type === "tool_use" &&
       part.tool_name === FETCH_AVAILABILITY_TOOL_NAME,
   );
+}
+
+/**
+ * Tool-use parts persist in chat history forever, so "the latest assistant
+ * message read the calendar" alone would let a days-old scheduling chat
+ * hijack the first send after reopening it (the add-in reopens the last
+ * chat). An hour comfortably covers a slow pick or a mid-scheduling reload
+ * without carrying stickiness across sessions.
+ */
+export const SCHEDULING_THREAD_MAX_AGE_MS = 60 * 60_000;
+
+/**
+ * Whether a scheduling exchange is FRESH enough to claim the facet slot:
+ * the latest assistant message read the calendar (`lastToolUseAtIso` is its
+ * `createdAt`, or null when it didn't) AND that was recent. A missing or
+ * unparseable timestamp counts as fresh — optimistic in-session messages may
+ * not carry one yet, and mid-session is exactly when stickiness is wanted.
+ */
+export function isSchedulingThreadFresh(
+  lastToolUseAtIso: string | null,
+  nowMs: number,
+): boolean {
+  if (lastToolUseAtIso === null) {
+    return false;
+  }
+  const createdMs = Date.parse(lastToolUseAtIso);
+  if (Number.isNaN(createdMs)) {
+    return true;
+  }
+  return nowMs - createdMs <= SCHEDULING_THREAD_MAX_AGE_MS;
 }

@@ -4,6 +4,7 @@ import {
   FETCH_AVAILABILITY_TOOL_NAME,
   containsFetchAvailabilityToolUse,
   createFetchAvailabilityExecutor,
+  isSchedulingThreadFresh,
   parseLookaheadDays,
   serializeCalendarForModel,
   toLocalOffsetIso,
@@ -349,12 +350,12 @@ describe("createFetchAvailabilityExecutor", () => {
 });
 
 describe("containsFetchAvailabilityToolUse", () => {
-  const toolUse = (toolName: string): ContentPart =>
+  const toolUse = (toolName: string, status = "success"): ContentPart =>
     ({
       content_type: "tool_use",
       tool_name: toolName,
       tool_call_id: "c1",
-      status: "success",
+      status,
       input: {},
     }) as unknown as ContentPart;
 
@@ -367,10 +368,38 @@ describe("containsFetchAvailabilityToolUse", () => {
     ).toBe(true);
   });
 
+  it("counts a FAILED fetch too — the follow-up is usually a retry", () => {
+    expect(
+      containsFetchAvailabilityToolUse([
+        toolUse(FETCH_AVAILABILITY_TOOL_NAME, "error"),
+      ]),
+    ).toBe(true);
+  });
+
   it("ignores other tools and empty content", () => {
     expect(containsFetchAvailabilityToolUse(undefined)).toBe(false);
     expect(containsFetchAvailabilityToolUse([toolUse("other_tool")])).toBe(
       false,
     );
+  });
+});
+
+describe("isSchedulingThreadFresh", () => {
+  const NOW_MS = Date.parse("2026-07-03T12:00:00Z");
+
+  it("is fresh within the window and stale beyond it", () => {
+    expect(isSchedulingThreadFresh("2026-07-03T11:30:00Z", NOW_MS)).toBe(true);
+    expect(isSchedulingThreadFresh("2026-07-03T11:00:00Z", NOW_MS)).toBe(true);
+    // A days-old scheduling chat must not hijack tomorrow's first send.
+    expect(isSchedulingThreadFresh("2026-07-02T12:00:00Z", NOW_MS)).toBe(false);
+    expect(isSchedulingThreadFresh("2026-07-03T10:59:00Z", NOW_MS)).toBe(false);
+  });
+
+  it("is never fresh without a scheduling tool use", () => {
+    expect(isSchedulingThreadFresh(null, NOW_MS)).toBe(false);
+  });
+
+  it("treats an unparseable timestamp as fresh (optimistic in-session message)", () => {
+    expect(isSchedulingThreadFresh("not-a-date", NOW_MS)).toBe(true);
   });
 });

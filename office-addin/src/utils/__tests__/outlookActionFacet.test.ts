@@ -292,6 +292,7 @@ describe("resolveOutlookActionFacet", () => {
       schedulingThreadActive: true,
     };
 
+    // Beats review_draft (changed non-empty draft would otherwise win).
     expect(
       resolveOutlookActionFacet({
         ...sticky,
@@ -299,6 +300,16 @@ describe("resolveOutlookActionFacet", () => {
         composeEmailAvailable: true,
         draftContextIncluded: true,
         draftBody: "a changed draft",
+      }).facet?.id,
+    ).toBe("outlook_schedule");
+
+    // Beats compose_email (empty compose would otherwise win).
+    expect(
+      resolveOutlookActionFacet({
+        ...sticky,
+        isComposeMode: true,
+        composeEmailAvailable: true,
+        draftBody: "",
       }).facet?.id,
     ).toBe("outlook_schedule");
 
