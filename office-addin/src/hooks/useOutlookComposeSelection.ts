@@ -1,6 +1,7 @@
 import { htmlToPlainText } from "@erato/frontend/library";
 import { useEffect, useRef, useState } from "react";
 
+import { publishComposeSelection } from "./composeSelectionStore";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
 import { isMessageRead } from "../sessionPolicy";
 
@@ -60,6 +61,20 @@ export function useOutlookComposeSelection(): OutlookComposeSelection {
     conversationId: string | null;
     isCompose: boolean;
   } | null>(null);
+  // ERMAIN-431 state that must SURVIVE effect re-runs (the effect re-runs on
+  // every `mailItem` identity churn, which is frequent):
+  // - the Html-coercion switch is per SURFACE, not per effect instance — as an
+  //   effect local it kept resetting to Text and re-hanging (observed live);
+  // - the in-flight guard tracks the HOST's serialized API slot, which is
+  //   global — a re-run must not double-issue while a call is stuck.
+  const useHtmlCoercionRef = useRef(false);
+  const callSeqRef = useRef(0);
+  const inFlightSeqRef = useRef<number | null>(null);
+  const inFlightSinceRef = useRef(0);
+  const timedOutStreakRef = useRef(0);
+  // Raw (pre-extraction) Html payload of the last poll, so the ~80ms
+  // htmlToPlainText conversion runs only when the selection actually changed.
+  const lastRawHtmlRef = useRef<string | null>(null);
 
   useEffect(() => {
     const item = Office.context.mailbox.item as
@@ -71,6 +86,7 @@ export function useOutlookComposeSelection(): OutlookComposeSelection {
       lastDataRef.current = "";
       lastSourceRef.current = "body";
       setSelection(EMPTY_SELECTION);
+      publishComposeSelection(EMPTY_SELECTION);
     };
 
     // Positive read mode: the user is reading a received email, not composing.
@@ -126,29 +142,21 @@ export function useOutlookComposeSelection(): OutlookComposeSelection {
     // the selection and refs already start empty).
     if (!isSameSurface) {
       commitEmpty();
+      // The coercion choice is a per-SURFACE adaptation; a new surface starts
+      // fresh on the fast Text path. (The in-flight refs are deliberately NOT
+      // reset — a stuck call from the previous surface still occupies the
+      // host's global API slot.)
+      useHtmlCoercionRef.current = false;
+      lastRawHtmlRef.current = null;
     }
 
     let cancelled = false;
-    // Consecutive polls whose callback never fired — a wedged host API.
-    // Warn on the first and then sparsely, so a dead bridge is visible in the
-    // console without spamming a line every poll.
-    let timedOutStreak = 0;
     let lastLoggedErrorCode: number | undefined;
-    // In-flight guard: the item API is serialized host-side, so exactly one
-    // call may be outstanding. `inFlightSeq` names it; a callback whose seq no
-    // longer matches was abandoned and must be dropped.
-    let callSeq = 0;
-    let inFlightSeq: number | null = null;
-    let inFlightSince = 0;
-    // Once the Text coercion hung ONCE on this surface, switch to the Html
-    // coercion (observed reliable where Text hangs) and extract the plain
-    // text client-side. Per-surface: the effect re-runs on item change.
-    let useHtmlCoercion = false;
     let consecutiveInternalErrors = 0;
 
     const switchToHtmlCoercion = (reason: string) => {
-      if (useHtmlCoercion) return;
-      useHtmlCoercion = true;
+      if (useHtmlCoercionRef.current) return;
+      useHtmlCoercionRef.current = true;
       console.warn(
         `[selection-poll] ${reason} — switching this surface to Html coercion with client-side text extraction (ERMAIN-431)`,
       );
@@ -161,34 +169,38 @@ export function useOutlookComposeSelection(): OutlookComposeSelection {
         .item as Office.MessageCompose | null;
       if (!composeItem) return;
 
-      if (inFlightSeq !== null) {
+      if (inFlightSeqRef.current !== null) {
         // A call is still outstanding — issuing another would only fail with
         // 5100. Skip this tick unless the outstanding call is old enough to
         // abandon (its late callback is then ignored via the seq check).
-        if (Date.now() - inFlightSince < STUCK_CALL_ABANDON_MS) {
+        if (Date.now() - inFlightSinceRef.current < STUCK_CALL_ABANDON_MS) {
           return;
         }
         console.warn(
           `[selection-poll] abandoning a getSelectedDataAsync call stuck for ${STUCK_CALL_ABANDON_MS}ms; a late callback will be ignored`,
         );
-        inFlightSeq = null;
+        inFlightSeqRef.current = null;
       }
 
-      const seq = ++callSeq;
-      inFlightSeq = seq;
-      inFlightSince = Date.now();
-      const coercion = useHtmlCoercion
+      callSeqRef.current += 1;
+      const seq = callSeqRef.current;
+      inFlightSeqRef.current = seq;
+      inFlightSinceRef.current = Date.now();
+      const coercion = useHtmlCoercionRef.current
         ? Office.CoercionType.Html
         : Office.CoercionType.Text;
 
       let callbackFired = false;
       const watchdog = setTimeout(() => {
         if (callbackFired || cancelled) return;
-        timedOutStreak += 1;
-        if (timedOutStreak === 1 || timedOutStreak % 10 === 0) {
+        timedOutStreakRef.current += 1;
+        if (
+          timedOutStreakRef.current === 1 ||
+          timedOutStreakRef.current % 10 === 0
+        ) {
           console.warn(
             `[selection-poll] getSelectedDataAsync callback did not fire within ${POLL_CALLBACK_TIMEOUT_MS}ms` +
-              ` (${timedOutStreak} consecutive) — Office host API appears wedged; selection detection is blind`,
+              ` (${timedOutStreakRef.current} consecutive) — Office host API appears wedged; selection detection is blind`,
           );
         }
         if (coercion === Office.CoercionType.Text) {
@@ -204,17 +216,17 @@ export function useOutlookComposeSelection(): OutlookComposeSelection {
         (result: Office.AsyncResult<any>) => {
           callbackFired = true;
           clearTimeout(watchdog);
-          if (inFlightSeq !== seq) {
+          if (inFlightSeqRef.current !== seq) {
             // Abandoned call finally answering — a newer call owns the slot
             // (or will); its data may be stale, so drop it entirely.
             return;
           }
-          inFlightSeq = null;
-          if (timedOutStreak > 0) {
+          inFlightSeqRef.current = null;
+          if (timedOutStreakRef.current > 0) {
             console.warn(
-              `[selection-poll] callbacks resumed after ${timedOutStreak} timed-out poll(s)`,
+              `[selection-poll] callbacks resumed after ${timedOutStreakRef.current} timed-out poll(s)`,
             );
-            timedOutStreak = 0;
+            timedOutStreakRef.current = 0;
           }
           if (cancelled) return;
 
@@ -222,12 +234,25 @@ export function useOutlookComposeSelection(): OutlookComposeSelection {
             lastLoggedErrorCode = undefined;
             consecutiveInternalErrors = 0;
             const raw: string = result.value?.data ?? "";
-            const data =
-              coercion === Office.CoercionType.Html
-                ? htmlToPlainText(raw)
-                : raw;
             const sourceProperty: "body" | "subject" =
               result.value?.sourceProperty === "subject" ? "subject" : "body";
+
+            let data: string;
+            if (coercion === Office.CoercionType.Html) {
+              // The html→text extraction costs ~80ms on Word-styled content —
+              // skip it when the raw payload didn't change since last poll.
+              if (
+                raw === lastRawHtmlRef.current &&
+                sourceProperty === lastSourceRef.current
+              ) {
+                return;
+              }
+              lastRawHtmlRef.current = raw;
+              data = raw.length > 0 ? htmlToPlainText(raw) : "";
+            } else {
+              lastRawHtmlRef.current = null;
+              data = raw;
+            }
 
             // Deduplicate: only update state when selection actually changed.
             if (
@@ -237,6 +262,7 @@ export function useOutlookComposeSelection(): OutlookComposeSelection {
               lastDataRef.current = data;
               lastSourceRef.current = sourceProperty;
               setSelection({ data, sourceProperty });
+              publishComposeSelection({ data, sourceProperty });
               if (import.meta.env.DEV) {
                 console.debug(
                   data.length > 0

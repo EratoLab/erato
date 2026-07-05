@@ -77,8 +77,8 @@ vi.mock("../../providers/OutlookMailItemProvider", () => ({
   useOutlookMailItem: () => mockUseOutlookMailItem(),
 }));
 
-vi.mock("../../hooks/useOutlookComposeSelection", () => ({
-  useOutlookComposeSelection: () => ({ data: "", sourceProperty: "body" }),
+vi.mock("../../hooks/composeSelectionStore", () => ({
+  useComposeSelectionSnapshot: () => ({ data: "", sourceProperty: "body" }),
 }));
 
 vi.mock("../../utils/outlookReadReply", () => ({

@@ -436,4 +436,60 @@ describe("useOutlookComposeSelection", () => {
     });
     expect(result.current.data).toBe("fresh");
   });
+
+  it("keeps the Html-coercion switch across effect re-runs on the same surface", () => {
+    const { callbacks, coercions } = setNeverAnsweringComposeItem();
+    const { result, rerender } = renderHook(() => useOutlookComposeSelection());
+
+    // Text call hangs → watchdog flips the surface to Html.
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    // The stuck call answers late; the host slot frees up.
+    act(() => {
+      callbacks[0](
+        createMockAsyncResult({ data: "late", sourceProperty: "body" }),
+      );
+    });
+    expect(result.current.data).toBe("late");
+
+    // mailItem identity churn re-runs the effect (same surface anchor); the
+    // re-run's immediate poll must stay on Html — not reset to Text.
+    mockUseOutlookMailItem.mockReturnValue({ mailItem: { subject: "" } });
+    rerender();
+    expect(coercions.at(-1)).toBe(Office.CoercionType.Html);
+  });
+
+  it("does not double-issue across effect re-runs while a call is stuck", () => {
+    const { composeItem } = setNeverAnsweringComposeItem();
+    const { rerender } = renderHook(() => useOutlookComposeSelection());
+
+    mockUseOutlookMailItem.mockReturnValue({ mailItem: { subject: "" } });
+    rerender();
+
+    // The re-run's immediate poll is skipped — the stuck call still owns the
+    // host's serialized API slot.
+    expect(composeItem.getSelectedDataAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it("resets to the fast Text coercion on a genuine surface change", () => {
+    const { callbacks, coercions } = setNeverAnsweringComposeItem();
+    const { rerender } = renderHook(() => useOutlookComposeSelection());
+
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    act(() => {
+      callbacks[0](
+        createMockAsyncResult({ data: "late", sourceProperty: "body" }),
+      );
+    });
+
+    // A DIFFERENT compose surface starts fresh on Text.
+    mockUseOutlookMailItem.mockReturnValue({
+      mailItem: { subject: "", conversationId: "other-conversation" },
+    });
+    rerender();
+    expect(coercions.at(-1)).toBe(Office.CoercionType.Text);
+  });
 });

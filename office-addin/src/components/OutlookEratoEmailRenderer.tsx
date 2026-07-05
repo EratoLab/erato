@@ -9,7 +9,7 @@ import {
 import { plural, t } from "@lingui/core/macro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { useOutlookComposeSelection } from "../hooks/useOutlookComposeSelection";
+import { useComposeSelectionSnapshot } from "../hooks/composeSelectionStore";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
 import {
   CLIENT_ACTION_DECISIONS_KEY,
@@ -99,7 +99,10 @@ export function OutlookEratoEmailRenderer({
   content,
   isHtml,
 }: EratoEmailCodeBlockProps) {
-  const composeSelection = useOutlookComposeSelection();
+  // Subscribe to the shared snapshot instead of running an own poll loop —
+  // a second poller would fight the input's over the host's serialized
+  // item-API slot and re-learn the ERMAIN-431 coercion switch separately.
+  const composeSelection = useComposeSelectionSnapshot();
   const hasSelection = composeSelection.data.length > 0;
   const { mailItem, itemIdentity } = useOutlookMailItem();
   const artifact = useOutlookArtifact();
