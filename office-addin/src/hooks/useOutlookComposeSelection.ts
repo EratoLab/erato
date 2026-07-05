@@ -15,6 +15,11 @@ const EMPTY_SELECTION: OutlookComposeSelection = {
   sourceProperty: "body",
 };
 const POLL_INTERVAL_MS = 2500;
+// Watchdog for a single poll's callback. Office.js occasionally stops
+// delivering callbacks entirely (host-side wedge, observed live after a
+// programmatic setSelectedDataAsync) — without this the failure is invisible:
+// polls keep firing, nothing returns, the selection silently never updates.
+const POLL_CALLBACK_TIMEOUT_MS = 5000;
 // Grace period before clearing the selection when the mail item momentarily
 // disappears. In reply / inline-compose contexts `Office.context.mailbox.item`
 // (and the provider's `mailItem`) flap to null for a beat; clearing on the spot
@@ -116,6 +121,11 @@ export function useOutlookComposeSelection(): OutlookComposeSelection {
     }
 
     let cancelled = false;
+    // Consecutive polls whose callback never fired — a wedged host API.
+    // Warn on the first and then sparsely, so a dead bridge is visible in the
+    // console without spamming a line every poll.
+    let timedOutStreak = 0;
+    let lastLoggedErrorCode: number | undefined;
 
     const poll = () => {
       if (cancelled) return;
@@ -124,15 +134,36 @@ export function useOutlookComposeSelection(): OutlookComposeSelection {
         .item as Office.MessageCompose | null;
       if (!composeItem) return;
 
+      let callbackFired = false;
+      const watchdog = setTimeout(() => {
+        if (callbackFired || cancelled) return;
+        timedOutStreak += 1;
+        if (timedOutStreak === 1 || timedOutStreak % 10 === 0) {
+          console.warn(
+            `[selection-poll] getSelectedDataAsync callback did not fire within ${POLL_CALLBACK_TIMEOUT_MS}ms` +
+              ` (${timedOutStreak} consecutive) — Office host API appears wedged; selection detection is blind`,
+          );
+        }
+      }, POLL_CALLBACK_TIMEOUT_MS);
+
       composeItem.getSelectedDataAsync(
         Office.CoercionType.Text,
         // Office.js types MessageCompose.getSelectedDataAsync as AsyncResult<any>;
         // the actual value is { data: string, sourceProperty: "body" | "subject" }.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (result: Office.AsyncResult<any>) => {
+          callbackFired = true;
+          clearTimeout(watchdog);
+          if (timedOutStreak > 0) {
+            console.warn(
+              `[selection-poll] callbacks resumed after ${timedOutStreak} timed-out poll(s)`,
+            );
+            timedOutStreak = 0;
+          }
           if (cancelled) return;
 
           if (result.status === Office.AsyncResultStatus.Succeeded) {
+            lastLoggedErrorCode = undefined;
             const data: string = result.value?.data ?? "";
             const sourceProperty: "body" | "subject" =
               result.value?.sourceProperty === "subject" ? "subject" : "body";
@@ -145,10 +176,29 @@ export function useOutlookComposeSelection(): OutlookComposeSelection {
               lastDataRef.current = data;
               lastSourceRef.current = sourceProperty;
               setSelection({ data, sourceProperty });
+              if (import.meta.env.DEV) {
+                console.debug(
+                  data.length > 0
+                    ? `[selection-poll] selection detected (${data.length} chars, ${sourceProperty})`
+                    : "[selection-poll] selection cleared",
+                );
+              }
             }
+            return;
           }
           // A failed poll (e.g. InvalidSelection when the cursor is outside
-          // body/subject) is ignored; the last selection is retained.
+          // body/subject) is routine — the last selection is retained. Log
+          // only when the error CHANGES so a new failure mode is visible.
+          if (result.error?.code !== lastLoggedErrorCode) {
+            lastLoggedErrorCode = result.error?.code;
+            if (import.meta.env.DEV) {
+              console.debug(
+                "[selection-poll] getSelectedDataAsync failed:",
+                result.error?.code,
+                result.error?.message,
+              );
+            }
+          }
         },
       );
     };
