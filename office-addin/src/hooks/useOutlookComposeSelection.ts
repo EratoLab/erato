@@ -156,7 +156,6 @@ export function useOutlookComposeSelection(): OutlookComposeSelection {
     }
 
     let cancelled = false;
-    let lastLoggedErrorCode: number | undefined;
 
     const poll = () => {
       if (cancelled) return;
@@ -224,53 +223,35 @@ export function useOutlookComposeSelection(): OutlookComposeSelection {
           }
           if (cancelled) return;
 
-          if (result.status === Office.AsyncResultStatus.Succeeded) {
-            lastLoggedErrorCode = undefined;
-            const raw: string = result.value?.data ?? "";
-            const sourceProperty: "body" | "subject" =
-              result.value?.sourceProperty === "subject" ? "subject" : "body";
-
-            // Dedup on the raw Html payload so the ~80ms extraction runs only
-            // when the selection actually changed.
-            if (
-              raw === lastRawHtmlRef.current &&
-              sourceProperty === lastSourceRef.current
-            ) {
-              return;
-            }
-            lastRawHtmlRef.current = raw;
-            const data = raw.length > 0 ? htmlToPlainText(raw) : "";
-
-            if (
-              data !== lastDataRef.current ||
-              sourceProperty !== lastSourceRef.current
-            ) {
-              lastDataRef.current = data;
-              lastSourceRef.current = sourceProperty;
-              setSelection({ data, sourceProperty });
-              publishComposeSelection({ data, sourceProperty });
-              if (import.meta.env.DEV) {
-                console.debug(
-                  data.length > 0
-                    ? `[selection-poll] selection detected (${data.length} chars, ${sourceProperty})`
-                    : "[selection-poll] selection cleared",
-                );
-              }
-            }
+          if (result.status !== Office.AsyncResultStatus.Succeeded) {
+            // A failed poll (e.g. InvalidSelection when the cursor is outside
+            // body/subject) is routine — retain the last selection, no-op.
             return;
           }
-          // A failed poll (e.g. InvalidSelection when the cursor is outside
-          // body/subject) is routine — the last selection is retained. Log
-          // only when the error CHANGES so a new failure mode is visible.
-          if (result.error?.code !== lastLoggedErrorCode) {
-            lastLoggedErrorCode = result.error?.code;
-            if (import.meta.env.DEV) {
-              console.debug(
-                "[selection-poll] getSelectedDataAsync failed:",
-                result.error?.code,
-                result.error?.message,
-              );
-            }
+
+          const raw: string = result.value?.data ?? "";
+          const sourceProperty: "body" | "subject" =
+            result.value?.sourceProperty === "subject" ? "subject" : "body";
+
+          // Dedup on the raw Html payload so the ~80ms extraction runs only
+          // when the selection actually changed.
+          if (
+            raw === lastRawHtmlRef.current &&
+            sourceProperty === lastSourceRef.current
+          ) {
+            return;
+          }
+          lastRawHtmlRef.current = raw;
+          const data = raw.length > 0 ? htmlToPlainText(raw) : "";
+
+          if (
+            data !== lastDataRef.current ||
+            sourceProperty !== lastSourceRef.current
+          ) {
+            lastDataRef.current = data;
+            lastSourceRef.current = sourceProperty;
+            setSelection({ data, sourceProperty });
+            publishComposeSelection({ data, sourceProperty });
           }
         },
       );

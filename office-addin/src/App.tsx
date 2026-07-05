@@ -14,14 +14,8 @@ import { OutlookAuthProvider } from "./providers/OutlookAuthProvider";
 import { OutlookEmailSourceProvider } from "./providers/OutlookEmailSourceProvider";
 import { OutlookMailItemProvider } from "./providers/OutlookMailItemProvider";
 import { useSessionAuth } from "./providers/SessionAuthProvider";
-import { installSelectionDiagnosticsProbe } from "./utils/selectionDiagnostics";
 
 import "./styles.css";
-
-// Console probe for the selection host-wedge investigation (dev-only).
-if (import.meta.env.DEV) {
-  installSelectionDiagnosticsProbe();
-}
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { isInitialized, isAuthenticated, retryAuthentication, error } =
