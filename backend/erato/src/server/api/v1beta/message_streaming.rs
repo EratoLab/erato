@@ -7273,7 +7273,7 @@ pub async fn edit_message_sse(
             // changed since is dropped (edit proceeds without it) rather
             // than failing the request.
             let fallback_action_facet = if request.action_facet.is_none() {
-                crate::models::message::get_generation_action_facet_from_message(&message_to_edit)
+                crate::models::message::get_input_action_facet_from_message(&message_to_edit)
                     .ok()
                     .flatten()
                     .map(|(id, args)| ActionFacetRequest { id, args })
@@ -7309,12 +7309,12 @@ pub async fn edit_message_sse(
                     .action_facet
                     .as_ref()
                     .or(fallback_action_facet.as_ref())
-                    .map(|af| {
-                        crate::services::prompt_composition::types::ActionFacetUserInput {
+                    .map(
+                        |af| crate::services::prompt_composition::types::ActionFacetUserInput {
                             id: af.id.clone(),
                             args: af.args.clone(),
-                        }
-                    }),
+                        },
+                    ),
             };
             let prepare_chat_request_res = prepare_chat_request(
                 &app_state,

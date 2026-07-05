@@ -781,11 +781,11 @@ async fn test_edit_drops_stored_action_facet_that_no_longer_validates(pool: Pool
 
     let edit_events = parse_sse_events(&edit_response);
     assert!(
-        edit_events
-            .iter()
-            .any(|e| { serde_json::from_str::<Value>(&e.data)
+        edit_events.iter().any(|e| {
+            serde_json::from_str::<Value>(&e.data)
                 .map(|j| j["message_type"] == "assistant_message_completed")
-                .unwrap_or(false) }),
+                .unwrap_or(false)
+        }),
         "Edit must complete a generation even when the stored facet is gone"
     );
 
