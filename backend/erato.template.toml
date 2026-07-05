@@ -448,8 +448,9 @@ chat_provider_ids = ["test-token-limit"]
 #
 # The scheduling workflow facet that selects the tool. The Outlook add-in
 # attaches it in neutral contexts and on follow-ups of a scheduling exchange;
-# adding `tool_call_allowlist = ["outlook/*"]` to outlook_reply_from_read and
-# compose_email additionally makes the tool reachable from read/compose turns.
+# adding `tool_call_allowlist = ["outlook/*"]` to outlook_reply_from_read,
+# compose_email and outlook_review_draft additionally makes the tool reachable
+# from read, empty-compose and draft-review turns.
 #
 # [action_facets.facets.outlook_schedule]
 # display_name = "Outlook Appointment Scheduling"

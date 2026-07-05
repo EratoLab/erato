@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 
 import {
   FETCH_AVAILABILITY_TOOL_NAME,
+  SCHEDULING_THREAD_MAX_AGE_MS,
   containsFetchAvailabilityToolUse,
   createFetchAvailabilityExecutor,
   isSchedulingThreadFresh,
@@ -386,13 +387,19 @@ describe("containsFetchAvailabilityToolUse", () => {
 
 describe("isSchedulingThreadFresh", () => {
   const NOW_MS = Date.parse("2026-07-03T12:00:00Z");
+  const atWindowEdge = new Date(
+    NOW_MS - SCHEDULING_THREAD_MAX_AGE_MS,
+  ).toISOString();
+  const justBeyondWindow = new Date(
+    NOW_MS - SCHEDULING_THREAD_MAX_AGE_MS - 60_000,
+  ).toISOString();
 
   it("is fresh within the window and stale beyond it", () => {
     expect(isSchedulingThreadFresh("2026-07-03T11:30:00Z", NOW_MS)).toBe(true);
-    expect(isSchedulingThreadFresh("2026-07-03T11:00:00Z", NOW_MS)).toBe(true);
+    expect(isSchedulingThreadFresh(atWindowEdge, NOW_MS)).toBe(true);
+    expect(isSchedulingThreadFresh(justBeyondWindow, NOW_MS)).toBe(false);
     // A days-old scheduling chat must not hijack tomorrow's first send.
     expect(isSchedulingThreadFresh("2026-07-02T12:00:00Z", NOW_MS)).toBe(false);
-    expect(isSchedulingThreadFresh("2026-07-03T10:59:00Z", NOW_MS)).toBe(false);
   });
 
   it("is never fresh without a scheduling tool use", () => {
