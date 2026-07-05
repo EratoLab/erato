@@ -1457,6 +1457,11 @@ pub struct PreparedChatRequest {
     mcp_servers_unavailable: Vec<String>,
     // Filtered MCP tools available to this request, including server routing info.
     available_mcp_tools: Vec<crate::services::mcp_session_manager::ManagedTool>,
+    // Park budgets of the client tools OFFERED to this request, keyed by the
+    // model-facing name (unique post-dedup). The dispatch/park site resolves
+    // timeouts from here instead of re-finding config entries by bare name,
+    // which is ambiguous when namespaces reuse a name.
+    offered_client_tool_timeouts: HashMap<String, Option<u64>>,
     // Prepared `genai` `ChatRequest` (messages + available tools)
     chat_request: ChatRequest,
     // Prepared `genai` `ChatOptions` (e.g. reasoning effort)
@@ -2043,25 +2048,61 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         &effective_selected_facet_ids,
         user_input.action_facet.as_ref().map(|af| af.id.as_str()),
     );
+    // Park budgets of the client tools OFFERED to this request, keyed by the
+    // model-facing name (unique post-dedup). The dispatch/park site resolves
+    // timeouts from here instead of re-finding config entries by bare name.
+    let mut offered_client_tool_timeouts: std::collections::HashMap<String, Option<u64>> =
+        std::collections::HashMap::new();
     if !client_tool_allowlist.is_empty() {
-        for client_tool in app_state.config.client_tools.tools.values() {
-            if !is_qualified_tool_allowed(
-                client_tool.namespace_or_default(),
-                &client_tool.name,
-                &client_tool_allowlist,
-            ) {
-                continue;
+        let allowlist_matched: Vec<&crate::config::ClientToolConfig> = app_state
+            .config
+            .client_tools
+            .tools
+            .values()
+            .filter(|client_tool| {
+                is_qualified_tool_allowed(
+                    client_tool.namespace_or_default(),
+                    &client_tool.name,
+                    &client_tool_allowlist,
+                )
+            })
+            .collect();
+        let selection = crate::services::client_tools::select_client_tools(
+            allowlist_matched,
+            &client_tool_allowlist,
+            |name| generation_mcp_tools.iter().any(|mcp| mcp.tool.name == name),
+        );
+        for (skipped_tool, skip) in &selection.skipped {
+            use crate::services::client_tools::ClientToolSkip;
+            match skip {
+                ClientToolSkip::ReservedName => tracing::warn!(
+                    "Not offering client tool '{}': the name is reserved",
+                    skipped_tool.qualified_name()
+                ),
+                // An exact allowlist entry naming a tool that then cannot be
+                // offered is always a config bug — surface it loudly.
+                ClientToolSkip::McpCollision {
+                    explicitly_selected: true,
+                } => tracing::error!(
+                    "Not offering client tool '{}' although the allowlist selects it EXACTLY: an MCP tool already uses the model-facing name '{}' — fix the config",
+                    skipped_tool.qualified_name(),
+                    skipped_tool.name
+                ),
+                ClientToolSkip::McpCollision { .. } => tracing::warn!(
+                    "Not offering client tool '{}': an MCP tool already uses the model-facing name '{}'",
+                    skipped_tool.qualified_name(),
+                    skipped_tool.name
+                ),
+                ClientToolSkip::DuplicateBareName { winner_qualified } => tracing::warn!(
+                    "Not offering client tool '{}': '{}' already offers the model-facing name '{}' (providers require unique tool names)",
+                    skipped_tool.qualified_name(),
+                    winner_qualified,
+                    skipped_tool.name
+                ),
             }
+        }
+        for client_tool in selection.offered {
             let name = client_tool.name.as_str();
-            if name == crate::services::client_actions::CLIENT_ACTION_TOOL_NAME
-                || generation_mcp_tools.iter().any(|mcp| mcp.tool.name == name)
-            {
-                tracing::warn!(
-                    "Not offering client tool '{}': the name is reserved or already used by an MCP tool",
-                    name
-                );
-                continue;
-            }
             let schema = match serde_json::from_str::<serde_json::Value>(&client_tool.parameters) {
                 Ok(schema) => schema,
                 Err(error) => {
@@ -2073,6 +2114,10 @@ pub(crate) async fn prepare_chat_request_with_adapters(
                     continue;
                 }
             };
+            // Remember the OFFERED entry's park budget by model-facing name
+            // (unique post-dedup) — the dispatch site must not re-find the
+            // config by bare name, which is ambiguous across namespaces.
+            offered_client_tool_timeouts.insert(name.to_string(), client_tool.timeout_ms);
             chat_request_tools.push(crate::services::client_tools::build_client_tool(
                 name,
                 &client_tool.description,
@@ -2131,6 +2176,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         generation_request_context,
         mcp_servers_unavailable: tool_discovery.unavailable_server_ids,
         available_mcp_tools: generation_mcp_tools.clone(),
+        offered_client_tool_timeouts,
         chat_request,
         chat_options,
     })
@@ -2246,6 +2292,7 @@ async fn stream_generate_chat_completion<
     mcp_servers_unavailable: Vec<String>,
     allowed_tool_names: HashSet<String>,
     available_mcp_tools: Vec<crate::services::mcp_session_manager::ManagedTool>,
+    offered_client_tool_timeouts: HashMap<String, Option<u64>>,
     chat_provider_headers_context: &'a ChatProviderHeadersContext<'a>,
     streaming_task: Option<&Arc<StreamingTask>>,
     assistant_id: Option<Uuid>,
@@ -2659,15 +2706,13 @@ async fn stream_generate_chat_completion<
                 // durable signal path.
                 let _ = call_message.send_event(tx.clone()).await;
 
-                // Resolve this tool's park budget: the top-level client tool's
-                // `timeout_ms` override if set, else the default.
-                let park_timeout_ms = app_state
-                    .config
-                    .client_tools
-                    .tools
-                    .values()
-                    .find(|tool| tool.name == tool_name)
-                    .and_then(|tool| tool.timeout_ms)
+                // Resolve this tool's park budget from the entry that was
+                // OFFERED to this request (a bare-name config scan would be
+                // ambiguous when namespaces reuse a name), else the default.
+                let park_timeout_ms = offered_client_tool_timeouts
+                    .get(tool_name.as_str())
+                    .copied()
+                    .flatten()
                     .unwrap_or(DEFAULT_CLIENT_TOOL_PARK_TIMEOUT_MS);
 
                 // Park until the client POSTs a result, an abort arrives, or the
@@ -6397,6 +6442,7 @@ async fn run_message_submit_task(
         generation_request_context,
         mcp_servers_unavailable,
         available_mcp_tools,
+        offered_client_tool_timeouts,
     } = prepare_chat_request(
         app_state,
         policy,
@@ -6677,6 +6723,7 @@ async fn run_message_submit_task(
         mcp_servers_unavailable,
         allowed_tool_names,
         available_mcp_tools,
+        offered_client_tool_timeouts,
         &chat_provider_headers_context,
         Some(task),
         chat.assistant_id,
@@ -6902,6 +6949,7 @@ pub async fn regenerate_message_sse(
                 generation_request_context,
                 mcp_servers_unavailable,
                 available_mcp_tools,
+                offered_client_tool_timeouts,
             } = prepare_chat_request_res.unwrap();
 
             let langfuse_trace_enrichment = match build_langfuse_trace_enrichment(
@@ -7001,6 +7049,7 @@ pub async fn regenerate_message_sse(
                     mcp_servers_unavailable,
                     allowed_tool_names,
                     available_mcp_tools,
+                    offered_client_tool_timeouts,
                     &chat_provider_headers_context,
                     Some(&task_for_stream),
                     chat.assistant_id,
@@ -7251,6 +7300,7 @@ pub async fn edit_message_sse(
                 generation_request_context,
                 mcp_servers_unavailable,
                 available_mcp_tools,
+                offered_client_tool_timeouts,
             } = prepare_chat_request_res.unwrap();
 
             let langfuse_trace_enrichment = match build_langfuse_trace_enrichment(
@@ -7350,6 +7400,7 @@ pub async fn edit_message_sse(
                     mcp_servers_unavailable,
                     allowed_tool_names,
                     available_mcp_tools,
+                    offered_client_tool_timeouts,
                     &chat_provider_headers_context,
                     Some(&task_for_stream),
                     chat.assistant_id,
