@@ -49,7 +49,49 @@ export function useComposeSelectionSnapshot(): OutlookComposeSelection {
   return useSyncExternalStore(subscribe, getSnapshot);
 }
 
+// --- Polling coordination (ERMAIN-431) ---
+// A compose WRITE (`setSelectedDataAsync`, the insert/replace path) locks the
+// host's single serialized item-API slot while it re-tokenizes the body; a
+// selection poll issued in that window contends (5100/5001) and — worse — the
+// write is invisible to the poll's own in-flight guard, so the poll can wait
+// out its whole stuck-call budget on a slot the INSERT is holding. Callers
+// pause polling around a write and request one immediate poll on completion,
+// so a post-insert re-selection is reflected without waiting for the next
+// interval. Depth-counted so overlapping writes stay balanced.
+let pauseDepth = 0;
+const immediatePollListeners = new Set<() => void>();
+
+export function pauseComposeSelectionPolling(): void {
+  pauseDepth += 1;
+}
+
+export function resumeComposeSelectionPolling(): void {
+  pauseDepth = Math.max(0, pauseDepth - 1);
+}
+
+export function isComposeSelectionPollingPaused(): boolean {
+  return pauseDepth > 0;
+}
+
+/** Ask the live poller to run one poll now (e.g. right after a compose write). */
+export function requestImmediateComposeSelectionPoll(): void {
+  for (const listener of immediatePollListeners) {
+    listener();
+  }
+}
+
+export function subscribeImmediateComposeSelectionPoll(
+  listener: () => void,
+): () => void {
+  immediatePollListeners.add(listener);
+  return () => {
+    immediatePollListeners.delete(listener);
+  };
+}
+
 export function resetComposeSelectionStoreForTests(): void {
   snapshot = EMPTY;
   listeners.clear();
+  pauseDepth = 0;
+  immediatePollListeners.clear();
 }

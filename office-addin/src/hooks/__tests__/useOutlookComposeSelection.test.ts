@@ -13,6 +13,12 @@ import {
   uninstallMockMailbox,
 } from "../../test/mocks/outlook/mailbox";
 import { createMockMessageRead } from "../../test/mocks/outlook/readMail";
+import {
+  pauseComposeSelectionPolling,
+  requestImmediateComposeSelectionPoll,
+  resetComposeSelectionStoreForTests,
+  resumeComposeSelectionPolling,
+} from "../composeSelectionStore";
 import { useOutlookComposeSelection } from "../useOutlookComposeSelection";
 
 const mockUseOutlookMailItem = useOutlookMailItem as ReturnType<typeof vi.fn>;
@@ -45,6 +51,7 @@ describe("useOutlookComposeSelection", () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     uninstallMockMailbox();
+    resetComposeSelectionStoreForTests();
   });
 
   it("returns empty selection when not in compose mode", () => {
@@ -340,8 +347,9 @@ describe("useOutlookComposeSelection", () => {
     });
   });
 
-  // ERMAIN-431: the item API is serialized host-side and the Text coercion
-  // was observed hanging for 15s+ on Word-styled HTML selections.
+  // ERMAIN-431: always read the Html coercion (Text hangs on Word-HTML on
+  // classic Win32) and extract the plain text client-side; coordinate with the
+  // insert path so a compose write can't wedge or contend with the poll.
 
   function setNeverAnsweringComposeItem() {
     const callbacks: Array<(result: unknown) => void> = [];
@@ -360,53 +368,48 @@ describe("useOutlookComposeSelection", () => {
     return { composeItem, callbacks, coercions };
   }
 
+  it("always requests the Html coercion", () => {
+    const { coercions } = setNeverAnsweringComposeItem();
+
+    renderHook(() => useOutlookComposeSelection());
+
+    expect(coercions[0]).toBe(Office.CoercionType.Html);
+  });
+
+  it("extracts plain text from the Html payload", () => {
+    const composeItem = createMockMessageCompose({
+      getSelectedDataAsync: vi.fn(
+        (coercionType: unknown, callback: Function) => {
+          expect(coercionType).toBe(Office.CoercionType.Html);
+          callback(
+            createMockAsyncResult({
+              data: "<p>Hallo <b>Welt</b></p>",
+              sourceProperty: "body",
+            }),
+          );
+        },
+      ),
+    });
+    installMockMailbox().item = composeItem;
+    mockUseOutlookMailItem.mockReturnValue({ mailItem: { subject: "" } });
+
+    const { result } = renderHook(() => useOutlookComposeSelection());
+
+    expect(result.current.sourceProperty).toBe("body");
+    expect(result.current.data).toContain("Hallo");
+    expect(result.current.data).not.toContain("<");
+  });
+
   it("does not stack calls behind a hung one (in-flight guard)", () => {
     const { composeItem } = setNeverAnsweringComposeItem();
 
     renderHook(() => useOutlookComposeSelection());
     act(() => {
-      vi.advanceTimersByTime(2500 * 4);
+      vi.advanceTimersByTime(2500 * 2);
     });
 
-    // Initial poll only — every interval tick skipped while it hangs.
+    // Initial poll only — interval ticks skipped while it hangs.
     expect(composeItem.getSelectedDataAsync).toHaveBeenCalledTimes(1);
-  });
-
-  it("switches to Html coercion after the Text call hangs and extracts plain text", () => {
-    const { callbacks, coercions } = setNeverAnsweringComposeItem();
-
-    const { result } = renderHook(() => useOutlookComposeSelection());
-    expect(coercions[0]).toBe(Office.CoercionType.Text);
-
-    // Watchdog (5s) flags the surface; the stuck call then answers late —
-    // it was not abandoned, so its data still lands.
-    act(() => {
-      vi.advanceTimersByTime(5000);
-    });
-    act(() => {
-      callbacks[0](
-        createMockAsyncResult({ data: "late text", sourceProperty: "body" }),
-      );
-    });
-    expect(result.current.data).toBe("late text");
-
-    // The next poll goes out with Html coercion; the result is converted to
-    // plain text client-side before hitting state.
-    act(() => {
-      vi.advanceTimersByTime(2500);
-    });
-    expect(coercions[1]).toBe(Office.CoercionType.Html);
-    act(() => {
-      callbacks[1](
-        createMockAsyncResult({
-          data: "<p>Hallo <b>Welt</b></p>",
-          sourceProperty: "body",
-        }),
-      );
-    });
-    expect(result.current.sourceProperty).toBe("body");
-    expect(result.current.data).toContain("Hallo");
-    expect(result.current.data).not.toContain("<");
   });
 
   it("abandons a call stuck past the limit and drops its late callback", () => {
@@ -414,9 +417,11 @@ describe("useOutlookComposeSelection", () => {
 
     const { result } = renderHook(() => useOutlookComposeSelection());
 
-    // At the abandon threshold a fresh call is let through.
+    // At the first interval tick past the (defensive) 8s abandon threshold a
+    // fresh call is let through — far shorter than the 30s window the
+    // default-Html redesign removed.
     act(() => {
-      vi.advanceTimersByTime(30_000);
+      vi.advanceTimersByTime(10_000);
     });
     expect(composeItem.getSelectedDataAsync).toHaveBeenCalledTimes(2);
 
@@ -437,27 +442,33 @@ describe("useOutlookComposeSelection", () => {
     expect(result.current.data).toBe("fresh");
   });
 
-  it("keeps the Html-coercion switch across effect re-runs on the same surface", () => {
-    const { callbacks, coercions } = setNeverAnsweringComposeItem();
-    const { result, rerender } = renderHook(() => useOutlookComposeSelection());
+  it("pauses polling while a compose write holds the host slot", () => {
+    const { composeItem } = setNeverAnsweringComposeItem();
+    // Answer instantly so the in-flight guard never blocks — isolate the pause.
+    composeItem.getSelectedDataAsync.mockImplementation(
+      (_c: unknown, callback: Function) => {
+        callback(createMockAsyncResult({ data: "x", sourceProperty: "body" }));
+      },
+    );
 
-    // Text call hangs → watchdog flips the surface to Html.
-    act(() => {
-      vi.advanceTimersByTime(5000);
-    });
-    // The stuck call answers late; the host slot frees up.
-    act(() => {
-      callbacks[0](
-        createMockAsyncResult({ data: "late", sourceProperty: "body" }),
-      );
-    });
-    expect(result.current.data).toBe("late");
+    renderHook(() => useOutlookComposeSelection());
+    const afterMount = composeItem.getSelectedDataAsync.mock.calls.length;
 
-    // mailItem identity churn re-runs the effect (same surface anchor); the
-    // re-run's immediate poll must stay on Html — not reset to Text.
-    mockUseOutlookMailItem.mockReturnValue({ mailItem: { subject: "" } });
-    rerender();
-    expect(coercions.at(-1)).toBe(Office.CoercionType.Html);
+    pauseComposeSelectionPolling();
+    act(() => {
+      vi.advanceTimersByTime(2500 * 2);
+    });
+    // No polls issued while paused.
+    expect(composeItem.getSelectedDataAsync).toHaveBeenCalledTimes(afterMount);
+
+    // Resume + poke fires one immediate poll (the post-insert re-check).
+    resumeComposeSelectionPolling();
+    act(() => {
+      requestImmediateComposeSelectionPoll();
+    });
+    expect(composeItem.getSelectedDataAsync).toHaveBeenCalledTimes(
+      afterMount + 1,
+    );
   });
 
   it("does not double-issue across effect re-runs while a call is stuck", () => {
@@ -470,26 +481,5 @@ describe("useOutlookComposeSelection", () => {
     // The re-run's immediate poll is skipped — the stuck call still owns the
     // host's serialized API slot.
     expect(composeItem.getSelectedDataAsync).toHaveBeenCalledTimes(1);
-  });
-
-  it("resets to the fast Text coercion on a genuine surface change", () => {
-    const { callbacks, coercions } = setNeverAnsweringComposeItem();
-    const { rerender } = renderHook(() => useOutlookComposeSelection());
-
-    act(() => {
-      vi.advanceTimersByTime(5000);
-    });
-    act(() => {
-      callbacks[0](
-        createMockAsyncResult({ data: "late", sourceProperty: "body" }),
-      );
-    });
-
-    // A DIFFERENT compose surface starts fresh on Text.
-    mockUseOutlookMailItem.mockReturnValue({
-      mailItem: { subject: "", conversationId: "other-conversation" },
-    });
-    rerender();
-    expect(coercions.at(-1)).toBe(Office.CoercionType.Text);
   });
 });
