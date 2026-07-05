@@ -1,3 +1,4 @@
+import { htmlToPlainText } from "@erato/frontend/library";
 import { useEffect, useRef, useState } from "react";
 
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
@@ -15,11 +16,18 @@ const EMPTY_SELECTION: OutlookComposeSelection = {
   sourceProperty: "body",
 };
 const POLL_INTERVAL_MS = 2500;
-// Watchdog for a single poll's callback. Office.js occasionally stops
-// delivering callbacks entirely (host-side wedge, observed live after a
-// programmatic setSelectedDataAsync) — without this the failure is invisible:
-// polls keep firing, nothing returns, the selection silently never updates.
+// Watchdog for a single poll's callback. Classic Outlook Win32 was observed
+// live (ERMAIN-431) hanging `getSelectedDataAsync(Text)` for 15s+ when the
+// selection is complex Word-generated HTML — the host's html→text conversion
+// chokes, while the Html coercion answers instantly. Without a watchdog the
+// failure is invisible: polls keep firing, nothing returns, the selection
+// silently never updates.
 const POLL_CALLBACK_TIMEOUT_MS = 5000;
+// A hung call occupies the host's serialized item-API slot (new calls fail
+// with 5100 "Wait until the previous call completes"), so the poller must not
+// stack calls behind it. After this long, give up waiting and let a fresh
+// call through; the stuck call's late callback is dropped by sequence check.
+const STUCK_CALL_ABANDON_MS = 30_000;
 // Grace period before clearing the selection when the mail item momentarily
 // disappears. In reply / inline-compose contexts `Office.context.mailbox.item`
 // (and the provider's `mailItem`) flap to null for a beat; clearing on the spot
@@ -126,6 +134,25 @@ export function useOutlookComposeSelection(): OutlookComposeSelection {
     // console without spamming a line every poll.
     let timedOutStreak = 0;
     let lastLoggedErrorCode: number | undefined;
+    // In-flight guard: the item API is serialized host-side, so exactly one
+    // call may be outstanding. `inFlightSeq` names it; a callback whose seq no
+    // longer matches was abandoned and must be dropped.
+    let callSeq = 0;
+    let inFlightSeq: number | null = null;
+    let inFlightSince = 0;
+    // Once the Text coercion hung ONCE on this surface, switch to the Html
+    // coercion (observed reliable where Text hangs) and extract the plain
+    // text client-side. Per-surface: the effect re-runs on item change.
+    let useHtmlCoercion = false;
+    let consecutiveInternalErrors = 0;
+
+    const switchToHtmlCoercion = (reason: string) => {
+      if (useHtmlCoercion) return;
+      useHtmlCoercion = true;
+      console.warn(
+        `[selection-poll] ${reason} — switching this surface to Html coercion with client-side text extraction (ERMAIN-431)`,
+      );
+    };
 
     const poll = () => {
       if (cancelled) return;
@@ -133,6 +160,26 @@ export function useOutlookComposeSelection(): OutlookComposeSelection {
       const composeItem = Office.context.mailbox
         .item as Office.MessageCompose | null;
       if (!composeItem) return;
+
+      if (inFlightSeq !== null) {
+        // A call is still outstanding — issuing another would only fail with
+        // 5100. Skip this tick unless the outstanding call is old enough to
+        // abandon (its late callback is then ignored via the seq check).
+        if (Date.now() - inFlightSince < STUCK_CALL_ABANDON_MS) {
+          return;
+        }
+        console.warn(
+          `[selection-poll] abandoning a getSelectedDataAsync call stuck for ${STUCK_CALL_ABANDON_MS}ms; a late callback will be ignored`,
+        );
+        inFlightSeq = null;
+      }
+
+      const seq = ++callSeq;
+      inFlightSeq = seq;
+      inFlightSince = Date.now();
+      const coercion = useHtmlCoercion
+        ? Office.CoercionType.Html
+        : Office.CoercionType.Text;
 
       let callbackFired = false;
       const watchdog = setTimeout(() => {
@@ -144,16 +191,25 @@ export function useOutlookComposeSelection(): OutlookComposeSelection {
               ` (${timedOutStreak} consecutive) — Office host API appears wedged; selection detection is blind`,
           );
         }
+        if (coercion === Office.CoercionType.Text) {
+          switchToHtmlCoercion("text coercion hung");
+        }
       }, POLL_CALLBACK_TIMEOUT_MS);
 
       composeItem.getSelectedDataAsync(
-        Office.CoercionType.Text,
+        coercion,
         // Office.js types MessageCompose.getSelectedDataAsync as AsyncResult<any>;
         // the actual value is { data: string, sourceProperty: "body" | "subject" }.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (result: Office.AsyncResult<any>) => {
           callbackFired = true;
           clearTimeout(watchdog);
+          if (inFlightSeq !== seq) {
+            // Abandoned call finally answering — a newer call owns the slot
+            // (or will); its data may be stale, so drop it entirely.
+            return;
+          }
+          inFlightSeq = null;
           if (timedOutStreak > 0) {
             console.warn(
               `[selection-poll] callbacks resumed after ${timedOutStreak} timed-out poll(s)`,
@@ -164,7 +220,12 @@ export function useOutlookComposeSelection(): OutlookComposeSelection {
 
           if (result.status === Office.AsyncResultStatus.Succeeded) {
             lastLoggedErrorCode = undefined;
-            const data: string = result.value?.data ?? "";
+            consecutiveInternalErrors = 0;
+            const raw: string = result.value?.data ?? "";
+            const data =
+              coercion === Office.CoercionType.Html
+                ? htmlToPlainText(raw)
+                : raw;
             const sourceProperty: "body" | "subject" =
               result.value?.sourceProperty === "subject" ? "subject" : "body";
 
@@ -185,6 +246,20 @@ export function useOutlookComposeSelection(): OutlookComposeSelection {
               }
             }
             return;
+          }
+          // 5001 "An internal error has occurred" accompanies the text-
+          // coercion hang (observed live); repeated occurrences are the same
+          // signal as a timeout.
+          if (
+            result.error?.code === 5001 &&
+            coercion === Office.CoercionType.Text
+          ) {
+            consecutiveInternalErrors += 1;
+            if (consecutiveInternalErrors >= 2) {
+              switchToHtmlCoercion("text coercion failed repeatedly (5001)");
+            }
+          } else {
+            consecutiveInternalErrors = 0;
           }
           // A failed poll (e.g. InvalidSelection when the cursor is outside
           // body/subject) is routine — the last selection is retained. Log

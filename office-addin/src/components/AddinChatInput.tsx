@@ -183,6 +183,8 @@ export const AddinChatInput = forwardRef<
   if (itemIdentity !== lastDraftItemIdentityRef.current) {
     lastDraftItemIdentityRef.current = itemIdentity;
     setIsDraftDismissed(false);
+    // A dismissal must not outlive the item it suppressed (ERMAIN-431).
+    setIsSelectionDismissed(false);
   }
   const isDraftContextIncluded =
     !!mailItem?.isComposeMode && draftBodyText.length > 0 && !isDraftDismissed;
@@ -209,13 +211,19 @@ export const AddinChatInput = forwardRef<
     }
   }
 
-  // Reset dismiss when selection changes (user selects new text)
+  // Reset dismiss when the selection changes (user selects new text). The ref
+  // tracks the previous render's value UNCONDITIONALLY: updating it only
+  // inside the reset branch made a dismiss permanent for a same-text
+  // re-selection (dismiss → deselect → select the same passage again read as
+  // "unchanged" because the ref still held that passage; ERMAIN-431). A
+  // deselect-then-reselect gesture now always passes through "" and re-arms.
   const lastSelectionDataRef = useRef(composeSelection.data);
+  const previousSelectionData = lastSelectionDataRef.current;
+  lastSelectionDataRef.current = composeSelection.data;
   if (
-    composeSelection.data !== lastSelectionDataRef.current &&
+    composeSelection.data !== previousSelectionData &&
     composeSelection.data.length > 0
   ) {
-    lastSelectionDataRef.current = composeSelection.data;
     setIsSelectionDismissed(false);
   }
   const {

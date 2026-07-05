@@ -339,4 +339,101 @@ describe("useOutlookComposeSelection", () => {
       sourceProperty: "body",
     });
   });
+
+  // ERMAIN-431: the item API is serialized host-side and the Text coercion
+  // was observed hanging for 15s+ on Word-styled HTML selections.
+
+  function setNeverAnsweringComposeItem() {
+    const callbacks: Array<(result: unknown) => void> = [];
+    const coercions: unknown[] = [];
+    const mailbox = installMockMailbox();
+    const composeItem = createMockMessageCompose({
+      getSelectedDataAsync: vi.fn(
+        (coercionType: unknown, callback: (result: unknown) => void) => {
+          coercions.push(coercionType);
+          callbacks.push(callback);
+        },
+      ),
+    });
+    mailbox.item = composeItem;
+    mockUseOutlookMailItem.mockReturnValue({ mailItem: { subject: "" } });
+    return { composeItem, callbacks, coercions };
+  }
+
+  it("does not stack calls behind a hung one (in-flight guard)", () => {
+    const { composeItem } = setNeverAnsweringComposeItem();
+
+    renderHook(() => useOutlookComposeSelection());
+    act(() => {
+      vi.advanceTimersByTime(2500 * 4);
+    });
+
+    // Initial poll only — every interval tick skipped while it hangs.
+    expect(composeItem.getSelectedDataAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it("switches to Html coercion after the Text call hangs and extracts plain text", () => {
+    const { callbacks, coercions } = setNeverAnsweringComposeItem();
+
+    const { result } = renderHook(() => useOutlookComposeSelection());
+    expect(coercions[0]).toBe(Office.CoercionType.Text);
+
+    // Watchdog (5s) flags the surface; the stuck call then answers late —
+    // it was not abandoned, so its data still lands.
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    act(() => {
+      callbacks[0](
+        createMockAsyncResult({ data: "late text", sourceProperty: "body" }),
+      );
+    });
+    expect(result.current.data).toBe("late text");
+
+    // The next poll goes out with Html coercion; the result is converted to
+    // plain text client-side before hitting state.
+    act(() => {
+      vi.advanceTimersByTime(2500);
+    });
+    expect(coercions[1]).toBe(Office.CoercionType.Html);
+    act(() => {
+      callbacks[1](
+        createMockAsyncResult({
+          data: "<p>Hallo <b>Welt</b></p>",
+          sourceProperty: "body",
+        }),
+      );
+    });
+    expect(result.current.sourceProperty).toBe("body");
+    expect(result.current.data).toContain("Hallo");
+    expect(result.current.data).not.toContain("<");
+  });
+
+  it("abandons a call stuck past the limit and drops its late callback", () => {
+    const { composeItem, callbacks } = setNeverAnsweringComposeItem();
+
+    const { result } = renderHook(() => useOutlookComposeSelection());
+
+    // At the abandon threshold a fresh call is let through.
+    act(() => {
+      vi.advanceTimersByTime(30_000);
+    });
+    expect(composeItem.getSelectedDataAsync).toHaveBeenCalledTimes(2);
+
+    // The abandoned call's late answer must be ignored…
+    act(() => {
+      callbacks[0](
+        createMockAsyncResult({ data: "stale", sourceProperty: "body" }),
+      );
+    });
+    expect(result.current.data).toBe("");
+
+    // …while the fresh call's answer wins.
+    act(() => {
+      callbacks[1](
+        createMockAsyncResult({ data: "fresh", sourceProperty: "body" }),
+      );
+    });
+    expect(result.current.data).toBe("fresh");
+  });
 });
