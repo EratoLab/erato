@@ -3,13 +3,50 @@
 use axum::Router;
 use axum::http;
 use axum_test::TestServer;
+use erato::config::ActionFacetConfig;
+use erato::models::message::GenerationParameters;
+use erato::models::user::get_or_create_user;
 use erato::server::router::router;
+use mocktail::MockSet;
+use mocktail::body::BodyAction;
+use mocktail::mock_builder::Then;
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde_json::{Value, json};
 use sqlx::Pool;
 use sqlx::postgres::Postgres;
 
 use crate::test_app_state;
-use crate::test_utils::{TEST_JWT_TOKEN, TestRequestAuthExt, setup_mock_llm_server};
+use crate::test_utils::{
+    RequestBodyRecorder, TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt,
+    build_openai_text_streaming_response, hermetic_app_config, parse_sse_events,
+    setup_mock_llm_server, setup_mock_llm_server_with_mocks,
+};
+
+fn mock_llm_sse_response(then: Then, actions: Vec<BodyAction>) {
+    then.status(http::StatusCode::OK)
+        .headers([
+            ("Content-Type", "text/event-stream"),
+            ("Cache-Control", "no-cache"),
+            ("Connection", "keep-alive"),
+        ])
+        .bytes_stream_with_delays(actions);
+}
+
+fn add_action_facets(app_config: &mut erato::config::AppConfig) {
+    app_config.action_facets.facets.insert(
+        "rewrite".to_string(),
+        ActionFacetConfig {
+            display_name: "Rewrite".to_string(),
+            platform: None,
+            template: "Rewrite the following in a {{tone}} tone:\n\n{{content}}".to_string(),
+            allowed_args: vec!["tone".to_string(), "content".to_string()],
+            client_actions: vec![],
+            presentation: None,
+            client_actions_always_ask: vec![],
+            tool_call_allowlist: vec![],
+        },
+    );
+}
 
 // Helper structure for SSE events
 #[derive(Debug, Clone)]
@@ -533,4 +570,243 @@ async fn test_edit_assistant_message_fails(pool: Pool<Postgres>) {
         "Expected error message about wrong message role, got: {}",
         error_text
     );
+}
+
+/// Editing a message that was originally sent with an action facet re-applies
+/// the stored facet when the edit request omits it — the user is refining
+/// their instruction, not stripping the context.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_edit_falls_back_to_stored_action_facet(pool: Pool<Postgres>) {
+    let llm_request_recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = llm_request_recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post().path("/v1/chat/completions").matcher(recorder);
+            mock_llm_sse_response(then, build_openai_text_streaming_response(&["Rewritten."]));
+        });
+    }
+    let (mut app_config, _server) = setup_mock_llm_server_with_mocks(mocks).await;
+    add_action_facets(&mut app_config);
+    let app_state = test_app_state(app_config, pool).await;
+    let db = app_state.db.clone();
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // Submit the original message WITH an action facet.
+    let submit_response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "user_message": "Rewrite this",
+            "action_facet": {
+                "id": "rewrite",
+                "args": { "tone": "professional", "content": "yo whats up" }
+            }
+        }))
+        .await;
+    submit_response.assert_status_ok();
+
+    let submit_events = parse_sse_events(&submit_response);
+    let original_user_message_id = submit_events
+        .iter()
+        .find_map(|event| {
+            if let Ok(json) = serde_json::from_str::<Value>(&event.data)
+                && json["message_type"] == "user_message_saved"
+            {
+                return json["message_id"].as_str().map(|s| s.to_string());
+            }
+            None
+        })
+        .expect("Expected user_message_saved event with message_id");
+
+    // Edit the message WITHOUT re-sending the action facet.
+    let edit_response = server
+        .post("/api/v1beta/me/messages/editstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": original_user_message_id,
+            "replace_user_message": "Rewrite this (refined instruction)",
+            "replace_input_files_ids": []
+        }))
+        .await;
+    edit_response.assert_status_ok();
+
+    // Verify the edit assistant message has the facet in its generation params.
+    let assistant_messages = erato::db::entity::messages::Entity::find()
+        .filter(erato::db::entity::messages::Column::GenerationParameters.is_not_null())
+        .order_by_asc(erato::db::entity::messages::Column::CreatedAt)
+        .all(&db)
+        .await
+        .expect("Failed to fetch assistant messages");
+    assert_eq!(
+        assistant_messages.len(),
+        2,
+        "Expected original and edited assistant messages"
+    );
+
+    let edit_params: GenerationParameters = serde_json::from_value(
+        assistant_messages[1]
+            .generation_parameters
+            .clone()
+            .expect("Missing edit generation_parameters"),
+    )
+    .expect("Failed to deserialize edit generation parameters");
+    assert_eq!(
+        edit_params.action_facet_id.as_deref(),
+        Some("rewrite"),
+        "Edit must re-apply the facet stored on the original generation",
+    );
+    assert_eq!(
+        edit_params
+            .action_facet_args
+            .as_ref()
+            .and_then(|args| args.get("tone"))
+            .map(String::as_str),
+        Some("professional"),
+    );
+
+    // The rendered directive must have reached the LLM on both the original
+    // submit and the edit.  The recorder also sees the chat-title summary
+    // request, which only carries the raw user message.
+    let llm_request_bodies = llm_request_recorder.bodies();
+    let directive_body_count = llm_request_bodies
+        .iter()
+        .filter(|body| {
+            body.contains("Rewrite the following in a professional tone:")
+                && body.contains("yo whats up")
+        })
+        .count();
+    assert_eq!(
+        directive_body_count, 2,
+        "Expected the rendered facet directive in both generation request bodies (submit + edit): {llm_request_bodies:?}"
+    );
+}
+
+/// Editing after the stored action facet stopped validating drops the facet
+/// instead of failing the request — parity with the regenerate lane.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_edit_drops_stored_action_facet_that_no_longer_validates(pool: Pool<Postgres>) {
+    let (mut app_config, server) = setup_mock_llm_server(None).await;
+    add_action_facets(&mut app_config);
+    let app_state = test_app_state(app_config, pool.clone()).await;
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let test_server =
+        TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // Submit WITH the facet.
+    let submit_response = test_server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "user_message": "Rewrite this",
+            "action_facet": {
+                "id": "rewrite",
+                "args": { "tone": "professional", "content": "yo whats up" }
+            }
+        }))
+        .await;
+    submit_response.assert_status_ok();
+
+    let submit_events = parse_sse_events(&submit_response);
+    let original_user_message_id = submit_events
+        .iter()
+        .find_map(|event| {
+            if let Ok(json) = serde_json::from_str::<Value>(&event.data)
+                && json["message_type"] == "user_message_saved"
+            {
+                return json["message_id"].as_str().map(|s| s.to_string());
+            }
+            None
+        })
+        .expect("Expected user_message_saved event with message_id");
+
+    // Replace the config with one that no longer knows the stored facet.
+    let replacement_config = hermetic_app_config(None, Some(server.url("/v1/").to_string()));
+    assert!(
+        !replacement_config
+            .action_facets
+            .facets
+            .contains_key("rewrite"),
+        "Replacement config must not declare the stored facet"
+    );
+    let replacement_app_state = test_app_state(replacement_config, pool).await;
+    let db = replacement_app_state.db.clone();
+    let replacement_app: Router = router(replacement_app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(replacement_app_state);
+    let replacement_server =
+        TestServer::new(replacement_app.into_make_service()).expect("Failed to create test server");
+
+    // Edit WITHOUT re-sending the facet, using the config that no longer has it.
+    let edit_response = replacement_server
+        .post("/api/v1beta/me/messages/editstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": original_user_message_id,
+            "replace_user_message": "Rewrite this (refined)",
+            "replace_input_files_ids": []
+        }))
+        .await;
+    edit_response.assert_status_ok();
+
+    let edit_events = parse_sse_events(&edit_response);
+    assert!(
+        edit_events
+            .iter()
+            .any(|e| { serde_json::from_str::<Value>(&e.data)
+                .map(|j| j["message_type"] == "assistant_message_completed")
+                .unwrap_or(false) }),
+        "Edit must complete a generation even when the stored facet is gone"
+    );
+
+    let assistant_messages = erato::db::entity::messages::Entity::find()
+        .filter(erato::db::entity::messages::Column::GenerationParameters.is_not_null())
+        .order_by_asc(erato::db::entity::messages::Column::CreatedAt)
+        .all(&db)
+        .await
+        .expect("Failed to fetch assistant messages");
+    assert_eq!(assistant_messages.len(), 2);
+
+    let edit_params: GenerationParameters = serde_json::from_value(
+        assistant_messages[1]
+            .generation_parameters
+            .clone()
+            .expect("Missing edit generation_parameters"),
+    )
+    .expect("Failed to deserialize edit generation parameters");
+    assert_eq!(
+        edit_params.action_facet_id, None,
+        "A stored facet that no longer validates must be dropped on edit",
+    );
+    assert_eq!(edit_params.action_facet_args, None);
 }

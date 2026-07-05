@@ -7264,6 +7264,39 @@ pub async fn edit_message_sse(
             } else {
                 None
             };
+            // Mirror the regenerate fallback for the action facet: an edit
+            // without an explicit facet re-applies the one the original
+            // generation ran under.  The user edits their instruction; the
+            // context it referred to (selected text, draft, etc.) should
+            // persist — matching the regenerate precedent.  Re-validated
+            // against the CURRENT config — a facet that was removed or
+            // changed since is dropped (edit proceeds without it) rather
+            // than failing the request.
+            let fallback_action_facet = if request.action_facet.is_none() {
+                crate::models::message::get_generation_action_facet_from_message(&message_to_edit)
+                    .ok()
+                    .flatten()
+                    .map(|(id, args)| ActionFacetRequest { id, args })
+                    .filter(|af| {
+                        let platform = generation_request_context
+                            .platform
+                            .as_deref()
+                            .unwrap_or(DEFAULT_ERATO_PLATFORM);
+                        match validate_action_facet(&app_state.config, Some(af), platform) {
+                            Ok(()) => true,
+                            Err((_, reason)) => {
+                                tracing::warn!(
+                                    "Dropping stored action facet '{}' on edit: {}",
+                                    af.id,
+                                    reason
+                                );
+                                false
+                            }
+                        }
+                    })
+            } else {
+                None
+            };
             let user_input = PromptCompositionUserInput {
                 just_submitted_user_message_id: saved_user_message.id,
                 requested_chat_provider_id: request
@@ -7272,12 +7305,16 @@ pub async fn edit_message_sse(
                     .or(fallback_chat_provider_id),
                 new_input_file_ids: replace_input_files_ids,
                 selected_facet_ids: request.selected_facet_ids.clone(),
-                action_facet: request.action_facet.as_ref().map(|af| {
-                    crate::services::prompt_composition::types::ActionFacetUserInput {
-                        id: af.id.clone(),
-                        args: af.args.clone(),
-                    }
-                }),
+                action_facet: request
+                    .action_facet
+                    .as_ref()
+                    .or(fallback_action_facet.as_ref())
+                    .map(|af| {
+                        crate::services::prompt_composition::types::ActionFacetUserInput {
+                            id: af.id.clone(),
+                            args: af.args.clone(),
+                        }
+                    }),
             };
             let prepare_chat_request_res = prepare_chat_request(
                 &app_state,
