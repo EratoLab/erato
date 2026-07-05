@@ -459,6 +459,21 @@ msgid "officeAddin.office.loading"
 msgstr "Office-Add-in wird geladen..."
 
 #. js-lingui-explicit-id
+#: src/components/AddinPinHintBanner.tsx
+msgid "officeAddin.pinHint.description"
+msgstr "Solange es nicht angeheftet ist, bleibt dieses Add-in bei der E-Mail, aus der du es geöffnet hast. Hefte es über das Stecknadelsymbol an, damit es beim Lesen synchron bleibt."
+
+#. js-lingui-explicit-id
+#: src/components/AddinPinHintBanner.tsx
+msgid "officeAddin.pinHint.dismiss"
+msgstr "Schließen"
+
+#. js-lingui-explicit-id
+#: src/components/AddinPinHintBanner.tsx
+msgid "officeAddin.pinHint.title"
+msgstr "Anheften, um deinen E-Mails zu folgen"
+
+#. js-lingui-explicit-id
 #: src/components/sessionAskToast.tsx
 msgid "officeAddin.sessionAsk.actions.continue"
 msgstr "Weiterführen"

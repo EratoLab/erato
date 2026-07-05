@@ -459,6 +459,21 @@ msgid "officeAddin.office.loading"
 msgstr "Ładowanie dodatku Office..."
 
 #. js-lingui-explicit-id
+#: src/components/AddinPinHintBanner.tsx
+msgid "officeAddin.pinHint.description"
+msgstr "Dopóki nie zostanie przypięty, ten dodatek pozostaje przy wiadomości, z której go otwarto. Wybierz ikonę pinezki, aby był zsynchronizowany podczas czytania."
+
+#. js-lingui-explicit-id
+#: src/components/AddinPinHintBanner.tsx
+msgid "officeAddin.pinHint.dismiss"
+msgstr "Odrzuć"
+
+#. js-lingui-explicit-id
+#: src/components/AddinPinHintBanner.tsx
+msgid "officeAddin.pinHint.title"
+msgstr "Przypnij, aby śledzić pocztę"
+
+#. js-lingui-explicit-id
 #: src/components/sessionAskToast.tsx
 msgid "officeAddin.sessionAsk.actions.continue"
 msgstr "Kontynuuj"

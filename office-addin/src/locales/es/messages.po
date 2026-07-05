@@ -459,6 +459,21 @@ msgid "officeAddin.office.loading"
 msgstr "Cargando complemento de Office..."
 
 #. js-lingui-explicit-id
+#: src/components/AddinPinHintBanner.tsx
+msgid "officeAddin.pinHint.description"
+msgstr "Hasta que no esté anclado, este complemento permanece en el mensaje desde el que lo abriste. Selecciona el icono de anclar para mantenerlo sincronizado mientras lees."
+
+#. js-lingui-explicit-id
+#: src/components/AddinPinHintBanner.tsx
+msgid "officeAddin.pinHint.dismiss"
+msgstr "Descartar"
+
+#. js-lingui-explicit-id
+#: src/components/AddinPinHintBanner.tsx
+msgid "officeAddin.pinHint.title"
+msgstr "Ánclalo para seguir tu correo"
+
+#. js-lingui-explicit-id
 #: src/components/sessionAskToast.tsx
 msgid "officeAddin.sessionAsk.actions.continue"
 msgstr "Continuar"

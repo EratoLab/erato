@@ -22,6 +22,7 @@ import {
   useFilePreviewModal,
   useFileUploadWithTokenCheck,
   useMessageFeedback,
+  usePersistedState,
   useProfile,
   useStandardMessageActions,
   type ActionFacetRequest,
@@ -32,12 +33,14 @@ import {
   type MessageAction,
   type MessageControlsComponent,
   type MessageControlsContext,
+  type PersistedStateOptions,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AddinChatInput } from "./AddinChatInput";
+import { AddinPinHintBanner } from "./AddinPinHintBanner";
 import { AddinSettingsDialog } from "./AddinSettingsDialog";
 import { useActionFacetClientActions } from "../hooks/useAvailableActionFacets";
 import { useEmailDedupSet } from "../hooks/useEmailDedupSet";
@@ -45,6 +48,7 @@ import { useOfficeDragAndDrop } from "../hooks/useOfficeDragAndDrop";
 import { useOutlookClientTools } from "../hooks/useOutlookClientTools";
 import { useOutlookMailListDrag } from "../hooks/useOutlookMailListDrag";
 import { useOutlookMessageFetcher } from "../hooks/useOutlookMessageFetcher";
+import { useOffice } from "../providers/OfficeProvider";
 import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
 import { FreshCompletionTracker } from "../utils/freshCompletionTracker";
@@ -73,6 +77,11 @@ const EML_MIME_TYPES: Record<string, string[]> = {
 const EMAIL_MIME_TYPES: Record<string, string[]> = {
   ...EML_MIME_TYPES,
   "application/vnd.ms-outlook": [".msg"],
+};
+
+const PIN_HINT_DISMISSED_KEY = "erato.outlookAddin.pinHintDismissed";
+const pinHintDismissedPersistedOptions: PersistedStateOptions<boolean> = {
+  parse: (value) => (typeof value === "boolean" ? value : null),
 };
 
 interface AddinChatProps {
@@ -177,7 +186,25 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
   // drops keep working since they parse without a backend.
   const { fetcher: messageFetcher } = useOutlookMessageFetcher();
 
-  const { mailItem } = useOutlookMailItem();
+  const { mailItem, hasItemChangedFired } = useOutlookMailItem();
+  const { itemTrackingRequiresPin } = useOffice();
+
+  // "Pin this add-in" hint (office-js #1691 heuristic): nudge until the host
+  // delivers its first real item change (proof the pane is tracking) or the
+  // user dismisses for good. Compose panes are excluded — pinning doesn't
+  // carry across modes, so pinning there can't fix the read-mode freeze, and
+  // dismissing there would permanently burn the hint where it matters.
+  const [pinHintDismissed, setPinHintDismissed] = usePersistedState<boolean>(
+    PIN_HINT_DISMISSED_KEY,
+    false,
+    pinHintDismissedPersistedOptions,
+  );
+  const showPinHint =
+    itemTrackingRequiresPin &&
+    !mailItem?.isComposeMode &&
+    !hasItemChangedFired &&
+    !pinHintDismissed;
+
   const {
     hasSelectedEmailSource,
     isEmailBodyIncluded,
@@ -905,6 +932,9 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
                 </div>
               </div>
             )}
+            {showPinHint ? (
+              <AddinPinHintBanner onDismiss={() => setPinHintDismissed(true)} />
+            ) : null}
             {TopLeftAccessory ? (
               <TopLeftAccessory
                 availableModels={availableModels}

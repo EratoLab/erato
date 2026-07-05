@@ -459,6 +459,21 @@ msgid "officeAddin.office.loading"
 msgstr "Chargement du complément Office..."
 
 #. js-lingui-explicit-id
+#: src/components/AddinPinHintBanner.tsx
+msgid "officeAddin.pinHint.description"
+msgstr "Tant qu'il n'est pas épinglé, ce complément reste sur le message depuis lequel vous l'avez ouvert. Sélectionnez l'icône d'épingle pour le garder synchronisé pendant votre lecture."
+
+#. js-lingui-explicit-id
+#: src/components/AddinPinHintBanner.tsx
+msgid "officeAddin.pinHint.dismiss"
+msgstr "Ignorer"
+
+#. js-lingui-explicit-id
+#: src/components/AddinPinHintBanner.tsx
+msgid "officeAddin.pinHint.title"
+msgstr "Épinglez pour suivre vos e-mails"
+
+#. js-lingui-explicit-id
 #: src/components/sessionAskToast.tsx
 msgid "officeAddin.sessionAsk.actions.continue"
 msgstr "Continuer"
