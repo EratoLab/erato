@@ -882,6 +882,28 @@ impl AppConfig {
             if !seen_qualified_names.insert(qualified.clone()) {
                 panic!("Duplicate client tool '{}'.", qualified);
             }
+            // Portable-name check is a WARNING, not an error: the pattern is
+            // the OpenAI/Azure + Anthropic intersection, but Gemini accepts
+            // more (dots, colons, 128 chars), so a laxer name may be
+            // deliberate in a Gemini-only deployment. tracing is not
+            // initialized yet at config load, hence startup_log.
+            if !(name.len() <= 64
+                && name
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'))
+            {
+                crate::startup_log::warn_preinit(format!(
+                    "Client tool name '{}' does not match ^[a-zA-Z0-9_-]{{1,64}}$; \
+                     OpenAI/Azure and Anthropic reject such tool names at request time.",
+                    name
+                ));
+            }
+            if tool.timeout_ms == Some(0) {
+                panic!(
+                    "Client tool '{}' has timeout_ms = 0; every call would time out before the client can respond.",
+                    qualified
+                );
+            }
             match serde_json::from_str::<serde_json::Value>(&tool.parameters) {
                 Ok(value) if value.is_object() => {}
                 Ok(_) => panic!(
@@ -2807,9 +2829,15 @@ pub struct ClientToolsConfig {
 /// must use the terminal `client_actions` (`propose_client_action`) path.
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
 pub struct ClientToolConfig {
-    /// Tool name exposed to the model (e.g. "outlook.fetch_availability").
-    /// Must be non-empty and must not collide with the reserved
+    /// Tool name exposed to the model (e.g. "fetch_availability", selected in
+    /// allowlists as "outlook/fetch_availability" via its namespace). Must be
+    /// non-empty and must not collide with the reserved
     /// `propose_client_action` name; the `namespace/name` pair must be unique.
+    /// Portable names match `^[a-zA-Z0-9_-]{1,64}$` — that is the
+    /// cross-provider intersection (OpenAI/Azure and Anthropic reject
+    /// anything else at request time; Gemini additionally accepts dots,
+    /// colons, and up to 128 chars). Names outside the portable set load with
+    /// a startup warning, not an error.
     pub name: String,
 
     /// Namespace used for `tool_call_allowlist` selection (e.g. `outlook` →

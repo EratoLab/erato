@@ -2928,7 +2928,7 @@ fn test_top_level_client_tools_load_with_namespace() {
     let config = migrate_config_with_action_facets(
         r#"
 [client_tools.tools.fetch_availability]
-name = "outlook.fetch_availability"
+name = "fetch_availability"
 namespace = "outlook"
 description = "Fetch the user's calendar free/busy in a window."
 parameters = '{ "type": "object", "properties": {}, "additionalProperties": false }'
@@ -2943,9 +2943,9 @@ parameters = '{ "type": "object" }'
 
     assert_eq!(config.client_tools.tools.len(), 2);
     let tool = &config.client_tools.tools["fetch_availability"];
-    assert_eq!(tool.name, "outlook.fetch_availability");
+    assert_eq!(tool.name, "fetch_availability");
     assert_eq!(tool.namespace_or_default(), "outlook");
-    assert_eq!(tool.qualified_name(), "outlook/outlook.fetch_availability");
+    assert_eq!(tool.qualified_name(), "outlook/fetch_availability");
     assert_eq!(tool.timeout_ms, Some(30000));
     assert!(tool.parameters.contains("\"type\": \"object\""));
     // Defaults to the `client` namespace when unset.
@@ -2963,6 +2963,37 @@ fn test_client_tool_reserved_name_rejected() {
 name = "propose_client_action"
 description = "collides with the reserved client-action tool name"
 parameters = '{ "type": "object" }'
+"#,
+    );
+}
+
+#[test]
+fn test_client_tool_nonportable_name_warns_but_loads() {
+    // Dots are outside the portable ^[a-zA-Z0-9_-]{1,64}$ intersection
+    // (OpenAI/Anthropic reject them at request time) but Gemini accepts them,
+    // so config load only WARNS — the tool must still load.
+    let config = migrate_config_with_action_facets(
+        r#"
+[client_tools.tools.dotted]
+name = "outlook.fetch"
+namespace = "outlook"
+description = "nonportable dotted name"
+parameters = '{ "type": "object" }'
+"#,
+    );
+    assert_eq!(config.client_tools.tools["dotted"].name, "outlook.fetch");
+}
+
+#[test]
+#[should_panic(expected = "timeout_ms = 0")]
+fn test_client_tool_zero_timeout_rejected() {
+    migrate_config_with_action_facets(
+        r#"
+[client_tools.tools.instant]
+name = "instant"
+description = "park would cancel immediately"
+parameters = '{ "type": "object" }'
+timeout_ms = 0
 "#,
     );
 }

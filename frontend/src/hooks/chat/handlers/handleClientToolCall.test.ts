@@ -22,7 +22,7 @@ function makeEvent(
     message_id: "msg-1",
     content_index: 0,
     tool_call_id: "call-1",
-    tool_name: "outlook.fetch_availability",
+    tool_name: "fetch_availability",
     input: { window_start: "x" },
     ...overrides,
   } as MessageSubmitStreamingResponseClientToolCall & {
@@ -50,7 +50,7 @@ describe("handleClientToolCall", () => {
   });
 
   it("runs the registered executor and POSTs its result", async () => {
-    registerClientToolExecutor("outlook.fetch_availability", async (input) => {
+    registerClientToolExecutor("fetch_availability", async (input) => {
       expect(input).toEqual({ window_start: "x" });
       return { ok: true, result: { slots: 3 } };
     });
@@ -73,7 +73,7 @@ describe("handleClientToolCall", () => {
   });
 
   it("POSTs an error when the executor returns a failure", async () => {
-    registerClientToolExecutor("outlook.fetch_availability", async () => ({
+    registerClientToolExecutor("fetch_availability", async () => ({
       ok: false,
       error: "boom",
     }));
@@ -84,7 +84,7 @@ describe("handleClientToolCall", () => {
   });
 
   it("POSTs an error when the executor throws", async () => {
-    registerClientToolExecutor("outlook.fetch_availability", async () => {
+    registerClientToolExecutor("fetch_availability", async () => {
       throw new Error("kaboom");
     });
 
@@ -101,7 +101,7 @@ describe("handleClientToolCall", () => {
 
   it("execute-once: a replayed event does not re-run or re-POST the tool", async () => {
     const executor = vi.fn(async () => ({ ok: true as const, result: 1 }));
-    registerClientToolExecutor("outlook.fetch_availability", executor);
+    registerClientToolExecutor("fetch_availability", executor);
 
     await handleClientToolCall(makeEvent(), deps);
     await handleClientToolCall(makeEvent(), deps); // replay, same tool_call_id
@@ -125,7 +125,7 @@ describe("handleClientToolCall", () => {
       await gate;
       return { ok: true as const, result: 1 };
     });
-    registerClientToolExecutor("outlook.fetch_availability", executor);
+    registerClientToolExecutor("fetch_availability", executor);
 
     // Fire both before the first resolves; the pre-await guard must block the
     // second (this would fail if the mark moved after the await).
@@ -140,7 +140,7 @@ describe("handleClientToolCall", () => {
 
   it("un-marks on a failed POST so a later replay retries", async () => {
     const executor = vi.fn(async () => ({ ok: true as const, result: 1 }));
-    registerClientToolExecutor("outlook.fetch_availability", executor);
+    registerClientToolExecutor("fetch_availability", executor);
     fetchMock.mockResolvedValueOnce({ ok: false, status: 503 });
 
     await handleClientToolCall(makeEvent(), deps);
@@ -153,7 +153,7 @@ describe("handleClientToolCall", () => {
   });
 
   it("delivers an empty success as an explicit null result", async () => {
-    registerClientToolExecutor("outlook.fetch_availability", async () => ({
+    registerClientToolExecutor("fetch_availability", async () => ({
       ok: true as const,
       result: undefined,
     }));
