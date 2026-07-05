@@ -9,7 +9,7 @@
   "exports": {
     "./library": {
       "types": "./dist-library/library/index.d.ts",
-      "import": "./dist-library/library.js"
+      "import": "./dist-library/library.mjs"
     },
     "./library.css": "./dist-library/style.css"
   },
