@@ -471,6 +471,38 @@ describe("useOutlookComposeSelection", () => {
     );
   });
 
+  it("stays paused through overlapping writes until the last resume (depth-counted)", () => {
+    const { composeItem } = setNeverAnsweringComposeItem();
+    composeItem.getSelectedDataAsync.mockImplementation(
+      (_c: unknown, callback: Function) => {
+        callback(createMockAsyncResult({ data: "x", sourceProperty: "body" }));
+      },
+    );
+
+    renderHook(() => useOutlookComposeSelection());
+    const afterMount = composeItem.getSelectedDataAsync.mock.calls.length;
+
+    // Two overlapping compose writes each pause once (depth 0→1→2).
+    pauseComposeSelectionPolling();
+    pauseComposeSelectionPolling();
+
+    // First write finishes: resume (2→1) + poke — still paused, no poll.
+    resumeComposeSelectionPolling();
+    act(() => {
+      requestImmediateComposeSelectionPoll();
+    });
+    expect(composeItem.getSelectedDataAsync).toHaveBeenCalledTimes(afterMount);
+
+    // Second write finishes: resume (1→0) + poke — now the poll runs once.
+    resumeComposeSelectionPolling();
+    act(() => {
+      requestImmediateComposeSelectionPoll();
+    });
+    expect(composeItem.getSelectedDataAsync).toHaveBeenCalledTimes(
+      afterMount + 1,
+    );
+  });
+
   it("does not double-issue across effect re-runs while a call is stuck", () => {
     const { composeItem } = setNeverAnsweringComposeItem();
     const { rerender } = renderHook(() => useOutlookComposeSelection());
