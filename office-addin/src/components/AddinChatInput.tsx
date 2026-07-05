@@ -18,6 +18,7 @@ import { t } from "@lingui/core/macro";
 import { forwardRef, useCallback, useMemo, useRef, useState } from "react";
 
 import { useAvailableActionFacetIds } from "../hooks/useAvailableActionFacets";
+import { useOutlookCalendarFetcher } from "../hooks/useOutlookCalendarFetcher";
 import { useOutlookComposeSelection } from "../hooks/useOutlookComposeSelection";
 import { useOffice } from "../providers/OfficeProvider";
 import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
@@ -25,6 +26,11 @@ import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
 import { resolveOutlookActionFacet } from "../utils/outlookActionFacet";
 import { OUTLOOK_REPLY_FROM_READ_FACET_ID } from "../utils/outlookClientActions";
 import { getComposeBodyType } from "../utils/outlookComposeWrite";
+import {
+  OUTLOOK_SCHEDULE_FACET_ID,
+  isSchedulingThreadFresh,
+  toLocalOffsetIso,
+} from "../utils/outlookScheduleTool";
 
 function validateAttachment(
   filename: string,
@@ -126,6 +132,13 @@ interface AddinChatInputProps {
   controlledSelectedModel?: ChatModel | null;
   onControlledSelectedModelChange?: (model: ChatModel) => void;
   controlledIsModelSelectionReady?: boolean;
+  /**
+   * `createdAt` of the latest assistant message IF it read the calendar via
+   * the `fetch_availability` client tool, else null (computed in `AddinChat`,
+   * which owns the message stream). When fresh at send time, the send carries
+   * the `outlook_schedule` facet so the model can handle the user's slot pick.
+   */
+  lastSchedulingToolUseAt?: string | null;
 }
 
 export const AddinChatInput = forwardRef<
@@ -139,6 +152,7 @@ export const AddinChatInput = forwardRef<
     editInitialFiles,
     isExpandingDroppedEmails = false,
     onEmailSourceDropsSent,
+    lastSchedulingToolUseAt = null,
     ...chatInputProps
   },
   ref,
@@ -149,6 +163,10 @@ export const AddinChatInput = forwardRef<
   const replyFromReadAvailable = availableFacetIds.has(
     OUTLOOK_REPLY_FROM_READ_FACET_ID,
   );
+  const scheduleFacetAvailable = availableFacetIds.has(
+    OUTLOOK_SCHEDULE_FACET_ID,
+  );
+  const { fetcher: calendarFetcher } = useOutlookCalendarFetcher();
   const [isUploadingEmail, setIsUploadingEmail] = useState(false);
   const composeSelection = useOutlookComposeSelection();
   const { mailItem, itemIdentity } = useOutlookMailItem();
@@ -165,6 +183,8 @@ export const AddinChatInput = forwardRef<
   if (itemIdentity !== lastDraftItemIdentityRef.current) {
     lastDraftItemIdentityRef.current = itemIdentity;
     setIsDraftDismissed(false);
+    // A dismissal must not outlive the item it suppressed (ERMAIN-431).
+    setIsSelectionDismissed(false);
   }
   const isDraftContextIncluded =
     !!mailItem?.isComposeMode && draftBodyText.length > 0 && !isDraftDismissed;
@@ -191,13 +211,19 @@ export const AddinChatInput = forwardRef<
     }
   }
 
-  // Reset dismiss when selection changes (user selects new text)
+  // Reset dismiss when the selection changes (user selects new text). The ref
+  // tracks the previous render's value UNCONDITIONALLY: updating it only
+  // inside the reset branch made a dismiss permanent for a same-text
+  // re-selection (dismiss → deselect → select the same passage again read as
+  // "unchanged" because the ref still held that passage; ERMAIN-431). A
+  // deselect-then-reselect gesture now always passes through "" and re-arms.
   const lastSelectionDataRef = useRef(composeSelection.data);
+  const previousSelectionData = lastSelectionDataRef.current;
+  lastSelectionDataRef.current = composeSelection.data;
   if (
-    composeSelection.data !== lastSelectionDataRef.current &&
+    composeSelection.data !== previousSelectionData &&
     composeSelection.data.length > 0
   ) {
-    lastSelectionDataRef.current = composeSelection.data;
     setIsSelectionDismissed(false);
   }
   const {
@@ -646,6 +672,14 @@ export const AddinChatInput = forwardRef<
         composeEmailAvailable,
         isReadMode: !!mailItem && !mailItem.isComposeMode,
         replyFromReadAvailable,
+        scheduleFacetAvailable,
+        calendarAvailable: calendarFetcher !== null,
+        schedulingThreadActive: isSchedulingThreadFresh(
+          lastSchedulingToolUseAt,
+          Date.now(),
+        ),
+        nowIso: toLocalOffsetIso(new Date().toISOString()),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       });
       if (sentDraftBody !== null) {
         // Remember what we sent so an unchanged follow-up de-dupes (#4).
@@ -748,6 +782,7 @@ export const AddinChatInput = forwardRef<
       }
     },
     [
+      calendarFetcher,
       chatId,
       chatInputProps,
       composeEmailAvailable,
@@ -757,10 +792,12 @@ export const AddinChatInput = forwardRef<
       hasActiveSelection,
       isDraftContextIncluded,
       itemIdentity,
+      lastSchedulingToolUseAt,
       mailItem,
       onEmailSourceDropsSent,
       replyFromReadAvailable,
       resolveSelectedFilesForSend,
+      scheduleFacetAvailable,
       shouldUseSuggestedEmailSource,
       stagedEmails,
     ],

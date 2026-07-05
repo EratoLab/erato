@@ -13,6 +13,12 @@ import {
   uninstallMockMailbox,
 } from "../../test/mocks/outlook/mailbox";
 import { createMockMessageRead } from "../../test/mocks/outlook/readMail";
+import {
+  pauseComposeSelectionPolling,
+  requestImmediateComposeSelectionPoll,
+  resetComposeSelectionStoreForTests,
+  resumeComposeSelectionPolling,
+} from "../composeSelectionStore";
 import { useOutlookComposeSelection } from "../useOutlookComposeSelection";
 
 const mockUseOutlookMailItem = useOutlookMailItem as ReturnType<typeof vi.fn>;
@@ -45,6 +51,7 @@ describe("useOutlookComposeSelection", () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     uninstallMockMailbox();
+    resetComposeSelectionStoreForTests();
   });
 
   it("returns empty selection when not in compose mode", () => {
@@ -338,5 +345,173 @@ describe("useOutlookComposeSelection", () => {
       data: "keep this",
       sourceProperty: "body",
     });
+  });
+
+  // ERMAIN-431: always read the Html coercion (Text hangs on Word-HTML on
+  // classic Win32) and extract the plain text client-side; coordinate with the
+  // insert path so a compose write can't wedge or contend with the poll.
+
+  function setNeverAnsweringComposeItem() {
+    const callbacks: Array<(result: unknown) => void> = [];
+    const coercions: unknown[] = [];
+    const mailbox = installMockMailbox();
+    const composeItem = createMockMessageCompose({
+      getSelectedDataAsync: vi.fn(
+        (coercionType: unknown, callback: (result: unknown) => void) => {
+          coercions.push(coercionType);
+          callbacks.push(callback);
+        },
+      ),
+    });
+    mailbox.item = composeItem;
+    mockUseOutlookMailItem.mockReturnValue({ mailItem: { subject: "" } });
+    return { composeItem, callbacks, coercions };
+  }
+
+  it("always requests the Html coercion", () => {
+    const { coercions } = setNeverAnsweringComposeItem();
+
+    renderHook(() => useOutlookComposeSelection());
+
+    expect(coercions[0]).toBe(Office.CoercionType.Html);
+  });
+
+  it("extracts plain text from the Html payload", () => {
+    const composeItem = createMockMessageCompose({
+      getSelectedDataAsync: vi.fn(
+        (coercionType: unknown, callback: Function) => {
+          expect(coercionType).toBe(Office.CoercionType.Html);
+          callback(
+            createMockAsyncResult({
+              data: "<p>Hallo <b>Welt</b></p>",
+              sourceProperty: "body",
+            }),
+          );
+        },
+      ),
+    });
+    installMockMailbox().item = composeItem;
+    mockUseOutlookMailItem.mockReturnValue({ mailItem: { subject: "" } });
+
+    const { result } = renderHook(() => useOutlookComposeSelection());
+
+    expect(result.current.sourceProperty).toBe("body");
+    expect(result.current.data).toContain("Hallo");
+    expect(result.current.data).not.toContain("<");
+  });
+
+  it("does not stack calls behind a hung one (in-flight guard)", () => {
+    const { composeItem } = setNeverAnsweringComposeItem();
+
+    renderHook(() => useOutlookComposeSelection());
+    act(() => {
+      vi.advanceTimersByTime(2500 * 2);
+    });
+
+    // Initial poll only — interval ticks skipped while it hangs.
+    expect(composeItem.getSelectedDataAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it("abandons a call stuck past the limit and drops its late callback", () => {
+    const { composeItem, callbacks } = setNeverAnsweringComposeItem();
+
+    const { result } = renderHook(() => useOutlookComposeSelection());
+
+    // At the first interval tick past the (defensive) 8s abandon threshold a
+    // fresh call is let through — far shorter than the 30s window the
+    // default-Html redesign removed.
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+    expect(composeItem.getSelectedDataAsync).toHaveBeenCalledTimes(2);
+
+    // The abandoned call's late answer must be ignored…
+    act(() => {
+      callbacks[0](
+        createMockAsyncResult({ data: "stale", sourceProperty: "body" }),
+      );
+    });
+    expect(result.current.data).toBe("");
+
+    // …while the fresh call's answer wins.
+    act(() => {
+      callbacks[1](
+        createMockAsyncResult({ data: "fresh", sourceProperty: "body" }),
+      );
+    });
+    expect(result.current.data).toBe("fresh");
+  });
+
+  it("pauses polling while a compose write holds the host slot", () => {
+    const { composeItem } = setNeverAnsweringComposeItem();
+    // Answer instantly so the in-flight guard never blocks — isolate the pause.
+    composeItem.getSelectedDataAsync.mockImplementation(
+      (_c: unknown, callback: Function) => {
+        callback(createMockAsyncResult({ data: "x", sourceProperty: "body" }));
+      },
+    );
+
+    renderHook(() => useOutlookComposeSelection());
+    const afterMount = composeItem.getSelectedDataAsync.mock.calls.length;
+
+    pauseComposeSelectionPolling();
+    act(() => {
+      vi.advanceTimersByTime(2500 * 2);
+    });
+    // No polls issued while paused.
+    expect(composeItem.getSelectedDataAsync).toHaveBeenCalledTimes(afterMount);
+
+    // Resume + poke fires one immediate poll (the post-insert re-check).
+    resumeComposeSelectionPolling();
+    act(() => {
+      requestImmediateComposeSelectionPoll();
+    });
+    expect(composeItem.getSelectedDataAsync).toHaveBeenCalledTimes(
+      afterMount + 1,
+    );
+  });
+
+  it("stays paused through overlapping writes until the last resume (depth-counted)", () => {
+    const { composeItem } = setNeverAnsweringComposeItem();
+    composeItem.getSelectedDataAsync.mockImplementation(
+      (_c: unknown, callback: Function) => {
+        callback(createMockAsyncResult({ data: "x", sourceProperty: "body" }));
+      },
+    );
+
+    renderHook(() => useOutlookComposeSelection());
+    const afterMount = composeItem.getSelectedDataAsync.mock.calls.length;
+
+    // Two overlapping compose writes each pause once (depth 0→1→2).
+    pauseComposeSelectionPolling();
+    pauseComposeSelectionPolling();
+
+    // First write finishes: resume (2→1) + poke — still paused, no poll.
+    resumeComposeSelectionPolling();
+    act(() => {
+      requestImmediateComposeSelectionPoll();
+    });
+    expect(composeItem.getSelectedDataAsync).toHaveBeenCalledTimes(afterMount);
+
+    // Second write finishes: resume (1→0) + poke — now the poll runs once.
+    resumeComposeSelectionPolling();
+    act(() => {
+      requestImmediateComposeSelectionPoll();
+    });
+    expect(composeItem.getSelectedDataAsync).toHaveBeenCalledTimes(
+      afterMount + 1,
+    );
+  });
+
+  it("does not double-issue across effect re-runs while a call is stuck", () => {
+    const { composeItem } = setNeverAnsweringComposeItem();
+    const { rerender } = renderHook(() => useOutlookComposeSelection());
+
+    mockUseOutlookMailItem.mockReturnValue({ mailItem: { subject: "" } });
+    rerender();
+
+    // The re-run's immediate poll is skipped — the stuck call still owns the
+    // host's serialized API slot.
+    expect(composeItem.getSelectedDataAsync).toHaveBeenCalledTimes(1);
   });
 });

@@ -32,12 +32,16 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: "dist-library",
       emptyOutDir: false,
-      sourcemap: isLibraryDevBuild ? "inline" : true,
+      // Always EXTERNAL sourcemaps: an inline map is one colossal base64
+      // line that overflows the regex stack of vite's stripLiteral scan
+      // (worker-import-meta-url) when the linked add-in dev server transforms
+      // the bundle. External .map keeps identical debuggability.
+      sourcemap: true,
       minify: isLibraryDevBuild ? false : "esbuild",
       lib: {
         entry: path.resolve(__dirname, "./src/library/index.ts"),
         formats: ["es"],
-        fileName: () => "library.js",
+        fileName: () => "library.mjs",
         cssFileName: "style",
       },
       rollupOptions: {

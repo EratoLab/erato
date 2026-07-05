@@ -580,7 +580,7 @@ export default defineConfig(({ mode }) => {
           alias: {
             "@erato/frontend/library": path.resolve(
               __dirname,
-              "../frontend/dist-library/library.js",
+              "../frontend/dist-library/library.mjs",
             ),
             "@erato/frontend/library.css": path.resolve(
               __dirname,

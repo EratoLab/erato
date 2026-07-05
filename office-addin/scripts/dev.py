@@ -35,7 +35,7 @@ FRONTEND_TARBALL_PATH = FRONTEND_DIR / "dist-package" / "erato-frontend.tgz"
 FRONTEND_PACKAGE_STATE_PATH = (
     FRONTEND_DIR / "dist-package" / "erato-frontend.state.json"
 )
-FRONTEND_LIBRARY_ENTRY_PATH = FRONTEND_DIR / "dist-library" / "library.js"
+FRONTEND_LIBRARY_ENTRY_PATH = FRONTEND_DIR / "dist-library" / "library.mjs"
 FRONTEND_LIBRARY_CSS_PATH = FRONTEND_DIR / "dist-library" / "style.css"
 FRONTEND_APP_BUILD_WATCH_POLL_SECONDS = 1.0
 FRONTEND_APP_BUILD_WATCH_FILES = (
@@ -48,7 +48,7 @@ INSTALLED_FRONTEND_LIBRARY_ENTRY_PATH = (
     / "@erato"
     / "frontend"
     / "dist-library"
-    / "library.js"
+    / "library.mjs"
 )
 LOCAL_AUTH_DIR = OFFICE_ADDIN_DIR / "local-auth"
 VITE_BIN_PATH = OFFICE_ADDIN_DIR / "node_modules" / ".bin" / "vite"

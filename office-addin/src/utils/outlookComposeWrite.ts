@@ -2,6 +2,33 @@ import { htmlToPlainText } from "@erato/frontend/library";
 
 import { plainTextToHtml } from "./htmlConvert";
 import { callOfficeAsync } from "./officeAsync";
+import {
+  pauseComposeSelectionPolling,
+  requestImmediateComposeSelectionPoll,
+  resumeComposeSelectionPolling,
+} from "../hooks/composeSelectionStore";
+
+// A compose write (setSelectedDataAsync/prependAsync) drops a callback ~never,
+// but on a wedged host it could hang the whole insert forever — bound it.
+const COMPOSE_WRITE_TIMEOUT_MS = 15_000;
+
+/**
+ * Run a compose-body write with the selection poller paused (so it can't
+ * contend with the write on the host's serialized item-API slot), then poke
+ * the poller once on completion so a post-insert re-selection is picked up
+ * immediately instead of after the next interval. ERMAIN-431.
+ */
+async function withPausedSelectionPolling<T>(
+  write: () => Promise<T>,
+): Promise<T> {
+  pauseComposeSelectionPolling();
+  try {
+    return await write();
+  } finally {
+    resumeComposeSelectionPolling();
+    requestImmediateComposeSelectionPoll();
+  }
+}
 
 export type BodyFormat = "html" | "text";
 
@@ -153,12 +180,16 @@ export async function replaceComposeSelection(
           },
         ];
 
-  await tryComposeWrite(writeAttempts, (attempt) =>
-    callOfficeAsync<void>((callback) =>
-      item.body.setSelectedDataAsync(
-        attempt.data,
-        { coercionType: attempt.coercionType },
-        callback,
+  await withPausedSelectionPolling(() =>
+    tryComposeWrite(writeAttempts, (attempt) =>
+      callOfficeAsync<void>(
+        (callback) =>
+          item.body.setSelectedDataAsync(
+            attempt.data,
+            { coercionType: attempt.coercionType },
+            callback,
+          ),
+        { timeoutMs: COMPOSE_WRITE_TIMEOUT_MS },
       ),
     ),
   );
@@ -191,12 +222,16 @@ export async function prependComposeBody(data: string): Promise<void> {
           { coercionType: Office.CoercionType.Html, data },
         ];
 
-  await tryComposeWrite(writeAttempts, (attempt) =>
-    callOfficeAsync<void>((callback) =>
-      item.body.prependAsync(
-        attempt.data,
-        { coercionType: attempt.coercionType },
-        callback,
+  await withPausedSelectionPolling(() =>
+    tryComposeWrite(writeAttempts, (attempt) =>
+      callOfficeAsync<void>(
+        (callback) =>
+          item.body.prependAsync(
+            attempt.data,
+            { coercionType: attempt.coercionType },
+            callback,
+          ),
+        { timeoutMs: COMPOSE_WRITE_TIMEOUT_MS },
       ),
     ),
   );
