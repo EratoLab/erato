@@ -7182,9 +7182,38 @@ pub async fn edit_message_sse(
     // Move request data into the task
     let replace_user_message = request.replace_user_message;
     let replace_input_files_ids = request.replace_input_files_ids;
+    // Resolve the effective action facet for this edit. When the edit request
+    // carries no explicit facet, fall back to the one the original user
+    // message stored — re-validated against the CURRENT config so a facet
+    // removed/changed since is dropped (edit proceeds without it) rather than
+    // failing the request. Mirrors the regenerate precedent: the user edits
+    // their instruction, but the context it referred to (selected text, draft,
+    // etc.) persists. Unlike regenerate — which reuses the existing user
+    // message row — edit creates a NEW sibling message, so the resolved facet
+    // must be persisted onto it (below) as well as fed to the generation, or
+    // the UI and any subsequent edit would lose the context.
+    let resolved_action_facet: Option<ActionFacetRequest> = match request.action_facet.clone() {
+        Some(af) => Some(af),
+        None => crate::models::message::get_input_action_facet_from_message(&message_to_edit)
+            .ok()
+            .flatten()
+            .map(|(id, args)| ActionFacetRequest { id, args })
+            .filter(
+                |af| match validate_action_facet(&app_state.config, Some(af), platform) {
+                    Ok(()) => true,
+                    Err((_, reason)) => {
+                        tracing::warn!(
+                            "Dropping stored action facet '{}' on edit: {}",
+                            af.id,
+                            reason
+                        );
+                        false
+                    }
+                },
+            ),
+    };
     let edit_input_parameters =
-        request
-            .action_facet
+        resolved_action_facet
             .as_ref()
             .map(|af| crate::models::message::InputParameters {
                 action_facet_id: Some(af.id.clone()),
@@ -7272,7 +7301,9 @@ pub async fn edit_message_sse(
                     .or(fallback_chat_provider_id),
                 new_input_file_ids: replace_input_files_ids,
                 selected_facet_ids: request.selected_facet_ids.clone(),
-                action_facet: request.action_facet.as_ref().map(|af| {
+                // Resolved above (request facet, else the validated stored
+                // fallback); the same value is persisted via edit_input_parameters.
+                action_facet: resolved_action_facet.as_ref().map(|af| {
                     crate::services::prompt_composition::types::ActionFacetUserInput {
                         id: af.id.clone(),
                         args: af.args.clone(),

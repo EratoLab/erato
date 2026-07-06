@@ -641,6 +641,28 @@ pub fn get_generation_action_facet_from_message(
     Ok(None)
 }
 
+/// The action facet (id + args) stored in a user message's input parameters,
+/// if any. Used by edit to re-apply the facet the original user message
+/// carried when the edit request doesn't re-send one.
+pub fn get_input_action_facet_from_message(
+    message: &messages::Model,
+) -> Result<Option<StoredActionFacet>, Report> {
+    if let Some(input_params_json) = &message.input_parameters {
+        let input_params: InputParameters = serde_json::from_value(input_params_json.clone())
+            .map_err(|e| {
+                eyre!(
+                    "Failed to parse input parameters for message {}: {}",
+                    message.id,
+                    e
+                )
+            })?;
+        return Ok(input_params
+            .action_facet_id
+            .map(|id| (id, input_params.action_facet_args.unwrap_or_default())));
+    }
+    Ok(None)
+}
+
 /// Resolve a provider for a user message branch by checking the assistant response that follows
 /// the user message. Prefer the active-thread assistant sibling; fall back to newest sibling.
 pub async fn get_generation_chat_provider_id_for_replaced_user_message(
