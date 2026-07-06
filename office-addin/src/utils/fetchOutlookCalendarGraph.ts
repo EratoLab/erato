@@ -1,6 +1,8 @@
 import {
   computeCalendarRanges,
+  decodeMergedFreeBusyView,
   MS_PER_DAY,
+  onlyBlockingBlocks,
   resolveTimezone,
   runCalendarLegs,
   throwIfAborted,
@@ -17,6 +19,7 @@ import { toIanaStrict } from "./windowsZones";
 import type { CalendarRange } from "./calendarLegs";
 import type {
   CalendarFetchOptions,
+  NormalizedAttendeeAvailability,
   NormalizedBusyBlock,
   NormalizedBusyType,
   NormalizedCalendar,
@@ -75,8 +78,19 @@ interface GraphWorkingHours {
   timeZone?: { name?: string };
 }
 
+interface GraphScheduleItem {
+  /** free | tentative | busy | oof | workingElsewhere | unknown. */
+  status?: string;
+  start?: GraphDateTimeTimeZone;
+  end?: GraphDateTimeTimeZone;
+}
+
 interface GraphScheduleInformation {
+  scheduleId?: string;
+  availabilityView?: string;
+  scheduleItems?: GraphScheduleItem[];
   workingHours?: GraphWorkingHours;
+  error?: { message?: string; responseCode?: string };
 }
 
 interface GraphGetScheduleResponse {
@@ -275,29 +289,21 @@ export async function fetchCalendarHistoryViaGraph(
   return meetings;
 }
 
-/**
- * Working hours via `POST /me/calendar/getSchedule` — deliberately NOT
- * `/me/mailboxSettings`, which would need an extra `MailboxSettings.Read`
- * consent per tenant while getSchedule rides the same `Calendars.Read` token.
- * Returns null when working hours are genuinely absent or untrustworthy;
- * THROWS on a hard fetch failure.
- */
-export async function fetchWorkingHoursViaGraph(
+/** Shared `POST /me/calendar/getSchedule` (working-hours and attendee legs).
+ * THROWS on a hard HTTP failure; per-schedule errors stay in the payload. */
+async function postGetSchedule(
   acquireToken: AcquireGraphToken,
-  options: CalendarFetchOptions = {},
-): Promise<NormalizedWorkingHours | null> {
-  throwIfAborted(options.signal);
-  const smtp = Office.context.mailbox.userProfile?.emailAddress;
-  if (!smtp) return null;
-  const now = new Date();
+  schedules: string[],
+  startUtc: string,
+  endUtc: string,
+  availabilityViewInterval: number,
+  options: CalendarFetchOptions,
+): Promise<GraphGetScheduleResponse> {
   const body = JSON.stringify({
-    schedules: [smtp],
-    startTime: { dateTime: toUtcNoMillis(now), timeZone: "UTC" },
-    endTime: {
-      dateTime: toUtcNoMillis(new Date(now.getTime() + MS_PER_DAY)),
-      timeZone: "UTC",
-    },
-    availabilityViewInterval: 60,
+    schedules,
+    startTime: { dateTime: startUtc, timeZone: "UTC" },
+    endTime: { dateTime: endUtc, timeZone: "UTC" },
+    availabilityViewInterval,
   });
   const response = await graphFetch(
     `${GRAPH_BASE}/me/calendar/getSchedule`,
@@ -316,7 +322,32 @@ export async function fetchWorkingHoursViaGraph(
       `Graph getSchedule failed: ${response.status} ${response.statusText}`,
     );
   }
-  const payload = (await response.json()) as GraphGetScheduleResponse;
+  return (await response.json()) as GraphGetScheduleResponse;
+}
+
+/**
+ * Working hours via `POST /me/calendar/getSchedule` — deliberately NOT
+ * `/me/mailboxSettings`, which would need an extra `MailboxSettings.Read`
+ * consent per tenant while getSchedule rides the same `Calendars.Read` token.
+ * Returns null when working hours are genuinely absent or untrustworthy;
+ * THROWS on a hard fetch failure.
+ */
+export async function fetchWorkingHoursViaGraph(
+  acquireToken: AcquireGraphToken,
+  options: CalendarFetchOptions = {},
+): Promise<NormalizedWorkingHours | null> {
+  throwIfAborted(options.signal);
+  const smtp = Office.context.mailbox.userProfile?.emailAddress;
+  if (!smtp) return null;
+  const now = new Date();
+  const payload = await postGetSchedule(
+    acquireToken,
+    [smtp],
+    toUtcNoMillis(now),
+    toUtcNoMillis(new Date(now.getTime() + MS_PER_DAY)),
+    60,
+    options,
+  );
   const workingHours = payload.value?.[0]?.workingHours;
   if (!workingHours) return null;
   // start/end are clock times in workingHours.timeZone; under a different zone
@@ -343,6 +374,144 @@ export async function fetchWorkingHoursViaGraph(
   };
 }
 
+/** Interval sized so the window never exceeds getSchedule's 1000-slot
+ * `availabilityView` cap (error 5006): doubled from 30 min until it fits. */
+export function availabilityViewIntervalFor(windowMinutes: number): number {
+  let interval = 30;
+  while (windowMinutes / interval > 1000 && interval < 1440) {
+    interval *= 2;
+  }
+  return Math.min(interval, 1440);
+}
+
+const unknownAttendee = (
+  requested: string,
+  reason: string,
+): NormalizedAttendeeAvailability => ({
+  requested,
+  status: "unknown",
+  reason,
+  busy: [],
+});
+
+/**
+ * Colleague free/busy over `range` (ERMAIN-434): one getSchedule call with all
+ * attendee SMTP addresses. Per-schedule failures become `status: "unknown"`
+ * entries — never silently free; only the whole-call failure THROWS (and
+ * degrades the leg). Graph needs SMTP: a non-address input is "unknown"
+ * without a network round-trip (the GAL-name path is EWS-only, where
+ * ResolveNames exists). Results are OPAQUE — blocking intervals, no subjects.
+ */
+export async function fetchAttendeeAvailabilityViaGraph(
+  acquireToken: AcquireGraphToken,
+  range: CalendarRange,
+  attendees: string[],
+  options: CalendarFetchOptions = {},
+): Promise<NormalizedAttendeeAvailability[]> {
+  if (attendees.length === 0) return [];
+  throwIfAborted(options.signal);
+
+  const smtpAttendees = attendees.filter((entry) => entry.includes("@"));
+  const bySmtp = new Map<string, NormalizedAttendeeAvailability>();
+  if (smtpAttendees.length > 0) {
+    const windowMinutes =
+      (Date.parse(range.endUtc) - Date.parse(range.startUtc)) / 60_000;
+    const interval = availabilityViewIntervalFor(windowMinutes);
+    const payload = await postGetSchedule(
+      acquireToken,
+      smtpAttendees,
+      range.startUtc,
+      range.endUtc,
+      interval,
+      options,
+    );
+    (payload.value ?? []).forEach((schedule, index) => {
+      // scheduleId echoes the request; fall back to request order.
+      const requested =
+        smtpAttendees.find(
+          (s) => s.toLowerCase() === schedule.scheduleId?.toLowerCase(),
+        ) ?? smtpAttendees[index];
+      if (requested === undefined) return;
+      bySmtp.set(
+        requested.toLowerCase(),
+        normalizeSchedule(requested, schedule, range.startUtc, interval),
+      );
+    });
+  }
+
+  return attendees.map((requested) => {
+    if (!requested.includes("@")) {
+      return unknownAttendee(
+        requested,
+        "not an email address — Exchange Online availability needs an SMTP address",
+      );
+    }
+    return (
+      bySmtp.get(requested.toLowerCase()) ?? {
+        // The address is known even though the read failed — parity with EWS.
+        ...unknownAttendee(requested, "no availability data returned"),
+        smtp: requested,
+      }
+    );
+  });
+}
+
+function normalizeSchedule(
+  requested: string,
+  schedule: GraphScheduleInformation,
+  windowStartUtc: string,
+  intervalMinutes: number,
+): NormalizedAttendeeAvailability {
+  if (schedule.error) {
+    return {
+      ...unknownAttendee(
+        requested,
+        schedule.error.message ??
+          schedule.error.responseCode ??
+          "availability lookup failed",
+      ),
+      smtp: requested,
+    };
+  }
+  if (Array.isArray(schedule.scheduleItems)) {
+    const blocks: NormalizedBusyBlock[] = [];
+    for (const item of schedule.scheduleItems) {
+      const startUtc = toUtcIso(item.start);
+      const endUtc = toUtcIso(item.end);
+      if (!startUtc || !endUtc) continue;
+      blocks.push({
+        // No subject on purpose: colleague calendars surface opaquely.
+        when: { kind: "date-time", startUtc, endUtc },
+        // "unknown" status falls through mapShowAs to Busy — never read as free.
+        busyType: mapShowAs(item.status),
+      });
+    }
+    return {
+      requested,
+      smtp: requested,
+      status: "ok",
+      busy: onlyBlockingBlocks(blocks),
+    };
+  }
+  if (typeof schedule.availabilityView === "string") {
+    // Sharing policies that only publish merged free/busy omit scheduleItems.
+    return {
+      requested,
+      smtp: requested,
+      status: "ok",
+      busy: onlyBlockingBlocks(
+        decodeMergedFreeBusyView(
+          schedule.availabilityView,
+          windowStartUtc,
+          intervalMinutes,
+          "WorkingElsewhere",
+        ),
+      ),
+    };
+  }
+  return unknownAttendee(requested, "no availability data returned");
+}
+
 /** The full Graph calendar snapshot; NEVER throws except to propagate an
  * abort — a failed leg degrades to `[]` / null and is named in `degradedLegs`. */
 export async function fetchOutlookCalendarViaGraph(
@@ -355,22 +524,35 @@ export async function fetchOutlookCalendarViaGraph(
   );
   const displayTimeZone = resolveTimezone();
 
-  const { historyMeetings, busyBlocks, workingHours, degradedLegs } =
-    await runCalendarLegs(
-      {
-        history: () =>
-          fetchCalendarHistoryViaGraph(acquireToken, historyRange, options),
-        busy: () => fetchCalendarBusyViaGraph(acquireToken, busyRange, options),
-        workingHours: () => fetchWorkingHoursViaGraph(acquireToken, options),
-      },
-      options.signal,
-      "[fetchOutlookCalendarViaGraph]",
-    );
+  const {
+    historyMeetings,
+    busyBlocks,
+    workingHours,
+    attendeeAvailability,
+    degradedLegs,
+  } = await runCalendarLegs(
+    {
+      history: () =>
+        fetchCalendarHistoryViaGraph(acquireToken, historyRange, options),
+      busy: () => fetchCalendarBusyViaGraph(acquireToken, busyRange, options),
+      workingHours: () => fetchWorkingHoursViaGraph(acquireToken, options),
+      attendees: () =>
+        fetchAttendeeAvailabilityViaGraph(
+          acquireToken,
+          busyRange,
+          options.attendees ?? [],
+          options,
+        ),
+    },
+    options.signal,
+    "[fetchOutlookCalendarViaGraph]",
+  );
 
   return {
     workingHours,
     busyBlocks,
     historyMeetings,
+    attendees: attendeeAvailability,
     displayTimeZone,
     degradedLegs,
   };

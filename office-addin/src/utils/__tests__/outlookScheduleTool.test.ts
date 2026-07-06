@@ -6,6 +6,8 @@ import {
   containsFetchAvailabilityToolUse,
   createFetchAvailabilityExecutor,
   isSchedulingThreadFresh,
+  parseAttendees,
+  parseDurationMinutes,
   parseLookaheadDays,
   serializeCalendarForModel,
   toLocalOffsetIso,
@@ -21,6 +23,7 @@ const emptyCalendar: NormalizedCalendar = {
   workingHours: null,
   busyBlocks: [],
   historyMeetings: [],
+  attendees: [],
   displayTimeZone: "Europe/Berlin",
   degradedLegs: [],
 };
@@ -265,6 +268,123 @@ describe("serializeCalendarForModel", () => {
     expect(result.notes).toHaveLength(2);
   });
 
+  it("serializes attendees opaquely with unknown-as-not-free wording", () => {
+    const result = serializeCalendarForModel(
+      {
+        ...emptyCalendar,
+        attendees: [
+          {
+            requested: "alice@example.de",
+            smtp: "alice@example.de",
+            status: "ok",
+            busy: [
+              {
+                when: {
+                  kind: "date-time",
+                  startUtc: "2026-07-06T07:00:00Z",
+                  endUtc: "2026-07-06T08:00:00Z",
+                },
+                busyType: "Busy",
+              },
+            ],
+          },
+          {
+            requested: "Sales Team",
+            smtp: "bob@example.de",
+            status: "ok",
+            reason:
+              '1 nested distribution list(s) inside "Sales Team" were not expanded',
+            busy: [],
+          },
+          {
+            requested: "Nemo",
+            status: "unknown",
+            reason: "not found in the directory (GAL)",
+            busy: [],
+          },
+        ],
+      },
+      NOW,
+    ) as { attendees: Record<string, unknown>[]; legend: string };
+
+    expect(result.attendees).toEqual([
+      {
+        name: "alice@example.de",
+        status: "ok",
+        busy: [
+          {
+            day: "Monday 2026-07-06",
+            start: "09:00",
+            end: "10:00",
+            utcOffset: "+02:00",
+            busyType: "Busy",
+          },
+        ],
+      },
+      {
+        name: "Sales Team",
+        email: "bob@example.de",
+        status: "ok",
+        note: expect.stringContaining("nested distribution list"),
+        busy: [],
+      },
+      {
+        name: "Nemo",
+        status: "unknown - treat as NOT free",
+        note: "not found in the directory (GAL)",
+        busy: [],
+      },
+    ]);
+    expect(result.legend).toContain("attendees");
+    expect(result.legend).toContain("NOT free");
+  });
+
+  it("emits ranked suggestedSlots and flags unreadable attendees in notes", () => {
+    const result = serializeCalendarForModel(
+      {
+        ...emptyCalendar,
+        workingHours: {
+          daysOfWeek: ["monday", "tuesday", "wednesday", "thursday", "friday"],
+          startMinutes: 540,
+          endMinutes: 1020,
+        },
+        attendees: [
+          { requested: "Nemo", status: "unknown", reason: "no", busy: [] },
+        ],
+      },
+      NOW,
+      { requestedDurationMinutes: 60, freeBusyWindowDays: 3 },
+    ) as {
+      suggestedSlots: {
+        durationMinutes: number;
+        durationBasis: string;
+        slots: { tier: string; start: string; day: string }[];
+      };
+      notes: string[];
+    };
+
+    expect(result.suggestedSlots.durationMinutes).toBe(60);
+    expect(result.suggestedSlots.durationBasis).toBe("requested");
+    expect(result.suggestedSlots.slots.length).toBeGreaterThan(0);
+    expect(result.suggestedSlots.slots[0].tier).toBe("earliest");
+    // NOW is Friday 14:00 Berlin; the same afternoon is the soonest window.
+    expect(result.suggestedSlots.slots[0].day).toBe("Friday 2026-07-03");
+    expect(result.notes).toEqual([
+      expect.stringContaining("1 attendee(s) whose calendar was unreadable"),
+    ]);
+  });
+
+  it("suppresses suggestedSlots when busy or attendee data degraded", () => {
+    for (const leg of ["busy", "attendees"] as const) {
+      const result = serializeCalendarForModel(
+        { ...emptyCalendar, degradedLegs: [leg] },
+        NOW,
+        { requestedDurationMinutes: 30, freeBusyWindowDays: 7 },
+      );
+      expect(result.suggestedSlots).toBeUndefined();
+    }
+  });
+
   it("trims very long subjects", () => {
     const result = serializeCalendarForModel(
       {
@@ -314,6 +434,43 @@ describe("parseLookaheadDays", () => {
   });
 });
 
+describe("parseAttendees", () => {
+  it("returns empty for absent/invalid input", () => {
+    expect(parseAttendees(null)).toEqual({ attendees: [], droppedByCap: 0 });
+    expect(parseAttendees({})).toEqual({ attendees: [], droppedByCap: 0 });
+    expect(parseAttendees({ attendees: "alice" })).toEqual({
+      attendees: [],
+      droppedByCap: 0,
+    });
+  });
+
+  it("trims, drops non-strings/empties and dedupes case-insensitively", () => {
+    expect(
+      parseAttendees({
+        attendees: [" alice@x.de ", "ALICE@x.de", 7, "", "Bob"],
+      }),
+    ).toEqual({ attendees: ["alice@x.de", "Bob"], droppedByCap: 0 });
+  });
+
+  it("caps at 15 and reports only cap drops", () => {
+    const attendees = Array.from({ length: 18 }, (_, i) => `p${i}@x.de`);
+    const parsed = parseAttendees({ attendees });
+    expect(parsed.attendees).toHaveLength(15);
+    expect(parsed.droppedByCap).toBe(3);
+  });
+});
+
+describe("parseDurationMinutes", () => {
+  it("returns null for absent/invalid and clamps valid values", () => {
+    expect(parseDurationMinutes(null)).toBeNull();
+    expect(parseDurationMinutes({})).toBeNull();
+    expect(parseDurationMinutes({ duration_minutes: "60" })).toBeNull();
+    expect(parseDurationMinutes({ duration_minutes: 60 })).toBe(60);
+    expect(parseDurationMinutes({ duration_minutes: 1 })).toBe(5);
+    expect(parseDurationMinutes({ duration_minutes: 5000 })).toBe(1440);
+  });
+});
+
 describe("createFetchAvailabilityExecutor", () => {
   it("returns a clean error when no calendar backend applies", async () => {
     const executor = createFetchAvailabilityExecutor(() => null);
@@ -334,10 +491,29 @@ describe("createFetchAvailabilityExecutor", () => {
     expect(fetchCalendar).toHaveBeenCalledWith({
       freeBusyWindowDays: 30,
       historyWindowDays: 21,
+      attendees: [],
     });
     expect(outcome.ok).toBe(true);
     if (outcome.ok) {
       expect(outcome.result).toMatchObject({ timezone: "Europe/Berlin" });
+    }
+  });
+
+  it("passes attendees through and notes cap overflow", async () => {
+    const fetchCalendar = vi.fn().mockResolvedValue(emptyCalendar);
+    const executor = createFetchAvailabilityExecutor(() => ({
+      fetchCalendar,
+    }));
+
+    const attendees = Array.from({ length: 17 }, (_, i) => `p${i}@x.de`);
+    const outcome = await executor({ attendees });
+
+    expect(fetchCalendar.mock.calls[0][0].attendees).toHaveLength(15);
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) {
+      expect((outcome.result as { notes: string[] }).notes).toContainEqual(
+        expect.stringContaining("2 not checked"),
+      );
     }
   });
 

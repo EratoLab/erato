@@ -1,5 +1,7 @@
 import {
   computeCalendarRanges,
+  decodeMergedFreeBusyView,
+  onlyBlockingBlocks,
   resolveTimezone,
   runCalendarLegs,
 } from "./calendarLegs";
@@ -23,6 +25,7 @@ import { toIanaStrict } from "./windowsZones";
 import type { CalendarRange } from "./calendarLegs";
 import type {
   CalendarFetchOptions,
+  NormalizedAttendeeAvailability,
   NormalizedBusyBlock,
   NormalizedBusyType,
   NormalizedCalendar,
@@ -111,35 +114,70 @@ function buildSerializableUtcTimeZone(): string {
   );
 }
 
+/** Merged free/busy slice width for GetUserAvailability (and the decode
+ * anchor when a response is MergedOnly). */
+export const EWS_MERGED_FREE_BUSY_INTERVAL_MINUTES = 30;
+
 /** Element order is STRICT per the schema (TimeZone → MailboxDataArray →
  * FreeBusyViewOptions; TimeWindow → Interval → RequestedView). RequestedView
- * `Detailed` makes the response carry WorkingHours. */
+ * `Detailed` makes the response carry WorkingHours (the self working-hours
+ * leg); the attendee leg asks `FreeBusy` — opaque intervals, no details.
+ * FreeBusyResponses come back in MailboxDataArray order. */
 export function buildGetUserAvailabilityBody(
-  smtpAddress: string,
+  smtpAddresses: string[],
   startUtc: string,
   endUtc: string,
+  requestedView: "Detailed" | "FreeBusy",
 ): string {
+  const mailboxData = smtpAddresses
+    .map(
+      (smtpAddress) =>
+        "<t:MailboxData>" +
+        "<t:Email>" +
+        `<t:Address>${escapeXml(smtpAddress)}</t:Address>` +
+        "</t:Email>" +
+        "<t:AttendeeType>Required</t:AttendeeType>" +
+        "<t:ExcludeConflicts>false</t:ExcludeConflicts>" +
+        "</t:MailboxData>",
+    )
+    .join("");
   return (
     "<m:GetUserAvailabilityRequest>" +
     buildSerializableUtcTimeZone() +
-    "<m:MailboxDataArray>" +
-    "<t:MailboxData>" +
-    "<t:Email>" +
-    `<t:Address>${escapeXml(smtpAddress)}</t:Address>` +
-    "</t:Email>" +
-    "<t:AttendeeType>Required</t:AttendeeType>" +
-    "<t:ExcludeConflicts>false</t:ExcludeConflicts>" +
-    "</t:MailboxData>" +
-    "</m:MailboxDataArray>" +
+    `<m:MailboxDataArray>${mailboxData}</m:MailboxDataArray>` +
     "<t:FreeBusyViewOptions>" +
     "<t:TimeWindow>" +
     `<t:StartTime>${startUtc}</t:StartTime>` +
     `<t:EndTime>${endUtc}</t:EndTime>` +
     "</t:TimeWindow>" +
-    "<t:MergedFreeBusyIntervalInMinutes>30</t:MergedFreeBusyIntervalInMinutes>" +
-    "<t:RequestedView>Detailed</t:RequestedView>" +
+    `<t:MergedFreeBusyIntervalInMinutes>${EWS_MERGED_FREE_BUSY_INTERVAL_MINUTES}</t:MergedFreeBusyIntervalInMinutes>` +
+    `<t:RequestedView>${requestedView}</t:RequestedView>` +
     "</t:FreeBusyViewOptions>" +
     "</m:GetUserAvailabilityRequest>"
+  );
+}
+
+/**
+ * ResolveNames against the directory (SI-3 plumbing style, ERMAIN-434): turns
+ * a GAL display name into mailbox candidates. `ContactsActiveDirectory` is not
+ * used — personal contacts can shadow a colleague's directory entry.
+ */
+export function buildResolveNamesBody(unresolvedEntry: string): string {
+  return (
+    '<m:ResolveNames ReturnFullContactData="false" SearchScope="ActiveDirectory">' +
+    `<m:UnresolvedEntry>${escapeXml(unresolvedEntry)}</m:UnresolvedEntry>` +
+    "</m:ResolveNames>"
+  );
+}
+
+/** ExpandDL: one level only — nested DLs are reported, never recursed. */
+export function buildExpandDlBody(smtpAddress: string): string {
+  return (
+    "<m:ExpandDL>" +
+    "<m:Mailbox>" +
+    `<t:EmailAddress>${escapeXml(smtpAddress)}</t:EmailAddress>` +
+    "</m:Mailbox>" +
+    "</m:ExpandDL>"
   );
 }
 
@@ -229,6 +267,115 @@ export function parseAvailability(
     startMinutes,
     endMinutes,
   };
+}
+
+/** A `t:Mailbox` as ResolveNames / ExpandDL return it. */
+export interface EwsMailboxEntry {
+  name?: string;
+  emailAddress?: string;
+  routingType?: string;
+  mailboxType?: string;
+}
+
+function parseMailboxEl(mailbox: Element): EwsMailboxEntry {
+  return {
+    name: typesText(mailbox, "Name"),
+    emailAddress: typesText(mailbox, "EmailAddress"),
+    routingType: typesText(mailbox, "RoutingType"),
+    mailboxType: typesText(mailbox, "MailboxType"),
+  };
+}
+
+/** Zero matches is a RESULT ([]), not an error; ambiguous names come back as
+ * ResponseClass "Warning" WITH the candidate set, which passes through. */
+export function parseResolveNames(doc: Document): EwsMailboxEntry[] {
+  const responseMessage = allMessagesEls(doc, "ResolveNamesResponseMessage")[0];
+  if (!responseMessage) return [];
+  assertResponseOk(responseMessage, new Set(["ErrorNameResolutionNoResults"]));
+  return allTypesEls(responseMessage, "Resolution")
+    .map((resolution) => firstTypesEl(resolution, "Mailbox"))
+    .filter((mailbox): mailbox is Element => mailbox !== null)
+    .map(parseMailboxEl);
+}
+
+export function parseExpandDl(doc: Document): EwsMailboxEntry[] {
+  const responseMessage = allMessagesEls(doc, "ExpandDLResponseMessage")[0];
+  if (!responseMessage) return [];
+  assertResponseOk(responseMessage);
+  const expansion = firstMessagesEl(responseMessage, "DLExpansion");
+  if (!expansion) return [];
+  return allTypesEls(expansion, "Mailbox").map(parseMailboxEl);
+}
+
+/** One mailbox's slice of a GetUserAvailability response. */
+export type EwsFreeBusyResult =
+  | { kind: "ok"; blocks: NormalizedBusyBlock[] }
+  | { kind: "error"; reason: string };
+
+/**
+ * Per-mailbox FreeBusyResponses, in MailboxDataArray order. A per-mailbox
+ * error (ErrorNoFreeBusyAccess & co) is a RESULT — one denied colleague must
+ * not sink the others — so this never calls the throwing `assertResponseOk`.
+ * Blocks come from CalendarEventArray when present (RequestedView FreeBusy),
+ * else from the MergedFreeBusy string (MergedOnly — all the sharing policy
+ * publishes); `'4'`/NoData reads as Busy, never free.
+ */
+export function parseAttendeeFreeBusy(
+  doc: Document,
+  windowStartUtc: string,
+): EwsFreeBusyResult[] {
+  return allMessagesEls(doc, "FreeBusyResponse").map((freeBusyResponse) => {
+    const responseMessage = firstMessagesEl(
+      freeBusyResponse,
+      "ResponseMessage",
+    );
+    if (responseMessage?.getAttribute("ResponseClass") === "Error") {
+      const reason =
+        firstMessagesEl(responseMessage, "MessageText")?.textContent ??
+        firstMessagesEl(responseMessage, "ResponseCode")?.textContent ??
+        "free/busy lookup failed";
+      return { kind: "error", reason };
+    }
+    const view = firstMessagesEl(freeBusyResponse, "FreeBusyView");
+    if (!view) {
+      return { kind: "error", reason: "no free/busy view returned" };
+    }
+    const events = allTypesEls(view, "CalendarEvent");
+    if (events.length > 0 || firstTypesEl(view, "CalendarEventArray")) {
+      const blocks: NormalizedBusyBlock[] = [];
+      for (const event of events) {
+        const start = typesText(event, "StartTime");
+        const end = typesText(event, "EndTime");
+        if (!start || !end) continue;
+        blocks.push({
+          when: {
+            kind: "date-time",
+            startUtc: toUtcIso(start),
+            endUtc: toUtcIso(end),
+          },
+          // BusyType NoData (or anything unknown) → Busy via mapBusyType.
+          busyType: mapBusyType(typesText(event, "BusyType")),
+        });
+      }
+      return { kind: "ok", blocks: onlyBlockingBlocks(blocks) };
+    }
+    const merged = typesText(view, "MergedFreeBusy");
+    if (merged !== undefined) {
+      return {
+        kind: "ok",
+        blocks: onlyBlockingBlocks(
+          decodeMergedFreeBusyView(
+            merged,
+            windowStartUtc,
+            EWS_MERGED_FREE_BUSY_INTERVAL_MINUTES,
+            "Busy",
+          ),
+        ),
+      };
+    }
+    // An empty FreeBusyView with a non-error response = genuinely free window.
+    return { kind: "ok", blocks: [] };
+  });
 }
 
 // --- Normalization helpers -------------------------------------------------
@@ -351,10 +498,202 @@ export async function fetchWorkingHoursViaEws(
   throwIfAborted(options.signal);
   const doc = await ewsHostFetch(
     buildSoapEnvelope(
-      buildGetUserAvailabilityBody(smtpAddress, range.startUtc, range.endUtc),
+      buildGetUserAvailabilityBody(
+        [smtpAddress],
+        range.startUtc,
+        range.endUtc,
+        "Detailed",
+      ),
     ),
   );
   return parseAvailability(doc);
+}
+
+// --- Attendee availability (ERMAIN-434) --------------------------------------
+
+/** Total resolved-mailbox budget per fetch: inputs are capped upstream at
+ * MAX_ATTENDEES, but one DL can expand wide — spend in input order, stop here. */
+export const EWS_MAX_RESOLVED_MAILBOXES = 30;
+
+type ResolvedInput =
+  | { requested: string; smtps: { smtp: string; caveat?: string }[] }
+  | { requested: string; unknownReason: string };
+
+const hasSmtpShape = (entry: EwsMailboxEntry): boolean =>
+  Boolean(entry.emailAddress?.includes("@")) &&
+  (entry.routingType === undefined || entry.routingType === "SMTP");
+
+const isDl = (entry: EwsMailboxEntry): boolean =>
+  entry.mailboxType === "PublicDL" || entry.mailboxType === "PrivateDL";
+
+/** One input string → SMTP list via ResolveNames (+ ExpandDL for DLs).
+ * Resolution failures are per-input results, never throws. */
+async function resolveAttendeeInput(requested: string): Promise<ResolvedInput> {
+  if (requested.includes("@")) {
+    return { requested, smtps: [{ smtp: requested }] };
+  }
+  try {
+    const candidates = parseResolveNames(
+      await ewsHostFetch(buildSoapEnvelope(buildResolveNamesBody(requested))),
+    );
+    if (candidates.length === 0) {
+      return {
+        requested,
+        unknownReason: "not found in the directory (GAL)",
+      };
+    }
+    if (candidates.length > 1) {
+      return {
+        requested,
+        unknownReason: `ambiguous name (${candidates.length} directory matches) — use an email address`,
+      };
+    }
+    const candidate = candidates[0];
+    if (isDl(candidate)) {
+      if (!candidate.emailAddress) {
+        return {
+          requested,
+          unknownReason: "distribution list has no address to expand",
+        };
+      }
+      const members = parseExpandDl(
+        await ewsHostFetch(
+          buildSoapEnvelope(buildExpandDlBody(candidate.emailAddress)),
+        ),
+      );
+      const usable = members.filter((m) => hasSmtpShape(m) && !isDl(m));
+      const nestedDls = members.filter(isDl).length;
+      if (usable.length === 0) {
+        return {
+          requested,
+          unknownReason: "distribution list has no resolvable members",
+        };
+      }
+      return {
+        requested,
+        smtps: usable.map((m, index) => ({
+          smtp: m.emailAddress as string,
+          // Surface skipped nested DLs once, on the first member.
+          ...(index === 0 && nestedDls > 0
+            ? {
+                caveat: `${nestedDls} nested distribution list(s) inside "${requested}" were not expanded`,
+              }
+            : {}),
+        })),
+      };
+    }
+    if (!hasSmtpShape(candidate)) {
+      return {
+        requested,
+        unknownReason:
+          "resolved without an SMTP address — use an email address",
+      };
+    }
+    return {
+      requested,
+      smtps: [{ smtp: candidate.emailAddress as string }],
+    };
+  } catch (error) {
+    return {
+      requested,
+      unknownReason: `name resolution failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    };
+  }
+}
+
+/**
+ * Colleague free/busy over `range` (ERMAIN-434): resolve every input to SMTP
+ * (ResolveNames/ExpandDL for GAL names and DLs), then ONE GetUserAvailability
+ * with all resolved mailboxes (RequestedView FreeBusy — opaque). Per-attendee
+ * failures become `status: "unknown"` entries; only the availability call
+ * itself THROWS (degrading the leg). No impersonation anywhere: the host leg
+ * acts as the signed-in user, and Exchange free/busy sharing is the consent
+ * gate for what comes back.
+ */
+export async function fetchAttendeeAvailabilityViaEws(
+  range: CalendarRange,
+  attendees: string[],
+  options: CalendarFetchOptions = {},
+): Promise<NormalizedAttendeeAvailability[]> {
+  if (attendees.length === 0) return [];
+  throwIfAborted(options.signal);
+
+  const resolvedInputs = await Promise.all(attendees.map(resolveAttendeeInput));
+  throwIfAborted(options.signal);
+
+  // Spend the mailbox budget in input order; overflow entries stay visible as
+  // "unknown" rather than silently dropping off.
+  const entries: NormalizedAttendeeAvailability[] = [];
+  const toQuery: string[] = [];
+  for (const resolved of resolvedInputs) {
+    if ("unknownReason" in resolved) {
+      entries.push({
+        requested: resolved.requested,
+        status: "unknown",
+        reason: resolved.unknownReason,
+        busy: [],
+      });
+      continue;
+    }
+    const budget = EWS_MAX_RESOLVED_MAILBOXES - toQuery.length;
+    const taking = resolved.smtps.slice(0, Math.max(0, budget));
+    const dropped = resolved.smtps.length - taking.length;
+    for (const { smtp, caveat } of taking) {
+      toQuery.push(smtp);
+      entries.push({
+        requested: resolved.requested,
+        smtp,
+        status: "ok", // provisional; zipped with the free/busy result below
+        ...(caveat !== undefined ? { reason: caveat } : {}),
+        busy: [],
+      });
+    }
+    if (dropped > 0) {
+      entries.push({
+        requested: resolved.requested,
+        status: "unknown",
+        reason: `attendee cap reached (${EWS_MAX_RESOLVED_MAILBOXES} mailboxes) — ${dropped} not checked`,
+        busy: [],
+      });
+    }
+  }
+
+  if (toQuery.length > 0) {
+    const doc = await ewsHostFetch(
+      buildSoapEnvelope(
+        buildGetUserAvailabilityBody(
+          toQuery,
+          range.startUtc,
+          range.endUtc,
+          "FreeBusy",
+        ),
+      ),
+    );
+    const results = parseAttendeeFreeBusy(doc, range.startUtc);
+    let cursor = 0;
+    for (const entry of entries) {
+      if (entry.smtp === undefined) continue; // unresolved — no response slot
+      const result = results[cursor];
+      cursor += 1;
+      if (result === undefined) {
+        entry.status = "unknown";
+        entry.reason = "no free/busy response for this mailbox";
+      } else if (result.kind === "error") {
+        entry.status = "unknown";
+        entry.reason = result.reason;
+      } else {
+        entry.busy = result.blocks;
+      }
+    }
+    if (results.length !== toQuery.length) {
+      console.warn(
+        `[fetchAttendeeAvailabilityViaEws] expected ${toQuery.length} FreeBusyResponses, got ${results.length}`,
+      );
+    }
+  }
+  return entries;
 }
 
 /** The full EWS calendar snapshot. After the `getEwsUrl()` precheck this NEVER
@@ -372,21 +711,33 @@ export async function fetchOutlookCalendarViaEws(
   );
   const displayTimeZone = resolveTimezone();
 
-  const { historyMeetings, busyBlocks, workingHours, degradedLegs } =
-    await runCalendarLegs(
-      {
-        history: () => fetchCalendarHistoryViaEws(historyRange, options),
-        busy: () => fetchCalendarBusyViaEws(busyRange, options),
-        workingHours: () => fetchWorkingHoursViaEws(busyRange, options),
-      },
-      options.signal,
-      "[fetchOutlookCalendarViaEws]",
-    );
+  const {
+    historyMeetings,
+    busyBlocks,
+    workingHours,
+    attendeeAvailability,
+    degradedLegs,
+  } = await runCalendarLegs(
+    {
+      history: () => fetchCalendarHistoryViaEws(historyRange, options),
+      busy: () => fetchCalendarBusyViaEws(busyRange, options),
+      workingHours: () => fetchWorkingHoursViaEws(busyRange, options),
+      attendees: () =>
+        fetchAttendeeAvailabilityViaEws(
+          busyRange,
+          options.attendees ?? [],
+          options,
+        ),
+    },
+    options.signal,
+    "[fetchOutlookCalendarViaEws]",
+  );
 
   return {
     workingHours,
     busyBlocks,
     historyMeetings,
+    attendees: attendeeAvailability,
     displayTimeZone,
     degradedLegs,
   };

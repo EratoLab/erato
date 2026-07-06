@@ -1,10 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  EXPECTED_ATTENDEE_PARITY,
+  stripReasons,
+} from "./attendeeParity.fixture";
+import {
   installMockMailbox,
   uninstallMockMailbox,
 } from "../../test/mocks/outlook/mailbox";
-import { fetchOutlookCalendarViaGraph } from "../fetchOutlookCalendarGraph";
+import {
+  availabilityViewIntervalFor,
+  fetchAttendeeAvailabilityViaGraph,
+  fetchOutlookCalendarViaGraph,
+} from "../fetchOutlookCalendarGraph";
 import { GRAPH_BASE } from "../fetchOutlookMessageGraph";
 
 type MailboxMock = ReturnType<typeof installMockMailbox> & {
@@ -601,5 +609,193 @@ describe("fetchOutlookCalendarViaGraph", () => {
         signal: controller.signal,
       }),
     ).rejects.toBe(reason);
+  });
+});
+
+/** The wire fixture for the SHARED attendee parity contract — the EWS suite
+ * feeds the equivalent GetUserAvailability response and asserts the same
+ * `EXPECTED_ATTENDEE_PARITY`. */
+const GET_SCHEDULE_ATTENDEES_RESPONSE = {
+  value: [
+    {
+      scheduleId: "alice@example.de",
+      availabilityView: "not-used-when-items-present",
+      scheduleItems: [
+        {
+          status: "busy",
+          start: { dateTime: "2026-07-07T08:00:00.0000000", timeZone: "UTC" },
+          end: { dateTime: "2026-07-07T09:00:00.0000000", timeZone: "UTC" },
+        },
+        // A free item must be filtered out (opaque = blocking-only).
+        {
+          status: "free",
+          start: { dateTime: "2026-07-07T10:00:00.0000000", timeZone: "UTC" },
+          end: { dateTime: "2026-07-07T10:30:00.0000000", timeZone: "UTC" },
+        },
+        {
+          status: "tentative",
+          start: { dateTime: "2026-07-07T12:00:00.0000000", timeZone: "UTC" },
+          end: { dateTime: "2026-07-07T12:30:00.0000000", timeZone: "UTC" },
+        },
+        {
+          status: "oof",
+          start: { dateTime: "2026-07-08T08:00:00.0000000", timeZone: "UTC" },
+          end: { dateTime: "2026-07-08T16:00:00.0000000", timeZone: "UTC" },
+        },
+      ],
+    },
+    {
+      scheduleId: "denied@example.de",
+      error: {
+        message: "Access is denied.",
+        responseCode: "ErrorNoFreeBusyAccess",
+      },
+    },
+  ],
+};
+
+const ATTENDEE_RANGE = {
+  startUtc: "2026-07-07T00:00:00Z",
+  endUtc: "2026-07-21T00:00:00Z",
+};
+
+describe("fetchAttendeeAvailabilityViaGraph", () => {
+  beforeEach(() => {
+    installOutlookMailboxMock();
+  });
+
+  afterEach(() => {
+    uninstallMockMailbox();
+    vi.unstubAllGlobals();
+  });
+
+  it("posts ONE multi-schedule getSchedule and matches the shared parity contract", async () => {
+    const bodies: string[] = [];
+    const transport = vi.fn(async (url: string, init?: RequestInit) => {
+      bodies.push(String(init?.body ?? ""));
+      expect(url).toContain("getSchedule");
+      return jsonResponse(GET_SCHEDULE_ATTENDEES_RESPONSE);
+    });
+
+    const entries = await fetchAttendeeAvailabilityViaGraph(
+      vi.fn().mockResolvedValue("graph-tok"),
+      ATTENDEE_RANGE,
+      ["alice@example.de", "denied@example.de"],
+      { transport },
+    );
+
+    expect(transport).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(bodies[0]) as {
+      schedules: string[];
+      startTime: { dateTime: string; timeZone: string };
+      endTime: { dateTime: string };
+      availabilityViewInterval: number;
+    };
+    expect(body.schedules).toEqual(["alice@example.de", "denied@example.de"]);
+    expect(body.startTime).toEqual({
+      dateTime: "2026-07-07T00:00:00Z",
+      timeZone: "UTC",
+    });
+    expect(body.endTime.dateTime).toBe("2026-07-21T00:00:00Z");
+    // 14 days / 30 min = 672 slots — safely under the 1000-slot 5006 cap.
+    expect(body.availabilityViewInterval).toBe(30);
+
+    expect(stripReasons(entries)).toEqual(EXPECTED_ATTENDEE_PARITY);
+    // Opaque contract: no subject anywhere.
+    for (const entry of entries) {
+      for (const block of entry.busy) {
+        expect(block.subject).toBeUndefined();
+      }
+    }
+  });
+
+  it("decodes availabilityView when scheduleItems are absent (merged-only policy)", async () => {
+    const transport = vi.fn(async () =>
+      jsonResponse({
+        value: [
+          {
+            scheduleId: "carol@example.de",
+            // 30-min slices from the window start: free, Busy×2, free, OOF,
+            // workingElsewhere (Graph '4' — non-blocking, must be dropped).
+            availabilityView: "022034",
+          },
+        ],
+      }),
+    );
+
+    const entries = await fetchAttendeeAvailabilityViaGraph(
+      vi.fn().mockResolvedValue("graph-tok"),
+      { startUtc: "2026-07-07T00:00:00Z", endUtc: "2026-07-08T00:00:00Z" },
+      ["carol@example.de"],
+      { transport },
+    );
+
+    expect(entries).toEqual([
+      {
+        requested: "carol@example.de",
+        smtp: "carol@example.de",
+        status: "ok",
+        busy: [
+          {
+            when: {
+              kind: "date-time",
+              startUtc: "2026-07-07T00:30:00Z",
+              endUtc: "2026-07-07T01:30:00Z",
+            },
+            busyType: "Busy",
+          },
+          {
+            when: {
+              kind: "date-time",
+              startUtc: "2026-07-07T02:00:00Z",
+              endUtc: "2026-07-07T02:30:00Z",
+            },
+            busyType: "OOF",
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("marks non-SMTP inputs unknown; an all-invalid list never hits the network", async () => {
+    const transport = vi.fn();
+
+    const entries = await fetchAttendeeAvailabilityViaGraph(
+      vi.fn().mockResolvedValue("graph-tok"),
+      ATTENDEE_RANGE,
+      ["Bob Builder"],
+      { transport },
+    );
+
+    expect(transport).not.toHaveBeenCalled();
+    expect(entries).toEqual([
+      {
+        requested: "Bob Builder",
+        status: "unknown",
+        reason: expect.stringContaining("not an email address"),
+        busy: [],
+      },
+    ]);
+  });
+
+  it("returns [] for an empty attendee list without a network call", async () => {
+    const transport = vi.fn();
+    await expect(
+      fetchAttendeeAvailabilityViaGraph(
+        vi.fn().mockResolvedValue("graph-tok"),
+        ATTENDEE_RANGE,
+        [],
+        { transport },
+      ),
+    ).resolves.toEqual([]);
+    expect(transport).not.toHaveBeenCalled();
+  });
+});
+
+describe("availabilityViewIntervalFor", () => {
+  it("stays at 30 min for windows within the 1000-slot cap and doubles beyond", () => {
+    expect(availabilityViewIntervalFor(14 * 24 * 60)).toBe(30); // 672 slots
+    expect(availabilityViewIntervalFor(21 * 24 * 60)).toBe(60); // 30 → 1008 > cap
+    expect(availabilityViewIntervalFor(62 * 24 * 60)).toBe(120); // Graph max window
   });
 });

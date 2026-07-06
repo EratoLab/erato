@@ -58,14 +58,41 @@ export interface NormalizedHistoryMeeting {
   authoringTimeZone?: string | null;
 }
 
+/**
+ * One requested attendee's free/busy (ERMAIN-434). Colleague calendars are
+ * OPAQUE by contract: `busy` carries only BLOCKING intervals (Busy/OOF/
+ * Tentative), never subjects or details, and never `Free`/`WorkingElsewhere`
+ * rows — what Exchange free/busy sharing permits is exactly what surfaces.
+ * A DL input expands to one entry per member, all sharing `requested`.
+ */
+export interface NormalizedAttendeeAvailability {
+  /** The attendee string exactly as the tool call requested it. */
+  requested: string;
+  /** Resolved SMTP address; absent when resolution failed. */
+  smtp?: string;
+  /**
+   * "ok" — `busy` is authoritative: time outside the listed intervals is free.
+   * "unknown" — free/busy could not be read (resolution failure, access
+   * denied, no data); the attendee must be treated as NOT free at any time.
+   */
+  status: "ok" | "unknown";
+  /** Why status is "unknown"; also used for non-fatal caveats (truncation). */
+  reason?: string;
+  busy: NormalizedBusyBlock[];
+}
+
 /** The independently-sourced legs of a calendar snapshot. */
-export type CalendarLeg = "busy" | "history" | "workingHours";
+export type CalendarLeg = "busy" | "history" | "workingHours" | "attendees";
 
 export interface NormalizedCalendar {
   /** null when it couldn't be sourced (the EWS working-hours leg is best-effort). */
   workingHours: NormalizedWorkingHours | null;
   busyBlocks: NormalizedBusyBlock[];
   historyMeetings: NormalizedHistoryMeeting[];
+  /** Per-attendee free/busy, in request order; empty when none were requested.
+   * Per-attendee read failures live INSIDE entries (`status: "unknown"`); the
+   * `"attendees"` degraded leg means the whole fetch hard-failed. */
+  attendees: NormalizedAttendeeAvailability[];
   /**
    * Canonical IANA id (e.g. `Europe/Berlin`) to display times in and the anchor
    * used to project `date` events onto the timeline. Always present (falls back
@@ -89,6 +116,10 @@ export interface CalendarFetchOptions {
   transport?: GraphTransport;
   historyWindowDays?: number;
   freeBusyWindowDays?: number;
+  /** Other people whose free/busy to read alongside the user's own calendar
+   * (SMTP addresses; on EWS also GAL display names / DLs). Already deduped
+   * and capped by the caller. */
+  attendees?: string[];
 }
 
 export interface OutlookCalendarFetcher {

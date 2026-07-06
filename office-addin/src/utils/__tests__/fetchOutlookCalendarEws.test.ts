@@ -1,10 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  EXPECTED_ATTENDEE_PARITY,
+  stripReasons,
+} from "./attendeeParity.fixture";
+import {
   installMockMailbox,
   uninstallMockMailbox,
 } from "../../test/mocks/outlook/mailbox";
 import {
+  fetchAttendeeAvailabilityViaEws,
   fetchCalendarHistoryViaEws,
   fetchOutlookCalendarViaEws,
 } from "../fetchOutlookCalendarEws";
@@ -450,8 +455,11 @@ describe("fetchOutlookCalendarViaEws", () => {
       workingHours: null,
       busyBlocks: [],
       historyMeetings: [],
+      // No attendees requested → the leg resolves [] without a host call and
+      // is NOT degraded.
+      attendees: [],
       displayTimeZone: "Europe/Berlin",
-      // Every leg hard-failed → all three flagged (in dispatch order).
+      // Every network leg hard-failed → all three flagged (in dispatch order).
       degradedLegs: ["history", "busy", "workingHours"],
     });
     warnSpy.mockRestore();
@@ -492,5 +500,317 @@ describe("fetchOutlookCalendarViaEws", () => {
     await expect(
       fetchOutlookCalendarViaEws({ signal: controller.signal }),
     ).rejects.toBe(reason);
+  });
+});
+
+// --- Attendee availability (ERMAIN-434) ---------------------------------------
+
+const soapEnvelope = (body: string): string =>
+  '<?xml version="1.0" encoding="utf-8"?>' +
+  '<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">' +
+  '<s:Body xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" ' +
+  'xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">' +
+  body +
+  "</s:Body></s:Envelope>";
+
+const resolutionXml = (
+  name: string,
+  address: string,
+  mailboxType: string,
+): string =>
+  "<t:Resolution><t:Mailbox>" +
+  `<t:Name>${name}</t:Name>` +
+  `<t:EmailAddress>${address}</t:EmailAddress>` +
+  "<t:RoutingType>SMTP</t:RoutingType>" +
+  `<t:MailboxType>${mailboxType}</t:MailboxType>` +
+  "</t:Mailbox></t:Resolution>";
+
+const resolveNamesSoap = (resolutions: string, responseClass = "Success") =>
+  soapEnvelope(
+    "<m:ResolveNamesResponse><m:ResponseMessages>" +
+      `<m:ResolveNamesResponseMessage ResponseClass="${responseClass}">` +
+      `<m:ResponseCode>${
+        responseClass === "Warning"
+          ? "ErrorNameResolutionMultipleResults"
+          : "NoError"
+      }</m:ResponseCode>` +
+      `<m:ResolutionSet>${resolutions}</m:ResolutionSet>` +
+      "</m:ResolveNamesResponseMessage>" +
+      "</m:ResponseMessages></m:ResolveNamesResponse>",
+  );
+
+const RESOLVE_NONE_SOAP = soapEnvelope(
+  "<m:ResolveNamesResponse><m:ResponseMessages>" +
+    '<m:ResolveNamesResponseMessage ResponseClass="Error">' +
+    "<m:MessageText>No results were found.</m:MessageText>" +
+    "<m:ResponseCode>ErrorNameResolutionNoResults</m:ResponseCode>" +
+    "</m:ResolveNamesResponseMessage>" +
+    "</m:ResponseMessages></m:ResolveNamesResponse>",
+);
+
+const EXPAND_DL_SOAP = soapEnvelope(
+  "<m:ExpandDLResponse><m:ResponseMessages>" +
+    '<m:ExpandDLResponseMessage ResponseClass="Success">' +
+    "<m:ResponseCode>NoError</m:ResponseCode>" +
+    '<m:DLExpansion TotalItemsInView="3" IncludesLastItemInRange="true">' +
+    "<t:Mailbox><t:Name>Bob</t:Name><t:EmailAddress>bob@example.de</t:EmailAddress>" +
+    "<t:RoutingType>SMTP</t:RoutingType><t:MailboxType>Mailbox</t:MailboxType></t:Mailbox>" +
+    "<t:Mailbox><t:Name>Carol</t:Name><t:EmailAddress>carol@example.de</t:EmailAddress>" +
+    "<t:RoutingType>SMTP</t:RoutingType><t:MailboxType>Mailbox</t:MailboxType></t:Mailbox>" +
+    "<t:Mailbox><t:Name>Nested DL</t:Name><t:EmailAddress>nested@example.de</t:EmailAddress>" +
+    "<t:RoutingType>SMTP</t:RoutingType><t:MailboxType>PublicDL</t:MailboxType></t:Mailbox>" +
+    "</m:DLExpansion>" +
+    "</m:ExpandDLResponseMessage>" +
+    "</m:ResponseMessages></m:ExpandDLResponse>",
+);
+
+const calendarEventXml = (
+  start: string,
+  end: string,
+  busyType: string,
+): string =>
+  "<t:CalendarEvent>" +
+  `<t:StartTime>${start}</t:StartTime>` +
+  `<t:EndTime>${end}</t:EndTime>` +
+  `<t:BusyType>${busyType}</t:BusyType>` +
+  "</t:CalendarEvent>";
+
+/** The EWS half of the shared parity contract: same instants and free/busy
+ * states as the Graph suite's `GET_SCHEDULE_ATTENDEES_RESPONSE`, including a
+ * `Free` event that must be filtered, plus a denied second mailbox. */
+const FREE_BUSY_PARITY_SOAP = soapEnvelope(
+  "<m:GetUserAvailabilityResponse><m:FreeBusyResponseArray>" +
+    "<m:FreeBusyResponse>" +
+    '<m:ResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode></m:ResponseMessage>' +
+    "<m:FreeBusyView><t:FreeBusyViewType>FreeBusy</t:FreeBusyViewType>" +
+    "<t:CalendarEventArray>" +
+    calendarEventXml("2026-07-07T08:00:00", "2026-07-07T09:00:00", "Busy") +
+    calendarEventXml("2026-07-07T10:00:00", "2026-07-07T10:30:00", "Free") +
+    calendarEventXml(
+      "2026-07-07T12:00:00",
+      "2026-07-07T12:30:00",
+      "Tentative",
+    ) +
+    calendarEventXml("2026-07-08T08:00:00", "2026-07-08T16:00:00", "OOF") +
+    "</t:CalendarEventArray>" +
+    "</m:FreeBusyView>" +
+    "</m:FreeBusyResponse>" +
+    "<m:FreeBusyResponse>" +
+    '<m:ResponseMessage ResponseClass="Error">' +
+    "<m:MessageText>Access is denied.</m:MessageText>" +
+    "<m:ResponseCode>ErrorNoFreeBusyAccess</m:ResponseCode>" +
+    "</m:ResponseMessage>" +
+    "</m:FreeBusyResponse>" +
+    "</m:FreeBusyResponseArray></m:GetUserAvailabilityResponse>",
+);
+
+/** MergedOnly: the sharing policy publishes only the merged digit string.
+ * '4' is NoData on EWS and must read as Busy. */
+const FREE_BUSY_MERGED_ONLY_SOAP = soapEnvelope(
+  "<m:GetUserAvailabilityResponse><m:FreeBusyResponseArray>" +
+    "<m:FreeBusyResponse>" +
+    '<m:ResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode></m:ResponseMessage>' +
+    "<m:FreeBusyView><t:FreeBusyViewType>MergedOnly</t:FreeBusyViewType>" +
+    "<t:MergedFreeBusy>0220334</t:MergedFreeBusy>" +
+    "</m:FreeBusyView>" +
+    "</m:FreeBusyResponse>" +
+    "</m:FreeBusyResponseArray></m:GetUserAvailabilityResponse>",
+);
+
+const ATTENDEE_RANGE = {
+  startUtc: "2026-07-07T00:00:00Z",
+  endUtc: "2026-07-14T00:00:00Z",
+};
+
+describe("fetchAttendeeAvailabilityViaEws", () => {
+  beforeEach(() => {
+    installOutlookMailboxMock();
+  });
+
+  afterEach(() => {
+    uninstallMockMailbox();
+    vi.unstubAllGlobals();
+  });
+
+  it("queries all SMTP attendees in ONE GetUserAvailability and matches the shared parity contract", async () => {
+    const hostMock = installHostMock((body) => {
+      if (body.includes("<m:GetUserAvailabilityRequest")) {
+        return { status: "succeeded", value: FREE_BUSY_PARITY_SOAP };
+      }
+      return { status: "failed", error: { code: 0, message: "unexpected op" } };
+    });
+
+    const entries = await fetchAttendeeAvailabilityViaEws(ATTENDEE_RANGE, [
+      "alice@example.de",
+      "denied@example.de",
+    ]);
+
+    // SMTP inputs skip ResolveNames entirely: exactly one host call.
+    expect(hostMock).toHaveBeenCalledTimes(1);
+    const sent = String(hostMock.mock.calls[0][0]);
+    expect(sent).toContain("<t:Address>alice@example.de</t:Address>");
+    expect(sent).toContain("<t:Address>denied@example.de</t:Address>");
+    // Opaque view, never Detailed (no subjects wanted or needed).
+    expect(sent).toContain("<t:RequestedView>FreeBusy</t:RequestedView>");
+
+    expect(stripReasons(entries)).toEqual(EXPECTED_ATTENDEE_PARITY);
+    expect(entries[1].reason).toContain("Access is denied");
+  });
+
+  it("resolves a GAL display name via ResolveNames before the availability call", async () => {
+    installHostMock((body) => {
+      if (body.includes("<m:ResolveNames")) {
+        return {
+          status: "succeeded",
+          value: resolveNamesSoap(
+            resolutionXml("Bob Builder", "bob@example.de", "Mailbox"),
+          ),
+        };
+      }
+      if (body.includes("<m:GetUserAvailabilityRequest")) {
+        return { status: "succeeded", value: FREE_BUSY_MERGED_ONLY_SOAP };
+      }
+      return { status: "failed", error: { code: 0, message: "unexpected op" } };
+    });
+
+    const entries = await fetchAttendeeAvailabilityViaEws(ATTENDEE_RANGE, [
+      "Bob Builder",
+    ]);
+
+    expect(entries).toEqual([
+      {
+        requested: "Bob Builder",
+        smtp: "bob@example.de",
+        status: "ok",
+        // MergedFreeBusy "0220334", 30-min slices from the window start:
+        // Busy 00:30–01:30, OOF 02:00–03:00, NoData('4'→Busy) 03:00–03:30.
+        busy: [
+          {
+            when: {
+              kind: "date-time",
+              startUtc: "2026-07-07T00:30:00Z",
+              endUtc: "2026-07-07T01:30:00Z",
+            },
+            busyType: "Busy",
+          },
+          {
+            when: {
+              kind: "date-time",
+              startUtc: "2026-07-07T02:00:00Z",
+              endUtc: "2026-07-07T03:00:00Z",
+            },
+            busyType: "OOF",
+          },
+          {
+            when: {
+              kind: "date-time",
+              startUtc: "2026-07-07T03:00:00Z",
+              endUtc: "2026-07-07T03:30:00Z",
+            },
+            busyType: "Busy",
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("degrades ambiguous and unresolvable names to unknown without an availability call", async () => {
+    const hostMock = installHostMock((body) => {
+      if (body.includes("Ambiguous Person")) {
+        return {
+          status: "succeeded",
+          value: resolveNamesSoap(
+            resolutionXml("Ambiguous Person", "a1@example.de", "Mailbox") +
+              resolutionXml("Ambiguous Person 2", "a2@example.de", "Mailbox"),
+            "Warning",
+          ),
+        };
+      }
+      if (body.includes("<m:ResolveNames")) {
+        return { status: "succeeded", value: RESOLVE_NONE_SOAP };
+      }
+      return { status: "failed", error: { code: 0, message: "unexpected op" } };
+    });
+
+    const entries = await fetchAttendeeAvailabilityViaEws(ATTENDEE_RANGE, [
+      "Ambiguous Person",
+      "Ghost",
+    ]);
+
+    expect(entries).toEqual([
+      {
+        requested: "Ambiguous Person",
+        status: "unknown",
+        reason: expect.stringContaining("ambiguous name (2 directory matches)"),
+        busy: [],
+      },
+      {
+        requested: "Ghost",
+        status: "unknown",
+        reason: expect.stringContaining("not found in the directory"),
+        busy: [],
+      },
+    ]);
+    // Nothing resolved → GetUserAvailability is never sent.
+    const availabilityCalls = hostMock.mock.calls.filter((call) =>
+      String(call[0]).includes("<m:GetUserAvailabilityRequest"),
+    );
+    expect(availabilityCalls).toHaveLength(0);
+  });
+
+  it("expands a DL one level, skipping nested DLs with a caveat on the first member", async () => {
+    const hostMock = installHostMock((body) => {
+      if (body.includes("<m:ResolveNames")) {
+        return {
+          status: "succeeded",
+          value: resolveNamesSoap(
+            resolutionXml("Sales Team", "sales@example.de", "PublicDL"),
+          ),
+        };
+      }
+      if (body.includes("<m:ExpandDL")) {
+        return { status: "succeeded", value: EXPAND_DL_SOAP };
+      }
+      if (body.includes("<m:GetUserAvailabilityRequest")) {
+        return { status: "succeeded", value: FREE_BUSY_PARITY_SOAP };
+      }
+      return { status: "failed", error: { code: 0, message: "unexpected op" } };
+    });
+
+    const entries = await fetchAttendeeAvailabilityViaEws(ATTENDEE_RANGE, [
+      "Sales Team",
+    ]);
+
+    const expandBody = hostMock.mock.calls
+      .map((call) => String(call[0]))
+      .find((sent) => sent.includes("<m:ExpandDL"));
+    expect(expandBody).toContain(
+      "<t:EmailAddress>sales@example.de</t:EmailAddress>",
+    );
+
+    // Two resolvable members ride the parity response: ok + denied-unknown.
+    expect(entries).toHaveLength(2);
+    expect(entries[0]).toMatchObject({
+      requested: "Sales Team",
+      smtp: "bob@example.de",
+      status: "ok",
+      reason: expect.stringContaining("nested distribution list"),
+    });
+    expect(entries[1]).toMatchObject({
+      requested: "Sales Team",
+      smtp: "carol@example.de",
+      status: "unknown",
+    });
+  });
+
+  it("returns [] for an empty attendee list without a host call", async () => {
+    const hostMock = installHostMock(() => ({
+      status: "failed",
+      error: { code: 0, message: "should not be called" },
+    }));
+    await expect(
+      fetchAttendeeAvailabilityViaEws(ATTENDEE_RANGE, []),
+    ).resolves.toEqual([]);
+    expect(hostMock).not.toHaveBeenCalled();
   });
 });
