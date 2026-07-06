@@ -1,12 +1,13 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import { InteractiveContainer } from "@/components/ui/Container/InteractiveContainer";
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { Input } from "@/components/ui/Input/Input";
 import { ModalBase } from "@/components/ui/Modal/ModalBase";
+import { useTransientLabel } from "@/hooks/ui/useTransientLabel";
 import { useChatShareLink } from "@/hooks/useChatShareLink";
 
 import { CheckIcon, CopyIcon } from "../icons";
@@ -28,7 +29,7 @@ export function ChatShareDialog({
   const { shareLink, setEnabled, isUpdating } = useChatShareLink(
     isOpen ? chatId : null,
   );
-  const [isCopied, setIsCopied] = useState(false);
+  const { isActive: isCopied, trigger: triggerCopied } = useTransientLabel();
 
   const shareUrl = useMemo(() => {
     if (!shareLink?.enabled) {
@@ -47,9 +48,6 @@ export function ChatShareDialog({
     }
 
     await setEnabled(enabled);
-    if (!enabled) {
-      setIsCopied(false);
-    }
   };
 
   const handleCopy = async () => {
@@ -58,8 +56,7 @@ export function ChatShareDialog({
     }
 
     await navigator.clipboard.writeText(shareUrl);
-    setIsCopied(true);
-    window.setTimeout(() => setIsCopied(false), 2000);
+    triggerCopied();
   };
 
   return (

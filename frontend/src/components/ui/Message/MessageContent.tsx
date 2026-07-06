@@ -19,6 +19,7 @@ import {
 } from "@/config/codeHighlightThemes";
 import { componentRegistry } from "@/config/componentRegistry";
 import { useOptionalTranslation } from "@/hooks/i18n";
+import { useTransientLabel } from "@/hooks/ui/useTransientLabel";
 import { useTraceFeature } from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
@@ -197,7 +198,8 @@ function MarkdownPre({
   ...props
 }: MarkdownPreProps) {
   const artifact = React.useContext(OutlookArtifactContext);
-  const [copied, setCopied] = React.useState(false);
+  const { isActive: copied, trigger: triggerCopied, srAnnouncement } =
+    useTransientLabel({ announcement: t`Copied to clipboard` });
 
   // Extract the raw code text from the child <code> element so the copy button
   // can access it without needing a separate context or ref strategy.
@@ -215,11 +217,10 @@ function MarkdownPre({
     void navigator.clipboard
       .writeText(codeContent)
       .then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        triggerCopied();
       })
       .catch(() => {});
-  }, [codeContent]);
+  }, [codeContent, triggerCopied]);
 
   // erato-email / erato-appointment blocks render a custom component, not a
   // code block — use a plain <div> to avoid inheriting <pre> monospace font
@@ -263,6 +264,9 @@ function MarkdownPre({
           <CopyIcon className="size-3.5" />
         )}
       </button>
+      <p role="status" className="sr-only">
+        {srAnnouncement}
+      </p>
     </div>
   );
 }
