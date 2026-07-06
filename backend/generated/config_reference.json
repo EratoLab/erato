@@ -285,6 +285,8 @@
   "experimental_facets.facets.<facet-id>.additional_system_prompt.source": {},
   "experimental_facets.facets.<facet-id>.disable_facet_prompt_template": {},
   "experimental_facets.facets.<facet-id>.display_name": {},
+  "experimental_facets.facets.<facet-id>.hidden": {},
+  "experimental_facets.facets.<facet-id>.hidden_always_active_for_platform": {},
   "experimental_facets.facets.<facet-id>.icon": {},
   "experimental_facets.facets.<facet-id>.model_settings.compat_omit_strict": {},
   "experimental_facets.facets.<facet-id>.model_settings.generate_images": {},
@@ -347,13 +349,6 @@
   "guardrails.prompt_patterns.<pattern-id>.pattern": {},
   "guardrails.prompt_patterns.<pattern-id>.tags.[]": {},
   "guardrails.prompt_patterns.<pattern-id>.type": {},
-  "hidden_facets.facets.<facet-id>.additional_system_prompt": {},
-  "hidden_facets.facets.<facet-id>.additional_system_prompt.fallback": {},
-  "hidden_facets.facets.<facet-id>.additional_system_prompt.label": {},
-  "hidden_facets.facets.<facet-id>.additional_system_prompt.prompt": {},
-  "hidden_facets.facets.<facet-id>.additional_system_prompt.prompt_name": {},
-  "hidden_facets.facets.<facet-id>.additional_system_prompt.source": {},
-  "hidden_facets.facets.<facet-id>.platform": {},
   "http_host": {
     "hide_in_docs": true
   },

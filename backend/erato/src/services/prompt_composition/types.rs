@@ -68,13 +68,10 @@ pub enum AbstractChatSequencePart {
         facet_tools_list: Vec<String>,
     },
 
-    /// Facet-specific additional system prompt
+    /// Facet-specific additional system prompt. Also used for hidden baseline
+    /// facets (`hidden = true`), which are injected as always-on system prompts
+    /// at conversation start rather than via user selection.
     FacetAdditionalSystemPrompt { spec: PromptSpec, facet_id: String },
-
-    /// Hidden-facet baseline system prompt: platform-scoped, always-on, not
-    /// user-selectable. Injected once at conversation start alongside the base
-    /// system prompt, then persisted in history like any other system prompt.
-    HiddenFacetSystemPrompt { spec: PromptSpec, facet_id: String },
 
     /// Action-facet directive (request-scoped, parameterized). Carries the
     /// facet identity + invocation args; rendering happens later in the

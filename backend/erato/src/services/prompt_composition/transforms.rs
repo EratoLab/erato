@@ -11,7 +11,6 @@ use super::types::{
 use crate::config::ActionFacetConfig;
 use crate::config::ChatProviderConfig;
 use crate::config::ExperimentalFacetsConfig;
-use crate::config::HiddenFacetsConfig;
 use crate::db::entity::chats;
 use crate::db::entity::messages;
 use crate::models::message::{
@@ -62,7 +61,6 @@ pub async fn build_abstract_sequence(
         None,
         None,
         &HashMap::new(),
-        &HiddenFacetsConfig::default(),
         None,
     )
     .await
@@ -88,7 +86,6 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
     facet_tool_expansions: Option<&HashMap<String, Vec<String>>>,
     action_facet: Option<&ActionFacetUserInput>,
     action_facet_configs: &HashMap<String, ActionFacetConfig>,
-    hidden_facets: &HiddenFacetsConfig,
     // Request platform (from `X-Erato-Platform`). Used to scope hidden facets.
     platform: Option<&str>,
 ) -> Result<AbstractChatSequence, Report> {
@@ -151,25 +148,32 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
             });
         }
     };
-    // 7. Inject hidden-facet baseline system prompts (platform-scoped, always-on,
-    // not user-selectable). Gated like the base system prompt so they are added
-    // once at conversation start and then persist in history — a single
-    // injection, not a per-turn one. Deterministic (id-sorted) order.
+    // 7. Inject hidden-facet baseline system prompts. Hidden facets are regular
+    // facets (`[experimental_facets.facets.<id>]` with `hidden = true`) that are
+    // platform-scoped and always-on rather than user-selectable. Gated like the
+    // base system prompt so they are added once at conversation start and then
+    // persist in history — a single injection, not a per-turn one. A facet with
+    // no `hidden_always_active_for_platform` applies on every platform.
+    // Deterministic (id-sorted) order.
     if should_add_system_prompts {
-        let mut hidden_facet_ids: Vec<&String> = hidden_facets.facets.keys().collect();
+        let mut hidden_facet_ids: Vec<&String> = experimental_facets
+            .facets
+            .iter()
+            .filter(|(_, facet)| facet.hidden)
+            .filter(
+                |(_, facet)| match &facet.hidden_always_active_for_platform {
+                    None => true,
+                    Some(required) => platform == Some(required.as_str()),
+                },
+            )
+            .map(|(facet_id, _)| facet_id)
+            .collect();
         hidden_facet_ids.sort();
         for facet_id in hidden_facet_ids {
-            let hidden_facet = &hidden_facets.facets[facet_id];
-            let applies_to_platform = match &hidden_facet.platform {
-                None => true,
-                Some(required) => platform == Some(required.as_str()),
-            };
-            if !applies_to_platform {
-                continue;
-            }
-            if let Some(prompt) = &hidden_facet.additional_system_prompt {
+            let facet = &experimental_facets.facets[facet_id];
+            if let Some(prompt) = &facet.additional_system_prompt {
                 let prompt = prompt_provider.resolve_prompt_source(prompt).await?;
-                sequence.push(AbstractChatSequencePart::HiddenFacetSystemPrompt {
+                sequence.push(AbstractChatSequencePart::FacetAdditionalSystemPrompt {
                     spec: PromptSpec::Static { content: prompt },
                     facet_id: facet_id.clone(),
                 });
@@ -222,6 +226,13 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
         let Some(facet) = experimental_facets.facets.get(facet_id) else {
             continue;
         };
+
+        // Hidden facets are always-on baselines injected in step 7, never via
+        // the user-selection toggle path — skip them here (and skip the
+        // "user requested…" template that would misdescribe a baseline).
+        if facet.hidden {
+            continue;
+        }
 
         if !facet.disable_facet_prompt_template {
             let template = if let Some(spec) = &experimental_facets.facet_prompt_template {
@@ -463,23 +474,6 @@ pub async fn resolve_sequence(
             }
 
             AbstractChatSequencePart::FacetAdditionalSystemPrompt { spec, facet_id: _ } => {
-                let content = match spec {
-                    PromptSpec::Static { content } => content,
-                    PromptSpec::Langfuse { prompt_name: _ } => {
-                        return Err(eyre::eyre!(
-                            "Langfuse prompt should have been resolved earlier"
-                        ));
-                    }
-                };
-
-                input_messages.push(InputMessage {
-                    role: MessageRole::System,
-                    content: ContentPart::Text(ContentPartText { text: content }),
-                });
-                has_system_message = true;
-            }
-
-            AbstractChatSequencePart::HiddenFacetSystemPrompt { spec, facet_id: _ } => {
                 let content = match spec {
                     PromptSpec::Static { content } => content,
                     PromptSpec::Langfuse { prompt_name: _ } => {

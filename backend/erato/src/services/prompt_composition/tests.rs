@@ -9,7 +9,7 @@ mod test_cases {
         AbstractChatSequencePart, ActionFacetUserInput, PromptSpec, ResolvedChatSequence,
     };
     use crate::config::{
-        ChatProviderConfig, ExperimentalFacetsConfig, HiddenFacetsConfig, PromptSourceSpecification,
+        ChatProviderConfig, ExperimentalFacetsConfig, FacetConfig, PromptSourceSpecification,
     };
     use crate::db::entity::{chats, messages};
     use crate::models::assistant::{AssistantWithFiles, FileInfo};
@@ -2569,7 +2569,6 @@ mod test_cases {
             None,
             Some(&action_facet),
             &action_facet_configs,
-            &HiddenFacetsConfig::default(),
             None,
         )
         .await
@@ -2624,8 +2623,10 @@ mod test_cases {
 
     #[tokio::test]
     async fn test_hidden_facets_injected_for_matching_platform_only() {
-        // Hidden facets inject a baseline System prompt at conversation start,
-        // scoped by platform; a facet with no platform applies everywhere.
+        // Hidden facets are regular facets (`hidden = true`) injected as a
+        // baseline System prompt at conversation start, scoped by platform; a
+        // hidden facet with no `hidden_always_active_for_platform` applies
+        // everywhere. They reuse the FacetAdditionalSystemPrompt part.
         let mut message_repo = MockMessageRepository::new();
         let file_resolver = MockFileResolver::new();
         let prompt_provider = MockPromptProvider::new().with_system_prompt("You are helpful.");
@@ -2636,13 +2637,16 @@ mod test_cases {
         let chat = create_test_chat();
         let config = create_test_chat_provider_config();
 
-        let hidden = |content: &str, platform: Option<&str>| crate::config::HiddenFacetConfig {
-            platform: platform.map(str::to_string),
+        let hidden = |content: &str, platform: Option<&str>| FacetConfig {
+            display_name: "Hidden baseline".to_string(),
             additional_system_prompt: Some(PromptSourceSpecification::Static {
                 content: content.to_string(),
             }),
+            hidden: true,
+            hidden_always_active_for_platform: platform.map(str::to_string),
+            ..Default::default()
         };
-        let hidden_facets = HiddenFacetsConfig {
+        let experimental_facets = ExperimentalFacetsConfig {
             facets: HashMap::from([
                 (
                     "outlook_baseline".to_string(),
@@ -2657,6 +2661,7 @@ mod test_cases {
                     hidden("GLOBAL BASELINE", None),
                 ),
             ]),
+            ..Default::default()
         };
 
         let abstract_seq = build_abstract_sequence_with_facet_tool_expansions(
@@ -2666,7 +2671,7 @@ mod test_cases {
             &msg1_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &experimental_facets,
             &[],
             None,
             None,
@@ -2676,7 +2681,6 @@ mod test_cases {
             None,
             None,
             &HashMap::new(),
-            &hidden_facets,
             Some("outlook"),
         )
         .await
@@ -2686,7 +2690,7 @@ mod test_cases {
             .parts
             .iter()
             .filter_map(|p| match p {
-                AbstractChatSequencePart::HiddenFacetSystemPrompt { facet_id, .. } => {
+                AbstractChatSequencePart::FacetAdditionalSystemPrompt { facet_id, .. } => {
                     Some(facet_id.as_str())
                 }
                 _ => None,
@@ -2798,7 +2802,6 @@ mod test_cases {
             None,
             Some(&action_facet),
             &action_facet_configs,
-            &HiddenFacetsConfig::default(),
             None,
         )
         .await

@@ -3299,6 +3299,28 @@ tool_call_allowlist = ["web-search-mcp/*", "web-access-mcp/*"]
 additional_system_prompt = { source = "static", prompt = "Please execute one or multiple web searches to answer the user's question." }
 ```
 
+##### Hidden baseline facets
+
+{/* erato_toml_config_key: experimental_facets.facets.<facet-id>.hidden */}
+{/* erato_toml_config_key: experimental_facets.facets.<facet-id>.hidden_always_active_for_platform */}
+
+A facet with `hidden = true` is a platform-baseline: it never appears in the facet pool and cannot be selected or removed by the user. Instead of being toggled, it is injected as an always-on system prompt once at the start of a conversation — under the same rule as the base system prompt — and then persists in history for the rest of the conversation. Because it is an ordinary facet, its `model_settings` and `tool_call_allowlist` still apply (per request) like any active facet.
+
+Scope activation to a platform with `hidden_always_active_for_platform`, matched against the request's `X-Erato-Platform` header. Omit it to apply on all platforms.
+
+Use a hidden facet for general platform-baseline behavior that should always be present (e.g. "you are running inside the Outlook add-in"). For per-request, task-specific instructions that should _not_ persist across turns, use an [action facet](#action_facets) instead.
+
+```toml
+[experimental_facets.facets.outlook_baseline]
+display_name = "Outlook baseline"
+hidden = true
+hidden_always_active_for_platform = "outlook"
+additional_system_prompt = "You are assisting inside the Outlook add-in. Keep responses concise and email-appropriate."
+```
+
+- `hidden` - When `true`, the facet is a hidden baseline: never shown in the pool, not user-selectable, and injected as an always-on system prompt. Defaults to `false`.
+- `hidden_always_active_for_platform` - Optional platform identifier (e.g. `"outlook"`) restricting where a hidden facet auto-activates. Omit to apply on all platforms. Only meaningful together with `hidden = true`.
+
 #### `experimental_facets.priority_order`
 
 {/* erato_toml_config_key: experimental_facets.priority_order */}
@@ -3499,43 +3521,6 @@ The `action_facet` field is accepted on `submit`, `edit`, and `regenerate` endpo
 | Request field      | `selected_facet_ids`                                 | `action_facet`                     |
 | Prompt lifecycle   | Toggle-state based, persistent across messages       | Per-request, ephemeral             |
 | Base system prompt | May suppress historical replay on newly-enabled turn | Never suppresses — always additive |
-
-### `hidden_facets`
-
-{/* erato_toml_config_key: hidden_facets */}
-
-Configuration for hidden facets. Hidden facets are platform-scoped, always-on system prompts that users cannot select or remove and that never appear in the facet pool. For a request whose platform matches (or for a facet declaring no platform), a hidden facet's prompt is injected once at the start of a conversation — under the same rule as the base system prompt — and then persists in history for the rest of the conversation.
-
-Use a hidden facet for general platform-baseline behavior that should always be present (e.g. "you are running inside the Outlook add-in"). For per-request, task-specific instructions that should _not_ persist across turns, use an [action facet](#action_facets) instead.
-
-#### `hidden_facets.facets.<id>`
-
-{/* erato_toml_config_key: hidden_facets.facets.<facet-id> */}
-
-Map of hidden facet configurations, keyed by facet id.
-
-**Type:** `object`
-
-**Example:**
-
-```toml
-[hidden_facets.facets.outlook_baseline]
-platform = "outlook"
-additional_system_prompt = "You are assisting inside the Outlook add-in. Keep responses concise and email-appropriate."
-```
-
-Each hidden facet supports these fields:
-
-{/* erato_toml_config_key: hidden_facets.facets.<facet-id>.platform */}
-{/* erato_toml_config_key: hidden_facets.facets.<facet-id>.additional_system_prompt */}
-{/* erato_toml_config_key: hidden_facets.facets.<facet-id>.additional_system_prompt.source */}
-{/* erato_toml_config_key: hidden_facets.facets.<facet-id>.additional_system_prompt.prompt */}
-{/* erato_toml_config_key: hidden_facets.facets.<facet-id>.additional_system_prompt.prompt_name */}
-{/* erato_toml_config_key: hidden_facets.facets.<facet-id>.additional_system_prompt.label */}
-{/* erato_toml_config_key: hidden_facets.facets.<facet-id>.additional_system_prompt.fallback */}
-
-- `platform` - Optional platform identifier (e.g. `"outlook"`), matched against the request's `X-Erato-Platform`. Omit to apply on all platforms.
-- `additional_system_prompt` - The baseline system prompt to inject. A prompt source: either an inline string, or a Langfuse-backed prompt via `source` / `prompt` / `prompt_name` / `label` / `fallback`.
 
 ### `budget`
 
