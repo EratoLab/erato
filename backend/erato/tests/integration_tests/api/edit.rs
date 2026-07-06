@@ -46,6 +46,19 @@ fn add_action_facets(app_config: &mut erato::config::AppConfig) {
             tool_call_allowlist: vec![],
         },
     );
+    app_config.action_facets.facets.insert(
+        "summarize".to_string(),
+        ActionFacetConfig {
+            display_name: "Summarize".to_string(),
+            platform: None,
+            template: "Summarize the following briefly:\n\n{{content}}".to_string(),
+            allowed_args: vec!["content".to_string()],
+            client_actions: vec![],
+            presentation: None,
+            client_actions_always_ask: vec![],
+            tool_call_allowlist: vec![],
+        },
+    );
 }
 
 // Helper structure for SSE events
@@ -695,6 +708,341 @@ async fn test_edit_falls_back_to_stored_action_facet(pool: Pool<Postgres>) {
         directive_body_count, 2,
         "Expected the rendered facet directive in both generation request bodies (submit + edit): {llm_request_bodies:?}"
     );
+
+    // Regression (ERMAIN edit fallback): the fallback facet must ALSO be
+    // persisted onto the edited user message's input_parameters — not only fed
+    // to the generation.  The add-in reads these back to render the facet chip
+    // and the selected text, and a subsequent edit falls back off them.  The
+    // edited user message is the sibling of the original.
+    let edited_user_message_id = parse_sse_events(&edit_response)
+        .iter()
+        .find_map(|event| {
+            if let Ok(json) = serde_json::from_str::<Value>(&event.data)
+                && json["message_type"] == "user_message_saved"
+            {
+                return json["message_id"].as_str().map(|s| s.to_string());
+            }
+            None
+        })
+        .expect("Expected user_message_saved event on edit");
+    let original_uuid = sea_orm::prelude::Uuid::parse_str(&original_user_message_id)
+        .expect("original user message id is a uuid");
+    let edited_user_message = erato::db::entity::messages::Entity::find()
+        .filter(erato::db::entity::messages::Column::SiblingMessageId.eq(original_uuid))
+        .one(&db)
+        .await
+        .expect("Failed to fetch edited user message")
+        .expect("Edited user message should exist");
+    // Guard the sibling query against ever silently picking a wrong row.
+    assert_eq!(
+        edited_user_message.id.to_string(),
+        edited_user_message_id,
+        "Sibling query must resolve to the message the edit's SSE reported",
+    );
+    let edited_input_params: erato::models::message::InputParameters = serde_json::from_value(
+        edited_user_message
+            .input_parameters
+            .clone()
+            .expect("Edited user message must persist input_parameters"),
+    )
+    .expect("Failed to deserialize edited input parameters");
+    assert_eq!(
+        edited_input_params.action_facet_id.as_deref(),
+        Some("rewrite"),
+        "Edited user message must persist the fallback facet id (UI chip + chained edits)",
+    );
+    assert_eq!(
+        edited_input_params
+            .action_facet_args
+            .as_ref()
+            .and_then(|args| args.get("content"))
+            .map(String::as_str),
+        Some("yo whats up"),
+        "Edited user message must persist the fallback facet args (e.g. the selected text)",
+    );
+}
+
+/// Editing an already-edited message keeps re-applying the original facet.
+/// This only works if each edit PERSISTS the fallback facet onto the new user
+/// message: the second edit reads its fallback off the first edit's message,
+/// so a fallback that fed generation but was never stored would break the
+/// chain on the second hop (the exact symptom of the reported regression).
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_edit_chained_fallback_persists_action_facet(pool: Pool<Postgres>) {
+    let llm_request_recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = llm_request_recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post().path("/v1/chat/completions").matcher(recorder);
+            mock_llm_sse_response(then, build_openai_text_streaming_response(&["Rewritten."]));
+        });
+    }
+    let (mut app_config, _server) = setup_mock_llm_server_with_mocks(mocks).await;
+    add_action_facets(&mut app_config);
+    let app_state = test_app_state(app_config, pool).await;
+    let db = app_state.db.clone();
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // Extracts the newest `user_message_saved` message_id from an SSE response.
+    let saved_user_message_id = |response: &axum_test::TestResponse| {
+        parse_sse_events(response)
+            .iter()
+            .find_map(|event| {
+                if let Ok(json) = serde_json::from_str::<Value>(&event.data)
+                    && json["message_type"] == "user_message_saved"
+                {
+                    return json["message_id"].as_str().map(|s| s.to_string());
+                }
+                None
+            })
+            .expect("Expected user_message_saved event with message_id")
+    };
+
+    // Submit WITH the facet.
+    let submit_response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "user_message": "Rewrite this",
+            "action_facet": {
+                "id": "rewrite",
+                "args": { "tone": "professional", "content": "yo whats up" }
+            }
+        }))
+        .await;
+    submit_response.assert_status_ok();
+    let original_user_message_id = saved_user_message_id(&submit_response);
+
+    // First edit WITHOUT a facet — falls back and persists.
+    let edit_one = server
+        .post("/api/v1beta/me/messages/editstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": original_user_message_id,
+            "replace_user_message": "Rewrite this (v2)",
+            "replace_input_files_ids": []
+        }))
+        .await;
+    edit_one.assert_status_ok();
+    let first_edit_user_message_id = saved_user_message_id(&edit_one);
+
+    // Second edit, now editing the FIRST edit's message, again WITHOUT a facet.
+    // The fallback must come from what the first edit persisted.
+    let edit_two = server
+        .post("/api/v1beta/me/messages/editstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": first_edit_user_message_id,
+            "replace_user_message": "Rewrite this (v3)",
+            "replace_input_files_ids": []
+        }))
+        .await;
+    edit_two.assert_status_ok();
+    let second_edit_user_message_id = saved_user_message_id(&edit_two);
+
+    // The rendered directive must have reached the LLM on all three
+    // generations (submit + edit1 + edit2). Title-summary requests only carry
+    // the raw user message, so they don't match.
+    let directive_body_count = llm_request_recorder
+        .bodies()
+        .iter()
+        .filter(|body| {
+            body.contains("Rewrite the following in a professional tone:")
+                && body.contains("yo whats up")
+        })
+        .count();
+    assert_eq!(
+        directive_body_count, 3,
+        "Facet directive must survive a chain of edits (submit + edit1 + edit2)",
+    );
+
+    // The twice-edited user message must still carry the persisted facet.
+    let second_edit_uuid = sea_orm::prelude::Uuid::parse_str(&second_edit_user_message_id)
+        .expect("second edit user message id is a uuid");
+    let twice_edited = erato::db::entity::messages::Entity::find()
+        .filter(erato::db::entity::messages::Column::Id.eq(second_edit_uuid))
+        .one(&db)
+        .await
+        .expect("Failed to fetch twice-edited user message")
+        .expect("Twice-edited user message should exist");
+    let params: erato::models::message::InputParameters = serde_json::from_value(
+        twice_edited
+            .input_parameters
+            .clone()
+            .expect("Twice-edited user message must persist input_parameters"),
+    )
+    .expect("Failed to deserialize twice-edited input parameters");
+    assert_eq!(params.action_facet_id.as_deref(), Some("rewrite"));
+    assert_eq!(
+        params
+            .action_facet_args
+            .as_ref()
+            .and_then(|args| args.get("content"))
+            .map(String::as_str),
+        Some("yo whats up"),
+    );
+}
+
+/// An edit that DOES send an explicit action facet must win over the stored
+/// one — for both the generation and the persisted input_parameters. Pins the
+/// precedence of the request facet over the fallback; a regression flipping it
+/// (fallback clobbering explicit) or dropping explicit-facet persistence would
+/// go uncaught by the fallback tests, which never send a facet on edit.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_edit_explicit_action_facet_overrides_stored_one(pool: Pool<Postgres>) {
+    let llm_request_recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = llm_request_recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post().path("/v1/chat/completions").matcher(recorder);
+            mock_llm_sse_response(then, build_openai_text_streaming_response(&["Done."]));
+        });
+    }
+    let (mut app_config, _server) = setup_mock_llm_server_with_mocks(mocks).await;
+    add_action_facets(&mut app_config);
+    let app_state = test_app_state(app_config, pool).await;
+    let db = app_state.db.clone();
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // Submit with facet A ("rewrite").
+    let submit_response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "user_message": "Rewrite this",
+            "action_facet": {
+                "id": "rewrite",
+                "args": { "tone": "professional", "content": "yo whats up" }
+            }
+        }))
+        .await;
+    submit_response.assert_status_ok();
+    let original_user_message_id = parse_sse_events(&submit_response)
+        .iter()
+        .find_map(|event| {
+            if let Ok(json) = serde_json::from_str::<Value>(&event.data)
+                && json["message_type"] == "user_message_saved"
+            {
+                return json["message_id"].as_str().map(|s| s.to_string());
+            }
+            None
+        })
+        .expect("Expected user_message_saved event with message_id");
+
+    // Edit WITH an explicit facet B ("summarize") — B must win over stored A.
+    let edit_response = server
+        .post("/api/v1beta/me/messages/editstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": original_user_message_id,
+            "replace_user_message": "Actually summarize it",
+            "replace_input_files_ids": [],
+            "action_facet": {
+                "id": "summarize",
+                "args": { "content": "different selection" }
+            }
+        }))
+        .await;
+    edit_response.assert_status_ok();
+
+    // Generation ran under B, not A.
+    let assistant_messages = erato::db::entity::messages::Entity::find()
+        .filter(erato::db::entity::messages::Column::GenerationParameters.is_not_null())
+        .order_by_asc(erato::db::entity::messages::Column::CreatedAt)
+        .all(&db)
+        .await
+        .expect("Failed to fetch assistant messages");
+    assert_eq!(assistant_messages.len(), 2);
+    let edit_params: GenerationParameters = serde_json::from_value(
+        assistant_messages[1]
+            .generation_parameters
+            .clone()
+            .expect("Missing edit generation_parameters"),
+    )
+    .expect("Failed to deserialize edit generation parameters");
+    assert_eq!(
+        edit_params.action_facet_id.as_deref(),
+        Some("summarize"),
+        "The explicit request facet must win over the stored fallback",
+    );
+
+    // Each directive reached the LLM exactly once: A on submit, B on the edit.
+    let llm_request_bodies = llm_request_recorder.bodies();
+    let facet_a_count = llm_request_bodies
+        .iter()
+        .filter(|body| body.contains("Rewrite the following in a professional tone:"))
+        .count();
+    let facet_b_count = llm_request_bodies
+        .iter()
+        .filter(|body| {
+            body.contains("Summarize the following briefly:")
+                && body.contains("different selection")
+        })
+        .count();
+    assert_eq!(facet_a_count, 1, "Stored facet A only in the submit body");
+    assert_eq!(facet_b_count, 1, "Explicit facet B only in the edit body");
+
+    // Persistence carries B, not A.
+    let original_uuid = sea_orm::prelude::Uuid::parse_str(&original_user_message_id)
+        .expect("original user message id is a uuid");
+    let edited_user_message = erato::db::entity::messages::Entity::find()
+        .filter(erato::db::entity::messages::Column::SiblingMessageId.eq(original_uuid))
+        .one(&db)
+        .await
+        .expect("Failed to fetch edited user message")
+        .expect("Edited user message should exist");
+    let edited_input_params: erato::models::message::InputParameters = serde_json::from_value(
+        edited_user_message
+            .input_parameters
+            .clone()
+            .expect("Edited user message must persist input_parameters"),
+    )
+    .expect("Failed to deserialize edited input parameters");
+    assert_eq!(
+        edited_input_params.action_facet_id.as_deref(),
+        Some("summarize"),
+        "The persisted facet must be the explicit one, not the stored fallback",
+    );
+    assert_eq!(
+        edited_input_params
+            .action_facet_args
+            .as_ref()
+            .and_then(|args| args.get("content"))
+            .map(String::as_str),
+        Some("different selection"),
+    );
 }
 
 /// Editing after the stored action facet stopped validating drops the facet
@@ -809,4 +1157,21 @@ async fn test_edit_drops_stored_action_facet_that_no_longer_validates(pool: Pool
         "A stored facet that no longer validates must be dropped on edit",
     );
     assert_eq!(edit_params.action_facet_args, None);
+
+    // The drop must also hold on the PERSISTENCE side: an implementation that
+    // stored the facet before validating would pass the generation asserts
+    // above, but the invalid facet would sit on the edited sibling — ready to
+    // be resurrected by a later edit under a config that re-adds it.
+    let original_uuid = sea_orm::prelude::Uuid::parse_str(&original_user_message_id)
+        .expect("original user message id is a uuid");
+    let edited_user_message = erato::db::entity::messages::Entity::find()
+        .filter(erato::db::entity::messages::Column::SiblingMessageId.eq(original_uuid))
+        .one(&db)
+        .await
+        .expect("Failed to fetch edited user message")
+        .expect("Edited user message should exist");
+    assert_eq!(
+        edited_user_message.input_parameters, None,
+        "A dropped facet must not be persisted onto the edited user message",
+    );
 }
