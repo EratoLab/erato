@@ -799,3 +799,128 @@ describe("availabilityViewIntervalFor", () => {
     expect(availabilityViewIntervalFor(62 * 24 * 60)).toBe(120); // Graph max window
   });
 });
+
+describe("fetchAttendeeAvailabilityViaGraph with directory resolution", () => {
+  beforeEach(() => {
+    installOutlookMailboxMock();
+  });
+
+  afterEach(() => {
+    uninstallMockMailbox();
+    vi.unstubAllGlobals();
+  });
+
+  const directory = {
+    people: vi.fn().mockResolvedValue("people-tok"),
+    users: vi.fn().mockResolvedValue("users-tok"),
+  };
+
+  it("resolves a display name via People and joins it into getSchedule", async () => {
+    const bodies: string[] = [];
+    const transport = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes("/me/people")) {
+        return jsonResponse({
+          value: [
+            {
+              displayName: "Bob Builder",
+              personType: { class: "Person" },
+              scoredEmailAddresses: [{ address: "bob@example.de" }],
+            },
+          ],
+        });
+      }
+      expect(url).toContain("getSchedule");
+      bodies.push(String(init?.body ?? ""));
+      return jsonResponse({
+        value: [{ scheduleId: "bob@example.de", scheduleItems: [] }],
+      });
+    });
+
+    const entries = await fetchAttendeeAvailabilityViaGraph(
+      vi.fn().mockResolvedValue("graph-tok"),
+      ATTENDEE_RANGE,
+      ["Bob Builder"],
+      { transport },
+      directory,
+    );
+
+    const body = JSON.parse(bodies[0]) as { schedules: string[] };
+    expect(body.schedules).toEqual(["bob@example.de"]);
+    expect(entries).toEqual([
+      {
+        requested: "Bob Builder",
+        smtp: "bob@example.de",
+        status: "ok",
+        busy: [],
+      },
+    ]);
+  });
+
+  it("surfaces ambiguous candidates so the user can pick an address", async () => {
+    const transport = vi.fn(async (url: string) => {
+      expect(url).toContain("/me/people");
+      return jsonResponse({
+        value: [
+          {
+            displayName: "Chris A",
+            personType: { class: "Person" },
+            scoredEmailAddresses: [{ address: "a@example.de" }],
+          },
+          {
+            displayName: "Chris B",
+            personType: { class: "Person" },
+            scoredEmailAddresses: [{ address: "b@example.de" }],
+          },
+        ],
+      });
+    });
+
+    const entries = await fetchAttendeeAvailabilityViaGraph(
+      vi.fn().mockResolvedValue("graph-tok"),
+      ATTENDEE_RANGE,
+      ["Chris"],
+      { transport },
+      directory,
+    );
+
+    // Nothing resolvable → no getSchedule call at all.
+    expect(transport).toHaveBeenCalledTimes(1);
+    expect(entries).toEqual([
+      {
+        requested: "Chris",
+        status: "unknown",
+        reason: expect.stringContaining(
+          "Chris A <a@example.de>, Chris B <b@example.de>",
+        ),
+        busy: [],
+      },
+    ]);
+  });
+
+  it("degrades to unknown with a hint when no directory consent exists", async () => {
+    const transport = vi.fn(async () =>
+      jsonResponse({}, { ok: false, status: 403, statusText: "Forbidden" }),
+    );
+    const denied = {
+      people: vi.fn().mockRejectedValue(new Error("consent_required")),
+      users: vi.fn().mockRejectedValue(new Error("consent_required")),
+    };
+
+    const entries = await fetchAttendeeAvailabilityViaGraph(
+      vi.fn().mockResolvedValue("graph-tok"),
+      ATTENDEE_RANGE,
+      ["Bob Builder"],
+      { transport },
+      denied,
+    );
+
+    expect(entries).toEqual([
+      {
+        requested: "Bob Builder",
+        status: "unknown",
+        reason: expect.stringContaining("directory name search unavailable"),
+        busy: [],
+      },
+    ]);
+  });
+});

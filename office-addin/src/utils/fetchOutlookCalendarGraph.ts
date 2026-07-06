@@ -14,6 +14,7 @@ import {
   graphFetch,
   makeGraphTokenSource,
 } from "./fetchOutlookMessageGraph";
+import { resolveAttendeeNameViaGraph } from "./graphAttendeeResolution";
 import { toIanaStrict } from "./windowsZones";
 
 import type { CalendarRange } from "./calendarLegs";
@@ -31,6 +32,11 @@ import type {
   AcquireGraphToken,
   GraphTokenSource,
 } from "./fetchOutlookMessageGraph";
+import type {
+  DirectoryCandidate,
+  GraphDirectoryTokenSources,
+  GraphNameResolution,
+} from "./graphAttendeeResolution";
 
 /**
  * Microsoft Graph calendar sourcing for Exchange Online (SI-2 / ERMAIN-384);
@@ -394,32 +400,71 @@ const unknownAttendee = (
   busy: [],
 });
 
+const listCandidates = (candidates: DirectoryCandidate[]): string =>
+  candidates.map((c) => `${c.name} <${c.smtp}>`).join(", ");
+
 /**
  * Colleague free/busy over `range` (ERMAIN-434): one getSchedule call with all
  * attendee SMTP addresses. Per-schedule failures become `status: "unknown"`
  * entries — never silently free; only the whole-call failure THROWS (and
- * degrades the leg). Graph needs SMTP: a non-address input is "unknown"
- * without a network round-trip (the GAL-name path is EWS-only, where
- * ResolveNames exists). Results are OPAQUE — blocking intervals, no subjects.
+ * degrades the leg). Results are OPAQUE — blocking intervals, no subjects.
+ *
+ * getSchedule needs SMTP; a display name resolves through the OPTIONAL
+ * directory scopes first (`graphAttendeeResolution.ts` — People.Read /
+ * User.ReadBasic.All). Without those consents (or without `directory` at
+ * all) a non-address input degrades to "unknown" with a use-an-address hint,
+ * and an ambiguous name surfaces its candidates so the user can pick one —
+ * name lookup is a nicety that must never sink the calendar read.
  */
 export async function fetchAttendeeAvailabilityViaGraph(
   acquireToken: AcquireGraphToken,
   range: CalendarRange,
   attendees: string[],
   options: CalendarFetchOptions = {},
+  directory: GraphDirectoryTokenSources = {},
 ): Promise<NormalizedAttendeeAvailability[]> {
   if (attendees.length === 0) return [];
   throwIfAborted(options.signal);
 
-  const smtpAttendees = attendees.filter((entry) => entry.includes("@"));
-  const bySmtp = new Map<string, NormalizedAttendeeAvailability>();
-  if (smtpAttendees.length > 0) {
-    const windowMinutes =
-      (Date.parse(range.endUtc) - Date.parse(range.startUtc)) / 60_000;
-    const interval = availabilityViewIntervalFor(windowMinutes);
+  const names = attendees.filter((entry) => !entry.includes("@"));
+  const resolutions = new Map<string, GraphNameResolution>();
+  if (names.length > 0 && (directory.people || directory.users)) {
+    await Promise.all(
+      names.map(async (name) => {
+        resolutions.set(
+          name,
+          await resolveAttendeeNameViaGraph(directory, name, options),
+        );
+      }),
+    );
+    throwIfAborted(options.signal);
+  }
+
+  const smtpFor = (requested: string): string | null => {
+    if (requested.includes("@")) return requested;
+    const resolution = resolutions.get(requested);
+    return resolution?.kind === "resolved" ? resolution.smtp : null;
+  };
+
+  // Two inputs may resolve to one mailbox — query each address once.
+  const toQuery: string[] = [];
+  const queried = new Set<string>();
+  for (const requested of attendees) {
+    const smtp = smtpFor(requested);
+    if (smtp !== null && !queried.has(smtp.toLowerCase())) {
+      queried.add(smtp.toLowerCase());
+      toQuery.push(smtp);
+    }
+  }
+
+  const scheduleBySmtp = new Map<string, GraphScheduleInformation>();
+  const windowMinutes =
+    (Date.parse(range.endUtc) - Date.parse(range.startUtc)) / 60_000;
+  const interval = availabilityViewIntervalFor(windowMinutes);
+  if (toQuery.length > 0) {
     const payload = await postGetSchedule(
       acquireToken,
-      smtpAttendees,
+      toQuery,
       range.startUtc,
       range.endUtc,
       interval,
@@ -427,37 +472,61 @@ export async function fetchAttendeeAvailabilityViaGraph(
     );
     (payload.value ?? []).forEach((schedule, index) => {
       // scheduleId echoes the request; fall back to request order.
-      const requested =
-        smtpAttendees.find(
+      const smtp =
+        toQuery.find(
           (s) => s.toLowerCase() === schedule.scheduleId?.toLowerCase(),
-        ) ?? smtpAttendees[index];
-      if (requested === undefined) return;
-      bySmtp.set(
-        requested.toLowerCase(),
-        normalizeSchedule(requested, schedule, range.startUtc, interval),
-      );
+        ) ?? toQuery[index];
+      if (smtp !== undefined) scheduleBySmtp.set(smtp.toLowerCase(), schedule);
     });
   }
 
   return attendees.map((requested) => {
     if (!requested.includes("@")) {
-      return unknownAttendee(
-        requested,
-        "not an email address — Exchange Online availability needs an SMTP address",
-      );
+      const resolution = resolutions.get(requested);
+      if (resolution === undefined) {
+        return unknownAttendee(
+          requested,
+          "not an email address — Exchange Online availability needs an SMTP address",
+        );
+      }
+      if (resolution.kind === "ambiguous") {
+        return unknownAttendee(
+          requested,
+          `ambiguous in the directory — matches: ${listCandidates(resolution.candidates)}. Ask the user which address to use.`,
+        );
+      }
+      if (resolution.kind === "not-found") {
+        return unknownAttendee(requested, "not found in the directory");
+      }
+      if (resolution.kind === "unavailable") {
+        return unknownAttendee(
+          requested,
+          `directory name search unavailable (${resolution.detail}) — use an email address`,
+        );
+      }
     }
-    return (
-      bySmtp.get(requested.toLowerCase()) ?? {
+    const smtp = smtpFor(requested) as string;
+    const schedule = scheduleBySmtp.get(smtp.toLowerCase());
+    if (schedule === undefined) {
+      return {
         // The address is known even though the read failed — parity with EWS.
         ...unknownAttendee(requested, "no availability data returned"),
-        smtp: requested,
-      }
+        smtp,
+      };
+    }
+    return normalizeSchedule(
+      requested,
+      smtp,
+      schedule,
+      range.startUtc,
+      interval,
     );
   });
 }
 
 function normalizeSchedule(
   requested: string,
+  smtp: string,
   schedule: GraphScheduleInformation,
   windowStartUtc: string,
   intervalMinutes: number,
@@ -470,7 +539,7 @@ function normalizeSchedule(
           schedule.error.responseCode ??
           "availability lookup failed",
       ),
-      smtp: requested,
+      smtp,
     };
   }
   if (Array.isArray(schedule.scheduleItems)) {
@@ -488,7 +557,7 @@ function normalizeSchedule(
     }
     return {
       requested,
-      smtp: requested,
+      smtp,
       status: "ok",
       busy: onlyBlockingBlocks(blocks),
     };
@@ -497,7 +566,7 @@ function normalizeSchedule(
     // Sharing policies that only publish merged free/busy omit scheduleItems.
     return {
       requested,
-      smtp: requested,
+      smtp,
       status: "ok",
       busy: onlyBlockingBlocks(
         decodeMergedFreeBusyView(
@@ -509,7 +578,10 @@ function normalizeSchedule(
       ),
     };
   }
-  return unknownAttendee(requested, "no availability data returned");
+  return {
+    ...unknownAttendee(requested, "no availability data returned"),
+    smtp,
+  };
 }
 
 /** The full Graph calendar snapshot; NEVER throws except to propagate an
@@ -517,6 +589,7 @@ function normalizeSchedule(
 export async function fetchOutlookCalendarViaGraph(
   acquireToken: AcquireGraphToken,
   options: CalendarFetchOptions = {},
+  directory: GraphDirectoryTokenSources = {},
 ): Promise<NormalizedCalendar> {
   const { historyRange, busyRange } = computeCalendarRanges(
     new Date(),
@@ -542,6 +615,7 @@ export async function fetchOutlookCalendarViaGraph(
           busyRange,
           options.attendees ?? [],
           options,
+          directory,
         ),
     },
     options.signal,

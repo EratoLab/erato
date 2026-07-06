@@ -741,7 +741,9 @@ describe("fetchAttendeeAvailabilityViaEws", () => {
       {
         requested: "Ambiguous Person",
         status: "unknown",
-        reason: expect.stringContaining("ambiguous name (2 directory matches)"),
+        reason: expect.stringContaining(
+          "ambiguous name (2 directory matches: Ambiguous Person <a1@example.de>, Ambiguous Person 2 <a2@example.de>)",
+        ),
         busy: [],
       },
       {

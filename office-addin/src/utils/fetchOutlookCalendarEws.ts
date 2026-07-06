@@ -543,9 +543,15 @@ async function resolveAttendeeInput(requested: string): Promise<ResolvedInput> {
       };
     }
     if (candidates.length > 1) {
+      // List the candidates so the user can pick/copy the right address.
+      const listed = candidates
+        .filter((c) => c.emailAddress?.includes("@"))
+        .slice(0, 5)
+        .map((c) => `${c.name ?? c.emailAddress} <${c.emailAddress}>`)
+        .join(", ");
       return {
         requested,
-        unknownReason: `ambiguous name (${candidates.length} directory matches) — use an email address`,
+        unknownReason: `ambiguous name (${candidates.length} directory matches${listed ? `: ${listed}` : ""}) — ask the user which address to use`,
       };
     }
     const candidate = candidates[0];

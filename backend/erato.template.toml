@@ -449,6 +449,13 @@ chat_provider_ids = ["test-token-limit"]
 # # Optional per-tool park timeout (default 60000 ms).
 # # timeout_ms = 30000
 #
+# OPTIONAL Entra permissions (EXO attendee name search): grant the add-in app
+# registration People.Read and/or User.ReadBasic.All (delegated) to resolve
+# attendee display names to addresses on Exchange Online (counterpart of
+# on-prem ResolveNames). Without them nothing breaks — names degrade to an
+# "unknown - use an email address" attendee. Grant deliberately: directory
+# search lets any signed-in user enumerate GAL names.
+#
 # The scheduling workflow facet that selects the tool. The Outlook add-in
 # attaches it in neutral contexts and on follow-ups of a scheduling exchange;
 # adding `tool_call_allowlist = ["outlook/*"]` to outlook_reply_from_read,

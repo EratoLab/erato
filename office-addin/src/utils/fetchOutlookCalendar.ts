@@ -5,6 +5,7 @@ import type {
   AcquireGraphToken,
   GraphTransport,
 } from "./fetchOutlookMessageGraph";
+import type { GraphDirectoryTokenSources } from "./graphAttendeeResolution";
 
 export interface NormalizedWorkingHours {
   daysOfWeek: string[];
@@ -136,12 +137,19 @@ export function createEwsOutlookCalendarFetcher(): OutlookCalendarFetcher {
   };
 }
 
-/** `acquireToken` must be bound to the `Calendars.Read` scope. */
+/**
+ * `acquireToken` must be bound to the `Calendars.Read` scope. `directory`
+ * carries the OPTIONAL name-search acquirers (People.Read / User.ReadBasic.All,
+ * each prebound separately) — omit or pass `{}` when the deployment doesn't
+ * hold those consents; attendee display names then degrade to "unknown"
+ * instead of resolving.
+ */
 export function createGraphOutlookCalendarFetcher(
   acquireToken: AcquireGraphToken,
+  directory?: GraphDirectoryTokenSources,
 ): OutlookCalendarFetcher {
   return {
     fetchCalendar: (options) =>
-      fetchOutlookCalendarViaGraph(acquireToken, options),
+      fetchOutlookCalendarViaGraph(acquireToken, options, directory),
   };
 }

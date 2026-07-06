@@ -65,6 +65,7 @@ const CALENDAR_LEGEND =
   "recentMeetings are PAST meetings, only useful to calibrate a typical duration. " +
   "attendees (when present) are OTHER people's calendars, shown as opaque blocking intervals only — no subjects, and their free time is not listed: every listed interval blocks that person; time outside the listed intervals is free for them ONLY while their status is ok. " +
   'An attendee with status "unknown - treat as NOT free" could not be read: never present any time as confirmed-free for them, and say their calendar could not be checked. ' +
+  "If an unknown attendee's note lists directory matches (Name <address>), show them to the user so they can pick the right address. " +
   'If "degraded" contains "attendees", colleague availability failed to load — treat EVERY requested attendee that way. ' +
   "When attendees are present, only propose times where the user AND every readable attendee are free, inside the USER's workingHours. " +
   "suggestedSlots (when present) are deterministic pre-computed candidates for suggestedSlots.durationMinutes: already conflict-free against every loaded calendar, inside working hours, buffer-aware. Prefer them when that duration matches your chosen one; for a different duration re-derive slots from busy/attendees yourself. " +
