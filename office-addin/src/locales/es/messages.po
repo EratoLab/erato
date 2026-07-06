@@ -33,13 +33,13 @@ msgstr "Esto abre un formulario de cita prellenado en Outlook. No se guarda ni s
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoAppointmentRenderer.tsx
-msgid "officeAddin.appointmentRenderer.formNotOpened"
-msgstr "No se pudo abrir el formulario de cita"
+#~ msgid "officeAddin.appointmentRenderer.formNotOpened"
+#~ msgstr "No se pudo abrir el formulario de cita"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoAppointmentRenderer.tsx
-msgid "officeAddin.appointmentRenderer.formOpened"
-msgstr "Se abrió el formulario de cita"
+#~ msgid "officeAddin.appointmentRenderer.formOpened"
+#~ msgstr "Se abrió el formulario de cita"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoAppointmentRenderer.tsx
@@ -55,6 +55,11 @@ msgstr "(ninguno)"
 #: src/components/OutlookEratoAppointmentRenderer.tsx
 msgid "officeAddin.appointmentRenderer.openAppointment"
 msgstr "Abrir cita"
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoAppointmentRenderer.tsx
+msgid "officeAddin.appointmentRenderer.opened"
+msgstr "Abierto"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoAppointmentRenderer.tsx
@@ -358,6 +363,11 @@ msgstr "Insertando..."
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
+msgid "officeAddin.emailRenderer.opened"
+msgstr "Abierto"
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.opening"
 msgstr "Abriendo..."
 
@@ -393,8 +403,8 @@ msgstr "{confirmRecipientCount, plural, one {Esto abre una respuesta dirigida a 
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
-msgid "officeAddin.emailRenderer.replyAllFormOpened"
-msgstr "Se abrió el formulario de respuesta a todos"
+#~ msgid "officeAddin.emailRenderer.replyAllFormOpened"
+#~ msgstr "Se abrió el formulario de respuesta a todos"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
@@ -418,13 +428,13 @@ msgstr "No se pudo abrir el formulario de respuesta. Asegúrate de que el correo
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
-msgid "officeAddin.emailRenderer.replyFormNotOpened"
-msgstr "No se pudo abrir el formulario de respuesta"
+#~ msgid "officeAddin.emailRenderer.replyFormNotOpened"
+#~ msgstr "No se pudo abrir el formulario de respuesta"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
-msgid "officeAddin.emailRenderer.replyFormOpened"
-msgstr "Se abrió el formulario de respuesta"
+#~ msgid "officeAddin.emailRenderer.replyFormOpened"
+#~ msgstr "Se abrió el formulario de respuesta"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx

@@ -33,13 +33,13 @@ msgstr "Dies öffnet ein vorausgefülltes Terminformular in Outlook. Nichts wird
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoAppointmentRenderer.tsx
-msgid "officeAddin.appointmentRenderer.formNotOpened"
-msgstr "Terminformular konnte nicht geöffnet werden"
+#~ msgid "officeAddin.appointmentRenderer.formNotOpened"
+#~ msgstr "Terminformular konnte nicht geöffnet werden"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoAppointmentRenderer.tsx
-msgid "officeAddin.appointmentRenderer.formOpened"
-msgstr "Terminformular geöffnet"
+#~ msgid "officeAddin.appointmentRenderer.formOpened"
+#~ msgstr "Terminformular geöffnet"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoAppointmentRenderer.tsx
@@ -55,6 +55,11 @@ msgstr "(kein)"
 #: src/components/OutlookEratoAppointmentRenderer.tsx
 msgid "officeAddin.appointmentRenderer.openAppointment"
 msgstr "Termin öffnen"
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoAppointmentRenderer.tsx
+msgid "officeAddin.appointmentRenderer.opened"
+msgstr "Geöffnet!"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoAppointmentRenderer.tsx
@@ -358,6 +363,11 @@ msgstr "Wird eingefügt..."
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
+msgid "officeAddin.emailRenderer.opened"
+msgstr "Geöffnet!"
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.opening"
 msgstr "Wird geöffnet..."
 
@@ -393,8 +403,8 @@ msgstr "{confirmRecipientCount, plural, one {Dies öffnet eine Antwort an # Pers
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
-msgid "officeAddin.emailRenderer.replyAllFormOpened"
-msgstr "Antwortfenster für alle Empfänger geöffnet"
+#~ msgid "officeAddin.emailRenderer.replyAllFormOpened"
+#~ msgstr "Antwortfenster für alle Empfänger geöffnet"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
@@ -418,13 +428,13 @@ msgstr "Das Antwortfenster konnte nicht geöffnet werden. Stellen Sie sicher, da
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
-msgid "officeAddin.emailRenderer.replyFormNotOpened"
-msgstr "Antwortfenster konnte nicht geöffnet werden"
+#~ msgid "officeAddin.emailRenderer.replyFormNotOpened"
+#~ msgstr "Antwortfenster konnte nicht geöffnet werden"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
-msgid "officeAddin.emailRenderer.replyFormOpened"
-msgstr "Antwortfenster geöffnet"
+#~ msgid "officeAddin.emailRenderer.replyFormOpened"
+#~ msgstr "Antwortfenster geöffnet"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx

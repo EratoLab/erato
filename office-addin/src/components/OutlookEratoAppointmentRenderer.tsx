@@ -334,10 +334,15 @@ export function OutlookEratoAppointmentRenderer({
                     id: "officeAddin.appointmentRenderer.opening",
                     message: "Opening...",
                   })
-                : t({
-                    id: "officeAddin.appointmentRenderer.openAppointment",
-                    message: "Open appointment",
-                  })}
+                : status === "done"
+                  ? t({
+                      id: "officeAddin.appointmentRenderer.opened",
+                      message: "Opened!",
+                    })
+                  : t({
+                      id: "officeAddin.appointmentRenderer.openAppointment",
+                      message: "Open appointment",
+                    })}
             </button>
           ))}
         </div>
@@ -400,26 +405,6 @@ export function OutlookEratoAppointmentRenderer({
               : undefined
           }
           onDeny={() => denyCard(confirmCard)}
-          status={
-            confirmCard.resolution === "pending"
-              ? "pending"
-              : confirmCard.resolution === "opened"
-                ? "confirmed"
-                : "dismissed"
-          }
-          resolvedLabel={
-            confirmCard.resolution === "opened"
-              ? t({
-                  id: "officeAddin.appointmentRenderer.formOpened",
-                  message: "Appointment form opened",
-                })
-              : confirmCard.resolution === "failed"
-                ? t({
-                    id: "officeAddin.appointmentRenderer.formNotOpened",
-                    message: "Appointment form could not be opened",
-                  })
-                : undefined
-          }
           isBusy={isBusy}
           scrollIntoViewOnMount={confirmCard.autoTriggered}
         />

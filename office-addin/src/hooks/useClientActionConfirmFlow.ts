@@ -21,9 +21,9 @@ export interface ConfirmCardState<
   TAction extends OutlookClientAction = OutlookClientAction,
 > {
   /**
-   * Monotonic per-request id: a new confirmation replaces a resolved card
+   * Monotonic per-request id: a new confirmation replaces an earlier card
    * and remounts it (fresh scroll/focus), and an async resolution only
-   * lands on the card it was started from.
+   * closes the card it was started from.
    */
   requestId: number;
   action: TAction;
@@ -41,20 +41,20 @@ export interface ConfirmCardState<
    * never act on email B; item-independent executors ignore it.
    */
   itemIdentityAtOpen: string | null;
-  /**
-   * `pending` renders the decision buttons; afterwards the card stays
-   * mounted as a visible record of the outcome (allow → `opened` or
-   * `failed`, deny → `denied`).
-   */
-  resolution: "pending" | "opened" | "denied" | "failed";
 }
 
 /**
  * The confirm-card state machine + auto-prompt one-shot shared by the client
  * action renderers. The renderer supplies what differs: how to snapshot the
  * confirmation summary, how to execute the action, and the card's copy —
- * everything about WHEN a card may open, replace, resolve, or auto-surface is
+ * everything about WHEN a card may open, replace, close, or auto-surface is
  * identical by construction.
+ *
+ * A card only exists while the decision is pending: allow closes it once
+ * execution completes (the opened window / the renderer's transient button
+ * swap is the success feedback, the renderer's inline alert the failure
+ * feedback), deny closes it immediately. No persistent resolved record — the
+ * add-in's success-feedback idiom is the ~2s label swap.
  */
 export function useClientActionConfirmFlow<
   TSummary,
@@ -119,22 +119,21 @@ export function useClientActionConfirmFlow<
         summary,
         autoTriggered,
         itemIdentityAtOpen: itemIdentity,
-        resolution: "pending",
       });
       return true;
     },
     [buildSummary, itemIdentity],
   );
 
-  // Allow paths: execute, then resolve THIS card into its record state — a
-  // newer confirmation may have replaced it while the form was opening.
+  // Allow path: execute, then close THIS card — the card stays mounted (busy)
+  // while the form is opening, and a newer confirmation may have replaced it
+  // meanwhile. Success/failure feedback is the renderer's (button swap /
+  // inline alert), not the card's.
   const allowCard = useCallback(
     (card: ConfirmCardState<TSummary, TAction>) => {
-      void execute(card.action, card.itemIdentityAtOpen).then((opened) => {
+      void execute(card.action, card.itemIdentityAtOpen).then(() => {
         setConfirmCard((current) =>
-          current?.requestId === card.requestId
-            ? { ...current, resolution: opened ? "opened" : "failed" }
-            : current,
+          current?.requestId === card.requestId ? null : current,
         );
       });
     },
@@ -143,9 +142,7 @@ export function useClientActionConfirmFlow<
 
   const denyCard = useCallback((card: ConfirmCardState<TSummary, TAction>) => {
     setConfirmCard((current) =>
-      current?.requestId === card.requestId
-        ? { ...current, resolution: "denied" }
-        : current,
+      current?.requestId === card.requestId ? null : current,
     );
   }, []);
 
@@ -216,7 +213,7 @@ export function useClientActionConfirmFlow<
 
   return {
     confirmCard,
-    isConfirmPending: confirmCard?.resolution === "pending",
+    isConfirmPending: confirmCard !== null,
     requestConfirmation,
     allowCard,
     denyCard,

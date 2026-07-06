@@ -218,16 +218,15 @@ describe("OutlookEratoAppointmentRenderer — confirm flow", () => {
     });
 
     expect(mockOpenNewAppointmentForm).toHaveBeenCalledWith(DETAILS);
-    expect(screen.getByTestId("confirmation-card")).toHaveAttribute(
-      "data-status",
-      "confirmed",
-    );
-    expect(screen.getByTestId("resolved-label")).toHaveTextContent(
-      "Appointment form opened",
-    );
+    // No persistent record: the card closes and the button shows the
+    // transient "Opened!" swap (the add-in's standard success idiom).
+    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Opened!" }),
+    ).toBeInTheDocument();
   });
 
-  it("records a deny without opening anything", () => {
+  it("closes the card on deny without opening anything", () => {
     prime({ artifact: makeArtifact(), currentItemIdentity: null });
     render(<OutlookEratoAppointmentRenderer content={FENCE} />);
 
@@ -235,10 +234,10 @@ describe("OutlookEratoAppointmentRenderer — confirm flow", () => {
     fireEvent.click(screen.getByRole("button", { name: "deny" }));
 
     expect(mockOpenNewAppointmentForm).not.toHaveBeenCalled();
-    expect(screen.getByTestId("confirmation-card")).toHaveAttribute(
-      "data-status",
-      "dismissed",
-    );
+    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Open appointment" }),
+    ).toBeEnabled();
   });
 
   it("still confirms under a stored grant when the deployment enforces always-ask", () => {
@@ -255,7 +254,7 @@ describe("OutlookEratoAppointmentRenderer — confirm flow", () => {
     expect(screen.getByTestId("confirmation-card")).toBeInTheDocument();
   });
 
-  it("resolves the card as not opened when the form fails", async () => {
+  it("closes the card when the form fails; the inline alert is the feedback", async () => {
     prime({ artifact: makeArtifact(), currentItemIdentity: null });
     mockOpenNewAppointmentForm.mockRejectedValue(new Error("host says no"));
     render(<OutlookEratoAppointmentRenderer content={FENCE} />);
@@ -265,12 +264,12 @@ describe("OutlookEratoAppointmentRenderer — confirm flow", () => {
       fireEvent.click(screen.getByRole("button", { name: "allow-once" }));
     });
 
-    expect(screen.getByTestId("resolved-label")).toHaveTextContent(
-      "could not be opened",
-    );
+    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Failed to open the appointment form",
     );
+    // No success swap on a failed open.
+    expect(screen.queryByRole("button", { name: "Opened!" })).toBeNull();
   });
 });
 

@@ -315,11 +315,8 @@ describe("OutlookEratoEmailRenderer — confirmation-card item snapshot", () => 
     expect(screen.getByRole("alert")).toHaveTextContent(
       "written for a different email",
     );
-    // The card records the failed outcome instead of vanishing.
-    expect(screen.getByTestId("confirmation-card")).toHaveAttribute(
-      "data-status",
-      "dismissed",
-    );
+    // The card closes; the inline alert is the failure feedback.
+    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
   });
 
   it("aborts always-allow the same way (the persisted grant must not bypass the snapshot)", async () => {
@@ -438,8 +435,11 @@ describe("OutlookEratoEmailRenderer — auto-prompt one-shot", () => {
   });
 });
 
-describe("OutlookEratoEmailRenderer — resolved confirmation card", () => {
-  it("keeps the card as a confirmed record after allow-once and re-enables the proposal buttons", async () => {
+describe("OutlookEratoEmailRenderer — confirmation card resolution", () => {
+  // No persistent resolved record: the card closes on every outcome, and
+  // success feedback is the ~2s "Opened!" swap on the action button (the
+  // add-in's standard transient idiom, like Copy's "Copied!").
+  it("closes the card after allow-once and shows the transient Opened! swap", async () => {
     prime({ artifact: makeArtifact(), currentItemIdentity: "item-a" });
     render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
 
@@ -451,17 +451,17 @@ describe("OutlookEratoEmailRenderer — resolved confirmation card", () => {
     });
 
     expect(mockOpenReplyForm).toHaveBeenCalledWith(REPLY, "Draft body", false);
-    expect(screen.getByTestId("confirmation-card")).toHaveAttribute(
-      "data-status",
-      "confirmed",
-    );
-    expect(screen.getByTestId("resolved-label")).toHaveTextContent(
-      "Reply form opened",
-    );
-    expect(screen.getByRole("button", { name: "Reply" })).toBeEnabled();
+    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Opened!" }),
+    ).toBeInTheDocument();
+    // Only the executed action swaps; the sibling keeps its label.
+    expect(
+      screen.getByRole("button", { name: "Reply All" }),
+    ).toBeInTheDocument();
   });
 
-  it("labels a confirmed reply-all with its own outcome", async () => {
+  it("swaps the reply-all button when that action was the one executed", async () => {
     prime({ artifact: makeArtifact(), currentItemIdentity: "item-a" });
     render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
 
@@ -470,12 +470,14 @@ describe("OutlookEratoEmailRenderer — resolved confirmation card", () => {
       fireEvent.click(screen.getByRole("button", { name: "allow-once" }));
     });
 
-    expect(screen.getByTestId("resolved-label")).toHaveTextContent(
-      "Reply All form opened",
-    );
+    expect(
+      screen.getByRole("button", { name: "Opened!" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reply" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reply All" })).toBeNull();
   });
 
-  it("records a deny as dismissed instead of unmounting the card", () => {
+  it("closes the card on deny and re-enables the buttons", () => {
     prime({ artifact: makeArtifact(), currentItemIdentity: "item-a" });
     render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
 
@@ -483,14 +485,11 @@ describe("OutlookEratoEmailRenderer — resolved confirmation card", () => {
     fireEvent.click(screen.getByRole("button", { name: "deny" }));
 
     expect(mockOpenReplyForm).not.toHaveBeenCalled();
-    expect(screen.getByTestId("confirmation-card")).toHaveAttribute(
-      "data-status",
-      "dismissed",
-    );
+    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reply" })).toBeEnabled();
   });
 
-  it("resolves the card as not opened when the reply form fails", async () => {
+  it("closes the card when the reply form fails; the inline alert is the feedback", async () => {
     mockOpenReplyForm.mockRejectedValueOnce(new Error("boom"));
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     prime({ artifact: makeArtifact(), currentItemIdentity: "item-a" });
@@ -501,20 +500,16 @@ describe("OutlookEratoEmailRenderer — resolved confirmation card", () => {
       fireEvent.click(screen.getByRole("button", { name: "allow-once" }));
     });
 
-    expect(screen.getByTestId("confirmation-card")).toHaveAttribute(
-      "data-status",
-      "dismissed",
-    );
-    expect(screen.getByTestId("resolved-label")).toHaveTextContent(
-      "could not be opened",
-    );
+    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Failed to open the reply form",
     );
+    // No success swap on a failed open.
+    expect(screen.queryByRole("button", { name: "Opened!" })).toBeNull();
     warn.mockRestore();
   });
 
-  it("disables the card buttons while the reply form is opening", async () => {
+  it("keeps the card mounted and busy while the reply form is opening", async () => {
     let resolveOpen!: () => void;
     mockOpenReplyForm.mockImplementationOnce(
       () =>
@@ -537,22 +532,16 @@ describe("OutlookEratoEmailRenderer — resolved confirmation card", () => {
       resolveOpen();
     });
 
-    expect(screen.getByTestId("confirmation-card")).toHaveAttribute(
-      "data-status",
-      "confirmed",
-    );
+    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
   });
 
-  it("replaces a resolved card with a fresh pending one on the next request", () => {
+  it("opens a fresh card on the next request after a deny", () => {
     prime({ artifact: makeArtifact(), currentItemIdentity: "item-a" });
     render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Reply" }));
     fireEvent.click(screen.getByRole("button", { name: "deny" }));
-    expect(screen.getByTestId("confirmation-card")).toHaveAttribute(
-      "data-status",
-      "dismissed",
-    );
+    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Reply" }));
     expect(screen.getByTestId("confirmation-card")).toHaveAttribute(

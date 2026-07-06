@@ -135,6 +135,11 @@ export function OutlookEratoEmailRenderer({
   >("insert");
   const [busyAction, setBusyAction] =
     useState<OutlookEmailClientAction | null>(null);
+  // Which reply button flips to the ~2s "Opened!" swap — the add-in's
+  // standard transient success feedback (like Copy's "Copied!"). Only
+  // meaningful while `status` is "done"; overwritten by the next open.
+  const [openedAction, setOpenedAction] =
+    useState<OutlookEmailClientAction | null>(null);
   const isBusy = status === "inserting";
   const previewHtml = useMemo(
     () => (isHtml ? sanitizeHtmlPreview(content) : null),
@@ -208,6 +213,7 @@ export function OutlookEratoEmailRenderer({
       setStatus("inserting");
       try {
         await openReplyForm(action, content, !!isHtml);
+        setOpenedAction(action);
         setStatus("done");
         scheduleStatusReset(2000);
         return true;
@@ -394,7 +400,12 @@ export function OutlookEratoEmailRenderer({
                       id: "officeAddin.emailRenderer.opening",
                       message: "Opening...",
                     })
-                  : replyActionLabel(action)}
+                  : status === "done" && openedAction === action
+                    ? t({
+                        id: "officeAddin.emailRenderer.opened",
+                        message: "Opened!",
+                      })
+                    : replyActionLabel(action)}
               </button>
             ))
           : !isReadMode && (
@@ -501,31 +512,6 @@ export function OutlookEratoEmailRenderer({
               : undefined
           }
           onDeny={() => denyCard(confirmCard)}
-          status={
-            confirmCard.resolution === "pending"
-              ? "pending"
-              : confirmCard.resolution === "opened"
-                ? "confirmed"
-                : "dismissed"
-          }
-          resolvedLabel={
-            confirmCard.resolution === "opened"
-              ? confirmCard.action === "outlook.reply_all"
-                ? t({
-                    id: "officeAddin.emailRenderer.replyAllFormOpened",
-                    message: "Reply All form opened",
-                  })
-                : t({
-                    id: "officeAddin.emailRenderer.replyFormOpened",
-                    message: "Reply form opened",
-                  })
-              : confirmCard.resolution === "failed"
-                ? t({
-                    id: "officeAddin.emailRenderer.replyFormNotOpened",
-                    message: "Reply form could not be opened",
-                  })
-                : undefined
-          }
           isBusy={isBusy}
           scrollIntoViewOnMount={confirmCard.autoTriggered}
         />
