@@ -17,6 +17,74 @@ msgstr ""
 # Explicit IDs
 # ==============================
 #. js-lingui-explicit-id
+#: src/components/OutlookEratoAppointmentRenderer.tsx
+msgid "officeAddin.appointmentRenderer.alwaysAllowLocked"
+msgstr "Votre organisation exige une confirmation pour cette action à chaque fois."
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoAppointmentRenderer.tsx
+msgid "officeAddin.appointmentRenderer.attendees"
+msgstr "Participants :"
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoAppointmentRenderer.tsx
+msgid "officeAddin.appointmentRenderer.confirmMessage"
+msgstr "Ceci ouvre un formulaire de rendez-vous prérempli dans Outlook. Rien n'est enregistré ni envoyé tant que vous ne le faites pas là-bas."
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoAppointmentRenderer.tsx
+#~ msgid "officeAddin.appointmentRenderer.formNotOpened"
+#~ msgstr "Le formulaire de rendez-vous n'a pas pu être ouvert"
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoAppointmentRenderer.tsx
+#~ msgid "officeAddin.appointmentRenderer.formOpened"
+#~ msgstr "Formulaire de rendez-vous ouvert"
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoAppointmentRenderer.tsx
+msgid "officeAddin.appointmentRenderer.location"
+msgstr "Lieu :"
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoAppointmentRenderer.tsx
+msgid "officeAddin.appointmentRenderer.noSubject"
+msgstr "(aucun)"
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoAppointmentRenderer.tsx
+msgid "officeAddin.appointmentRenderer.openAppointment"
+msgstr "Ouvrir le rendez-vous"
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoAppointmentRenderer.tsx
+msgid "officeAddin.appointmentRenderer.opened"
+msgstr "Ouvert"
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoAppointmentRenderer.tsx
+msgid "officeAddin.appointmentRenderer.openFailed"
+msgstr "Le formulaire de rendez-vous n'a pas pu être ouvert. Vous pouvez créer le rendez-vous manuellement dans Outlook."
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoAppointmentRenderer.tsx
+msgid "officeAddin.appointmentRenderer.opening"
+msgstr "Ouverture..."
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoAppointmentRenderer.tsx
+msgid "officeAddin.appointmentRenderer.subject"
+msgstr "Objet :"
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoAppointmentRenderer.tsx
+msgid "officeAddin.appointmentRenderer.when"
+msgstr "Quand :"
+
+# ==============================
+# Explicit IDs
+# ==============================
+#. js-lingui-explicit-id
 #: src/App.tsx
 msgid "officeAddin.auth.authenticating"
 msgstr "Authentification..."
@@ -225,6 +293,11 @@ msgstr "Le fichier dépasse la limite du serveur de {globalMaxFormatted}"
 
 #. js-lingui-explicit-id
 #: src/utils/outlookClientActions.ts
+msgid "officeAddin.clientActions.createAppointment"
+msgstr "Ouvrir un rendez-vous prérempli"
+
+#. js-lingui-explicit-id
+#: src/utils/outlookClientActions.ts
 msgid "officeAddin.clientActions.reply"
 msgstr "Répondre à l'expéditeur"
 
@@ -290,6 +363,11 @@ msgstr "Insertion..."
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
+msgid "officeAddin.emailRenderer.opened"
+msgstr "Ouvert"
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.opening"
 msgstr "Ouverture..."
 
@@ -325,8 +403,8 @@ msgstr "{confirmRecipientCount, plural, one {Ceci ouvre une réponse adressée �
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
-msgid "officeAddin.emailRenderer.replyAllFormOpened"
-msgstr "Formulaire de réponse à tous ouvert"
+#~ msgid "officeAddin.emailRenderer.replyAllFormOpened"
+#~ msgstr "Formulaire de réponse à tous ouvert"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
@@ -350,13 +428,13 @@ msgstr "Impossible d'ouvrir le formulaire de réponse. Vérifiez que l'e-mail re
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
-msgid "officeAddin.emailRenderer.replyFormNotOpened"
-msgstr "Le formulaire de réponse n'a pas pu être ouvert"
+#~ msgid "officeAddin.emailRenderer.replyFormNotOpened"
+#~ msgstr "Le formulaire de réponse n'a pas pu être ouvert"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
-msgid "officeAddin.emailRenderer.replyFormOpened"
-msgstr "Formulaire de réponse ouvert"
+#~ msgid "officeAddin.emailRenderer.replyFormOpened"
+#~ msgstr "Formulaire de réponse ouvert"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx

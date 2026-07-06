@@ -89,6 +89,17 @@ function parseRecipients(
   }));
 }
 
+/**
+ * Sentinel send-time identity for a send with NO Outlook item open (neutral
+ * context: pinned pane with nothing selected). A REAL captured value — not a
+ * capture failure — so completions from neutral sends still count as fresh
+ * and item-INDEPENDENT actions (create appointment) can auto-prompt there.
+ * Item-BOUND executors (reply) treat it like any mismatching identity and
+ * fail closed. Distinct by construction from every built identity (message
+ * ids, `subject:date`, `compose:` mints).
+ */
+export const NO_ITEM_SEND_IDENTITY = "no-item";
+
 function buildMailItemIdentity(
   item: Office.MessageRead | Office.MessageCompose | null,
 ): string | null {

@@ -210,6 +210,7 @@ export {
   type ComponentKitComponentRegistration,
   type ComponentKitRegistration,
   type EratoEmailCodeBlockProps,
+  type EratoAppointmentCodeBlockProps,
   type ChatAddMenuExtraContentProps,
 } from "@/config/componentRegistry";
 export {

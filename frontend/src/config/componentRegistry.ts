@@ -42,6 +42,14 @@ export interface EratoEmailCodeBlockProps {
   isHtml?: boolean;
 }
 
+export interface EratoAppointmentCodeBlockProps {
+  /**
+   * The raw text inside the erato-appointment code block: the JSON appointment
+   * payload the model emitted (may be incomplete while streaming).
+   */
+  content: string;
+}
+
 /**
  * Props for a host-contributed section rendered inside the unified chat "+"
  * add menu (e.g. the Outlook add-in's email-content sources). The shared menu
@@ -173,6 +181,17 @@ export interface ComponentRegistry {
    * Copy button.
    */
   EratoEmailCodeBlock: ComponentType<EratoEmailCodeBlockProps> | null;
+
+  /**
+   * Override for rendering `erato-appointment` fenced code blocks (the JSON
+   * appointment payload a scheduling facet's confirm step emits).
+   *
+   * Used by the Office addin to render the appointment summary + confirm
+   * card that opens a prefilled Outlook appointment form.
+   *
+   * When null, `erato-appointment` blocks render as a plain code block.
+   */
+  EratoAppointmentCodeBlock: ComponentType<EratoAppointmentCodeBlockProps> | null;
 }
 
 type ComponentRegistryComponent<TKey extends keyof ComponentRegistry> = Exclude<
@@ -218,6 +237,7 @@ const emptyComponentRegistry = (): ComponentRegistry => ({
   ChatMessageRenderer: null,
   ChatTopLeftAccessory: null,
   EratoEmailCodeBlock: null,
+  EratoAppointmentCodeBlock: null,
 });
 
 const buildComponentRegistry = (
