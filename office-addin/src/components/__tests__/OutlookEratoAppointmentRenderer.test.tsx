@@ -221,9 +221,7 @@ describe("OutlookEratoAppointmentRenderer — confirm flow", () => {
     // No persistent record: the card closes and the button shows the
     // transient "Opened!" swap (the add-in's standard success idiom).
     expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Opened!" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Opened!" })).toBeInTheDocument();
   });
 
   it("closes the card on deny without opening anything", () => {

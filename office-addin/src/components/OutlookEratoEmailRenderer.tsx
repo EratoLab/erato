@@ -133,8 +133,9 @@ export function OutlookEratoEmailRenderer({
   const [errorKind, setErrorKind] = useState<
     "insert" | "reply" | "tooLarge" | "staleItem"
   >("insert");
-  const [busyAction, setBusyAction] =
-    useState<OutlookEmailClientAction | null>(null);
+  const [busyAction, setBusyAction] = useState<OutlookEmailClientAction | null>(
+    null,
+  );
   // Which reply button flips to the ~2s "Opened!" swap — the add-in's
   // standard transient success feedback (like Copy's "Copied!"). Only
   // meaningful while `status` is "done"; overwritten by the next open.

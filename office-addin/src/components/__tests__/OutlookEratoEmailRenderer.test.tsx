@@ -452,9 +452,7 @@ describe("OutlookEratoEmailRenderer — confirmation card resolution", () => {
 
     expect(mockOpenReplyForm).toHaveBeenCalledWith(REPLY, "Draft body", false);
     expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Opened!" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Opened!" })).toBeInTheDocument();
     // Only the executed action swaps; the sibling keeps its label.
     expect(
       screen.getByRole("button", { name: "Reply All" }),
@@ -470,9 +468,7 @@ describe("OutlookEratoEmailRenderer — confirmation card resolution", () => {
       fireEvent.click(screen.getByRole("button", { name: "allow-once" }));
     });
 
-    expect(
-      screen.getByRole("button", { name: "Opened!" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Opened!" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reply" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reply All" })).toBeNull();
   });

@@ -13,10 +13,8 @@ function installOffice({
   supportedSets = ["Mailbox 1.1", "Mailbox 1.9"],
   hostName = "Outlook",
   displayNewAppointmentFormAsync = vi.fn(
-    (
-      _form: unknown,
-      cb: (r: { status: string; value: undefined }) => void,
-    ) => cb({ status: "succeeded", value: undefined }),
+    (_form: unknown, cb: (r: { status: string; value: undefined }) => void) =>
+      cb({ status: "succeeded", value: undefined }),
   ),
   displayNewAppointmentForm = vi.fn(),
 }: {

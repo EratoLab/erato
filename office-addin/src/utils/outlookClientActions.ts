@@ -30,7 +30,9 @@ export type OutlookEmailClientAction = (typeof EMAIL_CLIENT_ACTIONS)[number];
  * Actions whose payload is the message's `erato-appointment` fence — executed
  * by the appointment renderer via Outlook's new-appointment form.
  */
-export const APPOINTMENT_CLIENT_ACTIONS = ["outlook.create_appointment"] as const;
+export const APPOINTMENT_CLIENT_ACTIONS = [
+  "outlook.create_appointment",
+] as const;
 
 export type OutlookAppointmentClientAction =
   (typeof APPOINTMENT_CLIENT_ACTIONS)[number];

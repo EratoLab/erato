@@ -263,7 +263,10 @@ describe("buildOutlookArtifact", () => {
     // the artifact (facet metadata + proposal) reaches the fence renderer.
     const artifact = buildOutlookArtifact({
       facetId: "outlook_schedule",
-      facetArgs: { now_iso: "2026-07-06T10:00:00+02:00", timezone: "Europe/Berlin" },
+      facetArgs: {
+        now_iso: "2026-07-06T10:00:00+02:00",
+        timezone: "Europe/Berlin",
+      },
       clientActionInfo: scheduleInfo,
       content: [
         toolUsePart({ input: { action: "outlook.create_appointment" } }),
