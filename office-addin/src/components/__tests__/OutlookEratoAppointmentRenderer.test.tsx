@@ -308,6 +308,19 @@ describe("OutlookEratoAppointmentRenderer — auto-prompt", () => {
     expect(screen.getByTestId("confirmation-card")).toBeInTheDocument();
   });
 
+  it("auto-surfaces when the live item drifted from the send-time identity", () => {
+    // create_appointment is item-independent: a mid-stream re-resolve that
+    // re-mints an unsaved-compose identity (or a navigation to another item)
+    // must not suppress the auto-prompt for a payload that lives in the fence.
+    prime({
+      artifact: makeAutoPromptArtifact({ itemIdentity: "compose:abc" }),
+      currentItemIdentity: "compose:xyz",
+    });
+    render(<OutlookEratoAppointmentRenderer content={FENCE} />);
+
+    expect(screen.getByTestId("confirmation-card")).toBeInTheDocument();
+  });
+
   it("never auto-surfaces for history messages", () => {
     prime({
       artifact: makeAutoPromptArtifact({

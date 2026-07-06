@@ -8,6 +8,10 @@ import {
 import { plural, t } from "@lingui/core/macro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import {
+  ACTION_BUTTON_CLASS,
+  PRIMARY_ACTION_BUTTON_CLASS,
+} from "./clientActionButtonStyles";
 import { useComposeSelectionSnapshot } from "../hooks/composeSelectionStore";
 import { useClientActionConfirmFlow } from "../hooks/useClientActionConfirmFlow";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
@@ -34,13 +38,6 @@ import {
 } from "../utils/outlookReadReply";
 
 import type { EratoEmailCodeBlockProps } from "@erato/frontend/library";
-
-const ACTION_BUTTON_CLASS =
-  "rounded-md border border-theme-border bg-theme-bg-primary px-3 py-1 text-xs hover:bg-theme-bg-tertiary disabled:opacity-50";
-// Mirrors the library Button "primary" variant tokens (Button.tsx) at the
-// compact geometry of the sibling action buttons.
-const PRIMARY_ACTION_BUTTON_CLASS =
-  "rounded-md px-3 py-1 text-xs font-medium bg-theme-action-primary-bg text-theme-action-primary-fg hover:bg-theme-action-primary-hover theme-transition disabled:opacity-50";
 
 /**
  * Office-aware renderer for erato-email code blocks.

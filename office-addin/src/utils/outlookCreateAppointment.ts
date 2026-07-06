@@ -1,5 +1,8 @@
 import { callOfficeAsync } from "./officeAsync";
 
+// A wedged host could drop the callback and hang the open forever — bound it.
+const APPOINTMENT_FORM_TIMEOUT_MS = 15_000;
+
 /**
  * The appointment the model emitted inside its fenced `erato-appointment`
  * block, validated into a shape the Office.js new-appointment form accepts.
@@ -41,8 +44,8 @@ function isParseableDate(value: string): boolean {
  * Parse the JSON payload of an `erato-appointment` fence (the renderer
  * receives the fence body directly). Returns `null` when the JSON is
  * unparseable (including mid-stream truncation), the required `start`/`end`
- * are missing, or they don't parse as dates — the caller then simply shows no
- * actionable card. Never throws.
+ * are missing, they don't parse as dates, or `end` is not after `start` — the
+ * caller then simply shows no actionable card. Never throws.
  */
 export function parseAppointmentDetails(
   fenceBody: string,
@@ -62,6 +65,10 @@ export function parseAppointmentDetails(
     return null;
   }
   if (!isParseableDate(obj.start) || !isParseableDate(obj.end)) {
+    return null;
+  }
+  // Reject inverted/zero-length ranges — never open a negative-duration form.
+  if (new Date(obj.end).getTime() <= new Date(obj.start).getTime()) {
     return null;
   }
 
@@ -127,8 +134,10 @@ export async function openNewAppointmentForm(
     Office.context.requirements?.isSetSupported?.("Mailbox", "1.9") ?? false;
   try {
     if (supportsAsync) {
-      await callOfficeAsync<void>((callback) =>
-        Office.context.mailbox.displayNewAppointmentFormAsync(form, callback),
+      await callOfficeAsync<void>(
+        (callback) =>
+          Office.context.mailbox.displayNewAppointmentFormAsync(form, callback),
+        { timeoutMs: APPOINTMENT_FORM_TIMEOUT_MS },
       );
     } else {
       Office.context.mailbox.displayNewAppointmentForm(form);

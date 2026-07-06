@@ -6,11 +6,12 @@ import {
 import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { useClientActionConfirmFlow } from "../hooks/useClientActionConfirmFlow";
 import {
-  NO_ITEM_SEND_IDENTITY,
-  useOutlookMailItem,
-} from "../providers/OutlookMailItemProvider";
+  ACTION_BUTTON_CLASS,
+  PRIMARY_ACTION_BUTTON_CLASS,
+} from "./clientActionButtonStyles";
+import { useClientActionConfirmFlow } from "../hooks/useClientActionConfirmFlow";
+import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
 import {
   CLIENT_ACTION_DECISIONS_KEY,
   DEFAULT_CLIENT_ACTION_DECISIONS,
@@ -33,12 +34,14 @@ import {
 
 import type { EratoAppointmentCodeBlockProps } from "@erato/frontend/library";
 
-const ACTION_BUTTON_CLASS =
-  "rounded-md border border-theme-border bg-theme-bg-primary px-3 py-1 text-xs hover:bg-theme-bg-tertiary disabled:opacity-50";
-// Mirrors the library Button "primary" variant tokens (Button.tsx) at the
-// compact geometry of the sibling action buttons.
-const PRIMARY_ACTION_BUTTON_CLASS =
-  "rounded-md px-3 py-1 text-xs font-medium bg-theme-action-primary-bg text-theme-action-primary-fg hover:bg-theme-action-primary-hover theme-transition disabled:opacity-50";
+const DATE_TIME_FORMAT: Intl.DateTimeFormatOptions = {
+  weekday: "short",
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+};
 
 /**
  * The appointment's time range for the summary and the confirmation card,
@@ -49,26 +52,19 @@ const PRIMARY_ACTION_BUTTON_CLASS =
 function formatAppointmentWhen(details: AppointmentDetails): string {
   const start = new Date(details.start);
   const end = new Date(details.end);
-  const startText = start.toLocaleString(undefined, {
-    weekday: "short",
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const startText = start.toLocaleString(undefined, DATE_TIME_FORMAT);
   const sameDay = start.toDateString() === end.toDateString();
   const endText = sameDay
     ? end.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
-    : end.toLocaleString(undefined, {
-        weekday: "short",
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+    : end.toLocaleString(undefined, DATE_TIME_FORMAT);
   return `${startText} – ${endText}`;
+}
+
+/** Combined required + optional attendees as a comma-separated string. */
+function formatAttendees(details: AppointmentDetails): string {
+  return [...details.attendees, ...(details.optionalAttendees ?? [])].join(
+    ", ",
+  );
 }
 
 /**
@@ -185,9 +181,11 @@ export function OutlookEratoAppointmentRenderer({
 
   // Shared confirm-card state machine + auto-prompt one-shot. The summary is
   // the parsed fence payload — exactly what the form will be prefilled with.
-  // The current identity is normalized to the no-item sentinel because this
-  // action is item-independent: a neutral-context send must still match its
-  // send-time identity at prompt time.
+  // create_appointment is item-independent (payload lives in the fence, form
+  // sits on the mailbox), so passing the send-time identity as the current one
+  // makes the identity gate a no-op; freshness/latest/once-per-message still
+  // bound WHEN it auto-prompts. Also covers unsaved-compose, whose minted
+  // identity re-mints on every re-resolve and could never match itself.
   const {
     confirmCard,
     isConfirmPending,
@@ -210,7 +208,7 @@ export function OutlookEratoAppointmentRenderer({
     isFreshCompletion: !!artifact?.isFreshCompletion,
     proposedAction,
     expectedItemIdentity: artifact?.itemIdentity,
-    currentItemIdentity: itemIdentity ?? NO_ITEM_SEND_IDENTITY,
+    currentItemIdentity: artifact?.itemIdentity,
   });
 
   const handleActionClick = useCallback(
@@ -254,10 +252,7 @@ export function OutlookEratoAppointmentRenderer({
   }
 
   const when = formatAppointmentWhen(details);
-  const attendeesText = [
-    ...details.attendees,
-    ...(details.optionalAttendees ?? []),
-  ].join(", ");
+  const attendeesText = formatAttendees(details);
 
   return (
     <div className="my-2 rounded-lg border border-theme-border bg-theme-bg-secondary p-3">
@@ -377,10 +372,7 @@ export function OutlookEratoAppointmentRenderer({
                 {formatAppointmentWhen(confirmCard.summary)}
                 {confirmCard.summary.attendees.length > 0 ||
                 (confirmCard.summary.optionalAttendees?.length ?? 0) > 0
-                  ? ` · ${[
-                      ...confirmCard.summary.attendees,
-                      ...(confirmCard.summary.optionalAttendees ?? []),
-                    ].join(", ")}`
+                  ? ` · ${formatAttendees(confirmCard.summary)}`
                   : ""}
               </p>
             </div>

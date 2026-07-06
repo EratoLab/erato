@@ -109,6 +109,19 @@ describe("parseAppointmentDetails", () => {
       ),
     ).toBeNull();
   });
+
+  it("returns null for an inverted or zero-length range", () => {
+    // Swapped start/end (or a timezone slip) — never open a negative-duration
+    // form; end === start is equally non-actionable.
+    expect(
+      parseAppointmentDetails(
+        JSON.stringify({ ...VALID, start: VALID.end, end: VALID.start }),
+      ),
+    ).toBeNull();
+    expect(
+      parseAppointmentDetails(JSON.stringify({ ...VALID, end: VALID.start })),
+    ).toBeNull();
+  });
 });
 
 describe("isCreateAppointmentSupported", () => {
@@ -172,6 +185,18 @@ describe("openNewAppointmentForm", () => {
     await expect(openNewAppointmentForm(VALID)).rejects.toBeInstanceOf(
       AppointmentFormError,
     );
+  });
+
+  it("times out when a wedged host drops the async callback", async () => {
+    vi.useFakeTimers();
+    // vi.fn() never invokes the callback — a dropped Office callback.
+    installOffice({ displayNewAppointmentFormAsync: vi.fn() });
+    const assertion = expect(
+      openNewAppointmentForm(VALID),
+    ).rejects.toBeInstanceOf(AppointmentFormError);
+    await vi.advanceTimersByTimeAsync(15_000);
+    await assertion;
+    vi.useRealTimers();
   });
 
   it("rejects when the async callback reports failure", async () => {
