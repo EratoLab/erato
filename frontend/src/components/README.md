@@ -12,8 +12,11 @@ import { useTransientLabel } from "@/hooks/ui/useTransientLabel";
 import { t } from "@lingui/core/macro";
 
 function CopyButton({ text }: { text: string }) {
-  const { isActive: isCopied, trigger: triggerCopied, srAnnouncement } =
-    useTransientLabel({ announcement: t`Copied to clipboard` });
+  const {
+    isActive: isCopied,
+    trigger: triggerCopied,
+    srAnnouncement,
+  } = useTransientLabel({ announcement: t`Copied to clipboard` });
 
   return (
     <>
@@ -26,7 +29,9 @@ function CopyButton({ text }: { text: string }) {
         {isCopied ? "Copied!" : "Copy"}
       </button>
       {/* sr-only live region — include whenever the visible change is icon-only */}
-      <p role="status" className="sr-only">{srAnnouncement}</p>
+      <p role="status" className="sr-only">
+        {srAnnouncement}
+      </p>
     </>
   );
 }
@@ -53,10 +58,10 @@ trigger — not on every render.
 
 ## What NOT to use for success feedback
 
-| Idiom | Use for |
-|---|---|
-| **Toasts** (`toast.success` / `<Toaster>`) | Auth/permission flows, session decisions ("You switched conversation", Graph sign-in prompts). **Not** for micro-actions like copy or form submission confirmations. |
-| **Persistent resolved row** (removed 2026-07) | Was used by `ActionConfirmationCard`; removed because callers now close the card on resolution and show transient feedback on the trigger button instead. |
+| Idiom                                         | Use for                                                                                                                                                              |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Toasts** (`toast.success` / `<Toaster>`)    | Auth/permission flows, session decisions ("You switched conversation", Graph sign-in prompts). **Not** for micro-actions like copy or form submission confirmations. |
+| **Persistent resolved row** (removed 2026-07) | Was used by `ActionConfirmationCard`; removed because callers now close the card on resolution and show transient feedback on the trigger button instead.            |
 
 Errors continue to use **sticky toast** (`toast.error`) or **inline `<Alert
 type="error">`** depending on scope (global vs. component-local).

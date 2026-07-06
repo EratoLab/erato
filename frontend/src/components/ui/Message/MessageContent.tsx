@@ -198,8 +198,11 @@ function MarkdownPre({
   ...props
 }: MarkdownPreProps) {
   const artifact = React.useContext(OutlookArtifactContext);
-  const { isActive: copied, trigger: triggerCopied, srAnnouncement } =
-    useTransientLabel({ announcement: t`Copied to clipboard` });
+  const {
+    isActive: copied,
+    trigger: triggerCopied,
+    srAnnouncement,
+  } = useTransientLabel({ announcement: t`Copied to clipboard` });
 
   // Extract the raw code text from the child <code> element so the copy button
   // can access it without needing a separate context or ref strategy.

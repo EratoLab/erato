@@ -125,7 +125,14 @@ export const DefaultMessageControls = memo(function DefaultMessageControls({
         logger.log(`Action '${actionType}' failed for message ${messageId}`);
       }
     },
-    [onAction, messageId, feedbackState, initialFeedback, onViewFeedback, triggerCopied],
+    [
+      onAction,
+      messageId,
+      feedbackState,
+      initialFeedback,
+      onViewFeedback,
+      triggerCopied,
+    ],
   );
 
   // Ensure safeCreatedAt is always a Date object
