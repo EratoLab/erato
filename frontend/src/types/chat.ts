@@ -43,8 +43,16 @@ export interface MessageError {
 export interface OutlookArtifact {
   /** The action facet id that produced this assistant message (free-form). */
   facetId: string;
-  /** Output format the facet requested; drives HTML-vs-text rendering. */
-  bodyFormat: "text" | "html";
+  /**
+   * Output format the facet requested; drives HTML-vs-text rendering. Present
+   * exactly when the facet's output IS an email body (it carried a
+   * `body_format` arg) — everything email-shaped keys off it: the drifted
+   * fence-tag rescue and the unfenced whole-body email card. Absent for
+   * facets whose output is prose that may carry action fences (e.g. a
+   * scheduling facet's `erato-appointment` block), which must never be
+   * treated as an insertable email.
+   */
+  bodyFormat?: "text" | "html";
   /**
    * How to treat the assistant's output:
    * - `"body"`: the whole response is a single insertable email body, so an

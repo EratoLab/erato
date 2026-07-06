@@ -17,6 +17,7 @@ import {
   DEFAULT_LIGHT_CODE_HIGHLIGHT_PRESET,
   resolvePrismCodeTheme,
 } from "@/config/codeHighlightThemes";
+import { componentRegistry } from "@/config/componentRegistry";
 import { useOptionalTranslation } from "@/hooks/i18n";
 import { useTraceFeature } from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
@@ -112,8 +113,12 @@ function classifyEratoEmailBlock(
   if (language === "erato-email-html") {
     return { isEmail: true, isHtml: looksLikeHtmlFragment(content) };
   }
-  // Only when we KNOW a facet produced this message do we accept drifted tags.
-  if (artifact && DRIFTED_EMAIL_TAGS.has(language.toLowerCase())) {
+  // Only when we KNOW an email-bodied facet produced this message do we accept
+  // drifted tags. `bodyFormat` presence is what marks the facet email-bodied —
+  // an action-fence facet (e.g. scheduling) also stamps an artifact, but its
+  // prose may legitimately contain generic code blocks that must not be
+  // hijacked into email cards.
+  if (artifact?.bodyFormat && DRIFTED_EMAIL_TAGS.has(language.toLowerCase())) {
     return {
       isEmail: true,
       isHtml: artifact.bodyFormat === "html" && looksLikeHtmlFragment(content),
@@ -156,7 +161,19 @@ type MarkdownPreProps = React.ComponentPropsWithoutRef<"pre"> & {
   node?: unknown;
 };
 
-function isEratoEmailCodeChild(
+/**
+ * The `erato-appointment` fence renders as a card only when a host registered
+ * a renderer for it (the Outlook add-in); otherwise it stays a plain code
+ * block, exactly like before the registry key existed.
+ */
+function isEratoAppointmentLanguage(language: string): boolean {
+  return (
+    language === "erato-appointment" &&
+    componentRegistry.EratoAppointmentCodeBlock !== null
+  );
+}
+
+function isCardCodeChild(
   children: React.ReactNode,
   artifact: OutlookArtifact | null,
 ): boolean {
@@ -167,7 +184,10 @@ function isEratoEmailCodeChild(
   const match = /language-([\w-]+)/.exec(cls);
   const language = match ? match[1] : "";
   // Only isEmail is consumed here; it doesn't depend on content.
-  return classifyEratoEmailBlock(language, artifact, "").isEmail;
+  return (
+    classifyEratoEmailBlock(language, artifact, "").isEmail ||
+    isEratoAppointmentLanguage(language)
+  );
 }
 
 function MarkdownPre({
@@ -201,11 +221,11 @@ function MarkdownPre({
       .catch(() => {});
   }, [codeContent]);
 
-  // erato-email blocks render a custom component, not a code block —
-  // use a plain <div> to avoid inheriting <pre> monospace font and
-  // horizontal scroll from message-content-code-block styling.
+  // erato-email / erato-appointment blocks render a custom component, not a
+  // code block — use a plain <div> to avoid inheriting <pre> monospace font
+  // and horizontal scroll from message-content-code-block styling.
   try {
-    if (isEratoEmailCodeChild(children, artifact)) {
+    if (isCardCodeChild(children, artifact)) {
       return (
         <div>
           <BlockCodeContext.Provider value={true}>
@@ -277,6 +297,11 @@ function MarkdownCode({
     return (
       <EratoEmailSuggestion content={codeContent} isHtml={emailBlock.isHtml} />
     );
+  }
+
+  const AppointmentBlock = componentRegistry.EratoAppointmentCodeBlock;
+  if (isBlockCode && AppointmentBlock && isEratoAppointmentLanguage(language)) {
+    return <AppointmentBlock content={codeContent} />;
   }
 
   if (isBlockCode) {
@@ -932,6 +957,10 @@ export const MessageContent = memo(function MessageContent({
   );
   const wholeBodyArtifact =
     outlookArtifact?.renderMode === "body" &&
+    // Only an email-bodied facet (body_format present) has a "whole response
+    // is one insertable email" fallback; an action-fence facet's unfenced
+    // prose is just prose.
+    outlookArtifact.bodyFormat !== undefined &&
     !isStreaming &&
     !showRaw &&
     textForArtifact.trim().length > 0 &&

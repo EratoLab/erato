@@ -612,6 +612,25 @@ describe("OutlookEratoEmailRenderer — read-reply gate tracks the reactive item
 
     expect(screen.queryByRole("button", { name: "Reply" })).toBeNull();
   });
+
+  it("never offers an appointment action as a reply button (kind filter)", () => {
+    // An appointment-only facet (outlook_schedule) stamps allowedClientActions
+    // = ["outlook.create_appointment"]; the email renderer must not turn that
+    // into a button whose click would open a REPLY form with the prose body.
+    prime({
+      artifact: makeArtifact({
+        allowedClientActions: ["outlook.create_appointment"],
+        proposedClientAction: "outlook.create_appointment",
+      }),
+      currentItemIdentity: "item-a",
+    });
+    render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
+
+    expect(screen.queryByRole("button", { name: "Reply" })).toBeNull();
+    // Only the Copy fallback remains.
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
+  });
 });
 
 describe("OutlookEratoEmailRenderer — copy", () => {

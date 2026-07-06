@@ -456,13 +456,19 @@ chat_provider_ids = ["test-token-limit"]
 # display_name = "Outlook Appointment Scheduling"
 # platform = "outlook"
 # tool_call_allowlist = ["outlook/*"]
-# # Do not declare client_actions here until the add-in implements the action
-# # (ERMAIN-387): the model would announce a confirmation the UI never shows.
+# # Confirm path: once the user picks a slot, the model emits the appointment
+# # as an erato-appointment fenced JSON block and proposes this action; the
+# # add-in confirms and opens a prefilled appointment form (nothing is created
+# # server-side). The three keys travel together (startup validation).
+# client_actions = ["outlook.create_appointment"]
+# presentation = "auto_prompt"
+# client_actions_always_ask = ["outlook.create_appointment"]
 # allowed_args = ["now_iso", "timezone"]
 # template = """
 # FOR THIS MESSAGE ONLY: <your scheduling instructions; have the model call the
 # fetch_availability tool before stating any availability, reason over the
-# returned data in the user's local time zone, and present valid free slots>
+# returned data in the user's local time zone, present valid free slots, and on
+# a pick emit one erato-appointment JSON block + one propose_client_action call>
 # """
 
 # Experimental facets feature configuration

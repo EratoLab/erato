@@ -7,6 +7,7 @@ import {
   THEME_MODE_LOCAL_STORAGE_KEY,
   ThemeProvider,
 } from "@/components/providers/ThemeProvider";
+import { componentRegistry } from "@/config/componentRegistry";
 import { messages as enMessages } from "@/locales/en/messages.json";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
@@ -939,6 +940,90 @@ describe("MessageContent", () => {
       screen.getByText(/Here is the rewritten passage/),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Copy/ })).toBeInTheDocument();
+  });
+
+  it("does NOT whole-body-fallback for an action facet without a bodyFormat", () => {
+    renderWithTheme(
+      <MessageContent
+        content={textContent(
+          "Tuesday 10:00 works well; Wednesday is fully booked.",
+        )}
+        outlookArtifact={{
+          facetId: "outlook_schedule",
+          renderMode: "body",
+          allowedClientActions: ["outlook.create_appointment"],
+          proposedClientAction: "outlook.create_appointment",
+        }}
+      />,
+    );
+
+    // Scheduling prose is prose — no bodyFormat means no insertable email,
+    // even though the facet proposed a (non-email) client action.
+    expect(screen.queryByRole("button", { name: /Copy/ })).toBeNull();
+    expect(screen.getByText(/Tuesday 10:00 works well/).tagName).toBe("P");
+  });
+
+  it("does NOT rescue drifted email tags for an action facet without a bodyFormat", () => {
+    const { container } = renderWithTheme(
+      <MessageContent
+        content={textContent("```text\nsome quoted schedule data\n```")}
+        outlookArtifact={{
+          facetId: "outlook_schedule",
+          renderMode: "body",
+          allowedClientActions: ["outlook.create_appointment"],
+        }}
+      />,
+    );
+
+    // A generic fence in scheduling prose stays an ordinary code block.
+    expect(
+      container.querySelector("pre.message-content-code-block code"),
+    ).toHaveTextContent("some quoted schedule data");
+  });
+
+  it("dispatches erato-appointment fences to a registered renderer", () => {
+    const original = componentRegistry.EratoAppointmentCodeBlock;
+    function AppointmentBlockStub({ content }: { content: string }) {
+      return <div data-testid="appointment-block">{content}</div>;
+    }
+    componentRegistry.EratoAppointmentCodeBlock = AppointmentBlockStub;
+    try {
+      const { container } = renderWithTheme(
+        <MessageContent
+          content={textContent(
+            '```erato-appointment\n{"start":"2026-07-09T10:00:00+02:00"}\n```',
+          )}
+          outlookArtifact={{
+            facetId: "outlook_schedule",
+            renderMode: "body",
+            allowedClientActions: ["outlook.create_appointment"],
+          }}
+        />,
+      );
+
+      expect(screen.getByTestId("appointment-block")).toHaveTextContent(
+        '"start":"2026-07-09T10:00:00+02:00"',
+      );
+      expect(
+        container.querySelector("pre.message-content-code-block"),
+      ).toBeNull();
+    } finally {
+      componentRegistry.EratoAppointmentCodeBlock = original;
+    }
+  });
+
+  it("keeps erato-appointment fences as plain code blocks without a registered renderer", () => {
+    const { container } = renderWithTheme(
+      <MessageContent
+        content={textContent(
+          '```erato-appointment\n{"start":"2026-07-09T10:00:00+02:00"}\n```',
+        )}
+      />,
+    );
+
+    expect(
+      container.querySelector("pre.message-content-code-block code"),
+    ).toHaveTextContent('"start"');
   });
 
   it("does NOT whole-body-fallback for review_draft (feedback stays markdown)", () => {

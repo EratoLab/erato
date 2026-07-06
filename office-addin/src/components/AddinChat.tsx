@@ -56,10 +56,7 @@ import {
   OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
   runWithGraphTimeout,
 } from "../utils/graphRequestTimeout";
-import {
-  computeShouldRenderEmailCard,
-  extractProposedClientAction,
-} from "../utils/outlookClientActions";
+import { buildOutlookArtifact } from "../utils/outlookClientActions";
 import { containsFetchAvailabilityToolUse } from "../utils/outlookScheduleTool";
 import { parseDroppedFiles } from "../utils/parseDroppedFiles";
 import { parseEmlBytes } from "../utils/parsedEmail";
@@ -775,13 +772,18 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
   // user message carried an Outlook action facet (resolved via
   // `previous_message_id`). The shared renderer uses it to show the
   // insert/replace email UI even when the model drifted or omitted the
-  // `erato-email` fence tag.
+  // `erato-email` fence tag, and the fence renderers use it for client-action
+  // proposals.
   //
-  // Convention-driven, NOT an id allowlist: any Outlook action facet carries a
-  // `body_format` arg, so a facet added only in erato.toml (e.g. `compose_email`)
-  // renders here with no add-in change. `renderMode` defaults to "body" (whole
-  // response is an insertable email); only review/critique facets opt into
-  // "suggestions" (fenced blocks render, unfenced prose stays markdown).
+  // Convention-driven, NOT an id allowlist: an email-bodied facet qualifies
+  // by its `body_format` arg, an action facet by its backend-advertised
+  // `client_actions` — so a facet added only in erato.toml (e.g.
+  // `compose_email`, `outlook_schedule`) renders here with no add-in change.
+  // The full decision lives in `buildOutlookArtifact`; `itemIdentity` is the
+  // SEND-time identity, and fresh implies it is known: completions whose
+  // identity is unknown (capture failed, edit/regenerate of an exchange this
+  // session no longer knows, ambiguous multi-id completion) were never added
+  // to `freshMessageIds`, so they render as history-like drafts.
   const clientActionsByFacetId = useActionFacetClientActions();
 
   const messagesWithArtifact = useMemo(() => {
@@ -797,66 +799,25 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
       }
       const previous = messages[message.previous_message_id];
       const facetId = previous?.action_facet_id;
-      const facetBodyFormat = previous?.action_facet_args?.body_format;
-      if (
-        !facetId ||
-        (facetBodyFormat !== "text" && facetBodyFormat !== "html")
-      ) {
+      const outlookArtifact = buildOutlookArtifact({
+        facetId,
+        facetArgs: previous?.action_facet_args,
+        clientActionInfo: facetId
+          ? clientActionsByFacetId.get(facetId)
+          : undefined,
+        content: message.content,
+        messageId: id,
+        freshItemIdentity: freshMessageIds.has(id)
+          ? freshItemIdentityRef.current.get(id)!
+          : undefined,
+      });
+      if (!outlookArtifact) {
         continue;
       }
-      const renderMode =
-        facetId === "outlook_review_draft" ? "suggestions" : "body";
-      // Client actions (e.g. reply / reply-all from read mode): the offerable
-      // set comes from the backend facet config, and the model's proposal is
-      // only stamped after revalidation against that set + tool-call status —
-      // never parsed out of message text.
-      const clientActionInfo = clientActionsByFacetId.get(facetId);
-      const allowedClientActions = clientActionInfo?.clientActions;
-      const proposedClientAction = allowedClientActions
-        ? extractProposedClientAction(message.content, allowedClientActions)
-        : undefined;
-      // Single source of truth for carding (see OutlookArtifact.shouldRenderEmailCard).
-      // Stamped below only when it SUPPRESSES (false); absent ⇒ cards.
-      const shouldRenderEmailCard = computeShouldRenderEmailCard({
-        allowedClientActions,
-        proposedClientAction,
-      });
       if (next === messages) {
         next = { ...messages };
       }
-      next[id] = {
-        ...message,
-        outlookArtifact: {
-          facetId,
-          bodyFormat: facetBodyFormat,
-          renderMode,
-          messageId: id,
-          ...(allowedClientActions ? { allowedClientActions } : {}),
-          ...(renderMode === "body" && !shouldRenderEmailCard
-            ? { shouldRenderEmailCard: false }
-            : {}),
-          ...(clientActionInfo && clientActionInfo.alwaysAskActions.length > 0
-            ? { alwaysAskClientActions: clientActionInfo.alwaysAskActions }
-            : {}),
-          ...(proposedClientAction ? { proposedClientAction } : {}),
-          ...(clientActionInfo?.presentation
-            ? { clientActionPresentation: clientActionInfo.presentation }
-            : {}),
-          // `itemIdentity` is the SEND-time identity, and fresh implies it
-          // is known: completions whose identity is unknown (capture
-          // failed, edit/regenerate of an exchange this session no longer
-          // knows, ambiguous multi-id completion) were never added to
-          // `freshMessageIds`, so they render as history-like drafts. The
-          // renderer still fails closed on a fresh-but-identity-less
-          // artifact, but this component no longer produces that shape.
-          ...(freshMessageIds.has(id)
-            ? {
-                isFreshCompletion: true,
-                itemIdentity: freshItemIdentityRef.current.get(id)!,
-              }
-            : {}),
-        },
-      };
+      next[id] = { ...message, outlookArtifact };
     }
     return next;
   }, [messages, messageOrder, clientActionsByFacetId, freshMessageIds]);

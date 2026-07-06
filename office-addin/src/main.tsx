@@ -7,6 +7,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import App from "./App";
 import { injectFrontendEnv } from "./app/env";
 import { AddinChatAddMenuExtraContent } from "./components/AddinChatAddMenuExtraContent";
+import { OutlookEratoAppointmentRenderer } from "./components/OutlookEratoAppointmentRenderer";
 import { OutlookEratoEmailRenderer } from "./components/OutlookEratoEmailRenderer";
 import { AddinSetupRoute } from "./pages/AddinSetupPage";
 
@@ -16,6 +17,7 @@ injectFrontendEnv();
 // ChatAddMenuExtraContent slot; file sources and tools come from the core menu.
 componentRegistry.ChatAddMenuExtraContent = AddinChatAddMenuExtraContent;
 componentRegistry.EratoEmailCodeBlock = OutlookEratoEmailRenderer;
+componentRegistry.EratoAppointmentCodeBlock = OutlookEratoAppointmentRenderer;
 
 const rootElement = document.getElementById("root");
 

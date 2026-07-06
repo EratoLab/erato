@@ -17,6 +17,69 @@ msgstr ""
 # Explicit IDs
 # ==============================
 #. js-lingui-explicit-id
+#: src/components/OutlookEratoAppointmentRenderer.tsx
+msgid "officeAddin.appointmentRenderer.alwaysAllowLocked"
+msgstr "Tu organización requiere confirmación para esta acción cada vez."
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoAppointmentRenderer.tsx
+msgid "officeAddin.appointmentRenderer.attendees"
+msgstr "Participantes:"
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoAppointmentRenderer.tsx
+msgid "officeAddin.appointmentRenderer.confirmMessage"
+msgstr "Esto abre un formulario de cita prellenado en Outlook. No se guarda ni se envía nada hasta que lo hagas allí."
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoAppointmentRenderer.tsx
+msgid "officeAddin.appointmentRenderer.formNotOpened"
+msgstr "No se pudo abrir el formulario de cita"
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoAppointmentRenderer.tsx
+msgid "officeAddin.appointmentRenderer.formOpened"
+msgstr "Se abrió el formulario de cita"
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoAppointmentRenderer.tsx
+msgid "officeAddin.appointmentRenderer.location"
+msgstr "Lugar:"
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoAppointmentRenderer.tsx
+msgid "officeAddin.appointmentRenderer.noSubject"
+msgstr "(ninguno)"
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoAppointmentRenderer.tsx
+msgid "officeAddin.appointmentRenderer.openAppointment"
+msgstr "Abrir cita"
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoAppointmentRenderer.tsx
+msgid "officeAddin.appointmentRenderer.openFailed"
+msgstr "No se pudo abrir el formulario de cita. Puedes crear la cita manualmente en Outlook."
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoAppointmentRenderer.tsx
+msgid "officeAddin.appointmentRenderer.opening"
+msgstr "Abriendo..."
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoAppointmentRenderer.tsx
+msgid "officeAddin.appointmentRenderer.subject"
+msgstr "Asunto:"
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoAppointmentRenderer.tsx
+msgid "officeAddin.appointmentRenderer.when"
+msgstr "Cuándo:"
+
+# ==============================
+# Explicit IDs
+# ==============================
+#. js-lingui-explicit-id
 #: src/App.tsx
 msgid "officeAddin.auth.authenticating"
 msgstr "Autenticando..."
@@ -222,6 +285,11 @@ msgstr "Remitente desconocido"
 #: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.validation.tooLarge"
 msgstr "El archivo supera el límite del servidor de {globalMaxFormatted}"
+
+#. js-lingui-explicit-id
+#: src/utils/outlookClientActions.ts
+msgid "officeAddin.clientActions.createAppointment"
+msgstr "Abrir una cita prellenada"
 
 #. js-lingui-explicit-id
 #: src/utils/outlookClientActions.ts

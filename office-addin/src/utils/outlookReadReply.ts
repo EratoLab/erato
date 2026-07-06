@@ -2,7 +2,7 @@ import { callOfficeAsync } from "./officeAsync";
 import { sanitizeReplyFormHtml } from "./sanitizeReplyFormHtml";
 import { isMessageRead } from "../sessionPolicy/outlookAnchor";
 
-import type { OutlookClientAction } from "./outlookClientActions";
+import type { OutlookEmailClientAction } from "./outlookClientActions";
 
 /**
  * Office.js rejects reply form bodies above 32 KB (displayReplyForm /
@@ -156,7 +156,7 @@ export function getReadModeRecipientSummary(): ReadModeRecipientSummary | null {
  * body exceeds the Office.js limit.
  */
 export async function openReplyForm(
-  action: OutlookClientAction,
+  action: OutlookEmailClientAction,
   content: string,
   isHtml: boolean,
 ): Promise<void> {

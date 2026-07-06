@@ -22,7 +22,10 @@ import { useOutlookCalendarFetcher } from "../hooks/useOutlookCalendarFetcher";
 import { useOutlookComposeSelection } from "../hooks/useOutlookComposeSelection";
 import { useOffice } from "../providers/OfficeProvider";
 import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
-import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
+import {
+  NO_ITEM_SEND_IDENTITY,
+  useOutlookMailItem,
+} from "../providers/OutlookMailItemProvider";
 import { resolveOutlookActionFacet } from "../utils/outlookActionFacet";
 import { OUTLOOK_REPLY_FROM_READ_FACET_ID } from "../utils/outlookClientActions";
 import { getComposeBodyType } from "../utils/outlookComposeWrite";
@@ -646,8 +649,12 @@ export const AddinChatInput = forwardRef<
     ) => {
       // Capture the item identity BEFORE any await: the uploads below can
       // take long enough for the user to switch emails, and the wrong-item
-      // guard must be anchored to the item the user actually sent from.
-      const sendItemIdentity = itemIdentity;
+      // guard must be anchored to the item the user actually sent from. A
+      // send with NO item open records the no-item sentinel — a real value,
+      // so neutral-context completions still count as fresh (item-independent
+      // actions like create-appointment can auto-prompt) while item-bound
+      // executors treat it as a mismatch and fail closed.
+      const sendItemIdentity = itemIdentity ?? NO_ITEM_SEND_IDENTITY;
 
       // Build the action facet (selection rewrite vs. draft review) via a pure
       // resolver so the selection-priority and draft de-dup rules stay testable.

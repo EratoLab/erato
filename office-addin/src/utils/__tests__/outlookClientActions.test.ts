@@ -2,10 +2,13 @@ import { describe, it, expect } from "vitest";
 
 import {
   CLIENT_ACTION_TOOL_NAME,
+  buildOutlookArtifact,
   computeShouldRenderEmailCard,
   extractProposedClientAction,
   isImplementedClientAction,
+  offerableAppointmentClientActions,
   offerableClientActions,
+  offerableEmailClientActions,
 } from "../outlookClientActions";
 
 import type { ContentPart } from "@erato/frontend/library";
@@ -40,12 +43,33 @@ describe("offerableClientActions", () => {
     expect(offerableClientActions([])).toEqual([]);
     expect(offerableClientActions(["not.implemented"])).toEqual([]);
   });
+
+  it("partitions by kind: each renderer only offers its own actions", () => {
+    const allowed = [
+      "outlook.create_appointment",
+      "outlook.reply",
+      "outlook.reply_all",
+    ];
+    expect(offerableEmailClientActions(allowed)).toEqual([
+      "outlook.reply",
+      "outlook.reply_all",
+    ]);
+    expect(offerableAppointmentClientActions(allowed)).toEqual([
+      "outlook.create_appointment",
+    ]);
+    // An appointment-only facet (outlook_schedule) yields NO reply buttons.
+    expect(offerableEmailClientActions(["outlook.create_appointment"])).toEqual(
+      [],
+    );
+    expect(offerableAppointmentClientActions(["outlook.reply"])).toEqual([]);
+  });
 });
 
 describe("isImplementedClientAction", () => {
   it("accepts only registry actions", () => {
     expect(isImplementedClientAction("outlook.reply")).toBe(true);
     expect(isImplementedClientAction("outlook.reply_all")).toBe(true);
+    expect(isImplementedClientAction("outlook.create_appointment")).toBe(true);
     expect(isImplementedClientAction("outlook.send")).toBe(false);
     expect(isImplementedClientAction("")).toBe(false);
   });
@@ -118,6 +142,27 @@ describe("extractProposedClientAction", () => {
     expect(extractProposedClientAction(undefined, ALLOWED)).toBeUndefined();
     expect(extractProposedClientAction([], ALLOWED)).toBeUndefined();
   });
+
+  it("accepts outlook.create_appointment only through BOTH gates", () => {
+    const proposal = [
+      toolUsePart({ input: { action: "outlook.create_appointment" } }),
+    ];
+    // In the registry AND in the facet's client_actions → accepted.
+    expect(
+      extractProposedClientAction(proposal, ["outlook.create_appointment"]),
+    ).toBe("outlook.create_appointment");
+    // Removed from the facet's client_actions → ignored despite the registry.
+    expect(extractProposedClientAction(proposal, [])).toBeUndefined();
+    expect(extractProposedClientAction(proposal, ALLOWED)).toBeUndefined();
+    // Allowed by the facet but outside the registry → ignored (the second
+    // gate; asserted with a look-alike id the add-in does not implement).
+    expect(
+      extractProposedClientAction(
+        [toolUsePart({ input: { action: "outlook.create_meeting" } })],
+        ["outlook.create_meeting"],
+      ),
+    ).toBeUndefined();
+  });
 });
 
 describe("computeShouldRenderEmailCard", () => {
@@ -180,5 +225,148 @@ describe("computeShouldRenderEmailCard", () => {
         proposedClientAction: undefined,
       }),
     ).toBe(true);
+  });
+
+  it("never lets an appointment proposal promote prose to an email card", () => {
+    // A facet offering both kinds: the create-appointment proposal is not an
+    // email draft, so the ambient-suppression verdict must hold.
+    expect(
+      computeShouldRenderEmailCard({
+        allowedClientActions: [...ALLOWED, "outlook.create_appointment"],
+        proposedClientAction: "outlook.create_appointment",
+      }),
+    ).toBe(false);
+  });
+
+  it("treats an appointment-only facet as not email-carding-relevant", () => {
+    // outlook_schedule: the verdict is true ("always cards") but inert — the
+    // whole-body email card additionally requires a bodyFormat, which
+    // appointment facets never stamp (see buildOutlookArtifact below).
+    expect(
+      computeShouldRenderEmailCard({
+        allowedClientActions: ["outlook.create_appointment"],
+        proposedClientAction: undefined,
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("buildOutlookArtifact", () => {
+  const scheduleInfo = {
+    clientActions: ["outlook.create_appointment"],
+    alwaysAskActions: ["outlook.create_appointment"],
+    presentation: "auto_prompt",
+  };
+
+  it("stamps an artifact for outlook_schedule despite it carrying no body_format", () => {
+    // The decoupled gate (ERMAIN-387): the confirm card can only render when
+    // the artifact (facet metadata + proposal) reaches the fence renderer.
+    const artifact = buildOutlookArtifact({
+      facetId: "outlook_schedule",
+      facetArgs: { now_iso: "2026-07-06T10:00:00+02:00", timezone: "Europe/Berlin" },
+      clientActionInfo: scheduleInfo,
+      content: [
+        toolUsePart({ input: { action: "outlook.create_appointment" } }),
+      ],
+      messageId: "msg-1",
+      freshItemIdentity: undefined,
+    });
+    expect(artifact).toMatchObject({
+      facetId: "outlook_schedule",
+      renderMode: "body",
+      messageId: "msg-1",
+      allowedClientActions: ["outlook.create_appointment"],
+      alwaysAskClientActions: ["outlook.create_appointment"],
+      proposedClientAction: "outlook.create_appointment",
+      clientActionPresentation: "auto_prompt",
+    });
+    // No bodyFormat ⇒ the email-shaped paths (drift rescue, whole-body card)
+    // stay off for scheduling prose.
+    expect(artifact?.bodyFormat).toBeUndefined();
+    expect(artifact?.isFreshCompletion).toBeUndefined();
+  });
+
+  it("returns undefined for a facet with neither body_format nor offerable actions", () => {
+    expect(
+      buildOutlookArtifact({
+        facetId: "some_facet",
+        facetArgs: { anything: "else" },
+        clientActionInfo: undefined,
+        content: [],
+        messageId: "msg-1",
+        freshItemIdentity: undefined,
+      }),
+    ).toBeUndefined();
+    expect(
+      buildOutlookArtifact({
+        facetId: undefined,
+        facetArgs: { body_format: "text" },
+        clientActionInfo: undefined,
+        content: [],
+        messageId: "msg-1",
+        freshItemIdentity: undefined,
+      }),
+    ).toBeUndefined();
+    // Advertising only unimplemented actions does not open the second door.
+    expect(
+      buildOutlookArtifact({
+        facetId: "some_facet",
+        facetArgs: {},
+        clientActionInfo: {
+          clientActions: ["teams.post"],
+          alwaysAskActions: [],
+        },
+        content: [],
+        messageId: "msg-1",
+        freshItemIdentity: undefined,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("keeps the email-facet stamp unchanged (bodyFormat, suppression, freshness)", () => {
+    const artifact = buildOutlookArtifact({
+      facetId: "outlook_reply_from_read",
+      facetArgs: { body_format: "html" },
+      clientActionInfo: {
+        clientActions: ALLOWED,
+        alwaysAskActions: ["outlook.reply_all"],
+        presentation: "auto_prompt",
+      },
+      content: [],
+      messageId: "msg-2",
+      freshItemIdentity: "item-abc",
+    });
+    expect(artifact).toMatchObject({
+      facetId: "outlook_reply_from_read",
+      bodyFormat: "html",
+      renderMode: "body",
+      // No proposal on an ambient client-action facet ⇒ suppressed.
+      shouldRenderEmailCard: false,
+      isFreshCompletion: true,
+      itemIdentity: "item-abc",
+    });
+  });
+
+  it("marks review facets as suggestions and plain body facets as body", () => {
+    expect(
+      buildOutlookArtifact({
+        facetId: "outlook_review_draft",
+        facetArgs: { body_format: "text" },
+        clientActionInfo: undefined,
+        content: [],
+        messageId: "m",
+        freshItemIdentity: undefined,
+      })?.renderMode,
+    ).toBe("suggestions");
+    expect(
+      buildOutlookArtifact({
+        facetId: "compose_email",
+        facetArgs: { body_format: "text" },
+        clientActionInfo: undefined,
+        content: [],
+        messageId: "m",
+        freshItemIdentity: undefined,
+      }),
+    ).toMatchObject({ renderMode: "body", bodyFormat: "text" });
   });
 });

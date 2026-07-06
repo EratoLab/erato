@@ -2,7 +2,6 @@ import {
   ActionConfirmationCard,
   copyEmailToClipboard,
   sanitizeHtmlPreview,
-  useChatContext,
   useOutlookArtifact,
   usePersistedState,
 } from "@erato/frontend/library";
@@ -10,6 +9,7 @@ import { plural, t } from "@lingui/core/macro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useComposeSelectionSnapshot } from "../hooks/composeSelectionStore";
+import { useClientActionConfirmFlow } from "../hooks/useClientActionConfirmFlow";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
 import {
   CLIENT_ACTION_DECISIONS_KEY,
@@ -17,13 +17,12 @@ import {
   clientActionDecisionsPersistedOptions,
   decisionKey,
   isActionDenied,
-  resolveAutoPromptBehavior,
   resolveClickBehavior,
 } from "../utils/clientActionPolicy";
 import {
   clientActionDisplayLabel,
-  offerableClientActions,
-  type OutlookClientAction,
+  offerableEmailClientActions,
+  type OutlookEmailClientAction,
 } from "../utils/outlookClientActions";
 import { replaceComposeSelection } from "../utils/outlookComposeWrite";
 import {
@@ -42,39 +41,6 @@ const ACTION_BUTTON_CLASS =
 // compact geometry of the sibling action buttons.
 const PRIMARY_ACTION_BUTTON_CLASS =
   "rounded-md px-3 py-1 text-xs font-medium bg-theme-action-primary-bg text-theme-action-primary-fg hover:bg-theme-action-primary-hover theme-transition disabled:opacity-50";
-
-/**
- * Auto-prompt fires at most once per assistant message, across remounts
- * (virtualized lists unmount/remount renderers) and across multiple fences
- * within one message. Module-level by design.
- */
-const firedAutoPrompts = new Set<string>();
-
-interface ConfirmCardState {
-  /**
-   * Monotonic per-request id: a new confirmation replaces a resolved card
-   * and remounts it (fresh scroll/focus), and an async resolution only
-   * lands on the card it was started from.
-   */
-  requestId: number;
-  action: OutlookClientAction;
-  recipients: ReadModeRecipientSummary;
-  /** Surfaced by auto-prompt (scrolls into view) rather than a click. */
-  autoTriggered: boolean;
-  /**
-   * Item identity when the card opened — the item the shown recipients
-   * were read from. Execution re-checks it so confirming a card opened on
-   * email A can never open a reply on email B, independent of whether the
-   * artifact carries an identity (history drafts don't).
-   */
-  itemIdentityAtOpen: string | null;
-  /**
-   * `pending` renders the decision buttons; afterwards the card stays
-   * mounted as a visible record of the outcome (allow → `opened` or
-   * `failed`, deny → `denied`).
-   */
-  resolution: "pending" | "opened" | "denied" | "failed";
-}
 
 /**
  * Office-aware renderer for erato-email code blocks.
@@ -132,7 +98,7 @@ export function OutlookEratoEmailRenderer({
     [artifact],
   );
 
-  const readActions = useMemo<OutlookClientAction[]>(
+  const readActions = useMemo<OutlookEmailClientAction[]>(
     () =>
       // Gate on the REACTIVE read-item signal (`isReadMode`, synced to the live
       // item by OutlookMailItemProvider) plus the host-static capability check
@@ -141,8 +107,9 @@ export function OutlookEratoEmailRenderer({
       // was momentarily unavailable (e.g. a pinned-pane reload), permanently
       // hiding the reply buttons. Execution re-checks the live item in
       // openReplyForm, so offering optimistically here fails closed on click.
+      // EMAIL kind only: an appointment action is never a reply button.
       isReadMode && isReplyFormHostSupported()
-        ? offerableClientActions(artifact?.allowedClientActions).filter(
+        ? offerableEmailClientActions(artifact?.allowedClientActions).filter(
             (action) =>
               !isActionDenied({
                 facetId,
@@ -157,7 +124,7 @@ export function OutlookEratoEmailRenderer({
   const proposedAction =
     artifact?.proposedClientAction &&
     (readActions as string[]).includes(artifact.proposedClientAction)
-      ? (artifact.proposedClientAction as OutlookClientAction)
+      ? (artifact.proposedClientAction as OutlookEmailClientAction)
       : undefined;
 
   const [status, setStatus] = useState<
@@ -166,13 +133,9 @@ export function OutlookEratoEmailRenderer({
   const [errorKind, setErrorKind] = useState<
     "insert" | "reply" | "tooLarge" | "staleItem"
   >("insert");
-  const [busyAction, setBusyAction] = useState<OutlookClientAction | null>(
-    null,
-  );
-  const [confirmCard, setConfirmCard] = useState<ConfirmCardState | null>(null);
-  const confirmRequestIdRef = useRef(0);
+  const [busyAction, setBusyAction] =
+    useState<OutlookEmailClientAction | null>(null);
   const isBusy = status === "inserting";
-  const isConfirmPending = confirmCard?.resolution === "pending";
   const previewHtml = useMemo(
     () => (isHtml ? sanitizeHtmlPreview(content) : null),
     [content, isHtml],
@@ -221,7 +184,7 @@ export function OutlookEratoEmailRenderer({
   /** Resolves `true` only when the reply form actually opened. */
   const executeReply = useCallback(
     async (
-      action: OutlookClientAction,
+      action: OutlookEmailClientAction,
       /**
        * Identity snapshotted when the confirmation card opened. `undefined`
        * for direct (card-less) executions; when provided it must still match
@@ -269,46 +232,41 @@ export function OutlookEratoEmailRenderer({
     ],
   );
 
-  // Open the inline confirmation card with recipients RE-READ from the
-  // current item — the user confirms against fresh data, not against
-  // whatever the chat message was generated from. Replaces a resolved card.
-  const requestConfirmation = useCallback(
-    (action: OutlookClientAction, autoTriggered = false): boolean => {
-      const recipients = getReadModeRecipientSummary();
-      if (!recipients) {
-        return false;
-      }
-      confirmRequestIdRef.current += 1;
-      setConfirmCard({
-        requestId: confirmRequestIdRef.current,
-        action,
-        recipients,
-        autoTriggered,
-        itemIdentityAtOpen: itemIdentity,
-        resolution: "pending",
-      });
-      return true;
-    },
-    [itemIdentity],
-  );
-
-  // Allow paths: execute, then resolve THIS card into its record state — a
-  // newer confirmation may have replaced it while the form was opening.
-  const handleCardAllow = useCallback(
-    (card: ConfirmCardState) => {
-      void executeReply(card.action, card.itemIdentityAtOpen).then((opened) => {
-        setConfirmCard((current) =>
-          current?.requestId === card.requestId
-            ? { ...current, resolution: opened ? "opened" : "failed" }
-            : current,
-        );
-      });
-    },
-    [executeReply],
-  );
+  // Shared confirm-card state machine + auto-prompt one-shot. The summary is
+  // the recipients RE-READ from the current item when the card opens; the
+  // auto-prompt only fires under the facet's `auto_prompt` presentation, for
+  // a validated proposal on a FRESH completion that is still the latest
+  // assistant message and whose send-time item is still the open one, at most
+  // once per message, and still through the user's approval preference. If
+  // the user meanwhile left read mode, the summary snapshot fails and nothing
+  // happens — the buttons remain as fallback.
+  const {
+    confirmCard,
+    isConfirmPending,
+    requestConfirmation,
+    allowCard,
+    denyCard,
+  } = useClientActionConfirmFlow<
+    ReadModeRecipientSummary,
+    OutlookEmailClientAction
+  >({
+    promptScope: "email",
+    facetId: artifact?.facetId,
+    decisions,
+    enforcedAskActions,
+    buildSummary: getReadModeRecipientSummary,
+    execute: executeReply,
+    itemIdentity,
+    presentation: artifact?.clientActionPresentation,
+    messageId: artifact?.messageId,
+    isFreshCompletion: !!artifact?.isFreshCompletion,
+    proposedAction,
+    expectedItemIdentity,
+    currentItemIdentity: itemIdentity,
+  });
 
   const handleReplyAction = useCallback(
-    (action: OutlookClientAction) => {
+    (action: OutlookEmailClientAction) => {
       if (isStaleForCurrentItem) {
         // Don't open a confirmation that would show the NEW email's
         // recipients for a draft written against the old one.
@@ -340,70 +298,6 @@ export function OutlookEratoEmailRenderer({
       showError,
     ],
   );
-
-  // Auto-prompt: only under the facet's `auto_prompt` presentation, only for
-  // a validated proposal on a FRESH completion (stamped by AddinChat — never
-  // history reloads) that is still the latest assistant message and whose
-  // send-time item is still the open one, at most once per message, and
-  // still through the user's approval preference ("don't ask" opens the
-  // form, "ask" surfaces the inline confirmation card). If the user
-  // meanwhile left read mode, requestConfirmation returns false and nothing
-  // happens — the buttons remain as fallback.
-  const { messages, messageOrder } = useChatContext();
-  const autoPromptMessageId = artifact?.messageId;
-  const isFreshCompletion = !!artifact?.isFreshCompletion;
-  const isLatestAssistantMessage = useMemo(() => {
-    if (!autoPromptMessageId) {
-      return false;
-    }
-    for (let index = messageOrder.length - 1; index >= 0; index -= 1) {
-      const id = messageOrder[index];
-      if (messages[id]?.role === "assistant") {
-        return id === autoPromptMessageId;
-      }
-    }
-    return false;
-  }, [autoPromptMessageId, messages, messageOrder]);
-  const autoPromptBehavior = resolveAutoPromptBehavior({
-    presentation: artifact?.clientActionPresentation,
-    facetId: artifact?.facetId,
-    proposedAction,
-    isFreshCompletion,
-    isLatestAssistantMessage,
-    expectedItemIdentity,
-    currentItemIdentity: itemIdentity,
-    decisions,
-    enforcedAskActions,
-  });
-  useEffect(() => {
-    if (!autoPromptMessageId || !isFreshCompletion) {
-      return;
-    }
-    if (firedAutoPrompts.has(autoPromptMessageId)) {
-      return;
-    }
-    // Consume the once-per-message slot on the FIRST evaluation for a fresh
-    // completion, regardless of the resolved behavior: a later settings flip
-    // (never → always allow) or a much later scroll-back mount must not
-    // resurrect the prompt. The failure direction is always a missed
-    // auto-open, never a late one — the buttons remain as fallback.
-    firedAutoPrompts.add(autoPromptMessageId);
-    if (autoPromptBehavior === "none" || !proposedAction) {
-      return;
-    }
-    if (autoPromptBehavior === "execute") {
-      void executeReply(proposedAction);
-    } else {
-      requestConfirmation(proposedAction, true);
-    }
-  }, [
-    autoPromptBehavior,
-    autoPromptMessageId,
-    isFreshCompletion,
-    proposedAction,
-    executeReply,
-    requestConfirmation,
-  ]);
 
   const handleCopy = useCallback(() => {
     void copyEmailToClipboard(content, isHtml ?? false)
@@ -438,7 +332,7 @@ export function OutlookEratoEmailRenderer({
         });
   })();
 
-  const replyActionLabel = (action: OutlookClientAction) =>
+  const replyActionLabel = (action: OutlookEmailClientAction) =>
     action === "outlook.reply_all"
       ? t({
           id: "officeAddin.emailRenderer.replyAll",
@@ -463,10 +357,8 @@ export function OutlookEratoEmailRenderer({
   // the card lists — never a separately computed number that could drift.
   const confirmListedEntries = confirmCard
     ? [
-        ...(confirmCard.recipients.sender
-          ? [confirmCard.recipients.sender]
-          : []),
-        ...(isConfirmingReplyAll ? confirmCard.recipients.recipients : []),
+        ...(confirmCard.summary.sender ? [confirmCard.summary.sender] : []),
+        ...(isConfirmingReplyAll ? confirmCard.summary.recipients : []),
       ]
     : [];
   const confirmRecipientCount = confirmListedEntries.length;
@@ -589,7 +481,7 @@ export function OutlookEratoEmailRenderer({
               </p>
             </div>
           }
-          onAllowOnce={() => handleCardAllow(confirmCard)}
+          onAllowOnce={() => allowCard(confirmCard)}
           onAlwaysAllow={() => {
             // Persist the grant for THIS facet + action, then execute. The
             // store is the source the settings page mirrors and revises.
@@ -597,7 +489,7 @@ export function OutlookEratoEmailRenderer({
               ...decisions,
               [decisionKey(facetId, confirmCard.action)]: "always",
             });
-            handleCardAllow(confirmCard);
+            allowCard(confirmCard);
           }}
           alwaysAllowDisabledReason={
             enforcedAskActions.includes(confirmCard.action)
@@ -608,13 +500,7 @@ export function OutlookEratoEmailRenderer({
                 })
               : undefined
           }
-          onDeny={() =>
-            setConfirmCard((current) =>
-              current?.requestId === confirmCard.requestId
-                ? { ...current, resolution: "denied" }
-                : current,
-            )
-          }
+          onDeny={() => denyCard(confirmCard)}
           status={
             confirmCard.resolution === "pending"
               ? "pending"
