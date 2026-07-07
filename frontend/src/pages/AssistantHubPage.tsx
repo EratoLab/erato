@@ -200,6 +200,7 @@ export default function AssistantHubPage() {
   return (
     <div className="flex h-full flex-col bg-theme-bg-primary">
       <PageHeader
+        density="compact"
         title={
           selectedCategory?.display_name ??
           t({ id: "assistantHub.title", message: "Assistant Hub" })
