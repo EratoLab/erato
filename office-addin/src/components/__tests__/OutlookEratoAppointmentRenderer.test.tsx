@@ -203,12 +203,79 @@ describe("OutlookEratoAppointmentRenderer — summary card", () => {
   });
 });
 
-describe("OutlookEratoAppointmentRenderer — confirm flow", () => {
-  it("confirms via the card (time + attendees summary) and opens the prefilled form", async () => {
-    prime({ artifact: makeArtifact(), currentItemIdentity: null });
+function makeAutoPromptArtifact(
+  overrides: Partial<TestArtifact> = {},
+): TestArtifact {
+  return makeArtifact({
+    isFreshCompletion: true,
+    itemIdentity: "item-a",
+    clientActionPresentation: "auto_prompt",
+    proposedClientAction: CREATE,
+    ...overrides,
+  });
+}
+
+describe("OutlookEratoAppointmentRenderer — click semantics", () => {
+  it("executes directly on click — the fully-described button IS the consent", async () => {
+    prime({
+      artifact: makeArtifact({ alwaysAskClientActions: [] }),
+      currentItemIdentity: null,
+    });
     render(<OutlookEratoAppointmentRenderer content={FENCE} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Open appointment" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Open appointment" }));
+    });
+
+    expect(mockOpenNewAppointmentForm).toHaveBeenCalledWith(DETAILS);
+    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Opened!" })).toBeInTheDocument();
+  });
+
+  it("executes directly on click even under org-enforced always-ask — enforcement gates assistant-initiated runs, not clicks on a fully-disclosed payload", async () => {
+    // The summary above the button already shows the whole payload, so the
+    // click is the consent; client_actions_always_ask only clamps the
+    // auto-prompt path (see the auto-prompt suite).
+    prime({
+      artifact: makeArtifact(),
+      currentItemIdentity: null,
+      decisions: { [`${FACET}/${CREATE}`]: "always" },
+    });
+    render(<OutlookEratoAppointmentRenderer content={FENCE} />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Open appointment" }));
+    });
+
+    expect(mockOpenNewAppointmentForm).toHaveBeenCalledWith(DETAILS);
+    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
+  });
+
+  it("shows the inline alert when a click-launched open fails", async () => {
+    prime({ artifact: makeArtifact(), currentItemIdentity: null });
+    mockOpenNewAppointmentForm.mockRejectedValue(new Error("host says no"));
+    render(<OutlookEratoAppointmentRenderer content={FENCE} />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Open appointment" }));
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Failed to open the appointment form",
+    );
+    // No success swap on a failed open.
+    expect(screen.queryByRole("button", { name: "Opened!" })).toBeNull();
+  });
+});
+
+describe("OutlookEratoAppointmentRenderer — confirmation card (auto-surfaced)", () => {
+  it("allow-once opens the prefilled form; the card shows the time + attendees summary", async () => {
+    prime({
+      artifact: makeAutoPromptArtifact(),
+      currentItemIdentity: "item-a",
+    });
+    render(<OutlookEratoAppointmentRenderer content={FENCE} />);
+
     const description = screen.getByTestId("confirmation-description");
     expect(description).toHaveTextContent("alice@example.com");
     expect(mockOpenNewAppointmentForm).not.toHaveBeenCalled();
@@ -225,10 +292,12 @@ describe("OutlookEratoAppointmentRenderer — confirm flow", () => {
   });
 
   it("closes the card on deny without opening anything", () => {
-    prime({ artifact: makeArtifact(), currentItemIdentity: null });
+    prime({
+      artifact: makeAutoPromptArtifact(),
+      currentItemIdentity: "item-a",
+    });
     render(<OutlookEratoAppointmentRenderer content={FENCE} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Open appointment" }));
     fireEvent.click(screen.getByRole("button", { name: "deny" }));
 
     expect(mockOpenNewAppointmentForm).not.toHaveBeenCalled();
@@ -238,41 +307,14 @@ describe("OutlookEratoAppointmentRenderer — confirm flow", () => {
     ).toBeEnabled();
   });
 
-  it("still confirms under a stored grant when the deployment enforces always-ask", () => {
-    prime({
-      artifact: makeArtifact(),
-      currentItemIdentity: null,
-      decisions: { [`${FACET}/${CREATE}`]: "always" },
-    });
-    render(<OutlookEratoAppointmentRenderer content={FENCE} />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Open appointment" }));
-
-    expect(mockOpenNewAppointmentForm).not.toHaveBeenCalled();
-    expect(screen.getByTestId("confirmation-card")).toBeInTheDocument();
-  });
-
-  it("executes directly on click when confirmation is not enforced — the click IS the consent", async () => {
-    prime({
-      artifact: makeArtifact({ alwaysAskClientActions: [] }),
-      currentItemIdentity: null,
-    });
-    render(<OutlookEratoAppointmentRenderer content={FENCE} />);
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Open appointment" }));
-    });
-
-    expect(mockOpenNewAppointmentForm).toHaveBeenCalledWith(DETAILS);
-    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
-  });
-
   it("closes the card when the form fails; the inline alert is the feedback", async () => {
-    prime({ artifact: makeArtifact(), currentItemIdentity: null });
+    prime({
+      artifact: makeAutoPromptArtifact(),
+      currentItemIdentity: "item-a",
+    });
     mockOpenNewAppointmentForm.mockRejectedValue(new Error("host says no"));
     render(<OutlookEratoAppointmentRenderer content={FENCE} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Open appointment" }));
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "allow-once" }));
     });
@@ -287,22 +329,22 @@ describe("OutlookEratoAppointmentRenderer — confirm flow", () => {
 });
 
 describe("OutlookEratoAppointmentRenderer — auto-prompt", () => {
-  function makeAutoPromptArtifact(
-    overrides: Partial<TestArtifact> = {},
-  ): TestArtifact {
-    return makeArtifact({
-      isFreshCompletion: true,
-      itemIdentity: "item-a",
-      clientActionPresentation: "auto_prompt",
-      proposedClientAction: CREATE,
-      ...overrides,
-    });
-  }
-
   it("auto-surfaces the confirmation card for a fresh matching proposal", () => {
     prime({
       artifact: makeAutoPromptArtifact(),
       currentItemIdentity: "item-a",
+    });
+    render(<OutlookEratoAppointmentRenderer content={FENCE} />);
+
+    expect(screen.getByTestId("confirmation-card")).toBeInTheDocument();
+    expect(mockOpenNewAppointmentForm).not.toHaveBeenCalled();
+  });
+
+  it("still cards under a stored grant when the deployment enforces always-ask — enforcement clamps the assistant-initiated path", () => {
+    prime({
+      artifact: makeAutoPromptArtifact(),
+      currentItemIdentity: "item-a",
+      decisions: { [`${FACET}/${CREATE}`]: "always" },
     });
     render(<OutlookEratoAppointmentRenderer content={FENCE} />);
 

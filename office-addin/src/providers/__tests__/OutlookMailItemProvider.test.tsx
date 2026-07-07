@@ -100,6 +100,16 @@ describe("OutlookMailItemProvider", () => {
     expect(captured?.mailItem).toBeNull();
   });
 
+  // A host leaking the pane into the calendar module: an AppointmentRead has a
+  // string subject too, so without the guard it would masquerade as a read
+  // message instead of resolving to the neutral no-item context.
+  it("treats an appointment item as no item", async () => {
+    mailbox.item = makeReadItem({ itemType: "appointment" });
+    await renderProvider();
+    expect(captured?.mailItem).toBeNull();
+    expect(captured?.itemIdentity).toBeNull();
+  });
+
   // Drives the "pin this add-in" hint: stays false on the host's initial
   // same-item selection event (which would otherwise flash-and-clear the hint),
   // and only flips true on a real navigation to a different item.

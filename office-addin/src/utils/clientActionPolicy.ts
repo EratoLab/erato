@@ -1,10 +1,22 @@
-import { isImplementedClientAction } from "./outlookClientActions";
+import {
+  CLICK_IS_CONSENT_ACTIONS,
+  isImplementedClientAction,
+} from "./outlookClientActions";
 
 import type { OutlookClientAction } from "./outlookClientActions";
 import type { PersistedStateOptions } from "@erato/frontend/library";
 
 /**
  * Local decision store for client actions, pure and unit-testable.
+ *
+ * Two-axis model. The user's stored decision and the deployment's
+ * `client_actions_always_ask` enforcement govern ASSISTANT-INITIATED
+ * execution (the auto-prompt path) for EVERY action. Whether they also
+ * govern a BUTTON CLICK depends on the action: for
+ * {@link CLICK_IS_CONSENT_ACTIONS} the click on a fully-described button is
+ * itself the consent and always executes; for all other actions the confirm
+ * card adds information the chat doesn't show (reply/reply-all re-read the
+ * live recipients), so a click confirms unless the user granted `always`.
  *
  * Browser-permission semantics: every action defaults to `ask` — the inline
  * card asks on each proposal, and "allow once" / "deny" on the card apply to
@@ -62,6 +74,9 @@ export function isClientActionDecision(
  * The decision in effect for an action: the stored decision (default `ask`),
  * with a server-enforced per-use confirmation clamping `always` back to
  * `ask`. `never` is honored regardless — stricter than the server is fine.
+ * This decision governs assistant-initiated execution for all actions; for
+ * clicks it only applies outside {@link CLICK_IS_CONSENT_ACTIONS} (see
+ * `resolveClickBehavior`).
  */
 export function effectiveDecision(input: {
   facetId: string;
@@ -84,10 +99,20 @@ export function isActionDenied(
   return effectiveDecision(input) === "never";
 }
 
-/** What an explicit button click does for an (offered, non-denied) action. */
+/**
+ * What an explicit button click does for an (offered, non-denied) action.
+ * Click-is-consent actions execute unconditionally — including under
+ * `client_actions_always_ask`, which gates assistant-initiated execution,
+ * not a click on a button whose surroundings already disclose the full
+ * payload. Every other action confirms unless the user granted `always`
+ * (which enforcement clamps back to `ask`).
+ */
 export function resolveClickBehavior(
   input: Parameters<typeof effectiveDecision>[0],
 ): "execute" | "confirm" {
+  if (CLICK_IS_CONSENT_ACTIONS.has(input.action)) {
+    return "execute";
+  }
   return effectiveDecision(input) === "always" ? "execute" : "confirm";
 }
 

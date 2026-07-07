@@ -19,7 +19,7 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoAppointmentRenderer.tsx
 msgid "officeAddin.appointmentRenderer.alwaysAllowLocked"
-msgstr "Twoja organizacja wymaga potwierdzenia tej akcji za każdym razem."
+msgstr "Twoja organizacja wymaga potwierdzenia za każdym razem, gdy ta akcja jest wykonywana automatycznie."
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoAppointmentRenderer.tsx
@@ -620,6 +620,21 @@ msgstr "Wyświetla krok potwierdzenia na czacie przed otwarciem czegokolwiek."
 #: src/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.clientActions.ask.label"
 msgstr "Pytaj za każdym razem"
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.clientActions.clickConsent.always.locked"
+msgstr "Zablokowane: Twoja organizacja wymaga potwierdzenia za każdym razem, gdy ta akcja jest uruchamiana automatycznie."
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.clientActions.clickConsent.ask.helper"
+msgstr "Wyświetla krok potwierdzenia tylko wtedy, gdy asystent uruchamia tę akcję samodzielnie. Kliknięcie przycisku akcji zawsze wykonuje ją bezpośrednio."
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.clientActions.clickConsent.ask.label"
+msgstr "Pytaj przed automatycznym uruchomieniem"
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx

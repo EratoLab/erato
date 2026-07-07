@@ -1,6 +1,9 @@
 import { callOfficeAsync } from "./officeAsync";
 import { sanitizeReplyFormHtml } from "./sanitizeReplyFormHtml";
-import { isMessageRead } from "../sessionPolicy/outlookAnchor";
+import {
+  isMessageRead,
+  resolveSupportedMailboxItem,
+} from "../sessionPolicy/outlookAnchor";
 
 import type { OutlookEmailClientAction } from "./outlookClientActions";
 
@@ -46,20 +49,10 @@ export function isReplyFormBodyTooLarge(body: string): boolean {
 }
 
 function getReadModeItem(): Office.MessageRead | null {
-  const item = Office.context?.mailbox?.item as
-    | Office.MessageRead
-    | Office.MessageCompose
-    | null
-    | undefined;
-  // Fail closed on appointment items: `isMessageRead` keys on the subject
-  // SHAPE (string vs object), which an AppointmentRead item also satisfies —
-  // a "reply" would then open a meeting reply form. Literal value
-  // (`ItemType.Appointment`) so an absent itemType keeps meaning "message".
-  if (
-    !item ||
-    (item as { itemType?: string }).itemType === "appointment" ||
-    !isMessageRead(item)
-  ) {
+  // Appointments fail closed via the shared guard — a "reply" on an
+  // AppointmentRead would open a meeting reply form.
+  const item = resolveSupportedMailboxItem(Office.context?.mailbox?.item);
+  if (!item || !isMessageRead(item)) {
     return null;
   }
   return item;

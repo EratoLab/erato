@@ -52,6 +52,21 @@ export const IMPLEMENTED_CLIENT_ACTIONS = [
 
 export type OutlookClientAction = (typeof IMPLEMENTED_CLIENT_ACTIONS)[number];
 
+/**
+ * Actions for which clicking the offered button is itself the consent:
+ * `resolveClickBehavior` executes them without a confirmation card, even
+ * under org-enforced always-ask (which gates assistant-initiated execution).
+ * An action belongs here only when BOTH hold:
+ * (a) execution is item-independent and side-effect-free beyond opening a
+ *     native review surface, and
+ * (b) the rendering around the button already shows everything the confirm
+ *     card would show.
+ * reply / reply_all fail (b): their card reveals freshly-read recipients the
+ * chat doesn't show.
+ */
+export const CLICK_IS_CONSENT_ACTIONS: ReadonlySet<OutlookClientAction> =
+  new Set(["outlook.create_appointment"]);
+
 export function isImplementedClientAction(
   action: string,
 ): action is OutlookClientAction {

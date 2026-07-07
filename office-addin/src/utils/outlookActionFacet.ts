@@ -64,12 +64,12 @@ export interface OutlookActionFacetInput {
    */
   calendarAvailable: boolean;
   /**
-   * The latest assistant message RECENTLY read the calendar
-   * (`fetch_availability` tool use; recency is judged by the caller at send
-   * time via `isSchedulingThreadFresh`) — the user's follow-up most likely
-   * picks one of the presented slots, so the scheduling facet must claim the
-   * single facet slot even in read/compose contexts that normally attach an
-   * email facet.
+   * The latest assistant message RECENTLY read the calendar or
+   * proposed/adjusted an appointment (`containsSchedulingSignal`; recency is
+   * judged by the caller at send time via `isSchedulingThreadFresh`) — the
+   * user's follow-up most likely picks or tweaks a slot, so the scheduling
+   * facet must claim the single facet slot even in read/compose contexts that
+   * normally attach an email facet.
    */
   schedulingThreadActive: boolean;
   /** Send-time "now" as a local, offset-bearing ISO string (facet arg). */
@@ -128,9 +128,10 @@ export function resolveOutlookActionFacet(
   }
 
   // Sticky scheduling: a FRESH scheduling exchange (the model recently read
-  // the calendar — recency-bounded upstream) outranks the email facets — the
-  // follow-up is the user picking a slot, and only the schedule facet's
-  // template handles that. One rung below selection: highlighting text is a
+  // the calendar OR proposed/adjusted an appointment — recency-bounded
+  // upstream) outranks the email facets — the follow-up is the user picking
+  // or tweaking a slot, and only the schedule facet's template handles that.
+  // One rung below selection: highlighting text is a
   // stronger, explicit gesture. Known v1 trade-offs (one facet per turn until
   // ERMAIN-414), both self-healing on the following send: (a) asking for a
   // reply draft right after a scheduling exchange misses the reply facet for

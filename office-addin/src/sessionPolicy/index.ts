@@ -3,6 +3,7 @@ export {
   composeInheritsAnchorsEqual,
   isMessageRead,
   outlookAnchorFromItem,
+  resolveSupportedMailboxItem,
   strictAnchorsEqual,
 } from "./outlookAnchor";
 export {

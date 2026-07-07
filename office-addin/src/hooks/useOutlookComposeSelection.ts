@@ -7,7 +7,7 @@ import {
   subscribeImmediateComposeSelectionPoll,
 } from "./composeSelectionStore";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
-import { isMessageRead } from "../sessionPolicy";
+import { isMessageRead, resolveSupportedMailboxItem } from "../sessionPolicy";
 
 export interface OutlookComposeSelection {
   /** The selected text content. Empty string when nothing is selected. */
@@ -87,10 +87,8 @@ export function useOutlookComposeSelection(): OutlookComposeSelection {
   const lastRawHtmlRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const item = Office.context.mailbox.item as
-      | Office.MessageRead
-      | Office.MessageCompose
-      | null;
+    // Appointments resolve to null and clear like a lost item below.
+    const item = resolveSupportedMailboxItem(Office.context.mailbox.item);
 
     const commitEmpty = () => {
       lastDataRef.current = "";
@@ -110,14 +108,11 @@ export function useOutlookComposeSelection(): OutlookComposeSelection {
     // Transient/unknown context: the provider's `mailItem` or the raw Office
     // item is momentarily null. Clearing here is what made the chip flicker, so
     // instead hold the last selection and only clear if the context is STILL
-    // gone (or has become a read item) after a short grace period. If a valid
+    // gone (or has become a read/appointment item) after a short grace period. If a valid
     // compose item returns first, this effect re-runs and cancels the timer.
     if (!mailItem || !item) {
       const graceTimer = setTimeout(() => {
-        const latest = Office.context.mailbox.item as
-          | Office.MessageRead
-          | Office.MessageCompose
-          | null;
+        const latest = resolveSupportedMailboxItem(Office.context.mailbox.item);
         if (!latest || isMessageRead(latest)) {
           commitEmpty();
         }
@@ -164,8 +159,9 @@ export function useOutlookComposeSelection(): OutlookComposeSelection {
       // an immediate poll when it completes.
       if (isComposeSelectionPollingPaused()) return;
 
-      const composeItem = Office.context.mailbox
-        .item as Office.MessageCompose | null;
+      const composeItem = resolveSupportedMailboxItem(
+        Office.context.mailbox.item,
+      ) as Office.MessageCompose | null;
       if (!composeItem) return;
 
       if (inFlightSeqRef.current !== null) {

@@ -19,7 +19,7 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoAppointmentRenderer.tsx
 msgid "officeAddin.appointmentRenderer.alwaysAllowLocked"
-msgstr "Votre organisation exige une confirmation pour cette action à chaque fois."
+msgstr "Votre organisation exige une confirmation chaque fois que cette action s'exécute automatiquement."
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoAppointmentRenderer.tsx
@@ -620,6 +620,21 @@ msgstr "Affiche une étape de confirmation dans la discussion avant d'ouvrir quo
 #: src/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.clientActions.ask.label"
 msgstr "Demander à chaque fois"
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.clientActions.clickConsent.always.locked"
+msgstr "Verrouillé : votre organisation exige une confirmation chaque fois que cette action s'exécute automatiquement."
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.clientActions.clickConsent.ask.helper"
+msgstr "Affiche une étape de confirmation uniquement lorsque l'assistant déclenche cette action de lui-même. Un clic sur le bouton de l'action l'exécute toujours directement."
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.clientActions.clickConsent.ask.label"
+msgstr "Demander avant l'exécution automatique"
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx

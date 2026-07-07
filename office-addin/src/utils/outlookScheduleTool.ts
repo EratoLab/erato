@@ -1,5 +1,9 @@
 import { MAX_ATTENDEES, MS_PER_DAY } from "./calendarLegs";
 import {
+  APPOINTMENT_CLIENT_ACTIONS,
+  CLIENT_ACTION_TOOL_NAME,
+} from "./outlookClientActions";
+import {
   inferTypicalDurationMinutes,
   rankAvailabilitySlots,
 } from "./slotRanking";
@@ -539,14 +543,35 @@ export function containsFetchAvailabilityToolUse(
   );
 }
 
+/** Line-anchored fence OPENER — prose merely quoting the syntax ("use a
+ * ```erato-appointment fence") must not re-arm the sticky facet. */
+const APPOINTMENT_FENCE_OPEN = /^\s*```erato-appointment\s*$/m;
+
+/** A `propose_client_action` input proposing the appointment action. Same
+ * persisted-part shape `extractProposedClientAction` reads; no status gate —
+ * like the fetch arm, a failed proposal's follow-up is still scheduling. */
+function proposesAppointmentAction(input: unknown): boolean {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    return false;
+  }
+  const action = (input as Record<string, unknown>).action;
+  return (
+    typeof action === "string" &&
+    (APPOINTMENT_CLIENT_ACTIONS as readonly string[]).includes(action)
+  );
+}
+
 /**
  * Whether an assistant message carries a scheduling-exchange signal: it read
- * the calendar OR it proposed an appointment (an `erato-appointment` fence in
- * its text). The fence arm exists because confirm/adjust turns contain NO
+ * the calendar, OR it proposed an appointment — a `propose_client_action`
+ * tool_use for `outlook.create_appointment`, or an `erato-appointment` fence
+ * on its own line. The fence arm stays load-bearing for recovery: on turns
+ * where the propose tool wasn't available, confirm/adjust turns contain NO
  * tool_use — without it, the send after a proposal ("add an agenda", "make it
  * 45 min") dropped the `outlook_schedule` facet, so the model could neither
  * call propose_client_action (no Open-appointment button on the redone fence)
  * nor see the fence contract (field drift like `description` for `body`).
+ * Each proposal turn re-arms the 60-min freshness window by design.
  */
 export function containsSchedulingSignal(
   content: ContentPart[] | undefined,
@@ -555,9 +580,12 @@ export function containsSchedulingSignal(
     containsFetchAvailabilityToolUse(content) ||
     (content ?? []).some(
       (part) =>
-        part.content_type === "text" &&
-        typeof (part as { text?: unknown }).text === "string" &&
-        (part as { text: string }).text.includes("```erato-appointment"),
+        (part.content_type === "text" &&
+          typeof (part as { text?: unknown }).text === "string" &&
+          APPOINTMENT_FENCE_OPEN.test((part as { text: string }).text)) ||
+        (part.content_type === "tool_use" &&
+          part.tool_name === CLIENT_ACTION_TOOL_NAME &&
+          proposesAppointmentAction(part.input)),
     )
   );
 }

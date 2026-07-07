@@ -9,7 +9,9 @@
 # Exit codes:
 #   0 - Catalogs are up-to-date
 #   1 - Catalogs need to be updated (changes detected)
-#   2 - Cannot run check due to uncommitted changes in locale files
+#
+# With uncommitted locale changes, compares extract output against a
+# working-tree snapshot (and restores it) instead of git.
 
 set -euo pipefail
 
@@ -36,9 +38,35 @@ done
 
 if [ "$UNCOMMITTED_CHANGES" = true ]; then
     echo ""
-    echo "Cannot run i18n:extract check: uncommitted changes detected in locale files."
-    echo "Please commit or stash your changes first."
-    exit 2
+    echo "Uncommitted locale changes detected; comparing against a working-tree snapshot instead."
+
+    SNAPSHOT_DIR="$(mktemp -d)"
+    trap 'rm -rf "$SNAPSHOT_DIR"' EXIT
+    cp -R src/locales/. "$SNAPSHOT_DIR/"
+
+    echo ""
+    echo "Running pnpm run i18n:extract..."
+    pnpm run i18n:extract
+
+    echo ""
+    echo "Checking for changes after extraction..."
+    if diff -r src/locales "$SNAPSHOT_DIR" > /dev/null 2>&1; then
+        echo "i18n catalogs are up-to-date"
+        exit 0
+    fi
+
+    echo "  Changes detected in: src/locales"
+    diff -r src/locales "$SNAPSHOT_DIR" || true
+
+    rm -rf src/locales
+    mkdir -p src/locales
+    cp -R "$SNAPSHOT_DIR/." src/locales/
+
+    echo ""
+    echo "i18n catalogs are out of date!"
+    echo ""
+    echo "Please run 'pnpm run i18n:extract' and commit the changes."
+    exit 1
 fi
 
 echo "  No uncommitted changes in locale files"

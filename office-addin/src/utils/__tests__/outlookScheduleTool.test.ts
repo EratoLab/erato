@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 
+import { CLIENT_ACTION_TOOL_NAME } from "../outlookClientActions";
 import {
   FETCH_AVAILABILITY_TOOL_NAME,
   SCHEDULING_THREAD_MAX_AGE_MS,
@@ -577,12 +578,41 @@ describe("containsSchedulingSignal", () => {
     ).toBe(true);
   });
 
+  const proposeToolUse = (action: string): ContentPart =>
+    ({
+      content_type: "tool_use",
+      tool_name: CLIENT_ACTION_TOOL_NAME,
+      tool_call_id: "c1",
+      status: "success",
+      input: { action },
+    }) as unknown as ContentPart;
+
   it("counts an erato-appointment fence — confirm/adjust turns must stay sticky", () => {
     expect(
       containsSchedulingSignal([
         textPart('Passt!\n```erato-appointment\n{"start":"..."}\n```'),
       ]),
     ).toBe(true);
+  });
+
+  it("ignores prose that merely quotes the fence syntax", () => {
+    expect(
+      containsSchedulingSignal([
+        textPart("You could use a ```erato-appointment fence for that."),
+      ]),
+    ).toBe(false);
+  });
+
+  it("counts a propose_client_action for the appointment action", () => {
+    expect(
+      containsSchedulingSignal([proposeToolUse("outlook.create_appointment")]),
+    ).toBe(true);
+  });
+
+  it("ignores a propose_client_action for a non-appointment action", () => {
+    expect(containsSchedulingSignal([proposeToolUse("outlook.reply")])).toBe(
+      false,
+    );
   });
 
   it("ignores plain text, other fences and other tools", () => {

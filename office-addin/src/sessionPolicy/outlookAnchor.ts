@@ -14,6 +14,27 @@ export function isMessageRead(
 }
 
 /**
+ * Narrow a raw `Office.context.mailbox.item` to the message shapes the add-in
+ * supports; appointment items resolve to `null` ("no item"). `isMessageRead`
+ * keys on the subject SHAPE (string vs object), which appointment items also
+ * satisfy — an AppointmentRead leaking past this guard masquerades as a read
+ * message (attaching the reply facet / reply form to a meeting) and an
+ * AppointmentCompose crashes message-only consumers (`item.to` is undefined).
+ * Compared against the literal value (`ItemType.Appointment`) so an absent
+ * `itemType` keeps meaning "message" — mocks and some hosts omit it.
+ *
+ * Pure; safe to call during render or in a `useState` initializer.
+ */
+export function resolveSupportedMailboxItem(
+  item: unknown,
+): Office.MessageRead | Office.MessageCompose | null {
+  if (!item || (item as { itemType?: string }).itemType === "appointment") {
+    return null;
+  }
+  return item as Office.MessageRead | Office.MessageCompose;
+}
+
+/**
  * Build an `OutlookSessionAnchor` from a raw Office mailbox item. Pure — the
  * caller is responsible for resolving `Office.context.mailbox?.item` and
  * handling any access errors. Returns `null` for a missing item.

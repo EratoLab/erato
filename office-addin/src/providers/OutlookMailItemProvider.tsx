@@ -7,7 +7,7 @@ import {
   useState,
 } from "react";
 
-import { isMessageRead } from "../sessionPolicy";
+import { isMessageRead, resolveSupportedMailboxItem } from "../sessionPolicy";
 import { callOfficeAsync } from "../utils/officeAsync";
 
 interface EmailAddress {
@@ -378,18 +378,10 @@ export function OutlookMailItemProvider({
   );
 
   useEffect(() => {
-    const rawItem = Office.context.mailbox.item;
-    // Appointment items are NOT supported: a host leaking the pane into the
-    // calendar module (no manifest surface declares one) must fall through to
-    // the neutral no-item context. Without this guard an AppointmentCompose
-    // item crashes the provider (`item.to` is undefined, and this effect runs
-    // above every error boundary) and an AppointmentRead item masquerades as
-    // message-read, attaching the reply facet to a meeting. Literal value
-    // (`ItemType.Appointment`) so an absent itemType keeps meaning "message".
-    const item =
-      (rawItem as { itemType?: string } | null)?.itemType === "appointment"
-        ? null
-        : (rawItem as Office.MessageRead | Office.MessageCompose | null);
+    // Appointments resolve to the neutral no-item context: a host leaking the
+    // pane into the calendar module (no manifest surface declares one) must
+    // not crash this effect — it runs above every error boundary.
+    const item = resolveSupportedMailboxItem(Office.context.mailbox.item);
     const selectionVersion = selectionVersionRef.current + 1;
     selectionVersionRef.current = selectionVersion;
     currentItemRef.current = item;

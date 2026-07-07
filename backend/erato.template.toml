@@ -406,9 +406,11 @@ chat_provider_ids = ["test-token-limit"]
 # # proposed action immediately after a fresh assistant completion, subject
 # # to the user's local approval preferences in the add-in settings).
 # presentation = "render_buttons"
-# # Subset of client_actions the deployment ENFORCES a per-use confirmation
-# # for: the client always asks and never offers a persistent "always allow"
-# # (greyed out with a reason in the client settings). Users can still deny.
+# # Subset of client_actions the deployment ENFORCES confirmation for on
+# # ASSISTANT-INITIATED execution: an LLM proposal always shows the card and
+# # a persistent "always allow" is never offered (greyed out with a reason in
+# # the client settings). Users can still deny. Does not gate manual clicks
+# # on fully-described buttons — those consent by clicking.
 # client_actions_always_ask = ["outlook.reply_all"]
 # allowed_args = ["body_format"]
 # template = """
@@ -469,11 +471,16 @@ chat_provider_ids = ["test-token-limit"]
 # # Confirm path: once the user picks a slot, the model emits the appointment
 # # as an erato-appointment fenced JSON block and proposes this action; the
 # # add-in opens a prefilled appointment form (nothing is created server-side).
-# # Deliberately NOT in client_actions_always_ask: a button click is itself
-# # the consent for this safe action (auto-prompts still show the card until
-# # the user grants "always allow"); list it there to force a per-use card
-# # even on clicks.
+# # Fence fields: start, end (ISO-8601 with offset, in {{timezone}}), subject,
+# # attendees (string[]); optional optionalAttendees, location, body (plain-
+# # text agenda; "description" is a tolerated alias — body wins on conflict).
+# # client_actions_always_ask gates ASSISTANT-INITIATED execution only: an LLM
+# # proposal always shows the confirmation card and "Always allow" is never
+# # grantable. A manual click on the fully-described button executes directly
+# # BY DESIGN — the click is the consent (CLICK_IS_CONSENT_ACTIONS in the
+# # add-in).
 # client_actions = ["outlook.create_appointment"]
+# client_actions_always_ask = ["outlook.create_appointment"]
 # presentation = "auto_prompt"
 # allowed_args = ["now_iso", "timezone"]
 # template = """

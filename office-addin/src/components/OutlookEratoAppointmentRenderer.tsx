@@ -18,6 +18,7 @@ import {
   clientActionDecisionsPersistedOptions,
   decisionKey,
   isActionDenied,
+  resolveClickBehavior,
 } from "../utils/clientActionPolicy";
 import {
   clientActionDisplayLabel,
@@ -212,24 +213,33 @@ export function OutlookEratoAppointmentRenderer({
 
   const handleActionClick = useCallback(
     (action: OutlookAppointmentClientAction) => {
-      // Unlike the reply buttons, a click here IS the consent: the action is
-      // item-independent and inherently safe (opens a prefilled form; nothing
-      // is saved or sent), and the card would only restate what the summary
-      // above the button already shows. The confirmation card serves the
-      // AUTO-surfaced proposal path; it interposes on clicks only when the
-      // deployment enforces per-use confirmation (client_actions_always_ask).
-      if (!enforcedAskActions.includes(action)) {
+      // create_appointment is click-is-consent (see CLICK_IS_CONSENT_ACTIONS),
+      // so this resolves to "execute" for every decision and enforcement
+      // state; the confirm branch stays as the policy-layer fallback.
+      if (
+        resolveClickBehavior({
+          facetId,
+          action,
+          decisions,
+          enforcedAskActions,
+        }) === "execute"
+      ) {
         void executeAppointment();
         return;
       }
+      // Currently unreachable: every appointment action is click-is-consent.
+      // Kept so a future non-click-consent appointment action confirms here
+      // instead of silently executing.
       if (!requestConfirmation(action)) {
         setStatus("error");
         scheduleStatusReset(4000);
       }
     },
     [
+      decisions,
       enforcedAskActions,
       executeAppointment,
+      facetId,
       requestConfirmation,
       scheduleStatusReset,
     ],
@@ -388,7 +398,7 @@ export function OutlookEratoAppointmentRenderer({
               ? t({
                   id: "officeAddin.appointmentRenderer.alwaysAllowLocked",
                   message:
-                    "Your organization requires confirmation for this action every time.",
+                    "Your organization requires confirmation each time this action runs automatically.",
                 })
               : undefined
           }

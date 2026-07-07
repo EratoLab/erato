@@ -16,6 +16,7 @@ import {
 const FACET = "outlook_reply_from_read";
 const REPLY = "outlook.reply" as const;
 const REPLY_ALL = "outlook.reply_all" as const;
+const CREATE = "outlook.create_appointment" as const;
 
 const base = {
   facetId: FACET,
@@ -92,6 +93,37 @@ describe("resolveClickBehavior / isActionDenied", () => {
       }),
     ).toBe(true);
   });
+
+  it("click-is-consent actions execute on click regardless of decision or enforcement", () => {
+    expect(resolveClickBehavior({ ...base, action: CREATE })).toBe("execute");
+    // Enforcement gates assistant-initiated execution, not clicks.
+    expect(
+      resolveClickBehavior({
+        ...base,
+        action: CREATE,
+        enforcedAskActions: [CREATE],
+      }),
+    ).toBe("execute");
+    expect(
+      resolveClickBehavior({
+        ...base,
+        action: CREATE,
+        decisions: { [decisionKey(FACET, CREATE)]: "always" },
+        enforcedAskActions: [CREATE],
+      }),
+    ).toBe("execute");
+  });
+
+  it("email actions keep confirming when enforcement clamps a stored grant", () => {
+    expect(
+      resolveClickBehavior({
+        ...base,
+        action: REPLY_ALL,
+        decisions: { [decisionKey(FACET, REPLY_ALL)]: "always" },
+        enforcedAskActions: [REPLY_ALL],
+      }),
+    ).toBe("confirm");
+  });
 });
 
 describe("resolveAutoPromptBehavior", () => {
@@ -127,6 +159,17 @@ describe("resolveAutoPromptBehavior", () => {
         proposedAction: REPLY_ALL,
         decisions: { [decisionKey(FACET, REPLY_ALL)]: "always" },
         enforcedAskActions: [REPLY_ALL],
+      }),
+    ).toBe("confirm");
+  });
+
+  it("click-is-consent never leaks into auto-prompt: enforced create_appointment still cards", () => {
+    expect(
+      resolveAutoPromptBehavior({
+        ...auto,
+        proposedAction: CREATE,
+        decisions: { [decisionKey(FACET, CREATE)]: "always" },
+        enforcedAskActions: [CREATE],
       }),
     ).toBe("confirm");
   });

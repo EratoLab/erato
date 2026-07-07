@@ -19,8 +19,10 @@ import {
   type ClientActionDecision,
 } from "../utils/clientActionPolicy";
 import {
+  CLICK_IS_CONSENT_ACTIONS,
   clientActionDisplayLabel,
   offerableClientActions,
+  type OutlookClientAction,
 } from "../utils/outlookClientActions";
 
 interface BehaviorTabContentProps {
@@ -101,22 +103,35 @@ export function BehaviorTabContent({
 
   // Decision toggles mirror the stored per-facet+action decisions written by
   // the inline permission card. Always the same three options; defaults to
-  // "ask" until the user decides otherwise.
-  const decisionOptionLabels: Record<
-    ClientActionDecision,
-    { label: string; helper: string }
-  > = {
-    ask: {
-      label: t({
-        id: "officeAddin.settings.addin.clientActions.ask.label",
-        message: "Ask every time",
-      }),
-      helper: t({
-        id: "officeAddin.settings.addin.clientActions.ask.helper",
-        message:
-          "Shows a confirmation step in the chat before opening anything.",
-      }),
-    },
+  // "ask" until the user decides otherwise. Click-is-consent actions execute
+  // on click regardless of the decision — for them the "ask" copy (and the
+  // org lock) must claim only what it governs: assistant-initiated runs.
+  const decisionOptionLabels = (
+    action: OutlookClientAction,
+  ): Record<ClientActionDecision, { label: string; helper: string }> => ({
+    ask: CLICK_IS_CONSENT_ACTIONS.has(action)
+      ? {
+          label: t({
+            id: "officeAddin.settings.addin.clientActions.clickConsent.ask.label",
+            message: "Ask before running automatically",
+          }),
+          helper: t({
+            id: "officeAddin.settings.addin.clientActions.clickConsent.ask.helper",
+            message:
+              "Shows a confirmation step only when the assistant triggers this action on its own. Clicking the action's button always runs it directly.",
+          }),
+        }
+      : {
+          label: t({
+            id: "officeAddin.settings.addin.clientActions.ask.label",
+            message: "Ask every time",
+          }),
+          helper: t({
+            id: "officeAddin.settings.addin.clientActions.ask.helper",
+            message:
+              "Shows a confirmation step in the chat before opening anything.",
+          }),
+        },
     always: {
       label: t({
         id: "officeAddin.settings.addin.clientActions.always.label",
@@ -138,12 +153,19 @@ export function BehaviorTabContent({
         message: "Hides this action and ignores the assistant's suggestion.",
       }),
     },
-  };
-  const alwaysLockedHelper = t({
-    id: "officeAddin.settings.addin.clientActions.always.locked",
-    message:
-      "Locked: your organization requires confirmation for this action every time.",
   });
+  const alwaysLockedHelper = (action: OutlookClientAction) =>
+    CLICK_IS_CONSENT_ACTIONS.has(action)
+      ? t({
+          id: "officeAddin.settings.addin.clientActions.clickConsent.always.locked",
+          message:
+            "Locked: your organization requires confirmation each time this action runs automatically.",
+        })
+      : t({
+          id: "officeAddin.settings.addin.clientActions.always.locked",
+          message:
+            "Locked: your organization requires confirmation for this action every time.",
+        });
   const decisionOrder: readonly ClientActionDecision[] = [
     "ask",
     "always",
@@ -251,6 +273,7 @@ export function BehaviorTabContent({
               </p>
               {group.actions.map((action) => {
                 const enforced = group.info.alwaysAskActions.includes(action);
+                const optionLabels = decisionOptionLabels(action);
                 const current = effectiveDecision({
                   facetId: group.facetId,
                   action,
@@ -286,11 +309,11 @@ export function BehaviorTabContent({
                               [decisionKey(group.facetId, action)]: decision,
                             });
                           }}
-                          label={decisionOptionLabels[decision].label}
+                          label={optionLabels[decision].label}
                           helper={
                             lockedAlways
-                              ? alwaysLockedHelper
-                              : decisionOptionLabels[decision].helper
+                              ? alwaysLockedHelper(action)
+                              : optionLabels[decision].helper
                           }
                         />
                       );
