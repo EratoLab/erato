@@ -144,6 +144,11 @@ msgstr "Le prompt système doit contenir au moins 10 caractères"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "assistant.welcome.configuration.open"
+msgstr "Afficher la configuration de l'assistant"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "assistant.welcome.files.inaccessible"
 msgstr "Certains fichiers par défaut sont inaccessibles en raison de permissions insuffisantes."
 
