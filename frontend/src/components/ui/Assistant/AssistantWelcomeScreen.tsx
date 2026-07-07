@@ -1,10 +1,12 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
+import { ModalBase } from "@/components/ui/Modal/ModalBase";
 import { EditIcon } from "@/components/ui/icons";
 import { usePageAlignment } from "@/hooks/ui/usePageAlignment";
 import { getChatUrl } from "@/utils/chat/urlUtils";
@@ -44,6 +46,7 @@ export function AssistantWelcomeScreen({
   className = "",
 }: AssistantWelcomeScreenProps) {
   const navigate = useNavigate();
+  const [isConfigurationOpen, setIsConfigurationOpen] = useState(false);
   const {
     containerClasses: contentContainerClasses,
     textAlignment: contentTextAlignment,
@@ -66,6 +69,16 @@ export function AssistantWelcomeScreen({
   const inaccessibleFiles = assistant.files.filter(
     (file) => file.file_contents_unavailable_missing_permissions,
   );
+  const assistantInitial = useMemo(() => {
+    const trimmedName = assistant.name.trim();
+    return (trimmedName.charAt(0) || "A").toLocaleUpperCase();
+  }, [assistant.name]);
+  const openConfiguration = () => setIsConfigurationOpen(true);
+  const closeConfiguration = () => setIsConfigurationOpen(false);
+  const configurationLabel = t({
+    id: "assistant.welcome.configuration.open",
+    message: "View assistant configuration",
+  });
 
   return (
     <div
@@ -80,19 +93,32 @@ export function AssistantWelcomeScreen({
         <div className={clsx("mb-8 w-full", headerContainerClasses)}>
           {/* Assistant Icon/Badge */}
           <div className={clsx("mb-6 flex", headerJustifyAlignment)}>
-            <div className="flex size-20 items-center justify-center rounded-full bg-theme-bg-accent">
-              <EditIcon className="size-10 text-theme-fg-secondary" />
-            </div>
+            <button
+              type="button"
+              onClick={openConfiguration}
+              className="focus-ring flex size-20 items-center justify-center rounded-full bg-theme-avatar-assistant-bg text-3xl font-semibold text-theme-avatar-assistant-fg transition-transform hover:scale-105"
+              aria-label={configurationLabel}
+              data-testid="assistant-welcome-avatar-button"
+            >
+              <span data-testid="assistant-welcome-avatar-initial">
+                {assistantInitial}
+              </span>
+            </button>
           </div>
 
           {/* Assistant Name */}
-          <h1
-            className={clsx(
-              "mb-2 text-2xl font-bold text-theme-fg-primary",
-              headerTextAlignment,
-            )}
-          >
-            {assistant.name}
+          <h1 className={clsx("mb-2", headerTextAlignment)}>
+            <button
+              type="button"
+              onClick={openConfiguration}
+              className={clsx(
+                "focus-ring-tight rounded-[var(--theme-radius-shell)] text-2xl font-bold text-theme-fg-primary hover:text-theme-fg-accent",
+                headerTextAlignment,
+              )}
+              title={configurationLabel}
+            >
+              {assistant.name}
+            </button>
           </h1>
 
           {/* Assistant Description */}
@@ -108,92 +134,90 @@ export function AssistantWelcomeScreen({
           )}
         </div>
 
-        {/* Assistant Details */}
-        <div
-          className="mb-8 w-full rounded-[var(--theme-radius-shell)] border border-theme-border bg-theme-bg-primary p-6 text-left"
-          data-ui="assistant-detail-card"
+        <ModalBase
+          isOpen={isConfigurationOpen}
+          onClose={closeConfiguration}
+          title={t`Configuration`}
+          contentClassName="max-w-2xl"
         >
-          {inaccessibleFiles.length > 0 ? (
-            <Alert type="warning" className="mb-4">
-              {assistant.owner_email ? (
-                <>
-                  {t({
+          <div className="space-y-5 text-left" data-ui="assistant-detail-card">
+            {inaccessibleFiles.length > 0 ? (
+              <Alert type="warning">
+                {assistant.owner_email ? (
+                  <>
+                    {t({
+                      id: "assistant.welcome.files.inaccessible",
+                      message:
+                        "Some default files are inaccessible due to missing permissions.",
+                    })}{" "}
+                    {t({
+                      id: "assistant.welcome.files.inaccessible.contact",
+                      message:
+                        "Contact this creator and ask them to share the files:",
+                    })}{" "}
+                    <a
+                      href={`mailto:${assistant.owner_email}`}
+                      className="font-medium text-theme-fg-accent underline"
+                    >
+                      {assistant.owner_email}
+                    </a>
+                  </>
+                ) : (
+                  t({
                     id: "assistant.welcome.files.inaccessible",
                     message:
                       "Some default files are inaccessible due to missing permissions.",
-                  })}{" "}
-                  {t({
-                    id: "assistant.welcome.files.inaccessible.contact",
-                    message:
-                      "Contact this creator and ask them to share the files:",
-                  })}{" "}
-                  <a
-                    href={`mailto:${assistant.owner_email}`}
-                    className="font-medium text-theme-fg-accent underline"
-                  >
-                    {assistant.owner_email}
-                  </a>
-                </>
-              ) : (
-                t({
-                  id: "assistant.welcome.files.inaccessible",
-                  message:
-                    "Some default files are inaccessible due to missing permissions.",
-                })
-              )}
-            </Alert>
-          ) : null}
+                  })
+                )}
+              </Alert>
+            ) : null}
 
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-theme-fg-muted">
-            {t`Configuration`}
-          </h2>
-
-          {/* System Prompt Preview */}
-          <div className="mb-4">
-            <h3 className="mb-2 text-sm font-medium text-theme-fg-secondary">
-              {t`System Prompt`}
-            </h3>
-            <div className="max-h-32 overflow-y-auto rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary p-3">
-              <p className="whitespace-pre-wrap font-mono text-xs text-theme-fg-primary">
-                {assistant.prompt.length > 500
-                  ? `${assistant.prompt.slice(0, 500)}...`
-                  : assistant.prompt}
-              </p>
-            </div>
-          </div>
-
-          {/* Files */}
-          {assistant.files.length > 0 && (
-            <div className="mb-4">
+            {/* System Prompt Preview */}
+            <div>
               <h3 className="mb-2 text-sm font-medium text-theme-fg-secondary">
-                {t`Default Files`} ({assistant.files.length})
+                {t`System Prompt`}
               </h3>
-              <div className="flex flex-wrap gap-2">
-                {assistant.files.map((file) => (
-                  <span
-                    key={file.id}
-                    className="rounded-[var(--theme-radius-pill)] bg-theme-bg-accent px-2 py-1 text-xs text-theme-fg-secondary"
-                  >
-                    {file.filename}
-                  </span>
-                ))}
+              <div className="max-h-48 overflow-y-auto rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary p-3">
+                <p className="whitespace-pre-wrap font-mono text-xs text-theme-fg-primary">
+                  {assistant.prompt.length > 500
+                    ? `${assistant.prompt.slice(0, 500)}...`
+                    : assistant.prompt}
+                </p>
               </div>
             </div>
-          )}
 
-          {/* Edit Assistant Button - only show if user can edit */}
-          {assistant.can_edit && (
-            <Button
-              variant="secondary"
-              size="sm"
-              icon={<EditIcon />}
-              onClick={handleEditAssistant}
-              className="mt-2"
-            >
-              {t`Edit Assistant Settings`}
-            </Button>
-          )}
-        </div>
+            {/* Files */}
+            {assistant.files.length > 0 && (
+              <div>
+                <h3 className="mb-2 text-sm font-medium text-theme-fg-secondary">
+                  {t`Default Files`} ({assistant.files.length})
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {assistant.files.map((file) => (
+                    <span
+                      key={file.id}
+                      className="rounded-[var(--theme-radius-pill)] bg-theme-bg-accent px-2 py-1 text-xs text-theme-fg-secondary"
+                    >
+                      {file.filename}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Edit Assistant Button - only show if user can edit */}
+            {assistant.can_edit && (
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={<EditIcon />}
+                onClick={handleEditAssistant}
+              >
+                {t`Edit Assistant Settings`}
+              </Button>
+            )}
+          </div>
+        </ModalBase>
 
         {/* Past Conversations Section */}
         {!isLoadingChats && pastChats.length > 0 && (

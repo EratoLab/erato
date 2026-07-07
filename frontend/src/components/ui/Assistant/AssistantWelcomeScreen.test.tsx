@@ -1,6 +1,6 @@
 import { i18n, type Messages } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
@@ -65,9 +65,13 @@ describe("AssistantWelcomeScreen", () => {
     expect(
       screen.getByTestId("assistant-welcome-screen-default").className,
     ).toContain("w-full");
+    expect(
+      screen.getByTestId("assistant-welcome-avatar-initial"),
+    ).toHaveTextContent("B");
+    expect(screen.queryByText("System Prompt")).not.toBeInTheDocument();
   });
 
-  it("renders the edit assistant settings action as a secondary button", () => {
+  it("opens assistant configuration from the large name and renders edit as a secondary button", () => {
     const assistant: AssistantWithFiles = {
       id: "assistant-1",
       name: "Budget Assistant",
@@ -92,6 +96,10 @@ describe("AssistantWelcomeScreen", () => {
       </ThemeProvider>,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "Budget Assistant" }));
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText("System Prompt")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Edit Assistant Settings" }),
     ).toHaveClass(
@@ -100,6 +108,37 @@ describe("AssistantWelcomeScreen", () => {
       "border-theme-border",
       "text-theme-fg-secondary",
     );
+  });
+
+  it("opens assistant configuration from the large assistant icon", () => {
+    const assistant: AssistantWithFiles = {
+      id: "assistant-1",
+      name: "Budget Assistant",
+      description: "Helps with finance questions",
+      prompt: "Use the supplied policy docs to answer questions.",
+      created_at: "2026-03-23T08:00:00.000Z",
+      facet_ids: [],
+      enforce_facet_settings: false,
+      mcp_server_ids: [],
+      updated_at: "2026-03-23T09:00:00.000Z",
+      files: [],
+      can_edit: false,
+    };
+
+    render(
+      <ThemeProvider>
+        <I18nProvider i18n={i18n}>
+          <MemoryRouter>
+            <AssistantWelcomeScreen assistant={assistant} />
+          </MemoryRouter>
+        </I18nProvider>
+      </ThemeProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId("assistant-welcome-avatar-button"));
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText("System Prompt")).toBeInTheDocument();
   });
 
   it("warns when assistant files are inaccessible and includes creator email", () => {
@@ -138,6 +177,8 @@ describe("AssistantWelcomeScreen", () => {
         </I18nProvider>
       </ThemeProvider>,
     );
+
+    fireEvent.click(screen.getByTestId("assistant-welcome-avatar-button"));
 
     const warning = screen.getByRole("alert");
     expect(warning).toHaveTextContent(

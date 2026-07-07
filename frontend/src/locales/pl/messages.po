@@ -144,6 +144,11 @@ msgstr "Prompt systemowy musi mieć co najmniej 10 znaków"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "assistant.welcome.configuration.open"
+msgstr "Wyświetl konfigurację asystenta"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "assistant.welcome.files.inaccessible"
 msgstr "Niektóre pliki domyślne są niedostępne z powodu braku uprawnień."
 
