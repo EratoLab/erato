@@ -329,7 +329,7 @@ msgstr "Sign in to load email"
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.alwaysAllowLocked"
-msgstr "Your organization requires confirmation for this action every time."
+msgstr "Your organization requires confirmation each time this action runs automatically."
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
@@ -608,18 +608,18 @@ msgstr "Always allow"
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
-msgid "officeAddin.settings.addin.clientActions.always.locked"
-msgstr "Locked: your organization requires confirmation for this action every time."
+#~ msgid "officeAddin.settings.addin.clientActions.always.locked"
+#~ msgstr "Locked: your organization requires confirmation for this action every time."
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
-msgid "officeAddin.settings.addin.clientActions.ask.helper"
-msgstr "Shows a confirmation step in the chat before opening anything."
+#~ msgid "officeAddin.settings.addin.clientActions.ask.helper"
+#~ msgstr "Shows a confirmation step in the chat before opening anything."
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
-msgid "officeAddin.settings.addin.clientActions.ask.label"
-msgstr "Ask every time"
+#~ msgid "officeAddin.settings.addin.clientActions.ask.label"
+#~ msgstr "Ask every time"
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx

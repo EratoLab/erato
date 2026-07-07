@@ -9,7 +9,6 @@ import {
   mergeIntoStoredDecisions,
   parseDecisionKey,
   resolveAutoPromptBehavior,
-  resolveClickBehavior,
   type ClientActionDecisionMap,
 } from "../clientActionPolicy";
 
@@ -75,16 +74,11 @@ describe("effectiveDecision", () => {
   });
 });
 
-describe("resolveClickBehavior / isActionDenied", () => {
-  it("ask confirms, always executes, never hides", () => {
-    expect(resolveClickBehavior({ ...base, action: REPLY })).toBe("confirm");
-    expect(
-      resolveClickBehavior({
-        ...base,
-        action: REPLY,
-        decisions: { [decisionKey(FACET, REPLY)]: "always" },
-      }),
-    ).toBe("execute");
+describe("isActionDenied", () => {
+  // Clicks never consult the policy layer (universal click-is-consent) —
+  // the ONLY click-relevant rule is that a denied action's button is hidden.
+  it("hides never-decided actions and only those", () => {
+    expect(isActionDenied({ ...base, action: REPLY })).toBe(false);
     expect(
       isActionDenied({
         ...base,
@@ -92,37 +86,14 @@ describe("resolveClickBehavior / isActionDenied", () => {
         decisions: { [decisionKey(FACET, REPLY)]: "never" },
       }),
     ).toBe(true);
-  });
-
-  it("click-is-consent actions execute on click regardless of decision or enforcement", () => {
-    expect(resolveClickBehavior({ ...base, action: CREATE })).toBe("execute");
-    // Enforcement gates assistant-initiated execution, not clicks.
+    // Enforcement pins to ask, which is not a deny.
     expect(
-      resolveClickBehavior({
+      isActionDenied({
         ...base,
         action: CREATE,
         enforcedAskActions: [CREATE],
       }),
-    ).toBe("execute");
-    expect(
-      resolveClickBehavior({
-        ...base,
-        action: CREATE,
-        decisions: { [decisionKey(FACET, CREATE)]: "always" },
-        enforcedAskActions: [CREATE],
-      }),
-    ).toBe("execute");
-  });
-
-  it("email actions keep confirming when enforcement clamps a stored grant", () => {
-    expect(
-      resolveClickBehavior({
-        ...base,
-        action: REPLY_ALL,
-        decisions: { [decisionKey(FACET, REPLY_ALL)]: "always" },
-        enforcedAskActions: [REPLY_ALL],
-      }),
-    ).toBe("confirm");
+    ).toBe(false);
   });
 });
 

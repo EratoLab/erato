@@ -477,8 +477,8 @@ chat_provider_ids = ["test-token-limit"]
 # # client_actions_always_ask gates ASSISTANT-INITIATED execution only: an LLM
 # # proposal always shows the confirmation card and "Always allow" is never
 # # grantable. A manual click on the fully-described button executes directly
-# # BY DESIGN — the click is the consent (CLICK_IS_CONSENT_ACTIONS in the
-# # add-in).
+# # BY DESIGN — the click is the consent (universal click-is-consent rule;
+# # see clientActionPolicy.ts in the add-in).
 # client_actions = ["outlook.create_appointment"]
 # client_actions_always_ask = ["outlook.create_appointment"]
 # presentation = "auto_prompt"

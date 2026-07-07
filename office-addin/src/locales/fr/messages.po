@@ -329,7 +329,7 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.alwaysAllowLocked"
-msgstr "Votre organisation exige une confirmation pour cette action à chaque fois."
+msgstr "Votre organisation exige une confirmation chaque fois que cette action s'exécute automatiquement."
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
@@ -608,18 +608,18 @@ msgstr "Toujours autoriser"
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
-msgid "officeAddin.settings.addin.clientActions.always.locked"
-msgstr "Verrouillé : votre organisation exige une confirmation pour cette action à chaque fois."
+#~ msgid "officeAddin.settings.addin.clientActions.always.locked"
+#~ msgstr "Verrouillé : votre organisation exige une confirmation pour cette action à chaque fois."
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
-msgid "officeAddin.settings.addin.clientActions.ask.helper"
-msgstr "Affiche une étape de confirmation dans la discussion avant d'ouvrir quoi que ce soit."
+#~ msgid "officeAddin.settings.addin.clientActions.ask.helper"
+#~ msgstr "Affiche une étape de confirmation dans la discussion avant d'ouvrir quoi que ce soit."
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
-msgid "officeAddin.settings.addin.clientActions.ask.label"
-msgstr "Demander à chaque fois"
+#~ msgid "officeAddin.settings.addin.clientActions.ask.label"
+#~ msgstr "Demander à chaque fois"
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
