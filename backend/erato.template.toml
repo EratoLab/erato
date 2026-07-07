@@ -468,11 +468,13 @@ chat_provider_ids = ["test-token-limit"]
 # tool_call_allowlist = ["outlook/*"]
 # # Confirm path: once the user picks a slot, the model emits the appointment
 # # as an erato-appointment fenced JSON block and proposes this action; the
-# # add-in confirms and opens a prefilled appointment form (nothing is created
-# # server-side). The three keys travel together (startup validation).
+# # add-in opens a prefilled appointment form (nothing is created server-side).
+# # Deliberately NOT in client_actions_always_ask: a button click is itself
+# # the consent for this safe action (auto-prompts still show the card until
+# # the user grants "always allow"); list it there to force a per-use card
+# # even on clicks.
 # client_actions = ["outlook.create_appointment"]
 # presentation = "auto_prompt"
-# client_actions_always_ask = ["outlook.create_appointment"]
 # allowed_args = ["now_iso", "timezone"]
 # template = """
 # FOR THIS MESSAGE ONLY: <your scheduling instructions; have the model call the

@@ -540,6 +540,29 @@ export function containsFetchAvailabilityToolUse(
 }
 
 /**
+ * Whether an assistant message carries a scheduling-exchange signal: it read
+ * the calendar OR it proposed an appointment (an `erato-appointment` fence in
+ * its text). The fence arm exists because confirm/adjust turns contain NO
+ * tool_use — without it, the send after a proposal ("add an agenda", "make it
+ * 45 min") dropped the `outlook_schedule` facet, so the model could neither
+ * call propose_client_action (no Open-appointment button on the redone fence)
+ * nor see the fence contract (field drift like `description` for `body`).
+ */
+export function containsSchedulingSignal(
+  content: ContentPart[] | undefined,
+): boolean {
+  return (
+    containsFetchAvailabilityToolUse(content) ||
+    (content ?? []).some(
+      (part) =>
+        part.content_type === "text" &&
+        typeof (part as { text?: unknown }).text === "string" &&
+        (part as { text: string }).text.includes("```erato-appointment"),
+    )
+  );
+}
+
+/**
  * Tool-use parts persist in chat history forever, so "the latest assistant
  * message read the calendar" alone would let a days-old scheduling chat
  * hijack the first send after reopening it (the add-in reopens the last

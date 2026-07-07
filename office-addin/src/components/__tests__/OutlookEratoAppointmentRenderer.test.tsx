@@ -252,6 +252,21 @@ describe("OutlookEratoAppointmentRenderer — confirm flow", () => {
     expect(screen.getByTestId("confirmation-card")).toBeInTheDocument();
   });
 
+  it("executes directly on click when confirmation is not enforced — the click IS the consent", async () => {
+    prime({
+      artifact: makeArtifact({ alwaysAskClientActions: [] }),
+      currentItemIdentity: null,
+    });
+    render(<OutlookEratoAppointmentRenderer content={FENCE} />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Open appointment" }));
+    });
+
+    expect(mockOpenNewAppointmentForm).toHaveBeenCalledWith(DETAILS);
+    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
+  });
+
   it("closes the card when the form fails; the inline alert is the feedback", async () => {
     prime({ artifact: makeArtifact(), currentItemIdentity: null });
     mockOpenNewAppointmentForm.mockRejectedValue(new Error("host says no"));

@@ -57,7 +57,7 @@ import {
   runWithGraphTimeout,
 } from "../utils/graphRequestTimeout";
 import { buildOutlookArtifact } from "../utils/outlookClientActions";
-import { containsFetchAvailabilityToolUse } from "../utils/outlookScheduleTool";
+import { containsSchedulingSignal } from "../utils/outlookScheduleTool";
 import { parseDroppedFiles } from "../utils/parseDroppedFiles";
 import { parseEmlBytes } from "../utils/parsedEmail";
 
@@ -133,16 +133,18 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
   useOutlookClientTools();
 
   // A scheduling exchange is in flight when the LATEST assistant message read
-  // the calendar — the next send then carries the `outlook_schedule` facet
-  // (sticky rung in `resolveOutlookActionFacet`) so the model can handle the
-  // user's slot pick. This memo yields that message's TIMESTAMP (not a
-  // verdict): recency must be judged at send time, and a memo only recomputes
-  // when messages change, so a boolean here would freeze while the user idles.
-  const lastSchedulingToolUseAt = useMemo(() => {
+  // the calendar OR proposed an appointment (erato-appointment fence) — the
+  // next send then carries the `outlook_schedule` facet (sticky rung in
+  // `resolveOutlookActionFacet`) so the model can handle the user's slot pick
+  // or adjust the proposal (the fence arm keeps "add an agenda" turns able to
+  // re-propose the create action). This memo yields that message's TIMESTAMP
+  // (not a verdict): recency must be judged at send time, and a memo only
+  // recomputes when messages change, so a boolean would freeze while idle.
+  const lastSchedulingSignalAt = useMemo(() => {
     for (let i = messageOrder.length - 1; i >= 0; i--) {
       const message = messages[messageOrder[i]];
       if (message?.role === "assistant") {
-        return containsFetchAvailabilityToolUse(message.content)
+        return containsSchedulingSignal(message.content)
           ? message.createdAt
           : null;
       }
@@ -963,7 +965,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
               // so the web default of 5 fills up after a single multi-attachment
               // drop. The add-in lifts the cap; web stays at 5.
               maxFiles={50}
-              lastSchedulingToolUseAt={lastSchedulingToolUseAt}
+              lastSchedulingSignalAt={lastSchedulingSignalAt}
             />
           </div>
         </ChatErrorBoundary>

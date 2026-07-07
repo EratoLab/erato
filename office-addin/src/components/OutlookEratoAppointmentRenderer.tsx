@@ -18,7 +18,6 @@ import {
   clientActionDecisionsPersistedOptions,
   decisionKey,
   isActionDenied,
-  resolveClickBehavior,
 } from "../utils/clientActionPolicy";
 import {
   clientActionDisplayLabel,
@@ -213,14 +212,13 @@ export function OutlookEratoAppointmentRenderer({
 
   const handleActionClick = useCallback(
     (action: OutlookAppointmentClientAction) => {
-      if (
-        resolveClickBehavior({
-          facetId,
-          action,
-          decisions,
-          enforcedAskActions,
-        }) === "execute"
-      ) {
+      // Unlike the reply buttons, a click here IS the consent: the action is
+      // item-independent and inherently safe (opens a prefilled form; nothing
+      // is saved or sent), and the card would only restate what the summary
+      // above the button already shows. The confirmation card serves the
+      // AUTO-surfaced proposal path; it interposes on clicks only when the
+      // deployment enforces per-use confirmation (client_actions_always_ask).
+      if (!enforcedAskActions.includes(action)) {
         void executeAppointment();
         return;
       }
@@ -230,10 +228,8 @@ export function OutlookEratoAppointmentRenderer({
       }
     },
     [
-      decisions,
       enforcedAskActions,
       executeAppointment,
-      facetId,
       requestConfirmation,
       scheduleStatusReset,
     ],

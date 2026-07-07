@@ -51,7 +51,15 @@ function getReadModeItem(): Office.MessageRead | null {
     | Office.MessageCompose
     | null
     | undefined;
-  if (!item || !isMessageRead(item)) {
+  // Fail closed on appointment items: `isMessageRead` keys on the subject
+  // SHAPE (string vs object), which an AppointmentRead item also satisfies —
+  // a "reply" would then open a meeting reply form. Literal value
+  // (`ItemType.Appointment`) so an absent itemType keeps meaning "message".
+  if (
+    !item ||
+    (item as { itemType?: string }).itemType === "appointment" ||
+    !isMessageRead(item)
+  ) {
     return null;
   }
   return item;

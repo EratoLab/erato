@@ -4,6 +4,7 @@ import {
   FETCH_AVAILABILITY_TOOL_NAME,
   SCHEDULING_THREAD_MAX_AGE_MS,
   containsFetchAvailabilityToolUse,
+  containsSchedulingSignal,
   createFetchAvailabilityExecutor,
   isSchedulingThreadFresh,
   parseAttendees,
@@ -558,6 +559,45 @@ describe("containsFetchAvailabilityToolUse", () => {
     expect(containsFetchAvailabilityToolUse([toolUse("other_tool")])).toBe(
       false,
     );
+  });
+});
+
+describe("containsSchedulingSignal", () => {
+  const textPart = (text: string): ContentPart =>
+    ({ content_type: "text", text }) as unknown as ContentPart;
+
+  it("counts a fetch_availability tool use", () => {
+    expect(
+      containsSchedulingSignal([
+        {
+          content_type: "tool_use",
+          tool_name: FETCH_AVAILABILITY_TOOL_NAME,
+        } as unknown as ContentPart,
+      ]),
+    ).toBe(true);
+  });
+
+  it("counts an erato-appointment fence — confirm/adjust turns must stay sticky", () => {
+    expect(
+      containsSchedulingSignal([
+        textPart('Passt!\n```erato-appointment\n{"start":"..."}\n```'),
+      ]),
+    ).toBe(true);
+  });
+
+  it("ignores plain text, other fences and other tools", () => {
+    expect(containsSchedulingSignal(undefined)).toBe(false);
+    expect(
+      containsSchedulingSignal([textPart("```erato-email\nHi\n```")]),
+    ).toBe(false);
+    expect(
+      containsSchedulingSignal([
+        {
+          content_type: "tool_use",
+          tool_name: "other_tool",
+        } as unknown as ContentPart,
+      ]),
+    ).toBe(false);
   });
 });
 
