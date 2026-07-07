@@ -33,6 +33,7 @@
   <Rule xsi:type="RuleCollection" Mode="Or">
     <Rule xsi:type="ItemIs" ItemType="Message" FormType="Read" />
     <Rule xsi:type="ItemIs" ItemType="Message" FormType="Edit" />
+    <Rule xsi:type="ItemIs" ItemType="Appointment" FormType="Edit" />
   </Rule>
   <DisableEntityHighlighting>false</DisableEntityHighlighting>
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides" xsi:type="VersionOverridesV1_0">
@@ -71,6 +72,28 @@
               <Group id="eratoComposeGroup">
                 <Label resid="groupLabel" />
                 <Control xsi:type="Button" id="eratoComposeButton">
+                  <Label resid="buttonLabel" />
+                  <Supertip>
+                    <Title resid="buttonLabel" />
+                    <Description resid="buttonDesc" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="icon16" />
+                    <bt:Image size="32" resid="icon32" />
+                    <bt:Image size="80" resid="icon80" />
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <SourceLocation resid="taskPaneUrl" />
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+          <ExtensionPoint xsi:type="AppointmentOrganizerCommandSurface">
+            <OfficeTab id="TabDefault">
+              <Group id="eratoOrganizerGroup">
+                <Label resid="groupLabel" />
+                <Control xsi:type="Button" id="eratoOrganizerButton">
                   <Label resid="buttonLabel" />
                   <Supertip>
                     <Title resid="buttonLabel" />
@@ -159,6 +182,28 @@
                     <Action xsi:type="ShowTaskpane">
                       <SourceLocation resid="taskPaneUrl" />
                       <SupportsPinning>true</SupportsPinning>
+                    </Action>
+                  </Control>
+                </Group>
+              </OfficeTab>
+            </ExtensionPoint>
+            <ExtensionPoint xsi:type="AppointmentOrganizerCommandSurface">
+              <OfficeTab id="TabDefault">
+                <Group id="eratoOrganizerGroup">
+                  <Label resid="groupLabel" />
+                  <Control xsi:type="Button" id="eratoOrganizerButton">
+                    <Label resid="buttonLabel" />
+                    <Supertip>
+                      <Title resid="buttonLabel" />
+                      <Description resid="buttonDesc" />
+                    </Supertip>
+                    <Icon>
+                      <bt:Image size="16" resid="icon16" />
+                      <bt:Image size="32" resid="icon32" />
+                      <bt:Image size="80" resid="icon80" />
+                    </Icon>
+                    <Action xsi:type="ShowTaskpane">
+                      <SourceLocation resid="taskPaneUrl" />
                     </Action>
                   </Control>
                 </Group>
