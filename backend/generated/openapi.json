@@ -6851,6 +6851,12 @@
               "null"
             ]
           },
+          "owner_picture": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "share_link": {
             "$ref": "#/components/schemas/ShareLink"
           },

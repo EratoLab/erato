@@ -28,6 +28,7 @@ type ResolveShareLinkResponse = {
   share_link: ShareLink;
   title_resolved: string | null;
   owner_display_name: string | null;
+  owner_picture: string | null;
 };
 
 const shareLinkQueryKey = (chatId: string) =>
@@ -147,6 +148,7 @@ export function useResolveChatShareLink(shareLinkId: string | null) {
             ...response.share_link,
             title_resolved: response.title_resolved,
             owner_display_name: response.owner_display_name,
+            owner_picture: response.owner_picture,
           };
         }
       : skipToken,

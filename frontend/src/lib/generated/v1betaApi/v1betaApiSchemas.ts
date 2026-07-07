@@ -1819,6 +1819,7 @@ export type RegenerateMessageStreamingResponseMessage =
 
 export type ResolveShareLinkResponse = {
   owner_display_name?: null | undefined;
+  owner_picture?: null | undefined;
   share_link: ShareLink;
   title_resolved?: null | undefined;
 };

@@ -58,6 +58,7 @@ import type {
   FileUploadItem,
   ChatModel,
   ContentPart,
+  UserProfile,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
 import type {
@@ -120,6 +121,8 @@ export interface ChatProps {
   topContent?: React.ReactNode;
   /** Optional override for the display name of user-authored messages */
   userMessageDisplayName?: string;
+  /** Optional override for the profile of user-authored messages */
+  userMessageProfile?: UserProfile;
   /** Optional assistant ID for context-aware sending */
   assistantId?: string;
   /** Optional initial model to use (overrides chat history model) */
@@ -160,6 +163,7 @@ export const Chat = ({
   forceCenteredEmptyState = false,
   topContent,
   userMessageDisplayName,
+  userMessageProfile,
   assistantId,
   initialModelOverride,
   assistantFiles = [],
@@ -832,7 +836,7 @@ export const Chat = ({
                   maxWidth={maxWidth}
                   showTimestamps={showTimestamps}
                   showAvatars={showAvatars}
-                  userProfile={profile}
+                  userProfile={userMessageProfile ?? profile}
                   userDisplayNameOverride={userMessageDisplayName}
                   controls={resolvedMessageControls}
                   messageRenderer={resolvedMessageRenderer}
