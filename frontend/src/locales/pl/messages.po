@@ -2393,7 +2393,7 @@ msgstr "Ustawienia"
 #. js-lingui-explicit-id
 #: src/pages/SearchPage.tsx
 msgid "search.page.subtitle"
-msgstr ""
+msgstr "Znajdź rozmowy i wiadomości w historii czatu"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsListPage.tsx

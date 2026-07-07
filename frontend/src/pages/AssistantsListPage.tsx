@@ -111,6 +111,7 @@ export default function AssistantsListPage() {
     <div className="flex h-full flex-col bg-theme-bg-primary">
       {/* Page Header */}
       <PageHeader
+        density="compact"
         title={t`Assistants`}
         subtitle={t`Create and manage custom assistants with specific instructions and capabilities`}
       />

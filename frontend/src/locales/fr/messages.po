@@ -2393,7 +2393,7 @@ msgstr "Paramètres"
 #. js-lingui-explicit-id
 #: src/pages/SearchPage.tsx
 msgid "search.page.subtitle"
-msgstr ""
+msgstr "Retrouvez des conversations et des messages dans votre historique de chat"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsListPage.tsx

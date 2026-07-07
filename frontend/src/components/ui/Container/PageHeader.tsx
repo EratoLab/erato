@@ -11,6 +11,8 @@ export interface PageHeaderProps {
   subtitle?: string;
   /** Optional children to render below title/subtitle (e.g., search input) */
   children?: React.ReactNode;
+  /** Header vertical density */
+  density?: "default" | "compact";
   /** Additional CSS classes */
   className?: string;
 }
@@ -41,15 +43,18 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   title,
   subtitle,
   children,
+  density = "default",
   className,
 }) => {
   const { containerClasses, textAlignment, horizontalPadding } =
     usePageAlignment("headers");
+  const isCompact = density === "compact";
 
   return (
     <div
       className={clsx(
-        "flex flex-col border-b border-theme-border bg-theme-bg-primary py-8",
+        "flex flex-col border-b border-theme-border bg-theme-bg-primary",
+        isCompact ? "py-4" : "py-8",
         horizontalPadding,
         className,
       )}
@@ -58,14 +63,21 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
       <div className={clsx("w-full", containerClasses)}>
         <h1
           className={clsx(
-            "mb-6 text-2xl font-semibold text-theme-fg-primary",
+            "text-2xl font-semibold text-theme-fg-primary",
+            isCompact ? "mb-3" : "mb-6",
             textAlignment,
           )}
         >
           {title}
         </h1>
         {subtitle && (
-          <p className={clsx("mb-6 text-theme-fg-secondary", textAlignment)}>
+          <p
+            className={clsx(
+              "text-theme-fg-secondary",
+              isCompact ? "mb-4" : "mb-6",
+              textAlignment,
+            )}
+          >
             {subtitle}
           </p>
         )}

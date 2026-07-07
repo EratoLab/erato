@@ -224,6 +224,7 @@ export default function SearchPage() {
     <div className="flex h-full flex-col bg-theme-bg-primary">
       {/* Search Header */}
       <PageHeader
+        density="compact"
         title={t`Search Your Chats`}
         subtitle={t({
           id: "search.page.subtitle",
