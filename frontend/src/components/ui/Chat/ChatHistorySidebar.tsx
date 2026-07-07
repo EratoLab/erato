@@ -14,6 +14,7 @@ import {
 } from "@/config/componentRegistry";
 import { defaultThemeConfig } from "@/config/themeConfig";
 import { useResponsiveCollapsedMode, useThemedIcon } from "@/hooks/ui";
+import { usePersistedState } from "@/hooks/usePersistedState";
 import { useAssistantHubConfig } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import {
   useAssistantsFeature,
@@ -64,6 +65,12 @@ const sidebarSectionStyle = {
 } as const;
 const sidebarLinkClassName =
   "focus-ring-tight block rounded-[var(--theme-radius-shell)]";
+
+const RECENT_CHATS_SECTION_EXPANDED_STORAGE_KEY =
+  "erato.sidebar.recentChatsSectionExpanded";
+
+const parsePersistedBoolean = (value: unknown) =>
+  typeof value === "boolean" ? value : null;
 
 export interface ChatHistorySidebarProps {
   className?: string;
@@ -566,37 +573,51 @@ AssistantHubNavigationItem.displayName = "AssistantHubNavigationItem";
 const CollapsibleSection = memo<{
   title: string;
   defaultExpanded?: boolean;
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
   children: React.ReactNode;
   className?: string;
-}>(({ title, defaultExpanded = true, children, className }) => {
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+}>(
+  ({
+    title,
+    defaultExpanded = true,
+    expanded,
+    onExpandedChange,
+    children,
+    className,
+  }) => {
+    const [uncontrolledExpanded, setUncontrolledExpanded] =
+      useState(defaultExpanded);
+    const isExpanded = expanded ?? uncontrolledExpanded;
+    const setIsExpanded = onExpandedChange ?? setUncontrolledExpanded;
 
-  return (
-    <div className={className}>
-      <div className="px-2 py-1">
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="theme-transition flex w-full items-center justify-between px-3 py-2 text-left hover:bg-[var(--theme-shell-sidebar-hover)]"
-          style={sidebarItemStyle}
-          aria-expanded={isExpanded}
-          aria-label={isExpanded ? t`Collapse ${title}` : t`Expand ${title}`}
-          type="button"
-        >
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-theme-fg-muted">
-            {title}
-          </h3>
-          <ChevronRightIcon
-            className={clsx(
-              "size-3 text-theme-fg-muted transition-transform",
-              isExpanded ? "rotate-90" : "rotate-0",
-            )}
-          />
-        </button>
+    return (
+      <div className={className}>
+        <div className="px-2 py-1">
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="theme-transition flex w-full items-center justify-between px-3 py-2 text-left hover:bg-[var(--theme-shell-sidebar-hover)]"
+            style={sidebarItemStyle}
+            aria-expanded={isExpanded}
+            aria-label={isExpanded ? t`Collapse ${title}` : t`Expand ${title}`}
+            type="button"
+          >
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-theme-fg-muted">
+              {title}
+            </h3>
+            <ChevronRightIcon
+              className={clsx(
+                "size-3 text-theme-fg-muted transition-transform",
+                isExpanded ? "rotate-90" : "rotate-0",
+              )}
+            />
+          </button>
+        </div>
+        {isExpanded && <div>{children}</div>}
       </div>
-      {isExpanded && <div>{children}</div>}
-    </div>
-  );
-});
+    );
+  },
+);
 
 // eslint-disable-next-line lingui/no-unlocalized-strings
 CollapsibleSection.displayName = "CollapsibleSection";
@@ -695,6 +716,13 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     const { data: assistantHubConfig } = useAssistantHubConfig(
       {},
       { enabled: assistantsEnabled },
+    );
+    const [isRecentChatsExpanded, setIsRecentChatsExpanded] = usePersistedState(
+      RECENT_CHATS_SECTION_EXPANDED_STORAGE_KEY,
+      true,
+      {
+        parse: parsePersistedBoolean,
+      },
     );
 
     // Only use ResizeObserver in the browser
@@ -903,6 +931,8 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                   <CollapsibleSection
                     title={t({ id: "chat.history.recent", message: "Recent" })}
                     defaultExpanded={true}
+                    expanded={isRecentChatsExpanded}
+                    onExpandedChange={setIsRecentChatsExpanded}
                   >
                     <ResolvedChatHistoryList
                       sessions={sessions}

@@ -1,5 +1,5 @@
 import { I18nProvider } from "@lingui/react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -75,6 +75,7 @@ const sessions: ChatSession[] = [
 describe("ChatHistorySidebar", () => {
   beforeEach(async () => {
     mockedCollapsedMode = "hidden";
+    localStorage.clear();
     const { i18n } = await import("@lingui/core");
     i18n.load("en", enMessages as unknown as Messages);
     i18n.activate("en");
@@ -173,5 +174,52 @@ describe("ChatHistorySidebar", () => {
       minHeight: "var(--theme-spacing-sidebar-row-height)",
       borderRadius: "var(--theme-radius-shell)",
     });
+  });
+
+  it("persists the recent chats section collapsed state across remounts", async () => {
+    const { i18n } = await import("@lingui/core");
+    const sidebarProps = {
+      sessions,
+      currentSessionId: "chat-1",
+      onSessionSelect: vi.fn(),
+      onSessionArchive: vi.fn(),
+      isLoading: false,
+    };
+
+    const { unmount } = render(
+      <MemoryRouter>
+        <I18nProvider i18n={i18n}>
+          <ChatHistorySidebar {...sidebarProps} />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+
+    const recentToggle = screen.getByRole("button", {
+      name: "Collapse Recent",
+    });
+    expect(screen.getByTestId("history-list")).toBeInTheDocument();
+
+    fireEvent.click(recentToggle);
+
+    expect(recentToggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByTestId("history-list")).not.toBeInTheDocument();
+    expect(
+      localStorage.getItem("erato.sidebar.recentChatsSectionExpanded"),
+    ).toBe("false");
+
+    unmount();
+
+    render(
+      <MemoryRouter>
+        <I18nProvider i18n={i18n}>
+          <ChatHistorySidebar {...sidebarProps} />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Expand Recent" }),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByTestId("history-list")).not.toBeInTheDocument();
   });
 });
