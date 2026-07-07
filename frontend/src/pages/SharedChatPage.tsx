@@ -13,6 +13,7 @@ import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 import { mapApiMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 import { transformEmailFencesForCopy } from "@/utils/emailClipboard";
 
+import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type {
   MessageAction,
   MessageControlsProps,
@@ -40,6 +41,20 @@ export default function SharedChatPage() {
       id: "chat.share.owner.unknown",
       message: "Unknown user",
     });
+  const sharedOwnerProfile = useMemo<UserProfile | undefined>(() => {
+    if (!resolvedLink) {
+      return undefined;
+    }
+
+    return {
+      id: `shared-chat-owner-${resolvedLink.resource_id}`,
+      name: sharedOwnerDisplayName,
+      picture: resolvedLink.owner_picture ?? undefined,
+      preferred_language: "en",
+      groups: [],
+      organization_group_ids: [],
+    };
+  }, [resolvedLink, sharedOwnerDisplayName]);
 
   const {
     data: messagesResponse,
@@ -210,6 +225,7 @@ export default function SharedChatPage() {
           showAvatars={true}
           showTimestamps={true}
           emptyStateComponent={<ChatEmptyState variant="chat" />}
+          userMessageProfile={sharedOwnerProfile}
           readOnly={true}
         />
       </div>

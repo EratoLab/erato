@@ -591,8 +591,13 @@ async fn enrich_profile_with_entra_id_photo(
         }
     };
 
-    match fetch_entra_id_profile_photo_data_url(&http_client, GRAPH_API_BASE_URL, access_token)
-        .await
+    match fetch_entra_id_profile_photo_data_url(
+        &http_client,
+        GRAPH_API_BASE_URL,
+        access_token,
+        ProfilePhotoSubject::Me,
+    )
+    .await
     {
         Ok(Some(photo_data_url)) => {
             profile.picture = Some(photo_data_url);
@@ -620,21 +625,40 @@ fn is_entra_id_profile(id_token_claims: &serde_json::Value) -> bool {
     issuer_matches || id_token_claims.get("tid").is_some() || id_token_claims.get("oid").is_some()
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ProfilePhotoSubject<'a> {
+    Me,
+    User(&'a str),
+}
+
+fn graph_profile_photo_path(subject: ProfilePhotoSubject<'_>) -> String {
+    match subject {
+        ProfilePhotoSubject::Me => "/me/photo/$value".to_string(),
+        ProfilePhotoSubject::User(user_id) => {
+            let encoded_user_id =
+                url::form_urlencoded::byte_serialize(user_id.as_bytes()).collect::<String>();
+            format!("/users/{encoded_user_id}/photo/$value")
+        }
+    }
+}
+
 async fn fetch_entra_id_profile_photo_data_url(
     http_client: &reqwest::Client,
     graph_api_base_url: &str,
     access_token: &str,
+    subject: ProfilePhotoSubject<'_>,
 ) -> Result<Option<String>, Report> {
     let photo_url = format!(
-        "{}/me/photo/$value",
-        graph_api_base_url.trim_end_matches('/')
+        "{}{}",
+        graph_api_base_url.trim_end_matches('/'),
+        graph_profile_photo_path(subject)
     );
     let response = http_client
         .get(photo_url)
         .bearer_auth(access_token)
         .send()
         .await
-        .wrap_err("Failed to request signed-in user's profile photo from Microsoft Graph")?;
+        .wrap_err("Failed to request profile photo from Microsoft Graph")?;
 
     let status = response.status();
     if status == reqwest::StatusCode::NOT_FOUND {
@@ -659,7 +683,7 @@ async fn fetch_entra_id_profile_photo_data_url(
     let photo_bytes = response
         .bytes()
         .await
-        .wrap_err("Failed to read signed-in user's profile photo from Microsoft Graph")?;
+        .wrap_err("Failed to read profile photo from Microsoft Graph")?;
 
     if photo_bytes.len() > MAX_PROFILE_PHOTO_BYTES {
         return Err(eyre!(
@@ -3382,8 +3406,8 @@ pub struct FileCapabilitiesQuery {
 #[cfg(test)]
 mod tests {
     use super::{
-        effective_upload_content_type, fetch_entra_id_profile_photo_data_url, is_entra_id_profile,
-        preview_content_type,
+        ProfilePhotoSubject, effective_upload_content_type, fetch_entra_id_profile_photo_data_url,
+        graph_profile_photo_path, is_entra_id_profile, preview_content_type,
     };
     use axum::http::StatusCode;
     use axum::routing::get;
@@ -3474,6 +3498,14 @@ mod tests {
         assert!(!is_entra_id_profile(&claims));
     }
 
+    #[test]
+    fn graph_profile_photo_path_encodes_user_identifier() {
+        assert_eq!(
+            graph_profile_photo_path(ProfilePhotoSubject::User("owner+test@example.com")),
+            "/users/owner%2Btest%40example.com/photo/$value"
+        );
+    }
+
     #[tokio::test]
     async fn fetch_entra_id_profile_photo_data_url_encodes_graph_photo() {
         let app = Router::new().route(
@@ -3497,6 +3529,7 @@ mod tests {
             &http_client,
             &format!("http://{addr}"),
             "graph-access-token",
+            ProfilePhotoSubject::Me,
         )
         .await
         .unwrap();
@@ -3518,6 +3551,7 @@ mod tests {
             &http_client,
             &format!("http://{addr}"),
             "graph-access-token",
+            ProfilePhotoSubject::Me,
         )
         .await
         .unwrap();
