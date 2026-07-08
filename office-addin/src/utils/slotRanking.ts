@@ -171,8 +171,12 @@ function subtract(
 ): { gap: Interval; afterMeeting: boolean }[] {
   const gaps: { gap: Interval; afterMeeting: boolean }[] = [];
   let cursor = window.start;
+  // Seed within a buffer's reach, not just at overlap: a meeting ending one
+  // minute before the window start must still buffer the first gap.
   let afterMeeting = blocked.some(
-    (b) => b.start < window.start && b.end >= window.start,
+    (b) =>
+      b.start < window.start &&
+      b.end > window.start - SLOT_BUFFER_MINUTES * MINUTE_MS,
   );
   for (const block of blocked) {
     if (block.end <= window.start || block.start >= window.end) continue;

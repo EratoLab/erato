@@ -143,6 +143,29 @@ describe("rankAvailabilitySlots", () => {
     ).toBe(true);
   });
 
+  it("buffers the first gap when a meeting ends just before the window start", () => {
+    const { slots } = rankAvailabilitySlots(
+      {
+        ...baseCalendar,
+        busyBlocks: [
+          {
+            // Ends ONE minute before `now` — must still trigger the buffer.
+            when: {
+              kind: "date-time",
+              startUtc: "2026-07-06T08:00:00Z",
+              endUtc: "2026-07-06T08:59:00Z",
+            },
+            busyType: "Busy",
+          },
+        ],
+        attendees: [],
+      },
+      { ...RANKING_OPTIONS, nowUtc: "2026-07-06T09:00:00Z" },
+    );
+    // 09:00 + 15-min buffer; without the reach-back seed this would be 09:00.
+    expect(slots[0].startUtc).toBe("2026-07-06T09:15:00Z");
+  });
+
   it("assumes Mon-Fri 09:00-17:00 when working hours are null and flags it", () => {
     const { slots, workingHoursAssumed } = rankAvailabilitySlots(
       { ...baseCalendar, workingHours: null },
