@@ -87,6 +87,7 @@ export default function AssistantCreatePage() {
     <div className="flex h-full flex-col bg-theme-bg-secondary">
       {/* Page Header */}
       <PageHeader
+        density="compact"
         title={t`Create Assistant`}
         subtitle={t`Configure a custom assistant with specific instructions and capabilities`}
       />
