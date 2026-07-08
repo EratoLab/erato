@@ -634,6 +634,31 @@ const FREE_BUSY_COUNT_MISMATCH_SOAP = soapEnvelope(
     "</m:FreeBusyResponseArray></m:GetUserAvailabilityResponse>",
 );
 
+/** Genuinely free: FreeBusy view, zero events. SE OMITS CalendarEventArray
+ * entirely (verified on the wire — it does NOT send an empty one), and there is
+ * no MergedFreeBusy. Must still read as free, not unknown. */
+const FREE_BUSY_EMPTY_FREE_SOAP = soapEnvelope(
+  "<m:GetUserAvailabilityResponse><m:FreeBusyResponseArray>" +
+    "<m:FreeBusyResponse>" +
+    '<m:ResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode></m:ResponseMessage>' +
+    "<m:FreeBusyView><t:FreeBusyViewType>FreeBusy</t:FreeBusyViewType></m:FreeBusyView>" +
+    "</m:FreeBusyResponse>" +
+    "</m:FreeBusyResponseArray></m:GetUserAvailabilityResponse>",
+);
+
+/** No data: a non-error response whose FreeBusyViewType is None (e.g. a
+ * cross-forest lookup that resolved but returned nothing). Structurally
+ * identical to the free case EXCEPT the view type — which is the only signal
+ * that this must be unknown, never "free at all times". */
+const FREE_BUSY_NONE_VIEW_SOAP = soapEnvelope(
+  "<m:GetUserAvailabilityResponse><m:FreeBusyResponseArray>" +
+    "<m:FreeBusyResponse>" +
+    '<m:ResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode></m:ResponseMessage>' +
+    "<m:FreeBusyView><t:FreeBusyViewType>None</t:FreeBusyViewType></m:FreeBusyView>" +
+    "</m:FreeBusyResponse>" +
+    "</m:FreeBusyResponseArray></m:GetUserAvailabilityResponse>",
+);
+
 const ATTENDEE_RANGE = {
   startUtc: "2026-07-07T00:00:00Z",
   endUtc: "2026-07-14T00:00:00Z",
@@ -697,6 +722,39 @@ describe("fetchAttendeeAvailabilityViaEws", () => {
       expect(entry.busy).toEqual([]);
       expect(entry.reason).toContain("response count mismatch");
     }
+  });
+
+  it("reads a FreeBusy view with zero events (array omitted, not empty) as genuinely free", async () => {
+    installHostMock((body) =>
+      body.includes("<m:GetUserAvailabilityRequest")
+        ? { status: "succeeded", value: FREE_BUSY_EMPTY_FREE_SOAP }
+        : { status: "failed", error: { code: 0, message: "unexpected op" } },
+    );
+
+    const entries = await fetchAttendeeAvailabilityViaEws(ATTENDEE_RANGE, [
+      "free@example.de",
+    ]);
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0].status).toBe("ok");
+    expect(entries[0].busy).toEqual([]);
+  });
+
+  it("maps a no-data FreeBusyViewType None (e.g. cross-forest) to unknown, never free", async () => {
+    installHostMock((body) =>
+      body.includes("<m:GetUserAvailabilityRequest")
+        ? { status: "succeeded", value: FREE_BUSY_NONE_VIEW_SOAP }
+        : { status: "failed", error: { code: 0, message: "unexpected op" } },
+    );
+
+    const entries = await fetchAttendeeAvailabilityViaEws(ATTENDEE_RANGE, [
+      "crossforest@example.de",
+    ]);
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0].status).toBe("unknown");
+    expect(entries[0].busy).toEqual([]);
+    expect(entries[0].reason).toContain("no free/busy information");
   });
 
   it("resolves a GAL display name via ResolveNames before the availability call", async () => {

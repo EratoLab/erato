@@ -373,7 +373,14 @@ export function parseAttendeeFreeBusy(
         ),
       };
     }
-    // An empty FreeBusyView with a non-error response = genuinely free window.
+    // Ambiguous fall-through: FreeBusy/Detailed with zero events (SE OMITS the
+    // CalendarEventArray, not an empty one) = genuinely free; None (e.g.
+    // cross-forest) = no data and must NOT read as free — parity with Graph,
+    // which maps its no-data state to unknown. View type is the only tell.
+    const viewType = typesText(view, "FreeBusyViewType");
+    if (viewType === "None" || !viewType) {
+      return { kind: "error", reason: "no free/busy information available" };
+    }
     return { kind: "ok", blocks: [] };
   });
 }
