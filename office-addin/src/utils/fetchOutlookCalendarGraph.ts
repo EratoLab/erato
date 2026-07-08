@@ -369,8 +369,14 @@ export async function fetchWorkingHoursViaGraph(
     return null;
   }
   const startMinutes = clockStringToMinutes(workingHours.startTime);
-  const endMinutes = clockStringToMinutes(workingHours.endTime);
-  if (startMinutes === null || endMinutes === null) return null;
+  const rawEnd = clockStringToMinutes(workingHours.endTime);
+  if (startMinutes === null || rawEnd === null) return null;
+  // A workday ending at midnight arrives as "00:00:00" → 0; as an END that
+  // means end-of-day, and 0 < start would invert the ranking window (every
+  // day silently skipped). Any remaining end <= start (overnight shift) is
+  // unrepresentable — degrade to null/assumed rather than mislead.
+  const endMinutes = rawEnd === 0 ? 1440 : rawEnd;
+  if (endMinutes <= startMinutes) return null;
   return {
     daysOfWeek: Array.isArray(workingHours.daysOfWeek)
       ? workingHours.daysOfWeek
@@ -506,32 +512,49 @@ export async function fetchAttendeeAvailabilityViaGraph(
       }
     }
     const smtp = smtpFor(requested) as string;
+    // Disclose a non-exact directory match — without it the result claims
+    // the REQUESTED name's availability with the matched person's calendar.
+    const resolution = resolutions.get(requested);
+    const resolvedNote =
+      resolution?.kind === "resolved" &&
+      resolution.name !== undefined &&
+      resolution.name.trim().toLowerCase() !== requested.trim().toLowerCase()
+        ? `resolved as ${resolution.name} <${smtp}>`
+        : undefined;
+    const disclose = (
+      entry: NormalizedAttendeeAvailability,
+    ): NormalizedAttendeeAvailability =>
+      resolvedNote === undefined
+        ? entry
+        : {
+            ...entry,
+            reason:
+              entry.reason === undefined
+                ? resolvedNote
+                : `${entry.reason}; ${resolvedNote}`,
+          };
     const schedule = scheduleBySmtp.get(smtp.toLowerCase());
     if (schedule === undefined) {
-      return {
+      return disclose({
         // The address is known even though the read failed — parity with EWS.
         ...unknownAttendee(requested, "no availability data returned"),
         smtp,
-      };
+      });
     }
     try {
-      return normalizeSchedule(
-        requested,
-        smtp,
-        schedule,
-        range.startUtc,
-        interval,
+      return disclose(
+        normalizeSchedule(requested, smtp, schedule, range.startUtc, interval),
       );
     } catch (error) {
       // One malformed schedule (e.g. a non-UTC slice, which toUtcIso rejects)
       // must not sink the readable siblings — per-attendee degrade.
-      return {
+      return disclose({
         ...unknownAttendee(
           requested,
           error instanceof Error ? error.message : String(error),
         ),
         smtp,
-      };
+      });
     }
   });
 }

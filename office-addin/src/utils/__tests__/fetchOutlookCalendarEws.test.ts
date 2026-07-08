@@ -12,6 +12,7 @@ import {
   fetchAttendeeAvailabilityViaEws,
   fetchCalendarHistoryViaEws,
   fetchOutlookCalendarViaEws,
+  fetchWorkingHoursViaEws,
 } from "../fetchOutlookCalendarEws";
 import { EwsRequestError } from "../fetchOutlookMessageEws";
 
@@ -120,6 +121,37 @@ const AVAILABILITY_SOAP =
   "</m:FreeBusyResponseArray>" +
   "</m:GetUserAvailabilityResponse>" +
   "</s:Body></s:Envelope>";
+
+/** WorkingHours authored in US Eastern (Bias 300, DST -60 → UTC-5/-4) while
+ * the mock mailbox displays W. Europe (UTC+1/+2) — the relocated-user shape
+ * whose minutes MUST NOT be read as Berlin wall-clock. */
+const AVAILABILITY_MISMATCHED_ZONE_SOAP = AVAILABILITY_SOAP.replace(
+  "<t:TimeZone>" +
+    "<t:Bias>-60</t:Bias>" +
+    "<t:StandardTime><t:Bias>0</t:Bias><t:Time>03:00:00</t:Time><t:DayOrder>5</t:DayOrder><t:Month>10</t:Month><t:DayOfWeek>Sunday</t:DayOfWeek></t:StandardTime>" +
+    "<t:DaylightTime><t:Bias>-60</t:Bias><t:Time>02:00:00</t:Time><t:DayOrder>5</t:DayOrder><t:Month>3</t:Month><t:DayOfWeek>Sunday</t:DayOfWeek></t:DaylightTime>" +
+    "</t:TimeZone>",
+  "<t:TimeZone>" +
+    "<t:Bias>300</t:Bias>" +
+    "<t:StandardTime><t:Bias>0</t:Bias><t:Time>02:00:00</t:Time><t:DayOrder>1</t:DayOrder><t:Month>11</t:Month><t:DayOfWeek>Sunday</t:DayOfWeek></t:StandardTime>" +
+    "<t:DaylightTime><t:Bias>-60</t:Bias><t:Time>02:00:00</t:Time><t:DayOrder>2</t:DayOrder><t:Month>3</t:Month><t:DayOfWeek>Sunday</t:DayOfWeek></t:DaylightTime>" +
+    "</t:TimeZone>",
+);
+
+/** Mon-Fri 480..0 — a workday ending at midnight (EndTimeInMinutes 0). */
+const AVAILABILITY_MIDNIGHT_END_SOAP = AVAILABILITY_SOAP.replace(
+  "<t:EndTimeInMinutes>1020</t:EndTimeInMinutes>",
+  "<t:EndTimeInMinutes>0</t:EndTimeInMinutes>",
+);
+
+/** Inverted window (start 1020, end 480) — an overnight shift shape. */
+const AVAILABILITY_INVERTED_SOAP = AVAILABILITY_SOAP.replace(
+  "<t:StartTimeInMinutes>480</t:StartTimeInMinutes>",
+  "<t:StartTimeInMinutes>1020</t:StartTimeInMinutes>",
+).replace(
+  "<t:EndTimeInMinutes>1020</t:EndTimeInMinutes>",
+  "<t:EndTimeInMinutes>480</t:EndTimeInMinutes>",
+);
 
 /** Mon-Fri 480..1020 plus a Saturday period with DIFFERENT hours (540..720). */
 const AVAILABILITY_MIXED_PERIODS_SOAP = AVAILABILITY_SOAP.replace(
@@ -492,6 +524,52 @@ describe("fetchOutlookCalendarViaEws", () => {
     warnSpy.mockRestore();
   });
 
+  it("degrades working hours to null when the WorkingHours zone differs from the display zone", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    installHostMock((body) =>
+      body.includes("<m:GetUserAvailabilityRequest")
+        ? { status: "succeeded", value: AVAILABILITY_MISMATCHED_ZONE_SOAP }
+        : { status: "failed", error: { code: 0, message: "unexpected op" } },
+    );
+
+    // US-Eastern-authored minutes must not be read as Berlin wall-clock.
+    await expect(
+      fetchWorkingHoursViaEws({
+        startUtc: "2026-07-06T00:00:00Z",
+        endUtc: "2026-07-07T00:00:00Z",
+      }),
+    ).resolves.toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("differ from the display zone"),
+      expect.anything(),
+      expect.anything(),
+    );
+    warnSpy.mockRestore();
+  });
+
+  it("maps a midnight EndTimeInMinutes 0 to end-of-day and degrades an inverted window to null", async () => {
+    const range = {
+      startUtc: "2026-07-06T00:00:00Z",
+      endUtc: "2026-07-07T00:00:00Z",
+    };
+    installHostMock((body) =>
+      body.includes("<m:GetUserAvailabilityRequest")
+        ? { status: "succeeded", value: AVAILABILITY_MIDNIGHT_END_SOAP }
+        : { status: "failed", error: { code: 0, message: "unexpected op" } },
+    );
+    await expect(fetchWorkingHoursViaEws(range)).resolves.toMatchObject({
+      startMinutes: 480,
+      endMinutes: 1440,
+    });
+
+    installHostMock((body) =>
+      body.includes("<m:GetUserAvailabilityRequest")
+        ? { status: "succeeded", value: AVAILABILITY_INVERTED_SOAP }
+        : { status: "failed", error: { code: 0, message: "unexpected op" } },
+    );
+    await expect(fetchWorkingHoursViaEws(range)).resolves.toBeNull();
+  });
+
   it("rethrows the abort reason when the signal is already aborted", async () => {
     const controller = new AbortController();
     const reason = new Error("calendar fetch aborted");
@@ -830,6 +908,35 @@ describe("fetchAttendeeAvailabilityViaEws", () => {
         ],
       },
     ]);
+  });
+
+  it("discloses a non-exact GAL match in the entry's reason", async () => {
+    installHostMock((body) => {
+      if (body.includes("<m:ResolveNames")) {
+        return {
+          status: "succeeded",
+          value: resolveNamesSoap(
+            // Fuzzy single hit for input "Michael Wagner".
+            resolutionXml("Michaela Wagner", "michaela@example.de", "Mailbox"),
+          ),
+        };
+      }
+      if (body.includes("<m:GetUserAvailabilityRequest")) {
+        return { status: "succeeded", value: FREE_BUSY_EMPTY_FREE_SOAP };
+      }
+      return { status: "failed", error: { code: 0, message: "unexpected op" } };
+    });
+
+    const entries = await fetchAttendeeAvailabilityViaEws(ATTENDEE_RANGE, [
+      "Michael Wagner",
+    ]);
+
+    expect(entries[0]).toMatchObject({
+      requested: "Michael Wagner",
+      smtp: "michaela@example.de",
+      status: "ok",
+      reason: "resolved as Michaela Wagner <michaela@example.de>",
+    });
   });
 
   it("degrades ambiguous and unresolvable names to unknown without an availability call", async () => {

@@ -66,11 +66,13 @@ const CALENDAR_LEGEND =
   'If "degraded" contains "busy", busy data failed to load — you must NOT claim any time is free; say the calendar could not be read. ' +
   'If "degraded" contains "history", recentMeetings is incomplete — do not calibrate duration from it. ' +
   "If workingHours is null none are configured — assume Mon-Fri 09:00-17:00 and say you assumed it. " +
+  'If "degraded" contains "workingHours", the working-hours lookup FAILED — hours may exist; assume Mon-Fri 09:00-17:00 but say the real hours could not be read, never that none are configured. ' +
   "recentMeetings are PAST meetings, only useful to calibrate a typical duration. " +
   "attendees (when present) are OTHER people's calendars, shown as opaque blocking intervals only — no subjects, and their free time is not listed: every listed interval blocks that person; time outside the listed intervals is free for them ONLY while their status is ok. " +
   "An attendee entry with coveredUntil had its busy list truncated there: treat that person's time after coveredUntil as unknown, not free. " +
   'An attendee with status "unknown - treat as NOT free" could not be read: never present any time as confirmed-free for them, and say their calendar could not be checked. ' +
   "If an unknown attendee's note lists directory matches (Name <address>), show them to the user so they can pick the right address. " +
+  'An attendee note saying "resolved as" names the directory entry actually used for a name input — repeat it so the user can catch a wrong match. ' +
   'If "degraded" contains "attendees", colleague availability failed to load — treat EVERY requested attendee that way. ' +
   "When attendees are present, only propose times where the user AND every readable attendee are free, inside the USER's workingHours. " +
   "suggestedSlots (when present) are deterministic pre-computed candidates for suggestedSlots.durationMinutes: already conflict-free against every loaded calendar, inside working hours, buffer-aware. Prefer them when that duration matches your chosen one; for a different duration re-derive slots from busy/attendees yourself. " +
@@ -380,8 +382,12 @@ function buildSuggestedSlots(
   if (slots.length === 0) return null;
 
   if (workingHoursAssumed) {
+    // A FAILED lookup is not "none configured" — the model must not repeat
+    // that falsehood about the user's setup.
     notes.push(
-      "suggestedSlots assume Mon-Fri 09:00-17:00 (no working hours configured)",
+      calendar.degradedLegs.includes("workingHours")
+        ? "suggestedSlots assume Mon-Fri 09:00-17:00 (working-hours lookup failed — real hours unknown)"
+        : "suggestedSlots assume Mon-Fri 09:00-17:00 (no working hours configured)",
     );
   }
   const unknownAttendees = calendar.attendees.filter(

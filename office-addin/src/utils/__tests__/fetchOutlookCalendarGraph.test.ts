@@ -429,6 +429,45 @@ describe("fetchOutlookCalendarViaGraph", () => {
     warnSpy.mockRestore();
   });
 
+  it("maps a midnight workingHours end to end-of-day, and degrades an inverted window to null", async () => {
+    const acquireToken = vi.fn().mockResolvedValue("graph-tok");
+    const scheduleWith = (startTime: string, endTime: string) =>
+      makeTransport((url) =>
+        url.includes("getSchedule")
+          ? jsonResponse({
+              value: [
+                {
+                  workingHours: {
+                    daysOfWeek: ["monday"],
+                    startTime,
+                    endTime,
+                    timeZone: { name: "W. Europe Standard Time" },
+                  },
+                },
+              ],
+            })
+          : happyRouter(url),
+      );
+
+    // Workday ending at midnight: "00:00:00" is an END → 1440, not 0.
+    const midnight = await fetchOutlookCalendarViaGraph(acquireToken, {
+      transport: scheduleWith("09:00:00.0000000", "00:00:00.0000000"),
+    });
+    expect(midnight.workingHours).toEqual({
+      daysOfWeek: ["monday"],
+      startMinutes: 540,
+      endMinutes: 1440,
+    });
+
+    // Genuinely inverted (overnight shift) → null/assumed, never an inverted
+    // window that silently skips every day in the ranking.
+    const inverted = await fetchOutlookCalendarViaGraph(acquireToken, {
+      transport: scheduleWith("17:00:00.0000000", "09:00:00.0000000"),
+    });
+    expect(inverted.workingHours).toBeNull();
+    expect(inverted.degradedLegs).toEqual([]);
+  });
+
   it("emits authoringTimeZone null for an unmappable originalStartTimeZone", async () => {
     const acquireToken = vi.fn().mockResolvedValue("graph-tok");
     const transport = makeTransport((url) => {
@@ -915,6 +954,41 @@ describe("fetchAttendeeAvailabilityViaGraph with directory resolution", () => {
         busy: [],
       },
     ]);
+  });
+
+  it("discloses a non-exact directory match in the entry's reason", async () => {
+    const transport = vi.fn(async (url: string) => {
+      if (url.includes("/me/people")) {
+        return jsonResponse({
+          value: [
+            {
+              // Fuzzy single hit for input "Michael Wagner".
+              displayName: "Michaela Wagner",
+              personType: { class: "Person" },
+              scoredEmailAddresses: [{ address: "michaela@example.de" }],
+            },
+          ],
+        });
+      }
+      return jsonResponse({
+        value: [{ scheduleId: "michaela@example.de", scheduleItems: [] }],
+      });
+    });
+
+    const entries = await fetchAttendeeAvailabilityViaGraph(
+      vi.fn().mockResolvedValue("graph-tok"),
+      ATTENDEE_RANGE,
+      ["Michael Wagner"],
+      { transport },
+      directory,
+    );
+
+    expect(entries[0]).toMatchObject({
+      requested: "Michael Wagner",
+      smtp: "michaela@example.de",
+      status: "ok",
+      reason: "resolved as Michaela Wagner <michaela@example.de>",
+    });
   });
 
   it("surfaces ambiguous candidates so the user can pick an address", async () => {

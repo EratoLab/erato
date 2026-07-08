@@ -223,8 +223,58 @@ export function parseCalendarView(doc: Document): RawCalendarItem[] {
  * only days of same-window periods are kept — dropping a day understates
  * availability, which is safe; unioning it under the wrong hours is not.
  */
+/** Effective UTC offsets (minutes EAST) of a WorkingHours `<TimeZone>`:
+ * EWS Bias is minutes WEST of UTC; the period biases add to the base. */
+function workingHoursZoneOffsets(tz: Element): [number, number] | null {
+  const base = Number(typesText(tz, "Bias"));
+  if (Number.isNaN(base)) return null;
+  const periodBias = (name: string): number => {
+    const period = firstTypesEl(tz, name);
+    if (!period) return 0;
+    const bias = Number(typesText(period, "Bias"));
+    return Number.isNaN(bias) ? 0 : bias;
+  };
+  return [
+    -(base + periodBias("StandardTime")),
+    -(base + periodBias("DaylightTime")),
+  ];
+}
+
+/** A zone's offset (minutes east) at a UTC instant, via Intl. */
+function zoneOffsetMinutesAt(zone: string, utcIso: string): number | null {
+  try {
+    const label =
+      new Intl.DateTimeFormat("en-US", {
+        timeZone: zone,
+        timeZoneName: "longOffset",
+      })
+        .formatToParts(new Date(utcIso))
+        .find((part) => part.type === "timeZoneName")?.value ?? "";
+    const match = /^GMT(?:([+-])(\d{2}):(\d{2}))?$/.exec(label);
+    if (!match) return null;
+    if (match[1] === undefined) return 0; // bare "GMT"
+    const sign = match[1] === "-" ? -1 : 1;
+    return sign * (Number(match[2]) * 60 + Number(match[3]));
+  } catch {
+    return null;
+  }
+}
+
+/** The display zone's standard/daylight offsets, sampled mid-January and
+ * mid-July (hemisphere-agnostic when compared as an unordered pair). */
+function januaryJulyOffsets(zone: string): [number, number] | null {
+  const year = new Date().getUTCFullYear();
+  const jan = zoneOffsetMinutesAt(zone, `${year}-01-15T12:00:00Z`);
+  const jul = zoneOffsetMinutesAt(zone, `${year}-07-15T12:00:00Z`);
+  return jan === null || jul === null ? null : [jan, jul];
+}
+
+const sameOffsetPair = (a: [number, number], b: [number, number]): boolean =>
+  (a[0] === b[0] && a[1] === b[1]) || (a[0] === b[1] && a[1] === b[0]);
+
 export function parseAvailability(
   doc: Document,
+  displayZone: string,
 ): NormalizedWorkingHours | null {
   const freeBusyResponse = allMessagesEls(doc, "FreeBusyResponse")[0];
   if (!freeBusyResponse) return null;
@@ -234,6 +284,29 @@ export function parseAvailability(
   }
   const workingHours = firstTypesEl(freeBusyResponse, "WorkingHours");
   if (!workingHours) return null;
+  // start/end minutes are wall-clock in the RESPONSE's WorkingHours zone but
+  // the ranking interprets them in the DISPLAY zone — under different zones
+  // every "inside working hours" slot shifts by the delta (relocated user).
+  // EWS carries no zone NAME (unlike Graph's guard), only bias+DST rules, so
+  // compare effective offsets against the display zone's January/July pair;
+  // mismatch degrades to null exactly like the Graph sibling.
+  const tz = firstTypesEl(workingHours, "TimeZone");
+  if (tz) {
+    const responseOffsets = workingHoursZoneOffsets(tz);
+    const displayOffsets = januaryJulyOffsets(displayZone);
+    if (
+      responseOffsets !== null &&
+      displayOffsets !== null &&
+      !sameOffsetPair(responseOffsets, displayOffsets)
+    ) {
+      console.warn(
+        "[parseAvailability] WorkingHours zone offsets differ from the display zone; degrading working hours to null:",
+        responseOffsets,
+        displayOffsets,
+      );
+      return null;
+    }
+  }
   const periods = allTypesEls(workingHours, "WorkingPeriod");
   if (periods.length === 0) return null;
 
@@ -241,6 +314,10 @@ export function parseAvailability(
   const startMinutes = Number(typesText(first, "StartTimeInMinutes"));
   const endMinutes = Number(typesText(first, "EndTimeInMinutes"));
   if (Number.isNaN(startMinutes) || Number.isNaN(endMinutes)) return null;
+  // Midnight end = 0 means end-of-day (mirror the Graph parser); a still-
+  // inverted window (overnight shift) degrades to null/assumed.
+  const normalizedEnd = endMinutes === 0 ? 1440 : endMinutes;
+  if (normalizedEnd <= startMinutes) return null;
 
   const daysOfWeek = new Set<string>();
   let droppedPeriods = 0;
@@ -265,7 +342,7 @@ export function parseAvailability(
   return {
     daysOfWeek: Array.from(daysOfWeek),
     startMinutes,
-    endMinutes,
+    endMinutes: normalizedEnd,
   };
 }
 
@@ -521,7 +598,7 @@ export async function fetchWorkingHoursViaEws(
       ),
     ),
   );
-  return parseAvailability(doc);
+  return parseAvailability(doc, resolveTimezone());
 }
 
 // --- Attendee availability (ERMAIN-434) --------------------------------------
@@ -629,9 +706,21 @@ async function resolveAttendeeInput(requested: string): Promise<ResolvedInput> {
           "resolved without an SMTP address — use an email address",
       };
     }
+    const smtp = candidate.emailAddress as string;
+    // Disclose a non-exact directory match — the caveat rides entry.reason.
+    const resolvedCaveat =
+      candidate.name !== undefined &&
+      candidate.name.trim().toLowerCase() !== requested.trim().toLowerCase()
+        ? `resolved as ${candidate.name} <${smtp}>`
+        : undefined;
     return {
       requested,
-      smtps: [{ smtp: candidate.emailAddress as string }],
+      smtps: [
+        {
+          smtp,
+          ...(resolvedCaveat !== undefined ? { caveat: resolvedCaveat } : {}),
+        },
+      ],
     };
   } catch (error) {
     return {

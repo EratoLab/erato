@@ -428,6 +428,26 @@ describe("serializeCalendarForModel", () => {
     ]);
   });
 
+  it("distinguishes failed working-hours lookup from genuinely unconfigured hours", () => {
+    const failed = serializeCalendarForModel(
+      { ...emptyCalendar, degradedLegs: ["workingHours"] },
+      NOW,
+      { requestedDurationMinutes: 30, freeBusyWindowDays: 3 },
+    ) as { notes: string[] };
+    expect(failed.notes).toContain(
+      "suggestedSlots assume Mon-Fri 09:00-17:00 (working-hours lookup failed — real hours unknown)",
+    );
+
+    const unconfigured = serializeCalendarForModel(emptyCalendar, NOW, {
+      requestedDurationMinutes: 30,
+      freeBusyWindowDays: 3,
+    }) as { notes: string[]; legend: string };
+    expect(unconfigured.notes).toContain(
+      "suggestedSlots assume Mon-Fri 09:00-17:00 (no working hours configured)",
+    );
+    expect(unconfigured.legend).toContain('"degraded" contains "workingHours"');
+  });
+
   it("suppresses suggestedSlots when every requested attendee is unreadable", () => {
     const result = serializeCalendarForModel(
       {
