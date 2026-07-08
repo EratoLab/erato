@@ -514,13 +514,25 @@ export async function fetchAttendeeAvailabilityViaGraph(
         smtp,
       };
     }
-    return normalizeSchedule(
-      requested,
-      smtp,
-      schedule,
-      range.startUtc,
-      interval,
-    );
+    try {
+      return normalizeSchedule(
+        requested,
+        smtp,
+        schedule,
+        range.startUtc,
+        interval,
+      );
+    } catch (error) {
+      // One malformed schedule (e.g. a non-UTC slice, which toUtcIso rejects)
+      // must not sink the readable siblings — per-attendee degrade.
+      return {
+        ...unknownAttendee(
+          requested,
+          error instanceof Error ? error.message : String(error),
+        ),
+        smtp,
+      };
+    }
   });
 }
 

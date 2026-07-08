@@ -757,6 +757,67 @@ describe("fetchAttendeeAvailabilityViaGraph", () => {
     ]);
   });
 
+  it("degrades ONE attendee to unknown when its schedule carries a non-UTC slice, keeping siblings", async () => {
+    const transport = vi.fn(async () =>
+      jsonResponse({
+        value: [
+          {
+            scheduleId: "alice@example.de",
+            scheduleItems: [
+              {
+                status: "busy",
+                start: {
+                  dateTime: "2026-07-07T08:00:00.0000000",
+                  timeZone: "W. Europe Standard Time",
+                },
+                end: {
+                  dateTime: "2026-07-07T09:00:00.0000000",
+                  timeZone: "W. Europe Standard Time",
+                },
+              },
+            ],
+          },
+          {
+            scheduleId: "bob@example.de",
+            scheduleItems: [
+              {
+                status: "busy",
+                start: {
+                  dateTime: "2026-07-07T08:00:00.0000000",
+                  timeZone: "UTC",
+                },
+                end: {
+                  dateTime: "2026-07-07T09:00:00.0000000",
+                  timeZone: "UTC",
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    const entries = await fetchAttendeeAvailabilityViaGraph(
+      vi.fn().mockResolvedValue("graph-tok"),
+      ATTENDEE_RANGE,
+      ["alice@example.de", "bob@example.de"],
+      { transport },
+    );
+
+    // The malformed slice degrades alice only — bob's data survives.
+    expect(entries[0]).toMatchObject({
+      requested: "alice@example.de",
+      status: "unknown",
+      busy: [],
+    });
+    expect(entries[0].reason).toContain("non-UTC");
+    expect(entries[1]).toMatchObject({
+      requested: "bob@example.de",
+      status: "ok",
+    });
+    expect(entries[1].busy).toHaveLength(1);
+  });
+
   it("marks non-SMTP inputs unknown; an all-invalid list never hits the network", async () => {
     const transport = vi.fn();
 
