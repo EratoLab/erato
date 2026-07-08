@@ -81,7 +81,7 @@ export default function AssistantEditPage() {
   const { mutateAsync: updateAssistant, isPending } = useUpdateAssistant();
 
   useEffect(() => {
-    document.title = `${t`Edit Assistant`} - ${t({ id: "branding.page_title_suffix" })}`;
+    document.title = `${t({ id: "assistant.edit.title", message: "Edit Assistant" })} - ${t({ id: "branding.page_title_suffix" })}`;
   }, []);
 
   // Handle form submission
@@ -113,7 +113,12 @@ export default function AssistantEditPage() {
         body: requestBody,
       });
 
-      setSuccessMessage(t`Assistant updated successfully!`);
+      setSuccessMessage(
+        t({
+          id: "assistant.edit.success",
+          message: "Assistant updated successfully!",
+        }),
+      );
 
       // Invalidate queries
       await Promise.all([
@@ -132,7 +137,12 @@ export default function AssistantEditPage() {
       }, 1500);
     } catch (error) {
       console.error("Failed to update assistant:", error);
-      setErrorMessage(t`Failed to update assistant. Please try again.`);
+      setErrorMessage(
+        t({
+          id: "assistant.edit.error",
+          message: "Failed to update assistant. Please try again.",
+        }),
+      );
     }
   };
 
@@ -144,11 +154,19 @@ export default function AssistantEditPage() {
   if (isLoadingAssistant) {
     return (
       <div className="flex h-full flex-col bg-theme-bg-secondary">
-        <PageHeader density="compact" title={t`Edit Assistant`} />
+        <PageHeader
+          density="compact"
+          title={t({ id: "assistant.edit.title", message: "Edit Assistant" })}
+        />
         <div className="flex flex-1 items-center justify-center">
           <div className="text-center">
             <div className="mx-auto mb-4 size-8 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
-            <p className="text-sm text-theme-fg-secondary">{t`Loading assistant...`}</p>
+            <p className="text-sm text-theme-fg-secondary">
+              {t({
+                id: "assistant.loading",
+                message: "Loading assistant...",
+              })}
+            </p>
           </div>
         </div>
       </div>
@@ -159,11 +177,17 @@ export default function AssistantEditPage() {
   if (loadError || !assistant) {
     return (
       <div className="flex h-full flex-col bg-theme-bg-secondary">
-        <PageHeader density="compact" title={t`Edit Assistant`} />
+        <PageHeader
+          density="compact"
+          title={t({ id: "assistant.edit.title", message: "Edit Assistant" })}
+        />
         <div className="flex-1 overflow-auto">
           <div className="mx-auto max-w-4xl p-6">
             <Alert type="error">
-              {t`Failed to load assistant. Please try again.`}
+              {t({
+                id: "assistant.error.load",
+                message: "Failed to load assistant. Please try again.",
+              })}
             </Alert>
           </div>
         </div>
@@ -175,15 +199,25 @@ export default function AssistantEditPage() {
   if (!assistant.can_edit) {
     return (
       <div className="flex h-full flex-col bg-theme-bg-secondary">
-        <PageHeader density="compact" title={t`Edit Assistant`} />
+        <PageHeader
+          density="compact"
+          title={t({ id: "assistant.edit.title", message: "Edit Assistant" })}
+        />
         <div className="flex-1 overflow-auto">
           <div className="mx-auto max-w-4xl p-6">
             <Alert type="error">
-              {t`You don't have permission to edit this assistant. Only the owner can modify assistant settings.`}
+              {t({
+                id: "assistant.edit.permissionDenied",
+                message:
+                  "You don't have permission to edit this assistant. Only the owner can modify assistant settings.",
+              })}
             </Alert>
             <div className="mt-4">
               <Button variant="secondary" onClick={handleCancel}>
-                {t`Back to Assistants`}
+                {t({
+                  id: "assistant.action.backToAssistants",
+                  message: "Back to Assistants",
+                })}
               </Button>
             </div>
           </div>
@@ -219,8 +253,11 @@ export default function AssistantEditPage() {
       {/* Page Header */}
       <PageHeader
         density="compact"
-        title={t`Edit Assistant`}
-        subtitle={t`Update your assistant's configuration and settings`}
+        title={t({ id: "assistant.edit.title", message: "Edit Assistant" })}
+        subtitle={t({
+          id: "assistant.edit.subtitle",
+          message: "Update your assistant's configuration and settings",
+        })}
       />
 
       {/* Content */}

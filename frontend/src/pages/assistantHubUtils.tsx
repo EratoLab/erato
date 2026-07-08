@@ -120,7 +120,9 @@ export function AssistantHubBreadcrumb({
 }
 
 const formatFileDiffValue = (value: unknown): string => {
-  if (!Array.isArray(value) || value.length === 0) return t`None`;
+  if (!Array.isArray(value) || value.length === 0) {
+    return t({ id: "common.none", message: "None" });
+  }
 
   return value
     .map((item) => {
@@ -140,12 +142,16 @@ const formatFileDiffValue = (value: unknown): string => {
 };
 
 const formatDiffValue = (value: unknown, field?: string): string => {
-  if (value === null || value === undefined) return t`Not set`;
+  if (value === null || value === undefined) {
+    return t({ id: "common.notSet", message: "Not set" });
+  }
   if (field === "files" || field === "file_ids") {
     return formatFileDiffValue(value);
   }
   if (Array.isArray(value)) {
-    if (value.length === 0) return t`None`;
+    if (value.length === 0) {
+      return t({ id: "common.none", message: "None" });
+    }
     if (
       value.every(
         (item) =>
@@ -159,7 +165,11 @@ const formatDiffValue = (value: unknown, field?: string): string => {
     return JSON.stringify(value, null, 2);
   }
   if (typeof value === "object") return JSON.stringify(value, null, 2);
-  if (typeof value === "boolean") return value ? t`Yes` : t`No`;
+  if (typeof value === "boolean") {
+    return value
+      ? t({ id: "common.yes", message: "Yes" })
+      : t({ id: "common.no", message: "No" });
+  }
   return String(value);
 };
 
@@ -345,7 +355,10 @@ export function AssistantHubVersionCard({
 
               return (
                 <span className="inline-flex min-h-6 items-center">
-                  {t`Version ${versionNumber}`}
+                  {t({
+                    id: "assistantHub.version.label",
+                    message: `Version ${versionNumber}`,
+                  })}
                 </span>
               );
             })()}
@@ -521,9 +534,9 @@ export function AssistantHubVersionConfigurationSection({
             {defaultModel ? (
               <ModelSelectorOptionContent model={defaultModel} compact />
             ) : defaultModelId && isLoadingModels ? (
-              t`Loading...`
+              t({ id: "common.loadingEllipsis", message: "Loading..." })
             ) : (
-              (defaultModelId ?? t`Not set`)
+              (defaultModelId ?? t({ id: "common.notSet", message: "Not set" }))
             )}
           </div>
         </div>
@@ -548,14 +561,19 @@ export function AssistantHubVersionConfigurationSection({
                     {facet
                       ? getFacetDisplayName(facet)
                       : isLoadingFacets
-                        ? t`Loading...`
+                        ? t({
+                            id: "common.loadingEllipsis",
+                            message: "Loading...",
+                          })
                         : facetId}
                   </span>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-theme-fg-secondary">{t`None`}</p>
+            <p className="text-sm text-theme-fg-secondary">
+              {t({ id: "common.none", message: "None" })}
+            </p>
           )}
         </div>
         <div>
@@ -575,7 +593,9 @@ export function AssistantHubVersionConfigurationSection({
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-theme-fg-secondary">{t`None`}</p>
+            <p className="text-sm text-theme-fg-secondary">
+              {t({ id: "common.none", message: "None" })}
+            </p>
           )}
         </div>
       </div>

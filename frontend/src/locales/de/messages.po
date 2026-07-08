@@ -52,6 +52,63 @@ msgid "actionConfirmation.title"
 msgstr "Diese Aktion erlauben?"
 
 #. js-lingui-explicit-id
+#: src/pages/AssistantEditPage.tsx
+msgid "assistant.action.backToAssistants"
+msgstr "Zurück zu Assistenten"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantCreatePage.tsx
+msgid "assistant.create.error"
+msgstr "Assistent konnte nicht erstellt werden. Bitte versuchen Sie es erneut."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantCreatePage.tsx
+msgid "assistant.create.subtitle"
+msgstr "Konfigurieren Sie einen benutzerdefinierten Assistenten mit spezifischen Anweisungen und Fähigkeiten"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantCreatePage.tsx
+msgid "assistant.create.success"
+msgstr "Assistent erfolgreich erstellt!"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantCreatePage.tsx
+#: src/pages/AssistantsListPage.tsx
+msgid "assistant.create.title"
+msgstr "Assistent erstellen"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantEditPage.tsx
+msgid "assistant.edit.error"
+msgstr "Assistent konnte nicht aktualisiert werden. Bitte versuchen Sie es erneut."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantEditPage.tsx
+msgid "assistant.edit.permissionDenied"
+msgstr "Sie haben keine Berechtigung, diesen Assistenten zu bearbeiten. Nur der Besitzer kann Assistenteneinstellungen ändern."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantEditPage.tsx
+msgid "assistant.edit.subtitle"
+msgstr "Aktualisieren Sie die Konfiguration und Einstellungen Ihres Assistenten"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantEditPage.tsx
+msgid "assistant.edit.success"
+msgstr "Assistent erfolgreich aktualisiert!"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantEditPage.tsx
+msgid "assistant.edit.title"
+msgstr "Assistent bearbeiten"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantChatSpacePage.tsx
+#: src/pages/AssistantEditPage.tsx
+msgid "assistant.error.load"
+msgstr "Assistent konnte nicht geladen werden. Bitte versuchen Sie es erneut."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "assistant.form.button.save"
 msgstr "Änderungen speichern"
@@ -141,6 +198,12 @@ msgstr "System-Prompt ist erforderlich"
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "assistant.form.validation.prompt.tooShort"
 msgstr "System-Prompt muss mindestens 10 Zeichen lang sein"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantChatSpacePage.tsx
+#: src/pages/AssistantEditPage.tsx
+msgid "assistant.loading"
+msgstr "Assistent wird geladen..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
@@ -927,6 +990,59 @@ msgstr "Assistant Hub"
 #~ msgstr "Weitere Assistants"
 
 #. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+#: src/pages/AssistantHubMyPage.tsx
+#: src/pages/AssistantHubReviewPage.tsx
+#: src/pages/assistantHubUtils.tsx
+msgid "assistantHub.version.label"
+msgstr "Version {versionNumber}"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "assistants.action.archive"
+msgstr "Archivieren"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "assistants.action.createFirst"
+msgstr "Erstellen Sie Ihren ersten Assistenten"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "assistants.action.edit"
+msgstr "Bearbeiten"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "assistants.action.newChat"
+msgstr "Neuer Chat"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "assistants.archive.confirmMessage"
+msgstr "Möchten Sie diesen Assistenten wirklich archivieren?"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "assistants.archive.confirmTitle"
+msgstr "Archivierung bestätigen"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "assistants.card.updated"
+msgstr "Aktualisiert {updatedRelativeTime}"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "assistants.empty.all"
+msgstr "Noch keine Assistenten"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "assistants.empty.createFirst"
+msgstr "Erstellen Sie Ihren ersten Assistenten, um loszulegen"
+
+#. js-lingui-explicit-id
 #: src/pages/AssistantsListPage.tsx
 msgid "assistants.empty.owned_by_user"
 msgstr "Sie haben noch keine Assistenten erstellt"
@@ -938,8 +1054,23 @@ msgstr "Es wurden keine Assistenten mit Ihnen geteilt"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsListPage.tsx
+msgid "assistants.empty.shared_with_user.description"
+msgstr "Assistenten, die andere mit Ihnen teilen, werden hier angezeigt"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "assistants.error.load"
+msgstr "Assistenten konnten nicht geladen werden. Bitte versuchen Sie es erneut."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
 msgid "assistants.filter.all"
 msgstr "Alle"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "assistants.filter.aria"
+msgstr "Assistenten filtern"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsListPage.tsx
@@ -965,6 +1096,21 @@ msgstr "Meine Assistenten"
 #: src/pages/AssistantsListPage.tsx
 msgid "assistants.list.title.shared_with_user"
 msgstr "Mit mir geteilt"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "assistants.loading"
+msgstr "Assistenten werden geladen..."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "assistants.subtitle"
+msgstr "Erstellen und verwalten Sie benutzerdefinierte Assistenten mit spezifischen Anweisungen und Fähigkeiten"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "assistants.title"
+msgstr "Assistenten"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
@@ -1600,6 +1746,31 @@ msgstr ""
 #: src/components/ui/Chat/ChatShareDialog.tsx
 msgid "common.close"
 msgstr "Schließen"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantHubUtils.tsx
+msgid "common.loadingEllipsis"
+msgstr "Laden..."
+
+#. js-lingui-explicit-id
+#: src/pages/assistantHubUtils.tsx
+msgid "common.no"
+msgstr "Nein"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantHubUtils.tsx
+msgid "common.none"
+msgstr "Keine"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantHubUtils.tsx
+msgid "common.notSet"
+msgstr "Nicht festgelegt"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantHubUtils.tsx
+msgid "common.yes"
+msgstr "Ja"
 
 #. js-lingui-explicit-id
 #: src/App.tsx
@@ -2731,12 +2902,12 @@ msgid "Approaching Token Limit"
 msgstr "Token-Limit wird erreicht"
 
 #: src/pages/AssistantsListPage.tsx
-msgid "Archive"
-msgstr "Archivieren"
+#~ msgid "Archive"
+#~ msgstr "Archivieren"
 
 #: src/pages/AssistantsListPage.tsx
-msgid "Are you sure you want to archive this assistant?"
-msgstr "Möchten Sie diesen Assistenten wirklich archivieren?"
+#~ msgid "Are you sure you want to archive this assistant?"
+#~ msgstr "Möchten Sie diesen Assistenten wirklich archivieren?"
 
 #: src/components/ui/Controls/Button.tsx
 #: src/components/ui/Controls/DropdownMenu.tsx
@@ -2753,25 +2924,24 @@ msgid "Assistant avatar"
 msgstr "Assistent-Avatar"
 
 #: src/pages/AssistantCreatePage.tsx
-msgid "Assistant created successfully!"
-msgstr "Assistent erfolgreich erstellt!"
+#~ msgid "Assistant created successfully!"
+#~ msgstr "Assistent erfolgreich erstellt!"
 
 #: src/pages/AssistantHubDetailPage.tsx
 #~ msgid "Assistant Hub"
 #~ msgstr ""
 
 #: src/pages/AssistantEditPage.tsx
-msgid "Assistant updated successfully!"
-msgstr "Assistent erfolgreich aktualisiert!"
+#~ msgid "Assistant updated successfully!"
+#~ msgstr "Assistent erfolgreich aktualisiert!"
 
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
-#: src/pages/AssistantsListPage.tsx
 msgid "Assistants"
 msgstr "Assistenten"
 
 #: src/pages/AssistantsListPage.tsx
-msgid "Assistants that others share with you will appear here"
-msgstr ""
+#~ msgid "Assistants that others share with you will appear here"
+#~ msgstr ""
 
 #: src/components/ui/FileUpload/FileUploadButton.tsx
 msgid "Attach File"
@@ -2897,8 +3067,8 @@ msgid "auto gain: {autoGainControl}"
 msgstr "automatische Verstärkung: {autoGainControl}"
 
 #: src/pages/AssistantEditPage.tsx
-msgid "Back to Assistants"
-msgstr ""
+#~ msgid "Back to Assistants"
+#~ msgstr ""
 
 #: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "Back to email"
@@ -3017,8 +3187,8 @@ msgid "Configuration"
 msgstr "Konfiguration"
 
 #: src/pages/AssistantCreatePage.tsx
-msgid "Configure a custom assistant with specific instructions and capabilities"
-msgstr "Konfigurieren Sie einen benutzerdefinierten Assistenten mit spezifischen Anweisungen und Fähigkeiten"
+#~ msgid "Configure a custom assistant with specific instructions and capabilities"
+#~ msgstr "Konfigurieren Sie einen benutzerdefinierten Assistenten mit spezifischen Anweisungen und Fähigkeiten"
 
 #: src/components/ui/Modal/ConfirmationDialog.tsx
 msgid "Confirm"
@@ -3034,8 +3204,8 @@ msgid "Confirm Action"
 msgstr "Aktion bestätigen"
 
 #: src/pages/AssistantsListPage.tsx
-msgid "Confirm Archive"
-msgstr "Archivierung bestätigen"
+#~ msgid "Confirm Archive"
+#~ msgstr "Archivierung bestätigen"
 
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
@@ -3124,22 +3294,20 @@ msgid "Could not transcribe the clip."
 msgstr ""
 
 #: src/pages/AssistantsListPage.tsx
-msgid "Create and manage custom assistants with specific instructions and capabilities"
-msgstr "Erstellen und verwalten Sie benutzerdefinierte Assistenten mit spezifischen Anweisungen und Fähigkeiten"
+#~ msgid "Create and manage custom assistants with specific instructions and capabilities"
+#~ msgstr "Erstellen und verwalten Sie benutzerdefinierte Assistenten mit spezifischen Anweisungen und Fähigkeiten"
 
 #: src/components/ui/Assistant/AssistantForm.tsx
-#: src/pages/AssistantCreatePage.tsx
-#: src/pages/AssistantsListPage.tsx
 msgid "Create Assistant"
 msgstr "Assistent erstellen"
 
 #: src/pages/AssistantsListPage.tsx
-msgid "Create Your First Assistant"
-msgstr "Erstellen Sie Ihren ersten Assistenten"
+#~ msgid "Create Your First Assistant"
+#~ msgstr "Erstellen Sie Ihren ersten Assistenten"
 
 #: src/pages/AssistantsListPage.tsx
-msgid "Create your first assistant to get started"
-msgstr "Erstellen Sie Ihren ersten Assistenten, um loszulegen"
+#~ msgid "Create your first assistant to get started"
+#~ msgstr "Erstellen Sie Ihren ersten Assistenten, um loszulegen"
 
 #: src/components/ui/Controls/UserProfileDropdown.tsx
 #~ msgid "Dark mode"
@@ -3218,18 +3386,18 @@ msgstr "Dateien zum Hochladen loslassen..."
 msgid "echo cancellation: {echoCancellation}"
 msgstr "Echo-Unterdrückung: {echoCancellation}"
 
-#: src/pages/AssistantsListPage.tsx
-msgid "Edit"
-msgstr "Bearbeiten"
-
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/FeedbackViewDialog.tsx
 msgid "Edit"
 msgstr "Bearbeiten"
 
+#: src/pages/AssistantsListPage.tsx
+#~ msgid "Edit"
+#~ msgstr "Bearbeiten"
+
 #: src/pages/AssistantEditPage.tsx
-msgid "Edit Assistant"
-msgstr "Assistent bearbeiten"
+#~ msgid "Edit Assistant"
+#~ msgstr "Assistent bearbeiten"
 
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "Edit Assistant Settings"
@@ -3305,21 +3473,21 @@ msgid "Failed to complete audio dictation."
 msgstr "Audiodiktat konnte nicht abgeschlossen werden."
 
 #: src/pages/AssistantCreatePage.tsx
-msgid "Failed to create assistant. Please try again."
-msgstr "Fehler beim Erstellen des Assistenten. Bitte versuchen Sie es erneut."
+#~ msgid "Failed to create assistant. Please try again."
+#~ msgstr "Fehler beim Erstellen des Assistenten. Bitte versuchen Sie es erneut."
 
 #: src/pages/AssistantChatSpacePage.tsx
 #: src/pages/AssistantEditPage.tsx
-msgid "Failed to load assistant. Please try again."
-msgstr "Fehler beim Laden des Assistenten. Bitte versuchen Sie es erneut."
+#~ msgid "Failed to load assistant. Please try again."
+#~ msgstr "Fehler beim Laden des Assistenten. Bitte versuchen Sie es erneut."
 
 #: src/pages/AssistantsListPage.tsx
-msgid "Failed to load assistants. Please try again."
-msgstr "Fehler beim Laden der Assistenten. Bitte versuchen Sie es erneut."
+#~ msgid "Failed to load assistants. Please try again."
+#~ msgstr "Fehler beim Laden der Assistenten. Bitte versuchen Sie es erneut."
 
 #: src/pages/AssistantEditPage.tsx
-msgid "Failed to update assistant. Please try again."
-msgstr "Fehler beim Aktualisieren des Assistenten. Bitte versuchen Sie es erneut."
+#~ msgid "Failed to update assistant. Please try again."
+#~ msgstr "Fehler beim Aktualisieren des Assistenten. Bitte versuchen Sie es erneut."
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Failed to upload audio recording for transcription."
@@ -3330,8 +3498,8 @@ msgid "File"
 msgstr "Datei"
 
 #: src/pages/AssistantsListPage.tsx
-msgid "Filter assistants"
-msgstr ""
+#~ msgid "Filter assistants"
+#~ msgstr ""
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Finishing audio transcript"
@@ -3423,12 +3591,12 @@ msgstr "Laden"
 
 #: src/pages/AssistantChatSpacePage.tsx
 #: src/pages/AssistantEditPage.tsx
-msgid "Loading assistant..."
-msgstr ""
+#~ msgid "Loading assistant..."
+#~ msgstr ""
 
 #: src/pages/AssistantsListPage.tsx
-msgid "Loading assistants..."
-msgstr ""
+#~ msgid "Loading assistants..."
+#~ msgstr ""
 
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "Loading attachment..."
@@ -3442,7 +3610,6 @@ msgstr ""
 #: src/components/ui/Chat/ModelSelector.tsx
 #: src/components/ui/Feedback/SpinnerIcon.tsx
 #: src/components/ui/Message/LoadMoreButton.tsx
-#: src/pages/assistantHubUtils.tsx
 #: src/pages/SearchPage.tsx
 msgid "Loading..."
 msgstr "Laden..."
@@ -3506,17 +3673,16 @@ msgstr ""
 
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
-#: src/pages/AssistantsListPage.tsx
 msgid "New Chat"
 msgstr "Neuer Chat"
 
 #: src/pages/assistantHubUtils.tsx
-msgid "No"
-msgstr ""
+#~ msgid "No"
+#~ msgstr ""
 
 #: src/pages/AssistantsListPage.tsx
-msgid "No assistants yet"
-msgstr ""
+#~ msgid "No assistants yet"
+#~ msgstr ""
 
 #: src/hooks/audio/useAudioDictationRecorder.ts
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
@@ -3548,12 +3714,12 @@ msgid "noise suppression: {noiseSuppression}"
 msgstr "Rauschunterdrückung: {noiseSuppression}"
 
 #: src/pages/assistantHubUtils.tsx
-msgid "None"
-msgstr ""
+#~ msgid "None"
+#~ msgstr ""
 
 #: src/pages/assistantHubUtils.tsx
-msgid "Not set"
-msgstr ""
+#~ msgid "Not set"
+#~ msgstr ""
 
 #: src/components/ui/MessageList/MessageListHeader.tsx
 msgid "of"
@@ -4029,16 +4195,16 @@ msgid "Untitled Chat"
 msgstr ""
 
 #: src/pages/AssistantEditPage.tsx
-msgid "Update your assistant's configuration and settings"
-msgstr ""
+#~ msgid "Update your assistant's configuration and settings"
+#~ msgstr ""
 
 #: src/pages/AssistantsListPage.tsx
 #~ msgid "Updated"
 #~ msgstr ""
 
 #: src/pages/AssistantsListPage.tsx
-msgid "Updated {updatedRelativeTime}"
-msgstr ""
+#~ msgid "Updated {updatedRelativeTime}"
+#~ msgstr ""
 
 #: src/components/ui/FileUpload/FileUpload.tsx
 msgid "Upload Files"
@@ -4085,24 +4251,24 @@ msgstr "Tools werden verwendet"
 #: src/pages/AssistantHubMyPage.tsx
 #: src/pages/AssistantHubReviewPage.tsx
 #: src/pages/assistantHubUtils.tsx
-msgid "Version {versionNumber}"
-msgstr "Version {versionNumber}"
+#~ msgid "Version {versionNumber}"
+#~ msgstr "Version {versionNumber}"
 
 #: src/components/ui/Chat/FrequentAssistantsList.tsx
 #~ msgid "View all assistants"
 #~ msgstr ""
 
 #: src/pages/assistantHubUtils.tsx
-msgid "Yes"
-msgstr ""
+#~ msgid "Yes"
+#~ msgstr ""
 
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
 msgid "You are using {percentUsed}% of your budget ({formattedSpending} of {formattedLimit})."
 msgstr ""
 
 #: src/pages/AssistantEditPage.tsx
-msgid "You don't have permission to edit this assistant. Only the owner can modify assistant settings."
-msgstr ""
+#~ msgid "You don't have permission to edit this assistant. Only the owner can modify assistant settings."
+#~ msgstr ""
 
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "Your conversations with this assistant"

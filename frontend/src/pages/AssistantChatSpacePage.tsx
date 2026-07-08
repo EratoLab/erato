@@ -176,7 +176,12 @@ export default function AssistantChatSpacePage() {
         <div className="flex flex-1 items-center justify-center">
           <div className="text-center">
             <div className="mx-auto mb-4 size-8 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
-            <p className="text-sm text-theme-fg-secondary">{t`Loading assistant...`}</p>
+            <p className="text-sm text-theme-fg-secondary">
+              {t({
+                id: "assistant.loading",
+                message: "Loading assistant...",
+              })}
+            </p>
           </div>
         </div>
       </div>
@@ -189,7 +194,10 @@ export default function AssistantChatSpacePage() {
       <div className="flex size-full flex-col">
         <div className="flex flex-1 items-center justify-center p-6">
           <Alert type="error">
-            {t`Failed to load assistant. Please try again.`}
+            {t({
+              id: "assistant.error.load",
+              message: "Failed to load assistant. Please try again.",
+            })}
           </Alert>
         </div>
       </div>

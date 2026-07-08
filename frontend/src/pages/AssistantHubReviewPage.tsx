@@ -317,7 +317,10 @@ export default function AssistantHubReviewPage() {
 
                     return (
                       <h2 className="text-lg font-semibold text-theme-fg-primary">
-                        {t`Version ${versionNumber}`}
+                        {t({
+                          id: "assistantHub.version.label",
+                          message: `Version ${versionNumber}`,
+                        })}
                       </h2>
                     );
                   })()}

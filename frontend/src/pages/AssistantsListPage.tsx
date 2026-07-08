@@ -52,7 +52,7 @@ export default function AssistantsListPage() {
   } | null>(null);
 
   useEffect(() => {
-    document.title = `${t`Assistants`} - ${t({ id: "branding.page_title_suffix" })}`;
+    document.title = `${t({ id: "assistants.title", message: "Assistants" })} - ${t({ id: "branding.page_title_suffix" })}`;
   }, []);
 
   const assistants = data ?? [];
@@ -112,8 +112,12 @@ export default function AssistantsListPage() {
       {/* Page Header */}
       <PageHeader
         density="compact"
-        title={t`Assistants`}
-        subtitle={t`Create and manage custom assistants with specific instructions and capabilities`}
+        title={t({ id: "assistants.title", message: "Assistants" })}
+        subtitle={t({
+          id: "assistants.subtitle",
+          message:
+            "Create and manage custom assistants with specific instructions and capabilities",
+        })}
       />
 
       {/* Content */}
@@ -144,7 +148,10 @@ export default function AssistantsListPage() {
               ]}
               value={selectedTab}
               onChange={setSelectedTab}
-              aria-label={t`Filter assistants`}
+              aria-label={t({
+                id: "assistants.filter.aria",
+                message: "Filter assistants",
+              })}
             />
           </div>
 
@@ -153,7 +160,12 @@ export default function AssistantsListPage() {
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
                 <div className="mx-auto mb-4 size-8 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
-                <p className="text-sm text-theme-fg-secondary">{t`Loading assistants...`}</p>
+                <p className="text-sm text-theme-fg-secondary">
+                  {t({
+                    id: "assistants.loading",
+                    message: "Loading assistants...",
+                  })}
+                </p>
               </div>
             </div>
           )}
@@ -161,7 +173,10 @@ export default function AssistantsListPage() {
           {/* Error state */}
           {error && (
             <Alert type="error">
-              {t`Failed to load assistants. Please try again.`}
+              {t({
+                id: "assistants.error.load",
+                message: "Failed to load assistants. Please try again.",
+              })}
             </Alert>
           )}
 
@@ -171,7 +186,11 @@ export default function AssistantsListPage() {
               <div className="text-center">
                 <EditIcon className="mx-auto mb-4 size-12 text-theme-fg-muted" />
                 <h2 className="mb-2 text-xl font-semibold text-theme-fg-primary">
-                  {selectedTab === "all" && t`No assistants yet`}
+                  {selectedTab === "all" &&
+                    t({
+                      id: "assistants.empty.all",
+                      message: "No assistants yet",
+                    })}
                   {selectedTab === "owned_by_user" &&
                     t({
                       id: "assistants.empty.owned_by_user",
@@ -185,11 +204,21 @@ export default function AssistantsListPage() {
                 </h2>
                 <p className="mb-6 text-theme-fg-secondary">
                   {selectedTab === "all" &&
-                    t`Create your first assistant to get started`}
+                    t({
+                      id: "assistants.empty.createFirst",
+                      message: "Create your first assistant to get started",
+                    })}
                   {selectedTab === "owned_by_user" &&
-                    t`Create your first assistant to get started`}
+                    t({
+                      id: "assistants.empty.createFirst",
+                      message: "Create your first assistant to get started",
+                    })}
                   {selectedTab === "shared_with_user" &&
-                    t`Assistants that others share with you will appear here`}
+                    t({
+                      id: "assistants.empty.shared_with_user.description",
+                      message:
+                        "Assistants that others share with you will appear here",
+                    })}
                 </p>
                 {selectedTab !== "shared_with_user" && (
                   <Button
@@ -197,7 +226,10 @@ export default function AssistantsListPage() {
                     icon={<PlusIcon />}
                     onClick={handleCreateNew}
                   >
-                    {t`Create Your First Assistant`}
+                    {t({
+                      id: "assistants.action.createFirst",
+                      message: "Create Your First Assistant",
+                    })}
                   </Button>
                 )}
               </div>
@@ -218,7 +250,10 @@ export default function AssistantsListPage() {
                   icon={<PlusIcon />}
                   onClick={handleCreateNew}
                 >
-                  {t`Create Assistant`}
+                  {t({
+                    id: "assistant.create.title",
+                    message: "Create Assistant",
+                  })}
                 </Button>
               </div>
 
@@ -264,7 +299,10 @@ export default function AssistantsListPage() {
                             )}
                             <div className="mt-auto flex items-center gap-4 text-xs text-theme-fg-muted">
                               <span className="whitespace-nowrap">
-                                {t`Updated ${updatedRelativeTime}`}
+                                {t({
+                                  id: "assistants.card.updated",
+                                  message: `Updated ${updatedRelativeTime}`,
+                                })}
                               </span>
                             </div>
                           </button>
@@ -294,7 +332,10 @@ export default function AssistantsListPage() {
                                           }),
                                       },
                                       {
-                                        label: t`Edit`,
+                                        label: t({
+                                          id: "assistants.action.edit",
+                                          message: "Edit",
+                                        }),
                                         icon: <EditIcon className="size-4" />,
                                         onClick: () => handleEdit(assistant.id),
                                       },
@@ -316,14 +357,24 @@ export default function AssistantsListPage() {
                                           ]
                                         : []),
                                       {
-                                        label: t`Archive`,
+                                        label: t({
+                                          id: "assistants.action.archive",
+                                          message: "Archive",
+                                        }),
                                         icon: <LogOutIcon className="size-4" />,
                                         onClick: () => {
                                           void handleArchive(assistant.id);
                                         },
                                         confirmAction: true,
-                                        confirmTitle: t`Confirm Archive`,
-                                        confirmMessage: t`Are you sure you want to archive this assistant?`,
+                                        confirmTitle: t({
+                                          id: "assistants.archive.confirmTitle",
+                                          message: "Confirm Archive",
+                                        }),
+                                        confirmMessage: t({
+                                          id: "assistants.archive.confirmMessage",
+                                          message:
+                                            "Are you sure you want to archive this assistant?",
+                                        }),
                                       },
                                     ]}
                                   />
@@ -336,7 +387,10 @@ export default function AssistantsListPage() {
                               className="mt-auto"
                               onClick={() => handleStartChat(assistant.id)}
                             >
-                              {t`New Chat`}
+                              {t({
+                                id: "assistants.action.newChat",
+                                message: "New Chat",
+                              })}
                             </Button>
                           </div>
                         </div>

@@ -31,7 +31,7 @@ export default function AssistantCreatePage() {
   const { mutateAsync: createAssistant, isPending } = useCreateAssistant();
 
   useEffect(() => {
-    document.title = `${t`Create Assistant`} - ${t({ id: "branding.page_title_suffix" })}`;
+    document.title = `${t({ id: "assistant.create.title", message: "Create Assistant" })} - ${t({ id: "branding.page_title_suffix" })}`;
   }, []);
 
   const handleSubmit = async (formData: AssistantFormData) => {
@@ -62,7 +62,12 @@ export default function AssistantCreatePage() {
         body: requestBody,
       });
 
-      setSuccessMessage(t`Assistant created successfully!`);
+      setSuccessMessage(
+        t({
+          id: "assistant.create.success",
+          message: "Assistant created successfully!",
+        }),
+      );
 
       // Invalidate assistants list query
       await queryClient.invalidateQueries({
@@ -75,7 +80,12 @@ export default function AssistantCreatePage() {
       }, 1500);
     } catch (error) {
       console.error("Failed to create assistant:", error);
-      setErrorMessage(t`Failed to create assistant. Please try again.`);
+      setErrorMessage(
+        t({
+          id: "assistant.create.error",
+          message: "Failed to create assistant. Please try again.",
+        }),
+      );
     }
   };
 
@@ -88,8 +98,12 @@ export default function AssistantCreatePage() {
       {/* Page Header */}
       <PageHeader
         density="compact"
-        title={t`Create Assistant`}
-        subtitle={t`Configure a custom assistant with specific instructions and capabilities`}
+        title={t({ id: "assistant.create.title", message: "Create Assistant" })}
+        subtitle={t({
+          id: "assistant.create.subtitle",
+          message:
+            "Configure a custom assistant with specific instructions and capabilities",
+        })}
       />
 
       {/* Content */}
