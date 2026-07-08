@@ -68,6 +68,7 @@ const CALENDAR_LEGEND =
   "If workingHours is null none are configured — assume Mon-Fri 09:00-17:00 and say you assumed it. " +
   "recentMeetings are PAST meetings, only useful to calibrate a typical duration. " +
   "attendees (when present) are OTHER people's calendars, shown as opaque blocking intervals only — no subjects, and their free time is not listed: every listed interval blocks that person; time outside the listed intervals is free for them ONLY while their status is ok. " +
+  "An attendee entry with coveredUntil had its busy list truncated there: treat that person's time after coveredUntil as unknown, not free. " +
   'An attendee with status "unknown - treat as NOT free" could not be read: never present any time as confirmed-free for them, and say their calendar could not be checked. ' +
   "If an unknown attendee's note lists directory matches (Name <address>), show them to the user so they can pick the right address. " +
   'If "degraded" contains "attendees", colleague availability failed to load — treat EVERY requested attendee that way. ' +
@@ -242,9 +243,20 @@ export function serializeCalendarForModel(
     const sortedBusy = [...attendee.busy].sort((a, b) =>
       localSortKey(a.when, zone).localeCompare(localSortKey(b.when, zone)),
     );
+    // Truncation cuts the TAIL, and the legend reads outside-listed as free
+    // while status is ok — so a cut entry must carry the coverage boundary.
+    let coveredUntil: string | undefined;
     if (sortedBusy.length > MAX_ATTENDEE_BUSY_ENTRIES) {
       sortedBusy.length = MAX_ATTENDEE_BUSY_ENTRIES;
       truncatedAttendeeLists += 1;
+      const lastWhen = sortedBusy[sortedBusy.length - 1].when;
+      coveredUntil =
+        lastWhen.kind === "date"
+          ? labelledCivilDay(previousCivilDay(lastWhen.endDateExclusive))
+          : (() => {
+              const end = zonedInstant(lastWhen.endUtc, zone);
+              return `${end.day} ${end.time}`;
+            })();
     }
     return {
       name: attendee.requested,
@@ -253,6 +265,7 @@ export function serializeCalendarForModel(
         : {}),
       status: attendee.status === "ok" ? "ok" : "unknown - treat as NOT free",
       ...(attendee.reason !== undefined ? { note: attendee.reason } : {}),
+      ...(coveredUntil !== undefined ? { coveredUntil } : {}),
       busy: sortedBusy.map((block) => ({
         ...serializeWhen(block.when, zone),
         busyType: block.busyType,
@@ -330,6 +343,18 @@ function buildSuggestedSlots(
     calendar.degradedLegs.includes("busy") ||
     calendar.degradedLegs.includes("attendees")
   ) {
+    return null;
+  }
+  // Attendees requested but NONE readable: slots would be computed from the
+  // user's calendar alone yet presented as conflict-free — suppress. (Partial
+  // unknowns keep the softer note below.)
+  if (
+    calendar.attendees.length > 0 &&
+    !calendar.attendees.some((a) => a.status === "ok")
+  ) {
+    notes.push(
+      "suggestedSlots suppressed — no requested attendee's calendar could be read",
+    );
     return null;
   }
   const requested = serializeOptions.requestedDurationMinutes ?? null;
@@ -448,10 +473,15 @@ export function parseAttendees(input: unknown): {
     if (typeof entry !== "string") continue;
     const trimmed = entry.trim();
     if (trimmed === "") continue;
-    const key = trimmed.toLowerCase();
+    // Models emit RFC-style "Alice Meier <alice@x.de>" constantly; the full
+    // string must not ride to the wire as an address — keep the bracketed
+    // part (dedupes against the bare form too).
+    const bracketed = /<([^<>\s]+@[^<>\s]+)>$/.exec(trimmed);
+    const attendee = bracketed ? bracketed[1] : trimmed;
+    const key = attendee.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    deduped.push(trimmed);
+    deduped.push(attendee);
   }
   return {
     attendees: deduped.slice(0, MAX_ATTENDEES),

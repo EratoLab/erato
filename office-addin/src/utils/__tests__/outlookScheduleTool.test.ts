@@ -341,6 +341,50 @@ describe("serializeCalendarForModel", () => {
     expect(result.legend).toContain("NOT free");
   });
 
+  it("stamps coveredUntil on a truncated attendee busy list (tail cut ≠ free)", () => {
+    // 150 hourly blocks from Monday 07:00Z; the cap keeps the 100 soonest, so
+    // coverage ends at block #99's end: +99h30m → Friday 10:30Z = 12:30 Berlin.
+    const busy = Array.from({ length: 150 }, (_, i) => ({
+      when: {
+        kind: "date-time" as const,
+        startUtc: new Date(
+          Date.parse("2026-07-06T07:00:00Z") + i * 3_600_000,
+        ).toISOString(),
+        endUtc: new Date(
+          Date.parse("2026-07-06T07:30:00Z") + i * 3_600_000,
+        ).toISOString(),
+      },
+      busyType: "Busy" as const,
+    }));
+
+    const result = serializeCalendarForModel(
+      {
+        ...emptyCalendar,
+        attendees: [
+          {
+            requested: "alice@example.de",
+            smtp: "alice@example.de",
+            status: "ok",
+            busy,
+          },
+        ],
+      },
+      NOW,
+    ) as {
+      attendees: { status: string; coveredUntil?: string; busy: unknown[] }[];
+      notes: string[];
+      legend: string;
+    };
+
+    expect(result.attendees[0].busy).toHaveLength(100);
+    expect(result.attendees[0].status).toBe("ok");
+    expect(result.attendees[0].coveredUntil).toBe("Friday 2026-07-10 12:30");
+    expect(result.notes).toContain(
+      "1 attendee busy list(s) truncated to the 100 soonest entries",
+    );
+    expect(result.legend).toContain("coveredUntil");
+  });
+
   it("emits ranked suggestedSlots and flags unreadable attendees in notes", () => {
     const result = serializeCalendarForModel(
       {
@@ -350,7 +394,15 @@ describe("serializeCalendarForModel", () => {
           startMinutes: 540,
           endMinutes: 1020,
         },
+        // PARTIALLY readable: one ok attendee keeps slots flowing; all-unknown
+        // suppresses them entirely (next test).
         attendees: [
+          {
+            requested: "alice@example.de",
+            smtp: "alice@example.de",
+            status: "ok",
+            busy: [],
+          },
           { requested: "Nemo", status: "unknown", reason: "no", busy: [] },
         ],
       },
@@ -374,6 +426,25 @@ describe("serializeCalendarForModel", () => {
     expect(result.notes).toEqual([
       expect.stringContaining("1 attendee(s) whose calendar was unreadable"),
     ]);
+  });
+
+  it("suppresses suggestedSlots when every requested attendee is unreadable", () => {
+    const result = serializeCalendarForModel(
+      {
+        ...emptyCalendar,
+        attendees: [
+          { requested: "Nemo", status: "unknown", reason: "no", busy: [] },
+          { requested: "Dory", status: "unknown", reason: "no", busy: [] },
+        ],
+      },
+      NOW,
+      { requestedDurationMinutes: 60, freeBusyWindowDays: 3 },
+    ) as { suggestedSlots?: unknown; notes: string[] };
+
+    expect(result.suggestedSlots).toBeUndefined();
+    expect(result.notes).toContain(
+      "suggestedSlots suppressed — no requested attendee's calendar could be read",
+    );
   });
 
   it("suppresses suggestedSlots when busy or attendee data degraded", () => {
@@ -459,6 +530,22 @@ describe("parseAttendees", () => {
     const parsed = parseAttendees({ attendees });
     expect(parsed.attendees).toHaveLength(15);
     expect(parsed.droppedByCap).toBe(3);
+  });
+
+  it('extracts the address from RFC-style "Name <addr>" and dedupes against the bare form', () => {
+    expect(
+      parseAttendees({
+        attendees: [
+          "Alice Meier <alice@x.de>",
+          "alice@x.de",
+          "<bob@x.de>",
+          "Just A Name",
+        ],
+      }),
+    ).toEqual({
+      attendees: ["alice@x.de", "bob@x.de", "Just A Name"],
+      droppedByCap: 0,
+    });
   });
 });
 
