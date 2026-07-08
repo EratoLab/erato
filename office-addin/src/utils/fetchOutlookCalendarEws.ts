@@ -678,25 +678,36 @@ export async function fetchAttendeeAvailabilityViaEws(
       ),
     );
     const results = parseAttendeeFreeBusy(doc, range.startUtc);
-    let cursor = 0;
-    for (const entry of entries) {
-      if (entry.smtp === undefined) continue; // unresolved — no response slot
-      const result = results[cursor];
-      cursor += 1;
-      if (result === undefined) {
-        entry.status = "unknown";
-        entry.reason = "no free/busy response for this mailbox";
-      } else if (result.kind === "error") {
-        entry.status = "unknown";
-        entry.reason = result.reason;
-      } else {
-        entry.busy = result.blocks;
+    if (results.length === toQuery.length) {
+      let cursor = 0;
+      for (const entry of entries) {
+        if (entry.smtp === undefined) continue; // unresolved — no response slot
+        const result = results[cursor];
+        cursor += 1;
+        if (result === undefined) {
+          entry.status = "unknown";
+          entry.reason = "no free/busy response for this mailbox";
+        } else if (result.kind === "error") {
+          entry.status = "unknown";
+          entry.reason = result.reason;
+        } else {
+          entry.busy = result.blocks;
+        }
       }
-    }
-    if (results.length !== toQuery.length) {
+    } else {
+      // Responses carry no identity, so they match mailboxes only by position —
+      // sound ONLY at 1:1 (validated on SE: a bad or duplicate mailbox still
+      // gets its own in-order slot). A count divergence means position can't be
+      // trusted, so don't guess — every queried mailbox degrades to unknown
+      // rather than silently inherit a neighbour's calendar.
       console.warn(
-        `[fetchAttendeeAvailabilityViaEws] expected ${toQuery.length} FreeBusyResponses, got ${results.length}`,
+        `[fetchAttendeeAvailabilityViaEws] expected ${toQuery.length} FreeBusyResponses, got ${results.length}; marking all unknown`,
       );
+      for (const entry of entries) {
+        if (entry.smtp === undefined) continue;
+        entry.status = "unknown";
+        entry.reason = "free/busy response count mismatch";
+      }
     }
   }
   return entries;

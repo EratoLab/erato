@@ -617,6 +617,23 @@ const FREE_BUSY_MERGED_ONLY_SOAP = soapEnvelope(
     "</m:FreeBusyResponseArray></m:GetUserAvailabilityResponse>",
 );
 
+/** A short array: ONE FreeBusyResponse returned for TWO requested mailboxes.
+ * EWS echoes no identity, so a count divergence makes positional matching
+ * unsafe — the guard must degrade every queried mailbox rather than hand the
+ * lone calendar to the first attendee. */
+const FREE_BUSY_COUNT_MISMATCH_SOAP = soapEnvelope(
+  "<m:GetUserAvailabilityResponse><m:FreeBusyResponseArray>" +
+    "<m:FreeBusyResponse>" +
+    '<m:ResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode></m:ResponseMessage>' +
+    "<m:FreeBusyView><t:FreeBusyViewType>FreeBusy</t:FreeBusyViewType>" +
+    "<t:CalendarEventArray>" +
+    calendarEventXml("2026-07-07T08:00:00", "2026-07-07T09:00:00", "Busy") +
+    "</t:CalendarEventArray>" +
+    "</m:FreeBusyView>" +
+    "</m:FreeBusyResponse>" +
+    "</m:FreeBusyResponseArray></m:GetUserAvailabilityResponse>",
+);
+
 const ATTENDEE_RANGE = {
   startUtc: "2026-07-07T00:00:00Z",
   endUtc: "2026-07-14T00:00:00Z",
@@ -655,6 +672,31 @@ describe("fetchAttendeeAvailabilityViaEws", () => {
 
     expect(stripReasons(entries)).toEqual(EXPECTED_ATTENDEE_PARITY);
     expect(entries[1].reason).toContain("Access is denied");
+  });
+
+  it("degrades ALL queried mailboxes to unknown when the response count != the request count", async () => {
+    const hostMock = installHostMock((body) => {
+      if (body.includes("<m:GetUserAvailabilityRequest")) {
+        return { status: "succeeded", value: FREE_BUSY_COUNT_MISMATCH_SOAP };
+      }
+      return { status: "failed", error: { code: 0, message: "unexpected op" } };
+    });
+
+    const entries = await fetchAttendeeAvailabilityViaEws(ATTENDEE_RANGE, [
+      "alice@example.de",
+      "bob@example.de",
+    ]);
+
+    expect(hostMock).toHaveBeenCalledTimes(1);
+    expect(entries).toHaveLength(2);
+    // One response for two mailboxes: positions are untrustworthy, so NEITHER
+    // inherits the lone Busy block — both degrade visibly instead of one
+    // silently showing the other's calendar.
+    for (const entry of entries) {
+      expect(entry.status).toBe("unknown");
+      expect(entry.busy).toEqual([]);
+      expect(entry.reason).toContain("response count mismatch");
+    }
   });
 
   it("resolves a GAL display name via ResolveNames before the availability call", async () => {
