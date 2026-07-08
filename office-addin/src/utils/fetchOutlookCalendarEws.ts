@@ -298,13 +298,21 @@ export function parseResolveNames(doc: Document): EwsMailboxEntry[] {
     .map(parseMailboxEl);
 }
 
-export function parseExpandDl(doc: Document): EwsMailboxEntry[] {
+export function parseExpandDl(doc: Document): {
+  members: EwsMailboxEntry[];
+  truncated: boolean;
+} {
   const responseMessage = allMessagesEls(doc, "ExpandDLResponseMessage")[0];
-  if (!responseMessage) return [];
+  if (!responseMessage) return { members: [], truncated: false };
   assertResponseOk(responseMessage);
   const expansion = firstMessagesEl(responseMessage, "DLExpansion");
-  if (!expansion) return [];
-  return allTypesEls(expansion, "Mailbox").map(parseMailboxEl);
+  if (!expansion) return { members: [], truncated: false };
+  return {
+    members: allTypesEls(expansion, "Mailbox").map(parseMailboxEl),
+    // Same contract as the FindItem check: only an explicit "false" means
+    // the server cut the list (ExpandDL is unpaged).
+    truncated: expansion.getAttribute("IncludesLastItemInRange") === "false",
+  };
 }
 
 /** One mailbox's slice of a GetUserAvailability response. */
@@ -523,7 +531,13 @@ export async function fetchWorkingHoursViaEws(
 export const EWS_MAX_RESOLVED_MAILBOXES = 30;
 
 type ResolvedInput =
-  | { requested: string; smtps: { smtp: string; caveat?: string }[] }
+  | {
+      requested: string;
+      smtps: { smtp: string; caveat?: string }[];
+      /** Members that could NOT be checked (shape-dropped / truncated list) —
+       * each becomes an aggregated unknown entry, like the attendee cap. */
+      notChecked?: string[];
+    }
   | { requested: string; unknownReason: string };
 
 const hasSmtpShape = (entry: EwsMailboxEntry): boolean =>
@@ -569,7 +583,7 @@ async function resolveAttendeeInput(requested: string): Promise<ResolvedInput> {
           unknownReason: "distribution list has no address to expand",
         };
       }
-      const members = parseExpandDl(
+      const { members, truncated } = parseExpandDl(
         await ewsHostFetch(
           buildSoapEnvelope(buildExpandDlBody(candidate.emailAddress)),
         ),
@@ -582,6 +596,18 @@ async function resolveAttendeeInput(requested: string): Promise<ResolvedInput> {
           unknownReason: "distribution list has no resolvable members",
         };
       }
+      const noSmtp = members.length - usable.length - nestedDls;
+      const notChecked: string[] = [];
+      if (noSmtp > 0) {
+        notChecked.push(
+          `${noSmtp} member(s) of "${requested}" not checked — no SMTP address`,
+        );
+      }
+      if (truncated) {
+        notChecked.push(
+          `member list of "${requested}" was truncated by the server — not all members were checked`,
+        );
+      }
       return {
         requested,
         smtps: usable.map((m, index) => ({
@@ -593,6 +619,7 @@ async function resolveAttendeeInput(requested: string): Promise<ResolvedInput> {
               }
             : {}),
         })),
+        ...(notChecked.length > 0 ? { notChecked } : {}),
       };
     }
     if (!hasSmtpShape(candidate)) {
@@ -668,6 +695,14 @@ export async function fetchAttendeeAvailabilityViaEws(
         requested: resolved.requested,
         status: "unknown",
         reason: `attendee cap reached (${EWS_MAX_RESOLVED_MAILBOXES} mailboxes) — ${dropped} not checked`,
+        busy: [],
+      });
+    }
+    for (const reason of resolved.notChecked ?? []) {
+      entries.push({
+        requested: resolved.requested,
+        status: "unknown",
+        reason,
         busy: [],
       });
     }

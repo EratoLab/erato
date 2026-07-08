@@ -564,6 +564,24 @@ const EXPAND_DL_SOAP = soapEnvelope(
     "</m:ResponseMessages></m:ExpandDLResponse>",
 );
 
+/** One good member, one shape-dropped member (EX routing, legacy DN — fails
+ * hasSmtpShape), and an explicitly truncated expansion. Both losses must
+ * surface as aggregated unknown entries, never vanish. */
+const EXPAND_DL_DROPPED_TRUNCATED_SOAP = soapEnvelope(
+  "<m:ExpandDLResponse><m:ResponseMessages>" +
+    '<m:ExpandDLResponseMessage ResponseClass="Success">' +
+    "<m:ResponseCode>NoError</m:ResponseCode>" +
+    '<m:DLExpansion TotalItemsInView="2" IncludesLastItemInRange="false">' +
+    "<t:Mailbox><t:Name>Bob</t:Name><t:EmailAddress>bob@example.de</t:EmailAddress>" +
+    "<t:RoutingType>SMTP</t:RoutingType><t:MailboxType>Mailbox</t:MailboxType></t:Mailbox>" +
+    "<t:Mailbox><t:Name>Legacy Contact</t:Name>" +
+    "<t:EmailAddress>/o=Org/ou=Admin Group/cn=Recipients/cn=legacy</t:EmailAddress>" +
+    "<t:RoutingType>EX</t:RoutingType><t:MailboxType>Contact</t:MailboxType></t:Mailbox>" +
+    "</m:DLExpansion>" +
+    "</m:ExpandDLResponseMessage>" +
+    "</m:ResponseMessages></m:ExpandDLResponse>",
+);
+
 const calendarEventXml = (
   start: string,
   end: string,
@@ -903,6 +921,53 @@ describe("fetchAttendeeAvailabilityViaEws", () => {
       smtp: "carol@example.de",
       status: "unknown",
     });
+  });
+
+  it("surfaces shape-dropped DL members and a truncated expansion as unknown entries", async () => {
+    installHostMock((body) => {
+      if (body.includes("<m:ResolveNames")) {
+        return {
+          status: "succeeded",
+          value: resolveNamesSoap(
+            resolutionXml("Sales Team", "sales@example.de", "PublicDL"),
+          ),
+        };
+      }
+      if (body.includes("<m:ExpandDL")) {
+        return { status: "succeeded", value: EXPAND_DL_DROPPED_TRUNCATED_SOAP };
+      }
+      if (body.includes("<m:GetUserAvailabilityRequest")) {
+        // One FreeBusyResponse — only bob survives the shape filter.
+        return { status: "succeeded", value: FREE_BUSY_MERGED_ONLY_SOAP };
+      }
+      return { status: "failed", error: { code: 0, message: "unexpected op" } };
+    });
+
+    const entries = await fetchAttendeeAvailabilityViaEws(ATTENDEE_RANGE, [
+      "Sales Team",
+    ]);
+
+    expect(entries).toHaveLength(3);
+    expect(entries[0]).toMatchObject({
+      requested: "Sales Team",
+      smtp: "bob@example.de",
+      status: "ok",
+    });
+    // The EX-routed member must not vanish: aggregated unknown with a count.
+    expect(entries[1]).toMatchObject({
+      requested: "Sales Team",
+      status: "unknown",
+      busy: [],
+    });
+    expect(entries[1].reason).toContain("1 member(s)");
+    expect(entries[1].reason).toContain("no SMTP address");
+    // IncludesLastItemInRange="false" → the truncation is named, not silent.
+    expect(entries[2]).toMatchObject({
+      requested: "Sales Team",
+      status: "unknown",
+      busy: [],
+    });
+    expect(entries[2].reason).toContain("truncated");
   });
 
   it("returns [] for an empty attendee list without a host call", async () => {
