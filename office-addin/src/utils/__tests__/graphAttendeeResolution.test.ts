@@ -104,6 +104,35 @@ describe("resolveAttendeeNameViaGraph", () => {
     }
   });
 
+  it("two exact namesakes stay an exact-only pick list — never padded with fuzzy hits", async () => {
+    const transport = transportOf(() =>
+      jsonResponse({
+        value: [
+          ...Array.from({ length: 6 }, (_, i) =>
+            person(`Chris Fuzzy ${i}`, `fuzzy${i}@x.de`),
+          ),
+          person("Chris", "chris.a@x.de"),
+          person("Chris", "chris.b@x.de"),
+        ],
+      }),
+    );
+
+    const outcome = await resolveAttendeeNameViaGraph(
+      { people: token() },
+      "Chris",
+      { transport },
+    );
+    expect(outcome.kind).toBe("ambiguous");
+    if (outcome.kind === "ambiguous") {
+      // Both namesakes survive; with the fuzzy fallback pool the 5-cap
+      // would have dropped them (they sit at positions 7-8).
+      expect(outcome.candidates.map((c) => c.smtp)).toEqual([
+        "chris.a@x.de",
+        "chris.b@x.de",
+      ]);
+    }
+  });
+
   it("drops personal/implicit contacts so a stale same-name contact cannot shadow the GAL colleague", async () => {
     // Wire-validated shape (maxgoisser tenant): implicit contacts with
     // external addresses outrank the org user in People relevance.

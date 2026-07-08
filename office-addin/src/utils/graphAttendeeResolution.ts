@@ -176,7 +176,9 @@ function settle(
   const exact = candidates.filter(
     (c) => c.name.trim().toLowerCase() === name.trim().toLowerCase(),
   );
-  const pool = exact.length === 1 ? exact : candidates;
+  // ≥2 exacts stay ambiguous but must NOT fall back to the fuzzy pool: the
+  // 5-cap could then drop a genuine namesake behind near-misses.
+  const pool = exact.length >= 1 ? exact : candidates;
   if (pool.length === 1)
     return { kind: "resolved", smtp: pool[0].smtp, name: pool[0].name };
   return {
