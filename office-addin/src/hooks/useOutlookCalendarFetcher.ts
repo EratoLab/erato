@@ -77,12 +77,21 @@ export function useOutlookCalendarFetcher(): UseOutlookCalendarFetcherResult {
       graph.acquireToken(GRAPH_CALENDAR_SCOPES, options);
     // Both acquirers are always offered; an unconsented scope fails at
     // acquisition time inside the resolution module, which degrades that
-    // lookup to "unavailable" without touching the calendar legs.
+    // lookup to "unavailable" without touching the calendar legs. The sign-in
+    // toast is suppressed: declining these OPTIONAL scopes is a designed-for
+    // steady state, and the toast's interactive retry would dead-end on the
+    // same missing consent (its wording is also email-specific).
     const directory: GraphDirectoryTokenSources = {
       people: (options) =>
-        graph.acquireToken(GRAPH_DIRECTORY_PEOPLE_SCOPES, options),
+        graph.acquireToken(GRAPH_DIRECTORY_PEOPLE_SCOPES, {
+          ...options,
+          suppressSignInPrompt: true,
+        }),
       users: (options) =>
-        graph.acquireToken(GRAPH_DIRECTORY_USERS_SCOPES, options),
+        graph.acquireToken(GRAPH_DIRECTORY_USERS_SCOPES, {
+          ...options,
+          suppressSignInPrompt: true,
+        }),
     };
     return {
       fetcher: createGraphOutlookCalendarFetcher(acquireGraphToken, directory),

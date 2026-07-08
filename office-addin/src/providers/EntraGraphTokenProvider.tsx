@@ -19,10 +19,17 @@ export interface GraphTokenContextValue {
    * Silent by default (never auto-popups). `{ forceRefresh: true }` bypasses the
    * MSAL cache (Graph 401-retry); `{ allowInteraction: true }` permits a popup
    * and is used only by the user-initiated "Sign in" action.
+   * `{ suppressSignInPrompt: true }` also skips the sign-in TOAST on failure —
+   * for OPTIONAL scopes (directory search) whose absence is an expected steady
+   * state the caller degrades on, not something to prompt the user over.
    */
   acquireToken: (
     scopes: string[],
-    options?: { forceRefresh?: boolean; allowInteraction?: boolean },
+    options?: {
+      forceRefresh?: boolean;
+      allowInteraction?: boolean;
+      suppressSignInPrompt?: boolean;
+    },
   ) => Promise<string>;
 }
 
@@ -74,7 +81,11 @@ export function EntraGraphTokenProvider({
   const acquireToken = useCallback(
     async (
       scopes: string[],
-      options?: { forceRefresh?: boolean; allowInteraction?: boolean },
+      options?: {
+        forceRefresh?: boolean;
+        allowInteraction?: boolean;
+        suppressSignInPrompt?: boolean;
+      },
     ): Promise<string> => {
       try {
         const { accessToken, bootstrap } = await source.acquireGraphToken(
@@ -95,7 +106,8 @@ export function EntraGraphTokenProvider({
         // is unaffected.
         if (
           error instanceof InteractionRequiredError &&
-          !options?.allowInteraction
+          !options?.allowInteraction &&
+          !options?.suppressSignInPrompt
         ) {
           toast.warning({
             dedupeKey: GRAPH_SIGNIN_TOAST_KEY,
