@@ -144,7 +144,7 @@ export default function AssistantEditPage() {
   if (isLoadingAssistant) {
     return (
       <div className="flex h-full flex-col bg-theme-bg-secondary">
-        <PageHeader title={t`Edit Assistant`} />
+        <PageHeader density="compact" title={t`Edit Assistant`} />
         <div className="flex flex-1 items-center justify-center">
           <div className="text-center">
             <div className="mx-auto mb-4 size-8 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
@@ -159,7 +159,7 @@ export default function AssistantEditPage() {
   if (loadError || !assistant) {
     return (
       <div className="flex h-full flex-col bg-theme-bg-secondary">
-        <PageHeader title={t`Edit Assistant`} />
+        <PageHeader density="compact" title={t`Edit Assistant`} />
         <div className="flex-1 overflow-auto">
           <div className="mx-auto max-w-4xl p-6">
             <Alert type="error">
@@ -175,7 +175,7 @@ export default function AssistantEditPage() {
   if (!assistant.can_edit) {
     return (
       <div className="flex h-full flex-col bg-theme-bg-secondary">
-        <PageHeader title={t`Edit Assistant`} />
+        <PageHeader density="compact" title={t`Edit Assistant`} />
         <div className="flex-1 overflow-auto">
           <div className="mx-auto max-w-4xl p-6">
             <Alert type="error">
@@ -218,6 +218,7 @@ export default function AssistantEditPage() {
     <div className="flex h-full flex-col bg-theme-bg-secondary">
       {/* Page Header */}
       <PageHeader
+        density="compact"
         title={t`Edit Assistant`}
         subtitle={t`Update your assistant's configuration and settings`}
       />

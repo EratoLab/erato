@@ -3775,7 +3775,7 @@ msgstr "Pokazuje"
 
 #: src/pages/SearchPage.tsx
 msgid "Showing {resultsCount} recent chats"
-msgstr ""
+msgstr "Wyświetlanie {resultsCount} ostatnich czatów"
 
 #: src/components/ui/Controls/UserProfileDropdown.tsx
 msgid "Sign out"
@@ -4106,4 +4106,4 @@ msgstr ""
 
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "Your conversations with this assistant"
-msgstr ""
+msgstr "Twoje rozmowy z tym asystentem"
