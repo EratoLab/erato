@@ -51,7 +51,7 @@ const SEARCH_PAGE_SIZE = 10;
 
 interface GraphPerson {
   displayName?: string;
-  personType?: { class?: string };
+  personType?: { class?: string; subclass?: string };
   scoredEmailAddresses?: { address?: string }[];
 }
 
@@ -131,6 +131,13 @@ function peopleCandidates(payload: unknown): DirectoryCandidate[] {
     // tolerated — some tenants omit it).
     const cls = person.personType?.class;
     if (cls !== undefined && cls !== "Person") continue;
+    // class Person also spans Personal/ImplicitContacts (auto-created from
+    // mail traffic, often stale/external addresses) which relevance ranks
+    // ABOVE org users — a same-name contact would shadow the GAL colleague
+    // and this leg short-circuits `/users`. Org users only; missing subclass
+    // tolerated.
+    const subclass = person.personType?.subclass;
+    if (subclass !== undefined && subclass !== "OrganizationUser") continue;
     const smtp = person.scoredEmailAddresses?.[0]?.address;
     if (!smtp || !smtp.includes("@")) continue;
     candidates.push({ name: person.displayName ?? smtp, smtp });

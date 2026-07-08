@@ -15,9 +15,15 @@ function jsonResponse(value: unknown, status = 200): Response {
 
 const token = () => vi.fn().mockResolvedValue("tok");
 
-const person = (displayName: string, address: string, cls = "Person") => ({
+const person = (
+  displayName: string,
+  address: string,
+  cls = "Person",
+  subclass?: string,
+) => ({
   displayName,
-  personType: { class: cls },
+  personType:
+    subclass !== undefined ? { class: cls, subclass } : { class: cls },
   scoredEmailAddresses: [{ address }],
 });
 
@@ -96,6 +102,92 @@ describe("resolveAttendeeNameViaGraph", () => {
       });
       expect(outcome.candidates.map((c) => c.smtp)).not.toContain("dl@x.de");
     }
+  });
+
+  it("drops personal/implicit contacts so a stale same-name contact cannot shadow the GAL colleague", async () => {
+    // Wire-validated shape (maxgoisser tenant): implicit contacts with
+    // external addresses outrank the org user in People relevance.
+    const transport = transportOf(() =>
+      jsonResponse({
+        value: [
+          person(
+            "Daniel Person",
+            "stale@external.de",
+            "Person",
+            "ImplicitContact",
+          ),
+          person(
+            "Daniel Person",
+            "old@gone.example",
+            "Person",
+            "PersonalContact",
+          ),
+          person(
+            "Daniel Person",
+            "daniel@org.example",
+            "Person",
+            "OrganizationUser",
+          ),
+        ],
+      }),
+    );
+
+    await expect(
+      resolveAttendeeNameViaGraph({ people: token() }, "Daniel Person", {
+        transport,
+      }),
+    ).resolves.toEqual({
+      kind: "resolved",
+      smtp: "daniel@org.example",
+      name: "Daniel Person",
+    });
+  });
+
+  it("falls back to /users when People returns ONLY contacts (none kept)", async () => {
+    const urls: string[] = [];
+    const transport = transportOf((url) => {
+      urls.push(url);
+      if (url.includes("/me/people")) {
+        return jsonResponse({
+          value: [
+            person(
+              "Daniel Person",
+              "stale@external.de",
+              "Person",
+              "ImplicitContact",
+            ),
+          ],
+        });
+      }
+      return jsonResponse({
+        value: [{ displayName: "Daniel Person", mail: "daniel@org.example" }],
+      });
+    });
+
+    await expect(
+      resolveAttendeeNameViaGraph(
+        { people: token(), users: token() },
+        "Daniel Person",
+        { transport },
+      ),
+    ).resolves.toEqual({
+      kind: "resolved",
+      smtp: "daniel@org.example",
+      name: "Daniel Person",
+    });
+    expect(urls[1]).toContain("/users");
+  });
+
+  it("keeps a person with class Person and no subclass (tenants that omit it)", async () => {
+    const transport = transportOf(() =>
+      jsonResponse({ value: [person("Bob Builder", "bob@x.de")] }),
+    );
+
+    await expect(
+      resolveAttendeeNameViaGraph({ people: token() }, "Bob Builder", {
+        transport,
+      }),
+    ).resolves.toMatchObject({ kind: "resolved", smtp: "bob@x.de" });
   });
 
   it("falls back to /users when People finds nothing, escaping the OData quote", async () => {
