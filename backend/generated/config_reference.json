@@ -155,6 +155,9 @@
   "chat_provider.model_name_langfuse": {
     "hide_in_docs": true
   },
+  "chat_provider.model_settings.compat_no_replay_summary": {
+    "hide_in_docs": true
+  },
   "chat_provider.model_settings.compat_omit_strict": {
     "hide_in_docs": true
   },
@@ -230,6 +233,7 @@
   "chat_providers.providers.<provider-id>.model_icon": {},
   "chat_providers.providers.<provider-id>.model_name": {},
   "chat_providers.providers.<provider-id>.model_name_langfuse": {},
+  "chat_providers.providers.<provider-id>.model_settings.compat_no_replay_summary": {},
   "chat_providers.providers.<provider-id>.model_settings.compat_omit_strict": {},
   "chat_providers.providers.<provider-id>.model_settings.generate_images": {},
   "chat_providers.providers.<provider-id>.model_settings.reasoning_effort": {},
@@ -286,6 +290,7 @@
   "experimental_facets.facets.<facet-id>.disable_facet_prompt_template": {},
   "experimental_facets.facets.<facet-id>.display_name": {},
   "experimental_facets.facets.<facet-id>.icon": {},
+  "experimental_facets.facets.<facet-id>.model_settings.compat_no_replay_summary": {},
   "experimental_facets.facets.<facet-id>.model_settings.compat_omit_strict": {},
   "experimental_facets.facets.<facet-id>.model_settings.generate_images": {},
   "experimental_facets.facets.<facet-id>.model_settings.reasoning_effort": {},

@@ -49,6 +49,9 @@ fn merge_model_settings(base: &ModelSettings, overrides: &ModelSettings) -> Mode
     if overrides.compat_omit_strict {
         merged.compat_omit_strict = true;
     }
+    if overrides.compat_no_replay_summary {
+        merged.compat_no_replay_summary = true;
+    }
     if let Some(temperature) = overrides.temperature {
         merged.temperature = Some(temperature);
     }
@@ -89,6 +92,7 @@ mod tests {
         let base = ModelSettings {
             generate_images: true,
             compat_omit_strict: false,
+            compat_no_replay_summary: false,
             temperature: Some(0.2),
             top_p: None,
             reasoning_effort: None,
@@ -197,5 +201,26 @@ mod tests {
 
         let merged = build_model_settings_for_facets(&base, &config, &["facet".to_string()]);
         assert!(merged.generate_images);
+    }
+
+    #[test]
+    fn applies_compat_no_replay_summary() {
+        let base = ModelSettings::default();
+        let config = ExperimentalFacetsConfig {
+            facets: HashMap::from([(
+                "facet".to_string(),
+                facet(
+                    "Facet",
+                    ModelSettings {
+                        compat_no_replay_summary: true,
+                        ..Default::default()
+                    },
+                ),
+            )]),
+            ..Default::default()
+        };
+
+        let merged = build_model_settings_for_facets(&base, &config, &["facet".to_string()]);
+        assert!(merged.compat_no_replay_summary);
     }
 }

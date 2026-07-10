@@ -109,6 +109,7 @@ fn now_timestamp() -> String {
 
 fn build_openai_responses_reasoning_replay_parts(
     generation_metadata: GenerationMetadata,
+    compat_no_replay_summary: bool,
 ) -> Vec<GenAiContentPart> {
     let reasoning_summary = generation_metadata
         .reasoning_summary
@@ -147,10 +148,14 @@ fn build_openai_responses_reasoning_replay_parts(
             .collect();
     }
 
-    reasoning_summary
-        .map(GenAiContentPart::ReasoningContent)
-        .into_iter()
-        .collect()
+    if compat_no_replay_summary {
+        Vec::new()
+    } else {
+        reasoning_summary
+            .map(GenAiContentPart::ReasoningContent)
+            .into_iter()
+            .collect()
+    }
 }
 
 fn strip_persisted_reasoning_messages(chat_request: &mut ChatRequest) {
@@ -238,6 +243,7 @@ async fn collect_reasoning_replay_messages(
     subject: &Subject,
     just_submitted_user_message_id: &Uuid,
     current_chat_provider_id: &str,
+    compat_no_replay_summary: bool,
 ) -> Result<Vec<OpenAiResponsesReasoningReplayMessage>, Report> {
     let mut current_message = get_message_by_id(
         &app_state.db,
@@ -267,7 +273,10 @@ async fn collect_reasoning_replay_messages(
             continue;
         };
 
-        let replay_parts = build_openai_responses_reasoning_replay_parts(generation_metadata);
+        let replay_parts = build_openai_responses_reasoning_replay_parts(
+            generation_metadata,
+            compat_no_replay_summary,
+        );
         if !replay_parts.is_empty() {
             let generation_parameters =
                 current_message
@@ -2141,6 +2150,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
                 &me_profile_input.subject,
                 &user_input.just_submitted_user_message_id,
                 chat_provider_id.as_str(),
+                effective_model_settings.compat_no_replay_summary,
             )
             .await?;
             if !reasoning_replay_messages.is_empty() {
@@ -5930,16 +5940,19 @@ mod reasoning_replay_tests {
 
     #[test]
     fn openai_responses_reasoning_replay_deduplicates_encrypted_content() {
-        let parts = build_openai_responses_reasoning_replay_parts(generation_metadata(
-            Some("summary".to_string()),
-            Some(vec![ReasoningItem {
-                id: Some("rs_123".to_string()),
-                summary: vec![ReasoningSummaryText::new("summary")],
-                encrypted_content: Some("encrypted".to_string()),
-                ..Default::default()
-            }]),
-            Some(vec!["encrypted".to_string()]),
-        ));
+        let parts = build_openai_responses_reasoning_replay_parts(
+            generation_metadata(
+                Some("summary".to_string()),
+                Some(vec![ReasoningItem {
+                    id: Some("rs_123".to_string()),
+                    summary: vec![ReasoningSummaryText::new("summary")],
+                    encrypted_content: Some("encrypted".to_string()),
+                    ..Default::default()
+                }]),
+                Some(vec!["encrypted".to_string()]),
+            ),
+            false,
+        );
 
         assert_eq!(parts.len(), 1);
         let GenAiContentPart::ReasoningItem(reasoning_item) = &parts[0] else {
@@ -5955,11 +5968,50 @@ mod reasoning_replay_tests {
 
     #[test]
     fn openai_responses_reasoning_replay_synthesizes_summary_for_legacy_encrypted_content() {
-        let parts = build_openai_responses_reasoning_replay_parts(generation_metadata(
-            Some("summary".to_string()),
-            None,
-            Some(vec!["encrypted".to_string()]),
-        ));
+        let parts = build_openai_responses_reasoning_replay_parts(
+            generation_metadata(
+                Some("summary".to_string()),
+                None,
+                Some(vec!["encrypted".to_string()]),
+            ),
+            false,
+        );
+
+        assert_eq!(parts.len(), 1);
+        let GenAiContentPart::ReasoningItem(reasoning_item) = &parts[0] else {
+            panic!("expected reasoning item");
+        };
+        assert_eq!(
+            reasoning_item.encrypted_content.as_deref(),
+            Some("encrypted")
+        );
+        assert_eq!(reasoning_item.summary.len(), 1);
+        assert_eq!(reasoning_item.summary[0].text, "summary");
+    }
+
+    #[test]
+    fn openai_responses_reasoning_replay_can_skip_summary_only_replay() {
+        let parts = build_openai_responses_reasoning_replay_parts(
+            generation_metadata(Some("summary".to_string()), None, None),
+            true,
+        );
+
+        assert!(
+            parts.is_empty(),
+            "compat_no_replay_summary should not replay plain reasoning summaries"
+        );
+    }
+
+    #[test]
+    fn openai_responses_reasoning_replay_still_replays_encrypted_content_when_summary_disabled() {
+        let parts = build_openai_responses_reasoning_replay_parts(
+            generation_metadata(
+                Some("summary".to_string()),
+                None,
+                Some(vec!["encrypted".to_string()]),
+            ),
+            true,
+        );
 
         assert_eq!(parts.len(), 1);
         let GenAiContentPart::ReasoningItem(reasoning_item) = &parts[0] else {
