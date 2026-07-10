@@ -980,12 +980,16 @@ top_p = 0.9
 reasoning_effort = "minimal"
 verbosity = "high"
 compat_omit_strict = false
+compat_no_replay_summary = false
 ```
 
 **Fields:**
 
 - **`generate_images`** _(default: false)_ - When set to `true`, the model will generate images instead of text. This is useful for image generation models like DALL-E. The user's message text will be used as the prompt for image generation. The generated image is automatically downloaded, stored as a file upload, and added to the chat history as an image file pointer.
 - **`compat_omit_strict`** _(default: false)_ - When set to `true`, requests will omit explicit tool schema `strict` fields for MCP tools. This can help when provider gateways reject strict-mode tool metadata.
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_settings.compat_no_replay_summary */}
+{/* erato_toml_config_key: experimental_facets.facets.<facet-id>.model_settings.compat_no_replay_summary */}
+- **`compat_no_replay_summary`** _(default: false)_ - When set to `true`, plain reasoning summaries from prior turns are not replayed as reasoning content. Use this for provider gateways that require signed or encrypted reasoning replay data and reject unsigned summary-only reasoning blocks.
 - **`temperature`** _(default: None)_ - Optional sampling temperature for generation (higher values increase randomness).
 - **`top_p`** _(default: None)_ - Optional nucleus sampling parameter to control diversity.
 - **`reasoning_effort`** _(default: None)_ - Optional reasoning effort for supported models. Values: `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`.

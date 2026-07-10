@@ -3684,6 +3684,10 @@ pub struct ModelSettings {
     // Defaults to `false`.
     #[serde(default)]
     pub compat_omit_strict: bool,
+    // Whether to skip replaying plain reasoning summaries as prior reasoning content.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub compat_no_replay_summary: bool,
     // Optional sampling temperature for generation.
     pub temperature: Option<f64>,
     // Optional nucleus sampling parameter.
