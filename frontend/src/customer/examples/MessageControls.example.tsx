@@ -25,7 +25,7 @@
  */
 
 import clsx from "clsx";
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useState } from "react";
 
 import { Button } from "@/components/ui/Controls/Button";
 import { DropdownMenu } from "@/components/ui/Controls/DropdownMenu";
@@ -38,6 +38,7 @@ import {
   ShareIcon,
   MoreVertical,
 } from "@/components/ui/icons";
+import { useTransientLabel } from "@/hooks/ui/useTransientLabel";
 import { createLogger } from "@/utils/debugLogger";
 
 import type { DropdownMenuItem } from "@/components/ui/Controls/DropdownMenu";
@@ -108,7 +109,7 @@ export const MessageControls = ({
   showRawMarkdown = false,
   onToggleRawMarkdown,
 }: MessageControlsProps) => {
-  const [isCopied, setIsCopied] = useState(false);
+  const { isActive: isCopied, trigger: triggerCopied } = useTransientLabel();
 
   // Emoji reactions state (demo with mock data)
   const [reactions, setReactions] = useState<Record<ReactionType, number>>({
@@ -126,14 +127,6 @@ export const MessageControls = ({
   // Chat-level edit permission
   const canEditChat = context.canEdit !== false;
 
-  // Reset copy state after 2 seconds
-  useEffect(() => {
-    if (isCopied) {
-      const timer = setTimeout(() => setIsCopied(false), 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [isCopied]);
-
   // Mock metadata (extend MessageControlsProps to pass real data)
   const metadata: MessageMetadata = {
     model: isUserMessage ? undefined : "GPT-4",
@@ -146,10 +139,10 @@ export const MessageControls = ({
   const handleCopy = useCallback(async () => {
     const success = await onAction({ type: "copy", messageId });
     if (success) {
-      setIsCopied(true);
+      triggerCopied();
       logger.log(`Copy succeeded for message ${messageId}`);
     }
-  }, [onAction, messageId]);
+  }, [onAction, messageId, triggerCopied]);
 
   const handleEdit = useCallback(async () => {
     const success = await onAction({ type: "edit", messageId });

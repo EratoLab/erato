@@ -6,6 +6,7 @@ import { memo, useState, useEffect, useCallback } from "react";
 
 import { Button } from "@/components/ui/Controls/Button";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
+import { useTransientLabel } from "@/hooks/ui/useTransientLabel";
 import { createLogger } from "@/utils/debugLogger";
 
 import {
@@ -40,7 +41,7 @@ export const DefaultMessageControls = memo(function DefaultMessageControls({
   hasToolCalls = false,
   onViewFeedback,
 }: MessageControlsProps) {
-  const [isCopied, setIsCopied] = useState(false);
+  const { isActive: isCopied, trigger: triggerCopied } = useTransientLabel();
   const controlsRowStyle = {
     gap: "var(--theme-spacing-control-gap)",
   } as const;
@@ -72,15 +73,6 @@ export const DefaultMessageControls = memo(function DefaultMessageControls({
       setFeedbackState(newState);
     }
   }, [initialFeedback]);
-
-  useEffect(() => {
-    if (isCopied) {
-      const timer = setTimeout(() => {
-        setIsCopied(false);
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [isCopied]);
 
   const handleAction = useCallback(
     async (actionType: "copy" | "edit" | "regenerate" | "like" | "dislike") => {
@@ -122,7 +114,7 @@ export const DefaultMessageControls = memo(function DefaultMessageControls({
 
       if (success) {
         if (actionType === "copy") {
-          setIsCopied(true);
+          triggerCopied();
         } else if (actionType === "like") {
           setFeedbackState("liked");
         } else if (actionType === "dislike") {
@@ -133,7 +125,14 @@ export const DefaultMessageControls = memo(function DefaultMessageControls({
         logger.log(`Action '${actionType}' failed for message ${messageId}`);
       }
     },
-    [onAction, messageId, feedbackState, initialFeedback, onViewFeedback],
+    [
+      onAction,
+      messageId,
+      feedbackState,
+      initialFeedback,
+      onViewFeedback,
+      triggerCopied,
+    ],
   );
 
   // Ensure safeCreatedAt is always a Date object

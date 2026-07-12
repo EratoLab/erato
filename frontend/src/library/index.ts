@@ -27,10 +27,7 @@ export { DefaultMessageControls } from "@/components/ui/Message/DefaultMessageCo
 export { DefaultEratoEmailCodeBlock } from "@/components/ui/Message/EratoEmailSuggestion";
 export { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
 export { ModalBase } from "@/components/ui/Modal/ModalBase";
-export {
-  ActionConfirmationCard,
-  type ActionConfirmationStatus,
-} from "@/components/ui/Message/ActionConfirmationCard";
+export { ActionConfirmationCard } from "@/components/ui/Message/ActionConfirmationCard";
 export { AppearanceTabContent } from "@/components/ui/Settings/AppearanceTabContent";
 export { AudioInputTabContent } from "@/components/ui/Settings/AudioInputTabContent";
 export {

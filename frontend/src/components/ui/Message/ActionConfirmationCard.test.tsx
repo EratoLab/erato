@@ -103,22 +103,7 @@ describe("ActionConfirmationCard", () => {
     expect(screen.getByText("Deny")).toBeDisabled();
   });
 
-  it("renders a compact resolved row instead of buttons once resolved", () => {
-    render(
-      <ActionConfirmationCard
-        title="t"
-        onAllowOnce={vi.fn()}
-        onDeny={vi.fn()}
-        status="confirmed"
-        resolvedLabel="Reply opened"
-        data-testid="card"
-      />,
-    );
-    expect(screen.getByTestId("card")).toHaveTextContent("Reply opened");
-    expect(screen.queryByText("Allow once")).not.toBeInTheDocument();
-  });
-
-  it("moves focus to a pending card on mount", () => {
+  it("moves focus to the card on mount", () => {
     render(
       <ActionConfirmationCard
         title="t"
@@ -130,87 +115,9 @@ describe("ActionConfirmationCard", () => {
     expect(screen.getByTestId("card")).toHaveFocus();
   });
 
-  it("does not grab focus when mounted already resolved", () => {
-    render(
-      <ActionConfirmationCard
-        title="t"
-        onAllowOnce={vi.fn()}
-        onDeny={vi.fn()}
-        status="dismissed"
-        data-testid="card"
-      />,
-    );
-    expect(screen.getByTestId("card")).not.toHaveFocus();
-  });
-
-  it("keeps focus on the card when the pending buttons resolve away", () => {
-    const props = {
-      title: "t",
-      onAllowOnce: vi.fn(),
-      onDeny: vi.fn(),
-      "data-testid": "card",
-    };
-    const { rerender } = render(<ActionConfirmationCard {...props} />);
-    screen.getByText("Deny").focus();
-    rerender(<ActionConfirmationCard {...props} status="dismissed" />);
-    expect(screen.getByTestId("card")).toHaveFocus();
-  });
-
-  it("populates the polite announcement region after mount and on resolution", () => {
-    const props = { onAllowOnce: vi.fn(), onDeny: vi.fn() };
-    const { rerender } = render(<ActionConfirmationCard {...props} />);
+  it("populates the polite announcement region after mount", () => {
+    render(<ActionConfirmationCard onAllowOnce={vi.fn()} onDeny={vi.fn()} />);
     expect(screen.getByRole("status")).toHaveTextContent("Allow this action?");
-    rerender(
-      <ActionConfirmationCard
-        {...props}
-        status="confirmed"
-        resolvedLabel="Reply opened"
-      />,
-    );
-    expect(screen.getByRole("status")).toHaveTextContent("Reply opened");
-  });
-
-  it("announces the pending→resolved transition exactly once", async () => {
-    const props = { onAllowOnce: vi.fn(), onDeny: vi.fn() };
-    const { rerender } = render(<ActionConfirmationCard {...props} />);
-    const region = screen.getByRole("status");
-    // Live regions announce on DOM mutation, so count mutations directly.
-    const mutations: string[] = [];
-    const observer = new MutationObserver((records) => {
-      mutations.push(...records.map(() => region.textContent ?? ""));
-    });
-    observer.observe(region, {
-      childList: true,
-      characterData: true,
-      subtree: true,
-    });
-    const resolvedProps = (
-      <ActionConfirmationCard
-        {...props}
-        status="confirmed"
-        resolvedLabel="Reply opened"
-      />
-    );
-    rerender(resolvedProps);
-    // A second render of the already-resolved card must not re-announce.
-    rerender(resolvedProps);
-    await Promise.resolve(); // flush the MutationObserver microtask
-    observer.disconnect();
-    expect(mutations).toEqual(["Reply opened"]);
-  });
-
-  it("does not announce a card that mounts already resolved", () => {
-    render(
-      <ActionConfirmationCard
-        onAllowOnce={vi.fn()}
-        onDeny={vi.fn()}
-        status="confirmed"
-        resolvedLabel="Reply opened"
-      />,
-    );
-    // Reloaded transcripts mount resolved cards in bulk; an announcement
-    // here would queue one polite readout per historical card.
-    expect(screen.getByRole("status")).toBeEmptyDOMElement();
   });
 
   it("scrolls into view on mount only when requested", () => {

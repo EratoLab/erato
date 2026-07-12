@@ -33,8 +33,8 @@ msgstr "Zawsze zezwalaj"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ActionConfirmationCard.tsx
-msgid "actionConfirmation.confirmed"
-msgstr "Potwierdzono"
+#~ msgid "actionConfirmation.confirmed"
+#~ msgstr "Potwierdzono"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ActionConfirmationCard.tsx
@@ -43,8 +43,8 @@ msgstr "Odmów"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ActionConfirmationCard.tsx
-msgid "actionConfirmation.dismissed"
-msgstr "Odrzucono"
+#~ msgid "actionConfirmation.dismissed"
+#~ msgstr "Odrzucono"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ActionConfirmationCard.tsx
@@ -3226,6 +3226,10 @@ msgstr ""
 
 #: src/components/ui/Message/MessageContent.tsx
 msgid "Copied"
+msgstr ""
+
+#: src/components/ui/Message/MessageContent.tsx
+msgid "Copied to clipboard"
 msgstr ""
 
 #: src/components/ui/Message/EratoEmailSuggestion.tsx

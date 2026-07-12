@@ -33,8 +33,8 @@ msgstr "Always allow"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ActionConfirmationCard.tsx
-msgid "actionConfirmation.confirmed"
-msgstr "Confirmed"
+#~ msgid "actionConfirmation.confirmed"
+#~ msgstr "Confirmed"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ActionConfirmationCard.tsx
@@ -43,8 +43,8 @@ msgstr "Deny"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ActionConfirmationCard.tsx
-msgid "actionConfirmation.dismissed"
-msgstr "Dismissed"
+#~ msgid "actionConfirmation.dismissed"
+#~ msgstr "Dismissed"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ActionConfirmationCard.tsx
@@ -3227,6 +3227,10 @@ msgstr "Conversational"
 #: src/components/ui/Message/MessageContent.tsx
 msgid "Copied"
 msgstr "Copied"
+
+#: src/components/ui/Message/MessageContent.tsx
+msgid "Copied to clipboard"
+msgstr "Copied to clipboard"
 
 #: src/components/ui/Message/EratoEmailSuggestion.tsx
 msgid "Copied!"

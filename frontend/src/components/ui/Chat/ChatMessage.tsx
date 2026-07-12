@@ -6,6 +6,7 @@ import { memo, useCallback, useState } from "react";
 import { InteractiveContainer } from "@/components/ui/Container/InteractiveContainer";
 import { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton";
 import { useImageLightbox } from "@/hooks/ui/useImageLightbox";
+import { useTransientLabel } from "@/hooks/ui/useTransientLabel";
 import { useGetFile } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import {
   useErrorReportFeature,
@@ -119,7 +120,8 @@ export const ChatMessage = memo(function ChatMessage({
 
   // Local state for raw markdown toggle
   const [showRawMarkdown, setShowRawMarkdown] = useState(false);
-  const [isErrorReportCopied, setIsErrorReportCopied] = useState(false);
+  const { isActive: isErrorReportCopied, trigger: triggerErrorReportCopied } =
+    useTransientLabel();
   const handleToggleRawMarkdown = useCallback(
     () => setShowRawMarkdown((prev) => !prev),
     [],
@@ -130,9 +132,8 @@ export const ChatMessage = memo(function ChatMessage({
     }
 
     await navigator.clipboard.writeText(message.error_report);
-    setIsErrorReportCopied(true);
-    window.setTimeout(() => setIsErrorReportCopied(false), 2000);
-  }, [message.error_report]);
+    triggerErrorReportCopied();
+  }, [message.error_report, triggerErrorReportCopied]);
 
   // Use custom hook for image lightbox state management
   const lightbox = useImageLightbox();

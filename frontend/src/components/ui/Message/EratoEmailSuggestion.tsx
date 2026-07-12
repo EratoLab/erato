@@ -1,7 +1,8 @@
 import { t } from "@lingui/core/macro";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 
 import { componentRegistry } from "@/config/componentRegistry";
+import { useTransientLabel } from "@/hooks/ui/useTransientLabel";
 import { copyEmailToClipboard } from "@/utils/emailClipboard";
 import { sanitizeHtmlPreview } from "@/utils/sanitizeHtmlPreview";
 
@@ -18,19 +19,18 @@ export function DefaultEratoEmailCodeBlock({
   content,
   isHtml,
 }: EratoEmailCodeBlockProps) {
-  const [copied, setCopied] = useState(false);
+  const { isActive: copied, trigger: triggerCopied } = useTransientLabel();
   const previewHtml = useMemo(() => sanitizeHtmlPreview(content), [content]);
 
   const handleCopy = useCallback(() => {
     void copyEmailToClipboard(content, isHtml ?? false)
       .then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        triggerCopied();
       })
       .catch(() => {
         // Fallback: ignore clipboard errors
       });
-  }, [content, isHtml]);
+  }, [content, isHtml, triggerCopied]);
 
   return (
     <div className="my-2 rounded-lg border border-theme-border bg-theme-bg-secondary p-3">
