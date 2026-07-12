@@ -91,6 +91,16 @@ fn is_openai_responses_provider_kind(provider_kind: &str) -> bool {
     matches!(provider_kind, "openai_responses" | "azure_openai_responses")
 }
 
+fn should_strip_persisted_reasoning_messages(
+    provider_kind: &str,
+    compat_no_replay_summary: bool,
+    did_prior_assistant_chat_provider_change: bool,
+) -> bool {
+    did_prior_assistant_chat_provider_change
+        || compat_no_replay_summary
+        || is_openai_responses_provider_kind(provider_kind)
+}
+
 fn non_empty_string(value: &str) -> Option<String> {
     (!value.is_empty()).then(|| value.to_string())
 }
@@ -2007,7 +2017,11 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         chat_provider_id.as_str(),
     )
     .await?;
-    if did_prior_assistant_chat_provider_change {
+    if should_strip_persisted_reasoning_messages(
+        &chat_provider_config.provider_kind,
+        effective_model_settings.compat_no_replay_summary,
+        did_prior_assistant_chat_provider_change,
+    ) {
         strip_persisted_reasoning_messages(&mut chat_request);
     }
     let mut chat_request_tools = convert_mcp_tools_to_genai_tools(
@@ -2142,7 +2156,6 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     }
     if is_openai_responses_provider_kind(&chat_provider_config.provider_kind) {
         chat_request = chat_request.with_store(false);
-        strip_persisted_reasoning_messages(&mut chat_request);
         if !did_prior_assistant_chat_provider_change {
             let reasoning_replay_messages = collect_reasoning_replay_messages(
                 app_state,
@@ -5905,6 +5918,16 @@ mod reasoning_replay_tests {
             chat_request.messages[2].content.first_text(),
             Some("Code: 34512.")
         );
+    }
+
+    #[test]
+    fn compat_no_replay_summary_strips_persisted_reasoning_for_non_responses_requests() {
+        assert!(should_strip_persisted_reasoning_messages(
+            "openai", true, false,
+        ));
+        assert!(!should_strip_persisted_reasoning_messages(
+            "openai", false, false,
+        ));
     }
 
     #[test]
