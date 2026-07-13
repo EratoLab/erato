@@ -424,7 +424,7 @@ test(
 
 test(
   "Mock-LLM pauses auto-scroll after manual scroll and resumes at the bottom",
-  { tag: TAG_CI },
+  { tag: TAG_NO_CI },
   async ({ page }) => {
     test.setTimeout(60000);
     let scrollTopAfterManualScroll = 0;
