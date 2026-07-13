@@ -19,7 +19,7 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoAppointmentRenderer.tsx
 msgid "officeAddin.appointmentRenderer.alwaysAllowLocked"
-msgstr "Ihre Organisation verlangt für diese Aktion jedes Mal eine Bestätigung."
+msgstr "Ihre Organisation verlangt jedes Mal eine Bestätigung, wenn diese Aktion automatisch ausgeführt wird."
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoAppointmentRenderer.tsx
@@ -329,7 +329,7 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.alwaysAllowLocked"
-msgstr "Ihre Organisation verlangt für diese Aktion jedes Mal eine Bestätigung."
+msgstr "Ihre Organisation verlangt jedes Mal eine Bestätigung, wenn diese Aktion automatisch ausgeführt wird."
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
@@ -608,18 +608,33 @@ msgstr "Immer erlauben"
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
-msgid "officeAddin.settings.addin.clientActions.always.locked"
-msgstr "Gesperrt: Ihre Organisation verlangt für diese Aktion jedes Mal eine Bestätigung."
+#~ msgid "officeAddin.settings.addin.clientActions.always.locked"
+#~ msgstr "Gesperrt: Ihre Organisation verlangt für diese Aktion jedes Mal eine Bestätigung."
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
-msgid "officeAddin.settings.addin.clientActions.ask.helper"
-msgstr "Zeigt einen Bestätigungsschritt im Chat an, bevor etwas geöffnet wird."
+#~ msgid "officeAddin.settings.addin.clientActions.ask.helper"
+#~ msgstr "Zeigt einen Bestätigungsschritt im Chat an, bevor etwas geöffnet wird."
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
-msgid "officeAddin.settings.addin.clientActions.ask.label"
-msgstr "Jedes Mal fragen"
+#~ msgid "officeAddin.settings.addin.clientActions.ask.label"
+#~ msgstr "Jedes Mal fragen"
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.clientActions.clickConsent.always.locked"
+msgstr "Gesperrt: Ihre Organisation verlangt jedes Mal eine Bestätigung, wenn diese Aktion automatisch ausgeführt wird."
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.clientActions.clickConsent.ask.helper"
+msgstr "Zeigt einen Bestätigungsschritt nur an, wenn der Assistent diese Aktion von sich aus auslöst. Ein Klick auf die Schaltfläche der Aktion führt sie immer direkt aus."
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.clientActions.clickConsent.ask.label"
+msgstr "Vor automatischer Ausführung fragen"
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx

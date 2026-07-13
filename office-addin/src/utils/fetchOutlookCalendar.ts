@@ -5,12 +5,52 @@ import type {
   AcquireGraphToken,
   GraphTransport,
 } from "./fetchOutlookMessageGraph";
+import type { GraphDirectoryTokenSources } from "./graphAttendeeResolution";
+
+/** One Windows/EWS-style DST transition: the nth (`dayOrder` 1-4, 5 = last)
+ * `dayOfWeek` (0 = Sunday) of `month`, at wall-clock `timeMinutes` in the
+ * phase being LEFT. */
+export interface WorkingHoursTransition {
+  month: number;
+  dayOrder: number;
+  dayOfWeek: number;
+  timeMinutes: number;
+}
+
+/**
+ * The zone the working-hours minutes are anchored to when it is NOT the
+ * display zone. The hours-zone is AUTHORITATIVE (per MS semantics a divergence
+ * is a supported traveler state, not corruption): consumers convert through it
+ * instead of reading the minutes as display-zone wall-clock. Graph names a
+ * zone (`iana`); EWS availability carries only offsets + transition rules
+ * (`rules`, offsets in minutes EAST of UTC; transitions absent ⇒ fixed
+ * `standardOffset` year-round).
+ */
+export type WorkingHoursAnchor =
+  | { kind: "iana"; zone: string }
+  | {
+      kind: "rules";
+      standardOffset: number;
+      daylightOffset: number;
+      daylightStart?: WorkingHoursTransition;
+      standardStart?: WorkingHoursTransition;
+    };
 
 export interface NormalizedWorkingHours {
   daysOfWeek: string[];
-  /** Minutes from midnight in the mailbox's own time zone. */
+  /** Minutes from midnight, wall-clock in `anchor` (display zone if absent). */
   startMinutes: number;
   endMinutes: number;
+  anchor?: WorkingHoursAnchor;
+}
+
+/** Soft working-hours result: `untrusted` set ⇒ hours EXIST on the mailbox
+ * but were unusable (unparseable zone rules / times) — distinct from "none
+ * configured" (hours null, untrusted absent) and from a hard fetch failure
+ * (the leg THROWS → degradedLegs). */
+export interface WorkingHoursLegResult {
+  hours: NormalizedWorkingHours | null;
+  untrusted?: string;
 }
 
 /**
@@ -58,14 +98,48 @@ export interface NormalizedHistoryMeeting {
   authoringTimeZone?: string | null;
 }
 
+/**
+ * One requested attendee's free/busy (ERMAIN-434). Colleague calendars are
+ * OPAQUE by contract: `busy` carries only BLOCKING intervals (Busy/OOF/
+ * Tentative), never subjects or details, and never `Free`/`WorkingElsewhere`
+ * rows — what Exchange free/busy sharing permits is exactly what surfaces.
+ * A DL input expands to one entry per member, all sharing `requested`.
+ */
+export interface NormalizedAttendeeAvailability {
+  /** The attendee string exactly as the tool call requested it. */
+  requested: string;
+  /** Resolved SMTP address; absent when resolution failed. */
+  smtp?: string;
+  /**
+   * "ok" — `busy` is authoritative: time outside the listed intervals is free.
+   * "unknown" — free/busy could not be read (resolution failure, access
+   * denied, no data); the attendee must be treated as NOT free at any time.
+   */
+  status: "ok" | "unknown";
+  /** Why status is "unknown"; also used for non-fatal caveats (truncation). */
+  reason?: string;
+  busy: NormalizedBusyBlock[];
+  /** The attendee's OWN working hours when the backend shares them (both
+   * availability APIs return them alongside free/busy) — wall-clock in their
+   * `anchor` zone; unusable attendee hours are simply omitted. */
+  workingHours?: NormalizedWorkingHours;
+}
+
 /** The independently-sourced legs of a calendar snapshot. */
-export type CalendarLeg = "busy" | "history" | "workingHours";
+export type CalendarLeg = "busy" | "history" | "workingHours" | "attendees";
 
 export interface NormalizedCalendar {
   /** null when it couldn't be sourced (the EWS working-hours leg is best-effort). */
   workingHours: NormalizedWorkingHours | null;
+  /** Set when hours WERE fetched but discarded as unusable — the model must
+   * never say "no working hours configured" in this state. */
+  workingHoursUntrusted?: string;
   busyBlocks: NormalizedBusyBlock[];
   historyMeetings: NormalizedHistoryMeeting[];
+  /** Per-attendee free/busy, in request order; empty when none were requested.
+   * Per-attendee read failures live INSIDE entries (`status: "unknown"`); the
+   * `"attendees"` degraded leg means the whole fetch hard-failed. */
+  attendees: NormalizedAttendeeAvailability[];
   /**
    * Canonical IANA id (e.g. `Europe/Berlin`) to display times in and the anchor
    * used to project `date` events onto the timeline. Always present (falls back
@@ -89,6 +163,10 @@ export interface CalendarFetchOptions {
   transport?: GraphTransport;
   historyWindowDays?: number;
   freeBusyWindowDays?: number;
+  /** Other people whose free/busy to read alongside the user's own calendar
+   * (SMTP addresses; on EWS also GAL display names / DLs). Already deduped
+   * and capped by the caller. */
+  attendees?: string[];
 }
 
 export interface OutlookCalendarFetcher {
@@ -105,12 +183,19 @@ export function createEwsOutlookCalendarFetcher(): OutlookCalendarFetcher {
   };
 }
 
-/** `acquireToken` must be bound to the `Calendars.Read` scope. */
+/**
+ * `acquireToken` must be bound to the `Calendars.Read` scope. `directory`
+ * carries the OPTIONAL name-search acquirers (People.Read / User.ReadBasic.All,
+ * each prebound separately) — omit or pass `{}` when the deployment doesn't
+ * hold those consents; attendee display names then degrade to "unknown"
+ * instead of resolving.
+ */
 export function createGraphOutlookCalendarFetcher(
   acquireToken: AcquireGraphToken,
+  directory?: GraphDirectoryTokenSources,
 ): OutlookCalendarFetcher {
   return {
     fetchCalendar: (options) =>
-      fetchOutlookCalendarViaGraph(acquireToken, options),
+      fetchOutlookCalendarViaGraph(acquireToken, options, directory),
   };
 }

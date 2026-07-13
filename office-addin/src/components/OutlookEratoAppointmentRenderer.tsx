@@ -18,7 +18,6 @@ import {
   clientActionDecisionsPersistedOptions,
   decisionKey,
   isActionDenied,
-  resolveClickBehavior,
 } from "../utils/clientActionPolicy";
 import {
   clientActionDisplayLabel,
@@ -186,57 +185,34 @@ export function OutlookEratoAppointmentRenderer({
   // makes the identity gate a no-op; freshness/latest/once-per-message still
   // bound WHEN it auto-prompts. Also covers unsaved-compose, whose minted
   // identity re-mints on every re-resolve and could never match itself.
-  const {
-    confirmCard,
-    isConfirmPending,
-    requestConfirmation,
-    allowCard,
-    denyCard,
-  } = useClientActionConfirmFlow<
-    AppointmentDetails,
-    OutlookAppointmentClientAction
-  >({
-    promptScope: "appointment",
-    facetId: artifact?.facetId,
-    decisions,
-    enforcedAskActions,
-    buildSummary,
-    execute: executeAppointment,
-    itemIdentity,
-    presentation: artifact?.clientActionPresentation,
-    messageId: artifact?.messageId,
-    isFreshCompletion: !!artifact?.isFreshCompletion,
-    proposedAction,
-    expectedItemIdentity: artifact?.itemIdentity,
-    currentItemIdentity: artifact?.itemIdentity,
-  });
-
-  const handleActionClick = useCallback(
-    (action: OutlookAppointmentClientAction) => {
-      if (
-        resolveClickBehavior({
-          facetId,
-          action,
-          decisions,
-          enforcedAskActions,
-        }) === "execute"
-      ) {
-        void executeAppointment();
-        return;
-      }
-      if (!requestConfirmation(action)) {
-        setStatus("error");
-        scheduleStatusReset(4000);
-      }
-    },
-    [
+  const { confirmCard, isConfirmPending, allowCard, denyCard } =
+    useClientActionConfirmFlow<
+      AppointmentDetails,
+      OutlookAppointmentClientAction
+    >({
+      promptScope: "appointment",
+      facetId: artifact?.facetId,
       decisions,
       enforcedAskActions,
-      executeAppointment,
-      facetId,
-      requestConfirmation,
-      scheduleStatusReset,
-    ],
+      buildSummary,
+      execute: executeAppointment,
+      itemIdentity,
+      presentation: artifact?.clientActionPresentation,
+      messageId: artifact?.messageId,
+      isFreshCompletion: !!artifact?.isFreshCompletion,
+      proposedAction,
+      expectedItemIdentity: artifact?.itemIdentity,
+      currentItemIdentity: artifact?.itemIdentity,
+    });
+
+  // A click IS the consent (universal rule, see clientActionPolicy header):
+  // the summary above the button discloses the full payload, and the confirm
+  // card exists only for the assistant-initiated auto-prompt path.
+  const handleActionClick = useCallback(
+    (_action: OutlookAppointmentClientAction) => {
+      void executeAppointment();
+    },
+    [executeAppointment],
   );
 
   // Streaming / malformed payload: no actionable card, keep the raw text
@@ -392,7 +368,7 @@ export function OutlookEratoAppointmentRenderer({
               ? t({
                   id: "officeAddin.appointmentRenderer.alwaysAllowLocked",
                   message:
-                    "Your organization requires confirmation for this action every time.",
+                    "Your organization requires confirmation each time this action runs automatically.",
                 })
               : undefined
           }

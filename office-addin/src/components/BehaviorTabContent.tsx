@@ -21,6 +21,7 @@ import {
 import {
   clientActionDisplayLabel,
   offerableClientActions,
+  type OutlookClientAction,
 } from "../utils/outlookClientActions";
 
 interface BehaviorTabContentProps {
@@ -101,20 +102,21 @@ export function BehaviorTabContent({
 
   // Decision toggles mirror the stored per-facet+action decisions written by
   // the inline permission card. Always the same three options; defaults to
-  // "ask" until the user decides otherwise.
-  const decisionOptionLabels: Record<
-    ClientActionDecision,
-    { label: string; helper: string }
-  > = {
+  // "ask" until the user decides otherwise. Decisions govern only
+  // assistant-initiated runs — a click on an action's button always executes
+  // (universal click-is-consent rule) — so the copy claims exactly that.
+  const decisionOptionLabels = (
+    _action: OutlookClientAction,
+  ): Record<ClientActionDecision, { label: string; helper: string }> => ({
     ask: {
       label: t({
-        id: "officeAddin.settings.addin.clientActions.ask.label",
-        message: "Ask every time",
+        id: "officeAddin.settings.addin.clientActions.clickConsent.ask.label",
+        message: "Ask before running automatically",
       }),
       helper: t({
-        id: "officeAddin.settings.addin.clientActions.ask.helper",
+        id: "officeAddin.settings.addin.clientActions.clickConsent.ask.helper",
         message:
-          "Shows a confirmation step in the chat before opening anything.",
+          "Shows a confirmation step only when the assistant triggers this action on its own. Clicking the action's button always runs it directly.",
       }),
     },
     always: {
@@ -138,12 +140,13 @@ export function BehaviorTabContent({
         message: "Hides this action and ignores the assistant's suggestion.",
       }),
     },
-  };
-  const alwaysLockedHelper = t({
-    id: "officeAddin.settings.addin.clientActions.always.locked",
-    message:
-      "Locked: your organization requires confirmation for this action every time.",
   });
+  const alwaysLockedHelper = (_action: OutlookClientAction) =>
+    t({
+      id: "officeAddin.settings.addin.clientActions.clickConsent.always.locked",
+      message:
+        "Locked: your organization requires confirmation each time this action runs automatically.",
+    });
   const decisionOrder: readonly ClientActionDecision[] = [
     "ask",
     "always",
@@ -251,6 +254,7 @@ export function BehaviorTabContent({
               </p>
               {group.actions.map((action) => {
                 const enforced = group.info.alwaysAskActions.includes(action);
+                const optionLabels = decisionOptionLabels(action);
                 const current = effectiveDecision({
                   facetId: group.facetId,
                   action,
@@ -286,11 +290,11 @@ export function BehaviorTabContent({
                               [decisionKey(group.facetId, action)]: decision,
                             });
                           }}
-                          label={decisionOptionLabels[decision].label}
+                          label={optionLabels[decision].label}
                           helper={
                             lockedAlways
-                              ? alwaysLockedHelper
-                              : decisionOptionLabels[decision].helper
+                              ? alwaysLockedHelper(action)
+                              : optionLabels[decision].helper
                           }
                         />
                       );

@@ -5,6 +5,7 @@ import {
   composeInheritsAnchorsEqual,
   isMessageRead,
   outlookAnchorFromItem,
+  resolveSupportedMailboxItem,
   strictAnchorsEqual,
 } from "../outlookAnchor";
 
@@ -93,6 +94,37 @@ const composeItem = (conv: string | null) =>
     subject: { getAsync: () => undefined },
     conversationId: conv ?? undefined,
   }) as unknown as Office.MessageCompose;
+
+describe("resolveSupportedMailboxItem", () => {
+  it("returns null for a missing item", () => {
+    expect(resolveSupportedMailboxItem(null)).toBeNull();
+    expect(resolveSupportedMailboxItem(undefined)).toBeNull();
+  });
+
+  it("treats appointment items as absent (read and compose shapes)", () => {
+    // AppointmentRead also has a string subject, AppointmentCompose an object
+    // one — both would pass the isMessageRead shape check if let through.
+    expect(
+      resolveSupportedMailboxItem({
+        subject: "Standup",
+        itemType: "appointment",
+      }),
+    ).toBeNull();
+    expect(
+      resolveSupportedMailboxItem({
+        subject: { getAsync: () => undefined },
+        itemType: "appointment",
+      }),
+    ).toBeNull();
+  });
+
+  it("passes message items through, including without itemType (mocks/hosts omit it)", () => {
+    const read = readItem("T1");
+    expect(resolveSupportedMailboxItem(read)).toBe(read);
+    const typed = { subject: "s", itemType: "message" };
+    expect(resolveSupportedMailboxItem(typed)).toBe(typed);
+  });
+});
 
 describe("isMessageRead", () => {
   it("identifies a read item by string subject", () => {

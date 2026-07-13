@@ -71,6 +71,19 @@ describe("parseAppointmentDetails", () => {
     });
   });
 
+  it('accepts "description" as a body alias (model drift), body winning', () => {
+    expect(
+      parseAppointmentDetails(
+        JSON.stringify({ ...VALID, description: "Agenda (30 min)" }),
+      ),
+    ).toEqual({ ...VALID, body: "Agenda (30 min)" });
+    expect(
+      parseAppointmentDetails(
+        JSON.stringify({ ...VALID, body: "Echter Body", description: "x" }),
+      ),
+    ).toEqual({ ...VALID, body: "Echter Body" });
+  });
+
   it("tolerates missing subject/attendees and non-string entries", () => {
     expect(
       parseAppointmentDetails(

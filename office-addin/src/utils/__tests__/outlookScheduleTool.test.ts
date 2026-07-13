@@ -1,11 +1,15 @@
 import { describe, it, expect, vi } from "vitest";
 
+import { CLIENT_ACTION_TOOL_NAME } from "../outlookClientActions";
 import {
   FETCH_AVAILABILITY_TOOL_NAME,
   SCHEDULING_THREAD_MAX_AGE_MS,
   containsFetchAvailabilityToolUse,
+  containsSchedulingSignal,
   createFetchAvailabilityExecutor,
   isSchedulingThreadFresh,
+  parseAttendees,
+  parseDurationMinutes,
   parseLookaheadDays,
   serializeCalendarForModel,
   toLocalOffsetIso,
@@ -21,6 +25,7 @@ const emptyCalendar: NormalizedCalendar = {
   workingHours: null,
   busyBlocks: [],
   historyMeetings: [],
+  attendees: [],
   displayTimeZone: "Europe/Berlin",
   degradedLegs: [],
 };
@@ -265,6 +270,327 @@ describe("serializeCalendarForModel", () => {
     expect(result.notes).toHaveLength(2);
   });
 
+  it("serializes attendees opaquely with unknown-as-not-free wording", () => {
+    const result = serializeCalendarForModel(
+      {
+        ...emptyCalendar,
+        attendees: [
+          {
+            requested: "alice@example.de",
+            smtp: "alice@example.de",
+            status: "ok",
+            busy: [
+              {
+                when: {
+                  kind: "date-time",
+                  startUtc: "2026-07-06T07:00:00Z",
+                  endUtc: "2026-07-06T08:00:00Z",
+                },
+                busyType: "Busy",
+              },
+            ],
+          },
+          {
+            requested: "Sales Team",
+            smtp: "bob@example.de",
+            status: "ok",
+            reason:
+              '1 nested distribution list(s) inside "Sales Team" were not expanded',
+            busy: [],
+          },
+          {
+            requested: "Nemo",
+            status: "unknown",
+            reason: "not found in the directory (GAL)",
+            busy: [],
+          },
+        ],
+      },
+      NOW,
+    );
+
+    expect(result.attendees).toEqual([
+      {
+        name: "alice@example.de",
+        status: "ok",
+        busy: [
+          {
+            day: "Monday 2026-07-06",
+            start: "09:00",
+            end: "10:00",
+            utcOffset: "+02:00",
+            busyType: "Busy",
+          },
+        ],
+      },
+      {
+        name: "Sales Team",
+        email: "bob@example.de",
+        status: "ok",
+        note: expect.stringContaining("nested distribution list"),
+        busy: [],
+      },
+      {
+        name: "Nemo",
+        status: "unknown - treat as NOT free",
+        note: "not found in the directory (GAL)",
+        busy: [],
+      },
+    ]);
+    expect(result.legend).toContain("attendees");
+    expect(result.legend).toContain("NOT free");
+  });
+
+  it("stamps coveredUntil on a truncated attendee busy list (tail cut ≠ free)", () => {
+    // 150 hourly blocks from Monday 07:00Z; the cap keeps the 100 soonest, so
+    // coverage ends at block #99's end: +99h30m → Friday 10:30Z = 12:30 Berlin.
+    const busy = Array.from({ length: 150 }, (_, i) => ({
+      when: {
+        kind: "date-time" as const,
+        startUtc: new Date(
+          Date.parse("2026-07-06T07:00:00Z") + i * 3_600_000,
+        ).toISOString(),
+        endUtc: new Date(
+          Date.parse("2026-07-06T07:30:00Z") + i * 3_600_000,
+        ).toISOString(),
+      },
+      busyType: "Busy" as const,
+    }));
+
+    const result = serializeCalendarForModel(
+      {
+        ...emptyCalendar,
+        attendees: [
+          {
+            requested: "alice@example.de",
+            smtp: "alice@example.de",
+            status: "ok",
+            busy,
+          },
+        ],
+      },
+      NOW,
+    ) as {
+      attendees: { status: string; coveredUntil?: string; busy: unknown[] }[];
+      notes: string[];
+      legend: string;
+    };
+
+    expect(result.attendees[0].busy).toHaveLength(100);
+    expect(result.attendees[0].status).toBe("ok");
+    expect(result.attendees[0].coveredUntil).toBe("Friday 2026-07-10 12:30");
+    expect(result.notes).toContain(
+      "1 attendee busy list(s) truncated to the 100 soonest entries",
+    );
+    expect(result.legend).toContain("coveredUntil");
+  });
+
+  it("emits ranked suggestedSlots and flags unreadable attendees in notes", () => {
+    const result = serializeCalendarForModel(
+      {
+        ...emptyCalendar,
+        workingHours: {
+          daysOfWeek: ["monday", "tuesday", "wednesday", "thursday", "friday"],
+          startMinutes: 540,
+          endMinutes: 1020,
+        },
+        // PARTIALLY readable: one ok attendee keeps slots flowing; all-unknown
+        // suppresses them entirely (next test).
+        attendees: [
+          {
+            requested: "alice@example.de",
+            smtp: "alice@example.de",
+            status: "ok",
+            busy: [],
+          },
+          { requested: "Nemo", status: "unknown", reason: "no", busy: [] },
+        ],
+      },
+      NOW,
+      { requestedDurationMinutes: 60, freeBusyWindowDays: 3 },
+    ) as {
+      suggestedSlots: {
+        durationMinutes: number;
+        durationBasis: string;
+        slots: { tier: string; start: string; day: string }[];
+      };
+      notes: string[];
+    };
+
+    expect(result.suggestedSlots.durationMinutes).toBe(60);
+    expect(result.suggestedSlots.durationBasis).toBe("requested");
+    expect(result.suggestedSlots.slots.length).toBeGreaterThan(0);
+    expect(result.suggestedSlots.slots[0].tier).toBe("earliest");
+    // NOW is Friday 14:00 Berlin; the same afternoon is the soonest window.
+    expect(result.suggestedSlots.slots[0].day).toBe("Friday 2026-07-03");
+    expect(result.notes).toEqual([
+      expect.stringContaining("1 attendee(s) whose calendar was unreadable"),
+    ]);
+  });
+
+  it("distinguishes failed working-hours lookup from genuinely unconfigured hours", () => {
+    const failed = serializeCalendarForModel(
+      { ...emptyCalendar, degradedLegs: ["workingHours"] },
+      NOW,
+      { requestedDurationMinutes: 30, freeBusyWindowDays: 3 },
+    ) as { notes: string[] };
+    expect(failed.notes).toContain(
+      "suggestedSlots assume Mon-Fri 09:00-17:00 (working-hours lookup failed — real hours unknown)",
+    );
+
+    const unconfigured = serializeCalendarForModel(emptyCalendar, NOW, {
+      requestedDurationMinutes: 30,
+      freeBusyWindowDays: 3,
+    }) as { notes: string[]; legend: string };
+    expect(unconfigured.notes).toContain(
+      "suggestedSlots assume Mon-Fri 09:00-17:00 (no working hours configured)",
+    );
+    expect(unconfigured.legend).toContain('"degraded" contains "workingHours"');
+  });
+
+  it("marks untrusted configured hours distinctly, even when suggestedSlots are suppressed", () => {
+    const withSlots = serializeCalendarForModel(
+      { ...emptyCalendar, workingHoursUntrusted: "zone mismatch (test)" },
+      NOW,
+      { requestedDurationMinutes: 30, freeBusyWindowDays: 3 },
+    ) as { notes: string[]; legend: string };
+    expect(withSlots.notes).toContain(
+      "working hours are configured but unusable (zone mismatch (test)) — real hours unknown; never say none are configured",
+    );
+    expect(withSlots.notes).toContain(
+      "suggestedSlots assume Mon-Fri 09:00-17:00 (configured working hours unusable — real hours unknown)",
+    );
+    expect(withSlots.legend).toContain("configured but unusable");
+
+    // Slots gated off (busy degraded): the unconditional note must survive —
+    // it is the only thing standing between the model and "none configured".
+    const suppressed = serializeCalendarForModel(
+      {
+        ...emptyCalendar,
+        workingHoursUntrusted: "zone mismatch (test)",
+        degradedLegs: ["busy"],
+      },
+      NOW,
+      { requestedDurationMinutes: 30, freeBusyWindowDays: 3 },
+    ) as { suggestedSlots?: unknown; notes: string[] };
+    expect(suppressed.suggestedSlots).toBeUndefined();
+    expect(suppressed.notes).toContain(
+      "working hours are configured but unusable (zone mismatch (test)) — real hours unknown; never say none are configured",
+    );
+  });
+
+  it("labels anchored working hours with their own time zone", () => {
+    const anchored = serializeCalendarForModel(
+      {
+        ...emptyCalendar,
+        workingHours: {
+          daysOfWeek: ["monday"],
+          startMinutes: 540,
+          endMinutes: 1020,
+          anchor: { kind: "iana", zone: "America/New_York" },
+        },
+      },
+      NOW,
+    ) as {
+      workingHours: { start: string; end: string; timeZone?: string };
+      notes: string[];
+      legend: string;
+    };
+    expect(anchored.workingHours).toEqual({
+      days: ["monday"],
+      start: "09:00",
+      end: "17:00",
+      timeZone: "America/New_York",
+    });
+    expect(anchored.notes).toContain(
+      "workingHours are anchored to America/New_York, NOT the display timezone — start/end are wall-clock in that zone; suggestedSlots already account for this",
+    );
+    expect(anchored.legend).toContain("may carry its own timeZone");
+
+    // EWS rules anchor (no IANA name): offsets become the label.
+    const rules = serializeCalendarForModel(
+      {
+        ...emptyCalendar,
+        workingHours: {
+          daysOfWeek: ["monday"],
+          startMinutes: 480,
+          endMinutes: 1020,
+          anchor: {
+            kind: "rules",
+            standardOffset: -300,
+            daylightOffset: -240,
+          },
+        },
+      },
+      NOW,
+    ) as { workingHours: { timeZone?: string } };
+    expect(rules.workingHours.timeZone).toBe("UTC-05:00/-04:00 DST");
+  });
+
+  it("serializes an attendee's shared working hours with their zone label", () => {
+    const result = serializeCalendarForModel(
+      {
+        ...emptyCalendar,
+        attendees: [
+          {
+            requested: "ny@example.de",
+            smtp: "ny@example.de",
+            status: "ok",
+            busy: [],
+            workingHours: {
+              daysOfWeek: ["monday"],
+              startMinutes: 540,
+              endMinutes: 1020,
+              anchor: { kind: "iana", zone: "America/New_York" },
+            },
+          },
+        ],
+      },
+      NOW,
+    ) as {
+      attendees: { workingHours?: Record<string, unknown> }[];
+      legend: string;
+    };
+
+    expect(result.attendees[0].workingHours).toEqual({
+      days: ["monday"],
+      start: "09:00",
+      end: "17:00",
+      timeZone: "America/New_York",
+    });
+    expect(result.legend).toContain("may include their workingHours");
+  });
+
+  it("suppresses suggestedSlots when every requested attendee is unreadable", () => {
+    const result = serializeCalendarForModel(
+      {
+        ...emptyCalendar,
+        attendees: [
+          { requested: "Nemo", status: "unknown", reason: "no", busy: [] },
+          { requested: "Dory", status: "unknown", reason: "no", busy: [] },
+        ],
+      },
+      NOW,
+      { requestedDurationMinutes: 60, freeBusyWindowDays: 3 },
+    ) as { suggestedSlots?: unknown; notes: string[] };
+
+    expect(result.suggestedSlots).toBeUndefined();
+    expect(result.notes).toContain(
+      "suggestedSlots suppressed — no requested attendee's calendar could be read",
+    );
+  });
+
+  it("suppresses suggestedSlots when busy or attendee data degraded", () => {
+    for (const leg of ["busy", "attendees"] as const) {
+      const result = serializeCalendarForModel(
+        { ...emptyCalendar, degradedLegs: [leg] },
+        NOW,
+        { requestedDurationMinutes: 30, freeBusyWindowDays: 7 },
+      );
+      expect(result.suggestedSlots).toBeUndefined();
+    }
+  });
+
   it("trims very long subjects", () => {
     const result = serializeCalendarForModel(
       {
@@ -314,6 +640,59 @@ describe("parseLookaheadDays", () => {
   });
 });
 
+describe("parseAttendees", () => {
+  it("returns empty for absent/invalid input", () => {
+    expect(parseAttendees(null)).toEqual({ attendees: [], droppedByCap: 0 });
+    expect(parseAttendees({})).toEqual({ attendees: [], droppedByCap: 0 });
+    expect(parseAttendees({ attendees: "alice" })).toEqual({
+      attendees: [],
+      droppedByCap: 0,
+    });
+  });
+
+  it("trims, drops non-strings/empties and dedupes case-insensitively", () => {
+    expect(
+      parseAttendees({
+        attendees: [" alice@x.de ", "ALICE@x.de", 7, "", "Bob"],
+      }),
+    ).toEqual({ attendees: ["alice@x.de", "Bob"], droppedByCap: 0 });
+  });
+
+  it("caps at 15 and reports only cap drops", () => {
+    const attendees = Array.from({ length: 18 }, (_, i) => `p${i}@x.de`);
+    const parsed = parseAttendees({ attendees });
+    expect(parsed.attendees).toHaveLength(15);
+    expect(parsed.droppedByCap).toBe(3);
+  });
+
+  it('extracts the address from RFC-style "Name <addr>" and dedupes against the bare form', () => {
+    expect(
+      parseAttendees({
+        attendees: [
+          "Alice Meier <alice@x.de>",
+          "alice@x.de",
+          "<bob@x.de>",
+          "Just A Name",
+        ],
+      }),
+    ).toEqual({
+      attendees: ["alice@x.de", "bob@x.de", "Just A Name"],
+      droppedByCap: 0,
+    });
+  });
+});
+
+describe("parseDurationMinutes", () => {
+  it("returns null for absent/invalid and clamps valid values", () => {
+    expect(parseDurationMinutes(null)).toBeNull();
+    expect(parseDurationMinutes({})).toBeNull();
+    expect(parseDurationMinutes({ duration_minutes: "60" })).toBeNull();
+    expect(parseDurationMinutes({ duration_minutes: 60 })).toBe(60);
+    expect(parseDurationMinutes({ duration_minutes: 1 })).toBe(5);
+    expect(parseDurationMinutes({ duration_minutes: 5000 })).toBe(1440);
+  });
+});
+
 describe("createFetchAvailabilityExecutor", () => {
   it("returns a clean error when no calendar backend applies", async () => {
     const executor = createFetchAvailabilityExecutor(() => null);
@@ -334,10 +713,29 @@ describe("createFetchAvailabilityExecutor", () => {
     expect(fetchCalendar).toHaveBeenCalledWith({
       freeBusyWindowDays: 30,
       historyWindowDays: 21,
+      attendees: [],
     });
     expect(outcome.ok).toBe(true);
     if (outcome.ok) {
       expect(outcome.result).toMatchObject({ timezone: "Europe/Berlin" });
+    }
+  });
+
+  it("passes attendees through and notes cap overflow", async () => {
+    const fetchCalendar = vi.fn().mockResolvedValue(emptyCalendar);
+    const executor = createFetchAvailabilityExecutor(() => ({
+      fetchCalendar,
+    }));
+
+    const attendees = Array.from({ length: 17 }, (_, i) => `p${i}@x.de`);
+    const outcome = await executor({ attendees });
+
+    expect(fetchCalendar.mock.calls[0][0].attendees).toHaveLength(15);
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) {
+      expect((outcome.result as { notes: string[] }).notes).toContainEqual(
+        expect.stringContaining("2 not checked"),
+      );
     }
   });
 
@@ -382,6 +780,74 @@ describe("containsFetchAvailabilityToolUse", () => {
     expect(containsFetchAvailabilityToolUse([toolUse("other_tool")])).toBe(
       false,
     );
+  });
+});
+
+describe("containsSchedulingSignal", () => {
+  const textPart = (text: string): ContentPart =>
+    ({ content_type: "text", text }) as unknown as ContentPart;
+
+  it("counts a fetch_availability tool use", () => {
+    expect(
+      containsSchedulingSignal([
+        {
+          content_type: "tool_use",
+          tool_name: FETCH_AVAILABILITY_TOOL_NAME,
+        } as unknown as ContentPart,
+      ]),
+    ).toBe(true);
+  });
+
+  const proposeToolUse = (action: string): ContentPart =>
+    ({
+      content_type: "tool_use",
+      tool_name: CLIENT_ACTION_TOOL_NAME,
+      tool_call_id: "c1",
+      status: "success",
+      input: { action },
+    }) as unknown as ContentPart;
+
+  it("counts an erato-appointment fence — confirm/adjust turns must stay sticky", () => {
+    expect(
+      containsSchedulingSignal([
+        textPart('Passt!\n```erato-appointment\n{"start":"..."}\n```'),
+      ]),
+    ).toBe(true);
+  });
+
+  it("ignores prose that merely quotes the fence syntax", () => {
+    expect(
+      containsSchedulingSignal([
+        textPart("You could use a ```erato-appointment fence for that."),
+      ]),
+    ).toBe(false);
+  });
+
+  it("counts a propose_client_action for the appointment action", () => {
+    expect(
+      containsSchedulingSignal([proposeToolUse("outlook.create_appointment")]),
+    ).toBe(true);
+  });
+
+  it("ignores a propose_client_action for a non-appointment action", () => {
+    expect(containsSchedulingSignal([proposeToolUse("outlook.reply")])).toBe(
+      false,
+    );
+  });
+
+  it("ignores plain text, other fences and other tools", () => {
+    expect(containsSchedulingSignal(undefined)).toBe(false);
+    expect(
+      containsSchedulingSignal([textPart("```erato-email\nHi\n```")]),
+    ).toBe(false);
+    expect(
+      containsSchedulingSignal([
+        {
+          content_type: "tool_use",
+          tool_name: "other_tool",
+        } as unknown as ContentPart,
+      ]),
+    ).toBe(false);
   });
 });
 

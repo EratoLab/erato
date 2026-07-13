@@ -406,9 +406,13 @@ chat_provider_ids = ["test-token-limit"]
 # # proposed action immediately after a fresh assistant completion, subject
 # # to the user's local approval preferences in the add-in settings).
 # presentation = "render_buttons"
-# # Subset of client_actions the deployment ENFORCES a per-use confirmation
-# # for: the client always asks and never offers a persistent "always allow"
-# # (greyed out with a reason in the client settings). Users can still deny.
+# # Subset of client_actions the deployment ENFORCES confirmation for on
+# # ASSISTANT-INITIATED execution: an LLM proposal always shows the card and
+# # a persistent "always allow" is never offered (greyed out with a reason in
+# # the client settings). Users can still deny. Does not gate manual clicks
+# # on fully-described buttons — those consent by clicking. (The three keys
+# # are startup-validated together: presentation requires non-empty
+# # client_actions; always_ask must be a subset of client_actions.)
 # client_actions_always_ask = ["outlook.reply_all"]
 # allowed_args = ["body_format"]
 # template = """
@@ -434,18 +438,28 @@ chat_provider_ids = ["test-token-limit"]
 # # names). The namespace exists purely for allowlist selection ("outlook/*").
 # name = "fetch_availability"
 # namespace = "outlook"
-# description = "Read the signed-in user's own Outlook calendar (working hours, busy times, recent meetings). All returned times are local to the user's time zone."
+# description = "Read the signed-in user's Outlook calendar (working hours, busy times, recent meetings); optionally also named attendees' opaque free/busy, to find a slot that works for everyone. All returned times are local to the user's time zone."
 # parameters = """
 # {
 #   "type": "object",
 #   "properties": {
-#     "lookahead_days": { "type": "integer", "minimum": 1, "maximum": 62 }
+#     "lookahead_days": { "type": "integer", "minimum": 1, "maximum": 62 },
+#     "attendees": { "type": "array", "items": { "type": "string" }, "maxItems": 15 },
+#     "duration_minutes": { "type": "integer", "minimum": 5, "maximum": 1440 }
 #   },
 #   "additionalProperties": false
 # }
 # """
 # # Optional per-tool park timeout (default 60000 ms).
 # # timeout_ms = 30000
+#
+# OPTIONAL Entra permissions (EXO attendee name search): grant the add-in app
+# registration People.Read and/or User.ReadBasic.All (delegated) to resolve
+# attendee display names to addresses on Exchange Online (counterpart of
+# on-prem ResolveNames). Without them nothing breaks — names degrade to
+# "unknown - treat as NOT free" attendees with a note to use an email address
+# instead. Grant deliberately: directory search lets any signed-in user
+# enumerate GAL names.
 #
 # The scheduling workflow facet that selects the tool. The Outlook add-in
 # attaches it in neutral contexts and on follow-ups of a scheduling exchange;
@@ -459,11 +473,15 @@ chat_provider_ids = ["test-token-limit"]
 # tool_call_allowlist = ["outlook/*"]
 # # Confirm path: once the user picks a slot, the model emits the appointment
 # # as an erato-appointment fenced JSON block and proposes this action; the
-# # add-in confirms and opens a prefilled appointment form (nothing is created
-# # server-side). The three keys travel together (startup validation).
+# # add-in opens a prefilled appointment form (nothing is created server-side).
+# # Fence fields: start, end (ISO-8601 with offset, in {{timezone}}), subject,
+# # attendees (string[]); optional optionalAttendees, location, body (plain-
+# # text agenda; "description" is a tolerated alias — body wins on conflict).
+# # Enforcement gates assistant-initiated runs only — see the
+# # client_actions_always_ask note above.
 # client_actions = ["outlook.create_appointment"]
-# presentation = "auto_prompt"
 # client_actions_always_ask = ["outlook.create_appointment"]
+# presentation = "auto_prompt"
 # allowed_args = ["now_iso", "timezone"]
 # template = """
 # FOR THIS MESSAGE ONLY: <your scheduling instructions; have the model call the

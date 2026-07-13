@@ -1,10 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  EXPECTED_ATTENDEE_PARITY,
+  stripReasons,
+} from "../../test/fixtures/attendeeParity";
+import {
   installMockMailbox,
   uninstallMockMailbox,
 } from "../../test/mocks/outlook/mailbox";
-import { fetchOutlookCalendarViaGraph } from "../fetchOutlookCalendarGraph";
+import {
+  availabilityViewIntervalFor,
+  fetchAttendeeAvailabilityViaGraph,
+  fetchOutlookCalendarViaGraph,
+} from "../fetchOutlookCalendarGraph";
 import { GRAPH_BASE } from "../fetchOutlookMessageGraph";
 
 type MailboxMock = ReturnType<typeof installMockMailbox> & {
@@ -332,8 +340,10 @@ describe("fetchOutlookCalendarViaGraph", () => {
     expect(calendar.workingHours).toBeNull();
     expect(calendar.busyBlocks).toHaveLength(3);
     expect(calendar.historyMeetings).toHaveLength(2);
-    // A hard getSchedule failure flags the workingHours leg degraded.
+    // A hard getSchedule failure flags the workingHours leg degraded — and is
+    // mutually exclusive with the untrusted state.
     expect(calendar.degradedLegs).toEqual(["workingHours"]);
+    expect(calendar.workingHoursUntrusted).toBeUndefined();
     warnSpy.mockRestore();
   });
 
@@ -386,11 +396,11 @@ describe("fetchOutlookCalendarViaGraph", () => {
     expect(scheduleAuths).toEqual(["Bearer stale-token", "Bearer fresh-token"]);
   });
 
-  it("degrades working hours to null when getSchedule's zone differs from the mailbox zone", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("anchors working hours to the schedule's own zone when it differs from the mailbox zone", async () => {
     const acquireToken = vi.fn().mockResolvedValue("graph-tok");
-    // Mailbox mock is "W. Europe Standard Time"; a UTC schedule zone would make
-    // the clock-time minutes wrong, so working hours must degrade rather than lie.
+    // Mailbox mock is "W. Europe Standard Time"; a UTC schedule zone is MS's
+    // supported traveler state — the hours-zone is authoritative and rides
+    // along as the anchor instead of being discarded.
     const transport = makeTransport((url) => {
       if (url.includes("getSchedule")) {
         return jsonResponse({
@@ -413,12 +423,55 @@ describe("fetchOutlookCalendarViaGraph", () => {
       transport,
     });
 
-    expect(calendar.workingHours).toBeNull();
+    expect(calendar.workingHours).toEqual({
+      daysOfWeek: ["monday"],
+      startMinutes: 480,
+      endMinutes: 1020,
+      anchor: { kind: "iana", zone: "UTC" },
+    });
+    expect(calendar.workingHoursUntrusted).toBeUndefined();
     expect(calendar.busyBlocks).toHaveLength(3);
-    // Zone divergence is a data-trust degrade, NOT a fetch failure — the leg
-    // fetched fine, so it is deliberately not listed in degradedLegs.
     expect(calendar.degradedLegs).toEqual([]);
-    warnSpy.mockRestore();
+  });
+
+  it("maps a midnight workingHours end to end-of-day, and degrades an inverted window to null", async () => {
+    const acquireToken = vi.fn().mockResolvedValue("graph-tok");
+    const scheduleWith = (startTime: string, endTime: string) =>
+      makeTransport((url) =>
+        url.includes("getSchedule")
+          ? jsonResponse({
+              value: [
+                {
+                  workingHours: {
+                    daysOfWeek: ["monday"],
+                    startTime,
+                    endTime,
+                    timeZone: { name: "W. Europe Standard Time" },
+                  },
+                },
+              ],
+            })
+          : happyRouter(url),
+      );
+
+    // Workday ending at midnight: "00:00:00" is an END → 1440, not 0.
+    const midnight = await fetchOutlookCalendarViaGraph(acquireToken, {
+      transport: scheduleWith("09:00:00.0000000", "00:00:00.0000000"),
+    });
+    expect(midnight.workingHours).toEqual({
+      daysOfWeek: ["monday"],
+      startMinutes: 540,
+      endMinutes: 1440,
+    });
+
+    // Genuinely inverted (overnight shift) → null/untrusted, never an
+    // inverted window that silently skips every day in the ranking.
+    const inverted = await fetchOutlookCalendarViaGraph(acquireToken, {
+      transport: scheduleWith("17:00:00.0000000", "09:00:00.0000000"),
+    });
+    expect(inverted.workingHours).toBeNull();
+    expect(inverted.workingHoursUntrusted).toContain("overnight");
+    expect(inverted.degradedLegs).toEqual([]);
   });
 
   it("emits authoringTimeZone null for an unmappable originalStartTimeZone", async () => {
@@ -517,6 +570,10 @@ describe("fetchOutlookCalendarViaGraph", () => {
     });
 
     expect(calendar.workingHours).toBeNull();
+    // Hours exist but can't be interpreted — untrusted, never "unconfigured".
+    expect(calendar.workingHoursUntrusted).toContain(
+      "unrecognized working-hours time zone",
+    );
     // Data-trust degrade, not a fetch failure — stays out of degradedLegs.
     expect(calendar.degradedLegs).toEqual([]);
     warnSpy.mockRestore();
@@ -601,5 +658,448 @@ describe("fetchOutlookCalendarViaGraph", () => {
         signal: controller.signal,
       }),
     ).rejects.toBe(reason);
+  });
+});
+
+/** The wire fixture for the SHARED attendee parity contract — the EWS suite
+ * feeds the equivalent GetUserAvailability response and asserts the same
+ * `EXPECTED_ATTENDEE_PARITY`. */
+const GET_SCHEDULE_ATTENDEES_RESPONSE = {
+  value: [
+    {
+      scheduleId: "alice@example.de",
+      availabilityView: "not-used-when-items-present",
+      scheduleItems: [
+        {
+          status: "busy",
+          start: { dateTime: "2026-07-07T08:00:00.0000000", timeZone: "UTC" },
+          end: { dateTime: "2026-07-07T09:00:00.0000000", timeZone: "UTC" },
+        },
+        // A free item must be filtered out (opaque = blocking-only).
+        {
+          status: "free",
+          start: { dateTime: "2026-07-07T10:00:00.0000000", timeZone: "UTC" },
+          end: { dateTime: "2026-07-07T10:30:00.0000000", timeZone: "UTC" },
+        },
+        {
+          status: "tentative",
+          start: { dateTime: "2026-07-07T12:00:00.0000000", timeZone: "UTC" },
+          end: { dateTime: "2026-07-07T12:30:00.0000000", timeZone: "UTC" },
+        },
+        {
+          status: "oof",
+          start: { dateTime: "2026-07-08T08:00:00.0000000", timeZone: "UTC" },
+          end: { dateTime: "2026-07-08T16:00:00.0000000", timeZone: "UTC" },
+        },
+      ],
+    },
+    {
+      scheduleId: "denied@example.de",
+      error: {
+        message: "Access is denied.",
+        responseCode: "ErrorNoFreeBusyAccess",
+      },
+    },
+  ],
+};
+
+const ATTENDEE_RANGE = {
+  startUtc: "2026-07-07T00:00:00Z",
+  endUtc: "2026-07-21T00:00:00Z",
+};
+
+describe("fetchAttendeeAvailabilityViaGraph", () => {
+  beforeEach(() => {
+    installOutlookMailboxMock();
+  });
+
+  afterEach(() => {
+    uninstallMockMailbox();
+    vi.unstubAllGlobals();
+  });
+
+  it("posts ONE multi-schedule getSchedule and matches the shared parity contract", async () => {
+    const bodies: string[] = [];
+    const transport = vi.fn(async (url: string, init?: RequestInit) => {
+      bodies.push(String(init?.body ?? ""));
+      expect(url).toContain("getSchedule");
+      return jsonResponse(GET_SCHEDULE_ATTENDEES_RESPONSE);
+    });
+
+    const entries = await fetchAttendeeAvailabilityViaGraph(
+      vi.fn().mockResolvedValue("graph-tok"),
+      ATTENDEE_RANGE,
+      ["alice@example.de", "denied@example.de"],
+      { transport },
+    );
+
+    expect(transport).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(bodies[0]) as {
+      schedules: string[];
+      startTime: { dateTime: string; timeZone: string };
+      endTime: { dateTime: string };
+      availabilityViewInterval: number;
+    };
+    expect(body.schedules).toEqual(["alice@example.de", "denied@example.de"]);
+    expect(body.startTime).toEqual({
+      dateTime: "2026-07-07T00:00:00Z",
+      timeZone: "UTC",
+    });
+    expect(body.endTime.dateTime).toBe("2026-07-21T00:00:00Z");
+    // 14 days / 30 min = 672 slots — safely under the 1000-slot 5006 cap.
+    expect(body.availabilityViewInterval).toBe(30);
+
+    expect(stripReasons(entries)).toEqual(EXPECTED_ATTENDEE_PARITY);
+    // Opaque contract: no subject anywhere.
+    for (const entry of entries) {
+      for (const block of entry.busy) {
+        expect(block.subject).toBeUndefined();
+      }
+    }
+  });
+
+  it("decodes availabilityView when scheduleItems are absent (merged-only policy)", async () => {
+    const transport = vi.fn(async () =>
+      jsonResponse({
+        value: [
+          {
+            scheduleId: "carol@example.de",
+            // 30-min slices from the window start: free, Busy×2, free, OOF,
+            // workingElsewhere (Graph '4' — non-blocking, must be dropped).
+            availabilityView: "022034",
+          },
+        ],
+      }),
+    );
+
+    const entries = await fetchAttendeeAvailabilityViaGraph(
+      vi.fn().mockResolvedValue("graph-tok"),
+      { startUtc: "2026-07-07T00:00:00Z", endUtc: "2026-07-08T00:00:00Z" },
+      ["carol@example.de"],
+      { transport },
+    );
+
+    expect(entries).toEqual([
+      {
+        requested: "carol@example.de",
+        smtp: "carol@example.de",
+        status: "ok",
+        busy: [
+          {
+            when: {
+              kind: "date-time",
+              startUtc: "2026-07-07T00:30:00Z",
+              endUtc: "2026-07-07T01:30:00Z",
+            },
+            busyType: "Busy",
+          },
+          {
+            when: {
+              kind: "date-time",
+              startUtc: "2026-07-07T02:00:00Z",
+              endUtc: "2026-07-07T02:30:00Z",
+            },
+            busyType: "OOF",
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("carries an attendee's shared working hours, anchored to their own zone", async () => {
+    const transport = vi.fn(async () =>
+      jsonResponse({
+        value: [
+          {
+            scheduleId: "alice@example.de",
+            scheduleItems: [],
+            workingHours: {
+              daysOfWeek: ["monday"],
+              startTime: "09:00:00.0000000",
+              endTime: "17:00:00.0000000",
+              timeZone: { name: "Pacific Standard Time" },
+            },
+          },
+        ],
+      }),
+    );
+
+    const entries = await fetchAttendeeAvailabilityViaGraph(
+      vi.fn().mockResolvedValue("graph-tok"),
+      ATTENDEE_RANGE,
+      ["alice@example.de"],
+      { transport },
+    );
+
+    expect(entries[0]).toMatchObject({ status: "ok", busy: [] });
+    expect(entries[0].workingHours).toEqual({
+      daysOfWeek: ["monday"],
+      startMinutes: 540,
+      endMinutes: 1020,
+      anchor: { kind: "iana", zone: "America/Los_Angeles" },
+    });
+  });
+
+  it("degrades ONE attendee to unknown when its schedule carries a non-UTC slice, keeping siblings", async () => {
+    const transport = vi.fn(async () =>
+      jsonResponse({
+        value: [
+          {
+            scheduleId: "alice@example.de",
+            scheduleItems: [
+              {
+                status: "busy",
+                start: {
+                  dateTime: "2026-07-07T08:00:00.0000000",
+                  timeZone: "W. Europe Standard Time",
+                },
+                end: {
+                  dateTime: "2026-07-07T09:00:00.0000000",
+                  timeZone: "W. Europe Standard Time",
+                },
+              },
+            ],
+          },
+          {
+            scheduleId: "bob@example.de",
+            scheduleItems: [
+              {
+                status: "busy",
+                start: {
+                  dateTime: "2026-07-07T08:00:00.0000000",
+                  timeZone: "UTC",
+                },
+                end: {
+                  dateTime: "2026-07-07T09:00:00.0000000",
+                  timeZone: "UTC",
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    const entries = await fetchAttendeeAvailabilityViaGraph(
+      vi.fn().mockResolvedValue("graph-tok"),
+      ATTENDEE_RANGE,
+      ["alice@example.de", "bob@example.de"],
+      { transport },
+    );
+
+    // The malformed slice degrades alice only — bob's data survives.
+    expect(entries[0]).toMatchObject({
+      requested: "alice@example.de",
+      status: "unknown",
+      busy: [],
+    });
+    expect(entries[0].reason).toContain("non-UTC");
+    expect(entries[1]).toMatchObject({
+      requested: "bob@example.de",
+      status: "ok",
+    });
+    expect(entries[1].busy).toHaveLength(1);
+  });
+
+  it("marks non-SMTP inputs unknown; an all-invalid list never hits the network", async () => {
+    const transport = vi.fn();
+
+    const entries = await fetchAttendeeAvailabilityViaGraph(
+      vi.fn().mockResolvedValue("graph-tok"),
+      ATTENDEE_RANGE,
+      ["Bob Builder"],
+      { transport },
+    );
+
+    expect(transport).not.toHaveBeenCalled();
+    expect(entries).toEqual([
+      {
+        requested: "Bob Builder",
+        status: "unknown",
+        reason: expect.stringContaining("not an email address"),
+        busy: [],
+      },
+    ]);
+  });
+
+  it("returns [] for an empty attendee list without a network call", async () => {
+    const transport = vi.fn();
+    await expect(
+      fetchAttendeeAvailabilityViaGraph(
+        vi.fn().mockResolvedValue("graph-tok"),
+        ATTENDEE_RANGE,
+        [],
+        { transport },
+      ),
+    ).resolves.toEqual([]);
+    expect(transport).not.toHaveBeenCalled();
+  });
+});
+
+describe("availabilityViewIntervalFor", () => {
+  it("stays at 30 min for windows within the 1000-slot cap and doubles beyond", () => {
+    expect(availabilityViewIntervalFor(14 * 24 * 60)).toBe(30); // 672 slots
+    expect(availabilityViewIntervalFor(21 * 24 * 60)).toBe(60); // 30 → 1008 > cap
+    expect(availabilityViewIntervalFor(62 * 24 * 60)).toBe(120); // Graph max window
+  });
+});
+
+describe("fetchAttendeeAvailabilityViaGraph with directory resolution", () => {
+  beforeEach(() => {
+    installOutlookMailboxMock();
+  });
+
+  afterEach(() => {
+    uninstallMockMailbox();
+    vi.unstubAllGlobals();
+  });
+
+  const directory = {
+    people: vi.fn().mockResolvedValue("people-tok"),
+    users: vi.fn().mockResolvedValue("users-tok"),
+  };
+
+  it("resolves a display name via People and joins it into getSchedule", async () => {
+    const bodies: string[] = [];
+    const transport = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes("/me/people")) {
+        return jsonResponse({
+          value: [
+            {
+              displayName: "Bob Builder",
+              personType: { class: "Person" },
+              scoredEmailAddresses: [{ address: "bob@example.de" }],
+            },
+          ],
+        });
+      }
+      expect(url).toContain("getSchedule");
+      bodies.push(String(init?.body ?? ""));
+      return jsonResponse({
+        value: [{ scheduleId: "bob@example.de", scheduleItems: [] }],
+      });
+    });
+
+    const entries = await fetchAttendeeAvailabilityViaGraph(
+      vi.fn().mockResolvedValue("graph-tok"),
+      ATTENDEE_RANGE,
+      ["Bob Builder"],
+      { transport },
+      directory,
+    );
+
+    const body = JSON.parse(bodies[0]) as { schedules: string[] };
+    expect(body.schedules).toEqual(["bob@example.de"]);
+    expect(entries).toEqual([
+      {
+        requested: "Bob Builder",
+        smtp: "bob@example.de",
+        status: "ok",
+        busy: [],
+      },
+    ]);
+  });
+
+  it("discloses a non-exact directory match in the entry's reason", async () => {
+    const transport = vi.fn(async (url: string) => {
+      if (url.includes("/me/people")) {
+        return jsonResponse({
+          value: [
+            {
+              // Fuzzy single hit for input "Michael Wagner".
+              displayName: "Michaela Wagner",
+              personType: { class: "Person" },
+              scoredEmailAddresses: [{ address: "michaela@example.de" }],
+            },
+          ],
+        });
+      }
+      return jsonResponse({
+        value: [{ scheduleId: "michaela@example.de", scheduleItems: [] }],
+      });
+    });
+
+    const entries = await fetchAttendeeAvailabilityViaGraph(
+      vi.fn().mockResolvedValue("graph-tok"),
+      ATTENDEE_RANGE,
+      ["Michael Wagner"],
+      { transport },
+      directory,
+    );
+
+    expect(entries[0]).toMatchObject({
+      requested: "Michael Wagner",
+      smtp: "michaela@example.de",
+      status: "ok",
+      reason: "resolved as Michaela Wagner <michaela@example.de>",
+    });
+  });
+
+  it("surfaces ambiguous candidates so the user can pick an address", async () => {
+    const transport = vi.fn(async (url: string) => {
+      expect(url).toContain("/me/people");
+      return jsonResponse({
+        value: [
+          {
+            displayName: "Chris A",
+            personType: { class: "Person" },
+            scoredEmailAddresses: [{ address: "a@example.de" }],
+          },
+          {
+            displayName: "Chris B",
+            personType: { class: "Person" },
+            scoredEmailAddresses: [{ address: "b@example.de" }],
+          },
+        ],
+      });
+    });
+
+    const entries = await fetchAttendeeAvailabilityViaGraph(
+      vi.fn().mockResolvedValue("graph-tok"),
+      ATTENDEE_RANGE,
+      ["Chris"],
+      { transport },
+      directory,
+    );
+
+    // Nothing resolvable → no getSchedule call at all.
+    expect(transport).toHaveBeenCalledTimes(1);
+    expect(entries).toEqual([
+      {
+        requested: "Chris",
+        status: "unknown",
+        reason: expect.stringContaining(
+          "ambiguous name (2 directory matches: Chris A <a@example.de>, Chris B <b@example.de>) — ask the user which address to use",
+        ),
+        busy: [],
+      },
+    ]);
+  });
+
+  it("degrades to unknown with a hint when no directory consent exists", async () => {
+    const transport = vi.fn(async () =>
+      jsonResponse({}, { ok: false, status: 403, statusText: "Forbidden" }),
+    );
+    const denied = {
+      people: vi.fn().mockRejectedValue(new Error("consent_required")),
+      users: vi.fn().mockRejectedValue(new Error("consent_required")),
+    };
+
+    const entries = await fetchAttendeeAvailabilityViaGraph(
+      vi.fn().mockResolvedValue("graph-tok"),
+      ATTENDEE_RANGE,
+      ["Bob Builder"],
+      { transport },
+      denied,
+    );
+
+    expect(entries).toEqual([
+      {
+        requested: "Bob Builder",
+        status: "unknown",
+        reason: expect.stringContaining("directory name search unavailable"),
+        busy: [],
+      },
+    ]);
   });
 });

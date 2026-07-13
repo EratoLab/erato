@@ -1,5 +1,9 @@
 import {
+  ambiguousCandidatesReason,
   computeCalendarRanges,
+  decodeMergedFreeBusyView,
+  onlyBlockingBlocks,
+  resolvedAsCaveat,
   resolveTimezone,
   runCalendarLegs,
 } from "./calendarLegs";
@@ -23,12 +27,16 @@ import { toIanaStrict } from "./windowsZones";
 import type { CalendarRange } from "./calendarLegs";
 import type {
   CalendarFetchOptions,
+  NormalizedAttendeeAvailability,
   NormalizedBusyBlock,
   NormalizedBusyType,
   NormalizedCalendar,
   NormalizedEventWhen,
   NormalizedHistoryMeeting,
   NormalizedWorkingHours,
+  WorkingHoursAnchor,
+  WorkingHoursLegResult,
+  WorkingHoursTransition,
 } from "./fetchOutlookCalendar";
 
 export type { CalendarRange } from "./calendarLegs";
@@ -111,35 +119,70 @@ function buildSerializableUtcTimeZone(): string {
   );
 }
 
+/** Merged free/busy slice width for GetUserAvailability (and the decode
+ * anchor when a response is MergedOnly). */
+export const EWS_MERGED_FREE_BUSY_INTERVAL_MINUTES = 30;
+
 /** Element order is STRICT per the schema (TimeZone → MailboxDataArray →
  * FreeBusyViewOptions; TimeWindow → Interval → RequestedView). RequestedView
- * `Detailed` makes the response carry WorkingHours. */
+ * `Detailed` makes the response carry WorkingHours (the self working-hours
+ * leg); the attendee leg asks `FreeBusy` — opaque intervals, no details.
+ * FreeBusyResponses come back in MailboxDataArray order. */
 export function buildGetUserAvailabilityBody(
-  smtpAddress: string,
+  smtpAddresses: string[],
   startUtc: string,
   endUtc: string,
+  requestedView: "Detailed" | "FreeBusy",
 ): string {
+  const mailboxData = smtpAddresses
+    .map(
+      (smtpAddress) =>
+        "<t:MailboxData>" +
+        "<t:Email>" +
+        `<t:Address>${escapeXml(smtpAddress)}</t:Address>` +
+        "</t:Email>" +
+        "<t:AttendeeType>Required</t:AttendeeType>" +
+        "<t:ExcludeConflicts>false</t:ExcludeConflicts>" +
+        "</t:MailboxData>",
+    )
+    .join("");
   return (
     "<m:GetUserAvailabilityRequest>" +
     buildSerializableUtcTimeZone() +
-    "<m:MailboxDataArray>" +
-    "<t:MailboxData>" +
-    "<t:Email>" +
-    `<t:Address>${escapeXml(smtpAddress)}</t:Address>` +
-    "</t:Email>" +
-    "<t:AttendeeType>Required</t:AttendeeType>" +
-    "<t:ExcludeConflicts>false</t:ExcludeConflicts>" +
-    "</t:MailboxData>" +
-    "</m:MailboxDataArray>" +
+    `<m:MailboxDataArray>${mailboxData}</m:MailboxDataArray>` +
     "<t:FreeBusyViewOptions>" +
     "<t:TimeWindow>" +
     `<t:StartTime>${startUtc}</t:StartTime>` +
     `<t:EndTime>${endUtc}</t:EndTime>` +
     "</t:TimeWindow>" +
-    "<t:MergedFreeBusyIntervalInMinutes>30</t:MergedFreeBusyIntervalInMinutes>" +
-    "<t:RequestedView>Detailed</t:RequestedView>" +
+    `<t:MergedFreeBusyIntervalInMinutes>${EWS_MERGED_FREE_BUSY_INTERVAL_MINUTES}</t:MergedFreeBusyIntervalInMinutes>` +
+    `<t:RequestedView>${requestedView}</t:RequestedView>` +
     "</t:FreeBusyViewOptions>" +
     "</m:GetUserAvailabilityRequest>"
+  );
+}
+
+/**
+ * ResolveNames against the directory (SI-3 plumbing style, ERMAIN-434): turns
+ * a GAL display name into mailbox candidates. `ContactsActiveDirectory` is not
+ * used — personal contacts can shadow a colleague's directory entry.
+ */
+export function buildResolveNamesBody(unresolvedEntry: string): string {
+  return (
+    '<m:ResolveNames ReturnFullContactData="false" SearchScope="ActiveDirectory">' +
+    `<m:UnresolvedEntry>${escapeXml(unresolvedEntry)}</m:UnresolvedEntry>` +
+    "</m:ResolveNames>"
+  );
+}
+
+/** ExpandDL: one level only — nested DLs are reported, never recursed. */
+export function buildExpandDlBody(smtpAddress: string): string {
+  return (
+    "<m:ExpandDL>" +
+    "<m:Mailbox>" +
+    `<t:EmailAddress>${escapeXml(smtpAddress)}</t:EmailAddress>` +
+    "</m:Mailbox>" +
+    "</m:ExpandDL>"
   );
 }
 
@@ -179,30 +222,183 @@ export function parseCalendarView(doc: Document): RawCalendarItem[] {
   return items;
 }
 
+const WEEKDAY_INDEX: Record<string, number> = {
+  sunday: 0,
+  monday: 1,
+  tuesday: 2,
+  wednesday: 3,
+  thursday: 4,
+  friday: 5,
+  saturday: 6,
+};
+
+/** "HH:MM[:SS]" → minutes; null when unparseable. */
+function clockToMinutes(clock: string | undefined): number | null {
+  if (!clock) return null;
+  const match = /^(\d{1,2}):(\d{2})/.exec(clock);
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
 /**
- * `NormalizedWorkingHours` carries a SINGLE window (as does Graph), so multiple
- * WorkingPeriods collapse lossily: the window comes from the FIRST period and
- * only days of same-window periods are kept — dropping a day understates
- * availability, which is safe; unioning it under the wrong hours is not.
+ * The WorkingHours `<TimeZone>` (bias + transition rules, NO name — EWS Bias
+ * is minutes WEST of UTC) as a rules anchor with offsets in minutes EAST.
+ * null when the block is present but unreadable — including offsets that
+ * differ while the transitions are unparseable (phase would be unknowable).
  */
+function parseWorkingHoursRules(
+  tz: Element,
+): Extract<WorkingHoursAnchor, { kind: "rules" }> | null {
+  const base = Number(typesText(tz, "Bias"));
+  if (Number.isNaN(base)) return null;
+  const period = (
+    name: string,
+  ): { bias: number; rule?: WorkingHoursTransition } | null => {
+    const el = firstTypesEl(tz, name);
+    if (!el) return { bias: 0 };
+    const bias = Number(typesText(el, "Bias"));
+    if (Number.isNaN(bias)) return null;
+    const month = Number(typesText(el, "Month"));
+    const dayOrder = Number(typesText(el, "DayOrder"));
+    const dayOfWeek =
+      WEEKDAY_INDEX[(typesText(el, "DayOfWeek") ?? "").toLowerCase()];
+    const timeMinutes = clockToMinutes(typesText(el, "Time"));
+    const rule =
+      month >= 1 &&
+      month <= 12 &&
+      dayOrder >= 1 &&
+      dayOrder <= 5 &&
+      dayOfWeek !== undefined &&
+      timeMinutes !== null
+        ? { month, dayOrder, dayOfWeek, timeMinutes }
+        : undefined;
+    return { bias, rule };
+  };
+  const standard = period("StandardTime");
+  const daylight = period("DaylightTime");
+  if (standard === null || daylight === null) return null;
+  const standardOffset = -(base + standard.bias);
+  const daylightOffset = -(base + daylight.bias);
+  if (standardOffset === daylightOffset) {
+    return { kind: "rules", standardOffset, daylightOffset };
+  }
+  if (standard.rule === undefined || daylight.rule === undefined) return null;
+  return {
+    kind: "rules",
+    standardOffset,
+    daylightOffset,
+    daylightStart: daylight.rule,
+    standardStart: standard.rule,
+  };
+}
+
+/** A zone's offset (minutes east) at a UTC instant, via Intl. */
+function zoneOffsetMinutesAt(zone: string, utcIso: string): number | null {
+  try {
+    const label =
+      new Intl.DateTimeFormat("en-US", {
+        timeZone: zone,
+        timeZoneName: "longOffset",
+      })
+        .formatToParts(new Date(utcIso))
+        .find((part) => part.type === "timeZoneName")?.value ?? "";
+    const match = /^GMT(?:([+-])(\d{2}):(\d{2}))?$/.exec(label);
+    if (!match) return null;
+    if (match[1] === undefined) return 0; // bare "GMT"
+    const sign = match[1] === "-" ? -1 : 1;
+    return sign * (Number(match[2]) * 60 + Number(match[3]));
+  } catch {
+    return null;
+  }
+}
+
+/** The display zone's standard/daylight offsets, sampled mid-January and
+ * mid-July (hemisphere-agnostic when compared as an unordered pair). */
+function januaryJulyOffsets(zone: string): [number, number] | null {
+  const year = new Date().getUTCFullYear();
+  const jan = zoneOffsetMinutesAt(zone, `${year}-01-15T12:00:00Z`);
+  const jul = zoneOffsetMinutesAt(zone, `${year}-07-15T12:00:00Z`);
+  return jan === null || jul === null ? null : [jan, jul];
+}
+
+const sameOffsetPair = (a: [number, number], b: [number, number]): boolean =>
+  (a[0] === b[0] && a[1] === b[1]) || (a[0] === b[1] && a[1] === b[0]);
+
 export function parseAvailability(
   doc: Document,
-): NormalizedWorkingHours | null {
+  displayZone: string,
+): WorkingHoursLegResult {
   const freeBusyResponse = allMessagesEls(doc, "FreeBusyResponse")[0];
-  if (!freeBusyResponse) return null;
+  if (!freeBusyResponse) return { hours: null };
   const responseMessage = firstMessagesEl(freeBusyResponse, "ResponseMessage");
   if (responseMessage) {
     assertResponseOk(responseMessage);
   }
   const workingHours = firstTypesEl(freeBusyResponse, "WorkingHours");
-  if (!workingHours) return null;
+  if (!workingHours) return { hours: null };
+  return parseWorkingHoursElement(workingHours, displayZone);
+}
+
+/**
+ * Shared by the self leg and per-attendee responses: one `<WorkingHours>`
+ * element → normalized hours (anchored to its own rules when its offsets
+ * differ from the display zone's).
+ *
+ * `NormalizedWorkingHours` carries a SINGLE window (as does Graph), so multiple
+ * WorkingPeriods collapse lossily: the window comes from the FIRST period and
+ * only days of same-window periods are kept — dropping a day understates
+ * availability, which is safe; unioning it under the wrong hours is not.
+ */
+function parseWorkingHoursElement(
+  workingHours: Element,
+  displayZone: string,
+): WorkingHoursLegResult {
+  // start/end minutes are wall-clock in the RESPONSE's WorkingHours zone,
+  // which is authoritative (a traveler keeping home hours is a supported MS
+  // state, and the blob zone is sticky across relocations). When its offsets
+  // match the display zone's January/July pair the arithmetic is identical
+  // and no anchor is needed; when they differ, the rules ride along as the
+  // anchor and the ranking converts through them. Only an unreadable zone
+  // block makes the minutes uninterpretable → untrusted.
+  const tz = firstTypesEl(workingHours, "TimeZone");
+  let anchor: WorkingHoursAnchor | undefined;
+  if (tz) {
+    const rules = parseWorkingHoursRules(tz);
+    if (rules === null) {
+      return {
+        hours: null,
+        untrusted: "unreadable working-hours time zone rules",
+      };
+    }
+    const displayOffsets = januaryJulyOffsets(displayZone);
+    if (
+      displayOffsets === null ||
+      !sameOffsetPair(
+        [rules.standardOffset, rules.daylightOffset],
+        displayOffsets,
+      )
+    ) {
+      anchor = rules;
+    }
+  }
   const periods = allTypesEls(workingHours, "WorkingPeriod");
-  if (periods.length === 0) return null;
+  if (periods.length === 0) return { hours: null };
 
   const first = periods[0];
   const startMinutes = Number(typesText(first, "StartTimeInMinutes"));
   const endMinutes = Number(typesText(first, "EndTimeInMinutes"));
-  if (Number.isNaN(startMinutes) || Number.isNaN(endMinutes)) return null;
+  if (Number.isNaN(startMinutes) || Number.isNaN(endMinutes)) {
+    return { hours: null, untrusted: "unreadable start/end times" };
+  }
+  // Midnight end = 0 means end-of-day (mirror the Graph parser); a still-
+  // inverted window (overnight shift) is unrepresentable.
+  const normalizedEnd = endMinutes === 0 ? 1440 : endMinutes;
+  if (normalizedEnd <= startMinutes) {
+    return {
+      hours: null,
+      untrusted: "overnight working hours (end not after start)",
+    };
+  }
 
   const daysOfWeek = new Set<string>();
   let droppedPeriods = 0;
@@ -225,10 +421,154 @@ export function parseAvailability(
     );
   }
   return {
-    daysOfWeek: Array.from(daysOfWeek),
-    startMinutes,
-    endMinutes,
+    hours: {
+      daysOfWeek: Array.from(daysOfWeek),
+      startMinutes,
+      endMinutes: normalizedEnd,
+      ...(anchor !== undefined ? { anchor } : {}),
+    },
   };
+}
+
+/** A `t:Mailbox` as ResolveNames / ExpandDL return it. */
+export interface EwsMailboxEntry {
+  name?: string;
+  emailAddress?: string;
+  routingType?: string;
+  mailboxType?: string;
+}
+
+function parseMailboxEl(mailbox: Element): EwsMailboxEntry {
+  return {
+    name: typesText(mailbox, "Name"),
+    emailAddress: typesText(mailbox, "EmailAddress"),
+    routingType: typesText(mailbox, "RoutingType"),
+    mailboxType: typesText(mailbox, "MailboxType"),
+  };
+}
+
+/** Zero matches is a RESULT ([]), not an error; ambiguous names come back as
+ * ResponseClass "Warning" WITH the candidate set, which passes through. */
+export function parseResolveNames(doc: Document): EwsMailboxEntry[] {
+  const responseMessage = allMessagesEls(doc, "ResolveNamesResponseMessage")[0];
+  if (!responseMessage) return [];
+  assertResponseOk(responseMessage, new Set(["ErrorNameResolutionNoResults"]));
+  return allTypesEls(responseMessage, "Resolution")
+    .map((resolution) => firstTypesEl(resolution, "Mailbox"))
+    .filter((mailbox): mailbox is Element => mailbox !== null)
+    .map(parseMailboxEl);
+}
+
+export function parseExpandDl(doc: Document): {
+  members: EwsMailboxEntry[];
+  truncated: boolean;
+} {
+  const responseMessage = allMessagesEls(doc, "ExpandDLResponseMessage")[0];
+  if (!responseMessage) return { members: [], truncated: false };
+  assertResponseOk(responseMessage);
+  const expansion = firstMessagesEl(responseMessage, "DLExpansion");
+  if (!expansion) return { members: [], truncated: false };
+  return {
+    members: allTypesEls(expansion, "Mailbox").map(parseMailboxEl),
+    // Same contract as the FindItem check: only an explicit "false" means
+    // the server cut the list (ExpandDL is unpaged).
+    truncated: expansion.getAttribute("IncludesLastItemInRange") === "false",
+  };
+}
+
+/** One mailbox's slice of a GetUserAvailability response. */
+export type EwsFreeBusyResult =
+  | {
+      kind: "ok";
+      blocks: NormalizedBusyBlock[];
+      /** The mailbox's shared working hours, when the response carries them. */
+      workingHours?: NormalizedWorkingHours;
+    }
+  | { kind: "error"; reason: string };
+
+/**
+ * Per-mailbox FreeBusyResponses, in MailboxDataArray order. A per-mailbox
+ * error (ErrorNoFreeBusyAccess & co) is a RESULT — one denied colleague must
+ * not sink the others — so this never calls the throwing `assertResponseOk`.
+ * Blocks come from CalendarEventArray when present (RequestedView FreeBusy),
+ * else from the MergedFreeBusy string (MergedOnly — all the sharing policy
+ * publishes); `'4'`/NoData reads as Busy, never free.
+ */
+export function parseAttendeeFreeBusy(
+  doc: Document,
+  windowStartUtc: string,
+  displayZone: string,
+): EwsFreeBusyResult[] {
+  return allMessagesEls(doc, "FreeBusyResponse").map((freeBusyResponse) => {
+    const responseMessage = firstMessagesEl(
+      freeBusyResponse,
+      "ResponseMessage",
+    );
+    if (responseMessage?.getAttribute("ResponseClass") === "Error") {
+      const reason =
+        firstMessagesEl(responseMessage, "MessageText")?.textContent ??
+        firstMessagesEl(responseMessage, "ResponseCode")?.textContent ??
+        "free/busy lookup failed";
+      return { kind: "error", reason };
+    }
+    const view = firstMessagesEl(freeBusyResponse, "FreeBusyView");
+    if (!view) {
+      return { kind: "error", reason: "no free/busy view returned" };
+    }
+    // The attendee's own shared hours (present even at FreeBusy view when the
+    // sharing policy permits); unusable ones are simply omitted.
+    const whEl = firstTypesEl(view, "WorkingHours");
+    const workingHours =
+      whEl !== null
+        ? (parseWorkingHoursElement(whEl, displayZone).hours ?? undefined)
+        : undefined;
+    const withHours = (
+      result: Extract<EwsFreeBusyResult, { kind: "ok" }>,
+    ): EwsFreeBusyResult =>
+      workingHours !== undefined ? { ...result, workingHours } : result;
+    const events = allTypesEls(view, "CalendarEvent");
+    if (events.length > 0 || firstTypesEl(view, "CalendarEventArray")) {
+      const blocks: NormalizedBusyBlock[] = [];
+      for (const event of events) {
+        const start = typesText(event, "StartTime");
+        const end = typesText(event, "EndTime");
+        if (!start || !end) continue;
+        blocks.push({
+          when: {
+            kind: "date-time",
+            startUtc: toUtcIso(start),
+            endUtc: toUtcIso(end),
+          },
+          // BusyType NoData (or anything unknown) → Busy via mapBusyType.
+          busyType: mapBusyType(typesText(event, "BusyType")),
+        });
+      }
+      return withHours({ kind: "ok", blocks: onlyBlockingBlocks(blocks) });
+    }
+    const merged = typesText(view, "MergedFreeBusy");
+    if (merged !== undefined) {
+      return withHours({
+        kind: "ok",
+        blocks: onlyBlockingBlocks(
+          decodeMergedFreeBusyView(
+            merged,
+            windowStartUtc,
+            EWS_MERGED_FREE_BUSY_INTERVAL_MINUTES,
+            "Busy",
+          ),
+        ),
+      });
+    }
+    // Ambiguous fall-through: FreeBusy/Detailed with zero events (SE OMITS the
+    // CalendarEventArray, not an empty one) = genuinely free; None (e.g.
+    // cross-forest) = no data and must NOT read as free — parity with Graph,
+    // which maps its no-data state to unknown. View type is the only tell.
+    const viewType = typesText(view, "FreeBusyViewType");
+    if (viewType === "None" || !viewType) {
+      return { kind: "error", reason: "no free/busy information available" };
+    }
+    return withHours({ kind: "ok", blocks: [] });
+  });
 }
 
 // --- Normalization helpers -------------------------------------------------
@@ -340,21 +680,272 @@ export async function fetchCalendarBusyViaEws(
   });
 }
 
-/** Working hours from GetUserAvailability. Returns null when genuinely absent;
- * THROWS on a hard EWS failure. */
+/** Working hours from GetUserAvailability. `hours: null` when genuinely
+ * absent; `untrusted` when hours exist but are unusable; THROWS on a hard
+ * EWS failure. */
 export async function fetchWorkingHoursViaEws(
   range: CalendarRange,
   options: CalendarFetchOptions = {},
-): Promise<NormalizedWorkingHours | null> {
+): Promise<WorkingHoursLegResult> {
   const smtpAddress = Office.context.mailbox.userProfile?.emailAddress;
-  if (!smtpAddress) return null;
+  if (!smtpAddress) return { hours: null };
   throwIfAborted(options.signal);
   const doc = await ewsHostFetch(
     buildSoapEnvelope(
-      buildGetUserAvailabilityBody(smtpAddress, range.startUtc, range.endUtc),
+      buildGetUserAvailabilityBody(
+        [smtpAddress],
+        range.startUtc,
+        range.endUtc,
+        "Detailed",
+      ),
     ),
   );
-  return parseAvailability(doc);
+  return parseAvailability(doc, resolveTimezone());
+}
+
+// --- Attendee availability (ERMAIN-434) --------------------------------------
+
+/** Total resolved-mailbox budget per fetch: inputs are capped upstream at
+ * MAX_ATTENDEES, but one DL can expand wide — spend in input order, stop here. */
+export const EWS_MAX_RESOLVED_MAILBOXES = 30;
+
+type ResolvedInput =
+  | {
+      requested: string;
+      smtps: { smtp: string; caveat?: string }[];
+      /** Members that could NOT be checked (shape-dropped / truncated list) —
+       * each becomes an aggregated unknown entry, like the attendee cap. */
+      notChecked?: string[];
+    }
+  | { requested: string; unknownReason: string };
+
+const hasSmtpShape = (entry: EwsMailboxEntry): boolean =>
+  Boolean(entry.emailAddress?.includes("@")) &&
+  (entry.routingType === undefined || entry.routingType === "SMTP");
+
+const isDl = (entry: EwsMailboxEntry): boolean =>
+  entry.mailboxType === "PublicDL" || entry.mailboxType === "PrivateDL";
+
+/** One input string → SMTP list via ResolveNames (+ ExpandDL for DLs).
+ * Resolution failures are per-input results, never throws. */
+async function resolveAttendeeInput(requested: string): Promise<ResolvedInput> {
+  if (requested.includes("@")) {
+    return { requested, smtps: [{ smtp: requested }] };
+  }
+  try {
+    const candidates = parseResolveNames(
+      await ewsHostFetch(buildSoapEnvelope(buildResolveNamesBody(requested))),
+    );
+    if (candidates.length === 0) {
+      return {
+        requested,
+        unknownReason: "not found in the directory (GAL)",
+      };
+    }
+    if (candidates.length > 1) {
+      return {
+        requested,
+        unknownReason: ambiguousCandidatesReason(
+          candidates.length,
+          candidates
+            .filter((c) => c.emailAddress?.includes("@"))
+            .map((c) => ({ name: c.name, smtp: c.emailAddress as string })),
+        ),
+      };
+    }
+    const candidate = candidates[0];
+    if (isDl(candidate)) {
+      if (!candidate.emailAddress) {
+        return {
+          requested,
+          unknownReason: "distribution list has no address to expand",
+        };
+      }
+      const { members, truncated } = parseExpandDl(
+        await ewsHostFetch(
+          buildSoapEnvelope(buildExpandDlBody(candidate.emailAddress)),
+        ),
+      );
+      const usable = members.filter((m) => hasSmtpShape(m) && !isDl(m));
+      const nestedDls = members.filter(isDl).length;
+      if (usable.length === 0) {
+        return {
+          requested,
+          unknownReason: "distribution list has no resolvable members",
+        };
+      }
+      const noSmtp = members.length - usable.length - nestedDls;
+      const notChecked: string[] = [];
+      if (noSmtp > 0) {
+        notChecked.push(
+          `${noSmtp} member(s) of "${requested}" not checked — no SMTP address`,
+        );
+      }
+      if (truncated) {
+        notChecked.push(
+          `member list of "${requested}" was truncated by the server — not all members were checked`,
+        );
+      }
+      return {
+        requested,
+        smtps: usable.map((m, index) => ({
+          smtp: m.emailAddress as string,
+          // Surface skipped nested DLs once, on the first member.
+          ...(index === 0 && nestedDls > 0
+            ? {
+                caveat: `${nestedDls} nested distribution list(s) inside "${requested}" were not expanded`,
+              }
+            : {}),
+        })),
+        ...(notChecked.length > 0 ? { notChecked } : {}),
+      };
+    }
+    if (!hasSmtpShape(candidate)) {
+      return {
+        requested,
+        unknownReason:
+          "resolved without an SMTP address — use an email address",
+      };
+    }
+    const smtp = candidate.emailAddress as string;
+    // Disclose a non-exact directory match — the caveat rides entry.reason.
+    const resolvedCaveat = resolvedAsCaveat(requested, candidate.name, smtp);
+    return {
+      requested,
+      smtps: [
+        {
+          smtp,
+          ...(resolvedCaveat !== undefined ? { caveat: resolvedCaveat } : {}),
+        },
+      ],
+    };
+  } catch (error) {
+    return {
+      requested,
+      unknownReason: `name resolution failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    };
+  }
+}
+
+/**
+ * Colleague free/busy over `range` (ERMAIN-434): resolve every input to SMTP
+ * (ResolveNames/ExpandDL for GAL names and DLs), then ONE GetUserAvailability
+ * with all resolved mailboxes (RequestedView FreeBusy — opaque). Per-attendee
+ * failures become `status: "unknown"` entries; only the availability call
+ * itself THROWS (degrading the leg). No impersonation anywhere: the host leg
+ * acts as the signed-in user, and Exchange free/busy sharing is the consent
+ * gate for what comes back.
+ */
+export async function fetchAttendeeAvailabilityViaEws(
+  range: CalendarRange,
+  attendees: string[],
+  options: CalendarFetchOptions = {},
+): Promise<NormalizedAttendeeAvailability[]> {
+  if (attendees.length === 0) return [];
+  throwIfAborted(options.signal);
+
+  const resolvedInputs = await Promise.all(attendees.map(resolveAttendeeInput));
+  throwIfAborted(options.signal);
+
+  // Spend the mailbox budget in input order; overflow entries stay visible as
+  // "unknown" rather than silently dropping off.
+  const entries: NormalizedAttendeeAvailability[] = [];
+  const toQuery: string[] = [];
+  for (const resolved of resolvedInputs) {
+    if ("unknownReason" in resolved) {
+      entries.push({
+        requested: resolved.requested,
+        status: "unknown",
+        reason: resolved.unknownReason,
+        busy: [],
+      });
+      continue;
+    }
+    const budget = EWS_MAX_RESOLVED_MAILBOXES - toQuery.length;
+    const taking = resolved.smtps.slice(0, Math.max(0, budget));
+    const dropped = resolved.smtps.length - taking.length;
+    for (const { smtp, caveat } of taking) {
+      toQuery.push(smtp);
+      entries.push({
+        requested: resolved.requested,
+        smtp,
+        status: "ok", // provisional; zipped with the free/busy result below
+        ...(caveat !== undefined ? { reason: caveat } : {}),
+        busy: [],
+      });
+    }
+    if (dropped > 0) {
+      entries.push({
+        requested: resolved.requested,
+        status: "unknown",
+        reason: `attendee cap reached (${EWS_MAX_RESOLVED_MAILBOXES} mailboxes) — ${dropped} not checked`,
+        busy: [],
+      });
+    }
+    for (const reason of resolved.notChecked ?? []) {
+      entries.push({
+        requested: resolved.requested,
+        status: "unknown",
+        reason,
+        busy: [],
+      });
+    }
+  }
+
+  if (toQuery.length > 0) {
+    const doc = await ewsHostFetch(
+      buildSoapEnvelope(
+        buildGetUserAvailabilityBody(
+          toQuery,
+          range.startUtc,
+          range.endUtc,
+          "FreeBusy",
+        ),
+      ),
+    );
+    const results = parseAttendeeFreeBusy(
+      doc,
+      range.startUtc,
+      resolveTimezone(),
+    );
+    if (results.length === toQuery.length) {
+      let cursor = 0;
+      for (const entry of entries) {
+        if (entry.smtp === undefined) continue; // unresolved — no response slot
+        const result = results[cursor];
+        cursor += 1;
+        if (result === undefined) {
+          entry.status = "unknown";
+          entry.reason = "no free/busy response for this mailbox";
+        } else if (result.kind === "error") {
+          entry.status = "unknown";
+          entry.reason = result.reason;
+        } else {
+          entry.busy = result.blocks;
+          if (result.workingHours !== undefined) {
+            entry.workingHours = result.workingHours;
+          }
+        }
+      }
+    } else {
+      // Responses carry no identity, so they match mailboxes only by position —
+      // sound ONLY at 1:1 (validated on SE: a bad or duplicate mailbox still
+      // gets its own in-order slot). A count divergence means position can't be
+      // trusted, so don't guess — every queried mailbox degrades to unknown
+      // rather than silently inherit a neighbour's calendar.
+      console.warn(
+        `[fetchAttendeeAvailabilityViaEws] expected ${toQuery.length} FreeBusyResponses, got ${results.length}; marking all unknown`,
+      );
+      for (const entry of entries) {
+        if (entry.smtp === undefined) continue;
+        entry.status = "unknown";
+        entry.reason = "free/busy response count mismatch";
+      }
+    }
+  }
+  return entries;
 }
 
 /** The full EWS calendar snapshot. After the `getEwsUrl()` precheck this NEVER
@@ -372,21 +963,36 @@ export async function fetchOutlookCalendarViaEws(
   );
   const displayTimeZone = resolveTimezone();
 
-  const { historyMeetings, busyBlocks, workingHours, degradedLegs } =
-    await runCalendarLegs(
-      {
-        history: () => fetchCalendarHistoryViaEws(historyRange, options),
-        busy: () => fetchCalendarBusyViaEws(busyRange, options),
-        workingHours: () => fetchWorkingHoursViaEws(busyRange, options),
-      },
-      options.signal,
-      "[fetchOutlookCalendarViaEws]",
-    );
+  const {
+    historyMeetings,
+    busyBlocks,
+    workingHours,
+    attendeeAvailability,
+    degradedLegs,
+  } = await runCalendarLegs(
+    {
+      history: () => fetchCalendarHistoryViaEws(historyRange, options),
+      busy: () => fetchCalendarBusyViaEws(busyRange, options),
+      workingHours: () => fetchWorkingHoursViaEws(busyRange, options),
+      attendees: () =>
+        fetchAttendeeAvailabilityViaEws(
+          busyRange,
+          options.attendees ?? [],
+          options,
+        ),
+    },
+    options.signal,
+    "[fetchOutlookCalendarViaEws]",
+  );
 
   return {
-    workingHours,
+    workingHours: workingHours.hours,
+    ...(workingHours.untrusted !== undefined
+      ? { workingHoursUntrusted: workingHours.untrusted }
+      : {}),
     busyBlocks,
     historyMeetings,
+    attendees: attendeeAvailability,
     displayTimeZone,
     degradedLegs,
   };

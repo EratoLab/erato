@@ -146,6 +146,28 @@ function prime(options: {
   });
 }
 
+/** Primes a fresh auto_prompt proposal so the card auto-surfaces on render —
+ * clicks execute directly, so this is the only route to the card. */
+function primeAutoCard(
+  options: {
+    proposedAction?: string;
+    decisions?: Record<string, string>;
+  } = {},
+): TestArtifact {
+  const artifact = makeArtifact({
+    isFreshCompletion: true,
+    itemIdentity: "item-a",
+    clientActionPresentation: "auto_prompt",
+    proposedClientAction: options.proposedAction ?? REPLY,
+  });
+  prime({
+    artifact,
+    currentItemIdentity: "item-a",
+    decisions: options.decisions,
+  });
+  return artifact;
+}
+
 beforeAll(() => {
   i18n.load("en", {});
   i18n.activate("en");
@@ -241,27 +263,13 @@ describe("OutlookEratoEmailRenderer — identity-unknown completions degrade to 
   // When no send-time identity is known for a regenerate/edit (e.g. after a
   // reload — the identity map is in-memory only), AddinChat does NOT stamp
   // the completion fresh. The artifact is then indistinguishable from a
-  // history draft: buttons stay usable, clicks are re-guarded by the
-  // confirmation card's item snapshot, the stale-item error never fires
+  // history draft: buttons stay usable, the stale-item error never fires
   // (it requires a KNOWN mismatching identity), and auto-prompt is
-  // impossible.
+  // impossible. A click executes directly — the reply form is the review
+  // surface (universal click-is-consent).
 
-  it("keeps the reply buttons usable with no stale-item error", () => {
+  it("executes a click directly with no stale-item error", async () => {
     prime({ artifact: makeArtifact(), currentItemIdentity: "item-a" });
-    render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Reply" }));
-
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(screen.getByTestId("confirmation-card")).toBeInTheDocument();
-  });
-
-  it("executes a click directly under a granted action, like any history draft", async () => {
-    prime({
-      artifact: makeArtifact(),
-      currentItemIdentity: "item-a",
-      decisions: { [`${FACET}/${REPLY}`]: "always" },
-    });
     render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
 
     await act(async () => {
@@ -270,6 +278,7 @@ describe("OutlookEratoEmailRenderer — identity-unknown completions degrade to 
 
     expect(mockOpenReplyForm).toHaveBeenCalledWith(REPLY, "Draft body", false);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
   });
 
   it("never auto-prompts, even under auto_prompt with a granted proposal", () => {
@@ -289,15 +298,15 @@ describe("OutlookEratoEmailRenderer — identity-unknown completions degrade to 
 });
 
 describe("OutlookEratoEmailRenderer — confirmation-card item snapshot", () => {
+  // The card only surfaces on the auto-prompt path (clicks execute
+  // directly); its open-time snapshot still guards the allow click against
+  // an email switch while the card was showing.
   it("aborts allow-once when the email changed while the card was open", async () => {
-    // History draft: no artifact identity, so only the card-open snapshot
-    // can catch the switch.
-    prime({ artifact: makeArtifact(), currentItemIdentity: "item-a" });
+    primeAutoCard();
     const view = render(
       <OutlookEratoEmailRenderer content="Draft body" isHtml={false} />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Reply" }));
     expect(screen.getByTestId("confirmation-card")).toBeInTheDocument();
 
     mockUseOutlookMailItem.mockReturnValue({
@@ -320,12 +329,11 @@ describe("OutlookEratoEmailRenderer — confirmation-card item snapshot", () => 
   });
 
   it("aborts always-allow the same way (the persisted grant must not bypass the snapshot)", async () => {
-    prime({ artifact: makeArtifact(), currentItemIdentity: "item-a" });
+    primeAutoCard();
     const view = render(
       <OutlookEratoEmailRenderer content="Draft body" isHtml={false} />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Reply" }));
     mockUseOutlookMailItem.mockReturnValue({
       mailItem: { isComposeMode: false },
       itemIdentity: "item-b",
@@ -344,10 +352,9 @@ describe("OutlookEratoEmailRenderer — confirmation-card item snapshot", () => 
   });
 
   it("executes a confirmed action when the item is unchanged", async () => {
-    prime({ artifact: makeArtifact(), currentItemIdentity: "item-a" });
+    primeAutoCard();
     render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Reply" }));
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "allow-once" }));
     });
@@ -440,10 +447,9 @@ describe("OutlookEratoEmailRenderer — confirmation card resolution", () => {
   // success feedback is the ~2s "Opened!" swap on the action button (the
   // add-in's standard transient idiom, like Copy's "Copied!").
   it("closes the card after allow-once and shows the transient Opened! swap", async () => {
-    prime({ artifact: makeArtifact(), currentItemIdentity: "item-a" });
+    primeAutoCard();
     render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Reply" }));
     expect(screen.getByRole("button", { name: "Reply" })).toBeDisabled();
 
     await act(async () => {
@@ -460,10 +466,9 @@ describe("OutlookEratoEmailRenderer — confirmation card resolution", () => {
   });
 
   it("swaps the reply-all button when that action was the one executed", async () => {
-    prime({ artifact: makeArtifact(), currentItemIdentity: "item-a" });
+    primeAutoCard({ proposedAction: "outlook.reply_all" });
     render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Reply All" }));
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "allow-once" }));
     });
@@ -474,10 +479,9 @@ describe("OutlookEratoEmailRenderer — confirmation card resolution", () => {
   });
 
   it("closes the card on deny and re-enables the buttons", () => {
-    prime({ artifact: makeArtifact(), currentItemIdentity: "item-a" });
+    primeAutoCard();
     render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Reply" }));
     fireEvent.click(screen.getByRole("button", { name: "deny" }));
 
     expect(mockOpenReplyForm).not.toHaveBeenCalled();
@@ -488,10 +492,9 @@ describe("OutlookEratoEmailRenderer — confirmation card resolution", () => {
   it("closes the card when the reply form fails; the inline alert is the feedback", async () => {
     mockOpenReplyForm.mockRejectedValueOnce(new Error("boom"));
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    prime({ artifact: makeArtifact(), currentItemIdentity: "item-a" });
+    primeAutoCard();
     render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Reply" }));
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "allow-once" }));
     });
@@ -513,10 +516,9 @@ describe("OutlookEratoEmailRenderer — confirmation card resolution", () => {
           resolveOpen = resolve;
         }),
     );
-    prime({ artifact: makeArtifact(), currentItemIdentity: "item-a" });
+    primeAutoCard();
     render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Reply" }));
     fireEvent.click(screen.getByRole("button", { name: "allow-once" }));
 
     expect(screen.getByTestId("confirmation-card")).toHaveAttribute(
@@ -531,15 +533,26 @@ describe("OutlookEratoEmailRenderer — confirmation card resolution", () => {
     expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
   });
 
-  it("opens a fresh card on the next request after a deny", () => {
-    prime({ artifact: makeArtifact(), currentItemIdentity: "item-a" });
-    render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
+  it("a NEW message's proposal opens a fresh card after a deny (once per message)", () => {
+    primeAutoCard();
+    const view = render(
+      <OutlookEratoEmailRenderer content="Draft body" isHtml={false} />,
+    );
 
-    fireEvent.click(screen.getByRole("button", { name: "Reply" }));
     fireEvent.click(screen.getByRole("button", { name: "deny" }));
     expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Reply" }));
+    // Same message re-renders: the once-per-message slot is consumed.
+    view.rerender(
+      <OutlookEratoEmailRenderer content="Draft body" isHtml={false} />,
+    );
+    expect(screen.queryByTestId("confirmation-card")).not.toBeInTheDocument();
+
+    // A new completion (new messageId) primes a fresh card.
+    primeAutoCard();
+    view.rerender(
+      <OutlookEratoEmailRenderer content="Draft body" isHtml={false} />,
+    );
     expect(screen.getByTestId("confirmation-card")).toHaveAttribute(
       "data-status",
       "pending",

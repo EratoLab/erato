@@ -758,6 +758,6 @@ function buildEmlFilename(subject: string): string {
   return `${sanitized}.eml`;
 }
 
-function escapeODataString(value: string): string {
+export function escapeODataString(value: string): string {
   return value.replace(/'/g, "''");
 }

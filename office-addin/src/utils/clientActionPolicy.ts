@@ -6,14 +6,22 @@ import type { PersistedStateOptions } from "@erato/frontend/library";
 /**
  * Local decision store for client actions, pure and unit-testable.
  *
- * Browser-permission semantics: every action defaults to `ask` — the inline
- * card asks on each proposal, and "allow once" / "deny" on the card apply to
- * that proposal only. Only an explicit "always allow" persists (written by
- * the card or the settings page); `never` is a persistent deny set in
- * settings. The deployment config is the policy authority: actions listed in
- * the facet's `client_actions_always_ask` can never resolve to `always` —
- * a stored grant is clamped back to `ask`, and the UI greys the option out
- * with a reason. Users may always be STRICTER than the server (deny).
+ * Trigger-provenance model. A manual BUTTON CLICK on an offered action is
+ * itself the user's consent and always executes — no card, regardless of
+ * config or stored decision (the renderers call their executor directly;
+ * item-identity guards inside the executors still fail closed). Everything
+ * below governs ASSISTANT-INITIATED execution only: the auto-prompt path,
+ * where the model proposed the action and no user gesture has happened yet.
+ *
+ * For that path: every action defaults to `ask` — the inline card surfaces
+ * on each proposal, and "allow once" / "deny" apply to that proposal only.
+ * Only an explicit "always allow" persists (written by the card or the
+ * settings page); `never` is a persistent deny set in settings and hides the
+ * action's button too. The deployment config is the policy authority:
+ * actions listed in the facet's `client_actions_always_ask` can never
+ * resolve to `always` — a stored grant is clamped back to `ask`, and the UI
+ * greys the option out with a reason. Users may always be STRICTER than the
+ * server (deny).
  */
 export type ClientActionDecision = "ask" | "always" | "never";
 
@@ -62,6 +70,8 @@ export function isClientActionDecision(
  * The decision in effect for an action: the stored decision (default `ask`),
  * with a server-enforced per-use confirmation clamping `always` back to
  * `ask`. `never` is honored regardless — stricter than the server is fine.
+ * Governs assistant-initiated execution only; clicks never consult it
+ * (except via `isActionDenied`, which hides denied actions entirely).
  */
 export function effectiveDecision(input: {
   facetId: string;
@@ -82,13 +92,6 @@ export function isActionDenied(
   input: Parameters<typeof effectiveDecision>[0],
 ): boolean {
   return effectiveDecision(input) === "never";
-}
-
-/** What an explicit button click does for an (offered, non-denied) action. */
-export function resolveClickBehavior(
-  input: Parameters<typeof effectiveDecision>[0],
-): "execute" | "confirm" {
-  return effectiveDecision(input) === "always" ? "execute" : "confirm";
 }
 
 export type AutoPromptBehavior = "execute" | "confirm" | "none";

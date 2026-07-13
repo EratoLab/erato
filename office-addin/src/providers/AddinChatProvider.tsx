@@ -36,6 +36,7 @@ import {
   outlookAnchorFromItem,
   outlookSessionPersistedOptions,
   outlookSessionPreferencesPersistedOptions,
+  resolveSupportedMailboxItem,
   type OutlookSessionAnchor,
   type OutlookSessionStorageValue,
 } from "../sessionPolicy";
@@ -76,16 +77,14 @@ export type SessionLifecycle =
  * the lazy lifecycle initializer derive an anchor before
  * `OutlookMailItemProvider`'s `useEffect` has populated its state. Try/catch
  * guards against Office.js access errors in degraded hosts; returns `null`
- * if no item is selected.
+ * if no supported item is selected (appointments resolve to no-item, matching
+ * `OutlookMailItemProvider`).
  */
 function readSyncOutlookAnchor(): OutlookSessionAnchor | null {
   try {
-    const item = Office.context.mailbox?.item as
-      | Office.MessageRead
-      | Office.MessageCompose
-      | undefined
-      | null;
-    return outlookAnchorFromItem(item ?? null);
+    return outlookAnchorFromItem(
+      resolveSupportedMailboxItem(Office.context.mailbox?.item),
+    );
   } catch {
     return null;
   }

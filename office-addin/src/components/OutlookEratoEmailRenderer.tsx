@@ -21,7 +21,6 @@ import {
   clientActionDecisionsPersistedOptions,
   decisionKey,
   isActionDenied,
-  resolveClickBehavior,
 } from "../utils/clientActionPolicy";
 import {
   clientActionDisplayLabel,
@@ -244,63 +243,36 @@ export function OutlookEratoEmailRenderer({
   // once per message, and still through the user's approval preference. If
   // the user meanwhile left read mode, the summary snapshot fails and nothing
   // happens — the buttons remain as fallback.
-  const {
-    confirmCard,
-    isConfirmPending,
-    requestConfirmation,
-    allowCard,
-    denyCard,
-  } = useClientActionConfirmFlow<
-    ReadModeRecipientSummary,
-    OutlookEmailClientAction
-  >({
-    promptScope: "email",
-    facetId: artifact?.facetId,
-    decisions,
-    enforcedAskActions,
-    buildSummary: getReadModeRecipientSummary,
-    execute: executeReply,
-    itemIdentity,
-    presentation: artifact?.clientActionPresentation,
-    messageId: artifact?.messageId,
-    isFreshCompletion: !!artifact?.isFreshCompletion,
-    proposedAction,
-    expectedItemIdentity,
-    currentItemIdentity: itemIdentity,
-  });
-
-  const handleReplyAction = useCallback(
-    (action: OutlookEmailClientAction) => {
-      if (isStaleForCurrentItem) {
-        // Don't open a confirmation that would show the NEW email's
-        // recipients for a draft written against the old one.
-        showError("staleItem", 4000);
-        return;
-      }
-      if (
-        resolveClickBehavior({
-          facetId,
-          action,
-          decisions,
-          enforcedAskActions,
-        }) === "execute"
-      ) {
-        void executeReply(action);
-        return;
-      }
-      if (!requestConfirmation(action)) {
-        showError("reply", 4000);
-      }
-    },
-    [
+  const { confirmCard, isConfirmPending, allowCard, denyCard } =
+    useClientActionConfirmFlow<
+      ReadModeRecipientSummary,
+      OutlookEmailClientAction
+    >({
+      promptScope: "email",
+      facetId: artifact?.facetId,
       decisions,
       enforcedAskActions,
-      executeReply,
-      facetId,
-      isStaleForCurrentItem,
-      requestConfirmation,
-      showError,
-    ],
+      buildSummary: getReadModeRecipientSummary,
+      execute: executeReply,
+      itemIdentity,
+      presentation: artifact?.clientActionPresentation,
+      messageId: artifact?.messageId,
+      isFreshCompletion: !!artifact?.isFreshCompletion,
+      proposedAction,
+      expectedItemIdentity,
+      currentItemIdentity: itemIdentity,
+    });
+
+  // A click IS the consent (universal rule, see clientActionPolicy header):
+  // the reply form is the native review surface (recipients visible there,
+  // nothing sent until Outlook's Send). The confirm card exists only for the
+  // assistant-initiated auto-prompt path. executeReply keeps its own
+  // stale-item guard, so a click never acts on the wrong email.
+  const handleReplyAction = useCallback(
+    (action: OutlookEmailClientAction) => {
+      void executeReply(action);
+    },
+    [executeReply],
   );
 
   const handleCopy = useCallback(() => {
@@ -505,7 +477,7 @@ export function OutlookEratoEmailRenderer({
               ? t({
                   id: "officeAddin.emailRenderer.alwaysAllowLocked",
                   message:
-                    "Your organization requires confirmation for this action every time.",
+                    "Your organization requires confirmation each time this action runs automatically.",
                 })
               : undefined
           }

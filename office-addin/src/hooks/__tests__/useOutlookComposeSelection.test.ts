@@ -293,6 +293,37 @@ describe("useOutlookComposeSelection", () => {
     expect(result.current).toEqual({ data: "", sourceProperty: "body" });
   });
 
+  it("clears the held selection when the item becomes an appointment (grace elapsed)", () => {
+    setComposeItem({ data: "held text", sourceProperty: "body" });
+
+    const { result, rerender } = renderHook(() => useOutlookComposeSelection());
+
+    expect(result.current.data).toBe("held text");
+
+    // The pane leaks into the calendar module: an AppointmentCompose replaces
+    // the message. It must clear like a lost item — before the shared guard,
+    // the grace re-check saw a non-null non-read item and held the stale
+    // selection chip forever.
+    const mailbox = installMockMailbox();
+    mailbox.item = {
+      subject: { getAsync: vi.fn() },
+      itemType: "appointment",
+    };
+    mockUseOutlookMailItem.mockReturnValue({ mailItem: null });
+
+    rerender();
+
+    // Held through the grace window...
+    expect(result.current.data).toBe("held text");
+
+    // ...then cleared, exactly like a still-null item.
+    act(() => {
+      vi.advanceTimersByTime(2500);
+    });
+
+    expect(result.current).toEqual({ data: "", sourceProperty: "body" });
+  });
+
   it("clears interval and ignores callbacks after unmount", () => {
     const composeItem = setComposeItem({
       data: "text",

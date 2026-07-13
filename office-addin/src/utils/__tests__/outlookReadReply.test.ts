@@ -113,6 +113,13 @@ describe("isReadReplySupported", () => {
     expect(isReadReplySupported()).toBe(false);
   });
 
+  it("is false for an appointment item (string subject, but not a message)", () => {
+    // An AppointmentRead passes the isMessageRead shape check; a "reply"
+    // would open a meeting reply form.
+    installOffice({ item: readModeItem({ itemType: "appointment" }) });
+    expect(isReadReplySupported()).toBe(false);
+  });
+
   it("is false without an item or without Mailbox 1.1", () => {
     installOffice({ item: null });
     expect(isReadReplySupported()).toBe(false);

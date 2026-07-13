@@ -10,8 +10,22 @@ import {
 
 import type { OutlookCalendarFetcher } from "../utils/fetchOutlookCalendar";
 import type { AcquireGraphToken } from "../utils/fetchOutlookMessageGraph";
+import type { GraphDirectoryTokenSources } from "../utils/graphAttendeeResolution";
 
 const GRAPH_CALENDAR_SCOPES = ["Calendars.Read"];
+
+/**
+ * OPTIONAL directory scopes for attendee display-name → SMTP resolution
+ * (ERMAIN-434 name search). Deliberately NOT bundled into
+ * GRAPH_CALENDAR_SCOPES: each is acquired separately and lazily, so a tenant
+ * that declines them (directory search can enumerate the GAL — some orgs
+ * won't allow it) loses ONLY name lookup, never the calendar read. Grant in
+ * the Entra app registration to enable: People.Read (relevance search over
+ * `/me/people`) and/or User.ReadBasic.All (GAL prefix search over `/users`) —
+ * either alone works, both is best.
+ */
+const GRAPH_DIRECTORY_PEOPLE_SCOPES = ["People.Read"];
+const GRAPH_DIRECTORY_USERS_SCOPES = ["User.ReadBasic.All"];
 
 export type OutlookCalendarFetcherUnavailableReason =
   /** Mailbox is cloud-served but the Graph token context isn't mounted. */
@@ -61,8 +75,26 @@ export function useOutlookCalendarFetcher(): UseOutlookCalendarFetcherResult {
     }
     const acquireGraphToken: AcquireGraphToken = (options) =>
       graph.acquireToken(GRAPH_CALENDAR_SCOPES, options);
+    // Both acquirers are always offered; an unconsented scope fails at
+    // acquisition time inside the resolution module, which degrades that
+    // lookup to "unavailable" without touching the calendar legs. The sign-in
+    // toast is suppressed: declining these OPTIONAL scopes is a designed-for
+    // steady state, and the toast's interactive retry would dead-end on the
+    // same missing consent (its wording is also email-specific).
+    const directory: GraphDirectoryTokenSources = {
+      people: (options) =>
+        graph.acquireToken(GRAPH_DIRECTORY_PEOPLE_SCOPES, {
+          ...options,
+          suppressSignInPrompt: true,
+        }),
+      users: (options) =>
+        graph.acquireToken(GRAPH_DIRECTORY_USERS_SCOPES, {
+          ...options,
+          suppressSignInPrompt: true,
+        }),
+    };
     return {
-      fetcher: createGraphOutlookCalendarFetcher(acquireGraphToken),
+      fetcher: createGraphOutlookCalendarFetcher(acquireGraphToken, directory),
       unavailableReason: null,
     };
   }, [graph, mode, isOnPrem]);

@@ -7,7 +7,7 @@ import {
   useState,
 } from "react";
 
-import { isMessageRead } from "../sessionPolicy";
+import { isMessageRead, resolveSupportedMailboxItem } from "../sessionPolicy";
 import { callOfficeAsync } from "../utils/officeAsync";
 
 interface EmailAddress {
@@ -378,10 +378,10 @@ export function OutlookMailItemProvider({
   );
 
   useEffect(() => {
-    const item = Office.context.mailbox.item as
-      | Office.MessageRead
-      | Office.MessageCompose
-      | null;
+    // Appointments resolve to the neutral no-item context: a host leaking the
+    // pane into the calendar module (no manifest surface declares one) must
+    // not crash this effect — it runs above every error boundary.
+    const item = resolveSupportedMailboxItem(Office.context.mailbox.item);
     const selectionVersion = selectionVersionRef.current + 1;
     selectionVersionRef.current = selectionVersion;
     currentItemRef.current = item;

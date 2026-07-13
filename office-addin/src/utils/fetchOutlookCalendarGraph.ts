@@ -1,6 +1,10 @@
 import {
+  ambiguousCandidatesReason,
   computeCalendarRanges,
+  decodeMergedFreeBusyView,
   MS_PER_DAY,
+  onlyBlockingBlocks,
+  resolvedAsCaveat,
   resolveTimezone,
   runCalendarLegs,
   throwIfAborted,
@@ -12,22 +16,29 @@ import {
   graphFetch,
   makeGraphTokenSource,
 } from "./fetchOutlookMessageGraph";
+import { resolveAttendeeNameViaGraph } from "./graphAttendeeResolution";
 import { toIanaStrict } from "./windowsZones";
 
 import type { CalendarRange } from "./calendarLegs";
 import type {
   CalendarFetchOptions,
+  NormalizedAttendeeAvailability,
   NormalizedBusyBlock,
   NormalizedBusyType,
   NormalizedCalendar,
   NormalizedEventWhen,
   NormalizedHistoryMeeting,
-  NormalizedWorkingHours,
+  WorkingHoursAnchor,
+  WorkingHoursLegResult,
 } from "./fetchOutlookCalendar";
 import type {
   AcquireGraphToken,
   GraphTokenSource,
 } from "./fetchOutlookMessageGraph";
+import type {
+  GraphDirectoryTokenSources,
+  GraphNameResolution,
+} from "./graphAttendeeResolution";
 
 /**
  * Microsoft Graph calendar sourcing for Exchange Online (SI-2 / ERMAIN-384);
@@ -75,8 +86,19 @@ interface GraphWorkingHours {
   timeZone?: { name?: string };
 }
 
+interface GraphScheduleItem {
+  /** free | tentative | busy | oof | workingElsewhere | unknown. */
+  status?: string;
+  start?: GraphDateTimeTimeZone;
+  end?: GraphDateTimeTimeZone;
+}
+
 interface GraphScheduleInformation {
+  scheduleId?: string;
+  availabilityView?: string;
+  scheduleItems?: GraphScheduleItem[];
   workingHours?: GraphWorkingHours;
+  error?: { message?: string; responseCode?: string };
 }
 
 interface GraphGetScheduleResponse {
@@ -275,29 +297,21 @@ export async function fetchCalendarHistoryViaGraph(
   return meetings;
 }
 
-/**
- * Working hours via `POST /me/calendar/getSchedule` — deliberately NOT
- * `/me/mailboxSettings`, which would need an extra `MailboxSettings.Read`
- * consent per tenant while getSchedule rides the same `Calendars.Read` token.
- * Returns null when working hours are genuinely absent or untrustworthy;
- * THROWS on a hard fetch failure.
- */
-export async function fetchWorkingHoursViaGraph(
+/** Shared `POST /me/calendar/getSchedule` (working-hours and attendee legs).
+ * THROWS on a hard HTTP failure; per-schedule errors stay in the payload. */
+async function postGetSchedule(
   acquireToken: AcquireGraphToken,
-  options: CalendarFetchOptions = {},
-): Promise<NormalizedWorkingHours | null> {
-  throwIfAborted(options.signal);
-  const smtp = Office.context.mailbox.userProfile?.emailAddress;
-  if (!smtp) return null;
-  const now = new Date();
+  schedules: string[],
+  startUtc: string,
+  endUtc: string,
+  availabilityViewInterval: number,
+  options: CalendarFetchOptions,
+): Promise<GraphGetScheduleResponse> {
   const body = JSON.stringify({
-    schedules: [smtp],
-    startTime: { dateTime: toUtcNoMillis(now), timeZone: "UTC" },
-    endTime: {
-      dateTime: toUtcNoMillis(new Date(now.getTime() + MS_PER_DAY)),
-      timeZone: "UTC",
-    },
-    availabilityViewInterval: 60,
+    schedules,
+    startTime: { dateTime: startUtc, timeZone: "UTC" },
+    endTime: { dateTime: endUtc, timeZone: "UTC" },
+    availabilityViewInterval,
   });
   const response = await graphFetch(
     `${GRAPH_BASE}/me/calendar/getSchedule`,
@@ -316,30 +330,322 @@ export async function fetchWorkingHoursViaGraph(
       `Graph getSchedule failed: ${response.status} ${response.statusText}`,
     );
   }
-  const payload = (await response.json()) as GraphGetScheduleResponse;
+  return (await response.json()) as GraphGetScheduleResponse;
+}
+
+/**
+ * Working hours via `POST /me/calendar/getSchedule` — deliberately NOT
+ * `/me/mailboxSettings`, which would need an extra `MailboxSettings.Read`
+ * consent per tenant while getSchedule rides the same `Calendars.Read` token.
+ * `hours: null` when genuinely absent; `untrusted` when hours exist but are
+ * unusable; THROWS on a hard fetch failure. A schedule zone that differs from
+ * the mailbox zone is NOT distrust — it is MS's supported traveler state, and
+ * the hours-zone is authoritative: it rides along as `anchor`.
+ */
+export async function fetchWorkingHoursViaGraph(
+  acquireToken: AcquireGraphToken,
+  options: CalendarFetchOptions = {},
+): Promise<WorkingHoursLegResult> {
+  throwIfAborted(options.signal);
+  const smtp = Office.context.mailbox.userProfile?.emailAddress;
+  if (!smtp) return { hours: null };
+  const now = new Date();
+  const payload = await postGetSchedule(
+    acquireToken,
+    [smtp],
+    toUtcNoMillis(now),
+    toUtcNoMillis(new Date(now.getTime() + MS_PER_DAY)),
+    60,
+    options,
+  );
   const workingHours = payload.value?.[0]?.workingHours;
-  if (!workingHours) return null;
-  // start/end are clock times in workingHours.timeZone; under a different zone
-  // than the mailbox's the minutes would be wrong — degrade rather than mislead.
+  if (!workingHours) return { hours: null };
+  return normalizeGraphWorkingHours(workingHours);
+}
+
+/** Shared by the self leg and per-attendee schedules: Graph clock strings +
+ * zone name → normalized hours with an anchor when the zone diverges. */
+function normalizeGraphWorkingHours(
+  workingHours: GraphWorkingHours,
+): WorkingHoursLegResult {
   const scheduleZone = workingHours.timeZone?.name;
   const mailboxZone = Office.context.mailbox.userProfile?.timeZone;
+  let anchor: WorkingHoursAnchor | undefined;
   if (scheduleZone && mailboxZone && !sameZone(scheduleZone, mailboxZone)) {
-    console.warn(
-      "[fetchWorkingHoursViaGraph] getSchedule zone differs from mailbox zone; degrading working hours to null:",
-      scheduleZone,
-      mailboxZone,
-    );
-    return null;
+    const iana = toIanaStrict(scheduleZone);
+    if (iana === null) {
+      // Divergent AND unresolvable: the minutes can't be interpreted at all.
+      return {
+        hours: null,
+        untrusted: `unrecognized working-hours time zone "${scheduleZone}"`,
+      };
+    }
+    anchor = { kind: "iana", zone: iana };
   }
   const startMinutes = clockStringToMinutes(workingHours.startTime);
-  const endMinutes = clockStringToMinutes(workingHours.endTime);
-  if (startMinutes === null || endMinutes === null) return null;
+  const rawEnd = clockStringToMinutes(workingHours.endTime);
+  if (startMinutes === null || rawEnd === null) {
+    return { hours: null, untrusted: "unreadable start/end times" };
+  }
+  // A workday ending at midnight arrives as "00:00:00" → 0; as an END that
+  // means end-of-day, and 0 < start would invert the ranking window (every
+  // day silently skipped). Any remaining end <= start (overnight shift) is
+  // unrepresentable.
+  const endMinutes = rawEnd === 0 ? 1440 : rawEnd;
+  if (endMinutes <= startMinutes) {
+    return {
+      hours: null,
+      untrusted: "overnight working hours (end not after start)",
+    };
+  }
   return {
-    daysOfWeek: Array.isArray(workingHours.daysOfWeek)
-      ? workingHours.daysOfWeek
-      : [],
-    startMinutes,
-    endMinutes,
+    hours: {
+      daysOfWeek: Array.isArray(workingHours.daysOfWeek)
+        ? workingHours.daysOfWeek
+        : [],
+      startMinutes,
+      endMinutes,
+      ...(anchor !== undefined ? { anchor } : {}),
+    },
+  };
+}
+
+/** Interval sized so the window never exceeds getSchedule's 1000-slot
+ * `availabilityView` cap (error 5006): doubled from 30 min until it fits. */
+export function availabilityViewIntervalFor(windowMinutes: number): number {
+  let interval = 30;
+  while (windowMinutes / interval > 1000 && interval < 1440) {
+    interval *= 2;
+  }
+  return Math.min(interval, 1440);
+}
+
+const unknownAttendee = (
+  requested: string,
+  reason: string,
+): NormalizedAttendeeAvailability => ({
+  requested,
+  status: "unknown",
+  reason,
+  busy: [],
+});
+
+/**
+ * Colleague free/busy over `range` (ERMAIN-434): one getSchedule call with all
+ * attendee SMTP addresses. Per-schedule failures become `status: "unknown"`
+ * entries — never silently free; only the whole-call failure THROWS (and
+ * degrades the leg). Results are OPAQUE — blocking intervals, no subjects.
+ *
+ * getSchedule needs SMTP; a display name resolves through the OPTIONAL
+ * directory scopes first (`graphAttendeeResolution.ts` — People.Read /
+ * User.ReadBasic.All). Without those consents (or without `directory` at
+ * all) a non-address input degrades to "unknown" with a use-an-address hint,
+ * and an ambiguous name surfaces its candidates so the user can pick one —
+ * name lookup is a nicety that must never sink the calendar read.
+ */
+export async function fetchAttendeeAvailabilityViaGraph(
+  acquireToken: AcquireGraphToken,
+  range: CalendarRange,
+  attendees: string[],
+  options: CalendarFetchOptions = {},
+  directory: GraphDirectoryTokenSources = {},
+): Promise<NormalizedAttendeeAvailability[]> {
+  if (attendees.length === 0) return [];
+  throwIfAborted(options.signal);
+
+  const names = attendees.filter((entry) => !entry.includes("@"));
+  const resolutions = new Map<string, GraphNameResolution>();
+  if (names.length > 0 && (directory.people || directory.users)) {
+    await Promise.all(
+      names.map(async (name) => {
+        resolutions.set(
+          name,
+          await resolveAttendeeNameViaGraph(directory, name, options),
+        );
+      }),
+    );
+    throwIfAborted(options.signal);
+  }
+
+  const smtpFor = (requested: string): string | null => {
+    if (requested.includes("@")) return requested;
+    const resolution = resolutions.get(requested);
+    return resolution?.kind === "resolved" ? resolution.smtp : null;
+  };
+
+  // Two inputs may resolve to one mailbox — query each address once.
+  const toQuery: string[] = [];
+  const queried = new Set<string>();
+  for (const requested of attendees) {
+    const smtp = smtpFor(requested);
+    if (smtp !== null && !queried.has(smtp.toLowerCase())) {
+      queried.add(smtp.toLowerCase());
+      toQuery.push(smtp);
+    }
+  }
+
+  const scheduleBySmtp = new Map<string, GraphScheduleInformation>();
+  const windowMinutes =
+    (Date.parse(range.endUtc) - Date.parse(range.startUtc)) / 60_000;
+  const interval = availabilityViewIntervalFor(windowMinutes);
+  if (toQuery.length > 0) {
+    const payload = await postGetSchedule(
+      acquireToken,
+      toQuery,
+      range.startUtc,
+      range.endUtc,
+      interval,
+      options,
+    );
+    (payload.value ?? []).forEach((schedule, index) => {
+      // scheduleId echoes the request; fall back to request order.
+      const smtp =
+        toQuery.find(
+          (s) => s.toLowerCase() === schedule.scheduleId?.toLowerCase(),
+        ) ?? toQuery[index];
+      if (smtp !== undefined) scheduleBySmtp.set(smtp.toLowerCase(), schedule);
+    });
+  }
+
+  return attendees.map((requested) => {
+    if (!requested.includes("@")) {
+      const resolution = resolutions.get(requested);
+      if (resolution === undefined) {
+        return unknownAttendee(
+          requested,
+          "not an email address — Exchange Online availability needs an SMTP address",
+        );
+      }
+      if (resolution.kind === "ambiguous") {
+        return unknownAttendee(
+          requested,
+          ambiguousCandidatesReason(
+            resolution.candidates.length,
+            resolution.candidates,
+          ),
+        );
+      }
+      if (resolution.kind === "not-found") {
+        return unknownAttendee(requested, "not found in the directory");
+      }
+      if (resolution.kind === "unavailable") {
+        return unknownAttendee(
+          requested,
+          `directory name search unavailable (${resolution.detail}) — use an email address`,
+        );
+      }
+    }
+    const smtp = smtpFor(requested) as string;
+    // Disclose a non-exact directory match — without it the result claims
+    // the REQUESTED name's availability with the matched person's calendar.
+    const resolution = resolutions.get(requested);
+    const resolvedNote =
+      resolution?.kind === "resolved"
+        ? resolvedAsCaveat(requested, resolution.name, smtp)
+        : undefined;
+    const disclose = (
+      entry: NormalizedAttendeeAvailability,
+    ): NormalizedAttendeeAvailability =>
+      resolvedNote === undefined
+        ? entry
+        : {
+            ...entry,
+            reason:
+              entry.reason === undefined
+                ? resolvedNote
+                : `${entry.reason}; ${resolvedNote}`,
+          };
+    const schedule = scheduleBySmtp.get(smtp.toLowerCase());
+    if (schedule === undefined) {
+      return disclose({
+        // The address is known even though the read failed — parity with EWS.
+        ...unknownAttendee(requested, "no availability data returned"),
+        smtp,
+      });
+    }
+    try {
+      return disclose(
+        normalizeSchedule(requested, smtp, schedule, range.startUtc, interval),
+      );
+    } catch (error) {
+      // One malformed schedule (e.g. a non-UTC slice, which toUtcIso rejects)
+      // must not sink the readable siblings — per-attendee degrade.
+      return disclose({
+        ...unknownAttendee(
+          requested,
+          error instanceof Error ? error.message : String(error),
+        ),
+        smtp,
+      });
+    }
+  });
+}
+
+function normalizeSchedule(
+  requested: string,
+  smtp: string,
+  schedule: GraphScheduleInformation,
+  windowStartUtc: string,
+  intervalMinutes: number,
+): NormalizedAttendeeAvailability {
+  if (schedule.error) {
+    return {
+      ...unknownAttendee(
+        requested,
+        schedule.error.message ??
+          schedule.error.responseCode ??
+          "availability lookup failed",
+      ),
+      smtp,
+    };
+  }
+  // The attendee's own shared hours (unusable ones are simply omitted —
+  // attendees never get an untrusted state, their busy blocks stand alone).
+  const attendeeHours =
+    schedule.workingHours !== undefined
+      ? (normalizeGraphWorkingHours(schedule.workingHours).hours ?? undefined)
+      : undefined;
+  if (Array.isArray(schedule.scheduleItems)) {
+    const blocks: NormalizedBusyBlock[] = [];
+    for (const item of schedule.scheduleItems) {
+      const startUtc = toUtcIso(item.start);
+      const endUtc = toUtcIso(item.end);
+      if (!startUtc || !endUtc) continue;
+      blocks.push({
+        // No subject on purpose: colleague calendars surface opaquely.
+        when: { kind: "date-time", startUtc, endUtc },
+        // "unknown" status falls through mapShowAs to Busy — never read as free.
+        busyType: mapShowAs(item.status),
+      });
+    }
+    return {
+      requested,
+      smtp,
+      status: "ok",
+      busy: onlyBlockingBlocks(blocks),
+      ...(attendeeHours !== undefined ? { workingHours: attendeeHours } : {}),
+    };
+  }
+  if (typeof schedule.availabilityView === "string") {
+    // Sharing policies that only publish merged free/busy omit scheduleItems.
+    return {
+      requested,
+      smtp,
+      status: "ok",
+      busy: onlyBlockingBlocks(
+        decodeMergedFreeBusyView(
+          schedule.availabilityView,
+          windowStartUtc,
+          intervalMinutes,
+          "WorkingElsewhere",
+        ),
+      ),
+      ...(attendeeHours !== undefined ? { workingHours: attendeeHours } : {}),
+    };
+  }
+  return {
+    ...unknownAttendee(requested, "no availability data returned"),
+    smtp,
   };
 }
 
@@ -348,6 +654,7 @@ export async function fetchWorkingHoursViaGraph(
 export async function fetchOutlookCalendarViaGraph(
   acquireToken: AcquireGraphToken,
   options: CalendarFetchOptions = {},
+  directory: GraphDirectoryTokenSources = {},
 ): Promise<NormalizedCalendar> {
   const { historyRange, busyRange } = computeCalendarRanges(
     new Date(),
@@ -355,22 +662,39 @@ export async function fetchOutlookCalendarViaGraph(
   );
   const displayTimeZone = resolveTimezone();
 
-  const { historyMeetings, busyBlocks, workingHours, degradedLegs } =
-    await runCalendarLegs(
-      {
-        history: () =>
-          fetchCalendarHistoryViaGraph(acquireToken, historyRange, options),
-        busy: () => fetchCalendarBusyViaGraph(acquireToken, busyRange, options),
-        workingHours: () => fetchWorkingHoursViaGraph(acquireToken, options),
-      },
-      options.signal,
-      "[fetchOutlookCalendarViaGraph]",
-    );
+  const {
+    historyMeetings,
+    busyBlocks,
+    workingHours,
+    attendeeAvailability,
+    degradedLegs,
+  } = await runCalendarLegs(
+    {
+      history: () =>
+        fetchCalendarHistoryViaGraph(acquireToken, historyRange, options),
+      busy: () => fetchCalendarBusyViaGraph(acquireToken, busyRange, options),
+      workingHours: () => fetchWorkingHoursViaGraph(acquireToken, options),
+      attendees: () =>
+        fetchAttendeeAvailabilityViaGraph(
+          acquireToken,
+          busyRange,
+          options.attendees ?? [],
+          options,
+          directory,
+        ),
+    },
+    options.signal,
+    "[fetchOutlookCalendarViaGraph]",
+  );
 
   return {
-    workingHours,
+    workingHours: workingHours.hours,
+    ...(workingHours.untrusted !== undefined
+      ? { workingHoursUntrusted: workingHours.untrusted }
+      : {}),
     busyBlocks,
     historyMeetings,
+    attendees: attendeeAvailability,
     displayTimeZone,
     degradedLegs,
   };

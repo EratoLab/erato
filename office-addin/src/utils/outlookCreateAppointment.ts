@@ -85,8 +85,12 @@ export function parseAppointmentDetails(
   if (typeof obj.location === "string") {
     details.location = obj.location;
   }
+  // The contract field is "body", but models drift to "description" — accept
+  // it rather than silently dropping the agenda text from the prefilled form.
   if (typeof obj.body === "string") {
     details.body = obj.body;
+  } else if (typeof obj.description === "string") {
+    details.body = obj.description;
   }
   return details;
 }

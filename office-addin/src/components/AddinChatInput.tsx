@@ -137,11 +137,12 @@ interface AddinChatInputProps {
   controlledIsModelSelectionReady?: boolean;
   /**
    * `createdAt` of the latest assistant message IF it read the calendar via
-   * the `fetch_availability` client tool, else null (computed in `AddinChat`,
+   * the `fetch_availability` client tool or emitted an `erato-appointment`
+   * fence, else null (computed in `AddinChat`,
    * which owns the message stream). When fresh at send time, the send carries
    * the `outlook_schedule` facet so the model can handle the user's slot pick.
    */
-  lastSchedulingToolUseAt?: string | null;
+  lastSchedulingSignalAt?: string | null;
 }
 
 export const AddinChatInput = forwardRef<
@@ -155,7 +156,7 @@ export const AddinChatInput = forwardRef<
     editInitialFiles,
     isExpandingDroppedEmails = false,
     onEmailSourceDropsSent,
-    lastSchedulingToolUseAt = null,
+    lastSchedulingSignalAt = null,
     ...chatInputProps
   },
   ref,
@@ -682,7 +683,7 @@ export const AddinChatInput = forwardRef<
         scheduleFacetAvailable,
         calendarAvailable: calendarFetcher !== null,
         schedulingThreadActive: isSchedulingThreadFresh(
-          lastSchedulingToolUseAt,
+          lastSchedulingSignalAt,
           Date.now(),
         ),
         nowIso: toLocalOffsetIso(new Date().toISOString()),
@@ -799,7 +800,7 @@ export const AddinChatInput = forwardRef<
       hasActiveSelection,
       isDraftContextIncluded,
       itemIdentity,
-      lastSchedulingToolUseAt,
+      lastSchedulingSignalAt,
       mailItem,
       onEmailSourceDropsSent,
       replyFromReadAvailable,
