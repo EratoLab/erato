@@ -220,12 +220,6 @@ export function parseCalendarView(doc: Document): RawCalendarItem[] {
   return items;
 }
 
-/**
- * `NormalizedWorkingHours` carries a SINGLE window (as does Graph), so multiple
- * WorkingPeriods collapse lossily: the window comes from the FIRST period and
- * only days of same-window periods are kept — dropping a day understates
- * availability, which is safe; unioning it under the wrong hours is not.
- */
 const WEEKDAY_INDEX: Record<string, number> = {
   sunday: 0,
   monday: 1,
@@ -343,9 +337,16 @@ export function parseAvailability(
   return parseWorkingHoursElement(workingHours, displayZone);
 }
 
-/** Shared by the self leg and per-attendee responses: one `<WorkingHours>`
+/**
+ * Shared by the self leg and per-attendee responses: one `<WorkingHours>`
  * element → normalized hours (anchored to its own rules when its offsets
- * differ from the display zone's). */
+ * differ from the display zone's).
+ *
+ * `NormalizedWorkingHours` carries a SINGLE window (as does Graph), so multiple
+ * WorkingPeriods collapse lossily: the window comes from the FIRST period and
+ * only days of same-window periods are kept — dropping a day understates
+ * availability, which is safe; unioning it under the wrong hours is not.
+ */
 function parseWorkingHoursElement(
   workingHours: Element,
   displayZone: string,
