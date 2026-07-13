@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   EXPECTED_ATTENDEE_PARITY,
   stripReasons,
-} from "./attendeeParity.fixture";
+} from "../../test/fixtures/attendeeParity";
 import {
   installMockMailbox,
   uninstallMockMailbox,
