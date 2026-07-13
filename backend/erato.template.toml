@@ -477,6 +477,11 @@ chat_provider_ids = ["test-token-limit"]
 # # Fence fields: start, end (ISO-8601 with offset, in {{timezone}}), subject,
 # # attendees (string[]); optional optionalAttendees, location, body (plain-
 # # text agenda; "description" is a tolerated alias — body wins on conflict).
+# # The template should tell the model: when the user picked one of the tool's
+# # suggestedSlots, copy that slot's startIso/endIso VERBATIM as start/end
+# # (never rebuild times from day/start/utcOffset), and for attendees use each
+# # availability entry's "email" when present (the resolved address), never a
+# # bare display name — this keeps the slot→appointment loop copy-exact.
 # # Enforcement gates assistant-initiated runs only — see the
 # # client_actions_always_ask note above.
 # client_actions = ["outlook.create_appointment"]

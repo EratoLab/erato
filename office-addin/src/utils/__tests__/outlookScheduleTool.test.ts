@@ -412,9 +412,18 @@ describe("serializeCalendarForModel", () => {
       suggestedSlots: {
         durationMinutes: number;
         durationBasis: string;
-        slots: { tier: string; start: string; day: string }[];
+        slots: {
+          tier: string;
+          start: string;
+          end: string;
+          day: string;
+          startIso: string;
+          endIso: string;
+          utcOffset: string;
+        }[];
       };
       notes: string[];
+      legend: string;
     };
 
     expect(result.suggestedSlots.durationMinutes).toBe(60);
@@ -423,6 +432,16 @@ describe("serializeCalendarForModel", () => {
     expect(result.suggestedSlots.slots[0].tier).toBe("earliest");
     // NOW is Friday 14:00 Berlin; the same afternoon is the soonest window.
     expect(result.suggestedSlots.slots[0].day).toBe("Friday 2026-07-03");
+    // Fence-ready ISO fields: consistent with the display fields, so the
+    // model copies rather than reassembles (the loop's main error source).
+    for (const slot of result.suggestedSlots.slots) {
+      expect(slot.startIso).toBe(
+        `${slot.day.split(" ")[1]}T${slot.start}:00${slot.utcOffset}`,
+      );
+      expect(slot.endIso).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00\+02:00$/);
+      expect(slot.endIso.slice(11, 16)).toBe(slot.end);
+    }
+    expect(result.legend).toContain("copy its startIso/endIso VERBATIM");
     expect(result.notes).toEqual([
       expect.stringContaining("1 attendee(s) whose calendar was unreadable"),
     ]);
