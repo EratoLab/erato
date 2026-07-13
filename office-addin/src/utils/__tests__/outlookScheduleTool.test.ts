@@ -448,6 +448,85 @@ describe("serializeCalendarForModel", () => {
     expect(unconfigured.legend).toContain('"degraded" contains "workingHours"');
   });
 
+  it("marks untrusted configured hours distinctly, even when suggestedSlots are suppressed", () => {
+    const withSlots = serializeCalendarForModel(
+      { ...emptyCalendar, workingHoursUntrusted: "zone mismatch (test)" },
+      NOW,
+      { requestedDurationMinutes: 30, freeBusyWindowDays: 3 },
+    ) as { notes: string[]; legend: string };
+    expect(withSlots.notes).toContain(
+      "working hours are configured but unusable (zone mismatch (test)) — real hours unknown; never say none are configured",
+    );
+    expect(withSlots.notes).toContain(
+      "suggestedSlots assume Mon-Fri 09:00-17:00 (configured working hours unusable — real hours unknown)",
+    );
+    expect(withSlots.legend).toContain("configured but unusable");
+
+    // Slots gated off (busy degraded): the unconditional note must survive —
+    // it is the only thing standing between the model and "none configured".
+    const suppressed = serializeCalendarForModel(
+      {
+        ...emptyCalendar,
+        workingHoursUntrusted: "zone mismatch (test)",
+        degradedLegs: ["busy"],
+      },
+      NOW,
+      { requestedDurationMinutes: 30, freeBusyWindowDays: 3 },
+    ) as { suggestedSlots?: unknown; notes: string[] };
+    expect(suppressed.suggestedSlots).toBeUndefined();
+    expect(suppressed.notes).toContain(
+      "working hours are configured but unusable (zone mismatch (test)) — real hours unknown; never say none are configured",
+    );
+  });
+
+  it("labels anchored working hours with their own time zone", () => {
+    const anchored = serializeCalendarForModel(
+      {
+        ...emptyCalendar,
+        workingHours: {
+          daysOfWeek: ["monday"],
+          startMinutes: 540,
+          endMinutes: 1020,
+          anchor: { kind: "iana", zone: "America/New_York" },
+        },
+      },
+      NOW,
+    ) as {
+      workingHours: { start: string; end: string; timeZone?: string };
+      notes: string[];
+      legend: string;
+    };
+    expect(anchored.workingHours).toEqual({
+      days: ["monday"],
+      start: "09:00",
+      end: "17:00",
+      timeZone: "America/New_York",
+    });
+    expect(anchored.notes).toContain(
+      "workingHours are anchored to America/New_York, NOT the display timezone — start/end are wall-clock in that zone; suggestedSlots already account for this",
+    );
+    expect(anchored.legend).toContain("may carry its own timeZone");
+
+    // EWS rules anchor (no IANA name): offsets become the label.
+    const rules = serializeCalendarForModel(
+      {
+        ...emptyCalendar,
+        workingHours: {
+          daysOfWeek: ["monday"],
+          startMinutes: 480,
+          endMinutes: 1020,
+          anchor: {
+            kind: "rules",
+            standardOffset: -300,
+            daylightOffset: -240,
+          },
+        },
+      },
+      NOW,
+    ) as { workingHours: { timeZone?: string } };
+    expect(rules.workingHours.timeZone).toBe("UTC-05:00/-04:00 DST");
+  });
+
   it("suppresses suggestedSlots when every requested attendee is unreadable", () => {
     const result = serializeCalendarForModel(
       {

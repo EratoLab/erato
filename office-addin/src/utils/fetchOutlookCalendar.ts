@@ -7,11 +7,50 @@ import type {
 } from "./fetchOutlookMessageGraph";
 import type { GraphDirectoryTokenSources } from "./graphAttendeeResolution";
 
+/** One Windows/EWS-style DST transition: the nth (`dayOrder` 1-4, 5 = last)
+ * `dayOfWeek` (0 = Sunday) of `month`, at wall-clock `timeMinutes` in the
+ * phase being LEFT. */
+export interface WorkingHoursTransition {
+  month: number;
+  dayOrder: number;
+  dayOfWeek: number;
+  timeMinutes: number;
+}
+
+/**
+ * The zone the working-hours minutes are anchored to when it is NOT the
+ * display zone. The hours-zone is AUTHORITATIVE (per MS semantics a divergence
+ * is a supported traveler state, not corruption): consumers convert through it
+ * instead of reading the minutes as display-zone wall-clock. Graph names a
+ * zone (`iana`); EWS availability carries only offsets + transition rules
+ * (`rules`, offsets in minutes EAST of UTC; transitions absent ⇒ fixed
+ * `standardOffset` year-round).
+ */
+export type WorkingHoursAnchor =
+  | { kind: "iana"; zone: string }
+  | {
+      kind: "rules";
+      standardOffset: number;
+      daylightOffset: number;
+      daylightStart?: WorkingHoursTransition;
+      standardStart?: WorkingHoursTransition;
+    };
+
 export interface NormalizedWorkingHours {
   daysOfWeek: string[];
-  /** Minutes from midnight in the mailbox's own time zone. */
+  /** Minutes from midnight, wall-clock in `anchor` (display zone if absent). */
   startMinutes: number;
   endMinutes: number;
+  anchor?: WorkingHoursAnchor;
+}
+
+/** Soft working-hours result: `untrusted` set ⇒ hours EXIST on the mailbox
+ * but were unusable (unparseable zone rules / times) — distinct from "none
+ * configured" (hours null, untrusted absent) and from a hard fetch failure
+ * (the leg THROWS → degradedLegs). */
+export interface WorkingHoursLegResult {
+  hours: NormalizedWorkingHours | null;
+  untrusted?: string;
 }
 
 /**
@@ -88,6 +127,9 @@ export type CalendarLeg = "busy" | "history" | "workingHours" | "attendees";
 export interface NormalizedCalendar {
   /** null when it couldn't be sourced (the EWS working-hours leg is best-effort). */
   workingHours: NormalizedWorkingHours | null;
+  /** Set when hours WERE fetched but discarded as unusable — the model must
+   * never say "no working hours configured" in this state. */
+  workingHoursUntrusted?: string;
   busyBlocks: NormalizedBusyBlock[];
   historyMeetings: NormalizedHistoryMeeting[];
   /** Per-attendee free/busy, in request order; empty when none were requested.

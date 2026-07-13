@@ -8,7 +8,7 @@ import type {
   NormalizedBusyBlock,
   NormalizedBusyType,
   NormalizedHistoryMeeting,
-  NormalizedWorkingHours,
+  WorkingHoursLegResult,
 } from "./fetchOutlookCalendar";
 
 /**
@@ -77,7 +77,7 @@ export function resolveTimezone(): string {
 export interface CalendarLegThunks {
   history: () => Promise<NormalizedHistoryMeeting[]>;
   busy: () => Promise<NormalizedBusyBlock[]>;
-  workingHours: () => Promise<NormalizedWorkingHours | null>;
+  workingHours: () => Promise<WorkingHoursLegResult>;
   /** Resolves `[]` immediately when no attendees were requested. */
   attendees: () => Promise<NormalizedAttendeeAvailability[]>;
 }
@@ -85,7 +85,7 @@ export interface CalendarLegThunks {
 export interface CalendarLegResults {
   historyMeetings: NormalizedHistoryMeeting[];
   busyBlocks: NormalizedBusyBlock[];
-  workingHours: NormalizedWorkingHours | null;
+  workingHours: WorkingHoursLegResult;
   attendeeAvailability: NormalizedAttendeeAvailability[];
   degradedLegs: CalendarLeg[];
 }
@@ -134,7 +134,9 @@ export async function runCalendarLegs(
   return {
     historyMeetings: settle(history, "history", "history", []),
     busyBlocks: settle(busy, "busy", "busy", []),
-    workingHours: settle(workingHours, "workingHours", "working-hours", null),
+    workingHours: settle(workingHours, "workingHours", "working-hours", {
+      hours: null,
+    }),
     attendeeAvailability: settle(attendees, "attendees", "attendees", []),
     degradedLegs,
   };

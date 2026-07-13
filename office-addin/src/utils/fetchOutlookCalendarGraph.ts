@@ -26,7 +26,8 @@ import type {
   NormalizedCalendar,
   NormalizedEventWhen,
   NormalizedHistoryMeeting,
-  NormalizedWorkingHours,
+  WorkingHoursAnchor,
+  WorkingHoursLegResult,
 } from "./fetchOutlookCalendar";
 import type {
   AcquireGraphToken,
@@ -335,16 +336,18 @@ async function postGetSchedule(
  * Working hours via `POST /me/calendar/getSchedule` — deliberately NOT
  * `/me/mailboxSettings`, which would need an extra `MailboxSettings.Read`
  * consent per tenant while getSchedule rides the same `Calendars.Read` token.
- * Returns null when working hours are genuinely absent or untrustworthy;
- * THROWS on a hard fetch failure.
+ * `hours: null` when genuinely absent; `untrusted` when hours exist but are
+ * unusable; THROWS on a hard fetch failure. A schedule zone that differs from
+ * the mailbox zone is NOT distrust — it is MS's supported traveler state, and
+ * the hours-zone is authoritative: it rides along as `anchor`.
  */
 export async function fetchWorkingHoursViaGraph(
   acquireToken: AcquireGraphToken,
   options: CalendarFetchOptions = {},
-): Promise<NormalizedWorkingHours | null> {
+): Promise<WorkingHoursLegResult> {
   throwIfAborted(options.signal);
   const smtp = Office.context.mailbox.userProfile?.emailAddress;
-  if (!smtp) return null;
+  if (!smtp) return { hours: null };
   const now = new Date();
   const payload = await postGetSchedule(
     acquireToken,
@@ -355,34 +358,46 @@ export async function fetchWorkingHoursViaGraph(
     options,
   );
   const workingHours = payload.value?.[0]?.workingHours;
-  if (!workingHours) return null;
-  // start/end are clock times in workingHours.timeZone; under a different zone
-  // than the mailbox's the minutes would be wrong — degrade rather than mislead.
+  if (!workingHours) return { hours: null };
   const scheduleZone = workingHours.timeZone?.name;
   const mailboxZone = Office.context.mailbox.userProfile?.timeZone;
+  let anchor: WorkingHoursAnchor | undefined;
   if (scheduleZone && mailboxZone && !sameZone(scheduleZone, mailboxZone)) {
-    console.warn(
-      "[fetchWorkingHoursViaGraph] getSchedule zone differs from mailbox zone; degrading working hours to null:",
-      scheduleZone,
-      mailboxZone,
-    );
-    return null;
+    const iana = toIanaStrict(scheduleZone);
+    if (iana === null) {
+      // Divergent AND unresolvable: the minutes can't be interpreted at all.
+      return {
+        hours: null,
+        untrusted: `unrecognized working-hours time zone "${scheduleZone}"`,
+      };
+    }
+    anchor = { kind: "iana", zone: iana };
   }
   const startMinutes = clockStringToMinutes(workingHours.startTime);
   const rawEnd = clockStringToMinutes(workingHours.endTime);
-  if (startMinutes === null || rawEnd === null) return null;
+  if (startMinutes === null || rawEnd === null) {
+    return { hours: null, untrusted: "unreadable start/end times" };
+  }
   // A workday ending at midnight arrives as "00:00:00" → 0; as an END that
   // means end-of-day, and 0 < start would invert the ranking window (every
   // day silently skipped). Any remaining end <= start (overnight shift) is
-  // unrepresentable — degrade to null/assumed rather than mislead.
+  // unrepresentable.
   const endMinutes = rawEnd === 0 ? 1440 : rawEnd;
-  if (endMinutes <= startMinutes) return null;
+  if (endMinutes <= startMinutes) {
+    return {
+      hours: null,
+      untrusted: "overnight working hours (end not after start)",
+    };
+  }
   return {
-    daysOfWeek: Array.isArray(workingHours.daysOfWeek)
-      ? workingHours.daysOfWeek
-      : [],
-    startMinutes,
-    endMinutes,
+    hours: {
+      daysOfWeek: Array.isArray(workingHours.daysOfWeek)
+        ? workingHours.daysOfWeek
+        : [],
+      startMinutes,
+      endMinutes,
+      ...(anchor !== undefined ? { anchor } : {}),
+    },
   };
 }
 
@@ -658,7 +673,10 @@ export async function fetchOutlookCalendarViaGraph(
   );
 
   return {
-    workingHours,
+    workingHours: workingHours.hours,
+    ...(workingHours.untrusted !== undefined
+      ? { workingHoursUntrusted: workingHours.untrusted }
+      : {}),
     busyBlocks,
     historyMeetings,
     attendees: attendeeAvailability,

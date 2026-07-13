@@ -524,30 +524,48 @@ describe("fetchOutlookCalendarViaEws", () => {
     warnSpy.mockRestore();
   });
 
-  it("degrades working hours to null when the WorkingHours zone differs from the display zone", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("anchors working hours to the response's own rules when its zone differs from the display zone", async () => {
     installHostMock((body) =>
       body.includes("<m:GetUserAvailabilityRequest")
         ? { status: "succeeded", value: AVAILABILITY_MISMATCHED_ZONE_SOAP }
         : { status: "failed", error: { code: 0, message: "unexpected op" } },
     );
 
-    // US-Eastern-authored minutes must not be read as Berlin wall-clock.
+    // US-Eastern-authored minutes must not be read as Berlin wall-clock —
+    // the response's rules ride along so ranking converts through THEM.
     await expect(
       fetchWorkingHoursViaEws({
         startUtc: "2026-07-06T00:00:00Z",
         endUtc: "2026-07-07T00:00:00Z",
       }),
-    ).resolves.toBeNull();
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining("differ from the display zone"),
-      expect.anything(),
-      expect.anything(),
-    );
-    warnSpy.mockRestore();
+    ).resolves.toEqual({
+      hours: {
+        daysOfWeek: ["monday", "tuesday", "wednesday", "thursday", "friday"],
+        startMinutes: 480,
+        endMinutes: 1020,
+        anchor: {
+          kind: "rules",
+          standardOffset: -300,
+          daylightOffset: -240,
+          // Second Sunday of March 02:00 / first Sunday of November 02:00.
+          daylightStart: {
+            month: 3,
+            dayOrder: 2,
+            dayOfWeek: 0,
+            timeMinutes: 120,
+          },
+          standardStart: {
+            month: 11,
+            dayOrder: 1,
+            dayOfWeek: 0,
+            timeMinutes: 120,
+          },
+        },
+      },
+    });
   });
 
-  it("maps a midnight EndTimeInMinutes 0 to end-of-day and degrades an inverted window to null", async () => {
+  it("maps a midnight EndTimeInMinutes 0 to end-of-day and marks an inverted window untrusted", async () => {
     const range = {
       startUtc: "2026-07-06T00:00:00Z",
       endUtc: "2026-07-07T00:00:00Z",
@@ -558,8 +576,7 @@ describe("fetchOutlookCalendarViaEws", () => {
         : { status: "failed", error: { code: 0, message: "unexpected op" } },
     );
     await expect(fetchWorkingHoursViaEws(range)).resolves.toMatchObject({
-      startMinutes: 480,
-      endMinutes: 1440,
+      hours: { startMinutes: 480, endMinutes: 1440 },
     });
 
     installHostMock((body) =>
@@ -567,7 +584,10 @@ describe("fetchOutlookCalendarViaEws", () => {
         ? { status: "succeeded", value: AVAILABILITY_INVERTED_SOAP }
         : { status: "failed", error: { code: 0, message: "unexpected op" } },
     );
-    await expect(fetchWorkingHoursViaEws(range)).resolves.toBeNull();
+    await expect(fetchWorkingHoursViaEws(range)).resolves.toEqual({
+      hours: null,
+      untrusted: expect.stringContaining("overnight"),
+    });
   });
 
   it("rethrows the abort reason when the signal is already aborted", async () => {

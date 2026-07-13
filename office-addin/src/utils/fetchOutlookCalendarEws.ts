@@ -31,7 +31,9 @@ import type {
   NormalizedCalendar,
   NormalizedEventWhen,
   NormalizedHistoryMeeting,
-  NormalizedWorkingHours,
+  WorkingHoursAnchor,
+  WorkingHoursLegResult,
+  WorkingHoursTransition,
 } from "./fetchOutlookCalendar";
 
 export type { CalendarRange } from "./calendarLegs";
@@ -223,21 +225,74 @@ export function parseCalendarView(doc: Document): RawCalendarItem[] {
  * only days of same-window periods are kept — dropping a day understates
  * availability, which is safe; unioning it under the wrong hours is not.
  */
-/** Effective UTC offsets (minutes EAST) of a WorkingHours `<TimeZone>`:
- * EWS Bias is minutes WEST of UTC; the period biases add to the base. */
-function workingHoursZoneOffsets(tz: Element): [number, number] | null {
+const WEEKDAY_INDEX: Record<string, number> = {
+  sunday: 0,
+  monday: 1,
+  tuesday: 2,
+  wednesday: 3,
+  thursday: 4,
+  friday: 5,
+  saturday: 6,
+};
+
+/** "HH:MM[:SS]" → minutes; null when unparseable. */
+function clockToMinutes(clock: string | undefined): number | null {
+  if (!clock) return null;
+  const match = /^(\d{1,2}):(\d{2})/.exec(clock);
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+/**
+ * The WorkingHours `<TimeZone>` (bias + transition rules, NO name — EWS Bias
+ * is minutes WEST of UTC) as a rules anchor with offsets in minutes EAST.
+ * null when the block is present but unreadable — including offsets that
+ * differ while the transitions are unparseable (phase would be unknowable).
+ */
+function parseWorkingHoursRules(
+  tz: Element,
+): Extract<WorkingHoursAnchor, { kind: "rules" }> | null {
   const base = Number(typesText(tz, "Bias"));
   if (Number.isNaN(base)) return null;
-  const periodBias = (name: string): number => {
-    const period = firstTypesEl(tz, name);
-    if (!period) return 0;
-    const bias = Number(typesText(period, "Bias"));
-    return Number.isNaN(bias) ? 0 : bias;
+  const period = (
+    name: string,
+  ): { bias: number; rule?: WorkingHoursTransition } | null => {
+    const el = firstTypesEl(tz, name);
+    if (!el) return { bias: 0 };
+    const bias = Number(typesText(el, "Bias"));
+    if (Number.isNaN(bias)) return null;
+    const month = Number(typesText(el, "Month"));
+    const dayOrder = Number(typesText(el, "DayOrder"));
+    const dayOfWeek =
+      WEEKDAY_INDEX[(typesText(el, "DayOfWeek") ?? "").toLowerCase()];
+    const timeMinutes = clockToMinutes(typesText(el, "Time"));
+    const rule =
+      month >= 1 &&
+      month <= 12 &&
+      dayOrder >= 1 &&
+      dayOrder <= 5 &&
+      dayOfWeek !== undefined &&
+      timeMinutes !== null
+        ? { month, dayOrder, dayOfWeek, timeMinutes }
+        : undefined;
+    return { bias, rule };
   };
-  return [
-    -(base + periodBias("StandardTime")),
-    -(base + periodBias("DaylightTime")),
-  ];
+  const standard = period("StandardTime");
+  const daylight = period("DaylightTime");
+  if (standard === null || daylight === null) return null;
+  const standardOffset = -(base + standard.bias);
+  const daylightOffset = -(base + daylight.bias);
+  if (standardOffset === daylightOffset) {
+    return { kind: "rules", standardOffset, daylightOffset };
+  }
+  if (standard.rule === undefined || daylight.rule === undefined) return null;
+  return {
+    kind: "rules",
+    standardOffset,
+    daylightOffset,
+    daylightStart: daylight.rule,
+    standardStart: standard.rule,
+  };
 }
 
 /** A zone's offset (minutes east) at a UTC instant, via Intl. */
@@ -275,49 +330,61 @@ const sameOffsetPair = (a: [number, number], b: [number, number]): boolean =>
 export function parseAvailability(
   doc: Document,
   displayZone: string,
-): NormalizedWorkingHours | null {
+): WorkingHoursLegResult {
   const freeBusyResponse = allMessagesEls(doc, "FreeBusyResponse")[0];
-  if (!freeBusyResponse) return null;
+  if (!freeBusyResponse) return { hours: null };
   const responseMessage = firstMessagesEl(freeBusyResponse, "ResponseMessage");
   if (responseMessage) {
     assertResponseOk(responseMessage);
   }
   const workingHours = firstTypesEl(freeBusyResponse, "WorkingHours");
-  if (!workingHours) return null;
-  // start/end minutes are wall-clock in the RESPONSE's WorkingHours zone but
-  // the ranking interprets them in the DISPLAY zone — under different zones
-  // every "inside working hours" slot shifts by the delta (relocated user).
-  // EWS carries no zone NAME (unlike Graph's guard), only bias+DST rules, so
-  // compare effective offsets against the display zone's January/July pair;
-  // mismatch degrades to null exactly like the Graph sibling.
+  if (!workingHours) return { hours: null };
+  // start/end minutes are wall-clock in the RESPONSE's WorkingHours zone,
+  // which is authoritative (a traveler keeping home hours is a supported MS
+  // state, and the blob zone is sticky across relocations). When its offsets
+  // match the display zone's January/July pair the arithmetic is identical
+  // and no anchor is needed; when they differ, the rules ride along as the
+  // anchor and the ranking converts through them. Only an unreadable zone
+  // block makes the minutes uninterpretable → untrusted.
   const tz = firstTypesEl(workingHours, "TimeZone");
+  let anchor: WorkingHoursAnchor | undefined;
   if (tz) {
-    const responseOffsets = workingHoursZoneOffsets(tz);
+    const rules = parseWorkingHoursRules(tz);
+    if (rules === null) {
+      return {
+        hours: null,
+        untrusted: "unreadable working-hours time zone rules",
+      };
+    }
     const displayOffsets = januaryJulyOffsets(displayZone);
     if (
-      responseOffsets !== null &&
-      displayOffsets !== null &&
-      !sameOffsetPair(responseOffsets, displayOffsets)
-    ) {
-      console.warn(
-        "[parseAvailability] WorkingHours zone offsets differ from the display zone; degrading working hours to null:",
-        responseOffsets,
+      displayOffsets === null ||
+      !sameOffsetPair(
+        [rules.standardOffset, rules.daylightOffset],
         displayOffsets,
-      );
-      return null;
+      )
+    ) {
+      anchor = rules;
     }
   }
   const periods = allTypesEls(workingHours, "WorkingPeriod");
-  if (periods.length === 0) return null;
+  if (periods.length === 0) return { hours: null };
 
   const first = periods[0];
   const startMinutes = Number(typesText(first, "StartTimeInMinutes"));
   const endMinutes = Number(typesText(first, "EndTimeInMinutes"));
-  if (Number.isNaN(startMinutes) || Number.isNaN(endMinutes)) return null;
+  if (Number.isNaN(startMinutes) || Number.isNaN(endMinutes)) {
+    return { hours: null, untrusted: "unreadable start/end times" };
+  }
   // Midnight end = 0 means end-of-day (mirror the Graph parser); a still-
-  // inverted window (overnight shift) degrades to null/assumed.
+  // inverted window (overnight shift) is unrepresentable.
   const normalizedEnd = endMinutes === 0 ? 1440 : endMinutes;
-  if (normalizedEnd <= startMinutes) return null;
+  if (normalizedEnd <= startMinutes) {
+    return {
+      hours: null,
+      untrusted: "overnight working hours (end not after start)",
+    };
+  }
 
   const daysOfWeek = new Set<string>();
   let droppedPeriods = 0;
@@ -340,9 +407,12 @@ export function parseAvailability(
     );
   }
   return {
-    daysOfWeek: Array.from(daysOfWeek),
-    startMinutes,
-    endMinutes: normalizedEnd,
+    hours: {
+      daysOfWeek: Array.from(daysOfWeek),
+      startMinutes,
+      endMinutes: normalizedEnd,
+      ...(anchor !== undefined ? { anchor } : {}),
+    },
   };
 }
 
@@ -579,14 +649,15 @@ export async function fetchCalendarBusyViaEws(
   });
 }
 
-/** Working hours from GetUserAvailability. Returns null when genuinely absent;
- * THROWS on a hard EWS failure. */
+/** Working hours from GetUserAvailability. `hours: null` when genuinely
+ * absent; `untrusted` when hours exist but are unusable; THROWS on a hard
+ * EWS failure. */
 export async function fetchWorkingHoursViaEws(
   range: CalendarRange,
   options: CalendarFetchOptions = {},
-): Promise<NormalizedWorkingHours | null> {
+): Promise<WorkingHoursLegResult> {
   const smtpAddress = Office.context.mailbox.userProfile?.emailAddress;
-  if (!smtpAddress) return null;
+  if (!smtpAddress) return { hours: null };
   throwIfAborted(options.signal);
   const doc = await ewsHostFetch(
     buildSoapEnvelope(
@@ -882,7 +953,10 @@ export async function fetchOutlookCalendarViaEws(
   );
 
   return {
-    workingHours,
+    workingHours: workingHours.hours,
+    ...(workingHours.untrusted !== undefined
+      ? { workingHoursUntrusted: workingHours.untrusted }
+      : {}),
     busyBlocks,
     historyMeetings,
     attendees: attendeeAvailability,

@@ -3,6 +3,8 @@ import { BLOCKING_BUSY_TYPES } from "./calendarLegs";
 import type {
   NormalizedCalendar,
   NormalizedHistoryMeeting,
+  WorkingHoursAnchor,
+  WorkingHoursTransition,
 } from "./fetchOutlookCalendar";
 
 /**
@@ -109,6 +111,73 @@ export function zonedCivilToUtcMs(
   const candidate = guess - offset1;
   const offset2 = utcWallClockMs(candidate, zone) - candidate;
   return offset2 === offset1 ? candidate : guess - offset2;
+}
+
+/** UTC instant of the nth/last-`dayOfWeek`-of-`month` transition in `year`;
+ * the rule's wall-clock time is in the phase being LEFT (`offsetBefore`,
+ * minutes east) — the Windows TIME_ZONE_INFORMATION convention. */
+function transitionUtcMs(
+  year: number,
+  rule: WorkingHoursTransition,
+  offsetBefore: number,
+): number {
+  let day: number;
+  if (rule.dayOrder >= 5) {
+    const daysInMonth = new Date(Date.UTC(year, rule.month, 0)).getUTCDate();
+    const lastDow = new Date(
+      Date.UTC(year, rule.month - 1, daysInMonth),
+    ).getUTCDay();
+    day = daysInMonth - ((lastDow - rule.dayOfWeek + 7) % 7);
+  } else {
+    const firstDow = new Date(Date.UTC(year, rule.month - 1, 1)).getUTCDay();
+    day = 1 + ((rule.dayOfWeek - firstDow + 7) % 7) + (rule.dayOrder - 1) * 7;
+  }
+  return (
+    Date.UTC(year, rule.month - 1, day) +
+    rule.timeMinutes * MINUTE_MS -
+    offsetBefore * MINUTE_MS
+  );
+}
+
+/**
+ * UTC instant of civil `date` + wall-clock `minutes` in a rules-defined zone
+ * (the EWS availability shape — offsets + two yearly transitions, no IANA
+ * name). This is what ical.js does for VTIMEZONE and .NET's AdjustmentRule
+ * does for this exact struct; the 1h ambiguity AT a transition resolves to
+ * the standard phase, immaterial for working-hours windows. A southern-
+ * hemisphere DST window (daylightStart after standardStart) wraps year-end.
+ */
+export function rulesCivilToUtcMs(
+  date: string,
+  minutes: number,
+  rules: Extract<WorkingHoursAnchor, { kind: "rules" }>,
+): number {
+  const civilAsUtc = Date.parse(`${date}T00:00:00Z`) + minutes * MINUTE_MS;
+  let offset = rules.standardOffset;
+  if (
+    rules.daylightStart !== undefined &&
+    rules.standardStart !== undefined &&
+    rules.daylightOffset !== rules.standardOffset
+  ) {
+    const year = Number(date.slice(0, 4));
+    const dstStart = transitionUtcMs(
+      year,
+      rules.daylightStart,
+      rules.standardOffset,
+    );
+    const stdStart = transitionUtcMs(
+      year,
+      rules.standardStart,
+      rules.daylightOffset,
+    );
+    const candidate = civilAsUtc - rules.standardOffset * MINUTE_MS;
+    const inDst =
+      dstStart <= stdStart
+        ? candidate >= dstStart && candidate < stdStart
+        : candidate >= dstStart || candidate < stdStart;
+    if (inDst) offset = rules.daylightOffset;
+  }
+  return civilAsUtc - offset * MINUTE_MS;
 }
 
 function civilDateOf(utcMs: number, zone: string): string {
@@ -265,6 +334,15 @@ export function rankAvailabilitySlots(
   const startMinutes =
     calendar.workingHours?.startMinutes ?? ASSUMED_START_MINUTES;
   const endMinutes = calendar.workingHours?.endMinutes ?? ASSUMED_END_MINUTES;
+  // Hours-zone is authoritative: an anchored schedule (traveler keeping home
+  // hours) converts through its OWN zone, not the display zone.
+  const anchor = calendar.workingHours?.anchor;
+  const hoursCivilToUtcMs = (date: string, minutes: number): number =>
+    anchor === undefined
+      ? zonedCivilToUtcMs(date, minutes, zone)
+      : anchor.kind === "iana"
+        ? zonedCivilToUtcMs(date, minutes, anchor.zone)
+        : rulesCivilToUtcMs(date, minutes, anchor);
 
   // Blocking intervals: own blocking events + every loaded attendee's blocks
   // (already blocking-only by contract; own list is filtered here).
@@ -300,8 +378,8 @@ export function rankAvailabilitySlots(
     i += 1, date = nextCivilDate(date)
   ) {
     if (!workingDays.has(weekdayOf(date))) continue;
-    const dayStart = zonedCivilToUtcMs(date, startMinutes, zone);
-    const dayEnd = zonedCivilToUtcMs(date, endMinutes, zone);
+    const dayStart = hoursCivilToUtcMs(date, startMinutes);
+    const dayEnd = hoursCivilToUtcMs(date, endMinutes);
     const window: Interval = {
       start: Math.max(dayStart, nowMs),
       end: Math.min(dayEnd, windowEndMs),

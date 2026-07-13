@@ -13,6 +13,7 @@ import type {
   NormalizedCalendar,
   NormalizedEventWhen,
   OutlookCalendarFetcher,
+  WorkingHoursAnchor,
 } from "./fetchOutlookCalendar";
 import type {
   ClientToolExecutionResult,
@@ -65,8 +66,10 @@ const CALENDAR_LEGEND =
   "busy covers only the requested lookahead window (notes may say it was truncated) — treat time beyond it as unknown, not free. " +
   'If "degraded" contains "busy", busy data failed to load — you must NOT claim any time is free; say the calendar could not be read. ' +
   'If "degraded" contains "history", recentMeetings is incomplete — do not calibrate duration from it. ' +
-  "If workingHours is null none are configured — assume Mon-Fri 09:00-17:00 and say you assumed it. " +
+  "If workingHours is null and no note says otherwise, none are configured — assume Mon-Fri 09:00-17:00 and say you assumed it. " +
   'If "degraded" contains "workingHours", the working-hours lookup FAILED — hours may exist; assume Mon-Fri 09:00-17:00 but say the real hours could not be read, never that none are configured. ' +
+  'If a note says working hours are "configured but unusable", hours DO exist but could not be read — assume Mon-Fri 09:00-17:00 and say the configured hours could not be used, never that none are configured. ' +
+  "workingHours may carry its own timeZone (a traveler keeping home working hours): start/end are wall-clock in THAT zone, not `timezone` — rely on suggestedSlots (already converted) rather than converting yourself. " +
   "recentMeetings are PAST meetings, only useful to calibrate a typical duration. " +
   "attendees (when present) are OTHER people's calendars, shown as opaque blocking intervals only — no subjects, and their free time is not listed: every listed interval blocks that person; time outside the listed intervals is free for them ONLY while their status is ok. " +
   "An attendee entry with coveredUntil had its busy list truncated there: treat that person's time after coveredUntil as unknown, not free. " +
@@ -207,6 +210,19 @@ export interface SerializeCalendarOptions {
  * this tool result client-side (busy[], workingHours, timezone, attendees,
  * suggestedSlots, degraded, notes) — keep fields structured and stable.
  */
+/** Human/model-readable label for a working-hours anchor: the IANA id, or the
+ * offsets when EWS gave only rules (e.g. "UTC-05:00/-04:00 DST"). */
+function anchorLabel(anchor: WorkingHoursAnchor): string {
+  if (anchor.kind === "iana") return anchor.zone;
+  const hhmm = (offset: number): string => {
+    const abs = Math.abs(offset);
+    return `${offset < 0 ? "-" : "+"}${String(Math.floor(abs / 60)).padStart(2, "0")}:${String(abs % 60).padStart(2, "0")}`;
+  };
+  return anchor.standardOffset === anchor.daylightOffset
+    ? `UTC${hhmm(anchor.standardOffset)}`
+    : `UTC${hhmm(anchor.standardOffset)}/${hhmm(anchor.daylightOffset)} DST`;
+}
+
 export function serializeCalendarForModel(
   calendar: NormalizedCalendar,
   now: Date,
@@ -214,6 +230,21 @@ export function serializeCalendarForModel(
 ): Record<string, unknown> {
   const zone = calendar.displayTimeZone;
   const notes: string[] = [...(serializeOptions.extraNotes ?? [])];
+
+  // Both working-hours caveats are UNCONDITIONAL (not tied to suggestedSlots,
+  // which may be suppressed): without them the model falls back to the
+  // legend's "none are configured" — a falsehood in either state.
+  if (calendar.workingHoursUntrusted !== undefined) {
+    notes.push(
+      `working hours are configured but unusable (${calendar.workingHoursUntrusted}) — real hours unknown; never say none are configured`,
+    );
+  }
+  const hoursAnchor = calendar.workingHours?.anchor;
+  if (hoursAnchor !== undefined) {
+    notes.push(
+      `workingHours are anchored to ${anchorLabel(hoursAnchor)}, NOT the display timezone — start/end are wall-clock in that zone; suggestedSlots already account for this`,
+    );
+  }
 
   const sortedBusy = [...calendar.busyBlocks].sort((a, b) =>
     localSortKey(a.when, zone).localeCompare(localSortKey(b.when, zone)),
@@ -297,6 +328,9 @@ export function serializeCalendarForModel(
           days: calendar.workingHours.daysOfWeek,
           start: minutesToHhMm(calendar.workingHours.startMinutes),
           end: minutesToHhMm(calendar.workingHours.endMinutes),
+          ...(hoursAnchor !== undefined
+            ? { timeZone: anchorLabel(hoursAnchor) }
+            : {}),
         }
       : null,
     busy: sortedBusy.map((block) => ({
@@ -382,12 +416,14 @@ function buildSuggestedSlots(
   if (slots.length === 0) return null;
 
   if (workingHoursAssumed) {
-    // A FAILED lookup is not "none configured" — the model must not repeat
-    // that falsehood about the user's setup.
+    // Neither a FAILED lookup nor unusable configured hours is "none
+    // configured" — the model must not repeat that falsehood.
     notes.push(
       calendar.degradedLegs.includes("workingHours")
         ? "suggestedSlots assume Mon-Fri 09:00-17:00 (working-hours lookup failed — real hours unknown)"
-        : "suggestedSlots assume Mon-Fri 09:00-17:00 (no working hours configured)",
+        : calendar.workingHoursUntrusted !== undefined
+          ? "suggestedSlots assume Mon-Fri 09:00-17:00 (configured working hours unusable — real hours unknown)"
+          : "suggestedSlots assume Mon-Fri 09:00-17:00 (no working hours configured)",
     );
   }
   const unknownAttendees = calendar.attendees.filter(

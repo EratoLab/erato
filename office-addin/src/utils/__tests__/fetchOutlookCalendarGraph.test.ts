@@ -340,8 +340,10 @@ describe("fetchOutlookCalendarViaGraph", () => {
     expect(calendar.workingHours).toBeNull();
     expect(calendar.busyBlocks).toHaveLength(3);
     expect(calendar.historyMeetings).toHaveLength(2);
-    // A hard getSchedule failure flags the workingHours leg degraded.
+    // A hard getSchedule failure flags the workingHours leg degraded — and is
+    // mutually exclusive with the untrusted state.
     expect(calendar.degradedLegs).toEqual(["workingHours"]);
+    expect(calendar.workingHoursUntrusted).toBeUndefined();
     warnSpy.mockRestore();
   });
 
@@ -394,11 +396,11 @@ describe("fetchOutlookCalendarViaGraph", () => {
     expect(scheduleAuths).toEqual(["Bearer stale-token", "Bearer fresh-token"]);
   });
 
-  it("degrades working hours to null when getSchedule's zone differs from the mailbox zone", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("anchors working hours to the schedule's own zone when it differs from the mailbox zone", async () => {
     const acquireToken = vi.fn().mockResolvedValue("graph-tok");
-    // Mailbox mock is "W. Europe Standard Time"; a UTC schedule zone would make
-    // the clock-time minutes wrong, so working hours must degrade rather than lie.
+    // Mailbox mock is "W. Europe Standard Time"; a UTC schedule zone is MS's
+    // supported traveler state — the hours-zone is authoritative and rides
+    // along as the anchor instead of being discarded.
     const transport = makeTransport((url) => {
       if (url.includes("getSchedule")) {
         return jsonResponse({
@@ -421,12 +423,15 @@ describe("fetchOutlookCalendarViaGraph", () => {
       transport,
     });
 
-    expect(calendar.workingHours).toBeNull();
+    expect(calendar.workingHours).toEqual({
+      daysOfWeek: ["monday"],
+      startMinutes: 480,
+      endMinutes: 1020,
+      anchor: { kind: "iana", zone: "UTC" },
+    });
+    expect(calendar.workingHoursUntrusted).toBeUndefined();
     expect(calendar.busyBlocks).toHaveLength(3);
-    // Zone divergence is a data-trust degrade, NOT a fetch failure — the leg
-    // fetched fine, so it is deliberately not listed in degradedLegs.
     expect(calendar.degradedLegs).toEqual([]);
-    warnSpy.mockRestore();
   });
 
   it("maps a midnight workingHours end to end-of-day, and degrades an inverted window to null", async () => {
@@ -459,12 +464,13 @@ describe("fetchOutlookCalendarViaGraph", () => {
       endMinutes: 1440,
     });
 
-    // Genuinely inverted (overnight shift) → null/assumed, never an inverted
-    // window that silently skips every day in the ranking.
+    // Genuinely inverted (overnight shift) → null/untrusted, never an
+    // inverted window that silently skips every day in the ranking.
     const inverted = await fetchOutlookCalendarViaGraph(acquireToken, {
       transport: scheduleWith("17:00:00.0000000", "09:00:00.0000000"),
     });
     expect(inverted.workingHours).toBeNull();
+    expect(inverted.workingHoursUntrusted).toContain("overnight");
     expect(inverted.degradedLegs).toEqual([]);
   });
 
@@ -564,6 +570,10 @@ describe("fetchOutlookCalendarViaGraph", () => {
     });
 
     expect(calendar.workingHours).toBeNull();
+    // Hours exist but can't be interpreted — untrusted, never "unconfigured".
+    expect(calendar.workingHoursUntrusted).toContain(
+      "unrecognized working-hours time zone",
+    );
     // Data-trust degrade, not a fetch failure — stays out of degradedLegs.
     expect(calendar.degradedLegs).toEqual([]);
     warnSpy.mockRestore();

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   inferTypicalDurationMinutes,
   rankAvailabilitySlots,
+  rulesCivilToUtcMs,
   zonedCivilToUtcMs,
 } from "../slotRanking";
 
@@ -247,5 +248,71 @@ describe("zonedCivilToUtcMs", () => {
     expect(zonedCivilToUtcMs("2026-01-05", 540, "Europe/Berlin")).toBe(
       Date.parse("2026-01-05T08:00:00Z"),
     );
+  });
+});
+
+describe("rulesCivilToUtcMs", () => {
+  // W. Europe as EWS serializes it: UTC+1, DST +2 from the last Sunday of
+  // March 02:00 to the last Sunday of October 03:00.
+  const BERLIN_RULES = {
+    kind: "rules" as const,
+    standardOffset: 60,
+    daylightOffset: 120,
+    daylightStart: { month: 3, dayOrder: 5, dayOfWeek: 0, timeMinutes: 120 },
+    standardStart: { month: 10, dayOrder: 5, dayOfWeek: 0, timeMinutes: 180 },
+  };
+
+  it("applies the DST phase per date (matches Intl for the same zone)", () => {
+    expect(rulesCivilToUtcMs("2026-07-06", 480, BERLIN_RULES)).toBe(
+      Date.parse("2026-07-06T06:00:00Z"),
+    );
+    expect(rulesCivilToUtcMs("2026-01-15", 480, BERLIN_RULES)).toBe(
+      Date.parse("2026-01-15T07:00:00Z"),
+    );
+    // 2026-03-29 IS the last Sunday of March: 09:00 falls after the 02:00
+    // spring-forward, so the daylight offset applies.
+    expect(rulesCivilToUtcMs("2026-03-29", 540, BERLIN_RULES)).toBe(
+      Date.parse("2026-03-29T07:00:00Z"),
+    );
+    // The day before the transition is still standard time.
+    expect(rulesCivilToUtcMs("2026-03-28", 540, BERLIN_RULES)).toBe(
+      Date.parse("2026-03-28T08:00:00Z"),
+    );
+  });
+
+  it("treats missing transitions as a fixed offset", () => {
+    const fixed = {
+      kind: "rules" as const,
+      standardOffset: 60,
+      daylightOffset: 60,
+    };
+    expect(rulesCivilToUtcMs("2026-07-06", 480, fixed)).toBe(
+      Date.parse("2026-07-06T07:00:00Z"),
+    );
+    expect(rulesCivilToUtcMs("2026-01-15", 480, fixed)).toBe(
+      Date.parse("2026-01-15T07:00:00Z"),
+    );
+  });
+});
+
+describe("working-hours anchor", () => {
+  it("computes the working window in the anchor zone, not the display zone", () => {
+    const { slots } = rankAvailabilitySlots(
+      {
+        ...baseCalendar,
+        busyBlocks: [],
+        attendees: [],
+        // NY-anchored 09:00-17:00 viewed from Berlin: the Monday window is
+        // 13:00-21:00 UTC, NOT Berlin's 07:00-15:00 UTC.
+        workingHours: {
+          daysOfWeek: baseCalendar.workingHours!.daysOfWeek,
+          startMinutes: 540,
+          endMinutes: 1020,
+          anchor: { kind: "iana", zone: "America/New_York" },
+        },
+      },
+      RANKING_OPTIONS,
+    );
+    expect(slots[0].startUtc).toBe("2026-07-06T13:00:00Z");
   });
 });
