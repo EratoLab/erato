@@ -307,7 +307,7 @@ describe("serializeCalendarForModel", () => {
         ],
       },
       NOW,
-    ) as { attendees: Record<string, unknown>[]; legend: string };
+    );
 
     expect(result.attendees).toEqual([
       {
