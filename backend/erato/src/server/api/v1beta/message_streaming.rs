@@ -33,7 +33,8 @@ use crate::services::background_tasks::{
 use crate::services::client_tools::{ClientToolDelivery, ClientToolOutcome};
 use crate::services::genai::{build_chat_options_for_completion, build_chat_options_for_summary};
 use crate::services::genai_langfuse::{
-    TracedGenerationBuilder, create_tool_call_span_from_chat, create_trace_metadata,
+    TracedGenerationBuilder, create_otel_error_generation_from_chat, create_otel_tool_call_span,
+    create_tool_call_span_from_chat, create_trace_from_chat, create_trace_metadata,
     create_trace_with_generation_from_chat, generate_langfuse_ids, generate_name_from_chat_request,
     langfuse_model_tag, langfuse_tool_called_tag,
 };
@@ -2287,6 +2288,124 @@ fn hallucination_loop_error_event(message_id: Uuid) -> MessageSubmitStreamingRes
     }
 }
 
+fn langfuse_model_name(app_state: &AppState, chat_provider_id: Option<&str>) -> String {
+    chat_provider_id
+        .map(ToString::to_string)
+        .or_else(|| {
+            app_state
+                .config
+                .determine_chat_provider(None, None)
+                .ok()
+                .map(ToString::to_string)
+        })
+        .map(|provider_id| {
+            app_state
+                .config
+                .get_chat_provider(&provider_id)
+                .model_name_langfuse()
+                .to_string()
+        })
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+fn langfuse_turn_name(base_name: Option<&str>, turn: usize) -> String {
+    base_name
+        .map(|name| format!("{name} (turn {turn})"))
+        .unwrap_or_else(|| format!("chat_completion_turn_{turn}"))
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn persist_otel_generation_error(
+    tracing_client: Option<&TracingLangfuseClient>,
+    turn_observation_id: &str,
+    chat_request: &ChatRequest,
+    output_content: &[ContentPart],
+    error: &GenerationErrorType,
+    model_name: &str,
+    generation_name: &str,
+    turn_start_time: Option<SystemTime>,
+    assistant_id: Option<Uuid>,
+    tool_names: &HashSet<String>,
+    platform: &str,
+) {
+    let Some(client) = tracing_client.filter(|client| client.uses_otel()) else {
+        return;
+    };
+    let Some(start_time) = turn_start_time else {
+        return;
+    };
+    let mut tool_names: Vec<String> = tool_names.iter().cloned().collect();
+    tool_names.sort();
+
+    if let Err(error) = create_otel_error_generation_from_chat(
+        client,
+        turn_observation_id.to_string(),
+        chat_request,
+        output_content,
+        error,
+        model_name.to_string(),
+        generation_name.to_string(),
+        start_time,
+        SystemTime::now(),
+        assistant_id,
+        &tool_names,
+        Some(platform),
+    )
+    .await
+    {
+        tracing::warn!(
+            error = %error,
+            observation_id = %turn_observation_id,
+            "Failed to persist Langfuse OTEL generation error"
+        );
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn persist_otel_tool_call(
+    tracing_client: Option<&TracingLangfuseClient>,
+    tool_call: &genai::chat::ToolCall,
+    output: Option<JsonValue>,
+    start_time: Option<SystemTime>,
+    end_time: Option<SystemTime>,
+    parent_observation_id: Option<String>,
+    assistant_id: Option<Uuid>,
+    platform: &str,
+    error: Option<&str>,
+) {
+    let Some(client) = tracing_client.filter(|client| client.uses_otel()) else {
+        return;
+    };
+    let (Some(start_time), Some(end_time)) = (start_time, end_time) else {
+        return;
+    };
+    let (observation_id, _) = generate_langfuse_ids();
+
+    if let Err(trace_error) = create_otel_tool_call_span(
+        client,
+        observation_id,
+        &tool_call.call_id,
+        &tool_call.fn_name,
+        tool_call.fn_arguments.clone(),
+        output,
+        start_time,
+        end_time,
+        assistant_id,
+        Some(platform),
+        parent_observation_id,
+        error,
+    )
+    .await
+    {
+        tracing::warn!(
+            error = %trace_error,
+            tool_call_id = %tool_call.call_id,
+            tool_name = %tool_call.fn_name,
+            "Failed to persist Langfuse OTEL tool-call span"
+        );
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]
 async fn stream_generate_chat_completion<
@@ -2357,6 +2476,29 @@ async fn stream_generate_chat_completion<
     } else {
         None
     };
+    if let Some(client) = tracing_client.as_ref().filter(|client| client.uses_otel()) {
+        let initial_tool_names = HashSet::new();
+        let model_tags = HashSet::from([langfuse_model_tag(&langfuse_model_name(
+            app_state,
+            chat_provider_id,
+        ))]);
+        let metadata = langfuse_trace_enrichment.trace_metadata(
+            assistant_id,
+            &initial_tool_names,
+            &mcp_servers_unavailable,
+            false,
+        );
+        let tags = langfuse_trace_enrichment.all_tags(&model_tags, &initial_tool_names);
+        if let Err(error) =
+            create_trace_from_chat(client, &chat_request, metadata, Some(tags)).await
+        {
+            tracing::warn!(
+                error = %error,
+                trace_id = %client.trace_id(),
+                "Failed to persist initial Langfuse OTEL trace"
+            );
+        }
+    }
     let langfuse_trace_id = tracing_client
         .as_ref()
         .map(|client| client.trace_id().to_string());
@@ -2487,6 +2629,9 @@ async fn stream_generate_chat_completion<
             None
         };
         let (turn_obs_id, _) = generate_langfuse_ids();
+        let turn_langfuse_model_name = langfuse_model_name(app_state, chat_provider_id);
+        let turn_langfuse_generation_name =
+            langfuse_turn_name(langfuse_generation_name.as_deref(), current_turn);
 
         if current_turn != 1 && unfinished_tool_calls.is_empty() {
             tracing::warn!(
@@ -2498,6 +2643,10 @@ async fn stream_generate_chat_completion<
         // must be the one that wins.
         let mut current_turn_tool_responses = vec![];
         while let Some(unfinished_tool_call) = unfinished_tool_calls.pop_front() {
+            let otel_tool_call_start_time = tracing_client
+                .as_ref()
+                .filter(|client| client.uses_otel())
+                .map(|_| SystemTime::now());
             if streaming_task.is_some_and(|task| task.is_abort_requested()) {
                 let generation_metadata = build_generation_metadata(
                     total_prompt_tokens,
@@ -2551,12 +2700,23 @@ async fn stream_generate_chat_completion<
 
             if !allowed_tool_names.contains(unfinished_tool_call.fn_name.as_str()) {
                 tool_call_started_at.remove(&unfinished_tool_call.call_id);
-                let _ = tx
-                    .send(Err(eyre!(
-                        "Proposed MCP tool call '{}' is not allowed for this request",
-                        unfinished_tool_call.fn_name
-                    )))
-                    .await;
+                let error_message = format!(
+                    "Proposed tool call '{}' is not allowed for this request",
+                    unfinished_tool_call.fn_name
+                );
+                persist_otel_tool_call(
+                    tracing_client.as_ref(),
+                    &unfinished_tool_call,
+                    Some(json!({ "error": error_message })),
+                    otel_tool_call_start_time,
+                    Some(SystemTime::now()),
+                    tool_call_parent_observation_ids.remove(&unfinished_tool_call.call_id),
+                    assistant_id,
+                    &langfuse_trace_enrichment.platform,
+                    Some(&error_message),
+                )
+                .await;
+                let _ = tx.send(Err(eyre!(error_message))).await;
                 return Err(());
             }
 
@@ -2578,7 +2738,8 @@ async fn stream_generate_chat_completion<
                 let tool_call_started = tool_call_started_at
                     .remove(&unfinished_tool_call.call_id)
                     .unwrap_or_else(now_timestamp);
-                tool_call_parent_observation_ids.remove(&unfinished_tool_call.call_id);
+                let tool_call_parent_observation_id =
+                    tool_call_parent_observation_ids.remove(&unfinished_tool_call.call_id);
                 let validated = crate::services::client_actions::validate_client_action_input(
                     &unfinished_tool_call.fn_arguments,
                     &allowed_actions,
@@ -2615,6 +2776,8 @@ async fn stream_generate_chat_completion<
                             format!("Invalid client action proposal: {error}"),
                         ),
                     };
+                let tool_error =
+                    matches!(status, ToolCallStatus::Error).then(|| response_text.clone());
                 let update_event = MessageSubmitStreamingResponseToolCallUpdate {
                     message_id: assistant_message_id,
                     content_index: current_message_content.len(),
@@ -2647,10 +2810,22 @@ async fn stream_generate_chat_completion<
                     tool_name: unfinished_tool_call.fn_name.clone(),
                     input: Some(unfinished_tool_call.fn_arguments.clone()),
                     progress_message: None,
-                    output: Some(output_value),
+                    output: Some(output_value.clone()),
                     started_at: Some(tool_call_started),
                     ended_at: Some(now_timestamp()),
                 }));
+                persist_otel_tool_call(
+                    tracing_client.as_ref(),
+                    &unfinished_tool_call,
+                    Some(output_value),
+                    otel_tool_call_start_time,
+                    Some(SystemTime::now()),
+                    tool_call_parent_observation_id,
+                    assistant_id,
+                    &langfuse_trace_enrichment.platform,
+                    tool_error.as_deref(),
+                )
+                .await;
                 current_turn_tool_responses.push(genai::chat::ToolResponse {
                     call_id: unfinished_tool_call.call_id.clone(),
                     content: response_text,
@@ -2675,7 +2850,8 @@ async fn stream_generate_chat_completion<
                 let tool_call_started = tool_call_started_at
                     .remove(&call_id)
                     .unwrap_or_else(now_timestamp);
-                tool_call_parent_observation_ids.remove(&call_id);
+                let tool_call_parent_observation_id =
+                    tool_call_parent_observation_ids.remove(&call_id);
 
                 let Some(task) = streaming_task else {
                     // No streaming task to park on (non-streaming caller):
@@ -2692,6 +2868,18 @@ async fn stream_generate_chat_completion<
                         started_at: Some(tool_call_started),
                         ended_at: Some(now_timestamp()),
                     }));
+                    persist_otel_tool_call(
+                        tracing_client.as_ref(),
+                        &unfinished_tool_call,
+                        Some(json!({ "status": "error", "error": response_text })),
+                        otel_tool_call_start_time,
+                        Some(SystemTime::now()),
+                        tool_call_parent_observation_id,
+                        assistant_id,
+                        &langfuse_trace_enrichment.platform,
+                        Some(&response_text),
+                    )
+                    .await;
                     current_turn_tool_responses.push(genai::chat::ToolResponse {
                         call_id,
                         content: response_text,
@@ -2772,6 +2960,18 @@ async fn stream_generate_chat_completion<
                     Park::Aborted => {
                         // User cancelled: discard any raced-in result and mirror
                         // the drain's abort exit.
+                        persist_otel_tool_call(
+                            tracing_client.as_ref(),
+                            &unfinished_tool_call,
+                            Some(json!({ "status": "cancelled", "reason": "aborted" })),
+                            otel_tool_call_start_time,
+                            Some(SystemTime::now()),
+                            tool_call_parent_observation_id.clone(),
+                            assistant_id,
+                            &langfuse_trace_enrichment.platform,
+                            Some("Client tool execution was aborted"),
+                        )
+                        .await;
                         let generation_metadata = build_generation_metadata(
                             total_prompt_tokens,
                             total_completion_tokens,
@@ -2819,6 +3019,8 @@ async fn stream_generate_chat_completion<
                             ),
                         ),
                     };
+                let tool_error =
+                    matches!(status, ToolCallStatus::Error).then(|| response_text.clone());
 
                 // In-band resolution: write the outcome into history so a resume
                 // replay is self-consistent (the client sees the call answered
@@ -2857,10 +3059,22 @@ async fn stream_generate_chat_completion<
                     tool_name: tool_name.clone(),
                     input: Some(tool_input),
                     progress_message: None,
-                    output: Some(output_value),
+                    output: Some(output_value.clone()),
                     started_at: Some(tool_call_started),
                     ended_at: Some(now_timestamp()),
                 }));
+                persist_otel_tool_call(
+                    tracing_client.as_ref(),
+                    &unfinished_tool_call,
+                    Some(output_value),
+                    otel_tool_call_start_time,
+                    Some(SystemTime::now()),
+                    tool_call_parent_observation_id,
+                    assistant_id,
+                    &langfuse_trace_enrichment.platform,
+                    tool_error.as_deref(),
+                )
+                .await;
                 current_turn_tool_responses.push(genai::chat::ToolResponse {
                     call_id,
                     content: response_text,
@@ -2906,10 +3120,10 @@ async fn stream_generate_chat_completion<
                 None
             };
             if let (Some(client), Some(start_time), Some(end_time), Some(parent_observation_id)) = (
-                tracing_client.as_ref(),
+                tracing_client.as_ref().filter(|client| !client.uses_otel()),
                 tool_call_span_start_time,
                 tool_call_end_time,
-                tool_call_parent_observation_id,
+                tool_call_parent_observation_id.clone(),
             ) {
                 let client = client.clone();
                 let request = current_turn_chat_request.clone();
@@ -2953,11 +3167,39 @@ async fn stream_generate_chat_completion<
                     if let Some(content_filter_error) =
                         parse_content_filter_error_from_mcp_tool_result(&tool_call_result)
                     {
+                        let tool_error = serde_json::to_string(&content_filter_error)
+                            .unwrap_or_else(|_| "MCP tool result was filtered".to_string());
+                        persist_otel_tool_call(
+                            tracing_client.as_ref(),
+                            &unfinished_tool_call,
+                            serde_json::to_value(&tool_call_result).ok(),
+                            tool_call_span_start_time,
+                            tool_call_end_time,
+                            tool_call_parent_observation_id.clone(),
+                            assistant_id,
+                            &langfuse_trace_enrichment.platform,
+                            Some(&tool_error),
+                        )
+                        .await;
                         let error_payload = Some(content_filter_error.clone());
                         let error_event = MessageSubmitStreamingResponseError {
                             message_id: Some(assistant_message_id),
                             error: content_filter_error,
                         };
+                        persist_otel_generation_error(
+                            tracing_client.as_ref(),
+                            &turn_obs_id,
+                            &current_turn_chat_request,
+                            &current_message_content,
+                            &error_event.error,
+                            &turn_langfuse_model_name,
+                            &turn_langfuse_generation_name,
+                            turn_start_time,
+                            assistant_id,
+                            &all_tool_names,
+                            &langfuse_trace_enrichment.platform,
+                        )
+                        .await;
 
                         if let Some(task) = streaming_task
                             && let Ok(error_json) = serde_json::to_value(
@@ -3001,6 +3243,19 @@ async fn stream_generate_chat_completion<
                     {
                         Ok(result) => result,
                         Err(err) => {
+                            let tool_error = err.to_string();
+                            persist_otel_tool_call(
+                                tracing_client.as_ref(),
+                                &unfinished_tool_call,
+                                serde_json::to_value(&tool_call_result).ok(),
+                                tool_call_span_start_time,
+                                tool_call_end_time,
+                                tool_call_parent_observation_id.clone(),
+                                assistant_id,
+                                &langfuse_trace_enrichment.platform,
+                                Some(&tool_error),
+                            )
+                            .await;
                             let _ = tx
                                 .send(Err(err).wrap_err("Failed to process MCP tool output"))
                                 .await;
@@ -3010,6 +3265,19 @@ async fn stream_generate_chat_completion<
                     let tool_response = post_processed.tool_response;
                     let output_value = post_processed.output_value;
                     let image_content_parts = post_processed.image_content_parts;
+
+                    persist_otel_tool_call(
+                        tracing_client.as_ref(),
+                        &unfinished_tool_call,
+                        output_value.clone(),
+                        tool_call_span_start_time,
+                        tool_call_end_time,
+                        tool_call_parent_observation_id.clone(),
+                        assistant_id,
+                        &langfuse_trace_enrichment.platform,
+                        None,
+                    )
+                    .await;
 
                     // Emit event for tool call update
                     {
@@ -3066,6 +3334,19 @@ async fn stream_generate_chat_completion<
                 Err(err) => {
                     // TODO: Send event and message_content
                     tool_call_started_at.remove(&unfinished_tool_call.call_id);
+                    let tool_error = err.to_string();
+                    persist_otel_tool_call(
+                        tracing_client.as_ref(),
+                        &unfinished_tool_call,
+                        Some(json!({ "error": tool_error })),
+                        tool_call_span_start_time,
+                        tool_call_end_time,
+                        tool_call_parent_observation_id.clone(),
+                        assistant_id,
+                        &langfuse_trace_enrichment.platform,
+                        Some(&tool_error),
+                    )
+                    .await;
                     let _ = tx.send(Err(err).wrap_err("Failed to call tool")).await;
                     return Err(());
                 }
@@ -3103,6 +3384,20 @@ async fn stream_generate_chat_completion<
                     chat_provider_metric_label,
                     &error_event.error,
                 );
+                persist_otel_generation_error(
+                    tracing_client.as_ref(),
+                    &turn_obs_id,
+                    &current_turn_chat_request,
+                    &current_message_content,
+                    &error_event.error,
+                    &turn_langfuse_model_name,
+                    &turn_langfuse_generation_name,
+                    turn_start_time,
+                    assistant_id,
+                    &all_tool_names,
+                    &langfuse_trace_enrichment.platform,
+                )
+                .await;
                 let error_payload = Some(error_event.error.clone());
 
                 if let Some(task) = streaming_task
@@ -3162,6 +3457,20 @@ async fn stream_generate_chat_completion<
                     chat_provider_metric_label,
                     &error_event.error,
                 );
+                persist_otel_generation_error(
+                    tracing_client.as_ref(),
+                    &turn_obs_id,
+                    &current_turn_chat_request,
+                    &current_message_content,
+                    &error_event.error,
+                    &turn_langfuse_model_name,
+                    &turn_langfuse_generation_name,
+                    turn_start_time,
+                    assistant_id,
+                    &all_tool_names,
+                    &langfuse_trace_enrichment.platform,
+                )
+                .await;
                 let error_payload = Some(error_event.error.clone());
 
                 if let Some(task) = streaming_task
@@ -3208,29 +3517,9 @@ async fn stream_generate_chat_completion<
 
                         if let (Some(client), Some(turn_start)) = (&tracing_client, turn_start_time) {
                             let turn_end_time = SystemTime::now();
-                            let model_name = if let Some(provider_id) = chat_provider_id {
-                                app_state
-                                    .config
-                                    .get_chat_provider(provider_id)
-                                    .model_name_langfuse()
-                                    .to_string()
-                            } else {
-                                match app_state.config.determine_chat_provider(None, None) {
-                                    Ok(provider_id) => app_state
-                                        .config
-                                        .get_chat_provider(provider_id)
-                                        .model_name_langfuse()
-                                        .to_string(),
-                                    Err(_) => "unknown".to_string(),
-                                }
-                            };
+                            let model_name = turn_langfuse_model_name.clone();
                             all_model_tags.insert(langfuse_model_tag(&model_name));
-                            let (turn_obs_id, _) = generate_langfuse_ids();
-                            let generation_name = if let Some(ref name) = langfuse_generation_name {
-                                Some(format!("{} (turn {})", name, current_turn))
-                            } else {
-                                Some(format!("chat_completion_turn_{}", current_turn))
-                            };
+                            let generation_name = turn_langfuse_generation_name.clone();
                             let client = client.clone();
                             let request = current_turn_chat_request.clone();
                             let content = aborted_content.clone();
@@ -3244,8 +3533,9 @@ async fn stream_generate_chat_completion<
                                 mcp_servers_unavailable.clone();
                             let trace_tags =
                                 trace_enrichment.all_tags(&trace_model_tags, &trace_tool_names);
-                            tokio::spawn(async move {
-                                let result = if current_turn == 1 {
+                            let uses_otel = client.uses_otel();
+                            let send_trace = async move {
+                                let result = if current_turn == 1 || uses_otel {
                                     create_trace_with_generation_from_chat(
                                         &client,
                                         turn_obs_id,
@@ -3253,7 +3543,7 @@ async fn stream_generate_chat_completion<
                                         &content,
                                         None,
                                         Some(model_name),
-                                        generation_name,
+                                        Some(generation_name),
                                         Some(turn_start),
                                         Some(turn_end_time),
                                         None,
@@ -3269,9 +3559,7 @@ async fn stream_generate_chat_completion<
                                         .with_model(model_name)
                                         .with_start_time(turn_start)
                                         .with_end_time(turn_end_time)
-                                        .with_name(generation_name.unwrap_or_else(|| {
-                                            format!("chat_completion_turn_{}", current_turn)
-                                        }))
+                                        .with_name(generation_name)
                                         .build_and_send(
                                             &client,
                                             &request,
@@ -3316,7 +3604,13 @@ async fn stream_generate_chat_completion<
                                         );
                                     }
                                 }
-                            });
+                            };
+
+                            if uses_otel {
+                                send_trace.await;
+                            } else {
+                                tokio::spawn(send_trace);
+                            }
                         }
 
                         let generation_metadata = build_generation_metadata(
@@ -3354,6 +3648,20 @@ async fn stream_generate_chat_completion<
                                 chat_provider_metric_label,
                                 &error_event.error,
                             );
+                            persist_otel_generation_error(
+                                tracing_client.as_ref(),
+                                &turn_obs_id,
+                                &current_turn_chat_request,
+                                &current_message_content,
+                                &error_event.error,
+                                &turn_langfuse_model_name,
+                                &turn_langfuse_generation_name,
+                                turn_start_time,
+                                assistant_id,
+                                &all_tool_names,
+                                &langfuse_trace_enrichment.platform,
+                            )
+                            .await;
                             if let Some(elapsed) = first_response_elapsed {
                                 report_chat_provider_time_to_first_token(
                                     chat_provider_metric_label,
@@ -3471,6 +3779,20 @@ async fn stream_generate_chat_completion<
                         chat_provider_metric_label,
                         &error_event.error,
                     );
+                    persist_otel_generation_error(
+                        tracing_client.as_ref(),
+                        &turn_obs_id,
+                        &current_turn_chat_request,
+                        &current_message_content,
+                        &error_event.error,
+                        &turn_langfuse_model_name,
+                        &turn_langfuse_generation_name,
+                        turn_start_time,
+                        assistant_id,
+                        &all_tool_names,
+                        &langfuse_trace_enrichment.platform,
+                    )
+                    .await;
                     let error_payload = Some(error_event.error.clone());
 
                     if let Some(task) = streaming_task
@@ -3610,24 +3932,7 @@ async fn stream_generate_chat_completion<
             // Send Langfuse tracing for this turn if enabled
             if let (Some(client), Some(turn_start)) = (&tracing_client, turn_start_time) {
                 let turn_end_time = SystemTime::now();
-                // Get the model name for Langfuse reporting using the actual chat provider used
-                let model_name = if let Some(provider_id) = chat_provider_id {
-                    app_state
-                        .config
-                        .get_chat_provider(provider_id)
-                        .model_name_langfuse()
-                        .to_string()
-                } else {
-                    // Fallback to determining provider if not specified
-                    match app_state.config.determine_chat_provider(None, None) {
-                        Ok(provider_id) => app_state
-                            .config
-                            .get_chat_provider(provider_id)
-                            .model_name_langfuse()
-                            .to_string(),
-                        Err(_) => "unknown".to_string(),
-                    }
-                };
+                let model_name = turn_langfuse_model_name.clone();
                 all_model_tags.insert(langfuse_model_tag(&model_name));
 
                 // Get the content generated in this turn
@@ -3636,12 +3941,7 @@ async fn stream_generate_chat_completion<
                 // Use the usage information from this turn's stream_end
                 let turn_usage = stream_end.captured_usage.as_ref();
 
-                // Determine generation name
-                let generation_name = if let Some(ref name) = langfuse_generation_name {
-                    Some(format!("{} (turn {})", name, current_turn))
-                } else {
-                    Some(format!("chat_completion_turn_{}", current_turn))
-                };
+                let generation_name = turn_langfuse_generation_name.clone();
                 // Extract tool names from this turn's captured tool calls
                 let turn_tool_names: Vec<String> = stream_end
                     .captured_tool_calls()
@@ -3661,14 +3961,18 @@ async fn stream_generate_chat_completion<
                 let usage = turn_usage.cloned();
                 let trace_platform = langfuse_trace_enrichment.platform.clone();
                 let turn_tool_name_set: HashSet<String> = turn_tool_names.iter().cloned().collect();
+                let trace_tool_name_set: HashSet<String> =
+                    all_tool_names.union(&turn_tool_name_set).cloned().collect();
                 let trace_tags =
-                    langfuse_trace_enrichment.all_tags(&all_model_tags, &turn_tool_name_set);
+                    langfuse_trace_enrichment.all_tags(&all_model_tags, &trace_tool_name_set);
+                let mut accumulated_tool_names: Vec<String> =
+                    trace_tool_name_set.into_iter().collect();
+                accumulated_tool_names.sort();
 
-                // Send trace/observation asynchronously
                 let assistant_id_for_langfuse = assistant_id;
-                tokio::spawn(async move {
-                    let result = if current_turn == 1 {
-                        // For first turn, create both trace and generation in a single batch
+                let uses_otel = client.uses_otel();
+                let send_trace = async move {
+                    let result = if current_turn == 1 || uses_otel {
                         create_trace_with_generation_from_chat(
                             &client,
                             turn_obs_id,
@@ -3676,26 +3980,27 @@ async fn stream_generate_chat_completion<
                             &content,
                             usage.as_ref(),
                             Some(model_name),
-                            generation_name,
+                            Some(generation_name),
                             Some(turn_start),
                             Some(turn_end_time),
                             None, // completion_start_time
                             assistant_id_for_langfuse,
-                            &turn_tool_names,
+                            if uses_otel {
+                                &accumulated_tool_names
+                            } else {
+                                &turn_tool_names
+                            },
                             Some(&trace_platform),
                             Some(trace_tags),
                             None,
                         )
                         .await
                     } else {
-                        // For subsequent turns, only create the generation observation
                         TracedGenerationBuilder::new(turn_obs_id)
                             .with_model(model_name)
                             .with_start_time(turn_start)
                             .with_end_time(turn_end_time)
-                            .with_name(generation_name.unwrap_or_else(|| {
-                                format!("chat_completion_turn_{}", current_turn)
-                            }))
+                            .with_name(generation_name)
                             .build_and_send(
                                 &client,
                                 &request,
@@ -3720,7 +4025,13 @@ async fn stream_generate_chat_completion<
                             current_turn
                         );
                     }
-                });
+                };
+
+                if uses_otel {
+                    send_trace.await;
+                } else {
+                    tokio::spawn(send_trace);
+                }
             }
 
             if let Some(captured_tool_calls) = stream_end.captured_tool_calls() {
@@ -3945,6 +4256,20 @@ async fn stream_generate_chat_completion<
                     chat_provider_metric_label,
                     &error_event.error,
                 );
+                persist_otel_generation_error(
+                    tracing_client.as_ref(),
+                    &turn_obs_id,
+                    &current_turn_chat_request,
+                    &current_message_content,
+                    &error_event.error,
+                    &turn_langfuse_model_name,
+                    &turn_langfuse_generation_name,
+                    turn_start_time,
+                    assistant_id,
+                    &all_tool_names,
+                    &langfuse_trace_enrichment.platform,
+                )
+                .await;
                 let error_payload = Some(error_event.error.clone());
 
                 if let Some(task) = streaming_task

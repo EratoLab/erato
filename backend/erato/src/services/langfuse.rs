@@ -59,6 +59,11 @@ impl LangfuseClient {
         self.environment.as_deref()
     }
 
+    /// Whether this client exports tracing data through Langfuse's OTEL endpoint.
+    pub fn uses_otel(&self) -> bool {
+        self.use_otel
+    }
+
     /// Create a new LangfuseClient from configuration
     pub fn from_config(config: &LangfuseConfig, environment: Option<String>) -> Result<Self> {
         tracing::debug!(
@@ -136,11 +141,7 @@ impl LangfuseClient {
         );
 
         if self.use_otel {
-            tracing::debug!(
-                trace_id = %request.id,
-                "Skipping standalone Langfuse trace-create in OTEL mode"
-            );
-            return Ok(());
+            return self.send_otel_spans(vec![otel_trace_span(request)]).await;
         }
 
         let timestamp_iso = system_time_to_iso_string(SystemTime::now());
@@ -912,6 +913,31 @@ fn otel_observation_span(
                 .collect::<String>()
         )
     });
+    let span_status = if request.level.as_deref() == Some("ERROR") {
+        Status::Error {
+            description: request
+                .status_message
+                .clone()
+                .unwrap_or_else(|| "Langfuse observation failed".to_string())
+                .into(),
+        }
+    } else {
+        Status::Unset
+    };
+    let tool_call_id = request
+        .metadata
+        .as_ref()
+        .and_then(serde_json::Value::as_object)
+        .and_then(|metadata| metadata.get("tool_call_id"))
+        .and_then(serde_json::Value::as_str)
+        .map(ToString::to_string);
+    let tool_name = request
+        .metadata
+        .as_ref()
+        .and_then(serde_json::Value::as_object)
+        .and_then(|metadata| metadata.get("tool_name"))
+        .and_then(serde_json::Value::as_str)
+        .map(ToString::to_string);
     let mut attributes = vec![
         KeyValue::new("langfuse.trace.id", request.trace_id.clone()),
         KeyValue::new("langfuse.observation.id", request.observation_id.clone()),
@@ -921,13 +947,27 @@ fn otel_observation_span(
         ),
         KeyValue::new(
             opentelemetry_semantic_conventions::trace::GEN_AI_OPERATION_NAME,
-            "chat",
+            if tool_name.is_some() {
+                "execute_tool"
+            } else {
+                "chat"
+            },
         ),
         KeyValue::new(
             opentelemetry_semantic_conventions::trace::GEN_AI_SYSTEM,
             "_OTHER",
         ),
     ];
+    push_string_attr(
+        &mut attributes,
+        opentelemetry_semantic_conventions::trace::GEN_AI_TOOL_CALL_ID,
+        tool_call_id,
+    );
+    push_string_attr(
+        &mut attributes,
+        opentelemetry_semantic_conventions::trace::GEN_AI_TOOL_NAME,
+        tool_name,
+    );
 
     push_string_attr(&mut attributes, LANGFUSE_ENVIRONMENT, request.environment);
     push_string_attr(&mut attributes, LANGFUSE_OBSERVATION_LEVEL, request.level);
@@ -982,13 +1022,42 @@ fn otel_observation_span(
         push_trace_attrs(&mut attributes, trace_request);
     }
 
-    span_data(
+    let mut span = span_data(
         trace_id,
         span_id,
         parent_span_id,
         span_name,
         start_time,
         end_time,
+        attributes,
+    );
+    span.status = span_status;
+    span
+}
+
+fn otel_trace_span(request: CreateTraceRequest) -> SpanData {
+    let now = SystemTime::now();
+    let trace_id = trace_id_from_langfuse_id(&request.id);
+    let observation_id = format!("trace-root-{}", request.id);
+    let span_id = observation_span_id(&observation_id);
+    let span_name = request
+        .name
+        .clone()
+        .unwrap_or_else(|| "Langfuse Trace".to_string());
+    let mut attributes = vec![
+        KeyValue::new("langfuse.trace.id", request.id.clone()),
+        KeyValue::new("langfuse.observation.id", observation_id),
+        KeyValue::new(LANGFUSE_OBSERVATION_TYPE, "span"),
+    ];
+    push_trace_attrs(&mut attributes, request);
+
+    span_data(
+        trace_id,
+        span_id,
+        SpanId::INVALID,
+        span_name,
+        now,
+        now,
         attributes,
     )
 }
@@ -1418,6 +1487,11 @@ impl TracingLangfuseClient {
     /// Get the environment for this tracing context
     pub fn environment(&self) -> Option<&str> {
         self.environment.as_deref()
+    }
+
+    /// Whether this tracing context exports through Langfuse's OTEL endpoint.
+    pub fn uses_otel(&self) -> bool {
+        self.client.uses_otel()
     }
 
     /// Create a trace using the stored metadata
@@ -1984,13 +2058,30 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn skips_standalone_trace_create_in_otel_mode() {
+    async fn sends_standalone_trace_to_otel_before_generation() {
         let (base_url, mut receiver) = mock_langfuse_server().await;
         let client = LangfuseClient::from_config(&enabled_config(base_url, true), None).unwrap();
 
         client.create_trace(test_trace_request()).await.unwrap();
 
-        assert_no_request(&mut receiver).await;
+        let (request, body) = recv_json(&mut receiver).await;
+        assert_eq!(request.path, "/api/public/otel/v1/traces");
+        assert_eq!(
+            otel_string_attr(&body, LANGFUSE_OBSERVATION_TYPE).unwrap(),
+            "span"
+        );
+        assert_eq!(
+            otel_string_attr(&body, LANGFUSE_TRACE_NAME).unwrap(),
+            "Test trace"
+        );
+        assert_eq!(
+            otel_string_attr(&body, "langfuse.observation.id").unwrap(),
+            "trace-root-trace_58406520a006649127e371903a2de979"
+        );
+        assert_eq!(
+            otel_string_array_attr(&body, LANGFUSE_TRACE_TAGS),
+            vec!["model-gpt-4".to_string(), "chat".to_string()]
+        );
     }
 
     #[tokio::test]
@@ -2094,16 +2185,49 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn sends_error_context_to_otel_endpoint() {
+        let (base_url, mut receiver) = mock_langfuse_server().await;
+        let client = LangfuseClient::from_config(&enabled_config(base_url, true), None).unwrap();
+        let mut generation = test_generation_request("generation");
+        generation.level = Some("ERROR".to_string());
+        generation.status_message = Some("provider failed before streaming".to_string());
+        generation.output = Some(json!({
+            "partial_output": {"content": []},
+            "error": {"provider_error": "connection reset"}
+        }));
+
+        client.finish_generation(generation).await.unwrap();
+
+        let (request, body) = recv_json(&mut receiver).await;
+        assert_eq!(request.path, "/api/public/otel/v1/traces");
+        assert_eq!(
+            otel_string_attr(&body, LANGFUSE_OBSERVATION_LEVEL).unwrap(),
+            "ERROR"
+        );
+        assert_eq!(
+            otel_string_attr(&body, LANGFUSE_OBSERVATION_STATUS_MESSAGE).unwrap(),
+            "provider failed before streaming"
+        );
+        assert!(
+            otel_string_attr(&body, LANGFUSE_OBSERVATION_OUTPUT)
+                .unwrap()
+                .contains("connection reset")
+        );
+    }
+
+    #[tokio::test]
     async fn sends_span_observation_to_both_transports() {
         for use_otel in [false, true] {
             let (base_url, mut receiver) = mock_langfuse_server().await;
             let client =
                 LangfuseClient::from_config(&enabled_config(base_url, use_otel), None).unwrap();
+            let mut span = test_generation_request("span");
+            span.metadata = Some(json!({
+                "tool_call_id": "call-123",
+                "tool_name": "weather_lookup",
+            }));
 
-            client
-                .finish_observation(test_generation_request("span"), "SPAN")
-                .await
-                .unwrap();
+            client.finish_observation(span, "SPAN").await.unwrap();
 
             let (request, body) = recv_json(&mut receiver).await;
             if use_otel {
@@ -2111,6 +2235,30 @@ mod tests {
                 assert_eq!(
                     otel_string_attr(&body, LANGFUSE_OBSERVATION_TYPE).unwrap(),
                     "span"
+                );
+                assert_eq!(
+                    otel_string_attr(
+                        &body,
+                        opentelemetry_semantic_conventions::trace::GEN_AI_OPERATION_NAME
+                    )
+                    .unwrap(),
+                    "execute_tool"
+                );
+                assert_eq!(
+                    otel_string_attr(
+                        &body,
+                        opentelemetry_semantic_conventions::trace::GEN_AI_TOOL_CALL_ID
+                    )
+                    .unwrap(),
+                    "call-123"
+                );
+                assert_eq!(
+                    otel_string_attr(
+                        &body,
+                        opentelemetry_semantic_conventions::trace::GEN_AI_TOOL_NAME
+                    )
+                    .unwrap(),
+                    "weather_lookup"
                 );
             } else {
                 assert_eq!(request.path, "/api/public/ingestion");
