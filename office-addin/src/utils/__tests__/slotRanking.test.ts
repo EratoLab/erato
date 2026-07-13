@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
 
+import { rulesCivilToUtcMs, zonedCivilToUtcMs } from "../calendarTime";
 import {
   inferTypicalDurationMinutes,
   rankAvailabilitySlots,
-  rulesCivilToUtcMs,
-  zonedCivilToUtcMs,
 } from "../slotRanking";
 
 import type {
@@ -175,6 +174,23 @@ describe("rankAvailabilitySlots", () => {
     expect(workingHoursAssumed).toBe(true);
     // Same window as the explicit fixture, so the earliest slot is unchanged.
     expect(slots[0].startUtc).toBe("2026-07-06T07:00:00Z");
+  });
+
+  it("breaks smart-pick score ties on earlier start", () => {
+    // Empty week: all candidates (day-start + back-edge per day) score the
+    // same (buffer 1, lightness 1, 0 fragments) — smart picks = 3 earliest.
+    const { slots } = rankAvailabilitySlots(
+      { ...baseCalendar, busyBlocks: [], attendees: [] },
+      RANKING_OPTIONS,
+    );
+    expect(slots[0].startUtc).toBe("2026-07-06T07:00:00Z");
+    expect(
+      slots.filter((s) => s.tier === "smart").map((s) => s.startUtc),
+    ).toEqual([
+      "2026-07-06T14:00:00Z",
+      "2026-07-07T07:00:00Z",
+      "2026-07-07T14:00:00Z",
+    ]);
   });
 
   it("returns no slots when everything is blocked", () => {
