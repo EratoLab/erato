@@ -5,6 +5,7 @@ use crate::policy::types::Subject;
 use crate::query_metrics::install_postgres_query_metrics;
 use crate::services::background_tasks::BackgroundTaskManager;
 use crate::services::file_storage::{FileStorage, SHAREPOINT_PROVIDER_ID};
+use crate::services::genai::GenAIClient;
 use crate::services::langfuse::{LangfuseClient, LangfusePrompt};
 use crate::services::mcp_manager::McpServers;
 use crate::services::template_rendering::consumers::{
@@ -112,6 +113,9 @@ pub struct AppState {
     pub global_policy_engine: GlobalPolicyEngine,
     pub background_tasks: BackgroundTaskManager,
     pub system_prompt_renderer: SystemPromptRenderer,
+    /// Optional inference client used instead of provider-specific clients built from config.
+    /// This allows tests to inject deterministic responses and provider failures.
+    pub genai_client_override: Option<Arc<dyn GenAIClient>>,
     /// Cache mapping file identity -> raw file bytes (for both text and images)
     pub file_bytes_cache: Cache<FileCacheKey, Vec<u8>>,
     /// Cache mapping file identity -> parsed file contents (text files only)
@@ -159,6 +163,10 @@ impl std::fmt::Debug for AppState {
             .field("global_policy_engine", &self.global_policy_engine)
             .field("background_tasks", &self.background_tasks)
             .field("system_prompt_renderer", &self.system_prompt_renderer)
+            .field(
+                "genai_client_override",
+                &self.genai_client_override.as_ref().map(|_| "<GenAIClient>"),
+            )
             .field("file_bytes_cache", &"<Cache>")
             .field("file_contents_cache", &"<Cache>")
             .field("token_count_cache", &"<Cache>")
@@ -251,6 +259,7 @@ impl AppState {
             global_policy_engine,
             background_tasks,
             system_prompt_renderer,
+            genai_client_override: None,
             file_bytes_cache,
             file_contents_cache,
             token_count_cache,
@@ -369,8 +378,11 @@ impl AppState {
             .unwrap_or(300) // Default to current hardcoded value
     }
 
-    pub fn genai_for_summary(&self) -> Result<GenaiClient, Report> {
-        Self::build_genai_client(self.chat_provider_for_summary()?.chat_provider_config)
+    pub fn genai_for_summary(&self) -> Result<Arc<dyn GenAIClient>, Report> {
+        self.genai_for_chat_provider_config_with_headers_context(
+            self.chat_provider_for_summary()?.chat_provider_config,
+            None,
+        )
     }
 
     pub fn chat_provider_for_prompt_optimizer(&self) -> Result<ChatProviderConfigWithId, Report> {
@@ -397,17 +409,18 @@ impl AppState {
         })
     }
 
-    pub fn genai_for_prompt_optimizer(&self) -> Result<GenaiClient, Report> {
-        Self::build_genai_client(
+    pub fn genai_for_prompt_optimizer(&self) -> Result<Arc<dyn GenAIClient>, Report> {
+        self.genai_for_chat_provider_config_with_headers_context(
             self.chat_provider_for_prompt_optimizer()?
                 .chat_provider_config,
+            None,
         )
     }
 
     pub fn genai_for_chat_provider_id(
         &self,
         chat_provider_id: Option<&str>,
-    ) -> Result<GenaiClient, Report> {
+    ) -> Result<Arc<dyn GenAIClient>, Report> {
         self.genai_for_chat_provider_id_with_headers_context(chat_provider_id, None)
     }
 
@@ -415,16 +428,31 @@ impl AppState {
         &self,
         chat_provider_id: Option<&str>,
         chat_provider_headers_context: Option<&ChatProviderHeadersContext<'a>>,
-    ) -> Result<GenaiClient, Report> {
+    ) -> Result<Arc<dyn GenAIClient>, Report> {
         let chat_provider_id = chat_provider_id.unwrap_or_else(|| {
             self.config
                 .determine_chat_provider(None, None)
                 .expect("Unable to choose default chat provider")
         });
-        Self::build_genai_client_with_headers_context(
+        self.genai_for_chat_provider_config_with_headers_context(
             self.config.get_chat_provider(chat_provider_id).clone(),
             chat_provider_headers_context,
         )
+    }
+
+    pub fn genai_for_chat_provider_config_with_headers_context<'a>(
+        &self,
+        chat_provider_config: ChatProviderConfig,
+        chat_provider_headers_context: Option<&ChatProviderHeadersContext<'a>>,
+    ) -> Result<Arc<dyn GenAIClient>, Report> {
+        if let Some(client) = &self.genai_client_override {
+            return Ok(client.clone());
+        }
+
+        Ok(Arc::new(Self::build_genai_client_with_headers_context(
+            chat_provider_config,
+            chat_provider_headers_context,
+        )?))
     }
 
     pub async fn chat_provider_for_chatcompletion(

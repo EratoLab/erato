@@ -1,4 +1,4 @@
-use crate::models::message::ContentPart;
+use crate::models::message::{ContentPart, GenerationErrorType};
 use crate::services::genai::into_openai_request_parts;
 use crate::services::langfuse::{
     CreateTraceRequest, FinishGenerationRequest, TracingLangfuseClient, Usage,
@@ -556,13 +556,123 @@ pub async fn create_tool_call_span_from_chat(
         .await
 }
 
+/// Create an OTEL span containing the input, output, and status of one executed tool call.
+#[allow(clippy::too_many_arguments)]
+pub async fn create_otel_tool_call_span(
+    tracing_client: &TracingLangfuseClient,
+    span_observation_id: String,
+    tool_call_id: &str,
+    tool_name: &str,
+    input: JsonValue,
+    output: Option<JsonValue>,
+    start_time: SystemTime,
+    end_time: SystemTime,
+    assistant_id: Option<Uuid>,
+    platform: Option<&str>,
+    parent_observation_id: Option<String>,
+    error: Option<&str>,
+) -> Result<()> {
+    let mut metadata = create_metadata_with_assistant_and_tools(
+        assistant_id,
+        &[tool_name.to_string()],
+        false,
+        platform,
+    )
+    .and_then(|value| value.as_object().cloned())
+    .unwrap_or_default();
+    metadata.insert(
+        "tool_call_id".to_string(),
+        JsonValue::String(tool_call_id.to_string()),
+    );
+    metadata.insert(
+        "tool_name".to_string(),
+        JsonValue::String(tool_name.to_string()),
+    );
+
+    tracing_client
+        .create_observation(
+            span_observation_id,
+            "SPAN".to_string(),
+            Some(format!("tool_call: {tool_name}")),
+            Some(system_time_to_iso_string(start_time)),
+            Some(system_time_to_iso_string(end_time)),
+            None,
+            None,
+            None,
+            Some(json!({
+                "tool_call_id": tool_call_id,
+                "name": tool_name,
+                "arguments": input,
+            })),
+            output,
+            None,
+            Some(JsonValue::Object(metadata)),
+            error.map(|_| "ERROR".to_string()),
+            error.map(ToString::to_string),
+            parent_observation_id,
+            None,
+        )
+        .await
+}
+
+/// Persist a failed generation turn with the partial output and structured error context.
+#[allow(clippy::too_many_arguments)]
+pub async fn create_otel_error_generation_from_chat(
+    tracing_client: &TracingLangfuseClient,
+    observation_id: String,
+    chat_request: &ChatRequest,
+    output_content: &[ContentPart],
+    error: &GenerationErrorType,
+    model: String,
+    generation_name: String,
+    start_time: SystemTime,
+    end_time: SystemTime,
+    assistant_id: Option<Uuid>,
+    tool_names: &[String],
+    platform: Option<&str>,
+) -> Result<()> {
+    let input_parts = into_openai_request_parts(chat_request)?;
+    let partial_output = convert_content_parts_to_json(output_content)?;
+    let error_json = serde_json::to_value(error)?;
+    let mut metadata =
+        create_metadata_with_assistant_and_tools(assistant_id, tool_names, false, platform)
+            .and_then(|value| value.as_object().cloned())
+            .unwrap_or_default();
+    metadata.insert("error".to_string(), error_json.clone());
+
+    tracing_client
+        .create_generation(
+            observation_id,
+            Some(generation_name),
+            Some(system_time_to_iso_string(start_time)),
+            Some(system_time_to_iso_string(end_time)),
+            None,
+            Some(model),
+            None,
+            Some(json!({
+                "messages": input_parts.messages,
+                "tools": input_parts.tools,
+            })),
+            Some(json!({
+                "partial_output": partial_output,
+                "error": error_json,
+            })),
+            None,
+            Some(JsonValue::Object(metadata)),
+            Some("ERROR".to_string()),
+            Some(serde_json::to_string(error)?),
+            None,
+            None,
+        )
+        .await
+}
+
 /// Create a trace in Langfuse using TracingLangfuseClient with a chat request
 pub async fn create_trace_from_chat(
     tracing_client: &TracingLangfuseClient,
     chat_request: &ChatRequest,
-    assistant_id: Option<Uuid>,
-    tool_names: &[String],
-    platform: Option<&str>,
+    metadata: Option<JsonValue>,
+    tags: Option<Vec<String>>,
 ) -> Result<()> {
     // Generate a name for the trace from the first user message
     let name = generate_name_from_chat_request(chat_request);
@@ -574,17 +684,8 @@ pub async fn create_trace_from_chat(
         "tools": input_parts.tools
     });
 
-    // Create metadata with assistant_id and tool calls
-    let metadata =
-        create_metadata_with_assistant_and_tools(assistant_id, tool_names, false, platform);
-
     tracing_client
-        .create_trace(
-            name,
-            Some(input_json),
-            metadata,
-            None, // tags
-        )
+        .create_trace(name, Some(input_json), metadata, tags)
         .await
 }
 
