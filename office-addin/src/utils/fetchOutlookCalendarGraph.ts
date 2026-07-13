@@ -1,8 +1,10 @@
 import {
+  ambiguousCandidatesReason,
   computeCalendarRanges,
   decodeMergedFreeBusyView,
   MS_PER_DAY,
   onlyBlockingBlocks,
+  resolvedAsCaveat,
   resolveTimezone,
   runCalendarLegs,
   throwIfAborted,
@@ -34,7 +36,6 @@ import type {
   GraphTokenSource,
 } from "./fetchOutlookMessageGraph";
 import type {
-  DirectoryCandidate,
   GraphDirectoryTokenSources,
   GraphNameResolution,
 } from "./graphAttendeeResolution";
@@ -429,9 +430,6 @@ const unknownAttendee = (
   busy: [],
 });
 
-const listCandidates = (candidates: DirectoryCandidate[]): string =>
-  candidates.map((c) => `${c.name} <${c.smtp}>`).join(", ");
-
 /**
  * Colleague free/busy over `range` (ERMAIN-434): one getSchedule call with all
  * attendee SMTP addresses. Per-schedule failures become `status: "unknown"`
@@ -521,7 +519,10 @@ export async function fetchAttendeeAvailabilityViaGraph(
       if (resolution.kind === "ambiguous") {
         return unknownAttendee(
           requested,
-          `ambiguous in the directory — matches: ${listCandidates(resolution.candidates)}. Ask the user which address to use.`,
+          ambiguousCandidatesReason(
+            resolution.candidates.length,
+            resolution.candidates,
+          ),
         );
       }
       if (resolution.kind === "not-found") {
@@ -539,10 +540,8 @@ export async function fetchAttendeeAvailabilityViaGraph(
     // the REQUESTED name's availability with the matched person's calendar.
     const resolution = resolutions.get(requested);
     const resolvedNote =
-      resolution?.kind === "resolved" &&
-      resolution.name !== undefined &&
-      resolution.name.trim().toLowerCase() !== requested.trim().toLowerCase()
-        ? `resolved as ${resolution.name} <${smtp}>`
+      resolution?.kind === "resolved"
+        ? resolvedAsCaveat(requested, resolution.name, smtp)
         : undefined;
     const disclose = (
       entry: NormalizedAttendeeAvailability,

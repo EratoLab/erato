@@ -1,7 +1,9 @@
 import {
+  ambiguousCandidatesReason,
   computeCalendarRanges,
   decodeMergedFreeBusyView,
   onlyBlockingBlocks,
+  resolvedAsCaveat,
   resolveTimezone,
   runCalendarLegs,
 } from "./calendarLegs";
@@ -741,15 +743,14 @@ async function resolveAttendeeInput(requested: string): Promise<ResolvedInput> {
       };
     }
     if (candidates.length > 1) {
-      // List the candidates so the user can pick/copy the right address.
-      const listed = candidates
-        .filter((c) => c.emailAddress?.includes("@"))
-        .slice(0, 5)
-        .map((c) => `${c.name ?? c.emailAddress} <${c.emailAddress}>`)
-        .join(", ");
       return {
         requested,
-        unknownReason: `ambiguous name (${candidates.length} directory matches${listed ? `: ${listed}` : ""}) — ask the user which address to use`,
+        unknownReason: ambiguousCandidatesReason(
+          candidates.length,
+          candidates
+            .filter((c) => c.emailAddress?.includes("@"))
+            .map((c) => ({ name: c.name, smtp: c.emailAddress as string })),
+        ),
       };
     }
     const candidate = candidates[0];
@@ -808,11 +809,7 @@ async function resolveAttendeeInput(requested: string): Promise<ResolvedInput> {
     }
     const smtp = candidate.emailAddress as string;
     // Disclose a non-exact directory match — the caveat rides entry.reason.
-    const resolvedCaveat =
-      candidate.name !== undefined &&
-      candidate.name.trim().toLowerCase() !== requested.trim().toLowerCase()
-        ? `resolved as ${candidate.name} <${smtp}>`
-        : undefined;
+    const resolvedCaveat = resolvedAsCaveat(requested, candidate.name, smtp);
     return {
       requested,
       smtps: [

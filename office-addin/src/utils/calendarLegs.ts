@@ -193,3 +193,29 @@ export function onlyBlockingBlocks(
 ): NormalizedBusyBlock[] {
   return blocks.filter((block) => BLOCKING_BUSY_TYPES.has(block.busyType));
 }
+
+/** Discloses a non-exact directory match — undefined when the resolved name
+ * equals the requested input. Shared so both backends word it identically. */
+export function resolvedAsCaveat(
+  requested: string,
+  name: string | undefined,
+  smtp: string,
+): string | undefined {
+  return name !== undefined &&
+    name.trim().toLowerCase() !== requested.trim().toLowerCase()
+    ? `resolved as ${name} <${smtp}>`
+    : undefined;
+}
+
+/** Unknown-attendee reason for an ambiguous directory name — lists up to five
+ * candidates so the user can pick an address. Shared wording, both backends. */
+export function ambiguousCandidatesReason(
+  matchCount: number,
+  candidates: { name: string | undefined; smtp: string }[],
+): string {
+  const listed = candidates
+    .slice(0, 5)
+    .map((c) => `${c.name ?? c.smtp} <${c.smtp}>`)
+    .join(", ");
+  return `ambiguous name (${matchCount} directory matches${listed ? `: ${listed}` : ""}) — ask the user which address to use`;
+}

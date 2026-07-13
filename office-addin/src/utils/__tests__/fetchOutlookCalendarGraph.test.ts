@@ -1069,7 +1069,7 @@ describe("fetchAttendeeAvailabilityViaGraph with directory resolution", () => {
         requested: "Chris",
         status: "unknown",
         reason: expect.stringContaining(
-          "Chris A <a@example.de>, Chris B <b@example.de>",
+          "ambiguous name (2 directory matches: Chris A <a@example.de>, Chris B <b@example.de>) — ask the user which address to use",
         ),
         busy: [],
       },
