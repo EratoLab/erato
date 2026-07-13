@@ -19,7 +19,7 @@ export const ToolCallInput: React.FC<ToolCallInputProps> = ({
   return (
     <div className={className}>
       <div className="mb-2 text-xs font-medium text-theme-fg-secondary">
-        {t`Input Parameters`}
+        {t({ id: "toolcall.input.title", message: "Input Parameters" })}
       </div>
       <JsonDisplay data={input} />
     </div>

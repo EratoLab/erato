@@ -1294,6 +1294,26 @@ msgid "chat.message.aria"
 msgstr "Nachricht"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/MessageContent.tsx
+msgid "chat.message.code.copied"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/MessageContent.tsx
+msgid "chat.message.code.copy"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/EratoEmailSuggestion.tsx
+msgid "chat.message.email.copied"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/EratoEmailSuggestion.tsx
+msgid "chat.message.email.copy"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/Feedback/CopyErrorButton.tsx
 msgid "chat.message.error.copy_report"
 msgstr "Fehlerbericht kopieren"
@@ -1392,6 +1412,21 @@ msgstr "Anfragelimit oder Kontingent überschritten. Das kann auch passieren, we
 #: src/components/ui/Chat/ChatMessage.tsx
 msgid "chat.message.error.variant.rate_limit.cta"
 msgstr "Bitte versuche es in einer Minute erneut und reduziere die Länge oder Anzahl der Anhänge."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/MessageContent.tsx
+msgid "chat.message.footnotes"
+msgstr "Fußnoten"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/MessageContent.tsx
+msgid "chat.message.image.fallback_alt"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/MessageContent.tsx
+msgid "chat.message.link.fallback"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
@@ -2757,6 +2792,51 @@ msgid "sharing.type.user"
 msgstr "Benutzer"
 
 #. js-lingui-explicit-id
+#: src/components/ui/ToolCall/ToolCallInput.tsx
+msgid "toolcall.input.title"
+msgstr "Eingabeparameter"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/ToolCallOutput.tsx
+msgid "toolcall.output.error"
+msgstr "Fehlerausgabe"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/ToolCallOutput.tsx
+msgid "toolcall.output.title"
+msgstr "Ausgabe"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/TraceDoneMarker.tsx
+msgid "trace.done"
+msgstr "Fertig"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/hooks/useThinkingDuration.ts
+msgid "trace.duration.subsecond"
+msgstr "weniger als eine Sekunde"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/TraceClusterHeader.tsx
+msgid "trace.header.stopped"
+msgstr "Abgebrochen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/TraceClusterHeader.tsx
+msgid "trace.header.stopped_after"
+msgstr "Abgebrochen nach {formatted}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/TraceClusterHeader.tsx
+msgid "trace.header.thought"
+msgstr "Nachgedacht"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/TraceClusterHeader.tsx
+msgid "trace.header.thought_for"
+msgstr "Nachgedacht für {formatted}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ReasoningStep.tsx
 msgid "trace.reasoning.masked"
 msgstr "Denkt nach…"
@@ -2765,6 +2845,26 @@ msgstr "Denkt nach…"
 #: src/components/ui/Trace/steps/ReasoningStep.tsx
 msgid "trace.reasoning.masked.done"
 msgstr "Nachdenken abgeschlossen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ReasoningStep.tsx
+msgid "trace.reasoning.title"
+msgstr "Denkt nach"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/TraceThinkingPlaceholder.tsx
+msgid "trace.thinking.placeholder"
+msgstr "Denkt nach…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.failed"
+msgstr "Fehlgeschlagen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.running"
+msgstr "Wird ausgeführt"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ImageLightbox.tsx
@@ -3225,20 +3325,20 @@ msgid "Conversational"
 msgstr ""
 
 #: src/components/ui/Message/MessageContent.tsx
-msgid "Copied"
-msgstr ""
+#~ msgid "Copied"
+#~ msgstr ""
 
 #: src/components/ui/Message/EratoEmailSuggestion.tsx
-msgid "Copied!"
-msgstr ""
+#~ msgid "Copied!"
+#~ msgstr ""
 
 #: src/components/ui/Message/EratoEmailSuggestion.tsx
-msgid "Copy"
-msgstr ""
+#~ msgid "Copy"
+#~ msgstr ""
 
 #: src/components/ui/Message/MessageContent.tsx
-msgid "Copy code"
-msgstr ""
+#~ msgid "Copy code"
+#~ msgstr ""
 
 #: src/hooks/audio/useGuidedAudioCapture.ts
 msgid "Could not capture audio from the microphone. Please try again."
@@ -3363,8 +3463,8 @@ msgid "Dismiss"
 msgstr "Schließen"
 
 #: src/components/ui/Trace/TraceDoneMarker.tsx
-msgid "Done"
-msgstr "Fertig"
+#~ msgid "Done"
+#~ msgstr "Fertig"
 
 #: src/components/ui/Modal/FilePreviewModal.tsx
 msgid "Download File"
@@ -3428,8 +3528,8 @@ msgstr "Fehler"
 #~ msgstr "Fehler beim Laden des Themes:"
 
 #: src/components/ui/ToolCall/ToolCallOutput.tsx
-msgid "Error Output"
-msgstr "Fehlerausgabe"
+#~ msgid "Error Output"
+#~ msgstr "Fehlerausgabe"
 
 #: src/components/ui/FileUpload/FileUploadStates.tsx
 msgid "Error:"
@@ -3464,7 +3564,6 @@ msgstr "facets.<facet-id>.displayName"
 #~ msgstr "fehlgeschlagen"
 
 #: src/components/ui/Chat/ChatInput.tsx
-#: src/components/ui/Trace/steps/ToolUseStep.tsx
 msgid "Failed"
 msgstr "Fehlgeschlagen"
 
@@ -3510,8 +3609,8 @@ msgid "Finishing dictation"
 msgstr "Audiodiktat wird abgeschlossen"
 
 #: src/components/ui/Message/MessageContent.tsx
-msgid "Footnotes"
-msgstr "Fußnoten"
+#~ msgid "Footnotes"
+#~ msgstr "Fußnoten"
 
 #: src/pages/SearchPage.tsx
 msgid "Found {resultsCount} results"
@@ -3534,8 +3633,8 @@ msgid "How to Test:"
 msgstr "So testen Sie:"
 
 #: src/components/ui/Message/MessageContent.tsx
-msgid "Image"
-msgstr ""
+#~ msgid "Image"
+#~ msgstr ""
 
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "In Progress"
@@ -3550,8 +3649,8 @@ msgid "Include message"
 msgstr ""
 
 #: src/components/ui/ToolCall/ToolCallInput.tsx
-msgid "Input Parameters"
-msgstr "Eingabeparameter"
+#~ msgid "Input Parameters"
+#~ msgstr "Eingabeparameter"
 
 #: src/components/ui/Message/MessageTimestamp.tsx
 msgid "Invalid date provided to MessageTimestamp, using current date"
@@ -3562,16 +3661,16 @@ msgid "Largest file context contributors:"
 msgstr "Größte Kontextbeiträge von Dateien:"
 
 #: src/components/ui/Trace/hooks/useThinkingDuration.ts
-msgid "less than a second"
-msgstr "weniger als eine Sekunde"
+#~ msgid "less than a second"
+#~ msgstr "weniger als eine Sekunde"
 
 #: src/components/ui/Controls/UserProfileDropdown.tsx
 #~ msgid "Light mode"
 #~ msgstr "Heller Modus"
 
 #: src/components/ui/Message/MessageContent.tsx
-msgid "Link"
-msgstr ""
+#~ msgid "Link"
+#~ msgstr ""
 
 #: src/components/ui/Chat/ChatInputAudioModeButton.tsx
 msgid "Listening"
@@ -3735,8 +3834,8 @@ msgid "assistant.form.prompt-optimizer.tooltip"
 msgstr "Prompt optimieren"
 
 #: src/components/ui/ToolCall/ToolCallOutput.tsx
-msgid "Output"
-msgstr "Ausgabe"
+#~ msgid "Output"
+#~ msgstr "Ausgabe"
 
 #: src/components/ui/FileUpload/FilePreviewLoading.tsx
 msgid "Please wait"
@@ -3856,8 +3955,8 @@ msgid "Retrying..."
 msgstr "Erneuter Versuch..."
 
 #: src/components/ui/Trace/steps/ToolUseStep.tsx
-msgid "Running"
-msgstr "Wird ausgeführt"
+#~ msgid "Running"
+#~ msgstr "Wird ausgeführt"
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 #~ msgid "sample rate: {0} Hz"
@@ -4019,12 +4118,12 @@ msgstr "Audiodiktat stoppen"
 #~ msgstr "Aufnahme stoppen"
 
 #: src/components/ui/Trace/TraceClusterHeader.tsx
-msgid "Stopped"
-msgstr "Abgebrochen"
+#~ msgid "Stopped"
+#~ msgstr "Abgebrochen"
 
 #: src/components/ui/Trace/TraceClusterHeader.tsx
-msgid "Stopped after {formatted}"
-msgstr "Abgebrochen nach {formatted}"
+#~ msgid "Stopped after {formatted}"
+#~ msgstr "Abgebrochen nach {formatted}"
 
 #: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "Subject"
@@ -4098,13 +4197,12 @@ msgid "The selected microphone is not available. Refresh the device list and try
 msgstr "Das ausgewählte Mikrofon ist nicht verfügbar. Aktualisieren Sie die Geräteliste und versuchen Sie es erneut."
 
 #: src/components/ui/Feedback/LoadingIndicator.tsx
-#: src/components/ui/Trace/steps/ReasoningStep.tsx
 msgid "Thinking"
 msgstr "Denkt nach"
 
 #: src/components/ui/Trace/TraceThinkingPlaceholder.tsx
-msgid "Thinking…"
-msgstr "Denkt nach…"
+#~ msgid "Thinking…"
+#~ msgstr "Denkt nach…"
 
 #: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
 msgid "This message exceeds the token limit of {maxTokensFormatted}. Please reduce the message length or remove attached files."
@@ -4115,12 +4213,12 @@ msgid "This message is using {percentUsed}% of the available token limit ({total
 msgstr "Diese Nachricht verwendet {percentUsed}% des verfügbaren Token-Limits ({totalTokensFormatted} von {maxTokensFormatted})."
 
 #: src/components/ui/Trace/TraceClusterHeader.tsx
-msgid "Thought"
-msgstr "Nachgedacht"
+#~ msgid "Thought"
+#~ msgstr "Nachgedacht"
 
 #: src/components/ui/Trace/TraceClusterHeader.tsx
-msgid "Thought for {formatted}"
-msgstr "Nachgedacht für {formatted}"
+#~ msgid "Thought for {formatted}"
+#~ msgstr "Nachgedacht für {formatted}"
 
 #: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "To"

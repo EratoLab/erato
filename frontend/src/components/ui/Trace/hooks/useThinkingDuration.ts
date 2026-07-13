@@ -18,7 +18,8 @@ const SECONDS_THRESHOLD_MS = 10 * MS_PER_MINUTE;
 export const formatThinkingDuration = (ms: number | null): string | null => {
   if (ms == null || !Number.isFinite(ms) || ms <= 0) return null;
 
-  if (ms < MS_PER_SECOND) return t`less than a second`;
+  if (ms < MS_PER_SECOND)
+    return t({ id: "trace.duration.subsecond", message: "less than a second" });
 
   const totalSeconds = Math.round(ms / MS_PER_SECOND);
 

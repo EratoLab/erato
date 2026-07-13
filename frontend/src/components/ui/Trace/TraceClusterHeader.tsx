@@ -20,9 +20,19 @@ const buildLabel = (durationMs: number | null, hasError: boolean): string => {
   const formatted = formatThinkingDuration(durationMs);
 
   if (hasError) {
-    return formatted ? t`Stopped after ${formatted}` : t`Stopped`;
+    return formatted
+      ? t({
+          id: "trace.header.stopped_after",
+          message: `Stopped after ${formatted}`,
+        })
+      : t({ id: "trace.header.stopped", message: "Stopped" });
   }
-  return formatted ? t`Thought for ${formatted}` : t`Thought`;
+  return formatted
+    ? t({
+        id: "trace.header.thought_for",
+        message: `Thought for ${formatted}`,
+      })
+    : t({ id: "trace.header.thought", message: "Thought" });
 };
 
 /**

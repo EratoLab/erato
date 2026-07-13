@@ -22,8 +22,8 @@ const STATUS_PILL_CLASS = {
 } as const;
 
 const STATUS_LABEL = {
-  running: () => t`Running`,
-  error: () => t`Failed`,
+  running: () => t({ id: "trace.tool.running", message: "Running" }),
+  error: () => t({ id: "trace.tool.failed", message: "Failed" }),
 } as const;
 
 type StatusWithPill = keyof typeof STATUS_PILL_CLASS;

@@ -27,7 +27,9 @@ export const ToolCallOutput: React.FC<ToolCallOutputProps> = ({
           isError ? "text-theme-error-fg" : "text-theme-fg-secondary",
         )}
       >
-        {isError ? t`Error Output` : t`Output`}
+        {isError
+          ? t({ id: "toolcall.output.error", message: "Error Output" })
+          : t({ id: "toolcall.output.title", message: "Output" })}
       </div>
       <div className={clsx({ "opacity-75": isError })}>
         <JsonDisplay data={output} />

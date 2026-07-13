@@ -27,7 +27,9 @@ export const TraceThinkingPlaceholder = ({
       isActive
     />
     <div className="min-w-0 flex-1 pl-2.5 pt-0.5 text-sm italic text-theme-fg-muted">
-      <span className="animate-pulse">{t`Thinking…`}</span>
+      <span className="animate-pulse">
+        {t({ id: "trace.thinking.placeholder", message: "Thinking…" })}
+      </span>
     </div>
   </div>
 );
