@@ -9,6 +9,7 @@ import {
   uninstallMockMailbox,
 } from "../../test/mocks/outlook/mailbox";
 import {
+  EWS_MAX_RESOLVED_MAILBOXES,
   fetchAttendeeAvailabilityViaEws,
   fetchCalendarHistoryViaEws,
   fetchOutlookCalendarViaEws,
@@ -801,6 +802,24 @@ const FREE_BUSY_WITH_HOURS_SOAP = soapEnvelope(
     "</m:FreeBusyResponseArray></m:GetUserAvailabilityResponse>",
 );
 
+/** `count` identical ok FreeBusyResponses, one busy block each — sized to
+ * match a capped mailbox request. */
+const freeBusyOkArraySoap = (count: number): string =>
+  soapEnvelope(
+    "<m:GetUserAvailabilityResponse><m:FreeBusyResponseArray>" +
+      (
+        "<m:FreeBusyResponse>" +
+        '<m:ResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode></m:ResponseMessage>' +
+        "<m:FreeBusyView><t:FreeBusyViewType>FreeBusy</t:FreeBusyViewType>" +
+        "<t:CalendarEventArray>" +
+        calendarEventXml("2026-07-07T08:00:00", "2026-07-07T09:00:00", "Busy") +
+        "</t:CalendarEventArray>" +
+        "</m:FreeBusyView>" +
+        "</m:FreeBusyResponse>"
+      ).repeat(count) +
+      "</m:FreeBusyResponseArray></m:GetUserAvailabilityResponse>",
+  );
+
 const ATTENDEE_RANGE = {
   startUtc: "2026-07-07T00:00:00Z",
   endUtc: "2026-07-14T00:00:00Z",
@@ -1158,6 +1177,58 @@ describe("fetchAttendeeAvailabilityViaEws", () => {
       busy: [],
     });
     expect(entries[2].reason).toContain("truncated");
+  });
+
+  it("caps the availability query at EWS_MAX_RESOLVED_MAILBOXES and keeps overflow attendees visible as unknown", async () => {
+    // Cap + 2 direct SMTP inputs: each consumes one budget slot, no
+    // ResolveNames needed.
+    const attendees = Array.from(
+      { length: EWS_MAX_RESOLVED_MAILBOXES + 2 },
+      (_, index) => `user${index}@example.de`,
+    );
+    const hostMock = installHostMock((body) => {
+      if (body.includes("<m:GetUserAvailabilityRequest")) {
+        return {
+          status: "succeeded",
+          value: freeBusyOkArraySoap(EWS_MAX_RESOLVED_MAILBOXES),
+        };
+      }
+      return { status: "failed", error: { code: 0, message: "unexpected op" } };
+    });
+
+    const entries = await fetchAttendeeAvailabilityViaEws(
+      ATTENDEE_RANGE,
+      attendees,
+    );
+
+    // The ONE availability request carries exactly the capped mailbox set.
+    expect(hostMock).toHaveBeenCalledTimes(1);
+    const sent = String(hostMock.mock.calls[0][0]);
+    expect(sent.match(/<t:Address>/g)).toHaveLength(EWS_MAX_RESOLVED_MAILBOXES);
+    expect(sent).toContain(
+      `<t:Address>user${EWS_MAX_RESOLVED_MAILBOXES - 1}@example.de</t:Address>`,
+    );
+    expect(sent).not.toContain(
+      `<t:Address>user${EWS_MAX_RESOLVED_MAILBOXES}@example.de</t:Address>`,
+    );
+
+    expect(entries).toHaveLength(EWS_MAX_RESOLVED_MAILBOXES + 2);
+    // In-budget attendees get real results...
+    for (const entry of entries.slice(0, EWS_MAX_RESOLVED_MAILBOXES)) {
+      expect(entry.status).toBe("ok");
+      expect(entry.busy).toHaveLength(1);
+    }
+    // ...and each overflow input stays visible as its own unknown entry.
+    for (const [offset, entry] of entries
+      .slice(EWS_MAX_RESOLVED_MAILBOXES)
+      .entries()) {
+      expect(entry).toEqual({
+        requested: `user${EWS_MAX_RESOLVED_MAILBOXES + offset}@example.de`,
+        status: "unknown",
+        reason: `attendee cap reached (${EWS_MAX_RESOLVED_MAILBOXES} mailboxes) — 1 not checked`,
+        busy: [],
+      });
+    }
   });
 
   it("returns [] for an empty attendee list without a host call", async () => {
