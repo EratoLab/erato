@@ -763,10 +763,40 @@ export function containsSchedulingSignal(
 }
 
 /**
- * Tool-use parts persist in chat history forever, so "the latest assistant
- * message read the calendar" alone would let a days-old scheduling chat
- * hijack the first send after reopening it (the add-in reopens the last
- * chat). An hour comfortably covers a slow pick or a mid-scheduling reload
+ * The newest signal-bearing assistant message's `createdAt`, scanning the
+ * WHOLE ordered history — deliberately not latest-message-only: negotiation
+ * turns without a tool call or fence (clarifying an ambiguous pick,
+ * gathering subject/location) must not drop the facet mid-flow. The
+ * misclassification costs are asymmetric: a facet riding an off-topic turn
+ * self-neutralizes ("for anything else respond normally" is in the
+ * template), while a dropped facet strands the pick turn without
+ * instructions or tools. Recency is judged separately at send time
+ * ({@link isSchedulingThreadFresh}).
+ */
+export function newestSchedulingSignalAt(
+  orderedMessages: readonly {
+    role: string;
+    content?: ContentPart[];
+    createdAt: string;
+  }[],
+): string | null {
+  for (let i = orderedMessages.length - 1; i >= 0; i--) {
+    const message = orderedMessages[i];
+    if (
+      message.role === "assistant" &&
+      containsSchedulingSignal(message.content)
+    ) {
+      return message.createdAt;
+    }
+  }
+  return null;
+}
+
+/**
+ * Tool-use parts persist in chat history forever, so a scheduling signal
+ * alone would let a days-old scheduling chat hijack the first send after
+ * reopening it (the add-in reopens the last chat). An hour comfortably
+ * covers a slow pick, a clarify/metadata detour, or a mid-scheduling reload
  * without carrying stickiness across sessions.
  */
 export const SCHEDULING_THREAD_MAX_AGE_MS = 60 * 60_000;

@@ -57,7 +57,7 @@ import {
   runWithGraphTimeout,
 } from "../utils/graphRequestTimeout";
 import { buildOutlookArtifact } from "../utils/outlookClientActions";
-import { containsSchedulingSignal } from "../utils/outlookScheduleTool";
+import { newestSchedulingSignalAt } from "../utils/outlookScheduleTool";
 import { parseDroppedFiles } from "../utils/parseDroppedFiles";
 import { parseEmlBytes } from "../utils/parsedEmail";
 
@@ -132,25 +132,29 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
   // with the shared streaming loop for the lifetime of the chat surface.
   useOutlookClientTools();
 
-  // A scheduling exchange is in flight when the LATEST assistant message read
+  // A scheduling exchange is in flight when a RECENT assistant message read
   // the calendar OR proposed an appointment (erato-appointment fence) — the
   // next send then carries the `outlook_schedule` facet (sticky rung in
   // `resolveOutlookActionFacet`) so the model can handle the user's slot pick
-  // or adjust the proposal (the fence arm keeps "add an agenda" turns able to
-  // re-propose the create action). This memo yields that message's TIMESTAMP
-  // (not a verdict): recency must be judged at send time, and a memo only
-  // recomputes when messages change, so a boolean would freeze while idle.
-  const lastSchedulingSignalAt = useMemo(() => {
-    for (let i = messageOrder.length - 1; i >= 0; i--) {
-      const message = messages[messageOrder[i]];
-      if (message?.role === "assistant") {
-        return containsSchedulingSignal(message.content)
-          ? message.createdAt
-          : null;
-      }
-    }
-    return null;
-  }, [messages, messageOrder]);
+  // or adjust the proposal. Deliberately NOT latest-message-only: negotiation
+  // turns without a tool call or fence (clarifying an ambiguous pick,
+  // gathering subject/location) must not drop the facet mid-flow — the
+  // misclassification costs are asymmetric (a facet riding an off-topic turn
+  // self-neutralizes via its own "for anything else respond normally" rule,
+  // while a dropped facet strands the pick turn without instructions or
+  // tools). This memo yields the newest signal-bearing assistant message's
+  // TIMESTAMP (not a verdict): recency is judged at send time against
+  // SCHEDULING_THREAD_MAX_AGE_MS, and a memo only recomputes when messages
+  // change, so a boolean would freeze while idle.
+  const lastSchedulingSignalAt = useMemo(
+    () =>
+      newestSchedulingSignalAt(
+        messageOrder
+          .map((id) => messages[id])
+          .filter((message) => message !== undefined),
+      ),
+    [messages, messageOrder],
+  );
 
   const { availableModels, selectedModel, setSelectedModel, isSelectionReady } =
     useActiveModelSelection({ initialModel: currentChatLastModel });
