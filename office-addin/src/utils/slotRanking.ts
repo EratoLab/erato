@@ -70,6 +70,9 @@ const ASSUMED_END_MINUTES = 17 * 60;
 const WEIGHT_BUFFER = 0.3;
 const WEIGHT_DAY_LIGHTNESS = 0.35;
 const WEIGHT_DEFRAG = 0.35;
+/** Additive bonus when a slot sits inside EVERY shared attendee working-hours
+ * window — zero attendee hours shared ⇒ zero effect on the ranking. */
+const WEIGHT_ATTENDEE_HOURS = 0.3;
 
 // --- Zone math (Intl-based, no deps) -----------------------------------------
 
@@ -336,13 +339,26 @@ export function rankAvailabilitySlots(
   const endMinutes = calendar.workingHours?.endMinutes ?? ASSUMED_END_MINUTES;
   // Hours-zone is authoritative: an anchored schedule (traveler keeping home
   // hours) converts through its OWN zone, not the display zone.
-  const anchor = calendar.workingHours?.anchor;
-  const hoursCivilToUtcMs = (date: string, minutes: number): number =>
+  const civilToUtcInAnchor = (
+    date: string,
+    minutes: number,
+    anchor: WorkingHoursAnchor | undefined,
+  ): number =>
     anchor === undefined
       ? zonedCivilToUtcMs(date, minutes, zone)
       : anchor.kind === "iana"
         ? zonedCivilToUtcMs(date, minutes, anchor.zone)
         : rulesCivilToUtcMs(date, minutes, anchor);
+  const ownAnchor = calendar.workingHours?.anchor;
+  const hoursCivilToUtcMs = (date: string, minutes: number): number =>
+    civilToUtcInAnchor(date, minutes, ownAnchor);
+
+  // Attendees' shared working hours (each in its own anchor zone) — a SOFT
+  // preference: slots inside everyone's hours score higher, never a filter
+  // (cross-zone pairs may have no overlap, and edges are often negotiable).
+  const attendeeHours = calendar.attendees
+    .filter((a) => a.status === "ok" && a.workingHours !== undefined)
+    .map((a) => a.workingHours!);
 
   // Blocking intervals: own blocking events + every loaded attendee's blocks
   // (already blocking-only by contract; own list is filtered here).
@@ -377,9 +393,18 @@ export function rankAvailabilitySlots(
     i < 100 && date <= lastDate;
     i += 1, date = nextCivilDate(date)
   ) {
-    if (!workingDays.has(weekdayOf(date))) continue;
+    const weekday = weekdayOf(date);
+    if (!workingDays.has(weekday)) continue;
     const dayStart = hoursCivilToUtcMs(date, startMinutes);
     const dayEnd = hoursCivilToUtcMs(date, endMinutes);
+    // This civil date's window per attendee-with-hours; an attendee not
+    // working this weekday gets no window (nothing can be "inside").
+    const attendeeDayWindows = attendeeHours
+      .filter((h) => h.daysOfWeek.some((d) => d.toLowerCase() === weekday))
+      .map((h) => ({
+        start: civilToUtcInAnchor(date, h.startMinutes, h.anchor),
+        end: civilToUtcInAnchor(date, h.endMinutes, h.anchor),
+      }));
     const window: Interval = {
       start: Math.max(dayStart, nowMs),
       end: Math.min(dayEnd, windowEndMs),
@@ -411,11 +436,20 @@ export function rankAvailabilitySlots(
           : leftoverBefore >= 30 * MINUTE_MS
             ? 0.9
             : 0.6;
+        const insideAllAttendeeHours =
+          attendeeHours.length > 0 &&
+          attendeeDayWindows.length === attendeeHours.length &&
+          attendeeDayWindows.every(
+            (w) => start >= w.start && start + durationMs <= w.end,
+          );
         const score =
           WEIGHT_BUFFER * bufferScore +
           WEIGHT_DAY_LIGHTNESS * dayLightness +
-          WEIGHT_DEFRAG * (1 - fragments / 2);
+          WEIGHT_DEFRAG * (1 - fragments / 2) +
+          (insideAllAttendeeHours ? WEIGHT_ATTENDEE_HOURS : 0);
         const reasons = [...tags];
+        if (insideAllAttendeeHours)
+          reasons.push("inside everyone's working hours");
         if (!afterMeeting) reasons.push("no meeting right before");
         else if (leftoverBefore >= 30 * MINUTE_MS) reasons.push("clean buffer");
         if (dayLightness >= 0.7) reasons.push("light day");

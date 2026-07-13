@@ -73,6 +73,7 @@ const CALENDAR_LEGEND =
   "recentMeetings are PAST meetings, only useful to calibrate a typical duration. " +
   "attendees (when present) are OTHER people's calendars, shown as opaque blocking intervals only — no subjects, and their free time is not listed: every listed interval blocks that person; time outside the listed intervals is free for them ONLY while their status is ok. " +
   "An attendee entry with coveredUntil had its busy list truncated there: treat that person's time after coveredUntil as unknown, not free. " +
+  "An attendee entry may include their workingHours (wall-clock in its own timeZone when present) — prefer times inside every attendee's hours; suggestedSlots already weight this. " +
   'An attendee with status "unknown - treat as NOT free" could not be read: never present any time as confirmed-free for them, and say their calendar could not be checked. ' +
   "If an unknown attendee's note lists directory matches (Name <address>), show them to the user so they can pick the right address. " +
   'An attendee note saying "resolved as" names the directory entry actually used for a name input — repeat it so the user can catch a wrong match. ' +
@@ -299,6 +300,18 @@ export function serializeCalendarForModel(
       status: attendee.status === "ok" ? "ok" : "unknown - treat as NOT free",
       ...(attendee.reason !== undefined ? { note: attendee.reason } : {}),
       ...(coveredUntil !== undefined ? { coveredUntil } : {}),
+      ...(attendee.workingHours !== undefined
+        ? {
+            workingHours: {
+              days: attendee.workingHours.daysOfWeek,
+              start: minutesToHhMm(attendee.workingHours.startMinutes),
+              end: minutesToHhMm(attendee.workingHours.endMinutes),
+              ...(attendee.workingHours.anchor !== undefined
+                ? { timeZone: anchorLabel(attendee.workingHours.anchor) }
+                : {}),
+            },
+          }
+        : {}),
       busy: sortedBusy.map((block) => ({
         ...serializeWhen(block.when, zone),
         busyType: block.busyType,

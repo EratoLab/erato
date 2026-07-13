@@ -806,6 +806,40 @@ describe("fetchAttendeeAvailabilityViaGraph", () => {
     ]);
   });
 
+  it("carries an attendee's shared working hours, anchored to their own zone", async () => {
+    const transport = vi.fn(async () =>
+      jsonResponse({
+        value: [
+          {
+            scheduleId: "alice@example.de",
+            scheduleItems: [],
+            workingHours: {
+              daysOfWeek: ["monday"],
+              startTime: "09:00:00.0000000",
+              endTime: "17:00:00.0000000",
+              timeZone: { name: "Pacific Standard Time" },
+            },
+          },
+        ],
+      }),
+    );
+
+    const entries = await fetchAttendeeAvailabilityViaGraph(
+      vi.fn().mockResolvedValue("graph-tok"),
+      ATTENDEE_RANGE,
+      ["alice@example.de"],
+      { transport },
+    );
+
+    expect(entries[0]).toMatchObject({ status: "ok", busy: [] });
+    expect(entries[0].workingHours).toEqual({
+      daysOfWeek: ["monday"],
+      startMinutes: 540,
+      endMinutes: 1020,
+      anchor: { kind: "iana", zone: "America/Los_Angeles" },
+    });
+  });
+
   it("degrades ONE attendee to unknown when its schedule carries a non-UTC slice, keeping siblings", async () => {
     const transport = vi.fn(async () =>
       jsonResponse({

@@ -119,6 +119,10 @@ export interface NormalizedAttendeeAvailability {
   /** Why status is "unknown"; also used for non-fatal caveats (truncation). */
   reason?: string;
   busy: NormalizedBusyBlock[];
+  /** The attendee's OWN working hours when the backend shares them (both
+   * availability APIs return them alongside free/busy) — wall-clock in their
+   * `anchor` zone; unusable attendee hours are simply omitted. */
+  workingHours?: NormalizedWorkingHours;
 }
 
 /** The independently-sourced legs of a calendar snapshot. */

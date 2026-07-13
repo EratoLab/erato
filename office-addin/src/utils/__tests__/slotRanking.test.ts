@@ -295,6 +295,60 @@ describe("rulesCivilToUtcMs", () => {
   });
 });
 
+describe("attendee working hours", () => {
+  it("prefers slots inside every shared attendee window (soft, never a filter)", () => {
+    const { slots } = rankAvailabilitySlots(
+      {
+        ...baseCalendar,
+        busyBlocks: [],
+        attendees: [
+          {
+            requested: "ny@example.de",
+            smtp: "ny@example.de",
+            status: "ok",
+            busy: [],
+            // NY 9-17 seen from Berlin = 15:00-23:00; overlap with the user's
+            // 09:00-17:00 Berlin window is 15:00-17:00 (13:00-15:00Z).
+            workingHours: {
+              daysOfWeek: [
+                "monday",
+                "tuesday",
+                "wednesday",
+                "thursday",
+                "friday",
+              ],
+              startMinutes: 540,
+              endMinutes: 1020,
+              anchor: { kind: "iana", zone: "America/New_York" },
+            },
+          },
+        ],
+      },
+      RANKING_OPTIONS,
+    );
+
+    const overlapTagged = slots.filter((s) =>
+      (s.reason ?? "").includes("inside everyone's working hours"),
+    );
+    expect(overlapTagged.length).toBeGreaterThan(0);
+    for (const slot of overlapTagged) {
+      // Tagged slots really lie inside the mutual window (13:00-15:00Z).
+      const hour = new Date(slot.startUtc).getUTCHours();
+      expect(hour).toBeGreaterThanOrEqual(13);
+      expect(Date.parse(slot.endUtc)).toBeLessThanOrEqual(
+        Date.parse(slot.startUtc.slice(0, 10) + "T15:00:00Z"),
+      );
+    }
+    // The top smart pick lands in the overlap — the bonus dominates.
+    const smart = slots.find((s) => s.tier === "smart");
+    expect(smart?.reason).toContain("inside everyone's working hours");
+    // Slots outside the overlap still exist: soft preference, not a filter.
+    expect(
+      slots.some((s) => !(s.reason ?? "").includes("inside everyone's")),
+    ).toBe(true);
+  });
+});
+
 describe("working-hours anchor", () => {
   it("computes the working window in the anchor zone, not the display zone", () => {
     const { slots } = rankAvailabilitySlots(

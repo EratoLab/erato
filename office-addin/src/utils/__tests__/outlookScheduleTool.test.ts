@@ -527,6 +527,40 @@ describe("serializeCalendarForModel", () => {
     expect(rules.workingHours.timeZone).toBe("UTC-05:00/-04:00 DST");
   });
 
+  it("serializes an attendee's shared working hours with their zone label", () => {
+    const result = serializeCalendarForModel(
+      {
+        ...emptyCalendar,
+        attendees: [
+          {
+            requested: "ny@example.de",
+            smtp: "ny@example.de",
+            status: "ok",
+            busy: [],
+            workingHours: {
+              daysOfWeek: ["monday"],
+              startMinutes: 540,
+              endMinutes: 1020,
+              anchor: { kind: "iana", zone: "America/New_York" },
+            },
+          },
+        ],
+      },
+      NOW,
+    ) as {
+      attendees: { workingHours?: Record<string, unknown> }[];
+      legend: string;
+    };
+
+    expect(result.attendees[0].workingHours).toEqual({
+      days: ["monday"],
+      start: "09:00",
+      end: "17:00",
+      timeZone: "America/New_York",
+    });
+    expect(result.legend).toContain("may include their workingHours");
+  });
+
   it("suppresses suggestedSlots when every requested attendee is unreadable", () => {
     const result = serializeCalendarForModel(
       {

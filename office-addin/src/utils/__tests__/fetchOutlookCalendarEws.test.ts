@@ -775,6 +775,32 @@ const FREE_BUSY_NONE_VIEW_SOAP = soapEnvelope(
     "</m:FreeBusyResponseArray></m:GetUserAvailabilityResponse>",
 );
 
+/** One busy block PLUS the attendee's shared WorkingHours, authored in US
+ * Eastern (Bias 300/DST -60) while the mock mailbox displays W. Europe — the
+ * hours must ride along anchored to their own rules. */
+const FREE_BUSY_WITH_HOURS_SOAP = soapEnvelope(
+  "<m:GetUserAvailabilityResponse><m:FreeBusyResponseArray>" +
+    "<m:FreeBusyResponse>" +
+    '<m:ResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode></m:ResponseMessage>' +
+    "<m:FreeBusyView><t:FreeBusyViewType>FreeBusy</t:FreeBusyViewType>" +
+    "<t:CalendarEventArray>" +
+    calendarEventXml("2026-07-07T08:00:00", "2026-07-07T09:00:00", "Busy") +
+    "</t:CalendarEventArray>" +
+    "<t:WorkingHours>" +
+    "<t:TimeZone>" +
+    "<t:Bias>300</t:Bias>" +
+    "<t:StandardTime><t:Bias>0</t:Bias><t:Time>02:00:00</t:Time><t:DayOrder>1</t:DayOrder><t:Month>11</t:Month><t:DayOfWeek>Sunday</t:DayOfWeek></t:StandardTime>" +
+    "<t:DaylightTime><t:Bias>-60</t:Bias><t:Time>02:00:00</t:Time><t:DayOrder>2</t:DayOrder><t:Month>3</t:Month><t:DayOfWeek>Sunday</t:DayOfWeek></t:DaylightTime>" +
+    "</t:TimeZone>" +
+    "<t:WorkingPeriodArray>" +
+    "<t:WorkingPeriod><t:DayOfWeek>Monday Tuesday Wednesday Thursday Friday</t:DayOfWeek><t:StartTimeInMinutes>540</t:StartTimeInMinutes><t:EndTimeInMinutes>1020</t:EndTimeInMinutes></t:WorkingPeriod>" +
+    "</t:WorkingPeriodArray>" +
+    "</t:WorkingHours>" +
+    "</m:FreeBusyView>" +
+    "</m:FreeBusyResponse>" +
+    "</m:FreeBusyResponseArray></m:GetUserAvailabilityResponse>",
+);
+
 const ATTENDEE_RANGE = {
   startUtc: "2026-07-07T00:00:00Z",
   endUtc: "2026-07-14T00:00:00Z",
@@ -838,6 +864,43 @@ describe("fetchAttendeeAvailabilityViaEws", () => {
       expect(entry.busy).toEqual([]);
       expect(entry.reason).toContain("response count mismatch");
     }
+  });
+
+  it("carries an attendee's shared working hours, anchored to their own rules", async () => {
+    installHostMock((body) =>
+      body.includes("<m:GetUserAvailabilityRequest")
+        ? { status: "succeeded", value: FREE_BUSY_WITH_HOURS_SOAP }
+        : { status: "failed", error: { code: 0, message: "unexpected op" } },
+    );
+
+    const entries = await fetchAttendeeAvailabilityViaEws(ATTENDEE_RANGE, [
+      "ny-colleague@example.de",
+    ]);
+
+    expect(entries[0].status).toBe("ok");
+    expect(entries[0].busy).toHaveLength(1);
+    expect(entries[0].workingHours).toEqual({
+      daysOfWeek: ["monday", "tuesday", "wednesday", "thursday", "friday"],
+      startMinutes: 540,
+      endMinutes: 1020,
+      anchor: {
+        kind: "rules",
+        standardOffset: -300,
+        daylightOffset: -240,
+        daylightStart: {
+          month: 3,
+          dayOrder: 2,
+          dayOfWeek: 0,
+          timeMinutes: 120,
+        },
+        standardStart: {
+          month: 11,
+          dayOrder: 1,
+          dayOfWeek: 0,
+          timeMinutes: 120,
+        },
+      },
+    });
   });
 
   it("reads a FreeBusy view with zero events (array omitted, not empty) as genuinely free", async () => {

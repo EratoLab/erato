@@ -359,6 +359,14 @@ export async function fetchWorkingHoursViaGraph(
   );
   const workingHours = payload.value?.[0]?.workingHours;
   if (!workingHours) return { hours: null };
+  return normalizeGraphWorkingHours(workingHours);
+}
+
+/** Shared by the self leg and per-attendee schedules: Graph clock strings +
+ * zone name → normalized hours with an anchor when the zone diverges. */
+function normalizeGraphWorkingHours(
+  workingHours: GraphWorkingHours,
+): WorkingHoursLegResult {
   const scheduleZone = workingHours.timeZone?.name;
   const mailboxZone = Office.context.mailbox.userProfile?.timeZone;
   let anchor: WorkingHoursAnchor | undefined;
@@ -592,6 +600,12 @@ function normalizeSchedule(
       smtp,
     };
   }
+  // The attendee's own shared hours (unusable ones are simply omitted —
+  // attendees never get an untrusted state, their busy blocks stand alone).
+  const attendeeHours =
+    schedule.workingHours !== undefined
+      ? (normalizeGraphWorkingHours(schedule.workingHours).hours ?? undefined)
+      : undefined;
   if (Array.isArray(schedule.scheduleItems)) {
     const blocks: NormalizedBusyBlock[] = [];
     for (const item of schedule.scheduleItems) {
@@ -610,6 +624,7 @@ function normalizeSchedule(
       smtp,
       status: "ok",
       busy: onlyBlockingBlocks(blocks),
+      ...(attendeeHours !== undefined ? { workingHours: attendeeHours } : {}),
     };
   }
   if (typeof schedule.availabilityView === "string") {
@@ -626,6 +641,7 @@ function normalizeSchedule(
           "WorkingElsewhere",
         ),
       ),
+      ...(attendeeHours !== undefined ? { workingHours: attendeeHours } : {}),
     };
   }
   return {

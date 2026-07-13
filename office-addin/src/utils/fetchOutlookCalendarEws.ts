@@ -31,6 +31,7 @@ import type {
   NormalizedCalendar,
   NormalizedEventWhen,
   NormalizedHistoryMeeting,
+  NormalizedWorkingHours,
   WorkingHoursAnchor,
   WorkingHoursLegResult,
   WorkingHoursTransition,
@@ -339,6 +340,16 @@ export function parseAvailability(
   }
   const workingHours = firstTypesEl(freeBusyResponse, "WorkingHours");
   if (!workingHours) return { hours: null };
+  return parseWorkingHoursElement(workingHours, displayZone);
+}
+
+/** Shared by the self leg and per-attendee responses: one `<WorkingHours>`
+ * element → normalized hours (anchored to its own rules when its offsets
+ * differ from the display zone's). */
+function parseWorkingHoursElement(
+  workingHours: Element,
+  displayZone: string,
+): WorkingHoursLegResult {
   // start/end minutes are wall-clock in the RESPONSE's WorkingHours zone,
   // which is authoritative (a traveler keeping home hours is a supported MS
   // state, and the blob zone is sticky across relocations). When its offsets
@@ -464,7 +475,12 @@ export function parseExpandDl(doc: Document): {
 
 /** One mailbox's slice of a GetUserAvailability response. */
 export type EwsFreeBusyResult =
-  | { kind: "ok"; blocks: NormalizedBusyBlock[] }
+  | {
+      kind: "ok";
+      blocks: NormalizedBusyBlock[];
+      /** The mailbox's shared working hours, when the response carries them. */
+      workingHours?: NormalizedWorkingHours;
+    }
   | { kind: "error"; reason: string };
 
 /**
@@ -478,6 +494,7 @@ export type EwsFreeBusyResult =
 export function parseAttendeeFreeBusy(
   doc: Document,
   windowStartUtc: string,
+  displayZone: string,
 ): EwsFreeBusyResult[] {
   return allMessagesEls(doc, "FreeBusyResponse").map((freeBusyResponse) => {
     const responseMessage = firstMessagesEl(
@@ -495,6 +512,17 @@ export function parseAttendeeFreeBusy(
     if (!view) {
       return { kind: "error", reason: "no free/busy view returned" };
     }
+    // The attendee's own shared hours (present even at FreeBusy view when the
+    // sharing policy permits); unusable ones are simply omitted.
+    const whEl = firstTypesEl(view, "WorkingHours");
+    const workingHours =
+      whEl !== null
+        ? (parseWorkingHoursElement(whEl, displayZone).hours ?? undefined)
+        : undefined;
+    const withHours = (
+      result: Extract<EwsFreeBusyResult, { kind: "ok" }>,
+    ): EwsFreeBusyResult =>
+      workingHours !== undefined ? { ...result, workingHours } : result;
     const events = allTypesEls(view, "CalendarEvent");
     if (events.length > 0 || firstTypesEl(view, "CalendarEventArray")) {
       const blocks: NormalizedBusyBlock[] = [];
@@ -512,11 +540,11 @@ export function parseAttendeeFreeBusy(
           busyType: mapBusyType(typesText(event, "BusyType")),
         });
       }
-      return { kind: "ok", blocks: onlyBlockingBlocks(blocks) };
+      return withHours({ kind: "ok", blocks: onlyBlockingBlocks(blocks) });
     }
     const merged = typesText(view, "MergedFreeBusy");
     if (merged !== undefined) {
-      return {
+      return withHours({
         kind: "ok",
         blocks: onlyBlockingBlocks(
           decodeMergedFreeBusyView(
@@ -526,7 +554,7 @@ export function parseAttendeeFreeBusy(
             "Busy",
           ),
         ),
-      };
+      });
     }
     // Ambiguous fall-through: FreeBusy/Detailed with zero events (SE OMITS the
     // CalendarEventArray, not an empty one) = genuinely free; None (e.g.
@@ -536,7 +564,7 @@ export function parseAttendeeFreeBusy(
     if (viewType === "None" || !viewType) {
       return { kind: "error", reason: "no free/busy information available" };
     }
-    return { kind: "ok", blocks: [] };
+    return withHours({ kind: "ok", blocks: [] });
   });
 }
 
@@ -879,7 +907,11 @@ export async function fetchAttendeeAvailabilityViaEws(
         ),
       ),
     );
-    const results = parseAttendeeFreeBusy(doc, range.startUtc);
+    const results = parseAttendeeFreeBusy(
+      doc,
+      range.startUtc,
+      resolveTimezone(),
+    );
     if (results.length === toQuery.length) {
       let cursor = 0;
       for (const entry of entries) {
@@ -894,6 +926,9 @@ export async function fetchAttendeeAvailabilityViaEws(
           entry.reason = result.reason;
         } else {
           entry.busy = result.blocks;
+          if (result.workingHours !== undefined) {
+            entry.workingHours = result.workingHours;
+          }
         }
       }
     } else {
