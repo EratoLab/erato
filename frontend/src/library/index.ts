@@ -24,7 +24,19 @@ export {
 export type { OutlookArtifact } from "@/types/chat";
 export { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 export { DefaultMessageControls } from "@/components/ui/Message/DefaultMessageControls";
-export { DefaultEratoEmailCodeBlock } from "@/components/ui/Message/EratoEmailSuggestion";
+export {
+  DefaultEratoEmailCodeBlock,
+  EratoEmailSuggestion,
+} from "@/components/ui/Message/EratoEmailSuggestion";
+export { ImageContentDisplay } from "@/components/ui/Message/ImageContentDisplay";
+export {
+  Trace,
+  groupIntoTraceClusters,
+  isTraceablePart,
+  durationFromTracePartsOrLegacyMessageTimestamps,
+  type TraceCluster,
+  type TraceablePart,
+} from "@/components/ui/Trace";
 export { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
 export { ModalBase } from "@/components/ui/Modal/ModalBase";
 export {
@@ -198,9 +210,11 @@ export {
   useAudioConversationalFeature,
   useFeatureConfig,
   useMessageFeedbackFeature,
+  useTraceFeature,
   useUploadFeature,
   type FeatureConfig,
   type MessageFeedbackFeatureConfig,
+  type TraceFeatureConfig,
 } from "@/providers/FeatureConfigProvider";
 export { EratoUiProvider, type EratoUiProviderProps } from "./EratoUiProvider";
 export {
@@ -228,6 +242,7 @@ export { sanitizeHtmlPreview } from "@/utils/sanitizeHtmlPreview";
 export {
   extractTextFromContent,
   parseContent,
+  type UiImagePart,
 } from "@/utils/adapters/contentPartAdapter";
 export { getSupportedFileTypes } from "@/utils/capabilitiesToFileTypes";
 export {

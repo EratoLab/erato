@@ -167,7 +167,7 @@ interface ChatSharingFeatureConfig {
 /**
  * Configuration for trace/reasoning display features
  */
-interface TraceFeatureConfig {
+export interface TraceFeatureConfig {
   /** When true, model-generated reasoning title and body text are replaced with a masked label */
   maskReasoningText: boolean;
 }
