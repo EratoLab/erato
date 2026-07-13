@@ -1519,7 +1519,7 @@ async fn transcribe_audio_chunk_genai(
     pending: &PendingChunk,
     audio_bytes: Vec<u8>,
 ) -> Result<String, Report> {
-    let client = AppState::build_genai_client_with_headers_context(
+    let client = app_state.genai_for_chat_provider_config_with_headers_context(
         provider.chat_provider_config.clone(),
         chat_provider_headers_context,
     )?;

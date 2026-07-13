@@ -4239,22 +4239,23 @@ pub async fn generate_chat_summary(
     tracing::debug!("[SUMMARY] Calling genai API (chat_id={})", chat.id);
     let chat_provider_headers_context =
         ChatProviderHeadersContext::new(&me_user.id, &me_user.id_token_claims);
-    let summary_completion = AppState::build_genai_client_with_headers_context(
-        chat_provider_config,
-        Some(&chat_provider_headers_context),
-    )?
-    .exec_chat(
-        "PLACEHOLDER_MODEL",
-        chat_request.clone(),
-        Some(&chat_options),
-    )
-    .await
-    .wrap_err_with(|| {
-        format!(
-            "[SUMMARY] Failed to generate chat summary via API (chat_id={})",
-            chat.id
+    let summary_completion = app_state
+        .genai_for_chat_provider_config_with_headers_context(
+            chat_provider_config,
+            Some(&chat_provider_headers_context),
+        )?
+        .exec_chat(
+            "PLACEHOLDER_MODEL",
+            chat_request.clone(),
+            Some(&chat_options),
         )
-    })?;
+        .await
+        .wrap_err_with(|| {
+            format!(
+                "[SUMMARY] Failed to generate chat summary via API (chat_id={})",
+                chat.id
+            )
+        })?;
 
     let summary_completion_end_time = SystemTime::now();
     let summary = summary_completion

@@ -1,12 +1,94 @@
 use crate::config::{ModelCapabilities, ModelReasoningEffort, ModelSettings, ModelVerbosity};
 use crate::models::message::{ContentPart, GenerationInputMessages, InputMessage, MessageRole};
+use async_trait::async_trait;
 use eyre::Result;
+use futures::Stream;
 use genai::chat::ChatRole as GenAiChatRole;
 use genai::chat::MessageContent as GenAiMessageContent;
 use genai::chat::{ChatMessage, ToolCall, ToolResponse};
 use genai::chat::{ChatOptions, ChatRequest, ReasoningEffort, Verbosity};
+use genai::chat::{ChatResponse, ChatStreamEvent, ImageRequest, ImageResponse};
 use serde_json::{Value as JsonValue, json};
+use std::pin::Pin;
 use std::sync::Arc;
+
+pub type GenAIChatStream =
+    Pin<Box<dyn Stream<Item = genai::Result<ChatStreamEvent>> + Send + 'static>>;
+
+/// A constructible streaming response that allows test clients to provide arbitrary event streams.
+pub struct GenAIChatStreamResponse {
+    pub stream: GenAIChatStream,
+}
+
+impl GenAIChatStreamResponse {
+    pub fn new<S>(stream: S) -> Self
+    where
+        S: Stream<Item = genai::Result<ChatStreamEvent>> + Send + 'static,
+    {
+        Self {
+            stream: Box::pin(stream),
+        }
+    }
+}
+
+/// Abstraction over the inference operations used by Erato.
+///
+/// Tests can implement this trait to return deterministic responses or provider errors without
+/// setting up an HTTP inference provider.
+#[async_trait]
+pub trait GenAIClient: Send + Sync {
+    async fn exec_chat(
+        &self,
+        model: &str,
+        chat_request: ChatRequest,
+        options: Option<&ChatOptions>,
+    ) -> genai::Result<ChatResponse>;
+
+    async fn exec_chat_stream(
+        &self,
+        model: &str,
+        chat_request: ChatRequest,
+        options: Option<&ChatOptions>,
+    ) -> genai::Result<GenAIChatStreamResponse>;
+
+    async fn exec_image_generation(
+        &self,
+        model: &str,
+        image_request: ImageRequest,
+        options: Option<&ChatOptions>,
+    ) -> genai::Result<ImageResponse>;
+}
+
+#[async_trait]
+impl GenAIClient for genai::Client {
+    async fn exec_chat(
+        &self,
+        model: &str,
+        chat_request: ChatRequest,
+        options: Option<&ChatOptions>,
+    ) -> genai::Result<ChatResponse> {
+        genai::Client::exec_chat(self, model, chat_request, options).await
+    }
+
+    async fn exec_chat_stream(
+        &self,
+        model: &str,
+        chat_request: ChatRequest,
+        options: Option<&ChatOptions>,
+    ) -> genai::Result<GenAIChatStreamResponse> {
+        let response = genai::Client::exec_chat_stream(self, model, chat_request, options).await?;
+        Ok(GenAIChatStreamResponse::new(response.stream))
+    }
+
+    async fn exec_image_generation(
+        &self,
+        model: &str,
+        image_request: ImageRequest,
+        options: Option<&ChatOptions>,
+    ) -> genai::Result<ImageResponse> {
+        genai::Client::exec_image_generation(self, model, image_request, options).await
+    }
+}
 
 impl From<ContentPart> for GenAiMessageContent {
     fn from(content: ContentPart) -> Self {
@@ -293,6 +375,41 @@ pub fn build_chat_options_for_summary(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures::{StreamExt, stream};
+
+    struct ErroringGenAIClient;
+
+    #[async_trait::async_trait]
+    impl GenAIClient for ErroringGenAIClient {
+        async fn exec_chat(
+            &self,
+            _model: &str,
+            _chat_request: ChatRequest,
+            _options: Option<&ChatOptions>,
+        ) -> genai::Result<ChatResponse> {
+            Err(genai::Error::Internal("forced chat error".to_string()))
+        }
+
+        async fn exec_chat_stream(
+            &self,
+            _model: &str,
+            _chat_request: ChatRequest,
+            _options: Option<&ChatOptions>,
+        ) -> genai::Result<GenAIChatStreamResponse> {
+            Ok(GenAIChatStreamResponse::new(stream::iter([Err(
+                genai::Error::Internal("forced stream error".to_string()),
+            )])))
+        }
+
+        async fn exec_image_generation(
+            &self,
+            _model: &str,
+            _image_request: ImageRequest,
+            _options: Option<&ChatOptions>,
+        ) -> genai::Result<ImageResponse> {
+            Err(genai::Error::Internal("forced image error".to_string()))
+        }
+    }
 
     fn reasoning_model_settings() -> ModelSettings {
         ModelSettings {
@@ -310,6 +427,26 @@ mod tests {
 
         assert_eq!(options.capture_reasoning_content, Some(true));
         assert_eq!(options.capture_encrypted_reasoning_content, Some(true));
+    }
+
+    #[tokio::test]
+    async fn alternative_client_can_inject_errors_during_streaming() {
+        let client: Arc<dyn GenAIClient> = Arc::new(ErroringGenAIClient);
+        let mut response = client
+            .exec_chat_stream("test-model", ChatRequest::default(), None)
+            .await
+            .expect("test client should start the stream");
+
+        let error = response
+            .stream
+            .next()
+            .await
+            .expect("test stream should contain an event")
+            .expect_err("test stream event should be an error");
+
+        assert!(
+            matches!(error, genai::Error::Internal(message) if message == "forced stream error")
+        );
     }
 
     #[test]

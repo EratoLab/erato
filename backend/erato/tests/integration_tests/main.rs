@@ -173,6 +173,7 @@ async fn test_app_state_internal(
         system_prompt_renderer:
             erato::services::template_rendering::consumers::system_prompt::SystemPromptRenderer::new(
             ),
+        genai_client_override: None,
         file_bytes_cache,
         file_contents_cache,
         token_count_cache,
