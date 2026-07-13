@@ -1,3 +1,8 @@
+import {
+  DEFAULT_ERROR_REPORT_TEMPLATE,
+  ERROR_REPORT_NONE_PLACEHOLDER,
+} from "@/utils/errorReport";
+
 export type Env = {
   apiRootUrl: string;
   frontendPlatform: "common" | "platform-office-addin";
@@ -31,6 +36,8 @@ export type Env = {
   messageFeedbackEditTimeLimitSeconds: number | null;
   showVerboseAssistantErrors: boolean;
   showCopyErrorReport: boolean;
+  errorReportTemplate: string;
+  errorReportEnvironment: string;
   audioTranscriptionEnabled: boolean;
   audioTranscriptionMaxRecordingDurationSeconds: number;
   audioDictationEnabled: boolean;
@@ -82,6 +89,8 @@ declare global {
     MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS?: number;
     SHOW_VERBOSE_ASSISTANT_ERRORS?: boolean;
     SHOW_COPY_ERROR_REPORT?: boolean;
+    ERROR_REPORT_TEMPLATE?: string;
+    ERROR_REPORT_ENVIRONMENT?: string;
     MAX_UPLOAD_SIZE_BYTES?: number;
     SIDEBAR_COLLAPSED_MODE?: string;
     AUDIO_TRANSCRIPTION_ENABLED?: boolean;
@@ -260,6 +269,14 @@ export const env = (): Env => {
     import.meta.env.VITE_SHOW_COPY_ERROR_REPORT === "false"
       ? false
       : (window.SHOW_COPY_ERROR_REPORT ?? true);
+  const errorReportTemplate =
+    import.meta.env.VITE_ERROR_REPORT_TEMPLATE ??
+    window.ERROR_REPORT_TEMPLATE ??
+    DEFAULT_ERROR_REPORT_TEMPLATE;
+  const errorReportEnvironment =
+    import.meta.env.VITE_ERROR_REPORT_ENVIRONMENT ??
+    window.ERROR_REPORT_ENVIRONMENT ??
+    ERROR_REPORT_NONE_PLACEHOLDER;
   const maxUploadSizeBytes = import.meta.env.VITE_MAX_UPLOAD_SIZE_BYTES
     ? Number(import.meta.env.VITE_MAX_UPLOAD_SIZE_BYTES)
     : (window.MAX_UPLOAD_SIZE_BYTES ?? DEFAULT_MAX_BODY_LIMIT_BYTES);
@@ -360,6 +377,8 @@ export const env = (): Env => {
     messageFeedbackEditTimeLimitSeconds,
     showVerboseAssistantErrors,
     showCopyErrorReport,
+    errorReportTemplate,
+    errorReportEnvironment,
     audioTranscriptionEnabled,
     audioTranscriptionMaxRecordingDurationSeconds,
     audioDictationEnabled,

@@ -28,6 +28,7 @@ import { FrequentAssistantsList } from "./FrequentAssistantsList";
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { Button } from "../Controls/Button";
 import { UserProfileThemeDropdown } from "../Controls/UserProfileThemeDropdown";
+import { CopyErrorButton } from "../Feedback/CopyErrorButton";
 import {
   SidebarToggleIcon,
   SearchIcon,
@@ -647,6 +648,7 @@ const ErrorDisplay = ({ error }: { error: Error }) => (
   <div className="flex flex-col items-center justify-center p-4 text-theme-error-fg">
     <p className="font-medium">{t`Something went wrong`}</p>
     <p className="text-sm">{error.message}</p>
+    <CopyErrorButton error={error} className="mt-3" />
   </div>
 );
 

@@ -9,6 +9,7 @@
 
 import { mergeApiAuthHeaders } from "@/auth/apiRequestAuth";
 import { tryRecoverAuth } from "@/auth/authRecovery";
+import { FrontendRequestError, sanitizeHeaders } from "@/utils/errorReport";
 
 import { createLogger } from "../debugLogger";
 
@@ -23,7 +24,7 @@ export interface SSEEvent {
 export interface SSEOptions {
   headers?: Record<string, string>;
   onMessage?: (event: SSEEvent) => void;
-  onError?: (error: Event) => void;
+  onError?: (error: Error | Event) => void;
   onOpen?: () => void;
   onClose?: () => void;
   method?: "GET" | "POST"; // HTTP method to use
@@ -34,6 +35,13 @@ const logger = createLogger("NETWORK", "SSE_CLIENT");
 
 const isAbortError = (error: unknown) =>
   error instanceof Error && error.name === "AbortError";
+
+const getResponseContext = (response: Response, body?: string) => ({
+  status: response.status,
+  statusText: response.statusText,
+  headers: sanitizeHeaders(response.headers),
+  body,
+});
 
 /**
  * Creates an SSE connection to the specified URL
@@ -53,7 +61,10 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
     body,
   } = options;
 
-  const effectiveHeaders = mergeApiAuthHeaders(headers);
+  const effectiveHeaders = mergeApiAuthHeaders({
+    ...(method === "POST" && { "Content-Type": "application/json" }),
+    ...headers,
+  });
 
   logger.log(`Creating ${method} connection to: ${url}`);
 
@@ -92,7 +103,13 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
     eventSource.onerror = (event: Event) => {
       logger.log("Native EventSource error:", event);
       isConnected = false;
-      onError?.(event);
+      onError?.(
+        new FrontendRequestError("SSE connection error", {
+          method,
+          url: requestUrl,
+          body,
+        }),
+      );
     };
 
     eventSource.onmessage = (event: MessageEvent) => {
@@ -222,22 +239,21 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
         return;
       }
 
-      // Catch errors during stream processing or generator execution
-      const error = err instanceof Error ? err : new Error(String(err));
-      logger.log("Stream error:", error.message);
-
-      // Create an event-like object
-      const errorEvent = new Event("error");
-      Object.defineProperty(errorEvent, "error", { value: error });
-
-      onError?.(errorEvent);
-      isConnected = false; // Ensure isConnected is false on error
-      // Note: reader lock should be released by the generator's finally block even on error
+      // Let the fetch-level handler attach request and response context.
+      throw err;
     }
   };
 
   // Execute the fetch request
   void (async () => {
+    const requestContext = {
+      method,
+      url,
+      headers: sanitizeHeaders(effectiveHeaders),
+      body: method === "POST" ? body : undefined,
+    };
+    let response: Response | undefined;
+
     try {
       logger.log(`Initiating ${method} fetch request`);
 
@@ -262,7 +278,7 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
         credentials: "same-origin",
       });
 
-      let response = await fetch(url, buildInit());
+      response = await fetch(url, buildInit());
       // Connect-time 401 (the proxy rejected the request before it reached the
       // backend/stream): recover the session and reopen ONCE. Safe to replay —
       // a pre-stream 401 means nothing was processed. No-op for the web app,
@@ -287,12 +303,20 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
             : `${response.status} ${response.statusText}`;
         const errorMsg = `SSE request failed: ${detail}`;
         logger.log("Fetch error:", errorMsg);
-        throw new Error(errorMsg);
+        throw new FrontendRequestError(
+          errorMsg,
+          requestContext,
+          getResponseContext(response, bodyText),
+        );
       }
 
       if (!response.body) {
         logger.log("Error: Response has no body");
-        throw new Error("Response has no body");
+        throw new FrontendRequestError(
+          "Response has no body",
+          requestContext,
+          getResponseContext(response),
+        );
       }
 
       // Check if connection was aborted while fetching
@@ -314,14 +338,18 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
         return;
       }
 
-      const error = err instanceof Error ? err : new Error(String(err));
+      const cause = err instanceof Error ? err : new Error(String(err));
+      const error =
+        cause instanceof FrontendRequestError
+          ? cause
+          : new FrontendRequestError(
+              cause.message,
+              requestContext,
+              response ? getResponseContext(response) : undefined,
+              { cause },
+            );
       logger.log("Fetch error:", error.message);
-
-      // Create an event-like object
-      const errorEvent = new Event("error");
-      Object.defineProperty(errorEvent, "error", { value: error });
-
-      onError?.(errorEvent);
+      onError?.(error);
       isConnected = false;
     }
   })();

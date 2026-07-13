@@ -194,7 +194,7 @@ const mockCreateSSEConnection = createSSEConnection as unknown as ReturnType<
 // Set up onMessage callback to capture
 let sseCallbacks: {
   onMessage?: (event: SSEEvent) => void;
-  onError?: (event?: Event) => void;
+  onError?: (event: Error | Event) => void;
   onClose?: () => void;
 } = {};
 

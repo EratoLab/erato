@@ -3,6 +3,10 @@
 import { createContext, useContext, useMemo } from "react";
 
 import { env } from "@/app/env";
+import {
+  DEFAULT_ERROR_REPORT_TEMPLATE,
+  ERROR_REPORT_NONE_PLACEHOLDER,
+} from "@/utils/errorReport";
 
 import type { ReactNode } from "react";
 
@@ -133,6 +137,12 @@ interface ErrorReportFeatureConfig {
   showVerboseAssistantErrors: boolean;
   /** Whether assistant error alerts show a button to copy a rendered error report */
   showCopyErrorReport: boolean;
+  /** Handlebars-style template used for copied frontend error reports */
+  errorReportTemplate: string;
+  /** Backend environment name included in copied frontend error reports */
+  environment: string;
+  /** Host platform included in copied frontend error reports */
+  platform: string;
 }
 
 /**
@@ -258,6 +268,9 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
   errorReport: {
     showVerboseAssistantErrors: false,
     showCopyErrorReport: true,
+    errorReportTemplate: DEFAULT_ERROR_REPORT_TEMPLATE,
+    environment: ERROR_REPORT_NONE_PLACEHOLDER,
+    platform: "common",
   },
   sidebar: {
     collapsedMode: "hidden",
@@ -356,6 +369,9 @@ function createFeatureConfig(
     errorReport: {
       showVerboseAssistantErrors: environment.showVerboseAssistantErrors,
       showCopyErrorReport: environment.showCopyErrorReport,
+      errorReportTemplate: environment.errorReportTemplate,
+      environment: environment.errorReportEnvironment,
+      platform: environment.frontendPlatform,
     },
     sidebar: {
       collapsedMode: environment.sidebarCollapsedMode,

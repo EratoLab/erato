@@ -14,15 +14,14 @@ import {
 import { hasToolCalls as messageHasToolCalls } from "@/utils/adapters/toolCallAdapter";
 import { isImageFile } from "@/utils/file/fileTypeUtils";
 
-import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";
 import { Avatar } from "../Feedback/Avatar";
+import { CopyErrorButton } from "../Feedback/CopyErrorButton";
 import { LoadingIndicator } from "../Feedback/LoadingIndicator";
 import { ActionFacetContext } from "../Message/ActionFacetContext";
 import { DefaultMessageControls } from "../Message/DefaultMessageControls";
 import { ImageLightbox } from "../Message/ImageLightbox";
 import { MessageContent } from "../Message/MessageContent";
-import { CheckIcon, CopyIcon } from "../icons";
 import { messageStyles } from "../styles/chatMessageStyles";
 
 import type {
@@ -119,20 +118,10 @@ export const ChatMessage = memo(function ChatMessage({
 
   // Local state for raw markdown toggle
   const [showRawMarkdown, setShowRawMarkdown] = useState(false);
-  const [isErrorReportCopied, setIsErrorReportCopied] = useState(false);
   const handleToggleRawMarkdown = useCallback(
     () => setShowRawMarkdown((prev) => !prev),
     [],
   );
-  const handleCopyErrorReport = useCallback(async () => {
-    if (!message.error_report) {
-      return;
-    }
-
-    await navigator.clipboard.writeText(message.error_report);
-    setIsErrorReportCopied(true);
-    window.setTimeout(() => setIsErrorReportCopied(false), 2000);
-  }, [message.error_report]);
 
   // Use custom hook for image lightbox state management
   const lightbox = useImageLightbox();
@@ -207,32 +196,7 @@ export const ChatMessage = memo(function ChatMessage({
               {errorReportConfig.showCopyErrorReport &&
                 message.error_report && (
                   <div className="mt-3">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      icon={
-                        isErrorReportCopied ? (
-                          <CheckIcon className="size-4" />
-                        ) : (
-                          <CopyIcon className="size-4" />
-                        )
-                      }
-                      onClick={() => void handleCopyErrorReport()}
-                      aria-label={t({
-                        id: "chat.message.error.copy_report.aria",
-                        message: "Copy error report",
-                      })}
-                    >
-                      {isErrorReportCopied
-                        ? t({
-                            id: "chat.message.error.copy_report.copied",
-                            message: "Copied",
-                          })
-                        : t({
-                            id: "chat.message.error.copy_report",
-                            message: "Copy error report",
-                          })}
-                    </Button>
+                    <CopyErrorButton report={message.error_report} />
                   </div>
                 )}
             </Alert>

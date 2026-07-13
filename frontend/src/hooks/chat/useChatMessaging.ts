@@ -63,6 +63,21 @@ const MAX_RESUME_ATTEMPTS_PER_KEY = 3;
 
 const X_ERATO_PLATFORM_HEADER = "X-Erato-Platform";
 
+const getSSEConnectionError = (
+  value: Error | Event | undefined,
+  fallbackMessage: string,
+): Error => {
+  if (value instanceof Error) {
+    return value;
+  }
+
+  if (value && "error" in value && value.error instanceof Error) {
+    return value.error;
+  }
+
+  return new Error(fallbackMessage);
+};
+
 const getAuthHeaders = (): Record<string, string> => {
   const idToken = getIdToken();
 
@@ -1117,9 +1132,11 @@ export function useChatMessaging(
             );
           },
           onError: (errorEvent) => {
-            const errorMessage =
-              (errorEvent as Event & { error?: Error }).error?.message ??
-              "SSE resume connection error";
+            const connectionError = getSSEConnectionError(
+              errorEvent,
+              "SSE resume connection error",
+            );
+            const errorMessage = connectionError.message;
             if (!errorMessage.includes("404")) {
               logger.error(
                 `[DEBUG_STREAMING] resumestream error (${reason}):`,
@@ -1138,7 +1155,7 @@ export function useChatMessaging(
               .getState()
               .getStreaming(resumeStreamKey).isStreaming;
             if (stillStreaming) {
-              setError(new Error("SSE resume connection error"));
+              setError(connectionError);
               resetStreaming(resumeStreamKey);
               void handleRefetchAndClear({
                 logContext: `Resume stream error (${reason})`,
@@ -1376,11 +1393,10 @@ export function useChatMessaging(
           onMessage: (sseEvent) =>
             processStreamEvent(sseEvent, connectionStreamKeyRef),
           onError: (errorEvent) => {
-            // Use the actual event if it's an Error, otherwise create a generic one
-            const connectionError =
-              errorEvent instanceof Error
-                ? errorEvent
-                : new Error("SSE connection error");
+            const connectionError = getSSEConnectionError(
+              errorEvent,
+              "SSE connection error",
+            );
             logger.error(
               "[DEBUG_STREAMING] SSE connection error in useChatMessaging:",
               connectionError,
@@ -1690,10 +1706,10 @@ export function useChatMessaging(
           onMessage: (sseEvent) =>
             processStreamEvent(sseEvent, connectionStreamKeyRef),
           onError: (errorEvent) => {
-            const connectionError =
-              errorEvent instanceof Error
-                ? errorEvent
-                : new Error("SSE connection error (edit)");
+            const connectionError = getSSEConnectionError(
+              errorEvent,
+              "SSE connection error (edit)",
+            );
             logger.error(
               "[DEBUG_STREAMING] SSE error in editMessage:",
               connectionError,
@@ -1833,10 +1849,10 @@ export function useChatMessaging(
           onMessage: (sseEvent) =>
             processStreamEvent(sseEvent, connectionStreamKeyRef),
           onError: (errorEvent) => {
-            const connectionError =
-              errorEvent instanceof Error
-                ? errorEvent
-                : new Error("SSE connection error (regenerate)");
+            const connectionError = getSSEConnectionError(
+              errorEvent,
+              "SSE connection error (regenerate)",
+            );
             logger.error(
               "[DEBUG_STREAMING] SSE error in regenerateMessage:",
               connectionError,
