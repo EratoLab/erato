@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { setIdToken } from "@/auth/tokenStore";
+import { FrontendRequestError } from "@/utils/errorReport";
 
 import { createSSEConnection } from "./sseClient";
 
@@ -153,6 +154,48 @@ describe("sseClient fetch parser", () => {
     expect(fetchMock.mock.calls[0][1]?.headers).toEqual({
       "Content-Type": "application/json",
       Authorization: "Bearer test-id-token",
+    });
+  });
+
+  it("preserves request and response context for failed SSE requests", async () => {
+    const onError = vi.fn();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        statusText: "Bad Request",
+        headers: new Headers({ "content-type": "text/plain" }),
+        text: vi.fn().mockResolvedValue("invalid stream request"),
+      }),
+    );
+    setIdToken("secret-token");
+
+    createSSEConnection("/api/test", {
+      method: "POST",
+      body: '{"message":"hello"}',
+      onError,
+    });
+
+    await waitForAsyncWork();
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    const error = onError.mock.calls[0][0];
+    expect(error).toBeInstanceOf(FrontendRequestError);
+    expect(error.request).toEqual({
+      method: "POST",
+      url: "/api/test",
+      headers: {
+        authorization: "<redacted>",
+        "content-type": "application/json",
+      },
+      body: '{"message":"hello"}',
+    });
+    expect(error.response).toEqual({
+      status: 400,
+      statusText: "Bad Request",
+      headers: { "content-type": "text/plain" },
+      body: "invalid stream request",
     });
   });
 

@@ -49,6 +49,7 @@ import { WaveformButton } from "./WaveformButton";
 import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";
 import { BudgetWarning } from "../Feedback/ChatWarnings/BudgetWarning";
+import { CopyErrorButton } from "../Feedback/CopyErrorButton";
 import { toast } from "../Toast/toast";
 
 import type { ChatInputControlsHandle } from "./ChatInputControlsContext";
@@ -1901,7 +1902,12 @@ export const ChatInput = ({
             className="mb-2"
             data-testid="chat-send-error"
           >
-            {sendErrorText}
+            <p>{sendErrorText}</p>
+            <CopyErrorButton
+              error={messagingError}
+              reportOptions={{ chatId }}
+              className="mt-3"
+            />
           </Alert>
         )}
         {(dictationError ?? recordingError) && (

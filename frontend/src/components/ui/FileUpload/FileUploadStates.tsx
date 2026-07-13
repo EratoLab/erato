@@ -2,6 +2,7 @@ import { t } from "@lingui/core/macro";
 import { memo } from "react";
 
 import { Button } from "../Controls";
+import { CopyErrorButton } from "../Feedback/CopyErrorButton";
 import { LoadingIcon, ErrorIcon } from "../icons";
 
 /**
@@ -42,16 +43,19 @@ export interface FileUploadErrorProps {
 
 export const FileUploadError = memo<FileUploadErrorProps>(
   ({ error, className = "" }) => (
-    <Button
-      disabled
-      variant="danger"
-      className={className}
-      title={error.message}
-      aria-label={`${t`Error:`} ${error.message}`}
-    >
-      {error.message}
-      <ErrorIcon className="size-5 text-[var(--theme-error-fg)]" />
-    </Button>
+    <div className="flex items-center gap-2">
+      <Button
+        disabled
+        variant="danger"
+        className={className}
+        title={error.message}
+        aria-label={`${t`Error:`} ${error.message}`}
+      >
+        {error.message}
+        <ErrorIcon className="size-5 text-[var(--theme-error-fg)]" />
+      </Button>
+      <CopyErrorButton error={error} iconOnly />
+    </div>
   ),
 );
 

@@ -5,6 +5,7 @@ import { ErrorBoundary } from "react-error-boundary";
 
 import { Button } from "../Controls/Button";
 import { ErrorIcon } from "../icons";
+import { CopyErrorButton } from "./CopyErrorButton";
 
 import type React from "react";
 
@@ -37,6 +38,7 @@ const ChatErrorFallback = ({ error, resetErrorBoundary }: FallbackProps) => {
       <Button onClick={resetErrorBoundary} variant="primary" className="mt-4">
         {t`Try Again`}
       </Button>
+      <CopyErrorButton error={error} />
     </div>
   );
 };

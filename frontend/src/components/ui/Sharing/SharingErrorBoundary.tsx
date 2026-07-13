@@ -3,6 +3,7 @@ import { ErrorBoundary } from "react-error-boundary";
 
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
+import { CopyErrorButton } from "@/components/ui/Feedback/CopyErrorButton";
 
 import type { ReactNode } from "react";
 
@@ -47,10 +48,11 @@ function SharingErrorFallback({
               </pre>
             </details>
           )}
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="secondary" size="sm" onClick={resetErrorBoundary}>
               {t({ id: "sharing.error.retry", message: "Try Again" })}
             </Button>
+            <CopyErrorButton error={error} />
           </div>
         </div>
       </Alert>

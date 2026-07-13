@@ -52,6 +52,8 @@ const FRONTEND_ENV_KEY_MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS: &str =
     "MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS";
 const FRONTEND_ENV_KEY_SHOW_VERBOSE_ASSISTANT_ERRORS: &str = "SHOW_VERBOSE_ASSISTANT_ERRORS";
 const FRONTEND_ENV_KEY_SHOW_COPY_ERROR_REPORT: &str = "SHOW_COPY_ERROR_REPORT";
+const FRONTEND_ENV_KEY_ERROR_REPORT_TEMPLATE: &str = "ERROR_REPORT_TEMPLATE";
+const FRONTEND_ENV_KEY_ERROR_REPORT_ENVIRONMENT: &str = "ERROR_REPORT_ENVIRONMENT";
 const FRONTEND_ENV_KEY_MAX_UPLOAD_SIZE_BYTES: &str = "MAX_UPLOAD_SIZE_BYTES";
 const FRONTEND_ENV_KEY_AUDIO_TRANSCRIPTION_ENABLED: &str = "AUDIO_TRANSCRIPTION_ENABLED";
 const FRONTEND_ENV_KEY_AUDIO_TRANSCRIPTION_MAX_RECORDING_DURATION_SECONDS: &str =
@@ -578,6 +580,14 @@ fn build_frontend_environment(
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_SHOW_COPY_ERROR_REPORT.to_string(),
         Value::Bool(config.frontend.error_report.show_copy_error_report),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_ERROR_REPORT_TEMPLATE.to_string(),
+        Value::String(config.frontend.error_report.error_report_template.clone()),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_ERROR_REPORT_ENVIRONMENT.to_string(),
+        Value::String(config.environment.clone()),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_AUDIO_TRANSCRIPTION_ENABLED.to_string(),
@@ -1279,6 +1289,28 @@ mod tests {
         config.frontend.allow_any_frame_ancestor = true;
 
         assert_eq!(build_content_security_policy(&config), None);
+    }
+
+    #[test]
+    fn error_report_template_and_environment_are_exposed_to_the_frontend() {
+        let mut config = AppConfig {
+            environment: "test-environment".to_string(),
+            ..Default::default()
+        };
+        config.frontend.error_report.error_report_template =
+            "environment={{environment}} error={{error}}".to_string();
+
+        let env = build_frontend_environment(&config, FrontendKind::Web);
+
+        assert!(env.additional_environment.iter().any(|(key, value)| {
+            key == FRONTEND_ENV_KEY_ERROR_REPORT_TEMPLATE
+                && value
+                    == &Value::String("environment={{environment}} error={{error}}".to_string())
+        }));
+        assert!(env.additional_environment.iter().any(|(key, value)| {
+            key == FRONTEND_ENV_KEY_ERROR_REPORT_ENVIRONMENT
+                && value == &Value::String("test-environment".to_string())
+        }));
     }
 
     #[test]

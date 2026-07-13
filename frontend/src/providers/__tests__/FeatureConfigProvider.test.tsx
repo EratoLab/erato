@@ -74,6 +74,8 @@ describe("FeatureConfigProvider", () => {
       messageFeedbackCommentsEnabled: false,
       showVerboseAssistantErrors: false,
       showCopyErrorReport: true,
+      errorReportTemplate: "{{error}}",
+      errorReportEnvironment: "test",
       userPreferencesEnabled: true,
       userPreferencesDataTabEnabled: true,
       messageFeedbackEditTimeLimitSeconds: null,
@@ -177,6 +179,9 @@ describe("FeatureConfigProvider", () => {
         errorReport: {
           showVerboseAssistantErrors: false,
           showCopyErrorReport: true,
+          errorReportTemplate: "{{error}}",
+          environment: "test",
+          platform: "common",
         },
         sidebar: {
           collapsedMode: "hidden",
@@ -407,6 +412,8 @@ describe("FeatureConfigProvider", () => {
         maskReasoningTraceText: false,
         showVerboseAssistantErrors: true,
         showCopyErrorReport: true,
+        errorReportTemplate: "{{error}}",
+        errorReportEnvironment: "test",
       });
 
       const { result } = renderHook(() => useErrorReportFeature(), {
@@ -464,6 +471,8 @@ describe("FeatureConfigProvider", () => {
         maskReasoningTraceText: false,
         showVerboseAssistantErrors: false,
         showCopyErrorReport: false,
+        errorReportTemplate: "{{error}}",
+        errorReportEnvironment: "test",
       });
 
       const { result } = renderHook(() => useErrorReportFeature(), {
