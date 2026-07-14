@@ -14,6 +14,7 @@ export * from "@/components/ui/Chat";
 export { ChatInputControlsProvider } from "@/components/ui/Chat/ChatInputControlsContext";
 export {
   ChatMessage,
+  type ChatMessageHostComponents,
   type ChatMessageProps,
 } from "@/components/ui/Chat/ChatMessage";
 export * from "@/components/ui/MessageList";
