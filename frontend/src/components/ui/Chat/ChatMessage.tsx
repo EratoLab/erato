@@ -51,10 +51,12 @@ const getPreviewUrl = (
  */
 export interface ChatMessageHostComponents {
   MessageContent: typeof MessageContent;
+  LoadingIndicator: typeof LoadingIndicator;
 }
 
 export const CHAT_MESSAGE_HOST_COMPONENTS: ChatMessageHostComponents = {
   MessageContent,
+  LoadingIndicator,
 };
 
 export interface ChatMessageProps {
