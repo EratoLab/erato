@@ -32,6 +32,14 @@ export interface AcquireBootstrapOptions {
    */
   forceRefresh?: boolean;
   /**
+   * Skip the silent MSAL acquire and ask the user to authenticate immediately.
+   * This is reserved for an explicit user action (the AuthGate sign-in button):
+   * MSAL's silent `forceRefresh` refreshes the access token, but some NAA hosts
+   * can keep returning the same expired ID token that oauth2-proxy rejected.
+   * An interactive acquire is then required to mint a new identity token.
+   */
+  forceInteraction?: boolean;
+  /**
    * When true the source MAY open interactive UI (popup) if a silent acquire
    * fails. Maps to the old `allowPopup`: init/timed-refresh pass false, the
    * user-driven retry passes true. Background timers/focus must pass false.

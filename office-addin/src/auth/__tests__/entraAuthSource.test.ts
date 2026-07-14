@@ -119,6 +119,74 @@ describe("createEntraAuthSource", () => {
     expect(pca.acquireTokenPopup).not.toHaveBeenCalled();
   });
 
+  it.each([
+    {
+      name: "ID token",
+      refreshedIdToken: "id-token",
+      refreshedAccessToken: "new-access-token",
+      unchangedTokens: ["id_token"],
+    },
+    {
+      name: "access token",
+      refreshedIdToken: "new-id-token",
+      refreshedAccessToken: "access-token",
+      unchangedTokens: ["access_token"],
+    },
+    {
+      name: "ID and access tokens",
+      refreshedIdToken: "id-token",
+      refreshedAccessToken: "access-token",
+      unchangedTokens: ["id_token", "access_token"],
+    },
+  ])(
+    "warns without logging credentials when a force refresh reuses the $name",
+    async ({ refreshedIdToken, refreshedAccessToken, unchangedTokens }) => {
+      const refreshedResult = {
+        ...authenticationResult,
+        idToken: refreshedIdToken,
+        accessToken: refreshedAccessToken,
+      } as AuthenticationResult;
+      const pca = createPcaMock();
+      (pca.acquireTokenSilent as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(authenticationResult)
+        .mockResolvedValueOnce(refreshedResult);
+      const { source } = await initializedSource(pca);
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      await source.acquireBootstrapToken();
+      await source.acquireBootstrapToken({ forceRefresh: true });
+
+      expect(warn).toHaveBeenCalledWith(
+        "MSAL bootstrap token refresh returned unchanged token values",
+        { unchangedTokens, refreshMode: "silent" },
+      );
+      const serializedWarning = JSON.stringify(warn.mock.calls);
+      expect(serializedWarning).not.toContain("new-id-token");
+      expect(serializedWarning).not.toContain("new-access-token");
+      warn.mockRestore();
+    },
+  );
+
+  it("does not warn when a force refresh replaces both bootstrap tokens", async () => {
+    const refreshedResult = {
+      ...authenticationResult,
+      idToken: "new-id-token",
+      accessToken: "new-access-token",
+    } as AuthenticationResult;
+    const pca = createPcaMock();
+    (pca.acquireTokenSilent as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(authenticationResult)
+      .mockResolvedValueOnce(refreshedResult);
+    const { source } = await initializedSource(pca);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await source.acquireBootstrapToken();
+    await source.acquireBootstrapToken({ forceRefresh: true });
+
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
   it("falls back to a popup when interaction is required AND allowed", async () => {
     const { InteractionRequiredAuthError } = await import(
       "@azure/msal-browser"
@@ -143,6 +211,37 @@ describe("createEntraAuthSource", () => {
       }),
     );
     expect(pca.setActiveAccount).toHaveBeenCalledWith(account);
+  });
+
+  it("acquires interactively without trying the silent cache when explicitly forced", async () => {
+    const pca = createPcaMock();
+    const { source } = await initializedSource(pca);
+
+    await expect(
+      source.acquireBootstrapToken({
+        allowInteraction: true,
+        forceInteraction: true,
+      }),
+    ).resolves.toEqual({ idToken: "id-token", accessToken: "access-token" });
+    expect(pca.acquireTokenSilent).not.toHaveBeenCalled();
+    expect(pca.acquireTokenPopup).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scopes: ["User.Read"],
+        prompt: "select_account",
+        loginHint: "user@example.com",
+      }),
+    );
+  });
+
+  it("rejects a forced interaction when interactive UI is not allowed", async () => {
+    const pca = createPcaMock();
+    const { source } = await initializedSource(pca);
+
+    await expect(
+      source.acquireBootstrapToken({ forceInteraction: true }),
+    ).rejects.toBeInstanceOf(InteractionRequiredError);
+    expect(pca.acquireTokenSilent).not.toHaveBeenCalled();
+    expect(pca.acquireTokenPopup).not.toHaveBeenCalled();
   });
 
   it("translates a disallowed interaction into InteractionRequiredError", async () => {

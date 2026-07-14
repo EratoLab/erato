@@ -90,13 +90,36 @@ export function createEntraAuthSource(
 ): AuthSource & GraphCapableSource {
   let pca: IPublicClientApplication | null = null;
   let loginHint: string | undefined;
+  // Kept in memory only so an explicit refresh can verify what MSAL actually
+  // returned. Never log either value: both are credentials.
+  let previousBootstrapToken: BootstrapToken | null = null;
 
   async function acquireMsalResult(
     instance: IPublicClientApplication,
     scopes: string[],
     allowInteraction: boolean,
     forceRefresh: boolean,
+    forceInteraction = false,
   ): Promise<AuthenticationResult> {
+    const acquireInteractively = async (): Promise<AuthenticationResult> => {
+      const result = await instance.acquireTokenPopup({
+        scopes,
+        prompt: "select_account",
+        ...(loginHint ? { loginHint } : {}),
+      });
+      if (result.account) {
+        instance.setActiveAccount(result.account);
+      }
+      return result;
+    };
+
+    if (forceInteraction) {
+      if (!allowInteraction) {
+        throw new InteractionRequiredError("MSAL interaction required");
+      }
+      return acquireInteractively();
+    }
+
     try {
       return await instance.acquireTokenSilent({
         scopes,
@@ -106,15 +129,7 @@ export function createEntraAuthSource(
     } catch (silentError) {
       if (requiresInteractiveSignIn(silentError)) {
         if (allowInteraction) {
-          const result = await instance.acquireTokenPopup({
-            scopes,
-            prompt: "select_account",
-            ...(loginHint ? { loginHint } : {}),
-          });
-          if (result.account) {
-            instance.setActiveAccount(result.account);
-          }
-          return result;
+          return acquireInteractively();
         }
         // Translate to a host-agnostic signal so the core stays MSAL-free.
         throw new InteractionRequiredError("MSAL interaction required", {
@@ -193,12 +208,41 @@ export function createEntraAuthSource(
         OAUTH2_PROXY_SESSION_SCOPES,
         opts.allowInteraction ?? false,
         opts.forceRefresh ?? false,
+        opts.forceInteraction ?? false,
       );
       applyResult(instance, result);
-      return {
+      const token: BootstrapToken = {
         idToken: result.idToken,
         accessToken: result.accessToken,
       };
+
+      if (
+        previousBootstrapToken &&
+        (opts.forceRefresh || opts.forceInteraction)
+      ) {
+        const unchangedTokens: string[] = [];
+        if (token.idToken === previousBootstrapToken.idToken) {
+          unchangedTokens.push("id_token");
+        }
+        if (
+          token.accessToken !== undefined &&
+          token.accessToken === previousBootstrapToken.accessToken
+        ) {
+          unchangedTokens.push("access_token");
+        }
+        if (unchangedTokens.length > 0) {
+          console.warn(
+            "MSAL bootstrap token refresh returned unchanged token values",
+            {
+              unchangedTokens,
+              refreshMode: opts.forceInteraction ? "interactive" : "silent",
+            },
+          );
+        }
+      }
+
+      previousBootstrapToken = token;
+      return token;
     },
 
     async acquireGraphToken(

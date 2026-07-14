@@ -273,16 +273,19 @@ export function SessionAuthProvider({
       allowInteraction,
       status,
       forceRefresh = false,
+      forceInteraction = false,
       shouldContinue,
     }: {
       allowInteraction: boolean;
       status: Extract<Oauth2ProxySessionStatus, "establishing" | "refreshing">;
       forceRefresh?: boolean;
+      forceInteraction?: boolean;
       shouldContinue?: () => boolean;
     }): Promise<void> => {
       const token = await authSource.acquireBootstrapToken({
         allowInteraction,
         ...(forceRefresh ? { forceRefresh: true } : {}),
+        ...(forceInteraction ? { forceInteraction: true } : {}),
       });
       if (shouldContinue && !shouldContinue()) {
         return;
@@ -290,9 +293,17 @@ export function SessionAuthProvider({
       setIsBootstrapAcquired(true);
 
       try {
-        await redeemSessionForToken(token, status, forceRefresh);
+        await redeemSessionForToken(
+          token,
+          status,
+          forceRefresh || forceInteraction,
+        );
       } catch (redeemError) {
-        if (forceRefresh || !isUnauthorizedRedeemError(redeemError)) {
+        if (
+          forceRefresh ||
+          forceInteraction ||
+          !isUnauthorizedRedeemError(redeemError)
+        ) {
           throw redeemError;
         }
 
@@ -375,11 +386,15 @@ export function SessionAuthProvider({
   }, [acquireAndRedeemSession, authSource, initNonce]);
 
   const refreshSession = useCallback(
-    async (allowInteraction: boolean): Promise<void> => {
+    async (
+      allowInteraction: boolean,
+      forceInteraction = false,
+    ): Promise<void> => {
       try {
         await acquireAndRedeemSession({
           allowInteraction,
           status: "refreshing",
+          forceInteraction,
         });
       } catch (refreshError) {
         const message = formatAuthenticationError(refreshError);
@@ -572,7 +587,11 @@ export function SessionAuthProvider({
 
     setIsInitialized(false);
     try {
-      await refreshSession(true);
+      // This button is the user's explicit request to sign in. Go straight to
+      // interactive NAA instead of first accepting another silent cached ID
+      // token: oauth2-proxy may have rejected that ID token as expired even
+      // after MSAL force-refreshed its accompanying access token.
+      await refreshSession(true, true);
     } catch (authenticationError) {
       setError(formatAuthenticationError(authenticationError));
     } finally {

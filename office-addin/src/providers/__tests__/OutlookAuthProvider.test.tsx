@@ -332,6 +332,63 @@ describe("OutlookAuthProvider", () => {
     );
   });
 
+  it("uses interactive sign-in when silent refresh keeps returning an expired ID token", async () => {
+    const expiredResult = {
+      ...authenticationResult,
+      idToken: "expired-id-token",
+      accessToken: "refreshed-access-token",
+    } as AuthenticationResult;
+    const freshInteractiveResult = {
+      ...authenticationResult,
+      idToken: "fresh-interactive-id-token",
+      accessToken: "fresh-interactive-access-token",
+    } as AuthenticationResult;
+    const pca = createPcaMock();
+    (pca.acquireTokenSilent as Mock).mockResolvedValue(expiredResult);
+    (pca.acquireTokenPopup as Mock).mockResolvedValue(freshInteractiveResult);
+    vi.mocked(createNestablePublicClientApplication).mockResolvedValue(pca);
+    const fetcher = stubFetchSequence([
+      () => new Response("Unauthorized", { status: 401 }),
+      () => new Response("Unauthorized", { status: 401 }),
+      () => new Response("{}", { status: 202 }),
+    ]);
+
+    render(
+      <OutlookAuthProvider>
+        <AuthProbe />
+      </OutlookAuthProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("initialized")).toHaveTextContent("true"),
+    );
+    expect(screen.getByTestId("authenticated")).toHaveTextContent("false");
+    expect(screen.getByTestId("error")).toHaveTextContent(
+      "Could not establish a secure Erato session.",
+    );
+
+    fireEvent.click(screen.getByTestId("retry"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("authenticated")).toHaveTextContent("true"),
+    );
+    expect(pca.acquireTokenSilent).toHaveBeenCalledTimes(2);
+    expect(pca.acquireTokenSilent).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ forceRefresh: true }),
+    );
+    expect(pca.acquireTokenPopup).toHaveBeenCalledTimes(1);
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(fetcher.mock.calls[2][1]).toEqual(
+      expect.objectContaining({
+        body: JSON.stringify({
+          id_token: "fresh-interactive-id-token",
+          access_token: "fresh-interactive-access-token",
+        }),
+      }),
+    );
+  });
+
   it("redeems a fresh session on the refresh timer before expiry", async () => {
     vi.useFakeTimers();
     try {
