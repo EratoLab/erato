@@ -609,9 +609,11 @@ export default defineConfig(({ mode }) => {
           ),
         },
         output: {
+          // The app imports generated exports from this runtime, so both files
+          // must be cache-busted together to avoid cross-deployment mismatches.
           entryFileNames: (chunkInfo) =>
             chunkInfo.name === "componentKitReactRuntime"
-              ? "public/common/assets/component-kit-react-runtime.js"
+              ? "public/common/assets/component-kit-react-runtime-[hash].js"
               : "public/common/assets/[name]-[hash].js",
         },
       },
