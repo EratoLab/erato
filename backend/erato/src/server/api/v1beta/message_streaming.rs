@@ -273,29 +273,43 @@ async fn collect_reasoning_replay_messages(
             continue;
         }
 
-        let Some(generation_metadata) =
-            current_message
-                .generation_metadata
-                .as_ref()
-                .and_then(|metadata| {
-                    serde_json::from_value::<GenerationMetadata>(metadata.clone()).ok()
-                })
-        else {
+        let Some(generation_metadata_value) = current_message.generation_metadata.as_ref() else {
             continue;
         };
+        let generation_metadata =
+            match serde_json::from_value::<GenerationMetadata>(generation_metadata_value.clone()) {
+                Ok(metadata) => metadata,
+                Err(error) => {
+                    tracing::warn!(
+                        message_id = %current_message.id,
+                        error = ?error,
+                        "Skipping malformed generation metadata during reasoning replay"
+                    );
+                    continue;
+                }
+            };
 
         let replay_parts = build_openai_responses_reasoning_replay_parts(
             generation_metadata,
             compat_no_replay_summary,
         );
         if !replay_parts.is_empty() {
-            let generation_parameters =
-                current_message
-                    .generation_parameters
-                    .as_ref()
-                    .and_then(|parameters| {
-                        serde_json::from_value::<GenerationParameters>(parameters.clone()).ok()
-                    });
+            let generation_parameters = match current_message.generation_parameters.as_ref() {
+                Some(parameters) => {
+                    match serde_json::from_value::<GenerationParameters>(parameters.clone()) {
+                        Ok(parameters) => Some(parameters),
+                        Err(error) => {
+                            tracing::warn!(
+                                message_id = %current_message.id,
+                                error = ?error,
+                                "Disabling reasoning replay because generation parameters are malformed"
+                            );
+                            return Ok(Vec::new());
+                        }
+                    }
+                }
+                None => None,
+            };
             if !openai_responses_reasoning_replay_model_matches(
                 current_chat_provider_id,
                 generation_parameters,
@@ -479,40 +493,77 @@ trait SendAsSseEvent {
     fn tag(&self) -> &'static str;
     fn data_json(&self) -> Result<String, Report>;
 
-    async fn send_event(&self, tx: Sender<Result<Event, Report>>) -> Result<(), ()> {
-        match self.data_json() {
-            Ok(json) => {
-                tracing::trace!(
-                    tag = self.tag(),
-                    data_json = json.as_str(),
-                    "Sending response event"
-                );
-                if let Err(err) = tx
-                    .send(Ok(Event::default().event(self.tag()).data(json)))
-                    .await
-                {
-                    let _ = tx
-                        .send(Err(eyre!(
-                            "Failed to send {tag} event: {}",
-                            err,
-                            tag = self.tag()
-                        )))
-                        .await;
-                    return Err(());
-                }
-            }
-            Err(err) => {
-                let _ = tx
-                    .send(Err(eyre!(
-                        "Failed to serialize {tag} event: {}",
-                        err,
-                        tag = self.tag()
-                    )))
-                    .await;
-                return Err(());
-            }
-        }
+    async fn send_event_report(&self, tx: Sender<Result<Event, Report>>) -> Result<(), Report> {
+        let json = self
+            .data_json()
+            .wrap_err_with(|| format!("Failed to serialize {} event", self.tag()))?;
+        tracing::trace!(
+            tag = self.tag(),
+            data_json = json.as_str(),
+            "Sending response event"
+        );
+        tx.send(Ok(Event::default().event(self.tag()).data(json)))
+            .await
+            .map_err(|err| eyre!("Failed to send {} event: {err}", self.tag()))?;
         Ok(())
+    }
+}
+
+async fn send_generation_event(
+    message: &impl SendAsSseEvent,
+    tx: Sender<Result<Event, Report>>,
+) -> Result<(), Report> {
+    message.send_event_report(tx).await
+}
+
+async fn forward_error_report(tx: &Sender<Result<Event, Report>>, error: &Report) {
+    // `Report` is not cloneable. Recreate the channel error from its debug
+    // representation so the returned report retains its original cause chain
+    // and backtrace while legacy SSE consumers still receive the diagnostics.
+    if let Err(send_error) = tx.send(Err(eyre!(format!("{error:?}")))).await {
+        tracing::debug!(
+            error = ?send_error,
+            "Could not forward error to a closed SSE stream"
+        );
+    }
+}
+
+fn log_and_capture_error(context: &'static str, error: &Report) {
+    tracing::error!(context, error = ?error, "Handled message-streaming error");
+    capture_report(error);
+}
+
+fn warn_and_capture_error(context: &'static str, error: &Report) {
+    tracing::warn!(context, error = ?error, "Continuing after message-streaming error");
+    capture_report(error);
+}
+
+fn serialize_json_value<T: Serialize>(value: T, context: &'static str) -> Option<JsonValue> {
+    match serde_json::to_value(value) {
+        Ok(value) => Some(value),
+        Err(error) => {
+            let error = Report::new(error).wrap_err(context);
+            warn_and_capture_error(context, &error);
+            None
+        }
+    }
+}
+
+fn content_parts_json_or_log(content: &[ContentPart], context: &'static str) -> Option<JsonValue> {
+    match crate::services::genai_langfuse::convert_content_parts_to_json(content) {
+        Ok(value) => Some(value),
+        Err(error) => {
+            let error = error.wrap_err(context);
+            warn_and_capture_error(context, &error);
+            None
+        }
+    }
+}
+
+async fn send_background_event(task: &StreamingTask, event: StreamingEvent, context: &'static str) {
+    if let Err(error) = task.send_event(event).await {
+        let error = Report::msg(error).wrap_err(context);
+        warn_and_capture_error(context, &error);
     }
 }
 
@@ -810,7 +861,7 @@ async fn parse_streaming_error(
     MessageSubmitStreamingResponseError {
         message_id: Some(message_id),
         error: GenerationErrorType::InternalError {
-            error_description: "An unexpected error occurred during generation".to_string(),
+            error_description: format!("Unexpected generation error: {err:?}"),
         },
     }
 }
@@ -822,20 +873,22 @@ async fn fetch_non_streaming_error(
     message_id: Uuid,
     chat_provider_id: Option<&str>,
     chat_provider_headers_context: &ChatProviderHeadersContext<'_>,
-) -> Option<MessageSubmitStreamingResponseError> {
+) -> Result<Option<MessageSubmitStreamingResponseError>, Report> {
     let client = app_state
         .genai_for_chat_provider_id_with_headers_context(
             chat_provider_id,
             Some(chat_provider_headers_context),
         )
-        .ok()?;
-    match client
-        .exec_chat("PLACEHOLDER_MODEL", chat_request, Some(chat_options))
-        .await
-    {
-        Err(err) => Some(parse_streaming_error(err, message_id).await),
-        Ok(_) => None,
-    }
+        .wrap_err("Unable to choose a chat provider for non-streaming error recovery")?;
+    Ok(
+        match client
+            .exec_chat("PLACEHOLDER_MODEL", chat_request, Some(chat_options))
+            .await
+        {
+            Err(err) => Some(parse_streaming_error(err, message_id).await),
+            Ok(_) => None,
+        },
+    )
 }
 /// Convert a StreamingEvent to an SSE Event for message submission
 fn streaming_event_to_sse(event: &StreamingEvent) -> Result<Event, Report> {
@@ -1342,7 +1395,7 @@ async fn bg_stream_save_user_message(
     user_message: &str,
     input_files_ids: &[Uuid],
     input_parameters: Option<crate::models::message::InputParameters>,
-) -> Result<messages::Model, String> {
+) -> Result<messages::Model, Report> {
     let user_message_json = json!({
         "role": "user",
         "content": vec![json!({
@@ -1366,16 +1419,17 @@ async fn bg_stream_save_user_message(
         input_parameters,
     )
     .await
-    .map_err(|e| format!("Failed to submit user message: {}", e))?;
+    .wrap_err("Failed to submit user message")?;
 
     let saved_user_message_wrapped = ChatMessage::from_model(saved_user_message.clone())
-        .map_err(|e| format!("Failed to convert user message: {}", e))?;
+        .wrap_err("Failed to convert user message")?;
 
     task.send_event(StreamingEvent::UserMessageSaved {
         message_id: saved_user_message.id,
         message: saved_user_message_wrapped,
     })
-    .await?;
+    .await
+    .map_err(Report::msg)?;
 
     Ok(saved_user_message)
 }
@@ -1536,7 +1590,17 @@ impl LangfuseTraceEnrichment {
 fn generation_request_context_from_headers(headers: &HeaderMap) -> GenerationRequestContext {
     let platform = headers
         .get(X_ERATO_PLATFORM_HEADER)
-        .and_then(|value| value.to_str().ok())
+        .and_then(|value| match value.to_str() {
+            Ok(value) => Some(value),
+            Err(error) => {
+                tracing::warn!(
+                    error = ?error,
+                    header = X_ERATO_PLATFORM_HEADER,
+                    "Ignoring malformed platform header"
+                );
+                None
+            }
+        })
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
@@ -2288,20 +2352,36 @@ fn hallucination_loop_error_event(message_id: Uuid) -> MessageSubmitStreamingRes
     }
 }
 
+fn log_chat_completion_generation_error(
+    chat_provider_id: &str,
+    message_id: Uuid,
+    error: &GenerationErrorType,
+) {
+    tracing::error!(
+        chat_provider_id,
+        message_id = %message_id,
+        error = ?error,
+        "Chat completion generation failed"
+    );
+}
+
 fn langfuse_model_name(app_state: &AppState, chat_provider_id: Option<&str>) -> String {
-    chat_provider_id
-        .map(ToString::to_string)
-        .or_else(|| {
-            app_state
-                .config
-                .determine_chat_provider(None, None)
-                .ok()
-                .map(ToString::to_string)
-        })
+    let provider_id = match chat_provider_id {
+        Some(provider_id) => Some(provider_id),
+        None => match app_state.config.determine_chat_provider(None, None) {
+            Ok(provider_id) => Some(provider_id),
+            Err(error) => {
+                warn_and_capture_error("resolve Langfuse model chat provider", &error);
+                None
+            }
+        },
+    };
+
+    provider_id
         .map(|provider_id| {
             app_state
                 .config
-                .get_chat_provider(&provider_id)
+                .get_chat_provider(provider_id)
                 .model_name_langfuse()
                 .to_string()
         })
@@ -2438,7 +2518,7 @@ async fn stream_generate_chat_completion<
     chat_provider_headers_context: &'a ChatProviderHeadersContext<'a>,
     streaming_task: Option<&Arc<StreamingTask>>,
     assistant_id: Option<Uuid>,
-) -> Result<(Vec<ContentPart>, Option<GenerationMetadata>), ()> {
+) -> Result<(Vec<ContentPart>, Option<GenerationMetadata>), Report> {
     // Record the real assistant message id on the streaming task. `start_task`
     // only had a placeholder id; client-tool results are routed to a task by
     // message_id (the id the client receives in `client_tool_call`), so it must
@@ -2521,8 +2601,19 @@ async fn stream_generate_chat_completion<
 
     let mut current_message_content: Vec<ContentPart> = vec![];
     let mut current_turn_chat_request = chat_request.clone();
+    let fallback_chat_provider_id = if chat_provider_id.is_none() {
+        match app_state.config.determine_chat_provider(None, None) {
+            Ok(provider_id) => Some(provider_id),
+            Err(error) => {
+                warn_and_capture_error("resolve hallucination-suppression chat provider", &error);
+                None
+            }
+        }
+    } else {
+        None
+    };
     let hallucination_suppression_config = chat_provider_id
-        .or_else(|| app_state.config.determine_chat_provider(None, None).ok())
+        .or(fallback_chat_provider_id)
         .map(|provider_id| {
             app_state
                 .config
@@ -2664,8 +2755,10 @@ async fn stream_generate_chat_completion<
             }
 
             if current_tool_call_count >= max_tool_call_iterations {
-                // TODO: Send error that tool call was aborted due to too many iterations
-                return Err(());
+                let error = eyre!(
+                    "Maximum tool-call iteration count ({max_tool_call_iterations}) exceeded"
+                );
+                return Err(error);
             } else {
                 current_tool_call_count += 1;
             }
@@ -2684,18 +2777,21 @@ async fn stream_generate_chat_completion<
                 };
                 // Forward to streaming_task if present
                 if let Some(task) = streaming_task {
-                    let _ = task
-                        .send_event(StreamingEvent::ToolCallProposed {
+                    send_background_event(
+                        task,
+                        StreamingEvent::ToolCallProposed {
                             message_id: assistant_message_id,
                             content_index: current_message_content.len(),
                             tool_call_id: unfinished_tool_call.call_id,
                             tool_name: unfinished_tool_call.fn_name,
                             input: Some(unfinished_tool_call.fn_arguments),
-                        })
-                        .await;
+                        },
+                        "broadcast proposed tool call",
+                    )
+                    .await;
                 }
                 let message: MSG = proposed_call.into();
-                message.send_event(tx.clone()).await?;
+                send_generation_event(&message, tx.clone()).await?;
             }
 
             if !allowed_tool_names.contains(unfinished_tool_call.fn_name.as_str()) {
@@ -2716,8 +2812,8 @@ async fn stream_generate_chat_completion<
                     Some(&error_message),
                 )
                 .await;
-                let _ = tx.send(Err(eyre!(error_message))).await;
-                return Err(());
+                let error = eyre!(error_message);
+                return Err(error);
             }
 
             // Client-action proposals are never executed server-side: validate
@@ -2789,8 +2885,9 @@ async fn stream_generate_chat_completion<
                     output: Some(output_value.clone()),
                 };
                 if let Some(task) = streaming_task {
-                    let _ = task
-                        .send_event(StreamingEvent::ToolCallUpdate {
+                    send_background_event(
+                        task,
+                        StreamingEvent::ToolCallUpdate {
                             message_id: assistant_message_id,
                             content_index: current_message_content.len(),
                             tool_call_id: unfinished_tool_call.call_id.clone(),
@@ -2799,11 +2896,13 @@ async fn stream_generate_chat_completion<
                             status: bg_status,
                             progress_message: None,
                             output: Some(output_value.clone()),
-                        })
-                        .await;
+                        },
+                        "broadcast client-action tool update",
+                    )
+                    .await;
                 }
                 let message: MSG = update_event.into();
-                message.send_event(tx.clone()).await?;
+                send_generation_event(&message, tx.clone()).await?;
                 current_message_content.push(ContentPart::ToolUse(ToolUse {
                     tool_call_id: unfinished_tool_call.call_id.clone(),
                     status: message_status,
@@ -2893,15 +2992,18 @@ async fn stream_generate_chat_completion<
 
                 // Signal the client to execute: broadcast (submit path + resume
                 // replay) AND the typed tx stream (regenerate/edit path).
-                let _ = task
-                    .send_event(StreamingEvent::ClientToolCall {
+                send_background_event(
+                    task,
+                    StreamingEvent::ClientToolCall {
                         message_id: assistant_message_id,
                         content_index,
                         tool_call_id: call_id.clone(),
                         tool_name: tool_name.clone(),
                         input: Some(tool_input.clone()),
-                    })
-                    .await;
+                    },
+                    "broadcast client tool call",
+                )
+                .await;
                 let call_event = MessageSubmitStreamingResponseClientToolCall {
                     message_id: assistant_message_id,
                     content_index,
@@ -2915,7 +3017,9 @@ async fn stream_generate_chat_completion<
                 // during the park, so a dropped SSE connection here must NOT
                 // abort the generation. The broadcast + resume history is the
                 // durable signal path.
-                let _ = call_message.send_event(tx.clone()).await;
+                if let Err(error) = call_message.send_event_report(tx.clone()).await {
+                    warn_and_capture_error("send best-effort client tool call SSE event", &error);
+                }
 
                 // Resolve this tool's park budget from the entry that was
                 // OFFERED to this request (a bare-name config scan would be
@@ -3025,8 +3129,9 @@ async fn stream_generate_chat_completion<
                 // In-band resolution: write the outcome into history so a resume
                 // replay is self-consistent (the client sees the call answered
                 // and does not re-execute the tool).
-                let _ = task
-                    .send_event(StreamingEvent::ToolCallUpdate {
+                send_background_event(
+                    task,
+                    StreamingEvent::ToolCallUpdate {
                         message_id: assistant_message_id,
                         content_index,
                         tool_call_id: call_id.clone(),
@@ -3035,8 +3140,10 @@ async fn stream_generate_chat_completion<
                         status: bg_status,
                         progress_message: None,
                         output: Some(output_value.clone()),
-                    })
-                    .await;
+                    },
+                    "broadcast client tool result",
+                )
+                .await;
                 let update_event = MessageSubmitStreamingResponseToolCallUpdate {
                     message_id: assistant_message_id,
                     content_index,
@@ -3051,7 +3158,9 @@ async fn stream_generate_chat_completion<
                 // Best-effort (see the call event above): a dropped SSE
                 // connection after the park must not abort the turn — the result
                 // is already recorded to history (broadcast) and persisted below.
-                let _ = update_message.send_event(tx.clone()).await;
+                if let Err(error) = update_message.send_event_report(tx.clone()).await {
+                    warn_and_capture_error("send best-effort client tool result SSE event", &error);
+                }
 
                 current_message_content.push(ContentPart::ToolUse(ToolUse {
                     tool_call_id: call_id.clone(),
@@ -3088,13 +3197,11 @@ async fn stream_generate_chat_completion<
                 Some(managed_tool) => managed_tool.clone(),
                 None => {
                     tool_call_started_at.remove(&unfinished_tool_call.call_id);
-                    let _ = tx
-                        .send(Err(eyre!(
-                            "Failed to resolve MCP tool call '{}': tool was not in the prepared MCP tool set",
-                            unfinished_tool_call.fn_name
-                        )))
-                        .await;
-                    return Err(());
+                    let error = eyre!(
+                        "Failed to resolve MCP tool call '{}': tool was not in the prepared MCP tool set",
+                        unfinished_tool_call.fn_name
+                    );
+                    return Err(error);
                 }
             };
             let managed_tool_call = crate::services::mcp_manager::ManagedToolCall {
@@ -3168,11 +3275,20 @@ async fn stream_generate_chat_completion<
                         parse_content_filter_error_from_mcp_tool_result(&tool_call_result)
                     {
                         let tool_error = serde_json::to_string(&content_filter_error)
-                            .unwrap_or_else(|_| "MCP tool result was filtered".to_string());
+                            .unwrap_or_else(|error| {
+                                tracing::warn!(
+                                    error = ?error,
+                                    "Failed to serialize MCP content-filter error"
+                                );
+                                "MCP tool result was filtered".to_string()
+                            });
                         persist_otel_tool_call(
                             tracing_client.as_ref(),
                             &unfinished_tool_call,
-                            serde_json::to_value(&tool_call_result).ok(),
+                            serialize_json_value(
+                                &tool_call_result,
+                                "serialize filtered MCP tool result",
+                            ),
                             tool_call_span_start_time,
                             tool_call_end_time,
                             tool_call_parent_observation_id.clone(),
@@ -3186,6 +3302,11 @@ async fn stream_generate_chat_completion<
                             message_id: Some(assistant_message_id),
                             error: content_filter_error,
                         };
+                        log_chat_completion_generation_error(
+                            chat_provider_metric_label,
+                            assistant_message_id,
+                            &error_event.error,
+                        );
                         persist_otel_generation_error(
                             tracing_client.as_ref(),
                             &turn_obs_id,
@@ -3202,19 +3323,23 @@ async fn stream_generate_chat_completion<
                         .await;
 
                         if let Some(task) = streaming_task
-                            && let Ok(error_json) = serde_json::to_value(
+                            && let Some(error_json) = serialize_json_value(
                                 MessageSubmitStreamingResponseMessage::Error(error_event.clone()),
+                                "serialize MCP content-filter error event",
                             )
                         {
-                            let _ = task
-                                .send_event(StreamingEvent::Error {
+                            send_background_event(
+                                task,
+                                StreamingEvent::Error {
                                     error: Some(error_json),
-                                })
-                                .await;
+                                },
+                                "broadcast MCP content-filter error",
+                            )
+                            .await;
                         }
 
                         let message: MSG = error_event.into();
-                        message.send_event(tx.clone()).await?;
+                        send_generation_event(&message, tx.clone()).await?;
                         let generation_metadata = build_generation_metadata(
                             total_prompt_tokens,
                             total_completion_tokens,
@@ -3247,7 +3372,10 @@ async fn stream_generate_chat_completion<
                             persist_otel_tool_call(
                                 tracing_client.as_ref(),
                                 &unfinished_tool_call,
-                                serde_json::to_value(&tool_call_result).ok(),
+                                serialize_json_value(
+                                    &tool_call_result,
+                                    "serialize failed MCP tool result",
+                                ),
                                 tool_call_span_start_time,
                                 tool_call_end_time,
                                 tool_call_parent_observation_id.clone(),
@@ -3256,10 +3384,8 @@ async fn stream_generate_chat_completion<
                                 Some(&tool_error),
                             )
                             .await;
-                            let _ = tx
-                                .send(Err(err).wrap_err("Failed to process MCP tool output"))
-                                .await;
-                            return Err(());
+                            let error = err.wrap_err("Failed to process MCP tool output");
+                            return Err(error);
                         }
                     };
                     let tool_response = post_processed.tool_response;
@@ -3295,8 +3421,9 @@ async fn stream_generate_chat_completion<
                         };
                         // Forward to streaming_task if present
                         if let Some(task) = streaming_task {
-                            let _ = task
-                                .send_event(StreamingEvent::ToolCallUpdate {
+                            send_background_event(
+                                task,
+                                StreamingEvent::ToolCallUpdate {
                                     message_id: assistant_message_id,
                                     content_index: current_message_content.len(),
                                     tool_call_id: finished_tool_call.call_id,
@@ -3305,11 +3432,13 @@ async fn stream_generate_chat_completion<
                                     status: BgToolCallStatus::Success,
                                     progress_message: None,
                                     output: output_value_for_event,
-                                })
-                                .await;
+                                },
+                                "broadcast completed MCP tool call",
+                            )
+                            .await;
                         }
                         let message: MSG = proposed_call.into();
-                        message.send_event(tx.clone()).await?;
+                        send_generation_event(&message, tx.clone()).await?;
                     }
                     // Add to current message content
                     {
@@ -3347,8 +3476,8 @@ async fn stream_generate_chat_completion<
                         Some(&tool_error),
                     )
                     .await;
-                    let _ = tx.send(Err(err).wrap_err("Failed to call tool")).await;
-                    return Err(());
+                    let error = err.wrap_err("Failed to call tool");
+                    return Err(error);
                 }
             };
         }
@@ -3380,6 +3509,11 @@ async fn stream_generate_chat_completion<
                         filter_details: Some(prompt_injection_filter_details(offense)),
                     },
                 };
+                log_chat_completion_generation_error(
+                    chat_provider_metric_label,
+                    assistant_message_id,
+                    &error_event.error,
+                );
                 report_chat_provider_generation_error(
                     chat_provider_metric_label,
                     &error_event.error,
@@ -3401,19 +3535,23 @@ async fn stream_generate_chat_completion<
                 let error_payload = Some(error_event.error.clone());
 
                 if let Some(task) = streaming_task
-                    && let Ok(error_json) = serde_json::to_value(
+                    && let Some(error_json) = serialize_json_value(
                         MessageSubmitStreamingResponseMessage::Error(error_event.clone()),
+                        "serialize guardrail error event",
                     )
                 {
-                    let _ = task
-                        .send_event(StreamingEvent::Error {
+                    send_background_event(
+                        task,
+                        StreamingEvent::Error {
                             error: Some(error_json),
-                        })
-                        .await;
+                        },
+                        "broadcast prompt-guardrail error",
+                    )
+                    .await;
                 }
 
                 let message: MSG = error_event.into();
-                message.send_event(tx.clone()).await?;
+                send_generation_event(&message, tx.clone()).await?;
                 let generation_metadata = build_generation_metadata(
                     total_prompt_tokens,
                     total_completion_tokens,
@@ -3430,19 +3568,18 @@ async fn stream_generate_chat_completion<
             }
             Ok(None) => {}
             Err(err) => {
-                let _ = tx
-                    .send(Err(err).wrap_err("Failed to run prompt injection guardrail"))
-                    .await;
-                return Err(());
+                let error = err.wrap_err("Failed to run prompt injection guardrail");
+                return Err(error);
             }
         }
 
-        let chat_stream = match app_state
+        let genai_client = app_state
             .genai_for_chat_provider_id_with_headers_context(
                 chat_provider_id,
                 Some(chat_provider_headers_context),
             )
-            .expect("Unable to choose chat provider")
+            .wrap_err("Unable to choose chat provider")?;
+        let chat_stream = match genai_client
             .exec_chat_stream(
                 "PLACEHOLDER_MODEL",
                 current_turn_chat_request.clone(),
@@ -3453,6 +3590,11 @@ async fn stream_generate_chat_completion<
             Ok(stream) => stream,
             Err(err) => {
                 let error_event = parse_streaming_error(err, assistant_message_id).await;
+                log_chat_completion_generation_error(
+                    chat_provider_metric_label,
+                    assistant_message_id,
+                    &error_event.error,
+                );
                 report_chat_provider_generation_error(
                     chat_provider_metric_label,
                     &error_event.error,
@@ -3474,19 +3616,23 @@ async fn stream_generate_chat_completion<
                 let error_payload = Some(error_event.error.clone());
 
                 if let Some(task) = streaming_task
-                    && let Ok(error_json) = serde_json::to_value(
+                    && let Some(error_json) = serialize_json_value(
                         MessageSubmitStreamingResponseMessage::Error(error_event.clone()),
+                        "serialize provider-start error event",
                     )
                 {
-                    let _ = task
-                        .send_event(StreamingEvent::Error {
+                    send_background_event(
+                        task,
+                        StreamingEvent::Error {
                             error: Some(error_json),
-                        })
-                        .await;
+                        },
+                        "broadcast provider-start error",
+                    )
+                    .await;
                 }
 
                 let message: MSG = error_event.into();
-                message.send_event(tx.clone()).await?;
+                send_generation_event(&message, tx.clone()).await?;
                 let generation_metadata = build_generation_metadata(
                     total_prompt_tokens,
                     total_completion_tokens,
@@ -3644,6 +3790,11 @@ async fn stream_generate_chat_completion<
                         first_response_elapsed.get_or_insert(elapsed);
                         if hallucination_suppression.observe_text_delta(&content) {
                             let error_event = hallucination_loop_error_event(assistant_message_id);
+                            log_chat_completion_generation_error(
+                                chat_provider_metric_label,
+                                assistant_message_id,
+                                &error_event.error,
+                            );
                             report_chat_provider_generation_error(
                                 chat_provider_metric_label,
                                 &error_event.error,
@@ -3671,21 +3822,25 @@ async fn stream_generate_chat_completion<
                             let error_payload = Some(error_event.error.clone());
 
                             if let Some(task) = streaming_task
-                                && let Ok(error_json) = serde_json::to_value(
+                                && let Some(error_json) = serialize_json_value(
                                     MessageSubmitStreamingResponseMessage::Error(
                                         error_event.clone(),
                                     ),
+                                    "serialize hallucination-loop error event",
                                 )
                             {
-                                let _ = task
-                                    .send_event(StreamingEvent::Error {
+                                send_background_event(
+                                    task,
+                                    StreamingEvent::Error {
                                         error: Some(error_json),
-                                    })
-                                    .await;
+                                    },
+                                    "broadcast hallucination-loop error",
+                                )
+                                .await;
                             }
 
                             let message: MSG = error_event.into();
-                            message.send_event(tx.clone()).await?;
+                            send_generation_event(&message, tx.clone()).await?;
                             let generation_metadata = build_generation_metadata(
                                 total_prompt_tokens,
                                 total_completion_tokens,
@@ -3713,16 +3868,19 @@ async fn stream_generate_chat_completion<
                         };
                         // Forward to streaming_task if present
                         if let Some(task) = streaming_task {
-                            let _ = task
-                                .send_event(StreamingEvent::TextDelta {
+                            send_background_event(
+                                task,
+                                StreamingEvent::TextDelta {
                                     message_id: assistant_message_id,
                                     content_index,
                                     new_text: content,
-                                })
-                                .await;
+                                },
+                                "broadcast text delta",
+                            )
+                            .await;
                         }
                         let message: MSG = delta.into();
-                        message.send_event(tx.clone()).await?;
+                        send_generation_event(&message, tx.clone()).await?;
                     }
                     ChatStreamEvent::ReasoningChunk(StreamChunk { content }) => {
                         captured_reasoning_summary.push_str(&content);
@@ -3744,16 +3902,19 @@ async fn stream_generate_chat_completion<
                             new_text: content.clone(),
                         };
                         if let Some(task) = streaming_task {
-                            let _ = task
-                                .send_event(StreamingEvent::ReasoningDelta {
+                            send_background_event(
+                                task,
+                                StreamingEvent::ReasoningDelta {
                                     message_id: assistant_message_id,
                                     content_index,
                                     new_text: content,
-                                })
-                                .await;
+                                },
+                                "broadcast reasoning delta",
+                            )
+                            .await;
                         }
                         let message: MSG = delta.into();
-                        message.send_event(tx.clone()).await?;
+                        send_generation_event(&message, tx.clone()).await?;
                     }
                     ChatStreamEvent::ThoughtSignatureChunk(StreamChunk { content }) => {
                         if !content.is_empty() {
@@ -3771,10 +3932,20 @@ async fn stream_generate_chat_completion<
                 },
                 Err(err) => {
                     if let genai::Error::JsonValueExt(_) = err {
+                        tracing::warn!(
+                            error = ?err,
+                            message_id = %assistant_message_id,
+                            "Ignoring malformed auxiliary JSON value in chat stream"
+                        );
                         continue;
                     }
 
                     let error_event = parse_streaming_error(err, assistant_message_id).await;
+                    log_chat_completion_generation_error(
+                        chat_provider_metric_label,
+                        assistant_message_id,
+                        &error_event.error,
+                    );
                     report_chat_provider_generation_error(
                         chat_provider_metric_label,
                         &error_event.error,
@@ -3796,19 +3967,23 @@ async fn stream_generate_chat_completion<
                     let error_payload = Some(error_event.error.clone());
 
                     if let Some(task) = streaming_task
-                        && let Ok(error_json) = serde_json::to_value(
+                        && let Some(error_json) = serialize_json_value(
                             MessageSubmitStreamingResponseMessage::Error(error_event.clone()),
+                            "serialize provider-stream error event",
                         )
                     {
-                        let _ = task
-                            .send_event(StreamingEvent::Error {
+                        send_background_event(
+                            task,
+                            StreamingEvent::Error {
                                 error: Some(error_json),
-                            })
-                            .await;
+                            },
+                            "broadcast provider-stream error",
+                        )
+                        .await;
                     }
 
                     let message: MSG = error_event.into();
-                    message.send_event(tx.clone()).await?;
+                    send_generation_event(&message, tx.clone()).await?;
                     let generation_metadata = build_generation_metadata(
                         total_prompt_tokens,
                         total_completion_tokens,
@@ -3884,16 +4059,19 @@ async fn stream_generate_chat_completion<
                     new_text: current_turn_captured_reasoning_summary.clone(),
                 };
                 if let Some(task) = streaming_task {
-                    let _ = task
-                        .send_event(StreamingEvent::ReasoningDelta {
+                    send_background_event(
+                        task,
+                        StreamingEvent::ReasoningDelta {
                             message_id: assistant_message_id,
                             content_index,
                             new_text: current_turn_captured_reasoning_summary.clone(),
-                        })
-                        .await;
+                        },
+                        "broadcast captured reasoning summary",
+                    )
+                    .await;
                 }
                 let message: MSG = delta.into();
-                message.send_event(tx.clone()).await?;
+                send_generation_event(&message, tx.clone()).await?;
             }
 
             #[allow(clippy::collapsible_match)]
@@ -4096,10 +4274,10 @@ async fn stream_generate_chat_completion<
                 } else {
                     // Update Langfuse trace with final output and metadata if enabled
                     if let Some(ref client) = tracing_client
-                        && let Ok(output_json) =
-                            crate::services::genai_langfuse::convert_content_parts_to_json(
-                                &current_message_content,
-                            )
+                        && let Some(output_json) = content_parts_json_or_log(
+                            &current_message_content,
+                            "serialize final Langfuse trace output",
+                        )
                     {
                         let client = client.clone();
                         let trace_id = client.trace_id().to_string();
@@ -4178,10 +4356,10 @@ async fn stream_generate_chat_completion<
             } else {
                 // Update Langfuse trace with final output if enabled
                 if let Some(ref client) = tracing_client
-                    && let Ok(output_json) =
-                        crate::services::genai_langfuse::convert_content_parts_to_json(
-                            &current_message_content,
-                        )
+                    && let Some(output_json) = content_parts_json_or_log(
+                        &current_message_content,
+                        "serialize final Langfuse trace output",
+                    )
                 {
                     let client = client.clone();
                     let trace_id = client.trace_id().to_string();
@@ -4250,8 +4428,13 @@ async fn stream_generate_chat_completion<
                 chat_provider_id,
                 chat_provider_headers_context,
             )
-            .await
+            .await?
             {
+                log_chat_completion_generation_error(
+                    chat_provider_metric_label,
+                    assistant_message_id,
+                    &error_event.error,
+                );
                 report_chat_provider_generation_error(
                     chat_provider_metric_label,
                     &error_event.error,
@@ -4273,19 +4456,23 @@ async fn stream_generate_chat_completion<
                 let error_payload = Some(error_event.error.clone());
 
                 if let Some(task) = streaming_task
-                    && let Ok(error_json) = serde_json::to_value(
+                    && let Some(error_json) = serialize_json_value(
                         MessageSubmitStreamingResponseMessage::Error(error_event.clone()),
+                        "serialize non-streaming provider error event",
                     )
                 {
-                    let _ = task
-                        .send_event(StreamingEvent::Error {
+                    send_background_event(
+                        task,
+                        StreamingEvent::Error {
                             error: Some(error_json),
-                        })
-                        .await;
+                        },
+                        "broadcast non-streaming provider error",
+                    )
+                    .await;
                 }
 
                 let message: MSG = error_event.into();
-                message.send_event(tx.clone()).await?;
+                send_generation_event(&message, tx.clone()).await?;
                 let generation_metadata = build_generation_metadata(
                     total_prompt_tokens,
                     total_completion_tokens,
@@ -4301,7 +4488,9 @@ async fn stream_generate_chat_completion<
                 break 'loop_call_turns Ok((current_message_content, generation_metadata));
             }
 
-            break 'loop_call_turns Err(());
+            break 'loop_call_turns Err(eyre!(
+                "Non-streaming chat generation failed without a parseable provider error"
+            ));
         }
     }
 }
@@ -4315,7 +4504,7 @@ async fn bg_stream_update_assistant_message_completion(
     final_content_parts: Vec<ContentPart>,
     me_user: &MeProfile,
     assistant_message_id: Uuid,
-) -> Result<(), String> {
+) -> Result<(), Report> {
     let updated_assistant_message = crate::models::message::update_message_content(
         &app_state.db,
         policy,
@@ -4324,18 +4513,18 @@ async fn bg_stream_update_assistant_message_completion(
         final_content_parts.clone(),
     )
     .await
-    .map_err(|e| format!("Failed to update assistant message content: {}", e))?;
+    .wrap_err("Failed to update assistant message content")?;
 
     let updated_assistant_message_wrapped =
         ChatMessage::from_model(updated_assistant_message.clone())
-            .map_err(|e| format!("Failed to convert updated assistant message: {}", e))?;
+            .wrap_err("Failed to convert updated assistant message")?;
     let hydrated_final_content_parts = crate::models::message::regenerate_image_urls_in_content(
         &app_state.db,
         final_content_parts.clone(),
         &app_state.file_storage_providers,
     )
     .await
-    .map_err(|e| format!("Failed to hydrate image URLs: {}", e))?;
+    .wrap_err("Failed to hydrate image URLs")?;
     let mut updated_assistant_message_wrapped = updated_assistant_message_wrapped;
     updated_assistant_message_wrapped.content = hydrated_final_content_parts.clone();
 
@@ -4344,7 +4533,8 @@ async fn bg_stream_update_assistant_message_completion(
         content: hydrated_final_content_parts,
         message: updated_assistant_message_wrapped,
     })
-    .await?;
+    .await
+    .map_err(Report::msg)?;
 
     app_state.global_policy_engine.invalidate_data().await;
 
@@ -4361,9 +4551,9 @@ async fn stream_update_assistant_message_completion<
     final_content_parts: Vec<ContentPart>,
     me_user: &MeProfile,
     assistant_message_id: Uuid,
-) -> Result<(), ()> {
+) -> Result<(), Report> {
     // Update the assistant message in the database
-    let updated_assistant_message = match crate::models::message::update_message_content(
+    let updated_assistant_message = crate::models::message::update_message_content(
         &app_state.db,
         policy,
         &me_user.to_subject(),
@@ -4371,42 +4561,18 @@ async fn stream_update_assistant_message_completion<
         final_content_parts.clone(),
     )
     .await
-    {
-        Ok(msg) => msg,
-        Err(err) => {
-            let _ = tx
-                .send(Err(err).wrap_err("Failed to update assistant message content"))
-                .await;
-            return Err(());
-        }
-    };
+    .wrap_err("Failed to update assistant message content")?;
 
     let mut updated_assistant_message_wrapped =
-        match ChatMessage::from_model(updated_assistant_message.clone()) {
-            Ok(msg) => msg,
-            Err(err) => {
-                let _ = tx
-                    .send(Err(err).wrap_err("Failed to convert updated assistant message"))
-                    .await;
-                return Err(());
-            }
-        };
-    let hydrated_final_content_parts =
-        match crate::models::message::regenerate_image_urls_in_content(
-            &app_state.db,
-            final_content_parts.clone(),
-            &app_state.file_storage_providers,
-        )
-        .await
-        {
-            Ok(content) => content,
-            Err(err) => {
-                let _ = tx
-                    .send(Err(err).wrap_err("Failed to hydrate image URLs"))
-                    .await;
-                return Err(());
-            }
-        };
+        ChatMessage::from_model(updated_assistant_message.clone())
+            .wrap_err("Failed to convert updated assistant message")?;
+    let hydrated_final_content_parts = crate::models::message::regenerate_image_urls_in_content(
+        &app_state.db,
+        final_content_parts.clone(),
+        &app_state.file_storage_providers,
+    )
+    .await
+    .wrap_err("Failed to hydrate image URLs")?;
     updated_assistant_message_wrapped.content = hydrated_final_content_parts.clone();
 
     let message_completed_event: MSG = MessageSubmitStreamingResponseMessageComplete {
@@ -4416,7 +4582,7 @@ async fn stream_update_assistant_message_completion<
     }
     .into();
     message_completed_event
-        .send_event(tx.clone())
+        .send_event_report(tx.clone())
         .in_current_span()
         .await?;
 
@@ -5992,14 +6158,22 @@ pub async fn message_submit_sse(
                     );
                 }
                 Err(e) => {
-                    tracing::error!("Background task failed for chat_id {}: {}", chat_id, e);
-                    // Send error event if possible
-                    // For now, just log it
+                    tracing::error!(
+                        chat_id = %chat_id,
+                        error = ?e,
+                        "Background task failed"
+                    );
+                    capture_report(&e);
                 }
             }
 
             // Send final stream_end event
-            let _ = task_clone.send_event(StreamingEvent::StreamEnd).await;
+            send_background_event(
+                &task_clone,
+                StreamingEvent::StreamEnd,
+                "broadcast submit stream end",
+            )
+            .await;
             // Mark task as completed
             task_clone.mark_completed();
             app_state_bg.background_tasks.remove_task(&chat_id).await;
@@ -6028,7 +6202,7 @@ pub async fn message_submit_sse(
         })
         .inspect(|event| {
             if let Err(err) = event {
-                capture_report(err);
+                log_and_capture_error("submit SSE serialization", err);
             }
         })
     };
@@ -6735,6 +6909,104 @@ mod summary_generation_tests {
     }
 }
 
+fn internal_generation_error(error: &Report) -> GenerationErrorType {
+    GenerationErrorType::InternalError {
+        // The debug representation includes eyre's full cause chain and the
+        // captured backtrace/span trace when those collectors are enabled.
+        error_description: format!("{error:?}"),
+    }
+}
+
+fn generation_metadata_for_error(error: GenerationErrorType) -> GenerationMetadata {
+    GenerationMetadata {
+        used_prompt_tokens: None,
+        used_completion_tokens: None,
+        used_total_tokens: None,
+        used_reasoning_tokens: None,
+        reasoning_summary: None,
+        reasoning_items: None,
+        reasoning_item_encrypted_content: None,
+        langfuse_trace_id: None,
+        was_aborted: None,
+        error: Some(error),
+        mcp_servers_unavailable: None,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn persist_background_generation_failure(
+    task: &Arc<StreamingTask>,
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    assistant_message_id: Uuid,
+    chat_provider_id: &str,
+    report: &Report,
+) {
+    let generation_error = internal_generation_error(report);
+    report_chat_provider_generation_error(chat_provider_id, &generation_error);
+
+    if let Err(error) = update_message_generation_metadata(
+        &app_state.db,
+        policy,
+        &me_user.to_subject(),
+        &assistant_message_id,
+        generation_metadata_for_error(generation_error.clone()),
+    )
+    .await
+    {
+        tracing::error!(
+            message_id = %assistant_message_id,
+            error = ?error,
+            "Failed to persist generation failure metadata"
+        );
+        capture_report(&error);
+    }
+
+    let error_event = MessageSubmitStreamingResponseError {
+        message_id: Some(assistant_message_id),
+        error: generation_error,
+    };
+    let error =
+        match serde_json::to_value(MessageSubmitStreamingResponseMessage::Error(error_event)) {
+            Ok(error) => Some(error),
+            Err(error) => {
+                let error =
+                    Report::new(error).wrap_err("Failed to serialize generation error event");
+                log_and_capture_error("persist_background_generation_failure", &error);
+                None
+            }
+        };
+    send_background_event(
+        task,
+        StreamingEvent::Error { error },
+        "broadcast persisted generation failure",
+    )
+    .await;
+}
+
+#[cfg(test)]
+mod generation_failure_diagnostic_tests {
+    use super::*;
+
+    #[test]
+    fn internal_generation_error_keeps_context_and_root_cause() {
+        let report = eyre!("provider connection closed")
+            .wrap_err("Failed to read the chat completion stream")
+            .wrap_err("Failed during chat completion generation");
+
+        let GenerationErrorType::InternalError { error_description } =
+            internal_generation_error(&report)
+        else {
+            panic!("expected an internal generation error");
+        };
+
+        assert!(error_description.contains("Failed during chat completion generation"));
+        assert!(error_description.contains("Failed to read the chat completion stream"));
+        assert!(error_description.contains("provider connection closed"));
+    }
+}
+
 /// Run the message submission task in the background
 #[allow(clippy::too_many_arguments)]
 async fn run_message_submit_task(
@@ -6746,7 +7018,7 @@ async fn run_message_submit_task(
     generation_request_context: GenerationRequestContext,
     chat_id: Uuid,
     chat_was_created: bool,
-) -> Result<(), String> {
+) -> Result<(), Report> {
     tracing::info!("run_message_submit_task started for chat_id: {}", chat_id);
 
     // Rebuild policy data FIRST if a new chat was created (before trying to fetch the chat)
@@ -6755,18 +7027,15 @@ async fn run_message_submit_task(
         policy
             .rebuild_data(&app_state.db, &app_state.config)
             .await
-            .map_err(|e| {
-                let err_msg = format!("Failed to rebuild policy data after chat creation: {}", e);
-                tracing::error!("{}", err_msg);
-                err_msg
-            })?;
+            .wrap_err("Failed to rebuild policy data after chat creation")?;
     }
 
     // Send ChatCreated event if the chat was just created
     if chat_was_created {
         tracing::info!("Sending ChatCreated event for chat_id: {}", chat_id);
         task.send_event(StreamingEvent::ChatCreated { chat_id })
-            .await?;
+            .await
+            .map_err(Report::msg)?;
     }
 
     tracing::info!("Fetching chat for chat_id: {}", chat_id);
@@ -6782,11 +7051,7 @@ async fn run_message_submit_task(
         None,
     )
     .await
-    .map_err(|e| {
-        let err_msg = format!("Failed to get chat: {}", e);
-        tracing::error!("{}", err_msg);
-        err_msg
-    })?
+    .wrap_err("Failed to get chat")?
     .0;
 
     tracing::info!("Chat fetched successfully, id: {}", chat.id);
@@ -6813,11 +7078,7 @@ async fn run_message_submit_task(
         user_input_parameters,
     )
     .await
-    .map_err(|e| {
-        let err_msg = format!("Failed to save user message: {}", e);
-        tracing::error!("{}", err_msg);
-        err_msg
-    })?;
+    .wrap_err("Failed to save user message")?;
 
     tracing::info!("User message saved, id: {}", saved_user_message.id);
 
@@ -6853,7 +7114,7 @@ async fn run_message_submit_task(
         &me_profile_input,
     )
     .await
-    .map_err(|e| format!("Failed to prepare chat request: {}", e))?;
+    .wrap_err("Failed to prepare chat request")?;
 
     // Spawn chat summary generation if needed. Use the composed prompt input
     // so summary generation sees the same first-turn structure as chat
@@ -6875,8 +7136,8 @@ async fn run_message_submit_task(
                     &summary_generation_input_messages,
                 )
                 .await;
-                if let Err(ref summary) = summary_res {
-                    capture_report(summary);
+                if let Err(summary) = summary_res {
+                    log_and_capture_error("generate_chat_summary", &summary);
                 }
                 Ok::<(), Report>(())
             }
@@ -6896,7 +7157,7 @@ async fn run_message_submit_task(
     {
         Ok(enrichment) => enrichment,
         Err(err) => {
-            tracing::warn!("Failed to build Langfuse trace enrichment: {}", err);
+            warn_and_capture_error("build submit Langfuse trace enrichment", &err);
             LangfuseTraceEnrichment::default()
         }
     };
@@ -6936,7 +7197,7 @@ async fn run_message_submit_task(
             Some(&chat_provider_id),
         )
         .await
-        .map_err(|e| format!("Failed to get chat provider config: {}", e))?;
+        .wrap_err("Failed to get chat provider config")?;
 
     // Check if image generation is enabled for this model
     let effective_model_settings = build_model_settings_for_facets(
@@ -6957,9 +7218,7 @@ async fn run_message_submit_task(
                 ContentPart::Text(text) => Some(text.text.clone()),
                 _ => None,
             })
-            .ok_or_else(|| {
-                "No text content found in user message for image generation".to_string()
-            })?;
+            .ok_or_eyre("No text content found in user message for image generation")?;
 
         tracing::debug!("Generating image with prompt: {}", user_prompt);
 
@@ -6984,76 +7243,97 @@ async fn run_message_submit_task(
             None, // input_parameters: not applicable for assistant messages
         )
         .await
-        .map_err(|e| format!("Failed to submit initial assistant message: {}", e))?;
+        .wrap_err("Failed to submit initial assistant message")?;
 
-        // Emit AssistantMessageStarted event
-        task.send_event(StreamingEvent::AssistantMessageStarted {
-            message_id: initial_assistant_message.id,
-        })
-        .await?;
-
-        // Generate the image using rust-genai
-        let image_request = genai::chat::ImageRequest::from_prompt(&user_prompt)
-            .with_size("1024x1024")
-            .with_quality("standard");
-
-        let genai_client = app_state
-            .genai_for_chat_provider_id_with_headers_context(
-                Some(&chat_provider_id),
-                Some(&chat_provider_headers_context),
-            )
-            .map_err(|e| format!("Failed to get genai client: {}", e))?;
-
-        let image_response = genai_client
-            .exec_image_generation(&chat_provider_config.model_name, image_request, None)
+        let generation_result: Result<(), Report> = async {
+            // Emit AssistantMessageStarted event
+            task.send_event(StreamingEvent::AssistantMessageStarted {
+                message_id: initial_assistant_message.id,
+            })
             .await
-            .map_err(|e| format!("Failed to generate image: {}", e))?;
+            .map_err(Report::msg)?;
 
-        // Get the first generated image
-        let generated_image = image_response
-            .images
-            .first()
-            .ok_or_else(|| "No images were generated".to_string())?;
+            // Generate the image using rust-genai
+            let image_request = genai::chat::ImageRequest::from_prompt(&user_prompt)
+                .with_size("1024x1024")
+                .with_quality("standard");
 
-        // Extract the binary
-        let binary = match generated_image {
-            genai::chat::ContentPart::Binary(binary) => binary.clone(),
-            _ => return Err("Unexpected content part type from image generation".to_string()),
-        };
+            let genai_client = app_state
+                .genai_for_chat_provider_id_with_headers_context(
+                    Some(&chat_provider_id),
+                    Some(&chat_provider_headers_context),
+                )
+                .wrap_err("Failed to get genai client")?;
 
-        // Download and store the image
-        let file_upload_id = download_and_store_generated_image(
-            app_state,
-            policy,
-            &me_user.to_subject(),
-            &chat.id,
-            binary,
-        )
-        .await
-        .map_err(|e| format!("Failed to download and store generated image: {}", e))?;
+            let image_response = genai_client
+                .exec_image_generation(&chat_provider_config.model_name, image_request, None)
+                .await
+                .wrap_err("Failed to generate image")?;
 
-        tracing::info!(
-            "Successfully generated and stored image: file_upload_id={}",
-            file_upload_id
-        );
+            // Get the first generated image
+            let generated_image = image_response
+                .images
+                .first()
+                .ok_or_eyre("No images were generated")?;
 
-        // Create content with the image pointer
-        let end_content = vec![ContentPart::ImageFilePointer(ContentPartImageFilePointer {
-            file_upload_id,
-            download_url: None,
-            preview_url: None,
-        })];
+            // Extract the binary
+            let binary = match generated_image {
+                genai::chat::ContentPart::Binary(binary) => binary.clone(),
+                _ => return Err(eyre!("Unexpected content part type from image generation")),
+            };
 
-        // Update assistant message with the image
-        bg_stream_update_assistant_message_completion(
-            task,
-            app_state,
-            policy,
-            end_content,
-            me_user,
-            initial_assistant_message.id,
-        )
-        .await?;
+            // Download and store the image
+            let file_upload_id = download_and_store_generated_image(
+                app_state,
+                policy,
+                &me_user.to_subject(),
+                &chat.id,
+                binary,
+            )
+            .await
+            .wrap_err("Failed to download and store generated image")?;
+
+            tracing::info!(
+                "Successfully generated and stored image: file_upload_id={}",
+                file_upload_id
+            );
+
+            // Create content with the image pointer
+            let end_content = vec![ContentPart::ImageFilePointer(ContentPartImageFilePointer {
+                file_upload_id,
+                download_url: None,
+                preview_url: None,
+            })];
+
+            // Update assistant message with the image
+            bg_stream_update_assistant_message_completion(
+                task,
+                app_state,
+                policy,
+                end_content,
+                me_user,
+                initial_assistant_message.id,
+            )
+            .await?;
+
+            Ok(())
+        }
+        .await;
+
+        if let Err(error) = generation_result {
+            let error = error.wrap_err("Failed during image generation");
+            persist_background_generation_failure(
+                task,
+                app_state,
+                policy,
+                me_user,
+                initial_assistant_message.id,
+                &chat_provider_id,
+                &error,
+            )
+            .await;
+            return Err(error);
+        }
 
         tracing::info!("run_message_submit_task completed successfully for image generation");
         return Ok(());
@@ -7081,22 +7361,26 @@ async fn run_message_submit_task(
         None,
     )
     .await
-    .map_err(|e| format!("Failed to submit initial assistant message: {}", e))?;
+    .wrap_err("Failed to submit initial assistant message")?;
 
     // Emit AssistantMessageStarted event
     task.send_event(StreamingEvent::AssistantMessageStarted {
         message_id: initial_assistant_message.id,
     })
-    .await?;
+    .await
+    .map_err(Report::msg)?;
 
     // Create a channel to intercept events from generation (needed for the generic function signature)
     let (temp_tx2, mut temp_rx2) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
 
     // Consume events from the temp channel (events are now forwarded directly to StreamingTask)
     tokio::spawn(async move {
-        while temp_rx2.recv().await.is_some() {
+        while let Some(event) = temp_rx2.recv().await {
             // Events are consumed here to prevent channel from filling up
             // Actual forwarding to StreamingTask happens in stream_generate_chat_completion
+            if let Err(error) = event {
+                log_and_capture_error("background generation SSE bridge", &error);
+            }
         }
     });
 
@@ -7130,9 +7414,23 @@ async fn run_message_submit_task(
         chat.assistant_id,
     );
 
-    let (end_content, generation_metadata) = generation_task
-        .await
-        .map_err(|_| "Failed during chat completion generation".to_string())?;
+    let (end_content, generation_metadata) = match generation_task.await {
+        Ok(result) => result,
+        Err(error) => {
+            let error = error.wrap_err("Failed during chat completion generation");
+            persist_background_generation_failure(
+                task,
+                app_state,
+                policy,
+                me_user,
+                initial_assistant_message.id,
+                &chat_provider_id,
+                &error,
+            )
+            .await;
+            return Err(error);
+        }
+    };
 
     if let Some(metadata) = generation_metadata.as_ref()
         && metadata.error.is_some()
@@ -7147,14 +7445,17 @@ async fn run_message_submit_task(
             let mut error_value = metadata
                 .error
                 .clone()
-                .and_then(|error| serde_json::to_value(error).ok());
+                .and_then(|error| serialize_json_value(error, "serialize generation error"));
             if let Some(JsonValue::Object(map)) = error_value.as_mut() {
                 map.entry("message_id".to_string())
                     .or_insert(JsonValue::String(initial_assistant_message.id.to_string()));
             }
-            let _ = task
-                .send_event(StreamingEvent::Error { error: error_value })
-                .await;
+            send_background_event(
+                task,
+                StreamingEvent::Error { error: error_value },
+                "broadcast structured generation error",
+            )
+            .await;
         }
     }
 
@@ -7174,7 +7475,7 @@ async fn run_message_submit_task(
         )
         .await
     {
-        tracing::warn!("Failed to update generation metadata: {}", err);
+        warn_and_capture_error("update submit generation metadata", &err);
     }
 
     // Update assistant message with final content
@@ -7264,15 +7565,19 @@ pub async fn regenerate_message_sse(
 
     // Spawn a task to process the request and send events
     tokio::spawn(async move {
-        let result: Result<(), ()> = async {
+        let result: Result<(), Report> = async {
             let input_files_for_previous_message = previous_message
                 .input_file_uploads
                 .clone()
                 .unwrap_or_default();
             let fallback_chat_provider_id = if request.chat_provider_id.is_none() {
-                get_generation_chat_provider_id_from_message(&current_message)
-                    .ok()
-                    .flatten()
+                match get_generation_chat_provider_id_from_message(&current_message) {
+                    Ok(chat_provider_id) => chat_provider_id,
+                    Err(error) => {
+                        warn_and_capture_error("read regenerate fallback chat provider", &error);
+                        None
+                    }
+                }
             } else {
                 None
             };
@@ -7284,27 +7589,33 @@ pub async fn regenerate_message_sse(
             // changed since is dropped (regenerate proceeds without it)
             // rather than failing the request.
             let fallback_action_facet = if request.action_facet.is_none() {
-                crate::models::message::get_generation_action_facet_from_message(&current_message)
-                    .ok()
-                    .flatten()
-                    .map(|(id, args)| ActionFacetRequest { id, args })
-                    .filter(|af| {
-                        let platform = generation_request_context
-                            .platform
-                            .as_deref()
-                            .unwrap_or(DEFAULT_ERATO_PLATFORM);
-                        match validate_action_facet(&app_state.config, Some(af), platform) {
-                            Ok(()) => true,
-                            Err((_, reason)) => {
-                                tracing::warn!(
-                                    "Dropping stored action facet '{}' on regenerate: {}",
-                                    af.id,
-                                    reason
-                                );
-                                false
-                            }
+                match crate::models::message::get_generation_action_facet_from_message(
+                    &current_message,
+                ) {
+                    Ok(action_facet) => action_facet,
+                    Err(error) => {
+                        warn_and_capture_error("read regenerate fallback action facet", &error);
+                        None
+                    }
+                }
+                .map(|(id, args)| ActionFacetRequest { id, args })
+                .filter(|af| {
+                    let platform = generation_request_context
+                        .platform
+                        .as_deref()
+                        .unwrap_or(DEFAULT_ERATO_PLATFORM);
+                    match validate_action_facet(&app_state.config, Some(af), platform) {
+                        Ok(()) => true,
+                        Err((_, reason)) => {
+                            tracing::warn!(
+                                "Dropping stored action facet '{}' on regenerate: {}",
+                                af.id,
+                                reason
+                            );
+                            false
                         }
-                    })
+                    }
+                })
             } else {
                 None
             };
@@ -7329,19 +7640,6 @@ pub async fn regenerate_message_sse(
                         },
                     ),
             };
-            let prepare_chat_request_res = prepare_chat_request(
-                &app_state,
-                &policy,
-                &chat,
-                user_input,
-                generation_request_context.clone(),
-                &me_profile_input,
-            )
-            .await;
-            if let Err(err) = prepare_chat_request_res {
-                let _ = tx.send(Err(err)).await;
-                return Err(());
-            }
             let PreparedChatRequest {
                 chat_request,
                 chat_options,
@@ -7351,7 +7649,16 @@ pub async fn regenerate_message_sse(
                 mcp_servers_unavailable,
                 available_mcp_tools,
                 offered_client_tool_timeouts,
-            } = prepare_chat_request_res.unwrap();
+            } = prepare_chat_request(
+                &app_state,
+                &policy,
+                &chat,
+                user_input,
+                generation_request_context.clone(),
+                &me_profile_input,
+            )
+            .await
+            .wrap_err("Failed to prepare regenerate chat request")?;
 
             let langfuse_trace_enrichment = match build_langfuse_trace_enrichment(
                 &app_state,
@@ -7365,7 +7672,7 @@ pub async fn regenerate_message_sse(
             {
                 Ok(enrichment) => enrichment,
                 Err(err) => {
-                    tracing::warn!("Failed to build Langfuse trace enrichment: {}", err);
+                    warn_and_capture_error("build regenerate Langfuse trace enrichment", &err);
                     LangfuseTraceEnrichment::default()
                 }
             };
@@ -7386,42 +7693,31 @@ pub async fn regenerate_message_sse(
                 })
                 .unwrap_or_default();
 
-            let initial_assistant_message =
-                match submit_message(
-                    &app_state.db,
-                    &policy,
-                    &me_user.to_subject(),
-                    &chat.id,
-                    empty_assistant_message_json,
-                    Some(&previous_message.id),
-                    Some(&request.current_message_id),
-                    Some(generation_input_messages.clone()),
-                    &[],
-                    Some(generation_parameters),
-                    None,
-                    None,
-                )
-                .await
-                {
-                    Ok(msg) => msg,
-                    Err(err) => {
-                        let _ = tx
-                            .send(Err(err).wrap_err(
-                                "Failed to submit initial assistant message for regenerate",
-                            ))
-                            .await;
-                        return Err(());
-                    }
-                };
+            let initial_assistant_message = submit_message(
+                &app_state.db,
+                &policy,
+                &me_user.to_subject(),
+                &chat.id,
+                empty_assistant_message_json,
+                Some(&previous_message.id),
+                Some(&request.current_message_id),
+                Some(generation_input_messages.clone()),
+                &[],
+                Some(generation_parameters),
+                None,
+                None,
+            )
+            .await
+            .wrap_err("Failed to submit initial assistant message for regenerate")?;
 
             let assistant_started_event: RegenerateMessageStreamingResponseMessage =
                 MessageSubmitStreamingResponseAssistantMessageStarted {
                     message_id: initial_assistant_message.id,
                 }
                 .into();
-            if let Err(()) = assistant_started_event.send_event(tx.clone()).await {
-                return Err(());
-            }
+            assistant_started_event
+                .send_event_report(tx.clone())
+                .await?;
 
             let subject = me_user.to_subject();
             let chat_provider_headers_context =
@@ -7432,7 +7728,7 @@ pub async fn regenerate_message_sse(
                 oidc_token: Some(&me_user.oidc_token),
                 access_token: me_user.access_token.as_deref(),
             };
-            let (end_content, generation_metadata) =
+            let generation_result =
                 stream_generate_chat_completion::<RegenerateMessageStreamingResponseMessage>(
                     tx.clone(),
                     &app_state,
@@ -7455,7 +7751,24 @@ pub async fn regenerate_message_sse(
                     Some(&task_for_stream),
                     chat.assistant_id,
                 )
-                .await?;
+                .await;
+            let (end_content, generation_metadata) = match generation_result {
+                Ok(result) => result,
+                Err(error) => {
+                    let error = error.wrap_err("Failed during chat completion generation");
+                    persist_background_generation_failure(
+                        &task_for_stream,
+                        &app_state,
+                        &policy,
+                        &me_user,
+                        initial_assistant_message.id,
+                        &chat_provider_id,
+                        &error,
+                    )
+                    .await;
+                    return Err(error);
+                }
+            };
 
             let generation_was_aborted = generation_metadata
                 .as_ref()
@@ -7472,7 +7785,7 @@ pub async fn regenerate_message_sse(
                 )
                 .await
             {
-                tracing::warn!("Failed to update generation metadata: {}", err);
+                warn_and_capture_error("update regenerate generation metadata", &err);
             }
 
             let end_content = if generation_was_aborted {
@@ -7494,24 +7807,22 @@ pub async fn regenerate_message_sse(
         }
         .await;
 
+        if let Err(error) = result {
+            forward_error_report(&tx, &error).await;
+            log_and_capture_error("regenerate message background task", &error);
+        }
+
         task_for_stream.mark_completed();
         app_state_for_cleanup
             .background_tasks
             .remove_task(&chat_id_for_cleanup)
             .await;
-
-        result
     });
 
     // Convert the receiver into a stream and return it
     let receiver_stream = tokio_stream::wrappers::ReceiverStream::<Result<Event, Report>>::new(rx);
-    let inspected_stream = futures::StreamExt::inspect(receiver_stream, |event| {
-        if let Err(err) = event {
-            capture_report(err);
-        }
-    });
 
-    Ok(Sse::new(inspected_stream).keep_alive(
+    Ok(Sse::new(receiver_stream).keep_alive(
         axum::response::sse::KeepAlive::new()
             .interval(Duration::from_secs(1))
             .text("keep-alive-text"),
@@ -7595,23 +7906,28 @@ pub async fn edit_message_sse(
     // the UI and any subsequent edit would lose the context.
     let resolved_action_facet: Option<ActionFacetRequest> = match request.action_facet.clone() {
         Some(af) => Some(af),
-        None => crate::models::message::get_input_action_facet_from_message(&message_to_edit)
-            .ok()
-            .flatten()
-            .map(|(id, args)| ActionFacetRequest { id, args })
-            .filter(
-                |af| match validate_action_facet(&app_state.config, Some(af), platform) {
-                    Ok(()) => true,
-                    Err((_, reason)) => {
-                        tracing::warn!(
-                            "Dropping stored action facet '{}' on edit: {}",
-                            af.id,
-                            reason
-                        );
-                        false
-                    }
-                },
-            ),
+        None => match crate::models::message::get_input_action_facet_from_message(&message_to_edit)
+        {
+            Ok(action_facet) => action_facet,
+            Err(error) => {
+                warn_and_capture_error("read edit fallback action facet", &error);
+                None
+            }
+        }
+        .map(|(id, args)| ActionFacetRequest { id, args })
+        .filter(
+            |af| match validate_action_facet(&app_state.config, Some(af), platform) {
+                Ok(()) => true,
+                Err((_, reason)) => {
+                    tracing::warn!(
+                        "Dropping stored action facet '{}' on edit: {}",
+                        af.id,
+                        reason
+                    );
+                    false
+                }
+            },
+        ),
     };
     let edit_input_parameters =
         resolved_action_facet
@@ -7626,7 +7942,7 @@ pub async fn edit_message_sse(
 
     // Spawn a task to process the request and send events
     tokio::spawn(async move {
-        let result: Result<(), ()> = async {
+        let result: Result<(), Report> = async {
             let user_message = json!({
                 "role": "user",
                 "content": vec![json!({
@@ -7636,7 +7952,7 @@ pub async fn edit_message_sse(
                 "name": me_user.id
             });
 
-            let saved_user_message = match submit_message(
+            let saved_user_message = submit_message(
                 &app_state.db,
                 &policy,
                 &me_user.to_subject(),
@@ -7651,26 +7967,10 @@ pub async fn edit_message_sse(
                 edit_input_parameters,
             )
             .await
-            {
-                Ok(msg) => msg,
-                Err(err) => {
-                    let _ = tx
-                        .send(Err(err).wrap_err("Failed to submit user message"))
-                        .await;
-                    return Err(());
-                }
-            };
+            .wrap_err("Failed to submit edited user message")?;
 
-            let saved_user_message_wrapped =
-                match ChatMessage::from_model(saved_user_message.clone()) {
-                    Ok(msg) => msg,
-                    Err(err) => {
-                        let _ = tx
-                            .send(Err(err).wrap_err("Failed to convert saved user message"))
-                            .await;
-                        return Err(());
-                    }
-                };
+            let saved_user_message_wrapped = ChatMessage::from_model(saved_user_message.clone())
+                .wrap_err("Failed to convert saved edited user message")?;
 
             let user_message_saved: EditMessageStreamingResponseMessage =
                 MessageSubmitStreamingResponseUserMessageSaved {
@@ -7678,19 +7978,22 @@ pub async fn edit_message_sse(
                     message: saved_user_message_wrapped,
                 }
                 .into();
-            if let Err(()) = user_message_saved.send_event(tx.clone()).await {
-                return Err(());
-            }
+            user_message_saved.send_event_report(tx.clone()).await?;
 
             let me_profile_input = MeProfileChatRequestInput::from_me_profile(&me_user);
             let fallback_chat_provider_id = if request.chat_provider_id.is_none() {
-                get_generation_chat_provider_id_for_replaced_user_message(
+                match get_generation_chat_provider_id_for_replaced_user_message(
                     &app_state.db,
                     &message_to_edit.id,
                 )
                 .await
-                .ok()
-                .flatten()
+                {
+                    Ok(chat_provider_id) => chat_provider_id,
+                    Err(error) => {
+                        warn_and_capture_error("read edit fallback chat provider", &error);
+                        None
+                    }
+                }
             } else {
                 None
             };
@@ -7711,19 +8014,6 @@ pub async fn edit_message_sse(
                     }
                 }),
             };
-            let prepare_chat_request_res = prepare_chat_request(
-                &app_state,
-                &policy,
-                &chat,
-                user_input,
-                generation_request_context.clone(),
-                &me_profile_input,
-            )
-            .await;
-            if let Err(err) = prepare_chat_request_res {
-                let _ = tx.send(Err(err)).await;
-                return Err(());
-            }
             let PreparedChatRequest {
                 chat_request,
                 chat_options,
@@ -7733,7 +8023,16 @@ pub async fn edit_message_sse(
                 mcp_servers_unavailable,
                 available_mcp_tools,
                 offered_client_tool_timeouts,
-            } = prepare_chat_request_res.unwrap();
+            } = prepare_chat_request(
+                &app_state,
+                &policy,
+                &chat,
+                user_input,
+                generation_request_context.clone(),
+                &me_profile_input,
+            )
+            .await
+            .wrap_err("Failed to prepare edited chat request")?;
 
             let langfuse_trace_enrichment = match build_langfuse_trace_enrichment(
                 &app_state,
@@ -7747,7 +8046,7 @@ pub async fn edit_message_sse(
             {
                 Ok(enrichment) => enrichment,
                 Err(err) => {
-                    tracing::warn!("Failed to build Langfuse trace enrichment: {}", err);
+                    warn_and_capture_error("build edit Langfuse trace enrichment", &err);
                     LangfuseTraceEnrichment::default()
                 }
             };
@@ -7768,7 +8067,7 @@ pub async fn edit_message_sse(
                 })
                 .unwrap_or_default();
 
-            let initial_assistant_message = match submit_message(
+            let initial_assistant_message = submit_message(
                 &app_state.db,
                 &policy,
                 &me_user.to_subject(),
@@ -7783,27 +8082,16 @@ pub async fn edit_message_sse(
                 None,
             )
             .await
-            {
-                Ok(msg) => msg,
-                Err(err) => {
-                    let _ = tx
-                        .send(
-                            Err(err)
-                                .wrap_err("Failed to submit initial assistant message for edit"),
-                        )
-                        .await;
-                    return Err(());
-                }
-            };
+            .wrap_err("Failed to submit initial assistant message for edit")?;
 
             let assistant_started_event: EditMessageStreamingResponseMessage =
                 MessageSubmitStreamingResponseAssistantMessageStarted {
                     message_id: initial_assistant_message.id,
                 }
                 .into();
-            if let Err(()) = assistant_started_event.send_event(tx.clone()).await {
-                return Err(());
-            }
+            assistant_started_event
+                .send_event_report(tx.clone())
+                .await?;
 
             let subject = me_user.to_subject();
             let chat_provider_headers_context =
@@ -7814,7 +8102,7 @@ pub async fn edit_message_sse(
                 oidc_token: Some(&me_user.oidc_token),
                 access_token: me_user.access_token.as_deref(),
             };
-            let (end_content, generation_metadata) =
+            let generation_result =
                 stream_generate_chat_completion::<EditMessageStreamingResponseMessage>(
                     tx.clone(),
                     &app_state,
@@ -7837,7 +8125,24 @@ pub async fn edit_message_sse(
                     Some(&task_for_stream),
                     chat.assistant_id,
                 )
-                .await?;
+                .await;
+            let (end_content, generation_metadata) = match generation_result {
+                Ok(result) => result,
+                Err(error) => {
+                    let error = error.wrap_err("Failed during chat completion generation");
+                    persist_background_generation_failure(
+                        &task_for_stream,
+                        &app_state,
+                        &policy,
+                        &me_user,
+                        initial_assistant_message.id,
+                        &chat_provider_id,
+                        &error,
+                    )
+                    .await;
+                    return Err(error);
+                }
+            };
 
             let generation_was_aborted = generation_metadata
                 .as_ref()
@@ -7854,7 +8159,7 @@ pub async fn edit_message_sse(
                 )
                 .await
             {
-                tracing::warn!("Failed to update generation metadata: {}", err);
+                warn_and_capture_error("update edit generation metadata", &err);
             }
 
             let end_content = if generation_was_aborted {
@@ -7876,24 +8181,22 @@ pub async fn edit_message_sse(
         }
         .await;
 
+        if let Err(error) = result {
+            forward_error_report(&tx, &error).await;
+            log_and_capture_error("edit message background task", &error);
+        }
+
         task_for_stream.mark_completed();
         app_state_for_cleanup
             .background_tasks
             .remove_task(&chat_id_for_cleanup)
             .await;
-
-        result
     });
 
     // Convert the receiver into a stream and return it
     let receiver_stream = tokio_stream::wrappers::ReceiverStream::<Result<Event, Report>>::new(rx);
-    let inspected_stream = futures::StreamExt::inspect(receiver_stream, |event| {
-        if let Err(err) = event {
-            capture_report(err);
-        }
-    });
 
-    Ok(Sse::new(inspected_stream).keep_alive(
+    Ok(Sse::new(receiver_stream).keep_alive(
         axum::response::sse::KeepAlive::new()
             .interval(Duration::from_secs(1))
             .text("keep-alive-text"),
@@ -8123,7 +8426,7 @@ pub async fn resume_message_sse(
     })
     .inspect(|event| {
         if let Err(err) = event {
-            capture_report(err);
+            log_and_capture_error("resume SSE serialization", err);
         }
     });
 
