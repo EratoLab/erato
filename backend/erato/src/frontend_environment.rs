@@ -73,8 +73,11 @@ const FRONTEND_ENV_KEY_MSAL_CLIENT_ID: &str = "MSAL_CLIENT_ID";
 const FRONTEND_ENV_KEY_MSAL_AUTHORITY: &str = "MSAL_AUTHORITY";
 const FRONTEND_ENV_KEY_MASK_REASONING_TRACE_TEXT: &str = "MASK_REASONING_TRACE_TEXT";
 const COMPONENT_KITS_PUBLIC_MOUNT_BASE: &str = "/public/component-kits";
-const COMPONENT_KIT_REACT_RUNTIME_SCRIPT_PATH: &str =
+// Frontend bundles built before ERMAIN-460 used this stable runtime path.
+const LEGACY_COMPONENT_KIT_REACT_RUNTIME_SCRIPT_PATH: &str =
     "/public/common/assets/component-kit-react-runtime.js";
+const COMPONENT_KIT_REACT_RUNTIME_SCRIPT_PATH_PREFIX: &str =
+    "/public/common/assets/component-kit-react-runtime-";
 const OUTLOOK_OFFICE_FRAME_ANCESTORS: &[&str] = &[
     "https://outlook.office.com",
     "https://outlook.cloud.microsoft",
@@ -742,6 +745,12 @@ fn matches_mount_path(request_path: &str, mount_path: &str) -> bool {
             .is_some_and(|suffix| suffix.starts_with('/'))
 }
 
+fn is_component_kit_react_runtime_script_path(path: &str) -> bool {
+    path == LEGACY_COMPONENT_KIT_REACT_RUNTIME_SCRIPT_PATH
+        || (path.starts_with(COMPONENT_KIT_REACT_RUNTIME_SCRIPT_PATH_PREFIX)
+            && path.ends_with(".js"))
+}
+
 fn load_server_config(bundle_path: String) -> Option<ServerConfig> {
     let config_path = Path::new(&bundle_path).join("serve.json");
     if !config_path.exists() {
@@ -843,14 +852,8 @@ pub fn inject_environment_script_tag(
             .unwrap();
         }
     }
-    let component_kit_runtime_script = format!(
-        "<script type=\"module\" src=\"{}\"></script>",
-        COMPONENT_KIT_REACT_RUNTIME_SCRIPT_PATH
-    );
-    let component_kit_runtime_and_scripts =
-        format!("{component_kit_runtime_script}{component_kit_scripts}");
-
     let inserted_component_kit_scripts = std::cell::Cell::new(false);
+    let component_kit_runtime_script_path = std::cell::RefCell::new(None);
     let mut rewriter = HtmlRewriter::new(
         Settings {
             element_content_handlers: vec![
@@ -858,6 +861,15 @@ pub fn inject_environment_script_tag(
                     el.append(&script_tag, ContentType::Html);
                     if !component_kit_styles.is_empty() {
                         el.append(&component_kit_styles, ContentType::Html);
+                    }
+                    Ok(())
+                }),
+                element!("link[rel=\"modulepreload\"][href]", |el| {
+                    // Vite emits the runtime entry as a preload because the app imports it too.
+                    if let Some(href) = el.get_attribute("href")
+                        && is_component_kit_react_runtime_script_path(&href)
+                    {
+                        component_kit_runtime_script_path.replace(Some(href));
                     }
                     Ok(())
                 }),
@@ -881,6 +893,13 @@ pub fn inject_environment_script_tag(
                         && !inserted_component_kit_scripts.get()
                         && !is_react_runtime_marker
                     {
+                        let runtime_script_path = component_kit_runtime_script_path.borrow();
+                        let runtime_script_path = runtime_script_path
+                            .as_deref()
+                            .unwrap_or(LEGACY_COMPONENT_KIT_REACT_RUNTIME_SCRIPT_PATH);
+                        let component_kit_runtime_and_scripts = format!(
+                            "<script type=\"module\" src=\"{runtime_script_path}\"></script>{component_kit_scripts}"
+                        );
                         el.before(&component_kit_runtime_and_scripts, ContentType::Html);
                         inserted_component_kit_scripts.set(true);
                     }
@@ -1381,6 +1400,41 @@ mod tests {
             .expect("main script should remain");
         assert!(runtime_script_index < kit_script_index);
         assert!(kit_script_index < main_script_index);
+    }
+
+    #[test]
+    fn injects_component_kit_assets_after_hashed_react_runtime() {
+        let component_kit_assets = vec![ComponentKitAsset {
+            name: "example".to_string(),
+            directory_path: "/app/component-kits/example".to_string(),
+            mount_path: "/public/component-kits/example".to_string(),
+            script_path: Some("/public/component-kits/example/index-abc.js".to_string()),
+            stylesheet_path: None,
+        }];
+        let input = br#"<!doctype html><html><head><link rel="modulepreload" href="/public/common/assets/component-kit-react-runtime-AbCd1234.js"></head><body><script type="module" src="/public/common/assets/app-abc.js"></script></body></html>"#;
+        let mut output = Vec::new();
+
+        inject_environment_script_tag(
+            input,
+            &mut output,
+            &FrontedEnvironment::default(),
+            &component_kit_assets,
+        )
+        .expect("html injection should succeed");
+
+        let output = String::from_utf8(output).expect("output should be utf8");
+        let runtime_script_index = output
+            .find(r#"<script type="module" src="/public/common/assets/component-kit-react-runtime-AbCd1234.js"></script>"#)
+            .expect("hashed runtime script should be injected");
+        let kit_script_index = output
+            .find(r#"<script type="module" src="/public/component-kits/example/index-abc.js"></script>"#)
+            .expect("component kit script should be injected");
+        let main_script_index = output
+            .find(r#"<script type="module" src="/public/common/assets/app-abc.js"></script>"#)
+            .expect("main script should remain");
+        assert!(runtime_script_index < kit_script_index);
+        assert!(kit_script_index < main_script_index);
+        assert!(!output.contains(LEGACY_COMPONENT_KIT_REACT_RUNTIME_SCRIPT_PATH));
     }
 
     #[test]
