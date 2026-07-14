@@ -42,6 +42,21 @@ const getPreviewUrl = (
 ): string =>
   typeof file.preview_url === "string" ? file.preview_url : file.download_url;
 
+/**
+ * Host-implemented building blocks handed to `ChatMessageRenderer` overrides.
+ * Component kits run in a separately built bundle, so importing these from
+ * `@erato/frontend/library` would duplicate module state (React contexts, the
+ * lingui i18n instance) — receiving the host's own instances via props is the
+ * only identity-safe channel.
+ */
+export interface ChatMessageHostComponents {
+  MessageContent: typeof MessageContent;
+}
+
+export const CHAT_MESSAGE_HOST_COMPONENTS: ChatMessageHostComponents = {
+  MessageContent,
+};
+
 export interface ChatMessageProps {
   message: UiChatMessage;
   className?: string;
@@ -72,6 +87,8 @@ export interface ChatMessageProps {
   onViewFeedback?: (messageId: string, feedback: MessageFeedback) => void;
   /** Map of all files from the entire conversation keyed by file ID */
   allFilesById?: Record<string, FileUploadItem>;
+  /** Optional so pre-existing renderers and tests remain valid call sites. */
+  hostComponents?: ChatMessageHostComponents;
 }
 
 export const ChatMessage = memo(function ChatMessage({

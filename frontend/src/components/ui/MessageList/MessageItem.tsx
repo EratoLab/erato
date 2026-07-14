@@ -2,7 +2,7 @@ import { memo } from "react";
 
 import { mapMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 
-import { ChatMessage } from "../Chat/ChatMessage";
+import { CHAT_MESSAGE_HOST_COMPONENTS, ChatMessage } from "../Chat/ChatMessage";
 
 import type { ChatMessageProps } from "../Chat/ChatMessage";
 import type {
@@ -75,6 +75,7 @@ export const MessageItem = memo<MessageItemProps>(
           onFilePreview={onFilePreview}
           onViewFeedback={onViewFeedback}
           allFilesById={allFilesById}
+          hostComponents={CHAT_MESSAGE_HOST_COMPONENTS}
         />
       </div>
     );
