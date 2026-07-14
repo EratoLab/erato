@@ -50,7 +50,9 @@ export function DefaultEratoEmailCodeBlock({
           onClick={handleCopy}
           className="rounded-md border border-theme-border bg-theme-bg-primary px-3 py-1 text-xs hover:bg-theme-bg-tertiary"
         >
-          {copied ? t`Copied!` : t`Copy`}
+          {copied
+            ? t({ id: "chat.message.email.copied", message: "Copied!" })
+            : t({ id: "chat.message.email.copy", message: "Copy" })}
         </button>
       </div>
     </div>

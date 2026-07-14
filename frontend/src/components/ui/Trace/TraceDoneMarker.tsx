@@ -16,7 +16,7 @@ export const TraceDoneMarker = () => (
       hasTrailingLine={false}
     />
     <div className="min-w-0 flex-1 pl-2.5 pt-0.5 text-sm text-theme-fg-secondary">
-      {t`Done`}
+      {t({ id: "trace.done", message: "Done" })}
     </div>
   </div>
 );

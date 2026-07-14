@@ -253,8 +253,16 @@ function MarkdownPre({
       <button
         type="button"
         onClick={handleCopy}
-        aria-label={copied ? t`Copied` : t`Copy code`}
-        title={copied ? t`Copied` : t`Copy code`}
+        aria-label={
+          copied
+            ? t({ id: "chat.message.code.copied", message: "Copied" })
+            : t({ id: "chat.message.code.copy", message: "Copy code" })
+        }
+        title={
+          copied
+            ? t({ id: "chat.message.code.copied", message: "Copied" })
+            : t({ id: "chat.message.code.copy", message: "Copy code" })
+        }
         className="absolute right-2 top-2 z-10 flex items-center justify-center rounded border border-theme-border bg-theme-bg-secondary p-1 text-theme-fg-muted opacity-0 transition-opacity hover:bg-theme-bg-tertiary hover:text-theme-fg-primary focus:opacity-100 group-hover:opacity-100"
       >
         {copied ? (
@@ -353,7 +361,7 @@ const autolinkEratoFiles = (text: string): string => {
     if (prevChar === "(") {
       return match;
     }
-    return `[${t`Link`}](${match})`;
+    return `[${t({ id: "chat.message.link.fallback", message: "Link" })}](${match})`;
   });
 };
 
@@ -621,7 +629,12 @@ export const MessageContent = memo(function MessageContent({
                 onFileLinkPreview(resolvedEratoFile.previewFile);
               }}
             >
-              {typeof alt === "string" ? alt : t`Image`}
+              {typeof alt === "string"
+                ? alt
+                : t({
+                    id: "chat.message.image.fallback_alt",
+                    message: "Image",
+                  })}
             </a>
           );
         }
@@ -634,7 +647,12 @@ export const MessageContent = memo(function MessageContent({
               rel="noopener noreferrer"
               className="text-theme-fg-accent underline hover:opacity-80"
             >
-              {typeof alt === "string" ? alt : t`Image`}
+              {typeof alt === "string"
+                ? alt
+                : t({
+                    id: "chat.message.image.fallback_alt",
+                    message: "Image",
+                  })}
             </a>
           );
         }
@@ -868,7 +886,7 @@ export const MessageContent = memo(function MessageContent({
             data-footnotes="true"
           >
             <h2 className="mb-3 font-heading text-lg font-semibold text-theme-fg-primary">
-              {t`Footnotes`}
+              {t({ id: "chat.message.footnotes", message: "Footnotes" })}
             </h2>
             {/* Filter out the auto-generated h2 from children */}
             {React.Children.toArray(children).filter(

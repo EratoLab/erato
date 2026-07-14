@@ -25,7 +25,7 @@ export const ReasoningStep = ({
   renderMarkdown,
   maskReasoningText = false,
 }: ReasoningStepProps) => {
-  const fallbackTitle = t`Thinking`;
+  const fallbackTitle = t({ id: "trace.reasoning.title", message: "Thinking" });
   const isRunning = status === "running" && isStreaming;
 
   if (maskReasoningText) {
