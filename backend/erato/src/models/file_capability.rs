@@ -23,7 +23,7 @@ pub struct FileCapability {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum FileOperation {
-    /// Extract text content from the file (via Kreuzberg or OCR)
+    /// Extract text content from the file (via Xberg or OCR)
     ExtractText,
 
     /// Analyze image using model's image understanding capabilities
@@ -171,7 +171,7 @@ pub fn get_file_capabilities(
     };
 
     vec![
-        // Word documents - supported by Kreuzberg
+        // Word documents - supported by Xberg
         FileCapability::new(
             "word",
             vec!["doc".to_string(), "docx".to_string()],
@@ -182,14 +182,14 @@ pub fn get_file_capabilities(
             ],
             vec![FileOperation::ExtractText],
         ),
-        // PDF documents - supported by Kreuzberg
+        // PDF documents - supported by Xberg
         FileCapability::new(
             "pdf",
             vec!["pdf".to_string()],
             vec!["application/pdf".to_string()],
             vec![FileOperation::ExtractText],
         ),
-        // Excel spreadsheets - supported by Kreuzberg
+        // Excel spreadsheets - supported by Xberg
         FileCapability::new(
             "excel",
             vec!["xls".to_string(), "xlsx".to_string()],
@@ -199,7 +199,7 @@ pub fn get_file_capabilities(
             ],
             vec![FileOperation::ExtractText],
         ),
-        // PowerPoint presentations - supported by Kreuzberg
+        // PowerPoint presentations - supported by Xberg
         FileCapability::new(
             "powerpoint",
             vec!["ppt".to_string(), "pptx".to_string()],
@@ -210,14 +210,14 @@ pub fn get_file_capabilities(
             ],
             vec![FileOperation::ExtractText],
         ),
-        // Email files - supported by Kreuzberg when parsed as RFC822
+        // Email files - supported by Xberg when parsed as RFC822
         FileCapability::new(
             "email",
             vec!["eml".to_string()],
             vec!["message/rfc822".to_string()],
             vec![FileOperation::ExtractText],
         ),
-        // Plain text files - supported by Kreuzberg
+        // Plain text files - supported by Xberg
         FileCapability::new(
             "text",
             vec![

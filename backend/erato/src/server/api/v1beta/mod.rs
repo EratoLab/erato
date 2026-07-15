@@ -2964,7 +2964,7 @@ pub(super) fn effective_upload_content_type(
     // The `.eml` extension is authoritative: an `.eml` is always an RFC822 message, so force
     // `message/rfc822` regardless of the provided type. A client that sends the file's own inner
     // header (`multipart/alternative`/`multipart/mixed`) would otherwise have it preserved, and
-    // kreuzberg cannot parse those — the raw content then gets counted, inflating the estimate.
+    // xberg cannot parse those — the raw content then gets counted, inflating the estimate.
     if is_eml_filename(filename) {
         return Some("message/rfc822".to_string());
     }
@@ -3438,7 +3438,7 @@ mod tests {
     #[test]
     fn effective_upload_content_type_forces_eml_with_multipart_type() {
         // Regression: a client sending the `.eml`'s own inner header must not bypass the override.
-        // kreuzberg errors on `multipart/*`, so the raw bytes used to be counted (~600k tokens for
+        // xberg errors on `multipart/*`, so the raw bytes used to be counted (~600k tokens for
         // a newsletter whose real content is ~6k).
         assert_eq!(
             effective_upload_content_type("message.eml", Some("multipart/alternative")),

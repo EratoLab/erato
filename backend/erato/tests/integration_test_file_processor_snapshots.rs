@@ -21,7 +21,7 @@ fn read_example_file(filename: &str) -> Vec<u8> {
 #[tokio::test]
 async fn test_file_processor_examples_are_snapshotted() {
     let processor =
-        create_file_processor("kreuzberg").expect("Expected to create kreuzberg file processor");
+        create_file_processor("kreuzberg").expect("Expected to create xberg file processor");
 
     let fixtures: &[ExampleFixture] = &[
         ExampleFixture {

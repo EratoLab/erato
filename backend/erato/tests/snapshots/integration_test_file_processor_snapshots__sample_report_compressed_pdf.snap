@@ -3,229 +3,85 @@ source: erato/tests/integration_test_file_processor_snapshots.rs
 expression: extracted
 ---
 <page number="1">
-Multi-Page
+## Multi-Page Report
 
-Report
+"A comprehensive and content-heavy report that includes text, images, and tables for thorough testing of pagination and complex layouts."
 
-“A comprehensive and content-heavy report that
-includes text, images, and tables for thorough
-testing of pagination and complex layouts.”
-
-Prepared By
-
-Sample Team
+### Prepared By Sample Team
 
 sample-files.com
 
 <page number="2">
-Table of Contents
+### Table of Contents
 
-1. Introduction
-
-2. Market Analysis
-
-3. Data Analysis
-
-4. Product Overview
-
-5. Results & Discussion
-
-6. Marketing Strategy
-
-7. Sales Projections
-
-8. Launch Timeline
+**1. Introduction 2. Market Analysis 3. Data Analysis 4. Product Overview 5. Results & Discussion 6. Marketing Strategy 7. Sales Projections 8. Launch Timeline**
 
 This sample PDF file is provided by Sample-Files.com. Visit us for more sample files and resource.
 
 <page number="3">
-Introduction
+### Introduction
 
-This section introduces the report and highlights the
-
-key objectives. The purpose of this report is to analyze
-
-data, evaluate outcomes, and provide insights for
-
-future decisions. This analysis is based on various data
-
-sources that include quantitative and qualitative
-
-inputs. Note: Add an image here illustrating the
-
-concept of data analysis or research methodology. 
+This section introduces the report and highlights the key objectives. The purpose of this report is to analyze data, evaluate outcomes, and provide insights for future decisions. This analysis is based on various data sources that include quantitative and qualitative inputs. Note: Add an image here illustrating the concept of data analysis or research methodology.
 
 ID Metric
 
-1 Metric 1
-
-2 Metric 2
-
-3 Metric 3
-
-4 Metric 4
-
-5 Metric 5
-
-This sample PDF file is provided by Sample-Files.com. Visit us for more sample files and resource.
+1 Metric 1 2 Metric 2 3 Metric 3 4 Metric 4 5 Metric 5
 
 Value Remarks
 
-70 Valid Data
-
-431 Valid Data
-
-186 Valid Data
-
-489 Valid Data
-
-180 Valid Data
+70 Valid Data 431 Valid Data 186 Valid Data 489 Valid Data 180 Valid Data
 
 <page number="4">
-Market Analysis
+### Market Analysis
 
-Nam quis porta ex. Donec porttitor at sem nec
-sollicitudin. Ut vel commodo tortor, sagittis egestas
-nisl. Donec quam mauris, tristique non tempus vitae,
-ornare sed mauris. Etiam blandit tempor metus, at
-vehicula nisi. Maecenas suscipit vulputate varius.
+Nam quis porta ex. Donec porttitor at sem nec sollicitudin. Ut vel commodo tortor, sagittis egestas nisl. Donec quam mauris, tristique non tempus vitae, ornare sed mauris. Etiam blandit tempor metus, at vehicula nisi. Maecenas suscipit vulputate varius.
 
-Current market share
-
-This sample PDF file is provided by Sample-Files.com. Visit us for more sample files and resource.
-
-Projected sales for the
-first three years
+**Current market share Projected sales for the first three years**
 
 <page number="5">
-Data Analysis
+### Data Analysis
 
-This section analyzes data collected from various
-sources. The data is presented in a structured format
-to identify trends, patterns, and anomalies. Statistical
-methods are used to derive meaningful insights. Note:
-Add a chart or a graph here depicting the data trends
-visually. 
-
-This sample PDF file is provided by Sample-Files.com. Visit us for more sample files and resource.
+This section analyzes data collected from various sources. The data is presented in a structured format to identify trends, patterns, and anomalies. Statistical methods are used to derive meaningful insights. Note: Add a chart or a graph here depicting the data trends visually.
 
 <page number="6">
-Product Overview
+### Product Overview
 
-Nam quis porta ex. Donec porttitor at sem nec
-sollicitudin. Ut vel commodo tortor, sagittis egestas
-nisl. Donec quam mauris, tristique non tempus vitae,
-ornare sed mauris. Etiam blandit tempor metus, at
-vehicula nisi. Maecenas suscipit vulputate varius.
+Nam quis porta ex. Donec porttitor at sem nec sollicitudin. Ut vel commodo tortor, sagittis egestas nisl. Donec quam mauris, tristique non tempus vitae, ornare sed mauris. Etiam blandit tempor metus, at vehicula nisi. Maecenas suscipit vulputate varius.
 
-Key Features
+## Key Features
 
-Integer et justo velus.
-Ut in ipsum ac risus.
-Maecenas iaculis.
-Ut nec mauris vel.
-Tellus accumsan.
+Integer et justo velus. Ut in ipsum ac risus. Maecenas iaculis. Ut nec mauris vel. Tellus accumsan.
 
-Key Features
-
-Integer et justo velus.
-Ut in ipsum ac risus.
-Maecenas iaculis.
-Ut nec mauris vel.
-Tellus accumsan.
-
-This sample PDF file is provided by Sample-Files.com. Visit us for more sample files and resource.
+## Key Features
 
 <page number="7">
-Results & Discussion
+### Results & Discussion
 
-The results and findings are discussed in this section.
-The data presented previously is analyzed and
-contextualized to understand the implications. This
-section highlights key trends, potential causes, and
-implications for future strategies. Note: Add a
-comparative analysis image or table illustrating
-different scenarios. 
-
-This sample PDF file is provided by Sample-Files.com. Visit us for more sample files and resource.
+The results and findings are discussed in this section. The data presented previously is analyzed and contextualized to understand the implications. This section highlights key trends, potential causes, and implications for future strategies. Note: Add a comparative analysis image or table illustrating different scenarios.
 
 <page number="8">
-Marketing Strategy
+### Marketing Strategy
 
-Tristique non tempus vitae, ornare sed mauris. Etiam
-blandit tempor metus, at vehicula nisi. Maecenas
-suscipit vulputate varius.
+Tristique non tempus vitae, ornare sed mauris. Etiam blandit tempor metus, at vehicula nisi. Maecenas suscipit vulputate varius.
 
-1st Strategy
+## 1st Strategy
 
-Integer et justo velus.
-Ut in ipsum ac risus.
-Maecenas iaculis.
-Ut nec mauris vel.
-Tellus accumsan.
+Integer et justo velus. Ut in ipsum ac risus. Maecenas iaculis. Ut nec mauris vel. Tellus accumsan.
 
- 2nd Strategy
-
-Integer et justo velus.
-Ut in ipsum ac risus.
-Maecenas iaculis.
-Ut nec mauris vel.
-Tellus accumsan.
-
-This sample PDF file is provided by Sample-Files.com. Visit us for more sample files and resource.
+## 2nd Strategy
 
 <page number="9">
-Sales Projections
+### Sales Projections
 
-Tristique non tempus vitae, ornare sed mauris. Etiam
-blandit tempor metus, at vehicula nisi. Maecenas
-suscipit vulputate varius.
+Tristique non tempus vitae, ornare sed mauris. Etiam blandit tempor metus, at vehicula nisi. Maecenas suscipit vulputate varius.
 
-20
+Series 1 20 15 10 5 0 Item 1 Item 2 Metric Market Size User Satisfaction Growth Rate
 
-15
-
-10
-
-5
-
-0
-
-This sample PDF file is provided by 
-
-Item 1
-
-Metric
-
-Market Size
-
-User Satisfaction
-
-Growth Rate
-
-Series 1
-
-Item 2
-
-Sample-Files.com. Visit us for more sample files and resource.
-
-Series 2
-
-Item 3
-
-Sales
-
-$50 Billion
-
-85%
-
-10%
+Series 2 Item 3 Sales $50 Billion 85% 10%
 
 <page number="10">
 This sample PDF file is provided by Sample-Files.com. Visit us for more sample files and resource.
 
-porttitor aliquam nec ut velit.
-amet rhoncus lacus. Cras non erat imperdiet sapien
-Vivamus ac nunc vitae nulla molestie sodales. Proin sit
+porttitor aliquam nec ut velit. amet rhoncus lacus. Cras non erat imperdiet sapien Vivamus ac nunc vitae nulla molestie sodales. Proin sit
 
-Launch Timeline
+# Launch Timeline

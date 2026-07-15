@@ -2,9 +2,6 @@
 resolver = "2"
 members = ["erato", "mock-llm-server", "mock-mcp-server", "rmcp-sse"]
 
-[patch.crates-io]
-html-to-markdown-rs = { git = "https://github.com/kreuzberg-dev/html-to-markdown", rev = "1af0ae475a941fb610b227ff4044f431c841f2e7" }
-
 [profile.dev]
 split-debuginfo = "packed"
 
@@ -13,14 +10,14 @@ insta.opt-level = 3
 similar.opt-level = 3
 pdf_oxide.opt-level = 3
 html-to-markdown-rs.opt-level = 3
-kreuzberg.opt-level = 3
+xberg.opt-level = 3
 
 [profile.test.package]
 insta.opt-level = 3
 similar.opt-level = 3
 pdf_oxide.opt-level = 3
 html-to-markdown-rs.opt-level = 3
-kreuzberg.opt-level = 3
+xberg.opt-level = 3
 
 [profile.release]
 # Better stack traces in production deployments

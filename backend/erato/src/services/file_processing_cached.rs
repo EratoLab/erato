@@ -66,7 +66,7 @@ fn effective_text_mime_type(filename: &str, storage_mime_type: Option<&str>) -> 
     // The `.eml` extension is authoritative: an `.eml` is always an RFC822 message, so force
     // `message/rfc822` regardless of the stored type. Trusting the stored type breaks extraction
     // when it is the file's own inner header (`multipart/alternative`/`multipart/mixed`), which
-    // kreuzberg cannot parse and which fell through to a raw, hugely-inflated token count.
+    // xberg cannot parse and which fell through to a raw, hugely-inflated token count.
     if is_eml_file(filename) {
         return Some("message/rfc822".to_string());
     }
@@ -598,7 +598,7 @@ pub fn process_files_parallel_cached<'a>(
 #[cfg(test)]
 mod tests {
     use super::{effective_text_mime_type, parse_text_file_bytes};
-    use crate::services::file_processor::KreuzbergProcessor;
+    use crate::services::file_processor::XbergProcessor;
 
     #[test]
     fn effective_text_mime_type_forces_eml_to_message_rfc822() {
@@ -635,7 +635,7 @@ mod tests {
     #[test]
     fn effective_text_mime_type_forces_eml_with_multipart_storage_type() {
         // Regression: a real `.eml` is often persisted under its own inner header
-        // (`multipart/alternative`/`multipart/mixed`). kreuzberg cannot parse those and the raw
+        // (`multipart/alternative`/`multipart/mixed`). xberg cannot parse those and the raw
         // content used to be counted, inflating a ~6k-token newsletter to hundreds of thousands.
         assert_eq!(
             effective_text_mime_type("digest.eml", Some("multipart/alternative")).as_deref(),
@@ -671,7 +671,7 @@ Content-Transfer-Encoding: 7bit
 "#
         .to_vec();
 
-        let extracted = parse_text_file_bytes(&KreuzbergProcessor, eml_bytes, "digest.eml", None)
+        let extracted = parse_text_file_bytes(&XbergProcessor, eml_bytes, "digest.eml", None)
             .await
             .expect("expected .eml to parse through the email extractor");
 

@@ -284,7 +284,7 @@ describe("EmlPreview", () => {
     // detected the synthesized-thread shape and routed to `EmlThreadBody`.
     // The exhaustive nested-section render is verified end-to-end by the
     // office-addin's parseEmlBytes + synthesizeThreadEml round-trip tests
-    // and the backend's `test_kreuzberg_extracts_nested_rfc822_thread_bundle`
+    // and the backend's `test_xberg_extracts_nested_rfc822_thread_bundle`
     // — covering the same contract from both directions without depending
     // on jsdom's blob-URL fetch shim.
     await waitFor(() =>
