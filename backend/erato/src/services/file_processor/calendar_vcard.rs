@@ -4,8 +4,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use eyre::{Context, Report};
 use ical::{IcalParser, VcardParser, parser::Component, property::Property};
-use kreuzberg::plugins::{DocumentExtractor, Plugin};
-use kreuzberg::types::internal::InternalDocument;
+use xberg::plugins::{DocumentExtractor, Plugin};
 
 use super::{PLAIN_TEXT_MIME_TYPE, normalize_mime_type};
 
@@ -14,7 +13,7 @@ use super::{PLAIN_TEXT_MIME_TYPE, normalize_mime_type};
 const CALENDAR_VCARD_EXTRACTOR_NAME: &str = "calendar-vcard-extractor";
 
 pub(crate) fn register_calendar_vcard_extractor() -> Result<(), Report> {
-    kreuzberg::plugins::register_document_extractor(Arc::new(CalendarVcardExtractor))
+    xberg::plugins::register_document_extractor(Arc::new(CalendarVcardExtractor))
         .wrap_err("failed to register calendar/vcard extractor")
 }
 
@@ -24,29 +23,32 @@ struct CalendarVcardExtractor;
 #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 impl DocumentExtractor for CalendarVcardExtractor {
-    async fn extract_bytes(
+    async fn extract(
         &self,
-        content: &[u8],
-        mime_type: &str,
-        _config: &kreuzberg::ExtractionConfig,
-    ) -> kreuzberg::Result<InternalDocument> {
+        input: xberg::ExtractInput,
+        _config: &xberg::ExtractionConfig,
+    ) -> xberg::Result<xberg::ExtractedDocument> {
+        let content = input.bytes.ok_or_else(|| {
+            xberg::XbergError::validation(
+                "calendar/vCard extraction requires an in-memory byte input".to_string(),
+            )
+        })?;
+        let mime_type = input.mime_type.as_deref().unwrap_or(PLAIN_TEXT_MIME_TYPE);
         let normalized_mime = normalize_mime_type(mime_type);
         if normalized_mime != PLAIN_TEXT_MIME_TYPE {
-            return Err(kreuzberg::KreuzbergError::UnsupportedFormat(
-                mime_type.to_string(),
-            ));
+            return Err(xberg::XbergError::UnsupportedFormat(mime_type.to_string()));
         }
 
-        let markdown = if let Ok(raw_text) = std::str::from_utf8(content) {
+        let markdown = if let Ok(raw_text) = std::str::from_utf8(&content) {
             if raw_text.contains("BEGIN:VCALENDAR") {
-                let summary = render_calendar_summary(content);
+                let summary = render_calendar_summary(&content);
                 if !summary.trim().is_empty() {
                     summary
                 } else {
                     String::new()
                 }
             } else if raw_text.contains("BEGIN:VCARD") {
-                let summary = render_vcard_summary(content);
+                let summary = render_vcard_summary(&content);
                 if !summary.trim().is_empty() {
                     summary
                 } else {
@@ -60,15 +62,15 @@ impl DocumentExtractor for CalendarVcardExtractor {
         };
 
         if !markdown.trim().is_empty() {
-            let mut doc = InternalDocument::new("calendar-vcard");
-            doc.mime_type = normalized_mime;
-            doc.metadata.output_format = Some("markdown".to_string());
-            doc.pre_rendered_content = Some(markdown);
-            return Ok(doc);
+            let mut result = xberg::ExtractedDocument::default();
+            result.content = markdown;
+            result.mime_type = normalized_mime.into();
+            result.metadata.output_format = Some("markdown".to_string());
+            return Ok(result);
         }
 
         // Fallback to plain-text extraction when this isn't calendar/vCard data.
-        Ok(plain_text_document(content, mime_type))
+        Ok(plain_text_document(&content, mime_type))
     }
 
     fn supported_mime_types(&self) -> &[&str] {
@@ -89,29 +91,27 @@ impl Plugin for CalendarVcardExtractor {
         env!("CARGO_PKG_VERSION").to_string()
     }
 
-    fn initialize(&self) -> kreuzberg::Result<()> {
+    fn initialize(&self) -> xberg::Result<()> {
         Ok(())
     }
 
-    fn shutdown(&self) -> kreuzberg::Result<()> {
+    fn shutdown(&self) -> xberg::Result<()> {
         Ok(())
     }
 }
 
-fn plain_text_document(content: &[u8], mime_type: &str) -> InternalDocument {
+fn plain_text_document(content: &[u8], mime_type: &str) -> xberg::ExtractedDocument {
     let text = String::from_utf8_lossy(content).into_owned();
     let text = text
         .trim_end_matches('\n')
         .trim_end_matches('\r')
         .to_string();
 
-    let mut doc = InternalDocument::new("text");
-    doc.mime_type = mime_type.to_string();
-    doc.metadata.output_format = Some("markdown".to_string());
-    if !text.is_empty() {
-        doc.pre_rendered_content = Some(text);
-    }
-    doc
+    let mut result = xberg::ExtractedDocument::default();
+    result.content = text;
+    result.mime_type = mime_type.to_string().into();
+    result.metadata.output_format = Some("markdown".to_string());
+    result
 }
 
 /// Unescape RFC 5545 / RFC 6350 TEXT escaping: `\n`/`\N` -> newline, `\,` -> `,`,
@@ -464,7 +464,7 @@ fn unfold_ics_folding(content: &[u8]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::file_processor::{FileProcessor, KreuzbergProcessor};
+    use crate::services::file_processor::{FileProcessor, XbergProcessor};
 
     fn token_count(text: &str) -> usize {
         let bpe = tiktoken_rs::o200k_base().expect("o200k_base tokenizer");
@@ -472,7 +472,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_kreuzberg_extracts_outlook_meeting_request_calendar() {
+    async fn test_xberg_extracts_outlook_meeting_request_calendar() {
         // An Outlook-style meeting REQUEST: `multipart/alternative` with text/plain + text/html +
         // `text/calendar; method=REQUEST`, where the calendar part carries a full VTIMEZONE and a
         // VALARM (the boilerplate Outlook always emits). Modeled on the structure of a real Outlook
@@ -528,7 +528,7 @@ mod tests {
                 END:VCALENDAR\r\n\
                 --INVITE--\r\n";
 
-        let processor = KreuzbergProcessor;
+        let processor = XbergProcessor;
         let extracted = processor
             .parse_file(eml.as_bytes().to_vec(), Some("message/rfc822"))
             .await
@@ -634,9 +634,9 @@ mod tests {
         );
     }
     #[tokio::test]
-    async fn test_kreuzberg_extracts_bare_ics_upload() {
+    async fn test_xberg_extracts_bare_ics_upload() {
         // A bare `.ics` body (mime `text/calendar`) used to error with "Unsupported format" in
-        // kreuzberg. It must now extract via our route and yield the summary. Includes ICS text
+        // xberg. It must now extract via our route and yield the summary. Includes ICS text
         // escaping (`\,` and `\n`) which must be unescaped.
         let ics = "BEGIN:VCALENDAR\r\n\
                 VERSION:2.0\r\n\
@@ -651,7 +651,7 @@ mod tests {
                 END:VEVENT\r\n\
                 END:VCALENDAR\r\n";
 
-        let processor = KreuzbergProcessor;
+        let processor = XbergProcessor;
         let extracted = processor
             .parse_file(ics.as_bytes().to_vec(), Some("text/calendar"))
             .await
@@ -680,7 +680,7 @@ mod tests {
         assert!(!extracted.contains("PRODID"), "PRODID leaked:\n{extracted}");
     }
     #[tokio::test]
-    async fn test_kreuzberg_extracts_vcard_3_with_photo() {
+    async fn test_xberg_extracts_vcard_3_with_photo() {
         // A vCard 3.0 with a large base64 PHOTO. FN/ORG/EMAIL/TEL must be present; the PHOTO base64
         // sentinel must be ABSENT; output must be token-light. Modeled on RFC 6350 / Apple Contacts
         // vCard 3.0 exports.
@@ -707,7 +707,7 @@ mod tests {
                  END:VCARD\r\n"
         );
 
-        let processor = KreuzbergProcessor;
+        let processor = XbergProcessor;
         let extracted = processor
             .parse_file(vcf.into_bytes(), Some("text/vcard"))
             .await
@@ -758,7 +758,7 @@ mod tests {
         );
     }
     #[tokio::test]
-    async fn test_kreuzberg_extracts_vcard_4_with_photo() {
+    async fn test_xberg_extracts_vcard_4_with_photo() {
         // A vCard 4.0 with a large base64 data-URI PHOTO. Same assertions: useful fields present,
         // PHOTO absent, small. Modeled on RFC 6350 vCard 4.0 (PHOTO as a `data:` URI).
         let mut photo = String::new();
@@ -780,7 +780,7 @@ mod tests {
                  END:VCARD\r\n"
         );
 
-        let processor = KreuzbergProcessor;
+        let processor = XbergProcessor;
         let extracted = processor
             .parse_file(vcf.into_bytes(), Some("text/x-vcard"))
             .await
@@ -814,7 +814,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_kreuzberg_surfaces_calendar_part_in_invite_email() {
+    async fn test_xberg_surfaces_calendar_part_in_invite_email() {
         // End-to-end: a meeting-invite email carrying a `text/calendar` part must surface the event
         // via the supplement appended in parse_file (confirming the email-path wiring, not just the
         // bare-upload path).
@@ -837,7 +837,7 @@ mod tests {
                 END:VCALENDAR\r\n\
                 --MX--\r\n";
 
-        let processor = KreuzbergProcessor;
+        let processor = XbergProcessor;
         let extracted = processor
             .parse_file(eml.as_bytes().to_vec(), Some("message/rfc822"))
             .await

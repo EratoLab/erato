@@ -1,10 +1,10 @@
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose};
 use eyre::{Context, Report};
-use kreuzberg::detect_mime_type_from_bytes;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tracing::Instrument;
+use xberg::detect_mime_type_from_bytes;
 
 mod calendar_vcard;
 use self::calendar_vcard::register_calendar_vcard_extractor;
@@ -99,8 +99,8 @@ pub trait FileProcessor: Send + Sync {
     ) -> Result<String, Report>;
 }
 
-/// Kreuzberg-based file processor with page-aware markdown extraction
-pub struct KreuzbergProcessor;
+/// Xberg-based file processor with page-aware markdown extraction
+pub struct XbergProcessor;
 
 fn looks_like_docx(file_bytes: &[u8]) -> bool {
     const ZIP_HEADER: [u8; 4] = [0x50, 0x4b, 0x03, 0x04];
@@ -138,6 +138,26 @@ fn detect_mime_type(file_bytes: &[u8]) -> Result<String, Report> {
         mime_type = DOCX_MIME_TYPE.to_string();
     }
     Ok(mime_type)
+}
+
+fn extract_xberg_bytes_sync(
+    content: &[u8],
+    mime_type: &str,
+    config: &xberg::ExtractionConfig,
+) -> xberg::Result<xberg::ExtractedDocument> {
+    let input = xberg::ExtractInput::from_bytes(content.to_vec(), mime_type, None);
+    let extraction = xberg::extract(input, config);
+    let output = match tokio::runtime::Handle::try_current() {
+        Ok(handle) => handle.block_on(extraction)?,
+        Err(_) => tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?
+            .block_on(extraction)?,
+    };
+
+    output.results.into_iter().next().ok_or_else(|| {
+        xberg::XbergError::Other("xberg extraction returned no document result".to_string())
+    })
 }
 
 fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
@@ -238,7 +258,7 @@ fn is_vcard_mime(mime_type: &str) -> bool {
     matches!(mime_type, "text/vcard" | "text/x-vcard")
 }
 
-fn normalize_kreuzberg_mime(mime_type: &str) -> String {
+fn normalize_xberg_mime(mime_type: &str) -> String {
     let normalized = normalize_mime_type(mime_type);
     if is_calendar_mime(&normalized) || is_vcard_mime(&normalized) {
         PLAIN_TEXT_MIME_TYPE.to_string()
@@ -364,7 +384,7 @@ fn is_base64_byte(byte: u8) -> bool {
 /// Two passes, conservative to avoid false positives on real prose, code, or short tokens:
 ///   1. PEM blocks: anything between a `-----BEGIN …-----` and the next `-----END …-----` line
 ///      (RFC 7468 textual encoding) is replaced wholesale — the delimiters mark it as non-prose.
-///      Handled first because kreuzberg collapses newlines to spaces in the final content, so the
+///      Handled first because xberg collapses newlines to spaces in the final content, so the
 ///      block can arrive either newline- or space-separated; matching on the literal delimiters
 ///      works for both.
 ///   2. Contiguous runs: a run is a sequence of *long* (>= [`MIN_BASE64_SEGMENT_LEN`]) base64
@@ -379,7 +399,7 @@ fn elide_base64_blobs(text: &str) -> String {
 
 /// Pass 1 of [`elide_base64_blobs`]: replace each `-----BEGIN …----- … -----END …-----` PEM block
 /// with a marker. Matches on the literal ASCII delimiters so it works whether the block is newline-
-/// or (post-kreuzberg) space-separated. An unterminated `-----BEGIN-----` (no matching END) is left
+/// or (post-xberg) space-separated. An unterminated `-----BEGIN-----` (no matching END) is left
 /// untouched so we never swallow trailing real text.
 fn elide_pem_blocks(text: &str) -> String {
     const BEGIN: &str = "-----BEGIN ";
@@ -685,7 +705,7 @@ fn collect_email_html_body_parts(
 
 fn extract_email_html_body_fallback(
     file_bytes: &[u8],
-    config: &kreuzberg::ExtractionConfig,
+    config: &xberg::ExtractionConfig,
     marker_format: &str,
 ) -> (
     Option<String>,
@@ -711,8 +731,7 @@ fn extract_email_html_body_fallback(
     for (html_part_index, html) in html_parts.into_iter().enumerate() {
         extraction_stats.extraction_attempts += 1;
         let extraction_started = Instant::now();
-        let result =
-            kreuzberg::extract_bytes_sync(html.as_bytes(), HTML_MIME_TYPE, &fallback_config);
+        let result = extract_xberg_bytes_sync(html.as_bytes(), HTML_MIME_TYPE, &fallback_config);
         let extraction_elapsed = extraction_started.elapsed();
         extraction_stats.extraction_elapsed += extraction_elapsed;
 
@@ -726,7 +745,7 @@ fn extract_email_html_body_fallback(
                     result_content_len = result.content.len(),
                     page_count = result.pages.as_ref().map_or(0, Vec::len),
                     top_level_child_count = result.children.as_ref().map_or(0, Vec::len),
-                    "Email HTML fallback kreuzberg extraction finished"
+                    "Email HTML fallback xberg extraction finished"
                 );
 
                 let normalization_started = Instant::now();
@@ -755,7 +774,7 @@ fn extract_email_html_body_fallback(
                     html_bytes = html.len(),
                     elapsed_ms = extraction_elapsed.as_millis(),
                     error = %err,
-                    "Email HTML fallback kreuzberg extraction failed"
+                    "Email HTML fallback xberg extraction failed"
                 );
                 tracing::debug!(error = %err, "Skipping email HTML body fallback extraction");
             }
@@ -876,7 +895,7 @@ fn find_tag_open(lower: &str, from: usize, tag: &str) -> Option<usize> {
 }
 
 /// Remove `<style>`/`<script>` blocks and HTML comments (which may wrap MSO CSS) from an HTML
-/// fragment. kreuzberg's email extractor renders `<style>` block *contents* as text (it drops
+/// fragment. xberg's email extractor renders `<style>` block *contents* as text (it drops
 /// inline `style=` attributes but keeps style blocks), so a CSS-heavy newsletter leaks tens of
 /// thousands of tokens of CSS. Stripping these blocks removes the leak without touching real text.
 fn strip_html_style_and_script(html: &str) -> String {
@@ -921,10 +940,10 @@ fn strip_html_style_and_script(html: &str) -> String {
 
 /// Drop `data:` URI payloads from HTML attribute values, keeping the surrounding markup and text.
 ///
-/// kreuzberg's standalone HTML extractor renders `<img src="data:image/png;base64,...">` as the
+/// xberg's standalone HTML extractor renders `<img src="data:image/png;base64,...">` as the
 /// markdown `![alt](data:...)`, so a single inline image (50 KB–500 KB of base64) lands in the
 /// extracted text and tokenizes at ~2 chars/token — a token bomb. (The email extractor happens to
-/// drop these today, but this guarantees the payload never reaches kreuzberg regardless of which
+/// drop these today, but this guarantees the payload never reaches xberg regardless of which
 /// renderer runs, and shrinks the bytes we hand it.) Data URIs in email bodies are never
 /// content-bearing text, so removing every `data:` payload is safe.
 ///
@@ -1104,8 +1123,8 @@ fn sanitize_email_html_blocks_inner(
         // contains its own MIME boundaries and CRLFs; re-emitting verbatim under the original CTE
         // (e.g. `7bit`) risks a boundary/line-length/encoding mismatch against the inner message we
         // just rebuilt. Base64-wrapping the whole inner message sidesteps every such pitfall and is
-        // transparent to kreuzberg, which decodes the CTE before recursing into the nested message
-        // — confirmed by `test_kreuzberg_extracts_nested_rfc822_thread_bundle` (the nested bodies,
+        // transparent to xberg, which decodes the CTE before recursing into the nested message
+        // — confirmed by `test_xberg_extracts_nested_rfc822_thread_bundle` (the nested bodies,
         // grandchild attachment, and filename all still extract).
         let transfer_encoding = header_value(&headers, "content-transfer-encoding");
         let decoded = decode_mime_body(body, transfer_encoding);
@@ -1122,7 +1141,7 @@ fn sanitize_email_html_blocks_inner(
     if content_type_essence == "text/html" {
         stats.html_entities += 1;
         // Only rewrite UTF-8/ASCII HTML: decoding other charsets (UTF-16, Latin-1, …) through
-        // `from_utf8_lossy` would corrupt the text, so leave those parts untouched. kreuzberg still
+        // `from_utf8_lossy` would corrupt the text, so leave those parts untouched. xberg still
         // decodes them itself via the charset header; the CSS leak is overwhelmingly a UTF-8 case.
         if !has_utf8_or_ascii_charset(content_type) {
             return entity.to_vec();
@@ -1134,7 +1153,7 @@ fn sanitize_email_html_blocks_inner(
         let decoded_html = String::from_utf8_lossy(&decoded);
         stats.decoded_html_table_cell_tags += count_html_table_cell_tags(&decoded_html);
         // Strip `<style>`/`<script>` blocks first, then neutralize any `data:` URI payloads (large
-        // inline base64 images) — both are token bombs kreuzberg would otherwise render as text.
+        // inline base64 images) — both are token bombs xberg would otherwise render as text.
         let cleaned = sanitized_html_body(&decoded);
         stats.sanitized_html_bytes += cleaned.len();
         stats.sanitized_html_table_cell_tags += count_html_table_cell_tags(&cleaned);
@@ -1151,7 +1170,7 @@ fn sanitize_email_html_blocks_inner(
         stats.tnef_entities += 1;
         // A `winmail.dat` / TNEF part is an opaque Outlook blob we deliberately do not decode.
         // BLANK its body (re-emit empty base64) so its base64 can never reach the token count,
-        // regardless of how a given kreuzberg version chooses to render an unknown attachment.
+        // regardless of how a given xberg version chooses to render an unknown attachment.
         // A short `[winmail.dat (TNEF) attachment omitted]` marker is appended separately by
         // `parse_file` so the reader still knows an attachment was present.
         let mut out = headers_with_base64_encoding(headers_raw).into_bytes();
@@ -1314,7 +1333,7 @@ fn append_email_html_body_if_missing(content: &mut String, html_body: Option<Str
 /// `winmail.dat` attachment Outlook emits when "Rich Text" is on. We do NOT decode TNEF (out of
 /// scope); we only need to recognize it so the sanitizer can blank its base64 (otherwise a few KB
 /// of opaque blob can tokenize as noise, and even if a given extractor drops it today, blanking
-/// guarantees the bytes never reach kreuzberg). Detection is by content-type essence
+/// guarantees the bytes never reach xberg). Detection is by content-type essence
 /// (`application/ms-tnef`, `application/vnd.ms-tnef`) OR by a `winmail.dat` filename in the
 /// content-type `name=` / content-disposition `filename=` parameter — Outlook sets all of these,
 /// but third-party relays sometimes mangle the content-type to `application/octet-stream` while
@@ -1396,7 +1415,7 @@ fn collect_tnef_attachments(
 
 fn append_extraction_children(
     content: &mut String,
-    children: Option<Vec<kreuzberg::ArchiveEntry>>,
+    children: Option<Vec<xberg::ArchiveEntry>>,
 ) -> usize {
     let Some(children) = children else {
         return 0;
@@ -1429,7 +1448,7 @@ fn append_extraction_children(
     appended_children
 }
 
-fn is_raw_nested_message_attachment_duplicate(child: &kreuzberg::ArchiveEntry) -> bool {
+fn is_raw_nested_message_attachment_duplicate(child: &xberg::ArchiveEntry) -> bool {
     child.path.to_ascii_lowercase().ends_with(".eml")
         && child.mime_type.eq_ignore_ascii_case("text/plain")
         && child.result.content.contains("Content-Type:")
@@ -1438,7 +1457,7 @@ fn is_raw_nested_message_attachment_duplicate(child: &kreuzberg::ArchiveEntry) -
 
 fn content_with_page_markers(
     content: String,
-    pages: Option<Vec<kreuzberg::PageContent>>,
+    pages: Option<Vec<xberg::PageContent>>,
     marker_format: &str,
 ) -> String {
     if marker_format.contains("{page_num}") {
@@ -1487,7 +1506,7 @@ fn content_with_page_markers(
 }
 
 #[async_trait]
-impl FileProcessor for KreuzbergProcessor {
+impl FileProcessor for XbergProcessor {
     async fn parse_file(
         &self,
         file_bytes: Vec<u8>,
@@ -1517,12 +1536,12 @@ impl FileProcessor for KreuzbergProcessor {
 
                 let mut mime_type = if let Some(mime_type) = mime_type.as_deref() {
                     tracing::debug!(mime_type = %mime_type, "Using provided MIME type");
-                    normalize_kreuzberg_mime(mime_type)
+                    normalize_xberg_mime(mime_type)
                 } else {
                     let timer = StepTimer::start("file_processor.detect_mime");
                     let detected = detect_mime_type(&file_bytes)?;
                     timer.finish();
-                    normalize_kreuzberg_mime(&detected)
+                    normalize_xberg_mime(&detected)
                 };
 
                 if matches!(
@@ -1538,7 +1557,7 @@ impl FileProcessor for KreuzbergProcessor {
                     .wrap_err("Failed to register calendar/vcard extractor")?;
                 timer.finish();
 
-                // kreuzberg rejects bare `multipart/*` types ("Unsupported format"), but those are
+                // xberg rejects bare `multipart/*` types ("Unsupported format"), but those are
                 // the inner header of an RFC822 message (a `.eml` whose Content-Type is
                 // `multipart/alternative`/`multipart/mixed`). Route them through the email
                 // extractor instead of failing and falling back to a raw, hugely-inflated count.
@@ -1591,7 +1610,7 @@ impl FileProcessor for KreuzbergProcessor {
                 };
 
                 // For emails, strip `<style>`/`<script>` blocks from HTML parts before extraction:
-                // kreuzberg renders style-block contents as text, which otherwise leaks a CSS-heavy
+                // xberg renders style-block contents as text, which otherwise leaks a CSS-heavy
                 // newsletter's stylesheet into the token count. Other parts are left untouched.
                 let sanitized_email_bytes;
                 let did_sanitize = is_email;
@@ -1624,17 +1643,17 @@ impl FileProcessor for KreuzbergProcessor {
                     &file_bytes
                 };
 
-                // Configure kreuzberg for page-aware markdown extraction
-                let page_config = kreuzberg::PageConfig {
+                // Configure xberg for page-aware markdown extraction
+                let page_config = xberg::PageConfig {
                     extract_pages: true,
                     insert_page_markers: true,
                     marker_format: "<page number=\"{page_num}\">".to_string(),
                 };
                 let marker_format = page_config.marker_format.clone();
 
-                let mut config = kreuzberg::ExtractionConfig {
+                let mut config = xberg::ExtractionConfig {
                     use_cache: false,
-                    output_format: kreuzberg::OutputFormat::Markdown,
+                    output_format: xberg::OutputFormat::Markdown,
                     pages: Some(page_config),
                     html_options: Some(html_to_markdown_rs::ConversionOptions {
                         compact_tables: true,
@@ -1648,13 +1667,13 @@ impl FileProcessor for KreuzbergProcessor {
                     .max(EMAIL_HTML_FALLBACK_MAX_TABLE_CELLS);
                 config.security_limits = Some(security_limits);
 
-                // Extract content using kreuzberg. If HTML sanitization rewrote the email and the
+                // Extract content using xberg. If HTML sanitization rewrote the email and the
                 // rewritten bytes somehow fail to parse, fall back to the original bytes so we never
                 // regress a previously-extractable email into a silent drop (a higher token count is
                 // strictly better than losing the file).
-                let timer = StepTimer::start("file_processor.kreuzberg.extract_bytes_sync");
+                let timer = StepTimer::start("file_processor.xberg.extract_bytes_sync");
                 let primary_extraction_started = Instant::now();
-                let result = match kreuzberg::extract_bytes_sync(extraction_bytes, &mime_type, &config)
+                let result = match extract_xberg_bytes_sync(extraction_bytes, &mime_type, &config)
                 {
                     Ok(result) => {
                         let primary_extraction_elapsed = primary_extraction_started.elapsed();
@@ -1665,7 +1684,7 @@ impl FileProcessor for KreuzbergProcessor {
                             page_count = result.pages.as_ref().map_or(0, Vec::len),
                             top_level_child_count = result.children.as_ref().map_or(0, Vec::len),
                             did_sanitize,
-                            "Normal kreuzberg extraction finished"
+                            "Normal xberg extraction finished"
                         );
                         result
                     }
@@ -1675,15 +1694,15 @@ impl FileProcessor for KreuzbergProcessor {
                             elapsed_ms = primary_extraction_elapsed.as_millis(),
                             extraction_bytes_len = extraction_bytes.len(),
                             error = %err,
-                            "Normal kreuzberg extraction failed after email sanitization"
+                            "Normal xberg extraction failed after email sanitization"
                         );
                         tracing::warn!(
                             error = %err,
                             "Email HTML sanitization produced unparseable output; retrying with original bytes"
                         );
                         let retry_started = Instant::now();
-                        let retry_result = kreuzberg::extract_bytes_sync(&file_bytes, &mime_type, &config)
-                            .wrap_err("Kreuzberg extraction failed")?;
+                        let retry_result = extract_xberg_bytes_sync(&file_bytes, &mime_type, &config)
+                            .wrap_err("Xberg extraction failed")?;
                         let retry_elapsed = retry_started.elapsed();
                         tracing::trace!(
                             elapsed_ms = retry_elapsed.as_millis(),
@@ -1692,7 +1711,7 @@ impl FileProcessor for KreuzbergProcessor {
                             page_count = retry_result.pages.as_ref().map_or(0, Vec::len),
                             top_level_child_count =
                                 retry_result.children.as_ref().map_or(0, Vec::len),
-                            "Normal kreuzberg extraction retry with original bytes finished"
+                            "Normal xberg extraction retry with original bytes finished"
                         );
                         retry_result
                     }
@@ -1702,9 +1721,9 @@ impl FileProcessor for KreuzbergProcessor {
                             elapsed_ms = primary_extraction_elapsed.as_millis(),
                             extraction_bytes_len = extraction_bytes.len(),
                             error = %err,
-                            "Normal kreuzberg extraction failed"
+                            "Normal xberg extraction failed"
                         );
-                        return Err(err).wrap_err("Kreuzberg extraction failed");
+                        return Err(err).wrap_err("Xberg extraction failed");
                     }
                 };
                 let elapsed = timer.finish();
@@ -1714,7 +1733,7 @@ impl FileProcessor for KreuzbergProcessor {
                     result_content_len = result.content.len(),
                     page_count = result.pages.as_ref().map_or(0, Vec::len),
                     top_level_child_count = result.children.as_ref().map_or(0, Vec::len),
-                    "Kreuzberg extraction stats"
+                    "Xberg extraction stats"
                 );
 
                 let timer = StepTimer::start("file_processor.postprocess.page_markers");
@@ -1790,7 +1809,7 @@ impl FileProcessor for KreuzbergProcessor {
                     "Email fallback append stats"
                 );
 
-                // Final post-extraction pass for emails: kreuzberg renders the email body directly
+                // Final post-extraction pass for emails: xberg renders the email body directly
                 // (so a PEM block / pasted blob in a `text/plain` body, or zero-width-obfuscated
                 // keywords, land in `content` even though the plain-text supplement is deduped away).
                 // Elide long base64 blobs and strip zero-width characters here so the cleanup applies
@@ -1828,10 +1847,10 @@ impl FileProcessor for KreuzbergProcessor {
 }
 
 /// Factory function to create the file processor
-/// Now only supports Kreuzberg as parser-core has been deprecated
+/// Now only supports Xberg as parser-core has been deprecated
 pub fn create_file_processor(_processor_type: &str) -> Result<Arc<dyn FileProcessor>, Report> {
-    tracing::info!("Using kreuzberg file processor");
-    Ok(Arc::new(KreuzbergProcessor))
+    tracing::info!("Using xberg file processor");
+    Ok(Arc::new(XbergProcessor))
 }
 
 #[cfg(test)]
@@ -1871,7 +1890,7 @@ mod tests {
     async fn debug_weekly_digest_extraction_timings() {
         init_test_tracing();
 
-        let processor = KreuzbergProcessor;
+        let processor = XbergProcessor;
         let only_fixture = std::env::var("ERATO_FILE_PROCESSOR_DEBUG_FIXTURE").ok();
         for fixture in [
             "styled_newsletter_multipart_alternative.eml",
@@ -1899,7 +1918,7 @@ mod tests {
 
     #[test]
     #[ignore]
-    fn debug_weekly_digest_kreuzberg_stage_timings() {
+    fn debug_weekly_digest_xberg_stage_timings() {
         init_test_tracing();
 
         let fixture = std::env::var("ERATO_FILE_PROCESSOR_DEBUG_FIXTURE")
@@ -1923,9 +1942,9 @@ mod tests {
         );
 
         let marker_format = "<page number=\"{page_num}\">".to_string();
-        let config = kreuzberg::ExtractionConfig {
-            output_format: kreuzberg::OutputFormat::Markdown,
-            pages: Some(kreuzberg::PageConfig {
+        let config = xberg::ExtractionConfig {
+            output_format: xberg::OutputFormat::Markdown,
+            pages: Some(xberg::PageConfig {
                 extract_pages: true,
                 insert_page_markers: true,
                 marker_format,
@@ -1957,7 +1976,7 @@ mod tests {
             }
 
             let started = Instant::now();
-            let result = kreuzberg::extract_bytes_sync(&bytes, mime_type, &config)
+            let result = extract_xberg_bytes_sync(&bytes, mime_type, &config)
                 .unwrap_or_else(|err| panic!("{stage} failed for {fixture}: {err}"));
             eprintln!(
                 "fixture={fixture} stage={stage} mime_type={mime_type} input_len={} elapsed_ms={} content_len={} child_count={} page_count={}",
@@ -1986,12 +2005,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_kreuzberg_extracts_page_markers_from_compressed_pdf() {
+    async fn test_xberg_extracts_page_markers_from_compressed_pdf() {
         let fixture_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("tests/integration_tests/test_files/sample-report-compressed.pdf");
         let pdf_bytes = fs::read(&fixture_path).expect("Failed to read PDF fixture");
 
-        let processor = KreuzbergProcessor;
+        let processor = XbergProcessor;
         let extracted = processor
             .parse_file(pdf_bytes, None)
             .await
@@ -2004,10 +2023,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_kreuzberg_extracts_structured_content_from_eml_with_attachment() {
+    async fn test_xberg_extracts_structured_content_from_eml_with_attachment() {
         let eml_bytes = read_test_fixture("please_review_attached_draft.eml");
 
-        let processor = KreuzbergProcessor;
+        let processor = XbergProcessor;
         let extracted = processor
             .parse_file(eml_bytes, Some("message/rfc822"))
             .await
@@ -2022,10 +2041,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_kreuzberg_coerces_multipart_alternative_eml_and_strips_css() {
+    async fn test_xberg_coerces_multipart_alternative_eml_and_strips_css() {
         // A styled newsletter is `multipart/alternative` in its own header, and its HTML body is
         // dominated by inline `style="..."` attributes (the real case: ~600 KB of inline CSS).
-        // Clients sometimes forward that inner type verbatim; kreuzberg rejects it
+        // Clients sometimes forward that inner type verbatim; xberg rejects it
         // ("Unsupported format") and the raw CSS-heavy bytes used to be counted (~600k tokens for
         // ~6k of real text). parse_file must coerce `multipart/*` to `message/rfc822` so the email
         // extractor runs and drops the inline CSS.
@@ -2052,7 +2071,7 @@ mod tests {
              --BOUND--\r\n"
         );
 
-        let processor = KreuzbergProcessor;
+        let processor = XbergProcessor;
         let extracted = processor
             .parse_file(eml.into_bytes(), Some("multipart/alternative"))
             .await
@@ -2076,9 +2095,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_kreuzberg_strips_embedded_data_uri_image_from_eml() {
+    async fn test_xberg_strips_embedded_data_uri_image_from_eml() {
         // A heavily-embedded inline image — `<img src="data:image/png;base64,...">` with a large
-        // base64 payload — is a token bomb: kreuzberg's HTML renderer turns it into `![](data:...)`
+        // base64 payload — is a token bomb: xberg's HTML renderer turns it into `![](data:...)`
         // and the whole blob tokenizes at ~2 chars/token. The sanitizer must drop the payload while
         // keeping the readable body, so the extracted content stays tiny.
         let mut payload = String::new();
@@ -2098,7 +2117,7 @@ mod tests {
              <p>Trailing readable text.</p></body></html>\r\n"
         );
 
-        let processor = KreuzbergProcessor;
+        let processor = XbergProcessor;
         let extracted = processor
             .parse_file(eml.into_bytes(), Some("message/rfc822"))
             .await
@@ -2187,9 +2206,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_kreuzberg_leaves_non_utf8_html_email_untouched() {
+    async fn test_xberg_leaves_non_utf8_html_email_untouched() {
         // A UTF-16 HTML part must not be run through the lossy UTF-8 sanitizer (it would corrupt
-        // the text); the sanitizer should leave it for kreuzberg to decode via the charset header.
+        // the text); the sanitizer should leave it for xberg to decode via the charset header.
         let mut body = Vec::new();
         for unit in "<html><body><p>UTF16 body marker works</p></body></html>".encode_utf16() {
             body.extend_from_slice(&unit.to_le_bytes());
@@ -2199,7 +2218,7 @@ mod tests {
             .to_vec();
         eml.extend_from_slice(&body);
 
-        let processor = KreuzbergProcessor;
+        let processor = XbergProcessor;
         let extracted = processor
             .parse_file(eml, Some("message/rfc822"))
             .await
@@ -2211,7 +2230,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_kreuzberg_reduces_production_scale_styled_newsletter_without_leaking() {
+    async fn test_xberg_reduces_production_scale_styled_newsletter_without_leaking() {
         // Production-scale regression: a ~950 KB synthetic Microsoft-style weekly digest
         // (`multipart/alternative`, quoted-printable HTML, a large `<style>` block, hundreds of
         // inline-styled nested tables, MSO conditionals, tracking URLs). The CSS carries a
@@ -2226,7 +2245,7 @@ mod tests {
             "fixture unexpectedly small ({raw_len} bytes)"
         );
 
-        let processor = KreuzbergProcessor;
+        let processor = XbergProcessor;
         // The bug case: a client forwards the `.eml`'s own inner `multipart/alternative` type.
         let extracted = processor
             .parse_file(eml_bytes, Some("multipart/alternative"))
@@ -2262,10 +2281,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_kreuzberg_extracts_content_from_eml_pdf_attachment() {
+    async fn test_xberg_extracts_content_from_eml_pdf_attachment() {
         let eml_bytes = read_test_fixture("email-with-sample-compressed-pdf.eml");
 
-        let processor = KreuzbergProcessor;
+        let processor = XbergProcessor;
         let extracted = processor
             .parse_file(eml_bytes, Some("message/rfc822"))
             .await
@@ -2283,10 +2302,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_kreuzberg_extracts_structured_content_from_eml_reply_thread() {
+    async fn test_xberg_extracts_structured_content_from_eml_reply_thread() {
         let eml_bytes = read_test_fixture("re_another_doc_you_have_to_check.eml");
 
-        let processor = KreuzbergProcessor;
+        let processor = XbergProcessor;
         let extracted = processor
             .parse_file(eml_bytes, Some("message/rfc822"))
             .await
@@ -2332,19 +2351,19 @@ Content-Type: text/html; charset=utf-8
             "(Updated) Microsoft Teams: AI meeting recap without transcript to meet compliance policies"
         ));
 
-        let mut kreuzberg_content =
+        let mut xberg_content =
             "Weekly digest: Microsoft service updates\n\nView a summary of the updates."
                 .to_string();
-        append_email_plain_text_if_missing(&mut kreuzberg_content, Some(plain_text));
+        append_email_plain_text_if_missing(&mut xberg_content, Some(plain_text));
 
-        assert!(kreuzberg_content.contains("## Email plain text body"));
-        assert!(kreuzberg_content.contains(
+        assert!(xberg_content.contains("## Email plain text body"));
+        assert!(xberg_content.contains(
             "(Updated) Microsoft Teams: AI meeting recap without transcript to meet compliance policies"
         ));
     }
 
     #[tokio::test]
-    async fn test_kreuzberg_strips_style_in_nested_forwarded_email() {
+    async fn test_xberg_strips_style_in_nested_forwarded_email() {
         // A CSS-heavy email forwarded *inside* a thread (as a `message/rfc822` attachment) must be
         // sanitized too: before the sanitizer recursed into `message/rfc822` parts, the inner
         // `<style>` block was treated as opaque and leaked into the token count. Build a
@@ -2370,7 +2389,7 @@ Content-Type: text/html; charset=utf-8
         eml.extend_from_slice(inner_email);
         eml.extend_from_slice(b"\r\n--OUTER--\r\n");
 
-        let processor = KreuzbergProcessor;
+        let processor = XbergProcessor;
         let extracted = processor
             .parse_file(eml, Some("message/rfc822"))
             .await
@@ -2390,16 +2409,16 @@ Content-Type: text/html; charset=utf-8
     }
 
     #[tokio::test]
-    async fn test_kreuzberg_extracts_nested_rfc822_thread_bundle() {
+    async fn test_xberg_extracts_nested_rfc822_thread_bundle() {
         let eml_bytes = read_test_fixture("synthesized_thread_bundle.eml");
 
-        let processor = KreuzbergProcessor;
+        let processor = XbergProcessor;
         let extracted = processor
             .parse_file(eml_bytes, Some("message/rfc822"))
             .await
             .expect("Failed to extract text from synthesized thread bundle");
 
-        // Both nested message bodies should appear — proves kreuzberg recurses
+        // Both nested message bodies should appear — proves xberg recurses
         // into the message/rfc822 parts of a multipart/mixed wrapper. Mirrors
         // the shape `synthesizeThreadEml` emits in the office add-in.
         assert!(
@@ -2425,7 +2444,7 @@ Content-Type: text/html; charset=utf-8
     }
 
     #[tokio::test]
-    async fn test_kreuzberg_extracts_deep_html_body_from_erato_wrapped_nested_message() {
+    async fn test_xberg_extracts_deep_html_body_from_erato_wrapped_nested_message() {
         let eml_bytes = read_test_fixture("weekly_digest_microsoft_via_erato.eml");
         let mut html_parts = Vec::new();
         let mut html_stats = EmailBodyStats::default();
@@ -2444,9 +2463,9 @@ Content-Type: text/html; charset=utf-8
             "HTML-only nested email should not be treated as having a text/plain body"
         );
         let marker_format = "<page number=\"{page_num}\">".to_string();
-        let config = kreuzberg::ExtractionConfig {
-            output_format: kreuzberg::OutputFormat::Markdown,
-            pages: Some(kreuzberg::PageConfig {
+        let config = xberg::ExtractionConfig {
+            output_format: xberg::OutputFormat::Markdown,
+            pages: Some(xberg::PageConfig {
                 extract_pages: true,
                 insert_page_markers: true,
                 marker_format: marker_format.clone(),
@@ -2467,7 +2486,7 @@ Content-Type: text/html; charset=utf-8
             "HTML fallback extraction did not contain expected content:\n{html_fallback}"
         );
 
-        let processor = KreuzbergProcessor;
+        let processor = XbergProcessor;
         let extracted = processor
             .parse_file(eml_bytes, Some("message/rfc822"))
             .await
@@ -2494,10 +2513,10 @@ Content-Type: text/html; charset=utf-8
     }
 
     #[tokio::test]
-    async fn test_kreuzberg_extracts_structured_content_from_company_overview_pptx() {
+    async fn test_xberg_extracts_structured_content_from_company_overview_pptx() {
         let pptx_bytes = read_test_fixture("Acme_Inc_Company_Overview.pptx");
 
-        let processor = KreuzbergProcessor;
+        let processor = XbergProcessor;
         let extracted = processor
             .parse_file(
                 pptx_bytes,
@@ -2527,7 +2546,7 @@ Content-Type: text/html; charset=utf-8
     }
 
     #[tokio::test]
-    async fn test_kreuzberg_handles_multipart_missing_closing_boundary() {
+    async fn test_xberg_handles_multipart_missing_closing_boundary() {
         // Adversarial MIME: declares `multipart/alternative; boundary="X"` but the message is
         // truncated mid-part — there is no closing `--X--` and the final HTML part is cut off
         // mid-tag. The sanitizer's MIME rebuild (`split_multipart_body` + boundary reconstruction)
@@ -2538,7 +2557,7 @@ Content-Type: text/html; charset=utf-8
             --X\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nADV_MARKER_A readable.\r\n\
             --X\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<html><body><p>trunc";
 
-        let processor = KreuzbergProcessor;
+        let processor = XbergProcessor;
         let extracted = processor
             .parse_file(eml.as_bytes().to_vec(), Some("message/rfc822"))
             .await
@@ -2556,7 +2575,7 @@ Content-Type: text/html; charset=utf-8
     }
 
     #[tokio::test]
-    async fn test_kreuzberg_handles_multipart_boundary_absent_from_body() {
+    async fn test_xberg_handles_multipart_boundary_absent_from_body() {
         // Adversarial MIME: declares a boundary (`NOPE`) that never appears anywhere in the body, so
         // `split_multipart_body` yields ZERO parts. Before the defensive guard in
         // `sanitize_email_html_blocks_inner`, rebuilding from zero parts emitted only `--NOPE--` and
@@ -2566,7 +2585,7 @@ Content-Type: text/html; charset=utf-8
             Content-Type: multipart/alternative; boundary=\"NOPE\"\r\n\r\n\
             ADV_MARKER_B body that has no boundary delimiter at all.\r\n";
 
-        let processor = KreuzbergProcessor;
+        let processor = XbergProcessor;
         let extracted = processor
             .parse_file(eml.as_bytes().to_vec(), Some("message/rfc822"))
             .await
@@ -2584,7 +2603,7 @@ Content-Type: text/html; charset=utf-8
     }
 
     #[tokio::test]
-    async fn test_kreuzberg_handles_invalid_base64_part() {
+    async fn test_xberg_handles_invalid_base64_part() {
         // Adversarial MIME: a part declares `Content-Transfer-Encoding: base64` but the body is not
         // valid base64. `decode_mime_body` must not panic — it falls back to the raw bytes on a
         // decode error — and the readable text/plain sibling must still extract.
@@ -2594,7 +2613,7 @@ Content-Type: text/html; charset=utf-8
             --Y\r\nContent-Type: application/octet-stream\r\nContent-Transfer-Encoding: base64\r\n\r\n\
             !!!not-valid-base64@@@truncated\r\n--Y--\r\n";
 
-        let processor = KreuzbergProcessor;
+        let processor = XbergProcessor;
         let extracted = processor
             .parse_file(eml.as_bytes().to_vec(), Some("message/rfc822"))
             .await
@@ -2612,11 +2631,11 @@ Content-Type: text/html; charset=utf-8
     }
 
     #[tokio::test]
-    async fn test_kreuzberg_does_not_leak_inline_cid_image_base64() {
+    async fn test_xberg_does_not_leak_inline_cid_image_base64() {
         // A `multipart/related` email with an inline image referenced by CID: a `text/html` part with
         // `<img src="cid:logo123">` plus a readable marker, and a sibling `image/png` part carrying a
         // few KB of base64 (`Content-ID: <logo123>`). The readable marker must survive, and the
-        // image's base64 must NOT be tokenized as a raw blob — kreuzberg's email extractor skips
+        // image's base64 must NOT be tokenized as a raw blob — xberg's email extractor skips
         // image parts, so this just locks that behavior in.
         let mut image_base64 = String::new();
         while image_base64.len() < 4_000 {
@@ -2633,7 +2652,7 @@ Content-Type: text/html; charset=utf-8
              {image_base64}\r\n--R--\r\n"
         );
 
-        let processor = KreuzbergProcessor;
+        let processor = XbergProcessor;
         let extracted = processor
             .parse_file(eml.into_bytes(), Some("message/rfc822"))
             .await
@@ -2655,11 +2674,11 @@ Content-Type: text/html; charset=utf-8
     }
 
     #[tokio::test]
-    async fn test_kreuzberg_preserves_latin1_html_email_content() {
+    async fn test_xberg_preserves_latin1_html_email_content() {
         // Charset edge: an `iso-8859-1` (Latin-1) `text/html` part with a high byte (é = 0xE9) and a
         // `<style>` block. Like the UTF-16 case, the sanitizer's charset guard leaves non-UTF-8 parts
         // untouched (running them through `from_utf8_lossy` would corrupt the high bytes), so
-        // kreuzberg decodes the part itself via the charset header and the accented text survives.
+        // xberg decodes the part itself via the charset header and the accented text survives.
         //
         // KNOWN LIMITATION: because we skip sanitizing non-UTF-8 parts, the `<style>` block is NOT
         // stripped for Latin-1 emails and its CSS can leak. We assert content *correctness* here
@@ -2675,7 +2694,7 @@ Content-Type: text/html; charset=utf-8
         eml.push(0xE9); // é in Latin-1
         eml.extend_from_slice(b" LATIN1_MARKER works</p></body></html>\r\n");
 
-        let processor = KreuzbergProcessor;
+        let processor = XbergProcessor;
         let extracted = processor
             .parse_file(eml, Some("message/rfc822"))
             .await
@@ -2692,7 +2711,7 @@ Content-Type: text/html; charset=utf-8
     }
 
     #[tokio::test]
-    async fn test_kreuzberg_handles_mixed_transfer_encodings_in_one_email() {
+    async fn test_xberg_handles_mixed_transfer_encodings_in_one_email() {
         // A `multipart/mixed` with two differently-encoded parts: a quoted-printable `text/html` part
         // carrying a `<style>` block (which must be stripped) and a base64 `text/plain` part (which
         // must decode and survive). Exercises both transfer-encoding paths in `decode_mime_body`
@@ -2711,7 +2730,7 @@ Content-Type: text/html; charset=utf-8
              {plain_base64}\r\n--M--\r\n"
         );
 
-        let processor = KreuzbergProcessor;
+        let processor = XbergProcessor;
         let extracted = processor
             .parse_file(eml.into_bytes(), Some("message/rfc822"))
             .await
@@ -2761,7 +2780,7 @@ Content-Type: text/html; charset=utf-8
     }
 
     #[tokio::test]
-    async fn test_kreuzberg_blanks_tnef_winmail_dat_and_marks_attachment() {
+    async fn test_xberg_blanks_tnef_winmail_dat_and_marks_attachment() {
         // An Outlook email whose Rich Text produced a `winmail.dat` (TNEF) attachment, a few KB of
         // base64, alongside a readable text/plain body. Modeled on the real Outlook TNEF MIME shape
         // (`application/ms-tnef; name="winmail.dat"` + `Content-Disposition: attachment;
@@ -2790,7 +2809,7 @@ Content-Type: text/html; charset=utf-8
              {blob}\r\n--TNEFBOUND--\r\n"
         );
 
-        let processor = KreuzbergProcessor;
+        let processor = XbergProcessor;
         let extracted = processor
             .parse_file(eml.into_bytes(), Some("message/rfc822"))
             .await
@@ -2816,7 +2835,7 @@ Content-Type: text/html; charset=utf-8
     }
 
     #[tokio::test]
-    async fn test_kreuzberg_elides_pem_block_in_plain_text_body() {
+    async fn test_xberg_elides_pem_block_in_plain_text_body() {
         // A `text/plain` body containing a PEM CERTIFICATE block (~1.5 KB of base64) wrapped in
         // ordinary sentences. The sentences must survive, the base64 must be elided behind a marker,
         // and the token count must collapse. Modeled on RFC 7468 PEM textual encoding.
@@ -2838,7 +2857,7 @@ Content-Type: text/html; charset=utf-8
              Content-Type: text/plain; charset=utf-8\r\n\r\n{body}\r\n"
         );
 
-        let processor = KreuzbergProcessor;
+        let processor = XbergProcessor;
         let extracted = processor
             .parse_file(eml.into_bytes(), Some("message/rfc822"))
             .await
@@ -2950,14 +2969,14 @@ Content-Type: text/html; charset=utf-8
     }
 
     #[tokio::test]
-    async fn test_kreuzberg_strips_zero_width_obfuscation_in_email_body() {
+    async fn test_xberg_strips_zero_width_obfuscation_in_email_body() {
         // End-to-end: a phishing-style body that splits keywords with zero-width spaces must come
         // out with the keywords joined so a downstream filter/LLM reads the real word.
         let eml = "From: a@example.com\r\nTo: b@example.com\r\nSubject: alert\r\nMIME-Version: 1.0\r\n\
             Content-Type: text/plain; charset=utf-8\r\n\r\n\
             Please confirm your pass\u{200b}word and in\u{200b}voice details immediately.\r\n";
 
-        let processor = KreuzbergProcessor;
+        let processor = XbergProcessor;
         let extracted = processor
             .parse_file(eml.as_bytes().to_vec(), Some("message/rfc822"))
             .await
@@ -2970,7 +2989,7 @@ Content-Type: text/html; charset=utf-8
     }
 
     #[tokio::test]
-    async fn test_kreuzberg_elides_pasted_base64_blob_in_email_body() {
+    async fn test_xberg_elides_pasted_base64_blob_in_email_body() {
         // A pasted contiguous base64 blob (e.g. someone pasted a log/image) in a text/plain body.
         let blob = "R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs".repeat(30);
         let eml = format!(
@@ -2978,7 +2997,7 @@ Content-Type: text/html; charset=utf-8
              Content-Type: text/plain; charset=utf-8\r\n\r\n\
              PASTE_BODY_MARKER here is the blob {blob} and PASTE_TAIL_MARKER after.\r\n"
         );
-        let processor = KreuzbergProcessor;
+        let processor = XbergProcessor;
         let extracted = processor
             .parse_file(eml.into_bytes(), Some("message/rfc822"))
             .await

@@ -10,7 +10,7 @@ Generate a test PDF file with distinct, identifiable content on each page.
 
 This script creates a PDF document with multiple pages (default: 20), where each page
 contains unique content with clear page identifiers. This is useful for testing
-page-aware file processors like kreuzberg.
+page-aware file processors like xberg.
 
 Each page includes:
 - Page identifier: PAGE-XXX (unique 3-digit number)

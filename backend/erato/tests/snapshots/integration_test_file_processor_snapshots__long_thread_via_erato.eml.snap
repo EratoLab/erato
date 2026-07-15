@@ -64,17 +64,19 @@ Attachments:
 
 MIME type: application/pdf
 
-### 5.2 Backend
+# Lastenheft – Kundenportal 2.0
 
-React 18+ mit TypeScript. Komponentenbibliothek nach Absprache (bevorzugt MUI oder shadcn/ui). Responsives Design (Mobile-first).
+Dokumentversion 1.0 | Erstellt: 02. Juni 2025 | Vertraulich
 
-### 5.1 Frontend
+## 1\. Projektziel
 
-## 5\. Technische Rahmenbedingungen
+Entwicklung eines modernen, webbasierten Kundenportals, das bestehenden Kunden Zugang zu Bestellhistorien, Rechnungen, Support-Tickets und Produktkonfigurationen bietet. Das System soll die bisherige, veraltete Lösung vollständig ersetzen.
 
-Performance: Ladezeit der Hauptseite unter 2 Sekunden (P95). Verfügbarkeit: 99,5 % SLA. Datenschutz: DSGVO-konform, Hosting ausschliesslich auf EU-Servern. Barrierefreiheit: WCAG 2.1 Level AA.
+## 2\. Zielgruppe
 
-## 4\. Nicht-funktionale Anforderungen
+Primäre Nutzer sind Bestandskunden der Firma A GmbH (ca. 1.200 aktive Accounts). Sekundär: interne Sachbearbeiter im Kundenservice.
+
+## 3\. Funktionale Anforderungen
 
 | ID | Anforderung | Priorität |
 | F-01 | Login mit SSO (OAuth 2.0 / SAML) | Hoch |
@@ -86,17 +88,25 @@ Performance: Ladezeit der Hauptseite unter 2 Sekunden (P95). Verfügbarkeit: 99,
 | F-07 | Mehrsprachigkeit (DE, EN, FR) | Mittel |
 | F-08 | Admin-Dashboard für Kundenservice | Hoch |
 
-Primäre Nutzer sind Bestandskunden der Firma A GmbH (ca. 1.200 aktive Accounts). Sekundär: interne Sachbearbeiter im Kundenservice. F-08 Admin-Dashboard für Kundenservice Hoch
+## 4\. Nicht-funktionale Anforderungen
 
-## 2\. Zielgruppe
+Performance: Ladezeit der Hauptseite unter 2 Sekunden (P95). Verfügbarkeit: 99,5 % SLA. Datenschutz: DSGVO-konform, Hosting ausschliesslich auf EU-Servern. Barrierefreiheit: WCAG 2.1 Level AA.
 
-Entwicklung eines modernen, webbasierten Kundenportals, das bestehenden Kunden Zugang zu Bestellhistorien, Rechnungen, Support-Tickets und Produktkonfigurationen bietet. Das System soll die bisherige, veraltete Lösung vollständig ersetzen.
+## 5\. Technische Rahmenbedingungen
 
-## 1\. Projektziel
+### 5.1 Frontend
 
-Dokumentversion 1.0 | Erstellt: 02. Juni 2025 | Vertraulich
+React 18+ mit TypeScript. Komponentenbibliothek nach Absprache (bevorzugt MUI oder shadcn/ui). Responsives Design (Mobile-first).
 
-# Lastenheft – Kundenportal 2.0
+### 5.2 Backend
+
+REST-API oder GraphQL. Bevorzugte Sprache: Node.js (NestJS) oder Java (Spring Boot). Datenbankanbindung: PostgreSQL. Caching: Redis.
+
+### 5.3 Infrastruktur
+
+Deployment via Docker / Kubernetes auf Azure. CI/CD-Pipeline erforderlich. Staging- und Produktionsumgebung getrennt.
+
+## 6\. Zeitplan (grob)
 
 | Phase | Inhalt | Dauer |
 | Phase 1 | Konzeption & Architektur | 4 Wochen |
@@ -105,24 +115,14 @@ Dokumentversion 1.0 | Erstellt: 02. Juni 2025 | Vertraulich
 | Phase 4 | Produktkonfigurator (F-05) | 4 Wochen |
 | Phase 5 | Testing, UAT, Go-Live | 4 Wochen |
 
-- Sicherheitsaudit durch externen Dienstleister einplanen Erstellt von: Anna Berger, Firma A GmbH | Freigegeben: ausstehend
-- Integration bestehende ERP-Schnittstelle (SAP) unklar
-- Lizenzmodell fuer Drittanbieter-Komponenten klaeren
-- Entscheidung Frontend-Framework noch ausstehend
-
 ## 7\. Offene Punkte
 
-Phase 1 Konzeption & Architektur 4 Wochen Phase 2 MVP (F-01, F-02, F-03, F-08) 8 Wochen Phase 3 Ausbau (F-04, F-06, F-07) 6 Wochen Phase 4 Produktkonfigurator (F-05) 4 Wochen Phase 5 Testing, UAT, Go-Live 4 Wochen
+- Entscheidung Frontend-Framework noch ausstehend
+- Lizenzmodell fuer Drittanbieter-Komponenten klaeren
+- Integration bestehende ERP-Schnittstelle (SAP) unklar
+- Sicherheitsaudit durch externen Dienstleister einplanen
 
-**Phase Inhalt Dauer**
-
-## 6\. Zeitplan (grob)
-
-Deployment via Docker / Kubernetes auf Azure. CI/CD-Pipeline erforderlich. Staging- und Produktionsumgebung getrennt.
-
-### 5.3 Infrastruktur
-
-REST-API oder GraphQL. Bevorzugte Sprache: Node.js (NestJS) oder Java (Spring Boot). Datenbankanbindung: PostgreSQL. Caching: Redis.
+Erstellt von: Anna Berger, Firma A GmbH | Freigegeben: ausstehend
 
 ## Attachment: nested_message_1.eml
 
@@ -1514,7 +1514,7 @@ Die Anbindung an das bestehende SAP ERP (S/4HANA) erfolgt über SAP BTP Integrat
 
 # 5\. Sicherheit
 
-**Sicherheitsaudit:** SRC Security Research Consulting GmbH (Bonn) – Beauftragung erfolgt. Audit geplant für Phase 4 (ab KW 42).
+**Sicherheitsaudit:** SRC Security Research & Consulting GmbH (Bonn) – Beauftragung erfolgt. Audit geplant für Phase 4 (ab KW 42).
 
 Weitere Massnahmen: OWASP Top 10 als Entwicklungsrichtlinie; Penetrationstest vor Go-Live; DSGVO-Datenschutz-Folgenabschätzung durch Datenschutzbeauftragten der Firma A.
 
@@ -1523,7 +1523,7 @@ Weitere Massnahmen: OWASP Top 10 als Entwicklungsrichtlinie; Penetrationstest vo
 | **Risiko** | **Wahrsch.** | **Auswirkung** | **Massnahme** |
 | SAP-Integration komplexer als erwartet | Mittel | Hoch | Puffer 2 Wo. in Phase 2 |
 | 3D-Konfigurator technisch nicht realisierbar | Niedrig | Mittel | Fallback: 2D-Konfigurator |
-| Schlüsselperson fällt aus | Niedrig | Hoch | Wissenstransfer Doku |
+| Schlüsselperson fällt aus | Niedrig | Hoch | Wissenstransfer & Doku |
 | Azure-Ausfallzeiten (Infrastruktur) | Niedrig | Mittel | Multi-Zone-Deployment |
 
 # 7\. Offene Punkte

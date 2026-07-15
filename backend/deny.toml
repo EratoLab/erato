@@ -137,9 +137,6 @@ exceptions = [
     { allow = ["CDLA-Permissive-2.0"], crate = "webpki-roots" },
     { allow = ["CDLA-Permissive-2.0"], crate = "webpki-root-certs" },
 
-    # Document extraction library used for parsing uploaded files.
-    # TODO: Update to xberg, which is MIT
-    { allow = ["Elastic-2.0"], crate = "kreuzberg" },
 ]
 
 # Some crates don't have (easily) machine readable licensing information,

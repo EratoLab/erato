@@ -91,8 +91,8 @@ color-eyre = "0.6.3"
 # Dependencies: File storage & file handling
 opendal = { version = "0.56.0", features = ["services-s3", "services-azblob"] }
 infer = "0.19.0"
-kreuzberg = { version = "5.0.0-rc.18",  features = ["pdf", "excel", "office", "email", "html", "archives"]}
-html-to-markdown-rs = { version = "3.6.11" }
+xberg = { version = "1.0.0-rc.29", features = ["pdf", "excel", "office", "email", "html", "archives"] }
+html-to-markdown-rs = { version = "3.8.3" }
 ical = "0.11.0"
 
 # Dependencies: Integgration / MS Graph API client for Sharepoint/OneDrive

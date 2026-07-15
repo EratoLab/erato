@@ -5,7 +5,7 @@
  * own headers, body, and (non-inline) attachments.
  *
  * Why one synthesized envelope instead of N separate uploads:
- *   - The backend's kreuzberg extractor recurses into nested rfc822 parts,
+ *   - The backend's xberg extractor recurses into nested rfc822 parts,
  *     so a single upload still gives the LLM per-message context (sender,
  *     date, body, attachments) without flattening filenames into
  *     ambiguous siblings (think three `Lastenheft.pdf` versions across
