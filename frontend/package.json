@@ -17,6 +17,9 @@
       "types": "./dist-library/shared/index.d.ts",
       "import": "./dist-library/shared.mjs"
     },
+    "./shared-runtime/*": {
+      "import": "./dist-library/component-kit-host/shared-*.mjs"
+    },
     "./component-kit/storybook": {
       "types": "./component-kit/storybook.d.ts",
       "import": "./component-kit/storybook.mjs"

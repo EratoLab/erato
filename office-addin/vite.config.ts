@@ -9,14 +9,19 @@ import { defineConfig, loadEnv, type Plugin, type ViteDevServer } from "vite";
 import {
   IMPORT_MAP_MANIFEST_FILE_NAME,
   SHARED_MODULES,
+  type SharedModuleEntry,
 } from "../frontend/shared-modules.config";
 
 import type { ServerResponse } from "node:http";
 
-// The erato surface file is named `erato.ts` here (the frontend uses
-// `index.ts`); everything else mirrors frontend/src/shared 1:1.
-const addinSharedFile = (file: string): string =>
-  file === "index.ts" ? "erato.ts" : file;
+// Expose entries are consumed from the packed frontend library instead of
+// local facade copies: the erato barrel via `./shared`, third-party facades
+// via `./shared-runtime/*` (compiled from frontend/src/shared with the
+// packages external, so this build bundles the add-in's own instances).
+const sharedModuleInputId = (entry: SharedModuleEntry): string =>
+  entry.specifier === "@erato/frontend/shared"
+    ? entry.specifier
+    : `@erato/frontend/shared-runtime/${entry.file.replace(/\.ts$/, "")}`;
 
 /**
  * Emits the add-in's shared-module manifest (bundle-relative URLs). The
@@ -631,6 +636,18 @@ export default defineConfig(({ mode }) => {
               __dirname,
               "../frontend/dist-library/shared.mjs",
             ),
+            ...Object.fromEntries(
+              SHARED_MODULES.filter(
+                (entry) => entry.specifier !== "@erato/frontend/shared",
+              ).map((entry) => [
+                sharedModuleInputId(entry),
+                path.resolve(
+                  __dirname,
+                  "../frontend/dist-library/component-kit-host",
+                  `${entry.entryName}.mjs`,
+                ),
+              ]),
+            ),
           },
         }
       : undefined,
@@ -644,11 +661,7 @@ export default defineConfig(({ mode }) => {
           ...Object.fromEntries(
             SHARED_MODULES.map((entry) => [
               entry.entryName,
-              path.resolve(
-                __dirname,
-                "src/shared",
-                addinSharedFile(entry.file),
-              ),
+              sharedModuleInputId(entry),
             ]),
           ),
         },
