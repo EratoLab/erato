@@ -2949,7 +2949,7 @@ msgstr "{fileName} : {filePercentage}%"
 
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "{itemCount} items"
-msgstr ""
+msgstr "{itemCount} éléments"
 
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "• Change browser language in settings and refresh"
@@ -2975,11 +2975,11 @@ msgstr ""
 #: src/components/ui/FilePreview/EmlPreview.tsx
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "1 file"
-msgstr ""
+msgstr "1 fichier"
 
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "1 item"
-msgstr ""
+msgstr "1 élément"
 
 #: src/components/ui/FileUpload/FileUpload.tsx
 msgid "Accepted types:"
@@ -3646,7 +3646,7 @@ msgstr "Inclure"
 
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "Include message"
-msgstr ""
+msgstr "Inclure le message"
 
 #: src/components/ui/ToolCall/ToolCallInput.tsx
 #~ msgid "Input Parameters"
@@ -4016,11 +4016,11 @@ msgstr "Afficher"
 
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "Show {hiddenCount} more items"
-msgstr ""
+msgstr "Afficher {hiddenCount} éléments de plus"
 
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "Show 1 more item"
-msgstr ""
+msgstr "Afficher 1 élément de plus"
 
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Show details"
@@ -4028,7 +4028,7 @@ msgstr "Afficher les détails"
 
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "Show less"
-msgstr ""
+msgstr "Afficher moins"
 
 #: src/components/ui/Settings/ToolCallSettings.tsx
 msgid "Show tool calls"
