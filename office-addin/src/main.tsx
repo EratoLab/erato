@@ -1,5 +1,8 @@
 import "@erato/frontend/library.css";
-import { componentRegistry } from "@erato/frontend/library";
+import {
+  applyComponentKitRegistrations,
+  componentRegistry,
+} from "@erato/frontend/library";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
@@ -12,6 +15,10 @@ import { OutlookEratoEmailRenderer } from "./components/OutlookEratoEmailRendere
 import { AddinSetupRoute } from "./pages/AddinSetupPage";
 
 injectFrontendEnv();
+
+// Kit scripts have executed by now (document order); pick up their
+// registrations before stacking the add-in's own slot assignments on top.
+applyComponentKitRegistrations();
 
 // The add-in's email-content sources ride into the shared "+" menu via the
 // ChatAddMenuExtraContent slot; file sources and tools come from the core menu.

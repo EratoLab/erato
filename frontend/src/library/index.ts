@@ -221,6 +221,7 @@ export {
 } from "@/providers/FeatureConfigProvider";
 export { EratoUiProvider, type EratoUiProviderProps } from "./EratoUiProvider";
 export {
+  applyComponentKitRegistrations,
   componentRegistry,
   resolveComponentOverride,
   type ComponentRegistry,
