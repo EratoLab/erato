@@ -2218,7 +2218,6 @@ model_name = "gpt-4"
 api_key = "sk-test-key"
 
 [chat_providers.providers.primary.model_settings]
-generate_images = false
 temperature = 0.2
 top_p = 0.9
 reasoning_effort = "minimal"
@@ -2250,7 +2249,6 @@ config = { bucket = "test-bucket", endpoint = "http://localhost:8333", region = 
     config = config.migrate();
 
     let provider = &config.chat_providers.as_ref().unwrap().providers["primary"];
-    assert!(!provider.model_settings.generate_images);
     assert_eq!(provider.model_settings.temperature, Some(0.2));
     assert_eq!(provider.model_settings.top_p, Some(0.9));
     assert_eq!(
@@ -2311,7 +2309,6 @@ config = { bucket = "test-bucket", endpoint = "http://localhost:8333", region = 
     config = config.migrate();
 
     let provider = &config.chat_providers.as_ref().unwrap().providers["basic"];
-    assert!(!provider.model_settings.generate_images);
     assert_eq!(provider.model_settings.temperature, None);
     assert_eq!(provider.model_settings.top_p, None);
     assert_eq!(provider.model_settings.reasoning_effort, None);

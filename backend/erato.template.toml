@@ -49,7 +49,6 @@ cost_output_tokens_per_1m = 0.0
 
 # Example model settings configuration
 # [chat_providers.providers.test-token-limit.model_settings]
-# generate_images = false  # Set to true to generate images instead of text (default: false)
 # temperature = 0.2        # Optional sampling temperature
 # top_p = 0.9              # Optional nucleus sampling parameter
 # reasoning_effort = "low" # Optional reasoning effort: "none" | "minimal" | "low" | "medium" | "high"

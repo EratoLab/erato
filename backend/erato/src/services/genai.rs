@@ -7,7 +7,7 @@ use genai::chat::ChatRole as GenAiChatRole;
 use genai::chat::MessageContent as GenAiMessageContent;
 use genai::chat::{ChatMessage, ToolCall, ToolResponse};
 use genai::chat::{ChatOptions, ChatRequest, ReasoningEffort, Verbosity};
-use genai::chat::{ChatResponse, ChatStreamEvent, ImageRequest, ImageResponse};
+use genai::chat::{ChatResponse, ChatStreamEvent};
 use serde_json::{Value as JsonValue, json};
 use std::pin::Pin;
 use std::sync::Arc;
@@ -50,13 +50,6 @@ pub trait GenAIClient: Send + Sync {
         chat_request: ChatRequest,
         options: Option<&ChatOptions>,
     ) -> genai::Result<GenAIChatStreamResponse>;
-
-    async fn exec_image_generation(
-        &self,
-        model: &str,
-        image_request: ImageRequest,
-        options: Option<&ChatOptions>,
-    ) -> genai::Result<ImageResponse>;
 }
 
 #[async_trait]
@@ -78,15 +71,6 @@ impl GenAIClient for genai::Client {
     ) -> genai::Result<GenAIChatStreamResponse> {
         let response = genai::Client::exec_chat_stream(self, model, chat_request, options).await?;
         Ok(GenAIChatStreamResponse::new(response.stream))
-    }
-
-    async fn exec_image_generation(
-        &self,
-        model: &str,
-        image_request: ImageRequest,
-        options: Option<&ChatOptions>,
-    ) -> genai::Result<ImageResponse> {
-        genai::Client::exec_image_generation(self, model, image_request, options).await
     }
 }
 
@@ -399,15 +383,6 @@ mod tests {
             Ok(GenAIChatStreamResponse::new(stream::iter([Err(
                 genai::Error::Internal("forced stream error".to_string()),
             )])))
-        }
-
-        async fn exec_image_generation(
-            &self,
-            _model: &str,
-            _image_request: ImageRequest,
-            _options: Option<&ChatOptions>,
-        ) -> genai::Result<ImageResponse> {
-            Err(genai::Error::Internal("forced image error".to_string()))
         }
     }
 
