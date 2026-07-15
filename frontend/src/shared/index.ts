@@ -5,6 +5,7 @@
 export * from "./component-registry.generated";
 
 export * from "@/auth/tokenStore";
+export * from "@/components/ui/Chat/ModelSelector";
 export * from "@/hooks/chat/store/messagingStore";
 export * from "@/hooks/chat/useStarterPrompts";
 export * from "@/hooks/ui/useThemedIcon";
