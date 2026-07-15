@@ -161,9 +161,6 @@
   "chat_provider.model_settings.compat_omit_strict": {
     "hide_in_docs": true
   },
-  "chat_provider.model_settings.generate_images": {
-    "hide_in_docs": true
-  },
   "chat_provider.model_settings.reasoning_effort": {
     "hide_in_docs": true
   },
@@ -235,7 +232,6 @@
   "chat_providers.providers.<provider-id>.model_name_langfuse": {},
   "chat_providers.providers.<provider-id>.model_settings.compat_no_replay_summary": {},
   "chat_providers.providers.<provider-id>.model_settings.compat_omit_strict": {},
-  "chat_providers.providers.<provider-id>.model_settings.generate_images": {},
   "chat_providers.providers.<provider-id>.model_settings.reasoning_effort": {},
   "chat_providers.providers.<provider-id>.model_settings.temperature": {},
   "chat_providers.providers.<provider-id>.model_settings.top_p": {},
@@ -292,7 +288,6 @@
   "experimental_facets.facets.<facet-id>.icon": {},
   "experimental_facets.facets.<facet-id>.model_settings.compat_no_replay_summary": {},
   "experimental_facets.facets.<facet-id>.model_settings.compat_omit_strict": {},
-  "experimental_facets.facets.<facet-id>.model_settings.generate_images": {},
   "experimental_facets.facets.<facet-id>.model_settings.reasoning_effort": {},
   "experimental_facets.facets.<facet-id>.model_settings.temperature": {},
   "experimental_facets.facets.<facet-id>.model_settings.top_p": {},

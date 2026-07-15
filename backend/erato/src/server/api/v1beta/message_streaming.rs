@@ -9,10 +9,9 @@ use crate::models::chat::{
     get_or_create_chat_by_previous_message_id,
 };
 use crate::models::message::{
-    ContentPart, ContentPartImage, ContentPartImageFilePointer, ContentPartReasoning,
-    ContentPartText, GenerationErrorType, GenerationInputMessages, GenerationMetadata,
-    GenerationParameters, GenerationRequestContext, MessageRole, MessageSchema,
-    ToolCallStatus as MessageToolCallStatus, ToolUse,
+    ContentPart, ContentPartImage, ContentPartReasoning, ContentPartText, GenerationErrorType,
+    GenerationInputMessages, GenerationMetadata, GenerationParameters, GenerationRequestContext,
+    MessageRole, MessageSchema, ToolCallStatus as MessageToolCallStatus, ToolUse,
     get_generation_chat_provider_id_for_replaced_user_message,
     get_generation_chat_provider_id_from_message, get_message_by_id, submit_message,
     update_message_generation_metadata,
@@ -1442,82 +1441,6 @@ fn ensure_saved_assistant_content_for_abort(mut content: Vec<ContentPart>) -> Ve
     }
 
     content
-}
-
-/// Download and store a generated image from URL or base64 data
-async fn download_and_store_generated_image(
-    app_state: &AppState,
-    policy: &PolicyEngine,
-    subject: &crate::policy::types::Subject,
-    chat_id: &Uuid,
-    binary: genai::chat::Binary,
-) -> Result<Uuid, Report> {
-    use crate::models::file_upload::create_file_upload;
-
-    // Download or decode the image
-    let image_bytes = match binary.source {
-        genai::chat::BinarySource::Url(url) => {
-            // Download from URL
-            let response = reqwest::get(&url)
-                .await
-                .wrap_err("Failed to download generated image")?;
-
-            response
-                .bytes()
-                .await
-                .wrap_err("Failed to read image bytes")?
-                .to_vec()
-        }
-        genai::chat::BinarySource::Base64(base64_data) => {
-            // Decode base64
-            use base64::{Engine as _, engine::general_purpose};
-            general_purpose::STANDARD
-                .decode(base64_data.as_ref())
-                .wrap_err("Failed to decode base64 image data")?
-        }
-    };
-
-    // Generate a unique filename with timestamp
-    let timestamp = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis();
-    let filename = format!("generated_image_{}.png", timestamp);
-
-    // Get the default file storage provider (filters out integration providers like SharePoint)
-    let file_storage_provider_id = app_state.default_file_storage_provider_id();
-    let file_storage = app_state.default_file_storage_provider();
-
-    // Store the image
-    let file_storage_path = format!("generated_images/{}", filename);
-    let mut writer = file_storage
-        .upload_file_writer(&file_storage_path, Some("image/png"))
-        .await
-        .wrap_err("Failed to create writer for generated image")?;
-
-    writer
-        .write(image_bytes)
-        .await
-        .wrap_err("Failed to write generated image bytes")?;
-
-    writer
-        .close()
-        .await
-        .wrap_err("Failed to close generated image writer")?;
-
-    // Create file_upload record
-    let file_upload = create_file_upload(
-        &app_state.db,
-        policy,
-        subject,
-        chat_id,
-        filename.clone(),
-        file_storage_provider_id.clone(),
-        file_storage_path.clone(),
-    )
-    .await?;
-
-    Ok(file_upload.id)
 }
 
 pub struct PreparedChatRequest {
@@ -7177,169 +7100,9 @@ async fn run_message_submit_task(
                 .collect::<HashSet<_>>()
         })
         .unwrap_or_default();
-    let effective_selected_facet_ids: Vec<String> = generation_parameters
-        .selected_facets
-        .iter()
-        .filter_map(|(facet_id, enabled)| enabled.then_some(facet_id.clone()))
-        .collect();
     let chat_provider_headers_context =
         ChatProviderHeadersContext::new(&me_user.id, &me_user.id_token_claims);
 
-    // Get the chat provider configuration to check if image generation is enabled
-    let ChatProviderConfigWithId {
-        chat_provider_config,
-        ..
-    } = app_state
-        .chat_provider_for_chatcompletion(
-            policy,
-            &me_user.to_subject(),
-            &me_user.groups,
-            Some(&chat_provider_id),
-        )
-        .await
-        .wrap_err("Failed to get chat provider config")?;
-
-    // Check if image generation is enabled for this model
-    let effective_model_settings = build_model_settings_for_facets(
-        &chat_provider_config.model_settings,
-        &app_state.config.experimental_facets,
-        &effective_selected_facet_ids,
-    );
-    if effective_model_settings.generate_images {
-        tracing::info!("Image generation mode enabled, generating image instead of text");
-
-        // Extract the user's prompt from the last user message
-        let user_prompt = generation_input_messages
-            .messages
-            .iter()
-            .rev()
-            .find(|msg| msg.role == MessageRole::User)
-            .and_then(|msg| match &msg.content {
-                ContentPart::Text(text) => Some(text.text.clone()),
-                _ => None,
-            })
-            .ok_or_eyre("No text content found in user message for image generation")?;
-
-        tracing::debug!("Generating image with prompt: {}", user_prompt);
-
-        // Save initial empty assistant message
-        let empty_assistant_message_json = json!({
-            "role": "assistant",
-            "content": [],
-        });
-
-        let initial_assistant_message = submit_message(
-            &app_state.db,
-            policy,
-            &me_user.to_subject(),
-            &chat.id,
-            empty_assistant_message_json,
-            Some(&saved_user_message.id),
-            None,
-            Some(generation_input_messages.clone()),
-            &[],
-            Some(generation_parameters),
-            None,
-            None, // input_parameters: not applicable for assistant messages
-        )
-        .await
-        .wrap_err("Failed to submit initial assistant message")?;
-
-        let generation_result: Result<(), Report> = async {
-            // Emit AssistantMessageStarted event
-            task.send_event(StreamingEvent::AssistantMessageStarted {
-                message_id: initial_assistant_message.id,
-            })
-            .await
-            .map_err(Report::msg)?;
-
-            // Generate the image using rust-genai
-            let image_request = genai::chat::ImageRequest::from_prompt(&user_prompt)
-                .with_size("1024x1024")
-                .with_quality("standard");
-
-            let genai_client = app_state
-                .genai_for_chat_provider_id_with_headers_context(
-                    Some(&chat_provider_id),
-                    Some(&chat_provider_headers_context),
-                )
-                .wrap_err("Failed to get genai client")?;
-
-            let image_response = genai_client
-                .exec_image_generation(&chat_provider_config.model_name, image_request, None)
-                .await
-                .wrap_err("Failed to generate image")?;
-
-            // Get the first generated image
-            let generated_image = image_response
-                .images
-                .first()
-                .ok_or_eyre("No images were generated")?;
-
-            // Extract the binary
-            let binary = match generated_image {
-                genai::chat::ContentPart::Binary(binary) => binary.clone(),
-                _ => return Err(eyre!("Unexpected content part type from image generation")),
-            };
-
-            // Download and store the image
-            let file_upload_id = download_and_store_generated_image(
-                app_state,
-                policy,
-                &me_user.to_subject(),
-                &chat.id,
-                binary,
-            )
-            .await
-            .wrap_err("Failed to download and store generated image")?;
-
-            tracing::info!(
-                "Successfully generated and stored image: file_upload_id={}",
-                file_upload_id
-            );
-
-            // Create content with the image pointer
-            let end_content = vec![ContentPart::ImageFilePointer(ContentPartImageFilePointer {
-                file_upload_id,
-                download_url: None,
-                preview_url: None,
-            })];
-
-            // Update assistant message with the image
-            bg_stream_update_assistant_message_completion(
-                task,
-                app_state,
-                policy,
-                end_content,
-                me_user,
-                initial_assistant_message.id,
-            )
-            .await?;
-
-            Ok(())
-        }
-        .await;
-
-        if let Err(error) = generation_result {
-            let error = error.wrap_err("Failed during image generation");
-            persist_background_generation_failure(
-                task,
-                app_state,
-                policy,
-                me_user,
-                initial_assistant_message.id,
-                &chat_provider_id,
-                &error,
-            )
-            .await;
-            return Err(error);
-        }
-
-        tracing::info!("run_message_submit_task completed successfully for image generation");
-        return Ok(());
-    }
-
-    // Normal text generation flow
     // Save initial empty assistant message
     let empty_assistant_message_json = json!({
         "role": "assistant",

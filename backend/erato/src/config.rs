@@ -3677,9 +3677,6 @@ pub enum ModelVerbosity {
 
 #[derive(Debug, Deserialize, PartialEq, Clone, Default, Facet)]
 pub struct ModelSettings {
-    // Whether the model should generate images instead of text
-    #[serde(default)]
-    pub generate_images: bool,
     // Whether to omit tool `strict` in outgoing request payloads.
     // Defaults to `false`.
     #[serde(default)]

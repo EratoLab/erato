@@ -43,9 +43,6 @@ pub fn build_model_settings_for_facets(
 fn merge_model_settings(base: &ModelSettings, overrides: &ModelSettings) -> ModelSettings {
     let mut merged = base.clone();
 
-    if overrides.generate_images {
-        merged.generate_images = true;
-    }
     if overrides.compat_omit_strict {
         merged.compat_omit_strict = true;
     }
@@ -90,7 +87,6 @@ mod tests {
     #[test]
     fn returns_base_when_no_facets_configured() {
         let base = ModelSettings {
-            generate_images: true,
             compat_omit_strict: false,
             compat_no_replay_summary: false,
             temperature: Some(0.2),
@@ -183,24 +179,6 @@ mod tests {
 
         assert_eq!(merged.top_p, Some(0.4));
         assert_eq!(merged.verbosity, Some(ModelVerbosity::High));
-    }
-
-    #[test]
-    fn does_not_disable_generate_images() {
-        let base = ModelSettings {
-            generate_images: true,
-            ..Default::default()
-        };
-        let config = ExperimentalFacetsConfig {
-            facets: HashMap::from([(
-                "facet".to_string(),
-                facet("Facet", ModelSettings::default()),
-            )]),
-            ..Default::default()
-        };
-
-        let merged = build_model_settings_for_facets(&base, &config, &["facet".to_string()]);
-        assert!(merged.generate_images);
     }
 
     #[test]
