@@ -7,7 +7,11 @@ import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv, type Plugin, type ViteDevServer } from "vite";
 
 import {
-  IMPORT_MAP_MANIFEST_FILE_NAME,
+  devComponentKitsPlugin,
+  distLibraryDevUrls,
+  sharedModulesImportMapPlugin,
+} from "../frontend/component-kit-host.plugins";
+import {
   SHARED_MODULES,
   type SharedModuleEntry,
 } from "../frontend/shared-modules.config";
@@ -22,36 +26,6 @@ const sharedModuleInputId = (entry: SharedModuleEntry): string =>
   entry.specifier === "@erato/frontend/shared"
     ? entry.specifier
     : `@erato/frontend/shared-runtime/${entry.file.replace(/\.ts$/, "")}`;
-
-/**
- * Emits the add-in's shared-module manifest (bundle-relative URLs). The
- * backend prefixes the add-in mount path and injects the import map into
- * served add-in HTML, so component kits loaded there resolve shared
- * specifiers to the add-in-bundle module instances — never the web ones.
- */
-const sharedModulesManifestPlugin = (): Plugin => ({
-  name: "addin-shared-modules-manifest",
-  generateBundle(_options, bundle) {
-    const imports: Record<string, string> = {};
-    for (const output of Object.values(bundle)) {
-      if (output.type !== "chunk" || !output.isEntry) {
-        continue;
-      }
-      const entry = SHARED_MODULES.find((e) => e.entryName === output.name);
-      if (entry) {
-        imports[entry.specifier] = output.fileName;
-      }
-    }
-    if (Object.keys(imports).length === 0) {
-      return;
-    }
-    this.emitFile({
-      type: "asset",
-      fileName: IMPORT_MAP_MANIFEST_FILE_NAME,
-      source: JSON.stringify({ imports }, null, 2),
-    });
-  },
-});
 
 const loadOfficeAddinEnv = (mode: string) => {
   const developmentEnv =
@@ -618,7 +592,29 @@ export default defineConfig(({ mode }) => {
       stageFrontendVoiceRuntimeAssetsPlugin(),
       rewriteLibraryWorkerUrlsPlugin(isDevServer),
       watchLinkedFrontendPublicOutputPlugin(linkedFrontend),
-      sharedModulesManifestPlugin(),
+      // Build: emits the manifest the backend injects (add-in mount path).
+      // Linked dev: injects the map itself, resolving specifiers through the
+      // built library's manifest so kit and app share module instances. The
+      // aliases and the map point at the same files; non-linked dev resolves
+      // @erato/frontend from node_modules pre-bundled, where no stable kit
+      // URL scheme exists, so kits stay a linked-mode (and backend-served)
+      // concern.
+      sharedModulesImportMapPlugin({
+        devUrl:
+          linkedFrontend && isDevServer
+            ? distLibraryDevUrls(
+                path.resolve(__dirname, "../frontend/dist-library"),
+                "/office-addin/",
+              )
+            : undefined,
+      }),
+      ...(linkedFrontend && isDevServer
+        ? [
+            devComponentKitsPlugin({
+              rootDir: path.resolve(__dirname, "../frontend"),
+            }),
+          ]
+        : []),
       copy404Plugin(),
     ],
     resolve: linkedFrontend
