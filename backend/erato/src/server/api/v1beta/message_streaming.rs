@@ -2795,11 +2795,16 @@ async fn stream_generate_chat_completion<
             }
 
             if !allowed_tool_names.contains(unfinished_tool_call.fn_name.as_str()) {
-                tool_call_started_at.remove(&unfinished_tool_call.call_id);
+                // Refuse the CALL, never the TURN — a `return Err` here kills
+                // the generation (user sees an empty message); an error
+                // response lets the model recover in prose.
                 let error_message = format!(
                     "Proposed tool call '{}' is not allowed for this request",
                     unfinished_tool_call.fn_name
                 );
+                let tool_call_started = tool_call_started_at
+                    .remove(&unfinished_tool_call.call_id)
+                    .unwrap_or_else(now_timestamp);
                 persist_otel_tool_call(
                     tracing_client.as_ref(),
                     &unfinished_tool_call,
@@ -2812,8 +2817,21 @@ async fn stream_generate_chat_completion<
                     Some(&error_message),
                 )
                 .await;
-                let error = eyre!(error_message);
-                return Err(error);
+                current_message_content.push(ContentPart::ToolUse(ToolUse {
+                    tool_call_id: unfinished_tool_call.call_id.clone(),
+                    status: MessageToolCallStatus::Error,
+                    tool_name: unfinished_tool_call.fn_name.clone(),
+                    input: Some(unfinished_tool_call.fn_arguments.clone()),
+                    progress_message: None,
+                    output: Some(json!({ "status": "error", "error": error_message })),
+                    started_at: Some(tool_call_started),
+                    ended_at: Some(now_timestamp()),
+                }));
+                current_turn_tool_responses.push(genai::chat::ToolResponse {
+                    call_id: unfinished_tool_call.call_id.clone(),
+                    content: error_message,
+                });
+                continue;
             }
 
             // Client-action proposals are never executed server-side: validate

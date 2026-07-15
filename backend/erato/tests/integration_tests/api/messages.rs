@@ -3780,3 +3780,78 @@ async fn test_client_action_invalid_proposal_then_valid_retry_succeeds(pool: Poo
     assert_eq!(tool_use_parts[1]["output"]["status"], "proposed");
     assert_eq!(tool_use_parts[1]["output"]["action"], "outlook.reply_all");
 }
+
+/// A call to a tool that was never offered (no facet ⇒ empty allow-list)
+/// must be refused per-CALL and answered so the model recovers — not kill
+/// the whole turn into an empty assistant message.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_unoffered_tool_call_recovers_instead_of_killing_the_turn(pool: Pool<Postgres>) {
+    const NOT_ALLOWED: &str = "not allowed for this request";
+    let mut mocks = MockSet::new();
+    // Turn 1: hallucinate a tool nothing offered.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[], &[NOT_ALLOWED]));
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[(
+                "call_ghost",
+                "totally_made_up_tool",
+                json!({}),
+            )]),
+        );
+    });
+    // Turn 2: the corrective error arrived → finish with text.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[NOT_ALLOWED], &[]));
+        mock_llm_sse_response(then, build_openai_text_streaming_response(&["Recovered."]));
+    });
+
+    let (app_config, _server) = setup_mock_llm_server_with_mocks(mocks).await;
+    let app_state = test_app_state(app_config, pool).await;
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "hi" }))
+        .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+
+    // The turn completes with the recovery text — no error event, no dead turn.
+    assert_eq!(extract_full_text(&events), "Recovered.");
+    assert!(
+        !events
+            .iter()
+            .filter_map(|event| serde_json::from_str::<Value>(&event.data).ok())
+            .any(|json| json["message_type"] == "error"),
+        "the refused tool call must not surface as a turn-killing error event"
+    );
+
+    // The refusal is persisted as an error tool_use part the model saw.
+    let chat_id = extract_chat_id(&events).expect("Expected chat_id");
+    let assistant_message_id = assistant_message_id_from_events(&events);
+    let tool_use_parts =
+        fetch_assistant_tool_use_parts(&server, &chat_id, &assistant_message_id).await;
+    assert_eq!(tool_use_parts.len(), 1, "Got: {tool_use_parts:?}");
+    assert_eq!(tool_use_parts[0]["tool_call_id"], "call_ghost");
+    assert_eq!(tool_use_parts[0]["status"], "error");
+    assert!(
+        tool_use_parts[0]["output"]["error"]
+            .as_str()
+            .is_some_and(|error| error.contains(NOT_ALLOWED)),
+        "Got: {}",
+        tool_use_parts[0]["output"]
+    );
+}
