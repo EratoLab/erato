@@ -34,40 +34,28 @@ const emitCompiledLocaleCatalogs = (): Plugin => {
   };
 };
 
+/**
+ * Shared specifiers stay bare imports in the kit bundle and resolve at
+ * runtime through the import map the host emits (backend in production,
+ * the frontend dev plugin in `just dev`). One module instance everywhere —
+ * host contexts and singletons included.
+ */
+const SHARED_EXTERNALS = [
+  "react",
+  "react/jsx-runtime",
+  "react/jsx-dev-runtime",
+  "react-dom",
+  "@lingui/core",
+  "@lingui/react",
+  "@tanstack/react-query",
+  "react-router",
+  "react-router-dom",
+];
+
 export default defineConfig({
   plugins: [emitCompiledLocaleCatalogs()],
-  resolve: {
-    alias: [
-      {
-        find: "react/jsx-runtime",
-        replacement: path.resolve(
-          __dirname,
-          "src/runtime/react-jsx-runtime.ts",
-        ),
-      },
-      {
-        find: "react/jsx-dev-runtime",
-        replacement: path.resolve(
-          __dirname,
-          "src/runtime/react-jsx-runtime.ts",
-        ),
-      },
-      {
-        find: /^react-dom\/server(?:\.browser)?$/,
-        replacement: path.resolve(__dirname, "src/runtime/react-dom-server.ts"),
-      },
-      {
-        find: "react-dom",
-        replacement: path.resolve(__dirname, "src/runtime/react-dom.ts"),
-      },
-      {
-        find: "react",
-        replacement: path.resolve(__dirname, "src/runtime/react.ts"),
-      },
-    ],
-  },
   esbuild: {
-    jsxFactory: "h",
+    jsx: "automatic",
   },
   build: {
     outDir: "dist",
@@ -77,6 +65,7 @@ export default defineConfig({
       formats: ["es"],
     },
     rollupOptions: {
+      external: [...SHARED_EXTERNALS, /^@erato\/frontend\/shared\//],
       output: {
         entryFileNames: "index-[hash].js",
         assetFileNames: "style[extname]",

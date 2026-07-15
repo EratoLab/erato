@@ -1,5 +1,7 @@
 import "./style.css";
 
+import { ERATO_SHARED_SURFACE_VERSION } from "@erato/frontend/shared/meta";
+
 import { ExampleAssistantWelcomeScreen } from "./components/ExampleAssistantWelcomeScreen";
 import { ExampleChatHistoryList } from "./components/ExampleChatHistoryList";
 import { ExampleChatInputAttachmentPreview } from "./components/ExampleChatInputAttachmentPreview";
@@ -18,6 +20,17 @@ declare global {
   interface Window {
     ERATO_COMPONENT_KITS?: ComponentKitRegistration[];
   }
+}
+
+// Version handshake against the host's shared import-map surface. The map
+// resolves this import to the running host's chunk, so a mismatch means the
+// kit was built against a different host generation.
+const EXPECTED_SHARED_SURFACE_VERSION = 1;
+if (ERATO_SHARED_SURFACE_VERSION !== EXPECTED_SHARED_SURFACE_VERSION) {
+  // eslint-disable-next-line no-console
+  console.error(
+    `component-kit-example: host shared surface v${ERATO_SHARED_SURFACE_VERSION} does not match the kit's expected v${EXPECTED_SHARED_SURFACE_VERSION}; UI may misbehave`,
+  );
 }
 
 const componentKit: ComponentKitRegistration = {

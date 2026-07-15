@@ -17,6 +17,18 @@ const mode =
 const storybookDir = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.resolve(storybookDir, "../dist");
 const componentKitRuntimeDir = path.resolve(storybookDir, "../src/runtime");
+const frontendSharedDir = path.resolve(
+  storybookDir,
+  "../../frontend/src/shared",
+);
+
+// In the app these specifiers resolve through the host's import map; inside
+// Storybook we alias them to the frontend's expose sources so live mode
+// bundles them directly (built mode still needs a map — known limitation).
+const sharedSpecifierAlias: AliasEntry = {
+  find: /^@erato\/frontend\/shared\/(.*)$/,
+  replacement: `${frontendSharedDir}/$1.ts`,
+};
 
 const resolveDistFile = (matcher: RegExp): string => {
   if (!fs.existsSync(distDir)) {
@@ -86,6 +98,19 @@ document.head.append(style);
   };
 };
 
+const normalizeAliasEntries = (alias: AliasConfig): AliasEntry[] => {
+  if (Array.isArray(alias)) {
+    return alias;
+  }
+  if (alias && typeof alias === "object") {
+    return Object.entries(alias).map(([find, replacement]) => ({
+      find,
+      replacement,
+    }));
+  }
+  return [];
+};
+
 const withoutComponentKitRuntimeAliases = (alias: AliasConfig): AliasConfig => {
   if (Array.isArray(alias)) {
     return alias.filter(
@@ -123,9 +148,14 @@ const config: StorybookConfig = {
     },
     resolve: {
       ...config.resolve,
-      alias: withoutComponentKitRuntimeAliases(
-        config.resolve?.alias as AliasConfig,
-      ),
+      alias: [
+        sharedSpecifierAlias,
+        ...normalizeAliasEntries(
+          withoutComponentKitRuntimeAliases(
+            config.resolve?.alias as AliasConfig,
+          ),
+        ),
+      ],
     },
     plugins: [...(config.plugins ?? []), builtComponentKitPlugin()],
   }),

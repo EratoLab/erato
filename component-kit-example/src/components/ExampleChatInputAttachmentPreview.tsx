@@ -1,5 +1,3 @@
-import { h } from "../react";
-
 import type { ChatInputAttachmentPreviewProps } from "@erato/frontend/library";
 import type { ReactNode } from "react";
 

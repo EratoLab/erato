@@ -1,4 +1,4 @@
-import { h, useLingui } from "../react";
+import { useLingui } from "@lingui/react";
 import { kitClassName } from "./utils";
 
 import type { ComponentRegistry } from "@erato/frontend/library";
