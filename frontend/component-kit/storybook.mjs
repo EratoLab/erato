@@ -109,6 +109,20 @@ const contentTypeFor = (filePath) => {
 const publicModuleUrl = (publicPath, fileName) =>
   `./${path.posix.join(publicPath, fileName)}`;
 
+// Linear-time slash trim; an equivalent /^\/+|\/+$/ regex backtracks
+// polynomially on adversarial input (flagged by CodeQL js/polynomial-redos).
+const trimSlashes = (value) => {
+  let start = 0;
+  let end = value.length;
+  while (start < end && value[start] === "/") {
+    start += 1;
+  }
+  while (end > start && value[end - 1] === "/") {
+    end -= 1;
+  }
+  return value.slice(start, end);
+};
+
 const developmentModuleUrl = (viteRoot, filePath) => {
   const relativePath = path.relative(viteRoot, filePath);
   return !relativePath.startsWith("..") && !path.isAbsolute(relativePath)
@@ -136,7 +150,7 @@ export const eratoComponentKitStorybook = ({
   publicPath = "erato-component-kit",
 }) => {
   const kitDirectory = path.resolve(componentKitDirectory);
-  const normalizedPublicPath = publicPath.replace(/^\/+|\/+$/g, "");
+  const normalizedPublicPath = trimSlashes(publicPath);
   const hostEntries = readHostEntries();
   const hostEntryBySpecifier = new Map(
     hostEntries.map((entry) => [entry.specifier, entry]),
