@@ -25,7 +25,7 @@ const componentKitHostManifestPlugin = (): Plugin => ({
         return entry ? [[entry.specifier, `./${output.fileName}`]] : [];
       }),
     );
-    imports["@erato/frontend/shared"] = "../library.mjs";
+    imports["@erato/frontend/shared"] = "../shared.mjs";
 
     this.emitFile({
       type: "asset",
