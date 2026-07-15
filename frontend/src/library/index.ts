@@ -17,7 +17,6 @@ export {
   type ChatMessageHostComponents,
   type ChatMessageProps,
 } from "@/components/ui/Chat/ChatMessage";
-export type { ComponentKitHostRuntime } from "@/componentKitHostRuntime";
 export * from "@/components/ui/MessageList";
 export {
   MessageContent,
