@@ -1,6 +1,6 @@
 import "./style.css";
 
-import { ERATO_SHARED_SURFACE_VERSION } from "@erato/frontend/shared/meta";
+import { ERATO_SHARED_SURFACE_VERSION } from "@erato/frontend/shared";
 
 import { ExampleAssistantWelcomeScreen } from "./components/ExampleAssistantWelcomeScreen";
 import { ExampleChatHistoryList } from "./components/ExampleChatHistoryList";

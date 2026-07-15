@@ -4,8 +4,8 @@
  * chunk is shared with the app entry (one evaluation = one module/context
  * instance), (2) an import-map entry emitted at build time
  * (import-map.manifest.json, injected into served HTML by the backend) and
- * in dev (specifier -> /src/shared/<file>), and (3) for erato specifiers a
- * `./shared/*` types export consumed by kits.
+ * in dev (specifier -> /src/shared/<file>), and (3) a `./shared` types export
+ * consumed by kits for the Erato-owned barrel.
  *
  * Third-party specifiers are the bare package names so kits can write plain
  * `import { useState } from "react"` with the package marked external.
@@ -22,6 +22,7 @@ export interface SharedModuleEntry {
 const THIRD_PARTY: Record<string, string> = {
   "react.ts": "react",
   "react-jsx-runtime.ts": "react/jsx-runtime",
+  "react-jsx-dev-runtime.ts": "react/jsx-dev-runtime",
   "react-dom.ts": "react-dom",
   "lingui-core.ts": "@lingui/core",
   "lingui-react.ts": "@lingui/react",
@@ -29,38 +30,6 @@ const THIRD_PARTY: Record<string, string> = {
   "react-router.ts": "react-router",
   "react-router-dom.ts": "react-router-dom",
 };
-
-const ERATO_SHARED_FILES = [
-  "alert.ts",
-  "api-files.ts",
-  "audio-input-device-store.ts",
-  "avatar.ts",
-  "button.ts",
-  "chat-history-list.ts",
-  "chat-input-controls.ts",
-  "chat-provider.ts",
-  "dropdown-menu.ts",
-  "feature-config.ts",
-  "file-capabilities-provider.ts",
-  "file-preview-button.ts",
-  "file-preview-loading.ts",
-  "image-lightbox.ts",
-  "interactive-container.ts",
-  "loading-indicator.ts",
-  "message-content.ts",
-  "message-controls.ts",
-  "message-timestamp.ts",
-  "messaging-store.ts",
-  "meta.ts",
-  "model-selector.ts",
-  "profile-provider.ts",
-  "starter-prompts.ts",
-  "theme-provider.ts",
-  "themed-icon.ts",
-  "token-store.ts",
-  "ui-store.ts",
-  "voice-runtime-provider.ts",
-];
 
 const entryNameFor = (file: string): string =>
   `shared-${file.replace(/\.ts$/, "")}`;
@@ -71,11 +40,11 @@ export const SHARED_MODULES: SharedModuleEntry[] = [
     entryName: entryNameFor(file),
     file,
   })),
-  ...ERATO_SHARED_FILES.map((file) => ({
-    specifier: `@erato/frontend/shared/${file.replace(/\.ts$/, "")}`,
-    entryName: entryNameFor(file),
-    file,
-  })),
+  {
+    specifier: "@erato/frontend/shared",
+    entryName: "shared-erato",
+    file: "index.ts",
+  },
 ];
 
 export const IMPORT_MAP_MANIFEST_FILE_NAME = "import-map.manifest.json";

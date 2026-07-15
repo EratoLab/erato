@@ -11,6 +11,11 @@ const outputTarballPath = path.join(distPackageDir, "erato-frontend.tgz");
 const outputStatePath = path.join(distPackageDir, "erato-frontend.state.json");
 const bundleEntrypointPath = path.join(distLibraryDir, "library.mjs");
 const bundleStylesPath = path.join(distLibraryDir, "style.css");
+const componentKitHostManifestPath = path.join(
+  distLibraryDir,
+  "component-kit-host",
+  "import-map.manifest.json",
+);
 const watchMode = process.argv.includes("--watch");
 const debounceMs = 500;
 const maxWaitForBundleMs = 10000;
@@ -52,6 +57,7 @@ function getBundleStamp() {
   return Math.max(
     getFileMtimeMs(bundleEntrypointPath),
     getFileMtimeMs(bundleStylesPath),
+    getFileMtimeMs(componentKitHostManifestPath),
   );
 }
 

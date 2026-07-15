@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { eratoComponentKitExternals } from "@erato/frontend/component-kit/vite";
 import { defineConfig, type Plugin } from "vite";
 
 const emitCompiledLocaleCatalogs = (): Plugin => {
@@ -34,24 +35,6 @@ const emitCompiledLocaleCatalogs = (): Plugin => {
   };
 };
 
-/**
- * Shared specifiers stay bare imports in the kit bundle and resolve at
- * runtime through the import map the host emits (backend in production,
- * the frontend dev plugin in `just dev`). One module instance everywhere —
- * host contexts and singletons included.
- */
-const SHARED_EXTERNALS = [
-  "react",
-  "react/jsx-runtime",
-  "react/jsx-dev-runtime",
-  "react-dom",
-  "@lingui/core",
-  "@lingui/react",
-  "@tanstack/react-query",
-  "react-router",
-  "react-router-dom",
-];
-
 export default defineConfig({
   plugins: [emitCompiledLocaleCatalogs()],
   esbuild: {
@@ -65,7 +48,9 @@ export default defineConfig({
       formats: ["es"],
     },
     rollupOptions: {
-      external: [...SHARED_EXTERNALS, /^@erato\/frontend\/shared\//],
+      // The frontend package owns this list alongside its generated import
+      // map, so kit externals cannot drift from the host contract.
+      external: [...eratoComponentKitExternals],
       output: {
         entryFileNames: "index-[hash].js",
         assetFileNames: "style[extname]",

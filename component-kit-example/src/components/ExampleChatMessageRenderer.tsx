@@ -1,7 +1,7 @@
 // Resolved via the host's import map to the app-bundle module — the host's
 // theme/feature-config providers apply directly, so no local provider
 // wrappers (the old workaround for bundled duplicate contexts) are needed.
-import { MessageContent } from "@erato/frontend/shared/message-content";
+import { MessageContent } from "@erato/frontend/shared";
 
 import type {
   ComponentRegistry,

@@ -1,7 +1,7 @@
 import {
   StaticFeatureConfigProvider,
   ThemeProvider,
-} from "@erato/frontend/library";
+} from "@erato/frontend/shared";
 import { i18n } from "@lingui/core";
 import { I18nProvider, Trans, useLingui } from "@lingui/react";
 import type { Preview } from "@storybook/react";

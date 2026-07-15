@@ -132,6 +132,11 @@ function shutdown(exitCode = 0) {
 process.on("SIGINT", () => shutdown(0));
 process.on("SIGTERM", () => shutdown(0));
 
+run("component-registry-shared", "node", [
+  "scripts/generate-component-registry-shared-exports.mjs",
+  "--watch",
+]);
+
 run("types", "pnpm", [
   "exec",
   "tsc",
@@ -156,5 +161,14 @@ run("bundle", "pnpm", [
   "vite.library.config.ts",
   "--mode",
   "library-dev",
+  "--watch",
+]);
+
+run("component-kit-host", "pnpm", [
+  "exec",
+  "vite",
+  "build",
+  "--config",
+  "vite.component-kit-host.config.ts",
   "--watch",
 ]);

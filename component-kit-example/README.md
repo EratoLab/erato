@@ -22,12 +22,11 @@ directly, so kits need no react shims and no provider wrappers.
 - Third-party: `react`, `react/jsx-runtime`, `react-dom`, `@lingui/core`,
   `@lingui/react`, `@tanstack/react-query`, `react-router`,
   `react-router-dom` — import normally, keep external.
-- Host surface: `@erato/frontend/shared/<name>` (see
-  `frontend/shared-modules.config.ts` for the list, and
-  `frontend/src/shared/` for what each exposes). Types resolve via the
-  `./shared/*` export of `@erato/frontend`.
-- Version handshake: import `ERATO_SHARED_SURFACE_VERSION` from
-  `@erato/frontend/shared/meta` and warn on mismatch (see `src/index.tsx`).
+- Host surface: `@erato/frontend/shared`, a frontend-owned barrel for the
+  components, providers, hooks, and stores that kits may consume. Its types
+  come from the same package export.
+- Version handshake: import `ERATO_SHARED_SURFACE_VERSION` from that barrel and
+  warn on mismatch (see `src/index.tsx`).
 
 Values may NOT be imported from `@erato/frontend/library` — that path is
 types-only for kits (the flat bundle would be duplicated wholesale into the
@@ -106,7 +105,9 @@ pnpm run storybook:live
 
 This compiles Lingui catalogs, starts Storybook on port 6007, and loads
 `src/index.tsx` plus `src/style.css` through Vite so component changes can
-live-reload.
+live-reload. The reusable `eratoComponentKitLiveStorybook` helper applies the
+frontend's React and Lingui source transforms, including to components reached
+through `@erato/frontend/shared`.
 
 Use the built configuration to inspect the emitted component kit:
 
@@ -115,11 +116,10 @@ cd ../component-kit-example
 pnpm run storybook:built
 ```
 
-> Known limitation: since the kit switched to bare shared specifiers, the
-> built bundle needs an import map to resolve them — Storybook's preview does
-> not emit one yet, so `storybook:built` cannot load the bundle until a
-> preview import map is added. `storybook:live` aliases the specifiers to the
-> frontend sources and works.
+The built preview uses the reusable `@erato/frontend/component-kit/storybook`
+Vite plugin. The frontend package supplies its generated host manifest and
+runtime facades; the plugin injects the import map before Storybook's module
+scripts and loads the emitted kit as an untouched browser module.
 
 This runs the normal kit build first, starts Storybook on port 6008, and loads
 the generated `dist/index-*.js`, `dist/style.css`, and compiled catalogs. That
