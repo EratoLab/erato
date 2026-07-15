@@ -1,3 +1,5 @@
 # Compiled translation files
 src/locales/**/*.json
 storybook-static/
+# CI installs this package with --lockfile=false; the lockfile is unused.
+pnpm-lock.yaml
