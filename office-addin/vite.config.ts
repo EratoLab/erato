@@ -6,7 +6,47 @@ import { lingui } from "@lingui/vite-plugin";
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv, type Plugin, type ViteDevServer } from "vite";
 
+import {
+  IMPORT_MAP_MANIFEST_FILE_NAME,
+  SHARED_MODULES,
+} from "../frontend/shared-modules.config";
+
 import type { ServerResponse } from "node:http";
+
+// The erato surface file is named `erato.ts` here (the frontend uses
+// `index.ts`); everything else mirrors frontend/src/shared 1:1.
+const addinSharedFile = (file: string): string =>
+  file === "index.ts" ? "erato.ts" : file;
+
+/**
+ * Emits the add-in's shared-module manifest (bundle-relative URLs). The
+ * backend prefixes the add-in mount path and injects the import map into
+ * served add-in HTML, so component kits loaded there resolve shared
+ * specifiers to the add-in-bundle module instances — never the web ones.
+ */
+const sharedModulesManifestPlugin = (): Plugin => ({
+  name: "addin-shared-modules-manifest",
+  generateBundle(_options, bundle) {
+    const imports: Record<string, string> = {};
+    for (const output of Object.values(bundle)) {
+      if (output.type !== "chunk" || !output.isEntry) {
+        continue;
+      }
+      const entry = SHARED_MODULES.find((e) => e.entryName === output.name);
+      if (entry) {
+        imports[entry.specifier] = output.fileName;
+      }
+    }
+    if (Object.keys(imports).length === 0) {
+      return;
+    }
+    this.emitFile({
+      type: "asset",
+      fileName: IMPORT_MAP_MANIFEST_FILE_NAME,
+      source: JSON.stringify({ imports }, null, 2),
+    });
+  },
+});
 
 const loadOfficeAddinEnv = (mode: string) => {
   const developmentEnv =
@@ -573,6 +613,7 @@ export default defineConfig(({ mode }) => {
       stageFrontendVoiceRuntimeAssetsPlugin(),
       rewriteLibraryWorkerUrlsPlugin(isDevServer),
       watchLinkedFrontendPublicOutputPlugin(linkedFrontend),
+      sharedModulesManifestPlugin(),
       copy404Plugin(),
     ],
     resolve: linkedFrontend
@@ -586,9 +627,33 @@ export default defineConfig(({ mode }) => {
               __dirname,
               "../frontend/dist-library/style.css",
             ),
+            "@erato/frontend/shared": path.resolve(
+              __dirname,
+              "../frontend/dist-library/shared.mjs",
+            ),
           },
         }
       : undefined,
+    build: {
+      rollupOptions: {
+        // Shared expose entries: chunks are shared with the app entry, so
+        // the import map hands kits the add-in's own module instances.
+        preserveEntrySignatures: "allow-extension" as const,
+        input: {
+          main: path.resolve(__dirname, "index.html"),
+          ...Object.fromEntries(
+            SHARED_MODULES.map((entry) => [
+              entry.entryName,
+              path.resolve(
+                __dirname,
+                "src/shared",
+                addinSharedFile(entry.file),
+              ),
+            ]),
+          ),
+        },
+      },
+    },
     server: {
       host: true,
       allowedHosts: [".ts.net"],

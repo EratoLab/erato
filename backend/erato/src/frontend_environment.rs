@@ -151,7 +151,15 @@ impl FrontendRegistry {
 pub fn build_frontend_registry(config: &AppConfig) -> FrontendRegistry {
     let component_kit_assets = discover_component_kits(&config.frontend.component_kits.directory);
     let content_security_policy = build_content_security_policy(config);
-    let web_import_map_json = load_import_map_json(&config.frontend.web_frontend_bundle_path);
+    let web_import_map_json = load_import_map_json(&config.frontend.web_frontend_bundle_path, "/");
+    let addin_import_map_json = load_import_map_json(
+        &config.integrations.ms_office.addin.frontend_bundle_path,
+        "/public/platform-office-addin",
+    );
+    let addin_legacy_import_map_json = load_import_map_json(
+        &config.integrations.ms_office.addin.frontend_bundle_path,
+        "/office-addin",
+    );
     let mut frontends = vec![ServedFrontend {
         bundle_path: config
             .integrations
@@ -166,7 +174,7 @@ pub fn build_frontend_registry(config: &AppConfig) -> FrontendRegistry {
         inject_environment: true,
         component_kit_assets: component_kit_assets.clone(),
         content_security_policy: content_security_policy.clone(),
-        import_map_json: None,
+        import_map_json: addin_import_map_json,
     }];
 
     if config.integrations.ms_office.addin.serve_bundle_legacy_path {
@@ -184,7 +192,7 @@ pub fn build_frontend_registry(config: &AppConfig) -> FrontendRegistry {
             inject_environment: true,
             component_kit_assets: component_kit_assets.clone(),
             content_security_policy: content_security_policy.clone(),
-            import_map_json: None,
+            import_map_json: addin_legacy_import_map_json,
         });
     }
 
@@ -227,7 +235,7 @@ const IMPORT_MAP_MANIFEST_FILE_NAME: &str = "import-map.manifest.json";
 /// (`import-map.manifest.json`, specifier -> hashed chunk URL). Absent or
 /// invalid manifests disable injection rather than failing startup so older
 /// bundles keep serving.
-fn load_import_map_json(bundle_path: &str) -> Option<String> {
+fn load_import_map_json(bundle_path: &str, mount_path: &str) -> Option<String> {
     let manifest_path = Path::new(bundle_path).join(IMPORT_MAP_MANIFEST_FILE_NAME);
     let contents = match fs::read_to_string(&manifest_path) {
         Ok(contents) => contents,
@@ -240,16 +248,16 @@ fn load_import_map_json(bundle_path: &str) -> Option<String> {
         }
     };
     match serde_json::from_str::<serde_json::Value>(&contents) {
-        Ok(manifest) if manifest.get("imports").is_some_and(|i| i.is_object()) => {
-            Some(manifest.to_string())
-        }
-        Ok(_) => {
-            tracing::warn!(
-                manifest_path = %manifest_path.display(),
-                "Import map manifest is missing an \"imports\" object; skipping injection"
-            );
-            None
-        }
+        Ok(manifest) => match manifest.get("imports").and_then(|i| i.as_object()) {
+            Some(imports) => Some(serialize_import_map(imports, mount_path)),
+            None => {
+                tracing::warn!(
+                    manifest_path = %manifest_path.display(),
+                    "Import map manifest is missing an \"imports\" object; skipping injection"
+                );
+                None
+            }
+        },
         Err(error) => {
             tracing::warn!(
                 manifest_path = %manifest_path.display(),
@@ -258,6 +266,30 @@ fn load_import_map_json(bundle_path: &str) -> Option<String> {
             None
         }
     }
+}
+
+/// Manifest entries are bundle-relative so one bundle can serve under any
+/// mount (the add-in bundle is mounted twice). Absolute entries pass through
+/// unchanged.
+fn serialize_import_map(
+    imports: &serde_json::Map<String, serde_json::Value>,
+    mount_path: &str,
+) -> String {
+    let mount_prefix = mount_path.trim_end_matches('/');
+    let prefixed: serde_json::Map<String, serde_json::Value> = imports
+        .iter()
+        .map(|(specifier, url)| {
+            let prefixed_url = match url.as_str() {
+                Some(url) if !url.starts_with('/') => {
+                    let relative = url.trim_start_matches("./");
+                    serde_json::Value::String(format!("{mount_prefix}/{relative}"))
+                }
+                _ => url.clone(),
+            };
+            (specifier.clone(), prefixed_url)
+        })
+        .collect();
+    serde_json::json!({ "imports": prefixed }).to_string()
 }
 
 fn build_content_security_policy(config: &AppConfig) -> Option<HeaderValue> {
@@ -1423,6 +1455,27 @@ mod tests {
         };
 
         assert!(registry.resolve("/office-addin").is_none());
+    }
+
+    #[test]
+    fn import_map_entries_are_prefixed_per_mount() {
+        let manifest: serde_json::Map<String, serde_json::Value> = serde_json::from_str(
+            r#"{"react":"assets/shared-react-x.mjs","@erato/frontend/shared":"./shared-erato-y.mjs","legacy":"/public/common/assets/abs.js"}"#,
+        )
+        .expect("manifest fixture should parse");
+
+        let web = serialize_import_map(&manifest, "/");
+        assert!(web.contains(r#""react":"/assets/shared-react-x.mjs""#));
+        assert!(web.contains(r#""@erato/frontend/shared":"/shared-erato-y.mjs""#));
+        assert!(web.contains(r#""legacy":"/public/common/assets/abs.js""#));
+
+        let addin = serialize_import_map(&manifest, "/public/platform-office-addin");
+        assert!(
+            addin.contains(r#""react":"/public/platform-office-addin/assets/shared-react-x.mjs""#)
+        );
+        assert!(addin.contains(
+            r#""@erato/frontend/shared":"/public/platform-office-addin/shared-erato-y.mjs""#
+        ));
     }
 
     #[test]

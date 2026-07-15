@@ -67,7 +67,8 @@ const sharedModulesImportMapPlugin = (): Plugin => {
         }
         const entry = SHARED_MODULES.find((e) => e.entryName === output.name);
         if (entry) {
-          imports[entry.specifier] = `/${output.fileName}`;
+          // Bundle-relative; the backend prefixes the serving mount path.
+          imports[entry.specifier] = output.fileName;
         }
       }
       if (Object.keys(imports).length === 0) {

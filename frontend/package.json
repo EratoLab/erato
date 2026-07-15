@@ -14,7 +14,8 @@
     },
     "./library.css": "./dist-library/style.css",
     "./shared": {
-      "types": "./dist-library/shared/index.d.ts"
+      "types": "./dist-library/shared/index.d.ts",
+      "import": "./dist-library/shared.mjs"
     },
     "./component-kit/storybook": {
       "types": "./component-kit/storybook.d.ts",
