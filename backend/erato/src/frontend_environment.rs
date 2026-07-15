@@ -109,6 +109,10 @@ pub struct ServedFrontend {
     pub inject_environment: bool,
     pub component_kit_assets: Vec<ComponentKitAsset>,
     pub content_security_policy: Option<HeaderValue>,
+    /// Pre-serialized import map injected as the first `<head>` child so
+    /// component kits resolve shared bare specifiers to app-bundle chunks.
+    /// Only set for the web frontend.
+    pub import_map_json: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -147,6 +151,7 @@ impl FrontendRegistry {
 pub fn build_frontend_registry(config: &AppConfig) -> FrontendRegistry {
     let component_kit_assets = discover_component_kits(&config.frontend.component_kits.directory);
     let content_security_policy = build_content_security_policy(config);
+    let web_import_map_json = load_import_map_json(&config.frontend.web_frontend_bundle_path);
     let mut frontends = vec![ServedFrontend {
         bundle_path: config
             .integrations
@@ -161,6 +166,7 @@ pub fn build_frontend_registry(config: &AppConfig) -> FrontendRegistry {
         inject_environment: true,
         component_kit_assets: component_kit_assets.clone(),
         content_security_policy: content_security_policy.clone(),
+        import_map_json: None,
     }];
 
     if config.integrations.ms_office.addin.serve_bundle_legacy_path {
@@ -178,6 +184,7 @@ pub fn build_frontend_registry(config: &AppConfig) -> FrontendRegistry {
             inject_environment: true,
             component_kit_assets: component_kit_assets.clone(),
             content_security_policy: content_security_policy.clone(),
+            import_map_json: None,
         });
     }
 
@@ -190,6 +197,7 @@ pub fn build_frontend_registry(config: &AppConfig) -> FrontendRegistry {
         inject_environment: true,
         component_kit_assets: component_kit_assets.clone(),
         content_security_policy: content_security_policy.clone(),
+        import_map_json: web_import_map_json,
     });
 
     for component_kit in component_kit_assets {
@@ -202,6 +210,7 @@ pub fn build_frontend_registry(config: &AppConfig) -> FrontendRegistry {
             inject_environment: false,
             component_kit_assets: Vec::new(),
             content_security_policy: content_security_policy.clone(),
+            import_map_json: None,
         });
     }
 
@@ -209,6 +218,45 @@ pub fn build_frontend_registry(config: &AppConfig) -> FrontendRegistry {
         frontends,
         translation_po_compilation_mode: config.frontend.translation_po_compilation_mode,
         translation_po_cache: Arc::new(TranslationPoCache::default()),
+    }
+}
+
+const IMPORT_MAP_MANIFEST_FILE_NAME: &str = "import-map.manifest.json";
+
+/// Loads the shared-module import map emitted by the web frontend build
+/// (`import-map.manifest.json`, specifier -> hashed chunk URL). Absent or
+/// invalid manifests disable injection rather than failing startup so older
+/// bundles keep serving.
+fn load_import_map_json(bundle_path: &str) -> Option<String> {
+    let manifest_path = Path::new(bundle_path).join(IMPORT_MAP_MANIFEST_FILE_NAME);
+    let contents = match fs::read_to_string(&manifest_path) {
+        Ok(contents) => contents,
+        Err(error) => {
+            tracing::info!(
+                manifest_path = %manifest_path.display(),
+                "No shared-module import map manifest found; skipping import map injection: {error}"
+            );
+            return None;
+        }
+    };
+    match serde_json::from_str::<serde_json::Value>(&contents) {
+        Ok(manifest) if manifest.get("imports").is_some_and(|i| i.is_object()) => {
+            Some(manifest.to_string())
+        }
+        Ok(_) => {
+            tracing::warn!(
+                manifest_path = %manifest_path.display(),
+                "Import map manifest is missing an \"imports\" object; skipping injection"
+            );
+            None
+        }
+        Err(error) => {
+            tracing::warn!(
+                manifest_path = %manifest_path.display(),
+                "Failed to parse import map manifest; skipping injection: {error}"
+            );
+            None
+        }
     }
 }
 
@@ -817,6 +865,7 @@ pub fn inject_environment_script_tag(
     output: &mut Vec<u8>,
     frontend_env: &FrontedEnvironment,
     component_kit_assets: &[ComponentKitAsset],
+    import_map_json: Option<&str>,
 ) -> io::Result<()> {
     let mut script_tag = String::new();
     script_tag.write_str("<script>\n").unwrap();
@@ -858,6 +907,14 @@ pub fn inject_environment_script_tag(
         Settings {
             element_content_handlers: vec![
                 element!("head", |el| {
+                    // The import map must precede every `<script type="module">`
+                    // tag in document order, so prepend rather than append.
+                    if let Some(import_map_json) = import_map_json {
+                        el.prepend(
+                            &format!("<script type=\"importmap\">{import_map_json}</script>"),
+                            ContentType::Html,
+                        );
+                    }
                     el.append(&script_tag, ContentType::Html);
                     if !component_kit_styles.is_empty() {
                         el.append(&component_kit_styles, ContentType::Html);
@@ -1057,6 +1114,7 @@ pub mod axum {
 
         let frontend_environment = frontend.environment.clone();
         let component_kit_assets = frontend.component_kit_assets.clone();
+        let import_map_json = frontend.import_map_json.clone();
         let content_security_policy = frontend.content_security_policy.clone();
         let should_inject_environment = frontend.inject_environment;
         let bundle_dir_path = PathBuf::from(frontend.bundle_path.clone())
@@ -1182,6 +1240,7 @@ pub mod axum {
                         frame.map_data({
                             let value = frontend_environment.clone();
                             let component_kit_assets = component_kit_assets.clone();
+                            let import_map_json = import_map_json.clone();
                             move |bytes| {
                                 let mut output = Vec::with_capacity(bytes.len() * 2);
                                 inject_environment_script_tag(
@@ -1189,6 +1248,7 @@ pub mod axum {
                                     &mut output,
                                     &value,
                                     &component_kit_assets,
+                                    import_map_json.as_deref(),
                                 )
                                 .unwrap();
                                 output.into()
@@ -1254,6 +1314,7 @@ mod tests {
             inject_environment: true,
             component_kit_assets: Vec::new(),
             content_security_policy: Some(HeaderValue::from_static("frame-ancestors 'self'")),
+            import_map_json: None,
         }
     }
 
@@ -1365,6 +1426,34 @@ mod tests {
     }
 
     #[test]
+    fn injects_import_map_before_module_scripts() {
+        let input = br#"<!doctype html><html><head><script type="module" src="/public/common/assets/app-abc.js"></script></head><body></body></html>"#;
+        let mut output = Vec::new();
+        let import_map = r#"{"imports":{"react":"/public/common/assets/shared-react-x.js"}}"#;
+
+        inject_environment_script_tag(
+            input,
+            &mut output,
+            &FrontedEnvironment::default(),
+            &[],
+            Some(import_map),
+        )
+        .expect("html injection should succeed");
+
+        let output = String::from_utf8(output).expect("output should be utf8");
+        let map_index = output
+            .find(r#"<script type="importmap">{"imports":{"react":"/public/common/assets/shared-react-x.js"}}</script>"#)
+            .expect("import map should be injected");
+        let module_script_index = output
+            .find(r#"<script type="module" src="/public/common/assets/app-abc.js"></script>"#)
+            .expect("module script should remain");
+        assert!(map_index < module_script_index);
+        // Must be the first head child.
+        let head_index = output.find("<head>").expect("head should exist");
+        assert_eq!(map_index, head_index + "<head>".len());
+    }
+
+    #[test]
     fn injects_component_kit_assets_before_main_module_script() {
         let mut env = FrontedEnvironment::default();
         env.additional_environment.insert(
@@ -1381,7 +1470,7 @@ mod tests {
         let input = br#"<!doctype html><html><head></head><body><script type="module" src="/public/common/assets/index.js"></script></body></html>"#;
         let mut output = Vec::new();
 
-        inject_environment_script_tag(input, &mut output, &env, &component_kit_assets)
+        inject_environment_script_tag(input, &mut output, &env, &component_kit_assets, None)
             .expect("html injection should succeed");
 
         let output = String::from_utf8(output).expect("output should be utf8");
@@ -1419,6 +1508,7 @@ mod tests {
             &mut output,
             &FrontedEnvironment::default(),
             &component_kit_assets,
+            None,
         )
         .expect("html injection should succeed");
 
@@ -1454,6 +1544,7 @@ mod tests {
             &mut output,
             &FrontedEnvironment::default(),
             &component_kit_assets,
+            None,
         )
         .expect("html injection should succeed");
 

@@ -19,6 +19,68 @@ import {
   emitVoiceRuntimePackageAssets,
   resolveVoiceRuntimePackageAssetFile,
 } from "./vite.voice-runtime-assets";
+import {
+  IMPORT_MAP_MANIFEST_FILE_NAME,
+  SHARED_MODULES,
+} from "./shared-modules.config";
+
+/**
+ * Shared-module import map for component kits.
+ *
+ * Build: emits `import-map.manifest.json` (specifier -> hashed chunk URL) so
+ * the backend can inject `<script type="importmap">` into served HTML.
+ * Dev: injects the map directly, pointing every specifier at its
+ * `/src/shared/*.ts` expose file — vite transforms those like app modules,
+ * so kit imports resolve to the same module instances as the app's own.
+ */
+const sharedModulesImportMapPlugin = (): Plugin => {
+  return {
+    name: "shared-modules-import-map",
+    transformIndexHtml: {
+      order: "pre",
+      handler(_html, ctx) {
+        // Dev server only — production HTML gets the map from the backend.
+        if (ctx.server === undefined) {
+          return;
+        }
+        const imports = Object.fromEntries(
+          SHARED_MODULES.map((entry) => [
+            entry.specifier,
+            `/src/shared/${entry.file}`,
+          ]),
+        );
+        return [
+          {
+            tag: "script",
+            attrs: { type: "importmap" },
+            children: JSON.stringify({ imports }),
+            injectTo: "head-prepend",
+          },
+        ];
+      },
+    },
+    generateBundle(_options, bundle) {
+      const imports: Record<string, string> = {};
+      for (const output of Object.values(bundle)) {
+        if (output.type !== "chunk" || !output.isEntry) {
+          continue;
+        }
+        const entry = SHARED_MODULES.find((e) => e.entryName === output.name);
+        if (entry) {
+          imports[entry.specifier] = `/${output.fileName}`;
+        }
+      }
+      if (Object.keys(imports).length === 0) {
+        return;
+      }
+      this.emitFile({
+        type: "asset",
+        fileName: IMPORT_MAP_MANIFEST_FILE_NAME,
+        source: JSON.stringify({ imports }, null, 2),
+      });
+    },
+  };
+};
 
 // Custom plugin to copy index.html as 404.html for SPA routing
 const copy404Plugin = ({ silent = false }: { silent?: boolean } = {}) => {
@@ -574,6 +636,7 @@ export default defineConfig(({ mode }) => {
       lingui(),
       i18nKeysManifestPlugin(),
       stagePublicLayoutPlugin(),
+      sharedModulesImportMapPlugin(),
       devComponentKitsPlugin(),
       copy404Plugin({ silent: silentLinkedBuildOutput }),
       // Endpoint lives under "/" so oauth2-proxy routes it to Vite (:3000);
@@ -601,11 +664,20 @@ export default defineConfig(({ mode }) => {
       assetsDir: "public/common/assets",
       reportCompressedSize: !silentLinkedBuildOutput,
       rollupOptions: {
+        // Expose entries must keep their re-export signatures so the import
+        // map can hand kits the app-bundle module instances.
+        preserveEntrySignatures: "allow-extension" as const,
         input: {
           app: path.resolve(__dirname, "index.html"),
           componentKitReactRuntime: path.resolve(
             __dirname,
             "src/componentKitReactRuntime.ts",
+          ),
+          ...Object.fromEntries(
+            SHARED_MODULES.map((entry) => [
+              entry.entryName,
+              path.resolve(__dirname, "src/shared", entry.file),
+            ]),
           ),
         },
         output: {

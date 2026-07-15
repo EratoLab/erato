@@ -11,7 +11,10 @@
       "types": "./dist-library/library/index.d.ts",
       "import": "./dist-library/library.mjs"
     },
-    "./library.css": "./dist-library/style.css"
+    "./library.css": "./dist-library/style.css",
+    "./shared/*": {
+      "types": "./dist-library/shared/*.d.ts"
+    }
   },
   "scripts": {
     "dev": "pnpm i18n:compile && vite",
