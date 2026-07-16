@@ -568,10 +568,18 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
     // the next snapshot is treated as history and nothing in the switched-to
     // chat can be considered "just completed". The pending send identity
     // belongs to the abandoned chat's in-flight exchange, so drop it too.
+    // Exception: a brand-new chat receiving its id on first send (null → id)
+    // is the same conversation continuing — resetting here would drop the
+    // in-flight exchange's identity and silently disable the consent prompt
+    // for the very first reply draft.
     if (freshTrackerChatIdRef.current !== currentChatId) {
+      const isNewChatGettingItsId =
+        freshTrackerChatIdRef.current == null && currentChatId != null;
       freshTrackerChatIdRef.current = currentChatId;
-      freshTrackerRef.current = new FreshCompletionTracker();
-      pendingSendItemIdentityRef.current = null;
+      if (!isNewChatGettingItsId) {
+        freshTrackerRef.current = new FreshCompletionTracker();
+        pendingSendItemIdentityRef.current = null;
+      }
     }
     const newlyFresh = freshTrackerRef.current.observe(messages, messageOrder);
     if (newlyFresh.length > 0) {
