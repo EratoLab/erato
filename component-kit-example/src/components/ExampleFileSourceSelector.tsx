@@ -1,4 +1,3 @@
-import { h } from "../react";
 import { kitClassName } from "./utils";
 
 import type { FileSourceSelectorProps } from "@erato/frontend/library";

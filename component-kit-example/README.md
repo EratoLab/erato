@@ -10,6 +10,28 @@ Components live in `src/components/*.tsx`, with one file per example component.
 The `src/index.tsx` entrypoint only imports those components and registers the
 kit.
 
+## Import-map contract
+
+Kits import shared host modules with plain import statements and leave them
+external in the bundle; the host emits an import map (the backend in
+production, the frontend dev plugin under `just dev`) that resolves every
+shared specifier to the app-bundle chunk. One module instance everywhere —
+the host's React, contexts, query client, router and singletons apply
+directly, so kits need no react shims and no provider wrappers.
+
+- Third-party: `react`, `react/jsx-runtime`, `react-dom`, `@lingui/core`,
+  `@lingui/react`, `@tanstack/react-query`, `react-router`,
+  `react-router-dom` — import normally, keep external.
+- Host surface: `@erato/frontend/shared`, a frontend-owned barrel for the
+  components, providers, hooks, and stores that kits may consume. Its types
+  come from the same package export.
+- Version handshake: import `ERATO_SHARED_SURFACE_VERSION` from that barrel and
+  warn on mismatch (see `src/index.tsx`).
+
+Values may NOT be imported from `@erato/frontend/library` — that path is
+types-only for kits (the flat bundle would be duplicated wholesale into the
+kit, including a second copy of every React context).
+
 ## Build
 
 Build the frontend library first, then build the kit:
@@ -83,7 +105,9 @@ pnpm run storybook:live
 
 This compiles Lingui catalogs, starts Storybook on port 6007, and loads
 `src/index.tsx` plus `src/style.css` through Vite so component changes can
-live-reload.
+live-reload. The reusable `eratoComponentKitLiveStorybook` helper applies the
+frontend's React and Lingui source transforms, including to components reached
+through `@erato/frontend/shared`.
 
 Use the built configuration to inspect the emitted component kit:
 
@@ -91,6 +115,11 @@ Use the built configuration to inspect the emitted component kit:
 cd ../component-kit-example
 pnpm run storybook:built
 ```
+
+The built preview uses the reusable `@erato/frontend/component-kit/storybook`
+Vite plugin. The frontend package supplies its generated host manifest and
+runtime facades; the plugin injects the import map before Storybook's module
+scripts and loads the emitted kit as an untouched browser module.
 
 This runs the normal kit build first, starts Storybook on port 6008, and loads
 the generated `dist/index-*.js`, `dist/style.css`, and compiled catalogs. That

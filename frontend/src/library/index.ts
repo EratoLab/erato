@@ -2,6 +2,8 @@ import "./styles.css";
 import "non.geist";
 import "non.geist/mono";
 
+export * from "@/shared";
+
 export { Trans, useLingui } from "@lingui/react";
 export {
   ThemeProvider,
@@ -17,7 +19,6 @@ export {
   type ChatMessageHostComponents,
   type ChatMessageProps,
 } from "@/components/ui/Chat/ChatMessage";
-export type { ComponentKitHostRuntime } from "@/componentKitHostRuntime";
 export * from "@/components/ui/MessageList";
 export {
   MessageContent,
@@ -220,6 +221,7 @@ export {
 } from "@/providers/FeatureConfigProvider";
 export { EratoUiProvider, type EratoUiProviderProps } from "./EratoUiProvider";
 export {
+  applyComponentKitRegistrations,
   componentRegistry,
   resolveComponentOverride,
   type ComponentRegistry,

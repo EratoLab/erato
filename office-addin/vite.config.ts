@@ -6,7 +6,26 @@ import { lingui } from "@lingui/vite-plugin";
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv, type Plugin, type ViteDevServer } from "vite";
 
+import {
+  devComponentKitsPlugin,
+  distLibraryDevUrls,
+  sharedModulesImportMapPlugin,
+} from "../frontend/component-kit-host.plugins";
+import {
+  SHARED_MODULES,
+  type SharedModuleEntry,
+} from "../frontend/shared-modules.config";
+
 import type { ServerResponse } from "node:http";
+
+// Expose entries are consumed from the packed frontend library instead of
+// local facade copies: the erato barrel via `./shared`, third-party facades
+// via `./shared-runtime/*` (compiled from frontend/src/shared with the
+// packages external, so this build bundles the add-in's own instances).
+const sharedModuleInputId = (entry: SharedModuleEntry): string =>
+  entry.specifier === "@erato/frontend/shared"
+    ? entry.specifier
+    : `@erato/frontend/shared-runtime/${entry.file.replace(/\.ts$/, "")}`;
 
 const loadOfficeAddinEnv = (mode: string) => {
   const developmentEnv =
@@ -573,6 +592,29 @@ export default defineConfig(({ mode }) => {
       stageFrontendVoiceRuntimeAssetsPlugin(),
       rewriteLibraryWorkerUrlsPlugin(isDevServer),
       watchLinkedFrontendPublicOutputPlugin(linkedFrontend),
+      // Build: emits the manifest the backend injects (add-in mount path).
+      // Linked dev: injects the map itself, resolving specifiers through the
+      // built library's manifest so kit and app share module instances. The
+      // aliases and the map point at the same files; non-linked dev resolves
+      // @erato/frontend from node_modules pre-bundled, where no stable kit
+      // URL scheme exists, so kits stay a linked-mode (and backend-served)
+      // concern.
+      sharedModulesImportMapPlugin({
+        devUrl:
+          linkedFrontend && isDevServer
+            ? distLibraryDevUrls(
+                path.resolve(__dirname, "../frontend/dist-library"),
+                "/office-addin/",
+              )
+            : undefined,
+      }),
+      ...(linkedFrontend && isDevServer
+        ? [
+            devComponentKitsPlugin({
+              rootDir: path.resolve(__dirname, "../frontend"),
+            }),
+          ]
+        : []),
       copy404Plugin(),
     ],
     resolve: linkedFrontend
@@ -586,9 +628,41 @@ export default defineConfig(({ mode }) => {
               __dirname,
               "../frontend/dist-library/style.css",
             ),
+            "@erato/frontend/shared": path.resolve(
+              __dirname,
+              "../frontend/dist-library/shared.mjs",
+            ),
+            ...Object.fromEntries(
+              SHARED_MODULES.filter(
+                (entry) => entry.specifier !== "@erato/frontend/shared",
+              ).map((entry) => [
+                sharedModuleInputId(entry),
+                path.resolve(
+                  __dirname,
+                  "../frontend/dist-library/component-kit-host",
+                  `${entry.entryName}.mjs`,
+                ),
+              ]),
+            ),
           },
         }
       : undefined,
+    build: {
+      rollupOptions: {
+        // Shared expose entries: chunks are shared with the app entry, so
+        // the import map hands kits the add-in's own module instances.
+        preserveEntrySignatures: "allow-extension" as const,
+        input: {
+          main: path.resolve(__dirname, "index.html"),
+          ...Object.fromEntries(
+            SHARED_MODULES.map((entry) => [
+              entry.entryName,
+              sharedModuleInputId(entry),
+            ]),
+          ),
+        },
+      },
+    },
     server: {
       host: true,
       allowedHosts: [".ts.net"],

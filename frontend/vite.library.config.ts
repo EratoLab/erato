@@ -39,9 +39,18 @@ export default defineConfig(({ mode }) => {
       sourcemap: true,
       minify: isLibraryDevBuild ? false : "esbuild",
       lib: {
-        entry: path.resolve(__dirname, "./src/library/index.ts"),
+        // `shared` is the component-kit host surface (@erato/frontend/shared).
+        // Building it as a sibling entry of the same compilation means both
+        // entries share chunk module instances — a consumer importing the
+        // library AND exposing the shared surface (the office add-in) hands
+        // kits the exact modules its own UI runs on.
+        entry: {
+          library: path.resolve(__dirname, "./src/library/index.ts"),
+          shared: path.resolve(__dirname, "./src/shared/index.ts"),
+        },
         formats: ["es"],
-        fileName: () => "library.mjs",
+        fileName: (_format, entryName) =>
+          entryName === "library" ? "library.mjs" : `${entryName}.mjs`,
         cssFileName: "style",
       },
       rollupOptions: {
@@ -61,9 +70,12 @@ export default defineConfig(({ mode }) => {
           "onnxruntime-web",
           "onnxruntime-web/wasm",
         ],
+        // Multi-entry rules out inlineDynamicImports; shared chunks carry the
+        // module instances both entries reference.
         output: {
-          inlineDynamicImports: true,
+          chunkFileNames: "chunks/[name]-[hash].mjs",
         },
+        preserveEntrySignatures: "allow-extension" as const,
       },
     },
   };

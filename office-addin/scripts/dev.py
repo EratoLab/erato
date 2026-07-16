@@ -73,6 +73,7 @@ ENTRA_TEMPLATE_PATH = LOCAL_AUTH_DIR / "oauth2-proxy-entra-id.template.cfg"
 ENTRA_CONFIG_PATH = LOCAL_AUTH_DIR / "oauth2-proxy-entra-id.cfg"
 REQUIRED_COMMANDS = ("docker", "node", "pnpm", "tailscale")
 EXPECTED_OAUTH2_PROXY_UPSTREAMS = """upstreams = [
+    "http://localhost:3002/public/component-kits/#/public/component-kits/",
     "http://localhost:3130/public/common/#/public/common/",
     "http://localhost:3002/public/platform-office-addin/voice-runtime/#/public/platform-office-addin/voice-runtime/",
     "http://localhost:3002/assets/#/assets/",

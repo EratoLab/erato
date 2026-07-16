@@ -1,4 +1,5 @@
 import type { ComponentKitRegistration } from "@erato/frontend/library";
+import { loadComponentKitModule } from "virtual:component-kit-mode-loader";
 
 type ComponentKitMode = "live" | "built";
 
@@ -17,17 +18,6 @@ declare global {
 }
 
 const componentKitMode = import.meta.env.STORYBOOK_COMPONENT_KIT_MODE ?? "live";
-
-const loadComponentKitModule = async () => {
-  if (componentKitMode === "built") {
-    await import("virtual:component-kit-built-style");
-    await import("virtual:component-kit-built-entry");
-    return;
-  }
-
-  await import("../src/style.css");
-  await import("../src/index");
-};
 
 export const loadExampleComponentKit =
   async (): Promise<ComponentKitRegistration> => {

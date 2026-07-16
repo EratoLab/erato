@@ -277,3 +277,22 @@ const buildComponentRegistry = (
 export const componentRegistry: ComponentRegistry = buildComponentRegistry(
   typeof window === "undefined" ? undefined : window.ERATO_COMPONENT_KITS,
 );
+
+/**
+ * Re-applies runtime kit registrations from `window.ERATO_COMPONENT_KITS`.
+ *
+ * Kits that import the shared surface evaluate this module as part of their
+ * own dependency graph — before their top-level registration push runs, so
+ * the initial build above sees an empty kit list. Entry points must call this
+ * after kit scripts have executed and before the first render (and before any
+ * entry-point-specific registry assignments).
+ */
+export const applyComponentKitRegistrations = (): void => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  Object.assign(
+    componentRegistry,
+    buildComponentRegistry(window.ERATO_COMPONENT_KITS),
+  );
+};

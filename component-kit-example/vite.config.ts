@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { eratoComponentKitExternals } from "@erato/frontend/component-kit/vite";
 import { defineConfig, type Plugin } from "vite";
 
 const emitCompiledLocaleCatalogs = (): Plugin => {
@@ -36,38 +37,8 @@ const emitCompiledLocaleCatalogs = (): Plugin => {
 
 export default defineConfig({
   plugins: [emitCompiledLocaleCatalogs()],
-  resolve: {
-    alias: [
-      {
-        find: "react/jsx-runtime",
-        replacement: path.resolve(
-          __dirname,
-          "src/runtime/react-jsx-runtime.ts",
-        ),
-      },
-      {
-        find: "react/jsx-dev-runtime",
-        replacement: path.resolve(
-          __dirname,
-          "src/runtime/react-jsx-runtime.ts",
-        ),
-      },
-      {
-        find: /^react-dom\/server(?:\.browser)?$/,
-        replacement: path.resolve(__dirname, "src/runtime/react-dom-server.ts"),
-      },
-      {
-        find: "react-dom",
-        replacement: path.resolve(__dirname, "src/runtime/react-dom.ts"),
-      },
-      {
-        find: "react",
-        replacement: path.resolve(__dirname, "src/runtime/react.ts"),
-      },
-    ],
-  },
   esbuild: {
-    jsxFactory: "h",
+    jsx: "automatic",
   },
   build: {
     outDir: "dist",
@@ -77,6 +48,9 @@ export default defineConfig({
       formats: ["es"],
     },
     rollupOptions: {
+      // The frontend package owns this list alongside its generated import
+      // map, so kit externals cannot drift from the host contract.
+      external: [...eratoComponentKitExternals],
       output: {
         entryFileNames: "index-[hash].js",
         assetFileNames: "style[extname]",

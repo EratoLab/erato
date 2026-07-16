@@ -21,12 +21,18 @@ importers:
       '@extend-ai/react-docx':
         specifier: 0.7.1
         version: 0.7.1(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@lingui/babel-plugin-lingui-macro':
+        specifier: ^5.9.4
+        version: 5.9.4(typescript@5.7.3)
       '@lingui/detect-locale':
         specifier: ^5.9.4
         version: 5.9.4
       '@lingui/format-po':
         specifier: ^5.9.4
         version: 5.9.4(typescript@5.7.3)
+      '@lingui/vite-plugin':
+        specifier: ^5.9.4
+        version: 5.9.4(typescript@5.7.3)(vite@6.4.2(@types/node@20.17.17)(jiti@2.7.0)(yaml@2.9.0))
       '@react-hook/resize-observer':
         specifier: ^2.0.2
         version: 2.0.2(react@19.2.7)
@@ -45,6 +51,9 @@ importers:
       '@types/react-syntax-highlighter':
         specifier: ^15.5.13
         version: 15.5.13
+      '@vitejs/plugin-react':
+        specifier: ^4.3.1
+        version: 4.3.4(vite@6.4.2(@types/node@20.17.17)(jiti@2.7.0)(yaml@2.9.0))
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -133,9 +142,6 @@ importers:
       '@faker-js/faker':
         specifier: ^10.4.0
         version: 10.4.0
-      '@lingui/babel-plugin-lingui-macro':
-        specifier: ^5.9.4
-        version: 5.9.4(typescript@5.7.3)
       '@lingui/cli':
         specifier: ^5.9.4
         version: 5.9.4(typescript@5.7.3)
@@ -148,9 +154,6 @@ importers:
       '@lingui/react':
         specifier: 5.9.4
         version: 5.9.4(@lingui/babel-plugin-lingui-macro@5.9.4(typescript@5.7.3))(react@19.2.7)
-      '@lingui/vite-plugin':
-        specifier: ^5.9.4
-        version: 5.9.4(typescript@5.7.3)(vite@6.4.2(@types/node@20.17.17)(jiti@2.7.0)(yaml@2.9.0))
       '@openapi-codegen/cli':
         specifier: ^3.1.0
         version: 3.1.0
@@ -220,9 +223,6 @@ importers:
       '@typescript-eslint/parser':
         specifier: ^8.60.0
         version: 8.60.0(eslint@9.39.4(jiti@2.7.0))(typescript@5.7.3)
-      '@vitejs/plugin-react':
-        specifier: ^4.3.1
-        version: 4.3.4(vite@6.4.2(@types/node@20.17.17)(jiti@2.7.0)(yaml@2.9.0))
       '@vitest/coverage-v8':
         specifier: ^4.1.0
         version: 4.1.7(vitest@4.1.7)

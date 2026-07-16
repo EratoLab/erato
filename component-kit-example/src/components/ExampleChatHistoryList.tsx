@@ -1,4 +1,3 @@
-import { h } from "../react";
 import { kitClassName } from "./utils";
 
 import type { ComponentRegistry } from "@erato/frontend/library";

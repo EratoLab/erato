@@ -4,6 +4,7 @@
   "private": true,
   "packageManager": "pnpm@11.8.0",
   "files": [
+    "component-kit",
     "dist-library"
   ],
   "exports": {
@@ -11,13 +12,29 @@
       "types": "./dist-library/library/index.d.ts",
       "import": "./dist-library/library.mjs"
     },
-    "./library.css": "./dist-library/style.css"
+    "./library.css": "./dist-library/style.css",
+    "./shared": {
+      "types": "./dist-library/shared/index.d.ts",
+      "import": "./dist-library/shared.mjs"
+    },
+    "./shared-runtime/*": {
+      "import": "./dist-library/component-kit-host/shared-*.mjs"
+    },
+    "./component-kit/storybook": {
+      "types": "./component-kit/storybook.d.ts",
+      "import": "./component-kit/storybook.mjs"
+    },
+    "./component-kit/vite": {
+      "types": "./component-kit/vite.d.ts",
+      "import": "./component-kit/vite.mjs",
+      "require": "./component-kit/vite.cjs"
+    }
   },
   "scripts": {
     "dev": "pnpm i18n:compile && vite",
     "build": "pnpm build:app",
-    "build:app": "pnpm i18n:compile && tsc && vite build",
-    "build:lib": "tsc -p tsconfig.lib.json && node scripts/rewrite-library-dts-paths.mjs && vite build --config vite.library.config.ts --mode library && node scripts/pack-library.mjs",
+    "build:app": "pnpm generate:component-registry-shared && pnpm i18n:compile && tsc && vite build",
+    "build:lib": "pnpm generate:component-registry-shared && tsc -p tsconfig.lib.json && node scripts/rewrite-library-dts-paths.mjs && vite build --config vite.library.config.ts --mode library && vite build --config vite.component-kit-host.config.ts && node scripts/pack-library.mjs",
     "build:lib:watch": "node scripts/watch-library.mjs",
     "pack:lib": "node scripts/pack-library.mjs",
     "start": "vite preview",
@@ -32,6 +49,7 @@
     "codegen:generate": "openapi-codegen gen v1betaApi",
     "codegen:fix-types": "node scripts/fix-codegen-types.mjs",
     "codegen": "pnpm codegen:generate && pnpm codegen:fix-types",
+    "generate:component-registry-shared": "node scripts/generate-component-registry-shared-exports.mjs",
     "typecheck": "tsc --noEmit",
     "check": "pnpm lint:strict && pnpm typecheck",
     "i18n:extract": "lingui extract",
@@ -43,11 +61,14 @@
   "dependencies": {
     "@erato/frontend-utils": "file:../frontend-utils",
     "@extend-ai/react-docx": "0.7.1",
+    "@lingui/babel-plugin-lingui-macro": "^5.9.4",
     "@lingui/detect-locale": "^5.9.4",
     "@lingui/format-po": "^5.9.4",
+    "@lingui/vite-plugin": "^5.9.4",
     "@react-hook/resize-observer": "^2.0.2",
     "@ricky0123/vad-web": "0.0.30",
     "@types/react-syntax-highlighter": "^15.5.13",
+    "@vitejs/plugin-react": "^4.3.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "dompurify": "^3.4.7",
@@ -79,12 +100,10 @@
     "@eslint/eslintrc": "^3",
     "@eslint/js": "^9.28.0",
     "@faker-js/faker": "^10.4.0",
-    "@lingui/babel-plugin-lingui-macro": "^5.9.4",
     "@lingui/cli": "^5.9.4",
     "@lingui/core": "5.9.4",
     "@lingui/message-utils": "^5.9.4",
     "@lingui/react": "5.9.4",
-    "@lingui/vite-plugin": "^5.9.4",
     "@openapi-codegen/cli": "^3.1.0",
     "@openapi-codegen/typescript": "^11.1.0",
     "@storybook/addon-a11y": "^8.6.18",
@@ -108,7 +127,6 @@
     "@types/react-window": "^1.8.8",
     "@typescript-eslint/eslint-plugin": "^8.60.0",
     "@typescript-eslint/parser": "^8.60.0",
-    "@vitejs/plugin-react": "^4.3.1",
     "@vitest/coverage-v8": "^4.1.0",
     "eslint": "^9.39.4",
     "eslint-import-resolver-typescript": "^4.4.3",

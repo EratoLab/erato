@@ -1,4 +1,5 @@
-import { h } from "../react";
+import { ResolvedIcon } from "@erato/frontend/shared";
+
 import { kitClassName } from "./utils";
 
 import type { StarterPromptsRendererProps } from "@erato/frontend/library";
@@ -16,6 +17,12 @@ export const ExampleStarterPrompts = ({
         type="button"
         onClick={() => onStarterPromptSelect(starterPrompt)}
       >
+        <ResolvedIcon
+          iconId={starterPrompt.icon}
+          width={18}
+          height={18}
+          aria-hidden="true"
+        />
         {starterPrompt.resolvedTitle}
       </button>
     ))}

@@ -1,10 +1,7 @@
-import {
-  MessageContent,
-  StaticFeatureConfigProvider,
-  ThemeProvider,
-} from "@erato/frontend/library";
-
-import { h } from "../react";
+// Resolved via the host's import map to the app-bundle module — the host's
+// theme/feature-config providers apply directly, so no local provider
+// wrappers (the old workaround for bundled duplicate contexts) are needed.
+import { MessageContent } from "@erato/frontend/shared";
 
 import type {
   ComponentRegistry,
@@ -65,30 +62,17 @@ export const ExampleChatMessageRenderer: NonNullable<
           {senderLabel}
         </div>
 
-        <StaticFeatureConfigProvider
-          children={
-            <ThemeProvider
-              enableCustomTheme={false}
-              initialThemeMode="light"
-              persistThemeMode={false}
-              children={
-                <MessageContent
-                  content={contentPartsFromMessage(message.content)}
-                  messageId={message.id}
-                  filesById={filesByIdFromMessage(allFilesById)}
-                  isStreaming={
-                    !!message.loading && message.loading.state !== "done"
-                  }
-                  onFileLinkPreview={onFilePreview}
-                  preserveSoftLineBreaks={isUser}
-                  createdAt={message.createdAt}
-                  updatedAt={message.updatedAt}
-                  hasError={!!message.error}
-                  outlookArtifact={message.outlookArtifact}
-                />
-              }
-            />
-          }
+        <MessageContent
+          content={contentPartsFromMessage(message.content)}
+          messageId={message.id}
+          filesById={filesByIdFromMessage(allFilesById)}
+          isStreaming={!!message.loading && message.loading.state !== "done"}
+          onFileLinkPreview={onFilePreview}
+          preserveSoftLineBreaks={isUser}
+          createdAt={message.createdAt}
+          updatedAt={message.updatedAt}
+          hasError={!!message.error}
+          outlookArtifact={message.outlookArtifact}
         />
 
         {Controls ? (

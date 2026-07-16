@@ -1,3 +1,8 @@
+// FROZEN — do not add to this file or to the ERATO_* window surface.
+// Host modules are shared with kits via the import map (see
+// shared-modules.config.ts); new host surface = a src/shared/ expose entry.
+// The globals below exist only for kit bundles built before the import-map
+// contract and go away once no deployed kit reads them.
 import { Trans, useLingui } from "@lingui/react";
 import React from "react";
 import { createPortal } from "react-dom";

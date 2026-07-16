@@ -1,4 +1,3 @@
-import { h } from "../react";
 import { fileName, kitClassName } from "./utils";
 
 import type { GroupedFileAttachmentsPreviewProps } from "@erato/frontend/library";
