@@ -11,10 +11,6 @@ const loginForSharingTest = async (
   await page.getByRole("button", { name: "Sign in with" }).click();
   await expect.poll(() => page.url(), { timeout: 10000 }).toContain("/auth");
 
-  if (page.url().includes("http://0.0.0.0:5556/")) {
-    await page.goto(page.url().replace("0.0.0.0", "localhost"));
-  }
-
   const emailInput = page.getByRole("textbox", { name: "email address" });
   await emailInput.waitFor({ state: "visible", timeout: 10000 });
   await emailInput.fill(email);
@@ -45,11 +41,6 @@ const createSharingTestContext = async (
   const context = await browser.newContext({
     storageState: { cookies: [], origins: [] },
   });
-  await context.route("http://0.0.0.0:5556/**", (route) =>
-    route.continue({
-      url: route.request().url().replace("0.0.0.0", "localhost"),
-    }),
-  );
   const page = await context.newPage();
   const chatTextbox = page.getByRole("textbox", { name: "Type a message..." });
   const localAuthUsername = email.split("@")[0];

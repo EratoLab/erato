@@ -1,4 +1,4 @@
-issuer: http://0.0.0.0:5556
+issuer: http://127.0.0.1:5556
 
 storage:
   type: memory
