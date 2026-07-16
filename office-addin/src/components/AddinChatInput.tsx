@@ -136,11 +136,13 @@ interface AddinChatInputProps {
   onControlledSelectedModelChange?: (model: ChatModel) => void;
   controlledIsModelSelectionReady?: boolean;
   /**
-   * `createdAt` of the latest assistant message IF it read the calendar via
+   * `createdAt` of the NEWEST assistant message that read the calendar via
    * the `fetch_availability` client tool or emitted an `erato-appointment`
-   * fence, else null (computed in `AddinChat`,
-   * which owns the message stream). When fresh at send time, the send carries
-   * the `outlook_schedule` facet so the model can handle the user's slot pick.
+   * fence, else null (computed in `AddinChat`, which owns the message
+   * stream). Deliberately not latest-message-only — prose negotiation turns
+   * in between (clarifications, subject/location gathering) must not drop
+   * the facet. When fresh at send time, the send carries the
+   * `outlook_schedule` facet so the model can handle the user's slot pick.
    */
   lastSchedulingSignalAt?: string | null;
 }

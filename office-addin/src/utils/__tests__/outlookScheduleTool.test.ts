@@ -8,6 +8,7 @@ import {
   containsSchedulingSignal,
   createFetchAvailabilityExecutor,
   isSchedulingThreadFresh,
+  newestSchedulingSignalAt,
   parseAttendees,
   parseDurationMinutes,
   parseLookaheadDays,
@@ -412,9 +413,18 @@ describe("serializeCalendarForModel", () => {
       suggestedSlots: {
         durationMinutes: number;
         durationBasis: string;
-        slots: { tier: string; start: string; day: string }[];
+        slots: {
+          tier: string;
+          start: string;
+          end: string;
+          day: string;
+          startIso: string;
+          endIso: string;
+          utcOffset: string;
+        }[];
       };
       notes: string[];
+      legend: string;
     };
 
     expect(result.suggestedSlots.durationMinutes).toBe(60);
@@ -423,6 +433,16 @@ describe("serializeCalendarForModel", () => {
     expect(result.suggestedSlots.slots[0].tier).toBe("earliest");
     // NOW is Friday 14:00 Berlin; the same afternoon is the soonest window.
     expect(result.suggestedSlots.slots[0].day).toBe("Friday 2026-07-03");
+    // Fence-ready ISO fields: consistent with the display fields, so the
+    // model copies rather than reassembles (the loop's main error source).
+    for (const slot of result.suggestedSlots.slots) {
+      expect(slot.startIso).toBe(
+        `${slot.day.split(" ")[1]}T${slot.start}:00${slot.utcOffset}`,
+      );
+      expect(slot.endIso).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00\+02:00$/);
+      expect(slot.endIso.slice(11, 16)).toBe(slot.end);
+    }
+    expect(result.legend).toContain("copy its startIso/endIso VERBATIM");
     expect(result.notes).toEqual([
       expect.stringContaining("1 attendee(s) whose calendar was unreadable"),
     ]);
@@ -848,6 +868,75 @@ describe("containsSchedulingSignal", () => {
         } as unknown as ContentPart,
       ]),
     ).toBe(false);
+  });
+});
+
+describe("newestSchedulingSignalAt", () => {
+  const textPart = (text: string): ContentPart =>
+    ({ content_type: "text", text }) as unknown as ContentPart;
+  const fetchToolUse = (): ContentPart =>
+    ({
+      content_type: "tool_use",
+      tool_name: FETCH_AVAILABILITY_TOOL_NAME,
+    }) as unknown as ContentPart;
+
+  it("survives prose negotiation turns after the signal (the yesterday-bug shape)", () => {
+    // fetch → clarify question → user answer → metadata question: the signal
+    // from turn 1 must still anchor the facet for the NEXT send.
+    expect(
+      newestSchedulingSignalAt([
+        {
+          role: "user",
+          content: [textPart("meeting with Chris?")],
+          createdAt: "t1",
+        },
+        { role: "assistant", content: [fetchToolUse()], createdAt: "t2" },
+        { role: "user", content: [textPart("Tuesday at 5")], createdAt: "t3" },
+        {
+          role: "assistant",
+          content: [textPart("5 AM or PM?")],
+          createdAt: "t4",
+        },
+        { role: "user", content: [textPart("17:00")], createdAt: "t5" },
+        {
+          role: "assistant",
+          content: [textPart("Title? Location?")],
+          createdAt: "t6",
+        },
+      ]),
+    ).toBe("t2");
+  });
+
+  it("returns the NEWEST signal when several exist", () => {
+    expect(
+      newestSchedulingSignalAt([
+        { role: "assistant", content: [fetchToolUse()], createdAt: "t1" },
+        { role: "assistant", content: [fetchToolUse()], createdAt: "t2" },
+        { role: "assistant", content: [textPart("prose")], createdAt: "t3" },
+      ]),
+    ).toBe("t2");
+  });
+
+  it("returns null when no assistant message carries a signal", () => {
+    expect(
+      newestSchedulingSignalAt([
+        { role: "user", content: [textPart("hi")], createdAt: "t1" },
+        { role: "assistant", content: [textPart("hello")], createdAt: "t2" },
+      ]),
+    ).toBe(null);
+    expect(newestSchedulingSignalAt([])).toBe(null);
+  });
+
+  it("ignores signals in user messages (pasted fences are untrusted)", () => {
+    expect(
+      newestSchedulingSignalAt([
+        {
+          role: "user",
+          content: [textPart('```erato-appointment\n{"start":"x"}\n```')],
+          createdAt: "t1",
+        },
+      ]),
+    ).toBe(null);
   });
 });
 
