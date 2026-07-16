@@ -202,6 +202,12 @@ export interface FilePreviewBaseProps {
   filenameTruncateLength?: number;
   /** Additional CSS classes for the filename element */
   filenameClassName?: string;
+  /**
+   * Render without the chip chrome (border/background/radius) so a parent
+   * surface can own it — e.g. a selectable row that wraps the checkbox and
+   * preview in one chip.
+   */
+  chromeless?: boolean;
 }
 
 /**
@@ -221,6 +227,7 @@ export const FilePreviewBase: React.FC<FilePreviewBaseProps> = ({
   removeButton,
   filenameTruncateLength: _filenameTruncateLength = 30,
   filenameClassName = "",
+  chromeless = false,
 }) => {
   const { iconMappings } = useTheme();
 
@@ -261,7 +268,9 @@ export const FilePreviewBase: React.FC<FilePreviewBaseProps> = ({
 
   return (
     <div
-      className={`${FILE_PREVIEW_STYLES.container} ${className}`}
+      className={`${
+        chromeless ? "flex items-center gap-2" : FILE_PREVIEW_STYLES.container
+      } ${className}`}
       data-filetype={fileType}
     >
       {/* File icon */}

@@ -35,7 +35,7 @@ export const FILE_PREVIEW_STYLES = {
   },
   group: {
     container:
-      "rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] p-3",
+      "rounded-[var(--theme-radius-input)] border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] p-3",
     header: "mb-2 flex min-w-0 items-start gap-2",
     title: "truncate text-sm font-medium text-[var(--theme-fg-secondary)]",
     meta: "text-xs text-[var(--theme-fg-muted)]",

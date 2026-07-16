@@ -822,7 +822,9 @@ export const AddinChatInput = forwardRef<
       }
     >
       {shouldShowEmailSourcePreview && (
-        <div className="mx-auto w-full max-w-4xl overflow-hidden overscroll-none px-2 pb-1 sm:px-4">
+        <div
+          className="mx-auto w-full max-w-[var(--theme-layout-chat-input-max-width)] overflow-hidden overscroll-none px-2 pb-1 sm:px-4"
+        >
           <div
             className="max-h-[40vh] overflow-y-auto overscroll-none pr-1 focus:outline-none focus:ring-2 focus:ring-theme-focus"
             role="region"
@@ -849,7 +851,7 @@ export const AddinChatInput = forwardRef<
       )}
 
       {isExpandingDroppedEmails && (
-        <div className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4">
+        <div className="mx-auto w-full max-w-[var(--theme-layout-chat-input-max-width)] px-2 pb-1 sm:px-4">
           <div
             className="flex items-center gap-2 rounded-lg border border-theme-border bg-theme-bg-secondary px-3 py-1.5 text-xs text-theme-fg-secondary"
             role="status"
@@ -871,7 +873,7 @@ export const AddinChatInput = forwardRef<
       )}
 
       {host === "Outlook" && hasActiveSelection && (
-        <div className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4">
+        <div className="mx-auto w-full max-w-[var(--theme-layout-chat-input-max-width)] px-2 pb-1 sm:px-4">
           <div className="flex items-center gap-2 rounded-lg border border-theme-border bg-theme-bg-secondary px-3 py-1.5 text-xs text-theme-fg-secondary">
             <span className="shrink-0">&#x2702;</span>
             <span className="min-w-0 truncate">
@@ -894,7 +896,7 @@ export const AddinChatInput = forwardRef<
       )}
 
       {hasDraftContextChip && (
-        <div className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4">
+        <div className="mx-auto w-full max-w-[var(--theme-layout-chat-input-max-width)] px-2 pb-1 sm:px-4">
           <div className="flex items-center gap-2 rounded-lg border border-theme-border bg-theme-bg-secondary px-3 py-1.5 text-xs text-theme-fg-secondary">
             <span className="shrink-0">&#x1F4DD;</span>
             <span className="min-w-0 truncate">

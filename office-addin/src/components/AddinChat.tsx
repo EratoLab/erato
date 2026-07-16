@@ -856,7 +856,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
           <button
             type="button"
             onClick={() => void createNewChat()}
-            className="rounded-md bg-theme-bg-tertiary px-3 py-1 text-xs font-medium text-theme-fg-secondary transition-colors hover:bg-theme-bg-hover"
+            className="rounded-[var(--theme-radius-control)] bg-theme-bg-tertiary px-3 py-1 text-xs font-medium text-theme-fg-secondary transition-colors hover:bg-theme-bg-hover"
           >
             {t({
               id: "officeAddin.chat.newChat",
