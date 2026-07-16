@@ -8,7 +8,9 @@ mod test_cases {
     use super::super::types::{
         AbstractChatSequencePart, ActionFacetUserInput, PromptSpec, ResolvedChatSequence,
     };
-    use crate::config::{ChatProviderConfig, ExperimentalFacetsConfig, PromptSourceSpecification};
+    use crate::config::{
+        ChatProviderConfig, ExperimentalFacetsConfig, FacetConfig, PromptSourceSpecification,
+    };
     use crate::db::entity::{chats, messages};
     use crate::models::assistant::{AssistantWithFiles, FileInfo};
     use crate::models::message::{
@@ -2567,6 +2569,7 @@ mod test_cases {
             None,
             Some(&action_facet),
             &action_facet_configs,
+            None,
         )
         .await
         .expect("Failed to build abstract sequence");
@@ -2616,6 +2619,103 @@ mod test_cases {
             }
             other => panic!("Expected ActionFacetMarker, got: {:?}", other),
         }
+    }
+
+    #[tokio::test]
+    async fn test_hidden_facets_injected_for_matching_platform_only() {
+        // Hidden facets are regular facets (`hidden = true`) injected as a
+        // baseline System prompt at conversation start, scoped by platform; a
+        // hidden facet with no `hidden_always_active_for_platform` applies
+        // everywhere. They reuse the FacetAdditionalSystemPrompt part.
+        let mut message_repo = MockMessageRepository::new();
+        let file_resolver = MockFileResolver::new();
+        let prompt_provider = MockPromptProvider::new().with_system_prompt("You are helpful.");
+
+        let msg1_id = Uuid::new_v4();
+        message_repo.add_message(msg1_id, None, MessageRole::User, "Hi");
+
+        let chat = create_test_chat();
+        let config = create_test_chat_provider_config();
+
+        let hidden = |content: &str, platform: Option<&str>| FacetConfig {
+            display_name: "Hidden baseline".to_string(),
+            additional_system_prompt: Some(PromptSourceSpecification::Static {
+                content: content.to_string(),
+            }),
+            hidden: true,
+            hidden_always_active_for_platform: platform.map(str::to_string),
+            ..Default::default()
+        };
+        let experimental_facets = ExperimentalFacetsConfig {
+            facets: HashMap::from([
+                (
+                    "outlook_baseline".to_string(),
+                    hidden("OUTLOOK BASELINE", Some("outlook")),
+                ),
+                (
+                    "teams_baseline".to_string(),
+                    hidden("TEAMS BASELINE", Some("teams")),
+                ),
+                (
+                    "global_baseline".to_string(),
+                    hidden("GLOBAL BASELINE", None),
+                ),
+            ]),
+            ..Default::default()
+        };
+
+        let abstract_seq = build_abstract_sequence_with_facet_tool_expansions(
+            &message_repo,
+            &prompt_provider,
+            &chat,
+            &msg1_id,
+            vec![],
+            &config,
+            &experimental_facets,
+            &[],
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            &HashMap::new(),
+            Some("outlook"),
+        )
+        .await
+        .expect("Failed to build abstract sequence");
+
+        let hidden_ids: Vec<&str> = abstract_seq
+            .parts
+            .iter()
+            .filter_map(|p| match p {
+                AbstractChatSequencePart::FacetAdditionalSystemPrompt { facet_id, .. } => {
+                    Some(facet_id.as_str())
+                }
+                _ => None,
+            })
+            .collect();
+        // outlook (platform match) + global (no platform) apply; teams does not.
+        assert!(hidden_ids.contains(&"outlook_baseline"));
+        assert!(hidden_ids.contains(&"global_baseline"));
+        assert!(!hidden_ids.contains(&"teams_baseline"));
+
+        let (resolved, _) = resolve_sequence(abstract_seq, &message_repo, &file_resolver)
+            .await
+            .expect("Failed to resolve sequence");
+        let system_texts: Vec<String> = resolved
+            .messages
+            .iter()
+            .filter(|m| matches!(m.role, MessageRole::System))
+            .filter_map(|m| match &m.content {
+                ContentPart::Text(t) => Some(t.text.clone()),
+                _ => None,
+            })
+            .collect();
+        assert!(system_texts.iter().any(|t| t.contains("OUTLOOK BASELINE")));
+        assert!(system_texts.iter().any(|t| t.contains("GLOBAL BASELINE")));
+        assert!(!system_texts.iter().any(|t| t.contains("TEAMS BASELINE")));
     }
 
     #[tokio::test]
@@ -2702,6 +2802,7 @@ mod test_cases {
             None,
             Some(&action_facet),
             &action_facet_configs,
+            None,
         )
         .await
         .expect("Failed to build second abstract sequence");

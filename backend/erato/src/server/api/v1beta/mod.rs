@@ -877,6 +877,10 @@ pub async fn facets(
         if authorized_facet_ids.contains(facet_id)
             && let Some(facet) = config.facets.get(facet_id)
         {
+            // Hidden baseline facets never appear in the pool.
+            if facet.hidden {
+                continue;
+            }
             let default_enabled = config.default_selected_facets.contains(facet_id);
             facets.push(FacetInfo {
                 id: facet_id.clone(),
@@ -890,9 +894,11 @@ pub async fn facets(
 
     let mut remaining: Vec<String> = config
         .facets
-        .keys()
-        .filter(|facet_id| authorized_facet_ids.contains(*facet_id) && !seen.contains(*facet_id))
-        .cloned()
+        .iter()
+        .filter(|(facet_id, facet)| {
+            authorized_facet_ids.contains(*facet_id) && !seen.contains(*facet_id) && !facet.hidden
+        })
+        .map(|(facet_id, _)| facet_id.clone())
         .collect();
     remaining.sort();
     for facet_id in remaining {

@@ -1722,7 +1722,14 @@ pub(crate) fn sanitize_selected_facet_ids(
     config: &ExperimentalFacetsConfig,
     selected_facet_ids: &[String],
 ) -> Vec<String> {
-    let available_facet_ids: HashSet<&str> = config.facets.keys().map(String::as_str).collect();
+    // Hidden facets are always-on baselines, never user-selectable — drop them
+    // from user-supplied selections so they cannot be forced on by id.
+    let available_facet_ids: HashSet<&str> = config
+        .facets
+        .iter()
+        .filter(|(_, facet)| !facet.hidden)
+        .map(|(id, _)| id.as_str())
+        .collect();
     let mut sanitized = Vec::new();
 
     for facet_id in selected_facet_ids {
@@ -1736,6 +1743,32 @@ pub(crate) fn sanitize_selected_facet_ids(
     }
 
     sanitized
+}
+
+/// Hidden facets that must be force-activated for this request's platform.
+///
+/// Hidden facets are system baselines: not user-selectable and injected
+/// regardless of per-user facet authorization. A facet with no
+/// `hidden_always_active_for_platform` applies on every platform. Returned
+/// id-sorted for deterministic ordering.
+pub(crate) fn active_hidden_facet_ids(
+    config: &ExperimentalFacetsConfig,
+    platform: Option<&str>,
+) -> Vec<String> {
+    let mut ids: Vec<String> = config
+        .facets
+        .iter()
+        .filter(|(_, facet)| facet.hidden)
+        .filter(
+            |(_, facet)| match &facet.hidden_always_active_for_platform {
+                None => true,
+                Some(required) => platform == Some(required.as_str()),
+            },
+        )
+        .map(|(id, _)| id.clone())
+        .collect();
+    ids.sort();
+    ids
 }
 
 pub(crate) fn resolve_effective_selected_facet_ids(
@@ -1844,13 +1877,25 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         &user_input.selected_facet_ids,
         assistant_config.as_ref(),
     );
-    let effective_selected_facet_ids = policy
+    let mut effective_selected_facet_ids = policy
         .filter_authorized_facet_ids(
             &me_profile_input.subject,
             me_profile_input.user_groups,
             &effective_selected_facet_ids,
         )
         .await?;
+    // Append always-on hidden baseline facets for this platform. Added after
+    // the authorization filter (they are system baselines, not user-gated) so
+    // their prompt injection, model settings, and tool allowlist all flow
+    // through the same machinery as user-selected facets.
+    for facet_id in active_hidden_facet_ids(
+        &app_state.config.experimental_facets,
+        generation_request_context.platform.as_deref(),
+    ) {
+        if !effective_selected_facet_ids.contains(&facet_id) {
+            effective_selected_facet_ids.push(facet_id);
+        }
+    }
 
     // Determine the chat provider to use
     let requested_chat_provider_id = user_input.requested_chat_provider_id.as_deref();
@@ -1968,6 +2013,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         me_profile_input.user_preference_assistant_additional_information,
         Some(&facet_tool_expansions),
         &app_state.config.action_facets.facets,
+        generation_request_context.platform.as_deref(),
     )
     .await?;
 
@@ -5430,6 +5476,94 @@ mod tests {
                 Some("missing"),
             ),
             vec!["client/*".to_string()]
+        );
+    }
+
+    #[test]
+    fn active_hidden_facet_ids_scopes_by_platform() {
+        use super::active_hidden_facet_ids;
+        use crate::config::{ExperimentalFacetsConfig, FacetConfig};
+        use std::collections::HashMap;
+
+        let hidden = |platform: Option<&str>| FacetConfig {
+            display_name: "Baseline".to_string(),
+            hidden: true,
+            hidden_always_active_for_platform: platform.map(str::to_string),
+            ..Default::default()
+        };
+        let config = ExperimentalFacetsConfig {
+            facets: HashMap::from([
+                ("outlook_baseline".to_string(), hidden(Some("outlook"))),
+                ("teams_baseline".to_string(), hidden(Some("teams"))),
+                ("global_baseline".to_string(), hidden(None)),
+                (
+                    "web_search".to_string(),
+                    FacetConfig {
+                        display_name: "Web".to_string(),
+                        ..Default::default() // not hidden
+                    },
+                ),
+            ]),
+            ..Default::default()
+        };
+
+        // Outlook request: outlook (platform match) + global (no platform);
+        // teams excluded, non-hidden facet excluded. Id-sorted.
+        assert_eq!(
+            active_hidden_facet_ids(&config, Some("outlook")),
+            vec![
+                "global_baseline".to_string(),
+                "outlook_baseline".to_string()
+            ]
+        );
+        // Web request: only the platform-agnostic global baseline.
+        assert_eq!(
+            active_hidden_facet_ids(&config, Some("web")),
+            vec!["global_baseline".to_string()]
+        );
+        // No platform on the request: still gets the global baseline.
+        assert_eq!(
+            active_hidden_facet_ids(&config, None),
+            vec!["global_baseline".to_string()]
+        );
+    }
+
+    #[test]
+    fn sanitize_drops_hidden_facets_from_user_selection() {
+        use super::sanitize_selected_facet_ids;
+        use crate::config::{ExperimentalFacetsConfig, FacetConfig};
+        use std::collections::HashMap;
+
+        let config = ExperimentalFacetsConfig {
+            facets: HashMap::from([
+                (
+                    "web_search".to_string(),
+                    FacetConfig {
+                        display_name: "Web".to_string(),
+                        ..Default::default()
+                    },
+                ),
+                (
+                    "outlook_baseline".to_string(),
+                    FacetConfig {
+                        display_name: "Baseline".to_string(),
+                        hidden: true,
+                        hidden_always_active_for_platform: Some("outlook".to_string()),
+                        ..Default::default()
+                    },
+                ),
+            ]),
+            ..Default::default()
+        };
+
+        // A user cannot force a hidden facet on by naming its id; only the
+        // selectable facet survives.
+        assert_eq!(
+            sanitize_selected_facet_ids(
+                &config,
+                &["web_search".to_string(), "outlook_baseline".to_string()],
+            ),
+            vec!["web_search".to_string()]
         );
     }
 

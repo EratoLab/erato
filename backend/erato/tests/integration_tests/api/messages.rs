@@ -219,6 +219,8 @@ async fn test_facets_persisted_in_generation_parameters(pool: Pool<Postgres>) {
             tool_call_allowlist: vec![],
             model_settings: ModelSettings::default(),
             disable_facet_prompt_template: true,
+            hidden: false,
+            hidden_always_active_for_platform: None,
         },
     );
     facets.insert(
@@ -232,6 +234,8 @@ async fn test_facets_persisted_in_generation_parameters(pool: Pool<Postgres>) {
             tool_call_allowlist: vec!["web-search-mcp/*".to_string()],
             model_settings: ModelSettings::default(),
             disable_facet_prompt_template: false,
+            hidden: false,
+            hidden_always_active_for_platform: None,
         },
     );
     app_config.experimental_facets = ExperimentalFacetsConfig {
@@ -893,6 +897,8 @@ async fn test_facet_prompt_injection_toggle_behavior(pool: Pool<Postgres>) {
             tool_call_allowlist: vec!["web-search-mcp/*".to_string()],
             model_settings: ModelSettings::default(),
             disable_facet_prompt_template: false,
+            hidden: false,
+            hidden_always_active_for_platform: None,
         },
     );
     facets.insert(
@@ -906,6 +912,8 @@ async fn test_facet_prompt_injection_toggle_behavior(pool: Pool<Postgres>) {
             tool_call_allowlist: vec![],
             model_settings: ModelSettings::default(),
             disable_facet_prompt_template: true,
+            hidden: false,
+            hidden_always_active_for_platform: None,
         },
     );
     app_config.experimental_facets = ExperimentalFacetsConfig {

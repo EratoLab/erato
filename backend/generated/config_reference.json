@@ -285,6 +285,8 @@
   "experimental_facets.facets.<facet-id>.additional_system_prompt.source": {},
   "experimental_facets.facets.<facet-id>.disable_facet_prompt_template": {},
   "experimental_facets.facets.<facet-id>.display_name": {},
+  "experimental_facets.facets.<facet-id>.hidden": {},
+  "experimental_facets.facets.<facet-id>.hidden_always_active_for_platform": {},
   "experimental_facets.facets.<facet-id>.icon": {},
   "experimental_facets.facets.<facet-id>.model_settings.compat_no_replay_summary": {},
   "experimental_facets.facets.<facet-id>.model_settings.compat_omit_strict": {},

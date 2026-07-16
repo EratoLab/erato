@@ -3271,6 +3271,28 @@ tool_call_allowlist = ["web-search-mcp/*", "web-access-mcp/*"]
 additional_system_prompt = { source = "static", prompt = "Please execute one or multiple web searches to answer the user's question." }
 ```
 
+##### Hidden baseline facets
+
+{/* erato_toml_config_key: experimental_facets.facets.<facet-id>.hidden */}
+{/* erato_toml_config_key: experimental_facets.facets.<facet-id>.hidden_always_active_for_platform */}
+
+A facet with `hidden = true` is a platform-baseline: it never appears in the facet pool and cannot be selected or removed by the user. Instead of being toggled, it is injected as an always-on system prompt once at the start of a conversation — under the same rule as the base system prompt — and then persists in history for the rest of the conversation. Because it is an ordinary facet, its `model_settings` and `tool_call_allowlist` still apply (per request) like any active facet.
+
+Scope activation to a platform with `hidden_always_active_for_platform`, matched against the request's `X-Erato-Platform` header. Omit it to apply on all platforms.
+
+Use a hidden facet for general platform-baseline behavior that should always be present (e.g. "you are running inside the Outlook add-in"). For per-request, task-specific instructions that should _not_ persist across turns, use an [action facet](#action_facets) instead.
+
+```toml
+[experimental_facets.facets.outlook_baseline]
+display_name = "Outlook baseline"
+hidden = true
+hidden_always_active_for_platform = "outlook"
+additional_system_prompt = "You are assisting inside the Outlook add-in. Keep responses concise and email-appropriate."
+```
+
+- `hidden` - When `true`, the facet is a hidden baseline: never shown in the pool, not user-selectable, and injected as an always-on system prompt. Defaults to `false`.
+- `hidden_always_active_for_platform` - Optional platform identifier (e.g. `"outlook"`) restricting where a hidden facet auto-activates. Omit to apply on all platforms. Only meaningful together with `hidden = true`.
+
 #### `experimental_facets.priority_order`
 
 {/* erato_toml_config_key: experimental_facets.priority_order */}

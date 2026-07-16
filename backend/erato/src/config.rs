@@ -2753,6 +2753,21 @@ pub struct FacetConfig {
     // Defaults to `false`.
     #[serde(default)]
     pub disable_facet_prompt_template: bool,
+
+    // Hidden baseline facet: never shown in the facet pool and not
+    // user-selectable. Instead of being toggled by the user, it is injected as
+    // an always-on baseline system prompt at conversation start (scoped by
+    // `hidden_always_active_for_platform`). Its `model_settings` and
+    // `tool_call_allowlist` still apply, per request, like any active facet.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub hidden: bool,
+
+    // Restricts auto-activation of a hidden facet to requests on this platform
+    // (matched against the `X-Erato-Platform` header, e.g. "outlook"). `None`
+    // applies on all platforms. Only meaningful together with `hidden = true`.
+    #[serde(default)]
+    pub hidden_always_active_for_platform: Option<String>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
