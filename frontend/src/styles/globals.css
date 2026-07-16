@@ -22,6 +22,13 @@
     overscroll-behavior: none;
   }
 
+  /* Native checkboxes/radios ignore border/background utilities; accent-color
+     is the only themable knob without replacing the control. */
+  input[type="checkbox"],
+  input[type="radio"] {
+    accent-color: var(--theme-fg-accent);
+  }
+
   /* #root no longer needs to be a flex container here, 
      as its immediate child in App.tsx will handle the main screen layout */
 

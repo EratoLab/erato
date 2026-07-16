@@ -4224,6 +4224,10 @@ msgstr "Este mensaje está usando {percentUsed}% del límite de tokens disponibl
 msgid "To"
 msgstr ""
 
+#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+msgid "Toggle attachments"
+msgstr "Alternar adjuntos"
+
 #: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
 msgid "Token Limit Exceeded"
 msgstr "Límite de tokens excedido"

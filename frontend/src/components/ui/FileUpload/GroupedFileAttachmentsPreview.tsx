@@ -189,7 +189,7 @@ const SelectableAttachmentRow: React.FC<SelectableAttachmentRowProps> = ({
   return (
     <label
       className={clsx(
-        "flex w-full items-start gap-2",
+        "flex w-full items-center gap-2 rounded-[var(--theme-radius-base)] border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-2",
         !selected && "opacity-50",
       )}
     >
@@ -198,7 +198,7 @@ const SelectableAttachmentRow: React.FC<SelectableAttachmentRowProps> = ({
         checked={selected}
         onChange={onToggle}
         disabled={disabled}
-        className="mt-1 size-4 shrink-0 rounded border-theme-border text-theme-fg-accent focus:ring-theme-focus disabled:cursor-not-allowed"
+        className="size-4 shrink-0 rounded border-theme-border text-theme-fg-accent focus:ring-theme-focus disabled:cursor-not-allowed"
         aria-label={`${t`Include`} ${filename}`}
       />
       <div className="min-w-0 flex-1">
@@ -211,6 +211,7 @@ const SelectableAttachmentRow: React.FC<SelectableAttachmentRowProps> = ({
           showFileType={showFileType}
           filenameTruncateLength={filenameTruncateLength}
           filenameClassName="max-w-full"
+          chromeless
         />
         {invalid && validation.reason && (
           <p className="mt-0.5 text-xs text-[var(--theme-error-fg)]">
@@ -238,21 +239,27 @@ interface ThreadMessageGroupSectionProps {
 const ThreadMessageHeaderText: React.FC<{
   label: string;
   sublabel?: string;
-}> = ({ label, sublabel }) => (
-  <div className="min-w-0 flex-1">
-    <p
-      className="truncate text-sm font-medium text-theme-fg-primary"
-      title={label}
-    >
-      {label}
-    </p>
-    {sublabel && (
-      <p className="truncate text-xs text-theme-fg-muted" title={sublabel}>
-        {sublabel}
+  metaLabel?: string;
+}> = ({ label, sublabel, metaLabel }) => {
+  // Meta stays in the text stack (like the group header's "N messages")
+  // instead of floating right-aligned on its own.
+  const secondLine = [sublabel, metaLabel].filter(Boolean).join(" · ");
+  return (
+    <div className="min-w-0 flex-1">
+      <p
+        className="truncate text-sm font-medium text-theme-fg-primary"
+        title={label}
+      >
+        {label}
       </p>
-    )}
-  </div>
-);
+      {secondLine && (
+        <p className="truncate text-xs text-theme-fg-muted" title={secondLine}>
+          {secondLine}
+        </p>
+      )}
+    </div>
+  );
+};
 
 const ThreadMessageGroupSection: React.FC<ThreadMessageGroupSectionProps> = ({
   label,
@@ -273,11 +280,33 @@ const ThreadMessageGroupSection: React.FC<ThreadMessageGroupSectionProps> = ({
   return (
     <div
       className={clsx(
-        "rounded-md border border-theme-border bg-theme-bg-secondary p-2",
+        "rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary p-2",
         !selected && "opacity-60",
       )}
     >
       <div className="flex items-center gap-2">
+        {/* Fixed columns across tree levels: disclosure, selection, text. */}
+        {hasAttachments ? (
+          // Only render the chevron when there's something to expand —
+          // an empty thread message has no attachments to show, so a
+          // disclosure toggle would dangle without any payload.
+          <button
+            type="button"
+            onClick={() => setCollapsed((value) => !value)}
+            className="inline-flex size-4 shrink-0 items-center justify-center text-theme-fg-muted"
+            aria-expanded={!collapsed}
+            aria-controls={panelId}
+            aria-label={`${t`Toggle attachments`} ${label}`}
+          >
+            {collapsed ? (
+              <ChevronRightIcon className="size-4" />
+            ) : (
+              <ChevronDownIcon className="size-4" />
+            )}
+          </button>
+        ) : (
+          <span className="size-4 shrink-0" aria-hidden="true" />
+        )}
         <input
           type="checkbox"
           checked={selected}
@@ -288,30 +317,19 @@ const ThreadMessageGroupSection: React.FC<ThreadMessageGroupSectionProps> = ({
           onClick={(event) => event.stopPropagation()}
         />
         {hasAttachments ? (
-          // Only render the chevron when there's something to expand —
-          // an empty thread message has no attachments to show, so a
-          // disclosure toggle would dangle without any payload.
           <button
             type="button"
             onClick={() => setCollapsed((value) => !value)}
             className="flex min-w-0 flex-1 items-start gap-2 text-left"
-            aria-expanded={!collapsed}
-            aria-controls={panelId}
+            tabIndex={-1}
           >
-            <span
-              className="mt-0.5 inline-flex shrink-0 items-center text-theme-fg-muted"
-              aria-hidden="true"
-            >
-              {collapsed ? (
-                <ChevronRightIcon className="size-4" />
-              ) : (
-                <ChevronDownIcon className="size-4" />
-              )}
-            </span>
-            <ThreadMessageHeaderText label={label} sublabel={sublabel} />
-            <span className="shrink-0 text-xs text-theme-fg-muted">
-              {attachmentCount === 1 ? t`1 file` : t`${attachmentCount} files`}
-            </span>
+            <ThreadMessageHeaderText
+              label={label}
+              sublabel={sublabel}
+              metaLabel={
+                attachmentCount === 1 ? t`1 file` : t`${attachmentCount} files`
+              }
+            />
           </button>
         ) : (
           <div className="flex min-w-0 flex-1 items-start gap-2">
@@ -468,7 +486,7 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
             : baseItems;
         const hiddenCount = isCollapsed ? 0 : itemCount - visibleItems.length;
         const sectionClassName = stickyGroupHeaders
-          ? "rounded-md bg-[var(--theme-bg-primary)]"
+          ? "rounded-[var(--theme-radius-input)] bg-[var(--theme-bg-primary)]"
           : FILE_PREVIEW_STYLES.group.container;
         const headerClassName = clsx(
           stickyGroupHeaders
@@ -477,7 +495,9 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
           stickyGroupHeaders &&
             clsx(
               "sticky top-0 z-10 border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] px-3 pb-2 pt-3",
-              isCollapsed ? "rounded-md" : "rounded-t-md",
+              isCollapsed
+                ? "rounded-[var(--theme-radius-input)]"
+                : "rounded-t-[var(--theme-radius-input)]",
             ),
         );
         const itemsClassName = clsx(
