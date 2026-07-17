@@ -37,8 +37,10 @@ describe("DropdownMenu", () => {
         "calc(100vw - (var(--theme-layout-dropdown-viewport-margin) * 2))",
       minWidth: "var(--theme-layout-dropdown-min-width)",
     });
-    expect(menuItem.className).toContain("focus-ring-inset");
-    expect(menuItem.className).not.toContain("focus:bg-theme-bg-accent");
+    // Active row uses the soft light highlight, not the old 2px dark ring.
+    expect(menuItem.className).not.toContain("focus-ring-inset");
+    expect(menuItem.className).toContain("focus:bg-theme-bg-hover");
+    expect(menuItem.className).toContain("focus:ring-1");
     expect(screen.getByRole("menu").firstElementChild).toHaveClass(
       "dropdown-panel-chrome-geometry",
     );
@@ -92,6 +94,133 @@ describe("DropdownMenu", () => {
       "overflow-y-auto",
       "overscroll-contain",
     );
+  });
+
+  it("focuses the panel (no item) on a pointer-open (ERMAIN-467)", async () => {
+    render(
+      <DropdownMenu
+        items={[
+          { label: "Rename", onClick: vi.fn() },
+          { label: "Delete", onClick: vi.fn() },
+        ]}
+      />,
+    );
+
+    // A real pointer click carries detail >= 1; keyboard-triggered clicks have
+    // detail 0. Simulate a pointer click here.
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }), {
+      detail: 1,
+    });
+
+    const menu = await screen.findByRole("menu");
+
+    await waitFor(() => {
+      expect(menu).toHaveFocus();
+    });
+    expect(screen.getByRole("menuitem", { name: "Rename" })).not.toHaveFocus();
+  });
+
+  it("focuses the first item on a keyboard-open (ERMAIN-467)", async () => {
+    render(
+      <DropdownMenu
+        items={[
+          { label: "Rename", onClick: vi.fn() },
+          { label: "Delete", onClick: vi.fn() },
+        ]}
+      />,
+    );
+
+    // Keyboard activation (Enter/Space) dispatches a synthetic click with
+    // detail 0.
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }), {
+      detail: 0,
+    });
+
+    const firstItem = await screen.findByRole("menuitem", { name: "Rename" });
+
+    await waitFor(() => {
+      expect(firstItem).toHaveFocus();
+    });
+  });
+
+  it("opens and focuses the first item on ArrowDown on the trigger (ERMAIN-467)", async () => {
+    render(
+      <DropdownMenu
+        items={[
+          { label: "Rename", onClick: vi.fn() },
+          { label: "Delete", onClick: vi.fn() },
+        ]}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Open menu" });
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+
+    const firstItem = await screen.findByRole("menuitem", { name: "Rename" });
+
+    await waitFor(() => {
+      expect(firstItem).toHaveFocus();
+    });
+  });
+
+  it("wraps arrow-key navigation and jumps with Home/End (ERMAIN-467)", async () => {
+    render(
+      <DropdownMenu
+        items={[
+          { label: "Rename", onClick: vi.fn() },
+          { label: "Share", onClick: vi.fn() },
+          { label: "Delete", onClick: vi.fn() },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }), {
+      detail: 1,
+    });
+    const menu = await screen.findByRole("menu");
+    const [rename, share, del] = screen.getAllByRole("menuitem");
+
+    fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect(rename).toHaveFocus();
+
+    fireEvent.keyDown(rename, { key: "ArrowUp" });
+    expect(del).toHaveFocus();
+
+    fireEvent.keyDown(del, { key: "Home" });
+    expect(rename).toHaveFocus();
+
+    fireEvent.keyDown(rename, { key: "End" });
+    expect(del).toHaveFocus();
+
+    fireEvent.keyDown(del, { key: "ArrowDown" });
+    expect(rename).toHaveFocus();
+
+    // sanity: middle item reachable
+    fireEvent.keyDown(rename, { key: "ArrowDown" });
+    expect(share).toHaveFocus();
+  });
+
+  it("skips disabled items during arrow-key navigation (ERMAIN-467)", async () => {
+    render(
+      <DropdownMenu
+        items={[
+          { label: "Rename", onClick: vi.fn() },
+          { label: "Share", onClick: vi.fn(), disabled: true },
+          { label: "Delete", onClick: vi.fn() },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }), {
+      detail: 1,
+    });
+    const menu = await screen.findByRole("menu");
+
+    fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect(screen.getByRole("menuitem", { name: "Rename" })).toHaveFocus();
+
+    fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect(screen.getByRole("menuitem", { name: "Delete" })).toHaveFocus();
   });
 
   it("closes on an outside pointerdown so tap-outside dismisses on touch (ERMAIN-465)", async () => {

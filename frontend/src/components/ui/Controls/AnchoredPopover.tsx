@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type RefObject,
   type ReactNode,
@@ -24,6 +25,7 @@ export interface AnchoredPopoverTriggerProps {
   id: string;
   type: "button";
   onClick: (event: ReactMouseEvent<HTMLButtonElement>) => void;
+  onKeyDown: (event: ReactKeyboardEvent<HTMLButtonElement>) => void;
   "aria-expanded": boolean;
   "aria-controls": string;
   "aria-haspopup"?: "menu" | "dialog" | "listbox" | "tree" | "grid";
@@ -98,6 +100,10 @@ export function AnchoredPopover({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const internalPanelRef = useRef<HTMLDivElement>(null);
   const wasOpenRef = useRef(false);
+  // How the current open was initiated. Keyboard opens (Enter/Space/ArrowDown
+  // on the trigger) focus the first item; pointer opens focus only the panel
+  // container so nothing looks pre-selected. See the focus effect below.
+  const openViaKeyboardRef = useRef(false);
   const panelId = useMemo(() => id ?? `popover-${reactId}`, [id, reactId]);
   // eslint-disable-next-line lingui/no-unlocalized-strings -- internal DOM id suffix
   const triggerId = `${panelId}-trigger`;
@@ -268,13 +274,26 @@ export function AnchoredPopover({
   }, [getPanelElement, isOpen, onOpenChange]);
 
   useEffect(() => {
-    if (!isOpen || !initialFocusSelector) {
+    if (!isOpen) {
       return;
     }
 
     requestAnimationFrame(() => {
+      const panelElement = getPanelElement();
+      if (!panelElement) {
+        return;
+      }
+
+      // Keyboard-open (WAI-ARIA menu-button pattern): focus the first item so
+      // arrow keys start from a defined position. Pointer-open: focus only the
+      // panel container so nothing looks pre-selected — arrows still work
+      // because the roving handler is bound to the panel and falls back to the
+      // first/last item when nothing is focused within it.
       const focusTarget =
-        getPanelElement()?.querySelector(initialFocusSelector);
+        openViaKeyboardRef.current && initialFocusSelector
+          ? panelElement.querySelector(initialFocusSelector)
+          : panelElement;
+
       if (focusTarget instanceof HTMLElement) {
         focusTarget.focus();
       }
@@ -296,7 +315,19 @@ export function AnchoredPopover({
     onClick: (event) => {
       event.preventDefault();
       event.stopPropagation();
+      // Space/Enter dispatch a synthetic click; detail === 0 marks a
+      // keyboard-driven activation (a real pointer click has detail >= 1).
+      openViaKeyboardRef.current = event.detail === 0;
       onOpenChange(!isOpen);
+    },
+    onKeyDown: (event) => {
+      // ArrowDown/ArrowUp open the menu and land on the first/last item, per
+      // the WAI-ARIA menu-button pattern. Enter/Space fall through to onClick.
+      if (!isOpen && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+        event.preventDefault();
+        openViaKeyboardRef.current = true;
+        onOpenChange(true);
+      }
     },
     "aria-expanded": isOpen,
     "aria-controls": panelId,
@@ -307,7 +338,13 @@ export function AnchoredPopover({
     <div
       ref={setPanelElement}
       id={panelId}
-      className={clsx("theme-transition fixed z-[9999] border", panelClassName)}
+      className={clsx(
+        "theme-transition fixed z-[9999] border focus:outline-none",
+        panelClassName,
+      )}
+      // Focusable container so a pointer-open can hold focus without any item
+      // looking pre-selected; roving arrow-key nav then works from here.
+      tabIndex={-1}
       style={{
         backgroundColor: "var(--theme-shell-dropdown)",
         borderColor: "var(--theme-border-dropdown)",
