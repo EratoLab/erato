@@ -289,7 +289,9 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
     return (
       <div
         className={clsx(
-          "flex w-full min-w-0 flex-col gap-1 overflow-y-auto",
+          // No overflow-y here: the sidebar wrapper (ChatHistorySidebar) owns the
+          // single scroll region; a second scroller caused rare double scrollbars.
+          "flex w-full min-w-0 flex-col gap-1",
           className,
         )}
         style={sidebarListStyle}
