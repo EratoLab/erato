@@ -3,8 +3,10 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
+  useState,
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
   type RefObject,
@@ -99,6 +101,10 @@ export function AnchoredPopover({
   const panelId = useMemo(() => id ?? `popover-${reactId}`, [id, reactId]);
   // eslint-disable-next-line lingui/no-unlocalized-strings -- internal DOM id suffix
   const triggerId = `${panelId}-trigger`;
+
+  // Keep the panel hidden until it has been measured & positioned, so it never
+  // paints a first frame at its unclamped flow height.
+  const [isPositioned, setIsPositioned] = useState(false);
 
   const getPanelElement = useCallback(
     () => panelRef?.current ?? internalPanelRef.current,
@@ -200,12 +206,17 @@ export function AnchoredPopover({
     panelElement.style.maxHeight = `${maxHeight}px`;
   }, [getPanelElement, isOpen, preferredOrientation, viewportPadding]);
 
-  useEffect(() => {
+  // Position before paint (not in a post-paint useEffect): a bottom-anchored
+  // panel would otherwise paint one frame at unclamped height past the viewport
+  // bottom, adding a document-root scrollbar (ERMAIN-464).
+  useLayoutEffect(() => {
     if (!isOpen) {
+      setIsPositioned(false);
       return;
     }
 
     updatePosition();
+    setIsPositioned(true);
 
     const handleViewportChange = () => {
       requestAnimationFrame(updatePosition);
@@ -303,6 +314,7 @@ export function AnchoredPopover({
         boxShadow: "var(--theme-elevation-dropdown)",
         maxWidth: "calc(100vw - 16px)",
         ...panelStyle,
+        visibility: isPositioned ? "visible" : "hidden",
       }}
       role={role}
       aria-labelledby={triggerId}

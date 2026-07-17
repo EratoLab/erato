@@ -237,6 +237,7 @@ export const DropdownMenu = memo(
             minWidth: "var(--theme-layout-dropdown-min-width)",
           }}
           panelClassName={clsx(
+            "flex flex-col",
             matchContentWidth
               ? "w-max"
               : "w-[var(--theme-layout-dropdown-min-width)]",
@@ -265,7 +266,7 @@ export const DropdownMenu = memo(
           )}
         >
           <div
-            className="dropdown-panel-chrome-geometry overflow-y-auto"
+            className="dropdown-panel-chrome-geometry min-h-0 flex-1 overflow-y-auto overscroll-contain"
             role="none"
           >
             {items.map((item, index) => (

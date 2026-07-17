@@ -69,4 +69,28 @@ describe("DropdownMenu", () => {
       expect(firstItem).not.toHaveFocus();
     });
   });
+
+  it("positions before reveal and contains its own scroll (ERMAIN-464)", async () => {
+    render(<DropdownMenu items={[{ label: "Rename", onClick: vi.fn() }]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
+
+    const menu = await screen.findByRole("menu");
+
+    // Panel is revealed only after the layout-effect positioning ran; the
+    // visibility guard is set explicitly (would be "hidden" if unpositioned).
+    expect(menu.style.visibility).toBe("visible");
+    // updatePosition clamped the panel to a pixel max-height.
+    expect(menu.style.maxHeight).toMatch(/^\d+px$/);
+    // Panel is a flex column that owns max-height; the inner list scrolls
+    // within it instead of overflowing the viewport.
+    expect(menu).toHaveClass("flex", "flex-col");
+    expect(menu.firstElementChild).toHaveClass(
+      "dropdown-panel-chrome-geometry",
+      "min-h-0",
+      "flex-1",
+      "overflow-y-auto",
+      "overscroll-contain",
+    );
+  });
 });
