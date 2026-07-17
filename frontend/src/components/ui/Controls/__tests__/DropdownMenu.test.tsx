@@ -93,4 +93,20 @@ describe("DropdownMenu", () => {
       "overscroll-contain",
     );
   });
+
+  it("closes on an outside pointerdown so tap-outside dismisses on touch (ERMAIN-465)", async () => {
+    render(<DropdownMenu items={[{ label: "Rename", onClick: vi.fn() }]} />);
+
+    const trigger = screen.getByRole("button", { name: "Open menu" });
+    fireEvent.click(trigger);
+    await screen.findByRole("menu");
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.pointerDown(document.body);
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-ui="dropdown-panel"]')).toBeNull();
+    });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+  });
 });
