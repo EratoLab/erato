@@ -1,4 +1,4 @@
-import { Preview } from "@storybook/react";
+import type { Preview } from "@storybook/react";
 import React, { useEffect, useState } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -9,9 +9,9 @@ import "non.geist"; // Imports Geist Sans Variable
 import "non.geist/mono"; // Imports Geist Mono Variable
 import {
   ThemeProvider,
-  ThemeMode,
   useTheme,
 } from "../src/components/providers/ThemeProvider";
+import type { ThemeMode } from "../src/components/providers/ThemeProvider";
 import { FeatureConfigProvider } from "../src/providers/FeatureConfigProvider";
 import { defaultTheme, darkTheme } from "../src/config/theme";
 import { themes as storybookThemes } from "@storybook/theming";
