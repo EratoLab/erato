@@ -236,7 +236,7 @@ export function AnchoredPopover({
       return;
     }
 
-    const handlePointerDown = (event: MouseEvent) => {
+    const handlePointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
 
       if (
@@ -256,11 +256,13 @@ export function AnchoredPopover({
       }
     };
 
-    document.addEventListener("mousedown", handlePointerDown);
+    // pointerdown (not mousedown) so tap-outside dismisses on touch surfaces
+    // (Outlook add-in / mobile), where synthesized mousedown is delayed/suppressed.
+    document.addEventListener("pointerdown", handlePointerDown);
     document.addEventListener("keydown", handleEscape);
 
     return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleEscape);
     };
   }, [getPanelElement, isOpen, onOpenChange]);
