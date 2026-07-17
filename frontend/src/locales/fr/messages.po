@@ -2792,6 +2792,11 @@ msgid "sharing.type.user"
 msgstr "Utilisateur"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+msgid "sidebar.assistants.title"
+msgstr "Assistants"
+
+#. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallInput.tsx
 msgid "toolcall.input.title"
 msgstr "Paramètres d'entrée"

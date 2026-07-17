@@ -70,6 +70,9 @@ const sidebarLinkClassName =
 const RECENT_CHATS_SECTION_EXPANDED_STORAGE_KEY =
   "erato.sidebar.recentChatsSectionExpanded";
 
+const ASSISTANTS_SECTION_EXPANDED_STORAGE_KEY =
+  "erato.sidebar.assistantsSectionExpanded";
+
 const parsePersistedBoolean = (value: unknown) =>
   typeof value === "boolean" ? value : null;
 
@@ -726,6 +729,13 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
         parse: parsePersistedBoolean,
       },
     );
+    const [isAssistantsExpanded, setIsAssistantsExpanded] = usePersistedState(
+      ASSISTANTS_SECTION_EXPANDED_STORAGE_KEY,
+      true,
+      {
+        parse: parsePersistedBoolean,
+      },
+    );
 
     // Only use ResizeObserver in the browser
     const isBrowser = typeof window !== "undefined";
@@ -905,7 +915,14 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
 
               {/* Optional recent assistants section */}
               {assistantsEnabled && assistantsShowRecent && !collapsed && (
-                <div
+                <CollapsibleSection
+                  title={t({
+                    id: "sidebar.assistants.title",
+                    message: "Assistants",
+                  })}
+                  defaultExpanded={true}
+                  expanded={isAssistantsExpanded}
+                  onExpandedChange={setIsAssistantsExpanded}
                   className={clsx(
                     "transition-opacity duration-200",
                     isSlimMode &&
@@ -913,7 +930,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                   )}
                 >
                   <FrequentAssistantsList limit={5} showBottomDivider={true} />
-                </div>
+                </CollapsibleSection>
               )}
 
               {/* Chat History - fade in/out with staggered timing */}
