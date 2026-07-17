@@ -38,6 +38,7 @@ vi.mock("@/providers/FeatureConfigProvider", () => ({
   useAssistantsFeature: () => ({
     enabled: false,
     showRecentItems: false,
+    showRecentItemsCollapsible: false,
   }),
   useSidebarFeature: () => ({
     collapsedMode: mockedCollapsedMode,

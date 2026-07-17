@@ -40,6 +40,7 @@ describe("themeConfig", () => {
     disableLogout: false,
     assistantsEnabled: false,
     assistantsShowRecentItems: false,
+    assistantsShowRecentItemsCollapsible: false,
     assistantContextWarningThreshold: 0.5,
     assistantContextFileContributorThreshold: 0.05,
     assistantsMaxSystemPromptLength: null,

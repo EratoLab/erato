@@ -717,6 +717,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     const {
       enabled: assistantsEnabled,
       showRecentItems: assistantsShowRecent,
+      showRecentItemsCollapsible: assistantsShowRecentCollapsible,
     } = useAssistantsFeature();
     const { data: assistantHubConfig } = useAssistantHubConfig(
       {},
@@ -914,24 +915,40 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
               />
 
               {/* Optional recent assistants section */}
-              {assistantsEnabled && assistantsShowRecent && !collapsed && (
-                <CollapsibleSection
-                  title={t({
-                    id: "sidebar.assistants.title",
-                    message: "Assistants",
-                  })}
-                  defaultExpanded={true}
-                  expanded={isAssistantsExpanded}
-                  onExpandedChange={setIsAssistantsExpanded}
-                  className={clsx(
-                    "transition-opacity duration-200",
-                    isSlimMode &&
-                      "pointer-events-none overflow-hidden opacity-0",
-                  )}
-                >
-                  <FrequentAssistantsList limit={5} showBottomDivider={true} />
-                </CollapsibleSection>
-              )}
+              {assistantsEnabled &&
+                assistantsShowRecent &&
+                !collapsed &&
+                (assistantsShowRecentCollapsible ? (
+                  <CollapsibleSection
+                    title={t`Assistants`}
+                    defaultExpanded={true}
+                    expanded={isAssistantsExpanded}
+                    onExpandedChange={setIsAssistantsExpanded}
+                    className={clsx(
+                      "transition-opacity duration-200",
+                      isSlimMode &&
+                        "pointer-events-none overflow-hidden opacity-0",
+                    )}
+                  >
+                    <FrequentAssistantsList
+                      limit={5}
+                      showBottomDivider={true}
+                    />
+                  </CollapsibleSection>
+                ) : (
+                  <div
+                    className={clsx(
+                      "transition-opacity duration-200",
+                      isSlimMode &&
+                        "pointer-events-none overflow-hidden opacity-0",
+                    )}
+                  >
+                    <FrequentAssistantsList
+                      limit={5}
+                      showBottomDivider={true}
+                    />
+                  </div>
+                ))}
 
               {/* Chat History - fade in/out with staggered timing */}
               <div

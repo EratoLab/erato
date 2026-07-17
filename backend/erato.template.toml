@@ -287,6 +287,9 @@ chat_provider_ids = ["test-token-limit"]
 # enabled = false
 # # Whether to show recent assistant items in the chat sidebar (default: false)
 # show_recent_items = false
+# # Whether the recent assistants sidebar section is rendered as a collapsible
+# # section (header + chevron) like the recent chats section (default: false)
+# show_recent_items_collapsible = false
 # # Threshold between 0.0 and 1.0 at or above which the assistant editor shows
 # # the overall context warning block (default: 0.5)
 # context_warning_threshold = 0.5

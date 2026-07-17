@@ -30,6 +30,8 @@ const FRONTEND_ENV_KEY_CHAT_INPUT_EMPTY_STATE_LAYOUT: &str = "CHAT_INPUT_EMPTY_S
 const FRONTEND_ENV_KEY_DISABLE_LOGOUT: &str = "DISABLE_LOGOUT";
 const FRONTEND_ENV_KEY_ASSISTANTS_ENABLED: &str = "ASSISTANTS_ENABLED";
 const FRONTEND_ENV_KEY_ASSISTANTS_SHOW_RECENT_ITEMS: &str = "ASSISTANTS_SHOW_RECENT_ITEMS";
+const FRONTEND_ENV_KEY_ASSISTANTS_SHOW_RECENT_ITEMS_COLLAPSIBLE: &str =
+    "ASSISTANTS_SHOW_RECENT_ITEMS_COLLAPSIBLE";
 const FRONTEND_ENV_KEY_ASSISTANTS_CONTEXT_WARNING_THRESHOLD: &str =
     "ASSISTANTS_CONTEXT_WARNING_THRESHOLD";
 const FRONTEND_ENV_KEY_ASSISTANTS_CONTEXT_FILE_CONTRIBUTOR_THRESHOLD: &str =
@@ -589,6 +591,10 @@ fn build_frontend_environment(
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_ASSISTANTS_SHOW_RECENT_ITEMS.to_string(),
         Value::Bool(config.assistants.show_recent_items),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_ASSISTANTS_SHOW_RECENT_ITEMS_COLLAPSIBLE.to_string(),
+        Value::Bool(config.assistants.show_recent_items_collapsible),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_ASSISTANTS_CONTEXT_WARNING_THRESHOLD.to_string(),

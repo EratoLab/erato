@@ -20,6 +20,7 @@ export type Env = {
   disableLogout: boolean;
   assistantsEnabled: boolean;
   assistantsShowRecentItems: boolean;
+  assistantsShowRecentItemsCollapsible: boolean;
   assistantContextWarningThreshold: number;
   assistantContextFileContributorThreshold: number;
   assistantsMaxSystemPromptLength: number | null;
@@ -73,6 +74,7 @@ declare global {
     DISABLE_LOGOUT?: boolean;
     ASSISTANTS_ENABLED?: boolean;
     ASSISTANTS_SHOW_RECENT_ITEMS?: boolean;
+    ASSISTANTS_SHOW_RECENT_ITEMS_COLLAPSIBLE?: boolean;
     ASSISTANTS_CONTEXT_WARNING_THRESHOLD?: number;
     ASSISTANTS_CONTEXT_FILE_CONTRIBUTOR_THRESHOLD?: number;
     ASSISTANTS_MAX_SYSTEM_PROMPT_LENGTH?: number;
@@ -205,6 +207,10 @@ export const env = (): Env => {
     import.meta.env.VITE_ASSISTANTS_SHOW_RECENT_ITEMS === "true"
       ? true
       : (window.ASSISTANTS_SHOW_RECENT_ITEMS ?? false);
+  const assistantsShowRecentItemsCollapsible =
+    import.meta.env.VITE_ASSISTANTS_SHOW_RECENT_ITEMS_COLLAPSIBLE === "true"
+      ? true
+      : (window.ASSISTANTS_SHOW_RECENT_ITEMS_COLLAPSIBLE ?? false);
   const assistantContextWarningThreshold = import.meta.env
     .VITE_ASSISTANTS_CONTEXT_WARNING_THRESHOLD
     ? Number(import.meta.env.VITE_ASSISTANTS_CONTEXT_WARNING_THRESHOLD)
@@ -361,6 +367,7 @@ export const env = (): Env => {
     disableLogout,
     assistantsEnabled,
     assistantsShowRecentItems,
+    assistantsShowRecentItemsCollapsible,
     assistantContextWarningThreshold,
     assistantContextFileContributorThreshold,
     assistantsMaxSystemPromptLength,
