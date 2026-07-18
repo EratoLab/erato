@@ -2,6 +2,10 @@ import { renderHook, act } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 import {
+  NEW_CHAT_STREAM_KEY,
+  useMessagingStore,
+} from "@/hooks/chat/store/messagingStore";
+import {
   useUploadFile,
   useCreateChat,
   fetchUploadFile,
@@ -83,9 +87,16 @@ describe("useFileDropzone", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    // Reset the Zustand store
+    // Reset the Zustand stores
     act(() => {
       useFileUploadStore.getState().reset();
+      useMessagingStore.setState({
+        isAwaitingFirstStreamChunkForNewChat: false,
+        newlyCreatedChatId: null,
+        streamingByKey: {},
+        streamKeyAliases: {},
+        activeStreamKey: NEW_CHAT_STREAM_KEY,
+      });
     });
 
     // Setup fetchUploadFile mock using vi.mocked
@@ -329,5 +340,104 @@ describe("useFileDropzone", () => {
 
     // API should not be called
     expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("routes a first-turn upload to the streaming chat instead of orphaning it", async () => {
+    act(() => {
+      useMessagingStore.setState({
+        isAwaitingFirstStreamChunkForNewChat: true,
+        newlyCreatedChatId: "streaming-chat-id",
+      });
+    });
+
+    const mockFetchUploadFile = vi.mocked(fetchUploadFile);
+    mockFetchUploadFile.mockResolvedValue({
+      files: [createMockUploadedFile("file1", "test1.pdf")],
+    });
+
+    const { result } = renderHook(() =>
+      useFileDropzone({ chatId: null, multiple: true }),
+    );
+
+    const testFile = new File(["test content"], "test1.pdf", {
+      type: "application/pdf",
+    });
+
+    await act(async () => {
+      await result.current.uploadFiles([testFile]);
+    });
+
+    expect(mockCreateChatMutateAsync).not.toHaveBeenCalled();
+    expect(mockFetchUploadFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queryParams: { chat_id: "streaming-chat-id" },
+      }),
+    );
+    expect(useFileUploadStore.getState().silentChatId).toBeNull();
+  });
+
+  it("waits for chat_created before uploading a first-turn file", async () => {
+    act(() => {
+      useMessagingStore.setState({
+        isAwaitingFirstStreamChunkForNewChat: true,
+        newlyCreatedChatId: null,
+      });
+    });
+
+    const mockFetchUploadFile = vi.mocked(fetchUploadFile);
+    mockFetchUploadFile.mockResolvedValue({
+      files: [createMockUploadedFile("file1", "test1.pdf")],
+    });
+
+    const { result } = renderHook(() =>
+      useFileDropzone({ chatId: null, multiple: true }),
+    );
+
+    const testFile = new File(["test content"], "test1.pdf", {
+      type: "application/pdf",
+    });
+
+    await act(async () => {
+      const uploadPromise = result.current.uploadFiles([testFile]);
+      // chat_created lands just after the file is attached.
+      useMessagingStore.getState().setNewlyCreatedChatIdInStore("late-chat-id");
+      await uploadPromise;
+    });
+
+    expect(mockCreateChatMutateAsync).not.toHaveBeenCalled();
+    expect(mockFetchUploadFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queryParams: { chat_id: "late-chat-id" },
+      }),
+    );
+  });
+
+  it("creates a silent chat for a fresh compose with no streaming first turn", async () => {
+    mockCreateChatMutateAsync.mockResolvedValue({ chat_id: "silent-chat-id" });
+
+    const mockFetchUploadFile = vi.mocked(fetchUploadFile);
+    mockFetchUploadFile.mockResolvedValue({
+      files: [createMockUploadedFile("file1", "test1.pdf")],
+    });
+
+    const { result } = renderHook(() =>
+      useFileDropzone({ chatId: null, multiple: true }),
+    );
+
+    const testFile = new File(["test content"], "test1.pdf", {
+      type: "application/pdf",
+    });
+
+    await act(async () => {
+      await result.current.uploadFiles([testFile]);
+    });
+
+    expect(mockCreateChatMutateAsync).toHaveBeenCalledTimes(1);
+    expect(mockFetchUploadFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queryParams: { chat_id: "silent-chat-id" },
+      }),
+    );
+    expect(useFileUploadStore.getState().silentChatId).toBe("silent-chat-id");
   });
 });

@@ -2,6 +2,10 @@ import { useCallback, useEffect, useRef } from "react";
 import { useDropzone } from "react-dropzone";
 
 import {
+  NEW_CHAT_STREAM_KEY,
+  useMessagingStore,
+} from "@/hooks/chat/store/messagingStore";
+import {
   useCreateChat,
   fetchUploadFile,
   type UploadFileVariables,
@@ -29,6 +33,56 @@ import type { FileType } from "@/utils/fileTypes";
 import type { FileRejection } from "react-dropzone";
 
 const logger = createLogger("HOOK", "useFileDropzone");
+
+const FIRST_TURN_CHAT_ID_TIMEOUT_MS = 4000;
+
+/**
+ * The chat id of a brand-new chat's in-flight first turn, or null for a genuine
+ * fresh compose. Attaching a file mid-first-turn has a null committed `chatId`,
+ * so without this the upload would spawn a second, orphaned chat (ERMAIN-466).
+ * `newlyCreatedChatId` is reset on new-chat/navigation, so it never leaks a
+ * stale id into a fresh compose.
+ */
+async function resolveInFlightNewChatId(): Promise<string | null> {
+  const store = useMessagingStore.getState();
+
+  // Set for attach-then-send (its silent-chat id) and send-first once
+  // `chat_created` lands.
+  if (store.newlyCreatedChatId) {
+    return store.newlyCreatedChatId;
+  }
+
+  // Send-first before `chat_created`: real id not reported yet. A fresh compose
+  // has neither signal, so bail and let the caller create a silent chat.
+  const firstTurnInFlight =
+    store.getStreaming(NEW_CHAT_STREAM_KEY).currentMessageId !== null ||
+    store.isAwaitingFirstStreamChunkForNewChat;
+  if (!firstTurnInFlight) {
+    return null;
+  }
+
+  return new Promise<string | null>((resolve) => {
+    let settled = false;
+    const finish = (value: string | null) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeoutId);
+      unsubscribe();
+      resolve(value);
+    };
+    const timeoutId = setTimeout(
+      () => finish(null),
+      FIRST_TURN_CHAT_ID_TIMEOUT_MS,
+    );
+    const unsubscribe = useMessagingStore.subscribe((state) => {
+      if (state.newlyCreatedChatId) {
+        finish(state.newlyCreatedChatId);
+      }
+    });
+  });
+}
 
 interface UseFileDropzoneProps {
   /** Array of accepted file types */
@@ -191,10 +245,10 @@ export function useFileDropzone({
 
         const filesToUpload = files.slice(0, multiple ? maxFiles : 1);
 
-        // Determine which chat ID to use for the upload
         let uploadChatId = chatId;
+        uploadChatId ??= await resolveInFlightNewChatId();
 
-        // If no chatId exists, create one silently first
+        // No chat yet — create one silently.
         if (!uploadChatId) {
           logger.log("Creating silent chat for file uploads");
           const createChatResult = await createChatMutation.mutateAsync({
