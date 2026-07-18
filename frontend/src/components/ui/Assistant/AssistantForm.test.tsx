@@ -102,6 +102,7 @@ function renderForm({
         assistants: {
           enabled: false,
           showRecentItems: false,
+          showRecentItemsCollapsible: false,
           contextWarningThreshold,
           contextFileContributorThreshold,
         },
@@ -137,6 +138,7 @@ describe("AssistantForm", () => {
           assistants: {
             enabled: false,
             showRecentItems: false,
+            showRecentItemsCollapsible: false,
             contextWarningThreshold: 0.5,
             contextFileContributorThreshold: 0.05,
           },
@@ -248,6 +250,7 @@ describe("AssistantForm", () => {
           assistants: {
             enabled: false,
             showRecentItems: false,
+            showRecentItemsCollapsible: false,
             contextWarningThreshold: 0.5,
             contextFileContributorThreshold: 0.05,
           },
@@ -269,6 +272,7 @@ describe("AssistantForm", () => {
           assistants: {
             enabled: false,
             showRecentItems: false,
+            showRecentItemsCollapsible: false,
             contextWarningThreshold: 0.5,
             contextFileContributorThreshold: 0.05,
           },
@@ -295,6 +299,7 @@ describe("AssistantForm", () => {
           assistants: {
             enabled: false,
             showRecentItems: false,
+            showRecentItemsCollapsible: false,
             contextWarningThreshold: 0.5,
             contextFileContributorThreshold: 0.05,
           },
@@ -371,6 +376,7 @@ describe("AssistantForm", () => {
           assistants: {
             enabled: false,
             showRecentItems: false,
+            showRecentItemsCollapsible: false,
             contextWarningThreshold: 0.5,
             contextFileContributorThreshold: 0.05,
           },
@@ -407,6 +413,7 @@ describe("AssistantForm", () => {
           assistants: {
             enabled: false,
             showRecentItems: false,
+            showRecentItemsCollapsible: false,
             contextWarningThreshold: 0.5,
             contextFileContributorThreshold: 0.05,
           },

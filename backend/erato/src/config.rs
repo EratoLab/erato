@@ -2356,6 +2356,12 @@ pub struct AssistantsConfig {
     #[serde(default)]
     pub show_recent_items: bool,
 
+    // Whether the recent assistants sidebar section is rendered as a
+    // collapsible section (header + chevron) like the recent chats section.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub show_recent_items_collapsible: bool,
+
     // The threshold (between 0.0 and 1.0) at or above which the assistant editor
     // shows the context usage warning block.
     // Defaults to `0.5` (50%).
@@ -2380,6 +2386,7 @@ impl Default for AssistantsConfig {
         Self {
             enabled: false,
             show_recent_items: false,
+            show_recent_items_collapsible: false,
             context_warning_threshold: default_assistant_context_warning_threshold(),
             context_file_contributor_threshold:
                 default_assistant_context_file_contributor_threshold(),

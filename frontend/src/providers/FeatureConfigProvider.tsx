@@ -80,6 +80,8 @@ interface AssistantsFeatureConfig {
   enabled: boolean;
   /** Whether recent assistants should be shown in the sidebar */
   showRecentItems: boolean;
+  /** Whether the recent assistants sidebar section is rendered as a collapsible section */
+  showRecentItemsCollapsible: boolean;
   /** Threshold at or above which assistant editor context warnings are shown */
   contextWarningThreshold: number;
   /** Threshold at or above which files are listed as major context contributors */
@@ -244,6 +246,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
   assistants: {
     enabled: false,
     showRecentItems: false,
+    showRecentItemsCollapsible: false,
     contextWarningThreshold: 0.5,
     contextFileContributorThreshold: 0.05,
     maxSystemPromptLength: null,
@@ -344,6 +347,8 @@ function createFeatureConfig(
     assistants: {
       enabled: environment.assistantsEnabled,
       showRecentItems: environment.assistantsShowRecentItems,
+      showRecentItemsCollapsible:
+        environment.assistantsShowRecentItemsCollapsible,
       contextWarningThreshold: environment.assistantContextWarningThreshold,
       contextFileContributorThreshold:
         environment.assistantContextFileContributorThreshold,

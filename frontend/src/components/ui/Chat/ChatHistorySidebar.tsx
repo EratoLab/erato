@@ -70,6 +70,9 @@ const sidebarLinkClassName =
 const RECENT_CHATS_SECTION_EXPANDED_STORAGE_KEY =
   "erato.sidebar.recentChatsSectionExpanded";
 
+const ASSISTANTS_SECTION_EXPANDED_STORAGE_KEY =
+  "erato.sidebar.assistantsSectionExpanded";
+
 const parsePersistedBoolean = (value: unknown) =>
   typeof value === "boolean" ? value : null;
 
@@ -714,6 +717,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     const {
       enabled: assistantsEnabled,
       showRecentItems: assistantsShowRecent,
+      showRecentItemsCollapsible: assistantsShowRecentCollapsible,
     } = useAssistantsFeature();
     const { data: assistantHubConfig } = useAssistantHubConfig(
       {},
@@ -721,6 +725,13 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     );
     const [isRecentChatsExpanded, setIsRecentChatsExpanded] = usePersistedState(
       RECENT_CHATS_SECTION_EXPANDED_STORAGE_KEY,
+      true,
+      {
+        parse: parsePersistedBoolean,
+      },
+    );
+    const [isAssistantsExpanded, setIsAssistantsExpanded] = usePersistedState(
+      ASSISTANTS_SECTION_EXPANDED_STORAGE_KEY,
       true,
       {
         parse: parsePersistedBoolean,
@@ -904,17 +915,40 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
               />
 
               {/* Optional recent assistants section */}
-              {assistantsEnabled && assistantsShowRecent && !collapsed && (
-                <div
-                  className={clsx(
-                    "transition-opacity duration-200",
-                    isSlimMode &&
-                      "pointer-events-none overflow-hidden opacity-0",
-                  )}
-                >
-                  <FrequentAssistantsList limit={5} showBottomDivider={true} />
-                </div>
-              )}
+              {assistantsEnabled &&
+                assistantsShowRecent &&
+                !collapsed &&
+                (assistantsShowRecentCollapsible ? (
+                  <CollapsibleSection
+                    title={t`Assistants`}
+                    defaultExpanded={true}
+                    expanded={isAssistantsExpanded}
+                    onExpandedChange={setIsAssistantsExpanded}
+                    className={clsx(
+                      "transition-opacity duration-200",
+                      isSlimMode &&
+                        "pointer-events-none overflow-hidden opacity-0",
+                    )}
+                  >
+                    <FrequentAssistantsList
+                      limit={5}
+                      showBottomDivider={true}
+                    />
+                  </CollapsibleSection>
+                ) : (
+                  <div
+                    className={clsx(
+                      "transition-opacity duration-200",
+                      isSlimMode &&
+                        "pointer-events-none overflow-hidden opacity-0",
+                    )}
+                  >
+                    <FrequentAssistantsList
+                      limit={5}
+                      showBottomDivider={true}
+                    />
+                  </div>
+                ))}
 
               {/* Chat History - fade in/out with staggered timing */}
               <div
