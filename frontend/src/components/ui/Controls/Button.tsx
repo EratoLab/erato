@@ -23,11 +23,23 @@ type ButtonSize = "sm" | "md" | "lg";
 // pass. Utilities still win over this since geometry lives in @layer components.
 type ButtonShape = "default" | "pill";
 
+// Geometry is the size/padding/radius axis, independent of the colour `variant`.
+// A button that renders only an icon should use "icon" (square, no inline
+// padding) whatever its colour is — before this existed, the only way to get
+// icon geometry was `variant="icon-only"`, which also forces a transparent
+// ghost look, so filled icon buttons were stuck with text-button geometry.
+type ButtonGeometry = "control" | "icon";
+
 interface ButtonProps
   extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "aria-checked"> {
   variant?: ButtonVariant;
   size?: ButtonSize;
   shape?: ButtonShape;
+  /**
+   * Opt a non-`icon-only` button into square icon geometry. Defaults to
+   * "control" (text-button padding); `variant="icon-only"` implies "icon".
+   */
+  geometry?: ButtonGeometry;
   icon?: React.ReactNode;
   iconClassName?: string;
   children?: React.ReactNode;
@@ -105,6 +117,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       variant = "secondary",
       size = "md",
       shape = "default",
+      geometry = "control",
       icon,
       iconClassName,
       children,
@@ -189,6 +202,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       validateProps(props);
     }, [props]);
 
+    const usesIconGeometry = variant === "icon-only" || geometry === "icon";
+
     const buttonClasses = useMemo(
       () =>
         clsx(
@@ -197,23 +212,33 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           VARIANT_STYLES[variant],
           variant === "list-item"
             ? "btn-geometry-list-item"
-            : variant === "icon-only"
+            : usesIconGeometry
               ? ICON_SIZE_STYLES[size]
               : // Link is a text affordance — it intentionally carries no control
                 // geometry (no padding, min-height, or radius).
                 variant === "link"
                 ? ""
                 : CONTROL_SIZE_STYLES[size],
-          shape === "pill" && "rounded-full",
+          // Reads the token rather than Tailwind's hardcoded 9999px, so
+          // `radius.pill` in theme.json actually reaches pill buttons.
+          shape === "pill" && "rounded-[var(--theme-radius-pill)]",
           {
             "bg-theme-bg-selected": ariaPressed === true,
-            "justify-center": variant === "icon-only",
+            "justify-center": usesIconGeometry,
           },
           showOnHover && "theme-transition opacity-0 group-hover:opacity-100",
           "disabled:cursor-not-allowed disabled:opacity-50",
           className,
         ),
-      [variant, size, shape, ariaPressed, showOnHover, className],
+      [
+        variant,
+        size,
+        shape,
+        usesIconGeometry,
+        ariaPressed,
+        showOnHover,
+        className,
+      ],
     );
 
     const iconClasses = useMemo(
@@ -237,6 +262,19 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           type={type}
           onClick={handleClick}
           data-pressed={isPressed}
+          // Stable theming hooks: `data-geometry` is the resolved geometry
+          // (not the raw props), so theme.css can target "every icon control
+          // in this surface" without naming private btn-geometry-* classes.
+          data-geometry={
+            variant === "list-item"
+              ? "list-item"
+              : variant === "link"
+                ? "link"
+                : usesIconGeometry
+                  ? `icon-${size}`
+                  : size
+          }
+          data-variant={variant}
           {...ariaState}
           aria-label={ariaLabel}
           className={buttonClasses}
