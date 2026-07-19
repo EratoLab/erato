@@ -5,6 +5,7 @@ import { act } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { componentRegistry } from "@/config/componentRegistry";
+import { useComposeSessionStore } from "@/hooks/chat/store/composeSessionStore";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useMessageQueueStore } from "@/hooks/chat/store/messageQueueStore";
 import { messages as enMessages } from "@/locales/en/messages.json";
@@ -213,6 +214,10 @@ describe("ChatInput", () => {
       clear: vi.fn(),
     });
     useToastStore.setState({ toasts: [] });
+    useComposeSessionStore.setState({
+      sessionIdByChatKey: {},
+      draftsBySessionId: {},
+    });
 
     const { i18n } = await import("@lingui/core");
     i18n.load("en", enMessages as unknown as Messages);
@@ -3401,8 +3406,13 @@ describe("ChatInput", () => {
       });
       const ui = (
         context: Partial<ChatContextValue>,
-        props: { disabled?: boolean } = {},
+        props: {
+          disabled?: boolean;
+          remountKey?: number;
+          chatId?: string | null;
+        } = {},
       ) => {
+        const { remountKey = 1, chatId = CHAT_ID, ...inputProps } = props;
         mockUseChatContext.mockReturnValue({
           isPendingResponse: false,
           isMessagingLoading: false,
@@ -3415,9 +3425,10 @@ describe("ChatInput", () => {
           <QueryClientProvider client={queryClient}>
             <I18nProvider i18n={i18n}>
               <ChatInput
+                key={remountKey}
                 onSendMessage={onSendMessage}
-                chatId={CHAT_ID}
-                {...props}
+                chatId={chatId}
+                {...inputProps}
               />
             </I18nProvider>
           </QueryClientProvider>
@@ -3426,7 +3437,11 @@ describe("ChatInput", () => {
       const { rerender } = render(ui(initialContext));
       return (
         context: Partial<ChatContextValue>,
-        props: { disabled?: boolean } = {},
+        props: {
+          disabled?: boolean;
+          remountKey?: number;
+          chatId?: string | null;
+        } = {},
       ) => rerender(ui(context, props));
     };
 
@@ -3544,6 +3559,114 @@ describe("ChatInput", () => {
 
       rerender({ isPendingResponse: false, cancelMessage });
       await flushTimers();
+      expect(onSendMessage).not.toHaveBeenCalled();
+    });
+
+    it("keeps a queued message across a remount instead of dropping it", async () => {
+      const { i18n } = await import("@lingui/core");
+      const onSendMessage = vi.fn();
+      const rerender = renderQueue(
+        { isPendingResponse: true },
+        onSendMessage,
+        i18n,
+      );
+
+      fireEvent.change(screen.getByPlaceholderText("Type a message..."), {
+        target: { value: "next message" },
+      });
+      fireEvent.keyDown(screen.getByPlaceholderText("Type a message..."), {
+        key: "Enter",
+        shiftKey: false,
+      });
+      expect(
+        screen.getByTestId("chat-input-queued-message-edit"),
+      ).toHaveTextContent("next message");
+
+      // Clicking "New Chat" bumps ChatProvider's newChatCounter, which is the
+      // `key` on <Chat> in ChatPageStructure — so the ChatInput subtree
+      // remounts underneath the queued message.
+      rerender({ isPendingResponse: true }, { remountKey: 2 });
+      await flushTimers();
+
+      // The payload becomes the chat's draft rather than staying queued: the
+      // user returns to it in a later render, and nothing is left in the queue
+      // to fire once the abandoned turn settles.
+      const sessionId = Object.keys(
+        useComposeSessionStore.getState().sessionIdByChatKey,
+      ).map(
+        (chatKey) =>
+          useComposeSessionStore.getState().sessionIdByChatKey[chatKey],
+      )[0];
+      expect(
+        useComposeSessionStore.getState().draftsBySessionId[sessionId!],
+      ).toEqual({ message: "next message", attachedFiles: [] });
+      expect(useMessageQueueStore.getState().queuedBySessionId).toEqual({});
+
+      rerender({ isPendingResponse: false }, { remountKey: 2 });
+      await flushTimers();
+      expect(onSendMessage).not.toHaveBeenCalled();
+    });
+
+    it("restores the dropped draft into the composer on returning to the chat", async () => {
+      const { i18n } = await import("@lingui/core");
+      const onSendMessage = vi.fn();
+      const rerender = renderQueue(
+        { isPendingResponse: true },
+        onSendMessage,
+        i18n,
+      );
+
+      fireEvent.change(screen.getByPlaceholderText("Type a message..."), {
+        target: { value: "next message" },
+      });
+      fireEvent.keyDown(screen.getByPlaceholderText("Type a message..."), {
+        key: "Enter",
+        shiftKey: false,
+      });
+
+      // The New Chat button remounts (mountKey) and navigates (chatId -> null).
+      // Which lands first is not guaranteed, so the drop-to-draft has to hold
+      // either way: here the remount is observed before the navigation.
+      rerender({ isPendingResponse: true }, { remountKey: 2 });
+      await flushTimers();
+      rerender({ isPendingResponse: false }, { remountKey: 2, chatId: null });
+      await flushTimers();
+
+      rerender({ isPendingResponse: false }, { remountKey: 2 });
+      await flushTimers();
+
+      expect(screen.getByPlaceholderText("Type a message...")).toHaveValue(
+        "next message",
+      );
+      expect(onSendMessage).not.toHaveBeenCalled();
+    });
+
+    it("restores the dropped draft when navigation lands before the remount", async () => {
+      const { i18n } = await import("@lingui/core");
+      const onSendMessage = vi.fn();
+      const rerender = renderQueue(
+        { isPendingResponse: true },
+        onSendMessage,
+        i18n,
+      );
+
+      fireEvent.change(screen.getByPlaceholderText("Type a message..."), {
+        target: { value: "next message" },
+      });
+      fireEvent.keyDown(screen.getByPlaceholderText("Type a message..."), {
+        key: "Enter",
+        shiftKey: false,
+      });
+
+      rerender({ isPendingResponse: false }, { remountKey: 2, chatId: null });
+      await flushTimers();
+
+      rerender({ isPendingResponse: false }, { remountKey: 2 });
+      await flushTimers();
+
+      expect(screen.getByPlaceholderText("Type a message...")).toHaveValue(
+        "next message",
+      );
       expect(onSendMessage).not.toHaveBeenCalled();
     });
 

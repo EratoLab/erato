@@ -4,6 +4,7 @@ import {
   useState,
   useRef,
   useEffect,
+  useLayoutEffect,
   useCallback,
   useMemo,
   useImperativeHandle,
@@ -368,6 +369,12 @@ export const ChatInput = ({
   onControlledIsAudioModeChange,
   ref,
 }: ChatInputPropsWithRef) => {
+  const {
+    sessionId: composeSessionId,
+    getActiveSessionId,
+    getDraft: getComposeDraftBySessionId,
+    saveDraft: saveComposeDraftBySessionId,
+  } = useComposeSession({ chatId });
   const [message, setMessage] = useState("");
   const [internalIsAudioMode, setInternalIsAudioMode] = useState(false);
   const [conversationStartSignal, setConversationStartSignal] = useState(0);
@@ -404,12 +411,6 @@ export const ChatInput = ({
   const audioModeRestartSawPendingResponseRef = useRef(false);
   const previousModeRef = useRef<"compose" | "edit">(mode);
   const previousEditMessageIdRef = useRef<string | undefined>(undefined);
-  const {
-    sessionId: composeSessionId,
-    getActiveSessionId,
-    getDraft: getComposeDraftBySessionId,
-    saveDraft: saveComposeDraftBySessionId,
-  } = useComposeSession({ chatId });
   const dictationTargetRef = useRef<DictationTarget | null>(null);
   // Add state for file button processing
   const [isFileButtonProcessing, setIsFileButtonProcessing] = useState(false);
@@ -957,9 +958,18 @@ export const ChatInput = ({
   // swap reads it.
   const activeComposeSessionIdRef = useRef(composeSessionId);
 
+  const hasPersistedInitialDraftRef = useRef(false);
+
   // Persist compose-mode draft state for the currently active session.
   useEffect(() => {
     if (mode !== "compose") {
+      return;
+    }
+    // The mount write only echoes the draft we seeded from, and on a remount
+    // it would land after the outgoing instance folded its queued message into
+    // that same draft — clobbering it with the empty composer. Skip it.
+    if (!hasPersistedInitialDraftRef.current) {
+      hasPersistedInitialDraftRef.current = true;
       return;
     }
     saveComposeDraftBySessionId(activeComposeSessionIdRef.current, {
@@ -967,6 +977,51 @@ export const ChatInput = ({
       attachedFiles,
     });
   }, [mode, message, attachedFiles, saveComposeDraftBySessionId]);
+
+  // Seed the composer from this session's stored draft, so a remount (New Chat
+  // bumping ChatProvider's mountKey, or the empty-state → messages layout flip)
+  // doesn't present an empty composer for a chat that has one. This has to be a
+  // layout effect: the outgoing instance's teardown below runs in the same
+  // phase, and seeding any earlier would read the draft before it folds its
+  // queued message in.
+  useLayoutEffect(() => {
+    if (mode !== "compose") {
+      return;
+    }
+    const draft = getComposeDraftBySessionId(activeComposeSessionIdRef.current);
+    if (draft.message) {
+      setMessage(draft.message);
+    }
+    if (draft.attachedFiles.length) {
+      setAttachedFiles(draft.attachedFiles);
+    }
+    // Mount-only: later session switches are handled by the switch effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // A remount tears this component down without a session switch, so the
+  // switch effect below never runs. Fold any queued message back into the
+  // chat's draft here, or it stays in the queue store waiting for a turn that
+  // this chat is no longer showing — and would auto-send on return. (ERMAIN-470)
+  useLayoutEffect(() => {
+    return () => {
+      const sessionId = activeComposeSessionIdRef.current;
+      const queued = getQueuedBySessionId(sessionId);
+      if (!queued) {
+        return;
+      }
+      saveComposeDraftBySessionId(
+        sessionId,
+        mergeComposeDrafts(queued, getComposeDraftBySessionId(sessionId)),
+      );
+      clearQueuedBySessionId(sessionId);
+    };
+  }, [
+    getQueuedBySessionId,
+    getComposeDraftBySessionId,
+    saveComposeDraftBySessionId,
+    clearQueuedBySessionId,
+  ]);
 
   // On chat switch, persist outgoing draft against the previous session and
   // restore the incoming draft for the new session. Because the session id
