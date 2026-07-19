@@ -25,8 +25,7 @@ interface ConfirmationRegistryStore {
 const hasPendingIn = (
   pendingIdsByChatId: Partial<Record<string, string[]>>,
   chatId: string | null | undefined,
-): boolean =>
-  chatId ? (pendingIdsByChatId[chatId]?.length ?? 0) > 0 : false;
+): boolean => (chatId ? (pendingIdsByChatId[chatId]?.length ?? 0) > 0 : false);
 
 export const useConfirmationRegistryStore = create<ConfirmationRegistryStore>()(
   devtools(

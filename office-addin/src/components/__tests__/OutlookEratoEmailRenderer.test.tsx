@@ -387,7 +387,8 @@ describe("OutlookEratoEmailRenderer — confirmation-card item snapshot", () => 
       "chat-1",
       expect.any(String),
     );
-    const registrationId = mockRegisterConfirmation.mock.calls[0]?.[1] as string;
+    const registrationId = mockRegisterConfirmation.mock
+      .calls[0]?.[1] as string;
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "deny" }));

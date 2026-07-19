@@ -61,7 +61,7 @@ export const useMessageQueueStore = create<MessageQueueStore>()(
 );
 
 /** Reactive read of the message queued for `sessionId`, or null. */
-export const useQueuedMessage = (
-  sessionId: string,
-): ComposeDraftState | null =>
-  useMessageQueueStore((state) => readQueued(state.queuedBySessionId, sessionId));
+export const useQueuedMessage = (sessionId: string): ComposeDraftState | null =>
+  useMessageQueueStore((state) =>
+    readQueued(state.queuedBySessionId, sessionId),
+  );
