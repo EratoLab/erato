@@ -6,7 +6,6 @@ import {
 } from "./ActionConfirmationCard";
 import { Button } from "../Controls/Button";
 
-
 import type { Meta, StoryObj } from "@storybook/react";
 
 const meta = {
@@ -29,7 +28,8 @@ const meta = {
     status: {
       control: "select",
       options: ["pending", "confirmed", "dismissed"],
-      description: "Lifecycle state — pending shows buttons, resolved shows a row",
+      description:
+        "Lifecycle state — pending shows buttons, resolved shows a row",
     },
     isBusy: {
       control: "boolean",
@@ -59,7 +59,8 @@ type Story = StoryObj<typeof meta>;
 export const Pending: Story = {
   args: {
     title: "Open a reply to this email?",
-    description: "The assistant wants to open a reply to Jordan Vega (jordan@contoso.com).",
+    description:
+      "The assistant wants to open a reply to Jordan Vega (jordan@contoso.com).",
     status: "pending",
   },
 };
@@ -71,7 +72,8 @@ export const Pending: Story = {
 export const TwoButton: Story = {
   args: {
     title: "Open a reply to this email?",
-    description: "The assistant wants to open a reply to Jordan Vega (jordan@contoso.com).",
+    description:
+      "The assistant wants to open a reply to Jordan Vega (jordan@contoso.com).",
     status: "pending",
     onAlwaysAllow: undefined,
   },
@@ -162,11 +164,7 @@ export const SurfacedLifecycle: Story = {
             onDeny={() => setStatus("dismissed")}
           />
           {status !== "pending" && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setStatus("idle")}
-            >
+            <Button variant="ghost" size="sm" onClick={() => setStatus("idle")}>
               Reset
             </Button>
           )}

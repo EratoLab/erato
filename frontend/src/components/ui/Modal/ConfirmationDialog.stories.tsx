@@ -1,7 +1,6 @@
 import { ConfirmationDialog } from "./ConfirmationDialog";
 import { Button } from "../Controls/Button";
 
-
 import type { Meta, StoryObj } from "@storybook/react";
 
 const meta = {
@@ -13,8 +12,8 @@ const meta = {
       description: {
         component:
           "Modal confirm/cancel dialog rendered on ModalBase. The frontend's " +
-          "data-loss / destructive safety-confirm idiom — e.g. the \"Remove this " +
-          "chat?\" guard. Also embedded inside Button via its `confirmAction` props.",
+          'data-loss / destructive safety-confirm idiom — e.g. the "Remove this ' +
+          'chat?" guard. Also embedded inside Button via its `confirmAction` props.',
       },
     },
   },
@@ -53,7 +52,8 @@ export const Danger: Story = {
   args: {
     isOpen: true,
     title: "Confirm Removal",
-    message: "Are you sure you want to remove this chat? This cannot be undone.",
+    message:
+      "Are you sure you want to remove this chat? This cannot be undone.",
     confirmButtonText: "Remove",
     confirmButtonVariant: "danger",
   },
