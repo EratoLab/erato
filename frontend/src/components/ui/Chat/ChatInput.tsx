@@ -2242,13 +2242,8 @@ export const ChatInput = ({
         )}
 
         {/* Queued next message: auto-sends when the current turn finishes.
-            Geometry AND surface colors come from the same message tokens as the
-            sibling attachment preview (`--theme-border-attachment` on
-            bg-primary), so the two read as one family. Not
-            `--theme-border-chat-input`: the stock theme aliases both to
-            `--theme-border`, but themes that split them treat chat-input as a
-            shell-only token they re-specify per surface, which would leave this
-            chip borderless. `data-ui` lets kits restyle it. */}
+            Geometry and surface tokens match the sibling attachment preview;
+            `data-ui` lets kits restyle it. */}
         {queuedMessage && (
           <div
             className="theme-transition mb-2 flex items-center gap-2 border bg-theme-bg-primary text-sm [border-color:var(--theme-border-attachment)]"
@@ -2262,14 +2257,8 @@ export const ChatInput = ({
             role="status"
             aria-live="polite"
           >
-            {/* Both the label and the message yield space as the row narrows
-                (the add-in's ~320px task pane, where this same component
-                renders). The label is boilerplate and shrinks from its natural
-                width; `flex-auto` — not `flex-1` — keeps the message's own
-                width in the shrink calculation, so it can't collapse to zero
-                and leave a chip that says something is queued but not what.
-                Matches the add-in's sibling status chips, which truncate text
-                and reserve `shrink-0` for fixed-size affordances. */}
+            {/* flex-auto, not flex-1: a zero basis would collapse the message
+                to nothing in the add-in's ~320px pane. */}
             <span className="min-w-0 truncate text-theme-fg-muted">
               {t`Queued — sends when response finishes`}
             </span>
