@@ -61,7 +61,6 @@ export { FileUploadError } from "@/components/ui/FileUpload/FileUploadStates";
 export { FileUploadLoading } from "@/components/ui/FileUpload/FileUploadStates";
 export type { FileUploadErrorProps } from "@/components/ui/FileUpload/FileUploadStates";
 export type { FileUploadLoadingProps } from "@/components/ui/FileUpload/FileUploadStates";
-export { BUTTON_STYLES } from "@/components/ui/FileUpload/fileUploadStyles";
 export { DROP_ZONE_STYLES } from "@/components/ui/FileUpload/fileUploadStyles";
 export { FILE_PREVIEW_STYLES } from "@/components/ui/FileUpload/fileUploadStyles";
 export { DefaultGroupedFileAttachmentsPreview } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
