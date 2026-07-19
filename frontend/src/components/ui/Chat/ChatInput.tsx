@@ -2242,11 +2242,11 @@ export const ChatInput = ({
         )}
 
         {/* Queued next message: auto-sends when the current turn finishes.
-            Geometry comes from the same message tokens as the sibling error
-            Alert / attachment preview; `data-ui` lets kits restyle it. */}
+            Geometry and surface tokens match the sibling attachment preview;
+            `data-ui` lets kits restyle it. */}
         {queuedMessage && (
           <div
-            className="theme-transition mb-2 flex items-center gap-2 border border-[var(--theme-border-chat-input)] bg-theme-bg-secondary text-sm"
+            className="theme-transition mb-2 flex items-center gap-2 border bg-theme-bg-primary text-sm [border-color:var(--theme-border-attachment)]"
             style={{
               borderRadius: "var(--theme-radius-message)",
               padding:
@@ -2257,13 +2257,15 @@ export const ChatInput = ({
             role="status"
             aria-live="polite"
           >
-            <span className="shrink-0 text-theme-fg-muted">
+            {/* flex-auto, not flex-1: a zero basis would collapse the message
+                to nothing in the add-in's ~320px pane. */}
+            <span className="min-w-0 truncate text-theme-fg-muted">
               {t`Queued — sends when response finishes`}
             </span>
             <button
               type="button"
               onClick={() => restoreQueuedToComposer(queuedMessage)}
-              className="theme-transition focus-ring-tight flex min-w-0 flex-1 items-center gap-1 text-left text-theme-fg-primary hover:underline"
+              className="theme-transition focus-ring-tight flex min-w-0 flex-auto items-center gap-1 text-left text-theme-fg-primary hover:underline"
               aria-label={t`Edit queued message`}
               title={t`Edit queued message`}
               data-testid="chat-input-queued-message-edit"
@@ -2283,6 +2285,7 @@ export const ChatInput = ({
               icon={<CloseIcon className="size-4" />}
               onClick={cancelQueuedMessage}
               aria-label={t`Cancel queued message`}
+              className="shrink-0"
               data-testid="chat-input-queued-message-cancel"
             />
           </div>
