@@ -736,3 +736,106 @@ export async function ensureTestScenario(
     }
   });
 }
+
+/**
+ * Install a browser-side tap on the submitstream SSE response that can inject
+ * a mid-stream `error` event (the same frame the backend emits when a provider
+ * fails, see message_streaming.rs StreamingEvent::Error) and then end the
+ * stream. Lets tests exercise the "turn errors mid-stream" path at an exact
+ * moment, which no mock behaviour currently offers.
+ *
+ * The injected event runs the client's `case "error"` handler, which resets
+ * the streaming state — so the stream end that follows is treated as a normal
+ * close and does NOT trigger a resumestream that would revive the turn.
+ */
+export const installStreamErrorTap = async (page: Page) => {
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch.bind(window);
+
+    const tapWindow = window as Window & {
+      __injectStreamError?: () => void;
+    };
+
+    let pendingInjection: (() => void) | null = null;
+    tapWindow.__injectStreamError = () => {
+      pendingInjection?.();
+    };
+
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
+
+      const response = await originalFetch(input, init);
+      if (
+        !url.includes("/api/v1beta/me/messages/submitstream") ||
+        !response.body
+      ) {
+        return response;
+      }
+
+      const upstream = response.body.getReader();
+      let injectRequested = false;
+      let resolveInjectSignal: (() => void) | null = null;
+      pendingInjection = () => {
+        injectRequested = true;
+        resolveInjectSignal?.();
+      };
+
+      const tapped = new ReadableStream<Uint8Array>({
+        async pull(controller) {
+          if (!injectRequested) {
+            // Wake up either on the next upstream chunk or on injection, so
+            // the error lands without waiting out a quiet stream.
+            const read = upstream.read();
+            const injectSignal = new Promise<void>((resolve) => {
+              resolveInjectSignal = resolve;
+            });
+            const winner = await Promise.race([
+              read.then((result) => ({ kind: "read" as const, result })),
+              injectSignal.then(() => ({ kind: "inject" as const })),
+            ]);
+            resolveInjectSignal = null;
+            if (winner.kind === "read") {
+              if (winner.result.done) {
+                controller.close();
+                return;
+              }
+              controller.enqueue(winner.result.value);
+              return;
+            }
+          }
+          const frame = `event: error\ndata: ${JSON.stringify({
+            message_type: "error",
+            error_type: "internal_error",
+            error_description: "Injected provider failure (e2e stream tap)",
+          })}\n\n`;
+          controller.enqueue(new TextEncoder().encode(frame));
+          controller.close();
+          void upstream.cancel().catch(() => {});
+        },
+        cancel(reason) {
+          void upstream.cancel(reason).catch(() => {});
+        },
+      });
+
+      return new Response(tapped, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+      });
+    };
+  });
+};
+
+/** Inject the tapped stream error installed by installStreamErrorTap. */
+export const injectStreamError = async (page: Page) => {
+  await page.evaluate(() => {
+    (
+      window as Window & { __injectStreamError?: () => void }
+    ).__injectStreamError?.();
+  });
+};

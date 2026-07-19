@@ -1,7 +1,12 @@
 import { expect, Locator, Page, test } from "@playwright/test";
 import path from "path";
 import { fileURLToPath } from "url";
-import { chatIsReadyToChat, ensureOpenSidebar } from "./shared";
+import {
+  chatIsReadyToChat,
+  ensureOpenSidebar,
+  installStreamErrorTap,
+  injectStreamError,
+} from "./shared";
 import { TAG_CI } from "./tags";
 
 /**
@@ -365,6 +370,53 @@ test.describe("Streaming composer + message queue", () => {
   );
 
   test(
+    "a turn that errors mid-stream returns the queued message to the composer and never sends",
+    { tag: TAG_CI },
+    async ({ page }) => {
+      test.setTimeout(60000);
+
+      // The tap lets us fail the stream at an exact moment — the only
+      // stream-then-error mock (`hallucination loop`) aborts within
+      // milliseconds, leaving no window to queue into.
+      await installStreamErrorTap(page);
+
+      await page.goto("/");
+      await chatIsReadyToChat(page);
+      await selectMockModel(page);
+
+      await startLongRunningStream(page, 15);
+
+      const textbox = messageBox(page);
+      await textbox.fill("fast");
+      await expectStreamStillActive(page);
+      await textbox.press("Enter");
+      await expect(queuedChip(page)).toBeVisible();
+      await expect(page.getByTestId("message-user")).toHaveCount(1);
+
+      // Fail the turn mid-stream: the client receives the same `error` event
+      // the backend emits on a provider failure, then the stream ends.
+      await injectStreamError(page);
+      await waitForStreamToFinish(page, 15000);
+
+      // The messagingError drain branch: queued content returns to the
+      // composer, the chip clears, and nothing is ever sent — asserted again
+      // after a grace beat so a late-firing drain would be caught.
+      await expect(textbox).toHaveValue("fast");
+      await expect(queuedChip(page)).toHaveCount(0);
+      await expect(page.getByTestId("message-user")).toHaveCount(1);
+
+      await page.waitForTimeout(1500);
+      await expect(page.getByTestId("message-user")).toHaveCount(1);
+      await expect(textbox).toHaveValue("fast");
+      await expect(
+        page
+          .getByTestId("message-assistant")
+          .filter({ hasText: "Quick response!" }),
+      ).toHaveCount(0);
+    },
+  );
+
+  test(
     "navigating away while a message is queued drops it to a draft and never background-sends",
     { tag: TAG_CI },
     async ({ page }) => {
@@ -374,19 +426,33 @@ test.describe("Streaming composer + message queue", () => {
       await chatIsReadyToChat(page);
       await selectMockModel(page);
 
-      await startLongRunningStream(page, 10);
-      await expect(page).toHaveURL(/\/chat\/[0-9a-fA-F-]+/, { timeout: 10000 });
+      // Establish the chat with a completed turn FIRST, so the sidebar lists
+      // it before we ever leave. The chats list only refetches on completion
+      // events (focus refetches are a no-op inside the 60s staleTime), so a
+      // chat abandoned mid-stream would not reliably appear in the sidebar —
+      // and returning to it is the whole point of this test.
+      const textbox = messageBox(page);
+      await textbox.fill("fast");
+      await textbox.press("Enter");
+      await expect(page).toHaveURL(/\/chat\/[0-9a-fA-F-]+/, { timeout: 15000 });
       const streamingChatId = page.url().split("/").pop();
       expect(streamingChatId).toBeTruthy();
+      await waitForStreamToFinish(page, 20000);
+      await ensureOpenSidebar(page);
+      const sidebarEntry = page
+        .getByRole("complementary")
+        .locator(`[data-chat-id="${streamingChatId}"]`);
+      await expect(sidebarEntry).toBeVisible({ timeout: 15000 });
 
-      const textbox = messageBox(page);
+      // Now stream long enough to queue into.
+      await startLongRunningStream(page, 10);
+
       await textbox.fill("fast");
       await expectStreamStillActive(page);
       await textbox.press("Enter");
       await expect(queuedChip(page)).toBeVisible();
 
       // Navigate away to a brand-new chat while the message is still queued.
-      await ensureOpenSidebar(page);
       await page
         .getByRole("complementary")
         .getByRole("button", { name: "New Chat", exact: true })
@@ -396,26 +462,18 @@ test.describe("Streaming composer + message queue", () => {
       await expect(queuedChip(page)).toHaveCount(0);
       await expect(messageBox(page)).toHaveValue("");
 
-      // Return to the original chat. Because we left mid-stream, no client-side
-      // completion event will invalidate the chats list for us — nudge the
-      // window-focus refetch (react-query v5 listens for visibilitychange),
-      // exactly what a user re-focusing the tab would trigger, so the sidebar
-      // reliably lists the chat created seconds ago.
-      await page.evaluate(() => {
-        window.dispatchEvent(new Event("visibilitychange"));
-      });
+      // Return to the original chat via its (already-listed) sidebar entry.
       await ensureOpenSidebar(page);
-      const sidebarEntry = page
-        .getByRole("complementary")
-        .locator(`[data-chat-id="${streamingChatId}"]`);
-      await expect(sidebarEntry).toBeVisible({ timeout: 20000 });
+      await expect(sidebarEntry).toBeVisible({ timeout: 15000 });
       await sidebarEntry.click();
       await expect(page).toHaveURL(new RegExp(`/chat/${streamingChatId}$`));
 
-      // The queued payload came back as a draft.
+      // The queued payload came back as a draft. (No message-count assert
+      // here: while the resumed stream is still in flight the history can
+      // render without the mid-stream user message — a pre-existing resume
+      // quirk unrelated to the queue. The count is checked after completion.)
       await expect(messageBox(page)).toHaveValue("fast");
       await expect(queuedChip(page)).toHaveCount(0);
-      await expect(page.getByTestId("message-user")).toHaveCount(1);
 
       // "Never background-sends" can only be asserted after the abandoned
       // turn has demonstrably completed — before that, the drain this guards
@@ -426,8 +484,15 @@ test.describe("Streaming composer + message queue", () => {
       );
       await waitForStreamToFinish(page, 15000);
       await page.waitForTimeout(1500);
-      await expect(page.getByTestId("message-user")).toHaveCount(1);
+      // Exactly the two sent user messages — an auto-send would make it 3 —
+      // and the queued text still sits in the composer.
+      await expect(page.getByTestId("message-user")).toHaveCount(2);
       await expect(messageBox(page)).toHaveValue("fast");
+      await expect(
+        page
+          .getByTestId("message-assistant")
+          .filter({ hasText: "Quick response!" }),
+      ).toHaveCount(1);
     },
   );
 
