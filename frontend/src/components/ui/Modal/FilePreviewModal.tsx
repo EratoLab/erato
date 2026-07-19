@@ -13,6 +13,12 @@ const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp"];
 const DOCX_MIME_TYPE =
   // eslint-disable-next-line lingui/no-unlocalized-strings
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const PPT_MIME_TYPE =
+  // eslint-disable-next-line lingui/no-unlocalized-strings
+  "application/vnd.ms-powerpoint";
+const PPTX_MIME_TYPE =
+  // eslint-disable-next-line lingui/no-unlocalized-strings
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 const XLSX_MIME_TYPE =
   // eslint-disable-next-line lingui/no-unlocalized-strings
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -36,8 +42,12 @@ const resolvePreviewSource = (
     extension === "pdf" ||
     extension === "eml" ||
     extension === "docx" ||
+    extension === "ppt" ||
+    extension === "pptx" ||
     extension === "xlsx" ||
     mimeType === DOCX_MIME_TYPE ||
+    mimeType === PPT_MIME_TYPE ||
+    mimeType === PPTX_MIME_TYPE ||
     mimeType === XLSX_MIME_TYPE
   ) {
     return { url: previewUrl ?? "", canPreview: Boolean(previewUrl) };

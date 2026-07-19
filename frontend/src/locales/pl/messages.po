@@ -1946,6 +1946,21 @@ msgid "filePreview.docxTheme.useLight"
 msgstr "Użyj jasnego motywu dokumentu"
 
 #. js-lingui-explicit-id
+#: src/components/ui/FilePreview/PptxPreview.tsx
+msgid "filePreview.pptxEmpty"
+msgstr "Podgląd prezentacji jest pusty."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/PptxPreview.tsx
+msgid "filePreview.pptxLoading"
+msgstr "Ładowanie podglądu prezentacji..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/PptxPreview.tsx
+msgid "filePreview.pptxPreviewUnavailable"
+msgstr "Podgląd niedostępny: nie udało się wczytać tej prezentacji."
+
+#. js-lingui-explicit-id
 #: src/components/ui/FilePreview/XlsxPreview.tsx
 msgid "filePreview.xlsxEmpty"
 msgstr "Podgląd arkusza kalkulacyjnego jest pusty."

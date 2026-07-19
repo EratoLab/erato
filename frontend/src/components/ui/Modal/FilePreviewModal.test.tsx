@@ -28,6 +28,15 @@ vi.mock("@extend-ai/react-docx", () => ({
   useDocxModel: useDocxModelMock,
 }));
 
+vi.mock("@extend-ai/react-pptx", () => ({
+  ReactPptxViewer: ({ source }: { source?: string }) => (
+    <div data-source={source} data-testid="mock-react-pptx-viewer">
+      PPTX rendered
+    </div>
+  ),
+  setWasmSource: setWasmSourceMock,
+}));
+
 vi.mock("@extend-ai/react-xlsx", () => ({
   XlsxViewer: ({ src }: { src?: string }) => (
     <div data-src={src} data-testid="mock-react-xlsx-viewer">
@@ -98,6 +107,51 @@ describe("FilePreviewModal", () => {
     expect(screen.getByTestId("mock-react-xlsx-viewer")).toHaveAttribute(
       "data-src",
       "https://files.example.com/preview/budget.xlsx",
+    );
+  });
+
+  it("previews PPTX files from the preview URL", () => {
+    renderWithTheme(
+      <FilePreviewModal
+        isOpen={true}
+        onClose={vi.fn()}
+        file={makeFile({
+          filename: "roadmap.pptx",
+          download_url: "https://files.example.com/download/roadmap.pptx",
+          preview_url: "https://files.example.com/preview/roadmap.pptx",
+          file_capability:
+            FileTypeUtil.createMockFileCapability("roadmap.pptx"),
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId("mock-react-pptx-viewer")).toHaveAttribute(
+      "data-source",
+      "https://files.example.com/preview/roadmap.pptx",
+    );
+  });
+
+  it("previews presentation files when the MIME type identifies them", () => {
+    renderWithTheme(
+      <FilePreviewModal
+        isOpen={true}
+        onClose={vi.fn()}
+        file={makeFile({
+          filename: "download",
+          preview_url: "https://files.example.com/preview/roadmap",
+          file_capability: {
+            ...FileTypeUtil.createMockFileCapability("roadmap.pptx"),
+            mime_types: [
+              "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            ],
+          },
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId("mock-react-pptx-viewer")).toHaveAttribute(
+      "data-source",
+      "https://files.example.com/preview/roadmap",
     );
   });
 

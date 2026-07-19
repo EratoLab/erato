@@ -1946,6 +1946,21 @@ msgid "filePreview.docxTheme.useLight"
 msgstr "Use light document theme"
 
 #. js-lingui-explicit-id
+#: src/components/ui/FilePreview/PptxPreview.tsx
+msgid "filePreview.pptxEmpty"
+msgstr "Presentation preview is empty."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/PptxPreview.tsx
+msgid "filePreview.pptxLoading"
+msgstr "Loading presentation preview..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/PptxPreview.tsx
+msgid "filePreview.pptxPreviewUnavailable"
+msgstr "Preview unavailable: this presentation could not be loaded."
+
+#. js-lingui-explicit-id
 #: src/components/ui/FilePreview/XlsxPreview.tsx
 msgid "filePreview.xlsxEmpty"
 msgstr "Spreadsheet preview is empty."

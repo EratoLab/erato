@@ -4,6 +4,7 @@ import { Alert } from "@/components/ui/Feedback/Alert";
 
 import { DocxPreview } from "./DocxPreview";
 import { EmlPreview } from "./EmlPreview";
+import { PptxPreview } from "./PptxPreview";
 import { XlsxPreview } from "./XlsxPreview";
 
 import type React from "react";
@@ -27,6 +28,12 @@ const IMAGE_MIME_PREFIX = "image/";
 const DOCX_MIME_TYPE =
   // eslint-disable-next-line lingui/no-unlocalized-strings
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const PPT_MIME_TYPE =
+  // eslint-disable-next-line lingui/no-unlocalized-strings
+  "application/vnd.ms-powerpoint";
+const PPTX_MIME_TYPE =
+  // eslint-disable-next-line lingui/no-unlocalized-strings
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 const XLSX_MIME_TYPE =
   // eslint-disable-next-line lingui/no-unlocalized-strings
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -65,6 +72,11 @@ export const FilePreviewContent: React.FC<FilePreviewContentProps> = ({
   const isPdf = extension === "pdf" || mimeType === "application/pdf";
   const isEml = extension === "eml" || mimeType === "message/rfc822";
   const isDocx = extension === "docx" || mimeType === DOCX_MIME_TYPE;
+  const isPptx =
+    extension === "ppt" ||
+    extension === "pptx" ||
+    mimeType === PPT_MIME_TYPE ||
+    mimeType === PPTX_MIME_TYPE;
   const isXlsx = extension === "xlsx" || mimeType === XLSX_MIME_TYPE;
 
   if (isImage) {
@@ -94,6 +106,10 @@ export const FilePreviewContent: React.FC<FilePreviewContentProps> = ({
 
   if (isDocx) {
     return <DocxPreview url={url} />;
+  }
+
+  if (isPptx) {
+    return <PptxPreview url={url} />;
   }
 
   if (isXlsx) {

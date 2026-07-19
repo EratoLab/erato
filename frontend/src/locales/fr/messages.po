@@ -1946,6 +1946,21 @@ msgid "filePreview.docxTheme.useLight"
 msgstr "Utiliser le thème clair du document"
 
 #. js-lingui-explicit-id
+#: src/components/ui/FilePreview/PptxPreview.tsx
+msgid "filePreview.pptxEmpty"
+msgstr "L’aperçu de la présentation est vide."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/PptxPreview.tsx
+msgid "filePreview.pptxLoading"
+msgstr "Chargement de l’aperçu de la présentation..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/PptxPreview.tsx
+msgid "filePreview.pptxPreviewUnavailable"
+msgstr "Aperçu indisponible : cette présentation n’a pas pu être chargée."
+
+#. js-lingui-explicit-id
 #: src/components/ui/FilePreview/XlsxPreview.tsx
 msgid "filePreview.xlsxEmpty"
 msgstr "L'aperçu de la feuille de calcul est vide."
