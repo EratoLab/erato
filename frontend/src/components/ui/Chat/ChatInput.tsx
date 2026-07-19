@@ -369,6 +369,11 @@ export const ChatInput = ({
   // Add state for file button processing
   const [isFileButtonProcessing, setIsFileButtonProcessing] = useState(false);
   const pendingSelectedFacetIdsRef = useRef<string[] | null>(null);
+  // Compose session for which the user interactively chose facets. Once set,
+  // the init effect treats that selection as authoritative so a chatId /
+  // initialSelectedFacetIds change can't wipe it — notably the new-chat
+  // null->real-id rename, which keeps the same composeSessionId. (ERMAIN-466)
+  const userSelectedFacetsSessionRef = useRef<string | null>(null);
   const pendingSelectedChatProviderIdRef = useRef<string | null>(null);
   const audioTranscriptionStatusLastPollAtRef = useRef(0);
   const audioTranscriptionStatusPollIndexRef = useRef(0);
@@ -675,6 +680,7 @@ export const ChatInput = ({
         return;
       }
 
+      userSelectedFacetsSessionRef.current = composeSessionId;
       const isSelected = selectedFacetIds.includes(facetId);
       const nextSelectedFacetIds = isSelected
         ? selectedFacetIds.filter((id) => id !== facetId)
@@ -685,6 +691,7 @@ export const ChatInput = ({
     },
     [
       applySelectedFacetIds,
+      composeSessionId,
       enforceSelectedFacetIds,
       globalFacetSettings?.only_single_facet,
       selectedFacetIds,
@@ -835,8 +842,28 @@ export const ChatInput = ({
       return;
     }
 
-    const hasExplicitInitialSelection = initialSelectedFacetIds !== undefined;
     const hasPendingSelection = pendingSelectedFacetIdsRef.current !== null;
+
+    // A facet the user picked for this compose session outranks re-init: don't
+    // let a chatId / initialSelectedFacetIds change wipe it (the new-chat
+    // null->real-id rename keeps the session, so a tool chosen mid-generation
+    // survives). Genuine chat switches change the session and still re-init; an
+    // explicit imperative push always applies. (ERMAIN-466)
+    if (
+      !hasPendingSelection &&
+      !enforceSelectedFacetIds &&
+      userSelectedFacetsSessionRef.current === composeSessionId
+    ) {
+      setSelectedFacetIds((previousSelectedFacetIds) => {
+        const sanitized = sanitizeFacetSelection(previousSelectedFacetIds);
+        return areFacetIdListsEqual(previousSelectedFacetIds, sanitized)
+          ? previousSelectedFacetIds
+          : sanitized;
+      });
+      return;
+    }
+
+    const hasExplicitInitialSelection = initialSelectedFacetIds !== undefined;
     const initialSelection = hasPendingSelection
       ? pendingSelectedFacetIdsRef.current
       : hasExplicitInitialSelection
@@ -863,6 +890,8 @@ export const ChatInput = ({
   }, [
     availableFacets,
     chatId,
+    composeSessionId,
+    enforceSelectedFacetIds,
     facetIdsByDefault,
     initialSelectedFacetIds,
     onFacetSelectionChange,
@@ -1123,15 +1152,20 @@ export const ChatInput = ({
     [externalUploadFiles, handleFilesUploaded],
   );
 
+  // Split so the composer stays live during generation (ERMAIN-466): only
+  // sendLocked gates Send/Enter; composeLocked gates the draft surfaces.
+  const sendLocked = isLoading || isPendingResponse;
+  const composeLocked =
+    disabled ||
+    isUploading ||
+    isFileButtonProcessing ||
+    isRecording ||
+    isRecordingUpload;
+  const isDisabled = composeLocked || sendLocked;
+
   const handleTextareaPaste = useCallback(
     (event: ReactClipboardEvent<HTMLTextAreaElement>) => {
-      if (
-        disabled ||
-        isLoading ||
-        isPendingResponse ||
-        isUploading ||
-        !externalUploadFiles
-      ) {
+      if (composeLocked || !externalUploadFiles) {
         return;
       }
 
@@ -1153,26 +1187,8 @@ export const ChatInput = ({
       event.preventDefault();
       void uploadFiles(imageFiles);
     },
-    [
-      disabled,
-      isLoading,
-      isPendingResponse,
-      isUploading,
-      externalUploadFiles,
-      uploadFiles,
-    ],
+    [composeLocked, externalUploadFiles, uploadFiles],
   );
-
-  // Combine disabled states
-  // Use isPendingResponse instead of isStreaming to disable immediately when send is clicked
-  const isDisabled =
-    disabled ||
-    isUploading || // From context (drag & drop)
-    isLoading ||
-    isPendingResponse || // True immediately when send is clicked
-    isFileButtonProcessing || // From button callback
-    isRecording || // Prevent edits while recording
-    isRecordingUpload; // Prevent edits while uploading recording
 
   // Collapse the file-upload button and the Tools dropdown into a single "+"
   // menu (ChatInputAddControls): on mobile, or whenever a host registers extra
@@ -1784,7 +1800,7 @@ export const ChatInput = ({
           assistantId={assistantId}
           previousMessageId={previousMessageId}
           chatProviderId={selectedModel?.chat_provider_id}
-          disabled={isDisabled}
+          disabled={composeLocked}
           onLimitExceeded={handleMessageTokenLimitExceeded}
         />
 
@@ -1872,7 +1888,7 @@ export const ChatInput = ({
             onRemoveFile={handleRemoveFileById}
             onRemoveAllFiles={handleRemoveAllFilesWithTokenReset}
             onFilePreview={onFilePreview}
-            disabled={isDisabled}
+            disabled={composeLocked}
             showFileTypes={showFileTypes}
             surfaceVariant="message"
           />
@@ -1944,7 +1960,7 @@ export const ChatInput = ({
               onRemoveFile={handleRemoveFileById}
               onRemoveAllFiles={handleRemoveAllFilesWithTokenReset}
               onFilePreview={onFilePreview}
-              disabled={isDisabled}
+              disabled={composeLocked}
               showFileTypes={showFileTypes}
             />
           )}
@@ -1969,9 +1985,7 @@ export const ChatInput = ({
                     : placeholder
               }
               rows={1}
-              disabled={
-                isLoading || isPendingResponse || disabled || isUploading
-              }
+              disabled={composeLocked}
               tabIndex={0}
               autoFocus={shouldAutofocus} // eslint-disable-line jsx-a11y/no-autofocus -- Controlled by feature config to prevent unwanted scrolling
               className={clsx(
@@ -2020,7 +2034,7 @@ export const ChatInput = ({
                     facets={availableFacets}
                     selectedFacetIds={selectedFacetIds}
                     onToggleFacet={toggleFacetId}
-                    disabled={isDisabled}
+                    disabled={composeLocked}
                     uploadDisabled={attachedFiles.length >= maxFiles}
                     toolsDisabled={enforceSelectedFacetIds}
                   />
@@ -2049,12 +2063,7 @@ export const ChatInput = ({
                         iconOnly
                         className="p-1"
                         disabled={
-                          attachedFiles.length >= maxFiles ||
-                          isLoading ||
-                          isPendingResponse ||
-                          disabled ||
-                          isUploading || // isUploading from context (drag & drop)
-                          isFileButtonProcessing // Add button processing state
+                          attachedFiles.length >= maxFiles || composeLocked
                         }
                       />
                     )}
@@ -2063,6 +2072,8 @@ export const ChatInput = ({
                         facets={availableFacets}
                         selectedFacetIds={selectedFacetIds}
                         onSelectionChange={(nextSelectedFacetIds) => {
+                          userSelectedFacetsSessionRef.current =
+                            composeSessionId;
                           setSelectedFacetIds(nextSelectedFacetIds);
                           onFacetSelectionChange?.(nextSelectedFacetIds);
                         }}
@@ -2073,7 +2084,7 @@ export const ChatInput = ({
                           globalFacetSettings?.show_facet_indicator_with_display_name ??
                           false
                         }
-                        disabled={isDisabled || enforceSelectedFacetIds}
+                        disabled={composeLocked || enforceSelectedFacetIds}
                       />
                     )}
                   </>

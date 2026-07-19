@@ -127,10 +127,20 @@ export const chatIsReadyToChat = async (
     }
     await expect(textbox).toBeVisible();
     // The "Loading" text disappears as soon as any content has streamed in
-    // (the loader is suppressed once content is present), but the textbox
-    // stays disabled until the entire stream has finished. Use the same
-    // loadingTimeoutMs for the textbox-enabled wait so we cover the full
-    // streaming window, not just the pre-content phase.
+    // (the loader is suppressed once content is present), so it does not mark
+    // the end of a turn. The composer textarea no longer does either: since
+    // ERMAIN-466 it stays enabled *while* a response streams (only Send/Enter
+    // are blocked). The Stop button is present iff a turn is in flight
+    // (isPendingResponse), so waiting for it to disappear is what now covers
+    // the full streaming window — including multi-step tool calls, which stay
+    // in a single pending turn. For the initial-ready call there is no turn in
+    // flight, so it is already absent and this passes immediately.
+    await expect(page.getByTestId("chat-input-stop-generation")).toHaveCount(
+      0,
+      loadingOpts,
+    );
+    // The textarea can still be disabled for non-streaming reasons (an upload
+    // or recording in progress); keep guarding those.
     await expect(textbox).toBeEnabled(loadingOpts);
   });
 };

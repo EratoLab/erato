@@ -33,6 +33,8 @@ const mockUseFacets = vi.fn();
 const mockUseCreateChat = vi.fn();
 const mockFetchGetFile = vi.fn();
 const mockModelSelector = vi.fn();
+const mockFacetSelector = vi.fn();
+const mockFileUploadControl = vi.fn();
 const mockUseAudioDictationRecorder = vi.fn();
 const mockUseAudioTranscriptionRecorder = vi.fn();
 
@@ -112,7 +114,15 @@ vi.mock("@/components/ui/FileUpload", () => ({
 }));
 
 vi.mock("@/components/ui/FileUpload/FileUploadWithTokenCheck", () => ({
-  FileUploadWithTokenCheck: () => <div data-testid="file-upload-control" />,
+  FileUploadWithTokenCheck: (props: { disabled?: boolean }) => {
+    mockFileUploadControl(props);
+    return (
+      <div
+        data-testid="file-upload-control"
+        data-disabled={String(Boolean(props.disabled))}
+      />
+    );
+  },
 }));
 
 const mockChatInputTokenUsage = vi.fn();
@@ -124,7 +134,15 @@ vi.mock("./ChatInputTokenUsage", () => ({
 }));
 
 vi.mock("./FacetSelector", () => ({
-  FacetSelector: () => null,
+  FacetSelector: (props: { disabled?: boolean }) => {
+    mockFacetSelector(props);
+    return (
+      <div
+        data-testid="facet-selector"
+        data-disabled={String(Boolean(props.disabled))}
+      />
+    );
+  },
 }));
 
 vi.mock("./ModelSelector", () => ({
@@ -323,6 +341,217 @@ describe("ChatInput", () => {
 
     expect(textarea).toHaveFocus();
     otherButton.remove();
+  });
+
+  it("keeps the composer interactive while a response is generating (only send is blocked)", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+
+    mockUseUploadFeature.mockReturnValue({ enabled: true });
+    mockUseFacets.mockReturnValue({
+      data: {
+        facets: [{ id: "facet-1", name: "Tool", default_enabled: false }],
+        global_facet_settings: undefined,
+      },
+      error: null,
+    });
+    mockUseChatContext.mockReturnValue({
+      isPendingResponse: true,
+      isMessagingLoading: false,
+      isUploading: false,
+      cancelMessage: vi.fn(),
+    });
+
+    const { i18n } = await import("@lingui/core");
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput onSendMessage={vi.fn()} handleFileAttachments={vi.fn()} />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByPlaceholderText("Type a message...")).not.toBeDisabled();
+    expect(screen.getByTestId("file-upload-control")).toHaveAttribute(
+      "data-disabled",
+      "false",
+    );
+    expect(screen.getByTestId("facet-selector")).toHaveAttribute(
+      "data-disabled",
+      "false",
+    );
+
+    expect(
+      screen.getByTestId("chat-input-stop-generation"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("chat-input-send-message"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not submit on Enter while a response is generating", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const onSendMessage = vi.fn();
+
+    // Mirrors the real createSubmitHandler guard, wrapped in a spy so the test
+    // also pins ChatInput's wiring: it must feed the generation state into the
+    // handler's lock argument rather than relying on the mock's own guard.
+    const createSubmitHandler = vi.fn(
+      (
+        message: string,
+        _attachedFiles: FileUploadItem[],
+        innerOnSend: (message: string, inputFileIds?: string[]) => void,
+        isLoading: boolean,
+        disabled: boolean,
+      ) =>
+        (event: FormEvent) => {
+          event.preventDefault();
+          if (isLoading || disabled) return;
+          const trimmed = message.trim();
+          if (trimmed) innerOnSend(trimmed);
+        },
+    );
+
+    mockUseChatInputHandlers.mockReturnValue({
+      attachedFiles: [],
+      fileError: null,
+      setFileError: vi.fn(),
+      handleFilesUploaded: vi.fn(),
+      handleRemoveFile: vi.fn(),
+      handleRemoveAllFiles: vi.fn(),
+      setAttachedFiles: vi.fn(),
+      createSubmitHandler,
+    });
+    mockUseChatContext.mockReturnValue({
+      isPendingResponse: true,
+      isMessagingLoading: false,
+      isUploading: false,
+      cancelMessage: vi.fn(),
+    });
+
+    const { i18n } = await import("@lingui/core");
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput onSendMessage={onSendMessage} />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    const textarea = screen.getByPlaceholderText("Type a message...");
+    fireEvent.change(textarea, { target: { value: "next message" } });
+    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+    expect(createSubmitHandler.mock.calls.at(-1)?.[3]).toBe(true);
+    expect(onSendMessage).not.toHaveBeenCalled();
+  });
+
+  describe("mid-stream facet persistence (ERMAIN-466)", () => {
+    const facets = [
+      { id: "facet-1", name: "Tool One", default_enabled: false },
+      { id: "facet-2", name: "Tool Two", default_enabled: false },
+    ];
+
+    const latestFacetProps = () =>
+      mockFacetSelector.mock.calls.at(-1)?.[0] as {
+        selectedFacetIds: string[];
+        onSelectionChange: (ids: string[]) => void;
+      };
+
+    const renderChatInput = async (chatId: string | null) => {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      const { i18n } = await import("@lingui/core");
+      const ui = (id: string | null) => (
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput
+              onSendMessage={vi.fn()}
+              handleFileAttachments={vi.fn()}
+              chatId={id}
+            />
+          </I18nProvider>
+        </QueryClientProvider>
+      );
+      const { rerender } = render(ui(chatId));
+      return { rerender: (id: string | null) => rerender(ui(id)) };
+    };
+
+    beforeEach(() => {
+      mockUseUploadFeature.mockReturnValue({ enabled: true });
+      mockUseFacets.mockReturnValue({
+        data: { facets, global_facet_settings: undefined },
+        error: null,
+      });
+    });
+
+    it("keeps a facet chosen mid-stream when a new chat acquires its real id", async () => {
+      const { rerender } = await renderChatInput(null);
+
+      // User picks a tool while the first response is still generating.
+      act(() => {
+        latestFacetProps().onSelectionChange(["facet-1"]);
+      });
+      expect(latestFacetProps().selectedFacetIds).toEqual(["facet-1"]);
+
+      // chat_created flips chatId null -> real id (same compose session).
+      rerender("real-chat-id");
+
+      expect(latestFacetProps().selectedFacetIds).toEqual(["facet-1"]);
+    });
+
+    it("re-initializes facets on a genuine chat switch", async () => {
+      const { rerender } = await renderChatInput("chat-a");
+
+      act(() => {
+        latestFacetProps().onSelectionChange(["facet-1"]);
+      });
+      expect(latestFacetProps().selectedFacetIds).toEqual(["facet-1"]);
+
+      rerender("chat-b");
+
+      expect(latestFacetProps().selectedFacetIds).toEqual([]);
+    });
+  });
+
+  it("locks the composer while an upload is in progress", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+
+    mockUseChatContext.mockReturnValue({
+      isPendingResponse: false,
+      isMessagingLoading: false,
+      isUploading: true,
+      cancelMessage: vi.fn(),
+    });
+
+    const { i18n } = await import("@lingui/core");
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput onSendMessage={vi.fn()} />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByPlaceholderText("Type a message...")).toBeDisabled();
   });
 
   it("does not leak the previous chat's draft into a newly opened chat", async () => {
