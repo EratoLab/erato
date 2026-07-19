@@ -1946,6 +1946,21 @@ msgid "filePreview.docxTheme.useLight"
 msgstr "Helles Dokumentdesign verwenden"
 
 #. js-lingui-explicit-id
+#: src/components/ui/FilePreview/PptxPreview.tsx
+msgid "filePreview.pptxEmpty"
+msgstr "Die Präsentationsvorschau ist leer."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/PptxPreview.tsx
+msgid "filePreview.pptxLoading"
+msgstr "Präsentationsvorschau wird geladen..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/PptxPreview.tsx
+msgid "filePreview.pptxPreviewUnavailable"
+msgstr "Vorschau nicht verfügbar: Diese Präsentation konnte nicht geladen werden."
+
+#. js-lingui-explicit-id
 #: src/components/ui/FilePreview/XlsxPreview.tsx
 msgid "filePreview.xlsxEmpty"
 msgstr "Tabellenvorschau ist leer."

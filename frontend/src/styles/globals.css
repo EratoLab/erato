@@ -679,6 +679,19 @@ body {
   background: #0f172a;
 }
 
+.pptx-preview-theme .rpv-root {
+  --rpv-ink: var(--theme-fg-primary);
+  --rpv-paper: var(--theme-bg-primary);
+  --rpv-panel: var(--theme-bg-secondary);
+  --rpv-rule: var(--theme-border-subtle);
+  --rpv-accent: var(--theme-fg-accent);
+}
+
+.pptx-preview-theme .rpv-stage,
+.pptx-preview-theme .rpv-status {
+  background: var(--theme-bg-secondary);
+}
+
 /* Footnote reference styling - add square brackets and remove underline */
 a[data-footnote-ref="true"] {
   text-decoration: none;

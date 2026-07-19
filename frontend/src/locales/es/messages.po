@@ -1946,6 +1946,21 @@ msgid "filePreview.docxTheme.useLight"
 msgstr "Usar tema claro del documento"
 
 #. js-lingui-explicit-id
+#: src/components/ui/FilePreview/PptxPreview.tsx
+msgid "filePreview.pptxEmpty"
+msgstr "La vista previa de la presentación está vacía."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/PptxPreview.tsx
+msgid "filePreview.pptxLoading"
+msgstr "Cargando vista previa de la presentación..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/PptxPreview.tsx
+msgid "filePreview.pptxPreviewUnavailable"
+msgstr "Vista previa no disponible: no se pudo cargar esta presentación."
+
+#. js-lingui-explicit-id
 #: src/components/ui/FilePreview/XlsxPreview.tsx
 msgid "filePreview.xlsxEmpty"
 msgstr "La vista previa de la hoja de cálculo está vacía."

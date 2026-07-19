@@ -26,6 +26,34 @@ vi.mock("@extend-ai/react-docx", () => ({
   useDocxModel: useDocxModelMock,
 }));
 
+vi.mock("@extend-ai/react-pptx", () => ({
+  ReactPptxViewer: ({
+    height,
+    mode,
+    showThumbnails,
+    showToolbar,
+    source,
+  }: {
+    height?: number | string;
+    mode?: string;
+    showThumbnails?: boolean;
+    showToolbar?: boolean;
+    source?: string;
+  }) => (
+    <div
+      data-height={height}
+      data-mode={mode}
+      data-show-thumbnails={showThumbnails ? "true" : "false"}
+      data-show-toolbar={showToolbar ? "true" : "false"}
+      data-source={source}
+      data-testid="mock-react-pptx-viewer"
+    >
+      PPTX rendered
+    </div>
+  ),
+  setWasmSource: setWasmSourceMock,
+}));
+
 vi.mock("@extend-ai/react-xlsx", () => ({
   XlsxViewer: ({
     fileName,
@@ -126,6 +154,62 @@ describe("FilePreviewContent", () => {
     expect(
       screen.getByRole("button", { name: "Use light document theme" }),
     ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("renders PPTX files through the presentation viewer", () => {
+    renderWithTheme(
+      <FilePreviewContent
+        filename="roadmap.pptx"
+        url="https://files.example.com/download/roadmap.pptx"
+      />,
+    );
+
+    expect(screen.getByTestId("mock-react-pptx-viewer")).toHaveAttribute(
+      "data-source",
+      "https://files.example.com/download/roadmap.pptx",
+    );
+    expect(screen.getByTestId("mock-react-pptx-viewer")).toHaveAttribute(
+      "data-mode",
+      "slide",
+    );
+    expect(screen.getByTestId("mock-react-pptx-viewer")).toHaveAttribute(
+      "data-height",
+      "100%",
+    );
+    expect(screen.getByTestId("mock-react-pptx-viewer")).toHaveAttribute(
+      "data-show-toolbar",
+      "true",
+    );
+    expect(screen.getByTestId("mock-react-pptx-viewer")).toHaveAttribute(
+      "data-show-thumbnails",
+      "true",
+    );
+  });
+
+  it("uses the presentation viewer for PPT MIME types and legacy PPT files", () => {
+    const { rerender } = renderWithTheme(
+      <FilePreviewContent
+        filename="download"
+        url="https://files.example.com/download/roadmap"
+        mimeType="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+      />,
+    );
+
+    expect(screen.getByTestId("mock-react-pptx-viewer")).toBeInTheDocument();
+
+    rerender(
+      <ThemeProvider>
+        <FilePreviewContent
+          filename="legacy-slides.ppt"
+          url="https://files.example.com/download/legacy-slides.ppt"
+        />
+      </ThemeProvider>,
+    );
+
+    expect(screen.getByTestId("mock-react-pptx-viewer")).toHaveAttribute(
+      "data-source",
+      "https://files.example.com/download/legacy-slides.ppt",
+    );
   });
 
   it("renders XLSX files through the XLSX viewer", () => {

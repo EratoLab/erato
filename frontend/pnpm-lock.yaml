@@ -21,6 +21,9 @@ importers:
       '@extend-ai/react-docx':
         specifier: 0.7.1
         version: 0.7.1(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@extend-ai/react-pptx':
+        specifier: 0.1.2
+        version: 0.1.2(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@extend-ai/react-xlsx':
         specifier: 0.15.0
         version: 0.15.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -714,6 +717,12 @@ packages:
 
   '@extend-ai/react-docx@0.7.1':
     resolution: {integrity: sha512-2TwYuTJsdAJkRTo/1IyKPDF1oQ96mq7/fWgPLSAng8voRtO1ZJ/0ICgVrsusMAGxYWFvhl1SaQAh6/VO4rqf9A==}
+    peerDependencies:
+      react: 19.2.7
+      react-dom: 19.2.7
+
+  '@extend-ai/react-pptx@0.1.2':
+    resolution: {integrity: sha512-eT1whkI0BjjNOXgBiJlR2wiAWDydhNY1DL0+2xBFzu0O88XPR+COuqkY6ia1JeXHegA/jjhxyHvMgurdOttReg==}
     peerDependencies:
       react: 19.2.7
       react-dom: 19.2.7
@@ -5512,6 +5521,19 @@ snapshots:
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
       utif: 3.1.0
+
+  '@extend-ai/react-pptx@0.1.2(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+    dependencies:
+      '@tanstack/react-virtual': 3.14.2(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@tanstack/virtual-core': 3.17.0
+      d3-geo: 3.1.1
+      d3-hierarchy: 3.1.2
+      d3-scale: 4.0.2
+      d3-shape: 3.2.0
+      react: 19.2.7
+      react-dom: 19.2.7(react@19.2.7)
+      regl: 2.1.1
+      topojson-client: 3.1.0
 
   '@extend-ai/react-xlsx@0.15.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:

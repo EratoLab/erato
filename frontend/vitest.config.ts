@@ -18,6 +18,7 @@ export default defineConfig({
     server: {
       deps: {
         inline: [
+          "@extend-ai/react-pptx",
           "@extend-ai/react-xlsx",
           "@storybook/test",
           "us-atlas",
