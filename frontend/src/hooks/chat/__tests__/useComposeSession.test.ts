@@ -61,6 +61,31 @@ describe("useComposeSession", () => {
     expect(result.current.sessionId).toBe(sessionA);
   });
 
+  it("keeps a chat's session when it is revisited via the new-chat route", () => {
+    const initialProps: { chatId: string | null } = { chatId: "chat-a" };
+    const { result, rerender } = renderHook(
+      ({ chatId }: { chatId: string | null }) => useComposeSession({ chatId }),
+      { initialProps },
+    );
+
+    const sessionA = result.current.sessionId;
+    result.current.saveDraft(sessionA, {
+      message: "unsent draft",
+      attachedFiles: [],
+    });
+
+    // Leaving via the New Chat button parks us on the sentinel before we
+    // navigate back — this must not be mistaken for a chat_created rename.
+    rerender({ chatId: null });
+    rerender({ chatId: "chat-a" });
+
+    expect(result.current.sessionId).toBe(sessionA);
+    expect(result.current.getDraft(result.current.sessionId)).toEqual({
+      message: "unsent draft",
+      attachedFiles: [],
+    });
+  });
+
   it("persists and retrieves drafts by session id", () => {
     const { result } = renderHook(() =>
       useComposeSession({ chatId: "chat-a" }),
