@@ -659,6 +659,26 @@ body {
   color: var(--docx-preview-page-fg) !important;
 }
 
+.xlsx-preview-theme {
+  --xlsx-preview-control-bg: #f8fafc;
+  --xlsx-preview-button-bg: rgba(255, 255, 255, 0.94);
+  --xlsx-preview-control-fg: #111827;
+  --xlsx-preview-control-border: rgba(17, 24, 39, 0.14);
+  --xlsx-preview-control-hover-bg: #ffffff;
+  --xlsx-preview-control-hover-fg: #111827;
+  background: #ffffff;
+}
+
+.xlsx-preview-theme[data-xlsx-theme="dark"] {
+  --xlsx-preview-control-bg: #111827;
+  --xlsx-preview-button-bg: rgba(15, 23, 42, 0.94);
+  --xlsx-preview-control-fg: #f8fafc;
+  --xlsx-preview-control-border: rgba(226, 232, 240, 0.22);
+  --xlsx-preview-control-hover-bg: #1e293b;
+  --xlsx-preview-control-hover-fg: #ffffff;
+  background: #0f172a;
+}
+
 /* Footnote reference styling - add square brackets and remove underline */
 a[data-footnote-ref="true"] {
   text-decoration: none;
