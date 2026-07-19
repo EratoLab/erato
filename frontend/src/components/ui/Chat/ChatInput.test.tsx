@@ -5,13 +5,16 @@ import { act } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { componentRegistry } from "@/config/componentRegistry";
+import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
+import { useMessageQueueStore } from "@/hooks/chat/store/messageQueueStore";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
 import { ChatInput } from "./ChatInput";
 import { useToastStore } from "../Toast/toastStore";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
-import type { Messages } from "@lingui/core";
+import type { ChatContextValue } from "@/providers/ChatProvider";
+import type { I18n, Messages } from "@lingui/core";
 import type {
   ButtonHTMLAttributes,
   FormEvent,
@@ -48,6 +51,13 @@ vi.mock("@/providers/FeatureConfigProvider", () => ({
   useAudioTranscriptionFeature: () => mockUseAudioTranscriptionFeature(),
   useAudioDictationFeature: () => mockUseAudioDictationFeature(),
   useAudioConversationalFeature: () => mockUseAudioConversationalFeature(),
+  useErrorReportFeature: () => ({
+    showVerboseAssistantErrors: false,
+    showCopyErrorReport: false,
+    errorReportTemplate: "",
+    environment: "test",
+    platform: "web",
+  }),
 }));
 
 vi.mock("@/hooks/i18n", () => ({
@@ -182,6 +192,8 @@ vi.mock("../Feedback/ChatWarnings/BudgetWarning", () => ({
 
 vi.mock("../icons", () => ({
   ArrowUpIcon: () => <span>send</span>,
+  CloseIcon: () => <span>close</span>,
+  EditIcon: () => <span>edit</span>,
   LoadingIcon: (props: HTMLAttributes<HTMLSpanElement>) => (
     <span {...props}>loading</span>
   ),
@@ -3359,6 +3371,449 @@ describe("ChatInput", () => {
 
       expect(requestSubmitSpy).not.toHaveBeenCalled();
       requestSubmitSpy.mockRestore();
+    });
+  });
+
+  describe("message queue (ERMAIN-470)", () => {
+    const CHAT_ID = "chat-q";
+
+    const flushTimers = async () => {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      });
+    };
+
+    const renderQueue = (
+      initialContext: Partial<ChatContextValue>,
+      onSendMessage: (
+        message: string,
+        inputFileIds?: string[],
+        modelId?: string,
+        selectedFacetIds?: string[],
+      ) => void,
+      i18n: I18n,
+    ) => {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      const ui = (
+        context: Partial<ChatContextValue>,
+        props: { disabled?: boolean } = {},
+      ) => {
+        mockUseChatContext.mockReturnValue({
+          isPendingResponse: false,
+          isMessagingLoading: false,
+          isUploading: false,
+          cancelMessage: vi.fn(),
+          messagingError: null,
+          ...context,
+        });
+        return (
+          <QueryClientProvider client={queryClient}>
+            <I18nProvider i18n={i18n}>
+              <ChatInput
+                onSendMessage={onSendMessage}
+                chatId={CHAT_ID}
+                {...props}
+              />
+            </I18nProvider>
+          </QueryClientProvider>
+        );
+      };
+      const { rerender } = render(ui(initialContext));
+      return (
+        context: Partial<ChatContextValue>,
+        props: { disabled?: boolean } = {},
+      ) => rerender(ui(context, props));
+    };
+
+    beforeEach(() => {
+      useConfirmationRegistryStore.setState({ pendingIdsByChatId: {} });
+      useMessageQueueStore.setState({ queuedBySessionId: {} });
+    });
+
+    it("queues the draft on Enter while generating instead of sending", async () => {
+      const { i18n } = await import("@lingui/core");
+      const onSendMessage = vi.fn();
+      renderQueue({ isPendingResponse: true }, onSendMessage, i18n);
+
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      fireEvent.change(textarea, { target: { value: "next message" } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      expect(
+        screen.getByTestId("chat-input-queued-message-edit"),
+      ).toHaveTextContent("next message");
+      expect(onSendMessage).not.toHaveBeenCalled();
+      expect(textarea).toHaveValue("");
+    });
+
+    it("auto-sends the queued message once the turn fully completes", async () => {
+      const { i18n } = await import("@lingui/core");
+      const onSendMessage = vi.fn();
+      const rerender = renderQueue(
+        { isPendingResponse: true },
+        onSendMessage,
+        i18n,
+      );
+
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      fireEvent.change(textarea, { target: { value: "next message" } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      rerender({ isPendingResponse: false });
+      await flushTimers();
+
+      expect(onSendMessage).toHaveBeenCalledTimes(1);
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "next message",
+        undefined,
+        undefined,
+        [],
+      );
+      expect(
+        screen.queryByTestId("chat-input-queued-message"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("returns the queued message to the composer when the chip is clicked", async () => {
+      const { i18n } = await import("@lingui/core");
+      const onSendMessage = vi.fn();
+      renderQueue({ isPendingResponse: true }, onSendMessage, i18n);
+
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      fireEvent.change(textarea, { target: { value: "next message" } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      fireEvent.click(screen.getByTestId("chat-input-queued-message-edit"));
+
+      expect(textarea).toHaveValue("next message");
+      expect(
+        screen.queryByTestId("chat-input-queued-message"),
+      ).not.toBeInTheDocument();
+      expect(onSendMessage).not.toHaveBeenCalled();
+    });
+
+    it("cancels the queued message from the chip without sending", async () => {
+      const { i18n } = await import("@lingui/core");
+      const onSendMessage = vi.fn();
+      const rerender = renderQueue(
+        { isPendingResponse: true },
+        onSendMessage,
+        i18n,
+      );
+
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      fireEvent.change(textarea, { target: { value: "next message" } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      fireEvent.click(screen.getByTestId("chat-input-queued-message-cancel"));
+      expect(
+        screen.queryByTestId("chat-input-queued-message"),
+      ).not.toBeInTheDocument();
+
+      rerender({ isPendingResponse: false });
+      await flushTimers();
+      expect(onSendMessage).not.toHaveBeenCalled();
+    });
+
+    it("restores the queued message to the composer on Stop and never auto-sends", async () => {
+      const { i18n } = await import("@lingui/core");
+      const onSendMessage = vi.fn();
+      const cancelMessage = vi.fn();
+      const rerender = renderQueue(
+        { isPendingResponse: true, cancelMessage },
+        onSendMessage,
+        i18n,
+      );
+
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      fireEvent.change(textarea, { target: { value: "next message" } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      fireEvent.click(screen.getByTestId("chat-input-stop-generation"));
+
+      expect(cancelMessage).toHaveBeenCalledTimes(1);
+      expect(textarea).toHaveValue("next message");
+      expect(
+        screen.queryByTestId("chat-input-queued-message"),
+      ).not.toBeInTheDocument();
+
+      rerender({ isPendingResponse: false, cancelMessage });
+      await flushTimers();
+      expect(onSendMessage).not.toHaveBeenCalled();
+    });
+
+    it("restores the queued message when the turn errors instead of sending", async () => {
+      const { i18n } = await import("@lingui/core");
+      const onSendMessage = vi.fn();
+      const rerender = renderQueue(
+        { isPendingResponse: true },
+        onSendMessage,
+        i18n,
+      );
+
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      fireEvent.change(textarea, { target: { value: "next message" } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      rerender({
+        isPendingResponse: false,
+        messagingError: new Error("stream failed"),
+      });
+      await flushTimers();
+
+      expect(onSendMessage).not.toHaveBeenCalled();
+      expect(textarea).toHaveValue("next message");
+      expect(
+        screen.queryByTestId("chat-input-queued-message"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("holds the auto-send while a confirmation card is pending, then sends when it resolves", async () => {
+      const { i18n } = await import("@lingui/core");
+      const onSendMessage = vi.fn();
+      const rerender = renderQueue(
+        { isPendingResponse: true },
+        onSendMessage,
+        i18n,
+      );
+
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      fireEvent.change(textarea, { target: { value: "next message" } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      // A tool-consent card is pending for this chat when the turn completes.
+      act(() => {
+        useConfirmationRegistryStore
+          .getState()
+          .registerConfirmation(CHAT_ID, "card-1");
+      });
+      rerender({ isPendingResponse: false });
+      await flushTimers();
+      expect(onSendMessage).not.toHaveBeenCalled();
+
+      // Resolving the card releases the drain.
+      act(() => {
+        useConfirmationRegistryStore
+          .getState()
+          .unregisterConfirmation(CHAT_ID, "card-1");
+      });
+      await flushTimers();
+      expect(onSendMessage).toHaveBeenCalledTimes(1);
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "next message",
+        undefined,
+        undefined,
+        [],
+      );
+    });
+
+    it("holds the auto-send while the composer is disabled (add-in busy), then sends when it clears", async () => {
+      const { i18n } = await import("@lingui/core");
+      const onSendMessage = vi.fn();
+      const rerender = renderQueue(
+        { isPendingResponse: true },
+        onSendMessage,
+        i18n,
+      );
+
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      fireEvent.change(textarea, { target: { value: "next message" } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      // Turn completes while the composer is still busy (e.g. the add-in is
+      // expanding a dropped email) — must not send ahead of staged attachments.
+      rerender({ isPendingResponse: false }, { disabled: true });
+      await flushTimers();
+      expect(onSendMessage).not.toHaveBeenCalled();
+
+      // The busy gate clears and the queued message drains.
+      rerender({ isPendingResponse: false }, { disabled: false });
+      await flushTimers();
+      expect(onSendMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it("auto-sends the queued attachments' file ids on completion", async () => {
+      const attachedFiles = [
+        {
+          id: "file-1",
+          filename: "report.pdf",
+          download_url: "/files/report.pdf",
+          preview_url: undefined,
+          file_contents_unavailable_missing_permissions: false,
+          file_capability: {
+            extensions: ["pdf"],
+            id: "pdf",
+            mime_types: ["application/pdf"],
+            operations: ["extract_text"],
+          },
+        },
+      ] as unknown as FileUploadItem[];
+      mockUseChatInputHandlers.mockReturnValue({
+        attachedFiles,
+        fileError: null,
+        setFileError: vi.fn(),
+        handleFilesUploaded: vi.fn(),
+        handleRemoveFile: vi.fn(),
+        handleRemoveAllFiles: vi.fn(),
+        setAttachedFiles: vi.fn(),
+        createSubmitHandler: () => (event: FormEvent) => event.preventDefault(),
+      });
+
+      const { i18n } = await import("@lingui/core");
+      const onSendMessage = vi.fn();
+      const rerender = renderQueue(
+        { isPendingResponse: true },
+        onSendMessage,
+        i18n,
+      );
+
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      fireEvent.change(textarea, { target: { value: "with attachment" } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      rerender({ isPendingResponse: false });
+      await flushTimers();
+
+      expect(onSendMessage).toHaveBeenCalledTimes(1);
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "with attachment",
+        ["file-1"],
+        undefined,
+        [],
+      );
+    });
+
+    it("sends exactly once across a multi-step turn that bounces pending true->false->true->false", async () => {
+      const { i18n } = await import("@lingui/core");
+      const onSendMessage = vi.fn();
+      const rerender = renderQueue(
+        { isPendingResponse: true },
+        onSendMessage,
+        i18n,
+      );
+
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      fireEvent.change(textarea, { target: { value: "next message" } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      // First completion edge arms the drain, but a follow-up tool step flips
+      // pending back true before the deferred send fires — it must not send yet.
+      rerender({ isPendingResponse: false });
+      rerender({ isPendingResponse: true });
+      await flushTimers();
+      expect(onSendMessage).not.toHaveBeenCalled();
+
+      // Only the final completion drains, exactly once.
+      rerender({ isPendingResponse: false });
+      await flushTimers();
+      expect(onSendMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it("shows a Send/Queue button beside Stop while streaming with content", async () => {
+      const { i18n } = await import("@lingui/core");
+      const onSendMessage = vi.fn();
+      renderQueue({ isPendingResponse: true }, onSendMessage, i18n);
+
+      // Empty composer while streaming → only Stop.
+      expect(
+        screen.getByTestId("chat-input-stop-generation"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("chat-input-queue-message"),
+      ).not.toBeInTheDocument();
+
+      // Typing surfaces the Send/Queue button alongside Stop (two controls).
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      fireEvent.change(textarea, { target: { value: "next message" } });
+      expect(
+        screen.getByTestId("chat-input-queue-message"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("chat-input-stop-generation"),
+      ).toBeInTheDocument();
+    });
+
+    it("queues via the Send/Queue button just like Enter", async () => {
+      const { i18n } = await import("@lingui/core");
+      const onSendMessage = vi.fn();
+      renderQueue({ isPendingResponse: true }, onSendMessage, i18n);
+
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      fireEvent.change(textarea, { target: { value: "clicked queue" } });
+      fireEvent.click(screen.getByTestId("chat-input-queue-message"));
+
+      expect(
+        screen.getByTestId("chat-input-queued-message-edit"),
+      ).toHaveTextContent("clicked queue");
+      expect(onSendMessage).not.toHaveBeenCalled();
+      expect(textarea).toHaveValue("");
+    });
+
+    it("confirms before overwriting an existing queued message, then replaces", async () => {
+      const { i18n } = await import("@lingui/core");
+      const onSendMessage = vi.fn();
+      renderQueue({ isPendingResponse: true }, onSendMessage, i18n);
+
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      fireEvent.change(textarea, { target: { value: "first" } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+      expect(
+        screen.getByTestId("chat-input-queued-message-edit"),
+      ).toHaveTextContent("first");
+
+      // Queuing again raises the confirm; the store is not touched yet and the
+      // new draft stays in the composer.
+      fireEvent.change(textarea, { target: { value: "second" } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+      expect(
+        screen.getByText("Replace the queued message?"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("chat-input-queued-message-edit"),
+      ).toHaveTextContent("first");
+      expect(textarea).toHaveValue("second");
+      expect(onSendMessage).not.toHaveBeenCalled();
+
+      // Replace swaps in the new draft and clears the composer.
+      fireEvent.click(screen.getByText("Replace"));
+      expect(
+        screen.queryByText("Replace the queued message?"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByTestId("chat-input-queued-message-edit"),
+      ).toHaveTextContent("second");
+      expect(textarea).toHaveValue("");
+    });
+
+    it("keeps both the queued message and the new draft when overwrite is declined", async () => {
+      const { i18n } = await import("@lingui/core");
+      const onSendMessage = vi.fn();
+      renderQueue({ isPendingResponse: true }, onSendMessage, i18n);
+
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      fireEvent.change(textarea, { target: { value: "first" } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      fireEvent.change(textarea, { target: { value: "second" } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+      expect(
+        screen.getByText("Replace the queued message?"),
+      ).toBeInTheDocument();
+
+      fireEvent.click(screen.getByText("Keep queued"));
+      expect(
+        screen.queryByText("Replace the queued message?"),
+      ).not.toBeInTheDocument();
+      // Original queue kept; new draft still in the composer — nothing lost.
+      expect(
+        screen.getByTestId("chat-input-queued-message-edit"),
+      ).toHaveTextContent("first");
+      expect(textarea).toHaveValue("second");
     });
   });
 });

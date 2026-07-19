@@ -25,6 +25,7 @@ import {
   usePromptOptimizer,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useAssistantsFeature } from "@/providers/FeatureConfigProvider";
+import { mergeUniqueFilesById } from "@/utils/file/mergeUniqueFilesById";
 
 import type { TokenUsageEstimationResult } from "@/hooks/chat/useTokenUsageEstimation";
 import type {
@@ -35,23 +36,6 @@ import type React from "react";
 
 // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal form field key
 const FACET_IDS_FIELD: keyof AssistantFormData = "facetIds";
-
-function mergeUniqueFilesById(
-  existingFiles: FileUploadItem[],
-  newFiles: FileUploadItem[],
-) {
-  const seenFileIds = new Set(existingFiles.map((file) => file.id));
-  const uniqueNewFiles = newFiles.filter((file) => {
-    if (seenFileIds.has(file.id)) {
-      return false;
-    }
-
-    seenFileIds.add(file.id);
-    return true;
-  });
-
-  return [...existingFiles, ...uniqueNewFiles];
-}
 
 function buildFormData(
   initialData?: Partial<AssistantFormData>,

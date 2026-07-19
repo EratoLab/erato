@@ -2931,6 +2931,11 @@ msgstr ""
 msgid "{0, plural, =0 {No files} one {# file} other {# files}}"
 msgstr "{0, plural, =0 {Keine Dateien} one {# Datei} other {# Dateien}}"
 
+#. placeholder {0}: queuedMessage.attachedFiles.length
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "{0, plural, one {# attachment ready to send} other {# attachments ready to send}}"
+msgstr "{0, plural, one {# Anhang bereit zum Senden} other {# Anhänge bereit zum Senden}}"
+
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 #~ msgid "{0} items"
 #~ msgstr ""
@@ -3050,6 +3055,10 @@ msgstr "Datei anhängen"
 #: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "attachment"
 msgstr ""
+
+#: src/components/ui/Chat/ChatInput.tsx
+#~ msgid "Attachment ready to send"
+#~ msgstr ""
 
 #: src/components/ui/FilePreview/EmlPreview.tsx
 #: src/components/ui/FileUpload/FileAttachmentsPreview.tsx
@@ -3201,6 +3210,10 @@ msgstr "Abbrechen"
 #: src/components/ui/Modal/ConfirmationDialog.tsx
 msgid "Cancel action"
 msgstr "Aktion abbrechen"
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Cancel queued message"
+msgstr "Wartende Nachricht abbrechen"
 
 #: src/components/ui/Chat/ChatInput.tsx
 #~ msgid "Cancel starting dictation"
@@ -3504,6 +3517,10 @@ msgid "Edit Assistant Settings"
 msgstr "Assistenten-Einstellungen bearbeiten"
 
 #: src/components/ui/Chat/ChatInput.tsx
+msgid "Edit queued message"
+msgstr "Wartende Nachricht bearbeiten"
+
+#: src/components/ui/Chat/ChatInput.tsx
 msgid "Edit your message..."
 msgstr "Bearbeiten Sie Ihre Nachricht..."
 
@@ -3655,6 +3672,10 @@ msgstr "Nachricht einbeziehen"
 #: src/components/ui/Message/MessageTimestamp.tsx
 msgid "Invalid date provided to MessageTimestamp, using current date"
 msgstr "Ungültiges Datum für MessageTimestamp bereitgestellt, aktuelles Datum wird verwendet"
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Keep queued"
+msgstr "In Warteschlange behalten"
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Largest file context contributors:"
@@ -3824,6 +3845,10 @@ msgstr "Rauschunterdrückung: {noiseSuppression}"
 msgid "of"
 msgstr "von"
 
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Only one message can be queued. Replacing discards the message you queued earlier."
+msgstr "Es kann nur eine Nachricht in die Warteschlange gestellt werden. Beim Ersetzen wird die zuvor eingereihte Nachricht verworfen."
+
 #: src/components/ui/Controls/DropdownMenu.tsx
 msgid "Open menu"
 msgstr "Menü öffnen"
@@ -3874,6 +3899,18 @@ msgstr "Vorschau:"
 #: src/components/ui/Chat/ChatInput.tsx
 #~ msgid "Progress: {0}%"
 #~ msgstr ""
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Queue — sends when the response finishes"
+msgstr "In Warteschlange – wird nach der Antwort gesendet"
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Queue message"
+msgstr "Nachricht in Warteschlange stellen"
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Queued — sends when response finishes"
+msgstr "In Warteschlange – wird nach der Antwort gesendet"
 
 #: src/components/ui/Message/MessageContent.tsx
 #~ msgid "Reasoning"
@@ -3941,6 +3978,14 @@ msgstr "Alle Dateien entfernen"
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Removing this audio attachment will also clear its transcription. Continue?"
 msgstr "Wenn dieser Audioanhang entfernt wird, wird auch seine Transkription gelöscht. Fortfahren?"
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Replace"
+msgstr "Ersetzen"
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Replace the queued message?"
+msgstr "Wartende Nachricht ersetzen?"
 
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Reset to Browser Detection"

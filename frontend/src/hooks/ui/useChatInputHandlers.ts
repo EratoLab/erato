@@ -7,28 +7,12 @@
 import { useState, useCallback } from "react";
 
 import { createLogger } from "@/utils/debugLogger";
+import { mergeUniqueFilesById } from "@/utils/file/mergeUniqueFilesById";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FormEvent } from "react";
 
 const logger = createLogger("HOOK", "useChatInputHandlers");
-
-function mergeUniqueFilesById(
-  existingFiles: FileUploadItem[],
-  newFiles: FileUploadItem[],
-) {
-  const seenFileIds = new Set(existingFiles.map((file) => file.id));
-  const uniqueNewFiles = newFiles.filter((file) => {
-    if (seenFileIds.has(file.id)) {
-      return false;
-    }
-
-    seenFileIds.add(file.id);
-    return true;
-  });
-
-  return [...existingFiles, ...uniqueNewFiles];
-}
 
 function isAudioTranscriptionAttachment(file: FileUploadItem): boolean {
   return Boolean(file.audio_transcription);

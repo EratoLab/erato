@@ -68,6 +68,16 @@ vi.mock("@erato/frontend/library", () => ({
   useChatContext: () => mockUseChatContext(),
   useOutlookArtifact: () => mockUseOutlookArtifact(),
   usePersistedState: () => mockUsePersistedState(),
+  useConfirmationRegistryStore: (
+    selector: (state: {
+      registerConfirmation: () => void;
+      unregisterConfirmation: () => void;
+    }) => unknown,
+  ) =>
+    selector({
+      registerConfirmation: () => {},
+      unregisterConfirmation: () => {},
+    }),
 }));
 
 vi.mock("../../providers/OutlookMailItemProvider", () => ({

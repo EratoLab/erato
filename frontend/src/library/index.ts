@@ -182,6 +182,10 @@ export {
 } from "@/hooks/ui";
 export { useMessageFeedback } from "@/hooks/chat/useMessageFeedback";
 export { useMessagingStore } from "@/hooks/chat/store/messagingStore";
+export {
+  useConfirmationRegistryStore,
+  useHasPendingConfirmation,
+} from "@/hooks/chat/store/confirmationRegistryStore";
 export { useProfile } from "@/hooks/useProfile";
 export {
   usePersistedState,

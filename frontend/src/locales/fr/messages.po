@@ -2931,6 +2931,11 @@ msgstr ""
 msgid "{0, plural, =0 {No files} one {# file} other {# files}}"
 msgstr "{0, plural, =0 {Aucun fichier} one {# fichier} other {# fichiers}}"
 
+#. placeholder {0}: queuedMessage.attachedFiles.length
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "{0, plural, one {# attachment ready to send} other {# attachments ready to send}}"
+msgstr ""
+
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 #~ msgid "{0} items"
 #~ msgstr ""
@@ -3050,6 +3055,10 @@ msgstr "Joindre un fichier"
 #: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "attachment"
 msgstr ""
+
+#: src/components/ui/Chat/ChatInput.tsx
+#~ msgid "Attachment ready to send"
+#~ msgstr ""
 
 #: src/components/ui/FilePreview/EmlPreview.tsx
 #: src/components/ui/FileUpload/FileAttachmentsPreview.tsx
@@ -3201,6 +3210,10 @@ msgstr "Annuler"
 #: src/components/ui/Modal/ConfirmationDialog.tsx
 msgid "Cancel action"
 msgstr "Annuler l'action"
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Cancel queued message"
+msgstr ""
 
 #: src/components/ui/Chat/ChatInput.tsx
 #~ msgid "Cancel starting dictation"
@@ -3504,6 +3517,10 @@ msgid "Edit Assistant Settings"
 msgstr ""
 
 #: src/components/ui/Chat/ChatInput.tsx
+msgid "Edit queued message"
+msgstr ""
+
+#: src/components/ui/Chat/ChatInput.tsx
 msgid "Edit your message..."
 msgstr ""
 
@@ -3655,6 +3672,10 @@ msgstr "Inclure le message"
 #: src/components/ui/Message/MessageTimestamp.tsx
 msgid "Invalid date provided to MessageTimestamp, using current date"
 msgstr "Date invalide fournie à MessageTimestamp, utilisation de la date actuelle"
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Keep queued"
+msgstr ""
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Largest file context contributors:"
@@ -3824,6 +3845,10 @@ msgstr "réduction du bruit : {noiseSuppression}"
 msgid "of"
 msgstr "sur"
 
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Only one message can be queued. Replacing discards the message you queued earlier."
+msgstr ""
+
 #: src/components/ui/Controls/DropdownMenu.tsx
 msgid "Open menu"
 msgstr "Ouvrir le menu"
@@ -3874,6 +3899,18 @@ msgstr "Aperçu :"
 #: src/components/ui/Chat/ChatInput.tsx
 #~ msgid "Progress: {0}%"
 #~ msgstr ""
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Queue — sends when the response finishes"
+msgstr ""
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Queue message"
+msgstr ""
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Queued — sends when response finishes"
+msgstr ""
 
 #: src/components/ui/Message/MessageContent.tsx
 #~ msgid "Reasoning"
@@ -3941,6 +3978,14 @@ msgstr "Supprimer tous les fichiers"
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Removing this audio attachment will also clear its transcription. Continue?"
 msgstr "Supprimer cette pièce jointe audio effacera aussi sa transcription. Continuer ?"
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Replace"
+msgstr ""
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Replace the queued message?"
+msgstr ""
 
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Reset to Browser Detection"

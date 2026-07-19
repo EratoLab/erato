@@ -21,6 +21,8 @@ const mockUsePersistedState = vi.fn();
 const mockOpenReplyForm = vi.fn();
 const mockGetReadModeRecipientSummary = vi.fn();
 const mockCopyEmailToClipboard = vi.fn();
+const mockRegisterConfirmation = vi.fn();
+const mockUnregisterConfirmation = vi.fn();
 
 vi.mock("@erato/frontend/library", () => ({
   // Mirrors the real card's lifecycle contract: decision buttons only while
@@ -71,6 +73,16 @@ vi.mock("@erato/frontend/library", () => ({
   useChatContext: () => mockUseChatContext(),
   useOutlookArtifact: () => mockUseOutlookArtifact(),
   usePersistedState: () => mockUsePersistedState(),
+  useConfirmationRegistryStore: (
+    selector: (state: {
+      registerConfirmation: (chatId: string, id: string) => void;
+      unregisterConfirmation: (chatId: string, id: string) => void;
+    }) => unknown,
+  ) =>
+    selector({
+      registerConfirmation: mockRegisterConfirmation,
+      unregisterConfirmation: mockUnregisterConfirmation,
+    }),
 }));
 
 vi.mock("../../providers/OutlookMailItemProvider", () => ({
@@ -131,6 +143,7 @@ function prime(options: {
     itemIdentity: options.currentItemIdentity,
   });
   mockUseChatContext.mockReturnValue({
+    currentChatId: "chat-1",
     messages: {
       [options.artifact.messageId]: {
         id: options.artifact.messageId,
@@ -360,6 +373,30 @@ describe("OutlookEratoEmailRenderer — confirmation-card item snapshot", () => 
     });
 
     expect(mockOpenReplyForm).toHaveBeenCalledWith(REPLY, "Draft body", false);
+  });
+
+  // The add-in half of the ERMAIN-470 message-queue hold: a pending card
+  // registers into the shared confirmation registry (keyed by chat) and
+  // deregisters when resolved, so the composer's auto-send drain waits.
+  it("registers the pending confirmation and deregisters it on resolve", async () => {
+    primeAutoCard();
+    render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
+
+    expect(screen.getByTestId("confirmation-card")).toBeInTheDocument();
+    expect(mockRegisterConfirmation).toHaveBeenCalledWith(
+      "chat-1",
+      expect.any(String),
+    );
+    const registrationId = mockRegisterConfirmation.mock.calls[0]?.[1] as string;
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "deny" }));
+    });
+
+    expect(mockUnregisterConfirmation).toHaveBeenCalledWith(
+      "chat-1",
+      registrationId,
+    );
   });
 });
 
