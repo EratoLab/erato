@@ -1,8 +1,8 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import { Fragment, useCallback, useId, useRef, useState } from "react";
+import { Fragment, useId, useRef, useState } from "react";
 
-import { useKeyboard } from "@/hooks/useKeyboard";
+import { useRovingMenuFocus } from "@/hooks/ui/useRovingMenuFocus";
 
 import { AnchoredPopover } from "../Controls/AnchoredPopover";
 import { CheckIcon, LoadingIcon, PlusIcon } from "../icons";
@@ -139,84 +139,11 @@ export function ChatInputAddMenu({
 
   // Roving focus across the navigable rows (skips natively-disabled ones;
   // aria-disabled tool rows stay reachable so they remain perceivable).
-  const getNavigableItems = useCallback(
-    () =>
-      panelRef.current
-        ? Array.from(
-            panelRef.current.querySelectorAll<HTMLElement>(
-              NAVIGABLE_ITEM_SELECTOR,
-            ),
-          )
-        : [],
-    [],
-  );
-
-  const moveFocus = useCallback(
-    (delta: number) => {
-      const items = getNavigableItems();
-      if (items.length === 0) {
-        return;
-      }
-      const currentIndex = items.indexOf(document.activeElement as HTMLElement);
-      const nextIndex =
-        currentIndex < 0
-          ? delta > 0
-            ? 0
-            : items.length - 1
-          : (currentIndex + delta + items.length) % items.length;
-      items[nextIndex].focus();
-    },
-    [getNavigableItems],
-  );
-
-  const focusEdge = useCallback(
-    (edge: "first" | "last") => {
-      const items = getNavigableItems();
-      if (items.length === 0) {
-        return;
-      }
-      (edge === "first" ? items[0] : items[items.length - 1]).focus();
-    },
-    [getNavigableItems],
-  );
-
-  const onArrowDown = useCallback(
-    (e: KeyboardEvent) => {
-      e.preventDefault();
-      moveFocus(1);
-    },
-    [moveFocus],
-  );
-  const onArrowUp = useCallback(
-    (e: KeyboardEvent) => {
-      e.preventDefault();
-      moveFocus(-1);
-    },
-    [moveFocus],
-  );
-  const onHome = useCallback(
-    (e: KeyboardEvent) => {
-      e.preventDefault();
-      focusEdge("first");
-    },
-    [focusEdge],
-  );
-  const onEnd = useCallback(
-    (e: KeyboardEvent) => {
-      e.preventDefault();
-      focusEdge("last");
-    },
-    [focusEdge],
-  );
-
-  // Escape + focus-return are handled by AnchoredPopover; we add navigation.
-  useKeyboard({
-    target: panelRef,
+  // Escape + focus-return are handled by AnchoredPopover; this adds navigation.
+  useRovingMenuFocus({
+    containerRef: panelRef,
     enabled: isOpen,
-    onArrowDown,
-    onArrowUp,
-    onHome,
-    onEnd,
+    itemSelector: NAVIGABLE_ITEM_SELECTOR,
   });
 
   const renderActionRow = (item: AddMenuActionItem, testId: string) => (

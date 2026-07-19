@@ -2,6 +2,7 @@ import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { useState, useRef, useCallback, memo, useEffect } from "react";
 
+import { useRovingMenuFocus } from "@/hooks/ui/useRovingMenuFocus";
 import { useKeyboard } from "@/hooks/useKeyboard";
 
 import { AnchoredPopover } from "./AnchoredPopover";
@@ -46,6 +47,11 @@ export interface DropdownMenuProps {
   onOpenChange?: (isOpen: boolean) => void;
 }
 
+// Navigable rows for roving focus and initial keyboard focus; natively-disabled
+// items are skipped so arrow keys land only on actionable rows.
+// eslint-disable-next-line lingui/no-unlocalized-strings -- CSS selector, not user-facing
+const MENU_ITEM_SELECTOR = '[role="menuitem"]:not(:disabled)';
+
 const MenuItem = memo(
   ({
     item,
@@ -59,15 +65,19 @@ const MenuItem = memo(
     <button
       className={clsx(
         "dropdown-item-geometry",
-        "w-full text-left text-sm",
+        "w-full rounded-md text-left text-sm",
         "flex items-center gap-2",
         "theme-transition",
         "disabled:cursor-not-allowed disabled:opacity-50",
-        "focus-ring-inset",
+        // Keyboard-active row: soft rounded highlight with a faint 1px inset
+        // border — deliberately lighter than hover/selected and free of the
+        // old 2px focus ring, so an arrowed-to item reads as "active" not
+        // "pre-selected" (ERMAIN-467).
+        "focus:outline-none focus:ring-1 focus:ring-inset",
         noWrap && "whitespace-nowrap",
         item.variant === "danger"
-          ? "text-theme-error-fg hover:bg-theme-error-bg focus:bg-theme-error-bg"
-          : "text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary focus:text-theme-fg-primary",
+          ? "text-theme-error-fg hover:bg-theme-error-bg focus:bg-theme-error-bg focus:ring-theme-error-border"
+          : "text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary focus:bg-theme-bg-hover focus:text-theme-fg-primary focus:ring-theme-border-dropdown",
       )}
       onClick={onSelect}
       disabled={item.disabled}
@@ -180,30 +190,19 @@ export const DropdownMenu = memo(
       setConfirmingItem(null); // Just close the confirmation dialog
     }, []);
 
+    // ArrowUp/Down/Home/End roving nav across enabled items (WAI-ARIA
+    // menu-button pattern). Escape-close + focus-return live in AnchoredPopover;
+    // we keep Escape here too so closeMenu can guard against an in-flight click.
+    useRovingMenuFocus({
+      containerRef: menuRef,
+      enabled: isOpen,
+      itemSelector: MENU_ITEM_SELECTOR,
+    });
+
     useKeyboard({
       target: menuRef,
       enabled: isOpen,
       onEscape: closeMenu,
-      onTab: (e) => {
-        e.preventDefault();
-        const menuItems =
-          menuRef.current?.querySelectorAll('[role="menuitem"]');
-        if (!menuItems?.length) return;
-
-        const currentIndex = Array.from(menuItems).findIndex(
-          (item) => item === document.activeElement,
-        );
-
-        const nextIndex = e.shiftKey
-          ? currentIndex <= 0
-            ? menuItems.length - 1
-            : currentIndex - 1
-          : currentIndex >= menuItems.length - 1
-            ? 0
-            : currentIndex + 1;
-
-        (menuItems[nextIndex] as HTMLElement).focus();
-      },
     });
 
     useEffect(() => {
@@ -228,7 +227,7 @@ export const DropdownMenu = memo(
             horizontal: preferredOrientation?.horizontal ?? align,
           }}
           initialFocusSelector={
-            autoFocusFirstItem ? '[role="menuitem"]' : undefined
+            autoFocusFirstItem ? MENU_ITEM_SELECTOR : undefined
           }
           panelRef={menuRef}
           panelStyle={{
@@ -252,6 +251,7 @@ export const DropdownMenu = memo(
               size="sm"
               variant={triggerButtonVariant}
               onClick={triggerProps.onClick}
+              onKeyDown={triggerProps.onKeyDown}
               className={clsx(
                 "flex min-w-fit items-center justify-center",
                 triggerButtonClassName,

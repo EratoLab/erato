@@ -158,6 +158,10 @@ export default {
         theme: {
           focus: "var(--theme-focus-ring)",
           "focus-error": "var(--theme-focus-ring-error)",
+          // Faint 1px ring for the keyboard-active dropdown/menu row — a soft
+          // "active" affordance distinct from the heavier focus ring.
+          "border-dropdown": "var(--theme-border-dropdown)",
+          "error-border": "var(--theme-error-border)",
         },
       },
     },
