@@ -93,10 +93,12 @@ test.describe("Streaming composer + message queue", () => {
       await expect(page.getByTestId("message-user")).toHaveCount(1);
 
       // ERMAIN-470: with content mid-stream the trailing slot is exactly
-      // Stop + Queue — the idle Send button is not rendered.
+      // Stop + Queue — neither the idle Send button nor the dictation-start
+      // button is rendered (the "at most two trailing controls" rule).
       await expect(page.getByTestId("chat-input-queue-message")).toBeVisible();
       await expect(stopButton(page)).toBeVisible();
       await expect(page.getByTestId("chat-input-send-message")).toHaveCount(0);
+      await expect(page.getByTestId("chat-input-record-audio")).toHaveCount(0);
 
       // Clean up: stop the stream so the test finishes quickly.
       await stopButton(page).click();
@@ -418,6 +420,54 @@ test.describe("Streaming composer + message queue", () => {
       expect(chatCountAfter).toBe(chatCountBaseline);
       await expect(page).toHaveURL(new RegExp(`/chat/${streamingChatId}$`));
       await expect(page.getByText(/sample.*compressed.*pdf/i)).toBeVisible();
+    },
+  );
+
+  test(
+    "a queued message carries its attachment through to the auto-sent turn",
+    { tag: TAG_CI },
+    async ({ page }) => {
+      test.setTimeout(90000);
+
+      await page.goto("/");
+      await chatIsReadyToChat(page);
+      await selectMockModel(page);
+
+      await startLongRunningStream(page, 8);
+
+      // Attach a file mid-stream (routes to the streaming chat, ERMAIN-466),
+      // then queue a "cite files" message that carries it. The queue stores
+      // attachedFiles, and the drain must forward them on the auto-send
+      // (ERMAIN-470) — otherwise the follow-up turn has no file to cite.
+      const pdfPath = path.join(
+        __dirname,
+        "../test-files/sample-report-compressed.pdf",
+      );
+      await uploadFileInChat(page, pdfPath);
+      await expect(page.getByText(/sample.*compressed.*pdf/i)).toBeVisible({
+        timeout: 15000,
+      });
+
+      const textbox = messageBox(page);
+      await textbox.fill("cite files");
+      await page.getByTestId("chat-input-queue-message").click();
+
+      await expect(queuedChip(page)).toBeVisible();
+      await expect(page.getByTestId("message-user")).toHaveCount(1);
+
+      // On completion the queued message auto-sends WITH the attachment, so the
+      // cite-files mock (which lists erato-file:// links found in the request)
+      // answers with a citation link — proving the file reached the backend.
+      await expect(page.getByTestId("message-user")).toHaveCount(2, {
+        timeout: 45000,
+      });
+      await expect(queuedChip(page)).toHaveCount(0);
+
+      await waitForStreamToFinish(page);
+      const lastAssistant = page.getByTestId("message-assistant").last();
+      await expect(
+        lastAssistant.getByRole("link", { name: "Link" }).first(),
+      ).toBeVisible({ timeout: 15000 });
     },
   );
 });
