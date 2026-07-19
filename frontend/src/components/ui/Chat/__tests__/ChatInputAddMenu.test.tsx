@@ -12,7 +12,7 @@ import { ChatInputAddMenu } from "../ChatInputAddMenu";
  */
 describe("ChatInputAddMenu", () => {
   const fileSources = [
-    { key: "upload", label: "Upload from Computer", onSelect: vi.fn() },
+    { id: "upload", label: "Upload from Computer", onSelect: vi.fn() },
   ];
 
   it("wires the popover contract onto the trigger", () => {
