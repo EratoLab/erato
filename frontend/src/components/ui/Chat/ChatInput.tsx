@@ -2242,11 +2242,16 @@ export const ChatInput = ({
         )}
 
         {/* Queued next message: auto-sends when the current turn finishes.
-            Geometry comes from the same message tokens as the sibling error
-            Alert / attachment preview; `data-ui` lets kits restyle it. */}
+            Geometry AND surface colors come from the same message tokens as the
+            sibling attachment preview (`--theme-border-attachment` on
+            bg-primary), so the two read as one family. Not
+            `--theme-border-chat-input`: the stock theme aliases both to
+            `--theme-border`, but themes that split them treat chat-input as a
+            shell-only token they re-specify per surface, which would leave this
+            chip borderless. `data-ui` lets kits restyle it. */}
         {queuedMessage && (
           <div
-            className="theme-transition mb-2 flex items-center gap-2 border border-[var(--theme-border-chat-input)] bg-theme-bg-secondary text-sm"
+            className="theme-transition mb-2 flex items-center gap-2 border bg-theme-bg-primary text-sm [border-color:var(--theme-border-attachment)]"
             style={{
               borderRadius: "var(--theme-radius-message)",
               padding:
