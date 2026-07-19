@@ -1,4 +1,7 @@
-import { useChatContext } from "@erato/frontend/library";
+import {
+  useChatContext,
+  useConfirmationRegistryStore,
+} from "@erato/frontend/library";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { resolveAutoPromptBehavior } from "../utils/clientActionPolicy";
@@ -154,7 +157,34 @@ export function useClientActionConfirmFlow<
   // form, "ask" surfaces the inline confirmation card). If the summary can't
   // be snapshotted, requestConfirmation returns false and nothing happens —
   // the buttons remain as fallback.
-  const { messages, messageOrder } = useChatContext();
+  const { messages, messageOrder, currentChatId } = useChatContext();
+
+  // Publish this card's pending state to the shared registry so the chat
+  // composer's message queue holds its auto-send while a tool-consent card is
+  // unresolved (ERMAIN-470). Keyed by chatId — the same value ChatInput reads —
+  // with a per-instance id so multiple fences each hold independently.
+  const isConfirmPending = confirmCard !== null;
+  const [registrationId] = useState(() => globalThis.crypto.randomUUID());
+  const registerConfirmation = useConfirmationRegistryStore(
+    (state) => state.registerConfirmation,
+  );
+  const unregisterConfirmation = useConfirmationRegistryStore(
+    (state) => state.unregisterConfirmation,
+  );
+  useEffect(() => {
+    if (!currentChatId || !isConfirmPending) {
+      return;
+    }
+    registerConfirmation(currentChatId, registrationId);
+    return () => unregisterConfirmation(currentChatId, registrationId);
+  }, [
+    currentChatId,
+    isConfirmPending,
+    registrationId,
+    registerConfirmation,
+    unregisterConfirmation,
+  ]);
+
   const isLatestAssistantMessage = useMemo(() => {
     if (!args.messageId) {
       return false;
@@ -213,7 +243,7 @@ export function useClientActionConfirmFlow<
 
   return {
     confirmCard,
-    isConfirmPending: confirmCard !== null,
+    isConfirmPending,
     requestConfirmation,
     allowCard,
     denyCard,

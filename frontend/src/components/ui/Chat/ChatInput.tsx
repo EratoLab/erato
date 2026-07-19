@@ -1,4 +1,4 @@
-import { t } from "@lingui/core/macro";
+import { plural, t } from "@lingui/core/macro";
 import clsx from "clsx";
 import {
   useState,
@@ -11,12 +11,24 @@ import {
 
 import { FileAttachmentsPreview } from "@/components/ui/FileUpload";
 import { FileUploadWithTokenCheck } from "@/components/ui/FileUpload/FileUploadWithTokenCheck";
+import { ConfirmationDialog } from "@/components/ui/Modal/ConfirmationDialog";
 import { componentRegistry } from "@/config/componentRegistry";
 import { useAudioDictationRecorder } from "@/hooks/audio/useAudioDictationRecorder";
 import { useAudioTranscriptionRecorder } from "@/hooks/audio/useAudioTranscriptionRecorder";
 import { useTokenManagement, useActiveModelSelection } from "@/hooks/chat";
+import {
+  useConfirmationRegistryStore,
+  useHasPendingConfirmation,
+} from "@/hooks/chat/store/confirmationRegistryStore";
+import {
+  useMessageQueueStore,
+  useQueuedMessage,
+} from "@/hooks/chat/store/messageQueueStore";
 import { useMessagingStore } from "@/hooks/chat/store/messagingStore";
-import { useComposeSession } from "@/hooks/chat/useComposeSession";
+import {
+  useComposeSession,
+  type ComposeDraftState,
+} from "@/hooks/chat/useComposeSession";
 import { UnsupportedFileTypeError } from "@/hooks/files/errors";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { useOptionalTranslation } from "@/hooks/i18n";
@@ -38,8 +50,16 @@ import {
 import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 import { resolveChatSendErrorMessage } from "@/utils/chatSendErrorMessage";
 import { createLogger } from "@/utils/debugLogger";
+import { mergeUniqueFilesById } from "@/utils/file/mergeUniqueFilesById";
 
-import { ArrowUpIcon, LoadingIcon, StopIcon, VoiceIcon } from "../icons";
+import {
+  ArrowUpIcon,
+  CloseIcon,
+  EditIcon,
+  LoadingIcon,
+  StopIcon,
+  VoiceIcon,
+} from "../icons";
 import { ChatInputAddControls } from "./ChatInputAddControls";
 import { ChatInputAudioModeButton } from "./ChatInputAudioModeButton";
 import { ChatInputTokenUsage } from "./ChatInputTokenUsage";
@@ -275,6 +295,31 @@ function appendDictationText(current: string, transcript: string): string {
     return text;
   }
   return /\s$/.test(current) ? `${current}${text}` : `${current} ${text}`;
+}
+
+// Fold two compose drafts into one, preserving both texts and de-duplicating
+// files. Used to return a queued message to the composer (abort/error, or the
+// "drop to draft" that happens when the user leaves a chat mid-generation)
+// without clobbering anything the user has since typed. (ERMAIN-470)
+function mergeComposeDrafts(
+  primary: ComposeDraftState,
+  secondary: ComposeDraftState,
+): ComposeDraftState {
+  const primaryHasText = primary.message.trim().length > 0;
+  const secondaryHasText = secondary.message.trim().length > 0;
+  const message =
+    primaryHasText && secondaryHasText
+      ? `${primary.message}\n${secondary.message}`
+      : primaryHasText
+        ? primary.message
+        : secondary.message;
+  return {
+    message,
+    attachedFiles: mergeUniqueFilesById(
+      primary.attachedFiles,
+      secondary.attachedFiles,
+    ),
+  };
 }
 
 /**
@@ -616,6 +661,126 @@ export const ChatInput = ({
 
   const [selectedFacetIds, setSelectedFacetIds] = useState<string[]>([]);
 
+  // --- Queue-the-next-message (ERMAIN-470) ---------------------------------
+  // The queued payload lives in the messageQueueStore keyed by the stable
+  // compose session (so it survives the new-chat null->real-id rename and stays
+  // isolated per chat). Reading it through a store selector keeps the chip and
+  // drain reactive without a manual invalidation token.
+  const queuedMessage = useQueuedMessage(composeSessionId);
+  const setQueuedBySessionId = useMessageQueueStore((state) => state.setQueued);
+  const clearQueuedBySessionId = useMessageQueueStore(
+    (state) => state.clearQueued,
+  );
+  const getQueuedBySessionId = useMessageQueueStore((state) => state.getQueued);
+  // A queued message is "armed" the moment its turn ends; the actual send is
+  // deferred one frame so a just-completed add-in turn's confirmation card can
+  // register and hold the drain.
+  const [isDrainArmed, setIsDrainArmed] = useState(false);
+  // Depth-1 overwrite guard: a message is already queued and the user is trying
+  // to queue another. We ask for confirmation (data-loss safety) before
+  // replacing, rather than silently clobbering the earlier draft.
+  const [queueReplacePending, setQueueReplacePending] = useState(false);
+  const hasPendingConfirmation = useHasPendingConfirmation(chatId);
+
+  // Enter-while-a-turn-is-generating queues the draft instead of sending.
+  // Gated on isPendingResponse specifically (a turn is in flight) — not the
+  // broader send lock, which also covers the initial history load that produces
+  // no completion edge to drain on. Returns true when it consumed the event.
+  const enqueueCurrentMessage = useCallback((): boolean => {
+    if (mode !== "compose" || !isPendingResponse || isAnyTokenLimitExceeded) {
+      return false;
+    }
+    // Leave the audio/dictation auto-send flows untouched.
+    if (
+      isDictating ||
+      isDictationStarting ||
+      isDictationCompleting ||
+      isCapturingAudio
+    ) {
+      return false;
+    }
+    const trimmedMessage = message.trim();
+    if (!trimmedMessage && attachedFiles.length === 0) {
+      return false;
+    }
+    // Depth-1: a message is already queued — confirm before overwriting it
+    // (data-loss safety) rather than silently replacing. Both Enter and the
+    // Send/Queue button reach this choke point, so the guard covers both.
+    if (getQueuedBySessionId(composeSessionId)) {
+      setQueueReplacePending(true);
+      return true;
+    }
+    setQueuedBySessionId(composeSessionId, {
+      message: trimmedMessage,
+      attachedFiles,
+    });
+    setMessage("");
+    handleRemoveAllFiles();
+    return true;
+  }, [
+    mode,
+    isPendingResponse,
+    isAnyTokenLimitExceeded,
+    isDictating,
+    isDictationStarting,
+    isDictationCompleting,
+    isCapturingAudio,
+    message,
+    attachedFiles,
+    getQueuedBySessionId,
+    setQueuedBySessionId,
+    composeSessionId,
+    handleRemoveAllFiles,
+  ]);
+
+  // Confirmed overwrite: replace the queued message with the current composer
+  // draft and clear the composer.
+  const commitQueueReplace = useCallback(() => {
+    const trimmedMessage = message.trim();
+    if (trimmedMessage || attachedFiles.length > 0) {
+      setQueuedBySessionId(composeSessionId, {
+        message: trimmedMessage,
+        attachedFiles,
+      });
+      setMessage("");
+      handleRemoveAllFiles();
+    }
+    setQueueReplacePending(false);
+  }, [
+    message,
+    attachedFiles,
+    setQueuedBySessionId,
+    composeSessionId,
+    handleRemoveAllFiles,
+  ]);
+
+  // Return a queued payload to the composer (chip click-to-edit, abort, error),
+  // merging with whatever the user has typed since so nothing is lost.
+  const restoreQueuedToComposer = useCallback(
+    (queued: ComposeDraftState) => {
+      const merged = mergeComposeDrafts(queued, { message, attachedFiles });
+      setMessage(merged.message);
+      setAttachedFiles(merged.attachedFiles.slice(0, maxFiles));
+      clearQueuedBySessionId(composeSessionId);
+      setIsDrainArmed(false);
+      setQueueReplacePending(false);
+    },
+    [
+      message,
+      attachedFiles,
+      maxFiles,
+      setAttachedFiles,
+      clearQueuedBySessionId,
+      composeSessionId,
+    ],
+  );
+
+  const cancelQueuedMessage = useCallback(() => {
+    clearQueuedBySessionId(composeSessionId);
+    setIsDrainArmed(false);
+    setQueueReplacePending(false);
+  }, [clearQueuedBySessionId, composeSessionId]);
+
   const facetIdsByDefault = useMemo(() => {
     return availableFacets
       .filter((facet) => facet.default_enabled)
@@ -818,7 +983,19 @@ export const ChatInput = ({
       return;
     }
 
-    saveComposeDraftBySessionId(previousSessionId, { message, attachedFiles });
+    // Leaving a chat with a queued message drops it back to a draft on that
+    // chat (ERMAIN-470): it never auto-sends in the background and reappears in
+    // the composer when the user returns.
+    const outgoingQueued = getQueuedBySessionId(previousSessionId);
+    const outgoingDraft = outgoingQueued
+      ? mergeComposeDrafts(outgoingQueued, { message, attachedFiles })
+      : { message, attachedFiles };
+    saveComposeDraftBySessionId(previousSessionId, outgoingDraft);
+    if (outgoingQueued) {
+      clearQueuedBySessionId(previousSessionId);
+      setIsDrainArmed(false);
+      setQueueReplacePending(false);
+    }
     const incoming = getComposeDraftBySessionId(composeSessionId);
     activeComposeSessionIdRef.current = composeSessionId;
     setMessage(incoming.message);
@@ -830,6 +1007,8 @@ export const ChatInput = ({
     attachedFiles,
     getComposeDraftBySessionId,
     saveComposeDraftBySessionId,
+    getQueuedBySessionId,
+    clearQueuedBySessionId,
     setAttachedFiles,
   ]);
 
@@ -1130,11 +1309,108 @@ export const ChatInput = ({
     wasPendingResponseRef.current = isPendingResponse;
 
     if (wasPendingResponse && !isPendingResponse && mode === "compose") {
+      // The turn just ended (completed, closed, aborted, or errored — the
+      // falling edge covers them all). Arm the drain if a message is queued for
+      // this session; the drain effect decides send-vs-restore and holds while
+      // a confirmation card is pending. Abort clears the queue before this fires
+      // (Stop restores it), so an aborted turn never arms. (ERMAIN-470)
+      if (getQueuedBySessionId(composeSessionId)) {
+        setIsDrainArmed(true);
+      }
       requestAnimationFrame(() => {
         textareaRef.current?.focus();
       });
     }
-  }, [isPendingResponse, mode]);
+  }, [isPendingResponse, mode, getQueuedBySessionId, composeSessionId]);
+
+  // Drain the queued message once its turn has fully finished (ERMAIN-470).
+  // Runs on the armed edge and whenever the hold inputs change (a confirmation
+  // card resolving, an error arriving). The send is deferred one frame so a
+  // just-completed add-in turn's confirmation card — which registers in a
+  // post-commit effect — can hold the drain before we commit to sending.
+  useEffect(() => {
+    if (!isDrainArmed) {
+      return;
+    }
+    const queued = getQueuedBySessionId(composeSessionId);
+    if (!queued) {
+      setIsDrainArmed(false);
+      return;
+    }
+    // A fresh turn started before we could drain — wait for its edge.
+    if (isPendingResponse) {
+      return;
+    }
+    // The turn failed — return the queued content to the composer, never send.
+    if (messagingError) {
+      restoreQueuedToComposer(queued);
+      return;
+    }
+    // Hold on a new chat's first turn until its real id has propagated. The
+    // confirmation registry is keyed by chatId (the add-in card only knows the
+    // real id), while the queue is keyed by composeSessionId which exists
+    // before chatId does — so draining while chatId is still null could send
+    // past a consent card about to register under the real id. chatId always
+    // becomes non-null after chat_created, so this only defers, never wedges.
+    if (!chatId) {
+      return;
+    }
+    // Hold while a tool-consent card is unresolved (add-in). This effect
+    // re-runs when the card resolves and hasPendingConfirmation flips false.
+    if (hasPendingConfirmation) {
+      return;
+    }
+    // Hold while the composer surface is busy (the add-in raises `disabled`
+    // during email drop/expansion and upload). Draining now would send ahead of
+    // attachments still being staged; the effect re-runs when `disabled` clears.
+    if (disabled) {
+      return;
+    }
+    // Defer past this commit's post-render effects (a just-completed add-in
+    // turn registers its confirmation card in one of them) before deciding.
+    const timer = setTimeout(() => {
+      // Re-check imperatively: a confirmation card may have registered in the
+      // tick we just waited out.
+      if (useConfirmationRegistryStore.getState().hasPending(chatId)) {
+        return;
+      }
+      const stillQueued = getQueuedBySessionId(composeSessionId);
+      if (!stillQueued) {
+        setIsDrainArmed(false);
+        return;
+      }
+      // Clear before sending so a re-render during the (async, in the add-in)
+      // onSendMessage can't re-drain the same payload.
+      clearQueuedBySessionId(composeSessionId);
+      setIsDrainArmed(false);
+      setQueueReplacePending(false);
+      // Model/facets are read live (not snapshotted at enqueue) so a selection
+      // the user changes while the message waits applies to the sent message.
+      onSendMessage(
+        stillQueued.message,
+        stillQueued.attachedFiles.length > 0
+          ? stillQueued.attachedFiles.map((file) => file.id)
+          : undefined,
+        selectedModel?.chat_provider_id,
+        selectedFacetIds,
+      );
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [
+    isDrainArmed,
+    isPendingResponse,
+    messagingError,
+    hasPendingConfirmation,
+    disabled,
+    getQueuedBySessionId,
+    composeSessionId,
+    chatId,
+    clearQueuedBySessionId,
+    restoreQueuedToComposer,
+    onSendMessage,
+    selectedModel,
+    selectedFacetIds,
+  ]);
 
   const uploadFiles = useCallback(
     async (files: File[]) => {
@@ -1288,6 +1564,25 @@ export const ChatInput = ({
       isDictationStarting ||
       isDictationCompleting);
 
+  // Like canSendMessage but for queuing the next message DURING a streaming
+  // turn (ERMAIN-470): valid only while a turn is in flight, gated on real
+  // content, and suppressed during any audio/dictation capture (which own their
+  // own send path) so the trailing controls never exceed Stop + one action.
+  const canQueueMessage =
+    mode === "compose" &&
+    isPendingResponse &&
+    hasComposeContent &&
+    !isAnyTokenLimitExceeded &&
+    !disabled &&
+    !isUploading &&
+    !isRecording &&
+    !hasIncompleteAudioTranscription &&
+    !isDictationCompleting &&
+    !isConversationalAudioActive &&
+    !isDictating &&
+    !isDictationStarting &&
+    !isCapturingAudio;
+
   const shouldShowAudioModeSelector =
     audioConversationalEnabled &&
     audioTranscriptionEnabled &&
@@ -1300,7 +1595,11 @@ export const ChatInput = ({
     (audioConversationalEnabled || audioTranscriptionEnabled) &&
     mode === "compose" &&
     (isAudioMode ||
-      (!hasComposeContent &&
+      // Don't offer to START an audio mode while a response streams — the
+      // trailing slot is Stop (+ Send/Queue). An already-active session keeps
+      // its own live control (render further up). (ERMAIN-470)
+      (!isPendingResponse &&
+        !hasComposeContent &&
         !isRecording &&
         !isRecordingUpload &&
         !isCapturingAudio &&
@@ -1942,6 +2241,67 @@ export const ChatInput = ({
           </Alert>
         )}
 
+        {/* Queued next message: auto-sends when the current turn finishes.
+            Geometry comes from the same message tokens as the sibling error
+            Alert / attachment preview; `data-ui` lets kits restyle it. */}
+        {queuedMessage && (
+          <div
+            className="theme-transition mb-2 flex items-center gap-2 border border-[var(--theme-border-chat-input)] bg-theme-bg-secondary text-sm"
+            style={{
+              borderRadius: "var(--theme-radius-message)",
+              padding:
+                "var(--theme-spacing-message-padding-y) var(--theme-spacing-message-padding-x)",
+            }}
+            data-ui="chat-input-queued-message"
+            data-testid="chat-input-queued-message"
+            role="status"
+            aria-live="polite"
+          >
+            <span className="shrink-0 text-theme-fg-muted">
+              {t`Queued — sends when response finishes`}
+            </span>
+            <button
+              type="button"
+              onClick={() => restoreQueuedToComposer(queuedMessage)}
+              className="theme-transition focus-ring-tight flex min-w-0 flex-1 items-center gap-1 text-left text-theme-fg-primary hover:underline"
+              aria-label={t`Edit queued message`}
+              title={t`Edit queued message`}
+              data-testid="chat-input-queued-message-edit"
+            >
+              <EditIcon className="size-3.5 shrink-0" />
+              <span className="truncate">
+                {queuedMessage.message.trim() ||
+                  plural(queuedMessage.attachedFiles.length, {
+                    one: "# attachment ready to send",
+                    other: "# attachments ready to send",
+                  })}
+              </span>
+            </button>
+            <Button
+              variant="icon-only"
+              size="sm"
+              icon={<CloseIcon className="size-4" />}
+              onClick={cancelQueuedMessage}
+              aria-label={t`Cancel queued message`}
+              data-testid="chat-input-queued-message-cancel"
+            />
+          </div>
+        )}
+
+        {/* Depth-1 overwrite guard: replacing a queued message is a data-loss
+            action, so confirm it (danger) rather than silently clobbering.
+            Shared across web + add-in via ModalBase. (ERMAIN-470) */}
+        <ConfirmationDialog
+          isOpen={queueReplacePending && queuedMessage !== null}
+          onClose={() => setQueueReplacePending(false)}
+          onConfirm={commitQueueReplace}
+          title={t`Replace the queued message?`}
+          message={t`Only one message can be queued. Replacing discards the message you queued earlier.`}
+          confirmButtonText={t`Replace`}
+          cancelButtonText={t`Keep queued`}
+          confirmButtonVariant="danger"
+        />
+
         <div
           className={clsx(
             "w-full",
@@ -1974,6 +2334,12 @@ export const ChatInput = ({
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
+                  // While a turn is generating, Enter queues the draft to
+                  // auto-send when the turn finishes (ERMAIN-470); otherwise it
+                  // submits normally.
+                  if (enqueueCurrentMessage()) {
+                    return;
+                  }
                   handleSubmit(e);
                 }
               }}
@@ -2227,6 +2593,12 @@ export const ChatInput = ({
                 !isAudioMode &&
                 !isRecording &&
                 !isRecordingUpload &&
+                // Keep the trailing controls at ≤2 (ERMAIN-470): while a
+                // response streams with composer content, the Send/Queue button
+                // takes this slot, so hide the idle dictation start — but keep
+                // the live waveform, which is its own stop control.
+                ((isCapturingAudio && isDictating) ||
+                  !(hasComposeContent && isPendingResponse)) &&
                 // Spinner until capture is live; the waveform appears only
                 // once real audio is flowing.
                 (isCapturingAudio && isDictating ? (
@@ -2236,7 +2608,6 @@ export const ChatInput = ({
                     disabled={
                       disabled ||
                       isLoading ||
-                      isPendingResponse ||
                       isUploading ||
                       isFileButtonProcessing ||
                       isAnyTokenLimitExceeded
@@ -2271,7 +2642,6 @@ export const ChatInput = ({
                     disabled={
                       disabled ||
                       isLoading ||
-                      isPendingResponse ||
                       isUploading ||
                       isFileButtonProcessing ||
                       isDictationCompleting ||
@@ -2295,15 +2665,43 @@ export const ChatInput = ({
                   />
                 ))}
               {isPendingResponse ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  icon={<StopIcon />}
-                  onClick={cancelMessage}
-                  data-testid="chat-input-stop-generation"
-                  aria-label={t`Stop`}
-                />
+                <>
+                  {/* Queue the next message while the response streams — same
+                      arrow as Send; the tooltip and the "Queued…" chip explain
+                      the deferred behavior. Routes through enqueueCurrentMessage
+                      (like Enter), NOT a submit, which handleSubmit would no-op
+                      during streaming. (ERMAIN-470) */}
+                  {canQueueMessage && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      icon={<ArrowUpIcon className="size-5" />}
+                      onClick={() => enqueueCurrentMessage()}
+                      data-testid="chat-input-queue-message"
+                      aria-label={t`Queue message`}
+                      title={t`Queue — sends when the response finishes`}
+                    />
+                  )}
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    icon={<StopIcon />}
+                    onClick={() => {
+                      // Stopping never auto-sends: return any queued draft to the
+                      // composer, then abort. Clearing the queue here also means
+                      // the completion edge won't arm a drain. (ERMAIN-470)
+                      const queued = getQueuedBySessionId(composeSessionId);
+                      if (queued) {
+                        restoreQueuedToComposer(queued);
+                      }
+                      cancelMessage();
+                    }}
+                    data-testid="chat-input-stop-generation"
+                    aria-label={t`Stop`}
+                  />
+                </>
               ) : showAudioModeButton ? (
                 isConversationalAudioActive ? (
                   <ChatInputAudioModeButton

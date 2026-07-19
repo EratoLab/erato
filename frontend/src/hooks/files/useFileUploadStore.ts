@@ -2,6 +2,8 @@
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 
+import { mergeUniqueFilesById } from "@/utils/file/mergeUniqueFilesById";
+
 import type { UploadError } from "./errors";
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
@@ -60,23 +62,6 @@ const initialState = {
   error: null,
   silentChatId: null,
 };
-
-function mergeUniqueFilesById(
-  existingFiles: FileUploadItem[],
-  newFiles: FileUploadItem[],
-) {
-  const seenFileIds = new Set(existingFiles.map((file) => file.id));
-  const uniqueNewFiles = newFiles.filter((file) => {
-    if (seenFileIds.has(file.id)) {
-      return false;
-    }
-
-    seenFileIds.add(file.id);
-    return true;
-  });
-
-  return [...existingFiles, ...uniqueNewFiles];
-}
 
 /**
  * Zustand store for file uploads
