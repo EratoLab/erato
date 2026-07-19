@@ -2262,13 +2262,21 @@ export const ChatInput = ({
             role="status"
             aria-live="polite"
           >
-            <span className="shrink-0 text-theme-fg-muted">
+            {/* Both the label and the message yield space as the row narrows
+                (the add-in's ~320px task pane, where this same component
+                renders). The label is boilerplate and shrinks from its natural
+                width; `flex-auto` — not `flex-1` — keeps the message's own
+                width in the shrink calculation, so it can't collapse to zero
+                and leave a chip that says something is queued but not what.
+                Matches the add-in's sibling status chips, which truncate text
+                and reserve `shrink-0` for fixed-size affordances. */}
+            <span className="min-w-0 truncate text-theme-fg-muted">
               {t`Queued — sends when response finishes`}
             </span>
             <button
               type="button"
               onClick={() => restoreQueuedToComposer(queuedMessage)}
-              className="theme-transition focus-ring-tight flex min-w-0 flex-1 items-center gap-1 text-left text-theme-fg-primary hover:underline"
+              className="theme-transition focus-ring-tight flex min-w-0 flex-auto items-center gap-1 text-left text-theme-fg-primary hover:underline"
               aria-label={t`Edit queued message`}
               title={t`Edit queued message`}
               data-testid="chat-input-queued-message-edit"
@@ -2288,6 +2296,7 @@ export const ChatInput = ({
               icon={<CloseIcon className="size-4" />}
               onClick={cancelQueuedMessage}
               aria-label={t`Cancel queued message`}
+              className="shrink-0"
               data-testid="chat-input-queued-message-cancel"
             />
           </div>
