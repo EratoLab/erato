@@ -89,6 +89,8 @@ struct GeneratedImage {
         "chat.erato/file_content_field" = true
     ))]
     data_base64: String,
+    #[schemars(extend("chat.erato/file_name_field" = true))]
+    file_name: String,
     width: u32,
     height: u32,
     mime_type: String,
@@ -423,6 +425,7 @@ impl ImageGenerationServer {
         let response = ImageGenerationResponse {
             images: vec![GeneratedImage {
                 data_base64,
+                file_name: "generated-cat.png".to_string(),
                 width: 500,
                 height: 500,
                 mime_type: "image/png".to_string(),

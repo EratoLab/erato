@@ -45,6 +45,79 @@ Erato's MCP integration provides the following capabilities:
 - Error handling and response processing
 - Full audit trail of tool calls in chat history
 
+### File support
+
+Erato extends MCP tool input and output schemas with annotations for transferring files without putting their Base64 contents into the model context.
+
+In the future, file transfers are planned to use the [SEP-2631 mechanism](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2631) once it has been accepted.
+
+#### File-content fields
+
+Mark a string field containing Base64-encoded file data with `chat.erato/file_content_field`:
+
+```json
+{
+  "type": "string",
+  "contentEncoding": "base64",
+  "chat.erato/file_content_field": true
+}
+```
+
+`contentEncoding` must be `base64` for input fields. It should also be specified for output fields to accurately describe their representation.
+
+The annotations can be used in nested object properties, arrays, local schema references, and `oneOf`, `anyOf`, or `allOf` schemas.
+
+#### File inputs
+
+For a marked input field, the model works with an Erato file URI instead of Base64 data:
+
+```text
+erato-file://<file_upload_id>
+```
+
+Before exposing the tool to the model, Erato adds this URI requirement to the field description and removes the custom annotations that model providers may not support. When the model calls the tool, Erato resolves the URI to an accessible file upload, reads the file from its configured storage provider, Base64-encodes it, and sends the resulting string to the MCP server.
+
+The MCP server therefore continues to receive the Base64 value declared by its original input schema; the URI is only used between the model and Erato.
+
+#### File outputs
+
+A marked output field must be part of an object that also contains a sibling `mime_type` or `content_type` string. The MCP tool result must provide the object as JSON in text content.
+
+An optional sibling string field can supply the file's display name by carrying the `chat.erato/file_name_field` annotation. The field name itself is arbitrary:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "data_base64": {
+      "type": "string",
+      "contentEncoding": "base64",
+      "chat.erato/file_content_field": true
+    },
+    "name": {
+      "type": "string",
+      "chat.erato/file_name_field": true
+    },
+    "mime_type": {
+      "type": "string"
+    }
+  },
+  "required": ["data_base64", "mime_type"]
+}
+```
+
+For each marked output, Erato:
+
+1. Decodes and stores the Base64 data.
+2. Creates a file upload associated with the current chat.
+3. Uses the annotated sibling value as the display name, or generates a name when the annotation or value is absent.
+4. Replaces the Base64 value in the tool result with an `erato-file://<file_upload_id>` URI.
+5. Adds a file pointer to the assistant message so the client can render the file.
+
+MCP-provided display names are not used as storage paths. At most one sibling field may be marked as the file name for a file-content field.
+
+The `x-chat.erato/file_content_field` and `x-chat.erato/file_name_field` aliases are also accepted for compatibility. File-output processing currently supports image MIME types only.
+
 ### Multiple Server Support
 
 - Connect to multiple MCP servers simultaneously
