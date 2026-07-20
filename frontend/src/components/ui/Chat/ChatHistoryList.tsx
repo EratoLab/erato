@@ -20,10 +20,6 @@ import {
 import type { ChatSession } from "@/types/chat";
 
 const logger = createLogger("UI", "ChatHistoryList");
-const sidebarListStyle = {
-  padding:
-    "calc(var(--theme-spacing-shell-padding-y) / 2) calc(var(--theme-spacing-shell-padding-x) / 2)",
-} as const;
 const sidebarRowLinkClassName =
   "focus-ring-tight block rounded-[var(--theme-radius-shell)]";
 
@@ -285,7 +281,6 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
           "flex w-full min-w-0 flex-col gap-1",
           className,
         )}
-        style={sidebarListStyle}
         data-ui="chat-history-list"
       >
         {sessions.map((session) => (
@@ -343,8 +338,7 @@ export const ChatHistoryListSkeleton = ({
 }) => (
   <div
     data-testid="chat-history-skeleton"
-    className="flex w-full min-w-0 flex-col gap-1 overflow-y-auto bg-[var(--theme-shell-sidebar)]"
-    style={sidebarListStyle}
+    className="chat-history-list-geometry flex w-full min-w-0 flex-col gap-1 overflow-y-auto bg-[var(--theme-shell-sidebar)]"
   >
     {Array.from({ length: 5 }, (_, i) => (
       <div

@@ -20,11 +20,8 @@ describe("ModalBase", () => {
     const overlay = document.querySelector('[data-ui="modal-overlay"]');
 
     expect(dialog).toHaveAttribute("data-ui", "modal-shell");
-    expect(dialog).toHaveStyle({
-      backgroundColor: "var(--theme-shell-modal)",
-      borderRadius: "var(--theme-radius-modal)",
-      boxShadow: "var(--theme-elevation-modal)",
-    });
+    expect(dialog).toHaveClass("modal-shell-skin");
+    expect(dialog.getAttribute("style") ?? "").toBe("");
     expect(dialog.className).toContain("focus-ring");
     expect(dialog.className).toContain("modal-shell-frame-geometry");
     expect(dialog.className).toContain("w-full");
@@ -37,9 +34,8 @@ describe("ModalBase", () => {
       "top: var(--theme-spacing-modal-padding)",
     );
     expect(overlay).toBeTruthy();
-    expect(overlay?.getAttribute("style")).toContain(
-      "background-color: var(--theme-overlay-modal)",
-    );
+    expect(overlay).toHaveClass("modal-overlay-skin");
+    expect(overlay?.getAttribute("style") ?? "").toBe("");
     expect(overlay?.className).not.toContain("backdrop-blur-sm");
   });
 });

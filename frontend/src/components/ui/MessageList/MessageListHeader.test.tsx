@@ -15,8 +15,8 @@ describe("MessageListHeader", () => {
       />,
     );
 
-    expect(screen.getByTestId("chat-header-shell")).toHaveStyle({
-      backgroundColor: "var(--theme-shell-chat-header)",
-    });
+    expect(screen.getByTestId("chat-header-shell")).toHaveClass(
+      "chat-header-skin",
+    );
   });
 });

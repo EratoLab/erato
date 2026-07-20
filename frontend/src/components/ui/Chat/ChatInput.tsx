@@ -1984,12 +1984,6 @@ export const ChatInput = ({
     maxWidth: "var(--theme-layout-chat-input-max-width)",
   } as const;
 
-  const inputShellStyle = {
-    backgroundColor: "var(--theme-shell-chat-input)",
-    borderRadius: "var(--theme-radius-input)",
-    boxShadow: "var(--theme-elevation-input)",
-  } as const;
-
   return (
     <div className="mx-auto w-full" style={shellWrapperStyle}>
       <form
@@ -2221,8 +2215,8 @@ export const ChatInput = ({
             "theme-transition focus-within:border-[var(--theme-border-chat-input-focus)]",
             "flex flex-col",
             "chat-input-shell-geometry",
+            "chat-input-shell-skin",
           )}
-          style={inputShellStyle}
           data-ui="chat-input-shell"
         >
           {ChatInputAttachmentPreview && (

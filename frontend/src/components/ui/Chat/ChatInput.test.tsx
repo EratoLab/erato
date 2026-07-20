@@ -785,13 +785,8 @@ describe("ChatInput", () => {
     expect(container.firstElementChild).toHaveStyle({
       maxWidth: "var(--theme-layout-chat-input-max-width)",
     });
-    expect(container.querySelector('[data-ui="chat-input-shell"]')).toHaveStyle(
-      {
-        backgroundColor: "var(--theme-shell-chat-input)",
-        borderColor: "var(--theme-border-chat-input)",
-        borderRadius: "var(--theme-radius-input)",
-        boxShadow: "var(--theme-elevation-input)",
-      },
+    expect(container.querySelector('[data-ui="chat-input-shell"]')).toHaveClass(
+      "chat-input-shell-skin",
     );
     expect(
       container.querySelector('[data-ui="chat-input-shell"]')?.className,

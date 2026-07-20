@@ -100,21 +100,21 @@ describe("ChatHistorySidebar", () => {
 
     const sidebar = container.querySelector('[data-ui="sidebar"]');
 
+    // Surface from the class so theme.css can reach it; only the computed
+    // width stays inline.
+    expect(sidebar).toHaveClass("sidebar-skin");
     expect(sidebar).toHaveStyle({
-      backgroundColor: "var(--theme-shell-sidebar)",
-      borderRightColor:
-        "var(--theme-shell-sidebar-divider-color, var(--theme-border-divider))",
-      boxShadow: "var(--theme-elevation-shell)",
       width: "var(--theme-layout-sidebar-width)",
     });
-    expect(container.querySelector('[data-ui="sidebar-header"]')).toHaveStyle({
-      padding:
-        "calc(var(--theme-spacing-shell-padding-y) / 2) calc(var(--theme-spacing-shell-padding-x) / 2)",
-    });
-    expect(container.querySelector('[data-ui="sidebar-footer"]')).toHaveStyle({
-      padding:
-        "calc(var(--theme-spacing-shell-padding-y) / 2) calc(var(--theme-spacing-shell-padding-x) / 2)",
-    });
+    for (const property of ["background-color", "box-shadow"]) {
+      expect(sidebar?.getAttribute("style") ?? "").not.toContain(property);
+    }
+    expect(container.querySelector('[data-ui="sidebar-header"]')).toHaveClass(
+      "sidebar-section-skin",
+    );
+    expect(container.querySelector('[data-ui="sidebar-footer"]')).toHaveClass(
+      "sidebar-section-skin",
+    );
     expect(screen.getByTestId("history-list")).toBeInTheDocument();
   });
 
