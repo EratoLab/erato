@@ -1588,14 +1588,9 @@ export function useChatMessaging(
     ],
   );
 
-  /**
-   * Take an edit's or regenerate's superseded turns out of the render tree.
-   *
-   * Hiding covers the API snapshot without destroying it, so a request that
-   * fails before streaming is restored by the refetch (which clears hidden ids
-   * anyway). Locally-held user messages are not covered by the hidden filter,
-   * so those are removed outright.
-   */
+  // Hiding keeps the API snapshot intact so a failed request is restored by the
+  // refetch, but `buildRenderableMessages` applies hidden ids to API messages
+  // only, so locally-held user messages have to be removed outright.
   const dropSupersededMessages = useCallback(
     (supersededMessageIds: string[], targetStreamKey: string) => {
       hideMessageIds(supersededMessageIds, targetStreamKey);
@@ -1618,9 +1613,8 @@ export function useChatMessaging(
         return;
       }
 
-      // Read the order from the store rather than the render closure, so this
-      // callback does not need `messages`/`messageOrder` as deps — those change
-      // on every stream chunk.
+      // Read from the store, not the render closure, so this callback does not
+      // depend on `messages`/`messageOrder`, which change on every stream chunk.
       const supersededMessageIds = collectSupersededMessageIds(
         useMessagingStore.getState().getRenderableMessages(streamKey),
         messageId,
@@ -1785,9 +1779,6 @@ export function useChatMessaging(
         setSSECleanupForKey(streamKey, null);
       }
 
-      // Keep the old assistant — and every turn after it, which the backend
-      // deactivates too — out of the render tree while the replacement branch
-      // is streaming, without mutating the cached API snapshot.
       dropSupersededMessages(
         collectSupersededMessageIds(
           useMessagingStore.getState().getRenderableMessages(streamKey),

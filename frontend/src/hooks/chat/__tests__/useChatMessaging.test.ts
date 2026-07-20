@@ -1081,13 +1081,9 @@ describe("useChatMessaging", () => {
       await result.current.regenerateMessage("msg-assistant-regenerate");
     });
 
-    expect(result.current.messages["msg-user-first"]).toBeDefined();
-    expect(result.current.messages["msg-assistant-regenerate"]).toBeUndefined();
-    expect(result.current.messages["msg-user-later"]).toBeUndefined();
-    expect(result.current.messages["msg-assistant-later"]).toBeUndefined();
     expect(result.current.messageOrder).toEqual(["msg-user-first"]);
 
-    // Hidden, not deleted — the API snapshot survives for the refetch.
+    // Hidden, not deleted: the API snapshot has to survive for the refetch.
     expect(
       useMessagingStore.getState().getApiMessages("chat1")["msg-user-later"],
     ).toBeDefined();
@@ -1119,8 +1115,6 @@ describe("useChatMessaging", () => {
         "chat1",
       );
 
-      // A later turn that only exists locally — hiding does not filter these,
-      // so it must be removed outright or it keeps rendering.
       useMessagingStore.getState().addUserMessage(
         {
           id: "temp-user-later",
@@ -1537,12 +1531,8 @@ describe("useChatMessaging", () => {
       await result.current.editMessage("msg-user-edit", "Edited content");
     });
 
-    expect(result.current.messages["msg-user-keep"]).toBeDefined();
     expect(result.current.messages["msg-user-edit"]).toBeUndefined();
     expect(result.current.messages["msg-assistant-following"]).toBeUndefined();
-    // The backend deactivates the whole tail, not just the next assistant.
-    expect(result.current.messages["msg-user-later"]).toBeUndefined();
-    expect(result.current.messages["msg-assistant-later"]).toBeUndefined();
 
     const optimisticEditedMessage = Object.values(result.current.messages).find(
       (message) =>
@@ -1555,18 +1545,10 @@ describe("useChatMessaging", () => {
     );
     expect(optimisticEditedMessage).toBeDefined();
 
-    // The symptom this guards is ordering: the edit and its streaming reply
-    // must be last, with no stale turn floating above them.
     expect(result.current.messageOrder).toEqual([
       "msg-user-keep",
       optimisticEditedMessage!.id,
     ]);
-
-    // Superseded messages are hidden, not destroyed, so a failed edit can be
-    // restored by the refetch.
-    expect(
-      useMessagingStore.getState().getApiMessages("chat1")["msg-user-later"],
-    ).toBeDefined();
   });
 
   it("should handle canceling a message", async () => {

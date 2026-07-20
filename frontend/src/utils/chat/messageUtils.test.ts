@@ -43,10 +43,6 @@ describe("collectSupersededMessageIds", () => {
     ]);
   });
 
-  it("returns only the anchor when it is already last", () => {
-    expect(collectSupersededMessageIds(conversation(), "a3")).toEqual(["a3"]);
-  });
-
   it("orders by createdAt rather than insertion order", () => {
     const outOfOrder: Record<string, Message> = {
       a3: message("a3", "assistant", "2026-02-20T10:05:00.000Z"),

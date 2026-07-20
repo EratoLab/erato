@@ -561,10 +561,6 @@ export const useMessagingStore = create<MessagingStore>()(
             "messaging/clearUserMessages",
           );
         },
-        // New method that only clears messages that are not in sending state
-        // Superseded turns must be dropped from the local user messages as
-        // well as hidden: `buildRenderableMessages` applies hidden ids to API
-        // messages only, so a locally-held user message would keep rendering.
         removeUserMessages: (messageIds, streamKey) =>
           set(
             (prev) => {
@@ -603,6 +599,7 @@ export const useMessagingStore = create<MessagingStore>()(
             false,
             "messaging/removeUserMessages",
           ),
+        // New method that only clears messages that are not in sending state
         clearCompletedUserMessages: (streamKey) => {
           set(
             (prev) => {

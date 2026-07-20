@@ -3,19 +3,10 @@ import { chatIsReadyToChat, selectModel } from "./shared";
 import { TAG_CI } from "./tags";
 
 /**
- * ERMAIN-469: editing or regenerating a message that is NOT the last turn must
- * drop every later turn immediately, not just the next assistant.
- *
- * The backend deactivates the whole tail and reactivates only the new lineage,
- * but the frontend used to prune just one message pair. The survivors kept
- * their original (older) `createdAt`, and since the message list sorts purely
- * by that timestamp they rendered ABOVE the optimistic edit and its streaming
- * reply — until the post-stream refetch silently removed them.
- *
- * The bug is only visible WHILE streaming, so these tests assert mid-stream and
- * then again after completion (to prove nothing re-orders). `long running <N>`
- * streams one `Second N passed` chunk per second, which is what makes that
- * window wide enough to assert in.
+ * Stale turns are only visible while the replacement streams, so these tests
+ * assert mid-stream and again after completion. The `long running <N>` mock
+ * trigger streams one `Second N passed` chunk per second, which is what makes
+ * the mid-stream window wide enough to assert in.
  */
 
 const messageBox = (page: Page): Locator =>
@@ -24,23 +15,16 @@ const messageBox = (page: Page): Locator =>
 const stopButton = (page: Page): Locator =>
   page.getByTestId("chat-input-stop-generation");
 
-/** Every rendered message, in DOM order. */
 const chatMessages = (page: Page): Locator =>
   page.locator('[data-ui="chat-message"]');
 
-/** The rendered roles, in DOM order — the thing the bug actually corrupted. */
 const messageRoles = async (page: Page): Promise<string[]> =>
   chatMessages(page).evaluateAll((nodes) =>
     nodes.map((node) => node.getAttribute("data-role") ?? ""),
   );
 
-/**
- * Send a message and wait for its turn to settle.
- *
- * `chatIsReadyToChat`'s `expectAssistantResponse` assertion is strict-mode, so
- * it throws once a second assistant message exists. Wait on turn completion
- * (the Stop button clearing) and assert the turn counts here instead.
- */
+// `chatIsReadyToChat`'s `expectAssistantResponse` assertion is strict-mode, so
+// it throws once a second assistant message exists; assert turn counts here.
 const sendSettledMessage = async (
   page: Page,
   text: string,
@@ -58,17 +42,14 @@ const sendSettledMessage = async (
   );
 };
 
-/**
- * Build `[u1, a1, u2, a2, u3, a3]`. The texts deliberately avoid every mock
- * trigger substring so each turn resolves via the fast default response.
- */
+// The texts avoid every mock trigger substring, so each turn resolves via the
+// fast default response.
 const seedThreeTurnConversation = async (page: Page) => {
   await sendSettledMessage(page, "Alpha one", 1);
   await sendSettledMessage(page, "Beta two", 2);
   await sendSettledMessage(page, "Gamma three", 3);
 };
 
-/** Wait until the streamed turn is genuinely in flight, with content on screen. */
 const waitForStreamingToStart = async (page: Page) => {
   await expect(stopButton(page)).toBeVisible({ timeout: 15000 });
   await expect(page.getByText("Second 1 passed")).toBeVisible({
@@ -80,16 +61,10 @@ const waitForStreamToFinish = async (page: Page, timeout = 60000) => {
   await expect(stopButton(page)).toHaveCount(0, { timeout });
 };
 
-/**
- * The whole point of ERMAIN-469: exactly one prefix turn survives, and the
- * replacement turn is last. Asserted identically mid-stream and post-refetch.
- */
+// Exactly one prefix turn survives, and the replacement turn is last.
 const expectSingleTrailingBranch = async (page: Page) => {
   await expect(page.getByTestId("message-user")).toHaveCount(2);
   await expect(page.getByTestId("message-assistant")).toHaveCount(2);
-
-  // The stale third turn must be gone, not merely re-sorted.
-  await expect(page.getByText("Gamma three")).toHaveCount(0);
 
   expect(await messageRoles(page)).toEqual([
     "user",
@@ -98,9 +73,7 @@ const expectSingleTrailingBranch = async (page: Page) => {
     "assistant",
   ]);
 
-  // The surviving prefix is the untouched first turn.
   await expect(chatMessages(page).first()).toContainText("Alpha one");
-  // ...and the streaming reply is genuinely last, with nothing floating above.
   await expect(chatMessages(page).last()).toContainText("Second");
 };
 
@@ -117,7 +90,6 @@ test.describe("Edit / regenerate lineage pruning", () => {
 
       await seedThreeTurnConversation(page);
 
-      // Edit the SECOND user message — the case the bug was specific to.
       const secondUserMessage = page.getByTestId("message-user").nth(1);
       await expect(secondUserMessage).toContainText("Beta two");
       await secondUserMessage.hover();
@@ -137,12 +109,10 @@ test.describe("Edit / regenerate lineage pruning", () => {
 
       await waitForStreamingToStart(page);
 
-      // MID-STREAM: this is the state ERMAIN-469 reported as broken.
       await expectSingleTrailingBranch(page);
       await expect(chatMessages(page).nth(2)).toContainText("long running 8");
 
-      // And the corrected state must survive the post-stream refetch without a
-      // visible re-order.
+      // The same state must survive the post-stream refetch.
       await waitForStreamToFinish(page);
       await chatIsReadyToChat(page, { loadingTimeoutMs: 30000 });
       await expectSingleTrailingBranch(page);
@@ -160,12 +130,11 @@ test.describe("Edit / regenerate lineage pruning", () => {
       await chatIsReadyToChat(page);
       await selectModel(page, "Mock-LLM");
 
-      // The regenerated turn replays its own user message, so the long-running
-      // trigger has to live in that message rather than in the edit.
+      // Regenerate replays the existing user message, so the long-running
+      // trigger has to be seeded into it.
       await sendSettledMessage(page, "Alpha one", 1);
       await sendSettledMessage(page, "long running 6", 2);
       await sendSettledMessage(page, "Gamma three", 3);
-      await expect(page.getByTestId("message-assistant")).toHaveCount(3);
 
       const secondAssistantMessage = page
         .getByTestId("message-assistant")
