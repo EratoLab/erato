@@ -11,7 +11,7 @@ import type { ChatAddMenuExtraContentProps } from "@erato/frontend/library";
 const headerClassName =
   "px-3 pb-1 pt-2 text-xs font-medium uppercase tracking-wide text-theme-fg-muted";
 const rowClassName =
-  "flex w-full items-start justify-between gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-theme-bg-hover disabled:cursor-not-allowed disabled:opacity-50";
+  "flex w-full items-start justify-between gap-3 rounded-[var(--theme-radius-control)] px-3 py-2 text-left transition-colors hover:bg-theme-bg-hover disabled:cursor-not-allowed disabled:opacity-50";
 
 function formatFileSize(size: number): string {
   if (!Number.isFinite(size) || size <= 0) {

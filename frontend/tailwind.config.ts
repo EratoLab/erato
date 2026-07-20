@@ -2,7 +2,17 @@ import type { Config } from "tailwindcss";
 import defaultTheme from "tailwindcss/defaultTheme";
 
 export default {
-  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+    // The add-in ships no Tailwind build of its own — it renders against this
+    // stylesheet (`@erato/frontend/library.css`). Without this glob its classes
+    // only resolve when the frontend happens to use the same ones, which fails
+    // silently: `border-t-theme-fg-primary` (AddinChatInput's spinner) was
+    // never emitted. A missing directory matches nothing, so a standalone
+    // frontend build is unaffected.
+    "../office-addin/src/**/*.{js,ts,jsx,tsx}",
+  ],
   theme: {
     extend: {
       fontFamily: {

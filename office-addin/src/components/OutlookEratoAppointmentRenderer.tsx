@@ -219,7 +219,7 @@ export function OutlookEratoAppointmentRenderer({
   // visible but unstyled as an artifact.
   if (!details) {
     return (
-      <div className="my-2 rounded-lg border border-theme-border bg-theme-bg-secondary p-3">
+      <div className="my-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary p-3">
         <pre className="whitespace-pre-wrap break-words text-xs text-theme-fg-muted">
           {content}
         </pre>
@@ -231,7 +231,7 @@ export function OutlookEratoAppointmentRenderer({
   const attendeesText = formatAttendees(details);
 
   return (
-    <div className="my-2 rounded-lg border border-theme-border bg-theme-bg-secondary p-3">
+    <div className="my-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary p-3">
       <dl className="mb-2 space-y-0.5 text-sm">
         <div className="flex gap-1">
           <dt className="font-medium text-theme-fg-primary">

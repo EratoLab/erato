@@ -340,7 +340,7 @@ export function OutlookEratoEmailRenderer({
   const confirmRecipientCount = confirmListedEntries.length;
 
   return (
-    <div className="my-2 rounded-lg border border-theme-border bg-theme-bg-secondary p-3">
+    <div className="my-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary p-3">
       {isHtml ? (
         <div
           className="mb-2 text-sm [&_blockquote]:border-l-2 [&_blockquote]:border-theme-border [&_blockquote]:pl-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-5"
