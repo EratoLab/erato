@@ -1,20 +1,7 @@
 import { useCallback } from "react";
 
 import type { ChatMessage } from "@/components/ui/MessageList/MessageList";
-import type {
-  ContentPart,
-  FileUploadItem,
-} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { MessageAction } from "@/types/message-controls";
-
-export type EditMessageState =
-  | { mode: "compose" }
-  | {
-      mode: "edit";
-      messageId: string;
-      initialContent: ContentPart[];
-      initialFiles: FileUploadItem[];
-    };
 
 interface UseStandardMessageActionsOptions {
   messages: Record<string, ChatMessage>;

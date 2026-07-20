@@ -7,7 +7,6 @@ import {
   useUploadFeature,
   type ChatInputControlsHandle,
   type ChatModel,
-  type ContentPart,
   type FileAttachmentGroup,
   type FileAttachmentGroupItem,
   type ActionFacetRequest,
@@ -77,13 +76,6 @@ interface AddinChatInputProps {
      */
     sendItemIdentity?: string | null,
   ) => void;
-  onEditMessage?: (
-    messageId: string,
-    newContent: string,
-    replaceInputFileIds?: string[],
-    selectedFacetIds?: string[],
-  ) => void;
-  onCancelEdit?: () => void;
   handleFileAttachments?: (files: FileUploadItem[]) => void;
   isLoading?: boolean;
   disabled?: boolean;
@@ -92,10 +84,6 @@ interface AddinChatInputProps {
   onFilePreview?: (file: FileUploadItem) => void;
   chatId?: string | null;
   assistantId?: string;
-  mode?: "compose" | "edit";
-  editMessageId?: string;
-  editInitialContent?: ContentPart[];
-  editInitialFiles?: FileUploadItem[];
   initialModel?: ChatModel | null;
   initialSelectedFacetIds?: string[];
   onFacetSelectionChange?: (selectedFacetIds: string[]) => void;
@@ -155,7 +143,6 @@ export const AddinChatInput = forwardRef<
     chatId,
     className,
     showSuggestedEmailSource = false,
-    editInitialFiles,
     isExpandingDroppedEmails = false,
     onEmailSourceDropsSent,
     lastSchedulingSignalAt = null,
@@ -923,7 +910,6 @@ export const AddinChatInput = forwardRef<
         className="p-2 sm:p-4"
         showControls={true}
         showFileTypes={true}
-        initialFiles={editInitialFiles ?? []}
         chatId={chatId}
         {...chatInputProps}
         uploadFiles={chatInputProps.uploadFiles}

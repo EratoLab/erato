@@ -1206,60 +1206,6 @@ describe("ChatInput", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("blocks edit send when attached audio transcription is incomplete", async () => {
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false },
-        mutations: { retry: false },
-      },
-    });
-
-    mockUseChatInputHandlers.mockReturnValue({
-      attachedFiles: [
-        {
-          id: "audio-file-2",
-          filename: "voicemail.wav",
-          download_url: "/files/voicemail.wav",
-          preview_url: undefined,
-          file_contents_unavailable_missing_permissions: false,
-          file_capability: {
-            extensions: ["wav"],
-            id: "audio",
-            mime_types: ["audio/wav"],
-            operations: ["extract_text"],
-          },
-          audio_transcription: {
-            status: "processing",
-          },
-        },
-      ] as unknown as FileUploadItem[],
-      fileError: null,
-      setFileError: vi.fn(),
-      handleFilesUploaded: vi.fn(),
-      handleRemoveFile: vi.fn(),
-      handleRemoveAllFiles: vi.fn(),
-      setAttachedFiles: vi.fn(),
-      createSubmitHandler: () => (event: FormEvent) => event.preventDefault(),
-    });
-
-    const onEditMessage = vi.fn();
-    const { i18n } = await import("@lingui/core");
-    render(
-      <QueryClientProvider client={queryClient}>
-        <I18nProvider i18n={i18n}>
-          <ChatInput
-            onSendMessage={vi.fn()}
-            mode="edit"
-            onEditMessage={onEditMessage}
-            editMessageId="msg-1"
-          />
-        </I18nProvider>
-      </QueryClientProvider>,
-    );
-
-    expect(screen.getByTestId("chat-input-save-edit")).toBeDisabled();
-  });
-
   it("shows the dictation button when audio dictation is enabled", async () => {
     const queryClient = new QueryClient({
       defaultOptions: {
@@ -1674,38 +1620,6 @@ describe("ChatInput", () => {
         screen.queryByTestId("chat-input-audio-mode-start"),
       ).not.toBeInTheDocument();
       expect(screen.getByTestId("chat-input-send-message")).toBeInTheDocument();
-    });
-
-    it("does not show the audio-mode button in edit mode", async () => {
-      const queryClient = new QueryClient({
-        defaultOptions: {
-          queries: { retry: false },
-          mutations: { retry: false },
-        },
-      });
-      mockUseAudioConversationalFeature.mockReturnValue({
-        enabled: true,
-        maxRecordingDurationSeconds: 1200,
-      });
-
-      const { i18n } = await import("@lingui/core");
-      render(
-        <QueryClientProvider client={queryClient}>
-          <I18nProvider i18n={i18n}>
-            <ChatInput
-              onSendMessage={vi.fn()}
-              mode="edit"
-              editMessageId="m-1"
-              onCancelEdit={vi.fn()}
-            />
-          </I18nProvider>
-        </QueryClientProvider>,
-      );
-
-      expect(
-        screen.queryByTestId("chat-input-audio-mode-start"),
-      ).not.toBeInTheDocument();
-      expect(screen.getByTestId("chat-input-save-edit")).toBeInTheDocument();
     });
 
     it("starts conversational dictation only after audio mode is rendered", async () => {
@@ -3937,63 +3851,6 @@ describe("ChatInput", () => {
         screen.getByTestId("chat-input-queued-message-edit"),
       ).toHaveTextContent("first");
       expect(textarea).toHaveValue("second");
-    });
-  });
-
-  describe("edit mode drafts", () => {
-    const renderModes = (i18n: I18n) => {
-      const queryClient = new QueryClient({
-        defaultOptions: {
-          queries: { retry: false },
-          mutations: { retry: false },
-        },
-      });
-      const ui = (mode: "compose" | "edit") => (
-        <QueryClientProvider client={queryClient}>
-          <I18nProvider i18n={i18n}>
-            <ChatInput
-              onSendMessage={vi.fn()}
-              chatId="chat-edit"
-              mode={mode}
-              editMessageId={mode === "edit" ? "m-1" : undefined}
-              onCancelEdit={vi.fn()}
-            />
-          </I18nProvider>
-        </QueryClientProvider>
-      );
-      const { rerender } = render(ui("compose"));
-      return (mode: "compose" | "edit") => rerender(ui(mode));
-    };
-
-    it("does not leak a discarded edit draft into the composer", async () => {
-      const { i18n } = await import("@lingui/core");
-      const rerender = renderModes(i18n);
-
-      rerender("edit");
-      fireEvent.change(screen.getByPlaceholderText("Edit your message..."), {
-        target: { value: "discarded draft" },
-      });
-
-      rerender("compose");
-      expect(screen.getByPlaceholderText("Type a message...")).toHaveValue("");
-    });
-
-    it("restores the compose draft that editing interrupted", async () => {
-      const { i18n } = await import("@lingui/core");
-      const rerender = renderModes(i18n);
-
-      const textarea = screen.getByPlaceholderText("Type a message...");
-      fireEvent.change(textarea, { target: { value: "half-typed" } });
-
-      rerender("edit");
-      fireEvent.change(screen.getByPlaceholderText("Edit your message..."), {
-        target: { value: "discarded draft" },
-      });
-
-      rerender("compose");
-      expect(screen.getByPlaceholderText("Type a message...")).toHaveValue(
-        "half-typed",
-      );
     });
   });
 });
