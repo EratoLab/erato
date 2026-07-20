@@ -105,7 +105,7 @@ export function AudioInputTabContent({ isActive }: AudioInputTabContentProps) {
         items={audioInputItems}
         align="left"
         triggerButtonVariant="secondary"
-        triggerButtonClassName="w-full justify-between gap-2 rounded-[var(--theme-radius-input)] px-3 py-2 shadow-sm"
+        triggerButtonClassName="w-full justify-between gap-2"
         matchContentWidth={false}
         onOpenChange={setIsAudioInputDropdownOpen}
         triggerIcon={

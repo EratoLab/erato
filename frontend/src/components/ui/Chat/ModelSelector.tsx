@@ -187,7 +187,7 @@ export const ModelSelector = ({
         onOpenChange={setIsDropdownOpen}
         matchContentWidth
         triggerButtonVariant="secondary"
-        triggerButtonClassName="min-w-[10rem] justify-between gap-2 rounded-[var(--theme-radius-input)] px-3 py-2 shadow-sm"
+        triggerButtonClassName="min-w-[10rem] justify-between gap-2"
         triggerIcon={
           <div className="flex min-w-0 flex-1 items-center gap-2">
             {selectedModel?.model_icon ? (
