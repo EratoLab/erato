@@ -8,6 +8,7 @@ import {
   FeedbackCommentDialog,
   FeedbackViewDialog,
   FilePreviewModal,
+  MessageEditProvider,
   MessageList,
   chatMessagesQuery,
   componentRegistry,
@@ -28,7 +29,6 @@ import {
   type ActionFacetRequest,
   type ChatInputControlsHandle,
   type DropdownMenuItem,
-  type EditMessageState,
   type FileUploadItem,
   type MessageAction,
   type MessageControlsComponent,
@@ -106,6 +106,9 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
       },
       addUploadedFiles: (files: FileUploadItem[]) => {
         chatInputControlsRef.current?.addUploadedFiles(files);
+      },
+      clearQueuedMessage: () => {
+        chatInputControlsRef.current?.clearQueuedMessage();
       },
     }),
     [],
@@ -507,9 +510,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
   const [activeSelectedFacetIds, setActiveSelectedFacetIds] = useState<
     string[]
   >(currentChatLastSelectedFacets ?? []);
-  const [editState, setEditState] = useState<EditMessageState>({
-    mode: "compose",
-  });
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const currentEmailMessageId = mailItem?.internetMessageId ?? null;
   const currentEmailAlreadyAttached =
     currentEmailMessageId !== null && dedup.ids.has(currentEmailMessageId);
@@ -517,7 +518,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
     currentChatId === null &&
     messageOrder.length === 0 &&
     !isPendingResponse &&
-    editState.mode === "compose" &&
+    editingMessageId === null &&
     !currentEmailAlreadyAttached;
 
   // Keep the preview's Message-ID fresh for the drop-dedup predicate. The
@@ -624,15 +625,14 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
     [assistantId, refetchHistory, sendMessage],
   );
 
-  const cancelEdit = useCallback(() => setEditState({ mode: "compose" }), []);
+  const cancelEdit = useCallback(() => setEditingMessageId(null), []);
 
   const handleEditSubmit = useCallback(
-    (
-      messageId: string,
-      newContent: string,
-      replaceInputFileIds?: string[],
-      selectedFacetIds?: string[],
-    ) => {
+    (messageId: string, newContent: string, replaceInputFileIds: string[]) => {
+      // The queued follow-up was written against the branch this edit
+      // supersedes, so it must not auto-send into the new one.
+      chatInputControlsRef.current?.clearQueuedMessage();
+      setEditingMessageId(null);
       // The edited exchange replays the ORIGINAL email (it rides in the
       // stored user message / facet args), so the wrong-item guard must
       // anchor on the original exchange's send-time identity — never the
@@ -649,14 +649,36 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
       pendingSendItemIdentityRef.current = exchangeAssistantId
         ? (freshItemIdentityRef.current.get(exchangeAssistantId) ?? null)
         : null;
+      // `action_facet` is deliberately not passed: the backend restores the
+      // edited message's own stored facet.
       void editMessage(
         messageId,
         newContent,
         replaceInputFileIds,
-        selectedFacetIds,
-      ).finally(() => setEditState({ mode: "compose" }));
+        activeSelectedFacetIds,
+      );
     },
-    [editMessage, messages, messageOrder],
+    [activeSelectedFacetIds, editMessage, messages, messageOrder],
+  );
+
+  const messageEditValue = useMemo(
+    () => ({
+      editingMessageId,
+      beginEdit: setEditingMessageId,
+      cancelEdit,
+      submitEdit: handleEditSubmit,
+      chatId: currentChatId,
+      assistantId,
+      chatProviderId: selectedModel?.chat_provider_id,
+    }),
+    [
+      assistantId,
+      cancelEdit,
+      currentChatId,
+      editingMessageId,
+      handleEditSubmit,
+      selectedModel?.chat_provider_id,
+    ],
   );
 
   const handleRegenerate = useCallback(
@@ -748,7 +770,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
 
   const standardMessageActionHandler = useStandardMessageActions({
     messages,
-    setEditState,
+    onBeginEdit: setEditingMessageId,
     handleRegenerate,
     handleFeedbackSubmit,
     feedbackConfig,
@@ -918,49 +940,39 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
                 isModelSelectionReady={isSelectionReady}
               />
             ) : null}
-            <MessageList
-              messages={messagesWithArtifact}
-              messageOrder={messageOrder}
-              loadOlderMessages={() => {}}
-              hasOlderMessages={false}
-              isPending={isMessagingLoading}
-              currentSessionId={currentChatId ?? ""}
-              pageSize={6}
-              maxWidth={768}
-              showTimestamps={true}
-              showAvatars={false}
-              userProfile={profile ?? undefined}
-              controls={resolvedMessageControls}
-              messageRenderer={resolvedMessageRenderer}
-              controlsContext={controlsContext}
-              onMessageAction={standardMessageActionHandler}
-              useVirtualization={messageOrder.length > 30}
-              virtualizationThreshold={30}
-              onFilePreview={openPreviewModal}
-              onViewFeedback={openFeedbackViewDialog}
-              className="overscroll-none"
-            />
+            <MessageEditProvider value={messageEditValue}>
+              <MessageList
+                messages={messagesWithArtifact}
+                messageOrder={messageOrder}
+                loadOlderMessages={() => {}}
+                hasOlderMessages={false}
+                isPending={isMessagingLoading}
+                currentSessionId={currentChatId ?? ""}
+                pageSize={6}
+                maxWidth={768}
+                showTimestamps={true}
+                showAvatars={false}
+                userProfile={profile ?? undefined}
+                controls={resolvedMessageControls}
+                messageRenderer={resolvedMessageRenderer}
+                controlsContext={controlsContext}
+                onMessageAction={standardMessageActionHandler}
+                useVirtualization={messageOrder.length > 30}
+                virtualizationThreshold={30}
+                onFilePreview={openPreviewModal}
+                onViewFeedback={openFeedbackViewDialog}
+                className="overscroll-none"
+              />
+            </MessageEditProvider>
 
             <AddinChatInput
               ref={chatInputControlsRef}
               onSendMessage={handleSendMessage}
-              onEditMessage={handleEditSubmit}
-              onCancelEdit={editState.mode === "edit" ? cancelEdit : undefined}
               onFilePreview={openPreviewModal}
               handleFileAttachments={(_files: FileUploadItem[]) => {}}
               chatId={currentChatId}
               assistantId={assistantId}
               isLoading={isMessagingLoading}
-              mode={editState.mode}
-              editMessageId={
-                editState.mode === "edit" ? editState.messageId : undefined
-              }
-              editInitialContent={
-                editState.mode === "edit" ? editState.initialContent : undefined
-              }
-              editInitialFiles={
-                editState.mode === "edit" ? editState.initialFiles : undefined
-              }
               controlledAvailableModels={availableModels}
               controlledSelectedModel={selectedModel}
               onControlledSelectedModelChange={setSelectedModel}

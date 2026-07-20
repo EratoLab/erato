@@ -58,6 +58,7 @@ vi.mock("@erato/frontend/library", () => ({
   FeedbackViewDialog: () => null,
   FilePreviewModal: () => null,
   MessageList: () => null,
+  MessageEditProvider: ({ children }: { children?: ReactNode }) => children,
   chatMessagesQuery: vi.fn(() => ({ queryKey: ["chat-messages"] })),
   componentRegistry: {},
   extractTextFromContent: vi.fn(() => ""),

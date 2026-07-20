@@ -907,8 +907,11 @@ export const ChatInput = ({
       setSelectedChatProviderId: applySelectedChatProviderId,
       toggleFacetId,
       addUploadedFiles: handleFilesUploaded,
+      clearQueuedMessage: () => clearQueuedBySessionId(composeSessionId),
     }),
     [
+      clearQueuedBySessionId,
+      composeSessionId,
       handleFilesUploaded,
       applySelectedChatProviderId,
       applySelectedFacetIds,

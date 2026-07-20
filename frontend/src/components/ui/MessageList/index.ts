@@ -1,3 +1,5 @@
+export * from "./MessageEditContext";
+export * from "./MessageEditor";
 export * from "./MessageItem";
 export * from "./MessageList";
 export * from "./MessageListUtils";

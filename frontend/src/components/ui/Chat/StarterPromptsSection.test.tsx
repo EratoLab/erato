@@ -53,6 +53,7 @@ describe("StarterPromptsSection", () => {
               focusInput: vi.fn(),
               setSelectedFacetIds: vi.fn(),
               setSelectedChatProviderId: vi.fn(),
+              clearQueuedMessage: vi.fn(),
               toggleFacetId: vi.fn(),
               addUploadedFiles: vi.fn(),
             }}
