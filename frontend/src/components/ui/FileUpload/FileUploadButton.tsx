@@ -1,13 +1,13 @@
 import { t } from "@lingui/core/macro";
-import { useState, memo, Suspense } from "react";
+import { memo, Suspense } from "react";
 import { useDropzone } from "react-dropzone";
 import { ErrorBoundary } from "react-error-boundary";
 
 import { FileTypeUtil } from "@/utils/fileTypes";
 
+import { Button } from "../Controls";
 import { PlusIcon } from "../icons";
 import { FileUploadLoading, FileUploadError } from "./FileUploadStates";
-import { BUTTON_STYLES } from "./fileUploadStyles";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FileType } from "@/utils/fileTypes";
@@ -60,8 +60,6 @@ const FileUploadButtonInner = memo<FileUploadButtonProps>(
     isUploading = false,
     uploadError = null,
   }) => {
-    const [isHovered, setIsHovered] = useState(false);
-
     // Setup react-dropzone
     const { getRootProps, getInputProps, open } = useDropzone({
       onDrop: (acceptedFiles) => {
@@ -84,15 +82,6 @@ const FileUploadButtonInner = memo<FileUploadButtonProps>(
       noKeyboard: true,
     });
 
-    // Handle hover states
-    function handleMouseEnter() {
-      setIsHovered(true);
-    }
-
-    function handleMouseLeave() {
-      setIsHovered(false);
-    }
-
     // Show loading state if uploading
     if (isUploading) {
       return <FileUploadLoading className={className} />;
@@ -103,31 +92,29 @@ const FileUploadButtonInner = memo<FileUploadButtonProps>(
       return <FileUploadError error={uploadError} className={className} />;
     }
 
-    // Compute button styles based on props and state
-    const buttonStyles = [
-      BUTTON_STYLES.base,
-      iconOnly ? BUTTON_STYLES.iconOnly : BUTTON_STYLES.withLabel,
-      isHovered ? BUTTON_STYLES.hover : BUTTON_STYLES.default,
-      className,
-    ].join(" ");
-
-    const iconStyles = `size-5 ${isHovered ? "text-blue-500" : "text-[var(--theme-fg-muted)]"}`;
-
     return (
       <div {...getRootProps({ className: "contents" })}>
         <input {...getInputProps()} />
-        <button
+        {/* The secondary variant already carries this button's fill and its
+            hover; the previous hand-rolled version tracked hover in React
+            state purely to swap in a hardcoded blue that no token could
+            reach. Sibling states (uploading, error) have used Button for a
+            while — this brings the idle state in line. */}
+        <Button
           type="button"
-          className={buttonStyles}
+          variant="secondary"
+          // sm keeps the icon form at 36px, matching the add-menu trigger and
+          // send button it sits beside in the composer row.
+          size={iconOnly ? "sm" : "md"}
+          geometry={iconOnly ? "icon" : "control"}
+          className={className}
           onClick={open}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
           disabled={disabled || isUploading}
           aria-label={iconOnly ? label : undefined}
+          icon={<PlusIcon className="size-5" />}
         >
-          <PlusIcon className={iconStyles} />
           {!iconOnly && <span>{label}</span>}
-        </button>
+        </Button>
       </div>
     );
   },
