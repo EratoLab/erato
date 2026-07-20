@@ -33,7 +33,7 @@ export function DefaultEratoEmailCodeBlock({
   }, [content, isHtml]);
 
   return (
-    <div className="my-2 rounded-lg border border-theme-border bg-theme-bg-secondary p-3">
+    <div className="my-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary p-3">
       {isHtml ? (
         <div
           className="mb-2 text-sm [&_blockquote]:border-l-2 [&_blockquote]:border-theme-border [&_blockquote]:pl-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-5"
@@ -48,7 +48,7 @@ export function DefaultEratoEmailCodeBlock({
         <button
           type="button"
           onClick={handleCopy}
-          className="rounded-md border border-theme-border bg-theme-bg-primary px-3 py-1 text-xs hover:bg-theme-bg-tertiary"
+          className="rounded-[var(--theme-radius-control)] border border-theme-border bg-theme-bg-primary px-3 py-1 text-xs hover:bg-theme-bg-tertiary"
         >
           {copied
             ? t({ id: "chat.message.email.copied", message: "Copied!" })

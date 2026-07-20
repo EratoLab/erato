@@ -112,7 +112,11 @@ export function AssistantWelcomeScreen({
               type="button"
               onClick={openConfiguration}
               className={clsx(
-                "focus-ring-tight rounded-[var(--theme-radius-shell)] text-2xl font-bold text-theme-fg-primary hover:text-theme-fg-accent",
+                // Control radius, not shell: this is a bare text affordance
+                // with no padding or fill, so the radius only shapes the focus
+                // ring. A card radius made that ring capsule-ish on one line
+                // of text.
+                "focus-ring-tight rounded-[var(--theme-radius-control)] text-2xl font-bold text-theme-fg-primary hover:text-theme-fg-accent",
                 headerTextAlignment,
               )}
               title={configurationLabel}

@@ -98,7 +98,7 @@ export function AddinPinHintBanner({ onDismiss }: AddinPinHintBannerProps) {
           id: "officeAddin.pinHint.dismiss",
           message: "Dismiss",
         })}
-        className="shrink-0 rounded p-0.5 text-theme-warning-fg transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus"
+        className="shrink-0 rounded-[var(--theme-radius-control)] p-0.5 text-theme-warning-fg transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus"
       >
         <DismissIcon className="size-4" />
       </button>

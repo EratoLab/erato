@@ -81,7 +81,7 @@ function CategoryTile({
     <button
       type="button"
       onClick={onOpen}
-      className="focus-ring theme-transition group rounded-lg border border-theme-border bg-theme-bg-primary p-4 text-left hover:border-theme-border-focus hover:bg-theme-bg-hover"
+      className="focus-ring theme-transition group rounded-[var(--theme-radius-shell)] border border-theme-border bg-theme-bg-primary p-4 text-left hover:border-theme-border-focus hover:bg-theme-bg-hover"
     >
       <div className="mb-4 flex size-10 items-center justify-center rounded bg-theme-bg-secondary text-theme-fg-secondary group-hover:text-theme-fg-primary">
         <ResolvedIcon

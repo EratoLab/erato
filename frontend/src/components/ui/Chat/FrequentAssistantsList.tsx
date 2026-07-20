@@ -25,7 +25,7 @@ const AssistantItem = memo<{
     <InteractiveContainer
       useDiv={true}
       onClick={onSelect}
-      className="flex items-center gap-3 rounded-lg px-3 py-2 pl-10 text-left hover:bg-theme-bg-hover"
+      className="flex items-center gap-3 rounded-[var(--theme-radius-control)] px-3 py-2 pl-10 text-left hover:bg-theme-bg-hover"
     >
       <span
         className="flex-1 truncate font-medium text-theme-fg-primary"

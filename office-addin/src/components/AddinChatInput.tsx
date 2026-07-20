@@ -851,7 +851,7 @@ export const AddinChatInput = forwardRef<
       {isExpandingDroppedEmails && (
         <div className="mx-auto w-full max-w-[var(--theme-layout-chat-input-max-width)] px-2 pb-1 sm:px-4">
           <div
-            className="flex items-center gap-2 rounded-lg border border-theme-border bg-theme-bg-secondary px-3 py-1.5 text-xs text-theme-fg-secondary"
+            className="flex items-center gap-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary px-3 py-1.5 text-xs text-theme-fg-secondary"
             role="status"
             aria-live="polite"
             data-testid="addin-chat-email-expansion-indicator"
@@ -872,7 +872,7 @@ export const AddinChatInput = forwardRef<
 
       {host === "Outlook" && hasActiveSelection && (
         <div className="mx-auto w-full max-w-[var(--theme-layout-chat-input-max-width)] px-2 pb-1 sm:px-4">
-          <div className="flex items-center gap-2 rounded-lg border border-theme-border bg-theme-bg-secondary px-3 py-1.5 text-xs text-theme-fg-secondary">
+          <div className="flex items-center gap-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary px-3 py-1.5 text-xs text-theme-fg-secondary">
             <span className="shrink-0">&#x2702;</span>
             <span className="min-w-0 truncate">
               &ldquo;{composeSelection.data.slice(0, 80)}
@@ -881,7 +881,7 @@ export const AddinChatInput = forwardRef<
             <button
               type="button"
               onClick={() => setIsSelectionDismissed(true)}
-              className="ml-auto shrink-0 rounded p-0.5 hover:bg-theme-bg-tertiary"
+              className="ml-auto shrink-0 rounded-[var(--theme-radius-control)] p-0.5 hover:bg-theme-bg-tertiary"
               aria-label={t({
                 id: "officeAddin.chatInput.dismissSelection",
                 message: "Dismiss selection",
@@ -895,7 +895,7 @@ export const AddinChatInput = forwardRef<
 
       {hasDraftContextChip && (
         <div className="mx-auto w-full max-w-[var(--theme-layout-chat-input-max-width)] px-2 pb-1 sm:px-4">
-          <div className="flex items-center gap-2 rounded-lg border border-theme-border bg-theme-bg-secondary px-3 py-1.5 text-xs text-theme-fg-secondary">
+          <div className="flex items-center gap-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary px-3 py-1.5 text-xs text-theme-fg-secondary">
             <span className="shrink-0">&#x1F4DD;</span>
             <span className="min-w-0 truncate">
               {t({
@@ -906,7 +906,7 @@ export const AddinChatInput = forwardRef<
             <button
               type="button"
               onClick={() => setIsDraftDismissed(true)}
-              className="ml-auto shrink-0 rounded p-0.5 hover:bg-theme-bg-tertiary"
+              className="ml-auto shrink-0 rounded-[var(--theme-radius-control)] p-0.5 hover:bg-theme-bg-tertiary"
               aria-label={t({
                 id: "officeAddin.chatInput.dismissDraftContext",
                 message: "Don't include draft",

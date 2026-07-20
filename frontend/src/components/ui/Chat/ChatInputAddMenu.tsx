@@ -86,7 +86,7 @@ export interface ChatInputAddMenuProps {
 const sectionDivider = "my-1 h-px bg-theme-border";
 
 const rowClassName =
-  "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-theme-fg-primary transition-colors hover:bg-theme-bg-hover";
+  "flex w-full items-center gap-3 rounded-[var(--theme-radius-control)] px-3 py-2 text-left text-sm text-theme-fg-primary transition-colors hover:bg-theme-bg-hover";
 
 // CSS selector for the menu's navigable rows; natively-disabled rows are
 // excluded from roving focus (aria-disabled tool rows stay reachable).
