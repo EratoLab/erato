@@ -75,11 +75,9 @@ describe("ChatHistoryList", () => {
       '[data-ui="chat-history-item"]',
     );
 
-    expect(historyItem).toHaveStyle({
-      minHeight: "var(--theme-spacing-sidebar-row-height)",
-      borderRadius: "var(--theme-radius-shell)",
-      backgroundColor: "var(--theme-shell-sidebar-selected)",
-    });
+    expect(historyItem).toHaveClass("sidebar-row-geometry");
+    expect(historyItem).toHaveClass("sidebar-row-selected");
+    expect(historyItem?.getAttribute("style") ?? "").toBe("");
     expect(historyItem).not.toHaveClass(
       "hover:bg-[var(--theme-shell-sidebar-hover)]",
     );
@@ -89,9 +87,7 @@ describe("ChatHistoryList", () => {
       padding:
         "calc(var(--theme-spacing-shell-padding-y) / 2) calc(var(--theme-spacing-shell-padding-x) / 2)",
     });
-    expect(historyItems[1].getAttribute("style") ?? "").not.toContain(
-      "background-color",
-    );
+    expect(historyItems[1]).not.toHaveClass("sidebar-row-selected");
   });
 
   it("uses the same sidebar tokens in the loading skeleton", () => {
@@ -99,11 +95,8 @@ describe("ChatHistoryList", () => {
 
     const skeletonItem = getAllByTestId("chat-history-skeleton-item")[0];
 
-    expect(skeletonItem).toHaveStyle({
-      minHeight: "var(--theme-spacing-sidebar-row-height)",
-      borderRadius: "var(--theme-radius-shell)",
-      backgroundColor: "var(--theme-shell-sidebar-selected)",
-    });
+    expect(skeletonItem).toHaveClass("sidebar-row-geometry");
+    expect(skeletonItem).toHaveClass("sidebar-row-selected");
     expect(screen.getByTestId("chat-history-skeleton")).toHaveStyle({
       padding:
         "calc(var(--theme-spacing-shell-padding-y) / 2) calc(var(--theme-spacing-shell-padding-x) / 2)",

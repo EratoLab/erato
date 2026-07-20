@@ -28,15 +28,23 @@ describe("DropdownMenu", () => {
       "data-ui",
       "dropdown-panel",
     );
-    expect(screen.getByRole("menu")).toHaveStyle({
-      backgroundColor: "var(--theme-shell-dropdown)",
-      borderColor: "var(--theme-border-divider)",
-      borderRadius: "var(--theme-radius-base)",
-      boxShadow: "var(--theme-elevation-dropdown)",
+    const panel = screen.getByRole("menu");
+    // Surface from the class; only consumer-supplied sizing stays inline.
+    expect(panel).toHaveClass("anchored-popover-skin");
+    expect(panel).toHaveStyle({
       maxWidth:
         "calc(100vw - (var(--theme-layout-dropdown-viewport-margin) * 2))",
       minWidth: "var(--theme-layout-dropdown-min-width)",
     });
+    const inlineStyle = panel.getAttribute("style") ?? "";
+    for (const property of [
+      "background-color",
+      "border-color",
+      "border-radius",
+      "box-shadow",
+    ]) {
+      expect(inlineStyle).not.toContain(property);
+    }
     // Active row uses the soft light highlight, not the old 2px dark ring.
     expect(menuItem.className).not.toContain("focus-ring-inset");
     expect(menuItem.className).toContain("focus:bg-theme-bg-hover");
