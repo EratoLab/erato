@@ -80,6 +80,15 @@ describe("Button", () => {
     expect(button.getAttribute("data-variant")).toBe("secondary");
   });
 
+  it("defaults to the sm house size", () => {
+    render(<Button>Default</Button>);
+
+    const button = screen.getByRole("button", { name: "Default" });
+
+    expect(button).toHaveAttribute("data-geometry", "sm");
+    expect(button.className).toContain("btn-geometry-sm");
+  });
+
   it("pins a type scale per size so it cannot inherit from the container", () => {
     const { rerender } = render(<Button size="sm">Small</Button>);
     expect(screen.getByRole("button", { name: "Small" }).className).toContain(
