@@ -1,10 +1,12 @@
 import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { FileAttachmentsPreview } from "@/components/ui/FileUpload";
 import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 
 import { Button } from "../Controls";
 
+import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
 import type { KeyboardEvent } from "react";
 
@@ -15,6 +17,9 @@ export interface MessageEditorProps {
   /** Rendered under the textarea; reports back whether Submit must be blocked. */
   renderTokenUsage?: (draft: string) => React.ReactNode;
   isSubmitBlocked?: boolean;
+  /** The message's own attachments, editable for this turn. */
+  initialFiles?: FileUploadItem[];
+  onFilePreview?: (file: FileUploadItem) => void;
 }
 
 export const MessageEditor = ({
@@ -23,7 +28,11 @@ export const MessageEditor = ({
   onSubmit,
   renderTokenUsage,
   isSubmitBlocked = false,
+  initialFiles = [],
+  onFilePreview,
 }: MessageEditorProps) => {
+  const [attachedFiles, setAttachedFiles] =
+    useState<FileUploadItem[]>(initialFiles);
   const [draft, setDraft] = useState(() =>
     extractTextFromContent(message.content),
   );
@@ -55,8 +64,11 @@ export const MessageEditor = ({
     if (!canSubmit) {
       return;
     }
-    onSubmit(draft.trim(), message.input_files_ids ?? []);
-  }, [canSubmit, draft, message.input_files_ids, onSubmit]);
+    onSubmit(
+      draft.trim(),
+      attachedFiles.map((file) => file.id),
+    );
+  }, [attachedFiles, canSubmit, draft, onSubmit]);
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -88,6 +100,22 @@ export const MessageEditor = ({
         className="w-full resize-none rounded-md border border-theme-border bg-theme-bg-primary p-2 text-theme-fg-primary focus:outline-none focus:ring-2 focus:ring-theme-focus"
         rows={1}
       />
+
+      {attachedFiles.length > 0 && (
+        <div className="mt-2">
+          <FileAttachmentsPreview
+            attachedFiles={attachedFiles}
+            maxFiles={attachedFiles.length}
+            onRemoveFile={(fileId) =>
+              setAttachedFiles((previous) =>
+                previous.filter((file) => file.id !== fileId),
+              )
+            }
+            onRemoveAllFiles={() => setAttachedFiles([])}
+            onFilePreview={onFilePreview}
+          />
+        </div>
+      )}
 
       {renderTokenUsage?.(draft)}
 

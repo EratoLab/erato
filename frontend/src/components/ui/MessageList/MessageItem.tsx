@@ -74,6 +74,7 @@ export const MessageItem = memo<MessageItemProps>(
             message={message}
             messageEdit={messageEdit}
             messageId={messageId}
+            onFilePreview={onFilePreview}
           />
         </div>
       );
@@ -138,10 +139,12 @@ const MessageEditorRow = ({
   message,
   messageEdit,
   messageId,
+  onFilePreview,
 }: {
   message: Message;
   messageEdit: MessageEditContextValue;
   messageId: string;
+  onFilePreview?: (file: FileUploadItem) => void;
 }) => {
   const [isTokenLimitExceeded, setIsTokenLimitExceeded] = useState(false);
   const messageFiles =
@@ -155,6 +158,8 @@ const MessageEditorRow = ({
         messageEdit.submitEdit(messageId, content, inputFileIds)
       }
       isSubmitBlocked={isTokenLimitExceeded}
+      initialFiles={messageFiles}
+      onFilePreview={onFilePreview}
       renderTokenUsage={(draft) => (
         <ChatInputTokenUsage
           message={draft}

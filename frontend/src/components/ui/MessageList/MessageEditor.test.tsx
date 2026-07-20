@@ -1,6 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import { ThemeProvider } from "@/components/providers/ThemeProvider";
+
 import { MessageEditor } from "./MessageEditor";
 
 import type { MessageEditorProps } from "./MessageEditor";
@@ -15,16 +17,31 @@ const userMessage: Message = {
   input_files_ids: ["file-1"],
 };
 
+const attachedFile = {
+  id: "file-1",
+  filename: "notes.pdf",
+  download_url: "https://example.invalid/notes.pdf",
+} as MessageEditorProps["initialFiles"] extends (infer F)[] | undefined
+  ? F
+  : never;
+
 const renderEditor = (overrides: Partial<MessageEditorProps> = {}) => {
   const onSubmit = vi.fn();
   const onCancel = vi.fn();
   render(
-    <MessageEditor
-      message={userMessage}
-      onSubmit={onSubmit}
-      onCancel={onCancel}
-      {...overrides}
-    />,
+    <ThemeProvider
+      enableCustomTheme={false}
+      initialThemeMode="light"
+      persistThemeMode={false}
+    >
+      <MessageEditor
+        message={userMessage}
+        onSubmit={onSubmit}
+        onCancel={onCancel}
+        initialFiles={[attachedFile]}
+        {...overrides}
+      />
+    </ThemeProvider>,
   );
   return {
     onSubmit,
@@ -80,6 +97,15 @@ describe("MessageEditor", () => {
     fireEvent.keyDown(input, { key: "Enter", shiftKey: false });
 
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("drops a removed attachment from the submitted file ids", () => {
+    const { onSubmit } = renderEditor();
+
+    fireEvent.click(screen.getByRole("button", { name: /remove|delete/i }));
+    fireEvent.click(screen.getByTestId("message-editor-submit"));
+
+    expect(onSubmit).toHaveBeenCalledWith("original text", []);
   });
 
   it("blocks submit when the draft is emptied", () => {
