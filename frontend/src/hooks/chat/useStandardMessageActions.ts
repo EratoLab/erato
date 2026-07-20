@@ -18,7 +18,8 @@ export type EditMessageState =
 
 interface UseStandardMessageActionsOptions {
   messages: Record<string, ChatMessage>;
-  setEditState: (state: EditMessageState) => void;
+  /** Opens the given user message for in-place editing. */
+  onBeginEdit: (messageId: string) => void;
   handleRegenerate: (messageId: string) => void;
   handleFeedbackSubmit: (
     messageId: string,
@@ -44,7 +45,7 @@ interface UseStandardMessageActionsOptions {
  */
 export function useStandardMessageActions({
   messages,
-  setEditState,
+  onBeginEdit,
   handleRegenerate,
   handleFeedbackSubmit,
   feedbackConfig,
@@ -54,17 +55,8 @@ export function useStandardMessageActions({
   return useCallback(
     async (action: MessageAction): Promise<boolean> => {
       if (action.type === "edit") {
-        const messageToEdit = messages[action.messageId];
-        if (messageToEdit.role === "user") {
-          const messageFiles = (
-            messageToEdit as ChatMessage & { files?: FileUploadItem[] }
-          ).files;
-          setEditState({
-            mode: "edit",
-            messageId: action.messageId,
-            initialContent: messageToEdit.content,
-            initialFiles: Array.isArray(messageFiles) ? messageFiles : [],
-          });
+        if (messages[action.messageId].role === "user") {
+          onBeginEdit(action.messageId);
         }
         return true;
       }
@@ -90,7 +82,7 @@ export function useStandardMessageActions({
     },
     [
       messages,
-      setEditState,
+      onBeginEdit,
       handleRegenerate,
       handleFeedbackSubmit,
       feedbackConfig,

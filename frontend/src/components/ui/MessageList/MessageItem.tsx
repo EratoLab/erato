@@ -1,9 +1,13 @@
-import { memo } from "react";
+import { memo, useState } from "react";
 
 import { mapMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 
+import { useMessageEdit } from "./MessageEditContext";
+import { MessageEditor } from "./MessageEditor";
+import { ChatInputTokenUsage } from "../Chat/ChatInputTokenUsage";
 import { CHAT_MESSAGE_HOST_COMPONENTS, ChatMessage } from "../Chat/ChatMessage";
 
+import type { MessageEditContextValue } from "./MessageEditContext";
 import type { ChatMessageProps } from "../Chat/ChatMessage";
 import type {
   UserProfile,
@@ -59,6 +63,22 @@ export const MessageItem = memo<MessageItemProps>(
     onViewFeedback,
     allFilesById,
   }) => {
+    const messageEdit = useMessageEdit();
+
+    // Replacing the renderer (rather than editing inside it) keeps editing
+    // available to kits that override ChatMessageRenderer.
+    if (messageEdit?.editingMessageId === messageId) {
+      return (
+        <div className={className}>
+          <MessageEditorRow
+            message={message}
+            messageEdit={messageEdit}
+            messageId={messageId}
+          />
+        </div>
+      );
+    }
+
     return (
       <div className={className}>
         <Renderer
@@ -107,3 +127,45 @@ export const MessageItem = memo<MessageItemProps>(
 
 // eslint-disable-next-line lingui/no-unlocalized-strings
 MessageItem.displayName = "MessageItem";
+
+/**
+ * Owns the draft-dependent token check for the row being edited. Separate from
+ * MessageItem so the state only exists while a row is open, and so the draft
+ * never lives above the row (a list-level draft would re-render every message
+ * on each keystroke).
+ */
+const MessageEditorRow = ({
+  message,
+  messageEdit,
+  messageId,
+}: {
+  message: Message;
+  messageEdit: MessageEditContextValue;
+  messageId: string;
+}) => {
+  const [isTokenLimitExceeded, setIsTokenLimitExceeded] = useState(false);
+  const messageFiles =
+    (message as Message & { files?: FileUploadItem[] }).files ?? [];
+
+  return (
+    <MessageEditor
+      message={message}
+      onCancel={messageEdit.cancelEdit}
+      onSubmit={(content, inputFileIds) =>
+        messageEdit.submitEdit(messageId, content, inputFileIds)
+      }
+      isSubmitBlocked={isTokenLimitExceeded}
+      renderTokenUsage={(draft) => (
+        <ChatInputTokenUsage
+          message={draft}
+          attachedFiles={messageFiles}
+          chatId={messageEdit.chatId}
+          assistantId={messageEdit.assistantId}
+          previousMessageId={message.previous_message_id}
+          chatProviderId={messageEdit.chatProviderId}
+          onLimitExceeded={setIsTokenLimitExceeded}
+        />
+      )}
+    />
+  );
+};
