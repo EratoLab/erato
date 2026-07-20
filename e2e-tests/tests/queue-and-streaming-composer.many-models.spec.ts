@@ -1,7 +1,12 @@
 import { expect, Locator, Page, test } from "@playwright/test";
 import path from "path";
 import { fileURLToPath } from "url";
-import { chatIsReadyToChat, ensureOpenSidebar } from "./shared";
+import {
+  chatIsReadyToChat,
+  ensureOpenSidebar,
+  installStreamErrorTap,
+  injectStreamError,
+} from "./shared";
 import { TAG_CI } from "./tags";
 
 /**
@@ -44,10 +49,21 @@ const selectMockModel = async (page: Page) => {
 };
 
 const uploadFileInChat = async (page: Page, file: string) => {
-  const fileChooserPromise = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: /upload files/i }).click();
-  const fileChooser = await fileChooserPromise;
-  await fileChooser.setFiles(file);
+  // Set the file directly on the input. These tests cover upload ROUTING
+  // (which chat the file lands on), not the chooser UI — and the visible
+  // affordance differs by config (dedicated button vs unified "+" menu), so
+  // clicking a specific button would couple them to one layout.
+  await page.locator('input[type="file"]').first().setInputFiles(file);
+};
+
+/**
+ * Re-assert the turn is still in flight immediately before a queue-affecting
+ * action. If the stream ended early, the Queue affordance silently becomes
+ * Send — this turns that into a loud failure at the right line instead of a
+ * confusing assertion later.
+ */
+const expectStreamStillActive = async (page: Page) => {
+  await expect(stopButton(page)).toBeVisible();
 };
 
 /**
@@ -65,7 +81,13 @@ const startLongRunningStream = async (page: Page, seconds: number) => {
   });
 };
 
-/** Wait until the whole turn (and any drained follow-up) has finished. */
+/**
+ * Wait until no turn is in flight (Stop control gone). NOTE: this does NOT by
+ * itself cover a drained follow-up — the Stop control is also absent in the
+ * gap between a turn ending and the auto-sent turn starting, so callers that
+ * expect a drain must first gate on the follow-up's user-message count (all
+ * current callers do).
+ */
 const waitForStreamToFinish = async (page: Page, timeout = 40000) => {
   await expect(stopButton(page)).toHaveCount(0, { timeout });
 };
@@ -116,10 +138,11 @@ test.describe("Streaming composer + message queue", () => {
       await chatIsReadyToChat(page);
       await selectMockModel(page);
 
-      await startLongRunningStream(page, 6);
+      await startLongRunningStream(page, 10);
 
       const textbox = messageBox(page);
       await textbox.fill("fast");
+      await expectStreamStillActive(page);
       await textbox.press("Enter");
 
       // Queued, not sent: chip shows, composer clears, still one user message.
@@ -155,10 +178,11 @@ test.describe("Streaming composer + message queue", () => {
       await chatIsReadyToChat(page);
       await selectMockModel(page);
 
-      await startLongRunningStream(page, 6);
+      await startLongRunningStream(page, 10);
 
       const textbox = messageBox(page);
       await textbox.fill("fast");
+      await expectStreamStillActive(page);
       await page.getByTestId("chat-input-queue-message").click();
 
       await expect(queuedChip(page)).toBeVisible();
@@ -184,18 +208,23 @@ test.describe("Streaming composer + message queue", () => {
       await chatIsReadyToChat(page);
       await selectMockModel(page);
 
-      await startLongRunningStream(page, 10);
+      // 20s window: this test has the longest interaction sequence in the
+      // file (two dialog round-trips), and a throttled CI runner must never
+      // see the stream end mid-sequence — Queue would silently become Send.
+      await startLongRunningStream(page, 20);
 
       const textbox = messageBox(page);
 
       // Queue the first candidate.
       await textbox.fill("alpha queued");
+      await expectStreamStillActive(page);
       await textbox.press("Enter");
       await expect(queuedChip(page)).toContainText("alpha queued");
 
       // Queuing a second one opens the danger confirmation dialog; the composer
       // draft is left intact behind it.
       await textbox.fill("beta queued");
+      await expectStreamStillActive(page);
       await textbox.press("Enter");
       const dialog = page.getByRole("dialog", {
         name: "Replace the queued message?",
@@ -214,6 +243,7 @@ test.describe("Streaming composer + message queue", () => {
       await expect(textbox).toHaveValue("beta queued");
 
       // Queue again and confirm Replace → queued draft is swapped.
+      await expectStreamStillActive(page);
       await textbox.press("Enter");
       await expect(dialog).toBeVisible();
       await dialog.getByRole("button").filter({ hasText: "Replace" }).click();
@@ -244,18 +274,26 @@ test.describe("Streaming composer + message queue", () => {
       await chatIsReadyToChat(page);
       await selectMockModel(page);
 
-      await startLongRunningStream(page, 6);
+      await startLongRunningStream(page, 10);
 
       const textbox = messageBox(page);
       await textbox.fill("fast");
+      await expectStreamStillActive(page);
       await textbox.press("Enter");
       await expect(queuedChip(page)).toBeVisible();
 
       await page.getByTestId("chat-input-queued-message-cancel").click();
       await expect(queuedChip(page)).toHaveCount(0);
 
-      // Let the turn finish; nothing should be auto-sent.
+      // Let the turn demonstrably complete (terminal token, not just the Stop
+      // control disappearing), give an erroneous drain a beat to fire, and
+      // only then assert nothing was auto-sent.
+      await expect(page.getByTestId("message-assistant").last()).toContainText(
+        "Complete!",
+        { timeout: 30000 },
+      );
       await waitForStreamToFinish(page);
+      await page.waitForTimeout(1000);
       await expect(page.getByTestId("message-user")).toHaveCount(1);
       await expect(
         page
@@ -275,10 +313,11 @@ test.describe("Streaming composer + message queue", () => {
       await chatIsReadyToChat(page);
       await selectMockModel(page);
 
-      await startLongRunningStream(page, 6);
+      await startLongRunningStream(page, 10);
 
       const textbox = messageBox(page);
       await textbox.fill("fast");
+      await expectStreamStillActive(page);
       await textbox.press("Enter");
       await expect(queuedChip(page)).toBeVisible();
 
@@ -287,8 +326,15 @@ test.describe("Streaming composer + message queue", () => {
       await expect(queuedChip(page)).toHaveCount(0);
       await expect(textbox).toHaveValue("fast");
 
-      // It is a plain draft again, so completing the turn sends nothing.
+      // It is a plain draft again, so completing the turn sends nothing —
+      // asserted only after the terminal token plus a grace beat, so a
+      // late-firing drain would be caught.
+      await expect(page.getByTestId("message-assistant").last()).toContainText(
+        "Complete!",
+        { timeout: 30000 },
+      );
       await waitForStreamToFinish(page);
+      await page.waitForTimeout(1000);
       await expect(page.getByTestId("message-user")).toHaveCount(1);
       await expect(textbox).toHaveValue("fast");
     },
@@ -308,6 +354,7 @@ test.describe("Streaming composer + message queue", () => {
 
       const textbox = messageBox(page);
       await textbox.fill("fast");
+      await expectStreamStillActive(page);
       await textbox.press("Enter");
       await expect(queuedChip(page)).toBeVisible();
 
@@ -323,6 +370,53 @@ test.describe("Streaming composer + message queue", () => {
   );
 
   test(
+    "a turn that errors mid-stream returns the queued message to the composer and never sends",
+    { tag: TAG_CI },
+    async ({ page }) => {
+      test.setTimeout(60000);
+
+      // The tap lets us fail the stream at an exact moment — the only
+      // stream-then-error mock (`hallucination loop`) aborts within
+      // milliseconds, leaving no window to queue into.
+      await installStreamErrorTap(page);
+
+      await page.goto("/");
+      await chatIsReadyToChat(page);
+      await selectMockModel(page);
+
+      await startLongRunningStream(page, 15);
+
+      const textbox = messageBox(page);
+      await textbox.fill("fast");
+      await expectStreamStillActive(page);
+      await textbox.press("Enter");
+      await expect(queuedChip(page)).toBeVisible();
+      await expect(page.getByTestId("message-user")).toHaveCount(1);
+
+      // Fail the turn mid-stream: the client receives the same `error` event
+      // the backend emits on a provider failure, then the stream ends.
+      await injectStreamError(page);
+      await waitForStreamToFinish(page, 15000);
+
+      // The messagingError drain branch: queued content returns to the
+      // composer, the chip clears, and nothing is ever sent — asserted again
+      // after a grace beat so a late-firing drain would be caught.
+      await expect(textbox).toHaveValue("fast");
+      await expect(queuedChip(page)).toHaveCount(0);
+      await expect(page.getByTestId("message-user")).toHaveCount(1);
+
+      await page.waitForTimeout(1500);
+      await expect(page.getByTestId("message-user")).toHaveCount(1);
+      await expect(textbox).toHaveValue("fast");
+      await expect(
+        page
+          .getByTestId("message-assistant")
+          .filter({ hasText: "Quick response!" }),
+      ).toHaveCount(0);
+    },
+  );
+
+  test(
     "navigating away while a message is queued drops it to a draft and never background-sends",
     { tag: TAG_CI },
     async ({ page }) => {
@@ -332,37 +426,73 @@ test.describe("Streaming composer + message queue", () => {
       await chatIsReadyToChat(page);
       await selectMockModel(page);
 
-      await startLongRunningStream(page, 10);
-      await expect(page).toHaveURL(/\/chat\/[0-9a-fA-F-]+/, { timeout: 10000 });
-      const streamingChatId = page.url().split("/").pop();
-      expect(streamingChatId).toBeTruthy();
-
+      // Establish the chat with a completed turn FIRST, so the sidebar lists
+      // it before we ever leave. The chats list only refetches on completion
+      // events (focus refetches are a no-op inside the 60s staleTime), so a
+      // chat abandoned mid-stream would not reliably appear in the sidebar —
+      // and returning to it is the whole point of this test.
       const textbox = messageBox(page);
       await textbox.fill("fast");
+      await textbox.press("Enter");
+      await expect(page).toHaveURL(/\/chat\/[0-9a-fA-F-]+/, { timeout: 15000 });
+      const streamingChatId = page.url().split("/").pop();
+      expect(streamingChatId).toBeTruthy();
+      await waitForStreamToFinish(page, 20000);
+      await ensureOpenSidebar(page);
+      const sidebarEntry = page
+        .getByRole("complementary")
+        .locator(`[data-chat-id="${streamingChatId}"]`);
+      await expect(sidebarEntry).toBeVisible({ timeout: 15000 });
+
+      // Now stream long enough to queue into.
+      await startLongRunningStream(page, 10);
+
+      await textbox.fill("fast");
+      await expectStreamStillActive(page);
       await textbox.press("Enter");
       await expect(queuedChip(page)).toBeVisible();
 
       // Navigate away to a brand-new chat while the message is still queued.
-      await ensureOpenSidebar(page);
       await page
         .getByRole("complementary")
         .getByRole("button", { name: "New Chat", exact: true })
         .click();
       await expect(page).toHaveURL(/\/chat\/new$/);
+      // Neither the chip nor the payload leaks into the new chat's composer.
       await expect(queuedChip(page)).toHaveCount(0);
+      await expect(messageBox(page)).toHaveValue("");
 
-      // Return to the original chat: the queued payload came back as a draft
-      // (never background-sent) and the chat still has a single user message.
+      // Return to the original chat via its (already-listed) sidebar entry.
       await ensureOpenSidebar(page);
-      await page
-        .getByRole("complementary")
-        .locator(`[data-chat-id="${streamingChatId}"]`)
-        .click();
+      await expect(sidebarEntry).toBeVisible({ timeout: 15000 });
+      await sidebarEntry.click();
       await expect(page).toHaveURL(new RegExp(`/chat/${streamingChatId}$`));
 
+      // The queued payload came back as a draft. (No message-count assert
+      // here: while the resumed stream is still in flight the history can
+      // render without the mid-stream user message — a pre-existing resume
+      // quirk unrelated to the queue. The count is checked after completion.)
       await expect(messageBox(page)).toHaveValue("fast");
       await expect(queuedChip(page)).toHaveCount(0);
-      await expect(page.getByTestId("message-user")).toHaveCount(1);
+
+      // "Never background-sends" can only be asserted after the abandoned
+      // turn has demonstrably completed — before that, the drain this guards
+      // against could not have fired yet.
+      await expect(page.getByTestId("message-assistant").last()).toContainText(
+        "Complete!",
+        { timeout: 30000 },
+      );
+      await waitForStreamToFinish(page, 15000);
+      await page.waitForTimeout(1500);
+      // Exactly the two sent user messages — an auto-send would make it 3 —
+      // and the queued text still sits in the composer.
+      await expect(page.getByTestId("message-user")).toHaveCount(2);
+      await expect(messageBox(page)).toHaveValue("fast");
+      await expect(
+        page
+          .getByTestId("message-assistant")
+          .filter({ hasText: "Quick response!" }),
+      ).toHaveCount(1);
     },
   );
 
@@ -384,6 +514,11 @@ test.describe("Streaming composer + message queue", () => {
       const textbox = messageBox(page);
       await textbox.fill("long running 8");
       await textbox.press("Enter");
+      // Bound the race: the submit must be in flight before the upload, or a
+      // no-op run (send failed silently) would pass vacuously. This waits on
+      // the turn starting, NOT on the chat id settling — the id race the test
+      // exists for stays open.
+      await expect(stopButton(page)).toBeVisible({ timeout: 10000 });
 
       const pdfPath = path.join(
         __dirname,
@@ -415,9 +550,12 @@ test.describe("Streaming composer + message queue", () => {
       await waitForStreamToFinish(page);
 
       // No orphan chat was created for the upload, and we're still on the same
-      // chat with its attachment.
-      const chatCountAfter = await sidebar.locator("[data-chat-id]").count();
-      expect(chatCountAfter).toBe(chatCountBaseline);
+      // chat with its attachment. Retrying assertion — the list refetches
+      // asynchronously after completion.
+      await expect(sidebar.locator("[data-chat-id]")).toHaveCount(
+        chatCountBaseline,
+        { timeout: 10000 },
+      );
       await expect(page).toHaveURL(new RegExp(`/chat/${streamingChatId}$`));
       await expect(page.getByText(/sample.*compressed.*pdf/i)).toBeVisible();
     },
@@ -433,7 +571,10 @@ test.describe("Streaming composer + message queue", () => {
       await chatIsReadyToChat(page);
       await selectMockModel(page);
 
-      await startLongRunningStream(page, 8);
+      // 25s window: the upload below is allowed up to 15s, which must fit
+      // inside the stream with margin — otherwise the queue click lands after
+      // completion and silently sends instead.
+      await startLongRunningStream(page, 25);
 
       // Attach a file mid-stream (routes to the streaming chat, ERMAIN-466),
       // then queue a "cite files" message that carries it. The queue stores
@@ -450,6 +591,7 @@ test.describe("Streaming composer + message queue", () => {
 
       const textbox = messageBox(page);
       await textbox.fill("cite files");
+      await expectStreamStillActive(page);
       await page.getByTestId("chat-input-queue-message").click();
 
       await expect(queuedChip(page)).toBeVisible();
