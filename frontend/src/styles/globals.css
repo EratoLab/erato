@@ -620,6 +620,33 @@ body {
   @apply transition-[background-color,border-color,color,fill,stroke,opacity,box-shadow,transform] duration-150 ease-in-out motion-reduce:transition-none;
 }
 
+/* Sidebar chat rows. Same reasoning as .anchored-popover-skin: held inline,
+   the radius made `[data-ui="chat-history-item"]` unoverridable. The row's <a>
+   wrapper reads --theme-radius-shell too, so a theme that moves the token keeps
+   the focus ring and the row in step; a direct border-radius rule on the hook
+   only reaches the row, since the hook sits on the inner element. */
+.sidebar-row-geometry {
+  min-height: var(--theme-spacing-sidebar-row-height);
+  border-radius: var(--theme-radius-shell);
+}
+
+.sidebar-row-selected {
+  background-color: var(--theme-shell-sidebar-selected);
+}
+
+/* Surface for AnchoredPopover panels (dropdown menus, the chat "+" menu).
+   Deliberately declared here, after @tailwind utilities and outside
+   @layer components: it must still outrank a utility a caller passes through
+   `panelClassName`, while remaining overridable from a customer theme.css,
+   which loads later still. */
+.anchored-popover-skin {
+  background-color: var(--theme-shell-dropdown);
+  border-color: var(--theme-border-dropdown);
+  border-radius: var(--theme-radius-base);
+  box-shadow: var(--theme-elevation-dropdown);
+  max-width: calc(100vw - 16px);
+}
+
 .docx-preview-theme {
   --docx-preview-surface-bg: #f3f4f6;
   --docx-preview-page-bg: #ffffff;

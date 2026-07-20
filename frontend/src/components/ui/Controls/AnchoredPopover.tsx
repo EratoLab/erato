@@ -339,19 +339,19 @@ export function AnchoredPopover({
       ref={setPanelElement}
       id={panelId}
       className={clsx(
-        "theme-transition fixed z-[9999] border focus:outline-none",
+        "anchored-popover-skin theme-transition fixed z-[9999] border focus:outline-none",
         panelClassName,
       )}
       // Focusable container so a pointer-open can hold focus without any item
       // looking pre-selected; roving arrow-key nav then works from here.
       tabIndex={-1}
+      // Only runtime values belong here. The panel's surface lives in
+      // .anchored-popover-skin: an inline style outranks every author rule, so
+      // holding it here made `[data-ui="dropdown-panel"]` — a hook the theming
+      // docs advertise as overridable — silently inert for background, border
+      // and radius. Positioning is written directly to the node in
+      // updatePosition(), so it is unaffected.
       style={{
-        backgroundColor: "var(--theme-shell-dropdown)",
-        borderColor: "var(--theme-border-dropdown)",
-        borderRadius: "var(--theme-radius-base)",
-        boxSizing: "border-box",
-        boxShadow: "var(--theme-elevation-dropdown)",
-        maxWidth: "calc(100vw - 16px)",
         ...panelStyle,
         visibility: isPositioned ? "visible" : "hidden",
       }}
