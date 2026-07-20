@@ -34,16 +34,28 @@ const messageRoles = async (page: Page): Promise<string[]> =>
     nodes.map((node) => node.getAttribute("data-role") ?? ""),
   );
 
-/** Send a message that falls through to the default mock and wait for the turn. */
-const sendSettledMessage = async (page: Page, text: string) => {
+/**
+ * Send a message and wait for its turn to settle.
+ *
+ * `chatIsReadyToChat`'s `expectAssistantResponse` assertion is strict-mode, so
+ * it throws once a second assistant message exists. Wait on turn completion
+ * (the Stop button clearing) and assert the turn counts here instead.
+ */
+const sendSettledMessage = async (
+  page: Page,
+  text: string,
+  expectedTurns: number,
+) => {
   const textbox = messageBox(page);
   await expect(textbox).toBeEnabled();
   await textbox.fill(text);
   await textbox.press("Enter");
-  await chatIsReadyToChat(page, {
-    expectAssistantResponse: true,
-    loadingTimeoutMs: 30000,
-  });
+  await chatIsReadyToChat(page, { loadingTimeoutMs: 30000 });
+
+  await expect(page.getByTestId("message-user")).toHaveCount(expectedTurns);
+  await expect(page.getByTestId("message-assistant")).toHaveCount(
+    expectedTurns,
+  );
 };
 
 /**
@@ -51,12 +63,9 @@ const sendSettledMessage = async (page: Page, text: string) => {
  * trigger substring so each turn resolves via the fast default response.
  */
 const seedThreeTurnConversation = async (page: Page) => {
-  await sendSettledMessage(page, "Alpha one");
-  await sendSettledMessage(page, "Beta two");
-  await sendSettledMessage(page, "Gamma three");
-
-  await expect(page.getByTestId("message-user")).toHaveCount(3);
-  await expect(page.getByTestId("message-assistant")).toHaveCount(3);
+  await sendSettledMessage(page, "Alpha one", 1);
+  await sendSettledMessage(page, "Beta two", 2);
+  await sendSettledMessage(page, "Gamma three", 3);
 };
 
 /** Wait until the streamed turn is genuinely in flight, with content on screen. */
@@ -153,9 +162,9 @@ test.describe("Edit / regenerate lineage pruning", () => {
 
       // The regenerated turn replays its own user message, so the long-running
       // trigger has to live in that message rather than in the edit.
-      await sendSettledMessage(page, "Alpha one");
-      await sendSettledMessage(page, "long running 6");
-      await sendSettledMessage(page, "Gamma three");
+      await sendSettledMessage(page, "Alpha one", 1);
+      await sendSettledMessage(page, "long running 6", 2);
+      await sendSettledMessage(page, "Gamma three", 3);
       await expect(page.getByTestId("message-assistant")).toHaveCount(3);
 
       const secondAssistantMessage = page

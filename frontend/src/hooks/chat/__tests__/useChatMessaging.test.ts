@@ -1093,6 +1093,56 @@ describe("useChatMessaging", () => {
     ).toBeDefined();
   });
 
+  it("should drop superseded turns that are still held as local user messages", async () => {
+    const { result } = renderHook(() => useChatMessaging("chat1"), {
+      wrapper: TestWrapper,
+    });
+
+    await act(async () => {
+      useMessagingStore.getState().setApiMessages(
+        [
+          {
+            id: "msg-user-first",
+            content: [{ content_type: "text", text: "First" }],
+            role: "user",
+            createdAt: "2026-02-20T10:00:00.000Z",
+            status: "complete",
+          },
+          {
+            id: "msg-assistant-regenerate",
+            content: [{ content_type: "text", text: "Old response" }],
+            role: "assistant",
+            createdAt: "2026-02-20T10:01:00.000Z",
+            status: "complete",
+          },
+        ],
+        "chat1",
+      );
+
+      // A later turn that only exists locally — hiding does not filter these,
+      // so it must be removed outright or it keeps rendering.
+      useMessagingStore.getState().addUserMessage(
+        {
+          id: "temp-user-later",
+          content: [{ content_type: "text", text: "Later message" }],
+          role: "user",
+          createdAt: "2026-02-20T10:02:00.000Z",
+          status: "complete",
+        },
+        "chat1",
+      );
+    });
+
+    expect(result.current.messages["temp-user-later"]).toBeDefined();
+
+    await act(async () => {
+      await result.current.regenerateMessage("msg-assistant-regenerate");
+    });
+
+    expect(result.current.messages["temp-user-later"]).toBeUndefined();
+    expect(result.current.messageOrder).toEqual(["msg-user-first"]);
+  });
+
   it("should preserve per-chat streaming state when switching chats", async () => {
     mockUseChatMessages.mockReturnValue({
       data: undefined,

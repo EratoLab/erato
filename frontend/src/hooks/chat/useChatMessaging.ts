@@ -219,6 +219,9 @@ export function useChatMessaging(
   );
   const setApiMessages = useMessagingStore((state) => state.setApiMessages);
   const hideMessageIds = useMessagingStore((state) => state.hideMessageIds);
+  const removeUserMessages = useMessagingStore(
+    (state) => state.removeUserMessages,
+  );
   const clearHiddenMessageIds = useMessagingStore(
     (state) => state.clearHiddenMessageIds,
   );
@@ -1585,6 +1588,22 @@ export function useChatMessaging(
     ],
   );
 
+  /**
+   * Take an edit's or regenerate's superseded turns out of the render tree.
+   *
+   * Hiding covers the API snapshot without destroying it, so a request that
+   * fails before streaming is restored by the refetch (which clears hidden ids
+   * anyway). Locally-held user messages are not covered by the hidden filter,
+   * so those are removed outright.
+   */
+  const dropSupersededMessages = useCallback(
+    (supersededMessageIds: string[], targetStreamKey: string) => {
+      hideMessageIds(supersededMessageIds, targetStreamKey);
+      removeUserMessages(supersededMessageIds, targetStreamKey);
+    },
+    [hideMessageIds, removeUserMessages],
+  );
+
   // Edit an existing message (rerun with modified user content and optional files)
   const editMessage = useCallback(
     async (
@@ -1607,55 +1626,7 @@ export function useChatMessaging(
         messageId,
       );
 
-      // Hidden rather than deleted: the API snapshot stays intact so an edit
-      // that fails before streaming can be restored by the refetch, which
-      // clears hidden ids anyway.
-      hideMessageIds(supersededMessageIds, streamKey);
-
-      // Hiding only filters API messages, so superseded *local* user messages
-      // (the edited one, plus any optimistic turn after it) must be dropped.
-      useMessagingStore.setState((prevState) => {
-        const resolveStreamKeyFromState = (
-          streamKeyToResolve: string,
-          aliases: Record<string, string>,
-        ): string => {
-          let resolvedKey = streamKeyToResolve;
-          const visited = new Set<string>();
-          while (aliases[resolvedKey] && !visited.has(resolvedKey)) {
-            visited.add(resolvedKey);
-            resolvedKey = aliases[resolvedKey];
-          }
-          return resolvedKey;
-        };
-
-        const resolvedStreamKey = resolveStreamKeyFromState(
-          streamKey,
-          prevState.streamKeyAliases,
-        );
-        const resolvedActiveStreamKey = resolveStreamKeyFromState(
-          prevState.activeStreamKey,
-          prevState.streamKeyAliases,
-        );
-
-        const previousUserMessages =
-          prevState.userMessagesByKey[resolvedStreamKey] ?? {};
-        const nextUserMessages = { ...previousUserMessages };
-        for (const id of supersededMessageIds) {
-          delete nextUserMessages[id];
-        }
-
-        return {
-          ...prevState,
-          userMessagesByKey: {
-            ...prevState.userMessagesByKey,
-            [resolvedStreamKey]: nextUserMessages,
-          },
-          userMessages:
-            resolvedActiveStreamKey === resolvedStreamKey
-              ? nextUserMessages
-              : prevState.userMessages,
-        };
-      });
+      dropSupersededMessages(supersededMessageIds, streamKey);
 
       // Keep UX responsive and allow user_message_saved to reconcile temp -> real.
       const optimisticEditedUserMessage = createOptimisticUserMessage(
@@ -1788,7 +1759,7 @@ export function useChatMessaging(
       getSSECleanupForKey,
       setSSECleanupForKey,
       addUserMessage,
-      hideMessageIds,
+      dropSupersededMessages,
     ],
   );
 
@@ -1817,7 +1788,7 @@ export function useChatMessaging(
       // Keep the old assistant — and every turn after it, which the backend
       // deactivates too — out of the render tree while the replacement branch
       // is streaming, without mutating the cached API snapshot.
-      hideMessageIds(
+      dropSupersededMessages(
         collectSupersededMessageIds(
           useMessagingStore.getState().getRenderableMessages(streamKey),
           currentMessageId,
@@ -1942,7 +1913,7 @@ export function useChatMessaging(
       streamKey,
       getSSECleanupForKey,
       setSSECleanupForKey,
-      hideMessageIds,
+      dropSupersededMessages,
       clearHiddenMessageIds,
     ],
   );

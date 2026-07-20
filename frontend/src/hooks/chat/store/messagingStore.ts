@@ -63,6 +63,7 @@ export interface MessagingStore {
     options?: { includeApiMessages?: boolean },
   ) => Record<string, Message>;
   addUserMessage: (message: Message, streamKey?: string | null) => void;
+  removeUserMessages: (messageIds: string[], streamKey?: string | null) => void;
   clearUserMessages: (streamKey?: string | null) => void;
   // New method to only clear messages that are not in sending state
   clearCompletedUserMessages: (streamKey?: string | null) => void;
@@ -561,6 +562,47 @@ export const useMessagingStore = create<MessagingStore>()(
           );
         },
         // New method that only clears messages that are not in sending state
+        // Superseded turns must be dropped from the local user messages as
+        // well as hidden: `buildRenderableMessages` applies hidden ids to API
+        // messages only, so a locally-held user message would keep rendering.
+        removeUserMessages: (messageIds, streamKey) =>
+          set(
+            (prev) => {
+              const inputKey = resolveStreamKey(streamKey);
+              const resolvedKey = resolveStreamKeyFromState(prev, inputKey);
+              const previousUserMessages =
+                prev.userMessagesByKey[resolvedKey] ?? EMPTY_MESSAGES;
+              const removableIds = messageIds.filter(
+                (messageId) => messageId in previousUserMessages,
+              );
+              if (removableIds.length === 0) {
+                return prev;
+              }
+
+              const nextUserMessages = { ...previousUserMessages };
+              for (const messageId of removableIds) {
+                delete nextUserMessages[messageId];
+              }
+
+              const activeResolvedKey = resolveStreamKeyFromState(
+                prev,
+                prev.activeStreamKey,
+              );
+              return {
+                ...prev,
+                userMessagesByKey: {
+                  ...prev.userMessagesByKey,
+                  [resolvedKey]: nextUserMessages,
+                },
+                userMessages:
+                  activeResolvedKey === resolvedKey
+                    ? nextUserMessages
+                    : prev.userMessages,
+              };
+            },
+            false,
+            "messaging/removeUserMessages",
+          ),
         clearCompletedUserMessages: (streamKey) => {
           set(
             (prev) => {
