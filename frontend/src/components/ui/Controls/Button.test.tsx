@@ -80,6 +80,23 @@ describe("Button", () => {
     expect(button.getAttribute("data-variant")).toBe("secondary");
   });
 
+  it("pins a type scale per size so it cannot inherit from the container", () => {
+    const { rerender } = render(<Button size="sm">Small</Button>);
+    expect(screen.getByRole("button", { name: "Small" }).className).toContain(
+      "text-sm",
+    );
+
+    rerender(<Button size="md">Medium</Button>);
+    expect(screen.getByRole("button", { name: "Medium" }).className).toContain(
+      "text-base",
+    );
+
+    rerender(<Button size="lg">Large</Button>);
+    expect(screen.getByRole("button", { name: "Large" }).className).toContain(
+      "text-lg",
+    );
+  });
+
   it("reads the pill radius from the theme token, not a hardcoded value", () => {
     render(
       <Button variant="secondary" shape="pill">

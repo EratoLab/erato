@@ -82,10 +82,14 @@ const VARIANT_STYLES = {
 
 // Size geometry classes defined in globals.css @layer components
 // so consumer Tailwind utilities (e.g. p-0) can override them.
+// Each size pins its own type scale. Leaving md/lg unset made a button's font
+// size depend on whatever container it happened to land in rather than on its
+// own size prop, so a default-size button next to a size="sm" one disagreed —
+// visible wherever the two sit together, e.g. dialog footers.
 const CONTROL_SIZE_STYLES = {
   sm: "btn-geometry-sm text-sm",
-  md: "btn-geometry-md",
-  lg: "btn-geometry-lg",
+  md: "btn-geometry-md text-base",
+  lg: "btn-geometry-lg text-lg",
 } as const;
 
 const ICON_SIZE_STYLES = {
