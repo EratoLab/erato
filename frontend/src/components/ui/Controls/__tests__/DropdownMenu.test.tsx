@@ -238,4 +238,26 @@ describe("DropdownMenu", () => {
     });
     expect(trigger).toHaveAttribute("aria-expanded", "false");
   });
+
+  it("takes its geometry from the shared control token, not a caller override", () => {
+    render(
+      <DropdownMenu
+        items={[{ label: "Rename", onClick: vi.fn() }]}
+        triggerButtonVariant="secondary"
+        triggerButtonClassName="min-w-[10rem] justify-between gap-2"
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Open menu" });
+
+    // btn-geometry-sm resolves --theme-radius-control, so a theme scoping that
+    // token to a surface reaches this trigger like any other button.
+    expect(trigger.className).toContain("btn-geometry-sm");
+    expect(trigger).toHaveAttribute("data-geometry", "sm");
+    // Layout is the caller's business; skin is not.
+    expect(trigger.className).toContain("justify-between");
+    expect(trigger.className).not.toMatch(/rounded-\[/);
+    expect(trigger.className).not.toMatch(/\bshadow-sm\b/);
+    expect(trigger.className).not.toMatch(/\bpx-3\b|\bpy-2\b/);
+  });
 });
