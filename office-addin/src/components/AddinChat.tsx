@@ -51,6 +51,7 @@ import { useOutlookMessageFetcher } from "../hooks/useOutlookMessageFetcher";
 import { useOffice } from "../providers/OfficeProvider";
 import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
+import { resolveEditExchangeItemIdentity } from "../utils/exchangeItemIdentity";
 import { FreshCompletionTracker } from "../utils/freshCompletionTracker";
 import {
   OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
@@ -633,22 +634,12 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
       replaceInputFileIds?: string[],
       selectedFacetIds?: string[],
     ) => {
-      // The edited exchange replays the ORIGINAL email (it rides in the
-      // stored user message / facet args), so the wrong-item guard must
-      // anchor on the original exchange's send-time identity — never the
-      // item open right now, which may be a different email entirely. That
-      // identity is the one stamped as `outlookArtifact.itemIdentity` on
-      // the exchange's assistant message; when this session no longer knows
-      // it (e.g. after a reload — the map is in-memory only) the ref stays
-      // null and the new completion degrades to a history-like draft.
-      const exchangeAssistantId = messageOrder.find(
-        (id) =>
-          messages[id]?.role === "assistant" &&
-          messages[id]?.previous_message_id === messageId,
+      pendingSendItemIdentityRef.current = resolveEditExchangeItemIdentity(
+        messages,
+        messageOrder,
+        messageId,
+        freshItemIdentityRef.current,
       );
-      pendingSendItemIdentityRef.current = exchangeAssistantId
-        ? (freshItemIdentityRef.current.get(exchangeAssistantId) ?? null)
-        : null;
       void editMessage(
         messageId,
         newContent,
