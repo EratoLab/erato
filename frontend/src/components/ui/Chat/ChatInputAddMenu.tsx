@@ -5,6 +5,7 @@ import { Fragment, useId, useRef, useState } from "react";
 import { useRovingMenuFocus } from "@/hooks/ui/useRovingMenuFocus";
 
 import { AnchoredPopover } from "../Controls/AnchoredPopover";
+import { Button } from "../Controls/Button";
 import { CheckIcon, LoadingIcon, PlusIcon } from "../icons";
 
 import type React from "react";
@@ -309,27 +310,30 @@ export function ChatInputAddMenu({
       initialFocusSelector={NAVIGABLE_ITEM_SELECTOR}
       panelClassName="w-[min(20rem,calc(100vw-16px))] overflow-y-auto p-1"
       dataUi="chat-input-add-menu"
+      // `relative` is the only styling this needs beyond the shared Button:
+      // it anchors the absolutely-positioned count badge. Size, radius, hover
+      // and disabled states all come from `variant="icon-only"`, which this
+      // previously hand-rolled with the same tokens.
       trigger={(triggerProps) => (
-        <button
+        <Button
           {...triggerProps}
+          variant="icon-only"
+          size="sm"
           disabled={isBusy}
           aria-label={t({
             id: "chatInput.addMenu.trigger",
             message: "Add files and tools",
           })}
           data-testid="chat-input-add-menu-trigger"
-          className={clsx(
-            "relative inline-flex size-9 items-center justify-center rounded-md",
-            "text-theme-fg-secondary transition-colors hover:bg-theme-bg-hover",
-            "disabled:cursor-not-allowed disabled:opacity-50",
-            className,
-          )}
+          className={clsx("relative", className)}
+          icon={
+            isProcessing ? (
+              <LoadingIcon className="size-5 animate-spin" />
+            ) : (
+              <PlusIcon className="size-5" />
+            )
+          }
         >
-          {isProcessing ? (
-            <LoadingIcon className="size-5 animate-spin" />
-          ) : (
-            <PlusIcon className="size-5" />
-          )}
           {showBadge && !isProcessing && (
             <span
               data-testid="chat-input-add-menu-badge"
@@ -338,7 +342,7 @@ export function ChatInputAddMenu({
               {selectedCount}
             </span>
           )}
-        </button>
+        </Button>
       )}
     >
       <div className="flex flex-col" data-ui="chat-input-add-menu-content">
