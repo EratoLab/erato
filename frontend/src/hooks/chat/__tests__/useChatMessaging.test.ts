@@ -1036,6 +1036,63 @@ describe("useChatMessaging", () => {
     );
   });
 
+  it("should hide every later turn when regenerating a non-last assistant", async () => {
+    const { result } = renderHook(() => useChatMessaging("chat1"), {
+      wrapper: TestWrapper,
+    });
+
+    await act(async () => {
+      useMessagingStore.getState().setApiMessages(
+        [
+          {
+            id: "msg-user-first",
+            content: [{ content_type: "text", text: "First" }],
+            role: "user",
+            createdAt: "2026-02-20T10:00:00.000Z",
+            status: "complete",
+          },
+          {
+            id: "msg-assistant-regenerate",
+            content: [{ content_type: "text", text: "Old response" }],
+            role: "assistant",
+            createdAt: "2026-02-20T10:01:00.000Z",
+            status: "complete",
+          },
+          {
+            id: "msg-user-later",
+            content: [{ content_type: "text", text: "Later message" }],
+            role: "user",
+            createdAt: "2026-02-20T10:02:00.000Z",
+            status: "complete",
+          },
+          {
+            id: "msg-assistant-later",
+            content: [{ content_type: "text", text: "Later response" }],
+            role: "assistant",
+            createdAt: "2026-02-20T10:03:00.000Z",
+            status: "complete",
+          },
+        ],
+        "chat1",
+      );
+    });
+
+    await act(async () => {
+      await result.current.regenerateMessage("msg-assistant-regenerate");
+    });
+
+    expect(result.current.messages["msg-user-first"]).toBeDefined();
+    expect(result.current.messages["msg-assistant-regenerate"]).toBeUndefined();
+    expect(result.current.messages["msg-user-later"]).toBeUndefined();
+    expect(result.current.messages["msg-assistant-later"]).toBeUndefined();
+    expect(result.current.messageOrder).toEqual(["msg-user-first"]);
+
+    // Hidden, not deleted — the API snapshot survives for the refetch.
+    expect(
+      useMessagingStore.getState().getApiMessages("chat1")["msg-user-later"],
+    ).toBeDefined();
+  });
+
   it("should preserve per-chat streaming state when switching chats", async () => {
     mockUseChatMessages.mockReturnValue({
       data: undefined,
@@ -1375,7 +1432,7 @@ describe("useChatMessaging", () => {
     expect(orderedMessages[1].role).toBe("assistant");
   });
 
-  it("should remove replaced user and following assistant immediately on edit submit", async () => {
+  it("should remove the replaced user message and every later turn on edit submit", async () => {
     const { result } = renderHook(() => useChatMessaging("chat1"), {
       wrapper: TestWrapper,
     });
@@ -1411,6 +1468,13 @@ describe("useChatMessaging", () => {
             createdAt: "2026-02-20T10:03:00.000Z",
             status: "complete",
           },
+          {
+            id: "msg-assistant-later",
+            content: [{ content_type: "text", text: "Later response" }],
+            role: "assistant",
+            createdAt: "2026-02-20T10:04:00.000Z",
+            status: "complete",
+          },
         ],
         "chat1",
       );
@@ -1423,9 +1487,12 @@ describe("useChatMessaging", () => {
       await result.current.editMessage("msg-user-edit", "Edited content");
     });
 
+    expect(result.current.messages["msg-user-keep"]).toBeDefined();
     expect(result.current.messages["msg-user-edit"]).toBeUndefined();
     expect(result.current.messages["msg-assistant-following"]).toBeUndefined();
-    expect(result.current.messages["msg-user-later"]).toBeDefined();
+    // The backend deactivates the whole tail, not just the next assistant.
+    expect(result.current.messages["msg-user-later"]).toBeUndefined();
+    expect(result.current.messages["msg-assistant-later"]).toBeUndefined();
 
     const optimisticEditedMessage = Object.values(result.current.messages).find(
       (message) =>
@@ -1437,6 +1504,19 @@ describe("useChatMessaging", () => {
         ),
     );
     expect(optimisticEditedMessage).toBeDefined();
+
+    // The symptom this guards is ordering: the edit and its streaming reply
+    // must be last, with no stale turn floating above them.
+    expect(result.current.messageOrder).toEqual([
+      "msg-user-keep",
+      optimisticEditedMessage!.id,
+    ]);
+
+    // Superseded messages are hidden, not destroyed, so a failed edit can be
+    // restored by the refetch.
+    expect(
+      useMessagingStore.getState().getApiMessages("chat1")["msg-user-later"],
+    ).toBeDefined();
   });
 
   it("should handle canceling a message", async () => {

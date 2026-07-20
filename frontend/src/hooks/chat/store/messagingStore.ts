@@ -53,7 +53,7 @@ export interface MessagingStore {
   getApiMessages: (streamKey?: string | null) => Record<string, Message>;
   getHiddenMessageIds: (streamKey?: string | null) => string[];
   setApiMessages: (messages: Message[], streamKey?: string | null) => void;
-  hideMessageId: (messageId: string, streamKey?: string | null) => void;
+  hideMessageIds: (messageIds: string[], streamKey?: string | null) => void;
   clearHiddenMessageIds: (streamKey?: string | null) => void;
   clearApiMessages: (streamKey?: string | null) => void;
   clearAllApiMessages: () => void;
@@ -397,14 +397,17 @@ export const useMessagingStore = create<MessagingStore>()(
             false,
             "messaging/setApiMessages",
           ),
-        hideMessageId: (messageId, streamKey) =>
+        hideMessageIds: (messageIds, streamKey) =>
           set(
             (prev) => {
               const inputKey = resolveStreamKey(streamKey);
               const resolvedKey = resolveStreamKeyFromState(prev, inputKey);
               const previousHiddenMessageIds =
                 prev.hiddenMessageIdsByKey[resolvedKey] ?? [];
-              if (previousHiddenMessageIds.includes(messageId)) {
+              const addedMessageIds = messageIds.filter(
+                (messageId) => !previousHiddenMessageIds.includes(messageId),
+              );
+              if (addedMessageIds.length === 0) {
                 return prev;
               }
 
@@ -412,12 +415,15 @@ export const useMessagingStore = create<MessagingStore>()(
                 ...prev,
                 hiddenMessageIdsByKey: {
                   ...prev.hiddenMessageIdsByKey,
-                  [resolvedKey]: [...previousHiddenMessageIds, messageId],
+                  [resolvedKey]: [
+                    ...previousHiddenMessageIds,
+                    ...addedMessageIds,
+                  ],
                 },
               };
             },
             false,
-            "messaging/hideMessageId",
+            "messaging/hideMessageIds",
           ),
         clearHiddenMessageIds: (streamKey) =>
           set(

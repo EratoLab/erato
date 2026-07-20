@@ -26,6 +26,34 @@ export function createOptimisticUserMessage(
 }
 
 /**
+ * Collects the message ids that an edit or regenerate supersedes: the anchor
+ * message itself plus everything ordered after it.
+ *
+ * This mirrors the backend, which deactivates every message in the chat and
+ * reactivates only the new lineage (`submit_message` in models/message.rs).
+ * Pruning less leaves stale turns visible with their original (older)
+ * `createdAt`, so they sort above the replacement while it streams.
+ *
+ * @param messages The currently renderable messages, keyed by id.
+ * @param anchorMessageId The edited user message, or the regenerated assistant.
+ * @returns The anchor id followed by every later message id.
+ */
+export function collectSupersededMessageIds(
+  messages: Record<string, Message>,
+  anchorMessageId: string,
+): string[] {
+  const orderedIds = Object.values(messages)
+    .sort(
+      (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    )
+    .map((message) => message.id);
+
+  const anchorIndex = orderedIds.indexOf(anchorMessageId);
+  return anchorIndex >= 0 ? orderedIds.slice(anchorIndex) : [anchorMessageId];
+}
+
+/**
  * Merges API messages with local user messages, prioritizing API messages
  * and de-duplicating user messages based on content.
  * @param apiMessages Messages fetched from the API.
