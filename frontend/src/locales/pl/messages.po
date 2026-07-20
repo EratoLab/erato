@@ -1429,6 +1429,21 @@ msgid "chat.message.link.fallback"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/MessageList/MessageEditor.tsx
+msgid "chat.messageEditor.ariaLabel"
+msgstr "Edytuj swoją wiadomość"
+
+#. js-lingui-explicit-id
+#: src/components/ui/MessageList/MessageEditor.tsx
+msgid "chat.messageEditor.cancel"
+msgstr "Anuluj"
+
+#. js-lingui-explicit-id
+#: src/components/ui/MessageList/MessageEditor.tsx
+msgid "chat.messageEditor.submit"
+msgstr "Wyślij"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
 msgid "chat.newChat.title"
 msgstr "Nowy Czat"
