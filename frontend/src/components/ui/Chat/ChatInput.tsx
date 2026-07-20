@@ -2683,6 +2683,7 @@ export const ChatInput = ({
                     type="button"
                     variant="secondary"
                     size="sm"
+                    geometry="icon"
                     icon={
                       isDictationStarting ||
                       isDictating ||
@@ -2734,6 +2735,7 @@ export const ChatInput = ({
                       type="button"
                       variant="secondary"
                       size="sm"
+                      geometry="icon"
                       icon={<ArrowUpIcon className="size-5" />}
                       onClick={() => enqueueCurrentMessage()}
                       data-testid="chat-input-queue-message"
@@ -2745,6 +2747,7 @@ export const ChatInput = ({
                     type="button"
                     variant="secondary"
                     size="sm"
+                    geometry="icon"
                     icon={<StopIcon />}
                     onClick={() => {
                       // Stopping never auto-sends: return any queued draft to the
@@ -2782,6 +2785,7 @@ export const ChatInput = ({
                   type="submit"
                   variant="secondary"
                   size="sm"
+                  geometry="icon"
                   icon={<ArrowUpIcon className="size-5" />}
                   disabled={!canSendMessage || isSendDisabled}
                   data-testid={
