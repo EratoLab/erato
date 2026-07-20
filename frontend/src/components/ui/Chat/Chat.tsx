@@ -392,6 +392,11 @@ export const Chat = ({
 
   const handleEditSubmit = useCallback(
     (messageId: string, newContent: string, replaceInputFileIds: string[]) => {
+      // `editMessage` drops the submission while a turn is in flight, so bail
+      // before the destructive steps rather than closing the editor on a no-op.
+      if (isPendingResponse) {
+        return;
+      }
       // The queued follow-up was written against the branch this edit
       // supersedes, so it must not auto-send into the new one.
       chatInputControlsRef.current?.clearQueuedMessage();
@@ -406,7 +411,7 @@ export const Chat = ({
         activeSelectedFacetIds,
       );
     },
-    [activeSelectedFacetIds, editMessage],
+    [activeSelectedFacetIds, editMessage, isPendingResponse],
   );
 
   const messageEditValue = useMemo(
@@ -415,6 +420,7 @@ export const Chat = ({
       beginEdit: setEditingMessageId,
       cancelEdit,
       submitEdit: handleEditSubmit,
+      isStreaming: isPendingResponse,
       chatId: currentChatId,
       assistantId,
       chatProviderId: selectedModel?.chat_provider_id,
@@ -425,6 +431,7 @@ export const Chat = ({
       currentChatId,
       editingMessageId,
       handleEditSubmit,
+      isPendingResponse,
       selectedModel?.chat_provider_id,
     ],
   );

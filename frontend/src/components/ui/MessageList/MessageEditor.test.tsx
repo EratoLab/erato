@@ -108,6 +108,14 @@ describe("MessageEditor", () => {
     expect(onSubmit).toHaveBeenCalledWith("original text", []);
   });
 
+  it("keeps Cancel usable while Submit is blocked", () => {
+    const { onCancel } = renderEditor({ isSubmitBlocked: true });
+
+    fireEvent.click(screen.getByTestId("message-editor-cancel"));
+
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
   it("blocks submit when the draft is emptied", () => {
     const { onSubmit, input } = renderEditor();
 

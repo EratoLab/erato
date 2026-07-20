@@ -13,6 +13,8 @@ export interface MessageEditContextValue {
     content: string,
     inputFileIds: string[],
   ) => void;
+  /** Blocks Submit: `editMessage` drops edits while a turn is in flight. */
+  isStreaming?: boolean;
   /** Passed to the row's token-usage check so Submit can be gated. */
   chatId?: string | null;
   assistantId?: string;

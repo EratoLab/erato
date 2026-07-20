@@ -157,7 +157,7 @@ const MessageEditorRow = ({
       onSubmit={(content, inputFileIds) =>
         messageEdit.submitEdit(messageId, content, inputFileIds)
       }
-      isSubmitBlocked={isTokenLimitExceeded}
+      isSubmitBlocked={isTokenLimitExceeded || messageEdit.isStreaming === true}
       initialFiles={messageFiles}
       onFilePreview={onFilePreview}
       renderTokenUsage={(draft) => (
