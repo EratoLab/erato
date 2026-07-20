@@ -123,7 +123,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
             {/* Simple Close Button — positioned using the same modal padding token */}
             <button
               onClick={onClose}
-              className="focus-ring-tight absolute rounded-[var(--theme-radius-pill)] text-theme-fg-muted hover:bg-theme-bg-secondary"
+              className="focus-ring-tight absolute rounded-full text-theme-fg-muted hover:bg-theme-bg-secondary"
               style={{
                 padding: "var(--theme-spacing-modal-close-button-padding)",
                 right: "var(--theme-spacing-modal-padding)",

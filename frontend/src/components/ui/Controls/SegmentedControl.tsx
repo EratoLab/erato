@@ -57,8 +57,10 @@ function SegmentedControlInner<T extends string>({
       aria-label={ariaLabel}
       className={clsx(
         // The track and its segments are a concentric pair: the segment radius
-        // is the track's minus the 2px (p-0.5) inset, so the selected chip's
-        // corners sit flush inside the track's. Both must move together.
+        // is the track's minus the 2px (p-0.5) inset. Both must move together,
+        // or the selected chip's corners bulge out of the track. (The track's
+        // 1px border means true concentricity would be -0.1875rem; the 2px
+        // relationship is kept as-is so the default theme is unchanged.)
         "inline-flex rounded-[var(--theme-radius-control)] border border-theme-border bg-theme-bg-secondary p-0.5",
         disabled && "cursor-not-allowed opacity-50",
         className,

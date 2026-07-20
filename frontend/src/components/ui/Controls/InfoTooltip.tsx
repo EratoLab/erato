@@ -80,7 +80,7 @@ export function InfoTooltip({
     <Tooltip content={tooltipContent} position={position}>
       <button
         type="button"
-        className={`inline-flex cursor-help items-center justify-center rounded-[var(--theme-radius-pill)] text-theme-fg-muted transition-colors hover:text-theme-fg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-border-focus ${className}`}
+        className={`inline-flex cursor-help items-center justify-center rounded-full text-theme-fg-muted transition-colors hover:text-theme-fg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-border-focus ${className}`}
         aria-label={t({
           id: "infotooltip.aria.label",
           message: "More information",

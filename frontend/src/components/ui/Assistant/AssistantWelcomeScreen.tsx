@@ -96,7 +96,7 @@ export function AssistantWelcomeScreen({
             <button
               type="button"
               onClick={openConfiguration}
-              className="focus-ring flex size-20 items-center justify-center rounded-[var(--theme-radius-pill)] bg-theme-avatar-assistant-bg text-3xl font-semibold text-theme-avatar-assistant-fg transition-transform hover:scale-105"
+              className="focus-ring flex size-20 items-center justify-center rounded-full bg-theme-avatar-assistant-bg text-3xl font-semibold text-theme-avatar-assistant-fg transition-transform hover:scale-105"
               aria-label={configurationLabel}
               data-testid="assistant-welcome-avatar-button"
             >

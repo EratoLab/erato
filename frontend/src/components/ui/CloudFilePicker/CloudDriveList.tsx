@@ -184,7 +184,15 @@ export const CloudDriveList = memo<CloudDriveListProps>(
                   onSelectDrive(drive);
                 }
               }}
-              className="theme-transition focus-ring w-full rounded-[var(--theme-radius-shell)] p-4 text-left hover:bg-theme-bg-hover"
+              // Only the top corners are rounded when a footer follows, so the
+              // hover fill meets the footer's border instead of curving away
+              // from it. The wrapper can't just clip: `focus-ring` is an
+              // offset (outset) ring, and overflow-hidden would cut it off.
+              className={`theme-transition focus-ring w-full p-4 text-left hover:bg-theme-bg-hover ${
+                drive.web_url
+                  ? "rounded-t-[var(--theme-radius-shell)]"
+                  : "rounded-[var(--theme-radius-shell)]"
+              }`}
               aria-label={t({
                 id: "cloudDriveList.openDrive",
                 message: "Open drive",
