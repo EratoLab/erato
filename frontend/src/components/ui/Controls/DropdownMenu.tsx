@@ -65,7 +65,7 @@ const MenuItem = memo(
     <button
       className={clsx(
         "dropdown-item-geometry",
-        "w-full rounded-md text-left text-sm",
+        "w-full rounded-[var(--theme-radius-control)] text-left text-sm",
         "flex items-center gap-2",
         "theme-transition",
         "disabled:cursor-not-allowed disabled:opacity-50",

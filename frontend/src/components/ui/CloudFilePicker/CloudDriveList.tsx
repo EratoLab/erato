@@ -126,7 +126,7 @@ function getDriveDetailLines(drive: CloudDrive): string[] {
 }
 
 const DriveCardSkeleton = memo(() => (
-  <div className="animate-pulse rounded-lg border border-theme-border p-4">
+  <div className="animate-pulse rounded-[var(--theme-radius-shell)] border border-theme-border p-4">
     <div className="flex items-start gap-3">
       <div className="size-10 rounded bg-theme-bg-accent" />
       <div className="flex-1 space-y-2">
@@ -173,7 +173,7 @@ export const CloudDriveList = memo<CloudDriveListProps>(
         {drives.map((drive) => (
           <div
             key={drive.id}
-            className="rounded-lg border border-theme-border bg-theme-bg-primary"
+            className="rounded-[var(--theme-radius-shell)] border border-theme-border bg-theme-bg-primary"
           >
             <button
               type="button"
@@ -184,7 +184,7 @@ export const CloudDriveList = memo<CloudDriveListProps>(
                   onSelectDrive(drive);
                 }
               }}
-              className="theme-transition focus-ring w-full rounded-lg p-4 text-left hover:bg-theme-bg-hover"
+              className="theme-transition focus-ring w-full rounded-[var(--theme-radius-shell)] p-4 text-left hover:bg-theme-bg-hover"
               aria-label={t({
                 id: "cloudDriveList.openDrive",
                 message: "Open drive",

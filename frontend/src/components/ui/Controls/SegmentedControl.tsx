@@ -56,7 +56,10 @@ function SegmentedControlInner<T extends string>({
       role="tablist"
       aria-label={ariaLabel}
       className={clsx(
-        "inline-flex rounded-lg border border-theme-border bg-theme-bg-secondary p-0.5",
+        // The track and its segments are a concentric pair: the segment radius
+        // is the track's minus the 2px (p-0.5) inset, so the selected chip's
+        // corners sit flush inside the track's. Both must move together.
+        "inline-flex rounded-[var(--theme-radius-control)] border border-theme-border bg-theme-bg-secondary p-0.5",
         disabled && "cursor-not-allowed opacity-50",
         className,
       )}
@@ -81,7 +84,7 @@ function SegmentedControlInner<T extends string>({
               }
             }}
             className={clsx(
-              "theme-transition flex items-center gap-1.5 rounded-md font-medium",
+              "theme-transition flex items-center gap-1.5 rounded-[calc(var(--theme-radius-control)_-_0.125rem)] font-medium",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus",
               sizeStyles[size],
               isSelected

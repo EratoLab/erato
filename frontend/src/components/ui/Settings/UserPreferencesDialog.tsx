@@ -515,7 +515,7 @@ export function UserPreferencesDialog({
                   aria-controls={panelIds[tab]}
                   tabIndex={isActive ? 0 : -1}
                   className={clsx(
-                    "flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-left text-sm md:w-full",
+                    "flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap rounded-[var(--theme-radius-control)] px-3 py-2 text-left text-sm md:w-full",
                     "theme-transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus",
                     isActive
                       ? "bg-theme-bg-hover font-medium text-theme-fg-primary"
