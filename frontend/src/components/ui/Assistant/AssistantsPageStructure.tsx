@@ -30,7 +30,6 @@ export default function AssistantsPageStructure({
     archiveChat,
     createNewChat: createChat,
     updateChatTitle,
-    refetchHistory,
     fetchNextHistoryPage,
     hasNextHistoryPage,
     isFetchingNextHistoryPage,
@@ -137,14 +136,15 @@ export default function AssistantsPageStructure({
 
       try {
         setIsUpdatingChatTitle(true);
+        // updateChatTitle already invalidates the recent-chats query, which
+        // refetches every loaded page — no extra refetch needed here.
         await updateChatTitle(titleDialogChatId, title);
-        await refetchHistory();
         setTitleDialogChatId(null);
       } finally {
         setIsUpdatingChatTitle(false);
       }
     },
-    [refetchHistory, titleDialogChatId, updateChatTitle],
+    [titleDialogChatId, updateChatTitle],
   );
 
   // Handle creating a new chat

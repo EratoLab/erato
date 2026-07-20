@@ -19,7 +19,6 @@ import {
   type RecentChatsError,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext";
-import { deepMerge } from "@/lib/generated/v1betaApi/v1betaApiUtils";
 import { getChatUrl } from "@/utils/chat/urlUtils";
 import { createLogger } from "@/utils/debugLogger";
 
@@ -205,9 +204,6 @@ export function useChatHistory() {
   // Memoize the empty array reference
   const emptyChats = useMemo(() => [], []);
 
-  // Create a stable empty object for fetcherOptions, reflecting what useV1betaApiContext currently returns
-  const stableEmptyFetcherOptions = useMemo(() => ({}), []);
-
   // Extract chats from the paginated response structure, defaulting to a stable empty array reference
   const listedChats = useMemo(
     () => data?.pages.flatMap((page) => page.chats) ?? emptyChats,
@@ -343,13 +339,10 @@ export function useChatHistory() {
   // Archive a chat
   const archiveChat = useCallback(
     async (chatId: string) => {
-      // Replicate the key generation process used by the hook:
-      // 1. Merge stableEmptyFetcherOptions with base variables ({})
-      const mergedVariables = deepMerge(stableEmptyFetcherOptions, {}); // Use stable reference
-      // 2. Get the query definition using the *merged* variables
-      const queryDefinition = recentChatsQuery(mergedVariables);
-      // 3. Extract the queryKey from the definition
-      const queryKey = queryDefinition.queryKey;
+      // Recent-chats query key. Request headers never enter the key
+      // (queryKeyFn only uses path/query/body params), so no fetcherOptions
+      // need to be merged in here.
+      const queryKey = recentChatsQuery({}).queryKey;
 
       try {
         // Call the mutation
@@ -379,23 +372,19 @@ export function useChatHistory() {
         throw error; // Re-throw error for potential handling upstream
       }
     },
-    // fetcherOptions is needed for queryKey generation
     [
       archiveChatMutation,
       queryClient,
       currentChatId,
       // router,
       navigate, // Updated dependency array
-      stableEmptyFetcherOptions, // Use stable reference in dependency array
     ],
   );
 
   // Update chat title_by_user_provided
   const updateChatTitle = useCallback(
     async (chatId: string, titleByUserProvided?: string) => {
-      const mergedVariables = deepMerge(stableEmptyFetcherOptions, {});
-      const queryDefinition = recentChatsQuery(mergedVariables);
-      const queryKey = queryDefinition.queryKey;
+      const queryKey = recentChatsQuery({}).queryKey;
 
       try {
         const trimmedTitle = titleByUserProvided?.trim();
@@ -412,7 +401,7 @@ export function useChatHistory() {
         throw error;
       }
     },
-    [queryClient, stableEmptyFetcherOptions, updateChatMutation],
+    [queryClient, updateChatMutation],
   );
 
   return {
