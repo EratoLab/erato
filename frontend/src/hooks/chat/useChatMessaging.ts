@@ -30,6 +30,7 @@ import {
 import { mapApiMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 import {
   createOptimisticUserMessage,
+  collectSupersededMessageIds,
   constructSubmitStreamRequestBody,
 } from "@/utils/chat/messageUtils";
 import { createLogger } from "@/utils/debugLogger";
@@ -217,7 +218,10 @@ export function useChatMessaging(
     (state) => state.getRenderableMessages,
   );
   const setApiMessages = useMessagingStore((state) => state.setApiMessages);
-  const hideMessageId = useMessagingStore((state) => state.hideMessageId);
+  const hideMessageIds = useMessagingStore((state) => state.hideMessageIds);
+  const removeUserMessages = useMessagingStore(
+    (state) => state.removeUserMessages,
+  );
   const clearHiddenMessageIds = useMessagingStore(
     (state) => state.clearHiddenMessageIds,
   );
@@ -1584,6 +1588,17 @@ export function useChatMessaging(
     ],
   );
 
+  // Hiding keeps the API snapshot intact so a failed request is restored by the
+  // refetch, but `buildRenderableMessages` applies hidden ids to API messages
+  // only, so locally-held user messages have to be removed outright.
+  const dropSupersededMessages = useCallback(
+    (supersededMessageIds: string[], targetStreamKey: string) => {
+      hideMessageIds(supersededMessageIds, targetStreamKey);
+      removeUserMessages(supersededMessageIds, targetStreamKey);
+    },
+    [hideMessageIds, removeUserMessages],
+  );
+
   // Edit an existing message (rerun with modified user content and optional files)
   const editMessage = useCallback(
     async (
@@ -1598,79 +1613,14 @@ export function useChatMessaging(
         return;
       }
 
-      const messageIdsToRemove = new Set<string>([messageId]);
-      const editedMessageIndex = messageOrder.indexOf(messageId);
-      if (editedMessageIndex >= 0) {
-        for (let i = editedMessageIndex + 1; i < messageOrder.length; i++) {
-          const nextMessage = messages[messageOrder[i]];
-          if (!nextMessage) {
-            continue;
-          }
-          if (nextMessage.role === "assistant") {
-            messageIdsToRemove.add(nextMessage.id);
-            break;
-          }
-          if (nextMessage.role === "user") {
-            break;
-          }
-        }
-      }
+      // Read from the store, not the render closure, so this callback does not
+      // depend on `messages`/`messageOrder`, which change on every stream chunk.
+      const supersededMessageIds = collectSupersededMessageIds(
+        useMessagingStore.getState().getRenderableMessages(streamKey),
+        messageId,
+      );
 
-      // Optimistically remove the edited message and its immediately following
-      // assistant message so stale responses disappear as soon as edit is submitted.
-      useMessagingStore.setState((prevState) => {
-        const resolveStreamKeyFromState = (
-          streamKeyToResolve: string,
-          aliases: Record<string, string>,
-        ): string => {
-          let resolvedKey = streamKeyToResolve;
-          const visited = new Set<string>();
-          while (aliases[resolvedKey] && !visited.has(resolvedKey)) {
-            visited.add(resolvedKey);
-            resolvedKey = aliases[resolvedKey];
-          }
-          return resolvedKey;
-        };
-
-        const resolvedStreamKey = resolveStreamKeyFromState(
-          streamKey,
-          prevState.streamKeyAliases,
-        );
-        const resolvedActiveStreamKey = resolveStreamKeyFromState(
-          prevState.activeStreamKey,
-          prevState.streamKeyAliases,
-        );
-
-        const previousApiMessages =
-          prevState.apiMessagesByKey[resolvedStreamKey] ?? {};
-        const nextApiMessages = { ...previousApiMessages };
-        for (const id of messageIdsToRemove) {
-          delete nextApiMessages[id];
-        }
-
-        const previousUserMessages =
-          prevState.userMessagesByKey[resolvedStreamKey] ?? {};
-        const nextUserMessages = { ...previousUserMessages };
-        for (const id of messageIdsToRemove) {
-          delete nextUserMessages[id];
-        }
-
-        return {
-          ...prevState,
-          apiMessagesByKey: {
-            ...prevState.apiMessagesByKey,
-            [resolvedStreamKey]: nextApiMessages,
-          },
-          userMessagesByKey: {
-            ...prevState.userMessagesByKey,
-            [resolvedStreamKey]: nextUserMessages,
-          },
-          userMessages:
-            resolvedActiveStreamKey === resolvedStreamKey
-              ? nextUserMessages
-              : prevState.userMessages,
-        };
-      });
+      dropSupersededMessages(supersededMessageIds, streamKey);
 
       // Keep UX responsive and allow user_message_saved to reconcile temp -> real.
       const optimisticEditedUserMessage = createOptimisticUserMessage(
@@ -1796,8 +1746,6 @@ export function useChatMessaging(
       platform,
       processStreamEvent,
       resetStreaming,
-      messages,
-      messageOrder,
       setError,
       setSSEAbortCallback,
       isStreamCurrentlyActive,
@@ -1805,6 +1753,7 @@ export function useChatMessaging(
       getSSECleanupForKey,
       setSSECleanupForKey,
       addUserMessage,
+      dropSupersededMessages,
     ],
   );
 
@@ -1830,9 +1779,13 @@ export function useChatMessaging(
         setSSECleanupForKey(streamKey, null);
       }
 
-      // Keep the old assistant out of the render tree while the replacement
-      // branch is streaming, without mutating the cached API snapshot.
-      hideMessageId(currentMessageId, streamKey);
+      dropSupersededMessages(
+        collectSupersededMessageIds(
+          useMessagingStore.getState().getRenderableMessages(streamKey),
+          currentMessageId,
+        ),
+        streamKey,
+      );
 
       setSubmittingForKey(streamKey, true);
 
@@ -1951,7 +1904,7 @@ export function useChatMessaging(
       streamKey,
       getSSECleanupForKey,
       setSSECleanupForKey,
-      hideMessageId,
+      dropSupersededMessages,
       clearHiddenMessageIds,
     ],
   );

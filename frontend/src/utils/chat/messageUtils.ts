@@ -26,6 +26,25 @@ export function createOptimisticUserMessage(
 }
 
 /**
+ * The anchor message plus every message after it, mirroring the backend, which
+ * deactivates the whole tail and reactivates only the new lineage.
+ */
+export function collectSupersededMessageIds(
+  messages: Record<string, Message>,
+  anchorMessageId: string,
+): string[] {
+  const orderedIds = Object.values(messages)
+    .sort(
+      (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    )
+    .map((message) => message.id);
+
+  const anchorIndex = orderedIds.indexOf(anchorMessageId);
+  return anchorIndex >= 0 ? orderedIds.slice(anchorIndex) : [anchorMessageId];
+}
+
+/**
  * Merges API messages with local user messages, prioritizing API messages
  * and de-duplicating user messages based on content.
  * @param apiMessages Messages fetched from the API.
