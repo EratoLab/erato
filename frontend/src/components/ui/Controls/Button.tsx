@@ -16,6 +16,10 @@ export type ButtonVariant =
   | "link"
   | "danger";
 
+// "sm" is the house size and the default. It is what the great majority of
+// call sites already pass, so omitting the prop yields the common case rather
+// than an outlier — which is how md buttons ended up scattered among sm ones.
+// Reach for "md"/"lg" only as deliberate emphasis.
 type ButtonSize = "sm" | "md" | "lg";
 
 // Shape controls the corner geometry. "pill" yields a fully rounded button;
@@ -119,7 +123,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   (
     {
       variant = "secondary",
-      size = "md",
+      size = "sm",
       shape = "default",
       geometry = "control",
       icon,

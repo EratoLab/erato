@@ -449,7 +449,7 @@ export function AssistantHubVersionOverviewSection({
           </div>
         </div>
         {onStartChat && (
-          <Button variant="primary" size="lg" onClick={onStartChat}>
+          <Button variant="primary" onClick={onStartChat}>
             {t({
               id: "assistantHub.action.startChat",
               message: "Start chat",
