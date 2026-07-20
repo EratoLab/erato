@@ -50,6 +50,7 @@ import { ChatErrorBoundary } from "../Feedback/ChatErrorBoundary";
 import { FeedbackCommentDialog } from "../Feedback/FeedbackCommentDialog";
 import { FeedbackViewDialog } from "../Feedback/FeedbackViewDialog";
 import { DefaultMessageControls } from "../Message/DefaultMessageControls";
+import { MessageEditProvider } from "../MessageList/MessageEditContext";
 import { MessageList } from "../MessageList/MessageList";
 import { DocumentIcon, ShareIcon } from "../icons";
 
@@ -57,7 +58,6 @@ import type { ChatMessage } from "../MessageList/MessageList";
 import type {
   FileUploadItem,
   ChatModel,
-  ContentPart,
   UserProfile,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
@@ -198,6 +198,9 @@ export const Chat = ({
       },
       addUploadedFiles: (files: FileUploadItem[]) => {
         chatInputControlsRef.current?.addUploadedFiles(files);
+      },
+      clearQueuedMessage: () => {
+        chatInputControlsRef.current?.clearQueuedMessage();
       },
     }),
     [],
@@ -383,41 +386,54 @@ export const Chat = ({
     [baseHandleSendMessage, refreshChats, assistantId],
   );
 
-  // Local edit state (simple UX; further polish can come later)
-  const [editState, setEditState] = useState<
-    | {
-        mode: "edit";
-        messageId: string;
-        initialContent: ContentPart[];
-        initialFiles: FileUploadItem[];
-      }
-    | { mode: "compose" }
-  >({ mode: "compose" });
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
 
-  // Debug logging for edit state changes
-  useEffect(() => {
-    logger.log("Edit state changed:", editState);
-  }, [editState]);
-
-  const cancelEdit = useCallback(() => setEditState({ mode: "compose" }), []);
+  const cancelEdit = useCallback(() => setEditingMessageId(null), []);
 
   const handleEditSubmit = useCallback(
-    (
-      messageId: string,
-      newContent: string,
-      replaceInputFileIds?: string[],
-      selectedFacetIds?: string[],
-    ) => {
+    (messageId: string, newContent: string, replaceInputFileIds: string[]) => {
+      // `editMessage` drops the submission while a turn is in flight, so bail
+      // before the destructive steps rather than closing the editor on a no-op.
+      if (isPendingResponse) {
+        return;
+      }
+      // The queued follow-up was written against the branch this edit
+      // supersedes, so it must not auto-send into the new one.
+      chatInputControlsRef.current?.clearQueuedMessage();
+      setEditingMessageId(null);
+      // `action_facet` is deliberately not passed: the backend restores the
+      // edited message's own stored facet, while the composer holds whatever
+      // is currently selected.
       void editMessage(
         messageId,
         newContent,
         replaceInputFileIds,
-        selectedFacetIds,
-      ).finally(() => {
-        setEditState({ mode: "compose" });
-      });
+        activeSelectedFacetIds,
+      );
     },
-    [editMessage],
+    [activeSelectedFacetIds, editMessage, isPendingResponse],
+  );
+
+  const messageEditValue = useMemo(
+    () => ({
+      editingMessageId,
+      beginEdit: setEditingMessageId,
+      cancelEdit,
+      submitEdit: handleEditSubmit,
+      isStreaming: isPendingResponse,
+      chatId: currentChatId,
+      assistantId,
+      chatProviderId: selectedModel?.chat_provider_id,
+    }),
+    [
+      assistantId,
+      cancelEdit,
+      currentChatId,
+      editingMessageId,
+      handleEditSubmit,
+      isPendingResponse,
+      selectedModel?.chat_provider_id,
+    ],
   );
 
   const handleRegenerate = useCallback(
@@ -571,7 +587,7 @@ export const Chat = ({
 
   const standardMessageActionHandler = useStandardMessageActions({
     messages,
-    setEditState,
+    onBeginEdit: setEditingMessageId,
     handleRegenerate,
     handleFeedbackSubmit,
     feedbackConfig,
@@ -637,7 +653,7 @@ export const Chat = ({
     messageOrder.length === 0 &&
     !chatLoading &&
     !isPendingResponse &&
-    editState.mode === "compose";
+    editingMessageId === null;
 
   const centeredEmptyStateContent =
     shouldRenderCenteredEmptyState &&
@@ -668,8 +684,6 @@ export const Chat = ({
     <ChatInput
       ref={chatInputControlsRef}
       onSendMessage={handleSendMessage}
-      onEditMessage={handleEditSubmit}
-      onCancelEdit={editState.mode === "edit" ? cancelEdit : undefined}
       acceptedFileTypes={acceptedFileTypes}
       onFilePreview={openPreviewModal}
       handleFileAttachments={handleFileAttachments}
@@ -680,14 +694,6 @@ export const Chat = ({
       showControls
       onRegenerate={onRegenerate}
       showFileTypes={true}
-      initialFiles={editState.mode === "edit" ? editState.initialFiles : []}
-      mode={editState.mode}
-      editMessageId={
-        editState.mode === "edit" ? editState.messageId : undefined
-      }
-      editInitialContent={
-        editState.mode === "edit" ? editState.initialContent : undefined
-      }
       initialModel={initialModelOverride ?? currentChatLastModel}
       controlledAvailableModels={availableModels}
       controlledSelectedModel={selectedModel}
@@ -825,38 +831,40 @@ export const Chat = ({
                   </div>
                 ) : null}
                 {/* Use the MessageList component */}
-                <MessageList
-                  messages={messages}
-                  messageOrder={messageOrder}
-                  loadOlderMessages={loadOlderMessages}
-                  hasOlderMessages={hasOlderMessages}
-                  isPending={chatLoading}
-                  currentSessionId={currentChatId ?? ""}
-                  pageSize={6}
-                  maxWidth={maxWidth}
-                  showTimestamps={showTimestamps}
-                  showAvatars={showAvatars}
-                  userProfile={userMessageProfile ?? profile}
-                  userDisplayNameOverride={userMessageDisplayName}
-                  controls={resolvedMessageControls}
-                  messageRenderer={resolvedMessageRenderer}
-                  controlsContext={{
-                    ...controlsContext,
-                    canEdit: canEditForCurrentChat,
-                  }}
-                  onMessageAction={standardMessageActionHandler}
-                  className={clsx(
-                    layout,
-                    canShareCurrentChat && "pt-12 sm:pt-14",
-                  )}
-                  useVirtualization={messageOrder.length > 30}
-                  virtualizationThreshold={30}
-                  onScrollToBottomRef={handleMessageListRef}
-                  onFilePreview={openPreviewModal}
-                  onViewFeedback={openFeedbackViewDialog}
-                  emptyStateComponent={emptyStateComponent}
-                  assistantFiles={assistantFiles}
-                />
+                <MessageEditProvider value={messageEditValue}>
+                  <MessageList
+                    messages={messages}
+                    messageOrder={messageOrder}
+                    loadOlderMessages={loadOlderMessages}
+                    hasOlderMessages={hasOlderMessages}
+                    isPending={chatLoading}
+                    currentSessionId={currentChatId ?? ""}
+                    pageSize={6}
+                    maxWidth={maxWidth}
+                    showTimestamps={showTimestamps}
+                    showAvatars={showAvatars}
+                    userProfile={userMessageProfile ?? profile}
+                    userDisplayNameOverride={userMessageDisplayName}
+                    controls={resolvedMessageControls}
+                    messageRenderer={resolvedMessageRenderer}
+                    controlsContext={{
+                      ...controlsContext,
+                      canEdit: canEditForCurrentChat,
+                    }}
+                    onMessageAction={standardMessageActionHandler}
+                    className={clsx(
+                      layout,
+                      canShareCurrentChat && "pt-12 sm:pt-14",
+                    )}
+                    useVirtualization={messageOrder.length > 30}
+                    virtualizationThreshold={30}
+                    onScrollToBottomRef={handleMessageListRef}
+                    onFilePreview={openPreviewModal}
+                    onViewFeedback={openFeedbackViewDialog}
+                    emptyStateComponent={emptyStateComponent}
+                    assistantFiles={assistantFiles}
+                  />
+                </MessageEditProvider>
               </>
             )}
             {/* ChatInput lives in a stable JSX position so React doesn't

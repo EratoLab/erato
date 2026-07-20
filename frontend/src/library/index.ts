@@ -20,6 +20,17 @@ export {
   type ChatMessageProps,
 } from "@/components/ui/Chat/ChatMessage";
 export * from "@/components/ui/MessageList";
+// Named explicitly: the library build drops re-exported bindings from the
+// `export *` above unless something in the bundle references them directly.
+export {
+  MessageEditProvider,
+  useMessageEdit,
+  type MessageEditContextValue,
+} from "@/components/ui/MessageList/MessageEditContext";
+export {
+  MessageEditor,
+  type MessageEditorProps,
+} from "@/components/ui/MessageList/MessageEditor";
 export {
   MessageContent,
   useOutlookArtifact,
@@ -154,7 +165,6 @@ export {
   useStandardMessageActions,
   useTokenManagement,
   useActiveModelSelection,
-  type EditMessageState,
 } from "@/hooks/chat";
 export { useBudgetStatus } from "@/hooks/budget/useBudgetStatus";
 export {

@@ -48,7 +48,6 @@ import {
   useAudioDictationFeature,
   useAudioConversationalFeature,
 } from "@/providers/FeatureConfigProvider";
-import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 import { resolveChatSendErrorMessage } from "@/utils/chatSendErrorMessage";
 import { createLogger } from "@/utils/debugLogger";
 import { mergeUniqueFilesById } from "@/utils/file/mergeUniqueFilesById";
@@ -79,7 +78,6 @@ import type { AudioDictationTranscriptChunk } from "@/hooks/audio/useAudioDictat
 import type {
   FileUploadItem,
   ChatModel,
-  ContentPart,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FileType } from "@/utils/fileTypes";
 import type { ClipboardEvent as ReactClipboardEvent, Ref } from "react";
@@ -203,15 +201,6 @@ interface ChatInputProps {
     selectedFacetIds?: string[],
   ) => void;
   onRegenerate?: () => void;
-  // Optional edit mode submit handler. When provided with mode="edit", submit will call this instead of onSendMessage
-  onEditMessage?: (
-    messageId: string,
-    newContent: string,
-    replaceInputFileIds?: string[],
-    selectedFacetIds?: string[],
-  ) => void;
-  // Optional cancel callback for edit mode
-  onCancelEdit?: () => void;
   handleFileAttachments?: (files: FileUploadItem[]) => void;
   isLoading?: boolean;
   disabled?: boolean;
@@ -242,12 +231,6 @@ interface ChatInputProps {
   assistantId?: string;
   // Add prop for previous message ID
   previousMessageId?: string | null;
-  // Control whether the input is editing an existing message or composing a new one
-  mode?: "compose" | "edit";
-  // Target message id to edit when in edit mode
-  editMessageId?: string;
-  // Initial content when entering edit mode (used to prefill the textarea)
-  editInitialContent?: ContentPart[];
   // Initial model to use for selection (typically from chat history)
   initialModel?: ChatModel | null;
   // Initial facets to use for selection (typically from chat history)
@@ -273,19 +256,11 @@ interface ChatInputProps {
   onControlledIsAudioModeChange?: (isAudioMode: boolean) => void;
 }
 
-type DictationTarget =
-  | {
-      mode: "compose";
-      sessionId: string;
-      nextChunkIndex: number;
-      chunkTranscripts: Map<number, string>;
-    }
-  | {
-      mode: "edit";
-      editMessageId?: string;
-      nextChunkIndex: number;
-      chunkTranscripts: Map<number, string>;
-    };
+interface DictationTarget {
+  sessionId: string;
+  nextChunkIndex: number;
+  chunkTranscripts: Map<number, string>;
+}
 
 function appendDictationText(current: string, transcript: string): string {
   const text = transcript.trim();
@@ -333,8 +308,6 @@ type ChatInputPropsWithRef = ChatInputProps & {
 export const ChatInput = ({
   onSendMessage,
   onRegenerate: _onRegenerate,
-  onEditMessage,
-  onCancelEdit,
   handleFileAttachments,
   isLoading: propIsLoading,
   disabled = false,
@@ -351,9 +324,6 @@ export const ChatInput = ({
   chatId,
   assistantId,
   previousMessageId,
-  mode = "compose",
-  editMessageId,
-  editInitialContent,
   initialModel,
   initialSelectedFacetIds,
   enforceSelectedFacetIds = false,
@@ -409,8 +379,6 @@ export const ChatInput = ({
   const pendingConversationalStartRef = useRef(false);
   const shouldRestartAudioModeAfterResponseRef = useRef(false);
   const audioModeRestartSawPendingResponseRef = useRef(false);
-  const previousModeRef = useRef<"compose" | "edit">(mode);
-  const previousEditMessageIdRef = useRef<string | undefined>(undefined);
   const dictationTargetRef = useRef<DictationTarget | null>(null);
   // Add state for file button processing
   const [isFileButtonProcessing, setIsFileButtonProcessing] = useState(false);
@@ -578,36 +546,21 @@ export const ChatInput = ({
         target.chunkTranscripts.delete(target.nextChunkIndex);
         target.nextChunkIndex += 1;
 
-        if (target.mode === "compose") {
-          if (mode === "compose" && target.sessionId === getActiveSessionId()) {
-            setMessage((current) =>
-              appendDictationText(current, nextTranscript),
-            );
-            continue;
-          }
-
-          const draft = getComposeDraftBySessionId(target.sessionId);
-          saveComposeDraftBySessionId(target.sessionId, {
-            ...draft,
-            message: appendDictationText(draft.message, nextTranscript),
-          });
+        if (target.sessionId === getActiveSessionId()) {
+          setMessage((current) => appendDictationText(current, nextTranscript));
           continue;
         }
 
-        if (
-          mode === "edit" &&
-          target.editMessageId !== undefined &&
-          target.editMessageId === editMessageId
-        ) {
-          setMessage((current) => appendDictationText(current, nextTranscript));
-        }
+        const draft = getComposeDraftBySessionId(target.sessionId);
+        saveComposeDraftBySessionId(target.sessionId, {
+          ...draft,
+          message: appendDictationText(draft.message, nextTranscript),
+        });
       }
     },
     [
-      editMessageId,
       getActiveSessionId,
       getComposeDraftBySessionId,
-      mode,
       saveComposeDraftBySessionId,
     ],
   );
@@ -628,31 +581,21 @@ export const ChatInput = ({
       ? maxConversationalDurationSeconds
       : maxDictationDurationSeconds,
     onTranscriptChunk: appendDictationTranscript,
-    vadAutoStopEnabled:
-      audioConversationalEnabled && isAudioMode && mode === "compose",
+    vadAutoStopEnabled: audioConversationalEnabled && isAudioMode,
     onVadAutoStop: handleConversationVadAutoStop,
   });
 
   const toggleDictationForCurrentTarget = useCallback(() => {
     if (!isDictating) {
-      dictationTargetRef.current =
-        mode === "compose"
-          ? {
-              mode: "compose",
-              sessionId: getActiveSessionId(),
-              nextChunkIndex: 0,
-              chunkTranscripts: new Map(),
-            }
-          : {
-              mode: "edit",
-              editMessageId,
-              nextChunkIndex: 0,
-              chunkTranscripts: new Map(),
-            };
+      dictationTargetRef.current = {
+        sessionId: getActiveSessionId(),
+        nextChunkIndex: 0,
+        chunkTranscripts: new Map(),
+      };
     }
 
     toggleDictation();
-  }, [editMessageId, getActiveSessionId, isDictating, mode, toggleDictation]);
+  }, [getActiveSessionId, isDictating, toggleDictation]);
 
   const { data: facetsData, error: facetsError } = useFacets({});
   const { fetcherOptions: fileFetchOptions } = useV1betaApiContext();
@@ -688,7 +631,7 @@ export const ChatInput = ({
   // broader send lock, which also covers the initial history load that produces
   // no completion edge to drain on. Returns true when it consumed the event.
   const enqueueCurrentMessage = useCallback((): boolean => {
-    if (mode !== "compose" || !isPendingResponse || isAnyTokenLimitExceeded) {
+    if (!isPendingResponse || isAnyTokenLimitExceeded) {
       return false;
     }
     // Leave the audio/dictation auto-send flows untouched.
@@ -719,7 +662,6 @@ export const ChatInput = ({
     handleRemoveAllFiles();
     return true;
   }, [
-    mode,
     isPendingResponse,
     isAnyTokenLimitExceeded,
     isDictating,
@@ -907,8 +849,11 @@ export const ChatInput = ({
       setSelectedChatProviderId: applySelectedChatProviderId,
       toggleFacetId,
       addUploadedFiles: handleFilesUploaded,
+      clearQueuedMessage: () => clearQueuedBySessionId(composeSessionId),
     }),
     [
+      clearQueuedBySessionId,
+      composeSessionId,
       handleFilesUploaded,
       applySelectedChatProviderId,
       applySelectedFacetIds,
@@ -960,11 +905,8 @@ export const ChatInput = ({
 
   const hasPersistedInitialDraftRef = useRef(false);
 
-  // Persist compose-mode draft state for the currently active session.
+  // Persist draft state for the currently active session.
   useEffect(() => {
-    if (mode !== "compose") {
-      return;
-    }
     // The mount write only echoes the draft we seeded from, and on a remount
     // it would land after the outgoing instance folded its queued message into
     // that same draft — clobbering it with the empty composer. Skip it.
@@ -972,17 +914,11 @@ export const ChatInput = ({
       hasPersistedInitialDraftRef.current = true;
       return;
     }
-    // On the render that leaves edit mode `message` still holds the edit draft,
-    // and this effect runs before the one below restores the compose draft —
-    // writing here would persist the edit text as the draft it then reads back.
-    if (previousModeRef.current !== "compose") {
-      return;
-    }
     saveComposeDraftBySessionId(activeComposeSessionIdRef.current, {
       message,
       attachedFiles,
     });
-  }, [mode, message, attachedFiles, saveComposeDraftBySessionId]);
+  }, [message, attachedFiles, saveComposeDraftBySessionId]);
 
   // Seed the composer from this session's stored draft, so a remount (New Chat
   // bumping ChatProvider's mountKey, or the empty-state → messages layout flip)
@@ -991,9 +927,6 @@ export const ChatInput = ({
   // phase, and seeding any earlier would read the draft before it folds its
   // queued message in.
   useLayoutEffect(() => {
-    if (mode !== "compose") {
-      return;
-    }
     const draft = getComposeDraftBySessionId(activeComposeSessionIdRef.current);
     if (draft.message) {
       setMessage(draft.message);
@@ -1034,11 +967,6 @@ export const ChatInput = ({
   // *follows* the chat across a sentinel → real-chatId rename, that
   // transition does NOT trigger a switch here — the session stays the same.
   useEffect(() => {
-    if (mode !== "compose") {
-      activeComposeSessionIdRef.current = composeSessionId;
-      return;
-    }
-
     const previousSessionId = activeComposeSessionIdRef.current;
     if (previousSessionId === composeSessionId) {
       return;
@@ -1062,7 +990,6 @@ export const ChatInput = ({
     setMessage(incoming.message);
     setAttachedFiles(incoming.attachedFiles);
   }, [
-    mode,
     composeSessionId,
     message,
     attachedFiles,
@@ -1140,40 +1067,6 @@ export const ChatInput = ({
 
   // Log attachedFiles received from the hook
   logger.log("Received attachedFiles from hook:", attachedFiles);
-
-  // Prefill message when entering edit mode
-  useEffect(() => {
-    const wasMode = previousModeRef.current;
-    const enteringCompose = mode === "compose" && wasMode !== "compose";
-    const editTargetChanged =
-      mode === "edit" && editMessageId !== previousEditMessageIdRef.current;
-    const enteringEdit = mode === "edit" && wasMode !== "edit";
-
-    if (mode === "edit" && (enteringEdit || editTargetChanged)) {
-      if (editInitialContent !== undefined) {
-        setMessage(extractTextFromContent(editInitialContent));
-      }
-      setAttachedFiles(initialFiles);
-      previousEditMessageIdRef.current = editMessageId;
-    }
-
-    if (enteringCompose) {
-      const composeDraft = getComposeDraftBySessionId(composeSessionId);
-      setMessage(composeDraft.message);
-      setAttachedFiles(composeDraft.attachedFiles);
-      previousEditMessageIdRef.current = undefined;
-    }
-
-    previousModeRef.current = mode;
-  }, [
-    mode,
-    editMessageId,
-    editInitialContent,
-    initialFiles,
-    composeSessionId,
-    getComposeDraftBySessionId,
-    setAttachedFiles,
-  ]);
 
   const hasIncompleteAudioTranscription = attachedFiles.some(
     (file) =>
@@ -1321,8 +1214,6 @@ export const ChatInput = ({
       }
 
       logger.log("Submit:", {
-        mode,
-        editMessageId,
         messagePreview:
           messageContent.substring(0, 20) +
           (messageContent.length > 20 ? "..." : ""),
@@ -1330,21 +1221,12 @@ export const ChatInput = ({
         model: selectedModel?.chat_provider_id,
         selectedFacetIds,
       });
-      if (mode === "edit" && onEditMessage && editMessageId) {
-        onEditMessage(
-          editMessageId,
-          messageContent,
-          inputFileIds,
-          selectedFacetIds,
-        );
-      } else {
-        onSendMessage(
-          messageContent,
-          inputFileIds,
-          selectedModel?.chat_provider_id,
-          selectedFacetIds,
-        );
-      }
+      onSendMessage(
+        messageContent,
+        inputFileIds,
+        selectedModel?.chat_provider_id,
+        selectedFacetIds,
+      );
     },
     isLoading ||
       isPendingResponse ||
@@ -1369,7 +1251,7 @@ export const ChatInput = ({
     const wasPendingResponse = wasPendingResponseRef.current;
     wasPendingResponseRef.current = isPendingResponse;
 
-    if (wasPendingResponse && !isPendingResponse && mode === "compose") {
+    if (wasPendingResponse && !isPendingResponse) {
       // The turn just ended (completed, closed, aborted, or errored — the
       // falling edge covers them all). Arm the drain if a message is queued for
       // this session; the drain effect decides send-vs-restore and holds while
@@ -1382,7 +1264,7 @@ export const ChatInput = ({
         textareaRef.current?.focus();
       });
     }
-  }, [isPendingResponse, mode, getQueuedBySessionId, composeSessionId]);
+  }, [isPendingResponse, getQueuedBySessionId, composeSessionId]);
 
   // Drain the queued message once its turn has fully finished (ERMAIN-470).
   // Runs on the armed edge and whenever the hold inputs change (a confirmation
@@ -1630,7 +1512,6 @@ export const ChatInput = ({
   // content, and suppressed during any audio/dictation capture (which own their
   // own send path) so the trailing controls never exceed Stop + one action.
   const canQueueMessage =
-    mode === "compose" &&
     isPendingResponse &&
     hasComposeContent &&
     !isAnyTokenLimitExceeded &&
@@ -1645,16 +1526,13 @@ export const ChatInput = ({
     !isCapturingAudio;
 
   const shouldShowAudioModeSelector =
-    audioConversationalEnabled &&
-    audioTranscriptionEnabled &&
-    mode === "compose";
+    audioConversationalEnabled && audioTranscriptionEnabled;
 
   // The send button slot becomes the audio entry point when the compose
   // input is clean. If both audio paths are enabled, it asks the user which
   // mode to start; otherwise it starts the one available audio flow.
   const showAudioModeButton =
     (audioConversationalEnabled || audioTranscriptionEnabled) &&
-    mode === "compose" &&
     (isAudioMode ||
       // Don't offer to START an audio mode while a response streams — the
       // trailing slot is Stop (+ Send/Queue). An already-active session keeps
@@ -1702,7 +1580,7 @@ export const ChatInput = ({
     if (!pendingConversationalStartRef.current) {
       return;
     }
-    if (!audioConversationalEnabled || mode !== "compose") {
+    if (!audioConversationalEnabled) {
       pendingConversationalStartRef.current = false;
       return;
     }
@@ -1749,7 +1627,6 @@ export const ChatInput = ({
     isRecordingUpload,
     isUploading,
     message,
-    mode,
     toggleDictationForCurrentTarget,
   ]);
 
@@ -1876,32 +1753,6 @@ export const ChatInput = ({
     toggleDictationForCurrentTarget,
   ]);
 
-  useEffect(() => {
-    if (mode !== "compose") {
-      toast.dismiss(AUDIO_MODE_SELECTOR_TOAST_ID);
-    }
-
-    if (mode !== "compose" && isAudioMode) {
-      clearPendingAutoSendTimeout();
-      pendingAutoSendRef.current = false;
-      pendingConversationalStartRef.current = false;
-      shouldRestartAudioModeAfterResponseRef.current = false;
-      audioModeRestartSawPendingResponseRef.current = false;
-      if (isDictating || isDictationStarting) {
-        toggleDictationForCurrentTarget();
-      }
-      setIsAudioMode(false);
-    }
-  }, [
-    mode,
-    isAudioMode,
-    isDictating,
-    isDictationStarting,
-    clearPendingAutoSendTimeout,
-    setIsAudioMode,
-    toggleDictationForCurrentTarget,
-  ]);
-
   // Surface any audio error as a "drop the pending auto-send"
   // signal so the user has to consciously retry — otherwise a silent
   // failure would still trigger a stale submit when the next transcript
@@ -2005,7 +1856,6 @@ export const ChatInput = ({
     }
     if (
       !isAudioMode ||
-      mode !== "compose" ||
       disabled ||
       isLoading ||
       isUploading ||
@@ -2043,7 +1893,6 @@ export const ChatInput = ({
     isRecordingUpload,
     isUploading,
     message,
-    mode,
     toggleDictationForCurrentTarget,
   ]);
 
@@ -2054,7 +1903,7 @@ export const ChatInput = ({
     if (!audioModeRestartSawPendingResponseRef.current) {
       return;
     }
-    if (!isAudioMode || mode !== "compose" || isPendingResponse) {
+    if (!isAudioMode || isPendingResponse) {
       return;
     }
     if (
@@ -2096,7 +1945,6 @@ export const ChatInput = ({
     isRecordingUpload,
     isUploading,
     message,
-    mode,
     toggleDictationForCurrentTarget,
   ]);
 
@@ -2410,9 +2258,7 @@ export const ChatInput = ({
               placeholder={
                 isAnyTokenLimitExceeded
                   ? t`Message exceeds token limit. Please reduce length or remove files.`
-                  : mode === "edit"
-                    ? t`Edit your message...`
-                    : placeholder
+                  : placeholder
               }
               rows={1}
               disabled={composeLocked}
@@ -2532,18 +2378,7 @@ export const ChatInput = ({
             </div>
 
             <div className="flex min-w-0 flex-wrap items-center gap-[var(--theme-spacing-control-gap)]">
-              {mode === "edit" && onCancelEdit && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={onCancelEdit}
-                  data-testid="chat-input-cancel-edit"
-                >
-                  {t`Cancel`}
-                </Button>
-              )}
-              {isAudioMode && mode === "compose" && (
+              {isAudioMode && (
                 <Button
                   type="button"
                   variant="ghost"
@@ -2794,17 +2629,11 @@ export const ChatInput = ({
                   geometry="icon"
                   icon={<ArrowUpIcon className="size-5" />}
                   disabled={!canSendMessage || isSendDisabled}
-                  data-testid={
-                    mode === "edit"
-                      ? "chat-input-save-edit"
-                      : "chat-input-send-message"
-                  }
+                  data-testid="chat-input-send-message"
                   aria-label={
                     isAnyTokenLimitExceeded
                       ? t`Cannot send: Token limit exceeded`
-                      : mode === "edit"
-                        ? t`Save edit`
-                        : t`Send message`
+                      : t`Send message`
                   }
                 />
               )}

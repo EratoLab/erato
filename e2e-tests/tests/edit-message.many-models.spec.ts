@@ -13,7 +13,7 @@ const messageBox = (page: Page): Locator =>
   page.getByRole("textbox", { name: "Type a message..." });
 
 const editTextbox = (page: Page): Locator =>
-  page.getByRole("textbox", { name: "Edit your message..." });
+  page.getByTestId("message-editor-input");
 
 /** Send a message and wait for its turn to settle, asserting the turn counts. */
 const sendSettledMessage = async (
@@ -77,7 +77,7 @@ test.describe("Edit message", () => {
 
       await openEditorFor(targetMessage, page);
       await editTextbox(page).fill("Beta two, edited");
-      const saveButton = page.getByTestId("chat-input-save-edit");
+      const saveButton = page.getByTestId("message-editor-submit");
       await expect(saveButton).toBeEnabled();
       await saveButton.click();
 
@@ -127,7 +127,7 @@ test.describe("Edit message", () => {
       await openEditorFor(userMessage, page);
       await editTextbox(page).fill("discarded draft");
 
-      await page.getByTestId("chat-input-cancel-edit").click();
+      await page.getByTestId("message-editor-cancel").click();
 
       await expect(editTextbox(page)).toHaveCount(0);
       await expect(messageBox(page)).toBeVisible();

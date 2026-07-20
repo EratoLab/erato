@@ -1429,6 +1429,21 @@ msgid "chat.message.link.fallback"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/MessageList/MessageEditor.tsx
+msgid "chat.messageEditor.ariaLabel"
+msgstr "Edita tu mensaje"
+
+#. js-lingui-explicit-id
+#: src/components/ui/MessageList/MessageEditor.tsx
+msgid "chat.messageEditor.cancel"
+msgstr "Cancelar"
+
+#. js-lingui-explicit-id
+#: src/components/ui/MessageList/MessageEditor.tsx
+msgid "chat.messageEditor.submit"
+msgstr "Enviar"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
 msgid "chat.newChat.title"
 msgstr "Nuevo Chat"
@@ -3236,7 +3251,6 @@ msgid "Browser Language:"
 msgstr "Idioma del navegador:"
 
 #: src/components/ui/Assistant/AssistantForm.tsx
-#: src/components/ui/Chat/ChatInput.tsx
 #: src/components/ui/Modal/ConfirmationDialog.tsx
 msgid "Cancel"
 msgstr "Cancelar"
@@ -3561,8 +3575,8 @@ msgid "Edit queued message"
 msgstr ""
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Edit your message..."
-msgstr ""
+#~ msgid "Edit your message..."
+#~ msgstr ""
 
 #: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "Email"
@@ -4052,8 +4066,8 @@ msgid "sample rate: {sampleRate} Hz"
 msgstr "frecuencia de muestreo: {sampleRate} Hz"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Save edit"
-msgstr ""
+#~ msgid "Save edit"
+#~ msgstr ""
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Saving..."

@@ -1274,14 +1274,12 @@ test(
     await editButton.waitFor({ state: "visible", timeout: 10000 });
     await editButton.click();
 
-    const editTextbox = page.getByRole("textbox", {
-      name: "Edit your message...",
-    });
+    const editTextbox = page.getByTestId("message-editor-input");
     await expect(editTextbox).toBeVisible({ timeout: 30000 });
     await editTextbox.clear();
     await editTextbox.fill("please cite files after edit");
 
-    const saveButton = page.getByTestId("chat-input-save-edit");
+    const saveButton = page.getByTestId("message-editor-submit");
     await expect(saveButton).toBeEnabled();
     await saveButton.click();
 
@@ -1354,9 +1352,7 @@ test(
     await editButton.waitFor({ state: "visible", timeout: 10000 });
     await editButton.click();
 
-    const editTextbox = page.getByRole("textbox", {
-      name: "Edit your message...",
-    });
+    const editTextbox = page.getByTestId("message-editor-input");
     await expect(editTextbox).toBeVisible({ timeout: 30000 });
 
     await expect(page.getByText(/Attachments/i)).toBeVisible();
@@ -1371,7 +1367,7 @@ test(
     await editTextbox.clear();
     await editTextbox.fill("please cite files after removing file");
 
-    const saveButton = page.getByTestId("chat-input-save-edit");
+    const saveButton = page.getByTestId("message-editor-submit");
     await expect(saveButton).toBeEnabled();
     await saveButton.click();
 
