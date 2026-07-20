@@ -51,19 +51,6 @@ const activeSidebarItemStyle = {
   ...sidebarItemStyle,
   backgroundColor: "var(--theme-shell-sidebar-selected)",
 } as const;
-const compactShellPaddingStyle = {
-  padding:
-    "var(--theme-spacing-shell-compact-padding-y) var(--theme-spacing-shell-compact-padding-x)",
-} as const;
-const sidebarDividerColor =
-  "var(--theme-shell-sidebar-divider-color, var(--theme-border-divider))";
-const sidebarSectionBackground =
-  "var(--theme-shell-sidebar-section-bg, transparent)";
-const sidebarSectionStyle = {
-  ...compactShellPaddingStyle,
-  backgroundColor: sidebarSectionBackground,
-  borderColor: sidebarDividerColor,
-} as const;
 const sidebarLinkClassName =
   "focus-ring-tight block rounded-[var(--theme-radius-shell)]";
 
@@ -173,8 +160,7 @@ const ChatHistoryHeader = memo<{
 }>(
   ({ collapsed, isSlimMode, onToggleCollapse, showTitle, sidebarLogoPath }) => (
     <div
-      className="flex min-h-[60px] border-b"
-      style={sidebarSectionStyle}
+      className="sidebar-section-skin flex min-h-[60px] border-b"
       data-ui="sidebar-header"
     >
       {/* In slim mode, show logo with hover toggle or just toggle button */}
@@ -631,11 +617,7 @@ const ChatHistoryFooter = memo<{
   onSignOut: () => void;
   isSlimMode?: boolean;
 }>(({ userProfile, onSignOut }) => (
-  <div
-    className="border-t"
-    style={sidebarSectionStyle}
-    data-ui="sidebar-footer"
-  >
+  <div className="sidebar-section-skin border-t" data-ui="sidebar-footer">
     <UserProfileThemeDropdown
       userProfile={userProfile}
       onSignOut={onSignOut}
@@ -807,11 +789,10 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       [minWidth],
     );
 
+    // Width is runtime state (slim vs expanded); the surface lives in
+    // .sidebar-skin so [data-ui="sidebar"] stays themeable.
     const sidebarShellStyle = useMemo(
       () => ({
-        backgroundColor: "var(--theme-shell-sidebar)",
-        borderColor: sidebarDividerColor,
-        boxShadow: "var(--theme-elevation-shell)",
         width: isSlimMode
           ? "var(--theme-layout-sidebar-slim-width)"
           : expandedSidebarWidth,
@@ -866,6 +847,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
               isHiddenMode && "pointer-events-none -translate-x-full opacity-0",
               // Slim and expanded modes stay visible
               !isHiddenMode && "translate-x-0 opacity-100",
+              "sidebar-skin",
               className,
             )}
             style={sidebarShellStyle}

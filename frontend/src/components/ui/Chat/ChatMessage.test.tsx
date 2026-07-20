@@ -105,11 +105,7 @@ describe("ChatMessage", () => {
     const messageShell = screen.getByTestId("message-assistant");
     expect(messageShell).toHaveAttribute("data-ui", "chat-message");
     expect(messageShell).toHaveAttribute("data-role", "assistant");
-    expect(messageShell).toHaveStyle({
-      borderRadius: "var(--theme-radius-message)",
-      padding:
-        "var(--theme-spacing-message-padding-y) var(--theme-spacing-message-padding-x)",
-    });
+    expect(messageShell).toHaveClass("chat-message-skin");
     expect(messageShell.className).toContain(
       "bg-[var(--theme-message-assistant)]",
     );

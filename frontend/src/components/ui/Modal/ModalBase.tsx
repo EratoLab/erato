@@ -69,28 +69,12 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
     return null;
   }
 
-  const overlayStyle = {
-    backgroundColor: "var(--theme-overlay-modal)",
-    backdropFilter: "blur(var(--theme-layout-modal-backdrop-blur))",
-    // Ensure a viewport gutter regardless of any max-w-* utility a consumer
-    // sets on contentClassName — Tailwind utilities outweigh the .modal-shell
-    // max-width calc, so the overlay's flex container holds the safe zone.
-    padding: "var(--theme-layout-modal-viewport-margin)",
-  } as const;
-
-  const shellStyle = {
-    backgroundColor: "var(--theme-shell-modal)",
-    borderRadius: "var(--theme-radius-modal)",
-    boxShadow: "var(--theme-elevation-modal)",
-  } as const;
-
   const modalContent = (
     <div
       className={clsx(
-        "fixed inset-0 z-50 flex items-center justify-center",
+        "modal-overlay-skin fixed inset-0 z-50 flex items-center justify-center",
         className,
       )}
-      style={overlayStyle}
       onMouseDown={handleOverlayMouseDown}
       onClick={handleOverlayClick}
       role="presentation"
@@ -100,11 +84,10 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
       <div
         ref={modalRef}
         className={clsx(
-          "modal-shell-frame-geometry theme-transition relative flex w-full flex-col overflow-hidden font-sans",
+          "modal-shell-skin modal-shell-frame-geometry theme-transition relative flex w-full flex-col overflow-hidden font-sans",
           "focus-ring",
           contentClassName,
         )}
-        style={shellStyle}
         // Make the content div focusable
         tabIndex={-1}
         role="dialog"

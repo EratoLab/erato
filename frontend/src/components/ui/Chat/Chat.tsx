@@ -633,20 +633,6 @@ export const Chat = ({
     );
   }
 
-  const appShellStyle = useMemo(
-    () => ({
-      backgroundColor: "var(--theme-shell-app)",
-    }),
-    [],
-  );
-
-  const pageShellStyle = useMemo(
-    () => ({
-      backgroundColor: "var(--theme-shell-page)",
-    }),
-    [],
-  );
-
   const shouldRenderCenteredEmptyState =
     (forceCenteredEmptyState || emptyStateLayout === "centered") &&
     !!emptyStateComponent &&
@@ -712,9 +698,8 @@ export const Chat = ({
   return (
     <ChatInputControlsProvider value={chatInputControls}>
       <div
-        className="flex size-full flex-col sm:flex-row"
+        className="app-shell-skin flex size-full flex-col sm:flex-row"
         data-ui="app-shell"
-        style={appShellStyle}
       >
         <ChatHistorySidebar
           collapsed={sidebarCollapsed}
@@ -746,7 +731,7 @@ export const Chat = ({
           <div
             {...getConversationDropzoneRootProps()}
             className={clsx(
-              "relative flex h-full min-w-0 flex-1 flex-col",
+              "page-shell-skin relative flex h-full min-w-0 flex-1 flex-col",
               "sm:mt-0",
               // Add left margin based on sidebar state to prevent overlap with fixed sidebar
               // Transition margin to match sidebar animation (300ms)
@@ -767,7 +752,6 @@ export const Chat = ({
               message: "Chat conversation",
             })}
             data-ui="chat-conversation-dropzone"
-            style={pageShellStyle}
           >
             <input
               {...getConversationDropzoneInputProps()}

@@ -620,6 +620,80 @@ body {
   @apply transition-[background-color,border-color,color,fill,stroke,opacity,box-shadow,transform] duration-150 ease-in-out motion-reduce:transition-none;
 }
 
+/* Surfaces for the remaining documented data-ui hooks. Same reasoning and the
+   same placement rule as .anchored-popover-skin below: an inline style
+   outranks every author rule, so holding these here is what makes the hooks
+   overridable from a customer theme.css at all. */
+.app-shell-skin {
+  background-color: var(--theme-shell-app);
+}
+
+.page-shell-skin {
+  background-color: var(--theme-shell-page);
+}
+
+.chat-body-skin {
+  background-color: var(--theme-shell-chat-body);
+}
+
+.chat-header-skin {
+  background-color: var(--theme-shell-chat-header);
+}
+
+.chat-input-shell-skin {
+  background-color: var(--theme-shell-chat-input);
+  border-radius: var(--theme-radius-input);
+  box-shadow: var(--theme-elevation-input);
+}
+
+.chat-message-skin {
+  border-radius: var(--theme-radius-message);
+  padding: var(--theme-spacing-message-padding-y)
+    var(--theme-spacing-message-padding-x);
+}
+
+.modal-overlay-skin {
+  background-color: var(--theme-overlay-modal);
+  backdrop-filter: blur(var(--theme-layout-modal-backdrop-blur));
+  /* Viewport gutter, held here rather than on the shell so a consumer's
+     max-w-* utility on contentClassName cannot eat into it. */
+  padding: var(--theme-layout-modal-viewport-margin);
+}
+
+.modal-shell-skin {
+  background-color: var(--theme-shell-modal);
+  border-radius: var(--theme-radius-modal);
+  box-shadow: var(--theme-elevation-modal);
+}
+
+/* The sidebar's own width stays inline — it is computed from slim/expanded
+   state. Only the surface moves here. */
+.sidebar-skin {
+  background-color: var(--theme-shell-sidebar);
+  border-color: var(
+    --theme-shell-sidebar-divider-color,
+    var(--theme-border-divider)
+  );
+  box-shadow: var(--theme-elevation-shell);
+}
+
+.sidebar-section-skin {
+  background-color: var(--theme-shell-sidebar-section-bg, transparent);
+  border-color: var(
+    --theme-shell-sidebar-divider-color,
+    var(--theme-border-divider)
+  );
+  padding: var(--theme-spacing-shell-compact-padding-y)
+    var(--theme-spacing-shell-compact-padding-x);
+}
+
+/* Spacing rather than surface, but blocked the same way: held inline it made
+   [data-ui="chat-history-list"] padding unoverridable. */
+.chat-history-list-geometry {
+  padding: calc(var(--theme-spacing-shell-padding-y) / 2)
+    calc(var(--theme-spacing-shell-padding-x) / 2);
+}
+
 /* Sidebar chat rows. Same reasoning as .anchored-popover-skin: held inline,
    the radius made `[data-ui="chat-history-item"]` unoverridable. The row's <a>
    wrapper reads --theme-radius-shell too, so a theme that moves the token keeps

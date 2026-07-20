@@ -30,8 +30,7 @@ export const MessageListHeader = ({
 }: MessageListHeaderProps) => {
   return (
     <div
-      className="pb-2"
-      style={{ backgroundColor: "var(--theme-shell-chat-header)" }}
+      className="chat-header-skin pb-2"
       data-testid="chat-header-shell"
       data-ui="chat-header"
     >

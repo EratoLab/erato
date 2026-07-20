@@ -110,11 +110,6 @@ export const ChatMessage = memo(function ChatMessage({
 }: ChatMessageProps) {
   const isUser = message.role === "user";
   const role = isUser ? "user" : "assistant";
-  const messageShellStyle = {
-    borderRadius: "var(--theme-radius-message)",
-    padding:
-      "var(--theme-spacing-message-padding-y) var(--theme-spacing-message-padding-x)",
-  } as const;
   const messageContentRowStyle = {
     gap: "var(--theme-spacing-message-gap)",
   } as const;
@@ -157,13 +152,12 @@ export const ChatMessage = memo(function ChatMessage({
   return (
     <div
       className={clsx(
-        "group relative flex",
+        "chat-message-skin group relative flex",
         "w-full min-w-[280px] shrink-0",
         messageStyles.hover,
         messageStyles.container[role],
         className,
       )}
-      style={messageShellStyle}
       role="log"
       aria-live="polite"
       aria-label={`${userDisplayName} ${t({ id: "chat.message.aria", message: "message" })}`}
