@@ -3939,4 +3939,61 @@ describe("ChatInput", () => {
       expect(textarea).toHaveValue("second");
     });
   });
+
+  describe("edit mode drafts", () => {
+    const renderModes = (i18n: I18n) => {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      const ui = (mode: "compose" | "edit") => (
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput
+              onSendMessage={vi.fn()}
+              chatId="chat-edit"
+              mode={mode}
+              editMessageId={mode === "edit" ? "m-1" : undefined}
+              onCancelEdit={vi.fn()}
+            />
+          </I18nProvider>
+        </QueryClientProvider>
+      );
+      const { rerender } = render(ui("compose"));
+      return (mode: "compose" | "edit") => rerender(ui(mode));
+    };
+
+    it("does not leak a discarded edit draft into the composer", async () => {
+      const { i18n } = await import("@lingui/core");
+      const rerender = renderModes(i18n);
+
+      rerender("edit");
+      fireEvent.change(screen.getByPlaceholderText("Edit your message..."), {
+        target: { value: "discarded draft" },
+      });
+
+      rerender("compose");
+      expect(screen.getByPlaceholderText("Type a message...")).toHaveValue("");
+    });
+
+    it("restores the compose draft that editing interrupted", async () => {
+      const { i18n } = await import("@lingui/core");
+      const rerender = renderModes(i18n);
+
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      fireEvent.change(textarea, { target: { value: "half-typed" } });
+
+      rerender("edit");
+      fireEvent.change(screen.getByPlaceholderText("Edit your message..."), {
+        target: { value: "discarded draft" },
+      });
+
+      rerender("compose");
+      expect(screen.getByPlaceholderText("Type a message...")).toHaveValue(
+        "half-typed",
+      );
+    });
+  });
 });

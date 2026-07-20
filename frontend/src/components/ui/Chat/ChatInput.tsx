@@ -972,6 +972,12 @@ export const ChatInput = ({
       hasPersistedInitialDraftRef.current = true;
       return;
     }
+    // On the render that leaves edit mode `message` still holds the edit draft,
+    // and this effect runs before the one below restores the compose draft —
+    // writing here would persist the edit text as the draft it then reads back.
+    if (previousModeRef.current !== "compose") {
+      return;
+    }
     saveComposeDraftBySessionId(activeComposeSessionIdRef.current, {
       message,
       attachedFiles,
