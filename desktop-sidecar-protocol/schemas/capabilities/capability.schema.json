@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/capabilities/capability.schema.json",
+  "title": "CapabilityDescriptor",
+  "type": "object",
+  "required": ["id", "major", "method", "availability"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)+$"
+    },
+    "major": { "type": "integer", "minimum": 1 },
+    "method": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)+\\.v[1-9][0-9]*$"
+    },
+    "availability": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["state"],
+          "properties": { "state": { "const": "enabled" } },
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "required": ["state", "reasonCode"],
+          "properties": {
+            "state": { "const": "disabled" },
+            "reasonCode": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "required": ["state"],
+          "properties": {
+            "state": {
+              "type": "string",
+              "not": { "enum": ["enabled", "disabled"] }
+            }
+          },
+          "additionalProperties": true
+        }
+      ]
+    }
+  },
+  "additionalProperties": true
+}

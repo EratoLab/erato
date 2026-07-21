@@ -1,5 +1,6 @@
 import {
   ApiProvider,
+  DesktopSidecarProvider,
   FeatureConfigProvider,
   I18nProvider,
   ThemeProvider,
@@ -108,27 +109,29 @@ function FeatureConfigGate({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <I18nProvider>
-      <ThemeProvider enableCustomTheme persistThemeMode={true}>
-        <OfficeProvider>
-          <FeatureConfigGate>
-            <ApiProvider enableDevtools={false}>
-              <OfficeThemeProvider>
-                <OutlookAuthProvider>
-                  <AuthGate>
-                    <OutlookWrapper>
-                      <div className="office-shell">
-                        <AddinChatPage />
-                      </div>
-                    </OutlookWrapper>
-                  </AuthGate>
-                  <Toaster placement="bottom-center" />
-                </OutlookAuthProvider>
-              </OfficeThemeProvider>
-            </ApiProvider>
-          </FeatureConfigGate>
-        </OfficeProvider>
-      </ThemeProvider>
-    </I18nProvider>
+    <DesktopSidecarProvider>
+      <I18nProvider>
+        <ThemeProvider enableCustomTheme persistThemeMode={true}>
+          <OfficeProvider>
+            <FeatureConfigGate>
+              <ApiProvider enableDevtools={false}>
+                <OfficeThemeProvider>
+                  <OutlookAuthProvider>
+                    <AuthGate>
+                      <OutlookWrapper>
+                        <div className="office-shell">
+                          <AddinChatPage />
+                        </div>
+                      </OutlookWrapper>
+                    </AuthGate>
+                    <Toaster placement="bottom-center" />
+                  </OutlookAuthProvider>
+                </OfficeThemeProvider>
+              </ApiProvider>
+            </FeatureConfigGate>
+          </OfficeProvider>
+        </ThemeProvider>
+      </I18nProvider>
+    </DesktopSidecarProvider>
   );
 }

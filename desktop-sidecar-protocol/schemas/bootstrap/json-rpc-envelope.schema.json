@@ -1,0 +1,82 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/json-rpc-envelope.schema.json",
+  "title": "JsonRpcEnvelope",
+  "oneOf": [
+    { "$ref": "#/definitions/Request" },
+    { "$ref": "#/definitions/Notification" },
+    { "$ref": "#/definitions/SuccessResponse" },
+    { "$ref": "#/definitions/ErrorResponse" }
+  ],
+  "definitions": {
+    "Request": {
+      "type": "object",
+      "required": ["jsonrpc", "method", "id"],
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "method": { "type": "string", "minLength": 1 },
+        "params": {
+          "oneOf": [{ "type": "object" }, { "type": "array" }]
+        },
+        "id": { "$ref": "../common.schema.json#/definitions/RequestId" },
+        "x-erato-deadline-at": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": true
+    },
+    "Notification": {
+      "type": "object",
+      "required": ["jsonrpc", "method"],
+      "not": { "required": ["id"], "properties": { "id": true } },
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "method": { "type": "string", "minLength": 1 },
+        "params": {
+          "oneOf": [{ "type": "object" }, { "type": "array" }]
+        }
+      },
+      "additionalProperties": true
+    },
+    "SuccessResponse": {
+      "type": "object",
+      "required": ["jsonrpc", "result", "id"],
+      "not": {
+        "required": ["error"],
+        "properties": { "error": true }
+      },
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "result": true,
+        "id": { "$ref": "../common.schema.json#/definitions/RequestId" }
+      },
+      "additionalProperties": true
+    },
+    "ErrorResponse": {
+      "type": "object",
+      "required": ["jsonrpc", "error", "id"],
+      "not": {
+        "required": ["result"],
+        "properties": { "result": true }
+      },
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "error": {
+          "type": "object",
+          "required": ["code", "message"],
+          "properties": {
+            "code": { "type": "integer" },
+            "message": { "type": "string" },
+            "data": true
+          },
+          "additionalProperties": true
+        },
+        "id": {
+          "oneOf": [
+            { "$ref": "../common.schema.json#/definitions/RequestId" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "cases": [
+    { "name": "batching disabled", "message": [], "error": "invalid_request" },
+    {
+      "name": "wrong JSON-RPC version",
+      "message": { "jsonrpc": "1.0", "id": 1, "result": null },
+      "error": "malformed_message"
+    },
+    {
+      "name": "null success response id",
+      "message": { "jsonrpc": "2.0", "id": null, "result": null },
+      "error": "malformed_message"
+    },
+    {
+      "name": "result and error together",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": null,
+        "error": { "code": -32603, "message": "bad" }
+      },
+      "error": "malformed_message"
+    }
+  ]
+}

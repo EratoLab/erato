@@ -59,6 +59,7 @@
     "i18n:watch": "lingui extract --watch"
   },
   "dependencies": {
+    "@erato/desktop-sidecar-protocol": "file:../desktop-sidecar-protocol",
     "@erato/frontend-utils": "file:../frontend-utils",
     "@extend-ai/react-docx": "0.7.1",
     "@extend-ai/react-pptx": "0.1.2",

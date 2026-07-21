@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/discover-result.schema.json",
+  "title": "DiscoverResult",
+  "type": "object",
+  "required": ["protocolVersion", "serverInfo", "instanceId", "document"],
+  "properties": {
+    "protocolVersion": {
+      "$ref": "../common.schema.json#/definitions/ProtocolVersion"
+    },
+    "serverInfo": {
+      "$ref": "../common.schema.json#/definitions/ProductInfo"
+    },
+    "instanceId": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "document": { "$ref": "./discovery-document.schema.json" }
+  },
+  "additionalProperties": true
+}

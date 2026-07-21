@@ -1,0 +1,67 @@
+{
+  "name": "discover ready data and invoke",
+  "messages": [
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-discover",
+        "method": "rpc.discover",
+        "params": {
+          "protocolVersions": ["1.0"],
+          "clientInfo": {
+            "name": "erato-office-addin",
+            "version": "2026.07.21"
+          },
+          "host": {
+            "application": "Outlook",
+            "applicationVersion": "new",
+            "runtime": "WebView2"
+          },
+          "os": {
+            "name": "Windows",
+            "version": "11",
+            "architecture": "x64"
+          }
+        }
+      }
+    },
+    {
+      "direction": "sidecar-to-client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-discover",
+        "result": {
+          "protocolVersion": "1.0",
+          "serverInfo": {
+            "name": "erato-desktop-sidecar",
+            "version": "0.1.0"
+          },
+          "instanceId": "sidecar-instance-id",
+          "documentFrom": "../openrpc.json"
+        }
+      }
+    },
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-echo",
+        "method": "diagnostics.echo.v1",
+        "params": { "message": "hello" },
+        "x-erato-deadline-at": "2026-07-21T10:00:00.000Z"
+      }
+    },
+    {
+      "direction": "sidecar-to-client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-echo",
+        "result": {
+          "message": "hello",
+          "sidecarInstanceId": "sidecar-instance-id"
+        }
+      }
+    }
+  ]
+}

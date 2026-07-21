@@ -1,0 +1,51 @@
+{
+  "name": "@erato/desktop-sidecar-protocol",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.8.0",
+  "files": [
+    "dist",
+    "schemas",
+    "examples",
+    "conformance",
+    "openrpc.json",
+    "README.md",
+    "SPEC.md",
+    "TRANSPORT.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/typescript/src/index.d.ts",
+      "import": "./dist/typescript/src/index.js"
+    },
+    "./test-server": {
+      "types": "./dist/test-server/src/index.d.ts",
+      "import": "./dist/test-server/src/index.js"
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "pnpm run format:check && pnpm run validate && pnpm run check:generated && pnpm run typecheck && pnpm run test",
+    "check:generated": "node scripts/check-generated.mjs",
+    "format": "prettier . --write",
+    "format:check": "prettier . --check",
+    "generate": "node scripts/generate.mjs && pnpm run build",
+    "package-library": "pnpm run check && pnpm run build && node scripts/package-library.mjs",
+    "package-spec": "pnpm run check && node scripts/package-spec.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "validate": "node scripts/validate.mjs"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@open-rpc/meta-schema": "1.14.9",
+    "@types/node": "22.19.15",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
+    "json-schema-to-typescript": "15.0.4",
+    "prettier": "3.5.0",
+    "typescript": "5.9.3",
+    "vitest": "4.1.7"
+  }
+}

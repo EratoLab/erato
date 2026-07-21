@@ -1,0 +1,34 @@
+{
+  "name": "no common protocol version",
+  "messages": [
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-discover",
+        "method": "rpc.discover",
+        "params": {
+          "protocolVersions": ["2.0"],
+          "clientInfo": { "name": "future-client", "version": "2.0.0" },
+          "host": { "application": "browser", "runtime": "Chromium" },
+          "os": { "name": "Windows" }
+        }
+      }
+    },
+    {
+      "direction": "sidecar-to-client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-discover",
+        "error": {
+          "code": -32010,
+          "message": "No mutually supported protocol version.",
+          "data": {
+            "kind": "incompatible_protocol",
+            "supportedProtocolVersions": ["1.0"]
+          }
+        }
+      }
+    }
+  ]
+}
