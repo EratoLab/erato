@@ -4,7 +4,11 @@
  * Provides a clean interface for fetching, navigating and managing chat history.
  */
 /* eslint-disable lingui/no-unlocalized-strings */
-import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useQueryClient,
+  type InfiniteData,
+} from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom"; // Added React Router hooks
 import { create } from "zustand";
@@ -53,6 +57,10 @@ export interface PendingChat {
  * to absent here.
  */
 type Complete<T> = { [K in keyof Required<T>]: T[K] };
+
+// Shape of the infinite recent-chats cache entry.
+type RecentChatsPage = Awaited<ReturnType<typeof fetchRecentChats>>;
+type InfiniteRecentChats = InfiniteData<RecentChatsPage>;
 
 interface ChatHistoryState {
   isNewChatPending: boolean; // Flag to indicate a new chat navigation is in progress
@@ -157,6 +165,17 @@ export function useChatHistory() {
   const pendingChat = useChatHistoryStore((state) => state.pendingChat);
   const setPendingChat = useChatHistoryStore((state) => state.setPendingChat);
 
+  // Stable query key for the infinite recent-chats list. Reused for both the
+  // query itself and for cache mutations (e.g. optimistic archive removal).
+  const infiniteChatsQueryKey = useMemo(
+    () => [
+      ...recentChatsQuery({}).queryKey,
+      "infinite",
+      { limit: CHAT_HISTORY_PAGE_SIZE },
+    ],
+    [],
+  );
+
   const {
     data,
     isLoading,
@@ -169,11 +188,7 @@ export function useChatHistory() {
     Awaited<ReturnType<typeof fetchRecentChats>>,
     RecentChatsError
   >({
-    queryKey: [
-      ...recentChatsQuery({}).queryKey,
-      "infinite",
-      { limit: CHAT_HISTORY_PAGE_SIZE },
-    ],
+    queryKey: infiniteChatsQueryKey,
     initialPageParam: 0,
     queryFn: ({ pageParam, signal }) => {
       const offset = typeof pageParam === "number" ? pageParam : 0;
@@ -349,10 +364,52 @@ export function useChatHistory() {
   // Archive a chat
   const archiveChat = useCallback(
     async (chatId: string) => {
-      // Recent-chats query key. Request headers never enter the key
-      // (queryKeyFn only uses path/query/body params), so no fetcherOptions
-      // need to be merged in here.
-      const queryKey = recentChatsQuery({}).queryKey;
+      // Snapshot the cache and pending placeholder so a failed mutation can
+      // roll both back.
+      const previousData =
+        queryClient.getQueryData<InfiniteRecentChats>(infiniteChatsQueryKey);
+      const previousPendingChat = useChatHistoryStore.getState().pendingChat;
+
+      // The archived row may be the pending-chat placeholder, which lives
+      // outside the cache and no list edit can take away; drop it too.
+      clearPendingChat(chatId);
+
+      // Optimistically remove the archived row from every loaded page.
+      //
+      // We deliberately mutate the cache in place rather than invalidating and
+      // refetching every page. A full refetch re-derives each page's offset
+      // from getNextPageParam (current_offset + returned_count); once the
+      // archive shrinks the server-side result set, every page boundary past
+      // the archived row shifts by one, so the refetch silently skips the chat
+      // that straddled the boundary (ERMAIN-474). Editing the cache keeps the
+      // list stable and makes the row disappear immediately, without waiting
+      // for a round trip.
+      queryClient.setQueryData<InfiniteRecentChats>(
+        infiniteChatsQueryKey,
+        (current) => {
+          if (!current) return current;
+          return {
+            ...current,
+            pages: current.pages.map((page) => {
+              const chats = page.chats.filter((chat) => chat.id !== chatId);
+              if (chats.length === page.chats.length) return page;
+              const removed = page.chats.length - chats.length;
+              return {
+                ...page,
+                chats,
+                stats: {
+                  ...page.stats,
+                  returned_count: Math.max(
+                    0,
+                    page.stats.returned_count - removed,
+                  ),
+                  total_count: Math.max(0, page.stats.total_count - removed),
+                },
+              };
+            }),
+          };
+        },
+      );
 
       try {
         // Call the mutation
@@ -361,24 +418,20 @@ export function useChatHistory() {
           body: {}, // Send empty object as body
         });
 
-        // The row offering this action may itself be the placeholder, which no
-        // list response can take away.
-        clearPendingChat(chatId);
-
-        // Invalidate the query - React Query will refetch it automatically
-        // when components using it are active.
-        await queryClient.invalidateQueries({ queryKey }); // Use the generated key
-
         // If the archived chat was the current one, navigate to the new chat page
         if (currentChatId === chatId) {
-          // router.replace("/chat/new"); // Navigate to the new chat page
-          navigate("/chat/new", { replace: true }); // Replaced router.replace with navigate
+          navigate("/chat/new", { replace: true });
         }
         // If not the current chat, no navigation occurs.
       } catch (error) {
         logger.log(`Failed to archive chat ${chatId}:`, error);
-        // Consider adding error handling, e.g., show a notification
-        // If using optimistic updates, would need to revert changes here
+        // Roll back the optimistic removal so the rows reappear.
+        if (previousData) {
+          queryClient.setQueryData(infiniteChatsQueryKey, previousData);
+        }
+        if (previousPendingChat?.id === chatId) {
+          useChatHistoryStore.getState().setPendingChat(previousPendingChat);
+        }
         throw error; // Re-throw error for potential handling upstream
       }
     },
@@ -386,8 +439,8 @@ export function useChatHistory() {
       archiveChatMutation,
       queryClient,
       currentChatId,
-      // router,
-      navigate, // Updated dependency array
+      navigate,
+      infiniteChatsQueryKey,
     ],
   );
 
