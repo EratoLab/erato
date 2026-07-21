@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/error-data.schema.json",
+  "title": "ProtocolErrorData",
+  "type": "object",
+  "required": ["kind"],
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": [
+        "incompatible_protocol",
+        "capability_unavailable",
+        "invalid_result",
+        "permission_denied",
+        "request_cancelled",
+        "timeout",
+        "sidecar_internal"
+      ]
+    },
+    "supportedProtocolVersions": {
+      "type": "array",
+      "items": { "$ref": "../common.schema.json#/definitions/ProtocolVersion" },
+      "uniqueItems": true
+    },
+    "method": { "type": "string", "minLength": 1 },
+    "reasonCode": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "requestId": { "$ref": "../common.schema.json#/definitions/RequestId" }
+  },
+  "additionalProperties": true
+}

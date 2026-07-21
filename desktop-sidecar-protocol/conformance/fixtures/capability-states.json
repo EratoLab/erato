@@ -1,0 +1,31 @@
+{
+  "cases": [
+    {
+      "name": "enabled compiled capability",
+      "advertised": { "method": "diagnostics.echo.v1", "state": "enabled" },
+      "compiledMethods": ["diagnostics.echo.v1"],
+      "supports": true
+    },
+    {
+      "name": "disabled compiled capability",
+      "advertised": {
+        "method": "diagnostics.echo.v1",
+        "state": "disabled",
+        "reasonCode": "organization_policy"
+      },
+      "compiledMethods": ["diagnostics.echo.v1"],
+      "supports": false
+    },
+    {
+      "name": "absent capability",
+      "compiledMethods": ["diagnostics.echo.v1"],
+      "supports": false
+    },
+    {
+      "name": "unknown additive capability",
+      "advertised": { "method": "future.feature.v3", "state": "enabled" },
+      "compiledMethods": ["diagnostics.echo.v1"],
+      "supports": false
+    }
+  ]
+}

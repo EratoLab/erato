@@ -14,3 +14,15 @@ lint-docker:
         exit 1
     fi
     find . -name "Dockerfile*" -type f -exec hadolint {} \;
+
+# Validate, regenerate-check, type-check, and test the desktop sidecar protocol.
+protocol-check:
+    cd desktop-sidecar-protocol && pnpm run check
+
+# Regenerate TypeScript contracts and compiled protocol artifacts.
+protocol-generate:
+    cd desktop-sidecar-protocol && pnpm run generate
+
+# Run the desktop sidecar protocol conformance suite.
+protocol-test:
+    cd desktop-sidecar-protocol && pnpm run test

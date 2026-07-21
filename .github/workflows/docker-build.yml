@@ -12,6 +12,7 @@ on:
       - '.github/workflows/docker-build.yml' 
       - 'backend/**'
       - 'component-kit-example/**'
+      - 'desktop-sidecar-protocol/**'
       - 'frontend/**'
       - 'office-addin/**'
       - 'e2e-tests/**'
@@ -27,6 +28,7 @@ on:
       - '.github/workflows/docker-build.yml' 
       - 'backend/**'
       - 'component-kit-example/**'
+      - 'desktop-sidecar-protocol/**'
       - 'frontend/**'
       - 'office-addin/**'
       - 'e2e-tests/**'
@@ -70,9 +72,18 @@ jobs:
           node-version: '22.22.2'
           cache: 'pnpm'
           cache-dependency-path: |
+            ./desktop-sidecar-protocol/pnpm-lock.yaml
             ./frontend/pnpm-lock.yaml
             ./component-kit-example/package.json
             ./office-addin/pnpm-lock.yaml
+
+      - name: "Install desktop sidecar protocol packages"
+        working-directory: ./desktop-sidecar-protocol
+        run: pnpm install --frozen-lockfile
+
+      - name: "Build desktop sidecar protocol package"
+        working-directory: ./desktop-sidecar-protocol
+        run: pnpm run build
 
       - name: "Install frontend packages"
         working-directory: ./frontend
@@ -115,6 +126,11 @@ jobs:
         with:
           dockerfile: Dockerfile.combined backend/Dockerfile backend/Dockerfile.sqitch-migrator backend/Dockerfile.mock-llm-server backend/Dockerfile.mock-mcp-server backend/ollama-smol/Dockerfile frontend/Dockerfile component-kit-example/Dockerfile
           config_file: .hadolint.yaml
+
+      - name: "Desktop sidecar protocol checks"
+        working-directory: ./desktop-sidecar-protocol
+        if: success() || failure()
+        run: pnpm run check
 
       - name: "rustfmt"
         working-directory: ./backend
@@ -396,7 +412,17 @@ jobs:
           # Source of truth is at /frontend/.node-version
           node-version: '22.22.2'
           cache: 'pnpm'
-          cache-dependency-path: './frontend/pnpm-lock.yaml'
+          cache-dependency-path: |
+            ./desktop-sidecar-protocol/pnpm-lock.yaml
+            ./frontend/pnpm-lock.yaml
+
+      - name: "Install desktop sidecar protocol packages"
+        working-directory: ./desktop-sidecar-protocol
+        run: pnpm install --frozen-lockfile
+
+      - name: "Build desktop sidecar protocol package"
+        working-directory: ./desktop-sidecar-protocol
+        run: pnpm run build
 
       - name: "Install frontend packages"
         working-directory: ./frontend

@@ -1,0 +1,132 @@
+{
+  "$schema": "https://raw.githubusercontent.com/open-rpc/meta-schema/master/schema.json",
+  "openrpc": "1.4.0",
+  "info": {
+    "title": "Erato desktop sidecar protocol",
+    "version": "1.0.0",
+    "description": "Live method catalogue negotiated by Erato clients and desktop sidecars."
+  },
+  "externalDocs": {
+    "description": "Normative protocol specification",
+    "url": "https://github.com/EratoLabs/erato/blob/main/desktop-sidecar-protocol/SPEC.md"
+  },
+  "methods": [
+    {
+      "name": "rpc.discover",
+      "summary": "Negotiate the protocol and return sidecar information plus the live OpenRPC catalogue.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/bootstrap/discover-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/bootstrap/discover-result.schema.json"
+        }
+      },
+      "errors": [
+        { "$ref": "#/components/errors/IncompatibleProtocol" },
+        { "$ref": "#/components/errors/InvalidParams" }
+      ]
+    },
+    {
+      "name": "erato.cancel",
+      "summary": "Request and acknowledge best-effort cancellation of a pending request.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/bootstrap/cancel-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/bootstrap/cancel-result.schema.json"
+        }
+      }
+    },
+    {
+      "name": "diagnostics.echo.v1",
+      "summary": "Echo a bounded string for connectivity and conformance tests.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/diagnostics-echo-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/diagnostics-echo-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        { "$ref": "#/components/errors/CapabilityUnavailable" },
+        { "$ref": "#/components/errors/InvalidParams" },
+        { "$ref": "#/components/errors/PermissionDenied" },
+        { "$ref": "#/components/errors/RequestCancelled" },
+        { "$ref": "#/components/errors/Timeout" },
+        { "$ref": "#/components/errors/SidecarInternal" }
+      ],
+      "x-erato-capability": {
+        "id": "diagnostics.echo",
+        "major": 1,
+        "method": "diagnostics.echo.v1",
+        "availability": { "state": "enabled" }
+      }
+    }
+  ],
+  "components": {
+    "errors": {
+      "IncompatibleProtocol": {
+        "code": -32010,
+        "message": "No mutually supported protocol version.",
+        "data": { "kind": "incompatible_protocol" }
+      },
+      "CapabilityUnavailable": {
+        "code": -32011,
+        "message": "The requested capability is unavailable.",
+        "data": { "kind": "capability_unavailable" }
+      },
+      "PermissionDenied": {
+        "code": -32013,
+        "message": "Permission was denied.",
+        "data": { "kind": "permission_denied" }
+      },
+      "RequestCancelled": {
+        "code": -32014,
+        "message": "The request was cancelled.",
+        "data": { "kind": "request_cancelled" }
+      },
+      "Timeout": {
+        "code": -32015,
+        "message": "The request timed out.",
+        "data": { "kind": "timeout" }
+      },
+      "SidecarInternal": {
+        "code": -32016,
+        "message": "The sidecar could not complete the request.",
+        "data": { "kind": "sidecar_internal" }
+      },
+      "InvalidParams": {
+        "code": -32602,
+        "message": "Invalid method parameters."
+      }
+    }
+  },
+  "x-erato-catalogue": {
+    "revision": "1",
+    "digest": "sha256:cfc68144fd9665281bb908ff7def9c5dd5959d233170e1345a5b5b49096eba8a"
+  }
+}

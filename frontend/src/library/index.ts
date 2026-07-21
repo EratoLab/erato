@@ -107,6 +107,13 @@ export { FeedbackViewDialog } from "@/components/ui/Feedback/FeedbackViewDialog"
 export { I18nProvider } from "@/providers/I18nProvider";
 export { ProfileProvider } from "@/providers/ProfileProvider";
 export {
+  DesktopSidecarProvider,
+  resolveDesktopSidecarEndpoint,
+  useDesktopSidecar,
+  type DesktopSidecarContextValue,
+  type DesktopSidecarProviderProps,
+} from "@/providers/DesktopSidecarProvider";
+export {
   FileCapabilitiesProvider,
   useFileCapabilitiesContext,
 } from "@/providers/FileCapabilitiesProvider";

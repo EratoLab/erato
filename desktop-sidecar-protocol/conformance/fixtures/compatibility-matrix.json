@@ -1,0 +1,30 @@
+{
+  "protocolVersion": "1.0",
+  "cases": [
+    {
+      "name": "current client and current sidecar",
+      "clientVersions": ["1.0"],
+      "sidecarVersions": ["1.0"],
+      "selected": "1.0"
+    },
+    {
+      "name": "current client and previous sidecar",
+      "clientVersions": ["1.1", "1.0"],
+      "sidecarVersions": ["1.0"],
+      "selected": "1.0"
+    },
+    {
+      "name": "previous client and additive current sidecar",
+      "clientVersions": ["1.0"],
+      "sidecarVersions": ["1.1", "1.0"],
+      "selected": "1.0",
+      "sidecarAddsUnknownFields": true
+    },
+    {
+      "name": "no common protocol",
+      "clientVersions": ["2.0"],
+      "sidecarVersions": ["1.0"],
+      "errorKind": "incompatible_protocol"
+    }
+  ]
+}

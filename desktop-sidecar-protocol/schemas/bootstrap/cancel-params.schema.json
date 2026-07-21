@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/cancel-params.schema.json",
+  "title": "CancelParams",
+  "type": "object",
+  "required": ["requestId", "reason"],
+  "properties": {
+    "requestId": { "$ref": "../common.schema.json#/definitions/RequestId" },
+    "reason": { "type": "string", "minLength": 1, "maxLength": 64 }
+  },
+  "additionalProperties": true
+}

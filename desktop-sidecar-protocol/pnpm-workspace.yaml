@@ -1,0 +1,4 @@
+allowBuilds: {}
+
+# Match the repository's five-day dependency cooling-off policy.
+minimumReleaseAge: 7200

@@ -7,6 +7,10 @@ RUN corepack enable
 COPY . /app
 
 FROM base AS build
+WORKDIR /app/desktop-sidecar-protocol
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --config.confirmModulesPurge=false
+RUN pnpm run build
+
 WORKDIR /app/frontend
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --config.confirmModulesPurge=false
 RUN NODE_OPTIONS=--max-old-space-size=4096 pnpm run build:lib

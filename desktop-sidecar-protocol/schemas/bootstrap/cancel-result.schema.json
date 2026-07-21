@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/cancel-result.schema.json",
+  "title": "CancelResult",
+  "type": "object",
+  "required": ["accepted"],
+  "properties": {
+    "accepted": { "type": "boolean" }
+  },
+  "additionalProperties": true
+}

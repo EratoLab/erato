@@ -1,0 +1,44 @@
+{
+  "name": "capability unavailable and discovery refresh",
+  "messages": [
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-echo",
+        "method": "diagnostics.echo.v1",
+        "params": { "message": "hello" }
+      }
+    },
+    {
+      "direction": "sidecar-to-client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-echo",
+        "error": {
+          "code": -32011,
+          "message": "The requested capability is unavailable.",
+          "data": {
+            "kind": "capability_unavailable",
+            "method": "diagnostics.echo.v1",
+            "reasonCode": "policy_changed"
+          }
+        }
+      }
+    },
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-refresh",
+        "method": "rpc.discover",
+        "params": {
+          "protocolVersions": ["1.0"],
+          "clientInfo": { "name": "erato-web", "version": "2026.07.21" },
+          "host": { "application": "browser", "runtime": "Chromium" },
+          "os": { "name": "Windows" }
+        }
+      }
+    }
+  ]
+}
