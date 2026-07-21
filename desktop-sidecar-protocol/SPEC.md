@@ -10,6 +10,10 @@ envelope, [OpenRPC 1.4](https://spec.open-rpc.org/) for discovery, and JSON
 Schema Draft 7 for payload contracts. JSON files in this directory are
 canonical; generated language bindings are not.
 
+Backend filesystem discovery and deployment of distributable sidecar artifacts
+are separate from the JSON-RPC protocol and are defined in
+[`DISTRIBUTION.md`](DISTRIBUTION.md).
+
 The protocol version selected by `rpc.discover` governs envelopes, discovery,
 errors, and cancellation. It does not version business methods. Protocol
 versions are exact `major.minor` strings. The client MUST send its supported

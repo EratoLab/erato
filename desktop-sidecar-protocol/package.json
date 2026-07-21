@@ -11,6 +11,7 @@
     "conformance",
     "openrpc.json",
     "README.md",
+    "DISTRIBUTION.md",
     "SPEC.md",
     "TRANSPORT.md"
   ],
