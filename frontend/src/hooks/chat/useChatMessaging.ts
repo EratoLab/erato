@@ -50,7 +50,11 @@ import {
   NEW_CHAT_STREAM_KEY,
   useMessagingStore,
 } from "./store/messagingStore";
-import { useChatHistoryStore } from "./useChatHistory";
+import {
+  clearPendingChat,
+  isPendingChat,
+  useChatHistoryStore,
+} from "./useChatHistory";
 import { useExplicitNavigation } from "./useExplicitNavigation";
 
 import type {
@@ -881,6 +885,9 @@ export function useChatMessaging(
                 useChatHistoryStore.getState().setPendingChat({
                   id: responseData.chat_id,
                   createdAt: new Date().toISOString(),
+                  ...(explicitNav.currentAssistantId
+                    ? { assistantId: explicitNav.currentAssistantId }
+                    : {}),
                 });
               }
 
@@ -930,9 +937,14 @@ export function useChatMessaging(
               responseData,
             );
             handleUserMessageSaved(responseData, activeStreamKey);
-            // The chat now has a message, so the list query can see it. This
-            // replaces the placeholder row with the real one.
-            void refetchChatHistory();
+            // The chat now has a message, so the list query can see it, which
+            // replaces the placeholder row with the real one. Only the chat
+            // still rendered from a placeholder needs this: for every other
+            // turn the list already has its row, and a refetch here would cost
+            // one request per loaded page mid-stream.
+            if (isPendingChat(activeStreamKey)) {
+              void refetchChatHistory();
+            }
             break;
 
           case "assistant_message_started":
@@ -1025,6 +1037,7 @@ export function useChatMessaging(
 
             setError(new Error(description));
             resetStreaming(activeStreamKey);
+            clearPendingChat(activeStreamKey);
             setSubmittingForKey(activeStreamKey, false);
             void handleRefetchAndClear({
               logContext: `Stream error event (${streamError.error_type})`,
@@ -1175,6 +1188,7 @@ export function useChatMessaging(
             if (stillStreaming) {
               setError(connectionError);
               resetStreaming(resumeStreamKey);
+              clearPendingChat(resumeStreamKey);
               void handleRefetchAndClear({
                 logContext: `Resume stream error (${reason})`,
               });
@@ -1447,6 +1461,7 @@ export function useChatMessaging(
               "[DEBUG_STREAMING] SSE onError: Resetting streaming state.",
             );
             resetStreaming(activeStreamKey);
+            clearPendingChat(activeStreamKey);
 
             // Use the new utility for refetch and clear
             logger.log(
@@ -1495,6 +1510,7 @@ export function useChatMessaging(
               logger.log(
                 "[DEBUG_STREAMING] SSE onClose: Not streaming, calling handleRefetchAndClear.",
               );
+              clearPendingChat(activeStreamKey);
               void handleRefetchAndClear({ logContext: "SSE closed normally" });
             } else if (currentlyStreaming) {
               setSSECleanupForKey(activeStreamKey, null);
@@ -1520,6 +1536,7 @@ export function useChatMessaging(
                 "[DEBUG_STREAMING] SSE onClose (unexpected): Resetting streaming state.",
               );
               resetStreaming(activeStreamKey);
+              clearPendingChat(activeStreamKey);
 
               // Use the new utility for refetch and clear
               logger.log(
