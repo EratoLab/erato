@@ -15,6 +15,9 @@ import { useChatHistory, useChatHistoryStore } from "../useChatHistory";
 import { useChatMessaging } from "../useChatMessaging";
 
 const mockUseInfiniteQuery = vi.hoisted(() => vi.fn());
+const mockInvalidateQueries = vi.hoisted(() =>
+  vi.fn().mockResolvedValue(undefined),
+);
 
 // Mock SSE Client
 vi.mock("@/utils/sse/sseClient", () => ({
@@ -53,7 +56,7 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
 vi.mock("@tanstack/react-query", () => ({
   useInfiniteQuery: mockUseInfiniteQuery,
   useQueryClient: () => ({
-    invalidateQueries: vi.fn().mockResolvedValue(undefined),
+    invalidateQueries: mockInvalidateQueries,
     clear: vi.fn(),
   }),
 }));
@@ -299,6 +302,24 @@ describe("Chat hooks integration", () => {
         messagingResult2.current.messageOrder[0]
       ].content,
     ).toEqual([{ content_type: "text", text: "Different chat message" }]);
+  });
+
+  it("should mark the left chat's messages stale when starting a new chat", async () => {
+    mockLocation = { pathname: "/chat/chat1" };
+    mockParams = { id: "chat1" };
+
+    const { result: historyResult } = renderHook(() => useChatHistory());
+    expect(historyResult.current.currentChatId).toBe("chat1");
+
+    await act(async () => {
+      await historyResult.current.createNewChat();
+    });
+
+    expect(mockInvalidateQueries).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queryKey: ["chatMessages", { chatId: "chat1" }],
+      }),
+    );
   });
 
   it("should create a new chat and send a message", async () => {

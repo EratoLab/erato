@@ -2915,6 +2915,121 @@ async fn test_resume_stream_full_replay(pool: Pool<Postgres>) {
     server_handle.abort();
 }
 
+/// Test that a mid-generation `GET /chats/{id}/messages` returns the user
+/// message of the in-flight turn.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+///
+/// # Test Behavior
+/// 1. Starts a slow generation and lets it run for a couple of seconds
+/// 2. Fetches the chat history while that generation is still streaming
+/// 3. Verifies the user message is already listed
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_get_chat_messages_returns_in_flight_user_message(pool: Pool<Postgres>) {
+    use crate::test_utils::MockLlmConfig;
+    use std::time::Duration;
+
+    const USER_MESSAGE: &str = "In-flight history probe";
+
+    // ~4 seconds of generation, so the fetch below lands mid-stream.
+    let mock_config = MockLlmConfig {
+        chunks: (1..=20).map(|i| format!("Message {:02}", i)).collect(),
+        delay_ms: 200,
+        provider_id: "mock-llm".to_string(),
+        model_name: "gpt-3.5-turbo".to_string(),
+        ..Default::default()
+    };
+
+    let (app_config, _server) = setup_mock_llm_server(Some(mock_config)).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    // A real TCP server: axum_test waits for the full response, leaving no
+    // window to fetch in.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server_addr = listener.local_addr().unwrap();
+    let app: axum::Router = erato::server::router::router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state.clone());
+    let server_handle = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    let client = reqwest::Client::new();
+    let base_url = format!("http://{}", server_addr);
+
+    let client_clone = client.clone();
+    let base_url_clone = base_url.clone();
+    let submit_handle = tokio::spawn(async move {
+        client_clone
+            .post(format!(
+                "{}/api/v1beta/me/messages/submitstream",
+                base_url_clone
+            ))
+            .header("Authorization", format!("Bearer {}", TEST_JWT_TOKEN))
+            .header("Content-Type", "application/json")
+            .json(&json!({ "user_message": USER_MESSAGE }))
+            .send()
+            .await
+            .expect("Failed to send submitstream request")
+            .text()
+            .await
+            .expect("Failed to read submitstream body")
+    });
+
+    tokio::time::sleep(Duration::from_secs(2)).await;
+
+    let chat_id = {
+        let tasks = app_state.background_tasks.tasks.read().await;
+        tasks.keys().next().copied()
+    }
+    .expect("Expected to find an active background task");
+
+    let messages_response = client
+        .get(format!(
+            "{}/api/v1beta/chats/{}/messages",
+            base_url, chat_id
+        ))
+        .header("Authorization", format!("Bearer {}", TEST_JWT_TOKEN))
+        .send()
+        .await
+        .expect("Failed to fetch chat messages");
+
+    assert_eq!(
+        messages_response.status(),
+        reqwest::StatusCode::OK,
+        "Mid-generation message fetch should succeed"
+    );
+
+    let body: Value = messages_response
+        .json()
+        .await
+        .expect("Failed to parse chat messages response");
+
+    let user_message = body["messages"]
+        .as_array()
+        .expect("Expected a messages array")
+        .iter()
+        .find(|message| message["role"] == "user")
+        .expect("Expected the in-flight user message to be listed");
+
+    assert_eq!(
+        user_message["content"][0]["text"], USER_MESSAGE,
+        "Listed user message should carry the submitted text"
+    );
+
+    submit_handle.abort();
+    server_handle.abort();
+}
+
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_abort_stream_persists_partial_message(pool: Pool<Postgres>) {
     use crate::test_utils::MockLlmConfig;

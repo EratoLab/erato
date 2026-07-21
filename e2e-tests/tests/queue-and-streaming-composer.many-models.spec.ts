@@ -468,12 +468,11 @@ test.describe("Streaming composer + message queue", () => {
       await sidebarEntry.click();
       await expect(page).toHaveURL(new RegExp(`/chat/${streamingChatId}$`));
 
-      // The queued payload came back as a draft. (No message-count assert
-      // here: while the resumed stream is still in flight the history can
-      // render without the mid-stream user message — a pre-existing resume
-      // quirk unrelated to the queue. The count is checked after completion.)
+      // The queued payload came back as a draft, and the resumed stream still
+      // shows both sent messages.
       await expect(messageBox(page)).toHaveValue("fast");
       await expect(queuedChip(page)).toHaveCount(0);
+      await expect(page.getByTestId("message-user")).toHaveCount(2);
 
       // "Never background-sends" can only be asserted after the abandoned
       // turn has demonstrably completed — before that, the drain this guards
