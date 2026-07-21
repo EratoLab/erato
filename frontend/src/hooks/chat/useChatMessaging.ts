@@ -50,6 +50,7 @@ import {
   NEW_CHAT_STREAM_KEY,
   useMessagingStore,
 } from "./store/messagingStore";
+import { useChatHistoryStore } from "./useChatHistory";
 import { useExplicitNavigation } from "./useExplicitNavigation";
 
 import type {
@@ -874,6 +875,15 @@ export function useChatMessaging(
                 previousStreamKey,
               );
 
+              if (responseData.chat_id) {
+                // Give the sidebar something to render right away; the chat is
+                // not listable until its first message is saved.
+                useChatHistoryStore.getState().setPendingChat({
+                  id: responseData.chat_id,
+                  createdAt: new Date().toISOString(),
+                });
+              }
+
               if (
                 responseData.chat_id &&
                 previousStreamKey !== responseData.chat_id
@@ -920,6 +930,9 @@ export function useChatMessaging(
               responseData,
             );
             handleUserMessageSaved(responseData, activeStreamKey);
+            // The chat now has a message, so the list query can see it. This
+            // replaces the placeholder row with the real one.
+            void refetchChatHistory();
             break;
 
           case "assistant_message_started":
@@ -1040,6 +1053,7 @@ export function useChatMessaging(
       setNewlyCreatedChatId, // for handleChatCreated
       // External handlers (handleChatCreated, handleUserMessageSaved, etc.) are stable imports
       handleRefetchAndClear, // Added dependency
+      refetchChatHistory,
       explicitNav, // Added explicit navigation dependency
       setError,
       resetStreaming,

@@ -5,7 +5,7 @@
  */
 /* eslint-disable lingui/no-unlocalized-strings */
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom"; // Added React Router hooks
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
@@ -25,12 +25,7 @@ import { createLogger } from "@/utils/debugLogger";
 
 import { getStreamKey, useMessagingStore } from "./store/messagingStore";
 
-// Import the correct response type and the RecentChat type from schemas
-// No longer needed after switching to invalidateQueries:
-// import type {
-//   RecentChatsResponse,
-//   RecentChat,
-// } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 const logger = createLogger("HOOK", "useChatHistory");
 const CHAT_HISTORY_PAGE_SIZE = 30;
@@ -38,6 +33,15 @@ const CHAT_HISTORY_PAGE_SIZE = 30;
 interface ChatHistoryState {
   isNewChatPending: boolean; // Flag to indicate a new chat navigation is in progress
   setNewChatPending: (isPending: boolean) => void;
+  /**
+   * A chat that exists on the backend but is not listable yet, with the moment
+   * it was created. `get_recent_chats` only returns chats that already have a
+   * message, and the backend creates the chat row before it inserts the first
+   * user message, so between `chat_created` and the first list fetch after
+   * `user_message_saved` there is nothing to render a row from.
+   */
+  pendingChat: { id: string; createdAt: string } | null;
+  setPendingChat: (chat: { id: string; createdAt: string } | null) => void;
 }
 
 // Create a store to track the current selected chat
@@ -54,6 +58,9 @@ export const useChatHistoryStore = create<ChatHistoryState>()(
             false,
             "chatHistory/setNewChatPending",
           ),
+        pendingChat: null,
+        setPendingChat: (chat) =>
+          set({ pendingChat: chat }, false, "chatHistory/setPendingChat"),
       };
 
       // Add debugging for state changes
@@ -88,7 +95,8 @@ export function useChatHistory() {
   }, [location.pathname, params.id, params.chatId]);
 
   const { fetcherOptions } = useV1betaApiContext();
-  const { isNewChatPending, setNewChatPending } = useChatHistoryStore();
+  const { isNewChatPending, setNewChatPending, pendingChat, setPendingChat } =
+    useChatHistoryStore();
 
   const {
     data,
@@ -141,10 +149,42 @@ export function useChatHistory() {
   const stableEmptyFetcherOptions = useMemo(() => ({}), []);
 
   // Extract chats from the paginated response structure, defaulting to a stable empty array reference
-  const chats = useMemo(
+  const listedChats = useMemo(
     () => data?.pages.flatMap((page) => page.chats) ?? emptyChats,
     [data?.pages, emptyChats],
   );
+
+  const isPendingChatListed = pendingChat
+    ? listedChats.some((chat) => chat.id === pendingChat.id)
+    : false;
+
+  // Once the backend lists the chat, the placeholder has served its purpose.
+  // Dropping it here also keeps it from resurfacing as a ghost row if the chat
+  // later leaves the list, e.g. by being archived.
+  useEffect(() => {
+    if (isPendingChatListed) {
+      setPendingChat(null);
+    }
+  }, [isPendingChatListed, setPendingChat]);
+
+  const chats = useMemo(() => {
+    if (!pendingChat || isPendingChatListed) {
+      return listedChats;
+    }
+    // Only the fields the sidebar renders. `last_selected_facets` and
+    // `last_model` are deliberately absent: consumers treat a present value as
+    // authoritative and would override what the assistant configured for the
+    // first turn. `can_edit` is false to match what an unlisted chat resolves
+    // to today.
+    const placeholder: RecentChat = {
+      id: pendingChat.id,
+      title_resolved: "",
+      can_edit: false,
+      file_uploads: [],
+      last_message_at: pendingChat.createdAt,
+    };
+    return [placeholder, ...listedChats];
+  }, [listedChats, pendingChat, isPendingChatListed]);
 
   // Navigate to a specific chat (assistant-aware)
   const navigateToChat = useCallback(
