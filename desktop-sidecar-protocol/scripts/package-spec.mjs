@@ -10,6 +10,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const releaseDirectory = path.join(root, "release");
 const releaseEntries = [
   "README.md",
+  "DISTRIBUTION.md",
   "SPEC.md",
   "TRANSPORT.md",
   "openrpc.json",

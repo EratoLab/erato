@@ -4,6 +4,8 @@ The payload protocol is transport independent. This document outlines the
 candidate loopback HTTP profile that replaces the earlier WebSocket proposal.
 The HTTP request/response profile is implemented by the reference client but is
 not a production default until the platform qualification below has passed.
+Distribution of sidecar executables and installers is a separate backend
+contract defined in [`DISTRIBUTION.md`](DISTRIBUTION.md).
 
 ## Request adapter contract
 

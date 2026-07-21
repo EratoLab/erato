@@ -61,6 +61,8 @@ Office add-in expose the negotiated snapshot and client through
 - `SPEC.md` defines normative readiness, compatibility, error, and security
   behavior.
 - `TRANSPORT.md` defines transport profiles and records platform qualification.
+- [`DISTRIBUTION.md`](DISTRIBUTION.md) defines the backend artifact filesystem,
+  manifest, and deployment contract.
 - `schemas/` defines bootstrap, discovery, capability, error, and application
   payloads.
 - `openrpc.json` is the canonical method catalogue.
@@ -93,11 +95,14 @@ and runs the compatibility/conformance tests.
    than a moving branch.
 
 The specification archive is language-neutral: it contains the Markdown
-documentation, OpenRPC document, JSON Schemas, examples, and conformance
-fixtures. It deliberately excludes JavaScript, TypeScript, generated
-declarations, and the mock/reference client implementations. Archive entries
-use the stable `package/` root; the release package version appears in the
-archive filename and package metadata, not in its directory structure.
+documentation, including [`DISTRIBUTION.md`](DISTRIBUTION.md), OpenRPC document,
+JSON Schemas, examples, and conformance fixtures. It deliberately excludes
+JavaScript, TypeScript, generated declarations, and the mock/reference client
+implementations. Archive entries use the stable `package/` root; the release
+package version appears in the archive filename and package metadata, not in
+its directory structure.
 
-Production sidecar implementation/distribution, dynamic Origin enrollment, and
-bulk or binary transfer are intentionally outside this package's scope.
+Production sidecar implementation, dynamic Origin enrollment, and bulk or
+binary transfer are intentionally outside this package's scope. Backend
+artifact discovery and deployment are defined in
+[`DISTRIBUTION.md`](DISTRIBUTION.md).
