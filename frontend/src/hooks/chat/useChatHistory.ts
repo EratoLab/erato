@@ -366,8 +366,9 @@ export function useChatHistory() {
     async (chatId: string) => {
       // Snapshot the cache and pending placeholder so a failed mutation can
       // roll both back.
-      const previousData =
-        queryClient.getQueryData<InfiniteRecentChats>(infiniteChatsQueryKey);
+      const previousData = queryClient.getQueryData<InfiniteRecentChats>(
+        infiniteChatsQueryKey,
+      );
       const previousPendingChat = useChatHistoryStore.getState().pendingChat;
 
       // The archived row may be the pending-chat placeholder, which lives

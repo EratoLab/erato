@@ -32,11 +32,7 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiContext", () => ({
 import { useChatHistory } from "../useChatHistory";
 
 const CHAT_HISTORY_PAGE_SIZE = 30;
-const queryKey = [
-  "recentChats",
-  "infinite",
-  { limit: CHAT_HISTORY_PAGE_SIZE },
-];
+const queryKey = ["recentChats", "infinite", { limit: CHAT_HISTORY_PAGE_SIZE }];
 
 function makePage(offset: number, ids: string[], hasMore: boolean) {
   return {
