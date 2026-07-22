@@ -15,16 +15,20 @@ interface FeedbackViewDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onEdit: () => void;
+  onRemove?: () => void;
   feedback: MessageFeedback | null;
   canEdit: boolean;
+  error?: string | null;
 }
 
 export const FeedbackViewDialog: React.FC<FeedbackViewDialogProps> = ({
   isOpen,
   onClose,
   onEdit,
+  onRemove,
   feedback,
   canEdit,
+  error,
 }) => {
   const handleEdit = useCallback(() => {
     onEdit();
@@ -44,6 +48,13 @@ export const FeedbackViewDialog: React.FC<FeedbackViewDialogProps> = ({
       contentClassName="max-w-lg"
     >
       <div className="space-y-4">
+        {/* Error message */}
+        {error && (
+          <div className="rounded-md bg-theme-error-bg p-3 text-sm text-theme-error-fg">
+            {error}
+          </div>
+        )}
+
         {/* Sentiment indicator */}
         <div className="flex items-center gap-2 text-sm text-theme-fg-secondary">
           {sentiment === "positive" ? (
@@ -77,6 +88,19 @@ export const FeedbackViewDialog: React.FC<FeedbackViewDialogProps> = ({
 
         {/* Action buttons */}
         <div className="flex justify-end gap-2">
+          {canEdit && onRemove && (
+            <Button
+              variant="danger"
+              onClick={onRemove}
+              className="mr-auto"
+              aria-label={t({
+                id: "feedback.remove",
+                message: "Remove",
+              })}
+            >
+              <Trans id="feedback.remove">Remove</Trans>
+            </Button>
+          )}
           <Button
             variant="secondary"
             onClick={onClose}

@@ -583,6 +583,65 @@ impl LangfuseClient {
         self.send_ingestion_batch(batch).await
     }
 
+    /// Delete a score (retracted user feedback) in Langfuse.
+    ///
+    /// Score deletion is not part of the ingestion API, so this issues a direct
+    /// `DELETE /api/public/scores/{scoreId}` request.
+    pub async fn delete_score(&self, score_id: &str) -> Result<()> {
+        if !self.enabled {
+            tracing::debug!("Langfuse client is disabled, skipping score deletion");
+            return Ok(());
+        }
+
+        let mut url = reqwest::Url::parse(&format!("{}/api/public/scores", self.base_url))
+            .map_err(|e| eyre!("Failed to build Langfuse score URL: {}", e))?;
+        url.path_segments_mut()
+            .map_err(|_| eyre!("Failed to build Langfuse score URL: base URL cannot be a base"))?
+            .push(score_id);
+
+        tracing::debug!(
+            score_id = %score_id,
+            url = %url.as_str(),
+            "Deleting Langfuse score"
+        );
+
+        let response = self
+            .client
+            .delete(url.clone())
+            .basic_auth(&self.public_key, Some(&self.secret_key))
+            .send()
+            .await
+            .map_err(|e| eyre!("Failed to delete score in Langfuse: {}", e))?;
+
+        let status = response.status();
+
+        // The score may legitimately not exist, e.g. when its ingestion event is
+        // still queued or the feedback predates score forwarding.
+        if status == reqwest::StatusCode::NOT_FOUND {
+            tracing::debug!(
+                score_id = %score_id,
+                "Langfuse score not found, nothing to delete"
+            );
+            return Ok(());
+        }
+
+        if !status.is_success() {
+            let body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Failed to read response body".to_string());
+            return Err(eyre!(
+                "Failed to delete score '{}' in Langfuse with status {}: {}",
+                score_id,
+                status,
+                body
+            ));
+        }
+
+        tracing::debug!(score_id = %score_id, "Successfully deleted Langfuse score");
+        Ok(())
+    }
+
     /// Get a prompt from Langfuse by name
     pub async fn get_prompt(&self, prompt_name: &str) -> Result<LangfusePrompt> {
         let prompt = self

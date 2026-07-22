@@ -4906,6 +4906,59 @@ export const useSubmitMessageFeedback = (
   });
 };
 
+export type DeleteMessageFeedbackPathParams = {
+  /**
+   * The ID of the message to delete feedback for
+   */
+  messageId: string;
+};
+
+export type DeleteMessageFeedbackError = Fetcher.ErrorWrapper<undefined>;
+
+export type DeleteMessageFeedbackVariables = {
+  pathParams: DeleteMessageFeedbackPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchDeleteMessageFeedback = (
+  variables: DeleteMessageFeedbackVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    undefined,
+    DeleteMessageFeedbackError,
+    undefined,
+    {},
+    {},
+    DeleteMessageFeedbackPathParams
+  >({
+    url: "/api/v1beta/messages/{messageId}/feedback",
+    method: "delete",
+    ...variables,
+    signal,
+  });
+
+export const useDeleteMessageFeedback = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      undefined,
+      DeleteMessageFeedbackError,
+      DeleteMessageFeedbackVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    undefined,
+    DeleteMessageFeedbackError,
+    DeleteMessageFeedbackVariables
+  >({
+    mutationFn: (variables: DeleteMessageFeedbackVariables) =>
+      fetchDeleteMessageFeedback(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
 export type PromptOptimizerError = Fetcher.ErrorWrapper<undefined>;
 
 export type PromptOptimizerVariables = {

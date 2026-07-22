@@ -1916,6 +1916,11 @@ msgstr "Update"
 
 #. js-lingui-explicit-id
 #: src/hooks/chat/useMessageFeedback.ts
+msgid "feedback.error.remove_failed"
+msgstr "Failed to remove feedback. Please try again."
+
+#. js-lingui-explicit-id
+#: src/hooks/chat/useMessageFeedback.ts
 msgid "feedback.error.time_limit_exceeded"
 msgstr "The editing window has expired. Feedback can no longer be modified."
 
@@ -1929,6 +1934,11 @@ msgstr "You found this helpful"
 #: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "feedback.like.aria"
 msgstr "Like message"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackViewDialog.tsx
+msgid "feedback.remove"
+msgstr "Remove"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/FeedbackViewDialog.tsx

@@ -1916,6 +1916,11 @@ msgstr "Aktualizuj"
 
 #. js-lingui-explicit-id
 #: src/hooks/chat/useMessageFeedback.ts
+msgid "feedback.error.remove_failed"
+msgstr "Nie udało się usunąć opinii. Spróbuj ponownie."
+
+#. js-lingui-explicit-id
+#: src/hooks/chat/useMessageFeedback.ts
 msgid "feedback.error.time_limit_exceeded"
 msgstr "Okno edycji wygasło. Opinia nie może być już modyfikowana."
 
@@ -1929,6 +1934,11 @@ msgstr "Uznałeś to za przydatne"
 #: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "feedback.like.aria"
 msgstr "Lubię wiadomość"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackViewDialog.tsx
+msgid "feedback.remove"
+msgstr "Usuń"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/FeedbackViewDialog.tsx

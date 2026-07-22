@@ -1916,6 +1916,11 @@ msgstr "Actualizar"
 
 #. js-lingui-explicit-id
 #: src/hooks/chat/useMessageFeedback.ts
+msgid "feedback.error.remove_failed"
+msgstr "No se pudo eliminar la retroalimentación. Por favor, inténtelo de nuevo."
+
+#. js-lingui-explicit-id
+#: src/hooks/chat/useMessageFeedback.ts
 msgid "feedback.error.time_limit_exceeded"
 msgstr "El período de edición ha expirado. La retroalimentación ya no puede ser modificada."
 
@@ -1929,6 +1934,11 @@ msgstr "Encontró esto útil"
 #: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "feedback.like.aria"
 msgstr "Me gusta el mensaje"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackViewDialog.tsx
+msgid "feedback.remove"
+msgstr "Eliminar"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/FeedbackViewDialog.tsx

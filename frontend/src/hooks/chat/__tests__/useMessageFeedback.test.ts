@@ -10,6 +10,7 @@ vi.mock("@lingui/react", () => ({
 
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   useSubmitMessageFeedback: vi.fn(),
+  useDeleteMessageFeedback: vi.fn(),
 }));
 
 vi.mock("@/providers/FeatureConfigProvider", () => ({
@@ -23,11 +24,15 @@ vi.mock("@/utils/debugLogger", () => ({
 }));
 
 import { useMessageFeedback } from "@/hooks/chat/useMessageFeedback";
-import { useSubmitMessageFeedback } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import {
+  useDeleteMessageFeedback,
+  useSubmitMessageFeedback,
+} from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useMessageFeedbackFeature } from "@/providers/FeatureConfigProvider";
 
 describe("useMessageFeedback", () => {
   const mockMutateAsync = vi.fn();
+  const mockDeleteMutateAsync = vi.fn();
   const mockFeedbackConfig = {
     enabled: true,
     commentsEnabled: true,
@@ -41,6 +46,25 @@ describe("useMessageFeedback", () => {
     vi.mocked(useSubmitMessageFeedback).mockReturnValue({
       mutateAsync: mockMutateAsync,
       // Add other required mutation properties
+      mutate: vi.fn(),
+      reset: vi.fn(),
+      data: undefined,
+      error: null,
+      isError: false,
+      isIdle: true,
+      isPending: false,
+      isPaused: false,
+      isSuccess: false,
+      status: "idle",
+      variables: undefined,
+      failureCount: 0,
+      failureReason: null,
+      submittedAt: 0,
+      context: undefined,
+    });
+
+    vi.mocked(useDeleteMessageFeedback).mockReturnValue({
+      mutateAsync: mockDeleteMutateAsync,
       mutate: vi.fn(),
       reset: vi.fn(),
       data: undefined,
@@ -275,5 +299,89 @@ describe("useMessageFeedback", () => {
         comment: "Great", // Comment is trimmed and passed through
       },
     });
+  });
+
+  it("should remove feedback successfully", async () => {
+    mockDeleteMutateAsync.mockResolvedValue(undefined);
+    const onFeedbackSuccess = vi.fn();
+
+    const { result } = renderHook(() =>
+      useMessageFeedback({ onFeedbackSuccess }),
+    );
+
+    let removeResult: { success: boolean; errorType?: string } | undefined;
+    await act(async () => {
+      removeResult = await result.current.handleFeedbackRemove("message-123");
+    });
+
+    expect(removeResult?.success).toBe(true);
+    expect(mockDeleteMutateAsync).toHaveBeenCalledWith({
+      pathParams: { messageId: "message-123" },
+    });
+    expect(onFeedbackSuccess).toHaveBeenCalledWith("message-123");
+  });
+
+  it("should report time limit errors when removing feedback", async () => {
+    mockDeleteMutateAsync.mockRejectedValue({ status: 403 });
+
+    const { result } = renderHook(() => useMessageFeedback());
+
+    let removeResult: { success: boolean; errorType?: string } | undefined;
+    await act(async () => {
+      removeResult = await result.current.handleFeedbackRemove("message-123");
+    });
+
+    expect(removeResult?.success).toBe(false);
+    expect(removeResult?.errorType).toBe("time_limit_exceeded");
+  });
+
+  it("should close the view dialog after removing its feedback", async () => {
+    mockDeleteMutateAsync.mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useMessageFeedback());
+
+    act(() => {
+      result.current.openFeedbackViewDialog("message-123", {
+        id: "feedback-id",
+        sentiment: "positive",
+        comment: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+    });
+
+    expect(result.current.feedbackViewDialogState.isOpen).toBe(true);
+
+    await act(async () => {
+      await result.current.handleFeedbackViewDialogRemove();
+    });
+
+    expect(mockDeleteMutateAsync).toHaveBeenCalledWith({
+      pathParams: { messageId: "message-123" },
+    });
+    expect(result.current.feedbackViewDialogState.isOpen).toBe(false);
+  });
+
+  it("should show an error in the view dialog when removal fails", async () => {
+    mockDeleteMutateAsync.mockRejectedValue({ status: 403 });
+
+    const { result } = renderHook(() => useMessageFeedback());
+
+    act(() => {
+      result.current.openFeedbackViewDialog("message-123", {
+        id: "feedback-id",
+        sentiment: "negative",
+        comment: "Some comment",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+    });
+
+    await act(async () => {
+      await result.current.handleFeedbackViewDialogRemove();
+    });
+
+    expect(result.current.feedbackViewDialogState.isOpen).toBe(true);
+    expect(result.current.feedbackViewDialogState.error).toBeTruthy();
   });
 });

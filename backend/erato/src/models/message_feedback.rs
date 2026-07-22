@@ -139,6 +139,94 @@ pub async fn submit_or_update_feedback(
     Ok(feedback)
 }
 
+/// Delete feedback for a message
+///
+/// Removes the feedback record for the given message. Authorization mirrors
+/// `submit_or_update_feedback`, and the same edit time limit applies. If Langfuse
+/// feedback forwarding is enabled, the corresponding score is deleted as well.
+pub async fn delete_feedback(
+    conn: &DatabaseConnection,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    message_id: &Uuid,
+    langfuse_client: &LangfuseClient,
+    enable_feedback: bool,
+    edit_time_limit_seconds: Option<u64>,
+) -> Result<(), Report> {
+    let message = Messages::find_by_id(*message_id)
+        .one(conn)
+        .await?
+        .ok_or_else(|| eyre!("Message with ID {} not found", message_id))?;
+
+    authorize!(
+        policy,
+        subject,
+        &Resource::Chat(message.chat_id.as_hyphenated().to_string()),
+        Action::Read
+    )
+    .map_err(|e| eyre!("Not authorized to delete feedback for this message: {}", e))?;
+
+    authorize!(
+        policy,
+        subject,
+        &Resource::MessageFeedback(message_id.as_hyphenated().to_string()),
+        Action::SubmitFeedback
+    )
+    .map_err(|e| eyre!("Not authorized to delete feedback: {}", e))?;
+
+    let existing = MessageFeedbacks::find()
+        .filter(message_feedbacks::Column::MessageId.eq(*message_id))
+        .one(conn)
+        .await?
+        .ok_or_else(|| eyre!("Feedback for message {} not found", message_id))?;
+
+    if let Some(time_limit_seconds) = edit_time_limit_seconds {
+        let elapsed = chrono::Utc::now().signed_duration_since(existing.created_at);
+        if elapsed.num_seconds() > time_limit_seconds as i64 {
+            return Err(eyre!(
+                "Feedback editing time limit exceeded. Feedback can only be removed within {} seconds of creation.",
+                time_limit_seconds
+            ));
+        }
+    }
+
+    existing.delete(conn).await?;
+
+    if enable_feedback {
+        let langfuse_trace_id = message
+            .generation_metadata
+            .as_ref()
+            .and_then(|metadata_json| {
+                serde_json::from_value::<GenerationMetadata>(metadata_json.clone()).ok()
+            })
+            .and_then(|metadata| metadata.langfuse_trace_id);
+
+        if let Some(trace_id) = langfuse_trace_id {
+            let score_id = format!("{}-user-feedback", trace_id);
+
+            // Delete score asynchronously - don't fail the feedback removal if Langfuse fails
+            let langfuse_client_clone = langfuse_client.clone();
+            tokio::spawn(async move {
+                if let Err(e) = langfuse_client_clone.delete_score(&score_id).await {
+                    tracing::warn!(
+                        error = %e,
+                        "Failed to delete feedback score in Langfuse"
+                    );
+                } else {
+                    tracing::debug!("Successfully deleted feedback score in Langfuse");
+                }
+            });
+        } else {
+            tracing::debug!(
+                message_id = %message_id,
+                "No Langfuse trace_id found in message metadata, skipping score deletion"
+            );
+        }
+    }
+
+    Ok(())
+}
+
 /// Get feedbacks for multiple messages efficiently
 ///
 /// This function bulk fetches feedback records for a list of message IDs,
