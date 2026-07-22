@@ -24,8 +24,14 @@
     {
       "name": "unknown additive capability",
       "advertised": { "method": "future.feature.v3", "state": "enabled" },
-      "compiledMethods": ["diagnostics.echo.v1"],
+      "compiledMethods": ["diagnostics.echo.v1", "sidecar.restart.v1"],
       "supports": false
+    },
+    {
+      "name": "enabled restart capability",
+      "advertised": { "method": "sidecar.restart.v1", "state": "enabled" },
+      "compiledMethods": ["diagnostics.echo.v1", "sidecar.restart.v1"],
+      "supports": true
     }
   ]
 }

@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-restart-v1-result.schema.json",
+  "title": "SidecarRestartV1Result",
+  "type": "object",
+  "required": ["accepted"],
+  "properties": {
+    "accepted": { "type": "boolean" }
+  },
+  "additionalProperties": true
+}

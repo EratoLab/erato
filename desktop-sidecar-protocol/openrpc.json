@@ -85,6 +85,37 @@
         "method": "diagnostics.echo.v1",
         "availability": { "state": "enabled" }
       }
+    },
+    {
+      "name": "sidecar.restart.v1",
+      "summary": "Acknowledge a request to restart the sidecar with its original command-line arguments.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/sidecar-restart-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/sidecar-restart-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        { "$ref": "#/components/errors/CapabilityUnavailable" },
+        { "$ref": "#/components/errors/InvalidParams" },
+        { "$ref": "#/components/errors/PermissionDenied" },
+        { "$ref": "#/components/errors/SidecarInternal" }
+      ],
+      "x-erato-capability": {
+        "id": "sidecar.restart",
+        "major": 1,
+        "method": "sidecar.restart.v1",
+        "availability": { "state": "enabled" }
+      }
     }
   ],
   "components": {
@@ -126,7 +157,7 @@
     }
   },
   "x-erato-catalogue": {
-    "revision": "1",
-    "digest": "sha256:cfc68144fd9665281bb908ff7def9c5dd5959d233170e1345a5b5b49096eba8a"
+    "revision": "2",
+    "digest": "sha256:ea9190a0b675cd61a311bd8df2571e20e17822126e2d184ea7e369319028f2b9"
   }
 }

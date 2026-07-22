@@ -158,6 +158,12 @@ const validators = {
   "diagnostics.echo.v1:result": ajv.getSchema(
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/diagnostics-echo-v1-result.schema.json",
   ),
+  "sidecar.restart.v1:params": ajv.getSchema(
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-restart-v1-params.schema.json",
+  ),
+  "sidecar.restart.v1:result": ajv.getSchema(
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-restart-v1-result.schema.json",
+  ),
 };
 const validateEnvelope = ajv.getSchema(
   "https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/json-rpc-envelope.schema.json",

@@ -21,6 +21,22 @@
       "sidecarAddsUnknownFields": true
     },
     {
+      "name": "current client and previous sidecar without restart",
+      "clientVersions": ["1.0"],
+      "sidecarVersions": ["1.0"],
+      "clientCompiledMethods": ["diagnostics.echo.v1", "sidecar.restart.v1"],
+      "sidecarAdvertisedMethods": ["diagnostics.echo.v1"],
+      "supportsRestart": false
+    },
+    {
+      "name": "previous client and current sidecar with additive restart",
+      "clientVersions": ["1.0"],
+      "sidecarVersions": ["1.0"],
+      "clientCompiledMethods": ["diagnostics.echo.v1"],
+      "sidecarAdvertisedMethods": ["diagnostics.echo.v1", "sidecar.restart.v1"],
+      "supportsRestart": false
+    },
+    {
       "name": "no common protocol",
       "clientVersions": ["2.0"],
       "sidecarVersions": ["1.0"],

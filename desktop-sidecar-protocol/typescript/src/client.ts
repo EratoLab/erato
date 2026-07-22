@@ -5,6 +5,8 @@ import {
   validateDiagnosticsEchoV1Result,
   validateDiscoverResult,
   validateJsonRpcEnvelope,
+  validateSidecarRestartV1Params,
+  validateSidecarRestartV1Result,
   type Validator,
 } from "./generated/validators.mjs";
 
@@ -15,6 +17,8 @@ import type {
   DiscoverParams,
   DiscoverResult,
   DiscoveryDocument,
+  SidecarRestartV1Params,
+  SidecarRestartV1Result,
 } from "./generated/index.js";
 import type { SidecarTransport } from "./transport.js";
 
@@ -97,6 +101,10 @@ const builtInContracts: Readonly<Record<string, SidecarMethodContract>> = {
     validateParams: validateDiagnosticsEchoV1Params,
     validateResult: validateDiagnosticsEchoV1Result,
   },
+  "sidecar.restart.v1": {
+    validateParams: validateSidecarRestartV1Params,
+    validateResult: validateSidecarRestartV1Result,
+  },
 };
 
 const EMPTY_CAPABILITIES = new Map<string, SidecarCapability>();
@@ -168,6 +176,11 @@ export class DesktopSidecarClient {
     params: DiagnosticsEchoV1Params,
     options?: InvokeOptions,
   ): Promise<DiagnosticsEchoV1Result>;
+  async invoke(
+    method: "sidecar.restart.v1",
+    params: SidecarRestartV1Params,
+    options?: InvokeOptions,
+  ): Promise<SidecarRestartV1Result>;
   async invoke(
     method: string,
     params: unknown,

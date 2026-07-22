@@ -43,6 +43,10 @@ await client.discover();
 if (client.supports("diagnostics.echo.v1")) {
   await client.invoke("diagnostics.echo.v1", { message: "hello" });
 }
+
+if (client.supports("sidecar.restart.v1")) {
+  await client.invoke("sidecar.restart.v1", {});
+}
 ```
 
 The candidate loopback URL above is not a production default. Consumers only
