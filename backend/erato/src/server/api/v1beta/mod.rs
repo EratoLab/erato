@@ -2155,6 +2155,7 @@ pub async fn chats() -> Json<Vec<Chat>> {
     responses(
         (status = OK, body = ChatMessagesResponse, description = "Successfully retrieved messages with pagination metadata"),
         (status = BAD_REQUEST, description = "Invalid chat ID format"),
+        (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
         (status = INTERNAL_SERVER_ERROR, description = "Server error while retrieving messages")
     ),
     security(
