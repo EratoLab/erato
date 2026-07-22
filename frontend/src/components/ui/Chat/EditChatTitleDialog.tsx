@@ -56,18 +56,26 @@ export const EditChatTitleDialog = ({
     >
       <div className="space-y-4">
         <div>
-          <p className="text-sm font-medium text-theme-fg-primary">
+          <label
+            htmlFor="chat-generated-title"
+            className="mb-1 block text-sm font-medium text-theme-fg-primary"
+          >
             {t({
               id: "chat.history.rename.generated.label",
               message: "Generated title",
             })}
-          </p>
-          <p
-            className="mt-1 rounded-md border border-theme-border bg-theme-bg-secondary px-3 py-2 text-sm text-theme-fg-secondary"
+          </label>
+          <Input
+            id="chat-generated-title"
+            value={generatedTitleFallback}
+            readOnly
+            disabled
             data-testid="generated-chat-title"
-          >
-            {generatedTitleFallback}
-          </p>
+            aria-label={t({
+              id: "chat.history.rename.generated.label",
+              message: "Generated title",
+            })}
+          />
         </div>
 
         <div>
