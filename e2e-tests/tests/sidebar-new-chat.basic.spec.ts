@@ -1,9 +1,14 @@
 import { test, expect, Page } from "@playwright/test";
 import { TAG_CI } from "./tags";
-import { chatIsReadyToChat, ensureOpenSidebar } from "./shared";
+import {
+  chatIsReadyToChat,
+  chatIdFromUrl,
+  ensureOpenSidebar,
+  RECENT_CHATS_ROUTE,
+  RECENT_CHATS_URL,
+  sendFirstMessage,
+} from "./shared";
 
-const RECENT_CHATS_ROUTE = "**/api/v1beta/me/recent_chats*";
-const RECENT_CHATS_URL = "/api/v1beta/me/recent_chats";
 /** What ChatHistoryList renders for a chat without a resolved title. */
 const UNTITLED_ROW_LABEL = "New Chat";
 
@@ -133,23 +138,96 @@ const waitForStreamEnd = (page: Page) =>
     });
   });
 
-const chatIdFromUrl = (page: Page): string => {
-  const match = /\/chat\/([0-9a-fA-F-]+)/.exec(page.url());
-  if (!match) {
-    throw new Error(`Expected a chat id in the URL, got: ${page.url()}`);
-  }
-  return match[1];
-};
+/**
+ * Deliver only the `chat_created` frame to the client and then end the stream
+ * on demand, dropping everything after it (so `user_message_saved` is never
+ * processed). Modelled on `holdStreamAfterChatCreated`, but it truncates the
+ * stream at the frame boundary instead of parking the untouched remainder:
+ * even when the backend batches `chat_created` and `user_message_saved` into
+ * one chunk, only `chat_created` reaches the client. Must be installed before
+ * the first navigation; `close()` ends the delivered stream.
+ */
+const closeStreamAfterChatCreated = async (page: Page) => {
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch.bind(window);
+    let close: () => void = () => {};
+    const closeRequested = new Promise<void>((resolve) => {
+      close = resolve;
+    });
+    const tapWindow = window as Window & { __closeHeldStream?: () => void };
+    tapWindow.__closeHeldStream = () => close();
 
-const sendFirstMessage = async (page: Page, message: string) => {
-  const textbox = page.getByRole("textbox", { name: "Type a message..." });
-  await textbox.fill(message);
-  await textbox.press("Enter");
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
 
-  // Navigation happens at chat_created, so the id is known long before the
-  // turn ends.
-  await expect(page).toHaveURL(/\/chat\/[0-9a-fA-F-]+/, { timeout: 15000 });
-  return chatIdFromUrl(page);
+      const response = await originalFetch(input, init);
+      if (
+        !url.includes("/api/v1beta/me/messages/submitstream") ||
+        !response.body
+      ) {
+        return response;
+      }
+
+      const upstream = response.body.getReader();
+      const decoder = new TextDecoder();
+      const encoder = new TextEncoder();
+      let seen = "";
+      let deliveredChatCreated = false;
+
+      const truncated = new ReadableStream<Uint8Array>({
+        async pull(controller) {
+          if (deliveredChatCreated) {
+            // The client has the chat_created frame; end the stream on trigger.
+            await closeRequested;
+            controller.close();
+            void upstream.cancel().catch(() => {});
+            return;
+          }
+          // Read until a complete chat_created frame is buffered, forward just
+          // that frame, and stop reading so nothing after it is delivered.
+          for (;;) {
+            const { done, value } = await upstream.read();
+            if (done) {
+              controller.close();
+              return;
+            }
+            seen += decoder.decode(value, { stream: true });
+            const start = seen.indexOf("chat_created");
+            const frameEnd = start !== -1 ? seen.indexOf("\n\n", start) : -1;
+            if (frameEnd !== -1) {
+              controller.enqueue(encoder.encode(seen.slice(0, frameEnd + 2)));
+              deliveredChatCreated = true;
+              return;
+            }
+          }
+        },
+        cancel(reason) {
+          void upstream.cancel(reason).catch(() => {});
+        },
+      });
+
+      return new Response(truncated, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+      });
+    };
+  });
+
+  return {
+    close: async () => {
+      await page.evaluate(() => {
+        (
+          window as Window & { __closeHeldStream?: () => void }
+        ).__closeHeldStream?.();
+      });
+    },
+  };
 };
 
 test(
@@ -190,8 +268,10 @@ test(
 
       // The placeholder is replaced by the real row, not added alongside it.
       await expect(row).toHaveCount(1);
-      // The summarizer-generated title takes over from the placeholder, which
-      // renders the untitled-chat fallback. It arrives well after the turn.
+      // The aria-label stops being the untitled fallback once the backend row
+      // carries any resolved title. That proves the local placeholder gave way
+      // to the backend-titled row; the label flips for any non-empty title, so
+      // it is not evidence that a summary specifically was generated.
       await expect(rowLink).not.toHaveAttribute(
         "aria-label",
         UNTITLED_ROW_LABEL,
@@ -200,35 +280,6 @@ test(
     } finally {
       await listHold.dispose();
     }
-  },
-);
-
-test(
-  "resuming a stream does not duplicate the new chat's sidebar row",
-  { tag: TAG_CI },
-  async ({ page }) => {
-    await page.goto("/");
-    await chatIsReadyToChat(page);
-    await ensureOpenSidebar(page);
-
-    const chatId = await sendFirstMessage(
-      page,
-      "Please write a long detailed poem about the sun",
-    );
-    const sidebar = page.getByRole("complementary");
-    await expect(sidebar.locator(`[data-chat-id="${chatId}"]`)).toBeVisible({
-      timeout: 5000,
-    });
-
-    // Only a reload taken while the turn is genuinely in flight resumes a
-    // stream and replays chat_created; the Stop control is present iff a turn
-    // is in flight.
-    await expect(page.getByTestId("chat-input-stop-generation")).toBeVisible();
-    await page.reload();
-    await ensureOpenSidebar(page);
-    await chatIsReadyToChat(page, { loadingTimeoutMs: 60000 });
-
-    await expect(sidebar.locator(`[data-chat-id="${chatId}"]`)).toHaveCount(1);
   },
 );
 
@@ -281,6 +332,48 @@ test(
       // The turn outlives the removal, so let it end before calling it gone.
       await streamHold.release();
       await streamEnded;
+      await expect(row).toHaveCount(0);
+    } finally {
+      await listHold.dispose();
+    }
+  },
+);
+
+test(
+  "a first turn that ends before its message is saved leaves no ghost row",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    const streamClose = await closeStreamAfterChatCreated(page);
+    await page.goto("/");
+    await chatIsReadyToChat(page);
+    await ensureOpenSidebar(page);
+
+    const sidebar = page.getByRole("complementary");
+    const listHold = await holdRecentChats(page);
+
+    try {
+      const chatId = await sendFirstMessage(
+        page,
+        "Please write a short poem about the moon",
+      );
+      const row = sidebar.locator(`[data-chat-id="${chatId}"]`);
+      await expect(row).toBeVisible({ timeout: 5000 });
+      // Only chat_created has been delivered, so the turn is provably parked
+      // mid-flight with the placeholder showing.
+      await expect(
+        page.getByTestId("chat-input-stop-generation"),
+      ).toBeVisible();
+
+      // End the stream after chat_created and before user_message_saved. The
+      // chat never gets a saved message, so it can never be listed; the only
+      // thing that can take its placeholder away is the terminal
+      // clearPendingChat on the stream's normal close.
+      await streamClose.close();
+
+      await expect(row).toHaveCount(0);
+      // recent_chats is still held, so the removal cannot be the list dropping
+      // the chat — only the close-path clear accounts for it.
+      await page.waitForTimeout(1000);
       await expect(row).toHaveCount(0);
     } finally {
       await listHold.dispose();

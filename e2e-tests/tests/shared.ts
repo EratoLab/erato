@@ -171,6 +171,31 @@ export const ensureOpenSidebar = async (page: Page) => {
   }
 };
 
+/** Glob for route interception; substring for request-URL matching. */
+export const RECENT_CHATS_ROUTE = "**/api/v1beta/me/recent_chats*";
+export const RECENT_CHATS_URL = "/api/v1beta/me/recent_chats";
+
+/** The chat id from a `/chat/<id>` URL, or a clear error if there isn't one. */
+export const chatIdFromUrl = (page: Page): string => {
+  const match = /\/chat\/([0-9a-fA-F-]+)/.exec(page.url());
+  if (!match) {
+    throw new Error(`Expected a chat id in the URL, got: ${page.url()}`);
+  }
+  return match[1];
+};
+
+/**
+ * Send the first message of a new chat and return its id. Navigation happens at
+ * `chat_created`, so the id is known long before the turn ends.
+ */
+export const sendFirstMessage = async (page: Page, message: string) => {
+  const textbox = page.getByRole("textbox", { name: "Type a message..." });
+  await textbox.fill(message);
+  await textbox.press("Enter");
+  await expect(page).toHaveURL(/\/chat\/[0-9a-fA-F-]+/, { timeout: 15000 });
+  return chatIdFromUrl(page);
+};
+
 /**
  * Install a browser-side abort hook that can cancel active streaming requests.
  * Intended for resilience tests that interrupt submitstream/resumestream.
