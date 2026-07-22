@@ -36,8 +36,14 @@ export function ApiProvider({
             staleTime: 60 * 1000, // 1 minute
             refetchOnWindowFocus: true,
             retry: (failureCount, error: ApiError) => {
-              // Don't retry on 401/403 errors (authentication issues)
-              if (error.status === 401 || error.status === 403) {
+              // Don't retry client errors that a retry can't change: auth
+              // issues (401/403) or a missing/inaccessible resource (404).
+              // Retrying a 404 would also delay the not-found route redirect.
+              if (
+                error.status === 401 ||
+                error.status === 403 ||
+                error.status === 404
+              ) {
                 return false;
               }
               // Retry other errors up to 2 times
