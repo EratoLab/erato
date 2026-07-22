@@ -163,12 +163,16 @@ test("cross-user status oracle probe", { tag: TAG_CI }, async ({ browser }) => {
   await c2.close();
 });
 
-// The "stuck loading forever" path: a turn starts streaming (isStreaming=true),
-// its connection drops, and resume can never complete -> infinite spinner.
-test(
-  "mid-stream drop + failing resume — the infinite spinner",
+// F3 (DEFERRED): a turn whose resume can never complete must NOT spin forever.
+// This asserts the DESIRED behavior and is skipped (test.fixme) until the
+// no-progress watchdog lands — remove `.fixme` and tune the timeout to the
+// watchdog once implemented. See ERMAIN-487. Verified current bug: with resume
+// hung open, the Stop button stays and no error appears (assistant stuck).
+test.fixme(
+  "mid-stream drop + un-completable resume resolves to an error, not a hang",
   { tag: TAG_CI },
   async ({ page }) => {
+    test.setTimeout(120000);
     await setupStreamingRequestAbortHook(page);
     await page.goto("/");
     await chatIsReadyToChat(page);
@@ -189,13 +193,12 @@ test(
     );
     await abortActiveStreamingRequest(page);
 
-    for (const ms of [3000, 7000, 10000]) {
-      await page.waitForTimeout(ms);
-      console.log(
-        `[hang] +${ms}ms turnState:`,
-        JSON.stringify(await turnState(page)),
-      );
-    }
+    // DESIRED: the stuck turn is bounded — a no-progress watchdog surfaces a
+    // visible error and clears the in-flight indicator instead of hanging.
+    await expect(page.getByTestId("chat-send-error")).toBeVisible({
+      timeout: 90000,
+    });
+    await expect(page.getByTestId("chat-input-stop-generation")).toHaveCount(0);
   },
 );
 
