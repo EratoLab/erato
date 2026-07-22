@@ -6168,6 +6168,39 @@ pub async fn message_submit_sse(
 
     // Determine the chat_id first so we can use it as the background task key
     let (chat_id, chat_was_created) = if let Some(existing_chat_id) = request.existing_chat_id {
+        let (chat, _) = get_or_create_chat(
+            &app_state.db,
+            &policy,
+            &me_user.to_subject(),
+            Some(&existing_chat_id),
+            &me_user.id,
+            None,
+            None,
+        )
+        .await
+        .map_err(|e| {
+            let s = e.to_string();
+            if s.contains("not found")
+                || s.contains("Access denied")
+                || s.contains("not authorized")
+            {
+                (
+                    axum::http::StatusCode::NOT_FOUND,
+                    "Chat not found".to_string(),
+                )
+            } else {
+                (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to load chat".to_string(),
+                )
+            }
+        })?;
+        if chat.archived_at.is_some() {
+            return Err((
+                axum::http::StatusCode::CONFLICT,
+                "Chat is archived and cannot receive new messages".to_string(),
+            ));
+        }
         (existing_chat_id, false)
     } else {
         // Need to get or create chat to determine the chat_id
@@ -6182,10 +6215,21 @@ pub async fn message_submit_sse(
         )
         .await
         .map_err(|e| {
-            (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to get or create chat: {}", e),
-            )
+            let s = e.to_string();
+            if s.contains("not found")
+                || s.contains("Access denied")
+                || s.contains("not authorized")
+            {
+                (
+                    axum::http::StatusCode::NOT_FOUND,
+                    "Chat or previous message not found".to_string(),
+                )
+            } else {
+                (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to get or create chat".to_string(),
+                )
+            }
         })?;
 
         let was_created = chat_status == ChatCreationStatus::Created;
