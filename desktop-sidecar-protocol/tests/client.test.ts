@@ -75,6 +75,17 @@ describe("DesktopSidecarClient", () => {
     });
   });
 
+  it("acknowledges a sidecar restart request", async () => {
+    const { client, sidecar } = await setup();
+    await client.discover();
+
+    expect(client.supports("sidecar.restart.v1")).toBe(true);
+    await expect(client.invoke("sidecar.restart.v1", {})).resolves.toEqual({
+      accepted: true,
+    });
+    expect(sidecar.restartRequests).toBe(1);
+  });
+
   it("reuses ready data for concurrent requests on independent HTTP connections", async () => {
     const { client } = await setup({ echoDelayMs: 5 });
     await client.discover();

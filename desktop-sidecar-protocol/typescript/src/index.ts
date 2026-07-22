@@ -34,4 +34,6 @@ export type {
   DiscoveryDocument,
   JsonRpcEnvelope,
   ProtocolErrorData,
+  SidecarRestartV1Params,
+  SidecarRestartV1Result,
 } from "./generated/index.js";

@@ -9,3 +9,5 @@ export type { CapabilityDescriptor } from "./capability.js";
 export type { DiscoveryDocument } from "./discovery-document.js";
 export type { DiagnosticsEchoV1Params } from "./diagnostics-echo-v1-params.js";
 export type { DiagnosticsEchoV1Result } from "./diagnostics-echo-v1-result.js";
+export type { SidecarRestartV1Params } from "./sidecar-restart-v1-params.js";
+export type { SidecarRestartV1Result } from "./sidecar-restart-v1-result.js";

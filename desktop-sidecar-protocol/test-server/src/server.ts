@@ -16,6 +16,7 @@ import {
   validateCancelParams,
   validateDiagnosticsEchoV1Params,
   validateDiscoverParams,
+  validateSidecarRestartV1Params,
 } from "../../typescript/src/generated/validators.mjs";
 
 import type { AddressInfo } from "node:net";
@@ -87,6 +88,7 @@ export class MockSidecar {
   #catalogueRevision = 1;
   #capabilityAvailability: "enabled" | "disabled";
   #capabilityReasonCode: string | undefined;
+  #restartRequests = 0;
 
   constructor(options: MockSidecarOptions) {
     if (options.allowedOrigins.length === 0) {
@@ -111,6 +113,10 @@ export class MockSidecar {
     if (!this.#address)
       throw new Error("The mock sidecar has not been started.");
     return this.#address;
+  }
+
+  get restartRequests(): number {
+    return this.#restartRequests;
   }
 
   async start(): Promise<MockSidecarAddress> {
@@ -316,6 +322,14 @@ export class MockSidecar {
       const controller = this.#inFlight.get(requestKey(origin, requestId));
       controller?.abort();
       return rpcResult(message.id, { accepted: controller !== undefined });
+    }
+
+    if (message.method === "sidecar.restart.v1") {
+      if (!validateSidecarRestartV1Params(message.params)) {
+        return rpcError(message.id, -32602, "Invalid method parameters.");
+      }
+      this.#restartRequests += 1;
+      return rpcResult(message.id, { accepted: true });
     }
 
     if (message.method !== "diagnostics.echo.v1") {

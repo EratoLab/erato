@@ -67,6 +67,16 @@ const typeTargets = [
     "diagnostics-echo-v1-result.ts",
     "DiagnosticsEchoV1Result",
   ],
+  [
+    "schemas/methods/sidecar-restart-v1-params.schema.json",
+    "sidecar-restart-v1-params.ts",
+    "SidecarRestartV1Params",
+  ],
+  [
+    "schemas/methods/sidecar-restart-v1-result.schema.json",
+    "sidecar-restart-v1-result.ts",
+    "SidecarRestartV1Result",
+  ],
 ];
 
 const validatorTargets = {
@@ -86,6 +96,10 @@ const validatorTargets = {
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/diagnostics-echo-v1-params.schema.json",
   validateDiagnosticsEchoV1Result:
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/diagnostics-echo-v1-result.schema.json",
+  validateSidecarRestartV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-restart-v1-params.schema.json",
+  validateSidecarRestartV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-restart-v1-result.schema.json",
 };
 
 await rm(outputDirectory, { recursive: true, force: true });

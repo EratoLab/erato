@@ -62,6 +62,23 @@
           "sidecarInstanceId": "sidecar-instance-id"
         }
       }
+    },
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-restart",
+        "method": "sidecar.restart.v1",
+        "params": {}
+      }
+    },
+    {
+      "direction": "sidecar-to-client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-restart",
+        "result": { "accepted": true }
+      }
     }
   ]
 }

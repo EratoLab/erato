@@ -203,3 +203,20 @@ bundled TypeScript generator emit client types or validators. Registration in
 `openrpc.json` remains the authoritative method catalogue for other client
 generators, which MUST resolve the parameter and result schema references from
 each method entry.
+
+## 11. Sidecar restart
+
+The `sidecar.restart.v1` capability requests a process restart for development
+and operational workflows. A successful result contains `accepted: true`. The
+sidecar MUST allow that in-flight response to complete during graceful shutdown
+before the current process terminates. The replacement process MUST use the
+same executable and command-line argument vector as the current process,
+preserving bind-address overrides and future arguments without interpreting or
+reconstructing them.
+
+After acknowledging the request, the sidecar MUST stop accepting new work,
+release its listener, start the replacement process, and terminate. The client
+MUST treat the current ready data as stale and rediscover after the endpoint is
+available again; the replacement sidecar has a new instance ID. Implementations
+MUST reject the request with a protocol error rather than returning
+`accepted: false` when restart cannot be scheduled.
