@@ -55,6 +55,9 @@ pub struct ErrorResponseConfig {
     pub status_code: u16,
     /// JSON error body to return
     pub body: Value,
+    /// Optional delay before returning the error response (in milliseconds)
+    #[serde(default)]
+    pub initial_delay_ms: Option<u64>,
 }
 
 /// Cite files response configuration
@@ -289,11 +292,20 @@ impl Mock {
                 }
             }
             ResponseConfig::Error(config) => {
-                println!(
-                    "    {}: error response with status {}",
-                    "Response".bold(),
-                    config.status_code
-                );
+                if let Some(initial_delay) = config.initial_delay_ms {
+                    println!(
+                        "    {}: error response with status {} after {}ms initial delay",
+                        "Response".bold(),
+                        config.status_code,
+                        initial_delay
+                    );
+                } else {
+                    println!(
+                        "    {}: error response with status {}",
+                        "Response".bold(),
+                        config.status_code
+                    );
+                }
             }
             ResponseConfig::CiteFiles(config) => {
                 println!(

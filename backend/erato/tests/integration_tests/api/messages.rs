@@ -2588,7 +2588,16 @@ async fn test_resume_stream_no_active_task(pool: Pool<Postgres>) {
     // Now manually remove the task from the manager to simulate cleanup
     // (normally this happens after 60 seconds, but we force it for testing)
     let chat_uuid: sea_orm::prelude::Uuid = chat_id.parse().expect("Invalid UUID");
-    app_state.background_tasks.remove_task(&chat_uuid).await;
+    if let Some(task) = app_state.background_tasks.get_task(&chat_uuid).await {
+        app_state
+            .background_tasks
+            .remove_task(
+                &chat_uuid,
+                task.generation_id,
+                erato::services::background_tasks::TaskOutcome::Completed,
+            )
+            .await;
+    }
 
     // Verify the task is no longer in the manager
     let task = app_state.background_tasks.get_task(&chat_uuid).await;

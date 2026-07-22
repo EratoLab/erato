@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 import { useBudgetStatus } from "@/hooks/budget/useBudgetStatus";
 import {
@@ -8,6 +8,7 @@ import {
   useChatMessaging,
   useModelHistory,
 } from "@/hooks/chat";
+import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { useFileDropzone, useFileUploadStore } from "@/hooks/files";
 import { mapMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 import { getSupportedFileTypes } from "@/utils/capabilitiesToFileTypes";
@@ -163,6 +164,12 @@ export function ChatProvider({
   } = useChatHistory();
 
   const [newChatCounter, setNewChatCounter] = useState(0);
+
+  // Mirror the viewed chat into the generation-status store: terminal
+  // indicators are suppressed for the chat the user is looking at.
+  useEffect(() => {
+    useGenerationStatusStore.getState().setCurrentChatId(currentChatId);
+  }, [currentChatId]);
 
   // Use model history hook for historical model information
   const { currentChatLastModel } = useModelHistory({

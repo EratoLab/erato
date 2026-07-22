@@ -1202,6 +1202,41 @@ msgstr "Zum Hochladen ablegen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.history.generation.actionRequired"
+msgstr "Aktion erforderlich"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.history.generation.error"
+msgstr "Fehler"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.history.generation.finished"
+msgstr "Fertig"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+msgid "chat.history.generation.liveError"
+msgstr "{errored, plural, one {# Chat fehlgeschlagen} other {# Chats fehlgeschlagen}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+msgid "chat.history.generation.liveFinished"
+msgstr "{finished, plural, one {# Chat fertig} other {# Chats fertig}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+msgid "chat.history.generation.liveRunning"
+msgstr "{running, plural, one {# Chat wird generiert} other {# Chats werden generiert}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.history.generation.running"
+msgstr "Läuft"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.menu.rename"
 msgstr "Umbenennen"

@@ -4,6 +4,8 @@ import clsx from "clsx";
 import { memo, useEffect, useRef } from "react";
 
 import { MessageTimestamp } from "@/components/ui";
+import { useHasPendingConfirmation } from "@/hooks/chat/store/confirmationRegistryStore";
+import { useGenerationStatusFor } from "@/hooks/chat/store/generationStatusStore";
 import { useThemedIcon } from "@/hooks/ui";
 import { getChatUrl } from "@/utils/chat/urlUtils";
 import { createLogger } from "@/utils/debugLogger";
@@ -41,6 +43,74 @@ const ChatItemIcon = memo(() => {
 
 // eslint-disable-next-line lingui/no-unlocalized-strings -- Component display name, not user-facing text
 ChatItemIcon.displayName = "ChatItemIcon";
+
+type RowGenerationStatus = "running" | "finished" | "error" | "action_required";
+
+/**
+ * Resolves a row's generation indicator from the stores. An unresolved tool
+ * confirmation outranks the generation state — the turn is waiting on the
+ * user, not on the model.
+ */
+const useRowGenerationStatus = (chatId: string): RowGenerationStatus | null => {
+  const status = useGenerationStatusFor(chatId);
+  const hasPendingConfirmation = useHasPendingConfirmation(chatId);
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- status token, not user-facing text
+  if (hasPendingConfirmation) return "action_required";
+  return status?.kind ?? null;
+};
+
+const rowGenerationStatusLabel = (status: RowGenerationStatus): string => {
+  switch (status) {
+    case "running":
+      return t({ id: "chat.history.generation.running", message: "Running" });
+    case "finished":
+      return t({ id: "chat.history.generation.finished", message: "Finished" });
+    case "error":
+      return t({ id: "chat.history.generation.error", message: "Error" });
+    case "action_required":
+      return t({
+        id: "chat.history.generation.actionRequired",
+        message: "Action required",
+      });
+  }
+};
+
+const rowGenerationStatusTextClass: Record<RowGenerationStatus, string> = {
+  running: "text-theme-fg-muted",
+  finished: "text-theme-success-fg",
+  error: "text-theme-error-fg",
+  action_required: "text-theme-warning-fg",
+};
+
+const GenerationStatusIndicator = memo<{ chatId: string }>(({ chatId }) => {
+  const status = useRowGenerationStatus(chatId);
+
+  if (!status) return null;
+
+  return (
+    <span
+      className={clsx(
+        "flex shrink-0 items-center gap-1 text-xs",
+        rowGenerationStatusTextClass[status],
+      )}
+      data-ui="chat-history-generation-status"
+      data-testid="chat-generation-status"
+      data-status={status}
+    >
+      <span
+        aria-hidden="true"
+        className={clsx(
+          "size-1.5 rounded-full bg-current",
+          status === "running" && "animate-pulse motion-reduce:animate-none",
+        )}
+      />
+      {rowGenerationStatusLabel(status)}
+    </span>
+  );
+});
+
+// eslint-disable-next-line lingui/no-unlocalized-strings
+GenerationStatusIndicator.displayName = "GenerationStatusIndicator";
 
 export interface ChatHistoryListProps {
   sessions: ChatSession[];
@@ -95,6 +165,8 @@ const ChatHistoryListItem = memo<{
     onShowDetails,
     showTimestamps = true,
   }) => {
+    const generationStatus = useRowGenerationStatus(session.id);
+    const rowTitle = session.title || t`New Chat`;
     return (
       <a
         href={getChatUrl(session.id, session.assistantId)}
@@ -108,7 +180,11 @@ const ChatHistoryListItem = memo<{
           onSelect();
         }}
         className={sidebarRowLinkClassName}
-        aria-label={session.title || t`New Chat`}
+        aria-label={
+          generationStatus
+            ? `${rowTitle}, ${rowGenerationStatusLabel(generationStatus)}`
+            : rowTitle
+        }
         aria-current={isActive ? "page" : undefined}
       >
         <InteractiveContainer
@@ -126,12 +202,10 @@ const ChatHistoryListItem = memo<{
         >
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 flex-1 items-center gap-2">
+              <GenerationStatusIndicator chatId={session.id} />
               <ChatItemIcon />
-              <span
-                className="truncate font-medium"
-                title={session.title || t`New Chat`}
-              >
-                {session.title || t`New Chat`}
+              <span className="truncate font-medium" title={rowTitle}>
+                {rowTitle}
               </span>
             </div>
             {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent bubbling */}

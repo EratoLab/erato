@@ -1202,6 +1202,41 @@ msgstr "Suelta para subir"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.history.generation.actionRequired"
+msgstr "Acción requerida"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.history.generation.error"
+msgstr "Error"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.history.generation.finished"
+msgstr "Terminado"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+msgid "chat.history.generation.liveError"
+msgstr "{errored, plural, one {# chat con error} other {# chats con error}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+msgid "chat.history.generation.liveFinished"
+msgstr "{finished, plural, one {# chat terminado} other {# chats terminados}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+msgid "chat.history.generation.liveRunning"
+msgstr "{running, plural, one {# chat generando} other {# chats generando}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.history.generation.running"
+msgstr "En curso"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.menu.rename"
 msgstr "Renombrar"

@@ -5,7 +5,6 @@ import {
   chatIdFromUrl,
   ensureOpenSidebar,
   RECENT_CHATS_ROUTE,
-  RECENT_CHATS_URL,
   sendFirstMessage,
 } from "./shared";
 
@@ -254,8 +253,14 @@ test(
       // The row renders already highlighted, without waiting for the list.
       await expect(rowLink).toHaveAttribute("aria-current", "page");
       // Nothing has a title to offer yet, so the placeholder shows the
-      // untitled-chat fallback.
-      await expect(rowLink).toHaveAttribute("aria-label", UNTITLED_ROW_LABEL);
+      // untitled-chat fallback. While the first turn runs the label carries
+      // the generation-status suffix; the backend turn can finish while the
+      // client stream is still parked, which drops the suffix again for the
+      // chat being viewed — both states are correct here.
+      await expect(rowLink).toHaveAttribute(
+        "aria-label",
+        /^New Chat(, Running)?$/,
+      );
 
       // The completion path waits on this same request.
       listHold.release();
@@ -319,14 +324,12 @@ test(
 
       await expect(row).toHaveCount(0);
 
-      // Archiving invalidates the list, so releasing lets the answer that
-      // legitimately omits this chat land. The row must not come back with it.
-      const listSettled = page.waitForResponse(
-        (response) => response.url().includes(RECENT_CHATS_URL),
-        { timeout: 30000 },
-      );
+      // Archiving edits the cached list in place rather than refetching it
+      // (a refetch would re-derive page offsets and could skip a boundary
+      // chat), so releasing just lets any parked request land. The row must
+      // not come back with it.
       listHold.release();
-      await listSettled;
+      await page.waitForTimeout(1000);
 
       await expect(row).toHaveCount(0);
       // The turn outlives the removal, so let it end before calling it gone.

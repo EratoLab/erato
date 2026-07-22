@@ -347,6 +347,9 @@
       "planned_removal_version": "0.6.0"
     }
   },
+  "generation_status.heartbeat_interval_secs": {},
+  "generation_status.stale_after_secs": {},
+  "generation_status.terminal_retention_secs": {},
   "guardrails.prompt_patterns.<pattern-id>.language": {},
   "guardrails.prompt_patterns.<pattern-id>.pattern": {},
   "guardrails.prompt_patterns.<pattern-id>.tags.[]": {},

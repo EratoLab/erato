@@ -19,6 +19,8 @@ pub struct Model {
 pub enum Relation {
     #[sea_orm(has_many = "super::assistant_hub_assistant_versions::Entity")]
     AssistantHubAssistantVersions,
+    #[sea_orm(has_many = "super::assistant_hub_reviews::Entity")]
+    AssistantHubReviews,
     #[sea_orm(
         belongs_to = "super::assistants::Entity",
         from = "Column::SourceAssistantId",
@@ -40,6 +42,12 @@ pub enum Relation {
 impl Related<super::assistant_hub_assistant_versions::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::AssistantHubAssistantVersions.def()
+    }
+}
+
+impl Related<super::assistant_hub_reviews::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::AssistantHubReviews.def()
     }
 }
 

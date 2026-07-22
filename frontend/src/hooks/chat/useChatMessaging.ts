@@ -45,6 +45,7 @@ import { handleTextDelta } from "./handlers/handleTextDelta";
 import { handleToolCallProposed } from "./handlers/handleToolCallProposed";
 import { handleToolCallUpdate } from "./handlers/handleToolCallUpdate";
 import { handleUserMessageSaved } from "./handlers/handleUserMessageSaved";
+import { useGenerationStatusStore } from "./store/generationStatusStore";
 import {
   getStreamKey,
   NEW_CHAT_STREAM_KEY,
@@ -889,6 +890,9 @@ export function useChatMessaging(
                     ? { assistantId: explicitNav.currentAssistantId }
                     : {}),
                 });
+                useGenerationStatusStore
+                  .getState()
+                  .seedRunning(responseData.chat_id, new Date().toISOString());
               }
 
               if (
@@ -979,6 +983,11 @@ export function useChatMessaging(
             logger.log(
               "[DEBUG_STREAMING] processStreamEvent: assistant_message_completed - calling handleRefetchAndClear.",
             );
+            if (activeStreamKey !== NEW_CHAT_STREAM_KEY) {
+              useGenerationStatusStore
+                .getState()
+                .markTerminalLocal(activeStreamKey, "finished");
+            }
             recentlyCompletedByKeyRef.current[activeStreamKey] = Date.now();
             void handleRefetchAndClear({
               invalidate: true,
@@ -1036,6 +1045,11 @@ export function useChatMessaging(
             );
 
             setError(new Error(description));
+            if (activeStreamKey !== NEW_CHAT_STREAM_KEY) {
+              useGenerationStatusStore
+                .getState()
+                .markTerminalLocal(activeStreamKey, "error");
+            }
             resetStreaming(activeStreamKey);
             clearPendingChat(activeStreamKey);
             setSubmittingForKey(activeStreamKey, false);
@@ -1349,6 +1363,13 @@ export function useChatMessaging(
       logger.log(
         "[DEBUG_STREAMING] sendMessage: isSubmittingRef.current set to true.",
       );
+      // A known chat is running from the moment of submission; a brand-new
+      // chat gets its seed on chat_created, once it has an id.
+      if (streamKey !== NEW_CHAT_STREAM_KEY) {
+        useGenerationStatusStore
+          .getState()
+          .seedRunning(streamKey, new Date().toISOString());
+      }
 
       try {
         // Reset any previous streaming state FIRST
@@ -1687,6 +1708,11 @@ export function useChatMessaging(
       }
 
       setSubmittingForKey(streamKey, true);
+      if (streamKey !== NEW_CHAT_STREAM_KEY) {
+        useGenerationStatusStore
+          .getState()
+          .seedRunning(streamKey, new Date().toISOString());
+      }
 
       try {
         const requestBody = {
@@ -1837,6 +1863,11 @@ export function useChatMessaging(
       );
 
       setSubmittingForKey(streamKey, true);
+      if (streamKey !== NEW_CHAT_STREAM_KEY) {
+        useGenerationStatusStore
+          .getState()
+          .seedRunning(streamKey, new Date().toISOString());
+      }
 
       try {
         const requestBody = {

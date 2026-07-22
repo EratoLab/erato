@@ -26,6 +26,7 @@ import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext"
 import { getChatUrl } from "@/utils/chat/urlUtils";
 import { createLogger } from "@/utils/debugLogger";
 
+import { useGenerationStatusStore } from "./store/generationStatusStore";
 import { getStreamKey, useMessagingStore } from "./store/messagingStore";
 
 import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -137,6 +138,18 @@ export function isPendingChat(chatId: string): boolean {
   return useChatHistoryStore.getState().pendingChat?.id === chatId;
 }
 
+/**
+ * Query key of the infinite recent-chats list. Cache edits (archive removal,
+ * generation-title patches) must target the same key as the query itself.
+ */
+export function buildInfiniteChatsQueryKey() {
+  return [
+    ...recentChatsQuery({}).queryKey,
+    "infinite",
+    { limit: CHAT_HISTORY_PAGE_SIZE },
+  ];
+}
+
 export function useChatHistory() {
   // const router = useRouter(); // Removed Next.js router
   const navigate = useNavigate(); // Added React Router navigate
@@ -167,14 +180,7 @@ export function useChatHistory() {
 
   // Stable query key for the infinite recent-chats list. Reused for both the
   // query itself and for cache mutations (e.g. optimistic archive removal).
-  const infiniteChatsQueryKey = useMemo(
-    () => [
-      ...recentChatsQuery({}).queryKey,
-      "infinite",
-      { limit: CHAT_HISTORY_PAGE_SIZE },
-    ],
-    [],
-  );
+  const infiniteChatsQueryKey = useMemo(() => buildInfiniteChatsQueryKey(), []);
 
   const {
     data,
@@ -264,9 +270,23 @@ export function useChatHistory() {
       last_chat_provider_id: undefined,
       last_selected_facets: undefined,
       last_model: undefined,
+      // The placeholder exists precisely while the first turn streams.
+      active_generation_started_at: pendingChat.createdAt,
     };
     return [placeholder, ...listedChats];
   }, [listedChats, pendingChat, isPendingChatListed]);
+
+  // Seed the generation-status store from the backend's running markers, so
+  // generations started elsewhere (other tab, other device, pre-reload) get an
+  // indicator without waiting for a poll.
+  useEffect(() => {
+    const { seedRunning } = useGenerationStatusStore.getState();
+    for (const chat of chats) {
+      if (chat.active_generation_started_at) {
+        seedRunning(chat.id, chat.active_generation_started_at);
+      }
+    }
+  }, [chats]);
 
   // Navigate to a specific chat (assistant-aware)
   const navigateToChat = useCallback(
@@ -374,6 +394,10 @@ export function useChatHistory() {
       // The archived row may be the pending-chat placeholder, which lives
       // outside the cache and no list edit can take away; drop it too.
       clearPendingChat(chatId);
+
+      // An archived chat can no longer be opened, so its status entry would
+      // otherwise keep the aggregate badge counting a chat that has no row.
+      useGenerationStatusStore.getState().clearStatus(chatId);
 
       // Optimistically remove the archived row from every loaded page.
       //

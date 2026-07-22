@@ -1202,6 +1202,41 @@ msgstr "Drop to upload"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.history.generation.actionRequired"
+msgstr "Action required"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.history.generation.error"
+msgstr "Error"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.history.generation.finished"
+msgstr "Finished"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+msgid "chat.history.generation.liveError"
+msgstr "{errored, plural, one {# chat failed} other {# chats failed}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+msgid "chat.history.generation.liveFinished"
+msgstr "{finished, plural, one {# chat finished} other {# chats finished}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+msgid "chat.history.generation.liveRunning"
+msgstr "{running, plural, one {# chat generating} other {# chats generating}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.history.generation.running"
+msgstr "Running"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.menu.rename"
 msgstr "Rename"

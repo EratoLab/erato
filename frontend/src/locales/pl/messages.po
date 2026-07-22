@@ -1202,6 +1202,41 @@ msgstr "Upuść, aby przesłać"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.history.generation.actionRequired"
+msgstr "Wymagane działanie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.history.generation.error"
+msgstr "Błąd"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.history.generation.finished"
+msgstr "Zakończono"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+msgid "chat.history.generation.liveError"
+msgstr "{errored, plural, one {# czat zakończony błędem} few {# czaty zakończone błędem} other {# czatów zakończonych błędem}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+msgid "chat.history.generation.liveFinished"
+msgstr "{finished, plural, one {# czat zakończony} few {# czaty zakończone} other {# czatów zakończonych}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+msgid "chat.history.generation.liveRunning"
+msgstr "{running, plural, one {# czat generuje odpowiedź} few {# czaty generują odpowiedź} other {# czatów generuje odpowiedź}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.history.generation.running"
+msgstr "Trwa"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.menu.rename"
 msgstr "Zmień nazwę"

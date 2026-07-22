@@ -1,6 +1,7 @@
 "use client";
 
 import { ApiProvider } from "./ApiProvider";
+import { GenerationStatusPoller } from "./GenerationStatusPoller";
 import { ThemeProvider } from "./ThemeProvider";
 import {
   DesktopSidecarConfigurationSync,
@@ -19,6 +20,7 @@ import type { PropsWithChildren } from "react";
 export function ClientProviders({ children }: PropsWithChildren) {
   return (
     <ApiProvider>
+      <GenerationStatusPoller />
       <DesktopSidecarProvider>
         <DesktopSidecarConfigurationSync />
         <ThemeProvider>

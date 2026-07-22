@@ -70,6 +70,9 @@ pub async fn chat_completions(
                     error_config.status_code
                 ),
             );
+            if let Some(initial_delay_ms) = error_config.initial_delay_ms {
+                tokio::time::sleep(std::time::Duration::from_millis(initial_delay_ms)).await;
+            }
             return Err((
                 StatusCode::from_u16(error_config.status_code).unwrap_or(StatusCode::BAD_REQUEST),
                 Json(error_config.body),
