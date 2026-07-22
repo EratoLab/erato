@@ -298,6 +298,16 @@ export function useChatHistory() {
     try {
       logger.log("Creating new chat - navigating to /chat/new");
 
+      // Same staleness marking as navigateToChat, which this path bypasses.
+      if (currentChatId) {
+        void queryClient.invalidateQueries({
+          queryKey: chatMessagesQuery({
+            pathParams: { chatId: currentChatId },
+          }).queryKey,
+          refetchType: "none",
+        });
+      }
+
       // CRITICAL: Clear ALL messaging state before navigation.
       // We intentionally clear across all stream keys to avoid resurrecting
       // an older in-flight new-chat stream when user clicks "new chat" again.
@@ -338,7 +348,7 @@ export function useChatHistory() {
       setNewChatPending(false);
       throw error;
     }
-  }, [navigate, setNewChatPending, currentChatId]); // Updated dependency array
+  }, [navigate, setNewChatPending, currentChatId, queryClient]);
 
   // Archive a chat
   const archiveChat = useCallback(

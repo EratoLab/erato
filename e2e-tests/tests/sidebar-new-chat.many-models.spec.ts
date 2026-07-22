@@ -166,6 +166,120 @@ test(
 );
 
 test(
+  "returning to an abandoned new chat via the sidebar shows its in-flight user message",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    // A paced turn that must outlive the abandon, the sidebar round-trip, the
+    // resume, and completion runs past the default per-test budget.
+    test.setTimeout(120000);
+
+    await page.goto("/");
+    await chatIsReadyToChat(page);
+    await ensureOpenSidebar(page);
+    await selectModel(page, MOCK_MODEL);
+
+    const sidebar = page.getByRole("complementary");
+
+    // Resolve once the gated refetch has listed this chat, so its sidebar row is
+    // backed by recent_chats and survives the New Chat below — which clears only
+    // the placeholder. Registered before the send so the refetch cannot be
+    // missed; the `chatId` guard skips list responses that predate the id.
+    let chatId = "";
+    const firstChatListed = page.waitForResponse(
+      async (response) => {
+        if (!response.url().includes(RECENT_CHATS_URL) || !chatId) {
+          return false;
+        }
+        try {
+          const body = (await response.json()) as { chats?: { id?: string }[] };
+          return (
+            Array.isArray(body.chats) &&
+            body.chats.some((entry) => entry.id === chatId)
+          );
+        } catch {
+          return false;
+        }
+      },
+      { timeout: 30000 },
+    );
+
+    // A long paced turn, so the return below attaches a resumestream to a task
+    // that is provably still generating rather than one that already 404s.
+    chatId = await sendFirstMessage(page, "long running 20");
+    const row = sidebar.locator(`[data-chat-id="${chatId}"]`);
+    const rowLink = sidebar.locator(`a:has([data-chat-id="${chatId}"])`);
+    await expect(row).toBeVisible({ timeout: 5000 });
+    // The first paced token confirms the turn is genuinely streaming.
+    await expect(page.getByText("Second 1 passed")).toBeVisible({
+      timeout: 15000,
+    });
+    await expect(page.getByTestId("chat-input-stop-generation")).toBeVisible();
+
+    await firstChatListed;
+
+    // Abandon the still-streaming chat by starting a new one. This is the
+    // load-bearing step: New Chat aborts the live SSE socket (abortAllSSE), so
+    // the return has to re-attach via resumestream and replay chat_created +
+    // user_message_saved, which is what puts the user message back. Clicking a
+    // different existing chat instead would preserve the socket and never resume.
+    await page.getByRole("button", { name: "New Chat" }).click();
+    await expect(page).toHaveURL(/\/chat\/new$/);
+
+    // Register before the row click triggers the resume.
+    const resumeResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url().includes("/api/v1beta/me/messages/resumestream"),
+      { timeout: 30000 },
+    );
+
+    // Return to the abandoned chat through its (now listed) sidebar row.
+    await ensureOpenSidebar(page);
+    await expect(rowLink).toBeVisible();
+    await rowLink.click();
+    await expect(page).toHaveURL(new RegExp(`/chat/${chatId}$`));
+
+    const resumeResponse = await resumeResponsePromise;
+    // A live task replays into a 2xx SSE stream; a finished/absent one 404s, so
+    // 2xx proves the turn was genuinely resumed rather than already complete.
+    expect(
+      resumeResponse.ok(),
+      `resumestream should replay a live task with a 2xx status, got ${resumeResponse.status()}`,
+    ).toBe(true);
+
+    // The replayed user message is shown exactly once, ahead of the resuming
+    // assistant reply.
+    await expect(page.getByTestId("message-user")).toHaveCount(1);
+    await expect(page.getByTestId("message-user")).toContainText(
+      "long running 20",
+    );
+    await page.waitForFunction(
+      () => {
+        const user = document.querySelector('[data-testid="message-user"]');
+        const assistant = document.querySelector(
+          '[data-testid="message-assistant"]',
+        );
+        return (
+          !!user &&
+          !!assistant &&
+          (user.compareDocumentPosition(assistant) &
+            Node.DOCUMENT_POSITION_FOLLOWING) !==
+            0
+        );
+      },
+      undefined,
+      { timeout: 15000 },
+    );
+
+    // The turn finishes cleanly and the user message is still the only one.
+    await chatIsReadyToChat(page, {
+      expectAssistantResponse: true,
+      loadingTimeoutMs: 60000,
+    });
+    await expect(page.getByTestId("message-user")).toHaveCount(1);
+  },
+);
+
+test(
   "the list refetch fires on a new chat's first turn but not on a listed chat's next turn",
   { tag: TAG_CI },
   async ({ page }) => {

@@ -1476,6 +1476,111 @@ describe("useChatMessaging", () => {
     expect(orderedMessages[1].role).toBe("assistant");
   });
 
+  it("should render the replayed user message when re-entering a streaming chat", async () => {
+    // The previous turn only: entering from /chat/new there is no optimistic
+    // message and no refetch, so the replay is the only source.
+    mockUseChatMessages.mockReturnValue({
+      data: {
+        messages: [
+          {
+            id: "msg-earlier-user",
+            content: [{ content_type: "text", text: "First question" }],
+            role: "user",
+            created_at: "2026-02-18T12:00:00.000Z",
+            chat_id: "chat-resume-1",
+            updated_at: "2026-02-18T12:00:00.000Z",
+            is_message_in_active_thread: true,
+          },
+          {
+            id: "msg-earlier-assistant",
+            content: [{ content_type: "text", text: "First answer" }],
+            role: "assistant",
+            created_at: "2026-02-18T12:00:01.000Z",
+            chat_id: "chat-resume-1",
+            updated_at: "2026-02-18T12:00:01.000Z",
+            is_message_in_active_thread: true,
+          },
+        ],
+        stats: {
+          total_count: 2,
+          returned_count: 2,
+          current_offset: 0,
+          has_more: false,
+        },
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn().mockResolvedValue({}),
+    });
+
+    let resumeCallbacks: {
+      onMessage?: (event: SSEEvent) => void;
+    } = {};
+    mockCreateSSEConnection.mockImplementation((url, callbacks) => {
+      if (url.includes("/resumestream")) {
+        resumeCallbacks = callbacks;
+      }
+      return vi.fn();
+    });
+
+    const { result } = renderHook(() => useChatMessaging("chat-resume-1"), {
+      wrapper: TestWrapper,
+    });
+
+    expect(resumeCallbacks.onMessage).toBeDefined();
+
+    const replay = async (eventData: Record<string, unknown>) => {
+      await act(async () => {
+        resumeCallbacks.onMessage?.({
+          data: JSON.stringify(eventData),
+          type: "message",
+        });
+      });
+    };
+
+    // Server clock ahead of the browser's: ordering must not depend on which
+    // clock stamped which message.
+    const serverNow = new Date(Date.now() + 60_000).toISOString();
+    await replay({
+      message_type: "user_message_saved",
+      message_id: "msg-inflight-user",
+      message: {
+        id: "msg-inflight-user",
+        role: "user",
+        created_at: serverNow,
+        updated_at: serverNow,
+        content: [{ content_type: "text", text: "Second question" }],
+        input_files_ids: [],
+        is_message_in_active_thread: true,
+      },
+    });
+    await replay({
+      message_type: "assistant_message_started",
+      message_id: "msg-inflight-assistant",
+    });
+    await replay({
+      message_type: "text_delta",
+      message_id: "msg-inflight-assistant",
+      new_text: "Streaming",
+    });
+
+    const orderedMessages = result.current.messageOrder.map(
+      (id) => result.current.messages[id],
+    );
+    const inflightUserIndex = orderedMessages.findIndex(
+      (message) => message.id === "msg-inflight-user",
+    );
+    const inflightAssistantIndex = orderedMessages.findIndex(
+      (message) => message.id === "msg-inflight-assistant",
+    );
+
+    expect(inflightUserIndex).toBeGreaterThanOrEqual(0);
+    expect(inflightAssistantIndex).toBeGreaterThan(inflightUserIndex);
+    expect(
+      orderedMessages.filter((message) => message.id === "msg-inflight-user"),
+    ).toHaveLength(1);
+  });
+
   it("should remove the replaced user message and every later turn on edit submit", async () => {
     const { result } = renderHook(() => useChatMessaging("chat1"), {
       wrapper: TestWrapper,

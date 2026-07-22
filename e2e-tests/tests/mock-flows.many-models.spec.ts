@@ -322,6 +322,14 @@ test(
     await expect(page.getByText("Second 5 passed")).toBeVisible({
       timeout: 20000,
     });
+
+    // The in-flight user message must survive the reload/resume, not only the
+    // assistant reply.
+    await expect(page.getByTestId("message-user")).toHaveCount(1);
+    await expect(page.getByTestId("message-user")).toContainText(
+      "long running 15",
+    );
+
     await expect(page.getByText("Complete!")).toHaveCount(0);
 
     await expect(page.getByTestId("message-assistant").last()).toContainText(

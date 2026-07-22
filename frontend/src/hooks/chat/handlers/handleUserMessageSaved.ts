@@ -20,7 +20,8 @@ const logger = createLogger("EVENT", "handleUserMessageSaved");
  * 2. Finding the corresponding temporary message in the Zustand store, typically by
  *    matching content and its 'sending' status.
  * 3. If a match is found, the temporary message is removed from the store.
- * 4. The server-confirmed message (with its real ID and details) is then added to the store.
+ * 4. The server-confirmed message (with its real ID and details) is added to the
+ *    store, whether or not a temporary message was found.
  * This ensures the UI reflects the authoritative state from the backend.
  *
  * @param responseData - The data from the 'user_message_saved' SSE event.
@@ -77,6 +78,20 @@ export function handleUserMessageSaved(
       const currentUserMessagesForKey =
         prevState.userMessagesByKey[resolvedStreamKey] ?? {};
       const newUserMessages = { ...currentUserMessagesForKey };
+      const activeResolvedStreamKey = resolveStreamKeyFromState(
+        prevState.activeStreamKey,
+        prevState.streamKeyAliases,
+      );
+
+      const finalUserMessage = {
+        id: serverConfirmedMessage.id,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        content: serverConfirmedMessage.content ?? [],
+        role: serverConfirmedMessage.role as "user", // Role from server, cast as "user"
+        createdAt: serverConfirmedMessage.created_at,
+        status: "complete" as const, // Message is saved, so status is complete
+        input_files_ids: serverConfirmedMessage.input_files_ids,
+      };
 
       // Find the temporary message by content comparison (extract text from ContentPart[])
       const tempMessage = Object.values(newUserMessages).find(
@@ -88,176 +103,88 @@ export function handleUserMessageSaved(
       );
 
       if (tempMessage?.id) {
-        const tempMessageKeyToDelete = tempMessage.id; // This key is the temp-user-id
-        delete newUserMessages[tempMessageKeyToDelete]; // Remove message with temp ID
-
-        // Construct the final message object using server data
-        const finalUserMessage = {
-          id: serverConfirmedMessage.id,
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-          content: serverConfirmedMessage.content ?? [],
-          role: serverConfirmedMessage.role as "user", // Role from server, cast as "user"
-          createdAt: serverConfirmedMessage.created_at,
-          status: "complete" as const, // Message is saved, so status is complete
-          input_files_ids: serverConfirmedMessage.input_files_ids,
-        };
-
-        newUserMessages[finalUserMessage.id] = finalUserMessage; // Add message with real ID
-
-        if (process.env.NODE_ENV === "development") {
-          logger.log(
-            `User message ID updated: from ${tempMessageKeyToDelete} to ${finalUserMessage.id}. Content: "${extractTextFromContent(finalUserMessage.content).substring(0, 50)}..."`,
-          );
-        }
-
-        const assistantTimestamp = new Date(
-          new Date(serverConfirmedMessage.created_at).getTime() + 1,
-        ).toISOString();
-        const activeResolvedStreamKey = resolveStreamKeyFromState(
-          prevState.activeStreamKey,
-          prevState.streamKeyAliases,
-        );
-        const nextUserMessagesByKey = {
-          ...prevState.userMessagesByKey,
-          [resolvedStreamKey]: newUserMessages,
-        };
-
-        const currentMessageId = currentStreaming.currentMessageId;
-        const currentAnchoredMessage =
-          typeof currentMessageId === "string"
-            ? newUserMessages[currentMessageId]
-            : undefined;
-        const pointsToUserMessage =
-          (typeof currentMessageId === "string" &&
-            (currentMessageId === tempMessageKeyToDelete ||
-              currentMessageId === finalUserMessage.id ||
-              currentMessageId.startsWith("temp-user-"))) ||
-          currentAnchoredMessage?.role === "user";
-
-        // Only create optimistic assistant if one doesn't already exist
-        // The optimistic assistant is now created immediately in sendMessage()
-        const hasOptimisticAssistant =
-          currentMessageId?.startsWith("temp-assistant-") &&
-          !pointsToUserMessage;
-
-        if (hasOptimisticAssistant) {
-          if (process.env.NODE_ENV === "development") {
-            logger.log(
-              `[OPTIMISTIC] Updating optimistic assistant placeholder timestamp: ${currentStreaming.createdAt} → ${assistantTimestamp} (after user message: ${serverConfirmedMessage.created_at})`,
-            );
-          }
-          const nextStreaming = {
-            ...currentStreaming,
-            createdAt: assistantTimestamp,
-          };
-
-          return {
-            ...prevState,
-            userMessagesByKey: nextUserMessagesByKey,
-            userMessages:
-              activeResolvedStreamKey === resolvedStreamKey
-                ? newUserMessages
-                : prevState.userMessages,
-            streamingByKey: {
-              ...prevState.streamingByKey,
-              [resolvedStreamKey]: nextStreaming,
-            },
-            streaming:
-              activeResolvedStreamKey === resolvedStreamKey
-                ? nextStreaming
-                : prevState.streaming,
-          };
-        }
-
-        // If we already have an assistant anchor (real assistant ID), keep it
-        // and only force ordering behind the confirmed user message.
-        const hasExistingAssistantAnchor =
-          !!currentMessageId && !pointsToUserMessage;
-
-        if (hasExistingAssistantAnchor) {
-          if (process.env.NODE_ENV === "development") {
-            logger.log(
-              `[OPTIMISTIC] Preserving existing assistant stream anchor (${currentMessageId}) and adjusting timestamp to ${assistantTimestamp}.`,
-            );
-          }
-
-          const nextStreaming = {
-            ...currentStreaming,
-            createdAt: assistantTimestamp,
-          };
-
-          return {
-            ...prevState,
-            userMessagesByKey: nextUserMessagesByKey,
-            userMessages:
-              activeResolvedStreamKey === resolvedStreamKey
-                ? newUserMessages
-                : prevState.userMessages,
-            streamingByKey: {
-              ...prevState.streamingByKey,
-              [resolvedStreamKey]: nextStreaming,
-            },
-            streaming:
-              activeResolvedStreamKey === resolvedStreamKey
-                ? nextStreaming
-                : prevState.streaming,
-          };
-        }
-
-        // Fallback: Create/repair optimistic assistant placeholder if stream anchor
-        // points to a user message or is missing.
-        const optimisticAssistantId = `temp-assistant-${Date.now()}`;
-
-        if (process.env.NODE_ENV === "development") {
-          logger.log(
-            `[OPTIMISTIC] Creating/repairing optimistic assistant placeholder with ID: ${optimisticAssistantId}. Previous anchor: ${String(currentMessageId)}`,
-          );
-        }
-
-        const nextStreaming = {
-          ...currentStreaming,
-          currentMessageId: optimisticAssistantId,
-          content: [],
-          createdAt: assistantTimestamp, // Ensure assistant renders after confirmed user
-          isStreaming: false, // Not streaming yet, just a placeholder
-          isFinalizing: false,
-        };
-        return {
-          ...prevState,
-          userMessagesByKey: nextUserMessagesByKey,
-          userMessages:
-            activeResolvedStreamKey === resolvedStreamKey
-              ? newUserMessages
-              : prevState.userMessages,
-          streamingByKey: {
-            ...prevState.streamingByKey,
-            [resolvedStreamKey]: nextStreaming,
-          },
-          streaming:
-            activeResolvedStreamKey === resolvedStreamKey
-              ? nextStreaming
-              : prevState.streaming,
-        };
+        delete newUserMessages[tempMessage.id]; // Remove message with temp ID
       } else {
-        // If no matching temp message found, log a warning.
-        // This could happen if the message was cleared or if there's a mismatch.
-        logger.warn(
-          `No temporary user message found to update for content: "${serverConfirmedMessageContent.substring(0, 100)}...". This might happen if the message was cleared or if there is a data mismatch.`,
+        // `resumestream` replays this event after the optimistic message is
+        // gone. The server id keeps a repeated delivery idempotent, and
+        // mergeDisplayMessages gives the API copy precedence over it.
+        logger.log(
+          `No temporary user message to reconcile; inserting server message ${serverConfirmedMessage.id} directly.`,
           {
-            serverConfirmedMessage,
-            previousUserMessages: currentUserMessagesForKey, // Log the state before attempting update
+            serverContent: serverConfirmedMessageContent,
+            currentMessages: currentUserMessagesForKey,
           },
         );
       }
-      // If no temp message was found to replace, return the previous state unchanged
-      logger.log(
-        "No matching temporary message found, returning previous state.",
-        {
-          serverContent: serverConfirmedMessageContent,
-          currentMessages: currentUserMessagesForKey,
+
+      newUserMessages[finalUserMessage.id] = finalUserMessage; // Add message with real ID
+
+      if (process.env.NODE_ENV === "development") {
+        logger.log(
+          `User message stored under ${finalUserMessage.id} (was ${tempMessage?.id ?? "absent"}). Content: "${extractTextFromContent(finalUserMessage.content).substring(0, 50)}..."`,
+        );
+      }
+
+      // Ordering is by createdAt, and user messages carry the server's clock
+      // while an unanchored assistant falls back to the browser's. Pin the
+      // assistant just behind the confirmed user message so skew between the
+      // two cannot float the answer above its question.
+      const assistantTimestamp = new Date(
+        new Date(serverConfirmedMessage.created_at).getTime() + 1,
+      ).toISOString();
+
+      const currentMessageId = currentStreaming.currentMessageId;
+      const currentAnchoredMessage =
+        typeof currentMessageId === "string"
+          ? newUserMessages[currentMessageId]
+          : undefined;
+      const pointsToUserMessage =
+        (typeof currentMessageId === "string" &&
+          (currentMessageId === tempMessage?.id ||
+            currentMessageId === finalUserMessage.id ||
+            currentMessageId.startsWith("temp-user-"))) ||
+        currentAnchoredMessage?.role === "user";
+      const hasAssistantAnchor = !!currentMessageId && !pointsToUserMessage;
+
+      // Without an assistant anchor, create/repair an optimistic placeholder;
+      // assistant_message_started later swaps in the real id and keeps this
+      // timestamp.
+      const nextStreaming = hasAssistantAnchor
+        ? { ...currentStreaming, createdAt: assistantTimestamp }
+        : {
+            ...currentStreaming,
+            currentMessageId: `temp-assistant-${Date.now()}`,
+            content: [],
+            createdAt: assistantTimestamp,
+            isStreaming: false, // Not streaming yet, just a placeholder
+            isFinalizing: false,
+          };
+
+      if (process.env.NODE_ENV === "development") {
+        logger.log(
+          `[OPTIMISTIC] Assistant anchor ${currentMessageId ?? "none"} → ${nextStreaming.currentMessageId ?? "none"} at ${assistantTimestamp}.`,
+        );
+      }
+
+      return {
+        ...prevState,
+        userMessagesByKey: {
+          ...prevState.userMessagesByKey,
+          [resolvedStreamKey]: newUserMessages,
         },
-      );
-      return prevState;
+        userMessages:
+          activeResolvedStreamKey === resolvedStreamKey
+            ? newUserMessages
+            : prevState.userMessages,
+        streamingByKey: {
+          ...prevState.streamingByKey,
+          [resolvedStreamKey]: nextStreaming,
+        },
+        streaming:
+          activeResolvedStreamKey === resolvedStreamKey
+            ? nextStreaming
+            : prevState.streaming,
+      };
     },
     false,
     "messaging/handleUserMessageSaved",
