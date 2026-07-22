@@ -7,7 +7,7 @@ import { Chat } from "@/components/ui/Chat/Chat";
 import { ChatEmptyState } from "@/components/ui/Chat/ChatEmptyState";
 import { DefaultMessageControls } from "@/components/ui/Message/DefaultMessageControls";
 import { useResolveChatShareLink } from "@/hooks/useChatShareLink";
-import { useChatMessages } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { useShareLinkMessages } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { RootProvider } from "@/providers/RootProvider";
 import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 import { mapApiMessageToUiMessage } from "@/utils/adapters/messageAdapter";
@@ -60,10 +60,10 @@ export default function SharedChatPage() {
     data: messagesResponse,
     isLoading: isLoadingMessages,
     error: messagesError,
-  } = useChatMessages(
-    chatId
+  } = useShareLinkMessages(
+    shareId
       ? {
-          pathParams: { chatId },
+          pathParams: { shareLinkId: shareId },
           queryParams: { limit: 1000 },
         }
       : skipToken,
