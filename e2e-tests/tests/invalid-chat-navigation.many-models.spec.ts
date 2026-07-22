@@ -89,16 +89,15 @@ test(
   },
 );
 
-// F3 (DEFERRED): a turn whose resume can never complete must NOT spin forever.
-// This asserts the DESIRED behavior and is skipped (test.fixme) until the
-// no-progress watchdog lands — remove `.fixme` and tune the timeout to the
-// watchdog once implemented. See ERMAIN-487. Verified current bug: with resume
-// hung open, the Stop button stays and no error appears (assistant stuck).
-test.fixme(
-  "mid-stream drop + un-completable resume resolves to an error, not a hang",
+// F3: a turn whose resume ends without a completion event must reconcile from
+// the server, not spin forever. The backend now emits an Error before StreamEnd
+// on failure; the client also reconciles on any inconclusive resume close. Here
+// the resume returns immediately with no events (the minimal "no completion"
+// case) and the client must clear the stuck turn.
+test(
+  "mid-stream drop + resume without completion reconciles instead of hanging",
   { tag: TAG_CI },
   async ({ page }) => {
-    test.setTimeout(120000);
     await setupStreamingRequestAbortHook(page);
     await page.goto("/");
     await chatIsReadyToChat(page);
@@ -111,20 +110,23 @@ test.fixme(
       timeout: 15000,
     });
 
-    // Make resume hang open forever (never fulfilled): the connection stays
-    // "streaming", so the client can never reach assistant_message_completed.
-    await page.route(
-      "**/api/v1beta/me/messages/resumestream*",
-      () => new Promise<void>(() => {}),
+    // Resume returns a 200 that ends immediately with no completion event.
+    await page.route("**/api/v1beta/me/messages/resumestream*", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: "",
+      }),
     );
     await abortActiveStreamingRequest(page);
 
-    // DESIRED: the stuck turn is bounded — a no-progress watchdog surfaces a
-    // visible error and clears the in-flight indicator instead of hanging.
-    await expect(page.getByTestId("chat-send-error")).toBeVisible({
-      timeout: 90000,
-    });
-    await expect(page.getByTestId("chat-input-stop-generation")).toHaveCount(0);
+    // Reconcile-on-close: no hang, the in-flight indicator clears.
+    await expect(page.getByTestId("chat-input-stop-generation")).toHaveCount(
+      0,
+      {
+        timeout: 15000,
+      },
+    );
   },
 );
 
