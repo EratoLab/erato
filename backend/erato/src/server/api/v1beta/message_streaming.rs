@@ -6300,6 +6300,28 @@ pub async fn message_submit_sse(
                         "Background task failed"
                     );
                     capture_report(&e);
+
+                    // Tell every listener — the original stream AND any resume —
+                    // that this turn is dead, so the client resolves instead of
+                    // waiting for a completion that will never arrive. The
+                    // detailed error is captured server-side above; the client
+                    // gets only a generic message.
+                    let error_event = MessageSubmitStreamingResponseError {
+                        message_id: None,
+                        error: GenerationErrorType::InternalError {
+                            error_description: "The message could not be generated.".to_string(),
+                        },
+                    };
+                    let error = serde_json::to_value(MessageSubmitStreamingResponseMessage::Error(
+                        error_event,
+                    ))
+                    .ok();
+                    send_background_event(
+                        &task_clone,
+                        StreamingEvent::Error { error },
+                        "broadcast submit task failure",
+                    )
+                    .await;
                 }
             }
 
