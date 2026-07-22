@@ -353,7 +353,6 @@ export const Chat = ({
       onMessageAction,
     });
 
-  // Enhanced sendMessage handler that refreshes the sidebar after sending
   const handleSendMessage = useCallback(
     (
       message: string,
@@ -374,16 +373,11 @@ export const Chat = ({
         modelId,
         assistantId,
         selectedFacetIds,
-      )
-        .then(() => {
-          logger.log("[CHAT_FLOW] Message sent, refreshing chats");
-          return refreshChats();
-        })
-        .catch((error) => {
-          logger.log("[CHAT_FLOW] Error sending message:", error);
-        });
+      ).catch((error) => {
+        logger.log("[CHAT_FLOW] Error sending message:", error);
+      });
     },
-    [baseHandleSendMessage, refreshChats, assistantId],
+    [baseHandleSendMessage, assistantId],
   );
 
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);

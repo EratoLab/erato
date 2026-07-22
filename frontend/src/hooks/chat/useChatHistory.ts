@@ -5,7 +5,7 @@
  */
 /* eslint-disable lingui/no-unlocalized-strings */
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom"; // Added React Router hooks
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
@@ -25,19 +25,41 @@ import { createLogger } from "@/utils/debugLogger";
 
 import { getStreamKey, useMessagingStore } from "./store/messagingStore";
 
-// Import the correct response type and the RecentChat type from schemas
-// No longer needed after switching to invalidateQueries:
-// import type {
-//   RecentChatsResponse,
-//   RecentChat,
-// } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 const logger = createLogger("HOOK", "useChatHistory");
 const CHAT_HISTORY_PAGE_SIZE = 30;
 
+/**
+ * A chat that exists on the backend but is not listable yet, with the moment it
+ * was created. `get_recent_chats` only returns chats that already have a
+ * message, and the backend creates the chat row before it inserts the first
+ * user message, so between `chat_created` and the first list fetch after
+ * `user_message_saved` there is nothing to render a row from.
+ */
+export interface PendingChat {
+  id: string;
+  createdAt: string;
+  /**
+   * Set only when the chat was started from an assistant page. Selecting the
+   * row has to keep the assistant in the URL, and the list response that would
+   * otherwise carry the assistant has not arrived yet.
+   */
+  assistantId?: string;
+}
+
+/**
+ * `T` with its optional fields made mandatory to write but still allowed to be
+ * `undefined`, so a field added to the generated type cannot silently default
+ * to absent here.
+ */
+type Complete<T> = { [K in keyof Required<T>]: T[K] };
+
 interface ChatHistoryState {
   isNewChatPending: boolean; // Flag to indicate a new chat navigation is in progress
   setNewChatPending: (isPending: boolean) => void;
+  pendingChat: PendingChat | null;
+  setPendingChat: (chat: PendingChat | null) => void;
 }
 
 // Create a store to track the current selected chat
@@ -54,6 +76,17 @@ export const useChatHistoryStore = create<ChatHistoryState>()(
             false,
             "chatHistory/setNewChatPending",
           ),
+        pendingChat: null,
+        // Returning the current state for a no-op write keeps the snapshot
+        // identity, so the redundant clears (one per mounted `useChatHistory`)
+        // do not notify subscribers.
+        setPendingChat: (chat) =>
+          set(
+            (state) =>
+              state.pendingChat === chat ? state : { pendingChat: chat },
+            false,
+            "chatHistory/setPendingChat",
+          ),
       };
 
       // Add debugging for state changes
@@ -68,6 +101,34 @@ export const useChatHistoryStore = create<ChatHistoryState>()(
     },
   ),
 );
+
+/**
+ * Drops the placeholder row for a chat whose first turn can no longer make it
+ * listable: nothing else will ever remove it, because the clearing effect below
+ * only fires when the chat shows up in the list, which a chat without a saved
+ * user message never does.
+ *
+ * `chatId` scopes the clear so a concurrent first turn keeps its own
+ * placeholder; pass nothing to clear whichever chat is pending.
+ */
+export function clearPendingChat(chatId?: string) {
+  const { pendingChat, setPendingChat } = useChatHistoryStore.getState();
+  if (!pendingChat) {
+    return;
+  }
+  if (chatId !== undefined && pendingChat.id !== chatId) {
+    return;
+  }
+  setPendingChat(null);
+}
+
+/**
+ * Whether the sidebar is currently rendering `chatId` from the placeholder,
+ * i.e. whether the list is known to be missing a row for it.
+ */
+export function isPendingChat(chatId: string): boolean {
+  return useChatHistoryStore.getState().pendingChat?.id === chatId;
+}
 
 export function useChatHistory() {
   // const router = useRouter(); // Removed Next.js router
@@ -88,7 +149,14 @@ export function useChatHistory() {
   }, [location.pathname, params.id, params.chatId]);
 
   const { fetcherOptions } = useV1betaApiContext();
-  const { isNewChatPending, setNewChatPending } = useChatHistoryStore();
+  const isNewChatPending = useChatHistoryStore(
+    (state) => state.isNewChatPending,
+  );
+  const setNewChatPending = useChatHistoryStore(
+    (state) => state.setNewChatPending,
+  );
+  const pendingChat = useChatHistoryStore((state) => state.pendingChat);
+  const setPendingChat = useChatHistoryStore((state) => state.setPendingChat);
 
   const {
     data,
@@ -141,10 +209,53 @@ export function useChatHistory() {
   const stableEmptyFetcherOptions = useMemo(() => ({}), []);
 
   // Extract chats from the paginated response structure, defaulting to a stable empty array reference
-  const chats = useMemo(
+  const listedChats = useMemo(
     () => data?.pages.flatMap((page) => page.chats) ?? emptyChats,
     [data?.pages, emptyChats],
   );
+
+  const isPendingChatListed = pendingChat
+    ? listedChats.some((chat) => chat.id === pendingChat.id)
+    : false;
+
+  // Once the backend lists the chat, the placeholder has served its purpose.
+  // Dropping it here is what keeps it from resurfacing later: the placeholder
+  // outranks the list, so a stale one would re-appear as a ghost row the moment
+  // the real row leaves the list, e.g. by being archived. This covers only
+  // chats that do get listed; the paths where that never happens clear the
+  // placeholder themselves.
+  useEffect(() => {
+    if (isPendingChatListed) {
+      setPendingChat(null);
+    }
+  }, [isPendingChatListed, setPendingChat]);
+
+  const chats = useMemo<RecentChat[]>(() => {
+    if (!pendingChat || isPendingChatListed) {
+      return listedChats;
+    }
+    // Everything the sidebar renders, plus `assistant_id` so selecting the row
+    // stays on the assistant route. `last_selected_facets` and `last_model` are
+    // deliberately undefined: consumers treat a present value as authoritative
+    // and would override what the assistant configured for the first turn.
+    // `can_edit` is false to match what an unlisted chat resolves to today.
+    const placeholder: Complete<RecentChat> = {
+      id: pendingChat.id,
+      title_resolved: "",
+      title_by_summary: undefined,
+      title_by_user_provided: undefined,
+      can_edit: false,
+      file_uploads: [],
+      last_message_at: pendingChat.createdAt,
+      assistant_id: pendingChat.assistantId,
+      assistant_name: undefined,
+      archived_at: undefined,
+      last_chat_provider_id: undefined,
+      last_selected_facets: undefined,
+      last_model: undefined,
+    };
+    return [placeholder, ...listedChats];
+  }, [listedChats, pendingChat, isPendingChatListed]);
 
   // Navigate to a specific chat (assistant-aware)
   const navigateToChat = useCallback(
@@ -199,6 +310,9 @@ export function useChatHistory() {
       messagingStore.setAwaitingFirstStreamChunkForNewChat(false);
       messagingStore.setSSEAbortCallback(null, getStreamKey(currentChatId));
 
+      // Aborting the streams above abandons any first turn still in flight.
+      clearPendingChat();
+
       // Set the pending flag first to prevent unwanted changes during navigation
       logger.log("Setting isNewChatPending to TRUE");
       setNewChatPending(true);
@@ -243,6 +357,10 @@ export function useChatHistory() {
           pathParams: { chatId },
           body: {}, // Send empty object as body
         });
+
+        // The row offering this action may itself be the placeholder, which no
+        // list response can take away.
+        clearPendingChat(chatId);
 
         // Invalidate the query - React Query will refetch it automatically
         // when components using it are active.
