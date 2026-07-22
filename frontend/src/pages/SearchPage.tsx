@@ -198,8 +198,11 @@ export default function SearchPage() {
 
     try {
       setIsUpdatingChatTitle(true);
+      // updateChatTitle already invalidates the recent-chats query, which
+      // refetches every loaded page. Only the separate search-results query
+      // still needs an explicit refetch to reflect the new title.
       await updateChatTitle(titleDialogChatId, title);
-      await Promise.all([refetchHistory(), refetchSearchResults()]);
+      await refetchSearchResults();
       setTitleDialogChatId(null);
     } finally {
       setIsUpdatingChatTitle(false);
