@@ -39,6 +39,16 @@ erato:
       repository: registry.eratolabs.com/erato/app
       tag: "adff59a50e3b78d0221a8a5bbb818a249fffb45a"
       pullPolicy: Always
+    # The chart default (500m/512Mi) OOMs under parallel e2e load: the backend's
+    # in-memory file caches (3x100MB default) plus up to 4 concurrent file
+    # parses (~100MB each) exceed 512Mi. Give e2e/dev clusters real headroom.
+    resources:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        cpu: 2000m
+        memory: 2Gi
     metrics:
       enabled: true
       host: 0.0.0.0
