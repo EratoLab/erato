@@ -255,8 +255,10 @@ fn sanitize_tool_schema_extensions(value: &mut serde_json::Value) {
             }
 
             map.remove("chat.erato/file_content_field");
+            map.remove("chat.erato/file_name_field");
             map.remove("contentEncoding");
             map.remove("x-chat.erato/file_content_field");
+            map.remove("x-chat.erato/file_name_field");
             map.remove("$schema");
             for child in map.values_mut() {
                 sanitize_tool_schema_extensions(child);
@@ -546,6 +548,11 @@ mod tests {
                             "type": "string"
                         }
                     }
+                },
+                "file_name": {
+                    "type": "string",
+                    "chat.erato/file_name_field": true,
+                    "x-chat.erato/file_name_field": true
                 }
             }
         });
@@ -558,6 +565,9 @@ mod tests {
         assert!(nested.get("chat.erato/file_content_field").is_none());
         assert!(nested.get("contentEncoding").is_none());
         assert!(nested.get("x-chat.erato/file_content_field").is_none());
+        let file_name = value["properties"]["file_name"].as_object().unwrap();
+        assert!(file_name.get("chat.erato/file_name_field").is_none());
+        assert!(file_name.get("x-chat.erato/file_name_field").is_none());
         assert_eq!(
             nested.get("description").and_then(|value| value.as_str()),
             Some("Expected value: erato-file://<file_upload_id> URI referencing an uploaded file.")

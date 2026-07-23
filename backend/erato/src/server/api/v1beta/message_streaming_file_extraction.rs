@@ -16,11 +16,18 @@ enum FileContentPathPart {
     ArrayItem,
 }
 
+#[derive(Clone, Debug)]
+struct FileContentPath {
+    parts: Vec<FileContentPathPart>,
+    file_name_fields: Vec<String>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 struct ExtractedFileField {
     json_pointer: String,
     mime_type: String,
     base64_data: String,
+    file_name: Option<String>,
 }
 
 pub struct McpToolPostProcessResult {
@@ -40,13 +47,23 @@ fn resolve_schema_ref<'a>(root: &'a Value, reference: &str) -> Option<&'a Value>
     root.pointer(&reference[1..])
 }
 
-fn collect_file_content_paths(schema: &Value) -> Vec<Vec<FileContentPathPart>> {
+fn has_schema_annotation(schema: &Value, annotation: &str) -> bool {
+    let prefixed_annotation = format!("x-{annotation}");
+    schema.get(annotation).and_then(Value::as_bool) == Some(true)
+        || schema
+            .get(prefixed_annotation.as_str())
+            .and_then(Value::as_bool)
+            == Some(true)
+}
+
+fn collect_file_content_paths(schema: &Value) -> Vec<FileContentPath> {
     let mut paths = Vec::new();
     let mut visited_refs = HashSet::new();
     collect_file_content_paths_inner(
         schema,
         schema,
         &mut Vec::new(),
+        &[],
         &mut paths,
         &mut visited_refs,
     );
@@ -57,15 +74,15 @@ fn collect_file_content_paths_inner(
     root: &Value,
     schema: &Value,
     current_path: &mut Vec<FileContentPathPart>,
-    paths: &mut Vec<Vec<FileContentPathPart>>,
+    sibling_file_name_fields: &[String],
+    paths: &mut Vec<FileContentPath>,
     visited_refs: &mut HashSet<String>,
 ) {
-    if schema
-        .get("chat.erato/file_content_field")
-        .and_then(|value| value.as_bool())
-        == Some(true)
-    {
-        paths.push(current_path.clone());
+    if has_schema_annotation(schema, "chat.erato/file_content_field") {
+        paths.push(FileContentPath {
+            parts: current_path.clone(),
+            file_name_fields: sibling_file_name_fields.to_vec(),
+        });
         return;
     }
 
@@ -74,7 +91,14 @@ fn collect_file_content_paths_inner(
             return;
         }
         if let Some(resolved) = resolve_schema_ref(root, reference) {
-            collect_file_content_paths_inner(root, resolved, current_path, paths, visited_refs);
+            collect_file_content_paths_inner(
+                root,
+                resolved,
+                current_path,
+                sibling_file_name_fields,
+                paths,
+                visited_refs,
+            );
         }
         visited_refs.remove(reference);
         return;
@@ -83,22 +107,42 @@ fn collect_file_content_paths_inner(
     for keyword in ["oneOf", "anyOf", "allOf"] {
         if let Some(options) = schema.get(keyword).and_then(|value| value.as_array()) {
             for option in options {
-                collect_file_content_paths_inner(root, option, current_path, paths, visited_refs);
+                collect_file_content_paths_inner(
+                    root,
+                    option,
+                    current_path,
+                    sibling_file_name_fields,
+                    paths,
+                    visited_refs,
+                );
             }
         }
     }
 
     if let Some(properties) = schema.get("properties").and_then(|value| value.as_object()) {
+        let file_name_fields = properties
+            .iter()
+            .filter(|(_, subschema)| has_schema_annotation(subschema, "chat.erato/file_name_field"))
+            .map(|(name, _)| name.clone())
+            .collect::<Vec<_>>();
+
         for (name, subschema) in properties {
             current_path.push(FileContentPathPart::Field(name.clone()));
-            collect_file_content_paths_inner(root, subschema, current_path, paths, visited_refs);
+            collect_file_content_paths_inner(
+                root,
+                subschema,
+                current_path,
+                &file_name_fields,
+                paths,
+                visited_refs,
+            );
             current_path.pop();
         }
     }
 
     if let Some(items) = schema.get("items") {
         current_path.push(FileContentPathPart::ArrayItem);
-        collect_file_content_paths_inner(root, items, current_path, paths, visited_refs);
+        collect_file_content_paths_inner(root, items, current_path, &[], paths, visited_refs);
         current_path.pop();
     }
 }
@@ -156,8 +200,15 @@ fn extract_mcp_file_fields(
         return Ok(Vec::new());
     }
 
-    let value_paths = expand_value_paths(output_value, &schema_paths);
-    if value_paths.is_empty() {
+    let mut expanded_paths = Vec::new();
+    for schema_path in &schema_paths {
+        for value_path in expand_value_paths(output_value, std::slice::from_ref(&schema_path.parts))
+        {
+            expanded_paths.push((value_path, &schema_path.file_name_fields));
+        }
+    }
+
+    if expanded_paths.is_empty() {
         return Err(eyre!(
             "MCP tool output schema marked file content, but no output values were found"
         ));
@@ -165,7 +216,7 @@ fn extract_mcp_file_fields(
 
     let mut extracted = Vec::new();
 
-    for path in value_paths {
+    for (path, file_name_fields) in expanded_paths {
         let pointer = format!(
             "/{}",
             path.iter()
@@ -209,10 +260,30 @@ fn extract_mcp_file_fields(
             .and_then(|value| value.as_str())
             .ok_or_else(|| eyre!("File content field is not a string"))?;
 
+        let file_name = match file_name_fields.as_slice() {
+            [] => None,
+            [field_name] => match parent_object.get(field_name) {
+                None | Some(Value::Null) => None,
+                Some(Value::String(file_name)) => Some(file_name.clone()),
+                Some(_) => {
+                    return Err(eyre!(
+                        "MCP file-name field '{}' is not a string",
+                        field_name
+                    ));
+                }
+            },
+            _ => {
+                return Err(eyre!(
+                    "MCP file output has multiple sibling fields marked as file names"
+                ));
+            }
+        };
+
         extracted.push(ExtractedFileField {
             json_pointer: pointer,
             mime_type: mime_type.to_string(),
             base64_data: base64_value.to_string(),
+            file_name,
         });
     }
 
@@ -285,11 +356,19 @@ async fn process_mcp_file_outputs(
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis();
-        let filename = format!("mcp_generated_{}_{}.{}", timestamp, index, extension);
+        let generated_filename = format!("mcp_generated_{}_{}.{}", timestamp, index, extension);
+        let filename = extracted
+            .file_name
+            .as_ref()
+            .filter(|file_name| !file_name.is_empty())
+            .cloned()
+            .unwrap_or_else(|| generated_filename.clone());
 
         let file_storage_provider_id = app_state.default_file_storage_provider_id();
         let file_storage = app_state.default_file_storage_provider();
-        let file_storage_path = format!("generated_images/{}", filename);
+        // Keep MCP-provided display names out of storage paths. Besides avoiding path traversal,
+        // this preserves the existing unique generated storage naming behavior.
+        let file_storage_path = format!("generated_images/{}", generated_filename);
 
         let mut writer = file_storage
             .upload_file_writer(&file_storage_path, Some(mime_type))
@@ -523,6 +602,7 @@ mod tests {
                 json_pointer: "/images/0/data_base64".to_string(),
                 mime_type: "image/png".to_string(),
                 base64_data: "aGVsbG8=".to_string(),
+                file_name: None,
             }
         );
         assert_eq!(
@@ -531,8 +611,86 @@ mod tests {
                 json_pointer: "/images/1/data_base64".to_string(),
                 mime_type: "image/png".to_string(),
                 base64_data: "d29ybGQ=".to_string(),
+                file_name: None,
             }
         );
+    }
+
+    #[test]
+    fn extract_mcp_file_fields_uses_annotated_sibling_file_name() {
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "images": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "data_base64": {
+                                "chat.erato/file_content_field": true,
+                                "contentEncoding": "base64",
+                                "type": "string"
+                            },
+                            "name": {
+                                "x-chat.erato/file_name_field": true,
+                                "type": "string"
+                            },
+                            "mime_type": { "type": "string" }
+                        }
+                    }
+                }
+            }
+        });
+        let output = json!({
+            "images": [
+                {
+                    "data_base64": "aGVsbG8=",
+                    "name": "friendly-name.png",
+                    "mime_type": "image/png"
+                },
+                {
+                    "data_base64": "d29ybGQ=",
+                    "mime_type": "image/png"
+                }
+            ]
+        });
+
+        let extracted = extract_mcp_file_fields(&schema, &output).expect("extract");
+
+        assert_eq!(extracted[0].file_name.as_deref(), Some("friendly-name.png"));
+        assert_eq!(extracted[1].file_name, None);
+    }
+
+    #[test]
+    fn extract_mcp_file_fields_rejects_multiple_annotated_sibling_file_names() {
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "data_base64": {
+                    "chat.erato/file_content_field": true,
+                    "type": "string"
+                },
+                "first_name": {
+                    "chat.erato/file_name_field": true,
+                    "type": "string"
+                },
+                "second_name": {
+                    "chat.erato/file_name_field": true,
+                    "type": "string"
+                },
+                "mime_type": { "type": "string" }
+            }
+        });
+        let output = json!({
+            "data_base64": "aGVsbG8=",
+            "first_name": "first.png",
+            "second_name": "second.png",
+            "mime_type": "image/png"
+        });
+
+        let error = extract_mcp_file_fields(&schema, &output).expect_err("ambiguous file name");
+
+        assert!(error.to_string().contains("multiple sibling fields"));
     }
 
     #[test]
