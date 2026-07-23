@@ -6,6 +6,7 @@ import { memo, useEffect, useRef } from "react";
 import { MessageTimestamp } from "@/components/ui";
 import { useHasPendingConfirmation } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useGenerationStatusFor } from "@/hooks/chat/store/generationStatusStore";
+import { useChatHistoryStore } from "@/hooks/chat/useChatHistory";
 import { useThemedIcon } from "@/hooks/ui";
 import { getChatUrl } from "@/utils/chat/urlUtils";
 import { createLogger } from "@/utils/debugLogger";
@@ -24,6 +25,32 @@ import type { ChatSession } from "@/types/chat";
 const logger = createLogger("UI", "ChatHistoryList");
 const sidebarRowLinkClassName =
   "focus-ring-tight block rounded-[var(--theme-radius-shell)]";
+
+/**
+ * Literal `title_resolved` the backend returns while a chat has neither a
+ * user-provided title nor a generated summary (resolve_chat_display_name).
+ * Treated as "no title yet" so the row can show something localized instead.
+ */
+// eslint-disable-next-line lingui/no-unlocalized-strings -- backend sentinel, not user-facing text
+const UNTITLED_BACKEND_SENTINEL = "Untitled Chat";
+
+/**
+ * Resolves what a row displays as its title. While the backend has no real
+ * title yet, the first words of the user's message (recorded at send time)
+ * stand in; without one, a localized placeholder. Reads `titleResolved` (the
+ * raw backend value) rather than `title`, which the session mappers already
+ * fill with their own localized fallback.
+ */
+const useRowTitle = (session: ChatSession): string => {
+  const titleHint = useChatHistoryStore(
+    (state) => state.titleHintByChatId[session.id],
+  );
+  const title = session.titleResolved ?? session.title;
+  if (title && title !== UNTITLED_BACKEND_SENTINEL) {
+    return title;
+  }
+  return titleHint ?? t`New Chat`;
+};
 
 const ChatItemIcon = memo(() => {
   // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal theme icon identifier, not user-facing text
@@ -87,12 +114,15 @@ const GenerationStatusIndicator = memo<{ chatId: string }>(({ chatId }) => {
 
   if (!status) return null;
 
+  // Visually a bare dot; the status text lives in the hover title and the row
+  // link's aria-label.
   return (
     <span
       className={clsx(
-        "flex shrink-0 items-center gap-1 text-xs",
+        "flex shrink-0 items-center",
         rowGenerationStatusTextClass[status],
       )}
+      title={rowGenerationStatusLabel(status)}
       data-ui="chat-history-generation-status"
       data-testid="chat-generation-status"
       data-status={status}
@@ -100,11 +130,10 @@ const GenerationStatusIndicator = memo<{ chatId: string }>(({ chatId }) => {
       <span
         aria-hidden="true"
         className={clsx(
-          "size-1.5 rounded-full bg-current",
+          "size-2 rounded-full bg-current",
           status === "running" && "animate-pulse motion-reduce:animate-none",
         )}
       />
-      {rowGenerationStatusLabel(status)}
     </span>
   );
 });
@@ -166,7 +195,7 @@ const ChatHistoryListItem = memo<{
     showTimestamps = true,
   }) => {
     const generationStatus = useRowGenerationStatus(session.id);
-    const rowTitle = session.title || t`New Chat`;
+    const rowTitle = useRowTitle(session);
     return (
       <a
         href={getChatUrl(session.id, session.assistantId)}
@@ -313,7 +342,15 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
     showTimestamps = true,
   }) => {
     const currentSession = sessions.find((s) => s.id === currentSessionId);
-    const currentSessionTitle = currentSession?.title;
+    const currentTitleHint = useChatHistoryStore((state) =>
+      currentSessionId ? state.titleHintByChatId[currentSessionId] : undefined,
+    );
+    const rawCurrentTitle =
+      currentSession?.titleResolved ?? currentSession?.title;
+    const currentSessionTitle =
+      rawCurrentTitle && rawCurrentTitle !== UNTITLED_BACKEND_SENTINEL
+        ? rawCurrentTitle
+        : (currentTitleHint ?? currentSession?.title);
     const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
 
     useEffect(() => {

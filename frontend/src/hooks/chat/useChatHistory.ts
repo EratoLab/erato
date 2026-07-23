@@ -68,6 +68,15 @@ interface ChatHistoryState {
   setNewChatPending: (isPending: boolean) => void;
   pendingChat: PendingChat | null;
   setPendingChat: (chat: PendingChat | null) => void;
+  /**
+   * First words of the user message that started a chat, recorded at send
+   * time. Stands in as the row title while the backend still reports the
+   * untitled sentinel (the summary has not landed yet); a real title always
+   * wins over it.
+   */
+  titleHintByChatId: Partial<Record<string, string>>;
+  setTitleHint: (chatId: string, hint: string) => void;
+  clearTitleHint: (chatId: string) => void;
 }
 
 // Create a store to track the current selected chat
@@ -94,6 +103,34 @@ export const useChatHistoryStore = create<ChatHistoryState>()(
               state.pendingChat === chat ? state : { pendingChat: chat },
             false,
             "chatHistory/setPendingChat",
+          ),
+        titleHintByChatId: {},
+        setTitleHint: (chatId, hint) =>
+          set(
+            (state) =>
+              state.titleHintByChatId[chatId] === hint
+                ? state
+                : {
+                    titleHintByChatId: {
+                      ...state.titleHintByChatId,
+                      [chatId]: hint,
+                    },
+                  },
+            false,
+            "chatHistory/setTitleHint",
+          ),
+        clearTitleHint: (chatId) =>
+          set(
+            (state) => {
+              if (!(chatId in state.titleHintByChatId)) {
+                return state;
+              }
+              const titleHintByChatId = { ...state.titleHintByChatId };
+              delete titleHintByChatId[chatId];
+              return { titleHintByChatId };
+            },
+            false,
+            "chatHistory/clearTitleHint",
           ),
       };
 
@@ -136,6 +173,27 @@ export function clearPendingChat(chatId?: string) {
  */
 export function isPendingChat(chatId: string): boolean {
   return useChatHistoryStore.getState().pendingChat?.id === chatId;
+}
+
+const TITLE_HINT_MAX_LENGTH = 40;
+
+/**
+ * Condenses a user message into something row-title sized, cutting at a word
+ * boundary where one exists in the second half.
+ */
+export function deriveTitleHint(text: string): string | null {
+  const collapsed = text.replace(/\s+/g, " ").trim();
+  if (!collapsed) {
+    return null;
+  }
+  if (collapsed.length <= TITLE_HINT_MAX_LENGTH) {
+    return collapsed;
+  }
+  const cut = collapsed.slice(0, TITLE_HINT_MAX_LENGTH);
+  const lastSpace = cut.lastIndexOf(" ");
+  const stem =
+    lastSpace > TITLE_HINT_MAX_LENGTH / 2 ? cut.slice(0, lastSpace) : cut;
+  return `${stem.trimEnd()}…`;
 }
 
 /**
@@ -398,6 +456,7 @@ export function useChatHistory() {
       // An archived chat can no longer be opened, so its status entry would
       // otherwise keep the aggregate badge counting a chat that has no row.
       useGenerationStatusStore.getState().clearStatus(chatId);
+      useChatHistoryStore.getState().clearTitleHint(chatId);
 
       // Optimistically remove the archived row from every loaded page.
       //

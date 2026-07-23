@@ -14,6 +14,7 @@ import {
 import { server } from "@/test/setupMsw";
 import { createSSEConnection } from "@/utils/sse/sseClient";
 
+import { useChatHistoryStore } from "../useChatHistory";
 import { useChatMessaging } from "../useChatMessaging";
 
 // Mock SSE connection directly
@@ -36,6 +37,7 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
 
 // Mock React Query client
 vi.mock("@tanstack/react-query", () => ({
+  skipToken: Symbol("skipToken"),
   useInfiniteQuery: () => ({
     data: {
       pages: [
@@ -310,6 +312,40 @@ describe("useChatMessaging with direct mocking", () => {
 
     // Verify streaming has ended
     expect(result.current.isStreaming).toBe(false);
+  });
+
+  it("records a title hint from the user message when a chat is created", async () => {
+    let onMessageCallback = vi.fn();
+    mockCreateSSEConnection.mockImplementation((url, callbacks) => {
+      onMessageCallback = callbacks.onMessage;
+      return vi.fn();
+    });
+
+    // New-chat flow: no chat id yet.
+    hookResult = renderHook(() => useChatMessaging(null), {
+      wrapper: TestWrapper,
+    });
+    const { result } = hookResult;
+
+    await act(async () => {
+      await result.current.sendMessage(
+        "Summarize the attached meeting notes and draft a follow-up email",
+      );
+    });
+
+    await act(async () => {
+      onMessageCallback({
+        data: JSON.stringify({
+          message_type: "chat_created",
+          chat_id: "hinted-chat-id",
+        }),
+        type: "message",
+      });
+    });
+
+    expect(
+      useChatHistoryStore.getState().titleHintByChatId["hinted-chat-id"],
+    ).toBe("Summarize the attached meeting notes…");
   });
 
   // Test for handling 401 unauthorized error - REMOVED

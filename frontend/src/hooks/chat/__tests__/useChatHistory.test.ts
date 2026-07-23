@@ -10,6 +10,7 @@ import {
   useChatHistory,
   useChatHistoryStore,
   clearPendingChat,
+  deriveTitleHint,
   isPendingChat,
 } from "../useChatHistory";
 
@@ -191,5 +192,27 @@ describe("useChatHistory pending chat placeholder", () => {
 
     clearPendingChat(PENDING_ID);
     expect(useChatHistoryStore.getState().pendingChat).toBeNull();
+  });
+});
+
+describe("deriveTitleHint", () => {
+  it("returns short messages unchanged with whitespace collapsed", () => {
+    expect(deriveTitleHint("  Plan the\n offsite ")).toBe("Plan the offsite");
+  });
+
+  it("returns null for whitespace-only input", () => {
+    expect(deriveTitleHint("   \n\t ")).toBeNull();
+  });
+
+  it("truncates long messages at a word boundary with an ellipsis", () => {
+    const hint = deriveTitleHint(
+      "Summarize the attached meeting notes and draft a follow-up email for the team",
+    );
+    expect(hint).toBe("Summarize the attached meeting notes…");
+    expect(hint!.length).toBeLessThanOrEqual(41);
+  });
+
+  it("hard-cuts a single overlong word", () => {
+    expect(deriveTitleHint("a".repeat(60))).toBe(`${"a".repeat(40)}…`);
   });
 });

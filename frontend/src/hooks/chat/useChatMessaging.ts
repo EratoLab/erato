@@ -53,6 +53,7 @@ import {
 } from "./store/messagingStore";
 import {
   clearPendingChat,
+  deriveTitleHint,
   isPendingChat,
   useChatHistoryStore,
 } from "./useChatHistory";
@@ -60,6 +61,7 @@ import { useExplicitNavigation } from "./useExplicitNavigation";
 
 import type {
   ActionFacetRequest,
+  ContentPart,
   MessageSubmitStreamingResponseMessage,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
@@ -893,6 +895,34 @@ export function useChatMessaging(
                 useGenerationStatusStore
                   .getState()
                   .seedRunning(responseData.chat_id, new Date().toISOString());
+
+                // The row title stays the backend's untitled sentinel until
+                // the summary lands; the start of the user's message makes a
+                // better stand-in. handleChatCreated may already have rebound
+                // the stream key, so the optimistic message can live under
+                // either the chat id or the pre-creation key.
+                const messagingState = useMessagingStore.getState();
+                const optimisticUserMessage = Object.values(
+                  messagingState.userMessagesByKey[responseData.chat_id] ??
+                    messagingState.userMessagesByKey[previousStreamKey] ??
+                    {},
+                )
+                  .filter((message) => message.role === "user")
+                  .at(-1);
+                const textPart = optimisticUserMessage?.content.find(
+                  (
+                    part,
+                  ): part is Extract<ContentPart, { content_type: "text" }> =>
+                    part.content_type === "text",
+                );
+                const titleHint = textPart
+                  ? deriveTitleHint(textPart.text)
+                  : null;
+                if (titleHint) {
+                  useChatHistoryStore
+                    .getState()
+                    .setTitleHint(responseData.chat_id, titleHint);
+                }
               }
 
               if (

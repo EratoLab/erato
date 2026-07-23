@@ -608,8 +608,6 @@ AssistantHubNavigationItem.displayName = "AssistantHubNavigationItem";
 
 const CollapsibleSection = memo<{
   title: string;
-  /** Rendered next to the title, e.g. a count chip. */
-  titleAccessory?: React.ReactNode;
   defaultExpanded?: boolean;
   expanded?: boolean;
   onExpandedChange?: (expanded: boolean) => void;
@@ -618,7 +616,6 @@ const CollapsibleSection = memo<{
 }>(
   ({
     title,
-    titleAccessory,
     defaultExpanded = true,
     expanded,
     onExpandedChange,
@@ -645,7 +642,6 @@ const CollapsibleSection = memo<{
               <h3 className="text-xs font-semibold uppercase tracking-wide text-theme-fg-muted">
                 {title}
               </h3>
-              {titleAccessory}
             </span>
             <ChevronRightIcon
               className={clsx(
@@ -772,7 +768,6 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       },
     );
 
-    const generationIndicatorCount = useGenerationIndicatorCount();
     const generationStatusByChatId = useGenerationStatusStore(
       (state) => state.statusByChatId,
     );
@@ -1083,16 +1078,6 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                 ) : (
                   <CollapsibleSection
                     title={t({ id: "chat.history.recent", message: "Recent" })}
-                    titleAccessory={
-                      generationIndicatorCount > 0 ? (
-                        <span
-                          data-testid="sidebar-generation-count-chip"
-                          className={generationBadgeClassName}
-                        >
-                          {generationIndicatorCount}
-                        </span>
-                      ) : undefined
-                    }
                     defaultExpanded={true}
                     expanded={isRecentChatsExpanded}
                     onExpandedChange={setIsRecentChatsExpanded}

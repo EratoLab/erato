@@ -113,9 +113,13 @@ test(
     });
     const rowLink = sidebarRowLink(page, chatId);
     await expect(rowLink).toHaveAttribute("aria-label", /, Finished$/);
-    // The real generated title replaced the untitled fallback. Any non-empty
-    // title flips the label, so this does not depend on the summary's wording.
-    await expect(rowLink).not.toHaveAttribute("aria-label", /^New Chat/);
+    // The real generated title replaced both the untitled fallback and the
+    // user-message stand-in. Any real title flips the label, so this does not
+    // depend on the summary's wording.
+    await expect(rowLink).not.toHaveAttribute(
+      "aria-label",
+      /^(New Chat|long running)/,
+    );
 
     // Opening the chat acknowledges the terminal status: the indicator clears.
     await rowLink.click();
@@ -160,12 +164,12 @@ test(
     await expect(page).toHaveURL(/\/chat\/new$/);
     await expect(indicator).toHaveAttribute("data-status", "running");
 
-    // The poll picks up the errored outcome: visibly distinct from Finished
-    // via data-status and the label text.
+    // The poll picks up the errored outcome: distinct from Finished via
+    // data-status (color) and the hover-title text.
     await expect(indicator).toHaveAttribute("data-status", "error", {
       timeout: 30000,
     });
-    await expect(indicator).toHaveText(/Error/);
+    await expect(indicator).toHaveAttribute("title", "Error");
 
     // Opening the chat acknowledges the error: the indicator clears.
     const rowLink = sidebarRowLink(page, chatId);
@@ -251,14 +255,9 @@ test(
       "running",
     );
 
-    // Expanded mode: the Recent section header carries a count chip. Another
-    // chat may legitimately be active in parallel, so assert a count, not "1".
-    const chip = page.getByTestId("sidebar-generation-count-chip");
-    await expect(chip).toBeVisible();
-    await expect(chip).toHaveText(/^[1-9]\d*$/);
-
-    // Collapsed mode: the rail toggle carries the same count as a badge, so
-    // activity stays visible while the list itself is hidden.
+    // Collapsed mode: the rail toggle carries a count badge, so activity
+    // stays visible while the list itself is hidden. Another chat may
+    // legitimately be active in parallel, so assert a count, not "1".
     await page.getByLabel("collapse sidebar").click();
     const badge = page.getByTestId("sidebar-generation-badge");
     await expect(badge).toBeVisible();

@@ -8,9 +8,6 @@ import {
   sendFirstMessage,
 } from "./shared";
 
-/** What ChatHistoryList renders for a chat without a resolved title. */
-const UNTITLED_ROW_LABEL = "New Chat";
-
 /**
  * Park every list request until released, so a row that shows up in that window
  * can only have come from local state. That is the whole point: a chat has no
@@ -252,14 +249,14 @@ test(
       await expect(row).toBeVisible({ timeout: 5000 });
       // The row renders already highlighted, without waiting for the list.
       await expect(rowLink).toHaveAttribute("aria-current", "page");
-      // Nothing has a title to offer yet, so the placeholder shows the
-      // untitled-chat fallback. While the first turn runs the label carries
-      // the generation-status suffix; the backend turn can finish while the
-      // client stream is still parked, which drops the suffix again for the
-      // chat being viewed — both states are correct here.
+      // No backend title exists yet, so the row shows the start of the user
+      // message as its stand-in title. While the first turn runs the label
+      // carries the generation-status suffix; the backend turn can finish
+      // while the client stream is still parked, which drops the suffix again
+      // for the chat being viewed — both states are correct here.
       await expect(rowLink).toHaveAttribute(
         "aria-label",
-        /^New Chat(, Running)?$/,
+        /^Please write a short poem about the sun(, Running)?$/,
       );
 
       // The completion path waits on this same request.
@@ -273,13 +270,13 @@ test(
 
       // The placeholder is replaced by the real row, not added alongside it.
       await expect(row).toHaveCount(1);
-      // The aria-label stops being the untitled fallback once the backend row
-      // carries any resolved title. That proves the local placeholder gave way
-      // to the backend-titled row; the label flips for any non-empty title, so
-      // it is not evidence that a summary specifically was generated.
+      // The aria-label stops being the user-message stand-in once the backend
+      // row carries a real resolved title (the untitled sentinel keeps the
+      // stand-in). That proves the summary-titled row replaced the local
+      // placeholder.
       await expect(rowLink).not.toHaveAttribute(
         "aria-label",
-        UNTITLED_ROW_LABEL,
+        /^(Please write a short poem|New Chat)/,
         { timeout: 60000 },
       );
     } finally {
