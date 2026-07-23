@@ -6126,6 +6126,22 @@ async fn validate_file_uploads_for_message_submit(
     Ok(())
 }
 
+/// Reject a write into an archived chat with 409 CONFLICT.
+///
+/// Every write entry point calls this after resolving its target chat, so an
+/// archived chat is rejected with a clean HTTP status before any stream opens.
+/// Reads (get_chat_messages), abort, client_tool_result and resume are out of
+/// scope and must not call this.
+fn reject_if_archived(chat: &chats::Model) -> Result<(), (axum::http::StatusCode, String)> {
+    if chat.archived_at.is_some() {
+        return Err((
+            axum::http::StatusCode::CONFLICT,
+            "Chat is archived and cannot receive new messages".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 #[utoipa::path(
     post,
     path = "/me/messages/submitstream",
@@ -6133,6 +6149,8 @@ async fn validate_file_uploads_for_message_submit(
     responses(
         (status = OK, content_type="text/event-stream", body = MessageSubmitStreamingResponseMessage),
         (status = BAD_REQUEST, description = "When validation fails (e.g., invalid previous_message_id)"),
+        (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
+        (status = CONFLICT, description = "When the chat is archived"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
     ),
@@ -6168,6 +6186,34 @@ pub async fn message_submit_sse(
 
     // Determine the chat_id first so we can use it as the background task key
     let (chat_id, chat_was_created) = if let Some(existing_chat_id) = request.existing_chat_id {
+        let (chat, _) = get_or_create_chat(
+            &app_state.db,
+            &policy,
+            &me_user.to_subject(),
+            Some(&existing_chat_id),
+            &me_user.id,
+            None,
+            None,
+        )
+        .await
+        .map_err(|e| {
+            let s = e.to_string();
+            if s.contains("not found")
+                || s.contains("Access denied")
+                || s.contains("not authorized")
+            {
+                (
+                    axum::http::StatusCode::NOT_FOUND,
+                    "Chat not found".to_string(),
+                )
+            } else {
+                (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to load chat".to_string(),
+                )
+            }
+        })?;
+        reject_if_archived(&chat)?;
         (existing_chat_id, false)
     } else {
         // Need to get or create chat to determine the chat_id
@@ -6182,11 +6228,26 @@ pub async fn message_submit_sse(
         )
         .await
         .map_err(|e| {
-            (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to get or create chat: {}", e),
-            )
+            let s = e.to_string();
+            if s.contains("not found")
+                || s.contains("Access denied")
+                || s.contains("not authorized")
+            {
+                (
+                    axum::http::StatusCode::NOT_FOUND,
+                    "Chat or previous message not found".to_string(),
+                )
+            } else {
+                (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to get or create chat".to_string(),
+                )
+            }
         })?;
+
+        // A brand-new chat has archived_at = None, so new-chat creation is
+        // unaffected; only writes resolved onto an existing archived chat 409.
+        reject_if_archived(&chat)?;
 
         let was_created = chat_status == ChatCreationStatus::Created;
         if was_created {
@@ -6239,6 +6300,28 @@ pub async fn message_submit_sse(
                         "Background task failed"
                     );
                     capture_report(&e);
+
+                    // Tell every listener — the original stream AND any resume —
+                    // that this turn is dead, so the client resolves instead of
+                    // waiting for a completion that will never arrive. The
+                    // detailed error is captured server-side above; the client
+                    // gets only a generic message.
+                    let error_event = MessageSubmitStreamingResponseError {
+                        message_id: None,
+                        error: GenerationErrorType::InternalError {
+                            error_description: "The message could not be generated.".to_string(),
+                        },
+                    };
+                    let error = serde_json::to_value(MessageSubmitStreamingResponseMessage::Error(
+                        error_event,
+                    ))
+                    .ok();
+                    send_background_event(
+                        &task_clone,
+                        StreamingEvent::Error { error },
+                        "broadcast submit task failure",
+                    )
+                    .await;
                 }
             }
 
@@ -7421,6 +7504,8 @@ async fn run_message_submit_task(
     responses(
         (status = OK, content_type="text/event-stream", body = RegenerateMessageStreamingResponseMessage),
         (status = BAD_REQUEST, description = "When validation fails (e.g., invalid message role)"),
+        (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
+        (status = CONFLICT, description = "When the chat is archived"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
     ),
@@ -7457,11 +7542,20 @@ pub async fn regenerate_message_sse(
     )
     .await
     .map_err(|e| {
-        (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to load chat for regeneration: {}", e),
-        )
+        let s = e.to_string();
+        if s.contains("not found") || s.contains("Access denied") || s.contains("not authorized") {
+            (
+                axum::http::StatusCode::NOT_FOUND,
+                "Chat not found".to_string(),
+            )
+        } else {
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to load chat for regeneration: {}", e),
+            )
+        }
     })?;
+    reject_if_archived(&chat)?;
 
     // Create a channel for sending events
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
@@ -7751,6 +7845,8 @@ pub async fn regenerate_message_sse(
     responses(
         (status = OK, content_type="text/event-stream", body = EditMessageStreamingResponseMessage),
         (status = BAD_REQUEST, description = "When validation fails (e.g., invalid message role)"),
+        (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
+        (status = CONFLICT, description = "When the chat is archived"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
     ),
@@ -7793,11 +7889,20 @@ pub async fn edit_message_sse(
     )
     .await
     .map_err(|e| {
-        (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to load chat for edit: {}", e),
-        )
+        let s = e.to_string();
+        if s.contains("not found") || s.contains("Access denied") || s.contains("not authorized") {
+            (
+                axum::http::StatusCode::NOT_FOUND,
+                "Chat not found".to_string(),
+            )
+        } else {
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to load chat for edit: {}", e),
+            )
+        }
     })?;
+    reject_if_archived(&chat)?;
 
     // Create a channel for sending events
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);

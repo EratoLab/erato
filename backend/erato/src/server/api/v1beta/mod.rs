@@ -2155,6 +2155,7 @@ pub async fn chats() -> Json<Vec<Chat>> {
     responses(
         (status = OK, body = ChatMessagesResponse, description = "Successfully retrieved messages with pagination metadata"),
         (status = BAD_REQUEST, description = "Invalid chat ID format"),
+        (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
         (status = INTERNAL_SERVER_ERROR, description = "Server error while retrieving messages")
     ),
     security(
@@ -2190,8 +2191,14 @@ pub async fn chat_messages(
         offset,
     )
     .await
-    .wrap_err("Failed to get chat messages")
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .map_err(|e| {
+        let s = e.to_string();
+        if s.contains("not found") || s.contains("Access denied") || s.contains("not authorized") {
+            StatusCode::NOT_FOUND
+        } else {
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    })?;
 
     // Get feedback for all messages
     let message_ids: Vec<Uuid> = messages.iter().map(|m| m.id).collect();

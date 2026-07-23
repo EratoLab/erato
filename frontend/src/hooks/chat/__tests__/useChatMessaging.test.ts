@@ -716,6 +716,44 @@ describe("useChatMessaging", () => {
     expect(result.current.error).toBeNull();
   });
 
+  it("reconciles from the server when a resume closes without completing", async () => {
+    const { result, startStreaming, sendSSEEvent, simulateConnectionClose } =
+      setupChatMessagingTest();
+
+    await startStreaming("Test resume close reconcile");
+    await sendSSEEvent({
+      message_type: "assistant_message_started",
+      message_id: "assistant-resume-close",
+    });
+    expect(result.current.isStreaming).toBe(true);
+
+    // Capture the resume connection's callbacks so we can drive its onClose.
+    let resumeCallbacks: { onClose?: () => void } = {};
+    mockCreateSSEConnection.mockImplementation((url, callbacks) => {
+      if (url.includes("/resumestream")) {
+        resumeCallbacks = callbacks;
+        return vi.fn();
+      }
+      sseCallbacks = callbacks;
+      return vi.fn();
+    });
+
+    // Submit closes unexpectedly → a resume is attempted, still streaming.
+    await simulateConnectionClose();
+    expect(mockCreateSSEConnection).toHaveBeenCalledWith(
+      "/api/v1beta/me/messages/resumestream",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(result.current.isStreaming).toBe(true);
+
+    // The resume closes without ever delivering a completion event: the client
+    // must reconcile and clear the turn instead of spinning forever.
+    await act(async () => {
+      resumeCallbacks.onClose?.();
+    });
+    expect(result.current.isStreaming).toBe(false);
+  });
+
   it("should attempt resumestream on unexpected close during an edit stream", async () => {
     const { result, sendSSEEvent, simulateConnectionClose } =
       setupChatMessagingTest();

@@ -1200,6 +1200,24 @@ export function useChatMessaging(
             );
             setSSECleanupForKey(resumeStreamKey, null);
             setSSEAbortCallback(null, resumeStreamKey);
+
+            // A resume that closes while we still think we're streaming ended
+            // without a completion event (e.g. the task died sending only
+            // StreamEnd). Trust the server: reconcile the persisted state and
+            // clear the streaming placeholder instead of spinning forever.
+            const stillStreaming = useMessagingStore
+              .getState()
+              .getStreaming(resumeStreamKey).isStreaming;
+            if (stillStreaming) {
+              logger.warn(
+                "[DEBUG_STREAMING] resumestream closed while still streaming — reconciling from server.",
+              );
+              resetStreaming(resumeStreamKey);
+              clearPendingChat(resumeStreamKey);
+              void handleRefetchAndClear({
+                logContext: `Resume stream closed without completion (${reason})`,
+              });
+            }
           },
         },
       );

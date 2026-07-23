@@ -1043,6 +1043,9 @@
           "400": {
             "description": "Invalid chat ID format"
           },
+          "404": {
+            "description": "When the chat does not exist or is not accessible"
+          },
           "500": {
             "description": "Server error while retrieving messages"
           }
@@ -2085,6 +2088,12 @@
           "401": {
             "description": "When no valid JWT token is provided"
           },
+          "404": {
+            "description": "When the chat does not exist or is not accessible"
+          },
+          "409": {
+            "description": "When the chat is archived"
+          },
           "500": {
             "description": "When an internal server error occurs"
           }
@@ -2126,6 +2135,12 @@
           },
           "401": {
             "description": "When no valid JWT token is provided"
+          },
+          "404": {
+            "description": "When the chat does not exist or is not accessible"
+          },
+          "409": {
+            "description": "When the chat is archived"
           },
           "500": {
             "description": "When an internal server error occurs"
@@ -2210,6 +2225,12 @@
           },
           "401": {
             "description": "When no valid JWT token is provided"
+          },
+          "404": {
+            "description": "When the chat does not exist or is not accessible"
+          },
+          "409": {
+            "description": "When the chat is archived"
           },
           "500": {
             "description": "When an internal server error occurs"

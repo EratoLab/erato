@@ -79,7 +79,7 @@ async fn test_chat_share_link_enable_disable_flow(pool: Pool<Postgres>) {
         .await;
     assert_eq!(
         before_share_response.status_code(),
-        http::StatusCode::INTERNAL_SERVER_ERROR
+        http::StatusCode::NOT_FOUND
     );
 
     let get_link_before_enable = server

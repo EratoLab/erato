@@ -29,7 +29,7 @@ use crate::test_utils::{
     BodyContainsMatcher, JwtTokenBuilder, RequestBodyRecorder, RequestHeadersRecorder,
     TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt,
     build_openai_text_streaming_response, build_openai_tool_calls_streaming_response,
-    extract_chat_id, extract_full_text, hermetic_app_config, parse_sse_events,
+    extract_chat_id, extract_full_text, has_event_type, hermetic_app_config, parse_sse_events,
     read_integration_test_file_bytes, setup_mock_llm_server, setup_mock_llm_server_with_mocks,
 };
 
@@ -3976,5 +3976,202 @@ async fn test_unoffered_tool_call_recovers_instead_of_killing_the_turn(pool: Poo
             .is_some_and(|error| error.contains(NOT_ALLOWED)),
         "Got: {}",
         tool_use_parts[0]["output"]
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Archived-chat write rejection + not-found contract.
+//
+// Writes into an archived chat must be rejected with 409 before any stream
+// opens; a missing chat is a 404. Reads remain accessible and are exercised
+// elsewhere. These share a helper that opens a chat via a full first turn.
+// ---------------------------------------------------------------------------
+
+/// Submit an opening turn against a fresh chat, streaming it to completion, and
+/// return `(chat_id, assistant_message_id)`.
+async fn submit_opening_turn(server: &TestServer) -> (String, String) {
+    let submit_response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "Opening turn" }))
+        .await;
+    submit_response.assert_status_ok();
+
+    let events = parse_sse_events(&submit_response);
+    let chat_id = extract_chat_id(&events).expect("Expected chat_created event");
+    let assistant_message_id = events
+        .iter()
+        .find_map(|event| {
+            if let Ok(json) = serde_json::from_str::<Value>(&event.data)
+                && json["message_type"] == "assistant_message_completed"
+            {
+                return json["message_id"].as_str().map(|s| s.to_string());
+            }
+            None
+        })
+        .expect("Expected assistant_message_completed event with message_id");
+
+    (chat_id, assistant_message_id)
+}
+
+/// Archive a chat through the public endpoint and assert success.
+async fn archive_chat_via_api(server: &TestServer, chat_id: &str) {
+    let archive_response = server
+        .post(&format!("/api/v1beta/chats/{chat_id}/archive"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({}))
+        .await;
+    archive_response.assert_status_ok();
+}
+
+fn app_server(app_state: erato::state::AppState) -> TestServer {
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    TestServer::new(app.into_make_service()).expect("Failed to create test server")
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_get_messages_nonexistent_chat_returns_404(pool: Pool<Postgres>) {
+    let app_state = test_app_state(hermetic_app_config(None, None), pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let server = app_server(app_state);
+
+    let response = server
+        .get(&format!("/api/v1beta/chats/{}/messages", Uuid::new_v4()))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+
+    assert_eq!(response.status_code(), http::StatusCode::NOT_FOUND);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_submit_to_nonexistent_chat_returns_404(pool: Pool<Postgres>) {
+    let app_state = test_app_state(hermetic_app_config(None, None), pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let server = app_server(app_state);
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "existing_chat_id": Uuid::new_v4().to_string(),
+            "user_message": "Hello into the void",
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), http::StatusCode::NOT_FOUND);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_submit_to_archived_chat_returns_409(pool: Pool<Postgres>) {
+    let (app_config, _mock_server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let server = app_server(app_state);
+
+    let (chat_id, _assistant_message_id) = submit_opening_turn(&server).await;
+    archive_chat_via_api(&server, &chat_id).await;
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "existing_chat_id": chat_id,
+            "user_message": "Please answer after archiving",
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), http::StatusCode::CONFLICT);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_regenerate_in_archived_chat_returns_409(pool: Pool<Postgres>) {
+    let (app_config, _mock_server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let server = app_server(app_state);
+
+    let (chat_id, assistant_message_id) = submit_opening_turn(&server).await;
+    archive_chat_via_api(&server, &chat_id).await;
+
+    let response = server
+        .post("/api/v1beta/me/messages/regeneratestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "current_message_id": assistant_message_id }))
+        .await;
+
+    assert_eq!(response.status_code(), http::StatusCode::CONFLICT);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_edit_in_archived_chat_returns_409(pool: Pool<Postgres>) {
+    let (app_config, _mock_server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+    let db = app_state.db.clone();
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let server = app_server(app_state);
+
+    let (chat_id, _assistant_message_id) = submit_opening_turn(&server).await;
+
+    // The opening user message is the only message without generation parameters.
+    let user_message = erato::db::entity::messages::Entity::find()
+        .filter(erato::db::entity::messages::Column::GenerationParameters.is_null())
+        .order_by_desc(erato::db::entity::messages::Column::CreatedAt)
+        .one(&db)
+        .await
+        .expect("Failed to fetch user message")
+        .expect("Expected a user message to edit");
+
+    archive_chat_via_api(&server, &chat_id).await;
+
+    let response = server
+        .post("/api/v1beta/me/messages/editstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": user_message.id,
+            "replace_user_message": "Edited after archiving",
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), http::StatusCode::CONFLICT);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_submit_to_normal_existing_chat_still_succeeds(pool: Pool<Postgres>) {
+    let (app_config, _mock_server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let server = app_server(app_state);
+
+    let (chat_id, _assistant_message_id) = submit_opening_turn(&server).await;
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "existing_chat_id": chat_id,
+            "user_message": "Second turn in the same chat",
+        }))
+        .await;
+
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    assert!(
+        has_event_type(&events, "assistant_message_completed"),
+        "Expected a completed assistant response for a normal existing chat",
     );
 }
