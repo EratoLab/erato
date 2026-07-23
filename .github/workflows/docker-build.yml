@@ -585,6 +585,21 @@ jobs:
           path: e2e-tests/blob-report/
           retention-days: 30
 
+  # Aggregate gate over the sharded e2e matrix. The "main - Tests pass" repo
+  # ruleset requires a check with this exact name; reporting it from a gate
+  # (instead of a matrix job) means shard-count changes never need a ruleset
+  # edit.
+  test-e2e-gate:
+    name: "test e2e (many-models)"
+    needs: [test-e2e]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - name: Verify e2e matrix succeeded
+        run: |
+          test "${{ needs.test-e2e.result }}" = "success"
+
   merge-e2e-reports:
     name: "merge e2e reports"
     needs: [test-e2e]
