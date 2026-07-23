@@ -894,13 +894,14 @@ export function useChatMessaging(
                 });
                 useGenerationStatusStore
                   .getState()
-                  .seedRunning(responseData.chat_id, new Date().toISOString());
+                  .seedRunningLocal(
+                    responseData.chat_id,
+                    new Date().toISOString(),
+                  );
 
-                // The row title stays the backend's untitled sentinel until
-                // the summary lands; the start of the user's message makes a
-                // better stand-in. handleChatCreated may already have rebound
-                // the stream key, so the optimistic message can live under
-                // either the chat id or the pre-creation key.
+                // Record a title hint for the untitled row. handleChatCreated
+                // may already have rebound the stream key, so the optimistic
+                // message can live under either key.
                 const messagingState = useMessagingStore.getState();
                 const optimisticUserMessage = Object.values(
                   messagingState.userMessagesByKey[responseData.chat_id] ??
@@ -1393,12 +1394,11 @@ export function useChatMessaging(
       logger.log(
         "[DEBUG_STREAMING] sendMessage: isSubmittingRef.current set to true.",
       );
-      // A known chat is running from the moment of submission; a brand-new
-      // chat gets its seed on chat_created, once it has an id.
+      // A brand-new chat gets its seed on chat_created, once it has an id.
       if (streamKey !== NEW_CHAT_STREAM_KEY) {
         useGenerationStatusStore
           .getState()
-          .seedRunning(streamKey, new Date().toISOString());
+          .seedRunningLocal(streamKey, new Date().toISOString());
       }
 
       try {
@@ -1741,7 +1741,7 @@ export function useChatMessaging(
       if (streamKey !== NEW_CHAT_STREAM_KEY) {
         useGenerationStatusStore
           .getState()
-          .seedRunning(streamKey, new Date().toISOString());
+          .seedRunningLocal(streamKey, new Date().toISOString());
       }
 
       try {
@@ -1896,7 +1896,7 @@ export function useChatMessaging(
       if (streamKey !== NEW_CHAT_STREAM_KEY) {
         useGenerationStatusStore
           .getState()
-          .seedRunning(streamKey, new Date().toISOString());
+          .seedRunningLocal(streamKey, new Date().toISOString());
       }
 
       try {

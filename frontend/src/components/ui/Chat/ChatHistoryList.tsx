@@ -26,20 +26,15 @@ const logger = createLogger("UI", "ChatHistoryList");
 const sidebarRowLinkClassName =
   "focus-ring-tight block rounded-[var(--theme-radius-shell)]";
 
-/**
- * Literal `title_resolved` the backend returns while a chat has neither a
- * user-provided title nor a generated summary (resolve_chat_display_name).
- * Treated as "no title yet" so the row can show something localized instead.
- */
+/** `title_resolved` sentinel the backend returns while a chat has no title. */
 // eslint-disable-next-line lingui/no-unlocalized-strings -- backend sentinel, not user-facing text
 const UNTITLED_BACKEND_SENTINEL = "Untitled Chat";
 
 /**
- * Resolves what a row displays as its title. While the backend has no real
- * title yet, the first words of the user's message (recorded at send time)
- * stand in; without one, a localized placeholder. Reads `titleResolved` (the
- * raw backend value) rather than `title`, which the session mappers already
- * fill with their own localized fallback.
+ * Row title: a real backend title, else the recorded user-message hint, else
+ * a localized placeholder. Reads `titleResolved` (the raw backend value)
+ * rather than `title`, which the session mappers fill with their own
+ * localized fallback.
  */
 const useRowTitle = (session: ChatSession): string => {
   const titleHint = useChatHistoryStore(
@@ -74,9 +69,8 @@ ChatItemIcon.displayName = "ChatItemIcon";
 type RowGenerationStatus = "running" | "finished" | "error" | "action_required";
 
 /**
- * Resolves a row's generation indicator from the stores. An unresolved tool
- * confirmation outranks the generation state — the turn is waiting on the
- * user, not on the model.
+ * Resolves a row's generation indicator; an unresolved tool confirmation
+ * outranks the generation state.
  */
 const useRowGenerationStatus = (chatId: string): RowGenerationStatus | null => {
   const status = useGenerationStatusFor(chatId);
@@ -114,8 +108,7 @@ const GenerationStatusIndicator = memo<{ chatId: string }>(({ chatId }) => {
 
   if (!status) return null;
 
-  // Visually a bare dot; the status text lives in the hover title and the row
-  // link's aria-label.
+  // A bare dot; the status text lives in the title and the row's aria-label.
   return (
     <span
       className={clsx(

@@ -9,12 +9,9 @@ import {
 } from "./shared";
 
 /**
- * Per-chat generation status in the history sidebar (Running / Finished /
- * Error), driven by the backend-persisted generation state plus the
- * `GET /me/generating` poll. Mock-LLM gives deterministic windows: `long
- * running N` streams for N seconds, `delayed error` waits ~5s and then fails
- * the backend turn — so Running is observable, and the terminal transition
- * happens while the test is provably elsewhere.
+ * Per-chat generation status in the history sidebar. Mock-LLM gives
+ * deterministic windows: `long running N` streams for N seconds, `delayed
+ * error` waits ~5s and then fails the backend turn.
  */
 const MOCK_MODEL = "Mock-LLM";
 
@@ -30,10 +27,9 @@ const rowIndicator = (page: Page, chatId: string) =>
   sidebarRow(page, chatId).getByTestId("chat-generation-status");
 
 /**
- * Resolves once a recent_chats response lists the chat. Clicking New Chat
- * clears only the local placeholder, so a row that must survive it has to be
- * list-backed first. Register before the action that triggers the listing
- * refetch; the `chatId()` guard skips responses that predate the id.
+ * Resolves once a recent_chats response lists the chat. A row that must
+ * survive clicking New Chat (which drops the local placeholder) has to be
+ * list-backed first; register before the action that triggers the refetch.
  */
 const waitForChatListed = (page: Page, chatId: () => string) =>
   page.waitForResponse(
@@ -58,8 +54,6 @@ test(
   "a running chat survives reload, finishes with its real title while unwatched, and clears on open",
   { tag: TAG_CI },
   async ({ page }) => {
-    // A 12s paced turn plus a reload and the post-completion poll window run
-    // past the default per-test budget.
     test.setTimeout(120000);
 
     await page.goto("/");
@@ -67,26 +61,21 @@ test(
     await ensureOpenSidebar(page);
     await selectModel(page, MOCK_MODEL);
 
-    // Long enough that the reload and the New Chat hop below both land inside
-    // the running window.
     const chatId = await sendFirstMessage(page, "long running 12");
     const row = sidebarRow(page, chatId);
     const indicator = rowIndicator(page, chatId);
     await expect(row).toBeVisible({ timeout: 5000 });
     await expect(indicator).toHaveAttribute("data-status", "running");
-    // The first paced token confirms the turn is genuinely streaming, so the
-    // reload provably happens mid-turn.
+    // The first paced token proves the reload happens mid-turn.
     await expect(page.getByText("Second 1 passed")).toBeVisible({
       timeout: 15000,
     });
 
-    // Register before the reload: its list fetch is what must list the chat
-    // (the reload wipes the client cache, so a pre-reload listing is not
-    // enough), and nothing invalidates the list between here and then.
+    // Register before the reload: the reload wipes the client cache, so a
+    // pre-reload listing is not enough.
     const listedAfterReload = waitForChatListed(page, () => chatId);
 
-    // Running survives a reload — the indicator is backend-sourced, not a
-    // leftover of this tab's session.
+    // Running survives a reload — the indicator is backend-sourced.
     await page.reload();
     await ensureOpenSidebar(page);
     await expect(row).toBeVisible({ timeout: 15000 });
@@ -94,8 +83,6 @@ test(
       timeout: 10000,
     });
 
-    // The row must be list-backed before New Chat drops the placeholder that
-    // the replayed chat_created re-created.
     await listedAfterReload;
 
     // Leave the chat; the backend turn keeps running without this tab's SSE.
@@ -106,16 +93,14 @@ test(
     await expect(page).toHaveURL(/\/chat\/new$/);
     await expect(indicator).toHaveAttribute("data-status", "running");
 
-    // Completion is observed by the poll while the user is elsewhere: the row
-    // flips to Finished and picks up the generated title in the same commit.
+    // The poll observes completion while the user is elsewhere.
     await expect(indicator).toHaveAttribute("data-status", "finished", {
       timeout: 45000,
     });
     const rowLink = sidebarRowLink(page, chatId);
     await expect(rowLink).toHaveAttribute("aria-label", /, Finished$/);
-    // The real generated title replaced both the untitled fallback and the
-    // user-message stand-in. Any real title flips the label, so this does not
-    // depend on the summary's wording.
+    // The generated title replaced both the untitled fallback and the
+    // user-message stand-in; this does not depend on the summary's wording.
     await expect(rowLink).not.toHaveAttribute(
       "aria-label",
       /^(New Chat|long running)/,
@@ -139,21 +124,18 @@ test(
     await ensureOpenSidebar(page);
     await selectModel(page, MOCK_MODEL);
 
-    // Register before the send so the user_message_saved-gated refetch that
-    // lists the chat cannot be missed.
+    // Register before the send so the refetch that lists the chat cannot be
+    // missed.
     let chatId = "";
     const listed = waitForChatListed(page, () => chatId);
 
-    // `delayed error` holds the backend turn open ~5s and then fails it, so
-    // there is a real running window to navigate away in — unlike the instant
-    // pre-stream error mocks.
+    // `delayed error` gives a real running window to navigate away in.
     chatId = await sendFirstMessage(page, "delayed error");
     const row = sidebarRow(page, chatId);
     const indicator = rowIndicator(page, chatId);
     await expect(row).toBeVisible({ timeout: 5000 });
     await expect(indicator).toHaveAttribute("data-status", "running");
 
-    // The row must be list-backed before New Chat drops the placeholder.
     await listed;
 
     // Leave during the delay window; the failure happens unwatched.
@@ -164,8 +146,7 @@ test(
     await expect(page).toHaveURL(/\/chat\/new$/);
     await expect(indicator).toHaveAttribute("data-status", "running");
 
-    // The poll picks up the errored outcome: distinct from Finished via
-    // data-status (color) and the hover-title text.
+    // The poll picks up the errored outcome, distinct from Finished.
     await expect(indicator).toHaveAttribute("data-status", "error", {
       timeout: 30000,
     });
@@ -183,11 +164,8 @@ test(
   "the client polls /me/generating only while a chat is running",
   { tag: TAG_CI },
   async ({ page }) => {
-    // An 8s idle window plus an 8s paced turn and its completion run past the
-    // default per-test budget.
     test.setTimeout(120000);
 
-    // Timestamp every poll request so each can be attributed to a window.
     const generatingAt: number[] = [];
     page.on("request", (request) => {
       if (request.url().includes(GENERATING_URL)) {
@@ -199,8 +177,8 @@ test(
     await chatIsReadyToChat(page);
     await ensureOpenSidebar(page);
 
-    // Settle to a provably idle baseline first: a still-running chat from an
-    // earlier test would legitimately keep the poller alive into the window.
+    // Settle to an idle baseline: a still-running chat from an earlier test
+    // would legitimately keep the poller alive.
     await expect(
       page
         .getByRole("complementary")
@@ -210,8 +188,7 @@ test(
     ).toHaveCount(0, { timeout: 60000 });
     await page.waitForTimeout(2000);
 
-    // With nothing running, the endpoint must see zero requests: the poll is
-    // disabled, not merely slowed down.
+    // The poll must be disabled while idle, not merely slowed down.
     const idleStart = Date.now();
     await page.waitForTimeout(8000);
     const idleCount = generatingAt.filter((t) => t >= idleStart).length;
@@ -248,23 +225,20 @@ test(
     await ensureOpenSidebar(page);
     await selectModel(page, MOCK_MODEL);
 
-    // Long enough that the collapse round-trip happens while still running.
     const chatId = await sendFirstMessage(page, "long running 15");
     await expect(rowIndicator(page, chatId)).toHaveAttribute(
       "data-status",
       "running",
     );
 
-    // Collapsed mode: the rail toggle carries a count badge, so activity
-    // stays visible while the list itself is hidden. Another chat may
-    // legitimately be active in parallel, so assert a count, not "1".
+    // Another chat may legitimately be active in parallel, so assert a
+    // count, not "1".
     await page.getByLabel("collapse sidebar").click();
     const badge = page.getByTestId("sidebar-generation-badge");
     await expect(badge).toBeVisible();
     await expect(badge).toHaveText(/^[1-9]\d*$/);
 
-    // Restore the sidebar and let the turn finish so the suite leaves no
-    // running chat behind.
+    // Let the turn finish so the suite leaves no running chat behind.
     await ensureOpenSidebar(page);
     await chatIsReadyToChat(page, {
       expectAssistantResponse: true,
@@ -284,18 +258,15 @@ test(
     await ensureOpenSidebar(page);
     await selectModel(page, MOCK_MODEL);
 
-    // First turn completes while the user stays on the chat, so its terminal
-    // row sits inside the /me/generating retention window.
+    // The first turn's terminal row sits inside the retention window.
     const chatId = await sendFirstMessage(page, "long running 2");
     await chatIsReadyToChat(page, {
       expectAssistantResponse: true,
       loadingTimeoutMs: 30000,
     });
 
-    // Replay the race deterministically: the first status poll after the
-    // second send answers with the PREVIOUS generation's retention row —
-    // exactly what a poll that read the chats row before the new lease write
-    // returns. Everything after it reaches the real backend.
+    // Replay the race deterministically: the first poll after the second
+    // send answers with the previous generation's retention row.
     let staleReplayed = false;
     await page.route(`**${GENERATING_URL}*`, async (route) => {
       if (staleReplayed) {
@@ -325,8 +296,7 @@ test(
     await composer.press("Enter");
     await expect(indicator).toHaveAttribute("data-status", "running");
 
-    // The stale snapshot must not consume the running status, and the poll
-    // must keep confirming it afterwards.
+    // The stale snapshot must not consume the running status.
     await expect.poll(() => staleReplayed, { timeout: 15000 }).toBe(true);
     for (let i = 0; i < 4; i += 1) {
       await page.waitForTimeout(1000);

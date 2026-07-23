@@ -6,19 +6,16 @@ import type { GeneratingChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas"
 /**
  * Per-chat generation status for the sidebar indicators.
  *
- * "running" is backend-persisted truth (seeded from list rows, the
- * `/me/generating` poll, and this tab's own streams). "finished"/"error" are
- * session-derived: they exist only when this client observed a chat leave the
+ * "finished"/"error" exist only when this client observed a chat leave the
  * running set, so a page refresh clears them by design. "cleared" is a
  * tombstone left when an outcome is consumed (or a running entry goes
  * unknown): it renders nothing but remembers which generation it refers to,
- * so stale list rows and in-flight poll responses cannot resurrect a
- * notification the user already saw. A chat with no entry renders no
- * indicator.
+ * so stale list rows and in-flight poll responses cannot resurrect it.
  *
- * `startedAt` is always the server-side generation start time; comparing it
- * against other `startedAt` values stays within the server clock domain, so
- * client/server clock skew cannot corrupt transitions.
+ * `startedAt` carries the server-side start time when seeded from list rows
+ * or the poll, and the client clock when seeded by this tab's own sends —
+ * which is why local sends use `seedRunningLocal` instead of the compared
+ * seed path.
  */
 export type ChatGenerationStatus =
   | { kind: "running"; startedAt: string; localSeenAt: number }
@@ -36,12 +33,12 @@ const SEED_GRACE_MS = 10_000;
 interface GenerationStatusStore {
   statusByChatId: Partial<Record<string, ChatGenerationStatus>>;
   /**
-   * Mirror of the chat the user is currently viewing. Terminal outcomes for
-   * that chat are suppressed: the result is visible in the conversation
-   * itself, so the sidebar has nothing to notify about.
+   * Chat the user is currently viewing; terminal outcomes for it are
+   * suppressed since the result is visible in the conversation itself.
    */
   currentChatId: string | null;
   seedRunning: (chatId: string, startedAt: string) => void;
+  seedRunningLocal: (chatId: string, startedAt: string) => void;
   applyPollSnapshot: (entries: GeneratingChat[]) => void;
   markTerminalLocal: (chatId: string, kind: "finished" | "error") => void;
   setCurrentChatId: (chatId: string | null) => void;
@@ -51,9 +48,7 @@ interface GenerationStatusStore {
 
 /**
  * `localSeenAt` anchors to when this client FIRST started believing the chat
- * is running: an update of an already-running entry (e.g. the poll confirming
- * with the server's start time) keeps the original anchor, so the seed grace
- * below cannot be extended by confirmations.
+ * is running, so later confirmations cannot extend the seed grace.
  */
 const runningEntry = (
   startedAt: string,
@@ -66,13 +61,9 @@ const runningEntry = (
 });
 
 /**
- * Whether a seed may (over)write the existing entry. An existing running
- * entry is only replaced by a newer generation, so repeated seeds from list
- * renders keep the original `localSeenAt` and the seed grace can expire. A
- * terminal or cleared entry is only upgraded back to running by a generation
- * that started strictly after the one whose outcome it records — stale list
- * rows and in-flight poll responses still carry the finished generation's
- * start time, and both sides of the comparison are server timestamps.
+ * Whether a seed may (over)write the existing entry: only a strictly newer
+ * generation wins, so stale list rows and in-flight poll responses that still
+ * carry a finished generation's start time cannot resurrect it.
  */
 const seedWins = (
   existing: ChatGenerationStatus | undefined,
@@ -111,6 +102,21 @@ export const useGenerationStatusStore = create<GenerationStatusStore>()(
           "generationStatus/seedRunning",
         ),
 
+      // A local send is definitive evidence of a new generation, so it
+      // bypasses the timestamp comparison (its client-clock `startedAt` may
+      // lose against a server timestamp under skew) and gets a fresh grace.
+      seedRunningLocal: (chatId, startedAt) =>
+        set(
+          (prev) => ({
+            statusByChatId: {
+              ...prev.statusByChatId,
+              [chatId]: { kind: "running", startedAt, localSeenAt: Date.now() },
+            },
+          }),
+          false,
+          "generationStatus/seedRunningLocal",
+        ),
+
       applyPollSnapshot: (entries) =>
         set(
           (prev) => {
@@ -134,16 +140,13 @@ export const useGenerationStatusStore = create<GenerationStatusStore>()(
                 continue;
               }
               // Terminal outcomes only transition chats this client saw
-              // running; anything else (e.g. retention rows right after a
-              // refresh) stays unknown by design.
+              // running; retention rows right after a refresh stay unknown.
               if (existing?.kind !== "running") {
                 continue;
               }
-              // A snapshot can race a just-started generation and still carry
-              // the PREVIOUS generation's terminal row (kept for the retention
-              // window). Within the seed grace the local running seed is the
-              // newer information — a genuine terminal is re-reported by the
-              // next poll once the grace has passed.
+              // Within the seed grace the snapshot may still carry the
+              // previous generation's retention row; a genuine terminal is
+              // re-reported by the next poll.
               if (now - existing.localSeenAt < SEED_GRACE_MS) {
                 continue;
               }
@@ -161,9 +164,8 @@ export const useGenerationStatusStore = create<GenerationStatusStore>()(
               changed = true;
             }
 
-            // A running chat absent from the snapshot is unknown, not stale:
-            // stop showing an indicator nothing backs, but leave a tombstone
-            // so a stale list row cannot re-seed the same generation.
+            // A running chat absent from the snapshot loses its indicator,
+            // but a tombstone keeps stale list rows from re-seeding it.
             for (const [chatId, status] of Object.entries(
               prev.statusByChatId,
             )) {
@@ -184,8 +186,6 @@ export const useGenerationStatusStore = create<GenerationStatusStore>()(
         set(
           (prev) => {
             const existing = prev.statusByChatId[chatId];
-            // Anchor the outcome to the generation it belongs to, so the
-            // comparison in `seedWins` never mixes clock domains.
             const startedAt = existing?.startedAt ?? null;
             if (chatId === prev.currentChatId) {
               if (!existing) {
@@ -212,10 +212,8 @@ export const useGenerationStatusStore = create<GenerationStatusStore>()(
       setCurrentChatId: (chatId) =>
         set(
           (prev) => {
-            // Opening a chat consumes its terminal notification; a still
-            // running generation keeps its indicator. A tombstone (not a
-            // delete) remembers the consumed generation, so a stale cached
-            // list row cannot re-seed it as running after a layout switch.
+            // Opening a chat consumes its terminal notification into a
+            // tombstone; a still-running generation keeps its indicator.
             const status = chatId ? prev.statusByChatId[chatId] : undefined;
             if (
               status &&

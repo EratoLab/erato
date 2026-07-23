@@ -69,10 +69,8 @@ interface ChatHistoryState {
   pendingChat: PendingChat | null;
   setPendingChat: (chat: PendingChat | null) => void;
   /**
-   * First words of the user message that started a chat, recorded at send
-   * time. Stands in as the row title while the backend still reports the
-   * untitled sentinel (the summary has not landed yet); a real title always
-   * wins over it.
+   * First words of the user message that started a chat; stands in as the
+   * row title until the backend reports a real one.
    */
   titleHintByChatId: Partial<Record<string, string>>;
   setTitleHint: (chatId: string, hint: string) => void;
@@ -177,10 +175,7 @@ export function isPendingChat(chatId: string): boolean {
 
 const TITLE_HINT_MAX_LENGTH = 40;
 
-/**
- * Condenses a user message into something row-title sized, cutting at a word
- * boundary where one exists in the second half.
- */
+/** Condenses a user message into something row-title sized. */
 export function deriveTitleHint(text: string): string | null {
   const collapsed = text.replace(/\s+/g, " ").trim();
   if (!collapsed) {
@@ -197,8 +192,8 @@ export function deriveTitleHint(text: string): string | null {
 }
 
 /**
- * Query key of the infinite recent-chats list. Cache edits (archive removal,
- * generation-title patches) must target the same key as the query itself.
+ * Query key of the infinite recent-chats list; cache edits must target the
+ * same key as the query itself.
  */
 export function buildInfiniteChatsQueryKey() {
   return [
@@ -334,9 +329,8 @@ export function useChatHistory() {
     return [placeholder, ...listedChats];
   }, [listedChats, pendingChat, isPendingChatListed]);
 
-  // Seed the generation-status store from the backend's running markers, so
-  // generations started elsewhere (other tab, other device, pre-reload) get an
-  // indicator without waiting for a poll.
+  // Seed the status store from the backend's running markers, so generations
+  // started elsewhere get an indicator without waiting for a poll.
   useEffect(() => {
     const { seedRunning } = useGenerationStatusStore.getState();
     for (const chat of chats) {
@@ -453,8 +447,7 @@ export function useChatHistory() {
       // outside the cache and no list edit can take away; drop it too.
       clearPendingChat(chatId);
 
-      // An archived chat can no longer be opened, so its status entry would
-      // otherwise keep the aggregate badge counting a chat that has no row.
+      // An archived chat has no row, so its status must not keep counting.
       useGenerationStatusStore.getState().clearStatus(chatId);
       useChatHistoryStore.getState().clearTitleHint(chatId);
 

@@ -249,11 +249,9 @@ test(
       await expect(row).toBeVisible({ timeout: 5000 });
       // The row renders already highlighted, without waiting for the list.
       await expect(rowLink).toHaveAttribute("aria-current", "page");
-      // No backend title exists yet, so the row shows the start of the user
-      // message as its stand-in title. While the first turn runs the label
-      // carries the generation-status suffix; the backend turn can finish
-      // while the client stream is still parked, which drops the suffix again
-      // for the chat being viewed — both states are correct here.
+      // No backend title yet, so the row shows the user-message stand-in.
+      // The status suffix is optional: the parked backend turn may already
+      // have finished for the viewed chat.
       await expect(rowLink).toHaveAttribute(
         "aria-label",
         /^Please write a short poem about the sun(, Running)?$/,
@@ -270,10 +268,8 @@ test(
 
       // The placeholder is replaced by the real row, not added alongside it.
       await expect(row).toHaveCount(1);
-      // The aria-label stops being the user-message stand-in once the backend
-      // row carries a real resolved title (the untitled sentinel keeps the
-      // stand-in). That proves the summary-titled row replaced the local
-      // placeholder.
+      // A real resolved title replacing the stand-in proves the
+      // summary-titled row replaced the local placeholder.
       await expect(rowLink).not.toHaveAttribute(
         "aria-label",
         /^(Please write a short poem|New Chat)/,
@@ -321,10 +317,8 @@ test(
 
       await expect(row).toHaveCount(0);
 
-      // Archiving edits the cached list in place rather than refetching it
-      // (a refetch would re-derive page offsets and could skip a boundary
-      // chat), so releasing just lets any parked request land. The row must
-      // not come back with it.
+      // Archiving edits the cached list in place rather than refetching, so
+      // releasing just lets any parked request land.
       listHold.release();
       await page.waitForTimeout(1000);
 

@@ -14,10 +14,8 @@ import type {
   RecentChatsResponse,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
-/**
- * A generation's first ~2 minutes are polled faster: that is when a turn
- * typically completes, so its Finished/Error transition shows up promptly.
- */
+/** Generations younger than this poll faster, so a typical turn's terminal
+ * transition shows up promptly. */
 const YOUNG_GENERATION_MS = 2 * 60 * 1000;
 const FAST_POLL_INTERVAL_MS = 3_000;
 const SLOW_POLL_INTERVAL_MS = 10_000;
@@ -39,11 +37,9 @@ const pollInterval = (): number | false => {
 };
 
 /**
- * Patches terminal chats into the cached recent-chats list: the freshly
- * generated title lands in the same commit as the Finished badge (instead of
- * waiting for the next list refetch), and the row's running marker is
- * removed so a later remount cannot re-seed a finished generation from stale
- * cache data.
+ * Patches terminal chats into the cached recent-chats list: the generated
+ * title lands in the same commit as the Finished badge, and the running
+ * marker is removed so a remount cannot re-seed a finished generation.
  */
 const patchTerminalChats = (
   setQueryData: ReturnType<typeof useQueryClient>["setQueryData"],
@@ -92,11 +88,8 @@ const patchTerminalChats = (
 
 /**
  * Polls `GET /me/generating` while any chat is known to be running and feeds
- * each snapshot into the generation-status store. Mounted once inside
- * `ClientProviders` so it survives layout switches; renders nothing.
- *
- * While nothing is running the query is disabled and its interval is `false`,
- * so the endpoint sees zero requests from an idle client.
+ * each snapshot into the generation-status store. Renders nothing; while
+ * nothing is running the query is fully disabled (zero idle requests).
  */
 export function GenerationStatusPoller() {
   const runningCount = useGenerationRunningCount();
@@ -109,17 +102,14 @@ export function GenerationStatusPoller() {
       staleTime: 0,
       refetchOnWindowFocus: false,
       refetchInterval: pollInterval,
-      // Keep polling while the tab is hidden: a chat that finishes more than
-      // the retention window before the user returns would otherwise leave
-      // the running set unobserved and silently clear instead of showing its
-      // outcome. Idle traffic stays zero — the query itself is gated off.
+      // Keep polling while the tab is hidden, so a chat that finishes and
+      // leaves the retention window before the user returns is still observed.
       refetchIntervalInBackground: true,
     },
   );
 
-  // Keyed on dataUpdatedAt, not just data: structural sharing keeps `data`
-  // referentially stable across identical responses, but every snapshot must
-  // be applied — an unchanged empty response can still expire a seed grace.
+  // Keyed on dataUpdatedAt: structural sharing keeps `data` referentially
+  // stable across identical responses, but every snapshot must be applied.
   useEffect(() => {
     if (!data) {
       return;

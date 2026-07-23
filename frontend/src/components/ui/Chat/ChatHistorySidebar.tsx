@@ -75,10 +75,7 @@ const generationBadgeClassName =
   // eslint-disable-next-line lingui/no-unlocalized-strings -- CSS utility classes, not user-facing text
   "flex min-w-4 items-center justify-center rounded-full bg-theme-action-primary-bg px-1 text-[10px] font-semibold leading-4 text-theme-action-primary-fg";
 
-/**
- * Chats worth a sidebar-level marker: running plus session-observed
- * finished/error, plus chats holding an unresolved tool confirmation.
- */
+/** Running + session-observed finished/error + pending tool confirmations. */
 const useGenerationIndicatorCount = (): number => {
   const runningCount = useGenerationStatusStore(selectRunningCount);
   const attentionCount = useGenerationStatusStore(selectAttentionCount);
@@ -89,8 +86,8 @@ const useGenerationIndicatorCount = (): number => {
 };
 
 /**
- * Count badge for the collapsed-rail toggles, so activity stays visible while
- * the chat list itself is hidden. Anchors on the nearest positioned ancestor.
+ * Count badge for the collapsed-rail toggles; anchors on the nearest
+ * positioned ancestor.
  */
 const GenerationRailBadge = () => {
   const count = useGenerationIndicatorCount();
@@ -773,7 +770,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     );
 
     // Screen-reader summary of generation activity, excluding the chat the
-    // user is viewing — its progress is already evident in the conversation.
+    // user is viewing.
     const generationLiveSummary = useMemo(() => {
       let running = 0;
       let finished = 0;
@@ -782,7 +779,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
         if (!status || chatId === currentSessionId) continue;
         if (status.kind === "running") running += 1;
         else if (status.kind === "finished") finished += 1;
-        else errored += 1;
+        else if (status.kind === "error") errored += 1;
       }
       const parts: string[] = [];
       if (running > 0) {
@@ -821,8 +818,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       return parts.join(", ");
     }, [generationStatusByChatId, currentSessionId]);
 
-    // Debounced so a burst of transitions (poll snapshot touching several
-    // chats) produces one announcement instead of one per store write.
+    // Debounced so a burst of transitions produces one announcement.
     const [generationAnnouncement, setGenerationAnnouncement] = useState("");
     const generationAnnounceTimeoutRef = useRef<ReturnType<
       typeof setTimeout

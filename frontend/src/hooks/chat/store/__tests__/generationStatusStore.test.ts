@@ -94,6 +94,34 @@ describe("generationStatusStore", () => {
     });
   });
 
+  describe("seedRunningLocal", () => {
+    it("forces running even when the tombstone carries a newer server timestamp", () => {
+      // Client clock behind the server: the consumed generation's server
+      // start time postdates the local clock at the follow-up send.
+      store().seedRunning("chat-1", iso(120_000));
+      store().markTerminalLocal("chat-1", "finished");
+      store().setCurrentChatId("chat-1");
+      expect(statusOf("chat-1")).toMatchObject({ kind: "cleared" });
+
+      store().seedRunningLocal("chat-1", iso(0));
+      expect(statusOf("chat-1")).toMatchObject({
+        kind: "running",
+        startedAt: iso(0),
+      });
+    });
+
+    it("grants a fresh seed grace against a stale terminal snapshot", () => {
+      store().seedRunning("chat-1", iso(0));
+      vi.advanceTimersByTime(11_000);
+      store().applyPollSnapshot([terminalEntry("chat-1", "completed", 0)]);
+
+      store().seedRunningLocal("chat-1", iso(500));
+      vi.advanceTimersByTime(500);
+      store().applyPollSnapshot([terminalEntry("chat-1", "completed", 0)]);
+      expect(statusOf("chat-1")).toMatchObject({ kind: "running" });
+    });
+  });
+
   describe("applyPollSnapshot", () => {
     it("marks snapshot running entries as running", () => {
       store().applyPollSnapshot([runningEntry("chat-1")]);
