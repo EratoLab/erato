@@ -863,59 +863,6 @@ jobs:
           cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.COMPONENT_KIT_EXAMPLE_IMAGE_NAME }}:latest-buildcache
           cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.COMPONENT_KIT_EXAMPLE_IMAGE_NAME }}:latest-buildcache
 
-  build-and-push-profiling-linux:
-    needs: [build-and-push-amd64]
-    runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
-    permissions:
-      contents: read
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Log in to Erato Labs registry
-        uses: docker/login-action@v3.6.0
-        with:
-          registry: registry.eratolabs.com
-          username: ${{ secrets.ERATOLABS_REGISTRY_USERNAME }}
-          password: ${{ secrets.ERATOLABS_REGISTRY_PASSWORD }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and push Backend profiling image
-        uses: docker/build-push-action@v6.15.0
-        with:
-          context: ./backend
-          push: true
-          platforms: linux/amd64
-          build-args: |
-            ERATO_FEATURES=profiling
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-profiling
-            ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-profiling
-            ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-profiling', env.REGISTRY, env.BACKEND_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
-          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-profiling-buildcache
-          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-profiling-buildcache
-
-      - name: Build and push Combined profiling image
-        uses: docker/build-push-action@v6.15.0
-        with:
-          context: .
-          file: ./Dockerfile.combined
-          push: true
-          platforms: linux/amd64
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:latest-profiling
-            ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:${{ env.SHA_TAG }}-profiling
-            ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-profiling', env.REGISTRY, env.COMBINED_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
-          build-args: |
-            REGISTRY=${{ env.REGISTRY }}
-            BACKEND_IMAGE=${{ env.BACKEND_IMAGE_NAME }}:${{ env.RELEASE_VERSION != '' && format('{0}-profiling', env.RELEASE_VERSION) || format('{0}-profiling', env.SHA_TAG) }}
-            FRONTEND_IMAGE=${{ env.FRONTEND_IMAGE_NAME }}:${{ env.RELEASE_VERSION != '' && format('{0}-amd64', env.RELEASE_VERSION) || format('{0}-amd64', env.SHA_TAG) }}
-          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:latest-profiling-buildcache
-          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:latest-profiling-buildcache
-
   create-manifests:
     needs: [build-and-push-amd64, build-and-push-arm64]
     runs-on: ubuntu-24.04 # blacksmith-4vcpu-ubuntu-2404
@@ -1173,7 +1120,7 @@ jobs:
           fi
 
   create-github-release:
-    needs: [create-manifests, create-manifests-mock-llm-server, create-manifests-mock-mcp-server, build-and-push-profiling-linux]
+    needs: [create-manifests, create-manifests-mock-llm-server, create-manifests-mock-mcp-server]
     runs-on: ubuntu-24.04 # blacksmith-4vcpu-ubuntu-2404
     if: github.ref_type == 'tag'
     permissions:
