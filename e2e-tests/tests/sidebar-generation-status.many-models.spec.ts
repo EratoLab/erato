@@ -272,3 +272,71 @@ test(
     });
   },
 );
+
+test(
+  "a follow-up message keeps its running indicator despite a stale status poll",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    test.setTimeout(120000);
+
+    await page.goto("/");
+    await chatIsReadyToChat(page);
+    await ensureOpenSidebar(page);
+    await selectModel(page, MOCK_MODEL);
+
+    // First turn completes while the user stays on the chat, so its terminal
+    // row sits inside the /me/generating retention window.
+    const chatId = await sendFirstMessage(page, "long running 2");
+    await chatIsReadyToChat(page, {
+      expectAssistantResponse: true,
+      loadingTimeoutMs: 30000,
+    });
+
+    // Replay the race deterministically: the first status poll after the
+    // second send answers with the PREVIOUS generation's retention row —
+    // exactly what a poll that read the chats row before the new lease write
+    // returns. Everything after it reaches the real backend.
+    let staleReplayed = false;
+    await page.route(`**${GENERATING_URL}*`, async (route) => {
+      if (staleReplayed) {
+        await route.continue().catch(() => {});
+        return;
+      }
+      staleReplayed = true;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          chats: [
+            {
+              chat_id: chatId,
+              state: "completed",
+              started_at: new Date(Date.now() - 60_000).toISOString(),
+              ended_at: new Date(Date.now() - 55_000).toISOString(),
+            },
+          ],
+        }),
+      });
+    });
+
+    const indicator = rowIndicator(page, chatId);
+    const composer = page.getByRole("textbox", { name: "Type a message..." });
+    await composer.fill("long running 12");
+    await composer.press("Enter");
+    await expect(indicator).toHaveAttribute("data-status", "running");
+
+    // The stale snapshot must not consume the running status, and the poll
+    // must keep confirming it afterwards.
+    await expect.poll(() => staleReplayed, { timeout: 15000 }).toBe(true);
+    for (let i = 0; i < 4; i += 1) {
+      await page.waitForTimeout(1000);
+      await expect(indicator).toHaveAttribute("data-status", "running");
+    }
+    await page.unroute(`**${GENERATING_URL}*`);
+
+    // Let the turn finish so the suite leaves no running chat behind. (No
+    // expectAssistantResponse: the chat holds two assistant messages by now
+    // and that assertion is strict-mode single-element.)
+    await chatIsReadyToChat(page, { loadingTimeoutMs: 60000 });
+  },
+);

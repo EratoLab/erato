@@ -106,6 +106,7 @@ describe("generationStatusStore", () => {
     it("transitions a running chat to finished/error", () => {
       store().seedRunning("chat-1", iso(0));
       store().seedRunning("chat-2", iso(0));
+      vi.advanceTimersByTime(11_000);
       store().applyPollSnapshot([
         terminalEntry("chat-1", "completed"),
         terminalEntry("chat-2", "errored"),
@@ -129,6 +130,7 @@ describe("generationStatusStore", () => {
     it("clears instead of marking terminal for the currently viewed chat", () => {
       store().seedRunning("chat-1", iso(0));
       store().setCurrentChatId("chat-1");
+      vi.advanceTimersByTime(11_000);
       store().applyPollSnapshot([terminalEntry("chat-1", "completed")]);
       expect(statusOf("chat-1")).toMatchObject({ kind: "cleared" });
     });
@@ -145,6 +147,7 @@ describe("generationStatusStore", () => {
 
     it("keeps a terminal status when the chat drops out of the snapshot (retention expiry)", () => {
       store().seedRunning("chat-1", iso(0));
+      vi.advanceTimersByTime(11_000);
       store().applyPollSnapshot([terminalEntry("chat-1", "completed")]);
       vi.advanceTimersByTime(120_000);
       store().applyPollSnapshot([]);
@@ -153,6 +156,7 @@ describe("generationStatusStore", () => {
 
     it("does not re-seed a consumed generation from a stale list row", () => {
       store().seedRunning("chat-1", iso(0));
+      vi.advanceTimersByTime(11_000);
       store().applyPollSnapshot([terminalEntry("chat-1", "completed")]);
       store().setCurrentChatId("chat-1");
       store().setCurrentChatId(null);
@@ -166,6 +170,7 @@ describe("generationStatusStore", () => {
 
     it("revives a consumed chat for a genuinely newer generation", () => {
       store().seedRunning("chat-1", iso(0));
+      vi.advanceTimersByTime(11_000);
       store().applyPollSnapshot([terminalEntry("chat-1", "completed")]);
       store().setCurrentChatId("chat-1");
       store().setCurrentChatId(null);
@@ -174,6 +179,54 @@ describe("generationStatusStore", () => {
         kind: "running",
         startedAt: iso(30_000),
       });
+    });
+
+    it("ignores a stale terminal snapshot racing a just-started generation", () => {
+      // First turn completes while the user views the chat: consumed.
+      store().setCurrentChatId("chat-1");
+      store().seedRunning("chat-1", iso(0));
+      vi.advanceTimersByTime(11_000);
+      store().applyPollSnapshot([terminalEntry("chat-1", "completed", 0)]);
+      expect(statusOf("chat-1")).toMatchObject({ kind: "cleared" });
+
+      // Second message: the send path seeds running and re-enables the poll.
+      vi.advanceTimersByTime(19_000);
+      store().seedRunning("chat-1", iso(30_000));
+      expect(statusOf("chat-1")).toMatchObject({ kind: "running" });
+
+      // The first poll raced the new generation's lease write and still
+      // reports the previous generation's retention row.
+      vi.advanceTimersByTime(500);
+      store().applyPollSnapshot([terminalEntry("chat-1", "completed", 0)]);
+      expect(statusOf("chat-1")).toMatchObject({ kind: "running" });
+
+      // Fresh snapshots confirm running; the entry must survive.
+      vi.advanceTimersByTime(3_000);
+      store().applyPollSnapshot([runningEntry("chat-1", 30_500)]);
+      expect(statusOf("chat-1")).toMatchObject({ kind: "running" });
+    });
+
+    it("applies a terminal snapshot once the running entry outlives the seed grace", () => {
+      store().seedRunning("chat-1", iso(0));
+      vi.advanceTimersByTime(500);
+      // Within grace: skipped even though the chat is not being viewed.
+      store().applyPollSnapshot([terminalEntry("chat-1", "errored", 0)]);
+      expect(statusOf("chat-1")).toMatchObject({ kind: "running" });
+
+      vi.advanceTimersByTime(11_000);
+      store().applyPollSnapshot([terminalEntry("chat-1", "errored", 0)]);
+      expect(statusOf("chat-1")).toMatchObject({ kind: "error" });
+    });
+
+    it("keeps the grace anchored to the first seed across poll confirmations", () => {
+      store().seedRunning("chat-1", iso(0));
+      // Poll confirms with the server's slightly newer start time; this must
+      // not restart the grace window.
+      vi.advanceTimersByTime(3_000);
+      store().applyPollSnapshot([runningEntry("chat-1", 400)]);
+      vi.advanceTimersByTime(8_000);
+      store().applyPollSnapshot([terminalEntry("chat-1", "completed", 400)]);
+      expect(statusOf("chat-1")).toMatchObject({ kind: "finished" });
     });
 
     it("does not flap between running and unknown for the same absent generation", () => {

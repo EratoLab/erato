@@ -49,10 +49,21 @@ interface GenerationStatusStore {
   reset: () => void;
 }
 
+/**
+ * `localSeenAt` anchors to when this client FIRST started believing the chat
+ * is running: an update of an already-running entry (e.g. the poll confirming
+ * with the server's start time) keeps the original anchor, so the seed grace
+ * below cannot be extended by confirmations.
+ */
 const runningEntry = (
   startedAt: string,
-  localSeenAt: number,
-): ChatGenerationStatus => ({ kind: "running", startedAt, localSeenAt });
+  existing: ChatGenerationStatus | undefined,
+  now: number,
+): ChatGenerationStatus => ({
+  kind: "running",
+  startedAt,
+  localSeenAt: existing?.kind === "running" ? existing.localSeenAt : now,
+});
 
 /**
  * Whether a seed may (over)write the existing entry. An existing running
@@ -85,13 +96,14 @@ export const useGenerationStatusStore = create<GenerationStatusStore>()(
       seedRunning: (chatId, startedAt) =>
         set(
           (prev) => {
-            if (!seedWins(prev.statusByChatId[chatId], startedAt)) {
+            const existing = prev.statusByChatId[chatId];
+            if (!seedWins(existing, startedAt)) {
               return prev;
             }
             return {
               statusByChatId: {
                 ...prev.statusByChatId,
-                [chatId]: runningEntry(startedAt, Date.now()),
+                [chatId]: runningEntry(startedAt, existing, Date.now()),
               },
             };
           },
@@ -112,7 +124,11 @@ export const useGenerationStatusStore = create<GenerationStatusStore>()(
               const existing = next[entry.chat_id];
               if (entry.state === "running") {
                 if (seedWins(existing, entry.started_at)) {
-                  next[entry.chat_id] = runningEntry(entry.started_at, now);
+                  next[entry.chat_id] = runningEntry(
+                    entry.started_at,
+                    existing,
+                    now,
+                  );
                   changed = true;
                 }
                 continue;
@@ -121,6 +137,14 @@ export const useGenerationStatusStore = create<GenerationStatusStore>()(
               // running; anything else (e.g. retention rows right after a
               // refresh) stays unknown by design.
               if (existing?.kind !== "running") {
+                continue;
+              }
+              // A snapshot can race a just-started generation and still carry
+              // the PREVIOUS generation's terminal row (kept for the retention
+              // window). Within the seed grace the local running seed is the
+              // newer information — a genuine terminal is re-reported by the
+              // next poll once the grace has passed.
+              if (now - existing.localSeenAt < SEED_GRACE_MS) {
                 continue;
               }
               if (entry.chat_id === prev.currentChatId) {
