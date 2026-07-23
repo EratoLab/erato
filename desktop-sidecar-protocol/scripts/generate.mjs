@@ -83,6 +83,21 @@ const typeTargets = [
     "DiagnosticsEchoV1Result",
   ],
   [
+    "schemas/configuration/sidecar-configuration.schema.json",
+    "sidecar-configuration.ts",
+    "SidecarConfiguration",
+  ],
+  [
+    "schemas/methods/sidecar-configure-v1-params.schema.json",
+    "sidecar-configure-v1-params.ts",
+    "SidecarConfigureV1Params",
+  ],
+  [
+    "schemas/methods/sidecar-configure-v1-result.schema.json",
+    "sidecar-configure-v1-result.ts",
+    "SidecarConfigureV1Result",
+  ],
+  [
     "schemas/methods/sidecar-restart-v1-params.schema.json",
     "sidecar-restart-v1-params.ts",
     "SidecarRestartV1Params",
@@ -135,6 +150,10 @@ const validatorTargets = {
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-restart-v1-params.schema.json",
   validateSidecarRestartV1Result:
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-restart-v1-result.schema.json",
+  validateSidecarConfigureV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-configure-v1-params.schema.json",
+  validateSidecarConfigureV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-configure-v1-result.schema.json",
   validateOutlookListMailboxesV1Params:
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-mailboxes-v1-params.schema.json",
   validateOutlookListMailboxesV1Result:

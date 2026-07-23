@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-configure-v1-params.schema.json",
+  "title": "SidecarConfigureV1Params",
+  "type": "object",
+  "required": ["user_configuration", "organization_configuration"],
+  "properties": {
+    "user_configuration": {
+      "$ref": "../configuration/sidecar-configuration.schema.json"
+    },
+    "organization_configuration": {
+      "$ref": "../configuration/sidecar-configuration.schema.json"
+    }
+  },
+  "additionalProperties": true
+}

@@ -383,6 +383,9 @@ pub struct AppConfig {
     pub frontend: FrontendConfig,
 
     #[serde(default)]
+    pub desktop_sidecar: DesktopSidecarConfig,
+
+    #[serde(default)]
     pub i18n: I18nConfig,
 
     #[serde(default)]
@@ -519,6 +522,24 @@ pub struct AppConfig {
     ))]
     #[facet(erato_config::hide_in_docs(hidden = true))]
     pub frontend_bundle_path: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct DesktopSidecarConfig {
+    /// Organization-managed configuration sent to the desktop sidecar when a
+    /// logged-in frontend session is initialized.
+    #[serde(default)]
+    pub organization_configuration: DesktopSidecarOrganizationConfiguration,
+}
+
+#[derive(Debug, Default, Deserialize, Serialize, PartialEq, Eq, Clone, Facet, ToSchema)]
+pub struct DesktopSidecarOrganizationConfiguration {
+    /// Whether the desktop sidecar should show its system tray icon.
+    ///
+    /// When unset, the sidecar uses its user configuration or built-in default.
+    #[serde(default)]
+    #[schema(nullable = true)]
+    pub show_tray_icon: Option<bool>,
 }
 
 impl AppConfig {

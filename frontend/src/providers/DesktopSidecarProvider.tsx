@@ -7,6 +7,8 @@ import {
 } from "@erato/desktop-sidecar-protocol";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
+import { useOrganizationConfiguration } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+
 import type {
   SidecarClientInfo,
   SidecarSnapshot,
@@ -129,6 +131,36 @@ export function DesktopSidecarProvider({
 
 export function useDesktopSidecar(): DesktopSidecarContextValue {
   return useContext(DesktopSidecarContext);
+}
+
+export function DesktopSidecarConfigurationSync() {
+  const { client, snapshot } = useDesktopSidecar();
+  const { data: organizationConfiguration } = useOrganizationConfiguration(
+    {},
+    { retry: false },
+  );
+
+  useEffect(() => {
+    if (
+      !client ||
+      snapshot.state !== "ready" ||
+      !client.supports("sidecar.configure.v1") ||
+      !organizationConfiguration
+    ) {
+      return;
+    }
+
+    void client
+      .invoke("sidecar.configure.v1", {
+        user_configuration: { show_tray_icon: null },
+        organization_configuration: organizationConfiguration,
+      })
+      .catch((error: unknown) => {
+        console.warn("Failed to configure the Erato desktop sidecar:", error);
+      });
+  }, [client, organizationConfiguration, snapshot.instanceId, snapshot.state]);
+
+  return null;
 }
 
 function abortableDelay(delayMs: number, signal: AbortSignal): Promise<void> {

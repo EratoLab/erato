@@ -18,6 +18,7 @@ import {
   validateDiscoverParams,
   validateOutlookListEmailsV1Params,
   validateOutlookListMailboxesV1Params,
+  validateSidecarConfigureV1Params,
   validateSidecarRestartV1Params,
 } from "../../typescript/src/generated/validators.mjs";
 
@@ -105,6 +106,7 @@ export class MockSidecar {
   #catalogueRevision = 1;
   #capabilityAvailability: "enabled" | "disabled";
   #capabilityReasonCode: string | undefined;
+  #configuration: unknown;
   #restartRequests = 0;
 
   constructor(options: MockSidecarOptions) {
@@ -134,6 +136,10 @@ export class MockSidecar {
 
   get restartRequests(): number {
     return this.#restartRequests;
+  }
+
+  get configuration(): unknown {
+    return this.#configuration;
   }
 
   async start(): Promise<MockSidecarAddress> {
@@ -347,6 +353,14 @@ export class MockSidecar {
       }
       this.#restartRequests += 1;
       return rpcResult(message.id, { accepted: true });
+    }
+
+    if (message.method === "sidecar.configure.v1") {
+      if (!validateSidecarConfigureV1Params(message.params)) {
+        return rpcError(message.id, -32602, "Invalid method parameters.");
+      }
+      this.#configuration = structuredClone(message.params);
+      return rpcResult(message.id, {});
     }
 
     if (message.method === "outlook.list_mailboxes.v1") {

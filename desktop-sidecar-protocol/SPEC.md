@@ -204,7 +204,24 @@ bundled TypeScript generator emit client types or validators. Registration in
 generators, which MUST resolve the parameter and result schema references from
 each method entry.
 
-## 11. Sidecar restart
+## 11. Sidecar configuration
+
+The `sidecar.configure.v1` capability replaces the current
+`user_configuration` and `organization_configuration` layers. Both layers are
+extensible objects. Sidecars MUST accept and persist unknown properties so that
+future configuration additions do not require a new method major.
+
+Each layer has a nullable `show_tray_icon` property. A non-null user value takes
+precedence over a non-null organization value. When both values are null or
+absent, the sidecar default is to show the tray icon. Applying configuration
+that is identical to the persisted configuration is a no-op.
+
+The complete configuration payload MUST be persisted in the current user's
+platform-default configuration directory and restored on process startup.
+Applying a changed effective `show_tray_icon` value MUST update the running
+sidecar without requiring a restart.
+
+## 12. Sidecar restart
 
 The `sidecar.restart.v1` capability requests a process restart for development
 and operational workflows. A successful result contains `accepted: true`. The
@@ -221,7 +238,7 @@ available again; the replacement sidecar has a new instance ID. Implementations
 MUST reject the request with a protocol error rather than returning
 `accepted: false` when restart cannot be scheduled.
 
-## 12. Local Outlook actions
+## 13. Local Outlook actions
 
 `outlook.list_mailboxes.v1` returns mailboxes and message stores exposed by the
 logged-in user's local Outlook installation. When the platform exposes an

@@ -3,6 +3,7 @@ pub mod assistant_hub;
 pub mod assistants;
 pub mod audio_transcription;
 pub mod budget;
+pub mod desktop_sidecar;
 pub mod entra_id;
 mod file_resolution;
 pub mod mcp_servers;
@@ -167,6 +168,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         )
         .route("/file-capabilities", get(file_capabilities))
         .route("/budget", get(budget::budget_status))
+        .route(
+            "/desktop-sidecar/organization-configuration",
+            get(desktop_sidecar::organization_configuration),
+        )
         .route(
             "/organization/users",
             get(entra_id::list_organization_users),
@@ -365,6 +370,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         mcp_servers::disconnect_mcp_server_oauth,
         file_capabilities,
         budget::budget_status,
+        desktop_sidecar::organization_configuration,
         assistants::create_assistant,
         assistants::list_assistants,
         assistants::get_assistant,
@@ -490,6 +496,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         PromptOptimizerRequest,
         PromptOptimizerResponse,
         budget::BudgetStatusResponse,
+        crate::config::DesktopSidecarOrganizationConfiguration,
         crate::config::BudgetCurrency,
         sharepoint::Drive,
         sharepoint::DriveItem,

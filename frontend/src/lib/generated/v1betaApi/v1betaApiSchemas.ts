@@ -931,6 +931,15 @@ export type CreateShareGrantRequest = {
  */
 export type CreateShareGrantResponse = ShareGrant;
 
+export type DesktopSidecarOrganizationConfiguration = {
+  /**
+   * Whether the desktop sidecar should show its system tray icon.
+   *
+   * When unset, the sidecar uses its user configuration or built-in default.
+   */
+  show_tray_icon?: boolean | null | undefined;
+};
+
 export type DisconnectMcpServerOauthResponse = {
   connection_status: McpServerStatusValue;
 };

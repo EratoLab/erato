@@ -700,6 +700,7 @@ pub const fn is_valid_resource_action(resource: ResourceKind, action: Action) ->
         (ResourceKind::Chat, Action::Share) => true,
         (ResourceKind::ChatSingleton, Action::Create) => true,
         (ResourceKind::PromptOptimizerSingleton, Action::Create) => true,
+        (ResourceKind::DesktopSidecarConfigurationSingleton, Action::Read) => true,
         (ResourceKind::MessageFeedback, Action::SubmitFeedback) => true,
         (ResourceKind::Assistant, Action::Read) => true,
         (ResourceKind::Assistant, Action::Update) => true,

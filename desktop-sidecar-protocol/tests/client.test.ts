@@ -86,6 +86,35 @@ describe("DesktopSidecarClient", () => {
     expect(sidecar.restartRequests).toBe(1);
   });
 
+  it("sends extensible user and organization configuration", async () => {
+    const { client, sidecar } = await setup();
+    await client.discover();
+
+    expect(client.supports("sidecar.configure.v1")).toBe(true);
+    await expect(
+      client.invoke("sidecar.configure.v1", {
+        user_configuration: {
+          show_tray_icon: null,
+          future_user_setting: "preserved",
+        },
+        organization_configuration: {
+          show_tray_icon: false,
+          future_organization_setting: { enabled: true },
+        },
+      }),
+    ).resolves.toEqual({});
+    expect(sidecar.configuration).toEqual({
+      user_configuration: {
+        show_tray_icon: null,
+        future_user_setting: "preserved",
+      },
+      organization_configuration: {
+        show_tray_icon: false,
+        future_organization_setting: { enabled: true },
+      },
+    });
+  });
+
   it("lists Outlook mailboxes and emails through pinned contracts", async () => {
     const { client } = await setup();
     await client.discover();

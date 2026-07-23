@@ -2778,6 +2778,120 @@ export const useUpdateChat = (
   });
 };
 
+export type OrganizationConfigurationError = Fetcher.ErrorWrapper<undefined>;
+
+export type OrganizationConfigurationVariables =
+  V1betaApiContext["fetcherOptions"];
+
+export const fetchOrganizationConfiguration = (
+  variables: OrganizationConfigurationVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.DesktopSidecarOrganizationConfiguration,
+    OrganizationConfigurationError,
+    undefined,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/desktop-sidecar/organization-configuration",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function organizationConfigurationQuery(
+  variables: OrganizationConfigurationVariables,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (
+    options: QueryFnOptions,
+  ) => Promise<Schemas.DesktopSidecarOrganizationConfiguration>;
+};
+
+export function organizationConfigurationQuery(
+  variables: OrganizationConfigurationVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((
+        options: QueryFnOptions,
+      ) => Promise<Schemas.DesktopSidecarOrganizationConfiguration>)
+    | reactQuery.SkipToken;
+};
+
+export function organizationConfigurationQuery(
+  variables: OrganizationConfigurationVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/desktop-sidecar/organization-configuration",
+      operationId: "organizationConfiguration",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchOrganizationConfiguration(variables, signal),
+  };
+}
+
+export const useSuspenseOrganizationConfiguration = <
+  TData = Schemas.DesktopSidecarOrganizationConfiguration,
+>(
+  variables: OrganizationConfigurationVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.DesktopSidecarOrganizationConfiguration,
+      OrganizationConfigurationError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.DesktopSidecarOrganizationConfiguration,
+    OrganizationConfigurationError,
+    TData
+  >({
+    ...organizationConfigurationQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useOrganizationConfiguration = <
+  TData = Schemas.DesktopSidecarOrganizationConfiguration,
+>(
+  variables: OrganizationConfigurationVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.DesktopSidecarOrganizationConfiguration,
+      OrganizationConfigurationError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.DesktopSidecarOrganizationConfiguration,
+    OrganizationConfigurationError,
+    TData
+  >({
+    ...organizationConfigurationQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type FacetsError = Fetcher.ErrorWrapper<undefined>;
 
 export type FacetsVariables = V1betaApiContext["fetcherOptions"];
@@ -5748,6 +5862,11 @@ export type QueryOperation =
       path: "/api/v1beta/me/budget";
       operationId: "budgetStatus";
       variables: BudgetStatusVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/me/desktop-sidecar/organization-configuration";
+      operationId: "organizationConfiguration";
+      variables: OrganizationConfigurationVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/me/facets";
