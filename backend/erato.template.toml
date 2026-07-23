@@ -219,6 +219,13 @@ chat_provider_ids = ["test-token-limit"]
 # [frontend.component_kits]
 # directory = "/app/component-kits"
 
+# Desktop sidecar distribution
+# When enabled, the backend validates manifest.json and all declared artifacts
+# during startup and serves them from /desktop-sidecar/setup.
+# [desktop_sidecar.distribution]
+# enabled = false
+# directory = "/app/desktop-sidecar-artifacts"
+
 # Chat sharing feature configuration
 # When enabled, chat owners can generate organization-internal share links for chats.
 # [chat_sharing]

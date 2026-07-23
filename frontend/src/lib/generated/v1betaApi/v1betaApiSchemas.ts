@@ -931,6 +931,35 @@ export type CreateShareGrantRequest = {
  */
 export type CreateShareGrantResponse = ShareGrant;
 
+export type DesktopSidecarDistributionFileResponse = {
+  download_filename: string;
+  id: string;
+  kind: string;
+  media_type: string;
+  /**
+   * @format int64
+   * @minimum 0
+   */
+  size: number;
+};
+
+export type DesktopSidecarDistributionPlatformResponse = {
+  abi: string;
+  architecture: string;
+  os: string;
+};
+
+export type DesktopSidecarDistributionResponse = {
+  targets: DesktopSidecarDistributionTargetResponse[];
+};
+
+export type DesktopSidecarDistributionTargetResponse = {
+  default_file: string;
+  files: DesktopSidecarDistributionFileResponse[];
+  id: string;
+  platform: DesktopSidecarDistributionPlatformResponse;
+};
+
 export type DesktopSidecarOrganizationConfiguration = {
   /**
    * Whether the desktop sidecar should show its system tray icon.

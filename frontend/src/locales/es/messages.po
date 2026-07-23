@@ -1823,6 +1823,136 @@ msgid "common.yes"
 msgstr "Sí"
 
 #. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.architecture.aarch64"
+msgstr "ARM de 64 bits"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.architecture.heading"
+msgstr "2. Procesador"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.architecture.x86_64"
+msgstr "Intel / AMD de 64 bits"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.artifact.applicationArchive"
+msgstr "Archivo de aplicación"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.artifact.archive"
+msgstr "Archivo"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.artifact.executable"
+msgstr "Ejecutable independiente"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.artifact.installer"
+msgstr "Instalador"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.artifact.recommended"
+msgstr "Recomendado"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.backToErato"
+msgstr "Volver a Erato"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.copy"
+msgstr "Elige tu sistema operativo y procesador y descarga el paquete que mejor se adapte a cómo quieres instalar Desktop Sidecar."
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.documentTitle"
+msgstr "Configuración de Desktop Sidecar"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.download.button"
+msgstr "Descargar"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.download.heading"
+msgstr "3. Descargar"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.eyebrow"
+msgstr "Erato Desktop Sidecar"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.fileSize.bytes"
+msgstr "{size} B"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.fileSize.kilobytes"
+msgstr "{size} KB"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.fileSize.megabytes"
+msgstr "{size} MB"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.loading"
+msgstr "Cargando las descargas disponibles..."
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.platform.heading"
+msgstr "1. Sistema operativo"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.platform.linux"
+msgstr "Linux"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.platform.macos"
+msgstr "macOS"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.platform.windows"
+msgstr "Windows"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.recommended"
+msgstr "Recomendado para este dispositivo"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.title"
+msgstr "Descargar para tu ordenador"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.unavailable.copy"
+msgstr "La distribución no está habilitada o no se pudieron cargar los artefactos configurados. Ponte en contacto con el administrador de Erato."
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.unavailable.title"
+msgstr "Las descargas de Desktop Sidecar no están disponibles"
+
+#. js-lingui-explicit-id
 #: src/App.tsx
 msgid "error.404.title"
 msgstr "404 - Página no encontrada"

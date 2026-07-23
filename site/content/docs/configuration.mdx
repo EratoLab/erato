@@ -488,8 +488,39 @@ directory = "/app/component-kits"
 
 ### `desktop_sidecar`
 
-Organization-managed settings sent to a logged-in user's local Erato desktop
-sidecar when the frontend session starts.
+Settings for distributing and configuring the local Erato desktop sidecar.
+
+#### `desktop_sidecar.distribution.enabled`
+
+{/* erato_toml_config_key: desktop_sidecar.distribution.enabled */}
+
+Enables the desktop-sidecar download page and artifact API. When enabled, Erato
+loads and validates the complete distribution manifest during startup. Invalid
+or missing manifests and artifacts are logged and the distribution remains
+unavailable instead of exposing a partial artifact set.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+#### `desktop_sidecar.distribution.directory`
+
+{/* erato_toml_config_key: desktop_sidecar.distribution.directory */}
+
+Directory containing the unversioned desktop-sidecar artifact set. It must
+contain one `manifest.json` and every artifact declared by that manifest.
+
+**Default value:** `/app/desktop-sidecar-artifacts`
+
+**Type:** `string`
+
+**Example**
+
+```toml
+[desktop_sidecar.distribution]
+enabled = true
+directory = "/app/desktop-sidecar-artifacts"
+```
 
 #### `desktop_sidecar.organization_configuration.show_tray_icon`
 

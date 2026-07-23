@@ -526,10 +526,38 @@ pub struct AppConfig {
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct DesktopSidecarConfig {
+    /// Distribution settings for desktop-sidecar installers and executables.
+    #[serde(default)]
+    pub distribution: DesktopSidecarDistributionConfig,
+
     /// Organization-managed configuration sent to the desktop sidecar when a
     /// logged-in frontend session is initialized.
     #[serde(default)]
     pub organization_configuration: DesktopSidecarOrganizationConfiguration,
+}
+
+fn default_desktop_sidecar_distribution_directory() -> String {
+    "/app/desktop-sidecar-artifacts".to_string()
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct DesktopSidecarDistributionConfig {
+    /// Enable serving desktop-sidecar artifacts from the distribution directory.
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// Directory containing the distribution manifest and its declared artifacts.
+    #[serde(default = "default_desktop_sidecar_distribution_directory")]
+    pub directory: String,
+}
+
+impl Default for DesktopSidecarDistributionConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            directory: default_desktop_sidecar_distribution_directory(),
+        }
+    }
 }
 
 #[derive(Debug, Default, Deserialize, Serialize, PartialEq, Eq, Clone, Facet, ToSchema)]

@@ -1823,6 +1823,136 @@ msgid "common.yes"
 msgstr "Oui"
 
 #. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.architecture.aarch64"
+msgstr "ARM 64 bits"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.architecture.heading"
+msgstr "2. Processeur"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.architecture.x86_64"
+msgstr "Intel / AMD 64 bits"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.artifact.applicationArchive"
+msgstr "Archive d’application"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.artifact.archive"
+msgstr "Archive"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.artifact.executable"
+msgstr "Exécutable autonome"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.artifact.installer"
+msgstr "Programme d’installation"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.artifact.recommended"
+msgstr "Recommandé"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.backToErato"
+msgstr "Retour à Erato"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.copy"
+msgstr "Choisissez votre système d’exploitation et votre processeur, puis téléchargez le paquet adapté à la façon dont vous souhaitez installer le Desktop Sidecar."
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.documentTitle"
+msgstr "Configuration du Desktop Sidecar"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.download.button"
+msgstr "Télécharger"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.download.heading"
+msgstr "3. Télécharger"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.eyebrow"
+msgstr "Erato Desktop Sidecar"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.fileSize.bytes"
+msgstr "{size} o"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.fileSize.kilobytes"
+msgstr "{size} Ko"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.fileSize.megabytes"
+msgstr "{size} Mo"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.loading"
+msgstr "Chargement des téléchargements disponibles..."
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.platform.heading"
+msgstr "1. Système d’exploitation"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.platform.linux"
+msgstr "Linux"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.platform.macos"
+msgstr "macOS"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.platform.windows"
+msgstr "Windows"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.recommended"
+msgstr "Recommandé pour cet appareil"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.title"
+msgstr "Télécharger pour votre ordinateur"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.unavailable.copy"
+msgstr "La distribution n’est pas activée ou les artefacts configurés n’ont pas pu être chargés. Contactez votre administrateur Erato."
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.unavailable.title"
+msgstr "Les téléchargements du Desktop Sidecar sont indisponibles"
+
+#. js-lingui-explicit-id
 #: src/App.tsx
 msgid "error.404.title"
 msgstr "404 - Page non trouvée"

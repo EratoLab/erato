@@ -1057,6 +1057,80 @@
         ]
       }
     },
+    "/api/v1beta/desktop-sidecar/distribution": {
+      "get": {
+        "tags": [
+          "desktop_sidecar"
+        ],
+        "operationId": "distribution",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesktopSidecarDistributionResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Desktop sidecar distribution is disabled or unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1beta/desktop-sidecar/distribution/download": {
+      "get": {
+        "tags": [
+          "desktop_sidecar"
+        ],
+        "operationId": "download_distribution_artifact",
+        "parameters": [
+          {
+            "name": "target",
+            "in": "query",
+            "description": "Manifest target identifier.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "file",
+            "in": "query",
+            "description": "Manifest file identifier. The target's default is used when omitted.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Desktop sidecar distribution artifact",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "format": "int32",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Distribution, target, or file is unavailable"
+          },
+          "500": {
+            "description": "The validated artifact could not be opened"
+          }
+        }
+      }
+    },
     "/api/v1beta/files/{file_id}": {
       "get": {
         "tags": [],
@@ -4886,6 +4960,94 @@
           }
         ],
         "description": "Response when creating a share grant"
+      },
+      "DesktopSidecarDistributionFileResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "download_filename",
+          "media_type",
+          "size"
+        ],
+        "properties": {
+          "download_filename": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "media_type": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "DesktopSidecarDistributionPlatformResponse": {
+        "type": "object",
+        "required": [
+          "os",
+          "architecture",
+          "abi"
+        ],
+        "properties": {
+          "abi": {
+            "type": "string"
+          },
+          "architecture": {
+            "type": "string"
+          },
+          "os": {
+            "type": "string"
+          }
+        }
+      },
+      "DesktopSidecarDistributionResponse": {
+        "type": "object",
+        "required": [
+          "targets"
+        ],
+        "properties": {
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DesktopSidecarDistributionTargetResponse"
+            }
+          }
+        }
+      },
+      "DesktopSidecarDistributionTargetResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "platform",
+          "default_file",
+          "files"
+        ],
+        "properties": {
+          "default_file": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DesktopSidecarDistributionFileResponse"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "platform": {
+            "$ref": "#/components/schemas/DesktopSidecarDistributionPlatformResponse"
+          }
+        }
       },
       "DesktopSidecarOrganizationConfiguration": {
         "type": "object",

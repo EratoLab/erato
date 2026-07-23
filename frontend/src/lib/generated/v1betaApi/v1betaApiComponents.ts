@@ -1763,6 +1763,244 @@ export const useChatMessages = <TData = Schemas.ChatMessagesResponse,>(
   });
 };
 
+export type DistributionError = Fetcher.ErrorWrapper<undefined>;
+
+export type DistributionVariables = V1betaApiContext["fetcherOptions"];
+
+export const fetchDistribution = (
+  variables: DistributionVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.DesktopSidecarDistributionResponse,
+    DistributionError,
+    undefined,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/desktop-sidecar/distribution",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function distributionQuery(variables: DistributionVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (
+    options: QueryFnOptions,
+  ) => Promise<Schemas.DesktopSidecarDistributionResponse>;
+};
+
+export function distributionQuery(
+  variables: DistributionVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((
+        options: QueryFnOptions,
+      ) => Promise<Schemas.DesktopSidecarDistributionResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function distributionQuery(
+  variables: DistributionVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/desktop-sidecar/distribution",
+      operationId: "distribution",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) => fetchDistribution(variables, signal),
+  };
+}
+
+export const useSuspenseDistribution = <
+  TData = Schemas.DesktopSidecarDistributionResponse,
+>(
+  variables: DistributionVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.DesktopSidecarDistributionResponse,
+      DistributionError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.DesktopSidecarDistributionResponse,
+    DistributionError,
+    TData
+  >({
+    ...distributionQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useDistribution = <
+  TData = Schemas.DesktopSidecarDistributionResponse,
+>(
+  variables: DistributionVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.DesktopSidecarDistributionResponse,
+      DistributionError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.DesktopSidecarDistributionResponse,
+    DistributionError,
+    TData
+  >({
+    ...distributionQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export type DownloadDistributionArtifactQueryParams = {
+  /**
+   * Manifest target identifier.
+   */
+  target: string;
+  /**
+   * Manifest file identifier. The target's default is used when omitted.
+   */
+  file?: string;
+};
+
+export type DownloadDistributionArtifactError = Fetcher.ErrorWrapper<undefined>;
+
+export type DownloadDistributionArtifactResponse = number[];
+
+export type DownloadDistributionArtifactVariables = {
+  queryParams: DownloadDistributionArtifactQueryParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchDownloadDistributionArtifact = (
+  variables: DownloadDistributionArtifactVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    DownloadDistributionArtifactResponse,
+    DownloadDistributionArtifactError,
+    undefined,
+    {},
+    DownloadDistributionArtifactQueryParams,
+    {}
+  >({
+    url: "/api/v1beta/desktop-sidecar/distribution/download",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function downloadDistributionArtifactQuery(
+  variables: DownloadDistributionArtifactVariables,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (
+    options: QueryFnOptions,
+  ) => Promise<DownloadDistributionArtifactResponse>;
+};
+
+export function downloadDistributionArtifactQuery(
+  variables: DownloadDistributionArtifactVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((
+        options: QueryFnOptions,
+      ) => Promise<DownloadDistributionArtifactResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function downloadDistributionArtifactQuery(
+  variables: DownloadDistributionArtifactVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/desktop-sidecar/distribution/download",
+      operationId: "downloadDistributionArtifact",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchDownloadDistributionArtifact(variables, signal),
+  };
+}
+
+export const useSuspenseDownloadDistributionArtifact = <
+  TData = DownloadDistributionArtifactResponse,
+>(
+  variables: DownloadDistributionArtifactVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      DownloadDistributionArtifactResponse,
+      DownloadDistributionArtifactError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    DownloadDistributionArtifactResponse,
+    DownloadDistributionArtifactError,
+    TData
+  >({
+    ...downloadDistributionArtifactQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useDownloadDistributionArtifact = <
+  TData = DownloadDistributionArtifactResponse,
+>(
+  variables: DownloadDistributionArtifactVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      DownloadDistributionArtifactResponse,
+      DownloadDistributionArtifactError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    DownloadDistributionArtifactResponse,
+    DownloadDistributionArtifactError,
+    TData
+  >({
+    ...downloadDistributionArtifactQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type GetFilePathParams = {
   /**
    * The ID of the file to retrieve
@@ -5827,6 +6065,16 @@ export type QueryOperation =
       path: "/api/v1beta/chats/{chatId}/messages";
       operationId: "chatMessages";
       variables: ChatMessagesVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/desktop-sidecar/distribution";
+      operationId: "distribution";
+      variables: DistributionVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/desktop-sidecar/distribution/download";
+      operationId: "downloadDistributionArtifact";
+      variables: DownloadDistributionArtifactVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/files/{fileId}";

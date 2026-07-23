@@ -56,6 +56,7 @@ sha2 = "0.11.0"
 # Dependencies: Async runtime
 tokio = { version = "1.52.3", features = ["rt-multi-thread"] }
 tokio-stream = { version = "0.1.18", features = ["sync"] }
+tokio-util = { version = "0.7.18", features = ["io"] }
 async-trait = "0.1.89"
 futures = "0.3.32"
 
