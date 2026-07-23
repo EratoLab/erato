@@ -6,8 +6,9 @@
 
 use crate::config::GenerationStatusConfig;
 use crate::metrics_constants::{
-    POSTGRES_QUERY_GENERATION_FINISH, POSTGRES_QUERY_GENERATION_HEARTBEAT,
-    POSTGRES_QUERY_GENERATION_REAP, POSTGRES_QUERY_GENERATION_START,
+    POSTGRES_QUERY_GENERATION_CLEANUP, POSTGRES_QUERY_GENERATION_FINISH,
+    POSTGRES_QUERY_GENERATION_HEARTBEAT, POSTGRES_QUERY_GENERATION_REAP,
+    POSTGRES_QUERY_GENERATION_START,
 };
 use crate::models::message::ContentPart;
 use crate::query_metrics::named_statement_from_sql_and_values;
@@ -95,8 +96,8 @@ impl BackgroundTaskManager {
             tasks.insert(chat_id, Arc::clone(&task));
         }
 
-        // Claim the chats-row lease for this generation. Best-effort: a failed
-        // status write must never fail a healthy generation.
+        // Best-effort lease claim: a failed status write must never fail a
+        // healthy generation.
         if let Some(db) = &self.db {
             let statement = named_statement_from_sql_and_values(
                 sea_orm::DatabaseBackend::Postgres,
@@ -133,12 +134,8 @@ impl BackgroundTaskManager {
     }
 
     /// Remove a completed task from the manager and persist its terminal
-    /// outcome.
-    ///
-    /// Both the in-map removal and the DB write are gated on `generation_id`:
-    /// `start_task` replaces the map entry when a chat starts a new
-    /// generation, so a stale wrapper finishing late must not remove (or mark
-    /// terminal) the replacement generation.
+    /// outcome. Gated on `generation_id` so a stale wrapper finishing late
+    /// cannot remove (or mark terminal) a replacement generation.
     pub async fn remove_task(&self, chat_id: &Uuid, generation_id: Uuid, outcome: TaskOutcome) {
         {
             let mut tasks = self.tasks.write().await;
@@ -201,11 +198,9 @@ impl BackgroundTaskManager {
             };
 
             if !chat_ids.is_empty() {
-                // The map is this process's source of truth, so the heartbeat
-                // also re-asserts the lease: two same-chat starts can race
-                // their start UPDATEs so the row's lease points at the losing
-                // generation, and without re-assertion the winner would never
-                // heartbeat and get reaped mid-run.
+                // The heartbeat also re-asserts the lease: two same-chat
+                // starts can race their start UPDATEs, and the map is this
+                // process's source of truth.
                 let statement = named_statement_from_sql_and_values(
                     sea_orm::DatabaseBackend::Postgres,
                     POSTGRES_QUERY_GENERATION_HEARTBEAT,
@@ -241,6 +236,27 @@ impl BackgroundTaskManager {
             if let Err(err) = db.execute_raw(statement).await {
                 tracing::warn!(error = %err, "Failed to reap stale generations");
             }
+
+            // Clear terminal rows once past the retention window, so the
+            // partial index only ever covers currently relevant rows.
+            let statement = named_statement_from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                POSTGRES_QUERY_GENERATION_CLEANUP,
+                r#"
+                UPDATE chats
+                SET active_generation_id = NULL,
+                    generation_state = NULL,
+                    generation_started_at = NULL,
+                    generation_heartbeat_at = NULL,
+                    generation_ended_at = NULL
+                WHERE generation_state IN ('completed', 'errored')
+                  AND generation_ended_at < now() - make_interval(secs => $1::double precision)
+                "#,
+                [(config.terminal_retention_secs as f64).into()],
+            );
+            if let Err(err) = db.execute_raw(statement).await {
+                tracing::warn!(error = %err, "Failed to clean up expired generation rows");
+            }
         }
     }
 }
@@ -252,9 +268,8 @@ impl Default for BackgroundTaskManager {
 }
 
 /// Removes a generation's task with an `Errored` outcome if its wrapper is
-/// dropped without reaching the normal cleanup, i.e. it panicked. Without
-/// this, a panicked wrapper leaves its map entry behind and the maintenance
-/// loop heartbeats the orphaned row as 'running' forever.
+/// dropped without reaching the normal cleanup (i.e. it panicked), so the
+/// maintenance loop cannot heartbeat the orphaned row forever.
 pub struct TaskCleanupGuard {
     manager: BackgroundTaskManager,
     chat_id: Uuid,
@@ -303,9 +318,8 @@ impl Drop for TaskCleanupGuard {
 
 /// A streaming task that manages event broadcasting and history
 pub struct StreamingTask {
-    /// Identity of this generation attempt. Distinguishes this task from an
-    /// earlier/later task for the same chat, both in the manager's map and in
-    /// the persisted chats-row lease.
+    /// Identity of this generation attempt, distinguishing it from other
+    /// generations of the same chat in the map and the chats-row lease.
     pub generation_id: Uuid,
     /// The id of the assistant message being generated. Set to a placeholder at
     /// construction (the real id is only known once the generation task creates
@@ -316,9 +330,8 @@ pub struct StreamingTask {
     event_tx: broadcast::Sender<StreamingEvent>,
     /// Storage for all events (for replay)
     event_history: Arc<RwLock<Vec<StreamingEvent>>>,
-    /// Whether any `Error` event was sent. Tracked separately from
-    /// `event_history`, which stops recording at `MAX_EVENT_HISTORY` while
-    /// events keep broadcasting — a trailing error must still count.
+    /// Whether any `Error` event was sent; tracked separately because
+    /// `event_history` stops recording at `MAX_EVENT_HISTORY`.
     saw_error: Arc<AtomicBool>,
     /// Whether the generation is complete
     completed: Arc<AtomicBool>,
@@ -419,10 +432,9 @@ impl StreamingTask {
         history.clone()
     }
 
-    /// Derive the terminal outcome of this task from the wrapper result
-    /// (`generation_failed`) and whether any `Error` event was sent. An abort
-    /// is a user-initiated stop and deliberately counts as `Completed`.
-    pub async fn derive_outcome(&self, generation_failed: bool) -> TaskOutcome {
+    /// Derive the terminal outcome of this task. An abort is a user-initiated
+    /// stop and deliberately counts as `Completed`.
+    pub fn derive_outcome(&self, generation_failed: bool) -> TaskOutcome {
         if generation_failed || self.saw_error.load(Ordering::SeqCst) {
             TaskOutcome::Errored
         } else {
@@ -738,7 +750,7 @@ mod tests {
     #[tokio::test]
     async fn derive_outcome_maps_wrapper_error_to_errored() {
         let task = StreamingTask::new(Uuid::new_v4(), Uuid::new_v4());
-        assert_eq!(task.derive_outcome(true).await, TaskOutcome::Errored);
+        assert_eq!(task.derive_outcome(true), TaskOutcome::Errored);
     }
 
     #[tokio::test]
@@ -747,7 +759,7 @@ mod tests {
         task.send_event(StreamingEvent::Error { error: None })
             .await
             .unwrap();
-        assert_eq!(task.derive_outcome(false).await, TaskOutcome::Errored);
+        assert_eq!(task.derive_outcome(false), TaskOutcome::Errored);
     }
 
     #[tokio::test]
@@ -760,14 +772,14 @@ mod tests {
         })
         .await
         .unwrap();
-        assert_eq!(task.derive_outcome(false).await, TaskOutcome::Completed);
+        assert_eq!(task.derive_outcome(false), TaskOutcome::Completed);
     }
 
     #[tokio::test]
     async fn derive_outcome_maps_abort_to_completed() {
         let task = StreamingTask::new(Uuid::new_v4(), Uuid::new_v4());
         task.request_abort();
-        assert_eq!(task.derive_outcome(false).await, TaskOutcome::Completed);
+        assert_eq!(task.derive_outcome(false), TaskOutcome::Completed);
     }
 
     #[tokio::test]

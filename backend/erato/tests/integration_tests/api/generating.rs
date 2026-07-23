@@ -273,6 +273,68 @@ async fn test_generating_chats_terminal_retention_expiry(pool: Pool<Postgres>) {
     );
 }
 
+/// Test the maintenance loop's cleanup of expired terminal rows.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `uses-mocked-llm`
+///
+/// # Test Behavior
+/// A terminal generation row whose retention window has passed gets all its
+/// generation columns cleared by the maintenance loop, so the partial index
+/// only covers currently relevant rows.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_generating_chats_expired_terminal_rows_cleared(pool: Pool<Postgres>) {
+    let (mut app_config, _server) = setup_mock_llm_server(None).await;
+    app_config.generation_status.heartbeat_interval_secs = 1;
+    app_config.generation_status.terminal_retention_secs = 1;
+
+    let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool.clone());
+    let user = get_or_create_user(&db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let chat = insert_chat(&db, &user.id.to_string()).await;
+    db.execute_raw(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        r#"
+        UPDATE chats
+        SET active_generation_id = $1,
+            generation_state = 'completed',
+            generation_started_at = now() - make_interval(secs => 600),
+            generation_heartbeat_at = now() - make_interval(secs => 600),
+            generation_ended_at = now() - make_interval(secs => 300)
+        WHERE id = $2
+        "#,
+        [Uuid::new_v4().into(), chat.id.into()],
+    ))
+    .await
+    .expect("Failed to mark chat as completed");
+
+    let app_state = test_app_state(app_config, pool).await;
+
+    let mut cleared = false;
+    for _ in 0..50 {
+        let chat = Chats::find_by_id(chat.id)
+            .one(&app_state.db)
+            .await
+            .unwrap()
+            .expect("Chat row should exist");
+        if chat.generation_state.is_none() {
+            assert!(chat.active_generation_id.is_none());
+            assert!(chat.generation_started_at.is_none());
+            assert!(chat.generation_heartbeat_at.is_none());
+            assert!(chat.generation_ended_at.is_none());
+            cleared = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert!(
+        cleared,
+        "The maintenance loop should clear a terminal row past its retention window"
+    );
+}
+
 /// Test that a failing provider turn ends up as an errored generation.
 ///
 /// # Test Categories

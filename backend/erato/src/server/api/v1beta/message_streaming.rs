@@ -6339,7 +6339,7 @@ pub async fn message_submit_sse(
             )
             .await;
             // Mark task as completed
-            let outcome = task_clone.derive_outcome(generation_failed).await;
+            let outcome = task_clone.derive_outcome(generation_failed);
             task_clone.mark_completed();
             cleanup_guard.disarm();
             app_state_bg
@@ -7838,7 +7838,7 @@ pub async fn regenerate_message_sse(
             log_and_capture_error("regenerate message background task", &error);
         }
 
-        let outcome = task_for_stream.derive_outcome(generation_failed).await;
+        let outcome = task_for_stream.derive_outcome(generation_failed);
         task_for_stream.mark_completed();
         cleanup_guard.disarm();
         app_state_for_cleanup
@@ -8231,7 +8231,7 @@ pub async fn edit_message_sse(
             log_and_capture_error("edit message background task", &error);
         }
 
-        let outcome = task_for_stream.derive_outcome(generation_failed).await;
+        let outcome = task_for_stream.derive_outcome(generation_failed);
         task_for_stream.mark_completed();
         cleanup_guard.disarm();
         app_state_for_cleanup

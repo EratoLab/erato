@@ -7,6 +7,7 @@ pub const POSTGRES_QUERY_GENERATION_START: &str = "generation_start";
 pub const POSTGRES_QUERY_GENERATION_FINISH: &str = "generation_finish";
 pub const POSTGRES_QUERY_GENERATION_HEARTBEAT: &str = "generation_heartbeat";
 pub const POSTGRES_QUERY_GENERATION_REAP: &str = "generation_reap";
+pub const POSTGRES_QUERY_GENERATION_CLEANUP: &str = "generation_cleanup";
 pub const POSTGRES_QUERY_LIST_GENERATING_CHATS: &str = "list_generating_chats";
 
 pub const KNOWN_POSTGRES_QUERY_IDS: &[&str] = &[
@@ -19,5 +20,6 @@ pub const KNOWN_POSTGRES_QUERY_IDS: &[&str] = &[
     POSTGRES_QUERY_GENERATION_FINISH,
     POSTGRES_QUERY_GENERATION_HEARTBEAT,
     POSTGRES_QUERY_GENERATION_REAP,
+    POSTGRES_QUERY_GENERATION_CLEANUP,
     POSTGRES_QUERY_LIST_GENERATING_CHATS,
 ];
