@@ -87,6 +87,72 @@
       }
     },
     {
+      "name": "outlook.list_mailboxes.v1",
+      "summary": "List mailboxes and message stores available through the local Outlook installation.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/outlook-list-mailboxes-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/outlook-list-mailboxes-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        { "$ref": "#/components/errors/CapabilityUnavailable" },
+        { "$ref": "#/components/errors/InvalidParams" },
+        { "$ref": "#/components/errors/PermissionDenied" },
+        { "$ref": "#/components/errors/RequestCancelled" },
+        { "$ref": "#/components/errors/Timeout" },
+        { "$ref": "#/components/errors/SidecarInternal" }
+      ],
+      "x-erato-capability": {
+        "id": "outlook.list_mailboxes",
+        "major": 1,
+        "method": "outlook.list_mailboxes.v1",
+        "availability": { "state": "enabled" }
+      }
+    },
+    {
+      "name": "outlook.list_emails.v1",
+      "summary": "List up to 50 of the newest locally indexed emails in a selected Outlook mailbox.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/outlook-list-emails-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/outlook-list-emails-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        { "$ref": "#/components/errors/CapabilityUnavailable" },
+        { "$ref": "#/components/errors/InvalidParams" },
+        { "$ref": "#/components/errors/PermissionDenied" },
+        { "$ref": "#/components/errors/RequestCancelled" },
+        { "$ref": "#/components/errors/Timeout" },
+        { "$ref": "#/components/errors/SidecarInternal" }
+      ],
+      "x-erato-capability": {
+        "id": "outlook.list_emails",
+        "major": 1,
+        "method": "outlook.list_emails.v1",
+        "availability": { "state": "enabled" }
+      }
+    },
+    {
       "name": "sidecar.restart.v1",
       "summary": "Acknowledge a request to restart the sidecar with its original command-line arguments.",
       "params": [
@@ -157,7 +223,7 @@
     }
   },
   "x-erato-catalogue": {
-    "revision": "2",
-    "digest": "sha256:ea9190a0b675cd61a311bd8df2571e20e17822126e2d184ea7e369319028f2b9"
+    "revision": "4",
+    "digest": "sha256:a9501bc1d89f8761008b9e2e2b0f17216dac203311e8c4007a2fe300fa373c50"
   }
 }

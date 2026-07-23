@@ -5,6 +5,10 @@ import {
   validateDiagnosticsEchoV1Result,
   validateDiscoverResult,
   validateJsonRpcEnvelope,
+  validateOutlookListEmailsV1Params,
+  validateOutlookListEmailsV1Result,
+  validateOutlookListMailboxesV1Params,
+  validateOutlookListMailboxesV1Result,
   validateSidecarRestartV1Params,
   validateSidecarRestartV1Result,
   type Validator,
@@ -17,6 +21,10 @@ import type {
   DiscoverParams,
   DiscoverResult,
   DiscoveryDocument,
+  OutlookListEmailsV1Params,
+  OutlookListEmailsV1Result,
+  OutlookListMailboxesV1Params,
+  OutlookListMailboxesV1Result,
   SidecarRestartV1Params,
   SidecarRestartV1Result,
 } from "./generated/index.js";
@@ -101,6 +109,14 @@ const builtInContracts: Readonly<Record<string, SidecarMethodContract>> = {
     validateParams: validateDiagnosticsEchoV1Params,
     validateResult: validateDiagnosticsEchoV1Result,
   },
+  "outlook.list_mailboxes.v1": {
+    validateParams: validateOutlookListMailboxesV1Params,
+    validateResult: validateOutlookListMailboxesV1Result,
+  },
+  "outlook.list_emails.v1": {
+    validateParams: validateOutlookListEmailsV1Params,
+    validateResult: validateOutlookListEmailsV1Result,
+  },
   "sidecar.restart.v1": {
     validateParams: validateSidecarRestartV1Params,
     validateResult: validateSidecarRestartV1Result,
@@ -176,6 +192,16 @@ export class DesktopSidecarClient {
     params: DiagnosticsEchoV1Params,
     options?: InvokeOptions,
   ): Promise<DiagnosticsEchoV1Result>;
+  async invoke(
+    method: "outlook.list_mailboxes.v1",
+    params: OutlookListMailboxesV1Params,
+    options?: InvokeOptions,
+  ): Promise<OutlookListMailboxesV1Result>;
+  async invoke(
+    method: "outlook.list_emails.v1",
+    params: OutlookListEmailsV1Params,
+    options?: InvokeOptions,
+  ): Promise<OutlookListEmailsV1Result>;
   async invoke(
     method: "sidecar.restart.v1",
     params: SidecarRestartV1Params,

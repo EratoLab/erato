@@ -16,6 +16,8 @@ import {
   validateCancelParams,
   validateDiagnosticsEchoV1Params,
   validateDiscoverParams,
+  validateOutlookListEmailsV1Params,
+  validateOutlookListMailboxesV1Params,
   validateSidecarRestartV1Params,
 } from "../../typescript/src/generated/validators.mjs";
 
@@ -55,6 +57,21 @@ interface HttpRejection {
 }
 
 const INSTANCE_ID = "mock-sidecar-instance";
+const MOCK_OUTLOOK_MAILBOX = {
+  id: "8b7d2f4a6c9e1035d8a1b2c3e4f50617",
+  displayName: "Mock Outlook mailbox",
+  emailAddress: "mock@example.com",
+  profileName: "Mock Outlook Profile",
+  source: "mock",
+};
+const MOCK_OUTLOOK_EMAIL = {
+  id: "mock-outlook-email",
+  subject: "Mock Outlook message",
+  senderName: "Erato Test",
+  senderEmailAddress: "test@example.com",
+  receivedAtUnixSeconds: 1_774_291_200,
+  internetMessageId: "<mock-outlook-email@example.com>",
+};
 const openRpcUrl = [
   new URL("../../openrpc.json", import.meta.url),
   new URL("../../../openrpc.json", import.meta.url),
@@ -330,6 +347,32 @@ export class MockSidecar {
       }
       this.#restartRequests += 1;
       return rpcResult(message.id, { accepted: true });
+    }
+
+    if (message.method === "outlook.list_mailboxes.v1") {
+      if (!validateOutlookListMailboxesV1Params(message.params)) {
+        return rpcError(message.id, -32602, "Invalid method parameters.");
+      }
+      return rpcResult(message.id, {
+        mailboxes: [MOCK_OUTLOOK_MAILBOX],
+        warnings: [],
+      });
+    }
+
+    if (message.method === "outlook.list_emails.v1") {
+      if (!validateOutlookListEmailsV1Params(message.params)) {
+        return rpcError(message.id, -32602, "Invalid method parameters.");
+      }
+      if (
+        (message.params as { mailboxId: string }).mailboxId !==
+        MOCK_OUTLOOK_MAILBOX.id
+      ) {
+        return rpcError(message.id, -32602, "Unknown Outlook mailbox.");
+      }
+      return rpcResult(message.id, {
+        mailbox: MOCK_OUTLOOK_MAILBOX,
+        emails: [MOCK_OUTLOOK_EMAIL],
+      });
     }
 
     if (message.method !== "diagnostics.echo.v1") {

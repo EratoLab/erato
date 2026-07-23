@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-mailboxes-v1-result.schema.json",
+  "title": "OutlookListMailboxesV1Result",
+  "type": "object",
+  "required": ["mailboxes", "warnings"],
+  "properties": {
+    "mailboxes": {
+      "type": "array",
+      "items": {
+        "$ref": "../outlook/mailbox.schema.json"
+      },
+      "maxItems": 1024
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "$ref": "../outlook/listing-warning.schema.json"
+      },
+      "maxItems": 1024
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/outlook/mailbox.schema.json",
+  "title": "OutlookMailbox",
+  "description": "A mailbox or message store available through the local Outlook installation.",
+  "type": "object",
+  "required": ["id", "displayName", "source"],
+  "properties": {
+    "id": {
+      "description": "Short opaque mailbox identifier. It is unique for the current sidecar runtime and logically stable across restarts while the Outlook profile and store identity remain unchanged.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "displayName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "emailAddress": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "profileName": {
+      "description": "Name of the Outlook profile containing this mailbox. Omitted when the platform or standalone store has no profile concept.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "source": {
+      "description": "Implementation-defined local Outlook storage source. Known values include pst, ost, macOsProfile, and windowsOutlook.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    }
+  },
+  "additionalProperties": true
+}

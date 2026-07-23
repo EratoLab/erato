@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/outlook/listing-warning.schema.json",
+  "title": "OutlookListingWarning",
+  "description": "A local Outlook source that could not be inspected without hiding successful results.",
+  "type": "object",
+  "required": ["message"],
+  "properties": {
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32768
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    }
+  },
+  "additionalProperties": true
+}

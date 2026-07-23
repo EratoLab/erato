@@ -47,6 +47,15 @@ if (client.supports("diagnostics.echo.v1")) {
 if (client.supports("sidecar.restart.v1")) {
   await client.invoke("sidecar.restart.v1", {});
 }
+
+if (client.supports("outlook.list_mailboxes.v1")) {
+  const { mailboxes } = await client.invoke("outlook.list_mailboxes.v1", {});
+  if (mailboxes[0] && client.supports("outlook.list_emails.v1")) {
+    await client.invoke("outlook.list_emails.v1", {
+      mailboxId: mailboxes[0].id,
+    });
+  }
+}
 ```
 
 The candidate loopback URL above is not a production default. Consumers only

@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-emails-v1-result.schema.json",
+  "title": "OutlookListEmailsV1Result",
+  "description": "Up to 50 of the newest locally indexed emails in the selected mailbox.",
+  "type": "object",
+  "required": ["mailbox", "emails"],
+  "properties": {
+    "mailbox": {
+      "$ref": "../outlook/mailbox.schema.json"
+    },
+    "emails": {
+      "type": "array",
+      "items": {
+        "$ref": "../outlook/email-summary.schema.json"
+      },
+      "maxItems": 50
+    }
+  },
+  "additionalProperties": true
+}
