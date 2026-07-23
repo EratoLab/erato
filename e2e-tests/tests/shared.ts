@@ -160,8 +160,12 @@ export const selectModel = async (page: Page, modelDisplayName: string) => {
     .getByRole("menuitem", { name: modelDisplayName, exact: true })
     .click();
 
-  // Wait a moment for the selection to take effect
-  await page.waitForTimeout(500);
+  // Selection is synchronous client state, and the trigger label re-renders in
+  // the same commit as the value the send path reads — so the label is the
+  // authoritative signal that the selection took effect. The hidden menu
+  // additionally guarantees the overlay no longer intercepts clicks.
+  await expect(modelSelector).toContainText(modelDisplayName);
+  await expect(menu).toBeHidden();
 };
 
 export const ensureOpenSidebar = async (page: Page) => {

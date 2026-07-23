@@ -1,4 +1,4 @@
-import { test, expect, Page } from "@playwright/test";
+import { test, expect, Page, Response } from "@playwright/test";
 import { TAG_CI } from "./tags";
 import {
   chatIsReadyToChat,
@@ -180,32 +180,30 @@ test(
 
     const sidebar = page.getByRole("complementary");
 
-    // Resolve once the gated refetch has listed this chat, so its sidebar row is
-    // backed by recent_chats and survives the New Chat below — which clears only
-    // the placeholder. Registered before the send so the refetch cannot be
-    // missed; the `chatId` guard skips list responses that predate the id.
-    let chatId = "";
-    const firstChatListed = page.waitForResponse(
-      async (response) => {
-        if (!response.url().includes(RECENT_CHATS_URL) || !chatId) {
-          return false;
-        }
-        try {
-          const body = (await response.json()) as { chats?: { id?: string }[] };
-          return (
-            Array.isArray(body.chats) &&
-            body.chats.some((entry) => entry.id === chatId)
-          );
-        } catch {
-          return false;
-        }
-      },
-      { timeout: 30000 },
-    );
+    // The chat's row must be backed by recent_chats before the New Chat below —
+    // which clears only the placeholder. The gated refetch can land before
+    // sendFirstMessage's URL poll has resolved the id, and no further list
+    // request happens until the turn completes; a waitForResponse predicate
+    // keyed on the id would discard that only mid-stream listing and eat the
+    // whole paced-stream budget. Buffer every body from before the send
+    // instead, and match once the id is known.
+    const recentChatsBodies: { chats?: { id?: string }[] }[] = [];
+    const onRecentChats = (response: Response) => {
+      if (!response.url().includes(RECENT_CHATS_URL)) {
+        return;
+      }
+      response
+        .json()
+        .then((body: { chats?: { id?: string }[] }) =>
+          recentChatsBodies.push(body),
+        )
+        .catch(() => {});
+    };
+    page.on("response", onRecentChats);
 
     // A long paced turn, so the return below attaches a resumestream to a task
     // that is provably still generating rather than one that already 404s.
-    chatId = await sendFirstMessage(page, "long running 20");
+    const chatId = await sendFirstMessage(page, "long running 20");
     const row = sidebar.locator(`[data-chat-id="${chatId}"]`);
     const rowLink = sidebar.locator(`a:has([data-chat-id="${chatId}"])`);
     await expect(row).toBeVisible({ timeout: 5000 });
@@ -215,7 +213,18 @@ test(
     });
     await expect(page.getByTestId("chat-input-stop-generation")).toBeVisible();
 
-    await firstChatListed;
+    await expect
+      .poll(
+        () =>
+          recentChatsBodies.some(
+            (body) =>
+              Array.isArray(body.chats) &&
+              body.chats.some((entry) => entry.id === chatId),
+          ),
+        { timeout: 30000 },
+      )
+      .toBe(true);
+    page.off("response", onRecentChats);
 
     // Abandon the still-streaming chat by starting a new one. This is the
     // load-bearing step: New Chat aborts the live SSE socket (abortAllSSE), so
@@ -360,7 +369,7 @@ test(
     const listExclude = await excludeOpenChatFromRecentChats(page);
 
     try {
-      const chatId = await sendFirstMessage(page, "long running 2");
+      const chatId = await sendFirstMessage(page, "long running 6");
       const row = sidebar.locator(`[data-chat-id="${chatId}"]`);
       await expect(row).toBeVisible({ timeout: 5000 });
       // The placeholder is shown while the first turn is still in flight.
