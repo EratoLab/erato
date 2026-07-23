@@ -18,6 +18,7 @@ import AssistantHubReviewPage from "./pages/AssistantHubReviewPage";
 import AssistantHubSubmitPage from "./pages/AssistantHubSubmitPage";
 import AssistantsListPage from "./pages/AssistantsListPage";
 import ChatDetailPage from "./pages/ChatDetailPage";
+import DesktopSidecarSetupPage from "./pages/DesktopSidecarSetupPage";
 import HomePage from "./pages/HomePage";
 import NewChatPage from "./pages/NewChatPage";
 import SearchPage from "./pages/SearchPage";
@@ -68,6 +69,10 @@ function AppRoutes() {
         {/* The App component provides the outermost layout context */}
         <Route index element={<HomePage />} />
         <Route path="about" element={<AboutPage />} />
+        <Route
+          path="desktop-sidecar/setup"
+          element={<DesktopSidecarSetupPage />}
+        />
         {/* Chat section with its own nested layout and routes */}
         <Route path="chat" element={<ChatLayout />}>
           <Route index element={<Navigate to="new" replace />} />{" "}

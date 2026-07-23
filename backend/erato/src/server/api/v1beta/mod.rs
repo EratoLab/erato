@@ -328,6 +328,14 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
     let app = Router::new()
         .route("/messages", get(messages))
         .route("/chats", get(chats))
+        .route(
+            "/desktop-sidecar/distribution",
+            get(desktop_sidecar::distribution),
+        )
+        .route(
+            "/desktop-sidecar/distribution/download",
+            get(desktop_sidecar::download_distribution_artifact),
+        )
         .nest("/me", me_routes)
         .merge(authenticated_routes)
         .fallback(fallback);
@@ -371,6 +379,8 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         file_capabilities,
         budget::budget_status,
         desktop_sidecar::organization_configuration,
+        desktop_sidecar::distribution,
+        desktop_sidecar::download_distribution_artifact,
         assistants::create_assistant,
         assistants::list_assistants,
         assistants::get_assistant,
@@ -497,6 +507,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         PromptOptimizerResponse,
         budget::BudgetStatusResponse,
         crate::config::DesktopSidecarOrganizationConfiguration,
+        desktop_sidecar::DesktopSidecarDistributionResponse,
+        desktop_sidecar::DesktopSidecarDistributionTargetResponse,
+        desktop_sidecar::DesktopSidecarDistributionPlatformResponse,
+        desktop_sidecar::DesktopSidecarDistributionFileResponse,
         crate::config::BudgetCurrency,
         sharepoint::Drive,
         sharepoint::DriveItem,

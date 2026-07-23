@@ -25,6 +25,10 @@ fn test_desktop_sidecar_organization_configuration() {
 [desktop_sidecar.organization_configuration]
 show_tray_icon = false
 
+[desktop_sidecar.distribution]
+enabled = true
+directory = "/tmp/desktop-sidecar-artifacts"
+
 [file_storage_providers]
 "#,
         )
@@ -52,6 +56,11 @@ show_tray_icon = false
             .organization_configuration
             .show_tray_icon,
         Some(false)
+    );
+    assert!(config.desktop_sidecar.distribution.enabled);
+    assert_eq!(
+        config.desktop_sidecar.distribution.directory,
+        "/tmp/desktop-sidecar-artifacts"
     );
 }
 

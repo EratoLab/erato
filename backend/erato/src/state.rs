@@ -4,6 +4,7 @@ use crate::policy::engine::PolicyEngine;
 use crate::policy::types::Subject;
 use crate::query_metrics::install_postgres_query_metrics;
 use crate::services::background_tasks::BackgroundTaskManager;
+use crate::services::desktop_sidecar_distribution::DesktopSidecarDistribution;
 use crate::services::file_storage::{FileStorage, SHAREPOINT_PROVIDER_ID};
 use crate::services::genai::GenAIClient;
 use crate::services::langfuse::{LangfuseClient, LangfusePrompt};
@@ -113,6 +114,7 @@ pub struct AppState {
     pub global_policy_engine: GlobalPolicyEngine,
     pub background_tasks: BackgroundTaskManager,
     pub system_prompt_renderer: SystemPromptRenderer,
+    pub desktop_sidecar_distribution: Option<Arc<DesktopSidecarDistribution>>,
     /// Optional inference client used instead of provider-specific clients built from config.
     /// This allows tests to inject deterministic responses and provider failures.
     pub genai_client_override: Option<Arc<dyn GenAIClient>>,
@@ -164,6 +166,10 @@ impl std::fmt::Debug for AppState {
             .field("background_tasks", &self.background_tasks)
             .field("system_prompt_renderer", &self.system_prompt_renderer)
             .field(
+                "desktop_sidecar_distribution",
+                &self.desktop_sidecar_distribution,
+            )
+            .field(
                 "genai_client_override",
                 &self.genai_client_override.as_ref().map(|_| "<GenAIClient>"),
             )
@@ -179,6 +185,29 @@ impl std::fmt::Debug for AppState {
 
 impl AppState {
     pub async fn new(config: AppConfig) -> Result<Self, Report> {
+        let desktop_sidecar_distribution = if config.desktop_sidecar.distribution.enabled {
+            match DesktopSidecarDistribution::load(&config.desktop_sidecar.distribution.directory) {
+                Ok(distribution) => {
+                    tracing::info!(
+                        directory = %config.desktop_sidecar.distribution.directory,
+                        targets = distribution.targets().len(),
+                        "Loaded desktop sidecar distribution"
+                    );
+                    Some(Arc::new(distribution))
+                }
+                Err(error) => {
+                    tracing::error!(
+                        directory = %config.desktop_sidecar.distribution.directory,
+                        %error,
+                        "Desktop sidecar distribution is enabled but could not be loaded"
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         let db_connect_options = ConnectOptions::new(config.database_url.expose_secret());
         // TODO: Change level to Debug, but that also seems to deactivate some other logging (e.g. Errors during request?)
         // db_connect_options.sqlx_logging_level(LevelFilter::Debug);
@@ -259,6 +288,7 @@ impl AppState {
             global_policy_engine,
             background_tasks,
             system_prompt_renderer,
+            desktop_sidecar_distribution,
             genai_client_override: None,
             file_bytes_cache,
             file_contents_cache,
