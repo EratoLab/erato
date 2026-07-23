@@ -343,6 +343,28 @@ test_anonymous_user_cannot_create_chat if {
 	}
 }
 
+# A logged-in user can read the organization-managed desktop sidecar configuration.
+test_logged_in_user_can_read_desktop_sidecar_configuration if {
+	backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_1_id,
+		"resource_kind": "desktop_sidecar_configuration_singleton",
+		"resource_id": "__singleton__",
+		"action": "read",
+	}
+}
+
+# A not-logged-in user cannot read the desktop sidecar configuration.
+test_anonymous_user_cannot_read_desktop_sidecar_configuration if {
+	not backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": "__not_logged_in__",
+		"resource_kind": "desktop_sidecar_configuration_singleton",
+		"resource_id": "__singleton__",
+		"action": "read",
+	}
+}
+
 # A user can submit a message to their own chat.
 test_user_can_submit_message_to_own_chat if {
 	backend.allow with input as {

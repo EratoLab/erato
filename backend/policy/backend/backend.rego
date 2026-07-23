@@ -87,6 +87,7 @@ not_logged_in := "__not_logged_in__"
 resource_kind_chat := "chat"
 resource_kind_chat_singleton := "chat_singleton"
 resource_kind_prompt_optimizer_singleton := "prompt_optimizer_singleton"
+resource_kind_desktop_sidecar_configuration_singleton := "desktop_sidecar_configuration_singleton"
 resource_kind_message_feedback := "message_feedback"
 resource_kind_assistant := "assistant"
 resource_kind_file_upload := "file_upload"
@@ -270,6 +271,14 @@ allow if {
 	# Check for prompt optimizer create action on singleton resource
 	input.resource_kind == resource_kind_prompt_optimizer_singleton
 	input.action == action_create
+}
+
+# A logged-in user can read organization configuration for the local desktop sidecar.
+allow if {
+	input.subject_kind == subject_kind_user
+	input.subject_id != not_logged_in
+	input.resource_kind == resource_kind_desktop_sidecar_configuration_singleton
+	input.action == action_read
 }
 
 # A user can read/update/share assistants they own.

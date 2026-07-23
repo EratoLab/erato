@@ -1,0 +1,7 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-configure-v1-result.schema.json",
+  "title": "SidecarConfigureV1Result",
+  "type": "object",
+  "additionalProperties": true
+}

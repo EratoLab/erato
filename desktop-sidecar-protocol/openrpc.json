@@ -153,6 +153,36 @@
       }
     },
     {
+      "name": "sidecar.configure.v1",
+      "summary": "Replace and persist the current user and organization configuration layers.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/sidecar-configure-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/sidecar-configure-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        { "$ref": "#/components/errors/CapabilityUnavailable" },
+        { "$ref": "#/components/errors/InvalidParams" },
+        { "$ref": "#/components/errors/SidecarInternal" }
+      ],
+      "x-erato-capability": {
+        "id": "sidecar.configure",
+        "major": 1,
+        "method": "sidecar.configure.v1",
+        "availability": { "state": "enabled" }
+      }
+    },
+    {
       "name": "sidecar.restart.v1",
       "summary": "Acknowledge a request to restart the sidecar with its original command-line arguments.",
       "params": [
@@ -223,7 +253,7 @@
     }
   },
   "x-erato-catalogue": {
-    "revision": "4",
-    "digest": "sha256:a9501bc1d89f8761008b9e2e2b0f17216dac203311e8c4007a2fe300fa373c50"
+    "revision": "5",
+    "digest": "sha256:13f936659b24d6888f6d81e78ca3438af7cdfedc136b947f213b51dd0aa5342f"
   }
 }

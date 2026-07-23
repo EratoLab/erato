@@ -13,6 +13,48 @@ use std::io::Write;
 use tempfile::Builder;
 use test_log::test;
 
+#[test]
+fn test_desktop_sidecar_organization_configuration() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    temp_file
+        .write_all(
+            br#"
+[desktop_sidecar.organization_configuration]
+show_tray_icon = false
+
+[file_storage_providers]
+"#,
+        )
+        .expect("Failed to write desktop sidecar configuration");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let mut builder = AppConfig::config_schema_builder(
+        Some(vec![temp_file.path().to_string_lossy().into_owned()]),
+        false,
+    )
+    .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config: AppConfig = builder
+        .build()
+        .expect("Failed to build config schema")
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    assert_eq!(
+        config
+            .desktop_sidecar
+            .organization_configuration
+            .show_tray_icon,
+        Some(false)
+    );
+}
+
 /// Tests OpenAI provider configuration parsing.
 ///
 /// # Test Categories

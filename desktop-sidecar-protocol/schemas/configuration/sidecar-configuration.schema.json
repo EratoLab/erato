@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/configuration/sidecar-configuration.schema.json",
+  "title": "SidecarConfiguration",
+  "description": "An extensible configuration layer. Unknown properties must be accepted and preserved.",
+  "type": "object",
+  "properties": {
+    "show_tray_icon": {
+      "description": "Whether the sidecar should show its system tray icon. Null leaves the decision to the other configuration layer or the sidecar default.",
+      "type": ["boolean", "null"]
+    }
+  },
+  "additionalProperties": true
+}

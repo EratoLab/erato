@@ -486,6 +486,33 @@ file in the current component-kit format.
 directory = "/app/component-kits"
 ```
 
+### `desktop_sidecar`
+
+Organization-managed settings sent to a logged-in user's local Erato desktop
+sidecar when the frontend session starts.
+
+#### `desktop_sidecar.organization_configuration.show_tray_icon`
+
+{/* erato_toml_config_key: desktop_sidecar.organization_configuration.show_tray_icon */}
+
+Controls whether the desktop sidecar displays its system tray icon. When this
+value is omitted, a user-specific sidecar setting may take precedence; if
+neither layer provides a value, the sidecar shows the icon.
+
+The sidecar applies changes at runtime and persists the complete configuration
+in the platform-default per-user configuration directory.
+
+**Default value:** `None`
+
+**Type:** `boolean | None`
+
+**Example**
+
+```toml
+[desktop_sidecar.organization_configuration]
+show_tray_icon = false
+```
+
 ### `i18n`
 
 {/* erato_toml_config_key: i18n */}

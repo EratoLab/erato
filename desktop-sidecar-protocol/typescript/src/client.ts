@@ -11,6 +11,8 @@ import {
   validateOutlookListMailboxesV1Result,
   validateSidecarRestartV1Params,
   validateSidecarRestartV1Result,
+  validateSidecarConfigureV1Params,
+  validateSidecarConfigureV1Result,
   type Validator,
 } from "./generated/validators.mjs";
 
@@ -27,6 +29,8 @@ import type {
   OutlookListMailboxesV1Result,
   SidecarRestartV1Params,
   SidecarRestartV1Result,
+  SidecarConfigureV1Params,
+  SidecarConfigureV1Result,
 } from "./generated/index.js";
 import type { SidecarTransport } from "./transport.js";
 
@@ -121,6 +125,10 @@ const builtInContracts: Readonly<Record<string, SidecarMethodContract>> = {
     validateParams: validateSidecarRestartV1Params,
     validateResult: validateSidecarRestartV1Result,
   },
+  "sidecar.configure.v1": {
+    validateParams: validateSidecarConfigureV1Params,
+    validateResult: validateSidecarConfigureV1Result,
+  },
 };
 
 const EMPTY_CAPABILITIES = new Map<string, SidecarCapability>();
@@ -202,6 +210,11 @@ export class DesktopSidecarClient {
     params: OutlookListEmailsV1Params,
     options?: InvokeOptions,
   ): Promise<OutlookListEmailsV1Result>;
+  async invoke(
+    method: "sidecar.configure.v1",
+    params: SidecarConfigureV1Params,
+    options?: InvokeOptions,
+  ): Promise<SidecarConfigureV1Result>;
   async invoke(
     method: "sidecar.restart.v1",
     params: SidecarRestartV1Params,

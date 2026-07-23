@@ -1562,6 +1562,34 @@
         ]
       }
     },
+    "/api/v1beta/me/desktop-sidecar/organization-configuration": {
+      "get": {
+        "tags": [
+          "desktop_sidecar"
+        ],
+        "operationId": "organization_configuration",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesktopSidecarOrganizationConfiguration"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/facets": {
       "get": {
         "tags": [],
@@ -4858,6 +4886,18 @@
           }
         ],
         "description": "Response when creating a share grant"
+      },
+      "DesktopSidecarOrganizationConfiguration": {
+        "type": "object",
+        "properties": {
+          "show_tray_icon": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether the desktop sidecar should show its system tray icon.\n\nWhen unset, the sidecar uses its user configuration or built-in default."
+          }
+        }
       },
       "DisconnectMcpServerOauthResponse": {
         "type": "object",

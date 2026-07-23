@@ -164,6 +164,12 @@ const validators = {
   "sidecar.restart.v1:result": ajv.getSchema(
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-restart-v1-result.schema.json",
   ),
+  "sidecar.configure.v1:params": ajv.getSchema(
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-configure-v1-params.schema.json",
+  ),
+  "sidecar.configure.v1:result": ajv.getSchema(
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-configure-v1-result.schema.json",
+  ),
   "outlook.list_mailboxes.v1:params": ajv.getSchema(
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-mailboxes-v1-params.schema.json",
   ),

@@ -22,6 +22,8 @@ export const validateDiagnosticsEchoV1Params: Validator;
 export const validateDiagnosticsEchoV1Result: Validator;
 export const validateSidecarRestartV1Params: Validator;
 export const validateSidecarRestartV1Result: Validator;
+export const validateSidecarConfigureV1Params: Validator;
+export const validateSidecarConfigureV1Result: Validator;
 export const validateOutlookListMailboxesV1Params: Validator;
 export const validateOutlookListMailboxesV1Result: Validator;
 export const validateOutlookListEmailsV1Params: Validator;

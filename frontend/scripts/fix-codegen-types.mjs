@@ -149,6 +149,10 @@ const schemaStringFieldFixes = [
     from: "comment?: null | undefined;",
     to: "comment?: string | null | undefined;",
   },
+  {
+    from: "show_tray_icon?: null | undefined;",
+    to: "show_tray_icon?: boolean | null | undefined;",
+  },
   // Keep the two-space indent: it pins the match to LinkFileRequest.chat_id and
   // avoids the substring collision with `existing_chat_id?: null | undefined;`
   // (which other, unindented entries would also rewrite via replaceAll).

@@ -43,4 +43,7 @@ export type {
   ProtocolErrorData,
   SidecarRestartV1Params,
   SidecarRestartV1Result,
+  SidecarConfiguration,
+  SidecarConfigureV1Params,
+  SidecarConfigureV1Result,
 } from "./generated/index.js";

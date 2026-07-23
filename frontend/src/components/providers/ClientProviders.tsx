@@ -2,7 +2,10 @@
 
 import { ApiProvider } from "./ApiProvider";
 import { ThemeProvider } from "./ThemeProvider";
-import { DesktopSidecarProvider } from "../../providers/DesktopSidecarProvider";
+import {
+  DesktopSidecarConfigurationSync,
+  DesktopSidecarProvider,
+} from "../../providers/DesktopSidecarProvider";
 import { FeatureConfigProvider } from "../../providers/FeatureConfigProvider";
 import { I18nProvider } from "../../providers/I18nProvider";
 import { Toaster } from "../ui/Toast/Toaster";
@@ -15,8 +18,9 @@ import type { PropsWithChildren } from "react";
  */
 export function ClientProviders({ children }: PropsWithChildren) {
   return (
-    <DesktopSidecarProvider>
-      <ApiProvider>
+    <ApiProvider>
+      <DesktopSidecarProvider>
+        <DesktopSidecarConfigurationSync />
         <ThemeProvider>
           <FeatureConfigProvider>
             <I18nProvider>
@@ -32,7 +36,7 @@ export function ClientProviders({ children }: PropsWithChildren) {
             </I18nProvider>
           </FeatureConfigProvider>
         </ThemeProvider>
-      </ApiProvider>
-    </DesktopSidecarProvider>
+      </DesktopSidecarProvider>
+    </ApiProvider>
   );
 }
