@@ -6,6 +6,8 @@ import {
   validateDiagnosticsEchoV1Params,
   validateDiscoveryDocument,
   validateJsonRpcEnvelope,
+  validateOutlookListEmailsV1Params,
+  validateOutlookListMailboxesV1Result,
 } from "../typescript/src/generated/validators.mjs";
 
 interface InvalidMessageFixture {
@@ -47,6 +49,29 @@ describe("language-neutral conformance fixtures", () => {
     };
 
     expect(validateDiscoveryDocument(document)).toBe(true);
+  });
+
+  it("validates the Outlook action boundary", () => {
+    expect(
+      validateOutlookListEmailsV1Params({
+        mailboxId: "8b7d2f4a6c9e1035d8a1b2c3e4f50617",
+      }),
+    ).toBe(true);
+    expect(validateOutlookListEmailsV1Params({ mailboxId: "" })).toBe(false);
+    expect(
+      validateOutlookListMailboxesV1Result({
+        mailboxes: [
+          {
+            id: "8b7d2f4a6c9e1035d8a1b2c3e4f50617",
+            displayName: "Work",
+            emailAddress: "work@example.com",
+            profileName: "Work Profile",
+            source: "windowsOutlook",
+          },
+        ],
+        warnings: [],
+      }),
+    ).toBe(true);
   });
 });
 

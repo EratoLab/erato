@@ -53,6 +53,21 @@ const typeTargets = [
     "CapabilityDescriptor",
   ],
   [
+    "schemas/outlook/mailbox.schema.json",
+    "outlook-mailbox.ts",
+    "OutlookMailbox",
+  ],
+  [
+    "schemas/outlook/email-summary.schema.json",
+    "outlook-email-summary.ts",
+    "OutlookEmailSummary",
+  ],
+  [
+    "schemas/outlook/listing-warning.schema.json",
+    "outlook-listing-warning.ts",
+    "OutlookListingWarning",
+  ],
+  [
     "schemas/bootstrap/discovery-document.schema.json",
     "discovery-document.ts",
     "DiscoveryDocument",
@@ -77,6 +92,26 @@ const typeTargets = [
     "sidecar-restart-v1-result.ts",
     "SidecarRestartV1Result",
   ],
+  [
+    "schemas/methods/outlook-list-mailboxes-v1-params.schema.json",
+    "outlook-list-mailboxes-v1-params.ts",
+    "OutlookListMailboxesV1Params",
+  ],
+  [
+    "schemas/methods/outlook-list-mailboxes-v1-result.schema.json",
+    "outlook-list-mailboxes-v1-result.ts",
+    "OutlookListMailboxesV1Result",
+  ],
+  [
+    "schemas/methods/outlook-list-emails-v1-params.schema.json",
+    "outlook-list-emails-v1-params.ts",
+    "OutlookListEmailsV1Params",
+  ],
+  [
+    "schemas/methods/outlook-list-emails-v1-result.schema.json",
+    "outlook-list-emails-v1-result.ts",
+    "OutlookListEmailsV1Result",
+  ],
 ];
 
 const validatorTargets = {
@@ -100,6 +135,14 @@ const validatorTargets = {
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-restart-v1-params.schema.json",
   validateSidecarRestartV1Result:
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-restart-v1-result.schema.json",
+  validateOutlookListMailboxesV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-mailboxes-v1-params.schema.json",
+  validateOutlookListMailboxesV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-mailboxes-v1-result.schema.json",
+  validateOutlookListEmailsV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-emails-v1-params.schema.json",
+  validateOutlookListEmailsV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-emails-v1-result.schema.json",
 };
 
 await rm(outputDirectory, { recursive: true, force: true });

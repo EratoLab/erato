@@ -86,6 +86,32 @@ describe("DesktopSidecarClient", () => {
     expect(sidecar.restartRequests).toBe(1);
   });
 
+  it("lists Outlook mailboxes and emails through pinned contracts", async () => {
+    const { client } = await setup();
+    await client.discover();
+
+    expect(client.supports("outlook.list_mailboxes.v1")).toBe(true);
+    expect(client.supports("outlook.list_emails.v1")).toBe(true);
+
+    const mailboxResult = await client.invoke("outlook.list_mailboxes.v1", {});
+    expect(mailboxResult.mailboxes).toEqual([
+      expect.objectContaining({
+        id: "8b7d2f4a6c9e1035d8a1b2c3e4f50617",
+        displayName: "Mock Outlook mailbox",
+        profileName: "Mock Outlook Profile",
+      }),
+    ]);
+
+    await expect(
+      client.invoke("outlook.list_emails.v1", {
+        mailboxId: mailboxResult.mailboxes[0].id,
+      }),
+    ).resolves.toMatchObject({
+      mailbox: { id: "8b7d2f4a6c9e1035d8a1b2c3e4f50617" },
+      emails: [{ id: "mock-outlook-email", subject: "Mock Outlook message" }],
+    });
+  });
+
   it("reuses ready data for concurrent requests on independent HTTP connections", async () => {
     const { client } = await setup({ echoDelayMs: 5 });
     await client.discover();

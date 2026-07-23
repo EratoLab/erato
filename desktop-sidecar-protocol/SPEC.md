@@ -220,3 +220,25 @@ MUST treat the current ready data as stale and rediscover after the endpoint is
 available again; the replacement sidecar has a new instance ID. Implementations
 MUST reject the request with a protocol error rather than returning
 `accepted: false` when restart cannot be scheduled.
+
+## 12. Local Outlook actions
+
+`outlook.list_mailboxes.v1` returns mailboxes and message stores exposed by the
+logged-in user's local Outlook installation. When the platform exposes an
+Outlook profile concept, the mailbox includes its `profileName`; standalone
+stores and platforms without profiles omit that field.
+
+Each mailbox has a short opaque `id` that the client MUST return unchanged as
+`mailboxId` to `outlook.list_emails.v1`. The ID MUST be unique among mailboxes
+advertised by one sidecar runtime and stable for that runtime. It SHOULD remain
+stable across sidecar restarts while the logical profile and store identity are
+unchanged. Implementations SHOULD derive it from a versioned hash of normalized
+profile, address, source, and private store identity. Clients MUST NOT parse the
+ID or use it after current ready data becomes stale.
+
+`outlook.list_emails.v1` returns at most 50 of the newest locally indexed
+messages for the selected mailbox. Results are metadata summaries; neither
+action returns message bodies or attachments. Implementations MUST use
+read-only storage access. A mailbox enumeration MAY succeed partially and
+report inaccessible local sources in `warnings`; a failure to enumerate the
+active platform's Outlook profile is a `sidecar_internal` error.

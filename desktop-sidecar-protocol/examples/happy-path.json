@@ -5,6 +5,71 @@
       "direction": "client-to-sidecar",
       "message": {
         "jsonrpc": "2.0",
+        "id": "c-mailboxes",
+        "method": "outlook.list_mailboxes.v1",
+        "params": {}
+      }
+    },
+    {
+      "direction": "sidecar-to-client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-mailboxes",
+        "result": {
+          "mailboxes": [
+            {
+              "id": "8b7d2f4a6c9e1035d8a1b2c3e4f50617",
+              "displayName": "Work",
+              "emailAddress": "work@example.com",
+              "profileName": "Work Profile",
+              "source": "windowsOutlook"
+            }
+          ],
+          "warnings": []
+        }
+      }
+    },
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-emails",
+        "method": "outlook.list_emails.v1",
+        "params": {
+          "mailboxId": "8b7d2f4a6c9e1035d8a1b2c3e4f50617"
+        }
+      }
+    },
+    {
+      "direction": "sidecar-to-client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-emails",
+        "result": {
+          "mailbox": {
+            "id": "8b7d2f4a6c9e1035d8a1b2c3e4f50617",
+            "displayName": "Work",
+            "emailAddress": "work@example.com",
+            "profileName": "Work Profile",
+            "source": "windowsOutlook"
+          },
+          "emails": [
+            {
+              "id": "message-1",
+              "subject": "Hello",
+              "senderName": "Example Sender",
+              "senderEmailAddress": "sender@example.com",
+              "receivedAtUnixSeconds": 1774291200,
+              "internetMessageId": "<message-1@example.com>"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
         "id": "c-discover",
         "method": "rpc.discover",
         "params": {

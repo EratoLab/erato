@@ -37,6 +37,30 @@
       "supportsRestart": false
     },
     {
+      "name": "current client and previous sidecar without Outlook actions",
+      "clientVersions": ["1.0"],
+      "sidecarVersions": ["1.0"],
+      "clientCompiledMethods": [
+        "diagnostics.echo.v1",
+        "outlook.list_mailboxes.v1",
+        "outlook.list_emails.v1"
+      ],
+      "sidecarAdvertisedMethods": ["diagnostics.echo.v1"],
+      "supportsOutlookActions": false
+    },
+    {
+      "name": "previous client and current sidecar with additive Outlook actions",
+      "clientVersions": ["1.0"],
+      "sidecarVersions": ["1.0"],
+      "clientCompiledMethods": ["diagnostics.echo.v1"],
+      "sidecarAdvertisedMethods": [
+        "diagnostics.echo.v1",
+        "outlook.list_mailboxes.v1",
+        "outlook.list_emails.v1"
+      ],
+      "supportsOutlookActions": false
+    },
+    {
       "name": "no common protocol",
       "clientVersions": ["2.0"],
       "sidecarVersions": ["1.0"],
