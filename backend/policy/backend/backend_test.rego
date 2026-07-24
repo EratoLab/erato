@@ -258,8 +258,11 @@ test_user_cannot_read_other_users_chat if {
 		with data.config as chat_sharing_enabled_config
 }
 
-test_user_can_read_shared_chat_when_feature_enabled if {
-	backend.allow with input as {
+# A share link must NOT grant generic chat read. Shared reads go only through the
+# dedicated share-links messages route, which authorizes via the share link itself
+# and serves the active thread only.
+test_share_link_does_not_grant_generic_chat_read if {
+	not backend.allow with input as {
 		"subject_kind": "user",
 		"subject_id": user_2_id,
 		"resource_kind": "chat",
