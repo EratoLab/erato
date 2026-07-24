@@ -127,15 +127,16 @@ test("My test", { tag: TAG_CI }, async ({ page }) => {
 
 ### Tagging Tests
 
-Tests can be tagged with `@ci` to indicate they should run in CI:
+Every test runs in CI by default. Tag a test with `@no-ci` only when it
+genuinely cannot run there (and say why in a comment):
 
 ```typescript
-test("Important test", { tag: TAG_CI }, async ({ page }) => {
-  // This test will run in CI
+test("Local-only test", { tag: TAG_NO_CI }, async ({ page }) => {
+  // Excluded from CI runs
 });
 ```
 
-Tests without the `@ci` tag will only run locally.
+The legacy `@ci` tag is inert and being phased out — new tests need no tag.
 
 ### Helper Functions
 
@@ -172,7 +173,7 @@ Tests run automatically in CI via GitHub Actions (`.github/workflows/docker-buil
 
 ### CI Test Execution
 
-- Only tests tagged with `@ci` run in CI
+- All tests run in CI except those tagged `@no-ci`
 - Tests run in parallel across scenarios and browsers
 - Each scenario runs in its own matrix job
 - Failed tests are retried up to 2 times

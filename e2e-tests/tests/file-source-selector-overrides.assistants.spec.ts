@@ -41,11 +41,6 @@ test.describe("Assistant file source selector overrides", () => {
   test("shows default assistant file source selector behavior", async ({
     page,
   }) => {
-    await page.addInitScript(() => {
-      (window as Window & { SHAREPOINT_ENABLED?: boolean }).SHAREPOINT_ENABLED =
-        true;
-    });
-
     const assistantName = buildAssistantName("FileSelector-default");
     await createAssistantAndOpenChat(page, assistantName);
 
@@ -59,16 +54,7 @@ test.describe("Assistant file source selector overrides", () => {
   }) => {
     await page.addInitScript(() => {
       (
-        window as Window & {
-          SHAREPOINT_ENABLED?: boolean;
-          __E2E_COMPONENT_VARIANT__?: string;
-        }
-      ).SHAREPOINT_ENABLED = true;
-      (
-        window as Window & {
-          SHAREPOINT_ENABLED?: boolean;
-          __E2E_COMPONENT_VARIANT__?: string;
-        }
+        window as Window & { __E2E_COMPONENT_VARIANT__?: string }
       ).__E2E_COMPONENT_VARIANT__ = "welcome-screen-example";
     });
 
