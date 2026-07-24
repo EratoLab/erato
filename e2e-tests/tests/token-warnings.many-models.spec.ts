@@ -23,6 +23,8 @@ type Estimate = {
   remaining_tokens: number;
 };
 
+type EstimateResponseBody = { stats: Estimate };
+
 const fillAndReadEstimate = async (
   page: Page,
   text: string,
@@ -38,7 +40,8 @@ const fillAndReadEstimate = async (
     { timeout: 15000 },
   );
   await page.getByRole("textbox", { name: "Type a message..." }).fill(text);
-  return (await (await estimateResponse).json()) as Estimate;
+  const body = (await (await estimateResponse).json()) as EstimateResponseBody;
+  return body.stats;
 };
 
 /** Repeats of SENTENCE that land total_tokens at ~targetRatio of the limit. */
