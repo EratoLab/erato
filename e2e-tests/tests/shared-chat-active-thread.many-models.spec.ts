@@ -116,6 +116,18 @@ test(
       const { shareUrl, ownerRoles } = await test.step(
         "Owner builds a branched chat and shares it",
         async () => {
+          // Record the chat's own generic-route messages URL as the owner
+          // loads it, so the positive control below can re-fetch the full tree.
+          let ownerMessagesUrl: string | undefined;
+          owner.page.on("response", (response) => {
+            if (
+              response.request().method() === "GET" &&
+              /\/api\/v1beta\/chats\/[^/]+\/messages/.test(response.url())
+            ) {
+              ownerMessagesUrl = response.url();
+            }
+          });
+
           await owner.page.goto("/");
           await chatIsReadyToChat(owner.page);
           await selectModel(owner.page, "Mock-LLM");
@@ -155,6 +167,30 @@ test(
           // shared view must reproduce exactly.
           const ownerRoles = await chatMessageRoles(owner.page);
           expect(ownerRoles.length).toBeGreaterThan(0);
+
+          // Positive control: prove the edit + regenerate actually orphaned
+          // branches server-side. Without it the shared-route assertion (no
+          // `is_message_in_active_thread: false` rows) could pass vacuously if
+          // no branch was ever created. The owner's own generic route returns
+          // the full tree, including the discarded branches.
+          expect(
+            ownerMessagesUrl,
+            "owner's generic messages route must have been observed",
+          ).toBeTruthy();
+          const ownerFullResponse = await owner.page.request.get(
+            ownerMessagesUrl as string,
+          );
+          expect(ownerFullResponse.ok()).toBe(true);
+          const ownerFullBody = (await ownerFullResponse.json()) as {
+            messages: { is_message_in_active_thread: boolean }[];
+          };
+          const discardedBranches = ownerFullBody.messages.filter(
+            (message) => message.is_message_in_active_thread === false,
+          );
+          expect(
+            discardedBranches.length,
+            "edit + regenerate must orphan at least one branch",
+          ).toBeGreaterThan(0);
 
           await owner.page.getByRole("button", { name: "Share" }).click();
           const dialog = owner.page.getByRole("dialog", {
