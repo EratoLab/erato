@@ -16,6 +16,7 @@ use sea_orm::{DatabaseConnection, EntityTrait, FromQueryResult, QuerySelect};
 use serde_json::{Value as JsonValue, json};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::{Mutex, RwLock};
 use tracing::instrument;
 
@@ -336,13 +337,19 @@ macro_rules! authorize {
 }
 pub(crate) use authorize;
 
+/// All clones (including request-scoped ones) share the generation counters and
+/// the rebuild lock, so an invalidation from any task is visible process-wide and
+/// a rebuild from any task satisfies it process-wide.
 #[derive(Debug, Clone)]
 pub struct PolicyEngine {
     engine: Arc<RwLock<Engine>>,
-    data_needs_rebuild: Arc<RwLock<bool>>,
-    /// Serializes rebuilds process-wide (shared by request-scoped clones):
-    /// concurrent stale observers queue here and re-check staleness after
-    /// acquiring, so they coalesce into a single rebuild.
+    /// Generation the policy data must reach to be considered fresh.
+    target_generation: Arc<AtomicU64>,
+    /// Generation the engine data was built at. Data is stale while this is
+    /// behind `target_generation`; `0` means the data has never been built.
+    built_generation: Arc<AtomicU64>,
+    /// Serializes rebuilds: concurrent stale observers queue here and re-check
+    /// freshness after acquiring, so they coalesce into a single rebuild.
     rebuild_lock: Arc<Mutex<()>>,
 }
 
@@ -363,36 +370,35 @@ impl PolicyEngine {
             .unwrap();
         Self {
             engine: Arc::new(RwLock::new(engine)),
-            data_needs_rebuild: Arc::new(RwLock::new(true)),
+            target_generation: Arc::new(AtomicU64::new(1)),
+            built_generation: Arc::new(AtomicU64::new(0)),
             rebuild_lock: Arc::new(Mutex::new(())),
         }
     }
 
-    /// Clone the engine for use in a request handler.
-    /// Unlike regular Clone, this creates an independent `data_needs_rebuild` state
-    /// set to `false`, so that invalidating the global engine doesn't affect
-    /// cloned request-scoped engines.
-    pub fn clone_for_request(&self) -> Self {
-        Self {
-            engine: self.engine.clone(),
-            data_needs_rebuild: Arc::new(RwLock::new(false)),
-            rebuild_lock: self.rebuild_lock.clone(),
-        }
+    fn is_stale(&self) -> bool {
+        self.built_generation.load(Ordering::SeqCst) < self.target_generation.load(Ordering::SeqCst)
     }
 
+    #[cfg(test)]
     async fn set_data(&self, data: JsonValue) -> Result<(), Report> {
+        let generation = self.target_generation.load(Ordering::SeqCst);
+        self.install_data(data, generation).await
+    }
+
+    async fn install_data(&self, data: JsonValue, generation: u64) -> Result<(), Report> {
         let mut guard = self.engine.write().await;
         guard.clear_data();
         guard
             .add_data_json(&data.to_string())
             .map_err(|e| eyre!(e))?;
-        *self.data_needs_rebuild.write().await = false;
+        self.built_generation
+            .fetch_max(generation, Ordering::SeqCst);
         Ok(())
     }
 
     pub async fn invalidate_data(&self) {
-        *self.data_needs_rebuild.write().await = true;
-        // info!("Invalidated policy data");
+        self.target_generation.fetch_add(1, Ordering::SeqCst);
     }
 
     #[instrument(skip_all)]
@@ -410,6 +416,10 @@ impl PolicyEngine {
         db: &DatabaseConnection,
         config: &AppConfig,
     ) -> Result<(), Report> {
+        // Capture the target before reading from the database: an invalidation
+        // that lands while the reads are in flight may not be reflected in what
+        // was read, so it must remain pending after this rebuild completes.
+        let generation = self.target_generation.load(Ordering::SeqCst);
         // Fetch policy data for each resource type
         let chat_data = fetch_chat_policy_data(db).await?;
         let assistant_data = fetch_assistant_policy_data(db).await?;
@@ -452,8 +462,7 @@ impl PolicyEngine {
             "config_permissions": build_config_permissions_policy_data(config),
         });
 
-        self.set_data(policy_data).await?;
-        // info!("Finished policy data rebuild");
+        self.install_data(policy_data, generation).await?;
         Ok(())
     }
 
@@ -463,13 +472,13 @@ impl PolicyEngine {
         db: &DatabaseConnection,
         config: &AppConfig,
     ) -> Result<(), Report> {
-        if !*self.data_needs_rebuild.read().await {
+        if !self.is_stale() {
             return Ok(());
         }
         let _rebuild_guard = self.rebuild_lock.lock().await;
         // Re-check after acquiring: a rebuild that finished while we waited on
-        // the lock already covers this invalidation.
-        if !*self.data_needs_rebuild.read().await {
+        // the lock already covers our pending invalidation.
+        if !self.is_stale() {
             return Ok(());
         }
         self.rebuild_data_locked(db, config).await
@@ -523,10 +532,12 @@ impl PolicyEngine {
         organization_group_ids: &[String],
         groups: &[String],
     ) -> Result<(), Report> {
-        // info!("Authorizing");
-        if *self.data_needs_rebuild.read().await {
+        // Freshness is enforced when the engine is handed out (middleware and
+        // explicit rebuild_data_if_needed calls); here we only refuse to
+        // authorize against data that has never been built at all.
+        if self.built_generation.load(Ordering::SeqCst) == 0 {
             return Err(eyre!(
-                "Policy data is stale and needs to be rebuilt before authorization"
+                "Policy data has not been built yet; rebuild before authorization"
             ));
         }
         // First validate the resource_kind-action combination as an assertion
@@ -806,6 +817,77 @@ mod tests {
             action
         )
         .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_authorize_fails_before_first_data_build() {
+        let engine = PolicyEngine::new();
+        let result = authorize!(
+            engine,
+            &Subject::User("user_1".to_string()),
+            &Resource::Chat("chat_1".to_string()),
+            Action::Read
+        );
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_invalidation_marks_stale_but_authorize_keeps_working() {
+        let engine = PolicyEngine::new();
+        engine
+            .set_data(json!({
+                "resource_attributes": {
+                    "chat": {
+                        "chat_1": { "id": "chat_1", "owner_id": "user_1" }
+                    }
+                }
+            }))
+            .await
+            .unwrap();
+        assert!(!engine.is_stale());
+
+        engine.invalidate_data().await;
+        assert!(engine.is_stale());
+
+        // Authorization proceeds on the already-built data; freshness is
+        // enforced where engines are handed out, not per authorize call.
+        let result = authorize!(
+            engine,
+            &Subject::User("user_1".to_string()),
+            &Resource::Chat("chat_1".to_string()),
+            Action::Read
+        );
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_invalidation_is_shared_across_clones() {
+        let engine = PolicyEngine::new();
+        engine.set_data(json!({})).await.unwrap();
+
+        let request_clone = engine.clone();
+        engine.invalidate_data().await;
+        assert!(request_clone.is_stale());
+
+        // A rebuild through any clone satisfies the pending invalidation
+        // process-wide (set_data stands in for a full rebuild here).
+        request_clone.set_data(json!({})).await.unwrap();
+        assert!(!engine.is_stale());
+        assert!(!request_clone.is_stale());
+    }
+
+    #[tokio::test]
+    async fn test_install_data_ignores_generation_regression() {
+        let engine = PolicyEngine::new();
+        engine.set_data(json!({})).await.unwrap();
+        engine.invalidate_data().await;
+        engine.set_data(json!({})).await.unwrap();
+        assert!(!engine.is_stale());
+
+        // A rebuild that captured its target before an already-applied newer
+        // one must not move built_generation backwards.
+        engine.install_data(json!({}), 1).await.unwrap();
+        assert!(!engine.is_stale());
     }
 
     #[tokio::test]

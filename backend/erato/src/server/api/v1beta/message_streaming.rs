@@ -7200,10 +7200,7 @@ async fn run_message_submit_task(
             .map_err(Report::msg)?;
 
         tracing::info!("Rebuilding policy data for newly created chat");
-        // Via the global engine: `policy` is a request-scoped clone whose
-        // severed staleness flag cannot see the handler's invalidation.
-        app_state
-            .global_policy_engine
+        policy
             .rebuild_data_if_needed(&app_state.db, &app_state.config)
             .await
             .wrap_err("Failed to rebuild policy data after chat creation")?;

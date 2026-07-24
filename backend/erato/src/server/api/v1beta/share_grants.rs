@@ -293,6 +293,7 @@ pub async fn create_share_grant(
         &app_state.db,
         &policy,
         &me_user.to_subject(),
+        &app_state.config,
         request.resource_type,
         request.resource_id,
         request.subject_type,
@@ -492,22 +493,28 @@ pub async fn delete_share_grant(
     let grant_id = Uuid::parse_str(&grant_id).map_err(|_| StatusCode::BAD_REQUEST)?;
 
     // Delete the share grant
-    share_grant::delete_share_grant(&app_state.db, &policy, &me_user.to_subject(), grant_id)
-        .await
-        .map_err(|e| {
-            if e.to_string().contains("Access denied") || e.to_string().contains("does not own") {
-                tracing::warn!(
-                    "User {} attempted to delete a share grant for a resource they don't own: {}",
-                    me_user.id,
-                    e
-                );
-                StatusCode::FORBIDDEN
-            } else if e.to_string().contains("not found") {
-                StatusCode::NOT_FOUND
-            } else {
-                log_internal_server_error(e)
-            }
-        })?;
+    share_grant::delete_share_grant(
+        &app_state.db,
+        &policy,
+        &me_user.to_subject(),
+        &app_state.config,
+        grant_id,
+    )
+    .await
+    .map_err(|e| {
+        if e.to_string().contains("Access denied") || e.to_string().contains("does not own") {
+            tracing::warn!(
+                "User {} attempted to delete a share grant for a resource they don't own: {}",
+                me_user.id,
+                e
+            );
+            StatusCode::FORBIDDEN
+        } else if e.to_string().contains("not found") {
+            StatusCode::NOT_FOUND
+        } else {
+            log_internal_server_error(e)
+        }
+    })?;
 
     tracing::info!("User {} deleted share grant {}", me_user.id, grant_id);
 

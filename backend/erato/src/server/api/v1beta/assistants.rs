@@ -495,6 +495,7 @@ pub async fn create_assistant(
                 &app_state.db,
                 &policy,
                 &me_user.to_subject(),
+                &app_state.config,
                 "assistant".to_string(),
                 created_assistant.id.to_string(),
                 grant_input.subject_type,

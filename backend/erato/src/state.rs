@@ -91,21 +91,10 @@ impl GlobalPolicyEngine {
 
         self.engine.rebuild_data_if_needed(db, config).await?;
 
-        // Use clone_for_request to create an independent data_needs_rebuild state
-        // This prevents invalidate_data() on the global engine from affecting
-        // request-scoped clones during request processing
-        Ok(self.engine.clone_for_request())
-    }
-
-    /// Rebuild after an invalidation, coalescing with any concurrent rebuild.
-    /// For background tasks, whose request-scoped engine clones cannot observe
-    /// invalidations of the global engine.
-    pub async fn rebuild_data_if_needed(
-        &self,
-        db: &DatabaseConnection,
-        config: &AppConfig,
-    ) -> Result<(), Report> {
-        self.engine.rebuild_data_if_needed(db, config).await
+        // Clones share the generation counters, so a rebuild performed anywhere
+        // (this middleware, another request, a background task) satisfies
+        // pending invalidations process-wide.
+        Ok(self.engine.clone())
     }
 
     /// Invalidate the policy data, forcing a rebuild on next access

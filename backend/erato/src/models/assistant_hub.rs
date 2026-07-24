@@ -442,16 +442,17 @@ pub async fn build_submission_diff(
 pub async fn submit_version(
     conn: &DatabaseConnection,
     policy: &PolicyEngine,
-    config: &AssistantHubConfig,
+    config: &crate::config::AppConfig,
     subject: &Subject,
     source_assistant_id: Uuid,
     profile: HubSubmissionProfile,
     audience_grants: Vec<HubAudienceGrantInput>,
 ) -> Result<HubVersionRecord, Report> {
-    ensure_enabled(config)?;
+    let hub_config = &config.assistant_hub;
+    ensure_enabled(hub_config)?;
     let mut profile = profile;
     profile.version_number = profile.version_number.trim().to_string();
-    validate_profile(config, &profile)?;
+    validate_profile(hub_config, &profile)?;
 
     let hub_assistant = get_or_create_hub_assistant(conn, subject, source_assistant_id).await?;
     ensure_unique_version_number(conn, hub_assistant.id, &profile.version_number).await?;
@@ -459,7 +460,7 @@ pub async fn submit_version(
     policy.invalidate_data().await;
 
     let diff_summary =
-        build_submission_diff(conn, config, subject, source_assistant_id, &profile).await?;
+        build_submission_diff(conn, hub_config, subject, source_assistant_id, &profile).await?;
     let now = Utc::now().into();
     let version = assistant_hub_assistant_versions::ActiveModel {
         id: Set(Uuid::new_v4()),
@@ -497,6 +498,7 @@ pub async fn submit_version(
             conn,
             policy,
             subject,
+            config,
             "assistant".to_string(),
             cloned.id.to_string(),
             grant.subject_type,
