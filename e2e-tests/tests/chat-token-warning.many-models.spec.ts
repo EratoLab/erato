@@ -53,6 +53,10 @@ test(
     await uploadLongPdf(page);
 
     await expect(tokenWarningAlert(page)).toBeVisible({ timeout: 60000 });
+    // The tokens here are file-borne, so the warning must attribute them.
+    await expect(tokenWarningAlert(page)).toContainText(
+      /file attachments account for/i,
+    );
   },
 );
 
