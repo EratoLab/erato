@@ -394,6 +394,7 @@ test(
       await expect(row).toHaveCount(0);
       // The exclusion is still in force, so a late list response cannot be what
       // took the row away, and cannot bring it back either.
+      // eslint-disable-next-line playwright/no-wait-for-timeout -- additive grace recheck after the event-bounded absence assertion above
       await page.waitForTimeout(1000);
       await expect(row).toHaveCount(0);
     } finally {

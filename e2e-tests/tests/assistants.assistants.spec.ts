@@ -12,8 +12,9 @@ test.describe("Assistant Management", () => {
     // Navigate to assistants page (don't use networkidle due to potential 404 responses)
     await page.goto("/assistants");
 
-    // Wait for the page to be ready by checking for any button
-    await page.waitForTimeout(500);
+    await expect(
+      page.getByRole("button", { name: /create.*assistant|new.*assistant/i }),
+    ).toBeVisible();
   });
 
   test("should create an assistant with file upload", async ({ page }) => {

@@ -73,9 +73,6 @@ test(
       window.dispatchEvent(new Event("visibilitychange"));
     });
 
-    // Small delay to ensure the hidden state is processed
-    await page2.waitForTimeout(100);
-
     // Now simulate the page becoming visible (user returning to the tab)
     await page2.evaluate(() => {
       Object.defineProperty(document, "visibilityState", {

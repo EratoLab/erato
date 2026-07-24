@@ -147,13 +147,26 @@ async function shareAssistantWithUser(page: Page, assistantName: string) {
   await expect(sharingDialog).toBeVisible({ timeout: 10000 });
 
   const searchBox = sharingDialog.getByRole("searchbox");
+  // The selector lists results for the empty query too, so a wait on rendered
+  // content can resolve before the debounced search answers. The response
+  // carrying the query is the unambiguous signal that the list below is the
+  // narrowed one. Registered before the fill.
+  const searchedResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/v1beta/me/organization/users") &&
+      response.url().includes("Demis"),
+    { timeout: 15000 },
+  );
   await searchBox.fill("Demis Gemini");
-  await page.waitForTimeout(1500);
+  await searchedResponse;
 
-  // Pick first selectable user result (search is already narrowed by user2 email)
-  const candidate = sharingDialog.locator('input[type="checkbox"]').first();
-  await expect(candidate).toBeVisible({ timeout: 10000 });
-  await candidate.check();
+  // Select by identity within the narrowed list: the row that shows the
+  // user's name and holds a checkbox.
+  const userRow = sharingDialog
+    .locator('div:has-text("Demis Gemini"):has(input[type="checkbox"])')
+    .first();
+  await expect(userRow).toBeVisible({ timeout: 15000 });
+  await userRow.locator('input[type="checkbox"]').first().check();
 
   await sharingDialog.getByRole("button", { name: "Add" }).click();
 

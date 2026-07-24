@@ -367,6 +367,7 @@ test(
       await expect(row).toHaveCount(0);
       // recent_chats is still held, so the removal cannot be the list dropping
       // the chat — only the close-path clear accounts for it.
+      // eslint-disable-next-line playwright/no-wait-for-timeout -- additive grace recheck after the event-bounded absence assertion above
       await page.waitForTimeout(1000);
       await expect(row).toHaveCount(0);
     } finally {

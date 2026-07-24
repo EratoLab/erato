@@ -496,6 +496,7 @@ export async function ensureTestScenario(
                   `Current: ${newScenario}, Target: ${requiredScenario}`,
               );
 
+              // eslint-disable-next-line playwright/no-wait-for-timeout -- poll interval of the k3d scenario-switch loop, bounded by a loud 2min timeout
               await helperPage.waitForTimeout(pollInterval);
             }
 

@@ -101,6 +101,10 @@ jobs:
         working-directory: ./component-kit-example
         run: pnpm run build
 
+      - name: "Install e2e-tests packages"
+        working-directory: ./e2e-tests
+        run: pnpm install --frozen-lockfile
+
       - name: "Install office-addin packages"
         working-directory: ./office-addin
         run: pnpm install --no-frozen-lockfile --lockfile=false
@@ -166,6 +170,11 @@ jobs:
         working-directory: ./frontend
         if: success() || failure()
         run: pnpm run typecheck
+
+      - name: "E2e-tests lint"
+        working-directory: ./e2e-tests
+        if: success() || failure()
+        run: pnpm run lint
 
       - name: "Install uv"
         if: success() || failure()

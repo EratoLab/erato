@@ -173,8 +173,19 @@ test(
 
         const userSearchInput = page1.getByRole("searchbox");
         await expect(userSearchInput).toBeVisible({ timeout: 5000 });
+        // The selector lists results for the empty query too, so a wait on
+        // rendered content can resolve before the debounced search answers.
+        // The response carrying the query is the unambiguous signal that the
+        // list below is the narrowed one. Registered before the fill.
+        const searchToken = user2DisplayName.trim().split(/\s+/)[0];
+        const searchedResponse = page1.waitForResponse(
+          (response) =>
+            response.url().includes("/api/v1beta/me/organization/users") &&
+            response.url().includes(searchToken),
+          { timeout: 15000 },
+        );
         await userSearchInput.fill(user2DisplayName);
-        await page1.waitForTimeout(1500);
+        await searchedResponse;
 
         const allCheckboxes = page1.locator('input[type="checkbox"]');
         const checkboxCount = await allCheckboxes.count();
