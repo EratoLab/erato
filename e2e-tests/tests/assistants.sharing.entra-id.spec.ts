@@ -174,10 +174,15 @@ test(
         const userSearchInput = page1.getByRole("searchbox");
         await expect(userSearchInput).toBeVisible({ timeout: 5000 });
         await userSearchInput.fill(user2DisplayName);
-        // The people search is debounced; the searched user's name appearing
-        // in the results is the signal that it has answered.
+        // The selector lists results for the empty query too; waiting on the
+        // aria-labelled checkbox is identity-based, so it is the right row
+        // whether it comes from the initial list or the debounced search.
         await expect(
-          page1.getByText(user2DisplayName, { exact: false }).first(),
+          page1
+            .locator(
+              `input[type="checkbox"][aria-label*="${user2DisplayName}" i]`,
+            )
+            .first(),
         ).toBeVisible({ timeout: 15000 });
 
         const allCheckboxes = page1.locator('input[type="checkbox"]');

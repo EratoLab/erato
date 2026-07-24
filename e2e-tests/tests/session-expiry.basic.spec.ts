@@ -73,12 +73,6 @@ test(
       window.dispatchEvent(new Event("visibilitychange"));
     });
 
-    // Deliberate spacing between two synthetic visibilitychange dispatches so
-    // they arrive as distinct events — not synchronization for an assertion,
-    // so there is no observable to await instead.
-    // eslint-disable-next-line playwright/no-wait-for-timeout -- deliberate spacing between synthetic events; no observable exists
-    await page2.waitForTimeout(100);
-
     // Now simulate the page becoming visible (user returning to the tab)
     await page2.evaluate(() => {
       Object.defineProperty(document, "visibilityState", {

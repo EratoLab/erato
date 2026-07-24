@@ -148,15 +148,15 @@ async function shareAssistantWithUser(page: Page, assistantName: string) {
 
   const searchBox = sharingDialog.getByRole("searchbox");
   await searchBox.fill("Demis Gemini");
-  // The people search is debounced; the searched user's name appearing in the
-  // dialog is the signal that it has answered.
-  await expect(sharingDialog.getByText(/Demis Gemini/i).first()).toBeVisible({
-    timeout: 15000,
-  });
-
-  // Pick first selectable user result (search is already narrowed by user2 email)
-  const candidate = sharingDialog.locator('input[type="checkbox"]').first();
-  await expect(candidate).toBeVisible({ timeout: 10000 });
+  // The selector lists results for the empty query too, so waiting on the
+  // name alone could resolve before the debounced search answers. Selecting
+  // the checkbox by its accessible name is identity-based and therefore
+  // order-independent: it is the right row whether it comes from the initial
+  // list or the search.
+  const candidate = sharingDialog
+    .locator('input[type="checkbox"][aria-label*="Demis Gemini" i]')
+    .first();
+  await expect(candidate).toBeVisible({ timeout: 15000 });
   await candidate.check();
 
   await sharingDialog.getByRole("button", { name: "Add" }).click();
