@@ -2331,9 +2331,10 @@ pub async fn chat_messages(
         }
     })?;
 
-    let response =
-        assemble_chat_messages_response(&app_state, &policy, &me_user, chat_id, messages, stats)
-            .await?;
+    let response = assemble_chat_messages_response(
+        &app_state, &policy, &me_user, chat_id, messages, stats, true,
+    )
+    .await?;
 
     Ok(Json(response))
 }
@@ -2344,6 +2345,9 @@ pub async fn chat_messages(
 /// messages route and the share-link messages route: feedback lookup, file-id
 /// collection, capability flags, file-URL map, per-message conversion with
 /// feedback + error reports, presigned image-URL regeneration, and stats.
+///
+/// `include_feedback` gates the feedback lookup: feedback is the chat owner's
+/// private signal, so the share-link path passes `false` and returns none.
 async fn assemble_chat_messages_response(
     app_state: &AppState,
     policy: &PolicyEngine,
@@ -2351,14 +2355,18 @@ async fn assemble_chat_messages_response(
     chat_id: Uuid,
     messages: Vec<messages::Model>,
     stats: models::message::MessageListStats,
+    include_feedback: bool,
 ) -> Result<ChatMessagesResponse, StatusCode> {
-    // Get feedback for all messages
+    // Get feedback for all messages (owner-only; empty on the shared path).
     let message_ids: Vec<Uuid> = messages.iter().map(|m| m.id).collect();
-    let feedbacks =
+    let feedbacks = if include_feedback {
         models::message_feedback::get_feedbacks_for_messages(&app_state.db, &message_ids)
             .await
             .wrap_err("Failed to get message feedbacks")
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    } else {
+        std::collections::HashMap::new()
+    };
 
     // Collect all unique file IDs from all messages
     let all_file_ids: std::collections::HashSet<Uuid> = messages

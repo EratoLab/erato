@@ -73,6 +73,47 @@ async fn test_chat_share_link_enable_disable_flow(pool: Pool<Postgres>) {
     let events = parse_sse_events(&submit_response);
     let chat_id = extract_chat_id(&events).expect("Expected chat_created event");
 
+    // The owner leaves feedback on the assistant reply and sees it on their own
+    // view — the positive control for the shared-view assertion further down.
+    let owner_view: Value = server
+        .get(&format!("/api/v1beta/chats/{chat_id}/messages"))
+        .with_bearer_token(&owner_token)
+        .await
+        .json();
+    let assistant_message_id = owner_view["messages"]
+        .as_array()
+        .expect("owner messages array")
+        .iter()
+        .find(|message| message["role"] == "assistant")
+        .and_then(|message| message["id"].as_str())
+        .expect("assistant message id")
+        .to_string();
+    server
+        .put(&format!(
+            "/api/v1beta/messages/{assistant_message_id}/feedback"
+        ))
+        .with_bearer_token(&owner_token)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&json!({ "sentiment": "positive", "comment": "clear answer" }))
+        .await
+        .assert_status_ok();
+
+    let owner_view_with_feedback: Value = server
+        .get(&format!("/api/v1beta/chats/{chat_id}/messages"))
+        .with_bearer_token(&owner_token)
+        .await
+        .json();
+    let owner_feedback = owner_view_with_feedback["messages"]
+        .as_array()
+        .expect("owner messages array")
+        .iter()
+        .find(|message| message["id"] == assistant_message_id.as_str())
+        .expect("owner sees the assistant message");
+    assert!(
+        !owner_feedback["feedback"].is_null(),
+        "owner must see their own feedback"
+    );
+
     let before_share_response = server
         .get(&format!("/api/v1beta/chats/{chat_id}/messages"))
         .with_bearer_token(&recipient_token)
@@ -135,6 +176,18 @@ async fn test_chat_share_link_enable_disable_flow(pool: Pool<Postgres>) {
             >= 2
     );
 
+    // The owner's feedback must not surface in the shared view.
+    let shared_assistant = shared_messages_json["messages"]
+        .as_array()
+        .expect("shared messages array")
+        .iter()
+        .find(|message| message["id"] == assistant_message_id.as_str())
+        .expect("assistant message in shared view");
+    assert!(
+        shared_assistant["feedback"].is_null(),
+        "share-link viewer must not see the owner's feedback"
+    );
+
     // A share link must NOT grant generic Chat::Read: the recipient cannot reach
     // the raw messages route (which would expose every edit/regen branch).
     let generic_route_denied = server
@@ -144,6 +197,33 @@ async fn test_chat_share_link_enable_disable_flow(pool: Pool<Postgres>) {
     assert_eq!(
         generic_route_denied.status_code(),
         http::StatusCode::NOT_FOUND
+    );
+
+    // A share-link viewer cannot write feedback either — the feedback endpoint
+    // gates on Chat::Read, which the viewer no longer holds.
+    let viewer_feedback_denied = server
+        .put(&format!(
+            "/api/v1beta/messages/{assistant_message_id}/feedback"
+        ))
+        .with_bearer_token(&recipient_token)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&json!({ "sentiment": "negative" }))
+        .await;
+    assert_eq!(
+        viewer_feedback_denied.status_code(),
+        http::StatusCode::FORBIDDEN
+    );
+
+    // Nor retract the owner's feedback — deletion gates on Chat::Read too.
+    let viewer_feedback_delete_denied = server
+        .delete(&format!(
+            "/api/v1beta/messages/{assistant_message_id}/feedback"
+        ))
+        .with_bearer_token(&recipient_token)
+        .await;
+    assert_eq!(
+        viewer_feedback_delete_denied.status_code(),
+        http::StatusCode::FORBIDDEN
     );
 
     let disable_response = server
