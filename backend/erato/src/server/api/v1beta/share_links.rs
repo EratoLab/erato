@@ -307,8 +307,10 @@ pub async fn share_link_messages(
         }
     })?;
 
+    // Feedback is the owner's private signal — never surface it to a share-link
+    // viewer.
     let response = super::assemble_chat_messages_response(
-        &app_state, &policy, &me_user, chat_id, messages, stats,
+        &app_state, &policy, &me_user, chat_id, messages, stats, false,
     )
     .await?;
 
