@@ -1,4 +1,4 @@
-import { test, expect, Page } from "@playwright/test";
+import { test, expect, Page, Response } from "@playwright/test";
 import { TAG_CI } from "./tags";
 import {
   chatIsReadyToChat,
@@ -27,28 +27,46 @@ const rowIndicator = (page: Page, chatId: string) =>
   sidebarRow(page, chatId).getByTestId("chat-generation-status");
 
 /**
- * Resolves once a recent_chats response lists the chat. A row that must
- * survive clicking New Chat (which drops the local placeholder) has to be
- * list-backed first; register before the action that triggers the refetch.
+ * Buffers every recent_chats body from the moment of the call and returns a
+ * function that resolves once any buffered or later response lists the chat.
+ * A row that must survive clicking New Chat (which drops the local
+ * placeholder) has to be list-backed first. Buffering is required because the
+ * listing can land before the chat id is known to the test (sendFirstMessage
+ * resolves the id from the URL), and no further list request may happen until
+ * the turn ends; a waitForResponse predicate keyed on the id would discard
+ * that only listing. Start buffering before the action that triggers the
+ * refetch.
  */
-const waitForChatListed = (page: Page, chatId: () => string) =>
-  page.waitForResponse(
-    async (response) => {
-      if (!response.url().includes(RECENT_CHATS_URL) || !chatId()) {
-        return false;
-      }
-      try {
-        const body = (await response.json()) as { chats?: { id?: string }[] };
-        return (
-          Array.isArray(body.chats) &&
-          body.chats.some((entry) => entry.id === chatId())
-        );
-      } catch {
-        return false;
-      }
-    },
-    { timeout: 30000 },
-  );
+const watchForChatListed = (page: Page) => {
+  const bodies: { chats?: { id?: string }[] }[] = [];
+  const onRecentChats = (response: Response) => {
+    if (!response.url().includes(RECENT_CHATS_URL)) {
+      return;
+    }
+    response
+      .json()
+      .then((body: { chats?: { id?: string }[] }) => bodies.push(body))
+      .catch(() => {});
+  };
+  page.on("response", onRecentChats);
+  return async (chatId: string) => {
+    try {
+      await expect
+        .poll(
+          () =>
+            bodies.some(
+              (body) =>
+                Array.isArray(body.chats) &&
+                body.chats.some((entry) => entry.id === chatId),
+            ),
+          { timeout: 30000 },
+        )
+        .toBe(true);
+    } finally {
+      page.off("response", onRecentChats);
+    }
+  };
+};
 
 test(
   "a running chat survives reload, finishes with its real title while unwatched, and clears on open",
@@ -71,9 +89,9 @@ test(
       timeout: 15000,
     });
 
-    // Register before the reload: the reload wipes the client cache, so a
-    // pre-reload listing is not enough.
-    const listedAfterReload = waitForChatListed(page, () => chatId);
+    // Start buffering just before the reload: the reload wipes the client
+    // cache, so a pre-reload listing is not enough.
+    const listedAfterReload = watchForChatListed(page);
 
     // Running survives a reload — the indicator is backend-sourced.
     await page.reload();
@@ -83,7 +101,7 @@ test(
       timeout: 10000,
     });
 
-    await listedAfterReload;
+    await listedAfterReload(chatId);
 
     // Leave the chat; the backend turn keeps running without this tab's SSE.
     await page
@@ -124,19 +142,19 @@ test(
     await ensureOpenSidebar(page);
     await selectModel(page, MOCK_MODEL);
 
-    // Register before the send so the refetch that lists the chat cannot be
-    // missed.
-    let chatId = "";
-    const listed = waitForChatListed(page, () => chatId);
+    // Start buffering before the send so the refetch that lists the chat
+    // cannot be missed; the poll below must resolve inside the mock's 5s
+    // error window.
+    const listed = watchForChatListed(page);
 
     // `delayed error` gives a real running window to navigate away in.
-    chatId = await sendFirstMessage(page, "delayed error");
+    const chatId = await sendFirstMessage(page, "delayed error");
     const row = sidebarRow(page, chatId);
     const indicator = rowIndicator(page, chatId);
     await expect(row).toBeVisible({ timeout: 5000 });
     await expect(indicator).toHaveAttribute("data-status", "running");
 
-    await listed;
+    await listed(chatId);
 
     // Leave during the delay window; the failure happens unwatched.
     await page
