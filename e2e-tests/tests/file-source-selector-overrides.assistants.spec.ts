@@ -38,17 +38,17 @@ const buildAssistantName = (prefix: string) => {
 };
 
 test.describe("Assistant file source selector overrides", () => {
-  test("shows default assistant file source selector behavior", async ({
+  // Without cloud providers or a registry override the assistant chat falls
+  // back to the plain upload button; see the note in the basic variant spec.
+  test("falls back to the plain upload button without providers or overrides", async ({
     page,
   }) => {
-    await page.addInitScript(() => {
-      (window as Window & { SHAREPOINT_ENABLED?: boolean }).SHAREPOINT_ENABLED =
-        true;
-    });
-
     const assistantName = buildAssistantName("FileSelector-default");
     await createAssistantAndOpenChat(page, assistantName);
 
+    await expect(
+      page.getByRole("button", { name: "Upload Files" }),
+    ).toBeVisible();
     await expect(
       page.getByRole("button", { name: /upload from computer/i }),
     ).toHaveCount(0);
@@ -59,16 +59,7 @@ test.describe("Assistant file source selector overrides", () => {
   }) => {
     await page.addInitScript(() => {
       (
-        window as Window & {
-          SHAREPOINT_ENABLED?: boolean;
-          __E2E_COMPONENT_VARIANT__?: string;
-        }
-      ).SHAREPOINT_ENABLED = true;
-      (
-        window as Window & {
-          SHAREPOINT_ENABLED?: boolean;
-          __E2E_COMPONENT_VARIANT__?: string;
-        }
+        window as Window & { __E2E_COMPONENT_VARIANT__?: string }
       ).__E2E_COMPONENT_VARIANT__ = "welcome-screen-example";
     });
 

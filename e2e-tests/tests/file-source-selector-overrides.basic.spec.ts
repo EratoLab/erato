@@ -1,21 +1,22 @@
 import { expect, test } from "@playwright/test";
 
-const enableSharepoint = async (page: { addInitScript: Function }) => {
-  await page.addInitScript(() => {
-    (window as Window & { SHAREPOINT_ENABLED?: boolean }).SHAREPOINT_ENABLED =
-      true;
-  });
-};
-
 test.describe("Chat file source selector overrides", () => {
-  test("shows default chat file source selector behavior", async ({ page }) => {
-    await enableSharepoint(page);
+  // Without cloud providers (none are configured in this scenario) or a
+  // registry override, the app renders the plain upload button rather than a
+  // source selector; the cloud-provider default selector is only reachable in
+  // the entra-id scenario.
+  test("falls back to the plain upload button without providers or overrides", async ({
+    page,
+  }) => {
     await page.goto("/");
 
     await expect(
       page.getByRole("textbox", { name: /type a message/i }),
     ).toBeVisible();
 
+    await expect(
+      page.getByRole("button", { name: "Upload Files" }),
+    ).toBeVisible();
     await expect(
       page.getByRole("button", { name: /upload from computer/i }),
     ).toHaveCount(0);
@@ -26,16 +27,7 @@ test.describe("Chat file source selector overrides", () => {
   }) => {
     await page.addInitScript(() => {
       (
-        window as Window & {
-          SHAREPOINT_ENABLED?: boolean;
-          __E2E_COMPONENT_VARIANT__?: string;
-        }
-      ).SHAREPOINT_ENABLED = true;
-      (
-        window as Window & {
-          SHAREPOINT_ENABLED?: boolean;
-          __E2E_COMPONENT_VARIANT__?: string;
-        }
+        window as Window & { __E2E_COMPONENT_VARIANT__?: string }
       ).__E2E_COMPONENT_VARIANT__ = "welcome-screen-example";
     });
 

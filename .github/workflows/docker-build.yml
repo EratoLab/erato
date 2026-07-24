@@ -585,7 +585,7 @@ jobs:
         env:
           PW_WORKERS: ${{ matrix.workers || 1 }}
         run: |
-          pnpm exec playwright test ${{ matrix.projects }} ${{ matrix.shard && format('--shard={0}', matrix.shard) || '' }} --retries 2 --trace on-first-retry --grep @ci
+          pnpm exec playwright test ${{ matrix.projects }} ${{ matrix.shard && format('--shard={0}', matrix.shard) || '' }} --retries 2 --trace on-first-retry --grep-invert "@no-ci"
 
       - name: Upload blob report
         uses: actions/upload-artifact@v4

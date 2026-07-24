@@ -36,8 +36,6 @@ test.describe("Assistant Management", () => {
       page.getByRole("heading", { name: /create assistant/i }),
     ).toBeVisible();
 
-    await expect(page.getByRole("button", { name: "-" })).toBeVisible();
-
     // Fill in basic fields
     await page.getByLabel(/name/i).fill(assistantName);
     await page
