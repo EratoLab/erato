@@ -156,6 +156,11 @@ impl Resource {
 pub enum Action {
     #[serde(rename = "read")]
     Read,
+    /// Read the shared view of a resource — for chats, the active thread as
+    /// served by the share-links messages route — as opposed to the full
+    /// owner-level [`Action::Read`].
+    #[serde(rename = "shared_read")]
+    SharedRead,
     #[serde(rename = "create")]
     Create,
     #[serde(rename = "update")]

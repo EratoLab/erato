@@ -546,14 +546,36 @@ pub async fn get_chat_messages(
     fetch_chat_messages(conn, chat_id, false, limit, offset).await
 }
 
+/// Get the shared view of a chat's messages: the active thread only, with
+/// branches from edits/regenerations excluded.
+///
+/// Authorizes via [`Action::SharedRead`], which the policy grants to any
+/// logged-in user when chat sharing is enabled and the chat has an enabled
+/// share link and is not archived.
+pub async fn get_shared_chat_messages(
+    conn: &DatabaseConnection,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    chat_id: &Uuid,
+    limit: Option<u64>,
+    offset: Option<u64>,
+) -> Result<(Vec<messages::Model>, MessageListStats), Report> {
+    authorize!(
+        policy,
+        subject,
+        &Resource::Chat(chat_id.as_hyphenated().to_string()),
+        Action::SharedRead
+    )?;
+
+    fetch_chat_messages(conn, chat_id, true, limit, offset).await
+}
+
 /// Fetch messages for a chat with pagination support, without any authorization
 /// check.
 ///
-/// Callers are responsible for authorizing access before calling this function.
-///
 /// When `active_thread_only` is true, only messages that are part of the chat's
 /// active thread are returned (branches from edits/regenerations are excluded).
-pub async fn fetch_chat_messages(
+async fn fetch_chat_messages(
     conn: &DatabaseConnection,
     chat_id: &Uuid,
     active_thread_only: bool,

@@ -272,13 +272,12 @@ pub async fn share_link_messages(
         .rebuild_data_if_needed_req(&app_state.db, &app_state.config)
         .await?;
 
-    // The share link is the authorization: a valid, enabled share link for a
-    // (non-archived) chat grants read access to the active thread. No
-    // `Chat::Read` check here.
-    let share_link =
-        share_link::get_active_share_link_by_id(&app_state.db, &app_state.config, &share_link_id)
-            .await
-            .map_err(|_| StatusCode::NOT_FOUND)?;
+    // The share link only identifies the chat. Whether it grants access is
+    // decided by the policy through `Action::SharedRead`, which requires the
+    // sharing feature on, the link enabled, and the chat not archived.
+    let share_link = share_link::get_share_link_by_id(&app_state.db, &share_link_id)
+        .await
+        .map_err(|_| StatusCode::NOT_FOUND)?;
 
     if share_link.resource_type != "chat" {
         return Err(StatusCode::NOT_FOUND);
@@ -289,13 +288,24 @@ pub async fn share_link_messages(
     let limit = params.get("limit").and_then(|l| l.parse::<u64>().ok());
     let offset = params.get("offset").and_then(|o| o.parse::<u64>().ok());
 
-    // Fetch only the active thread — branches from edits/regenerations are
-    // filtered server-side and cannot be requested by the caller.
-    let (messages, stats) =
-        crate::models::message::fetch_chat_messages(&app_state.db, &chat_id, true, limit, offset)
-            .await
-            .wrap_err("Failed to get shared chat messages")
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let (messages, stats) = crate::models::message::get_shared_chat_messages(
+        &app_state.db,
+        &policy,
+        &me_user.to_subject(),
+        &chat_id,
+        limit,
+        offset,
+    )
+    .await
+    .map_err(|e| {
+        let s = e.to_string();
+        if s.contains("not authorized") {
+            // A denied `shared_read` is indistinguishable from a missing link.
+            StatusCode::NOT_FOUND
+        } else {
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    })?;
 
     let response = super::assemble_chat_messages_response(
         &app_state, &policy, &me_user, chat_id, messages, stats,

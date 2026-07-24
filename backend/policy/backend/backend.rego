@@ -111,6 +111,11 @@ action_submit_feedback := "submit_feedback"
 action_update := "update"
 action_delete := "delete"
 action_share := "share"
+# If allowed on a chat, allows reading the chat's shared view: the active
+# thread only, as served by the dedicated share-links messages route. Distinct
+# from `read`, which also exposes non-active-thread messages from
+# edits/regenerations and everything else reserved for the chat owner.
+action_shared_read := "shared_read"
 
 chat_sharing_enabled if {
 	data.config.chat_sharing.enabled
@@ -237,6 +242,16 @@ allow if {
 	can_read_shared_chat(input.resource_id)
 }
 
+# A logged-in user can read the shared view of a chat when chat sharing is
+# enabled and the chat has an active share link.
+allow if {
+	input.subject_kind == subject_kind_user
+	input.subject_id != not_logged_in
+	input.resource_kind == resource_kind_chat
+	input.action == action_shared_read
+	can_read_shared_chat(input.resource_id)
+}
+
 # A user can submit messages to chats they own.
 allow if {
 	# Ensure subject is a user and is logged in.
@@ -338,7 +353,8 @@ allow if {
 	data.resource_attributes[resource_kind_chat][chat_id].owner_id == input.subject_id
 }
 
-# A user can read file uploads if they can access one of the linked shared chats.
+# A user can read file uploads linked to a chat they can `shared_read`: the
+# shared view of a chat includes its attachments.
 allow if {
 	input.subject_kind == subject_kind_user
 	input.subject_id != not_logged_in
