@@ -410,6 +410,10 @@ async fn process_mcp_file_outputs(
 
     replace_mcp_file_fields(output_value, &replacements)?;
 
+    // The new file_upload rows must enter the policy data before the client
+    // fetches their previews after the turn completes.
+    app_state.global_policy_engine.invalidate_data().await;
+
     Ok(image_pointers)
 }
 

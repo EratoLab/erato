@@ -1937,6 +1937,7 @@ async fn test_message_submit_with_completed_audio_transcription(pool: Pool<Postg
     let (app_config, _server) = setup_mock_llm_server(Some(mock_config)).await;
     let app_state = test_app_state(app_config, pool).await;
     let db = app_state.db.clone();
+    let global_policy_engine = app_state.global_policy_engine.clone();
 
     let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
         .await
@@ -2009,6 +2010,10 @@ async fn test_message_submit_with_completed_audio_transcription(pool: Pool<Postg
         .await
         .expect("Failed to link audio file upload to chat");
 
+    // The rows were inserted directly; the upload endpoint would have
+    // invalidated the policy data after creating them.
+    global_policy_engine.invalidate_data().await;
+
     let summarize_response = server
         .post("/api/v1beta/me/messages/submitstream")
         .with_bearer_token(TEST_JWT_TOKEN)
@@ -2066,6 +2071,7 @@ async fn test_chat_summary_generated_for_audio_only_first_message(pool: Pool<Pos
     let (app_config, _server) = setup_mock_llm_server(None).await;
     let app_state = test_app_state(app_config, pool).await;
     let db = app_state.db.clone();
+    let global_policy_engine = app_state.global_policy_engine.clone();
 
     let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
         .await
@@ -2125,6 +2131,10 @@ async fn test_chat_summary_generated_for_audio_only_first_message(pool: Pool<Pos
         .insert(&db)
         .await
         .expect("Failed to link audio file to preliminary chat");
+
+    // The rows were inserted directly; the upload endpoint would have
+    // invalidated the policy data after creating them.
+    global_policy_engine.invalidate_data().await;
 
     // Submit the audio file as the first (and only content) in a BRAND NEW chat.
     // No `user_message` text and no `previous_message_id` — the audio-only first-message

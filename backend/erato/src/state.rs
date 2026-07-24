@@ -60,16 +60,6 @@ impl GlobalPolicyEngine {
         }
     }
 
-    /// Check if the policy data needs rebuilding based on time threshold
-    /// Returns true if data has never been built or if more than the specified duration has passed
-    async fn needs_time_based_rebuild(&self, threshold: Duration) -> bool {
-        let last_rebuild = self.last_rebuild_time.read().await;
-        match *last_rebuild {
-            None => true, // Never been rebuilt
-            Some(instant) => instant.elapsed() > threshold,
-        }
-    }
-
     /// Rebuild data if needed based on time threshold or explicit invalidation
     /// Returns a request-scoped PolicyEngine clone for use in the request handler
     #[instrument(skip_all)]
@@ -79,21 +69,43 @@ impl GlobalPolicyEngine {
         config: &AppConfig,
         time_threshold: Duration,
     ) -> Result<PolicyEngine, Report> {
-        let needs_time_rebuild = self.needs_time_based_rebuild(time_threshold).await;
-
-        if needs_time_rebuild {
-            tracing::debug!("Policy data needs time-based rebuild, rebuilding...");
-            self.engine.rebuild_data(db, config).await?;
-            *self.last_rebuild_time.write().await = Some(Instant::now());
-        } else {
-            // Even if time hasn't elapsed, check if data was explicitly invalidated
-            self.engine.rebuild_data_if_needed(db, config).await?;
+        // The periodic refresh is expressed as an invalidation so it funnels
+        // through the same single-flight rebuild as explicit invalidations.
+        // Claiming the time slot under the write lock keeps concurrent requests
+        // from each scheduling their own refresh.
+        let time_based_refresh_due = {
+            let mut last_rebuild = self.last_rebuild_time.write().await;
+            let due = match *last_rebuild {
+                None => true,
+                Some(instant) => instant.elapsed() > time_threshold,
+            };
+            if due {
+                *last_rebuild = Some(Instant::now());
+            }
+            due
+        };
+        if time_based_refresh_due {
+            tracing::debug!("Policy data due for time-based refresh");
+            self.engine.invalidate_data().await;
         }
+
+        self.engine.rebuild_data_if_needed(db, config).await?;
 
         // Use clone_for_request to create an independent data_needs_rebuild state
         // This prevents invalidate_data() on the global engine from affecting
         // request-scoped clones during request processing
         Ok(self.engine.clone_for_request())
+    }
+
+    /// Rebuild after an invalidation, coalescing with any concurrent rebuild.
+    /// For background tasks, whose request-scoped engine clones cannot observe
+    /// invalidations of the global engine.
+    pub async fn rebuild_data_if_needed(
+        &self,
+        db: &DatabaseConnection,
+        config: &AppConfig,
+    ) -> Result<(), Report> {
+        self.engine.rebuild_data_if_needed(db, config).await
     }
 
     /// Invalidate the policy data, forcing a rebuild on next access
