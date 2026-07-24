@@ -4,20 +4,45 @@
 //! tasks that can continue in the background even if the client disconnects.
 //! Clients can resume streaming from any point by reconnecting.
 
+use crate::config::GenerationStatusConfig;
+use crate::metrics_constants::{
+    POSTGRES_QUERY_GENERATION_CLEANUP, POSTGRES_QUERY_GENERATION_FINISH,
+    POSTGRES_QUERY_GENERATION_HEARTBEAT, POSTGRES_QUERY_GENERATION_REAP,
+    POSTGRES_QUERY_GENERATION_START,
+};
 use crate::models::message::ContentPart;
+use crate::query_metrics::named_statement_from_sql_and_values;
 use crate::server::api::v1beta::ChatMessage;
-use sea_orm::JsonValue;
+use sea_orm::{ConnectionTrait, DatabaseConnection, JsonValue};
 use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 use tokio::sync::{Notify, RwLock, broadcast, oneshot};
+use tokio::task::JoinHandle;
 
 use crate::services::client_tools::{ClientToolDelivery, ClientToolOutcome};
 
 /// Maximum number of events to store in history per task
 const MAX_EVENT_HISTORY: usize = 10_000;
+
+/// Terminal outcome of a generation, persisted as the chat's generation state.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TaskOutcome {
+    Completed,
+    Errored,
+}
+
+impl TaskOutcome {
+    fn as_db_str(self) -> &'static str {
+        match self {
+            TaskOutcome::Completed => "completed",
+            TaskOutcome::Errored => "errored",
+        }
+    }
+}
 
 /// Manager for background streaming tasks
 #[derive(Clone, Debug)]
@@ -25,13 +50,30 @@ pub struct BackgroundTaskManager {
     /// Map of chat_id to streaming task
     /// Public for testing purposes
     pub tasks: Arc<RwLock<HashMap<Uuid, Arc<StreamingTask>>>>,
+    /// Persists per-chat generation state when present; `None` keeps the
+    /// manager purely in-memory (no DB writes, no heartbeat/reaper).
+    db: Option<DatabaseConnection>,
+    /// Handle to the heartbeat/reaper task, kept alive with the manager.
+    _maintenance_task: Option<Arc<JoinHandle<()>>>,
 }
 
 impl BackgroundTaskManager {
     /// Create a new background task manager
-    pub fn new() -> Self {
+    pub fn new(db: Option<DatabaseConnection>, config: GenerationStatusConfig) -> Self {
+        let tasks: Arc<RwLock<HashMap<Uuid, Arc<StreamingTask>>>> =
+            Arc::new(RwLock::new(HashMap::new()));
+
+        let maintenance_task = db.clone().map(|db| {
+            let tasks = Arc::clone(&tasks);
+            Arc::new(tokio::spawn(async move {
+                Self::run_maintenance_task(db, tasks, config).await;
+            }))
+        });
+
         Self {
-            tasks: Arc::new(RwLock::new(HashMap::new())),
+            tasks,
+            db,
+            _maintenance_task: maintenance_task,
         }
     }
 
@@ -45,12 +87,40 @@ impl BackgroundTaskManager {
         message_id: Uuid,
     ) -> (broadcast::Receiver<StreamingEvent>, Arc<StreamingTask>) {
         // Create a new streaming task
-        let task = Arc::new(StreamingTask::new(message_id));
+        let task = Arc::new(StreamingTask::new(message_id, Uuid::new_v4()));
         let receiver = task.subscribe();
 
         // Insert into the map, replacing any existing task
-        let mut tasks = self.tasks.write().await;
-        tasks.insert(chat_id, Arc::clone(&task));
+        {
+            let mut tasks = self.tasks.write().await;
+            tasks.insert(chat_id, Arc::clone(&task));
+        }
+
+        // Best-effort lease claim: a failed status write must never fail a
+        // healthy generation.
+        if let Some(db) = &self.db {
+            let statement = named_statement_from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                POSTGRES_QUERY_GENERATION_START,
+                r#"
+                UPDATE chats
+                SET active_generation_id = $1,
+                    generation_state = 'running',
+                    generation_started_at = now(),
+                    generation_heartbeat_at = now(),
+                    generation_ended_at = NULL
+                WHERE id = $2
+                "#,
+                [task.generation_id.into(), chat_id.into()],
+            );
+            if let Err(err) = db.execute_raw(statement).await {
+                tracing::warn!(
+                    chat_id = %chat_id,
+                    error = %err,
+                    "Failed to persist generation start"
+                );
+            }
+        }
 
         (receiver, task)
     }
@@ -63,23 +133,194 @@ impl BackgroundTaskManager {
         tasks.get(chat_id).map(Arc::clone)
     }
 
-    /// Remove a completed task from the manager
-    ///
-    /// This should be called when a task completes to allow cleanup.
-    pub async fn remove_task(&self, chat_id: &Uuid) {
-        let mut tasks = self.tasks.write().await;
-        tasks.remove(chat_id);
+    /// Remove a completed task from the manager and persist its terminal
+    /// outcome. Gated on `generation_id` so a stale wrapper finishing late
+    /// cannot remove (or mark terminal) a replacement generation.
+    pub async fn remove_task(&self, chat_id: &Uuid, generation_id: Uuid, outcome: TaskOutcome) {
+        {
+            let mut tasks = self.tasks.write().await;
+            if tasks
+                .get(chat_id)
+                .is_some_and(|task| task.generation_id == generation_id)
+            {
+                tasks.remove(chat_id);
+            }
+        }
+
+        if let Some(db) = &self.db {
+            let statement = named_statement_from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                POSTGRES_QUERY_GENERATION_FINISH,
+                r#"
+                UPDATE chats
+                SET generation_state = $1, generation_ended_at = now()
+                WHERE id = $2
+                  AND active_generation_id = $3
+                  AND generation_state = 'running'
+                "#,
+                [
+                    outcome.as_db_str().into(),
+                    (*chat_id).into(),
+                    generation_id.into(),
+                ],
+            );
+            if let Err(err) = db.execute_raw(statement).await {
+                tracing::warn!(
+                    chat_id = %chat_id,
+                    error = %err,
+                    "Failed to persist generation outcome"
+                );
+            }
+        }
+    }
+
+    /// Periodically heartbeat all in-flight generations and reap rows whose
+    /// heartbeat went stale (e.g. after a process died mid-generation).
+    async fn run_maintenance_task(
+        db: DatabaseConnection,
+        tasks: Arc<RwLock<HashMap<Uuid, Arc<StreamingTask>>>>,
+        config: GenerationStatusConfig,
+    ) {
+        let mut interval =
+            tokio::time::interval(Duration::from_secs(config.heartbeat_interval_secs.max(1)));
+
+        loop {
+            // The first tick completes immediately, so rows left 'running' by a
+            // previous process are reaped right at startup.
+            interval.tick().await;
+
+            let (chat_ids, generation_ids): (Vec<Uuid>, Vec<Uuid>) = {
+                let tasks = tasks.read().await;
+                tasks
+                    .iter()
+                    .map(|(chat_id, task)| (*chat_id, task.generation_id))
+                    .unzip()
+            };
+
+            if !chat_ids.is_empty() {
+                // The heartbeat also re-asserts the lease: two same-chat
+                // starts can race their start UPDATEs, and the map is this
+                // process's source of truth.
+                let statement = named_statement_from_sql_and_values(
+                    sea_orm::DatabaseBackend::Postgres,
+                    POSTGRES_QUERY_GENERATION_HEARTBEAT,
+                    r#"
+                    UPDATE chats
+                    SET generation_heartbeat_at = now(),
+                        active_generation_id = active.generation_id
+                    FROM (
+                        SELECT unnest($1::uuid[]) AS chat_id,
+                               unnest($2::uuid[]) AS generation_id
+                    ) active
+                    WHERE chats.id = active.chat_id
+                      AND chats.generation_state = 'running'
+                    "#,
+                    [chat_ids.into(), generation_ids.into()],
+                );
+                if let Err(err) = db.execute_raw(statement).await {
+                    tracing::warn!(error = %err, "Failed to heartbeat running generations");
+                }
+            }
+
+            let statement = named_statement_from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                POSTGRES_QUERY_GENERATION_REAP,
+                r#"
+                UPDATE chats
+                SET generation_state = 'errored', generation_ended_at = now()
+                WHERE generation_state = 'running'
+                  AND generation_heartbeat_at < now() - make_interval(secs => $1::double precision)
+                "#,
+                [(config.stale_after_secs as f64).into()],
+            );
+            if let Err(err) = db.execute_raw(statement).await {
+                tracing::warn!(error = %err, "Failed to reap stale generations");
+            }
+
+            // Clear terminal rows once past the retention window, so the
+            // partial index only ever covers currently relevant rows.
+            let statement = named_statement_from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                POSTGRES_QUERY_GENERATION_CLEANUP,
+                r#"
+                UPDATE chats
+                SET active_generation_id = NULL,
+                    generation_state = NULL,
+                    generation_started_at = NULL,
+                    generation_heartbeat_at = NULL,
+                    generation_ended_at = NULL
+                WHERE generation_state IN ('completed', 'errored')
+                  AND generation_ended_at < now() - make_interval(secs => $1::double precision)
+                "#,
+                [(config.terminal_retention_secs as f64).into()],
+            );
+            if let Err(err) = db.execute_raw(statement).await {
+                tracing::warn!(error = %err, "Failed to clean up expired generation rows");
+            }
+        }
     }
 }
 
 impl Default for BackgroundTaskManager {
     fn default() -> Self {
-        Self::new()
+        Self::new(None, GenerationStatusConfig::default())
+    }
+}
+
+/// Removes a generation's task with an `Errored` outcome if its wrapper is
+/// dropped without reaching the normal cleanup (i.e. it panicked), so the
+/// maintenance loop cannot heartbeat the orphaned row forever.
+pub struct TaskCleanupGuard {
+    manager: BackgroundTaskManager,
+    chat_id: Uuid,
+    generation_id: Uuid,
+    armed: bool,
+}
+
+impl TaskCleanupGuard {
+    pub fn new(manager: BackgroundTaskManager, chat_id: Uuid, generation_id: Uuid) -> Self {
+        Self {
+            manager,
+            chat_id,
+            generation_id,
+            armed: true,
+        }
+    }
+
+    /// Call once the wrapper has handed cleanup to `remove_task` itself.
+    pub fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for TaskCleanupGuard {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        tracing::error!(
+            chat_id = %self.chat_id,
+            generation_id = %self.generation_id,
+            "Generation wrapper dropped without cleanup (panic?); removing task as errored"
+        );
+        let manager = self.manager.clone();
+        let chat_id = self.chat_id;
+        let generation_id = self.generation_id;
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            handle.spawn(async move {
+                manager
+                    .remove_task(&chat_id, generation_id, TaskOutcome::Errored)
+                    .await;
+            });
+        }
     }
 }
 
 /// A streaming task that manages event broadcasting and history
 pub struct StreamingTask {
+    /// Identity of this generation attempt, distinguishing it from other
+    /// generations of the same chat in the map and the chats-row lease.
+    pub generation_id: Uuid,
     /// The id of the assistant message being generated. Set to a placeholder at
     /// construction (the real id is only known once the generation task creates
     /// the message) and updated via `set_message_id`. Behind a lock so it can be
@@ -89,6 +330,9 @@ pub struct StreamingTask {
     event_tx: broadcast::Sender<StreamingEvent>,
     /// Storage for all events (for replay)
     event_history: Arc<RwLock<Vec<StreamingEvent>>>,
+    /// Whether any `Error` event was sent; tracked separately because
+    /// `event_history` stops recording at `MAX_EVENT_HISTORY`.
+    saw_error: Arc<AtomicBool>,
     /// Whether the generation is complete
     completed: Arc<AtomicBool>,
     /// Whether cancellation was requested by the user
@@ -119,14 +363,16 @@ impl std::fmt::Debug for StreamingTask {
 
 impl StreamingTask {
     /// Create a new streaming task
-    fn new(message_id: Uuid) -> Self {
+    fn new(message_id: Uuid, generation_id: Uuid) -> Self {
         // Create a broadcast channel with capacity for 1000 events
         let (event_tx, _) = broadcast::channel(1000);
 
         Self {
+            generation_id,
             message_id: std::sync::RwLock::new(message_id),
             event_tx,
             event_history: Arc::new(RwLock::new(Vec::new())),
+            saw_error: Arc::new(AtomicBool::new(false)),
             completed: Arc::new(AtomicBool::new(false)),
             abort_requested: Arc::new(AtomicBool::new(false)),
             abort_notify: Arc::new(Notify::new()),
@@ -154,6 +400,9 @@ impl StreamingTask {
     /// Send an event to all subscribers and store it in history
     pub async fn send_event(&self, event: StreamingEvent) -> Result<(), String> {
         tracing::debug!("sending event to StreamingTask");
+        if matches!(event, StreamingEvent::Error { .. }) {
+            self.saw_error.store(true, Ordering::SeqCst);
+        }
         // First, add to history
         let mut history = self.event_history.write().await;
 
@@ -181,6 +430,16 @@ impl StreamingTask {
     pub async fn get_event_history(&self) -> Vec<StreamingEvent> {
         let history = self.event_history.read().await;
         history.clone()
+    }
+
+    /// Derive the terminal outcome of this task. An abort is a user-initiated
+    /// stop and deliberately counts as `Completed`.
+    pub fn derive_outcome(&self, generation_failed: bool) -> TaskOutcome {
+        if generation_failed || self.saw_error.load(Ordering::SeqCst) {
+            TaskOutcome::Errored
+        } else {
+            TaskOutcome::Completed
+        }
     }
 
     /// Mark the task as completed
@@ -371,7 +630,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_task_creation_and_subscription() {
-        let manager = BackgroundTaskManager::new();
+        let manager = BackgroundTaskManager::new(None, GenerationStatusConfig::default());
         let chat_id = Uuid::new_v4();
         let message_id = Uuid::new_v4();
 
@@ -385,7 +644,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_event_storage_and_replay() {
-        let manager = BackgroundTaskManager::new();
+        let manager = BackgroundTaskManager::new(None, GenerationStatusConfig::default());
         let chat_id = Uuid::new_v4();
         let message_id = Uuid::new_v4();
 
@@ -410,7 +669,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_task_completion() {
-        let manager = BackgroundTaskManager::new();
+        let manager = BackgroundTaskManager::new(None, GenerationStatusConfig::default());
         let chat_id = Uuid::new_v4();
         let message_id = Uuid::new_v4();
 
@@ -423,7 +682,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_task_replacement() {
-        let manager = BackgroundTaskManager::new();
+        let manager = BackgroundTaskManager::new(None, GenerationStatusConfig::default());
         let chat_id = Uuid::new_v4();
         let message_id_1 = Uuid::new_v4();
         let message_id_2 = Uuid::new_v4();
@@ -441,27 +700,91 @@ mod tests {
 
     #[tokio::test]
     async fn test_automatic_cleanup() {
-        let manager = BackgroundTaskManager::new();
+        let manager = BackgroundTaskManager::new(None, GenerationStatusConfig::default());
         let chat_id = Uuid::new_v4();
         let message_id = Uuid::new_v4();
 
-        {
-            let (_receiver, _task) = manager.start_task(chat_id, message_id).await;
+        let generation_id = {
+            let (_receiver, task) = manager.start_task(chat_id, message_id).await;
             // Task exists here
             assert!(manager.get_task(&chat_id).await.is_some());
-        }
+            task.generation_id
+        };
 
         // After dropping receiver and task, the Arc should still be in the manager
         assert!(manager.get_task(&chat_id).await.is_some());
 
         // Remove the task manually
-        manager.remove_task(&chat_id).await;
+        manager
+            .remove_task(&chat_id, generation_id, TaskOutcome::Completed)
+            .await;
         assert!(manager.get_task(&chat_id).await.is_none());
     }
 
     #[tokio::test]
+    async fn remove_task_is_gated_on_generation_identity() {
+        let manager = BackgroundTaskManager::new(None, GenerationStatusConfig::default());
+        let chat_id = Uuid::new_v4();
+
+        let (_receiver1, task1) = manager.start_task(chat_id, Uuid::new_v4()).await;
+        let (_receiver2, task2) = manager.start_task(chat_id, Uuid::new_v4()).await;
+
+        // A stale wrapper removing with the replaced generation's id must not
+        // evict the replacement task.
+        manager
+            .remove_task(&chat_id, task1.generation_id, TaskOutcome::Errored)
+            .await;
+        let retrieved = manager
+            .get_task(&chat_id)
+            .await
+            .expect("replacement task should survive a stale removal");
+        assert_eq!(retrieved.generation_id, task2.generation_id);
+
+        // Removing with the current generation's id evicts it.
+        manager
+            .remove_task(&chat_id, task2.generation_id, TaskOutcome::Completed)
+            .await;
+        assert!(manager.get_task(&chat_id).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn derive_outcome_maps_wrapper_error_to_errored() {
+        let task = StreamingTask::new(Uuid::new_v4(), Uuid::new_v4());
+        assert_eq!(task.derive_outcome(true), TaskOutcome::Errored);
+    }
+
+    #[tokio::test]
+    async fn derive_outcome_maps_error_event_to_errored() {
+        let task = StreamingTask::new(Uuid::new_v4(), Uuid::new_v4());
+        task.send_event(StreamingEvent::Error { error: None })
+            .await
+            .unwrap();
+        assert_eq!(task.derive_outcome(false), TaskOutcome::Errored);
+    }
+
+    #[tokio::test]
+    async fn derive_outcome_maps_clean_finish_to_completed() {
+        let task = StreamingTask::new(Uuid::new_v4(), Uuid::new_v4());
+        task.send_event(StreamingEvent::TextDelta {
+            message_id: Uuid::new_v4(),
+            content_index: 0,
+            new_text: "Hello".to_string(),
+        })
+        .await
+        .unwrap();
+        assert_eq!(task.derive_outcome(false), TaskOutcome::Completed);
+    }
+
+    #[tokio::test]
+    async fn derive_outcome_maps_abort_to_completed() {
+        let task = StreamingTask::new(Uuid::new_v4(), Uuid::new_v4());
+        task.request_abort();
+        assert_eq!(task.derive_outcome(false), TaskOutcome::Completed);
+    }
+
+    #[tokio::test]
     async fn test_task_abort_request() {
-        let manager = BackgroundTaskManager::new();
+        let manager = BackgroundTaskManager::new(None, GenerationStatusConfig::default());
         let chat_id = Uuid::new_v4();
         let message_id = Uuid::new_v4();
 
@@ -475,7 +798,7 @@ mod tests {
 
     #[tokio::test]
     async fn set_message_id_updates_the_routing_id() {
-        let task = StreamingTask::new(Uuid::new_v4());
+        let task = StreamingTask::new(Uuid::new_v4(), Uuid::new_v4());
         let real_id = Uuid::new_v4();
         task.set_message_id(real_id);
         assert_eq!(task.message_id(), real_id);
@@ -483,7 +806,7 @@ mod tests {
 
     #[tokio::test]
     async fn client_tool_result_delivery_round_trip() {
-        let task = StreamingTask::new(Uuid::new_v4());
+        let task = StreamingTask::new(Uuid::new_v4(), Uuid::new_v4());
         let mut rx = task.register_client_tool_call("call-1".to_string()).await;
 
         let delivery = task
@@ -509,7 +832,7 @@ mod tests {
 
     #[tokio::test]
     async fn deliver_unknown_tool_call_id_is_noop() {
-        let task = StreamingTask::new(Uuid::new_v4());
+        let task = StreamingTask::new(Uuid::new_v4(), Uuid::new_v4());
         let delivery = task
             .deliver_client_tool_result(
                 "never-registered",
@@ -521,7 +844,7 @@ mod tests {
 
     #[tokio::test]
     async fn remove_pending_client_tool_drops_the_waiter() {
-        let task = StreamingTask::new(Uuid::new_v4());
+        let task = StreamingTask::new(Uuid::new_v4(), Uuid::new_v4());
         let mut rx = task.register_client_tool_call("call-1".to_string()).await;
         task.remove_pending_client_tool("call-1").await;
         // The sender was dropped, so the receiver observes a closed channel and a

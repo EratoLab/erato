@@ -366,6 +366,11 @@ pub async fn token_usage_estimate(
             title_by_user_provided: None,
             assistant_configuration,
             assistant_id: new_chat.assistant_id,
+            active_generation_id: None,
+            generation_state: None,
+            generation_started_at: None,
+            generation_heartbeat_at: None,
+            generation_ended_at: None,
         };
         chat = Some(synthetic_chat);
     }

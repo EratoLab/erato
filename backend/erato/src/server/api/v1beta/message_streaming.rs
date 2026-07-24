@@ -27,7 +27,7 @@ use crate::server::api::v1beta::message_streaming_file_extraction::{
     parse_content_filter_error_from_mcp_tool_result, post_process_mcp_tool_result,
 };
 use crate::services::background_tasks::{
-    StreamingEvent, StreamingTask, ToolCallStatus as BgToolCallStatus,
+    StreamingEvent, StreamingTask, TaskCleanupGuard, ToolCallStatus as BgToolCallStatus,
 };
 use crate::services::client_tools::{ClientToolDelivery, ClientToolOutcome};
 use crate::services::genai::{build_chat_options_for_completion, build_chat_options_for_summary};
@@ -6273,6 +6273,11 @@ pub async fn message_submit_sse(
     // Spawn the background generation task
     tokio::spawn(
         async move {
+            let mut cleanup_guard = TaskCleanupGuard::new(
+                app_state_bg.background_tasks.clone(),
+                chat_id,
+                task_clone.generation_id,
+            );
             tracing::info!("Starting background task for chat_id: {}", chat_id);
             let result = run_message_submit_task(
                 &task_clone,
@@ -6286,6 +6291,7 @@ pub async fn message_submit_sse(
             )
             .await;
 
+            let generation_failed = result.is_err();
             match result {
                 Ok(()) => {
                     tracing::info!(
@@ -6333,8 +6339,13 @@ pub async fn message_submit_sse(
             )
             .await;
             // Mark task as completed
+            let outcome = task_clone.derive_outcome(generation_failed);
             task_clone.mark_completed();
-            app_state_bg.background_tasks.remove_task(&chat_id).await;
+            cleanup_guard.disarm();
+            app_state_bg
+                .background_tasks
+                .remove_task(&chat_id, task_clone.generation_id, outcome)
+                .await;
         }
         .in_current_span(),
     );
@@ -7574,6 +7585,11 @@ pub async fn regenerate_message_sse(
 
     // Spawn a task to process the request and send events
     tokio::spawn(async move {
+        let mut cleanup_guard = TaskCleanupGuard::new(
+            app_state_for_cleanup.background_tasks.clone(),
+            chat_id_for_cleanup,
+            task_for_stream.generation_id,
+        );
         let result: Result<(), Report> = async {
             let input_files_for_previous_message = previous_message
                 .input_file_uploads
@@ -7816,15 +7832,18 @@ pub async fn regenerate_message_sse(
         }
         .await;
 
+        let generation_failed = result.is_err();
         if let Err(error) = result {
             forward_error_report(&tx, &error).await;
             log_and_capture_error("regenerate message background task", &error);
         }
 
+        let outcome = task_for_stream.derive_outcome(generation_failed);
         task_for_stream.mark_completed();
+        cleanup_guard.disarm();
         app_state_for_cleanup
             .background_tasks
-            .remove_task(&chat_id_for_cleanup)
+            .remove_task(&chat_id_for_cleanup, task_for_stream.generation_id, outcome)
             .await;
     });
 
@@ -7962,6 +7981,11 @@ pub async fn edit_message_sse(
 
     // Spawn a task to process the request and send events
     tokio::spawn(async move {
+        let mut cleanup_guard = TaskCleanupGuard::new(
+            app_state_for_cleanup.background_tasks.clone(),
+            chat_id_for_cleanup,
+            task_for_stream.generation_id,
+        );
         let result: Result<(), Report> = async {
             let user_message = json!({
                 "role": "user",
@@ -8201,15 +8225,18 @@ pub async fn edit_message_sse(
         }
         .await;
 
+        let generation_failed = result.is_err();
         if let Err(error) = result {
             forward_error_report(&tx, &error).await;
             log_and_capture_error("edit message background task", &error);
         }
 
+        let outcome = task_for_stream.derive_outcome(generation_failed);
         task_for_stream.mark_completed();
+        cleanup_guard.disarm();
         app_state_for_cleanup
             .background_tasks
-            .remove_task(&chat_id_for_cleanup)
+            .remove_task(&chat_id_for_cleanup, task_for_stream.generation_id, outcome)
             .await;
     });
 

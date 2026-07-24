@@ -1,6 +1,6 @@
 "use client";
 
-import { t } from "@lingui/core/macro";
+import { plural, t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { memo, useRef, useState, useEffect, useCallback, useMemo } from "react";
 import { ErrorBoundary } from "react-error-boundary";
@@ -13,6 +13,12 @@ import {
   resolveComponentOverride,
 } from "@/config/componentRegistry";
 import { defaultThemeConfig } from "@/config/themeConfig";
+import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
+import {
+  selectAttentionCount,
+  selectRunningCount,
+  useGenerationStatusStore,
+} from "@/hooks/chat/store/generationStatusStore";
 import { useResponsiveCollapsedMode, useThemedIcon } from "@/hooks/ui";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { useAssistantHubConfig } from "@/lib/generated/v1betaApi/v1betaApiComponents";
@@ -62,6 +68,42 @@ const ASSISTANTS_SECTION_EXPANDED_STORAGE_KEY =
 
 const parsePersistedBoolean = (value: unknown) =>
   typeof value === "boolean" ? value : null;
+
+const GENERATION_ANNOUNCE_DEBOUNCE_MS = 1000;
+
+const generationBadgeClassName =
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- CSS utility classes, not user-facing text
+  "flex min-w-4 items-center justify-center rounded-full bg-theme-action-primary-bg px-1 text-[10px] font-semibold leading-4 text-theme-action-primary-fg";
+
+/** Running + session-observed finished/error + pending tool confirmations. */
+const useGenerationIndicatorCount = (): number => {
+  const runningCount = useGenerationStatusStore(selectRunningCount);
+  const attentionCount = useGenerationStatusStore(selectAttentionCount);
+  const actionRequiredCount = useConfirmationRegistryStore(
+    (state) => Object.keys(state.pendingIdsByChatId).length,
+  );
+  return runningCount + attentionCount + actionRequiredCount;
+};
+
+/**
+ * Count badge for the collapsed-rail toggles; anchors on the nearest
+ * positioned ancestor.
+ */
+const GenerationRailBadge = () => {
+  const count = useGenerationIndicatorCount();
+
+  if (count === 0) return null;
+
+  return (
+    <span
+      data-testid="sidebar-generation-badge"
+      aria-hidden="true"
+      className={clsx("absolute -right-0.5 -top-0.5", generationBadgeClassName)}
+    >
+      {count}
+    </span>
+  );
+};
 
 export interface ChatHistorySidebarProps {
   className?: string;
@@ -165,7 +207,7 @@ const ChatHistoryHeader = memo<{
     >
       {/* In slim mode, show logo with hover toggle or just toggle button */}
       {isSlimMode && (
-        <div className="flex w-12">
+        <div className="relative flex w-12">
           {sidebarLogoPath ? (
             <SidebarLogo
               logoPath={sidebarLogoPath}
@@ -180,6 +222,7 @@ const ChatHistoryHeader = memo<{
               aria-expanded="false"
             />
           )}
+          <GenerationRailBadge />
         </div>
       )}
       {/* In expanded mode, show toggle button and title */}
@@ -592,9 +635,11 @@ const CollapsibleSection = memo<{
             aria-label={isExpanded ? t`Collapse ${title}` : t`Expand ${title}`}
             type="button"
           >
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-theme-fg-muted">
-              {title}
-            </h3>
+            <span className="flex min-w-0 items-center gap-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-theme-fg-muted">
+                {title}
+              </h3>
+            </span>
             <ChevronRightIcon
               className={clsx(
                 "size-3 text-theme-fg-muted transition-transform",
@@ -720,6 +765,79 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       },
     );
 
+    const generationStatusByChatId = useGenerationStatusStore(
+      (state) => state.statusByChatId,
+    );
+
+    // Screen-reader summary of generation activity, excluding the chat the
+    // user is viewing.
+    const generationLiveSummary = useMemo(() => {
+      let running = 0;
+      let finished = 0;
+      let errored = 0;
+      for (const [chatId, status] of Object.entries(generationStatusByChatId)) {
+        if (!status || chatId === currentSessionId) continue;
+        if (status.kind === "running") running += 1;
+        else if (status.kind === "finished") finished += 1;
+        else if (status.kind === "error") errored += 1;
+      }
+      const parts: string[] = [];
+      if (running > 0) {
+        parts.push(
+          t({
+            id: "chat.history.generation.liveRunning",
+            message: plural(running, {
+              one: "# chat generating",
+              other: "# chats generating",
+            }),
+          }),
+        );
+      }
+      if (finished > 0) {
+        parts.push(
+          t({
+            id: "chat.history.generation.liveFinished",
+            message: plural(finished, {
+              one: "# chat finished",
+              other: "# chats finished",
+            }),
+          }),
+        );
+      }
+      if (errored > 0) {
+        parts.push(
+          t({
+            id: "chat.history.generation.liveError",
+            message: plural(errored, {
+              one: "# chat failed",
+              other: "# chats failed",
+            }),
+          }),
+        );
+      }
+      return parts.join(", ");
+    }, [generationStatusByChatId, currentSessionId]);
+
+    // Debounced so a burst of transitions produces one announcement.
+    const [generationAnnouncement, setGenerationAnnouncement] = useState("");
+    const generationAnnounceTimeoutRef = useRef<ReturnType<
+      typeof setTimeout
+    > | null>(null);
+
+    useEffect(() => {
+      if (generationAnnounceTimeoutRef.current) {
+        clearTimeout(generationAnnounceTimeoutRef.current);
+      }
+      generationAnnounceTimeoutRef.current = setTimeout(() => {
+        setGenerationAnnouncement(generationLiveSummary);
+      }, GENERATION_ANNOUNCE_DEBOUNCE_MS);
+      return () => {
+        if (generationAnnounceTimeoutRef.current) {
+          clearTimeout(generationAnnounceTimeoutRef.current);
+        }
+      };
+    }, [generationLiveSummary]);
+
     // Only use ResizeObserver in the browser
     const isBrowser = typeof window !== "undefined";
 
@@ -822,6 +940,13 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     return (
       <ErrorBoundary FallbackComponent={ErrorDisplay}>
         <div className="relative h-auto">
+          <div
+            role="status"
+            className="sr-only"
+            data-testid="sidebar-generation-live-region"
+          >
+            {generationAnnouncement}
+          </div>
           {/* Absolutely positioned toggle button when collapsed in hidden mode */}
           {isHiddenMode && (
             <div className="absolute left-2 top-2 z-30">
@@ -834,6 +959,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                 aria-label={t`expand sidebar`}
                 aria-expanded="false"
               />
+              <GenerationRailBadge />
             </div>
           )}
 

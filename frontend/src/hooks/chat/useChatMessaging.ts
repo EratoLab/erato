@@ -45,6 +45,7 @@ import { handleTextDelta } from "./handlers/handleTextDelta";
 import { handleToolCallProposed } from "./handlers/handleToolCallProposed";
 import { handleToolCallUpdate } from "./handlers/handleToolCallUpdate";
 import { handleUserMessageSaved } from "./handlers/handleUserMessageSaved";
+import { useGenerationStatusStore } from "./store/generationStatusStore";
 import {
   getStreamKey,
   NEW_CHAT_STREAM_KEY,
@@ -52,6 +53,7 @@ import {
 } from "./store/messagingStore";
 import {
   clearPendingChat,
+  deriveTitleHint,
   isPendingChat,
   useChatHistoryStore,
 } from "./useChatHistory";
@@ -59,6 +61,7 @@ import { useExplicitNavigation } from "./useExplicitNavigation";
 
 import type {
   ActionFacetRequest,
+  ContentPart,
   MessageSubmitStreamingResponseMessage,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
@@ -889,6 +892,38 @@ export function useChatMessaging(
                     ? { assistantId: explicitNav.currentAssistantId }
                     : {}),
                 });
+                useGenerationStatusStore
+                  .getState()
+                  .seedRunningLocal(
+                    responseData.chat_id,
+                    new Date().toISOString(),
+                  );
+
+                // Record a title hint for the untitled row. handleChatCreated
+                // may already have rebound the stream key, so the optimistic
+                // message can live under either key.
+                const messagingState = useMessagingStore.getState();
+                const optimisticUserMessage = Object.values(
+                  messagingState.userMessagesByKey[responseData.chat_id] ??
+                    messagingState.userMessagesByKey[previousStreamKey] ??
+                    {},
+                )
+                  .filter((message) => message.role === "user")
+                  .at(-1);
+                const textPart = optimisticUserMessage?.content.find(
+                  (
+                    part,
+                  ): part is Extract<ContentPart, { content_type: "text" }> =>
+                    part.content_type === "text",
+                );
+                const titleHint = textPart
+                  ? deriveTitleHint(textPart.text)
+                  : null;
+                if (titleHint) {
+                  useChatHistoryStore
+                    .getState()
+                    .setTitleHint(responseData.chat_id, titleHint);
+                }
               }
 
               if (
@@ -979,6 +1014,11 @@ export function useChatMessaging(
             logger.log(
               "[DEBUG_STREAMING] processStreamEvent: assistant_message_completed - calling handleRefetchAndClear.",
             );
+            if (activeStreamKey !== NEW_CHAT_STREAM_KEY) {
+              useGenerationStatusStore
+                .getState()
+                .markTerminalLocal(activeStreamKey, "finished");
+            }
             recentlyCompletedByKeyRef.current[activeStreamKey] = Date.now();
             void handleRefetchAndClear({
               invalidate: true,
@@ -1036,6 +1076,11 @@ export function useChatMessaging(
             );
 
             setError(new Error(description));
+            if (activeStreamKey !== NEW_CHAT_STREAM_KEY) {
+              useGenerationStatusStore
+                .getState()
+                .markTerminalLocal(activeStreamKey, "error");
+            }
             resetStreaming(activeStreamKey);
             clearPendingChat(activeStreamKey);
             setSubmittingForKey(activeStreamKey, false);
@@ -1349,6 +1394,12 @@ export function useChatMessaging(
       logger.log(
         "[DEBUG_STREAMING] sendMessage: isSubmittingRef.current set to true.",
       );
+      // A brand-new chat gets its seed on chat_created, once it has an id.
+      if (streamKey !== NEW_CHAT_STREAM_KEY) {
+        useGenerationStatusStore
+          .getState()
+          .seedRunningLocal(streamKey, new Date().toISOString());
+      }
 
       try {
         // Reset any previous streaming state FIRST
@@ -1687,6 +1738,11 @@ export function useChatMessaging(
       }
 
       setSubmittingForKey(streamKey, true);
+      if (streamKey !== NEW_CHAT_STREAM_KEY) {
+        useGenerationStatusStore
+          .getState()
+          .seedRunningLocal(streamKey, new Date().toISOString());
+      }
 
       try {
         const requestBody = {
@@ -1837,6 +1893,11 @@ export function useChatMessaging(
       );
 
       setSubmittingForKey(streamKey, true);
+      if (streamKey !== NEW_CHAT_STREAM_KEY) {
+        useGenerationStatusStore
+          .getState()
+          .seedRunningLocal(streamKey, new Date().toISOString());
+      }
 
       try {
         const requestBody = {

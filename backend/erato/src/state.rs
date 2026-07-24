@@ -232,7 +232,8 @@ impl AppState {
         let global_policy_engine = GlobalPolicyEngine::new();
 
         // Initialize the background task manager
-        let background_tasks = BackgroundTaskManager::new();
+        let background_tasks =
+            BackgroundTaskManager::new(Some(db.clone()), config.generation_status.clone());
 
         // Initialize the system prompt renderer
         let system_prompt_renderer = SystemPromptRenderer::new();

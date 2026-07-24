@@ -1,10 +1,10 @@
 use crate::image_data;
 use crate::matcher::{
     CiteFilesResponseConfig, ErrorResponseConfig, ImageMock, LongRunningResponseConfig, MatchRule,
-    MatchRuleAnyMessageContainsAudioContent, MatchRuleAnyUserMessageInCurrentTurnWithPattern,
-    MatchRuleLastMessageIsUserWithPattern, MatchRuleUserMessagePattern, Mock,
-    RandomOneLinerResponseConfig, ResponseConfig, StaticResponseConfig, ToolCallDef,
-    ToolCallResponseConfig, ToolCallsResponseConfig,
+    MatchRuleAnyMessageContainsAudioContent, MatchRuleAnySystemMessageWithPattern,
+    MatchRuleAnyUserMessageInCurrentTurnWithPattern, MatchRuleLastMessageIsUserWithPattern,
+    MatchRuleUserMessagePattern, Mock, RandomOneLinerResponseConfig, ResponseConfig,
+    StaticResponseConfig, ToolCallDef, ToolCallResponseConfig, ToolCallsResponseConfig,
 };
 use rand::Rng;
 use serde_json::json;
@@ -387,6 +387,25 @@ fn build_submitstream_replay_chunks() -> Vec<String> {
 /// Get the default set of configured mocks
 pub fn get_default_mocks() -> Vec<Mock> {
     vec![
+        // Must stay first: a summary request carries the raw first user
+        // message last, so any user-pattern mock (e.g. LongRunning) would
+        // match it and pace or fail the title generation.
+        Mock {
+            name: "SummaryTitle".to_string(),
+            description:
+                "Returns a static title for chat summary requests, keyed on the summary system prompt"
+                    .to_string(),
+            match_rules: vec![MatchRule::AnySystemMessageWithPattern(
+                MatchRuleAnySystemMessageWithPattern {
+                    pattern: "generate a summary for the topic".to_string(),
+                },
+            )],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec!["Mock Summary Title".to_string()],
+                delay_ms: 10,
+                ..Default::default()
+            }),
+        },
         Mock {
             name: "SubmitStreamReplay".to_string(),
             description:
@@ -561,6 +580,34 @@ pub fn get_default_mocks() -> Vec<Mock> {
                 ..Default::default()
             }),
         },
+        // Must precede the "Delay" mock: its "delay" pattern also matches "delayed error"
+        Mock {
+            name: "DelayedContentFilterError".to_string(),
+            description: "Returns the content filter error after a 5 second wait".to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: "delayed error".to_string(),
+                },
+            )],
+            response: ResponseConfig::Error(ErrorResponseConfig {
+                status_code: 400,
+                body: json!({
+                    "error": {
+                        "code": "content_filter",
+                        "message": "The response was filtered due to the prompt triggering content management policy.",
+                        "innererror": {
+                            "content_filter_result": {
+                                "sexual": { "filtered": true, "severity": "medium" },
+                                "violence": { "filtered": false, "severity": "low" },
+                                "hate": { "filtered": false, "severity": "safe" },
+                                "self_harm": { "filtered": false, "severity": "safe" }
+                            }
+                        }
+                    }
+                }),
+                initial_delay_ms: Some(5000),
+            }),
+        },
         Mock {
             name: "Delay".to_string(),
             description: "Demonstrates delayed response with 5 second wait before first chunk"
@@ -719,6 +766,7 @@ pub fn get_default_mocks() -> Vec<Mock> {
                         }
                     }
                 }),
+                initial_delay_ms: None,
             }),
         },
         Mock {
@@ -737,6 +785,7 @@ pub fn get_default_mocks() -> Vec<Mock> {
                         "message": "Requests to the ChatCompletions_Create Operation under Azure OpenAI API version 2024-06-01 have exceeded call rate limit of your current OpenAI S0 pricing tier. Please retry after 8 seconds. Please go here: https://aka.ms/oai/quotaincrease if you would like to further increase the default rate limit. For Free Account customers, upgrade to Pay as you Go here: https://aka.ms/429TrialUpgrade."
                     }
                 }),
+                initial_delay_ms: None,
             }),
         },
         Mock {
@@ -949,5 +998,50 @@ mod tests {
     fn test_default_mocks_include_random_one_liner() {
         let mocks = get_default_mocks();
         assert!(mocks.iter().any(|mock| mock.name == "RandomOneLiner"));
+    }
+
+    #[test]
+    fn test_delayed_error_matches_before_delay_mock() {
+        use crate::matcher::{ChatCompletionRequest, Matcher};
+
+        let matcher = Matcher::new(get_default_mocks());
+        let request: ChatCompletionRequest = serde_json::from_value(serde_json::json!({
+            "messages": [{"role": "user", "content": "please delayed error"}]
+        }))
+        .unwrap();
+
+        let response = matcher.match_request(&request, "test0001");
+        match response {
+            ResponseConfig::Error(config) => {
+                assert_eq!(config.status_code, 400);
+                assert_eq!(config.initial_delay_ms, Some(5000));
+                assert_eq!(config.body["error"]["code"], "content_filter");
+            }
+            _ => panic!("Expected Error response"),
+        }
+    }
+
+    #[test]
+    fn test_summary_title_matches_before_user_pattern_mocks() {
+        use crate::matcher::{ChatCompletionRequest, Matcher};
+
+        let matcher = Matcher::new(get_default_mocks());
+        // Shaped like an erato summary request: the summary system prompt plus
+        // the raw first user message, which would otherwise match LongRunning.
+        let request: ChatCompletionRequest = serde_json::from_value(serde_json::json!({
+            "messages": [
+                {"role": "system", "content": "Generate a summary for the topic of the following chat, based on the first message to the chat."},
+                {"role": "user", "content": "long running 12"}
+            ]
+        }))
+        .unwrap();
+
+        let response = matcher.match_request(&request, "test0002");
+        match response {
+            ResponseConfig::Static(config) => {
+                assert_eq!(config.chunks, vec!["Mock Summary Title"]);
+            }
+            _ => panic!("Expected Static response"),
+        }
     }
 }

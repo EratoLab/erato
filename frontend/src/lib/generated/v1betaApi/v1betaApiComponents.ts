@@ -3606,6 +3606,108 @@ export const useFrequentAssistants = <
   });
 };
 
+export type GeneratingChatsError = Fetcher.ErrorWrapper<undefined>;
+
+export type GeneratingChatsVariables = V1betaApiContext["fetcherOptions"];
+
+export const fetchGeneratingChats = (
+  variables: GeneratingChatsVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.GeneratingChatsResponse,
+    GeneratingChatsError,
+    undefined,
+    {},
+    {},
+    {}
+  >({ url: "/api/v1beta/me/generating", method: "get", ...variables, signal });
+
+export function generatingChatsQuery(variables: GeneratingChatsVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (
+    options: QueryFnOptions,
+  ) => Promise<Schemas.GeneratingChatsResponse>;
+};
+
+export function generatingChatsQuery(
+  variables: GeneratingChatsVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.GeneratingChatsResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function generatingChatsQuery(
+  variables: GeneratingChatsVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/generating",
+      operationId: "generatingChats",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchGeneratingChats(variables, signal),
+  };
+}
+
+export const useSuspenseGeneratingChats = <
+  TData = Schemas.GeneratingChatsResponse,
+>(
+  variables: GeneratingChatsVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.GeneratingChatsResponse,
+      GeneratingChatsError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.GeneratingChatsResponse,
+    GeneratingChatsError,
+    TData
+  >({
+    ...generatingChatsQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useGeneratingChats = <TData = Schemas.GeneratingChatsResponse,>(
+  variables: GeneratingChatsVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.GeneratingChatsResponse,
+      GeneratingChatsError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.GeneratingChatsResponse,
+    GeneratingChatsError,
+    TData
+  >({
+    ...generatingChatsQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type ListMcpServersError = Fetcher.ErrorWrapper<undefined>;
 
 export type ListMcpServersVariables = V1betaApiContext["fetcherOptions"];
@@ -6130,6 +6232,11 @@ export type QueryOperation =
       path: "/api/v1beta/me/frequent_assistants";
       operationId: "frequentAssistants";
       variables: FrequentAssistantsVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/me/generating";
+      operationId: "generatingChats";
+      variables: GeneratingChatsVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/me/mcp_servers";

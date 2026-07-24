@@ -304,6 +304,11 @@ mod test_cases {
             title_by_user_provided: None,
             assistant_configuration: None,
             assistant_id: None,
+            active_generation_id: None,
+            generation_state: None,
+            generation_started_at: None,
+            generation_heartbeat_at: None,
+            generation_ended_at: None,
         }
     }
 

@@ -160,6 +160,9 @@ async fn test_app_state_internal(
     )
     .unwrap();
 
+    let background_tasks =
+        BackgroundTaskManager::new(Some(db.clone()), app_config.generation_status.clone());
+
     let app_state = AppState {
         db: db.clone(),
         default_file_storage_provider: None,
@@ -169,7 +172,7 @@ async fn test_app_state_internal(
         actor_manager,
         langfuse_client,
         global_policy_engine,
-        background_tasks: BackgroundTaskManager::new(),
+        background_tasks,
         system_prompt_renderer:
             erato::services::template_rendering::consumers::system_prompt::SystemPromptRenderer::new(
             ),

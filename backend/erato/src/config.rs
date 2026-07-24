@@ -461,6 +461,11 @@ pub struct AppConfig {
     #[serde(default)]
     pub file_processor: FileProcessorConfig,
 
+    // Generation status tracking (persisted per-chat generation state surfaced
+    // in the chat list).
+    #[serde(default)]
+    pub generation_status: GenerationStatusConfig,
+
     // Audio transcription feature configuration.
     #[serde(default)]
     pub audio_transcription: AudioTranscriptionConfig,
@@ -2998,6 +3003,50 @@ impl Default for CachesConfig {
             file_contents_cache_mb: default_file_contents_cache_mb(),
             token_count_cache_mb: default_token_count_cache_mb(),
             file_processing_parallelism: default_file_processing_parallelism(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct GenerationStatusConfig {
+    // Interval in seconds at which in-flight generations refresh their
+    // heartbeat on the chats row.
+    // Defaults to 10.
+    #[serde(default = "default_generation_status_heartbeat_interval_secs")]
+    pub heartbeat_interval_secs: u64,
+
+    // Seconds after the last heartbeat before a running generation is
+    // considered stale. Stale generations are marked as errored and no longer
+    // reported as running.
+    // Defaults to 30.
+    #[serde(default = "default_generation_status_stale_after_secs")]
+    pub stale_after_secs: u64,
+
+    // Seconds a completed or errored generation remains visible in the
+    // generating-chats endpoint after it ended.
+    // Defaults to 60.
+    #[serde(default = "default_generation_status_terminal_retention_secs")]
+    pub terminal_retention_secs: u64,
+}
+
+fn default_generation_status_heartbeat_interval_secs() -> u64 {
+    10
+}
+
+fn default_generation_status_stale_after_secs() -> u64 {
+    30
+}
+
+fn default_generation_status_terminal_retention_secs() -> u64 {
+    60
+}
+
+impl Default for GenerationStatusConfig {
+    fn default() -> Self {
+        Self {
+            heartbeat_interval_secs: default_generation_status_heartbeat_interval_secs(),
+            stale_after_secs: default_generation_status_stale_after_secs(),
+            terminal_retention_secs: default_generation_status_terminal_retention_secs(),
         }
     }
 }

@@ -26,6 +26,7 @@ import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext"
 import { getChatUrl } from "@/utils/chat/urlUtils";
 import { createLogger } from "@/utils/debugLogger";
 
+import { useGenerationStatusStore } from "./store/generationStatusStore";
 import { getStreamKey, useMessagingStore } from "./store/messagingStore";
 
 import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -67,6 +68,13 @@ interface ChatHistoryState {
   setNewChatPending: (isPending: boolean) => void;
   pendingChat: PendingChat | null;
   setPendingChat: (chat: PendingChat | null) => void;
+  /**
+   * First words of the user message that started a chat; stands in as the
+   * row title until the backend reports a real one.
+   */
+  titleHintByChatId: Partial<Record<string, string>>;
+  setTitleHint: (chatId: string, hint: string) => void;
+  clearTitleHint: (chatId: string) => void;
 }
 
 // Create a store to track the current selected chat
@@ -93,6 +101,34 @@ export const useChatHistoryStore = create<ChatHistoryState>()(
               state.pendingChat === chat ? state : { pendingChat: chat },
             false,
             "chatHistory/setPendingChat",
+          ),
+        titleHintByChatId: {},
+        setTitleHint: (chatId, hint) =>
+          set(
+            (state) =>
+              state.titleHintByChatId[chatId] === hint
+                ? state
+                : {
+                    titleHintByChatId: {
+                      ...state.titleHintByChatId,
+                      [chatId]: hint,
+                    },
+                  },
+            false,
+            "chatHistory/setTitleHint",
+          ),
+        clearTitleHint: (chatId) =>
+          set(
+            (state) => {
+              if (!(chatId in state.titleHintByChatId)) {
+                return state;
+              }
+              const titleHintByChatId = { ...state.titleHintByChatId };
+              delete titleHintByChatId[chatId];
+              return { titleHintByChatId };
+            },
+            false,
+            "chatHistory/clearTitleHint",
           ),
       };
 
@@ -137,6 +173,36 @@ export function isPendingChat(chatId: string): boolean {
   return useChatHistoryStore.getState().pendingChat?.id === chatId;
 }
 
+const TITLE_HINT_MAX_LENGTH = 40;
+
+/** Condenses a user message into something row-title sized. */
+export function deriveTitleHint(text: string): string | null {
+  const collapsed = text.replace(/\s+/g, " ").trim();
+  if (!collapsed) {
+    return null;
+  }
+  if (collapsed.length <= TITLE_HINT_MAX_LENGTH) {
+    return collapsed;
+  }
+  const cut = collapsed.slice(0, TITLE_HINT_MAX_LENGTH);
+  const lastSpace = cut.lastIndexOf(" ");
+  const stem =
+    lastSpace > TITLE_HINT_MAX_LENGTH / 2 ? cut.slice(0, lastSpace) : cut;
+  return `${stem.trimEnd()}…`;
+}
+
+/**
+ * Query key of the infinite recent-chats list; cache edits must target the
+ * same key as the query itself.
+ */
+export function buildInfiniteChatsQueryKey() {
+  return [
+    ...recentChatsQuery({}).queryKey,
+    "infinite",
+    { limit: CHAT_HISTORY_PAGE_SIZE },
+  ];
+}
+
 export function useChatHistory() {
   // const router = useRouter(); // Removed Next.js router
   const navigate = useNavigate(); // Added React Router navigate
@@ -167,14 +233,7 @@ export function useChatHistory() {
 
   // Stable query key for the infinite recent-chats list. Reused for both the
   // query itself and for cache mutations (e.g. optimistic archive removal).
-  const infiniteChatsQueryKey = useMemo(
-    () => [
-      ...recentChatsQuery({}).queryKey,
-      "infinite",
-      { limit: CHAT_HISTORY_PAGE_SIZE },
-    ],
-    [],
-  );
+  const infiniteChatsQueryKey = useMemo(() => buildInfiniteChatsQueryKey(), []);
 
   const {
     data,
@@ -264,9 +323,22 @@ export function useChatHistory() {
       last_chat_provider_id: undefined,
       last_selected_facets: undefined,
       last_model: undefined,
+      // The placeholder exists precisely while the first turn streams.
+      active_generation_started_at: pendingChat.createdAt,
     };
     return [placeholder, ...listedChats];
   }, [listedChats, pendingChat, isPendingChatListed]);
+
+  // Seed the status store from the backend's running markers, so generations
+  // started elsewhere get an indicator without waiting for a poll.
+  useEffect(() => {
+    const { seedRunning } = useGenerationStatusStore.getState();
+    for (const chat of chats) {
+      if (chat.active_generation_started_at) {
+        seedRunning(chat.id, chat.active_generation_started_at);
+      }
+    }
+  }, [chats]);
 
   // Navigate to a specific chat (assistant-aware)
   const navigateToChat = useCallback(
@@ -374,6 +446,10 @@ export function useChatHistory() {
       // The archived row may be the pending-chat placeholder, which lives
       // outside the cache and no list edit can take away; drop it too.
       clearPendingChat(chatId);
+
+      // An archived chat has no row, so its status must not keep counting.
+      useGenerationStatusStore.getState().clearStatus(chatId);
+      useChatHistoryStore.getState().clearTitleHint(chatId);
 
       // Optimistically remove the archived row from every loaded page.
       //

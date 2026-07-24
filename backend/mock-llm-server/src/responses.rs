@@ -39,6 +39,74 @@ pub fn build_openai_chat_chunk(content: &str, finish_reason: Option<&str>) -> St
     chunk.to_string()
 }
 
+/// Build a non-streaming OpenAI-compatible chat completion body
+pub fn build_openai_chat_completion(content: &str) -> serde_json::Value {
+    json!({
+        "id": "chatcmpl-mock-123",
+        "object": "chat.completion",
+        "created": 1234567890,
+        "model": "gpt-3.5-turbo",
+        "choices": [{
+            "index": 0,
+            "message": {
+                "role": "assistant",
+                "content": content
+            },
+            "finish_reason": "stop"
+        }],
+        "usage": {
+            "prompt_tokens": 1,
+            "completion_tokens": 1,
+            "total_tokens": 2
+        }
+    })
+}
+
+/// Build a non-streaming OpenAI-compatible chat completion body with tool calls
+pub fn build_openai_tool_calls_completion(tool_calls: &[ToolCallDef]) -> serde_json::Value {
+    let mut rng = rand::thread_rng();
+    let calls: Vec<serde_json::Value> = tool_calls
+        .iter()
+        .map(|tool_def| {
+            let random_suffix: String = (0..24)
+                .map(|_| {
+                    let chars = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+                    chars[rng.gen_range(0..chars.len())] as char
+                })
+                .collect();
+            json!({
+                "id": format!("call_{}", random_suffix),
+                "type": "function",
+                "function": {
+                    "name": tool_def.tool_name,
+                    "arguments": tool_def.arguments
+                }
+            })
+        })
+        .collect();
+
+    json!({
+        "id": "chatcmpl-mock-123",
+        "object": "chat.completion",
+        "created": 1234567890,
+        "model": "gpt-3.5-turbo",
+        "choices": [{
+            "index": 0,
+            "message": {
+                "role": "assistant",
+                "content": null,
+                "tool_calls": calls
+            },
+            "finish_reason": "tool_calls"
+        }],
+        "usage": {
+            "prompt_tokens": 1,
+            "completion_tokens": 1,
+            "total_tokens": 2
+        }
+    })
+}
+
 /// Build an OpenAI-compatible tool call streaming chunk
 /// Tool calls are sent in the delta with tool_calls array
 pub fn build_openai_tool_call_chunk(
@@ -426,6 +494,31 @@ mod tests {
         assert!(chunk.contains("chat.completion.chunk"));
         // Verify it's valid JSON
         let _parsed: serde_json::Value = serde_json::from_str(&chunk).unwrap();
+    }
+
+    #[test]
+    fn test_build_openai_chat_completion() {
+        let body = build_openai_chat_completion("Mock Summary Title");
+        assert_eq!(body["object"], "chat.completion");
+        assert_eq!(
+            body["choices"][0]["message"]["content"],
+            "Mock Summary Title"
+        );
+        assert_eq!(body["choices"][0]["finish_reason"], "stop");
+    }
+
+    #[test]
+    fn test_build_openai_tool_calls_completion() {
+        let body = build_openai_tool_calls_completion(&[ToolCallDef {
+            tool_name: "list_files".to_string(),
+            arguments: "{}".to_string(),
+        }]);
+        assert_eq!(body["object"], "chat.completion");
+        assert_eq!(body["choices"][0]["finish_reason"], "tool_calls");
+        assert_eq!(
+            body["choices"][0]["message"]["tool_calls"][0]["function"]["name"],
+            "list_files"
+        );
     }
 
     #[test]

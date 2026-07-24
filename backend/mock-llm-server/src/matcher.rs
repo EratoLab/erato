@@ -55,6 +55,9 @@ pub struct ErrorResponseConfig {
     pub status_code: u16,
     /// JSON error body to return
     pub body: Value,
+    /// Optional delay before returning the error response (in milliseconds)
+    #[serde(default)]
+    pub initial_delay_ms: Option<u64>,
 }
 
 /// Cite files response configuration
@@ -145,6 +148,13 @@ pub struct MatchRuleAnyUserMessageInCurrentTurnWithPattern {
     pub pattern: String,
 }
 
+/// Match rule that checks system message content using substring matching
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MatchRuleAnySystemMessageWithPattern {
+    /// Pattern to match (substring matching)
+    pub pattern: String,
+}
+
 /// Match rule that checks for audio content in message payloads
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MatchRuleAnyMessageContainsAudioContent {
@@ -158,6 +168,8 @@ pub struct MatchRuleAnyMessageContainsAudioContent {
 pub enum MatchRule {
     /// Match based on user message pattern (looks at last user message anywhere in conversation)
     UserMessagePattern(MatchRuleUserMessagePattern),
+    /// Match based on any system message containing a pattern
+    AnySystemMessageWithPattern(MatchRuleAnySystemMessageWithPattern),
     /// Match based on any user message since the last assistant message
     AnyUserMessageInCurrentTurnWithPattern(MatchRuleAnyUserMessageInCurrentTurnWithPattern),
     /// Match based on any message containing an audio content part
@@ -195,6 +207,12 @@ impl Mock {
                     MatchRule::UserMessagePattern(pattern_rule) => {
                         println!("contains text \"{}\"", pattern_rule.pattern);
                     }
+                    MatchRule::AnySystemMessageWithPattern(pattern_rule) => {
+                        println!(
+                            "any system message contains text \"{}\"",
+                            pattern_rule.pattern
+                        );
+                    }
                     MatchRule::AnyUserMessageInCurrentTurnWithPattern(pattern_rule) => {
                         println!(
                             "any user message since last assistant contains text \"{}\"",
@@ -222,6 +240,12 @@ impl Mock {
                 match rule {
                     MatchRule::UserMessagePattern(pattern_rule) => {
                         println!("      - contains text \"{}\"", pattern_rule.pattern);
+                    }
+                    MatchRule::AnySystemMessageWithPattern(pattern_rule) => {
+                        println!(
+                            "      - any system message contains text \"{}\"",
+                            pattern_rule.pattern
+                        );
                     }
                     MatchRule::AnyUserMessageInCurrentTurnWithPattern(pattern_rule) => {
                         println!(
@@ -289,11 +313,20 @@ impl Mock {
                 }
             }
             ResponseConfig::Error(config) => {
-                println!(
-                    "    {}: error response with status {}",
-                    "Response".bold(),
-                    config.status_code
-                );
+                if let Some(initial_delay) = config.initial_delay_ms {
+                    println!(
+                        "    {}: error response with status {} after {}ms initial delay",
+                        "Response".bold(),
+                        config.status_code,
+                        initial_delay
+                    );
+                } else {
+                    println!(
+                        "    {}: error response with status {}",
+                        "Response".bold(),
+                        config.status_code
+                    );
+                }
             }
             ResponseConfig::CiteFiles(config) => {
                 println!(
@@ -499,6 +532,16 @@ impl Matcher {
             .collect()
     }
 
+    fn extract_system_messages(&self, request: &ChatCompletionRequest) -> Vec<String> {
+        request
+            .messages
+            .iter()
+            .filter(|message| message.role == "system")
+            .filter_map(|message| message.content.as_ref())
+            .map(|content| self.extract_content_text(content))
+            .collect()
+    }
+
     /// Check if any of the match rules match the request
     fn matches_any_rule(&self, rules: &[MatchRule], request: &ChatCompletionRequest) -> bool {
         for rule in rules {
@@ -511,6 +554,16 @@ impl Matcher {
                         {
                             return true;
                         }
+                    }
+                }
+                MatchRule::AnySystemMessageWithPattern(pattern_rule) => {
+                    let pattern = pattern_rule.pattern.to_lowercase();
+                    if self
+                        .extract_system_messages(request)
+                        .iter()
+                        .any(|message| message.to_lowercase().contains(&pattern))
+                    {
+                        return true;
                     }
                 }
                 MatchRule::AnyUserMessageInCurrentTurnWithPattern(pattern_rule) => {
@@ -1127,6 +1180,94 @@ mod tests {
             ResponseConfig::Static(config) => {
                 // Falls back to default response because only the last user message is checked
                 assert_ne!(config.chunks, vec!["Matched"]);
+            }
+            _ => panic!("Expected Static response"),
+        }
+    }
+
+    #[test]
+    fn test_system_message_pattern_wins_over_later_user_pattern_mock() {
+        let mocks = vec![
+            Mock {
+                name: "SummaryTitle".to_string(),
+                description: "Static summary title".to_string(),
+                match_rules: vec![MatchRule::AnySystemMessageWithPattern(
+                    MatchRuleAnySystemMessageWithPattern {
+                        pattern: "generate a summary for the topic".to_string(),
+                    },
+                )],
+                response: ResponseConfig::Static(StaticResponseConfig {
+                    chunks: vec!["Mock Summary Title".to_string()],
+                    delay_ms: 10,
+                    ..Default::default()
+                }),
+            },
+            Mock {
+                name: "LongRunning".to_string(),
+                description: "Long running".to_string(),
+                match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                    pattern: "long running".to_string(),
+                })],
+                response: ResponseConfig::LongRunning(LongRunningResponseConfig {
+                    default_seconds: 90,
+                    delay_ms: 1000,
+                    max_seconds: 3600,
+                }),
+            },
+        ];
+
+        let matcher = Matcher::new(mocks);
+
+        // Shaped like a summary request: the summary system prompt plus the
+        // raw first user message, which would otherwise match LongRunning.
+        let request: ChatCompletionRequest = serde_json::from_value(json!({
+            "messages": [
+                {"role": "system", "content": "Generate a summary for the topic of the following chat, based on the first message to the chat."},
+                {"role": "user", "content": "long running 12"}
+            ]
+        }))
+        .unwrap();
+
+        let response = matcher.match_request(&request, "test0017");
+        match response {
+            ResponseConfig::Static(config) => {
+                assert_eq!(config.chunks, vec!["Mock Summary Title"]);
+            }
+            _ => panic!("Expected Static response"),
+        }
+    }
+
+    #[test]
+    fn test_system_message_pattern_ignores_non_system_messages() {
+        let mocks = vec![Mock {
+            name: "SummaryTitle".to_string(),
+            description: "Static summary title".to_string(),
+            match_rules: vec![MatchRule::AnySystemMessageWithPattern(
+                MatchRuleAnySystemMessageWithPattern {
+                    pattern: "generate a summary for the topic".to_string(),
+                },
+            )],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec!["Mock Summary Title".to_string()],
+                delay_ms: 10,
+                ..Default::default()
+            }),
+        }];
+
+        let matcher = Matcher::new(mocks);
+
+        let request: ChatCompletionRequest = serde_json::from_value(json!({
+            "messages": [
+                {"role": "system", "content": "You are a helpful assistant"},
+                {"role": "user", "content": "please generate a summary for the topic of cats"}
+            ]
+        }))
+        .unwrap();
+
+        let response = matcher.match_request(&request, "test0018");
+        match response {
+            ResponseConfig::Static(config) => {
+                assert_ne!(config.chunks, vec!["Mock Summary Title"]);
             }
             _ => panic!("Expected Static response"),
         }

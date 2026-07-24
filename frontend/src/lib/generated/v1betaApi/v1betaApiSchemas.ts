@@ -1261,6 +1261,49 @@ export type FrequentAssistantsResponse = {
 };
 
 /**
+ * A chat with a running or recently finished generation
+ */
+export type GeneratingChat = {
+  /**
+   * The unique ID of the chat
+   */
+  chat_id: string;
+  /**
+   * When the generation reached its terminal state
+   *
+   * @format date-time
+   */
+  ended_at?: string;
+  /**
+   * When the generation started
+   *
+   * @format date-time
+   */
+  started_at: string;
+  state: GenerationChatState;
+  /**
+   * Resolved chat title (user-provided title takes precedence over the
+   * generated summary title), when one exists
+   */
+  title?: string;
+};
+
+/**
+ * Response for the generating_chats endpoint
+ */
+export type GeneratingChatsResponse = {
+  /**
+   * Chats with a running or recently finished generation
+   */
+  chats: GeneratingChat[];
+};
+
+/**
+ * State of a chat's most recent generation
+ */
+export type GenerationChatState = "running" | "completed" | "errored";
+
+/**
  * Represents different types of errors that can occur during message generation.
  */
 export type GenerationErrorType =
@@ -1713,6 +1756,13 @@ export type PromptOptimizerResponse = {
 };
 
 export type RecentChat = {
+  /**
+   * Start time of the chat's generation, present only while it is running
+   * with a fresh heartbeat
+   *
+   * @format date-time
+   */
+  active_generation_started_at?: string;
   /**
    * When this chat was archived by the user.
    *

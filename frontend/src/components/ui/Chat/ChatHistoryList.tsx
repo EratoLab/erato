@@ -4,6 +4,9 @@ import clsx from "clsx";
 import { memo, useEffect, useRef } from "react";
 
 import { MessageTimestamp } from "@/components/ui";
+import { useHasPendingConfirmation } from "@/hooks/chat/store/confirmationRegistryStore";
+import { useGenerationStatusFor } from "@/hooks/chat/store/generationStatusStore";
+import { useChatHistoryStore } from "@/hooks/chat/useChatHistory";
 import { useThemedIcon } from "@/hooks/ui";
 import { getChatUrl } from "@/utils/chat/urlUtils";
 import { createLogger } from "@/utils/debugLogger";
@@ -23,6 +26,27 @@ const logger = createLogger("UI", "ChatHistoryList");
 const sidebarRowLinkClassName =
   "focus-ring-tight block rounded-[var(--theme-radius-shell)]";
 
+/** `title_resolved` sentinel the backend returns while a chat has no title. */
+// eslint-disable-next-line lingui/no-unlocalized-strings -- backend sentinel, not user-facing text
+const UNTITLED_BACKEND_SENTINEL = "Untitled Chat";
+
+/**
+ * Row title: a real backend title, else the recorded user-message hint, else
+ * a localized placeholder. Reads `titleResolved` (the raw backend value)
+ * rather than `title`, which the session mappers fill with their own
+ * localized fallback.
+ */
+const useRowTitle = (session: ChatSession): string => {
+  const titleHint = useChatHistoryStore(
+    (state) => state.titleHintByChatId[session.id],
+  );
+  const title = session.titleResolved ?? session.title;
+  if (title && title !== UNTITLED_BACKEND_SENTINEL) {
+    return title;
+  }
+  return titleHint ?? t`New Chat`;
+};
+
 const ChatItemIcon = memo(() => {
   // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal theme icon identifier, not user-facing text
   const chatItemIconId = useThemedIcon("navigation", "chatItem");
@@ -41,6 +65,74 @@ const ChatItemIcon = memo(() => {
 
 // eslint-disable-next-line lingui/no-unlocalized-strings -- Component display name, not user-facing text
 ChatItemIcon.displayName = "ChatItemIcon";
+
+type RowGenerationStatus = "running" | "finished" | "error" | "action_required";
+
+/**
+ * Resolves a row's generation indicator; an unresolved tool confirmation
+ * outranks the generation state.
+ */
+const useRowGenerationStatus = (chatId: string): RowGenerationStatus | null => {
+  const status = useGenerationStatusFor(chatId);
+  const hasPendingConfirmation = useHasPendingConfirmation(chatId);
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- status token, not user-facing text
+  if (hasPendingConfirmation) return "action_required";
+  return status?.kind ?? null;
+};
+
+const rowGenerationStatusLabel = (status: RowGenerationStatus): string => {
+  switch (status) {
+    case "running":
+      return t({ id: "chat.history.generation.running", message: "Running" });
+    case "finished":
+      return t({ id: "chat.history.generation.finished", message: "Finished" });
+    case "error":
+      return t({ id: "chat.history.generation.error", message: "Error" });
+    case "action_required":
+      return t({
+        id: "chat.history.generation.actionRequired",
+        message: "Action required",
+      });
+  }
+};
+
+const rowGenerationStatusTextClass: Record<RowGenerationStatus, string> = {
+  running: "text-theme-fg-muted",
+  finished: "text-theme-success-fg",
+  error: "text-theme-error-fg",
+  action_required: "text-theme-warning-fg",
+};
+
+const GenerationStatusIndicator = memo<{ chatId: string }>(({ chatId }) => {
+  const status = useRowGenerationStatus(chatId);
+
+  if (!status) return null;
+
+  // A bare dot; the status text lives in the title and the row's aria-label.
+  return (
+    <span
+      className={clsx(
+        "flex shrink-0 items-center",
+        rowGenerationStatusTextClass[status],
+      )}
+      title={rowGenerationStatusLabel(status)}
+      data-ui="chat-history-generation-status"
+      data-testid="chat-generation-status"
+      data-status={status}
+    >
+      <span
+        aria-hidden="true"
+        className={clsx(
+          "size-2 rounded-full bg-current",
+          status === "running" && "animate-pulse motion-reduce:animate-none",
+        )}
+      />
+    </span>
+  );
+});
+
+// eslint-disable-next-line lingui/no-unlocalized-strings
+GenerationStatusIndicator.displayName = "GenerationStatusIndicator";
 
 export interface ChatHistoryListProps {
   sessions: ChatSession[];
@@ -95,6 +187,8 @@ const ChatHistoryListItem = memo<{
     onShowDetails,
     showTimestamps = true,
   }) => {
+    const generationStatus = useRowGenerationStatus(session.id);
+    const rowTitle = useRowTitle(session);
     return (
       <a
         href={getChatUrl(session.id, session.assistantId)}
@@ -108,7 +202,11 @@ const ChatHistoryListItem = memo<{
           onSelect();
         }}
         className={sidebarRowLinkClassName}
-        aria-label={session.title || t`New Chat`}
+        aria-label={
+          generationStatus
+            ? `${rowTitle}, ${rowGenerationStatusLabel(generationStatus)}`
+            : rowTitle
+        }
         aria-current={isActive ? "page" : undefined}
       >
         <InteractiveContainer
@@ -126,12 +224,10 @@ const ChatHistoryListItem = memo<{
         >
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 flex-1 items-center gap-2">
+              <GenerationStatusIndicator chatId={session.id} />
               <ChatItemIcon />
-              <span
-                className="truncate font-medium"
-                title={session.title || t`New Chat`}
-              >
-                {session.title || t`New Chat`}
+              <span className="truncate font-medium" title={rowTitle}>
+                {rowTitle}
               </span>
             </div>
             {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent bubbling */}
@@ -239,7 +335,15 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
     showTimestamps = true,
   }) => {
     const currentSession = sessions.find((s) => s.id === currentSessionId);
-    const currentSessionTitle = currentSession?.title;
+    const currentTitleHint = useChatHistoryStore((state) =>
+      currentSessionId ? state.titleHintByChatId[currentSessionId] : undefined,
+    );
+    const rawCurrentTitle =
+      currentSession?.titleResolved ?? currentSession?.title;
+    const currentSessionTitle =
+      rawCurrentTitle && rawCurrentTitle !== UNTITLED_BACKEND_SENTINEL
+        ? rawCurrentTitle
+        : (currentTitleHint ?? currentSession?.title);
     const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
 
     useEffect(() => {

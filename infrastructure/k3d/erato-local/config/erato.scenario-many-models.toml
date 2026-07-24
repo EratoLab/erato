@@ -7,6 +7,9 @@ pattern = "ignore all previous instructions"
 language = "en"
 tags = ["input", "prompt_injection"]
 
+[chat_providers.summary]
+summary_chat_provider_id = "mock-llm-openai"
+
 [chat_providers.providers.mock-llm-openai]
 provider_kind = "openai"
 model_name = "placeholder"

@@ -1888,6 +1888,32 @@
         ]
       }
     },
+    "/api/v1beta/me/generating": {
+      "get": {
+        "tags": [],
+        "operationId": "generating_chats",
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved the chats with a running or recently finished generation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeneratingChatsResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error while retrieving chats"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/mcp_servers": {
       "get": {
         "tags": [
@@ -5684,6 +5710,64 @@
           }
         }
       },
+      "GeneratingChat": {
+        "type": "object",
+        "description": "A chat with a running or recently finished generation",
+        "required": [
+          "chat_id",
+          "state",
+          "started_at"
+        ],
+        "properties": {
+          "chat_id": {
+            "type": "string",
+            "description": "The unique ID of the chat"
+          },
+          "ended_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the generation reached its terminal state"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the generation started"
+          },
+          "state": {
+            "$ref": "#/components/schemas/GenerationChatState",
+            "description": "Current state of the chat's generation"
+          },
+          "title": {
+            "type": "string",
+            "description": "Resolved chat title (user-provided title takes precedence over the\ngenerated summary title), when one exists"
+          }
+        }
+      },
+      "GeneratingChatsResponse": {
+        "type": "object",
+        "description": "Response for the generating_chats endpoint",
+        "required": [
+          "chats"
+        ],
+        "properties": {
+          "chats": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeneratingChat"
+            },
+            "description": "Chats with a running or recently finished generation"
+          }
+        }
+      },
+      "GenerationChatState": {
+        "type": "string",
+        "description": "State of a chat's most recent generation",
+        "enum": [
+          "running",
+          "completed",
+          "errored"
+        ]
+      },
       "GenerationErrorType": {
         "oneOf": [
           {
@@ -6717,6 +6801,11 @@
           "can_edit"
         ],
         "properties": {
+          "active_generation_started_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Start time of the chat's generation, present only while it is running\nwith a fresh heartbeat"
+          },
           "archived_at": {
             "type": "string",
             "format": "date-time",

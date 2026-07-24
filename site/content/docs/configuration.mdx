@@ -3781,3 +3781,50 @@ file_processing_parallelism = 6
 - Decrease cache sizes in memory-constrained environments
 - The file contents cache is typically more beneficial than the token count cache
 - Cache efficiency depends on file reuse patterns in your workflow
+
+### `generation_status`
+
+Configuration for the persisted per-chat generation status that powers the chat list's running/finished/error indicators. While a generation runs, the backend periodically refreshes a heartbeat on the chat; generations whose heartbeat goes stale (for example because the process was killed mid-generation) are marked as errored.
+
+**Type:** `object`
+
+**Default behavior:** `heartbeat_interval_secs` defaults to `10`, `stale_after_secs` to `30`, and `terminal_retention_secs` to `60`.
+
+**Example:**
+
+```toml
+[generation_status]
+heartbeat_interval_secs = 10
+stale_after_secs = 30
+terminal_retention_secs = 60
+```
+
+#### `generation_status.heartbeat_interval_secs`
+
+{/* erato_toml_config_key: generation_status.heartbeat_interval_secs */}
+
+Interval in seconds at which in-flight generations refresh their heartbeat on the chat.
+
+**Type:** `number`
+
+**Default value:** `10`
+
+#### `generation_status.stale_after_secs`
+
+{/* erato_toml_config_key: generation_status.stale_after_secs */}
+
+Seconds after the last heartbeat before a running generation is considered stale. Stale generations are marked as errored and no longer reported as running.
+
+**Type:** `number`
+
+**Default value:** `30`
+
+#### `generation_status.terminal_retention_secs`
+
+{/* erato_toml_config_key: generation_status.terminal_retention_secs */}
+
+Seconds a completed or errored generation remains visible in the generating-chats endpoint after it ended. Clients use this window to observe a chat leaving the running state.
+
+**Type:** `number`
+
+**Default value:** `60`

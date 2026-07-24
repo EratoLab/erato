@@ -22,8 +22,8 @@ use crate::models;
 use crate::models::assistant::create_standalone_file_upload;
 use crate::models::chat::{
     RecentChatsFilter, archive_all_unarchived_chats_for_owner, archive_chat,
-    get_frequent_assistants, get_or_create_chat, get_recent_chats, resolve_chat_display_name,
-    update_chat_title_by_user_provided,
+    get_frequent_assistants, get_generating_chats, get_or_create_chat, get_recent_chats,
+    resolve_chat_display_name, update_chat_title_by_user_provided,
 };
 use crate::models::file_capability::{
     FileCapability, FileOperation, find_file_capability_by_filename, get_file_capabilities,
@@ -138,6 +138,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/messages/resumestream", post(resume_message_sse))
         .route("/messages/clienttoolresult", post(client_tool_result))
         .route("/recent_chats", get(recent_chats))
+        .route("/generating", get(generating_chats))
         .route("/frequent_assistants", get(frequent_assistants))
         .route("/chats", post(create_chat))
         .route("/chats/{chat_id}", put(update_chat))
@@ -354,6 +355,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         chat_messages,
         submit_message_feedback,
         recent_chats,
+        generating_chats,
         frequent_assistants,
         upload_file,
         link_file,
@@ -429,6 +431,9 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         ChatMessagesResponse,
         RecentChatStats,
         RecentChatsResponse,
+        GenerationChatState,
+        GeneratingChat,
+        GeneratingChatsResponse,
         FileUploadItem,
         FileUploadResponse,
         LinkFileRequest,
@@ -1205,6 +1210,11 @@ pub struct RecentChat {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     assistant_name: Option<String>,
+    /// Start time of the chat's generation, present only while it is running
+    /// with a fresh heartbeat
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    active_generation_started_at: Option<DateTime<FixedOffset>>,
 }
 
 /// Sentiment for message feedback
@@ -1357,6 +1367,42 @@ pub struct RecentChatsResponse {
     chats: Vec<RecentChat>,
     /// Statistics about the chat list
     stats: RecentChatStats,
+}
+
+/// State of a chat's most recent generation
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ToSchema, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum GenerationChatState {
+    Running,
+    Completed,
+    Errored,
+}
+
+/// A chat with a running or recently finished generation
+#[derive(Debug, ToSchema, Serialize)]
+pub struct GeneratingChat {
+    /// The unique ID of the chat
+    chat_id: String,
+    /// Current state of the chat's generation
+    state: GenerationChatState,
+    /// When the generation started
+    started_at: DateTime<FixedOffset>,
+    /// When the generation reached its terminal state
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    ended_at: Option<DateTime<FixedOffset>>,
+    /// Resolved chat title (user-provided title takes precedence over the
+    /// generated summary title), when one exists
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    title: Option<String>,
+}
+
+/// Response for the generating_chats endpoint
+#[derive(Debug, ToSchema, Serialize)]
+pub struct GeneratingChatsResponse {
+    /// Chats with a running or recently finished generation
+    chats: Vec<GeneratingChat>,
 }
 
 /// A frequently used assistant with usage statistics
@@ -2417,6 +2463,7 @@ pub async fn recent_chats(
             include_archived,
             search_query,
         },
+        app_state.config.generation_status.stale_after_secs,
     )
     .await
     .map_err(log_internal_server_error)?;
@@ -2452,6 +2499,88 @@ pub async fn recent_chats(
     };
 
     Ok(Json(response))
+}
+
+#[utoipa::path(
+    get,
+    path = "/me/generating",
+    responses(
+        (status = OK, body = GeneratingChatsResponse, description = "Successfully retrieved the chats with a running or recently finished generation"),
+        (status = INTERNAL_SERVER_ERROR, description = "Server error while retrieving chats")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn generating_chats(
+    State(app_state): State<AppState>,
+    Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
+) -> Result<Json<GeneratingChatsResponse>, StatusCode> {
+    policy
+        .rebuild_data_if_needed(&app_state.db, &app_state.config)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to rebuild policy data: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let generation_status = &app_state.config.generation_status;
+    let rows = get_generating_chats(
+        &app_state.db,
+        &me_user.id,
+        generation_status.stale_after_secs,
+        generation_status.terminal_retention_secs,
+    )
+    .await
+    .map_err(log_internal_server_error)?;
+
+    let subject = me_user.to_subject();
+    let mut chats = Vec::with_capacity(rows.len());
+    for row in rows {
+        // Should already be filtered to the correct user, but make sure to authorize.
+        if authorize!(
+            policy,
+            &subject,
+            &Resource::Chat(row.id.to_string()),
+            Action::Read
+        )
+        .is_err()
+        {
+            continue;
+        }
+
+        let state = match row.generation_state.as_str() {
+            "running" => GenerationChatState::Running,
+            "completed" => GenerationChatState::Completed,
+            "errored" => GenerationChatState::Errored,
+            other => {
+                tracing::warn!(
+                    chat_id = %row.id,
+                    generation_state = other,
+                    "Skipping chat with unknown generation state"
+                );
+                continue;
+            }
+        };
+
+        let title = row
+            .title_by_user_provided
+            .filter(|title| !title.trim().is_empty())
+            .or(row
+                .title_by_summary
+                .filter(|title| !title.trim().is_empty()));
+
+        chats.push(GeneratingChat {
+            chat_id: row.id.to_string(),
+            state,
+            started_at: row.generation_started_at,
+            ended_at: row.generation_ended_at,
+            title,
+        });
+    }
+
+    Ok(Json(GeneratingChatsResponse { chats }))
 }
 
 /// Extends model RecentChat objects to full API RecentChat objects.
@@ -2533,6 +2662,7 @@ async fn extend_recent_chats_to_api_model(
             can_edit,
             assistant_id: chat.assistant_id.map(|id| id.to_string()),
             assistant_name: chat.assistant_name,
+            active_generation_started_at: chat.active_generation_started_at,
         });
     }
 

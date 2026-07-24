@@ -3,7 +3,7 @@ use crate::db::entity_ext::chats;
 use crate::db::entity_ext::prelude::*;
 use crate::metrics_constants::{
     POSTGRES_QUERY_COUNT_RECENT_CHATS, POSTGRES_QUERY_FREQUENT_ASSISTANTS,
-    POSTGRES_QUERY_LIST_RECENT_CHATS,
+    POSTGRES_QUERY_LIST_GENERATING_CHATS, POSTGRES_QUERY_LIST_RECENT_CHATS,
 };
 use crate::models::message::GenerationParameters;
 use crate::models::pagination;
@@ -200,6 +200,9 @@ pub struct RecentChat {
     pub assistant_id: Option<Uuid>,
     /// The name of the assistant if this chat is based on an assistant
     pub assistant_name: Option<String>,
+    /// Start time of the chat's generation, present only while it is running
+    /// with a fresh heartbeat.
+    pub active_generation_started_at: Option<DateTimeWithTimeZone>,
 }
 
 /// Statistics for a list of chats
@@ -234,6 +237,7 @@ struct ChatWithLatestMessage {
     title_by_user_provided: Option<String>,
     archived_at: Option<DateTimeWithTimeZone>,
     assistant_id: Option<Uuid>,
+    active_generation_started_at: Option<DateTimeWithTimeZone>,
     // Latest message fields
     latest_message_at: DateTimeWithTimeZone,
 }
@@ -263,6 +267,7 @@ pub async fn get_recent_chats(
     subject: &Subject,
     owner_user_id: &str,
     filter: RecentChatsFilter<'_>,
+    generation_stale_after_secs: u64,
 ) -> Result<(Vec<RecentChat>, ChatListStats), Report> {
     use crate::db::entity::assistants;
     use crate::db::entity::prelude::Assistants;
@@ -307,6 +312,11 @@ pub async fn get_recent_chats(
             "chats"."title_by_user_provided",
             "chats"."archived_at",
             "chats"."assistant_id",
+            CASE
+                WHEN "chats"."generation_state" = 'running'
+                    AND "chats"."generation_heartbeat_at" > now() - make_interval(secs => {generation_stale_after_secs})
+                THEN "chats"."generation_started_at"
+            END AS "active_generation_started_at",
             "latest_msg"."created_at" AS "latest_message_at"
         FROM "chats"
         INNER JOIN LATERAL (
@@ -517,6 +527,7 @@ pub async fn get_recent_chats(
                 last_selected_facets,
                 assistant_id: chat_with_msg.assistant_id,
                 assistant_name,
+                active_generation_started_at: chat_with_msg.active_generation_started_at,
             }
         })
         .collect();
@@ -530,6 +541,66 @@ pub async fn get_recent_chats(
     };
 
     Ok((recent_chats, stats))
+}
+
+/// A chat with a running or recently ended generation.
+#[derive(Debug, FromQueryResult)]
+pub struct GeneratingChatRow {
+    pub id: Uuid,
+    pub generation_state: String,
+    pub generation_started_at: DateTimeWithTimeZone,
+    pub generation_ended_at: Option<DateTimeWithTimeZone>,
+    pub title_by_user_provided: Option<String>,
+    pub title_by_summary: Option<String>,
+}
+
+/// Get the chats of a user whose generation is currently running (with a
+/// fresh heartbeat) or reached a terminal state within the retention window.
+#[instrument(skip_all)]
+pub async fn get_generating_chats(
+    conn: &DatabaseConnection,
+    owner_user_id: &str,
+    stale_after_secs: u64,
+    terminal_retention_secs: u64,
+) -> Result<Vec<GeneratingChatRow>, Report> {
+    let sql = r#"
+        SELECT
+            "chats"."id",
+            "chats"."generation_state",
+            "chats"."generation_started_at",
+            "chats"."generation_ended_at",
+            "chats"."title_by_user_provided",
+            "chats"."title_by_summary"
+        FROM "chats"
+        WHERE "chats"."owner_user_id" = $1
+            AND "chats"."archived_at" IS NULL
+            AND "chats"."generation_started_at" IS NOT NULL
+            AND (
+                (
+                    "chats"."generation_state" = 'running'
+                    AND "chats"."generation_heartbeat_at" > now() - make_interval(secs => $2::double precision)
+                )
+                OR (
+                    "chats"."generation_state" IN ('completed', 'errored')
+                    AND "chats"."generation_ended_at" > now() - make_interval(secs => $3::double precision)
+                )
+            )
+        "#;
+
+    let rows = GeneratingChatRow::find_by_statement(named_statement_from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        POSTGRES_QUERY_LIST_GENERATING_CHATS,
+        sql,
+        [
+            owner_user_id.into(),
+            (stale_after_secs as f64).into(),
+            (terminal_retention_secs as f64).into(),
+        ],
+    ))
+    .all(conn)
+    .await?;
+
+    Ok(rows)
 }
 
 /// Get the most frequently used assistants for a user over a specified time period.
