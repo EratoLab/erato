@@ -1,10 +1,10 @@
 use crate::image_data;
 use crate::matcher::{
     CiteFilesResponseConfig, ErrorResponseConfig, ImageMock, LongRunningResponseConfig, MatchRule,
-    MatchRuleAnyMessageContainsAudioContent, MatchRuleAnyUserMessageInCurrentTurnWithPattern,
-    MatchRuleLastMessageIsUserWithPattern, MatchRuleUserMessagePattern, Mock,
-    RandomOneLinerResponseConfig, ResponseConfig, StaticResponseConfig, ToolCallDef,
-    ToolCallResponseConfig, ToolCallsResponseConfig,
+    MatchRuleAnyMessageContainsAudioContent, MatchRuleAnySystemMessageWithPattern,
+    MatchRuleAnyUserMessageInCurrentTurnWithPattern, MatchRuleLastMessageIsUserWithPattern,
+    MatchRuleUserMessagePattern, Mock, RandomOneLinerResponseConfig, ResponseConfig,
+    StaticResponseConfig, ToolCallDef, ToolCallResponseConfig, ToolCallsResponseConfig,
 };
 use rand::Rng;
 use serde_json::json;
@@ -387,6 +387,25 @@ fn build_submitstream_replay_chunks() -> Vec<String> {
 /// Get the default set of configured mocks
 pub fn get_default_mocks() -> Vec<Mock> {
     vec![
+        // Must stay first: a summary request carries the raw first user
+        // message last, so any user-pattern mock (e.g. LongRunning) would
+        // match it and pace or fail the title generation.
+        Mock {
+            name: "SummaryTitle".to_string(),
+            description:
+                "Returns a static title for chat summary requests, keyed on the summary system prompt"
+                    .to_string(),
+            match_rules: vec![MatchRule::AnySystemMessageWithPattern(
+                MatchRuleAnySystemMessageWithPattern {
+                    pattern: "generate a summary for the topic".to_string(),
+                },
+            )],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec!["Mock Summary Title".to_string()],
+                delay_ms: 10,
+                ..Default::default()
+            }),
+        },
         Mock {
             name: "SubmitStreamReplay".to_string(),
             description:
@@ -999,6 +1018,30 @@ mod tests {
                 assert_eq!(config.body["error"]["code"], "content_filter");
             }
             _ => panic!("Expected Error response"),
+        }
+    }
+
+    #[test]
+    fn test_summary_title_matches_before_user_pattern_mocks() {
+        use crate::matcher::{ChatCompletionRequest, Matcher};
+
+        let matcher = Matcher::new(get_default_mocks());
+        // Shaped like an erato summary request: the summary system prompt plus
+        // the raw first user message, which would otherwise match LongRunning.
+        let request: ChatCompletionRequest = serde_json::from_value(serde_json::json!({
+            "messages": [
+                {"role": "system", "content": "Generate a summary for the topic of the following chat, based on the first message to the chat."},
+                {"role": "user", "content": "long running 12"}
+            ]
+        }))
+        .unwrap();
+
+        let response = matcher.match_request(&request, "test0002");
+        match response {
+            ResponseConfig::Static(config) => {
+                assert_eq!(config.chunks, vec!["Mock Summary Title"]);
+            }
+            _ => panic!("Expected Static response"),
         }
     }
 }
