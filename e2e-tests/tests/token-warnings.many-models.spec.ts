@@ -27,8 +27,14 @@ const fillAndReadEstimate = async (
   page: Page,
   text: string,
 ): Promise<Estimate> => {
+  // Pin the wait to the estimate for the selected mock model: estimates for
+  // other providers (e.g. one fired before the selection settled) may lack a
+  // configured context size and must not be read as calibration data.
   const estimateResponse = page.waitForResponse(
-    (response) => response.url().includes(ESTIMATE_URL),
+    (response) =>
+      response.url().includes(ESTIMATE_URL) &&
+      (response.request().postDataJSON() as { chat_provider_id?: string })
+        ?.chat_provider_id === "mock-llm-1k",
     { timeout: 15000 },
   );
   await page.getByRole("textbox", { name: "Type a message..." }).fill(text);

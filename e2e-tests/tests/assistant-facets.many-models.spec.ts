@@ -125,9 +125,14 @@ test.describe("Assistant facets", () => {
     await expect(
       page.getByTestId(`selected-facet-${facet!.id}`),
     ).toBeDisabled();
+    // Enforcement locks the dropdown trigger via a pointer-events-none
+    // wrapper, not a disabled attribute; a trial click proves it cannot
+    // receive interaction.
     await expect(
-      page.locator('button[aria-controls="facet-selector-dropdown"]'),
-    ).toBeDisabled();
+      page
+        .locator('button[aria-controls="facet-selector-dropdown"]')
+        .click({ trial: true, timeout: 2000 }),
+    ).rejects.toThrow();
   });
 
   test("assistant edit handles removed configured facets gracefully", async ({
