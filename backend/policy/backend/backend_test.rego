@@ -309,6 +309,101 @@ test_owner_can_share_own_chat if {
 	} with data.resource_attributes as resource_attributes
 }
 
+test_user_can_shared_read_chat_with_active_share_link if {
+	backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_2_id,
+		"resource_kind": "chat",
+		"resource_id": chat_1_id,
+		"action": "shared_read",
+	} with data.resource_attributes as resource_attributes
+		with data.share_links as share_links
+		with data.config as chat_sharing_enabled_config
+}
+
+test_user_cannot_shared_read_chat_without_share_link if {
+	not backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_2_id,
+		"resource_kind": "chat",
+		"resource_id": chat_1_id,
+		"action": "shared_read",
+	} with data.resource_attributes as resource_attributes
+		with data.share_links as []
+		with data.config as chat_sharing_enabled_config
+}
+
+test_user_cannot_shared_read_chat_when_feature_disabled if {
+	not backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_2_id,
+		"resource_kind": "chat",
+		"resource_id": chat_1_id,
+		"action": "shared_read",
+	} with data.resource_attributes as resource_attributes
+		with data.share_links as share_links
+		with data.config as chat_sharing_disabled_config
+}
+
+test_user_cannot_shared_read_chat_when_share_link_disabled if {
+	not backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_2_id,
+		"resource_kind": "chat",
+		"resource_id": chat_1_id,
+		"action": "shared_read",
+	} with data.resource_attributes as resource_attributes
+		with data.share_links as [{
+			"id": "share-link-1",
+			"resource_type": "chat",
+			"resource_id": chat_1_id,
+			"enabled": false,
+		}]
+		with data.config as chat_sharing_enabled_config
+}
+
+test_user_cannot_shared_read_archived_chat if {
+	not backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_2_id,
+		"resource_kind": "chat",
+		"resource_id": chat_1_id,
+		"action": "shared_read",
+	} with data.resource_attributes as {"chat": {chat_1_id: {
+		"id": chat_1_id,
+		"owner_id": user_1_id,
+		"archived_at": "2026-07-24T00:00:00Z",
+	}}}
+		with data.share_links as share_links
+		with data.config as chat_sharing_enabled_config
+}
+
+# `shared_read` never grants more than the shared view: the owner-only actions
+# on the same chat stay denied for a share-link viewer.
+test_shared_read_viewer_cannot_update_chat if {
+	not backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_2_id,
+		"resource_kind": "chat",
+		"resource_id": chat_1_id,
+		"action": "update",
+	} with data.resource_attributes as resource_attributes
+		with data.share_links as share_links
+		with data.config as chat_sharing_enabled_config
+}
+
+test_shared_read_viewer_cannot_submit_message if {
+	not backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_2_id,
+		"resource_kind": "chat",
+		"resource_id": chat_1_id,
+		"action": "submit_message",
+	} with data.resource_attributes as resource_attributes
+		with data.share_links as share_links
+		with data.config as chat_sharing_enabled_config
+}
+
 test_user_can_read_linked_file_via_shared_chat if {
 	backend.allow with input as {
 		"subject_kind": "user",

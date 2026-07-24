@@ -542,13 +542,56 @@ pub async fn get_chat_messages(
         Action::Read
     )?;
 
+    // Owner route: return every branch (no active-thread filter).
+    fetch_chat_messages(conn, chat_id, false, limit, offset).await
+}
+
+/// Get the shared view of a chat's messages: the active thread only, with
+/// branches from edits/regenerations excluded.
+///
+/// Authorizes via [`Action::SharedRead`], which the policy grants to any
+/// logged-in user when chat sharing is enabled and the chat has an enabled
+/// share link and is not archived.
+pub async fn get_shared_chat_messages(
+    conn: &DatabaseConnection,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    chat_id: &Uuid,
+    limit: Option<u64>,
+    offset: Option<u64>,
+) -> Result<(Vec<messages::Model>, MessageListStats), Report> {
+    authorize!(
+        policy,
+        subject,
+        &Resource::Chat(chat_id.as_hyphenated().to_string()),
+        Action::SharedRead
+    )?;
+
+    fetch_chat_messages(conn, chat_id, true, limit, offset).await
+}
+
+/// Fetch messages for a chat with pagination support, without any authorization
+/// check.
+///
+/// When `active_thread_only` is true, only messages that are part of the chat's
+/// active thread are returned (branches from edits/regenerations are excluded).
+async fn fetch_chat_messages(
+    conn: &DatabaseConnection,
+    chat_id: &Uuid,
+    active_thread_only: bool,
+    limit: Option<u64>,
+    offset: Option<u64>,
+) -> Result<(Vec<messages::Model>, MessageListStats), Report> {
     // Set default pagination values
     let limit = limit.unwrap_or(100);
     let offset = offset.unwrap_or(0);
 
     // Query messages for this chat with pagination, ordered by creation time
-    let messages = Messages::find()
-        .filter(messages::Column::ChatId.eq(*chat_id))
+    let mut query = Messages::find().filter(messages::Column::ChatId.eq(*chat_id));
+    if active_thread_only {
+        query = query.filter(messages::Column::IsMessageInActiveThread.eq(true));
+    }
+    let messages = query
         .order_by_desc(messages::Column::CreatedAt)
         .limit(limit)
         .offset(offset)
@@ -558,10 +601,12 @@ pub async fn get_chat_messages(
     // Use our pagination utility to efficiently calculate the total count
     let (total_count, has_more) =
         pagination::calculate_total_count(offset, limit, messages.len(), || async {
-            Messages::find()
-                .filter(messages::Column::ChatId.eq(*chat_id))
-                .count(conn)
-                .await
+            let mut count_query = Messages::find().filter(messages::Column::ChatId.eq(*chat_id));
+            if active_thread_only {
+                count_query =
+                    count_query.filter(messages::Column::IsMessageInActiveThread.eq(true));
+            }
+            count_query.count(conn).await
         })
         .await?;
 
