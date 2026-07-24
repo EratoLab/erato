@@ -626,7 +626,7 @@ pub async fn submit_assistant_hub_version(
     let record = assistant_hub::submit_version(
         &app_state.db,
         &policy,
-        &app_state.config.assistant_hub,
+        &app_state.config,
         &me_user.to_subject(),
         source_assistant_id,
         profile,

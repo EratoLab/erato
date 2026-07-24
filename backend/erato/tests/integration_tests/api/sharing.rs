@@ -238,9 +238,16 @@ async fn test_full_assistant_sharing_flow(pool: Pool<Postgres>) {
     .await
     .expect("Failed to create file");
 
+    // add_file_to_assistant authorizes the file read against policy data, so
+    // the fixture engine must be built first.
+    let fixture_policy = PolicyEngine::new();
+    fixture_policy
+        .rebuild_data(&app_state.db, &app_state.config)
+        .await
+        .expect("Failed to build fixture policy data");
     erato::models::assistant::add_file_to_assistant(
         &app_state.db,
-        &PolicyEngine::new(),
+        &fixture_policy,
         &erato::policy::types::Subject::User(user_a.id.to_string()),
         assistant.id,
         file.id,
@@ -262,6 +269,7 @@ async fn test_full_assistant_sharing_flow(pool: Pool<Postgres>) {
         &app_state.db,
         &PolicyEngine::new(),
         &erato::policy::types::Subject::User(user_a.id.to_string()),
+        &app_state.config,
         "assistant".to_string(),
         assistant.id.to_string(),
         "user".to_string(),
@@ -390,6 +398,7 @@ async fn test_archived_shared_assistant_hidden_but_existing_chat_accessible(pool
         &app_state.db,
         &PolicyEngine::new(),
         &erato::policy::types::Subject::User(user_a.id.to_string()),
+        &app_state.config,
         "assistant".to_string(),
         assistant.id.to_string(),
         "user".to_string(),
@@ -532,6 +541,7 @@ async fn test_viewer_cannot_update_assistant(pool: Pool<Postgres>) {
         &app_state.db,
         &PolicyEngine::new(),
         &erato::policy::types::Subject::User(user_a.id.to_string()),
+        &app_state.config,
         "assistant".to_string(),
         assistant.id.to_string(),
         "user".to_string(),
@@ -616,6 +626,7 @@ async fn test_list_share_grants(pool: Pool<Postgres>) {
         &app_state.db,
         &PolicyEngine::new(),
         &erato::policy::types::Subject::User(user_a.id.to_string()),
+        &app_state.config,
         "assistant".to_string(),
         assistant.id.to_string(),
         "user".to_string(),
@@ -706,6 +717,7 @@ async fn test_delete_share_grant(pool: Pool<Postgres>) {
         &app_state.db,
         &PolicyEngine::new(),
         &erato::policy::types::Subject::User(user_a.id.to_string()),
+        &app_state.config,
         "assistant".to_string(),
         assistant.id.to_string(),
         "user".to_string(),
@@ -822,6 +834,7 @@ async fn test_share_assistant_with_organization_user_id(pool: Pool<Postgres>) {
         &app_state.db,
         &PolicyEngine::new(),
         &erato::policy::types::Subject::User(user_a.id.to_string()),
+        &app_state.config,
         "assistant".to_string(),
         assistant.id.to_string(),
         "user".to_string(),
@@ -838,6 +851,7 @@ async fn test_share_assistant_with_organization_user_id(pool: Pool<Postgres>) {
         &app_state.db,
         &PolicyEngine::new(),
         &erato::policy::types::Subject::User(user_a.id.to_string()),
+        &app_state.config,
         "assistant".to_string(),
         assistant.id.to_string(),
         "user".to_string(),

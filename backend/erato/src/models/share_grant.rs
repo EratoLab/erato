@@ -46,6 +46,7 @@ pub async fn create_share_grant(
     conn: &DatabaseConnection,
     policy: &PolicyEngine,
     subject: &Subject,
+    config: &crate::config::AppConfig,
     resource_type: String,
     resource_id: String,
     subject_type: String,
@@ -53,10 +54,10 @@ pub async fn create_share_grant(
     subject_id_value: String,
     role: String,
 ) -> Result<share_grants::Model, Report> {
-    // Rebuild policy data if needed
-    policy
-        .rebuild_data_if_needed(conn, &crate::config::AppConfig::default())
-        .await?;
+    // The resource may have been created earlier in the same request (e.g. the
+    // assistant cloned during a hub submission); the authorize below needs it
+    // in the policy data.
+    policy.rebuild_data_if_needed(conn, config).await?;
 
     // Get the user ID from subject
     let user_id_str = subject.user_id();
@@ -198,12 +199,12 @@ pub async fn delete_share_grant(
     conn: &DatabaseConnection,
     policy: &PolicyEngine,
     subject: &Subject,
+    config: &crate::config::AppConfig,
     grant_id: Uuid,
 ) -> Result<(), Report> {
-    // Rebuild policy data if needed
-    policy
-        .rebuild_data_if_needed(conn, &crate::config::AppConfig::default())
-        .await?;
+    // The grant may have been created since this request's engine was handed
+    // out; the authorize below needs it in the policy data.
+    policy.rebuild_data_if_needed(conn, config).await?;
 
     // Get the user ID from subject
     let user_id_str = subject.user_id();
