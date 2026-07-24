@@ -4,5 +4,9 @@
 [chat_sharing]
 enabled = true
 
+[frontend]
+enable_message_feedback = true
+enable_message_feedback_comments = true
+
 [frontend.additional_environment]
 K3D_TEST_SCENARIO = "basic"

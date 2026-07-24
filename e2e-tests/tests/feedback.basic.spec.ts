@@ -31,8 +31,12 @@ test(
     await dialog.getByRole("button", { name: "Skip" }).click();
     await expect(dialog).toHaveCount(0);
 
-    // Clicking the active thumb opens the view dialog, which offers Remove
+    // Clicking the active thumb opens the view dialog, which offers Remove;
+    // wait for the thumb to render as filled so the click doesn't resubmit
     await assistantMessage.hover();
+    await expect(dislikeButton.locator("svg")).toHaveClass(
+      /fill-theme-error-fg/,
+    );
     await dislikeButton.click();
     await expect(dialog.getByText("Your Feedback")).toBeVisible();
     await expect(dialog.getByText("You found this unhelpful")).toBeVisible();
