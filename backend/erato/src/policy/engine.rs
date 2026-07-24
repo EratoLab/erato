@@ -16,7 +16,7 @@ use sea_orm::{DatabaseConnection, EntityTrait, FromQueryResult, QuerySelect};
 use serde_json::{Value as JsonValue, json};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tracing::instrument;
 
 const BACKEND_POLICY: &str = include_str!("../../../policy/backend/backend.rego");
@@ -340,6 +340,10 @@ pub(crate) use authorize;
 pub struct PolicyEngine {
     engine: Arc<RwLock<Engine>>,
     data_needs_rebuild: Arc<RwLock<bool>>,
+    /// Serializes rebuilds process-wide (shared by request-scoped clones):
+    /// concurrent stale observers queue here and re-check staleness after
+    /// acquiring, so they coalesce into a single rebuild.
+    rebuild_lock: Arc<Mutex<()>>,
 }
 
 impl Default for PolicyEngine {
@@ -360,6 +364,7 @@ impl PolicyEngine {
         Self {
             engine: Arc::new(RwLock::new(engine)),
             data_needs_rebuild: Arc::new(RwLock::new(true)),
+            rebuild_lock: Arc::new(Mutex::new(())),
         }
     }
 
@@ -371,6 +376,7 @@ impl PolicyEngine {
         Self {
             engine: self.engine.clone(),
             data_needs_rebuild: Arc::new(RwLock::new(false)),
+            rebuild_lock: self.rebuild_lock.clone(),
         }
     }
 
@@ -391,6 +397,15 @@ impl PolicyEngine {
 
     #[instrument(skip_all)]
     pub async fn rebuild_data(
+        &self,
+        db: &DatabaseConnection,
+        config: &AppConfig,
+    ) -> Result<(), Report> {
+        let _rebuild_guard = self.rebuild_lock.lock().await;
+        self.rebuild_data_locked(db, config).await
+    }
+
+    async fn rebuild_data_locked(
         &self,
         db: &DatabaseConnection,
         config: &AppConfig,
@@ -448,12 +463,16 @@ impl PolicyEngine {
         db: &DatabaseConnection,
         config: &AppConfig,
     ) -> Result<(), Report> {
-        let data_needs_rebuild = { *self.data_needs_rebuild.read().await };
-        tracing::trace!(data_needs_rebuild = data_needs_rebuild);
-        if data_needs_rebuild {
-            self.rebuild_data(db, config).await?;
+        if !*self.data_needs_rebuild.read().await {
+            return Ok(());
         }
-        Ok(())
+        let _rebuild_guard = self.rebuild_lock.lock().await;
+        // Re-check after acquiring: a rebuild that finished while we waited on
+        // the lock already covers this invalidation.
+        if !*self.data_needs_rebuild.read().await {
+            return Ok(());
+        }
+        self.rebuild_data_locked(db, config).await
     }
 
     pub async fn rebuild_data_if_needed_req(

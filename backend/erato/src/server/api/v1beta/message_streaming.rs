@@ -4523,8 +4523,6 @@ async fn bg_stream_update_assistant_message_completion(
     .await
     .map_err(Report::msg)?;
 
-    app_state.global_policy_engine.invalidate_data().await;
-
     Ok(())
 }
 
@@ -4572,8 +4570,6 @@ async fn stream_update_assistant_message_completion<
         .send_event_report(tx.clone())
         .in_current_span()
         .await?;
-
-    app_state.global_policy_engine.invalidate_data().await;
 
     Ok(())
 }
@@ -7190,21 +7186,27 @@ async fn run_message_submit_task(
 ) -> Result<(), Report> {
     tracing::info!("run_message_submit_task started for chat_id: {}", chat_id);
 
-    // Rebuild policy data FIRST if a new chat was created (before trying to fetch the chat)
-    if chat_was_created {
-        tracing::info!("Rebuilding policy data for newly created chat");
-        policy
-            .rebuild_data(&app_state.db, &app_state.config)
-            .await
-            .wrap_err("Failed to rebuild policy data after chat creation")?;
-    }
-
-    // Send ChatCreated event if the chat was just created
+    // Send ChatCreated before the policy rebuild so client navigation is not
+    // serialized behind it. This is authz-safe: the chat row is committed and
+    // the global engine invalidated before this task was spawned, so the
+    // client's post-navigation requests wait on (or perform) the same
+    // single-flight rebuild in the middleware and can never observe
+    // pre-create policy data. A rebuild failure no longer suppresses
+    // navigation; it surfaces as an error frame in the created chat.
     if chat_was_created {
         tracing::info!("Sending ChatCreated event for chat_id: {}", chat_id);
         task.send_event(StreamingEvent::ChatCreated { chat_id })
             .await
             .map_err(Report::msg)?;
+
+        tracing::info!("Rebuilding policy data for newly created chat");
+        // Via the global engine: `policy` is a request-scoped clone whose
+        // severed staleness flag cannot see the handler's invalidation.
+        app_state
+            .global_policy_engine
+            .rebuild_data_if_needed(&app_state.db, &app_state.config)
+            .await
+            .wrap_err("Failed to rebuild policy data after chat creation")?;
     }
 
     tracing::info!("Fetching chat for chat_id: {}", chat_id);
