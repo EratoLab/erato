@@ -1,7 +1,7 @@
 use axum::{
     extract::{Extension, Request, State},
     http::StatusCode,
-    response::{sse::Event, Sse},
+    response::{sse::Event, IntoResponse, Response, Sse},
     Json,
 };
 use futures::StreamExt;
@@ -10,10 +10,11 @@ use std::sync::Arc;
 
 use crate::{
     log,
-    matcher::{ChatCompletionRequest, Matcher},
+    matcher::{ChatCompletionRequest, Matcher, ResponseConfig, ToolCallDef},
     request_id::RequestId,
     responses::{
         build_delayed_streaming_response, build_multiple_tool_calls_streaming_response,
+        build_openai_chat_completion, build_openai_tool_calls_completion,
         build_tool_call_streaming_response, StreamAction,
     },
 };
@@ -23,10 +24,7 @@ pub async fn chat_completions(
     State(matcher): State<Arc<Matcher>>,
     Extension(request_id): Extension<RequestId>,
     request: Request,
-) -> Result<
-    Sse<impl futures::Stream<Item = Result<Event, std::convert::Infallible>>>,
-    (StatusCode, Json<Value>),
-> {
+) -> Result<Response, (StatusCode, Json<Value>)> {
     let uri = request.uri().path().to_string();
 
     // Extract the JSON body
@@ -59,6 +57,12 @@ pub async fn chat_completions(
 
     // Match the request to get the response config
     let response_config = matcher.match_request(&chat_request, request_id.as_str());
+
+    // Non-streaming clients (e.g. erato's summary/title generation via genai
+    // exec_chat) require a single JSON completion body and reject SSE.
+    if !chat_request.stream {
+        return non_streaming_chat_completion(response_config, &request_id).await;
+    }
 
     // Build the streaming response based on config type
     let actions = match response_config {
@@ -153,7 +157,9 @@ pub async fn chat_completions(
                             if is_last {
                                 log::log_response_complete(request_id.as_str());
                             }
-                            Some(Ok(Event::default().data(data)))
+                            Some(Ok::<Event, std::convert::Infallible>(
+                                Event::default().data(data),
+                            ))
                         } else {
                             None
                         }
@@ -166,5 +172,85 @@ pub async fn chat_completions(
             }
         });
 
-    Ok(Sse::new(stream))
+    Ok(Sse::new(stream).into_response())
+}
+
+/// Answer a `stream: false` request with a single JSON completion body,
+/// keeping the delay semantics of the streaming variant.
+async fn non_streaming_chat_completion(
+    response_config: ResponseConfig,
+    request_id: &RequestId,
+) -> Result<Response, (StatusCode, Json<Value>)> {
+    match response_config {
+        ResponseConfig::Error(error_config) => {
+            log::log_with_id(
+                request_id.as_str(),
+                &format!(
+                    "Matched error response with status {}",
+                    error_config.status_code
+                ),
+            );
+            if let Some(initial_delay_ms) = error_config.initial_delay_ms {
+                tokio::time::sleep(std::time::Duration::from_millis(initial_delay_ms)).await;
+            }
+            Err((
+                StatusCode::from_u16(error_config.status_code).unwrap_or(StatusCode::BAD_REQUEST),
+                Json(error_config.body),
+            ))
+        }
+        ResponseConfig::Static(static_config) => {
+            log::log_with_id(
+                request_id.as_str(),
+                &format!(
+                    "Matched static response with {} chunks, answering non-streaming",
+                    static_config.chunks.len()
+                ),
+            );
+            let total_delay_ms = static_config.initial_delay_ms.unwrap_or(0)
+                + static_config.delay_ms * static_config.chunks.len() as u64;
+            tokio::time::sleep(std::time::Duration::from_millis(total_delay_ms)).await;
+            log::log_response_complete(request_id.as_str());
+            Ok(Json(build_openai_chat_completion(&static_config.chunks.concat())).into_response())
+        }
+        ResponseConfig::ToolCall(tool_config) => {
+            log::log_with_id(
+                request_id.as_str(),
+                &format!(
+                    "Matched tool call response: {}, answering non-streaming",
+                    tool_config.tool_name
+                ),
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(tool_config.delay_ms)).await;
+            log::log_response_complete(request_id.as_str());
+            Ok(Json(build_openai_tool_calls_completion(&[ToolCallDef {
+                tool_name: tool_config.tool_name,
+                arguments: tool_config.arguments,
+            }]))
+            .into_response())
+        }
+        ResponseConfig::ToolCalls(tool_calls_config) => {
+            log::log_with_id(
+                request_id.as_str(),
+                &format!(
+                    "Matched multiple tool calls response: {} tool calls, answering non-streaming",
+                    tool_calls_config.tool_calls.len()
+                ),
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(tool_calls_config.delay_ms)).await;
+            log::log_response_complete(request_id.as_str());
+            Ok(Json(build_openai_tool_calls_completion(
+                &tool_calls_config.tool_calls,
+            ))
+            .into_response())
+        }
+        ResponseConfig::CiteFiles(_) => {
+            unreachable!("CiteFiles responses should be resolved into Static in matcher")
+        }
+        ResponseConfig::LongRunning(_) => {
+            unreachable!("LongRunning responses should be resolved into Static in matcher")
+        }
+        ResponseConfig::RandomOneLiner(_) => {
+            unreachable!("RandomOneLiner responses should be resolved into Static in matcher")
+        }
+    }
 }
