@@ -191,12 +191,50 @@ export const chatIdFromUrl = (page: Page): string => {
 /**
  * Send the first message of a new chat and return its id. Navigation happens at
  * `chat_created`, so the id is known long before the turn ends.
+ *
+ * The send is verified in layers so a failure names the broken link instead of
+ * a generic navigation timeout: the submitstream request opened a 2xx stream →
+ * the optimistic user bubble rendered → navigation or an explicit send error,
+ * whichever surfaces first. Deliberate-failure tests must not use this helper
+ * for the turn they break.
  */
 export const sendFirstMessage = async (page: Page, message: string) => {
   const textbox = page.getByRole("textbox", { name: "Type a message..." });
   await textbox.fill(message);
+  const submitResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/v1beta/me/messages/submitstream"),
+    { timeout: 10000 },
+  );
   await textbox.press("Enter");
-  await expect(page).toHaveURL(/\/chat\/[0-9a-fA-F-]+/, { timeout: 15000 });
+  const response = await submitResponse;
+  expect(
+    response.ok(),
+    `submitstream should open a 2xx stream, got ${response.status()}`,
+  ).toBe(true);
+  // The optimistic bubble commits on submit, before any stream frame arrives;
+  // its absence means the client dropped the send.
+  await expect(page.getByTestId("message-user").last()).toBeVisible({
+    timeout: 5000,
+  });
+  const sendError = page.getByTestId("chat-send-error");
+  const outcome = await Promise.race([
+    page.waitForURL(/\/chat\/[0-9a-fA-F-]+/, { timeout: 15000 }).then(
+      () => "navigated" as const,
+      () => "timeout" as const,
+    ),
+    sendError.waitFor({ state: "visible", timeout: 15000 }).then(
+      () => "send-error" as const,
+      () => "timeout" as const,
+    ),
+  ]);
+  if (outcome === "send-error") {
+    throw new Error(`send failed: ${await sendError.textContent()}`);
+  }
+  expect(
+    outcome,
+    "chat_created never navigated and no send error was shown",
+  ).toBe("navigated");
   return chatIdFromUrl(page);
 };
 

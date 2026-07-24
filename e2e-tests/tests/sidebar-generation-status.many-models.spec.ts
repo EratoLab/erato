@@ -204,10 +204,12 @@ test(
           '[data-testid="chat-generation-status"][data-status="running"]',
         ),
     ).toHaveCount(0, { timeout: 60000 });
+    // eslint-disable-next-line playwright/no-wait-for-timeout -- settle beat between the terminal transition and the idle measurement window below
     await page.waitForTimeout(2000);
 
     // The poll must be disabled while idle, not merely slowed down.
     const idleStart = Date.now();
+    // eslint-disable-next-line playwright/no-wait-for-timeout -- bounded measurement window: proves an idle client sends zero /me/generating requests
     await page.waitForTimeout(8000);
     const idleCount = generatingAt.filter((t) => t >= idleStart).length;
     expect(
@@ -317,6 +319,7 @@ test(
     // The stale snapshot must not consume the running status.
     await expect.poll(() => staleReplayed, { timeout: 15000 }).toBe(true);
     for (let i = 0; i < 4; i += 1) {
+      // eslint-disable-next-line playwright/no-wait-for-timeout -- bounded absence window: proves the stale replay does not flip the status within it
       await page.waitForTimeout(1000);
       await expect(indicator).toHaveAttribute("data-status", "running");
     }

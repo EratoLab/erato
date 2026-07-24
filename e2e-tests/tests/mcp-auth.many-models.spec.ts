@@ -27,7 +27,10 @@ const runMcpAuthFlow = async (
   await textbox.press("Enter");
 
   const latestAssistantMessage = page.getByTestId("message-assistant").last();
-  await expect(latestAssistantMessage).toBeVisible();
+  // First turn for a cold user plus an MCP tool round-trip regularly exceeds
+  // the 5s default under parallel workers; match the 15s the sibling asserts
+  // in this helper already use.
+  await expect(latestAssistantMessage).toBeVisible({ timeout: 15000 });
 
   // Tool calls render inline in the trace timeline as <ToolCallItem> cards
   // tagged with data-tool-name. The card exists in the DOM whether the trace
