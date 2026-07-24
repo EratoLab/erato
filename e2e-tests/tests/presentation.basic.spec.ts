@@ -60,26 +60,37 @@ async function analyzeThemeFromScreenshot(screenshotBuffer) {
   };
 }
 
+/* Poll the screenshot analysis itself instead of sleeping for a render-settle
+ * guess: the assertion converges as soon as the theme transition has painted
+ * and fails loudly if it never does. */
+const expectPageTheme = async (
+  page,
+  theme: "light" | "dark",
+  expectMessage: string,
+) => {
+  await expect
+    .poll(
+      async () => {
+        const buffer = await page.screenshot();
+        return (await analyzeThemeFromScreenshot(buffer)).theme;
+      },
+      { message: expectMessage, timeout: 10000 },
+    )
+    .toBe(theme);
+};
+
 const expectIsLightPage = async (
   page,
   expectMessage = "Page should be light",
 ) => {
-  // HACK: Replace with better way to check if rendering is setteled
-  await page.waitForTimeout(500);
-  const buffer = await page.screenshot();
-  const analysisResult = await analyzeThemeFromScreenshot(buffer);
-  expect(analysisResult.theme, expectMessage).toBe("light");
+  await expectPageTheme(page, "light", expectMessage);
 };
 
 const expectIsDarkPage = async (
   page,
-  expectMessage = "Page should be light",
+  expectMessage = "Page should be dark",
 ) => {
-  // HACK: Replace with better way to check if rendering is setteled
-  await page.waitForTimeout(500);
-  const buffer = await page.screenshot();
-  const analysisResult = await analyzeThemeFromScreenshot(buffer);
-  expect(analysisResult.theme, expectMessage).toBe("dark");
+  await expectPageTheme(page, "dark", expectMessage);
 };
 
 const openAppearanceSettings = async (page) => {

@@ -502,6 +502,7 @@ test(
       await expect(page.getByText("Streaming scroll line 003")).toBeAttached({
         timeout: 15000,
       });
+      // eslint-disable-next-line playwright/no-wait-for-timeout -- fixed measurement window for scroll stability while the stream is provably active
       await page.waitForTimeout(1000);
 
       const scrollTopAfterMoreStreaming = await messageList.evaluate(
@@ -1123,6 +1124,7 @@ test(
 
     const previewFrame = previewDialog.getByTestId("file-preview-pdf");
     await expect(previewFrame).toBeVisible({ timeout: 10000 });
+    // eslint-disable-next-line playwright/no-wait-for-timeout -- bounded absence window: proves no popup tab opened
     await page.waitForTimeout(1000);
     await expect
       .poll(() => page.context().pages().length, { timeout: 3000 })

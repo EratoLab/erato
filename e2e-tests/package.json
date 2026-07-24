@@ -4,7 +4,9 @@
   "description": "",
   "main": "index.js",
   "type": "module",
-  "scripts": {},
+  "scripts": {
+    "lint": "eslint ."
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -12,6 +14,9 @@
   "devDependencies": {
     "@playwright/test": "^1.57.0",
     "@types/node": "^22.14.1",
+    "@typescript-eslint/parser": "^8.64.0",
+    "eslint": "^10.7.0",
+    "eslint-plugin-playwright": "^2.10.5",
     "prettier": "3.5.0"
   },
   "dependencies": {

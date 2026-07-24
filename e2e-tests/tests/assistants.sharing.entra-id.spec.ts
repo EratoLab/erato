@@ -174,7 +174,11 @@ test(
         const userSearchInput = page1.getByRole("searchbox");
         await expect(userSearchInput).toBeVisible({ timeout: 5000 });
         await userSearchInput.fill(user2DisplayName);
-        await page1.waitForTimeout(1500);
+        // The people search is debounced; the searched user's name appearing
+        // in the results is the signal that it has answered.
+        await expect(
+          page1.getByText(user2DisplayName, { exact: false }).first(),
+        ).toBeVisible({ timeout: 15000 });
 
         const allCheckboxes = page1.locator('input[type="checkbox"]');
         const checkboxCount = await allCheckboxes.count();

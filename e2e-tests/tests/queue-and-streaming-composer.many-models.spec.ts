@@ -293,6 +293,7 @@ test.describe("Streaming composer + message queue", () => {
         { timeout: 30000 },
       );
       await waitForStreamToFinish(page);
+      // eslint-disable-next-line playwright/no-wait-for-timeout -- bounded absence window: proves no auto-send after the completion observables above
       await page.waitForTimeout(1000);
       await expect(page.getByTestId("message-user")).toHaveCount(1);
       await expect(
@@ -334,6 +335,7 @@ test.describe("Streaming composer + message queue", () => {
         { timeout: 30000 },
       );
       await waitForStreamToFinish(page);
+      // eslint-disable-next-line playwright/no-wait-for-timeout -- bounded absence window: proves no auto-send after the completion observables above
       await page.waitForTimeout(1000);
       await expect(page.getByTestId("message-user")).toHaveCount(1);
       await expect(textbox).toHaveValue("fast");
@@ -405,6 +407,7 @@ test.describe("Streaming composer + message queue", () => {
       await expect(queuedChip(page)).toHaveCount(0);
       await expect(page.getByTestId("message-user")).toHaveCount(1);
 
+      // eslint-disable-next-line playwright/no-wait-for-timeout -- bounded absence window: proves no auto-send after the completion observables above
       await page.waitForTimeout(1500);
       await expect(page.getByTestId("message-user")).toHaveCount(1);
       await expect(textbox).toHaveValue("fast");
@@ -482,6 +485,7 @@ test.describe("Streaming composer + message queue", () => {
         { timeout: 30000 },
       );
       await waitForStreamToFinish(page, 15000);
+      // eslint-disable-next-line playwright/no-wait-for-timeout -- bounded absence window: proves no auto-send after the completion observables above
       await page.waitForTimeout(1500);
       // Exactly the two sent user messages — an auto-send would make it 3 —
       // and the queued text still sits in the composer.

@@ -148,7 +148,11 @@ async function shareAssistantWithUser(page: Page, assistantName: string) {
 
   const searchBox = sharingDialog.getByRole("searchbox");
   await searchBox.fill("Demis Gemini");
-  await page.waitForTimeout(1500);
+  // The people search is debounced; the searched user's name appearing in the
+  // dialog is the signal that it has answered.
+  await expect(sharingDialog.getByText(/Demis Gemini/i).first()).toBeVisible({
+    timeout: 15000,
+  });
 
   // Pick first selectable user result (search is already narrowed by user2 email)
   const candidate = sharingDialog.locator('input[type="checkbox"]').first();
