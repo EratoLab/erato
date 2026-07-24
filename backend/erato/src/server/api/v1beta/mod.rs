@@ -201,7 +201,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/chats/{chat_id}/archive", post(archive_chat_endpoint))
         .route(
             "/messages/{message_id}/feedback",
-            put(submit_message_feedback),
+            put(submit_message_feedback).delete(delete_message_feedback),
         )
         .route("/files/{file_id}", get(get_file))
         .route("/files/{file_id}/preview", get(get_file_preview))
@@ -354,6 +354,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         starter_prompts,
         chat_messages,
         submit_message_feedback,
+        delete_message_feedback,
         recent_chats,
         generating_chats,
         frequent_assistants,
@@ -2195,6 +2196,64 @@ pub async fn submit_message_feedback(
     };
 
     Ok(Json(response))
+}
+
+/// Delete feedback for a message
+#[utoipa::path(
+    delete,
+    path = "/messages/{message_id}/feedback",
+    params(
+        ("message_id" = String, Path, description = "The ID of the message to delete feedback for")
+    ),
+    responses(
+        (status = NO_CONTENT, description = "Feedback successfully deleted"),
+        (status = BAD_REQUEST, description = "Invalid message ID"),
+        (status = NOT_FOUND, description = "Message or feedback not found"),
+        (status = FORBIDDEN, description = "User does not have permission to delete feedback for this message, or the editing time limit has been exceeded"),
+        (status = INTERNAL_SERVER_ERROR, description = "Server error while deleting feedback")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn delete_message_feedback(
+    State(app_state): State<AppState>,
+    Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
+    Path(message_id): Path<String>,
+) -> Result<StatusCode, StatusCode> {
+    let message_id = Uuid::parse_str(&message_id).map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    policy
+        .rebuild_data_if_needed_req(&app_state.db, &app_state.config)
+        .await?;
+
+    models::message_feedback::delete_feedback(
+        &app_state.db,
+        &policy,
+        &me_user.to_subject(),
+        &message_id,
+        &app_state.langfuse_client,
+        app_state.config.integrations.langfuse.enable_feedback,
+        app_state
+            .config
+            .frontend
+            .message_feedback_edit_time_limit_seconds,
+    )
+    .await
+    .map_err(|e| {
+        let error_msg = e.to_string().to_lowercase();
+        if error_msg.contains("not found") {
+            StatusCode::NOT_FOUND
+        } else if error_msg.contains("not authorized") || error_msg.contains("time limit exceeded")
+        {
+            StatusCode::FORBIDDEN
+        } else {
+            log_internal_server_error(e)
+        }
+    })?;
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[utoipa::path(get, path = "/messages", responses((status = OK, body = Vec<Message>)))]

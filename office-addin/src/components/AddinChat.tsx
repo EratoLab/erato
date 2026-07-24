@@ -723,6 +723,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
     feedbackViewDialogState,
     feedbackConfig,
     handleFeedbackSubmit,
+    handleFeedbackViewDialogRemove,
     closeFeedbackDialog,
     closeFeedbackViewDialog,
     handleFeedbackDialogSubmit,
@@ -1007,12 +1008,14 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
           isOpen={feedbackViewDialogState.isOpen}
           onClose={closeFeedbackViewDialog}
           onEdit={switchToEditMode}
+          onRemove={() => void handleFeedbackViewDialogRemove()}
           feedback={feedbackViewDialogState.feedback}
           canEdit={
             feedbackViewDialogState.feedback
               ? canEditFeedback(feedbackViewDialogState.feedback)
               : false
           }
+          error={feedbackViewDialogState.error}
         />
         <FeedbackCommentDialog
           isOpen={feedbackDialogState.isOpen}

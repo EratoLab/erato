@@ -684,3 +684,298 @@ async fn test_create_feedback_ignores_time_limit(pool: Pool<Postgres>) {
     assert_eq!(feedback["sentiment"], "positive");
     assert_eq!(feedback["comment"], "New feedback creation");
 }
+
+/// Test deleting feedback for a message.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+///
+/// # Test Behavior
+/// Verifies that feedback can be deleted, disappears from the messages list,
+/// and that new feedback can be submitted afterwards as a fresh record.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_delete_feedback(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let (chat_id, message_id) = create_chat_with_message(&server).await;
+
+    // Submit feedback
+    let feedback_body = json!({
+        "sentiment": "negative",
+        "comment": "Not helpful"
+    });
+
+    let response = server
+        .put(&format!("/api/v1beta/messages/{}/feedback", message_id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&feedback_body)
+        .await;
+
+    response.assert_status_ok();
+    let first_feedback: serde_json::Value = response.json();
+    let first_feedback_id = first_feedback["id"].as_str().unwrap().to_string();
+
+    // Delete the feedback
+    let response = server
+        .delete(&format!("/api/v1beta/messages/{}/feedback", message_id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+
+    response.assert_status(axum::http::StatusCode::NO_CONTENT);
+
+    // The messages list no longer contains feedback for the message
+    let response = server
+        .get(&format!("/api/v1beta/chats/{}/messages", chat_id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+
+    response.assert_status_ok();
+    let messages_response: serde_json::Value = response.json();
+    let messages = messages_response["messages"].as_array().unwrap();
+    let message = messages
+        .iter()
+        .find(|m| m["id"] == message_id)
+        .expect("Message not found");
+    assert!(message["feedback"].is_null());
+
+    // Submitting feedback again creates a fresh record
+    let feedback_body = json!({
+        "sentiment": "positive"
+    });
+
+    let response = server
+        .put(&format!("/api/v1beta/messages/{}/feedback", message_id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&feedback_body)
+        .await;
+
+    response.assert_status_ok();
+    let new_feedback: serde_json::Value = response.json();
+    assert_eq!(new_feedback["sentiment"], "positive");
+    assert_ne!(new_feedback["id"].as_str().unwrap(), first_feedback_id);
+}
+
+/// Test that users cannot delete feedback for messages in chats they don't own.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `authorization`
+/// - `uses-mocked-llm`
+///
+/// # Test Behavior
+/// Verifies that authorization prevents users from deleting feedback for other users' messages.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_delete_feedback_authorization(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    let user1_subject = TEST_USER_SUBJECT;
+    let _user1 = get_or_create_user(&app_state.db, TEST_USER_ISSUER, user1_subject, None)
+        .await
+        .expect("Failed to create user 1");
+
+    let user2_subject = "user-2-subject";
+    let _user2 = get_or_create_user(&app_state.db, TEST_USER_ISSUER, user2_subject, None)
+        .await
+        .expect("Failed to create user 2");
+
+    let user2_token = JwtTokenBuilder::new()
+        .issuer(TEST_USER_ISSUER)
+        .subject(user2_subject)
+        .build();
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // User 1 creates a message and submits feedback
+    let (_chat_id, message_id) = create_chat_with_message(&server).await;
+
+    let feedback_body = json!({
+        "sentiment": "positive"
+    });
+
+    server
+        .put(&format!("/api/v1beta/messages/{}/feedback", message_id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&feedback_body)
+        .await
+        .assert_status_ok();
+
+    // User 2 tries to delete user 1's feedback
+    let response = server
+        .delete(&format!("/api/v1beta/messages/{}/feedback", message_id))
+        .with_bearer_token(&user2_token)
+        .await;
+
+    response.assert_status(axum::http::StatusCode::FORBIDDEN);
+}
+
+/// Test that deleting non-existent feedback returns 404.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+///
+/// # Test Behavior
+/// Verifies that deleting feedback returns 404 when the message has no feedback,
+/// and when the message itself does not exist.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_delete_nonexistent_feedback(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // Message without any feedback
+    let (_chat_id, message_id) = create_chat_with_message(&server).await;
+
+    let response = server
+        .delete(&format!("/api/v1beta/messages/{}/feedback", message_id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+
+    response.assert_status(axum::http::StatusCode::NOT_FOUND);
+
+    // Non-existent message
+    let fake_message_id = "00000000-0000-0000-0000-000000000000";
+
+    let response = server
+        .delete(&format!(
+            "/api/v1beta/messages/{}/feedback",
+            fake_message_id
+        ))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+
+    response.assert_status(axum::http::StatusCode::NOT_FOUND);
+}
+
+/// Test deleting feedback within the configured time limit.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+///
+/// # Test Behavior
+/// Verifies that feedback can be deleted when within the configured edit time limit.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_delete_feedback_within_time_limit(pool: Pool<Postgres>) {
+    let (mut app_config, _server) = setup_mock_llm_server(None).await;
+    app_config.frontend.message_feedback_edit_time_limit_seconds = Some(60);
+
+    let app_state = test_app_state(app_config, pool).await;
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let (_chat_id, message_id) = create_chat_with_message(&server).await;
+
+    let feedback_body = json!({
+        "sentiment": "positive"
+    });
+
+    server
+        .put(&format!("/api/v1beta/messages/{}/feedback", message_id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&feedback_body)
+        .await
+        .assert_status_ok();
+
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    let response = server
+        .delete(&format!("/api/v1beta/messages/{}/feedback", message_id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+
+    response.assert_status(axum::http::StatusCode::NO_CONTENT);
+}
+
+/// Test deleting feedback after the configured time limit has expired.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+///
+/// # Test Behavior
+/// Verifies that feedback cannot be deleted after the configured edit time limit,
+/// returning 403 FORBIDDEN.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_delete_feedback_after_time_limit(pool: Pool<Postgres>) {
+    let (mut app_config, _server) = setup_mock_llm_server(None).await;
+    app_config.frontend.message_feedback_edit_time_limit_seconds = Some(2);
+
+    let app_state = test_app_state(app_config, pool).await;
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let (_chat_id, message_id) = create_chat_with_message(&server).await;
+
+    let feedback_body = json!({
+        "sentiment": "positive"
+    });
+
+    server
+        .put(&format!("/api/v1beta/messages/{}/feedback", message_id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&feedback_body)
+        .await
+        .assert_status_ok();
+
+    tokio::time::sleep(Duration::from_secs(3)).await;
+
+    let response = server
+        .delete(&format!("/api/v1beta/messages/{}/feedback", message_id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+
+    response.assert_status(axum::http::StatusCode::FORBIDDEN);
+}

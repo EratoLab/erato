@@ -2749,6 +2749,44 @@
             "bearer_auth": []
           }
         ]
+      },
+      "delete": {
+        "tags": [],
+        "summary": "Delete feedback for a message",
+        "operationId": "delete_message_feedback",
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "description": "The ID of the message to delete feedback for",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Feedback successfully deleted"
+          },
+          "400": {
+            "description": "Invalid message ID"
+          },
+          "403": {
+            "description": "User does not have permission to delete feedback for this message, or the editing time limit has been exceeded"
+          },
+          "404": {
+            "description": "Message or feedback not found"
+          },
+          "500": {
+            "description": "Server error while deleting feedback"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
       }
     },
     "/api/v1beta/prompt-optimizer": {

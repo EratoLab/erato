@@ -2,7 +2,10 @@ import { msg } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react";
 import { useState, useCallback } from "react";
 
-import { useSubmitMessageFeedback } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import {
+  useDeleteMessageFeedback,
+  useSubmitMessageFeedback,
+} from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useMessageFeedbackFeature } from "@/providers/FeatureConfigProvider";
 import { createLogger } from "@/utils/debugLogger";
 
@@ -29,6 +32,7 @@ interface FeedbackViewDialogState {
   isOpen: boolean;
   messageId: string | null;
   feedback: MessageFeedback | null;
+  error: string | null;
 }
 
 /**
@@ -76,6 +80,9 @@ export function useMessageFeedback(options: UseMessageFeedbackOptions = {}) {
   // API mutation for submitting feedback
   const submitFeedbackMutation = useSubmitMessageFeedback();
 
+  // API mutation for removing feedback
+  const deleteFeedbackMutation = useDeleteMessageFeedback();
+
   // State for feedback comment dialog (create or edit)
   const [feedbackDialogState, setFeedbackDialogState] =
     useState<FeedbackDialogState>({
@@ -93,6 +100,7 @@ export function useMessageFeedback(options: UseMessageFeedbackOptions = {}) {
       isOpen: false,
       messageId: null,
       feedback: null,
+      error: null,
     });
 
   /**
@@ -147,6 +155,44 @@ export function useMessageFeedback(options: UseMessageFeedbackOptions = {}) {
   );
 
   /**
+   * Removes previously submitted feedback for a message.
+   *
+   * @param messageId - The ID of the message whose feedback should be removed
+   * @returns Promise<{success: boolean, errorType?: string}> - Success status and optional error type
+   */
+  const handleFeedbackRemove = useCallback(
+    async (
+      messageId: string,
+    ): Promise<{ success: boolean; errorType?: string }> => {
+      try {
+        await deleteFeedbackMutation.mutateAsync({
+          pathParams: { messageId },
+        });
+        logger.log(`Feedback removed successfully for message ${messageId}`);
+        onFeedbackSuccess?.(messageId);
+        return { success: true };
+      } catch (error) {
+        logger.log(
+          `Failed to remove feedback for message ${messageId}:`,
+          error,
+        );
+        if (
+          error &&
+          typeof error === "object" &&
+          "status" in error &&
+          error.status === 403
+        ) {
+          // eslint-disable-next-line lingui/no-unlocalized-strings -- error type identifier, not user-facing
+          return { success: false, errorType: "time_limit_exceeded" };
+        }
+
+        return { success: false, errorType: "unknown" };
+      }
+    },
+    [deleteFeedbackMutation, onFeedbackSuccess],
+  );
+
+  /**
    * Closes the feedback comment dialog and resets state.
    */
   const closeFeedbackDialog = useCallback(() => {
@@ -168,8 +214,52 @@ export function useMessageFeedback(options: UseMessageFeedbackOptions = {}) {
       isOpen: false,
       messageId: null,
       feedback: null,
+      error: null,
     });
   }, []);
+
+  /**
+   * Removes the feedback currently shown in the view dialog.
+   * Closes the dialog on success, shows an error inside it otherwise.
+   */
+  const handleFeedbackViewDialogRemove = useCallback(async () => {
+    if (!feedbackViewDialogState.messageId) {
+      return;
+    }
+
+    const result = await handleFeedbackRemove(
+      feedbackViewDialogState.messageId,
+    );
+
+    if (result.success) {
+      closeFeedbackViewDialog();
+      return;
+    }
+
+    setFeedbackViewDialogState((prev) => ({
+      ...prev,
+      error:
+        result.errorType === "time_limit_exceeded"
+          ? _(
+              msg({
+                id: "feedback.error.time_limit_exceeded",
+                message:
+                  "The editing window has expired. Feedback can no longer be modified.",
+              }),
+            )
+          : _(
+              msg({
+                id: "feedback.error.remove_failed",
+                message: "Failed to remove feedback. Please try again.",
+              }),
+            ),
+    }));
+  }, [
+    feedbackViewDialogState.messageId,
+    handleFeedbackRemove,
+    closeFeedbackViewDialog,
+    _,
+  ]);
 
   /**
    * Handles feedback dialog submission with an optional comment.
@@ -240,6 +330,7 @@ export function useMessageFeedback(options: UseMessageFeedbackOptions = {}) {
         isOpen: true,
         messageId,
         feedback,
+        error: null,
       });
     },
     [],
@@ -296,6 +387,8 @@ export function useMessageFeedback(options: UseMessageFeedbackOptions = {}) {
     feedbackViewDialogState,
     feedbackConfig,
     handleFeedbackSubmit,
+    handleFeedbackRemove,
+    handleFeedbackViewDialogRemove,
     closeFeedbackDialog,
     closeFeedbackViewDialog,
     handleFeedbackDialogSubmit,

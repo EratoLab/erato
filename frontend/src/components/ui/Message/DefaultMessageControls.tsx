@@ -70,6 +70,8 @@ export const DefaultMessageControls = memo(function DefaultMessageControls({
       const newState =
         initialFeedback.sentiment === "positive" ? "liked" : "disliked";
       setFeedbackState(newState);
+    } else {
+      setFeedbackState(null);
     }
   }, [initialFeedback]);
 

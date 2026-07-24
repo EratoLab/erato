@@ -569,6 +569,7 @@ export const Chat = ({
     feedbackViewDialogState,
     feedbackConfig,
     handleFeedbackSubmit,
+    handleFeedbackViewDialogRemove,
     closeFeedbackDialog,
     closeFeedbackViewDialog,
     handleFeedbackDialogSubmit,
@@ -866,12 +867,14 @@ export const Chat = ({
           isOpen={feedbackViewDialogState.isOpen}
           onClose={closeFeedbackViewDialog}
           onEdit={switchToEditMode}
+          onRemove={() => void handleFeedbackViewDialogRemove()}
           feedback={feedbackViewDialogState.feedback}
           canEdit={
             feedbackViewDialogState.feedback
               ? canEditFeedback(feedbackViewDialogState.feedback)
               : false
           }
+          error={feedbackViewDialogState.error}
         />
 
         {/* Render the Feedback Comment Dialog */}

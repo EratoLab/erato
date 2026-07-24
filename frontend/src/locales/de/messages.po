@@ -2081,6 +2081,11 @@ msgstr "Aktualisieren"
 
 #. js-lingui-explicit-id
 #: src/hooks/chat/useMessageFeedback.ts
+msgid "feedback.error.remove_failed"
+msgstr "Das Feedback konnte nicht entfernt werden. Bitte versuchen Sie es erneut."
+
+#. js-lingui-explicit-id
+#: src/hooks/chat/useMessageFeedback.ts
 msgid "feedback.error.time_limit_exceeded"
 msgstr "Das Bearbeitungsfenster ist abgelaufen. Das Feedback kann nicht mehr geändert werden."
 
@@ -2094,6 +2099,11 @@ msgstr "Sie fanden dies hilfreich"
 #: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "feedback.like.aria"
 msgstr "Nachricht gefällt mir"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackViewDialog.tsx
+msgid "feedback.remove"
+msgstr "Entfernen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/FeedbackViewDialog.tsx
