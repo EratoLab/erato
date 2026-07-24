@@ -74,6 +74,23 @@ test("shows a warning when typed text approaches the token limit", async ({
   await expect(page.getByText(/using \d+% of.*token limit/i)).toBeVisible();
 });
 
+test("styles the warning as an error when critically close to the limit", async ({
+  page,
+}) => {
+  const repeats = await calibrateRepeats(page, 0.97);
+  const estimate = await fillAndReadEstimate(page, SENTENCE.repeat(repeats));
+  expect(estimate.remaining_tokens).toBeGreaterThan(0);
+  expect(estimate.total_tokens / estimate.max_tokens).toBeGreaterThan(0.95);
+
+  const alert = page
+    .getByRole("alert")
+    .filter({ hasText: "Approaching Token Limit" });
+  await expect(alert).toBeVisible();
+  // The critical band (>= 95%, not exceeded) is distinguished from the plain
+  // warning only by error styling; the theme class is the observable.
+  await expect(alert).toHaveClass(/text-theme-error-fg/);
+});
+
 test("shows an error when typed text exceeds the token limit", async ({
   page,
 }) => {

@@ -38,12 +38,17 @@ const buildAssistantName = (prefix: string) => {
 };
 
 test.describe("Assistant file source selector overrides", () => {
-  test("shows default assistant file source selector behavior", async ({
+  // Without cloud providers or a registry override the assistant chat falls
+  // back to the plain upload button; see the note in the basic variant spec.
+  test("falls back to the plain upload button without providers or overrides", async ({
     page,
   }) => {
     const assistantName = buildAssistantName("FileSelector-default");
     await createAssistantAndOpenChat(page, assistantName);
 
+    await expect(
+      page.getByRole("button", { name: "Upload Files" }),
+    ).toBeVisible();
     await expect(
       page.getByRole("button", { name: /upload from computer/i }),
     ).toHaveCount(0);
