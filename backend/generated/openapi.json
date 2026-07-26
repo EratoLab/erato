@@ -3119,6 +3119,73 @@
         ]
       }
     },
+    "/api/v1beta/share-links/{share_link_id}/messages": {
+      "get": {
+        "tags": [
+          "share_links"
+        ],
+        "operationId": "share_link_messages",
+        "parameters": [
+          {
+            "name": "share_link_id",
+            "in": "path",
+            "description": "The share link ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of messages to return per page. Defaults to 100 if not provided. Larger values may impact performance.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Number of messages to skip for pagination. Defaults to 0 if not provided.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved active-thread messages for the shared chat",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatMessagesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid share link ID"
+          },
+          "404": {
+            "description": "Share link not found, disabled, or unavailable"
+          },
+          "500": {
+            "description": "Server error while retrieving messages"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/token_usage/estimate": {
       "post": {
         "tags": [

@@ -288,6 +288,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/share-links", get(get_share_link_for_resource))
         .route("/share-links", put(set_share_link))
         .route("/share-links/{share_link_id}", get(resolve_share_link))
+        .route(
+            "/share-links/{share_link_id}/messages",
+            get(share_links::share_link_messages),
+        )
         // Sharepoint/OneDrive integration routes
         .route(
             "/integrations/sharepoint/all-drives",
@@ -409,6 +413,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         share_links::get_share_link_for_resource,
         share_links::set_share_link,
         share_links::resolve_share_link,
+        share_links::share_link_messages,
         ms_office::ews_proxy,
         sharepoint::all_drives,
         sharepoint::get_drive_root,
@@ -2326,6 +2331,27 @@ pub async fn chat_messages(
         }
     })?;
 
+    let response =
+        assemble_chat_messages_response(&app_state, &policy, &me_user, chat_id, messages, stats)
+            .await?;
+
+    Ok(Json(response))
+}
+
+/// Assemble the `ChatMessagesResponse` DTO from a list of message models.
+///
+/// This performs the shared assembly used by both the owner-facing chat
+/// messages route and the share-link messages route: feedback lookup, file-id
+/// collection, capability flags, file-URL map, per-message conversion with
+/// feedback + error reports, presigned image-URL regeneration, and stats.
+async fn assemble_chat_messages_response(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    chat_id: Uuid,
+    messages: Vec<messages::Model>,
+    stats: models::message::MessageListStats,
+) -> Result<ChatMessagesResponse, StatusCode> {
     // Get feedback for all messages
     let message_ids: Vec<Uuid> = messages.iter().map(|m| m.id).collect();
     let feedbacks =
@@ -2347,7 +2373,7 @@ pub async fn chat_messages(
 
     // Determine if any available model supports image understanding
     let available_models = app_state
-        .available_models(&policy, &me_user.to_subject(), &me_user.groups)
+        .available_models(policy, &me_user.to_subject(), &me_user.groups)
         .await
         .map_err(log_internal_server_error)?;
     let (supports_image_understanding, supports_audio_input) =
@@ -2370,7 +2396,7 @@ pub async fn chat_messages(
     for file_id in all_file_ids {
         if let Ok(file_upload) = models::file_upload::get_file_upload_with_url_and_token(
             &app_state.db,
-            &policy,
+            policy,
             &me_user.to_subject(),
             &file_id,
             &app_state.file_storage_providers,
@@ -2448,7 +2474,7 @@ pub async fn chat_messages(
     }
 
     // Create the response with messages and stats
-    let response = ChatMessagesResponse {
+    Ok(ChatMessagesResponse {
         messages: response_messages,
         stats: ChatMessageStats {
             total_count: stats.total_count,
@@ -2456,9 +2482,7 @@ pub async fn chat_messages(
             returned_count: stats.returned_count,
             has_more: stats.has_more,
         },
-    };
-
-    Ok(Json(response))
+    })
 }
 
 #[utoipa::path(

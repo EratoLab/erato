@@ -5832,6 +5832,138 @@ export const useResolveShareLink = <TData = Schemas.ResolveShareLinkResponse,>(
   });
 };
 
+export type ShareLinkMessagesPathParams = {
+  /**
+   * The share link ID
+   */
+  shareLinkId: string;
+};
+
+export type ShareLinkMessagesQueryParams = {
+  /**
+   * Maximum number of messages to return per page. Defaults to 100 if not provided. Larger values may impact performance.
+   *
+   * @format int64
+   * @minimum 0
+   */
+  limit?: number;
+  /**
+   * Number of messages to skip for pagination. Defaults to 0 if not provided.
+   *
+   * @format int64
+   * @minimum 0
+   */
+  offset?: number;
+};
+
+export type ShareLinkMessagesError = Fetcher.ErrorWrapper<undefined>;
+
+export type ShareLinkMessagesVariables = {
+  pathParams: ShareLinkMessagesPathParams;
+  queryParams?: ShareLinkMessagesQueryParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchShareLinkMessages = (
+  variables: ShareLinkMessagesVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ChatMessagesResponse,
+    ShareLinkMessagesError,
+    undefined,
+    {},
+    ShareLinkMessagesQueryParams,
+    ShareLinkMessagesPathParams
+  >({
+    url: "/api/v1beta/share-links/{shareLinkId}/messages",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function shareLinkMessagesQuery(variables: ShareLinkMessagesVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<Schemas.ChatMessagesResponse>;
+};
+
+export function shareLinkMessagesQuery(
+  variables: ShareLinkMessagesVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.ChatMessagesResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function shareLinkMessagesQuery(
+  variables: ShareLinkMessagesVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/share-links/{shareLinkId}/messages",
+      operationId: "shareLinkMessages",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchShareLinkMessages(variables, signal),
+  };
+}
+
+export const useSuspenseShareLinkMessages = <
+  TData = Schemas.ChatMessagesResponse,
+>(
+  variables: ShareLinkMessagesVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.ChatMessagesResponse,
+      ShareLinkMessagesError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.ChatMessagesResponse,
+    ShareLinkMessagesError,
+    TData
+  >({
+    ...shareLinkMessagesQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useShareLinkMessages = <TData = Schemas.ChatMessagesResponse,>(
+  variables: ShareLinkMessagesVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.ChatMessagesResponse,
+      ShareLinkMessagesError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.ChatMessagesResponse,
+    ShareLinkMessagesError,
+    TData
+  >({
+    ...shareLinkMessagesQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type TokenUsageEstimateError = Fetcher.ErrorWrapper<undefined>;
 
 export type TokenUsageEstimateVariables = {
@@ -6350,6 +6482,11 @@ export type QueryOperation =
       path: "/api/v1beta/share-links/{shareLinkId}";
       operationId: "resolveShareLink";
       variables: ResolveShareLinkVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/share-links/{shareLinkId}/messages";
+      operationId: "shareLinkMessages";
+      variables: ShareLinkMessagesVariables | reactQuery.SkipToken;
     }
   | {
       path: "/health";

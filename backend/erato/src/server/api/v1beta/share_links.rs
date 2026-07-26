@@ -241,6 +241,80 @@ pub async fn resolve_share_link(
     }))
 }
 
+#[utoipa::path(
+    get,
+    path = "/share-links/{share_link_id}/messages",
+    params(
+        ("share_link_id" = String, Path, description = "The share link ID"),
+        ("limit" = Option<u64>, Query, description = "Maximum number of messages to return per page. Defaults to 100 if not provided. Larger values may impact performance."),
+        ("offset" = Option<u64>, Query, description = "Number of messages to skip for pagination. Defaults to 0 if not provided.")
+    ),
+    responses(
+        (status = OK, body = super::ChatMessagesResponse, description = "Successfully retrieved active-thread messages for the shared chat"),
+        (status = BAD_REQUEST, description = "Invalid share link ID"),
+        (status = NOT_FOUND, description = "Share link not found, disabled, or unavailable"),
+        (status = INTERNAL_SERVER_ERROR, description = "Server error while retrieving messages")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn share_link_messages(
+    State(app_state): State<AppState>,
+    Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
+    Path(share_link_id): Path<String>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<super::ChatMessagesResponse>, StatusCode> {
+    let share_link_id = Uuid::parse_str(&share_link_id).map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    policy
+        .rebuild_data_if_needed_req(&app_state.db, &app_state.config)
+        .await?;
+
+    // The share link only identifies the chat. Whether it grants access is
+    // decided by the policy through `Action::SharedRead`, which requires the
+    // sharing feature on, the link enabled, and the chat not archived.
+    let share_link = share_link::get_share_link_by_id(&app_state.db, &share_link_id)
+        .await
+        .map_err(|_| StatusCode::NOT_FOUND)?;
+
+    if share_link.resource_type != "chat" {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    let chat_id = Uuid::parse_str(&share_link.resource_id).map_err(|_| StatusCode::NOT_FOUND)?;
+
+    // Parse pagination parameters
+    let limit = params.get("limit").and_then(|l| l.parse::<u64>().ok());
+    let offset = params.get("offset").and_then(|o| o.parse::<u64>().ok());
+
+    let (messages, stats) = crate::models::message::get_shared_chat_messages(
+        &app_state.db,
+        &policy,
+        &me_user.to_subject(),
+        &chat_id,
+        limit,
+        offset,
+    )
+    .await
+    .map_err(|e| {
+        let s = e.to_string();
+        if s.contains("not authorized") {
+            // A denied `shared_read` is indistinguishable from a missing link.
+            StatusCode::NOT_FOUND
+        } else {
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    })?;
+
+    let response = super::assemble_chat_messages_response(
+        &app_state, &policy, &me_user, chat_id, messages, stats,
+    )
+    .await?;
+
+    Ok(Json(response))
+}
+
 async fn fetch_owner_profile_photo(
     app_state: &AppState,
     me_user: &MeProfile,

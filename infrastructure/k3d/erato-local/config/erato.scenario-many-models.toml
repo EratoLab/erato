@@ -132,5 +132,8 @@ rule_type = "allow-for-group-members"
 mcp_server_ids = ["mock_mcp_unavailable_500"]
 groups = ["mcp-unavailable-resilience"]
 
+[chat_sharing]
+enabled = true
+
 [frontend.additional_environment]
 K3D_TEST_SCENARIO = "many-models"

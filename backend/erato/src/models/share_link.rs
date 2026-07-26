@@ -146,6 +146,21 @@ pub async fn set_share_link_enabled(
     Ok(created)
 }
 
+/// Look up a share link by ID without any validity checks.
+///
+/// Whether the link actually grants access (sharing feature enabled, link
+/// enabled, resource not archived) is the policy's decision — callers resolve
+/// the target resource from the returned row and authorize against that.
+pub async fn get_share_link_by_id(
+    conn: &DatabaseConnection,
+    share_link_id: &Uuid,
+) -> Result<share_links::Model, Report> {
+    ShareLinks::find_by_id(*share_link_id)
+        .one(conn)
+        .await?
+        .wrap_err("Share link not found")
+}
+
 pub async fn get_active_share_link_by_id(
     conn: &DatabaseConnection,
     config: &crate::config::AppConfig,
