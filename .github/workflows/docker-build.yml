@@ -40,6 +40,7 @@ on:
       - '**/Dockerfile.*'
 
 env:
+  K3D_VERSION: v5.9.0
   REGISTRY: registry.eratolabs.com
   BACKEND_IMAGE_NAME: erato/backend
   MOCK_LLM_SERVER_IMAGE_NAME: erato/mock-llm-server
@@ -496,7 +497,11 @@ jobs:
           password: ${{ secrets.ERATOLABS_REGISTRY_PASSWORD }}
 
       - name: Install k3d
-        run: curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+        run: |
+          curl --fail --silent --show-error --location \
+            "https://raw.githubusercontent.com/k3d-io/k3d/${K3D_VERSION}/install.sh" |
+            TAG="${K3D_VERSION}" bash
+          k3d version
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
