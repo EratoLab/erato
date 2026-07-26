@@ -581,7 +581,7 @@ export default function AssistantHubSubmitPage() {
               <div className="flex justify-end gap-3">
                 <Button
                   variant="secondary"
-                  onClick={() => navigate("/assistants")}
+                  onClick={() => navigate("/assistants/created")}
                 >
                   {t({ id: "common.cancel", message: "Cancel" })}
                 </Button>

@@ -81,7 +81,7 @@ test.describe("Assistant Management", () => {
     );
 
     // Should redirect to assistants list
-    await page.waitForURL("/assistants", { timeout: 5000 });
+    await page.waitForURL("/assistants/created", { timeout: 5000 });
 
     // Verify the assistant appears in the list
     await expect(
@@ -129,7 +129,7 @@ test.describe("Assistant Management", () => {
     await page.getByRole("button", { name: /create assistant/i }).click();
 
     // Wait for redirect
-    await page.waitForURL("/assistants", { timeout: 5000 });
+    await page.waitForURL("/assistants/created", { timeout: 5000 });
 
     // Find the assistant button by name
     const assistantButton = page.getByRole("button", {
@@ -324,7 +324,7 @@ test.describe("Assistant Management", () => {
     await expect(page.getByText(/sample.*compressed.*pdf/i)).toBeVisible();
 
     await page.getByRole("button", { name: /create assistant/i }).click();
-    await page.waitForURL("/assistants");
+    await page.waitForURL("/assistants/created");
 
     // Start chat with this assistant
     const assistantButton = page.getByRole("button", {
@@ -381,7 +381,7 @@ test.describe.serial("Pirate Assistant Lifecycle", () => {
       ).toBeVisible({ timeout: 5000 });
 
       // Should redirect to assistants list
-      await page.waitForURL("/assistants", { timeout: 5000 });
+      await page.waitForURL("/assistants/created", { timeout: 5000 });
 
       // Verify the assistant appears in the list
       await expect(
@@ -395,7 +395,7 @@ test.describe.serial("Pirate Assistant Lifecycle", () => {
     { tag: TAG_CI },
     async ({ page }) => {
       // Navigate to assistants page
-      await page.goto("/assistants");
+      await page.goto("/assistants/created");
 
       // Find and click the Pirate assistant to start a chat using the unique name
       const pirateButton = page.getByRole("button", {
@@ -434,7 +434,7 @@ test.describe.serial("Pirate Assistant Lifecycle", () => {
     { tag: TAG_CI },
     async ({ page }) => {
       // Navigate to the assistants page
-      await page.goto("/assistants");
+      await page.goto("/assistants/created");
 
       // Find the Pirate assistant card using data-testid and the unique name
       const assistantCard = page

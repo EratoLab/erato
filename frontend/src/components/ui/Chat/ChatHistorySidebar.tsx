@@ -39,7 +39,6 @@ import {
   SidebarToggleIcon,
   SearchIcon,
   EditIcon,
-  FileTextIcon,
   ResolvedIcon,
   ChevronRightIcon,
 } from "../icons";
@@ -399,10 +398,11 @@ const SearchNavigationItem = memo<{
 SearchNavigationItem.displayName = "SearchNavigationItem";
 
 const AssistantsNavigationItem = memo<{
+  href: string;
   onAssistants?: () => void;
   isOnAssistantsPage?: boolean;
   isSlimMode?: boolean;
-}>(({ onAssistants, isOnAssistantsPage, isSlimMode = false }) => {
+}>(({ href, onAssistants, isOnAssistantsPage, isSlimMode = false }) => {
   const assistantsIconId = useThemedIcon("navigation", "assistants");
 
   return (
@@ -438,7 +438,7 @@ const AssistantsNavigationItem = memo<{
         </InteractiveContainer>
       ) : (
         <a
-          href="/assistants"
+          href={href}
           onClick={(e) => {
             // Allow cmd/ctrl-click to open in new tab
             if (e.metaKey || e.ctrlKey) {
@@ -487,121 +487,6 @@ const AssistantsNavigationItem = memo<{
 
 // eslint-disable-next-line lingui/no-unlocalized-strings
 AssistantsNavigationItem.displayName = "AssistantsNavigationItem";
-
-const AssistantHubNavigationItem = memo<{
-  onAssistantHub?: () => void;
-  isOnAssistantHubPage?: boolean;
-  isSlimMode?: boolean;
-}>(({ onAssistantHub, isOnAssistantHubPage, isSlimMode = false }) => {
-  // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal theme icon identifiers, not user-facing text
-  const hubIconId = useThemedIcon("navigation", "assistantHub");
-
-  return (
-    <div className="px-2 py-1">
-      {isOnAssistantHubPage ? (
-        <InteractiveContainer
-          useDiv={true}
-          interactive={false}
-          className={clsx(
-            "flex items-center text-left",
-            isSlimMode ? "min-w-[44px] px-3 py-2" : "gap-3 px-3 py-2",
-          )}
-          style={activeSidebarItemStyle}
-          aria-label={t({
-            id: "assistantHub.title",
-            message: "Assistant Hub",
-          })}
-          title={
-            isSlimMode
-              ? t({
-                  id: "assistantHub.title",
-                  message: "Assistant Hub",
-                })
-              : undefined
-          }
-          data-ui="sidebar-assistant-hub-item"
-        >
-          <ResolvedIcon
-            iconId={hubIconId}
-            fallbackIcon={FileTextIcon}
-            className="size-4 shrink-0 text-theme-fg-secondary"
-          />
-          <span
-            className={clsx(
-              "whitespace-nowrap font-medium text-theme-fg-primary transition-opacity duration-150",
-              isSlimMode
-                ? "w-0 overflow-hidden opacity-0"
-                : "opacity-100 delay-150",
-            )}
-          >
-            {t({
-              id: "assistantHub.title",
-              message: "Assistant Hub",
-            })}
-          </span>
-        </InteractiveContainer>
-      ) : (
-        <a
-          href="/assistant-hub"
-          onClick={(e) => {
-            if (e.metaKey || e.ctrlKey) {
-              return;
-            }
-            e.preventDefault();
-            logger.log("[ASSISTANT_HUB_FLOW] Hub navigation item clicked");
-            onAssistantHub?.();
-          }}
-          className={sidebarLinkClassName}
-          aria-label={t({
-            id: "assistantHub.title",
-            message: "Assistant Hub",
-          })}
-          title={
-            isSlimMode
-              ? t({
-                  id: "assistantHub.title",
-                  message: "Assistant Hub",
-                })
-              : undefined
-          }
-        >
-          <InteractiveContainer
-            useDiv={true}
-            showFocusRing={false}
-            className={clsx(
-              "theme-transition flex items-center text-left hover:bg-[var(--theme-shell-sidebar-hover)]",
-              isSlimMode ? "min-w-[44px] px-3 py-2" : "gap-3 px-3 py-2",
-            )}
-            style={sidebarItemStyle}
-            data-ui="sidebar-assistant-hub-item"
-          >
-            <ResolvedIcon
-              iconId={hubIconId}
-              fallbackIcon={FileTextIcon}
-              className="size-4 shrink-0 text-theme-fg-secondary"
-            />
-            <span
-              className={clsx(
-                "whitespace-nowrap font-medium text-theme-fg-primary transition-opacity duration-150",
-                isSlimMode
-                  ? "w-0 overflow-hidden opacity-0"
-                  : "opacity-100 delay-150",
-              )}
-            >
-              {t({
-                id: "assistantHub.title",
-                message: "Assistant Hub",
-              })}
-            </span>
-          </InteractiveContainer>
-        </a>
-      )}
-    </div>
-  );
-});
-
-// eslint-disable-next-line lingui/no-unlocalized-strings
-AssistantHubNavigationItem.displayName = "AssistantHubNavigationItem";
 
 const CollapsibleSection = memo<{
   title: string;
@@ -711,10 +596,10 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     const isOnSearchPage = location.pathname === "/search";
     // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal route path
     const assistantsRoute = "/assistants";
-    const isOnAssistantsPage = location.pathname.startsWith(assistantsRoute);
     // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal route path
     const assistantHubRoute = "/assistant-hub";
-    const isOnAssistantHubPage =
+    const isOnAssistantsPage =
+      location.pathname.startsWith(assistantsRoute) ||
       location.pathname.startsWith(assistantHubRoute);
 
     // Get sidebar configuration
@@ -746,10 +631,14 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       showRecentItems: assistantsShowRecent,
       showRecentItemsCollapsible: assistantsShowRecentCollapsible,
     } = useAssistantsFeature();
-    const { data: assistantHubConfig } = useAssistantHubConfig(
-      {},
-      { enabled: assistantsEnabled },
-    );
+    const { data: assistantHubConfig, isLoading: isLoadingAssistantHubConfig } =
+      useAssistantHubConfig({});
+    const assistantsLandingRoute = assistantHubConfig?.enabled
+      ? assistantHubRoute
+      : assistantsRoute;
+    const showAssistantsNavigation =
+      !isLoadingAssistantHubConfig &&
+      (assistantsEnabled || assistantHubConfig?.enabled === true);
     const [isRecentChatsExpanded, setIsRecentChatsExpanded] = usePersistedState(
       RECENT_CHATS_SECTION_EXPANDED_STORAGE_KEY,
       true,
@@ -891,13 +780,8 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
 
     const handleAssistantsClick = useCallback(() => {
       logger.log("[ASSISTANTS_FLOW] Navigating to assistants page");
-      navigate(assistantsRoute);
-    }, [assistantsRoute, navigate]);
-
-    const handleAssistantHubClick = useCallback(() => {
-      logger.log("[ASSISTANT_HUB_FLOW] Navigating to assistant hub page");
-      navigate(assistantHubRoute);
-    }, [assistantHubRoute, navigate]);
+      navigate(assistantsLandingRoute);
+    }, [assistantsLandingRoute, navigate]);
 
     const expandedSidebarWidth = useMemo(
       () =>
@@ -997,18 +881,11 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                 isSlimMode={isSlimMode}
               />
 
-              {assistantsEnabled && (
+              {showAssistantsNavigation && (
                 <AssistantsNavigationItem
+                  href={assistantsLandingRoute}
                   onAssistants={handleAssistantsClick}
                   isOnAssistantsPage={isOnAssistantsPage}
-                  isSlimMode={isSlimMode}
-                />
-              )}
-
-              {assistantsEnabled && assistantHubConfig?.enabled && (
-                <AssistantHubNavigationItem
-                  onAssistantHub={handleAssistantHubClick}
-                  isOnAssistantHubPage={isOnAssistantHubPage}
                   isSlimMode={isSlimMode}
                 />
               )}

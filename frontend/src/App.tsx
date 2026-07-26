@@ -13,10 +13,9 @@ import AssistantCreatePage from "./pages/AssistantCreatePage";
 import AssistantEditPage from "./pages/AssistantEditPage";
 import AssistantHubDetailPage from "./pages/AssistantHubDetailPage";
 import AssistantHubMyPage from "./pages/AssistantHubMyPage";
-import AssistantHubPage from "./pages/AssistantHubPage";
 import AssistantHubReviewPage from "./pages/AssistantHubReviewPage";
 import AssistantHubSubmitPage from "./pages/AssistantHubSubmitPage";
-import AssistantsListPage from "./pages/AssistantsListPage";
+import AssistantsPage from "./pages/AssistantsPage";
 import ChatDetailPage from "./pages/ChatDetailPage";
 import DesktopSidecarSetupPage from "./pages/DesktopSidecarSetupPage";
 import HomePage from "./pages/HomePage";
@@ -94,12 +93,16 @@ function AppRoutes() {
         </Route>
         {/* Assistants section with its own layout */}
         <Route path="assistants" element={<AssistantsLayout />}>
-          <Route index element={<AssistantsListPage />} />
+          <Route index element={<AssistantsPage view="shared_with_user" />} />
+          <Route
+            path="created"
+            element={<AssistantsPage view="owned_by_user" />}
+          />
           <Route path="new" element={<AssistantCreatePage />} />
           <Route path=":id/edit" element={<AssistantEditPage />} />
         </Route>
         <Route path="assistant-hub" element={<AssistantsLayout />}>
-          <Route index element={<AssistantHubPage />} />
+          <Route index element={<AssistantsPage view="hub" />} />
           <Route path="my" element={<AssistantHubMyPage />} />
           <Route path="my/:versionId" element={<AssistantHubMyPage />} />
           <Route path="review" element={<AssistantHubReviewPage />} />
@@ -107,7 +110,10 @@ function AppRoutes() {
             path="review/:versionId"
             element={<AssistantHubReviewPage />}
           />
-          <Route path="category/:categoryId" element={<AssistantHubPage />} />
+          <Route
+            path="category/:categoryId"
+            element={<AssistantsPage view="hub" />}
+          />
           <Route
             path="submit/:sourceAssistantId"
             element={<AssistantHubSubmitPage />}

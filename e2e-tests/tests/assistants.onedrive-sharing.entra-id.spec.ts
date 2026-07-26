@@ -234,7 +234,7 @@ test(
       user1Page.getByText(/assistant created successfully/i),
     ).toBeVisible({ timeout: 15000 });
 
-    await user1Page.waitForURL("/assistants", { timeout: 15000 });
+    await user1Page.waitForURL("/assistants/created", { timeout: 15000 });
 
     await shareAssistantWithUser(user1Page, assistantName);
 

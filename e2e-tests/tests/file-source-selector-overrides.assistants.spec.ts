@@ -17,7 +17,7 @@ const createAssistantAndOpenChat = async (
   await expect(page.getByText(/assistant created successfully/i)).toBeVisible({
     timeout: 5000,
   });
-  await page.waitForURL("/assistants", { timeout: 5000 });
+  await page.waitForURL("/assistants/created", { timeout: 5000 });
 
   const assistantButton = page.getByRole("button", {
     name: new RegExp(assistantName),
