@@ -233,15 +233,6 @@ allow if {
 	data.resource_attributes[resource_kind_chat][input.resource_id].owner_id == input.subject_id
 }
 
-# A logged-in user can read a chat when chat sharing is enabled and the chat has an active share link.
-allow if {
-	input.subject_kind == subject_kind_user
-	input.subject_id != not_logged_in
-	input.resource_kind == resource_kind_chat
-	input.action == action_read
-	can_read_shared_chat(input.resource_id)
-}
-
 # A logged-in user can read the shared view of a chat when chat sharing is
 # enabled and the chat has an active share link.
 allow if {

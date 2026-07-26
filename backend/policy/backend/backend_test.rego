@@ -258,8 +258,11 @@ test_user_cannot_read_other_users_chat if {
 		with data.config as chat_sharing_enabled_config
 }
 
-test_user_can_read_shared_chat_when_feature_enabled if {
-	backend.allow with input as {
+# A share link must NOT grant generic chat read. Shared reads go only through the
+# dedicated share-links messages route, which authorizes via shared_read and
+# serves the active thread only.
+test_share_link_does_not_grant_generic_chat_read if {
+	not backend.allow with input as {
 		"subject_kind": "user",
 		"subject_id": user_2_id,
 		"resource_kind": "chat",
@@ -413,6 +416,23 @@ test_user_can_read_linked_file_via_shared_chat if {
 		"action": "read",
 	} with data.resource_attributes as resource_attributes
 		with data.share_links as share_links
+		with data.config as chat_sharing_enabled_config
+}
+
+test_user_cannot_read_linked_file_via_shared_chat_when_share_link_disabled if {
+	not backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_2_id,
+		"resource_kind": "file_upload",
+		"resource_id": file_upload_2_id,
+		"action": "read",
+	} with data.resource_attributes as resource_attributes
+		with data.share_links as [{
+			"id": "share-link-1",
+			"resource_type": "chat",
+			"resource_id": chat_1_id,
+			"enabled": false,
+		}]
 		with data.config as chat_sharing_enabled_config
 }
 
