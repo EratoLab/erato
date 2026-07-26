@@ -133,7 +133,7 @@ export default function AssistantEditPage() {
 
       // Navigate back to assistants list after a short delay
       setTimeout(() => {
-        navigate("/assistants");
+        navigate("/assistants/created");
       }, 1500);
     } catch (error) {
       console.error("Failed to update assistant:", error);
@@ -147,7 +147,7 @@ export default function AssistantEditPage() {
   };
 
   const handleCancel = () => {
-    navigate("/assistants");
+    navigate("/assistants/created");
   };
 
   // Loading state

@@ -73,7 +73,7 @@ msgstr "Assistant created successfully!"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantCreatePage.tsx
-#: src/pages/AssistantsListPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistant.create.title"
 msgstr "Create Assistant"
 
@@ -223,8 +223,8 @@ msgstr "Contact this creator and ask them to share the files:"
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubDetailPage.tsx
 #: src/pages/AssistantHubMyPage.tsx
-#: src/pages/AssistantHubPage.tsx
 #: src/pages/AssistantHubReviewPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistantHub.action.backToHub"
 msgstr "Back to hub"
 
@@ -239,8 +239,8 @@ msgid "assistantHub.action.backToReviewQueue"
 msgstr "Back to review queue"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantHubPage.tsx
 #: src/pages/AssistantHubReviewPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistantHub.action.mySubmissions"
 msgstr "My submissions"
 
@@ -251,7 +251,7 @@ msgstr "Refresh"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
-#: src/pages/AssistantHubPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistantHub.action.reviewQueue"
 msgstr "Review queue"
 
@@ -262,12 +262,12 @@ msgstr "Start chat"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantEditPage.tsx
-#: src/pages/AssistantsListPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistantHub.action.submit"
 msgstr "Submit to Hub"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantHubPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistantHub.action.view"
 msgstr "View"
 
@@ -282,7 +282,7 @@ msgstr "By"
 #~ msgstr "Browse assistants by configured category"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantHubPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistantHub.categories.title"
 msgstr "Categories"
 
@@ -292,12 +292,12 @@ msgstr "Categories"
 #~ msgstr "All"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantHubPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistantHub.category.count.many"
 msgstr "{count} assistants"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantHubPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistantHub.category.count.one"
 msgstr "1 assistant"
 
@@ -312,22 +312,22 @@ msgstr "1 assistant"
 #~ msgstr "Filter assistant hub by category"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantHubPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistantHub.category.notFound.description"
 msgstr "This assistant hub category is not currently configured."
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantHubPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistantHub.category.notFound.title"
 msgstr "Category not found"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantHubPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistantHub.category.results"
 msgstr "Assistants"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantHubPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistantHub.category.subtitle"
 msgstr "Browse assistants filtered by category"
 
@@ -413,28 +413,27 @@ msgid "assistantHub.diff.previous"
 msgstr "Previous"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantHubPage.tsx
 #: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.disabled"
 msgstr "The assistant hub is not enabled."
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantHubPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistantHub.empty.description"
 msgstr "Accepted and published assistant versions will appear here."
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantHubPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistantHub.empty.title"
 msgstr "No published assistants yet"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantHubPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistantHub.error.load"
 msgstr "Failed to load assistant hub."
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantHubPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistantHub.featured.empty"
 msgstr "No assistants are featured yet."
 
@@ -444,12 +443,12 @@ msgstr "No assistants are featured yet."
 #~ msgstr "Reviewer-highlighted assistants"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantHubPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistantHub.featured.title"
 msgstr "Featured assistants"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantHubPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistantHub.loading"
 msgstr "Loading assistant hub..."
 
@@ -799,27 +798,27 @@ msgid "assistantHub.reviews.visibleComments"
 msgstr "Visible comments"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantHubPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistantHub.search.aria"
 msgstr "Search assistant hub"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantHubPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistantHub.search.empty.description"
 msgstr "Try a different search term."
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantHubPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistantHub.search.empty.title"
 msgstr "No matching assistants"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantHubPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistantHub.search.placeholder"
 msgstr "Search assistants..."
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantHubPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistantHub.search.results"
 msgstr "Search results"
 
@@ -974,13 +973,12 @@ msgid "assistantHub.submit.versionNumber"
 msgstr "Version number"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantHubPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistantHub.subtitle"
 msgstr "Browse reviewed assistants that are available to your organization"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistorySidebar.tsx
-#: src/pages/AssistantHubPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistantHub.title"
 msgstr "Assistant Hub"
 
@@ -998,117 +996,127 @@ msgid "assistantHub.version.label"
 msgstr "Version {versionNumber}"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantsListPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistants.action.archive"
 msgstr "Archive"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantsListPage.tsx
-msgid "assistants.action.createFirst"
-msgstr "Create Your First Assistant"
+#: src/pages/AssistantsPage.tsx
+#~ msgid "assistants.action.createFirst"
+#~ msgstr "Create Your First Assistant"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantsListPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistants.action.edit"
 msgstr "Edit"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantsListPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistants.action.newChat"
 msgstr "New Chat"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantsListPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistants.archive.confirmMessage"
 msgstr "Are you sure you want to archive this assistant?"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantsListPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistants.archive.confirmTitle"
 msgstr "Confirm Archive"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantsListPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistants.card.updated"
 msgstr "Updated {updatedRelativeTime}"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantsListPage.tsx
-msgid "assistants.empty.all"
-msgstr "No assistants yet"
+#: src/pages/AssistantsPage.tsx
+#~ msgid "assistants.disabled"
+#~ msgstr "Assistants are not enabled."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsListPage.tsx
+#~ msgid "assistants.empty.all"
+#~ msgstr "No assistants yet"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsPage.tsx
 msgid "assistants.empty.createFirst"
 msgstr "Create your first assistant to get started"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantsListPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistants.empty.owned_by_user"
 msgstr "You haven't created any assistants yet"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantsListPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistants.empty.shared_with_user"
 msgstr "No assistants have been shared with you"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantsListPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistants.empty.shared_with_user.description"
 msgstr "Assistants that others share with you will appear here"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantsListPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistants.error.load"
 msgstr "Failed to load assistants. Please try again."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsListPage.tsx
-msgid "assistants.filter.all"
-msgstr "All"
+#~ msgid "assistants.filter.all"
+#~ msgstr "All"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantsListPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistants.filter.aria"
 msgstr "Filter assistants"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantsListPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistants.filter.owned_by_user"
-msgstr "My Assistants"
+msgstr "Created by me"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantsListPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistants.filter.shared_with_user"
-msgstr "Shared With Me"
+msgstr "Shared with me"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsListPage.tsx
-msgid "assistants.list.title.all"
-msgstr "All Assistants"
+#~ msgid "assistants.list.title.all"
+#~ msgstr "All Assistants"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantsListPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistants.list.title.owned_by_user"
-msgstr "My Assistants"
+msgstr "Created by me"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantsListPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistants.list.title.shared_with_user"
-msgstr "Shared With Me"
+msgstr "Shared with me"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantsListPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistants.loading"
 msgstr "Loading assistants..."
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantsListPage.tsx
+#: src/pages/AssistantsPage.tsx
+msgid "assistants.search.aria"
+msgstr "Search assistants"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsPage.tsx
 msgid "assistants.subtitle"
 msgstr "Create and manage custom assistants with specific instructions and capabilities"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantsListPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "assistants.title"
 msgstr "Assistants"
 
@@ -1125,10 +1133,9 @@ msgstr "Assistant"
 #: src/pages/AssistantEditPage.tsx
 #: src/pages/AssistantHubDetailPage.tsx
 #: src/pages/AssistantHubMyPage.tsx
-#: src/pages/AssistantHubPage.tsx
 #: src/pages/AssistantHubReviewPage.tsx
 #: src/pages/AssistantHubSubmitPage.tsx
-#: src/pages/AssistantsListPage.tsx
+#: src/pages/AssistantsPage.tsx
 #: src/pages/HomePage.tsx
 #: src/pages/NewChatPage.tsx
 #: src/pages/SharedChatPage.tsx
@@ -2837,7 +2844,7 @@ msgid "search.page.subtitle"
 msgstr "Find conversations and messages across your chat history"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantsListPage.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "sharing.action.share"
 msgstr "Share"
 

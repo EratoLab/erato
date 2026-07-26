@@ -60,7 +60,7 @@ test(
         timeout: 15000,
       },
     );
-    await page.waitForURL("/assistants", { timeout: 10000 });
+    await page.waitForURL("/assistants/created", { timeout: 10000 });
 
     const assistantButton = page.getByRole("button", {
       name: new RegExp(assistantName),

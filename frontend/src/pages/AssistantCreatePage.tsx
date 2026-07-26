@@ -76,7 +76,7 @@ export default function AssistantCreatePage() {
 
       // Navigate to assistants list after a short delay
       setTimeout(() => {
-        navigate("/assistants");
+        navigate("/assistants/created");
       }, 1500);
     } catch (error) {
       console.error("Failed to create assistant:", error);
@@ -90,7 +90,7 @@ export default function AssistantCreatePage() {
   };
 
   const handleCancel = () => {
-    navigate("/assistants");
+    navigate("/assistants/created");
   };
 
   return (

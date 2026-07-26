@@ -42,7 +42,7 @@ test(
           .padStart(6, "0");
         assistantName = `Shared Assistant-${randomSuffix}`;
 
-        await page1.goto("/assistants");
+        await page1.goto("/assistants/created");
 
         const createButton = page1.getByRole("button", {
           name: /create.*assistant|new.*assistant/i,
@@ -67,7 +67,7 @@ test(
         await expect(
           page1.getByText(/assistant created successfully/i),
         ).toBeVisible({ timeout: 5000 });
-        await page1.waitForURL("/assistants", { timeout: 5000 });
+        await page1.waitForURL("/assistants/created", { timeout: 5000 });
         await expect(
           page1.getByRole("heading", { name: assistantName }),
         ).toBeVisible();
@@ -147,7 +147,7 @@ test(
           page1.getByRole("textbox", { name: "Type a message..." }),
         ).toBeVisible({ timeout: 15000 });
 
-        await page1.goto("/assistants");
+        await page1.goto("/assistants/created");
 
         const assistantButton = page1.getByRole("button", {
           name: new RegExp(assistantName),
@@ -165,13 +165,10 @@ test(
         await expect(shareOption).toBeVisible();
         await shareOption.click();
 
-        await expect(page1.getByRole("dialog", { name: /share/i })).toBeVisible(
-          {
-            timeout: 5000,
-          },
-        );
+        const sharingDialog = page1.getByRole("dialog", { name: /share/i });
+        await expect(sharingDialog).toBeVisible({ timeout: 5000 });
 
-        const userSearchInput = page1.getByRole("searchbox");
+        const userSearchInput = sharingDialog.getByRole("searchbox");
         await expect(userSearchInput).toBeVisible({ timeout: 5000 });
         // The selector lists results for the empty query too, so a wait on
         // rendered content can resolve before the debounced search answers.
@@ -221,7 +218,6 @@ test(
 
         expect(user2Found).toBe(true);
 
-        const sharingDialog = page1.getByRole("dialog", { name: /share/i });
         const addButton = sharingDialog.getByRole("button", { name: "Add" });
         await expect(addButton).toBeVisible({ timeout: 5000 });
         await addButton.click();
@@ -314,7 +310,7 @@ test(
           page1.getByRole("textbox", { name: "Type a message..." }),
         ).toBeVisible({ timeout: 15000 });
 
-        await page1.goto("/assistants");
+        await page1.goto("/assistants/created");
 
         const assistantButton = page1.getByRole("button", {
           name: new RegExp(assistantName),

@@ -11,6 +11,8 @@ import type { ChatSession } from "@/types/chat";
 import type { Messages } from "@lingui/core";
 
 let mockedCollapsedMode = "hidden";
+let mockedAssistantsEnabled = false;
+let mockedAssistantHubEnabled = false;
 
 vi.mock("@/components/providers/ThemeProvider", () => ({
   useTheme: () => ({
@@ -31,12 +33,14 @@ vi.mock("@/hooks/ui", () => ({
 }));
 
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
-  useAssistantHubConfig: () => ({ data: undefined }),
+  useAssistantHubConfig: () => ({
+    data: { enabled: mockedAssistantHubEnabled },
+  }),
 }));
 
 vi.mock("@/providers/FeatureConfigProvider", () => ({
   useAssistantsFeature: () => ({
-    enabled: false,
+    enabled: mockedAssistantsEnabled,
     showRecentItems: false,
     showRecentItemsCollapsible: false,
   }),
@@ -76,6 +80,8 @@ const sessions: ChatSession[] = [
 describe("ChatHistorySidebar", () => {
   beforeEach(async () => {
     mockedCollapsedMode = "hidden";
+    mockedAssistantsEnabled = false;
+    mockedAssistantHubEnabled = false;
     localStorage.clear();
     const { i18n } = await import("@lingui/core");
     i18n.load("en", enMessages as unknown as Messages);
@@ -222,5 +228,91 @@ describe("ChatHistorySidebar", () => {
       screen.getByRole("button", { name: "Expand Recent" }),
     ).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByTestId("history-list")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    {
+      assistantsEnabled: false,
+      assistantHubEnabled: false,
+      expectedHref: null,
+    },
+    {
+      assistantsEnabled: true,
+      assistantHubEnabled: false,
+      expectedHref: "/assistants",
+    },
+    {
+      assistantsEnabled: false,
+      assistantHubEnabled: true,
+      expectedHref: "/assistant-hub",
+    },
+    {
+      assistantsEnabled: true,
+      assistantHubEnabled: true,
+      expectedHref: "/assistant-hub",
+    },
+  ])(
+    "renders one assistants navigation target for assistants=$assistantsEnabled and hub=$assistantHubEnabled",
+    async ({ assistantsEnabled, assistantHubEnabled, expectedHref }) => {
+      mockedAssistantsEnabled = assistantsEnabled;
+      mockedAssistantHubEnabled = assistantHubEnabled;
+      const { i18n } = await import("@lingui/core");
+      const { container } = render(
+        <MemoryRouter>
+          <I18nProvider i18n={i18n}>
+            <ChatHistorySidebar
+              sessions={sessions}
+              currentSessionId="chat-1"
+              onSessionSelect={vi.fn()}
+              onSessionArchive={vi.fn()}
+              isLoading={false}
+            />
+          </I18nProvider>
+        </MemoryRouter>,
+      );
+
+      const assistantsItems = container.querySelectorAll(
+        '[data-ui="sidebar-assistants-item"]',
+      );
+
+      expect(assistantsItems).toHaveLength(expectedHref == null ? 0 : 1);
+      if (expectedHref != null) {
+        expect(assistantsItems[0].closest("a")).toHaveAttribute(
+          "href",
+          expectedHref,
+        );
+      }
+      expect(
+        container.querySelector('[data-ui="sidebar-assistant-hub-item"]'),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it("marks the unified assistants item active on assistant hub routes", async () => {
+    mockedAssistantsEnabled = true;
+    mockedAssistantHubEnabled = true;
+    const { i18n } = await import("@lingui/core");
+    const { container } = render(
+      <MemoryRouter initialEntries={["/assistant-hub"]}>
+        <I18nProvider i18n={i18n}>
+          <ChatHistorySidebar
+            sessions={sessions}
+            currentSessionId="chat-1"
+            onSessionSelect={vi.fn()}
+            onSessionArchive={vi.fn()}
+            isLoading={false}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+
+    const assistantsItem = container.querySelector(
+      '[data-ui="sidebar-assistants-item"]',
+    );
+
+    expect(assistantsItem).toHaveStyle({
+      backgroundColor: "var(--theme-shell-sidebar-selected)",
+    });
+    expect(assistantsItem?.closest("a")).toBeNull();
   });
 });

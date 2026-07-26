@@ -424,7 +424,7 @@ export default function AssistantHubMyPage() {
               action={
                 <Button
                   variant="primary"
-                  onClick={() => navigate("/assistants")}
+                  onClick={() => navigate("/assistants/created")}
                 >
                   {t({
                     id: "assistantHub.my.chooseAssistant",
