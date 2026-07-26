@@ -259,8 +259,8 @@ test_user_cannot_read_other_users_chat if {
 }
 
 # A share link must NOT grant generic chat read. Shared reads go only through the
-# dedicated share-links messages route, which authorizes via shared_read and
-# serves the active thread only.
+# dedicated share-links messages route, which authorizes via the share link itself
+# and serves the active thread only.
 test_share_link_does_not_grant_generic_chat_read if {
 	not backend.allow with input as {
 		"subject_kind": "user",

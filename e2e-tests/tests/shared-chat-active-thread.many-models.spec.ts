@@ -113,7 +113,7 @@ test(
       createSharingTestContext(browser, "user02@example.com"));
 
     try {
-      const { shareUrl, ownerRoles } = await test.step(
+      const { shareUrl, ownerRoles, chatId } = await test.step(
         "Owner builds a branched chat and shares it",
         async () => {
           // Record the chat's own generic-route messages URL as the owner
@@ -209,7 +209,14 @@ test(
 
           await owner.page.keyboard.press("Escape");
 
-          return { shareUrl, ownerRoles };
+          // chatId (from the owner's own messages URL) lets the recipient step
+          // probe the generic route directly.
+          const chatId = (ownerMessagesUrl as string).match(
+            /\/chats\/([^/?]+)\/messages/,
+          )?.[1];
+          expect(chatId, "chatId parsed from owner messages URL").toBeTruthy();
+
+          return { shareUrl, ownerRoles, chatId };
         },
       );
 
@@ -262,6 +269,14 @@ test(
             .poll(() => chatMessageRoles(recipient.page), { timeout: 15000 })
             .toEqual(ownerRoles);
           await expect(messageBox(recipient.page)).toHaveCount(0);
+
+          // Boundary check: a share link must NOT grant generic Chat::Read.
+          // The recipient hand-crafts the raw messages request; it must be
+          // denied, otherwise every edit/regen branch leaks over that route.
+          const bypass = await recipient.page.request.get(
+            `/api/v1beta/chats/${chatId}/messages`,
+          );
+          expect(bypass.status()).toBe(404);
         },
       );
     } finally {

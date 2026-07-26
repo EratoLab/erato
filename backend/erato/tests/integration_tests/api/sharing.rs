@@ -119,8 +119,10 @@ async fn test_chat_share_link_enable_disable_flow(pool: Pool<Postgres>) {
     assert_eq!(resolve_json["share_link"]["resource_type"], "chat");
     assert_eq!(resolve_json["share_link"]["resource_id"], chat_id);
 
+    // The recipient reads the shared conversation through the dedicated
+    // share-link route, which authorizes via the share link itself.
     let shared_messages_response = server
-        .get(&format!("/api/v1beta/chats/{chat_id}/messages"))
+        .get(&format!("/api/v1beta/share-links/{share_link_id}/messages"))
         .with_bearer_token(&recipient_token)
         .await;
     shared_messages_response.assert_status_ok();
@@ -131,6 +133,17 @@ async fn test_chat_share_link_enable_disable_flow(pool: Pool<Postgres>) {
             .expect("messages should be array")
             .len()
             >= 2
+    );
+
+    // A share link must NOT grant generic Chat::Read: the recipient cannot reach
+    // the raw messages route (which would expose every edit/regen branch).
+    let generic_route_denied = server
+        .get(&format!("/api/v1beta/chats/{chat_id}/messages"))
+        .with_bearer_token(&recipient_token)
+        .await;
+    assert_eq!(
+        generic_route_denied.status_code(),
+        http::StatusCode::NOT_FOUND
     );
 
     let disable_response = server
@@ -165,6 +178,17 @@ async fn test_chat_share_link_enable_disable_flow(pool: Pool<Postgres>) {
         .await;
     assert_eq!(
         resolve_after_disable.status_code(),
+        http::StatusCode::NOT_FOUND
+    );
+
+    // The dedicated messages route follows the policy: with the link disabled,
+    // `shared_read` is denied and the shared view disappears.
+    let shared_messages_after_disable = server
+        .get(&format!("/api/v1beta/share-links/{share_link_id}/messages"))
+        .with_bearer_token(&recipient_token)
+        .await;
+    assert_eq!(
+        shared_messages_after_disable.status_code(),
         http::StatusCode::NOT_FOUND
     );
 }
