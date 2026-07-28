@@ -1134,6 +1134,10 @@ export type ListAssistantsQueryParams = {
    * - `shared_with_user`: Only assistants shared with the user (= all - owned_by_user)
    */
   sharing_relation?: string;
+  /**
+   * Whether to include archived assistants. Defaults to false.
+   */
+  include_archived?: boolean;
 };
 
 export type ListAssistantsError = Fetcher.ErrorWrapper<undefined>;

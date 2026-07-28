@@ -1,5 +1,6 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
+import { Star } from "iconoir-react";
 import { useMemo } from "react";
 
 import { getFacetDisplayName } from "@/components/ui/Chat/FacetSelector";
@@ -326,75 +327,182 @@ export function AssistantHubVersionCard({
     .map((categoryId) =>
       categories.find((category) => category.id === categoryId),
     )
-    .filter(Boolean)
-    .map((category) => category?.display_name);
+    .filter((category): category is AssistantHubCategory => category != null)
+    .map((category) => category.display_name);
   const creatorName = version.creator.display_name;
+  const assistantName = version.assistant.name;
+  const avatarLetter = assistantName.trim().charAt(0).toLocaleUpperCase();
+  const currentRating = version.review_average_score;
+
+  const publicContent = (
+    <>
+      <div
+        className="flex min-w-0 items-center gap-3"
+        data-ui="assistant-hub-card-header"
+      >
+        <span
+          aria-hidden="true"
+          className="flex size-10 shrink-0 items-center justify-center rounded-full bg-theme-bg-secondary text-sm font-semibold text-theme-fg-primary"
+          data-ui="assistant-hub-card-avatar"
+        >
+          {avatarLetter}
+        </span>
+        <div className="min-w-0">
+          <h3 className="truncate text-base font-semibold text-theme-fg-primary">
+            {assistantName}
+          </h3>
+          {creatorName && (
+            <p className="mt-0.5 truncate text-xs text-theme-fg-muted">
+              {`${t({
+                id: "assistantHub.card.creator",
+                message: "by",
+              })} ${creatorName}`}
+            </p>
+          )}
+        </div>
+      </div>
+      <p className="mt-4 line-clamp-3 text-sm text-theme-fg-secondary">
+        {version.long_description.length > 0
+          ? version.long_description
+          : (version.assistant.description ?? "")}
+      </p>
+      <div className="mt-auto flex min-h-6 items-center justify-between gap-3 pt-4">
+        {currentRating != null && version.review_count > 0 ? (
+          <span
+            className="inline-flex items-center gap-1 text-sm font-medium text-theme-fg-secondary"
+            data-ui="assistant-hub-card-rating"
+          >
+            {currentRating.toFixed(1)}
+            <Star
+              aria-hidden="true"
+              className="size-4 fill-current text-theme-warning-fg"
+              data-ui="assistant-hub-card-rating-icon"
+            />
+          </span>
+        ) : (
+          <span
+            className="text-sm text-theme-fg-secondary"
+            data-ui="assistant-hub-card-rating"
+          >
+            {t({
+              id: "assistantHub.rating.none",
+              message: "No ratings yet",
+            })}
+          </span>
+        )}
+        {categoryNames.length > 0 && (
+          <span
+            className="ml-auto truncate rounded-full bg-theme-bg-secondary px-2 py-1 text-xs font-medium text-theme-fg-secondary"
+            data-ui="assistant-hub-card-category"
+          >
+            {categoryNames.join(", ")}
+          </span>
+        )}
+      </div>
+    </>
+  );
+
+  const managementContent = (
+    <>
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <h3 className="text-base font-semibold text-theme-fg-primary">
+          {assistantName}
+        </h3>
+      </div>
+      <p className="line-clamp-3 text-sm text-theme-fg-secondary">
+        {version.long_description.length > 0
+          ? version.long_description
+          : (version.assistant.description ?? "")}
+      </p>
+      <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 pt-4 text-xs text-theme-fg-muted">
+        {(() => {
+          const versionNumber = version.version_number;
+
+          return (
+            <span className="inline-flex min-h-6 items-center">
+              {t({
+                id: "assistantHub.version.label",
+                message: `Version ${versionNumber}`,
+              })}
+            </span>
+          );
+        })()}
+        {showStatusBadge && (
+          <span className={getAssistantHubStatusClassName(version.status)}>
+            {getAssistantHubStatusLabel(version.status)}
+          </span>
+        )}
+        {showCurrentPublishedIndicator &&
+          version.is_current_published_version && (
+            <AssistantHubCurrentPublishedIndicator />
+          )}
+        {creatorName && (
+          <span className="inline-flex min-h-6 items-center">
+            {`${t({
+              id: "assistantHub.card.creator",
+              message: "by",
+            })} ${creatorName}`}
+          </span>
+        )}
+        {categoryNames.map((categoryName) => (
+          <span
+            key={categoryName}
+            className="inline-flex min-h-6 items-center rounded-full bg-theme-bg-secondary px-2 py-1 text-xs font-medium text-theme-fg-secondary"
+            data-ui="assistant-hub-management-card-category"
+          >
+            {categoryName}
+          </span>
+        ))}
+        {currentRating != null && version.review_count > 0 ? (
+          <span
+            className="inline-flex min-h-6 items-center gap-1 text-sm font-medium text-theme-fg-secondary"
+            data-ui="assistant-hub-management-card-rating"
+          >
+            {currentRating.toFixed(1)}
+            <Star
+              aria-hidden="true"
+              className="size-4 fill-current text-theme-warning-fg"
+              data-ui="assistant-hub-management-card-rating-icon"
+            />
+          </span>
+        ) : (
+          <span
+            className="inline-flex min-h-6 items-center text-theme-fg-secondary"
+            data-ui="assistant-hub-management-card-rating"
+          >
+            {t({
+              id: "assistantHub.rating.none",
+              message: "No ratings yet",
+            })}
+          </span>
+        )}
+      </div>
+    </>
+  );
+  const content = showStatusBadge ? managementContent : publicContent;
+
+  if (onOpen && actions == null) {
+    return (
+      <button
+        type="button"
+        className="focus-ring theme-transition group flex size-full flex-col rounded-lg border border-theme-border bg-theme-bg-primary p-4 text-left hover:border-theme-border-focus hover:bg-theme-bg-hover"
+        onClick={onOpen}
+      >
+        {content}
+      </button>
+    );
+  }
 
   return (
-    <div className="rounded-lg border border-theme-border bg-theme-bg-primary p-4">
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+    <div className="h-full rounded-lg border border-theme-border bg-theme-bg-primary p-4">
+      <div className="flex h-full flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <button
           type="button"
-          className="min-w-0 flex-1 text-left"
+          className="flex min-w-0 flex-1 flex-col text-left"
           onClick={onOpen}
           disabled={!onOpen}
         >
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <h3 className="text-base font-semibold text-theme-fg-primary">
-              {version.assistant.name}
-            </h3>
-          </div>
-          <p className="line-clamp-2 text-sm text-theme-fg-secondary">
-            {version.long_description.length > 0
-              ? version.long_description
-              : (version.assistant.description ?? "")}
-          </p>
-          <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-theme-fg-muted">
-            {(() => {
-              const versionNumber = version.version_number;
-
-              return (
-                <span className="inline-flex min-h-6 items-center">
-                  {t({
-                    id: "assistantHub.version.label",
-                    message: `Version ${versionNumber}`,
-                  })}
-                </span>
-              );
-            })()}
-            {showStatusBadge ? (
-              <span className={getAssistantHubStatusClassName(version.status)}>
-                {getAssistantHubStatusLabel(version.status)}
-              </span>
-            ) : (
-              <span className="inline-flex min-h-6 items-center">
-                {getAssistantHubStatusLabel(version.status)}
-              </span>
-            )}
-            {showCurrentPublishedIndicator &&
-              version.is_current_published_version && (
-                <AssistantHubCurrentPublishedIndicator />
-              )}
-            {creatorName && (
-              <span className="inline-flex min-h-6 items-center">
-                {`${t({
-                  id: "assistantHub.card.creator",
-                  message: "By",
-                })} ${creatorName}`}
-              </span>
-            )}
-            {categoryNames.map((categoryName) => (
-              <span
-                key={categoryName}
-                className="inline-flex min-h-6 items-center"
-              >
-                {categoryName}
-              </span>
-            ))}
-            <span className="inline-flex min-h-6 items-center font-medium text-theme-fg-secondary">
-              {getAssistantHubRatingLabel(version)}
-            </span>
-          </div>
+          {content}
         </button>
         <div className="flex shrink-0 flex-wrap gap-2">{actions}</div>
       </div>
@@ -418,34 +526,52 @@ export function AssistantHubVersionOverviewSection({
     .filter(Boolean)
     .map((category) => category?.display_name);
   const creatorName = version.creator.display_name;
+  const assistantName = version.assistant.name;
+  const avatarLetter = assistantName.trim().charAt(0).toLocaleUpperCase();
+  const currentRating = version.review_average_score;
+  const hasRating = currentRating != null && version.review_count > 0;
+  const description =
+    version.long_description.length > 0
+      ? version.long_description
+      : (version.assistant.description ?? "");
 
   return (
     <section className="rounded-lg border border-theme-border bg-theme-bg-primary p-6">
       <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-semibold text-theme-fg-primary">
-            {version.assistant.name}
-          </h1>
-          {version.assistant.description && (
-            <p className="mt-2 text-sm text-theme-fg-secondary">
-              {version.assistant.description}
-            </p>
-          )}
-          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-theme-fg-muted">
-            {creatorName && (
-              <span>
-                {`${t({
-                  id: "assistantHub.card.creator",
-                  message: "By",
-                })} ${creatorName}`}
-              </span>
-            )}
-            {categoryNames.map((categoryName) => (
-              <span key={categoryName}>{categoryName}</span>
-            ))}
-            <span className="font-medium text-theme-fg-secondary">
-              {getAssistantHubRatingLabel(version)}
-            </span>
+        <div
+          className="flex min-w-0 items-center gap-4"
+          data-ui="assistant-hub-overview-header"
+        >
+          <span
+            aria-hidden="true"
+            className="flex size-14 shrink-0 items-center justify-center rounded-full bg-theme-bg-secondary text-xl font-semibold text-theme-fg-primary"
+            data-ui="assistant-hub-overview-avatar"
+          >
+            {avatarLetter}
+          </span>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-semibold text-theme-fg-primary">
+              {assistantName}
+            </h1>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              {creatorName && (
+                <span className="text-sm text-theme-fg-muted">
+                  {`${t({
+                    id: "assistantHub.card.creator",
+                    message: "by",
+                  })} ${creatorName}`}
+                </span>
+              )}
+              {categoryNames.map((categoryName) => (
+                <span
+                  key={categoryName}
+                  className="rounded-full bg-theme-bg-secondary px-2 py-1 text-xs font-medium text-theme-fg-secondary"
+                  data-ui="assistant-hub-overview-category"
+                >
+                  {categoryName}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
         {onStartChat && (
@@ -458,9 +584,51 @@ export function AssistantHubVersionOverviewSection({
         )}
       </div>
 
-      <p className="mt-5 whitespace-pre-wrap text-theme-fg-primary">
-        {version.long_description}
-      </p>
+      <div className="mt-5">
+        {hasRating ? (
+          <div
+            className="inline-flex items-center gap-1.5"
+            data-ui="assistant-hub-overview-rating"
+          >
+            <span className="text-lg font-semibold text-theme-fg-primary">
+              {currentRating.toFixed(1)}
+            </span>
+            <Star
+              aria-hidden="true"
+              className="size-5 fill-current text-theme-warning-fg"
+              data-ui="assistant-hub-overview-rating-icon"
+            />
+            <span className="text-sm text-theme-fg-secondary">
+              {t({
+                id: "assistantHub.detail.rating",
+                message: "Rating",
+              })}
+            </span>
+          </div>
+        ) : (
+          <span
+            className="text-sm text-theme-fg-secondary"
+            data-ui="assistant-hub-overview-rating"
+          >
+            {t({
+              id: "assistantHub.rating.none",
+              message: "No ratings yet",
+            })}
+          </span>
+        )}
+      </div>
+
+      <div className="mt-5" data-ui="assistant-hub-overview-description">
+        <h2 className="mb-2 text-sm font-semibold text-theme-fg-primary">
+          {t({
+            id: "assistantHub.detail.description",
+            message: "Description",
+          })}
+        </h2>
+        <p className="whitespace-pre-wrap text-theme-fg-primary">
+          {description}
+        </p>
+      </div>
       {version.keywords.length > 0 && (
         <div className="mt-4 flex flex-wrap gap-2">
           {version.keywords.map((keyword) => (

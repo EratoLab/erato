@@ -4,13 +4,13 @@ use crate::models::assistant_hub::{
 };
 use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
+use crate::services::ms_graph::MsGraphService;
 use crate::services::sentry::log_internal_server_error;
 use crate::state::AppState;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::{Extension, Json};
 use chrono::{DateTime, FixedOffset};
-use graph_rs_sdk::{GraphClient, GraphClientConfiguration, ODataQuery};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use sqlx::types::Uuid;
@@ -195,22 +195,14 @@ impl From<&AssistantHubSubmissionRequest> for HubSubmissionProfile {
     }
 }
 
-#[derive(Debug, Deserialize)]
-struct GraphUserItem {
-    #[serde(rename = "displayName")]
-    display_name: Option<String>,
+#[derive(Debug)]
+struct GraphUserLookup {
+    email: Option<String>,
+    subject: String,
 }
 
 fn entra_id_enabled(app_state: &AppState) -> bool {
     app_state.config.integrations.experimental_entra_id.enabled
-}
-
-fn create_graph_client(access_token: &str) -> GraphClient {
-    GraphClient::from(
-        GraphClientConfiguration::new()
-            .access_token(access_token)
-            .connection_verbose(true),
-    )
 }
 
 async fn resolve_creator_display_names(
@@ -238,12 +230,13 @@ async fn resolve_creator_display_names(
             continue;
         }
 
-        let lookup_key = record
-            .creator
-            .email
-            .clone()
-            .unwrap_or_else(|| record.creator.subject.clone());
-        lookup_keys.insert(creator_id, lookup_key);
+        lookup_keys.insert(
+            creator_id,
+            GraphUserLookup {
+                email: record.creator.email.clone(),
+                subject: record.creator.subject.clone(),
+            },
+        );
     }
 
     if !entra_id_enabled(app_state) {
@@ -254,42 +247,12 @@ async fn resolve_creator_display_names(
         return display_names;
     };
 
-    let client = create_graph_client(access_token);
+    let ms_graph = MsGraphService::new(access_token);
 
-    for (creator_id, lookup_key) in lookup_keys {
-        let response = match client
-            .user(&lookup_key)
-            .get_user()
-            .select(&["displayName"])
-            .send()
+    for (creator_id, lookup) in lookup_keys {
+        if let Some(display_name) = ms_graph
+            .resolve_user_display_name(&lookup.subject, lookup.email.as_deref())
             .await
-        {
-            Ok(response) => response,
-            Err(error) => {
-                tracing::warn!(
-                    "Failed to resolve assistant hub creator {} via Graph API: {:?}",
-                    lookup_key,
-                    error
-                );
-                continue;
-            }
-        };
-
-        let user_item = match response.json::<GraphUserItem>().await {
-            Ok(user_item) => user_item,
-            Err(error) => {
-                tracing::warn!(
-                    "Failed to parse assistant hub creator {} from Graph API: {:?}",
-                    lookup_key,
-                    error
-                );
-                continue;
-            }
-        };
-
-        if let Some(display_name) = user_item
-            .display_name
-            .filter(|display_name| !display_name.trim().is_empty())
         {
             display_names.insert(creator_id, display_name);
         }
@@ -323,12 +286,13 @@ async fn resolve_review_user_display_names(
             continue;
         }
 
-        let lookup_key = record
-            .reviewer
-            .email
-            .clone()
-            .unwrap_or_else(|| record.reviewer.subject.clone());
-        lookup_keys.insert(reviewer_id, lookup_key);
+        lookup_keys.insert(
+            reviewer_id,
+            GraphUserLookup {
+                email: record.reviewer.email.clone(),
+                subject: record.reviewer.subject.clone(),
+            },
+        );
     }
 
     if !entra_id_enabled(app_state) {
@@ -339,42 +303,12 @@ async fn resolve_review_user_display_names(
         return display_names;
     };
 
-    let client = create_graph_client(access_token);
+    let ms_graph = MsGraphService::new(access_token);
 
-    for (reviewer_id, lookup_key) in lookup_keys {
-        let response = match client
-            .user(&lookup_key)
-            .get_user()
-            .select(&["displayName"])
-            .send()
+    for (reviewer_id, lookup) in lookup_keys {
+        if let Some(display_name) = ms_graph
+            .resolve_user_display_name(&lookup.subject, lookup.email.as_deref())
             .await
-        {
-            Ok(response) => response,
-            Err(error) => {
-                tracing::warn!(
-                    "Failed to resolve assistant hub review user {} via Graph API: {:?}",
-                    lookup_key,
-                    error
-                );
-                continue;
-            }
-        };
-
-        let user_item = match response.json::<GraphUserItem>().await {
-            Ok(user_item) => user_item,
-            Err(error) => {
-                tracing::warn!(
-                    "Failed to parse assistant hub review user {} from Graph API: {:?}",
-                    lookup_key,
-                    error
-                );
-                continue;
-            }
-        };
-
-        if let Some(display_name) = user_item
-            .display_name
-            .filter(|display_name| !display_name.trim().is_empty())
         {
             display_names.insert(reviewer_id, display_name);
         }

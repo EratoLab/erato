@@ -268,13 +268,18 @@ msgstr "Im Hub einreichen"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
-msgid "assistantHub.action.view"
-msgstr "Anzeigen"
+#~ msgid "assistantHub.action.view"
+#~ msgstr "Anzeigen"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsPage.tsx
+msgid "assistantHub.all.title"
+msgstr "Alle Assistenten"
 
 #. js-lingui-explicit-id
 #: src/pages/assistantHubUtils.tsx
 msgid "assistantHub.card.creator"
-msgstr "Von"
+msgstr "von"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubPage.tsx
@@ -337,6 +342,11 @@ msgid "assistantHub.detail.configuration"
 msgstr "Konfiguration"
 
 #. js-lingui-explicit-id
+#: src/pages/assistantHubUtils.tsx
+msgid "assistantHub.detail.description"
+msgstr "Beschreibung"
+
+#. js-lingui-explicit-id
 #: src/pages/AssistantHubDetailPage.tsx
 msgid "assistantHub.detail.diff"
 msgstr "Aenderungen zur vorherigen Version"
@@ -370,6 +380,11 @@ msgstr "Standardmodell"
 #: src/pages/assistantHubUtils.tsx
 msgid "assistantHub.detail.prompt"
 msgstr "System-Prompt"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantHubUtils.tsx
+msgid "assistantHub.detail.rating"
+msgstr "Bewertung"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubDetailPage.tsx
@@ -438,9 +453,9 @@ msgid "assistantHub.featured.empty"
 msgstr "Noch keine Assistants sind hervorgehoben."
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantHubPage.tsx
-#~ msgid "assistantHub.featured.subtitle"
-#~ msgstr "Von Reviewern hervorgehobene Assistants"
+#: src/pages/AssistantsPage.tsx
+msgid "assistantHub.featured.subtitle"
+msgstr "Handverlesene Assistenten, die sich bei Kolleg:innen bewährt haben."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
@@ -799,8 +814,8 @@ msgstr "Sichtbare Kommentare"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
-msgid "assistantHub.search.aria"
-msgstr "Assistant Hub durchsuchen"
+#~ msgid "assistantHub.search.aria"
+#~ msgstr "Assistant Hub durchsuchen"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
@@ -974,8 +989,8 @@ msgstr "Versionsnummer"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
-msgid "assistantHub.subtitle"
-msgstr "Gepruefte Assistants durchsuchen, die deiner Organisation zur Verfuegung stehen"
+#~ msgid "assistantHub.subtitle"
+#~ msgstr "Gepruefte Assistants durchsuchen, die deiner Organisation zur Verfuegung stehen"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
@@ -1078,7 +1093,7 @@ msgstr "Assistenten filtern"
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
 msgid "assistants.filter.owned_by_user"
-msgstr "Von mir erstellt"
+msgstr "Meine Assistenten"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
@@ -1093,7 +1108,7 @@ msgstr "Mit mir geteilt"
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
 msgid "assistants.list.title.owned_by_user"
-msgstr "Von mir erstellt"
+msgstr "Meine Assistenten"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
@@ -1112,13 +1127,63 @@ msgstr "Assistenten suchen"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
-msgid "assistants.subtitle"
-msgstr "Erstellen und verwalten Sie benutzerdefinierte Assistenten mit spezifischen Anweisungen und Fähigkeiten"
+msgid "assistants.status.all"
+msgstr "Alle"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsPage.tsx
+msgid "assistants.status.archived"
+msgstr "Archiviert"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsPage.tsx
+msgid "assistants.status.declined"
+msgstr "Abgelehnt"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsPage.tsx
+msgid "assistants.status.filterAria"
+msgstr "Meine Assistenten nach Hub-Status filtern"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsPage.tsx
+msgid "assistants.status.filterLabel"
+msgstr "Hub-Status"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsPage.tsx
+msgid "assistants.status.inReview"
+msgstr "In Prüfung"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsPage.tsx
+msgid "assistants.status.notSubmitted"
+msgstr "Nicht eingereicht"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsPage.tsx
+msgid "assistants.status.published"
+msgstr "Veröffentlicht"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsPage.tsx
+msgid "assistants.status.unpublished"
+msgstr "Nicht veröffentlicht"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsPage.tsx
+#~ msgid "assistants.subtitle"
+#~ msgstr "Erstellen und verwalten Sie benutzerdefinierte Assistenten mit spezifischen Anweisungen und Fähigkeiten"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
 msgid "assistants.title"
 msgstr "Assistenten"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsPage.tsx
+msgid "assistants.workspace.subtitle"
+msgstr "Individuelle Assistenten entdecken, erstellen und verwenden."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx

@@ -130,6 +130,7 @@ pub async fn get_user_assistants(
     _policy: &PolicyEngine,
     subject: &Subject,
     sharing_relation: &str,
+    include_archived: bool,
 ) -> Result<Vec<assistants::Model>, Report> {
     // Get the user ID from subject (subject contains the user UUID)
     let user_id_str = subject.user_id();
@@ -139,16 +140,14 @@ pub async fn get_user_assistants(
         .await?
         .wrap_err("User not found")?;
 
-    // Query all non-archived assistants owned by the user (if needed by filter)
+    // Query assistants owned by the user (if needed by filter)
     let owned_assistants = if sharing_relation == "owned_by_user" || sharing_relation == "all" {
-        Assistants::find()
-            .filter(
-                Condition::all()
-                    .add(assistants::Column::OwnerUserId.eq(user.id))
-                    .add(assistants::Column::ArchivedAt.is_null()),
-            )
-            .all(conn)
-            .await?
+        let mut condition = Condition::all().add(assistants::Column::OwnerUserId.eq(user.id));
+        if !include_archived {
+            condition = condition.add(assistants::Column::ArchivedAt.is_null());
+        }
+
+        Assistants::find().filter(condition).all(conn).await?
     } else {
         vec![]
     };
@@ -170,16 +169,15 @@ pub async fn get_user_assistants(
             .filter_map(|grant| Uuid::parse_str(&grant.resource_id).ok())
             .collect();
 
-        // Query all non-archived shared assistants
+        // Query shared assistants, including archived ones only when explicitly requested.
         if !shared_assistant_ids.is_empty() {
-            Assistants::find()
-                .filter(
-                    Condition::all()
-                        .add(assistants::Column::Id.is_in(shared_assistant_ids))
-                        .add(assistants::Column::ArchivedAt.is_null()),
-                )
-                .all(conn)
-                .await?
+            let mut condition =
+                Condition::all().add(assistants::Column::Id.is_in(shared_assistant_ids));
+            if !include_archived {
+                condition = condition.add(assistants::Column::ArchivedAt.is_null());
+            }
+
+            Assistants::find().filter(condition).all(conn).await?
         } else {
             vec![]
         }
