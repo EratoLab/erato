@@ -189,6 +189,9 @@ pub struct ListAssistantsQuery {
     /// - `shared_with_user`: Only assistants shared with the user (= all - owned_by_user)
     #[serde(default = "default_sharing_relation")]
     pub sharing_relation: String,
+    /// Whether to include archived assistants. Defaults to false.
+    #[serde(default)]
+    pub include_archived: bool,
 }
 
 fn default_sharing_relation() -> String {
@@ -636,6 +639,7 @@ pub async fn list_assistants(
         &policy,
         &me_user.to_subject(),
         &query.sharing_relation,
+        query.include_archived,
     )
     .await
     .map_err(log_internal_server_error)?;

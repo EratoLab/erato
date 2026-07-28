@@ -1037,7 +1037,49 @@ async fn test_list_assistants_sharing_relation_filter(pool: Pool<Postgres>) {
         assert_eq!(assistant["can_edit"], false);
     }
 
-    // Test 5: Invalid sharing_relation value should return 400 Bad Request
+    // Test 5: Archived assistants stay hidden by default.
+    let response = server
+        .post(&format!(
+            "/api/v1beta/assistants/{}/archive",
+            owned_assistant2.id
+        ))
+        .json(&json!({}))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    assert_eq!(response.status_code(), http::StatusCode::OK);
+
+    let response = server
+        .get("/api/v1beta/assistants?sharing_relation=owned_by_user")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    assert_eq!(response.status_code(), http::StatusCode::OK);
+    let active_owned: Value = response.json();
+    assert_eq!(
+        active_owned
+            .as_array()
+            .expect("Response should be an array")
+            .len(),
+        1
+    );
+
+    // Test 6: Owned-assistant management can opt into archived assistants.
+    let response = server
+        .get("/api/v1beta/assistants?sharing_relation=owned_by_user&include_archived=true")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    assert_eq!(response.status_code(), http::StatusCode::OK);
+    let owned_with_archived: Value = response.json();
+    let owned_with_archived_array = owned_with_archived
+        .as_array()
+        .expect("Response should be an array");
+    assert_eq!(owned_with_archived_array.len(), 2);
+    let archived_assistant = owned_with_archived_array
+        .iter()
+        .find(|assistant| assistant["id"] == owned_assistant2.id.to_string())
+        .expect("Archived assistant should be included");
+    assert!(archived_assistant["archived_at"].is_string());
+
+    // Test 7: Invalid sharing_relation value should return 400 Bad Request
     let response = server
         .get("/api/v1beta/assistants?sharing_relation=invalid_value")
         .with_bearer_token(TEST_JWT_TOKEN)

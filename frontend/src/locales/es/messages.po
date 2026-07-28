@@ -268,13 +268,18 @@ msgstr "Enviar a la tienda"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
-msgid "assistantHub.action.view"
-msgstr "Ver"
+#~ msgid "assistantHub.action.view"
+#~ msgstr "Ver"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsPage.tsx
+msgid "assistantHub.all.title"
+msgstr "Todos los asistentes"
 
 #. js-lingui-explicit-id
 #: src/pages/assistantHubUtils.tsx
 msgid "assistantHub.card.creator"
-msgstr "Por"
+msgstr "por"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubPage.tsx
@@ -337,6 +342,11 @@ msgid "assistantHub.detail.configuration"
 msgstr "Configuracion"
 
 #. js-lingui-explicit-id
+#: src/pages/assistantHubUtils.tsx
+msgid "assistantHub.detail.description"
+msgstr "Descripción"
+
+#. js-lingui-explicit-id
 #: src/pages/AssistantHubDetailPage.tsx
 msgid "assistantHub.detail.diff"
 msgstr "Cambios desde la version anterior"
@@ -370,6 +380,11 @@ msgstr "Modelo predeterminado"
 #: src/pages/assistantHubUtils.tsx
 msgid "assistantHub.detail.prompt"
 msgstr "Prompt del sistema"
+
+#. js-lingui-explicit-id
+#: src/pages/assistantHubUtils.tsx
+msgid "assistantHub.detail.rating"
+msgstr "Valoración"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubDetailPage.tsx
@@ -438,9 +453,9 @@ msgid "assistantHub.featured.empty"
 msgstr "Aun no hay asistentes destacados."
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantHubPage.tsx
-#~ msgid "assistantHub.featured.subtitle"
-#~ msgstr "Asistentes destacados por revisores"
+#: src/pages/AssistantsPage.tsx
+msgid "assistantHub.featured.subtitle"
+msgstr "Asistentes seleccionados que han demostrado ser útiles para tus compañeros."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
@@ -799,8 +814,8 @@ msgstr "Comentarios visibles"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
-msgid "assistantHub.search.aria"
-msgstr "Buscar en la tienda de asistentes"
+#~ msgid "assistantHub.search.aria"
+#~ msgstr "Buscar en la tienda de asistentes"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
@@ -974,8 +989,8 @@ msgstr "Numero de version"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
-msgid "assistantHub.subtitle"
-msgstr "Explora asistentes revisados disponibles para tu organizacion"
+#~ msgid "assistantHub.subtitle"
+#~ msgstr "Explora asistentes revisados disponibles para tu organizacion"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
@@ -1078,7 +1093,7 @@ msgstr "Filtrar asistentes"
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
 msgid "assistants.filter.owned_by_user"
-msgstr "Creados por mí"
+msgstr "Mis asistentes"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
@@ -1093,7 +1108,7 @@ msgstr "Compartidos conmigo"
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
 msgid "assistants.list.title.owned_by_user"
-msgstr "Creados por mí"
+msgstr "Mis asistentes"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
@@ -1112,13 +1127,63 @@ msgstr "Buscar asistentes"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
-msgid "assistants.subtitle"
-msgstr "Crea y administra asistentes personalizados con instrucciones y capacidades específicas"
+msgid "assistants.status.all"
+msgstr "Todos"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsPage.tsx
+msgid "assistants.status.archived"
+msgstr "Archivado"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsPage.tsx
+msgid "assistants.status.declined"
+msgstr "Rechazado"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsPage.tsx
+msgid "assistants.status.filterAria"
+msgstr "Filtrar mis asistentes por estado del Hub"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsPage.tsx
+msgid "assistants.status.filterLabel"
+msgstr "Estado del Hub"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsPage.tsx
+msgid "assistants.status.inReview"
+msgstr "En revisión"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsPage.tsx
+msgid "assistants.status.notSubmitted"
+msgstr "No enviado"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsPage.tsx
+msgid "assistants.status.published"
+msgstr "Publicado"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsPage.tsx
+msgid "assistants.status.unpublished"
+msgstr "No publicado"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsPage.tsx
+#~ msgid "assistants.subtitle"
+#~ msgstr "Crea y administra asistentes personalizados con instrucciones y capacidades específicas"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
 msgid "assistants.title"
 msgstr "Asistentes"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsPage.tsx
+msgid "assistants.workspace.subtitle"
+msgstr "Descubre, crea y usa asistentes personalizados."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx

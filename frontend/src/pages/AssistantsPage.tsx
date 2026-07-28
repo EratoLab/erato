@@ -1,7 +1,8 @@
 import { t } from "@lingui/core/macro";
+import { skipToken } from "@tanstack/react-query";
 import clsx from "clsx";
 import { formatDistanceToNow } from "date-fns";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 
 import { PageHeader } from "@/components/ui/Container/PageHeader";
@@ -29,6 +30,7 @@ import {
   useAssistantHubConfig,
   useListAssistantHubAssistants,
   useListAssistants,
+  useListMyAssistantHubVersions,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { createLogger } from "@/utils/debugLogger";
 
@@ -36,6 +38,8 @@ import {
   AssistantHubBreadcrumb,
   AssistantHubVersionCard,
   EmptyAssistantHubState,
+  isAssistantHubReviewAcceptedStatus,
+  isAssistantHubReviewDeclinedStatus,
 } from "./assistantHubUtils";
 
 import type {
@@ -46,6 +50,7 @@ import type {
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 const logger = createLogger("UI", "AssistantsPage");
+const ASSISTANT_HUB_PAGE_SIZE = 18;
 
 export type AssistantsLandingView =
   | "hub"
@@ -112,6 +117,108 @@ const assistantMatchesSearch = (assistant: Assistant, searchQuery: string) => {
   );
 };
 
+/* eslint-disable lingui/no-unlocalized-strings -- Internal Hub lifecycle identifiers and Tailwind class lists */
+type OwnedAssistantStatus =
+  | "in_review"
+  | "published"
+  | "unpublished"
+  | "declined"
+  | "not_submitted"
+  | "archived";
+
+type OwnedAssistantStatusFilter = "all" | OwnedAssistantStatus;
+
+const OWNED_ASSISTANT_STATUS_FILTERS: OwnedAssistantStatusFilter[] = [
+  "all",
+  "not_submitted",
+  "in_review",
+  "published",
+  "unpublished",
+  "declined",
+  "archived",
+];
+
+const getOwnedAssistantStatus = (
+  assistant: Assistant,
+  versions: AssistantHubVersion[],
+): OwnedAssistantStatus => {
+  if (assistant.archived_at) return "archived";
+
+  const assistantVersions = versions
+    .filter((version) => version.source_assistant_id === assistant.id)
+    .sort(
+      (left, right) =>
+        new Date(right.submitted_at).getTime() -
+        new Date(left.submitted_at).getTime(),
+    );
+  const latestVersion = assistantVersions.at(0);
+
+  if (!latestVersion) return "not_submitted";
+  if (latestVersion.status === "submitted") return "in_review";
+  if (isAssistantHubReviewDeclinedStatus(latestVersion.status)) {
+    return "declined";
+  }
+  if (isAssistantHubReviewAcceptedStatus(latestVersion.status)) {
+    return latestVersion.is_published ? "published" : "unpublished";
+  }
+  if (assistantVersions.some((version) => version.is_published)) {
+    return "published";
+  }
+
+  return "not_submitted";
+};
+
+const getOwnedAssistantStatusLabel = (status: OwnedAssistantStatusFilter) => {
+  switch (status) {
+    case "all":
+      return t({ id: "assistants.status.all", message: "All" });
+    case "in_review":
+      return t({
+        id: "assistants.status.inReview",
+        message: "In review",
+      });
+    case "published":
+      return t({
+        id: "assistants.status.published",
+        message: "Published",
+      });
+    case "unpublished":
+      return t({
+        id: "assistants.status.unpublished",
+        message: "Unpublished",
+      });
+    case "declined":
+      return t({
+        id: "assistants.status.declined",
+        message: "Declined",
+      });
+    case "not_submitted":
+      return t({
+        id: "assistants.status.notSubmitted",
+        message: "Not submitted",
+      });
+    case "archived":
+      return t({
+        id: "assistants.status.archived",
+        message: "Archived",
+      });
+  }
+};
+
+const getOwnedAssistantStatusClassName = (status: OwnedAssistantStatus) =>
+  clsx(
+    "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
+    status === "in_review" &&
+      "border-theme-info-border bg-theme-info-bg text-theme-info-fg",
+    status === "published" &&
+      "border-theme-success-border bg-theme-success-bg text-theme-success-fg",
+    status === "declined" &&
+      "border-theme-error-border bg-theme-error-bg text-theme-error-fg",
+    ["archived", "not_submitted", "unpublished"].includes(status) &&
+      "border-theme-border bg-theme-bg-secondary text-theme-fg-muted",
+  );
+/* eslint-enable lingui/no-unlocalized-strings */
+
 function LoadingState({ message }: { message: string }) {
   return (
     <div className="flex items-center justify-center py-12">
@@ -133,7 +240,7 @@ function AssistantsSearch({
   setSearchQuery: (value: string) => void;
 }) {
   return (
-    <div className="mx-auto w-full max-w-xl">
+    <div className="min-w-0 flex-1">
       <Input
         type="search"
         value={searchQuery}
@@ -191,12 +298,17 @@ function CategoryTile({
 function HubLandingView({
   categoryId,
   config,
+  searchQuery,
 }: {
   categoryId?: string;
   config: AssistantHubConfigResponse;
+  searchQuery: string;
 }) {
   const navigate = useNavigate();
-  const [searchQuery, setSearchQuery] = useState("");
+  const loadMoreAssistantsRef = useRef<HTMLDivElement | null>(null);
+  const [visibleAssistantCount, setVisibleAssistantCount] = useState(
+    ASSISTANT_HUB_PAGE_SIZE,
+  );
   const {
     data,
     isLoading: isLoadingAssistants,
@@ -238,29 +350,73 @@ function HubLandingView({
   }, [categoryId, config.categories, searchQuery, sortedVersions]);
 
   const showSearchResults = !isCategoryPage && searchQuery.trim().length > 0;
+  const visibleAllVersions = sortedVersions.slice(0, visibleAssistantCount);
+  const hasMoreAssistants = visibleAssistantCount < sortedVersions.length;
+
+  useEffect(() => {
+    const sentinel = loadMoreAssistantsRef.current;
+    if (
+      !sentinel ||
+      !hasMoreAssistants ||
+      isCategoryPage ||
+      showSearchResults
+    ) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          observer.disconnect();
+          setVisibleAssistantCount((currentCount) =>
+            Math.min(
+              currentCount + ASSISTANT_HUB_PAGE_SIZE,
+              sortedVersions.length,
+            ),
+          );
+        }
+      },
+      { rootMargin: "240px" }, // eslint-disable-line lingui/no-unlocalized-strings -- IntersectionObserver CSS length, not user-facing text
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [
+    hasMoreAssistants,
+    isCategoryPage,
+    showSearchResults,
+    sortedVersions.length,
+    visibleAssistantCount,
+  ]);
 
   return (
     <>
       {isCategoryPage && (
-        <AssistantHubBreadcrumb
-          icon={<ArrowLeftIcon className="size-4" />}
-          onClick={() => navigate("/assistant-hub")}
-        >
-          {t({
-            id: "assistantHub.action.backToHub",
-            message: "Back to hub",
-          })}
-        </AssistantHubBreadcrumb>
+        <>
+          <AssistantHubBreadcrumb
+            icon={<ArrowLeftIcon className="size-4" />}
+            onClick={() => navigate("/assistant-hub")}
+          >
+            {t({
+              id: "assistantHub.action.backToHub",
+              message: "Back to hub",
+            })}
+          </AssistantHubBreadcrumb>
+          {selectedCategory && (
+            <div>
+              <h2 className="text-xl font-semibold text-theme-fg-primary">
+                {selectedCategory.display_name}
+              </h2>
+              <p className="mt-1 text-sm text-theme-fg-secondary">
+                {t({
+                  id: "assistantHub.category.subtitle",
+                  message: "Browse assistants filtered by category",
+                })}
+              </p>
+            </div>
+          )}
+        </>
       )}
-
-      <AssistantsSearch
-        searchQuery={searchQuery}
-        setSearchQuery={setSearchQuery}
-        ariaLabel={t({
-          id: "assistantHub.search.aria",
-          message: "Search assistant hub",
-        })}
-      />
 
       {isLoadingAssistants && (
         <LoadingState
@@ -335,17 +491,27 @@ function HubLandingView({
         !showSearchResults &&
         sortedVersions.length > 0 && (
           <div className="space-y-8">
-            <section>
+            <section className="rounded-xl border border-theme-info-border bg-theme-info-bg p-6">
               <div className="mb-4">
-                <h2 className="text-lg font-semibold text-theme-fg-primary">
+                <div className="flex items-center gap-2">
+                  <span aria-hidden="true">✨</span>
+                  <h2 className="text-lg font-semibold text-theme-fg-primary">
+                    {t({
+                      id: "assistantHub.featured.title",
+                      message: "Featured assistants",
+                    })}
+                  </h2>
+                </div>
+                <p className="mt-1 text-sm text-theme-fg-secondary">
                   {t({
-                    id: "assistantHub.featured.title",
-                    message: "Featured assistants",
+                    id: "assistantHub.featured.subtitle",
+                    message:
+                      "Hand-picked assistants that have proven useful to colleagues.",
                   })}
-                </h2>
+                </p>
               </div>
               {featuredVersions.length > 0 ? (
-                <div className="grid gap-3">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {featuredVersions.map((version) => (
                     <AssistantHubVersionCard
                       key={version.version_id}
@@ -354,27 +520,11 @@ function HubLandingView({
                       onOpen={() =>
                         navigate(`/assistant-hub/${version.hub_assistant_id}`)
                       }
-                      actions={
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() =>
-                            navigate(
-                              `/assistant-hub/${version.hub_assistant_id}`,
-                            )
-                          }
-                        >
-                          {t({
-                            id: "assistantHub.action.view",
-                            message: "View",
-                          })}
-                        </Button>
-                      }
                     />
                   ))}
                 </div>
               ) : (
-                <p className="rounded-lg border border-theme-border bg-theme-bg-secondary p-4 text-sm text-theme-fg-secondary">
+                <p className="rounded-lg border border-theme-border bg-theme-bg-primary p-4 text-sm text-theme-fg-secondary">
                   {t({
                     id: "assistantHub.featured.empty",
                     message: "No assistants are featured yet.",
@@ -407,6 +557,37 @@ function HubLandingView({
                 </div>
               </section>
             )}
+
+            <section data-ui="assistant-hub-all-assistants">
+              <div className="mb-4">
+                <h2 className="text-lg font-semibold text-theme-fg-primary">
+                  {t({
+                    id: "assistantHub.all.title",
+                    message: "All assistants",
+                  })}
+                </h2>
+              </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {visibleAllVersions.map((version) => (
+                  <AssistantHubVersionCard
+                    key={version.version_id}
+                    version={version}
+                    categories={config.categories}
+                    onOpen={() =>
+                      navigate(`/assistant-hub/${version.hub_assistant_id}`)
+                    }
+                  />
+                ))}
+              </div>
+              {hasMoreAssistants && (
+                <div
+                  ref={loadMoreAssistantsRef}
+                  aria-hidden="true"
+                  className="h-px"
+                  data-testid="assistant-hub-load-more-sentinel"
+                />
+              )}
+            </section>
           </div>
         )}
 
@@ -430,7 +611,7 @@ function HubLandingView({
                     })}
               </h2>
             </div>
-            <div className="grid gap-3">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
               {filteredVersions.map((version) => (
                 <AssistantHubVersionCard
                   key={version.version_id}
@@ -438,20 +619,6 @@ function HubLandingView({
                   categories={config.categories}
                   onOpen={() =>
                     navigate(`/assistant-hub/${version.hub_assistant_id}`)
-                  }
-                  actions={
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() =>
-                        navigate(`/assistant-hub/${version.hub_assistant_id}`)
-                      }
-                    >
-                      {t({
-                        id: "assistantHub.action.view",
-                        message: "View",
-                      })}
-                    </Button>
                   }
                 />
               ))}
@@ -464,6 +631,7 @@ function HubLandingView({
 
 function AssistantListCard({
   assistant,
+  hubStatus,
   hubEnabled,
   onArchive,
   onEdit,
@@ -472,6 +640,7 @@ function AssistantListCard({
   onSubmitToHub,
 }: {
   assistant: Assistant;
+  hubStatus?: OwnedAssistantStatus;
   hubEnabled: boolean;
   onArchive: () => void;
   onEdit: () => void;
@@ -480,6 +649,7 @@ function AssistantListCard({
   onSubmitToHub: () => void;
 }) {
   const dateFnsLocale = useDateFnsLocale();
+  const isArchived = assistant.archived_at != null;
   const updatedRelativeTime = formatDistanceToNow(
     new Date(assistant.updated_at),
     {
@@ -500,10 +670,18 @@ function AssistantListCard({
           type="button"
           className="min-w-0 flex-1 text-left"
           onClick={onStartChat}
+          disabled={isArchived}
         >
-          <h3 className="text-base font-semibold text-theme-fg-primary">
-            {assistant.name}
-          </h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-base font-semibold text-theme-fg-primary">
+              {assistant.name}
+            </h3>
+            {hubStatus && (
+              <span className={getOwnedAssistantStatusClassName(hubStatus)}>
+                {getOwnedAssistantStatusLabel(hubStatus)}
+              </span>
+            )}
+          </div>
           {assistant.description && (
             <p className="mt-2 line-clamp-2 text-sm text-theme-fg-secondary">
               {assistant.description}
@@ -518,65 +696,68 @@ function AssistantListCard({
             </span>
           </div>
         </button>
-        <div className="flex shrink-0 flex-wrap gap-2">
-          {assistant.can_edit && (
-            <DropdownMenu
-              items={[
-                {
-                  label: t({
-                    id: "sharing.action.share",
-                    message: "Share",
-                  }),
-                  icon: <ShareIcon className="size-4" />,
-                  onClick: onShare,
-                },
-                {
-                  label: t({
-                    id: "assistants.action.edit",
-                    message: "Edit",
-                  }),
-                  icon: <EditIcon className="size-4" />,
-                  onClick: onEdit,
-                },
-                ...(hubEnabled
-                  ? [
-                      {
-                        label: t({
-                          id: "assistantHub.action.submit",
-                          message: "Submit to Hub",
-                        }),
-                        icon: <CheckCircleIcon className="size-4" />,
-                        onClick: onSubmitToHub,
-                      },
-                    ]
-                  : []),
-                {
-                  label: t({
-                    id: "assistants.action.archive",
-                    message: "Archive",
-                  }),
-                  icon: <LogOutIcon className="size-4" />,
-                  onClick: onArchive,
-                  confirmAction: true,
-                  confirmTitle: t({
-                    id: "assistants.archive.confirmTitle",
-                    message: "Confirm Archive",
-                  }),
-                  confirmMessage: t({
-                    id: "assistants.archive.confirmMessage",
-                    message: "Are you sure you want to archive this assistant?",
-                  }),
-                },
-              ]}
-            />
-          )}
-          <Button variant="secondary" size="sm" onClick={onStartChat}>
-            {t({
-              id: "assistants.action.newChat",
-              message: "New Chat",
-            })}
-          </Button>
-        </div>
+        {!isArchived && (
+          <div className="flex shrink-0 flex-wrap gap-2">
+            {assistant.can_edit && (
+              <DropdownMenu
+                items={[
+                  {
+                    label: t({
+                      id: "sharing.action.share",
+                      message: "Share",
+                    }),
+                    icon: <ShareIcon className="size-4" />,
+                    onClick: onShare,
+                  },
+                  {
+                    label: t({
+                      id: "assistants.action.edit",
+                      message: "Edit",
+                    }),
+                    icon: <EditIcon className="size-4" />,
+                    onClick: onEdit,
+                  },
+                  ...(hubEnabled
+                    ? [
+                        {
+                          label: t({
+                            id: "assistantHub.action.submit",
+                            message: "Submit to Hub",
+                          }),
+                          icon: <CheckCircleIcon className="size-4" />,
+                          onClick: onSubmitToHub,
+                        },
+                      ]
+                    : []),
+                  {
+                    label: t({
+                      id: "assistants.action.archive",
+                      message: "Archive",
+                    }),
+                    icon: <LogOutIcon className="size-4" />,
+                    onClick: onArchive,
+                    confirmAction: true,
+                    confirmTitle: t({
+                      id: "assistants.archive.confirmTitle",
+                      message: "Confirm Archive",
+                    }),
+                    confirmMessage: t({
+                      id: "assistants.archive.confirmMessage",
+                      message:
+                        "Are you sure you want to archive this assistant?",
+                    }),
+                  },
+                ]}
+              />
+            )}
+            <Button variant="secondary" size="sm" onClick={onStartChat}>
+              {t({
+                id: "assistants.action.newChat",
+                message: "New Chat",
+              })}
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -584,34 +765,81 @@ function AssistantListCard({
 
 function AssistantListView({
   hubEnabled,
+  searchQuery,
   view,
 }: {
   hubEnabled: boolean;
+  searchQuery: string;
   view: Exclude<AssistantsLandingView, "hub">;
 }) {
   const navigate = useNavigate();
-  const [searchQuery, setSearchQuery] = useState("");
+  const isCreatedView = view === "owned_by_user";
+  const [statusFilter, setStatusFilter] =
+    useState<OwnedAssistantStatusFilter>("all");
   const [sharingAssistant, setSharingAssistant] = useState<{
     id: string;
     name: string;
   } | null>(null);
   const { data, isLoading, error, refetch } = useListAssistants({
-    queryParams: { sharing_relation: view },
+    queryParams: {
+      sharing_relation: view,
+      ...(isCreatedView && hubEnabled ? { include_archived: true } : {}),
+    },
   });
+  const {
+    data: hubVersionsData,
+    isLoading: isLoadingHubVersions,
+    error: hubVersionsError,
+  } = useListMyAssistantHubVersions(
+    hubEnabled && isCreatedView ? {} : skipToken,
+  );
   const archiveAssistantMutation = useArchiveAssistant();
   const assistants = useMemo(() => data ?? [], [data]);
+  const hubVersions = useMemo(
+    () => hubVersionsData?.versions ?? [],
+    [hubVersionsData?.versions],
+  );
+  const assistantStatuses = useMemo(
+    () =>
+      new Map(
+        assistants.map((assistant) => [
+          assistant.id,
+          getOwnedAssistantStatus(assistant, hubVersions),
+        ]),
+      ),
+    [assistants, hubVersions],
+  );
+  const statusCounts = useMemo(() => {
+    const counts: Record<OwnedAssistantStatusFilter, number> = {
+      all: assistants.length,
+      in_review: 0,
+      published: 0,
+      unpublished: 0,
+      declined: 0,
+      not_submitted: 0,
+      archived: 0,
+    };
+
+    for (const status of assistantStatuses.values()) {
+      counts[status] += 1;
+    }
+
+    return counts;
+  }, [assistantStatuses, assistants.length]);
   const filteredAssistants = useMemo(
     () =>
-      assistants.filter((assistant) =>
-        assistantMatchesSearch(assistant, searchQuery),
+      assistants.filter(
+        (assistant) =>
+          assistantMatchesSearch(assistant, searchQuery) &&
+          (statusFilter === "all" ||
+            assistantStatuses.get(assistant.id) === statusFilter),
       ),
-    [assistants, searchQuery],
+    [assistantStatuses, assistants, searchQuery, statusFilter],
   );
-  const isCreatedView = view === "owned_by_user";
   const listTitle = isCreatedView
     ? t({
         id: "assistants.list.title.owned_by_user",
-        message: "Created by me",
+        message: "My assistants",
       })
     : t({
         id: "assistants.list.title.shared_with_user",
@@ -632,30 +860,47 @@ function AssistantListView({
 
   return (
     <>
-      <div className="flex flex-wrap justify-center gap-2">
-        <Button
-          variant="primary"
-          size="sm"
-          icon={<PlusIcon />}
-          onClick={() => navigate("/assistants/new")}
-        >
-          {t({
-            id: "assistant.create.title",
-            message: "Create Assistant",
+      {isCreatedView && hubEnabled && (
+        <div
+          className="flex flex-wrap items-center gap-2"
+          role="group"
+          aria-label={t({
+            id: "assistants.status.filterAria",
+            message: "Filter my assistants by Hub status",
           })}
-        </Button>
-      </div>
+        >
+          <span className="mr-1 text-xs font-semibold uppercase tracking-wide text-theme-fg-muted">
+            {t({
+              id: "assistants.status.filterLabel",
+              message: "Hub status",
+            })}
+          </span>
+          {OWNED_ASSISTANT_STATUS_FILTERS.map((status) => {
+            const isActive = statusFilter === status;
+            const label = getOwnedAssistantStatusLabel(status);
+            const count = statusCounts[status];
 
-      <AssistantsSearch
-        searchQuery={searchQuery}
-        setSearchQuery={setSearchQuery}
-        ariaLabel={t({
-          id: "assistants.search.aria",
-          message: "Search assistants",
-        })}
-      />
+            return (
+              <button
+                key={status}
+                type="button"
+                aria-pressed={isActive}
+                onClick={() => setStatusFilter(status)}
+                className={clsx(
+                  "focus-ring theme-transition rounded-lg px-3 py-1.5 text-sm font-medium",
+                  isActive
+                    ? "bg-theme-bg-selected text-theme-fg-primary"
+                    : "text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary",
+                )}
+              >
+                {`${label} (${count})`}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
-      {isLoading && (
+      {(isLoading || (isCreatedView && isLoadingHubVersions)) && (
         <LoadingState
           message={t({
             id: "assistants.loading",
@@ -664,7 +909,7 @@ function AssistantListView({
         />
       )}
 
-      {error && (
+      {(error ?? hubVersionsError) && (
         <Alert type="error">
           {t({
             id: "assistants.error.load",
@@ -673,36 +918,42 @@ function AssistantListView({
         </Alert>
       )}
 
-      {!isLoading && !error && assistants.length === 0 && (
-        <EmptyAssistantHubState
-          title={
-            isCreatedView
-              ? t({
-                  id: "assistants.empty.owned_by_user",
-                  message: "You haven't created any assistants yet",
-                })
-              : t({
-                  id: "assistants.empty.shared_with_user",
-                  message: "No assistants have been shared with you",
-                })
-          }
-          description={
-            isCreatedView
-              ? t({
-                  id: "assistants.empty.createFirst",
-                  message: "Create your first assistant to get started",
-                })
-              : t({
-                  id: "assistants.empty.shared_with_user.description",
-                  message:
-                    "Assistants that others share with you will appear here",
-                })
-          }
-        />
-      )}
+      {!isLoading &&
+        !isLoadingHubVersions &&
+        !error &&
+        !hubVersionsError &&
+        assistants.length === 0 && (
+          <EmptyAssistantHubState
+            title={
+              isCreatedView
+                ? t({
+                    id: "assistants.empty.owned_by_user",
+                    message: "You haven't created any assistants yet",
+                  })
+                : t({
+                    id: "assistants.empty.shared_with_user",
+                    message: "No assistants have been shared with you",
+                  })
+            }
+            description={
+              isCreatedView
+                ? t({
+                    id: "assistants.empty.createFirst",
+                    message: "Create your first assistant to get started",
+                  })
+                : t({
+                    id: "assistants.empty.shared_with_user.description",
+                    message:
+                      "Assistants that others share with you will appear here",
+                  })
+            }
+          />
+        )}
 
       {!isLoading &&
+        !isLoadingHubVersions &&
         !error &&
+        !hubVersionsError &&
         assistants.length > 0 &&
         filteredAssistants.length === 0 && (
           <EmptyAssistantHubState
@@ -717,39 +968,48 @@ function AssistantListView({
           />
         )}
 
-      {!isLoading && !error && filteredAssistants.length > 0 && (
-        <section>
-          <div className="mb-4 flex items-center gap-2">
-            <SearchIcon className="size-5 text-theme-fg-muted" />
-            <h2 className="text-lg font-semibold text-theme-fg-primary">
-              {listTitle}
-            </h2>
-          </div>
-          <div className="grid gap-3">
-            {filteredAssistants.map((assistant) => (
-              <AssistantListCard
-                key={assistant.id}
-                assistant={assistant}
-                hubEnabled={hubEnabled}
-                onStartChat={() => navigate(`/a/${assistant.id}`)}
-                onEdit={() => navigate(`/assistants/${assistant.id}/edit`)}
-                onShare={() =>
-                  setSharingAssistant({
-                    id: assistant.id,
-                    name: assistant.name,
-                  })
-                }
-                onSubmitToHub={() =>
-                  navigate(`/assistant-hub/submit/${assistant.id}`)
-                }
-                onArchive={() => {
-                  void handleArchive(assistant.id);
-                }}
-              />
-            ))}
-          </div>
-        </section>
-      )}
+      {!isLoading &&
+        !isLoadingHubVersions &&
+        !error &&
+        !hubVersionsError &&
+        filteredAssistants.length > 0 && (
+          <section>
+            <div className="mb-4 flex items-center gap-2">
+              <SearchIcon className="size-5 text-theme-fg-muted" />
+              <h2 className="text-lg font-semibold text-theme-fg-primary">
+                {listTitle}
+              </h2>
+            </div>
+            <div className="grid gap-3">
+              {filteredAssistants.map((assistant) => (
+                <AssistantListCard
+                  key={assistant.id}
+                  assistant={assistant}
+                  hubStatus={
+                    isCreatedView && hubEnabled
+                      ? assistantStatuses.get(assistant.id)
+                      : undefined
+                  }
+                  hubEnabled={hubEnabled}
+                  onStartChat={() => navigate(`/a/${assistant.id}`)}
+                  onEdit={() => navigate(`/assistants/${assistant.id}/edit`)}
+                  onShare={() =>
+                    setSharingAssistant({
+                      id: assistant.id,
+                      name: assistant.name,
+                    })
+                  }
+                  onSubmitToHub={() =>
+                    navigate(`/assistant-hub/submit/${assistant.id}`)
+                  }
+                  onArchive={() => {
+                    void handleArchive(assistant.id);
+                  }}
+                />
+              ))}
+            </div>
+          </section>
+        )}
 
       {sharingAssistant && (
         <SharingErrorBoundary onReset={() => setSharingAssistant(null)}>
@@ -769,6 +1029,7 @@ function AssistantListView({
 export default function AssistantsPage({ view }: AssistantsPageProps) {
   const navigate = useNavigate();
   const { categoryId } = useParams<{ categoryId?: string }>();
+  const [searchQuery, setSearchQuery] = useState("");
   const { containerClasses, horizontalPadding } =
     usePageAlignment("assistants");
   const {
@@ -777,9 +1038,6 @@ export default function AssistantsPage({ view }: AssistantsPageProps) {
     error: hubConfigError,
   } = useAssistantHubConfig({});
   const hubEnabled = hubConfig?.enabled === true;
-  const selectedCategory = hubConfig?.categories.find(
-    (category) => category.id === categoryId,
-  );
 
   const tabs = [
     ...(hubEnabled
@@ -794,48 +1052,54 @@ export default function AssistantsPage({ view }: AssistantsPageProps) {
         ]
       : []),
     {
+      value: "owned_by_user" as const,
+      label: t({
+        id: "assistants.filter.owned_by_user",
+        message: "My assistants",
+      }),
+    },
+    {
       value: "shared_with_user" as const,
       label: t({
         id: "assistants.filter.shared_with_user",
         message: "Shared with me",
       }),
     },
-    {
-      value: "owned_by_user" as const,
-      label: t({
-        id: "assistants.filter.owned_by_user",
-        message: "Created by me",
-      }),
-    },
   ];
 
-  const pageTitle =
-    view === "hub"
-      ? (selectedCategory?.display_name ??
-        t({
-          id: "assistantHub.title",
-          message: "Assistant Hub",
-        }))
-      : t({ id: "assistants.title", message: "Assistants" });
-  const pageSubtitle =
-    view === "hub"
-      ? categoryId != null
-        ? t({
-            id: "assistantHub.category.subtitle",
-            message: "Browse assistants filtered by category",
-          })
-        : t({
-            id: "assistantHub.subtitle",
-            message:
-              "Browse reviewed assistants that are available to your organization",
-          })
-      : t({
-          id: "assistants.subtitle",
-          message:
-            "Create and manage custom assistants with specific instructions and capabilities",
-        });
+  const pageTitle = t({ id: "assistants.title", message: "Assistants" });
+  const pageSubtitle = t({
+    id: "assistants.workspace.subtitle",
+    message: "Discover, create, and use custom assistants.",
+  });
   const showHubActions =
     view === "hub" && categoryId == null && hubConfig != null;
+  const pageHeader = (
+    <PageHeader density="compact" title={pageTitle} subtitle={pageSubtitle}>
+      <div className="mx-auto flex w-full max-w-3xl items-stretch gap-3">
+        <AssistantsSearch
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          ariaLabel={t({
+            id: "assistants.search.aria",
+            message: "Search assistants",
+          })}
+        />
+        <Button
+          variant="primary"
+          size="sm"
+          className="shrink-0 self-stretch whitespace-nowrap"
+          icon={<PlusIcon />}
+          onClick={() => navigate("/assistants/new")}
+        >
+          {t({
+            id: "assistant.create.title",
+            message: "Create Assistant",
+          })}
+        </Button>
+      </div>
+    </PageHeader>
+  );
 
   useEffect(() => {
     document.title = `${pageTitle} - ${t({
@@ -846,12 +1110,14 @@ export default function AssistantsPage({ view }: AssistantsPageProps) {
   if (isLoadingHubConfig) {
     return (
       <div className="flex h-full flex-col bg-theme-bg-primary">
-        <PageHeader
-          density="compact"
-          title={pageTitle}
-          subtitle={pageSubtitle}
-        />
-        <div className={clsx("flex-1 overflow-auto", horizontalPadding)}>
+        {pageHeader}
+        <div
+          className={clsx(
+            "flex-1 overflow-auto [scrollbar-gutter:stable_both-edges]",
+            horizontalPadding,
+          )}
+          data-ui="assistants-page-scroll-container"
+        >
           <div className={clsx("py-6", containerClasses)}>
             <LoadingState
               message={t({
@@ -871,8 +1137,14 @@ export default function AssistantsPage({ view }: AssistantsPageProps) {
 
   return (
     <div className="flex h-full flex-col bg-theme-bg-primary">
-      <PageHeader density="compact" title={pageTitle} subtitle={pageSubtitle} />
-      <div className={clsx("flex-1 overflow-auto", horizontalPadding)}>
+      {pageHeader}
+      <div
+        className={clsx(
+          "flex-1 overflow-auto [scrollbar-gutter:stable_both-edges]",
+          horizontalPadding,
+        )}
+        data-ui="assistants-page-scroll-container"
+      >
         <div className={clsx("space-y-8 py-6", containerClasses)}>
           {(tabs.length > 1 || showHubActions) && (
             <div
@@ -929,11 +1201,19 @@ export default function AssistantsPage({ view }: AssistantsPageProps) {
           )}
 
           {view === "hub" && hubConfig != null && (
-            <HubLandingView categoryId={categoryId} config={hubConfig} />
+            <HubLandingView
+              categoryId={categoryId}
+              config={hubConfig}
+              searchQuery={searchQuery}
+            />
           )}
 
           {view !== "hub" && (
-            <AssistantListView hubEnabled={hubEnabled} view={view} />
+            <AssistantListView
+              hubEnabled={hubEnabled}
+              searchQuery={searchQuery}
+              view={view}
+            />
           )}
         </div>
       </div>

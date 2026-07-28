@@ -3,6 +3,7 @@ use crate::models::chat::resolve_chat_display_name;
 use crate::models::share_link;
 use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
+use crate::services::ms_graph::MsGraphService;
 use crate::state::AppState;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
@@ -192,12 +193,41 @@ pub async fn resolve_share_link(
         let (owner_display_name, owner_photo_user_id) = if owner_is_me {
             (me_user.name.clone(), None)
         } else if let Ok(owner_user_id) = Uuid::parse_str(&chat.owner_user_id) {
-            let owner_email = Users::find_by_id(owner_user_id)
+            let owner = Users::find_by_id(owner_user_id)
                 .one(&app_state.db)
                 .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-                .and_then(|user| user.email);
-            (owner_email.clone(), owner_email)
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            if let Some(owner) = owner {
+                let owner_display_name = if app_state
+                    .config
+                    .integrations
+                    .experimental_entra_id
+                    .enabled
+                {
+                    match me_user.access_token.as_deref() {
+                        Some(access_token) => {
+                            MsGraphService::new(access_token)
+                                .resolve_user_display_name(&owner.subject, owner.email.as_deref())
+                                .await
+                        }
+                        None => {
+                            tracing::debug!(
+                                "Skipping shared chat owner display-name lookup because no forwarded access token is available"
+                            );
+                            None
+                        }
+                    }
+                } else {
+                    None
+                };
+                let owner_email = owner.email;
+                (
+                    owner_display_name.or_else(|| owner_email.clone()),
+                    owner_email,
+                )
+            } else {
+                (None, None)
+            }
         } else {
             (None, None)
         };

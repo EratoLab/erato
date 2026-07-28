@@ -670,6 +670,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "include_archived",
+            "in": "query",
+            "description": "Whether to include archived assistants. Defaults to false.",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
