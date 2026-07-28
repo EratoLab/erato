@@ -21,3 +21,8 @@ export type { OutlookListMailboxesV1Params } from "./outlook-list-mailboxes-v1-p
 export type { OutlookListMailboxesV1Result } from "./outlook-list-mailboxes-v1-result.js";
 export type { OutlookListEmailsV1Params } from "./outlook-list-emails-v1-params.js";
 export type { OutlookListEmailsV1Result } from "./outlook-list-emails-v1-result.js";
+export type { OutlookMessageRecipient } from "./outlook-message-recipient.js";
+export type { OutlookAttachmentReference } from "./outlook-attachment-reference.js";
+export type { OutlookConversationMessage } from "./outlook-conversation-message.js";
+export type { OutlookGetConversationV1Params } from "./outlook-get-conversation-v1-params.js";
+export type { OutlookGetConversationV1Result } from "./outlook-get-conversation-v1-result.js";

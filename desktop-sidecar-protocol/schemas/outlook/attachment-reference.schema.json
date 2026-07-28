@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/outlook/attachment-reference.schema.json",
+  "title": "OutlookAttachmentReference",
+  "description": "Metadata for one attachment. The bytes are fetched separately through the binary transfer profile, so any-size attachments stay out of the JSON-RPC body.",
+  "type": "object",
+  "required": ["transferHandle", "sizeBytes"],
+  "properties": {
+    "name": {
+      "description": "File name, when present.",
+      "type": "string",
+      "maxLength": 4096
+    },
+    "mimeType": {
+      "description": "MIME type. Embedded messages are reported as message/rfc822.",
+      "type": "string",
+      "maxLength": 256
+    },
+    "contentId": {
+      "description": "Content-ID for an inline attachment, without angle brackets.",
+      "type": "string",
+      "maxLength": 4096
+    },
+    "isInline": {
+      "description": "True when the attachment is referenced from the message body by contentId.",
+      "type": "boolean"
+    },
+    "kind": {
+      "description": "Implementation-defined attachment kind. Known values include binary and embeddedMessage.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "sizeBytes": {
+      "description": "Exact length of the transferable bytes.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "sha256": {
+      "description": "Lowercase hex SHA-256 of the transferable bytes.",
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "transferHandle": {
+      "description": "Opaque handle for GET /erato/sidecar/transfer/v1/{handle} within the same sidecar runtime.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{32,128}$"
+    }
+  },
+  "additionalProperties": true
+}

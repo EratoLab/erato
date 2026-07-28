@@ -16,6 +16,7 @@ import {
   validateCancelParams,
   validateDiagnosticsEchoV1Params,
   validateDiscoverParams,
+  validateOutlookGetConversationV1Params,
   validateOutlookListEmailsV1Params,
   validateOutlookListMailboxesV1Params,
   validateSidecarConfigureV1Params,
@@ -72,6 +73,26 @@ const MOCK_OUTLOOK_EMAIL = {
   senderEmailAddress: "test@example.com",
   receivedAtUnixSeconds: 1_774_291_200,
   internetMessageId: "<mock-outlook-email@example.com>",
+};
+const MOCK_OUTLOOK_CONVERSATION_MESSAGE = {
+  subject: "Mock Outlook message",
+  fromName: "Erato Test",
+  fromEmailAddress: "test@example.com",
+  to: [{ name: "Mock Outlook mailbox", emailAddress: "mock@example.com" }],
+  cc: [],
+  sentAtUnixSeconds: 1_774_291_200,
+  internetMessageId: "<mock-outlook-email@example.com>",
+  bodyText: "Mock Outlook conversation body.",
+  attachments: [
+    {
+      name: "mock-attachment.pdf",
+      mimeType: "application/pdf",
+      kind: "binary",
+      sizeBytes: 12,
+      sha256: "a".repeat(64),
+      transferHandle: "0".repeat(32),
+    },
+  ],
 };
 const openRpcUrl = [
   new URL("../../openrpc.json", import.meta.url),
@@ -386,6 +407,22 @@ export class MockSidecar {
       return rpcResult(message.id, {
         mailbox: MOCK_OUTLOOK_MAILBOX,
         emails: [MOCK_OUTLOOK_EMAIL],
+      });
+    }
+
+    if (message.method === "outlook.get_conversation.v1") {
+      if (!validateOutlookGetConversationV1Params(message.params)) {
+        return rpcError(message.id, -32602, "Invalid method parameters.");
+      }
+      if (
+        (message.params as { mailboxId: string }).mailboxId !==
+        MOCK_OUTLOOK_MAILBOX.id
+      ) {
+        return rpcError(message.id, -32602, "Unknown Outlook mailbox.");
+      }
+      return rpcResult(message.id, {
+        mailbox: MOCK_OUTLOOK_MAILBOX,
+        messages: [MOCK_OUTLOOK_CONVERSATION_MESSAGE],
       });
     }
 

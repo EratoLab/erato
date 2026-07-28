@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-get-conversation-v1-params.schema.json",
+  "title": "OutlookGetConversationV1Params",
+  "type": "object",
+  "required": ["mailboxId", "anchorInternetMessageId"],
+  "properties": {
+    "mailboxId": {
+      "description": "Short opaque identifier returned by outlook.list_mailboxes.v1.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "anchorInternetMessageId": {
+      "description": "RFC 5322 Message-ID of the anchor message, including angle brackets, as reported by outlook.list_emails.v1.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32768
+    }
+  },
+  "additionalProperties": true
+}

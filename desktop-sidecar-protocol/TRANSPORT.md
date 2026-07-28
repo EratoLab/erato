@@ -52,8 +52,36 @@ for a request that was not admitted. Clients MUST NOT try to interpret a
 non-JSON HTTP error body as a JSON-RPC response.
 
 `OPTIONS` is a transport-level preflight and never advances protocol state.
-`GET` is not supported, so JSON-RPC payloads cannot appear in URLs, browser
-history, or intermediary caches. RPC responses set `Cache-Control: no-store`.
+`GET` is not accepted on the RPC endpoint, so JSON-RPC payloads cannot appear in
+URLs, browser history, or intermediary caches. RPC responses set
+`Cache-Control: no-store`. `GET` is used only on the separate binary transfer
+endpoint below, whose URLs carry an opaque handle rather than any JSON-RPC
+payload.
+
+## Binary transfer profile (unqualified)
+
+Some results reference bytes that exceed the 262,144-byte JSON-RPC body, such as
+the attachments and embedded messages of `outlook.get_conversation.v1`. Those
+bytes are never base64-encoded into the JSON-RPC response. Instead the method
+result carries an opaque transfer handle for each object, and the client fetches
+the bytes from a separate loopback endpoint.
+
+| Property              | Candidate value                                              |
+| --------------------- | ------------------------------------------------------------ |
+| URL                   | `http://127.0.0.1:23123/erato/sidecar/transfer/v1/{handle}`  |
+| Methods               | `GET` for retrieval; `OPTIONS` for browser preflight         |
+| Response content type | the object's own media type, else `application/octet-stream` |
+| Response size         | unbounded; the 262,144-byte JSON-RPC cap does not apply      |
+
+A handle is minted by the sidecar inside a method result (for example an
+attachment's `transferHandle`). It is opaque, unguessable, and valid only within
+the same sidecar runtime that issued it; it may expire. The transfer endpoint
+enforces the **same** `Host`, `Origin`, and CORS/private-network validation as
+the RPC endpoint — an unlisted origin is refused identically — so a handle is
+usable only from an allowlisted Erato origin. A successful `GET` returns `200`
+with the exact bytes, `Content-Length`, the object's media type, and
+`Cache-Control: no-store`. An unknown or expired handle returns `404`. Range
+requests are not part of v1; each `GET` returns the whole object.
 
 ## Request-composed readiness state machine
 

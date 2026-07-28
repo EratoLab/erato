@@ -1,0 +1,73 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/outlook/conversation-message.schema.json",
+  "title": "OutlookConversationMessage",
+  "description": "One message of an Outlook conversation, with its bodies inline and its attachments referenced by transfer handle.",
+  "type": "object",
+  "required": ["attachments"],
+  "properties": {
+    "subject": {
+      "type": "string",
+      "maxLength": 32768
+    },
+    "fromName": {
+      "type": "string",
+      "maxLength": 4096
+    },
+    "fromEmailAddress": {
+      "description": "SMTP address of the sender. Omitted when only a non-routable Exchange address is stored locally.",
+      "type": "string",
+      "maxLength": 4096
+    },
+    "to": {
+      "type": "array",
+      "items": {
+        "$ref": "../outlook/message-recipient.schema.json"
+      }
+    },
+    "cc": {
+      "type": "array",
+      "items": {
+        "$ref": "../outlook/message-recipient.schema.json"
+      }
+    },
+    "sentAtUnixSeconds": {
+      "description": "UTC Unix timestamp in whole seconds.",
+      "type": "integer",
+      "minimum": -62135596800,
+      "maximum": 253402300799
+    },
+    "receivedAtUnixSeconds": {
+      "description": "UTC Unix timestamp in whole seconds.",
+      "type": "integer",
+      "minimum": -62135596800,
+      "maximum": 253402300799
+    },
+    "internetMessageId": {
+      "type": "string",
+      "maxLength": 32768
+    },
+    "conversationIndex": {
+      "description": "Lowercase hex PidTagConversationIndex; its embedded GUID groups the thread.",
+      "type": "string",
+      "maxLength": 8192
+    },
+    "bodyHtml": {
+      "description": "HTML body, when present.",
+      "type": "string",
+      "maxLength": 1048576
+    },
+    "bodyText": {
+      "description": "Plain-text body, when present.",
+      "type": "string",
+      "maxLength": 1048576
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "$ref": "../outlook/attachment-reference.schema.json"
+      }
+    }
+  },
+  "additionalProperties": true
+}
