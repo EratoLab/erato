@@ -4046,7 +4046,7 @@ return errors === 0;
 }
 
 export const validateOutlookGetConversationV1Params = validate36;
-const schema50 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-get-conversation-v1-params.schema.json","title":"OutlookGetConversationV1Params","type":"object","required":["mailboxId","anchorInternetMessageId"],"properties":{"mailboxId":{"description":"Short opaque identifier returned by outlook.list_mailboxes.v1.","type":"string","pattern":"^[0-9a-f]{32}$"},"anchorInternetMessageId":{"description":"RFC 5322 Message-ID of the anchor message, including angle brackets, as reported by outlook.list_emails.v1.","type":"string","minLength":1,"maxLength":32768}},"additionalProperties":true};
+const schema50 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-get-conversation-v1-params.schema.json","title":"OutlookGetConversationV1Params","type":"object","required":["mailboxId","anchor"],"properties":{"mailboxId":{"description":"Short opaque identifier returned by outlook.list_mailboxes.v1.","type":"string","pattern":"^[0-9a-f]{32}$"},"anchor":{"description":"The message the conversation is resolved from.","type":"object","required":["internetMessageId"],"properties":{"internetMessageId":{"description":"RFC 5322 Message-ID of the anchor message, including angle brackets, as reported by outlook.list_emails.v1. Not the Office.js conversationId.","type":"string","minLength":1,"maxLength":32768}},"additionalProperties":true},"maxMessages":{"description":"Cap on the number of returned messages. When the conversation has more, the result is reported as partial.","type":"integer","minimum":1,"maximum":1000}},"additionalProperties":true};
 
 function validate36(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-get-conversation-v1-params.schema.json" */;
@@ -4063,8 +4063,8 @@ vErrors.push(err0);
 }
 errors++;
 }
-if(data.anchorInternetMessageId === undefined){
-const err1 = {instancePath,schemaPath:"#/required",keyword:"required",params:{missingProperty: "anchorInternetMessageId"},message:"must have required property '"+"anchorInternetMessageId"+"'"};
+if(data.anchor === undefined){
+const err1 = {instancePath,schemaPath:"#/required",keyword:"required",params:{missingProperty: "anchor"},message:"must have required property '"+"anchor"+"'"};
 if(vErrors === null){
 vErrors = [err1];
 }
@@ -4098,11 +4098,11 @@ vErrors.push(err3);
 errors++;
 }
 }
-if(data.anchorInternetMessageId !== undefined){
-let data1 = data.anchorInternetMessageId;
-if(typeof data1 === "string"){
-if(func2(data1) > 32768){
-const err4 = {instancePath:instancePath+"/anchorInternetMessageId",schemaPath:"#/properties/anchorInternetMessageId/maxLength",keyword:"maxLength",params:{limit: 32768},message:"must NOT have more than 32768 characters"};
+if(data.anchor !== undefined){
+let data1 = data.anchor;
+if(data1 && typeof data1 == "object" && !Array.isArray(data1)){
+if(data1.internetMessageId === undefined){
+const err4 = {instancePath:instancePath+"/anchor",schemaPath:"#/properties/anchor/required",keyword:"required",params:{missingProperty: "internetMessageId"},message:"must have required property '"+"internetMessageId"+"'"};
 if(vErrors === null){
 vErrors = [err4];
 }
@@ -4111,8 +4111,11 @@ vErrors.push(err4);
 }
 errors++;
 }
-if(func2(data1) < 1){
-const err5 = {instancePath:instancePath+"/anchorInternetMessageId",schemaPath:"#/properties/anchorInternetMessageId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(data1.internetMessageId !== undefined){
+let data2 = data1.internetMessageId;
+if(typeof data2 === "string"){
+if(func2(data2) > 32768){
+const err5 = {instancePath:instancePath+"/anchor/internetMessageId",schemaPath:"#/properties/anchor/properties/internetMessageId/maxLength",keyword:"maxLength",params:{limit: 32768},message:"must NOT have more than 32768 characters"};
 if(vErrors === null){
 vErrors = [err5];
 }
@@ -4121,9 +4124,8 @@ vErrors.push(err5);
 }
 errors++;
 }
-}
-else {
-const err6 = {instancePath:instancePath+"/anchorInternetMessageId",schemaPath:"#/properties/anchorInternetMessageId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(func2(data2) < 1){
+const err6 = {instancePath:instancePath+"/anchor/internetMessageId",schemaPath:"#/properties/anchor/properties/internetMessageId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
 if(vErrors === null){
 vErrors = [err6];
 }
@@ -4133,9 +4135,8 @@ vErrors.push(err6);
 errors++;
 }
 }
-}
 else {
-const err7 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+const err7 = {instancePath:instancePath+"/anchor/internetMessageId",schemaPath:"#/properties/anchor/properties/internetMessageId/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err7];
 }
@@ -4144,17 +4145,78 @@ vErrors.push(err7);
 }
 errors++;
 }
+}
+}
+else {
+const err8 = {instancePath:instancePath+"/anchor",schemaPath:"#/properties/anchor/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err8];
+}
+else {
+vErrors.push(err8);
+}
+errors++;
+}
+}
+if(data.maxMessages !== undefined){
+let data3 = data.maxMessages;
+if(!(((typeof data3 == "number") && (!(data3 % 1) && !isNaN(data3))) && (isFinite(data3)))){
+const err9 = {instancePath:instancePath+"/maxMessages",schemaPath:"#/properties/maxMessages/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+if(vErrors === null){
+vErrors = [err9];
+}
+else {
+vErrors.push(err9);
+}
+errors++;
+}
+if((typeof data3 == "number") && (isFinite(data3))){
+if(data3 > 1000 || isNaN(data3)){
+const err10 = {instancePath:instancePath+"/maxMessages",schemaPath:"#/properties/maxMessages/maximum",keyword:"maximum",params:{comparison: "<=", limit: 1000},message:"must be <= 1000"};
+if(vErrors === null){
+vErrors = [err10];
+}
+else {
+vErrors.push(err10);
+}
+errors++;
+}
+if(data3 < 1 || isNaN(data3)){
+const err11 = {instancePath:instancePath+"/maxMessages",schemaPath:"#/properties/maxMessages/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
+if(vErrors === null){
+vErrors = [err11];
+}
+else {
+vErrors.push(err11);
+}
+errors++;
+}
+}
+}
+}
+else {
+const err12 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err12];
+}
+else {
+vErrors.push(err12);
+}
+errors++;
+}
 validate36.errors = vErrors;
 return errors === 0;
 }
 
 export const validateOutlookGetConversationV1Result = validate37;
-const schema51 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-get-conversation-v1-result.schema.json","title":"OutlookGetConversationV1Result","description":"The messages of the anchored conversation, oldest first, with attachment bytes referenced by transfer handle.","type":"object","required":["messages"],"properties":{"mailbox":{"$ref":"../outlook/mailbox.schema.json"},"messages":{"type":"array","items":{"$ref":"../outlook/conversation-message.schema.json"}}},"additionalProperties":true};
-const schema53 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/conversation-message.schema.json","title":"OutlookConversationMessage","description":"One message of an Outlook conversation, with its bodies inline and its attachments referenced by transfer handle.","type":"object","required":["attachments"],"properties":{"subject":{"type":"string","maxLength":32768},"fromName":{"type":"string","maxLength":4096},"fromEmailAddress":{"description":"SMTP address of the sender. Omitted when only a non-routable Exchange address is stored locally.","type":"string","maxLength":4096},"to":{"type":"array","items":{"$ref":"../outlook/message-recipient.schema.json"}},"cc":{"type":"array","items":{"$ref":"../outlook/message-recipient.schema.json"}},"sentAtUnixSeconds":{"description":"UTC Unix timestamp in whole seconds.","type":"integer","minimum":-62135596800,"maximum":253402300799},"receivedAtUnixSeconds":{"description":"UTC Unix timestamp in whole seconds.","type":"integer","minimum":-62135596800,"maximum":253402300799},"internetMessageId":{"type":"string","maxLength":32768},"conversationIndex":{"description":"Lowercase hex PidTagConversationIndex; its embedded GUID groups the thread.","type":"string","maxLength":8192},"bodyHtml":{"description":"HTML body, when present.","type":"string","maxLength":1048576},"bodyText":{"description":"Plain-text body, when present.","type":"string","maxLength":1048576},"attachments":{"type":"array","items":{"$ref":"../outlook/attachment-reference.schema.json"}}},"additionalProperties":true};
+const schema51 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-get-conversation-v1-result.schema.json","title":"OutlookGetConversationV1Result","description":"The messages of the anchored conversation, oldest first, with bodies and attachment bytes referenced by transfer handle.","type":"object","required":["state","messages"],"properties":{"state":{"description":"Completeness of the conversation. ok means every message and byte reference was produced; partial means some were omitted (see warnings), for example because maxMessages was reached or an attachment could not be read.","type":"string","minLength":1,"maxLength":32},"mailbox":{"$ref":"../outlook/mailbox.schema.json"},"messages":{"type":"array","items":{"$ref":"../outlook/conversation-message.schema.json"}},"warnings":{"type":"array","items":{"$ref":"../outlook/conversation-warning.schema.json"}}},"additionalProperties":true};
+const schema59 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/conversation-warning.schema.json","title":"OutlookConversationWarning","description":"A part of a conversation that could not be represented fully, without hiding the rest.","type":"object","required":["code"],"properties":{"code":{"description":"Stable machine-readable warning code. Known values include truncated, attachment_unavailable, and embedded_attachments_omitted.","type":"string","minLength":1,"maxLength":128},"message":{"type":"string","minLength":1,"maxLength":4096},"internetMessageId":{"description":"The message the warning is about, when it is message-scoped.","type":"string","maxLength":32768}},"additionalProperties":true};
+const schema53 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/conversation-message.schema.json","title":"OutlookConversationMessage","description":"One message of an Outlook conversation. Its body is referenced by transfer handle and its attachments by transfer handle, so no bytes are inline.","type":"object","required":["attachments"],"properties":{"internetMessageId":{"type":"string","maxLength":32768},"subject":{"type":"string","maxLength":32768},"from":{"$ref":"../outlook/message-recipient.schema.json"},"to":{"type":"array","items":{"$ref":"../outlook/message-recipient.schema.json"}},"cc":{"type":"array","items":{"$ref":"../outlook/message-recipient.schema.json"}},"sentAtUnixSeconds":{"description":"UTC Unix timestamp in whole seconds.","type":"integer","minimum":-62135596800,"maximum":253402300799},"receivedAtUnixSeconds":{"description":"UTC Unix timestamp in whole seconds.","type":"integer","minimum":-62135596800,"maximum":253402300799},"isDraft":{"description":"True when the message is an unsent draft.","type":"boolean"},"conversationIndex":{"description":"Lowercase hex PidTagConversationIndex; its embedded GUID groups the thread.","type":"string","maxLength":8192},"bodyHandle":{"$ref":"../outlook/body-handle.schema.json"},"attachments":{"type":"array","items":{"$ref":"../outlook/attachment-reference.schema.json"}}},"additionalProperties":true};
 const schema54 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/message-recipient.schema.json","title":"OutlookMessageRecipient","description":"One recipient of an Outlook message.","type":"object","properties":{"name":{"description":"Display name, when present.","type":"string","maxLength":4096},"emailAddress":{"description":"SMTP address. Omitted when only a non-routable Exchange address is stored locally.","type":"string","maxLength":4096}},"additionalProperties":true};
-const schema56 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/attachment-reference.schema.json","title":"OutlookAttachmentReference","description":"Metadata for one attachment. The bytes are fetched separately through the binary transfer profile, so any-size attachments stay out of the JSON-RPC body.","type":"object","required":["transferHandle","sizeBytes"],"properties":{"name":{"description":"File name, when present.","type":"string","maxLength":4096},"mimeType":{"description":"MIME type. Embedded messages are reported as message/rfc822.","type":"string","maxLength":256},"contentId":{"description":"Content-ID for an inline attachment, without angle brackets.","type":"string","maxLength":4096},"isInline":{"description":"True when the attachment is referenced from the message body by contentId.","type":"boolean"},"kind":{"description":"Implementation-defined attachment kind. Known values include binary and embeddedMessage.","type":"string","minLength":1,"maxLength":128},"sizeBytes":{"description":"Exact length of the transferable bytes.","type":"integer","minimum":0},"sha256":{"description":"Lowercase hex SHA-256 of the transferable bytes.","type":"string","pattern":"^[a-f0-9]{64}$"},"transferHandle":{"description":"Opaque handle for GET /erato/sidecar/transfer/v1/{handle} within the same sidecar runtime.","type":"string","pattern":"^[0-9a-f]{32,128}$"}},"additionalProperties":true};
-const pattern11 = new RegExp("^[a-f0-9]{64}$", "u");
-const pattern12 = new RegExp("^[0-9a-f]{32,128}$", "u");
+const schema57 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/body-handle.schema.json","title":"OutlookBodyHandle","description":"A reference to a message body fetched through the binary transfer profile, so large bodies stay out of the JSON-RPC response.","type":"object","required":["handle","contentType","size"],"properties":{"handle":{"description":"Opaque handle for GET /erato/sidecar/transfer/v1/{handle}.","type":"string","pattern":"^[0-9a-f]{32,128}$"},"contentType":{"description":"Media type of the body bytes, for example text/html or text/plain.","type":"string","maxLength":256},"size":{"description":"Exact length of the body bytes.","type":"integer","minimum":0}},"additionalProperties":true};
+const schema58 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/attachment-reference.schema.json","title":"OutlookAttachmentReference","description":"Metadata for one attachment. When its bytes are available they are fetched through the binary transfer profile via contentHandle, so any-size attachments stay out of the JSON-RPC body; otherwise unavailableReason explains why.","type":"object","properties":{"name":{"description":"File name, when present.","type":"string","maxLength":4096},"contentType":{"description":"Media type of the bytes. Embedded messages are reported as message/rfc822.","type":"string","maxLength":256},"size":{"description":"Exact length of the transferable bytes.","type":"integer","minimum":0},"isInline":{"description":"True when the attachment is referenced from the message body by contentId.","type":"boolean"},"contentId":{"description":"Content-ID for an inline attachment, without angle brackets.","type":"string","maxLength":4096},"sha256":{"description":"Lowercase hex SHA-256 of the transferable bytes, useful for de-duplicating attachments repeated across thread messages.","type":"string","pattern":"^[a-f0-9]{64}$"},"contentHandle":{"description":"Opaque handle for GET /erato/sidecar/transfer/v1/{handle}. Present when the bytes are available.","type":"string","pattern":"^[0-9a-f]{32,128}$"},"unavailableReason":{"description":"Stable code explaining why bytes are not available, present instead of contentHandle. Known values include unsupported_attachment.","type":"string","minLength":1,"maxLength":128}},"additionalProperties":true};
+const pattern11 = new RegExp("^[0-9a-f]{32,128}$", "u");
+const pattern12 = new RegExp("^[a-f0-9]{64}$", "u");
 
 function validate38(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/outlook/conversation-message.schema.json" */;
@@ -4171,11 +4233,11 @@ vErrors.push(err0);
 }
 errors++;
 }
-if(data.subject !== undefined){
-let data0 = data.subject;
+if(data.internetMessageId !== undefined){
+let data0 = data.internetMessageId;
 if(typeof data0 === "string"){
 if(func2(data0) > 32768){
-const err1 = {instancePath:instancePath+"/subject",schemaPath:"#/properties/subject/maxLength",keyword:"maxLength",params:{limit: 32768},message:"must NOT have more than 32768 characters"};
+const err1 = {instancePath:instancePath+"/internetMessageId",schemaPath:"#/properties/internetMessageId/maxLength",keyword:"maxLength",params:{limit: 32768},message:"must NOT have more than 32768 characters"};
 if(vErrors === null){
 vErrors = [err1];
 }
@@ -4186,7 +4248,7 @@ errors++;
 }
 }
 else {
-const err2 = {instancePath:instancePath+"/subject",schemaPath:"#/properties/subject/type",keyword:"type",params:{type: "string"},message:"must be string"};
+const err2 = {instancePath:instancePath+"/internetMessageId",schemaPath:"#/properties/internetMessageId/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err2];
 }
@@ -4196,11 +4258,11 @@ vErrors.push(err2);
 errors++;
 }
 }
-if(data.fromName !== undefined){
-let data1 = data.fromName;
+if(data.subject !== undefined){
+let data1 = data.subject;
 if(typeof data1 === "string"){
-if(func2(data1) > 4096){
-const err3 = {instancePath:instancePath+"/fromName",schemaPath:"#/properties/fromName/maxLength",keyword:"maxLength",params:{limit: 4096},message:"must NOT have more than 4096 characters"};
+if(func2(data1) > 32768){
+const err3 = {instancePath:instancePath+"/subject",schemaPath:"#/properties/subject/maxLength",keyword:"maxLength",params:{limit: 32768},message:"must NOT have more than 32768 characters"};
 if(vErrors === null){
 vErrors = [err3];
 }
@@ -4211,7 +4273,7 @@ errors++;
 }
 }
 else {
-const err4 = {instancePath:instancePath+"/fromName",schemaPath:"#/properties/fromName/type",keyword:"type",params:{type: "string"},message:"must be string"};
+const err4 = {instancePath:instancePath+"/subject",schemaPath:"#/properties/subject/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err4];
 }
@@ -4221,11 +4283,14 @@ vErrors.push(err4);
 errors++;
 }
 }
-if(data.fromEmailAddress !== undefined){
-let data2 = data.fromEmailAddress;
-if(typeof data2 === "string"){
-if(func2(data2) > 4096){
-const err5 = {instancePath:instancePath+"/fromEmailAddress",schemaPath:"#/properties/fromEmailAddress/maxLength",keyword:"maxLength",params:{limit: 4096},message:"must NOT have more than 4096 characters"};
+if(data.from !== undefined){
+let data2 = data.from;
+if(data2 && typeof data2 == "object" && !Array.isArray(data2)){
+if(data2.name !== undefined){
+let data3 = data2.name;
+if(typeof data3 === "string"){
+if(func2(data3) > 4096){
+const err5 = {instancePath:instancePath+"/from/name",schemaPath:"../outlook/message-recipient.schema.json/properties/name/maxLength",keyword:"maxLength",params:{limit: 4096},message:"must NOT have more than 4096 characters"};
 if(vErrors === null){
 vErrors = [err5];
 }
@@ -4236,7 +4301,7 @@ errors++;
 }
 }
 else {
-const err6 = {instancePath:instancePath+"/fromEmailAddress",schemaPath:"#/properties/fromEmailAddress/type",keyword:"type",params:{type: "string"},message:"must be string"};
+const err6 = {instancePath:instancePath+"/from/name",schemaPath:"../outlook/message-recipient.schema.json/properties/name/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err6];
 }
@@ -4246,18 +4311,11 @@ vErrors.push(err6);
 errors++;
 }
 }
-if(data.to !== undefined){
-let data3 = data.to;
-if(Array.isArray(data3)){
-const len0 = data3.length;
-for(let i0=0; i0<len0; i0++){
-let data4 = data3[i0];
-if(data4 && typeof data4 == "object" && !Array.isArray(data4)){
-if(data4.name !== undefined){
-let data5 = data4.name;
-if(typeof data5 === "string"){
-if(func2(data5) > 4096){
-const err7 = {instancePath:instancePath+"/to/" + i0+"/name",schemaPath:"../outlook/message-recipient.schema.json/properties/name/maxLength",keyword:"maxLength",params:{limit: 4096},message:"must NOT have more than 4096 characters"};
+if(data2.emailAddress !== undefined){
+let data4 = data2.emailAddress;
+if(typeof data4 === "string"){
+if(func2(data4) > 4096){
+const err7 = {instancePath:instancePath+"/from/emailAddress",schemaPath:"../outlook/message-recipient.schema.json/properties/emailAddress/maxLength",keyword:"maxLength",params:{limit: 4096},message:"must NOT have more than 4096 characters"};
 if(vErrors === null){
 vErrors = [err7];
 }
@@ -4268,7 +4326,7 @@ errors++;
 }
 }
 else {
-const err8 = {instancePath:instancePath+"/to/" + i0+"/name",schemaPath:"../outlook/message-recipient.schema.json/properties/name/type",keyword:"type",params:{type: "string"},message:"must be string"};
+const err8 = {instancePath:instancePath+"/from/emailAddress",schemaPath:"../outlook/message-recipient.schema.json/properties/emailAddress/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err8];
 }
@@ -4278,11 +4336,9 @@ vErrors.push(err8);
 errors++;
 }
 }
-if(data4.emailAddress !== undefined){
-let data6 = data4.emailAddress;
-if(typeof data6 === "string"){
-if(func2(data6) > 4096){
-const err9 = {instancePath:instancePath+"/to/" + i0+"/emailAddress",schemaPath:"../outlook/message-recipient.schema.json/properties/emailAddress/maxLength",keyword:"maxLength",params:{limit: 4096},message:"must NOT have more than 4096 characters"};
+}
+else {
+const err9 = {instancePath:instancePath+"/from",schemaPath:"../outlook/message-recipient.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err9];
 }
@@ -4292,8 +4348,18 @@ vErrors.push(err9);
 errors++;
 }
 }
-else {
-const err10 = {instancePath:instancePath+"/to/" + i0+"/emailAddress",schemaPath:"../outlook/message-recipient.schema.json/properties/emailAddress/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(data.to !== undefined){
+let data5 = data.to;
+if(Array.isArray(data5)){
+const len0 = data5.length;
+for(let i0=0; i0<len0; i0++){
+let data6 = data5[i0];
+if(data6 && typeof data6 == "object" && !Array.isArray(data6)){
+if(data6.name !== undefined){
+let data7 = data6.name;
+if(typeof data7 === "string"){
+if(func2(data7) > 4096){
+const err10 = {instancePath:instancePath+"/to/" + i0+"/name",schemaPath:"../outlook/message-recipient.schema.json/properties/name/maxLength",keyword:"maxLength",params:{limit: 4096},message:"must NOT have more than 4096 characters"};
 if(vErrors === null){
 vErrors = [err10];
 }
@@ -4303,9 +4369,8 @@ vErrors.push(err10);
 errors++;
 }
 }
-}
 else {
-const err11 = {instancePath:instancePath+"/to/" + i0,schemaPath:"../outlook/message-recipient.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
+const err11 = {instancePath:instancePath+"/to/" + i0+"/name",schemaPath:"../outlook/message-recipient.schema.json/properties/name/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err11];
 }
@@ -4315,9 +4380,11 @@ vErrors.push(err11);
 errors++;
 }
 }
-}
-else {
-const err12 = {instancePath:instancePath+"/to",schemaPath:"#/properties/to/type",keyword:"type",params:{type: "array"},message:"must be array"};
+if(data6.emailAddress !== undefined){
+let data8 = data6.emailAddress;
+if(typeof data8 === "string"){
+if(func2(data8) > 4096){
+const err12 = {instancePath:instancePath+"/to/" + i0+"/emailAddress",schemaPath:"../outlook/message-recipient.schema.json/properties/emailAddress/maxLength",keyword:"maxLength",params:{limit: 4096},message:"must NOT have more than 4096 characters"};
 if(vErrors === null){
 vErrors = [err12];
 }
@@ -4327,18 +4394,8 @@ vErrors.push(err12);
 errors++;
 }
 }
-if(data.cc !== undefined){
-let data7 = data.cc;
-if(Array.isArray(data7)){
-const len1 = data7.length;
-for(let i1=0; i1<len1; i1++){
-let data8 = data7[i1];
-if(data8 && typeof data8 == "object" && !Array.isArray(data8)){
-if(data8.name !== undefined){
-let data9 = data8.name;
-if(typeof data9 === "string"){
-if(func2(data9) > 4096){
-const err13 = {instancePath:instancePath+"/cc/" + i1+"/name",schemaPath:"../outlook/message-recipient.schema.json/properties/name/maxLength",keyword:"maxLength",params:{limit: 4096},message:"must NOT have more than 4096 characters"};
+else {
+const err13 = {instancePath:instancePath+"/to/" + i0+"/emailAddress",schemaPath:"../outlook/message-recipient.schema.json/properties/emailAddress/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err13];
 }
@@ -4348,8 +4405,9 @@ vErrors.push(err13);
 errors++;
 }
 }
+}
 else {
-const err14 = {instancePath:instancePath+"/cc/" + i1+"/name",schemaPath:"../outlook/message-recipient.schema.json/properties/name/type",keyword:"type",params:{type: "string"},message:"must be string"};
+const err14 = {instancePath:instancePath+"/to/" + i0,schemaPath:"../outlook/message-recipient.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err14];
 }
@@ -4359,11 +4417,9 @@ vErrors.push(err14);
 errors++;
 }
 }
-if(data8.emailAddress !== undefined){
-let data10 = data8.emailAddress;
-if(typeof data10 === "string"){
-if(func2(data10) > 4096){
-const err15 = {instancePath:instancePath+"/cc/" + i1+"/emailAddress",schemaPath:"../outlook/message-recipient.schema.json/properties/emailAddress/maxLength",keyword:"maxLength",params:{limit: 4096},message:"must NOT have more than 4096 characters"};
+}
+else {
+const err15 = {instancePath:instancePath+"/to",schemaPath:"#/properties/to/type",keyword:"type",params:{type: "array"},message:"must be array"};
 if(vErrors === null){
 vErrors = [err15];
 }
@@ -4373,8 +4429,18 @@ vErrors.push(err15);
 errors++;
 }
 }
-else {
-const err16 = {instancePath:instancePath+"/cc/" + i1+"/emailAddress",schemaPath:"../outlook/message-recipient.schema.json/properties/emailAddress/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(data.cc !== undefined){
+let data9 = data.cc;
+if(Array.isArray(data9)){
+const len1 = data9.length;
+for(let i1=0; i1<len1; i1++){
+let data10 = data9[i1];
+if(data10 && typeof data10 == "object" && !Array.isArray(data10)){
+if(data10.name !== undefined){
+let data11 = data10.name;
+if(typeof data11 === "string"){
+if(func2(data11) > 4096){
+const err16 = {instancePath:instancePath+"/cc/" + i1+"/name",schemaPath:"../outlook/message-recipient.schema.json/properties/name/maxLength",keyword:"maxLength",params:{limit: 4096},message:"must NOT have more than 4096 characters"};
 if(vErrors === null){
 vErrors = [err16];
 }
@@ -4384,9 +4450,8 @@ vErrors.push(err16);
 errors++;
 }
 }
-}
 else {
-const err17 = {instancePath:instancePath+"/cc/" + i1,schemaPath:"../outlook/message-recipient.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
+const err17 = {instancePath:instancePath+"/cc/" + i1+"/name",schemaPath:"../outlook/message-recipient.schema.json/properties/name/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err17];
 }
@@ -4396,9 +4461,11 @@ vErrors.push(err17);
 errors++;
 }
 }
-}
-else {
-const err18 = {instancePath:instancePath+"/cc",schemaPath:"#/properties/cc/type",keyword:"type",params:{type: "array"},message:"must be array"};
+if(data10.emailAddress !== undefined){
+let data12 = data10.emailAddress;
+if(typeof data12 === "string"){
+if(func2(data12) > 4096){
+const err18 = {instancePath:instancePath+"/cc/" + i1+"/emailAddress",schemaPath:"../outlook/message-recipient.schema.json/properties/emailAddress/maxLength",keyword:"maxLength",params:{limit: 4096},message:"must NOT have more than 4096 characters"};
 if(vErrors === null){
 vErrors = [err18];
 }
@@ -4408,10 +4475,8 @@ vErrors.push(err18);
 errors++;
 }
 }
-if(data.sentAtUnixSeconds !== undefined){
-let data11 = data.sentAtUnixSeconds;
-if(!(((typeof data11 == "number") && (!(data11 % 1) && !isNaN(data11))) && (isFinite(data11)))){
-const err19 = {instancePath:instancePath+"/sentAtUnixSeconds",schemaPath:"#/properties/sentAtUnixSeconds/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+else {
+const err19 = {instancePath:instancePath+"/cc/" + i1+"/emailAddress",schemaPath:"../outlook/message-recipient.schema.json/properties/emailAddress/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err19];
 }
@@ -4420,9 +4485,10 @@ vErrors.push(err19);
 }
 errors++;
 }
-if((typeof data11 == "number") && (isFinite(data11))){
-if(data11 > 253402300799 || isNaN(data11)){
-const err20 = {instancePath:instancePath+"/sentAtUnixSeconds",schemaPath:"#/properties/sentAtUnixSeconds/maximum",keyword:"maximum",params:{comparison: "<=", limit: 253402300799},message:"must be <= 253402300799"};
+}
+}
+else {
+const err20 = {instancePath:instancePath+"/cc/" + i1,schemaPath:"../outlook/message-recipient.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err20];
 }
@@ -4431,8 +4497,10 @@ vErrors.push(err20);
 }
 errors++;
 }
-if(data11 < -62135596800 || isNaN(data11)){
-const err21 = {instancePath:instancePath+"/sentAtUnixSeconds",schemaPath:"#/properties/sentAtUnixSeconds/minimum",keyword:"minimum",params:{comparison: ">=", limit: -62135596800},message:"must be >= -62135596800"};
+}
+}
+else {
+const err21 = {instancePath:instancePath+"/cc",schemaPath:"#/properties/cc/type",keyword:"type",params:{type: "array"},message:"must be array"};
 if(vErrors === null){
 vErrors = [err21];
 }
@@ -4442,11 +4510,10 @@ vErrors.push(err21);
 errors++;
 }
 }
-}
-if(data.receivedAtUnixSeconds !== undefined){
-let data12 = data.receivedAtUnixSeconds;
-if(!(((typeof data12 == "number") && (!(data12 % 1) && !isNaN(data12))) && (isFinite(data12)))){
-const err22 = {instancePath:instancePath+"/receivedAtUnixSeconds",schemaPath:"#/properties/receivedAtUnixSeconds/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+if(data.sentAtUnixSeconds !== undefined){
+let data13 = data.sentAtUnixSeconds;
+if(!(((typeof data13 == "number") && (!(data13 % 1) && !isNaN(data13))) && (isFinite(data13)))){
+const err22 = {instancePath:instancePath+"/sentAtUnixSeconds",schemaPath:"#/properties/sentAtUnixSeconds/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err22];
 }
@@ -4455,9 +4522,9 @@ vErrors.push(err22);
 }
 errors++;
 }
-if((typeof data12 == "number") && (isFinite(data12))){
-if(data12 > 253402300799 || isNaN(data12)){
-const err23 = {instancePath:instancePath+"/receivedAtUnixSeconds",schemaPath:"#/properties/receivedAtUnixSeconds/maximum",keyword:"maximum",params:{comparison: "<=", limit: 253402300799},message:"must be <= 253402300799"};
+if((typeof data13 == "number") && (isFinite(data13))){
+if(data13 > 253402300799 || isNaN(data13)){
+const err23 = {instancePath:instancePath+"/sentAtUnixSeconds",schemaPath:"#/properties/sentAtUnixSeconds/maximum",keyword:"maximum",params:{comparison: "<=", limit: 253402300799},message:"must be <= 253402300799"};
 if(vErrors === null){
 vErrors = [err23];
 }
@@ -4466,8 +4533,8 @@ vErrors.push(err23);
 }
 errors++;
 }
-if(data12 < -62135596800 || isNaN(data12)){
-const err24 = {instancePath:instancePath+"/receivedAtUnixSeconds",schemaPath:"#/properties/receivedAtUnixSeconds/minimum",keyword:"minimum",params:{comparison: ">=", limit: -62135596800},message:"must be >= -62135596800"};
+if(data13 < -62135596800 || isNaN(data13)){
+const err24 = {instancePath:instancePath+"/sentAtUnixSeconds",schemaPath:"#/properties/sentAtUnixSeconds/minimum",keyword:"minimum",params:{comparison: ">=", limit: -62135596800},message:"must be >= -62135596800"};
 if(vErrors === null){
 vErrors = [err24];
 }
@@ -4478,11 +4545,10 @@ errors++;
 }
 }
 }
-if(data.internetMessageId !== undefined){
-let data13 = data.internetMessageId;
-if(typeof data13 === "string"){
-if(func2(data13) > 32768){
-const err25 = {instancePath:instancePath+"/internetMessageId",schemaPath:"#/properties/internetMessageId/maxLength",keyword:"maxLength",params:{limit: 32768},message:"must NOT have more than 32768 characters"};
+if(data.receivedAtUnixSeconds !== undefined){
+let data14 = data.receivedAtUnixSeconds;
+if(!(((typeof data14 == "number") && (!(data14 % 1) && !isNaN(data14))) && (isFinite(data14)))){
+const err25 = {instancePath:instancePath+"/receivedAtUnixSeconds",schemaPath:"#/properties/receivedAtUnixSeconds/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err25];
 }
@@ -4491,9 +4557,9 @@ vErrors.push(err25);
 }
 errors++;
 }
-}
-else {
-const err26 = {instancePath:instancePath+"/internetMessageId",schemaPath:"#/properties/internetMessageId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if((typeof data14 == "number") && (isFinite(data14))){
+if(data14 > 253402300799 || isNaN(data14)){
+const err26 = {instancePath:instancePath+"/receivedAtUnixSeconds",schemaPath:"#/properties/receivedAtUnixSeconds/maximum",keyword:"maximum",params:{comparison: "<=", limit: 253402300799},message:"must be <= 253402300799"};
 if(vErrors === null){
 vErrors = [err26];
 }
@@ -4502,12 +4568,8 @@ vErrors.push(err26);
 }
 errors++;
 }
-}
-if(data.conversationIndex !== undefined){
-let data14 = data.conversationIndex;
-if(typeof data14 === "string"){
-if(func2(data14) > 8192){
-const err27 = {instancePath:instancePath+"/conversationIndex",schemaPath:"#/properties/conversationIndex/maxLength",keyword:"maxLength",params:{limit: 8192},message:"must NOT have more than 8192 characters"};
+if(data14 < -62135596800 || isNaN(data14)){
+const err27 = {instancePath:instancePath+"/receivedAtUnixSeconds",schemaPath:"#/properties/receivedAtUnixSeconds/minimum",keyword:"minimum",params:{comparison: ">=", limit: -62135596800},message:"must be >= -62135596800"};
 if(vErrors === null){
 vErrors = [err27];
 }
@@ -4517,8 +4579,10 @@ vErrors.push(err27);
 errors++;
 }
 }
-else {
-const err28 = {instancePath:instancePath+"/conversationIndex",schemaPath:"#/properties/conversationIndex/type",keyword:"type",params:{type: "string"},message:"must be string"};
+}
+if(data.isDraft !== undefined){
+if(typeof data.isDraft !== "boolean"){
+const err28 = {instancePath:instancePath+"/isDraft",schemaPath:"#/properties/isDraft/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
 if(vErrors === null){
 vErrors = [err28];
 }
@@ -4528,11 +4592,11 @@ vErrors.push(err28);
 errors++;
 }
 }
-if(data.bodyHtml !== undefined){
-let data15 = data.bodyHtml;
-if(typeof data15 === "string"){
-if(func2(data15) > 1048576){
-const err29 = {instancePath:instancePath+"/bodyHtml",schemaPath:"#/properties/bodyHtml/maxLength",keyword:"maxLength",params:{limit: 1048576},message:"must NOT have more than 1048576 characters"};
+if(data.conversationIndex !== undefined){
+let data16 = data.conversationIndex;
+if(typeof data16 === "string"){
+if(func2(data16) > 8192){
+const err29 = {instancePath:instancePath+"/conversationIndex",schemaPath:"#/properties/conversationIndex/maxLength",keyword:"maxLength",params:{limit: 8192},message:"must NOT have more than 8192 characters"};
 if(vErrors === null){
 vErrors = [err29];
 }
@@ -4543,7 +4607,7 @@ errors++;
 }
 }
 else {
-const err30 = {instancePath:instancePath+"/bodyHtml",schemaPath:"#/properties/bodyHtml/type",keyword:"type",params:{type: "string"},message:"must be string"};
+const err30 = {instancePath:instancePath+"/conversationIndex",schemaPath:"#/properties/conversationIndex/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err30];
 }
@@ -4553,11 +4617,11 @@ vErrors.push(err30);
 errors++;
 }
 }
-if(data.bodyText !== undefined){
-let data16 = data.bodyText;
-if(typeof data16 === "string"){
-if(func2(data16) > 1048576){
-const err31 = {instancePath:instancePath+"/bodyText",schemaPath:"#/properties/bodyText/maxLength",keyword:"maxLength",params:{limit: 1048576},message:"must NOT have more than 1048576 characters"};
+if(data.bodyHandle !== undefined){
+let data17 = data.bodyHandle;
+if(data17 && typeof data17 == "object" && !Array.isArray(data17)){
+if(data17.handle === undefined){
+const err31 = {instancePath:instancePath+"/bodyHandle",schemaPath:"../outlook/body-handle.schema.json/required",keyword:"required",params:{missingProperty: "handle"},message:"must have required property '"+"handle"+"'"};
 if(vErrors === null){
 vErrors = [err31];
 }
@@ -4566,9 +4630,8 @@ vErrors.push(err31);
 }
 errors++;
 }
-}
-else {
-const err32 = {instancePath:instancePath+"/bodyText",schemaPath:"#/properties/bodyText/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(data17.contentType === undefined){
+const err32 = {instancePath:instancePath+"/bodyHandle",schemaPath:"../outlook/body-handle.schema.json/required",keyword:"required",params:{missingProperty: "contentType"},message:"must have required property '"+"contentType"+"'"};
 if(vErrors === null){
 vErrors = [err32];
 }
@@ -4577,16 +4640,8 @@ vErrors.push(err32);
 }
 errors++;
 }
-}
-if(data.attachments !== undefined){
-let data17 = data.attachments;
-if(Array.isArray(data17)){
-const len2 = data17.length;
-for(let i2=0; i2<len2; i2++){
-let data18 = data17[i2];
-if(data18 && typeof data18 == "object" && !Array.isArray(data18)){
-if(data18.transferHandle === undefined){
-const err33 = {instancePath:instancePath+"/attachments/" + i2,schemaPath:"../outlook/attachment-reference.schema.json/required",keyword:"required",params:{missingProperty: "transferHandle"},message:"must have required property '"+"transferHandle"+"'"};
+if(data17.size === undefined){
+const err33 = {instancePath:instancePath+"/bodyHandle",schemaPath:"../outlook/body-handle.schema.json/required",keyword:"required",params:{missingProperty: "size"},message:"must have required property '"+"size"+"'"};
 if(vErrors === null){
 vErrors = [err33];
 }
@@ -4595,8 +4650,11 @@ vErrors.push(err33);
 }
 errors++;
 }
-if(data18.sizeBytes === undefined){
-const err34 = {instancePath:instancePath+"/attachments/" + i2,schemaPath:"../outlook/attachment-reference.schema.json/required",keyword:"required",params:{missingProperty: "sizeBytes"},message:"must have required property '"+"sizeBytes"+"'"};
+if(data17.handle !== undefined){
+let data18 = data17.handle;
+if(typeof data18 === "string"){
+if(!pattern11.test(data18)){
+const err34 = {instancePath:instancePath+"/bodyHandle/handle",schemaPath:"../outlook/body-handle.schema.json/properties/handle/pattern",keyword:"pattern",params:{pattern: "^[0-9a-f]{32,128}$"},message:"must match pattern \""+"^[0-9a-f]{32,128}$"+"\""};
 if(vErrors === null){
 vErrors = [err34];
 }
@@ -4605,11 +4663,9 @@ vErrors.push(err34);
 }
 errors++;
 }
-if(data18.name !== undefined){
-let data19 = data18.name;
-if(typeof data19 === "string"){
-if(func2(data19) > 4096){
-const err35 = {instancePath:instancePath+"/attachments/" + i2+"/name",schemaPath:"../outlook/attachment-reference.schema.json/properties/name/maxLength",keyword:"maxLength",params:{limit: 4096},message:"must NOT have more than 4096 characters"};
+}
+else {
+const err35 = {instancePath:instancePath+"/bodyHandle/handle",schemaPath:"../outlook/body-handle.schema.json/properties/handle/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err35];
 }
@@ -4619,8 +4675,11 @@ vErrors.push(err35);
 errors++;
 }
 }
-else {
-const err36 = {instancePath:instancePath+"/attachments/" + i2+"/name",schemaPath:"../outlook/attachment-reference.schema.json/properties/name/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(data17.contentType !== undefined){
+let data19 = data17.contentType;
+if(typeof data19 === "string"){
+if(func2(data19) > 256){
+const err36 = {instancePath:instancePath+"/bodyHandle/contentType",schemaPath:"../outlook/body-handle.schema.json/properties/contentType/maxLength",keyword:"maxLength",params:{limit: 256},message:"must NOT have more than 256 characters"};
 if(vErrors === null){
 vErrors = [err36];
 }
@@ -4630,11 +4689,8 @@ vErrors.push(err36);
 errors++;
 }
 }
-if(data18.mimeType !== undefined){
-let data20 = data18.mimeType;
-if(typeof data20 === "string"){
-if(func2(data20) > 256){
-const err37 = {instancePath:instancePath+"/attachments/" + i2+"/mimeType",schemaPath:"../outlook/attachment-reference.schema.json/properties/mimeType/maxLength",keyword:"maxLength",params:{limit: 256},message:"must NOT have more than 256 characters"};
+else {
+const err37 = {instancePath:instancePath+"/bodyHandle/contentType",schemaPath:"../outlook/body-handle.schema.json/properties/contentType/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err37];
 }
@@ -4644,8 +4700,10 @@ vErrors.push(err37);
 errors++;
 }
 }
-else {
-const err38 = {instancePath:instancePath+"/attachments/" + i2+"/mimeType",schemaPath:"../outlook/attachment-reference.schema.json/properties/mimeType/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(data17.size !== undefined){
+let data20 = data17.size;
+if(!(((typeof data20 == "number") && (!(data20 % 1) && !isNaN(data20))) && (isFinite(data20)))){
+const err38 = {instancePath:instancePath+"/bodyHandle/size",schemaPath:"../outlook/body-handle.schema.json/properties/size/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err38];
 }
@@ -4654,12 +4712,9 @@ vErrors.push(err38);
 }
 errors++;
 }
-}
-if(data18.contentId !== undefined){
-let data21 = data18.contentId;
-if(typeof data21 === "string"){
-if(func2(data21) > 4096){
-const err39 = {instancePath:instancePath+"/attachments/" + i2+"/contentId",schemaPath:"../outlook/attachment-reference.schema.json/properties/contentId/maxLength",keyword:"maxLength",params:{limit: 4096},message:"must NOT have more than 4096 characters"};
+if((typeof data20 == "number") && (isFinite(data20))){
+if(data20 < 0 || isNaN(data20)){
+const err39 = {instancePath:instancePath+"/bodyHandle/size",schemaPath:"../outlook/body-handle.schema.json/properties/size/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err39];
 }
@@ -4669,8 +4724,10 @@ vErrors.push(err39);
 errors++;
 }
 }
+}
+}
 else {
-const err40 = {instancePath:instancePath+"/attachments/" + i2+"/contentId",schemaPath:"../outlook/attachment-reference.schema.json/properties/contentId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+const err40 = {instancePath:instancePath+"/bodyHandle",schemaPath:"../outlook/body-handle.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err40];
 }
@@ -4680,9 +4737,18 @@ vErrors.push(err40);
 errors++;
 }
 }
-if(data18.isInline !== undefined){
-if(typeof data18.isInline !== "boolean"){
-const err41 = {instancePath:instancePath+"/attachments/" + i2+"/isInline",schemaPath:"../outlook/attachment-reference.schema.json/properties/isInline/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
+if(data.attachments !== undefined){
+let data21 = data.attachments;
+if(Array.isArray(data21)){
+const len2 = data21.length;
+for(let i2=0; i2<len2; i2++){
+let data22 = data21[i2];
+if(data22 && typeof data22 == "object" && !Array.isArray(data22)){
+if(data22.name !== undefined){
+let data23 = data22.name;
+if(typeof data23 === "string"){
+if(func2(data23) > 4096){
+const err41 = {instancePath:instancePath+"/attachments/" + i2+"/name",schemaPath:"../outlook/attachment-reference.schema.json/properties/name/maxLength",keyword:"maxLength",params:{limit: 4096},message:"must NOT have more than 4096 characters"};
 if(vErrors === null){
 vErrors = [err41];
 }
@@ -4692,11 +4758,8 @@ vErrors.push(err41);
 errors++;
 }
 }
-if(data18.kind !== undefined){
-let data23 = data18.kind;
-if(typeof data23 === "string"){
-if(func2(data23) > 128){
-const err42 = {instancePath:instancePath+"/attachments/" + i2+"/kind",schemaPath:"../outlook/attachment-reference.schema.json/properties/kind/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
+else {
+const err42 = {instancePath:instancePath+"/attachments/" + i2+"/name",schemaPath:"../outlook/attachment-reference.schema.json/properties/name/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err42];
 }
@@ -4705,8 +4768,12 @@ vErrors.push(err42);
 }
 errors++;
 }
-if(func2(data23) < 1){
-const err43 = {instancePath:instancePath+"/attachments/" + i2+"/kind",schemaPath:"../outlook/attachment-reference.schema.json/properties/kind/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+}
+if(data22.contentType !== undefined){
+let data24 = data22.contentType;
+if(typeof data24 === "string"){
+if(func2(data24) > 256){
+const err43 = {instancePath:instancePath+"/attachments/" + i2+"/contentType",schemaPath:"../outlook/attachment-reference.schema.json/properties/contentType/maxLength",keyword:"maxLength",params:{limit: 256},message:"must NOT have more than 256 characters"};
 if(vErrors === null){
 vErrors = [err43];
 }
@@ -4717,7 +4784,7 @@ errors++;
 }
 }
 else {
-const err44 = {instancePath:instancePath+"/attachments/" + i2+"/kind",schemaPath:"../outlook/attachment-reference.schema.json/properties/kind/type",keyword:"type",params:{type: "string"},message:"must be string"};
+const err44 = {instancePath:instancePath+"/attachments/" + i2+"/contentType",schemaPath:"../outlook/attachment-reference.schema.json/properties/contentType/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err44];
 }
@@ -4727,10 +4794,10 @@ vErrors.push(err44);
 errors++;
 }
 }
-if(data18.sizeBytes !== undefined){
-let data24 = data18.sizeBytes;
-if(!(((typeof data24 == "number") && (!(data24 % 1) && !isNaN(data24))) && (isFinite(data24)))){
-const err45 = {instancePath:instancePath+"/attachments/" + i2+"/sizeBytes",schemaPath:"../outlook/attachment-reference.schema.json/properties/sizeBytes/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+if(data22.size !== undefined){
+let data25 = data22.size;
+if(!(((typeof data25 == "number") && (!(data25 % 1) && !isNaN(data25))) && (isFinite(data25)))){
+const err45 = {instancePath:instancePath+"/attachments/" + i2+"/size",schemaPath:"../outlook/attachment-reference.schema.json/properties/size/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err45];
 }
@@ -4739,9 +4806,9 @@ vErrors.push(err45);
 }
 errors++;
 }
-if((typeof data24 == "number") && (isFinite(data24))){
-if(data24 < 0 || isNaN(data24)){
-const err46 = {instancePath:instancePath+"/attachments/" + i2+"/sizeBytes",schemaPath:"../outlook/attachment-reference.schema.json/properties/sizeBytes/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+if((typeof data25 == "number") && (isFinite(data25))){
+if(data25 < 0 || isNaN(data25)){
+const err46 = {instancePath:instancePath+"/attachments/" + i2+"/size",schemaPath:"../outlook/attachment-reference.schema.json/properties/size/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err46];
 }
@@ -4752,11 +4819,9 @@ errors++;
 }
 }
 }
-if(data18.sha256 !== undefined){
-let data25 = data18.sha256;
-if(typeof data25 === "string"){
-if(!pattern11.test(data25)){
-const err47 = {instancePath:instancePath+"/attachments/" + i2+"/sha256",schemaPath:"../outlook/attachment-reference.schema.json/properties/sha256/pattern",keyword:"pattern",params:{pattern: "^[a-f0-9]{64}$"},message:"must match pattern \""+"^[a-f0-9]{64}$"+"\""};
+if(data22.isInline !== undefined){
+if(typeof data22.isInline !== "boolean"){
+const err47 = {instancePath:instancePath+"/attachments/" + i2+"/isInline",schemaPath:"../outlook/attachment-reference.schema.json/properties/isInline/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"};
 if(vErrors === null){
 vErrors = [err47];
 }
@@ -4766,8 +4831,11 @@ vErrors.push(err47);
 errors++;
 }
 }
-else {
-const err48 = {instancePath:instancePath+"/attachments/" + i2+"/sha256",schemaPath:"../outlook/attachment-reference.schema.json/properties/sha256/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(data22.contentId !== undefined){
+let data27 = data22.contentId;
+if(typeof data27 === "string"){
+if(func2(data27) > 4096){
+const err48 = {instancePath:instancePath+"/attachments/" + i2+"/contentId",schemaPath:"../outlook/attachment-reference.schema.json/properties/contentId/maxLength",keyword:"maxLength",params:{limit: 4096},message:"must NOT have more than 4096 characters"};
 if(vErrors === null){
 vErrors = [err48];
 }
@@ -4777,11 +4845,8 @@ vErrors.push(err48);
 errors++;
 }
 }
-if(data18.transferHandle !== undefined){
-let data26 = data18.transferHandle;
-if(typeof data26 === "string"){
-if(!pattern12.test(data26)){
-const err49 = {instancePath:instancePath+"/attachments/" + i2+"/transferHandle",schemaPath:"../outlook/attachment-reference.schema.json/properties/transferHandle/pattern",keyword:"pattern",params:{pattern: "^[0-9a-f]{32,128}$"},message:"must match pattern \""+"^[0-9a-f]{32,128}$"+"\""};
+else {
+const err49 = {instancePath:instancePath+"/attachments/" + i2+"/contentId",schemaPath:"../outlook/attachment-reference.schema.json/properties/contentId/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err49];
 }
@@ -4791,8 +4856,11 @@ vErrors.push(err49);
 errors++;
 }
 }
-else {
-const err50 = {instancePath:instancePath+"/attachments/" + i2+"/transferHandle",schemaPath:"../outlook/attachment-reference.schema.json/properties/transferHandle/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(data22.sha256 !== undefined){
+let data28 = data22.sha256;
+if(typeof data28 === "string"){
+if(!pattern12.test(data28)){
+const err50 = {instancePath:instancePath+"/attachments/" + i2+"/sha256",schemaPath:"../outlook/attachment-reference.schema.json/properties/sha256/pattern",keyword:"pattern",params:{pattern: "^[a-f0-9]{64}$"},message:"must match pattern \""+"^[a-f0-9]{64}$"+"\""};
 if(vErrors === null){
 vErrors = [err50];
 }
@@ -4802,9 +4870,8 @@ vErrors.push(err50);
 errors++;
 }
 }
-}
 else {
-const err51 = {instancePath:instancePath+"/attachments/" + i2,schemaPath:"../outlook/attachment-reference.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
+const err51 = {instancePath:instancePath+"/attachments/" + i2+"/sha256",schemaPath:"../outlook/attachment-reference.schema.json/properties/sha256/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err51];
 }
@@ -4814,9 +4881,11 @@ vErrors.push(err51);
 errors++;
 }
 }
-}
-else {
-const err52 = {instancePath:instancePath+"/attachments",schemaPath:"#/properties/attachments/type",keyword:"type",params:{type: "array"},message:"must be array"};
+if(data22.contentHandle !== undefined){
+let data29 = data22.contentHandle;
+if(typeof data29 === "string"){
+if(!pattern11.test(data29)){
+const err52 = {instancePath:instancePath+"/attachments/" + i2+"/contentHandle",schemaPath:"../outlook/attachment-reference.schema.json/properties/contentHandle/pattern",keyword:"pattern",params:{pattern: "^[0-9a-f]{32,128}$"},message:"must match pattern \""+"^[0-9a-f]{32,128}$"+"\""};
 if(vErrors === null){
 vErrors = [err52];
 }
@@ -4826,14 +4895,84 @@ vErrors.push(err52);
 errors++;
 }
 }
-}
 else {
-const err53 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+const err53 = {instancePath:instancePath+"/attachments/" + i2+"/contentHandle",schemaPath:"../outlook/attachment-reference.schema.json/properties/contentHandle/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err53];
 }
 else {
 vErrors.push(err53);
+}
+errors++;
+}
+}
+if(data22.unavailableReason !== undefined){
+let data30 = data22.unavailableReason;
+if(typeof data30 === "string"){
+if(func2(data30) > 128){
+const err54 = {instancePath:instancePath+"/attachments/" + i2+"/unavailableReason",schemaPath:"../outlook/attachment-reference.schema.json/properties/unavailableReason/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
+if(vErrors === null){
+vErrors = [err54];
+}
+else {
+vErrors.push(err54);
+}
+errors++;
+}
+if(func2(data30) < 1){
+const err55 = {instancePath:instancePath+"/attachments/" + i2+"/unavailableReason",schemaPath:"../outlook/attachment-reference.schema.json/properties/unavailableReason/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(vErrors === null){
+vErrors = [err55];
+}
+else {
+vErrors.push(err55);
+}
+errors++;
+}
+}
+else {
+const err56 = {instancePath:instancePath+"/attachments/" + i2+"/unavailableReason",schemaPath:"../outlook/attachment-reference.schema.json/properties/unavailableReason/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err56];
+}
+else {
+vErrors.push(err56);
+}
+errors++;
+}
+}
+}
+else {
+const err57 = {instancePath:instancePath+"/attachments/" + i2,schemaPath:"../outlook/attachment-reference.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err57];
+}
+else {
+vErrors.push(err57);
+}
+errors++;
+}
+}
+}
+else {
+const err58 = {instancePath:instancePath+"/attachments",schemaPath:"#/properties/attachments/type",keyword:"type",params:{type: "array"},message:"must be array"};
+if(vErrors === null){
+vErrors = [err58];
+}
+else {
+vErrors.push(err58);
+}
+errors++;
+}
+}
+}
+else {
+const err59 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err59];
+}
+else {
+vErrors.push(err59);
 }
 errors++;
 }
@@ -4847,8 +4986,8 @@ function validate37(data, {instancePath="", parentData, parentDataProperty, root
 let vErrors = null;
 let errors = 0;
 if(data && typeof data == "object" && !Array.isArray(data)){
-if(data.messages === undefined){
-const err0 = {instancePath,schemaPath:"#/required",keyword:"required",params:{missingProperty: "messages"},message:"must have required property '"+"messages"+"'"};
+if(data.state === undefined){
+const err0 = {instancePath,schemaPath:"#/required",keyword:"required",params:{missingProperty: "state"},message:"must have required property '"+"state"+"'"};
 if(vErrors === null){
 vErrors = [err0];
 }
@@ -4857,11 +4996,8 @@ vErrors.push(err0);
 }
 errors++;
 }
-if(data.mailbox !== undefined){
-let data0 = data.mailbox;
-if(data0 && typeof data0 == "object" && !Array.isArray(data0)){
-if(data0.id === undefined){
-const err1 = {instancePath:instancePath+"/mailbox",schemaPath:"../outlook/mailbox.schema.json/required",keyword:"required",params:{missingProperty: "id"},message:"must have required property '"+"id"+"'"};
+if(data.messages === undefined){
+const err1 = {instancePath,schemaPath:"#/required",keyword:"required",params:{missingProperty: "messages"},message:"must have required property '"+"messages"+"'"};
 if(vErrors === null){
 vErrors = [err1];
 }
@@ -4870,8 +5006,11 @@ vErrors.push(err1);
 }
 errors++;
 }
-if(data0.displayName === undefined){
-const err2 = {instancePath:instancePath+"/mailbox",schemaPath:"../outlook/mailbox.schema.json/required",keyword:"required",params:{missingProperty: "displayName"},message:"must have required property '"+"displayName"+"'"};
+if(data.state !== undefined){
+let data0 = data.state;
+if(typeof data0 === "string"){
+if(func2(data0) > 32){
+const err2 = {instancePath:instancePath+"/state",schemaPath:"#/properties/state/maxLength",keyword:"maxLength",params:{limit: 32},message:"must NOT have more than 32 characters"};
 if(vErrors === null){
 vErrors = [err2];
 }
@@ -4880,8 +5019,8 @@ vErrors.push(err2);
 }
 errors++;
 }
-if(data0.source === undefined){
-const err3 = {instancePath:instancePath+"/mailbox",schemaPath:"../outlook/mailbox.schema.json/required",keyword:"required",params:{missingProperty: "source"},message:"must have required property '"+"source"+"'"};
+if(func2(data0) < 1){
+const err3 = {instancePath:instancePath+"/state",schemaPath:"#/properties/state/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
 if(vErrors === null){
 vErrors = [err3];
 }
@@ -4890,11 +5029,9 @@ vErrors.push(err3);
 }
 errors++;
 }
-if(data0.id !== undefined){
-let data1 = data0.id;
-if(typeof data1 === "string"){
-if(!pattern6.test(data1)){
-const err4 = {instancePath:instancePath+"/mailbox/id",schemaPath:"../outlook/mailbox.schema.json/properties/id/pattern",keyword:"pattern",params:{pattern: "^[0-9a-f]{32}$"},message:"must match pattern \""+"^[0-9a-f]{32}$"+"\""};
+}
+else {
+const err4 = {instancePath:instancePath+"/state",schemaPath:"#/properties/state/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err4];
 }
@@ -4904,8 +5041,11 @@ vErrors.push(err4);
 errors++;
 }
 }
-else {
-const err5 = {instancePath:instancePath+"/mailbox/id",schemaPath:"../outlook/mailbox.schema.json/properties/id/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(data.mailbox !== undefined){
+let data1 = data.mailbox;
+if(data1 && typeof data1 == "object" && !Array.isArray(data1)){
+if(data1.id === undefined){
+const err5 = {instancePath:instancePath+"/mailbox",schemaPath:"../outlook/mailbox.schema.json/required",keyword:"required",params:{missingProperty: "id"},message:"must have required property '"+"id"+"'"};
 if(vErrors === null){
 vErrors = [err5];
 }
@@ -4914,12 +5054,8 @@ vErrors.push(err5);
 }
 errors++;
 }
-}
-if(data0.displayName !== undefined){
-let data2 = data0.displayName;
-if(typeof data2 === "string"){
-if(func2(data2) > 1024){
-const err6 = {instancePath:instancePath+"/mailbox/displayName",schemaPath:"../outlook/mailbox.schema.json/properties/displayName/maxLength",keyword:"maxLength",params:{limit: 1024},message:"must NOT have more than 1024 characters"};
+if(data1.displayName === undefined){
+const err6 = {instancePath:instancePath+"/mailbox",schemaPath:"../outlook/mailbox.schema.json/required",keyword:"required",params:{missingProperty: "displayName"},message:"must have required property '"+"displayName"+"'"};
 if(vErrors === null){
 vErrors = [err6];
 }
@@ -4928,8 +5064,8 @@ vErrors.push(err6);
 }
 errors++;
 }
-if(func2(data2) < 1){
-const err7 = {instancePath:instancePath+"/mailbox/displayName",schemaPath:"../outlook/mailbox.schema.json/properties/displayName/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(data1.source === undefined){
+const err7 = {instancePath:instancePath+"/mailbox",schemaPath:"../outlook/mailbox.schema.json/required",keyword:"required",params:{missingProperty: "source"},message:"must have required property '"+"source"+"'"};
 if(vErrors === null){
 vErrors = [err7];
 }
@@ -4938,9 +5074,11 @@ vErrors.push(err7);
 }
 errors++;
 }
-}
-else {
-const err8 = {instancePath:instancePath+"/mailbox/displayName",schemaPath:"../outlook/mailbox.schema.json/properties/displayName/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(data1.id !== undefined){
+let data2 = data1.id;
+if(typeof data2 === "string"){
+if(!pattern6.test(data2)){
+const err8 = {instancePath:instancePath+"/mailbox/id",schemaPath:"../outlook/mailbox.schema.json/properties/id/pattern",keyword:"pattern",params:{pattern: "^[0-9a-f]{32}$"},message:"must match pattern \""+"^[0-9a-f]{32}$"+"\""};
 if(vErrors === null){
 vErrors = [err8];
 }
@@ -4950,11 +5088,8 @@ vErrors.push(err8);
 errors++;
 }
 }
-if(data0.emailAddress !== undefined){
-let data3 = data0.emailAddress;
-if(typeof data3 === "string"){
-if(func2(data3) > 1024){
-const err9 = {instancePath:instancePath+"/mailbox/emailAddress",schemaPath:"../outlook/mailbox.schema.json/properties/emailAddress/maxLength",keyword:"maxLength",params:{limit: 1024},message:"must NOT have more than 1024 characters"};
+else {
+const err9 = {instancePath:instancePath+"/mailbox/id",schemaPath:"../outlook/mailbox.schema.json/properties/id/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err9];
 }
@@ -4963,8 +5098,12 @@ vErrors.push(err9);
 }
 errors++;
 }
-if(func2(data3) < 1){
-const err10 = {instancePath:instancePath+"/mailbox/emailAddress",schemaPath:"../outlook/mailbox.schema.json/properties/emailAddress/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+}
+if(data1.displayName !== undefined){
+let data3 = data1.displayName;
+if(typeof data3 === "string"){
+if(func2(data3) > 1024){
+const err10 = {instancePath:instancePath+"/mailbox/displayName",schemaPath:"../outlook/mailbox.schema.json/properties/displayName/maxLength",keyword:"maxLength",params:{limit: 1024},message:"must NOT have more than 1024 characters"};
 if(vErrors === null){
 vErrors = [err10];
 }
@@ -4973,9 +5112,8 @@ vErrors.push(err10);
 }
 errors++;
 }
-}
-else {
-const err11 = {instancePath:instancePath+"/mailbox/emailAddress",schemaPath:"../outlook/mailbox.schema.json/properties/emailAddress/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(func2(data3) < 1){
+const err11 = {instancePath:instancePath+"/mailbox/displayName",schemaPath:"../outlook/mailbox.schema.json/properties/displayName/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
 if(vErrors === null){
 vErrors = [err11];
 }
@@ -4985,11 +5123,8 @@ vErrors.push(err11);
 errors++;
 }
 }
-if(data0.profileName !== undefined){
-let data4 = data0.profileName;
-if(typeof data4 === "string"){
-if(func2(data4) > 1024){
-const err12 = {instancePath:instancePath+"/mailbox/profileName",schemaPath:"../outlook/mailbox.schema.json/properties/profileName/maxLength",keyword:"maxLength",params:{limit: 1024},message:"must NOT have more than 1024 characters"};
+else {
+const err12 = {instancePath:instancePath+"/mailbox/displayName",schemaPath:"../outlook/mailbox.schema.json/properties/displayName/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err12];
 }
@@ -4998,8 +5133,12 @@ vErrors.push(err12);
 }
 errors++;
 }
-if(func2(data4) < 1){
-const err13 = {instancePath:instancePath+"/mailbox/profileName",schemaPath:"../outlook/mailbox.schema.json/properties/profileName/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+}
+if(data1.emailAddress !== undefined){
+let data4 = data1.emailAddress;
+if(typeof data4 === "string"){
+if(func2(data4) > 1024){
+const err13 = {instancePath:instancePath+"/mailbox/emailAddress",schemaPath:"../outlook/mailbox.schema.json/properties/emailAddress/maxLength",keyword:"maxLength",params:{limit: 1024},message:"must NOT have more than 1024 characters"};
 if(vErrors === null){
 vErrors = [err13];
 }
@@ -5008,9 +5147,8 @@ vErrors.push(err13);
 }
 errors++;
 }
-}
-else {
-const err14 = {instancePath:instancePath+"/mailbox/profileName",schemaPath:"../outlook/mailbox.schema.json/properties/profileName/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(func2(data4) < 1){
+const err14 = {instancePath:instancePath+"/mailbox/emailAddress",schemaPath:"../outlook/mailbox.schema.json/properties/emailAddress/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
 if(vErrors === null){
 vErrors = [err14];
 }
@@ -5020,11 +5158,8 @@ vErrors.push(err14);
 errors++;
 }
 }
-if(data0.source !== undefined){
-let data5 = data0.source;
-if(typeof data5 === "string"){
-if(func2(data5) > 128){
-const err15 = {instancePath:instancePath+"/mailbox/source",schemaPath:"../outlook/mailbox.schema.json/properties/source/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
+else {
+const err15 = {instancePath:instancePath+"/mailbox/emailAddress",schemaPath:"../outlook/mailbox.schema.json/properties/emailAddress/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err15];
 }
@@ -5033,8 +5168,12 @@ vErrors.push(err15);
 }
 errors++;
 }
-if(func2(data5) < 1){
-const err16 = {instancePath:instancePath+"/mailbox/source",schemaPath:"../outlook/mailbox.schema.json/properties/source/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+}
+if(data1.profileName !== undefined){
+let data5 = data1.profileName;
+if(typeof data5 === "string"){
+if(func2(data5) > 1024){
+const err16 = {instancePath:instancePath+"/mailbox/profileName",schemaPath:"../outlook/mailbox.schema.json/properties/profileName/maxLength",keyword:"maxLength",params:{limit: 1024},message:"must NOT have more than 1024 characters"};
 if(vErrors === null){
 vErrors = [err16];
 }
@@ -5043,9 +5182,8 @@ vErrors.push(err16);
 }
 errors++;
 }
-}
-else {
-const err17 = {instancePath:instancePath+"/mailbox/source",schemaPath:"../outlook/mailbox.schema.json/properties/source/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(func2(data5) < 1){
+const err17 = {instancePath:instancePath+"/mailbox/profileName",schemaPath:"../outlook/mailbox.schema.json/properties/profileName/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
 if(vErrors === null){
 vErrors = [err17];
 }
@@ -5055,9 +5193,8 @@ vErrors.push(err17);
 errors++;
 }
 }
-}
 else {
-const err18 = {instancePath:instancePath+"/mailbox",schemaPath:"../outlook/mailbox.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
+const err18 = {instancePath:instancePath+"/mailbox/profileName",schemaPath:"../outlook/mailbox.schema.json/properties/profileName/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err18];
 }
@@ -5067,19 +5204,11 @@ vErrors.push(err18);
 errors++;
 }
 }
-if(data.messages !== undefined){
-let data6 = data.messages;
-if(Array.isArray(data6)){
-const len0 = data6.length;
-for(let i0=0; i0<len0; i0++){
-if(!(validate38(data6[i0], {instancePath:instancePath+"/messages/" + i0,parentData:data6,parentDataProperty:i0,rootData}))){
-vErrors = vErrors === null ? validate38.errors : vErrors.concat(validate38.errors);
-errors = vErrors.length;
-}
-}
-}
-else {
-const err19 = {instancePath:instancePath+"/messages",schemaPath:"#/properties/messages/type",keyword:"type",params:{type: "array"},message:"must be array"};
+if(data1.source !== undefined){
+let data6 = data1.source;
+if(typeof data6 === "string"){
+if(func2(data6) > 128){
+const err19 = {instancePath:instancePath+"/mailbox/source",schemaPath:"../outlook/mailbox.schema.json/properties/source/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
 if(vErrors === null){
 vErrors = [err19];
 }
@@ -5088,15 +5217,206 @@ vErrors.push(err19);
 }
 errors++;
 }
-}
-}
-else {
-const err20 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(func2(data6) < 1){
+const err20 = {instancePath:instancePath+"/mailbox/source",schemaPath:"../outlook/mailbox.schema.json/properties/source/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
 if(vErrors === null){
 vErrors = [err20];
 }
 else {
 vErrors.push(err20);
+}
+errors++;
+}
+}
+else {
+const err21 = {instancePath:instancePath+"/mailbox/source",schemaPath:"../outlook/mailbox.schema.json/properties/source/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err21];
+}
+else {
+vErrors.push(err21);
+}
+errors++;
+}
+}
+}
+else {
+const err22 = {instancePath:instancePath+"/mailbox",schemaPath:"../outlook/mailbox.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err22];
+}
+else {
+vErrors.push(err22);
+}
+errors++;
+}
+}
+if(data.messages !== undefined){
+let data7 = data.messages;
+if(Array.isArray(data7)){
+const len0 = data7.length;
+for(let i0=0; i0<len0; i0++){
+if(!(validate38(data7[i0], {instancePath:instancePath+"/messages/" + i0,parentData:data7,parentDataProperty:i0,rootData}))){
+vErrors = vErrors === null ? validate38.errors : vErrors.concat(validate38.errors);
+errors = vErrors.length;
+}
+}
+}
+else {
+const err23 = {instancePath:instancePath+"/messages",schemaPath:"#/properties/messages/type",keyword:"type",params:{type: "array"},message:"must be array"};
+if(vErrors === null){
+vErrors = [err23];
+}
+else {
+vErrors.push(err23);
+}
+errors++;
+}
+}
+if(data.warnings !== undefined){
+let data9 = data.warnings;
+if(Array.isArray(data9)){
+const len1 = data9.length;
+for(let i1=0; i1<len1; i1++){
+let data10 = data9[i1];
+if(data10 && typeof data10 == "object" && !Array.isArray(data10)){
+if(data10.code === undefined){
+const err24 = {instancePath:instancePath+"/warnings/" + i1,schemaPath:"../outlook/conversation-warning.schema.json/required",keyword:"required",params:{missingProperty: "code"},message:"must have required property '"+"code"+"'"};
+if(vErrors === null){
+vErrors = [err24];
+}
+else {
+vErrors.push(err24);
+}
+errors++;
+}
+if(data10.code !== undefined){
+let data11 = data10.code;
+if(typeof data11 === "string"){
+if(func2(data11) > 128){
+const err25 = {instancePath:instancePath+"/warnings/" + i1+"/code",schemaPath:"../outlook/conversation-warning.schema.json/properties/code/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
+if(vErrors === null){
+vErrors = [err25];
+}
+else {
+vErrors.push(err25);
+}
+errors++;
+}
+if(func2(data11) < 1){
+const err26 = {instancePath:instancePath+"/warnings/" + i1+"/code",schemaPath:"../outlook/conversation-warning.schema.json/properties/code/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(vErrors === null){
+vErrors = [err26];
+}
+else {
+vErrors.push(err26);
+}
+errors++;
+}
+}
+else {
+const err27 = {instancePath:instancePath+"/warnings/" + i1+"/code",schemaPath:"../outlook/conversation-warning.schema.json/properties/code/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err27];
+}
+else {
+vErrors.push(err27);
+}
+errors++;
+}
+}
+if(data10.message !== undefined){
+let data12 = data10.message;
+if(typeof data12 === "string"){
+if(func2(data12) > 4096){
+const err28 = {instancePath:instancePath+"/warnings/" + i1+"/message",schemaPath:"../outlook/conversation-warning.schema.json/properties/message/maxLength",keyword:"maxLength",params:{limit: 4096},message:"must NOT have more than 4096 characters"};
+if(vErrors === null){
+vErrors = [err28];
+}
+else {
+vErrors.push(err28);
+}
+errors++;
+}
+if(func2(data12) < 1){
+const err29 = {instancePath:instancePath+"/warnings/" + i1+"/message",schemaPath:"../outlook/conversation-warning.schema.json/properties/message/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(vErrors === null){
+vErrors = [err29];
+}
+else {
+vErrors.push(err29);
+}
+errors++;
+}
+}
+else {
+const err30 = {instancePath:instancePath+"/warnings/" + i1+"/message",schemaPath:"../outlook/conversation-warning.schema.json/properties/message/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err30];
+}
+else {
+vErrors.push(err30);
+}
+errors++;
+}
+}
+if(data10.internetMessageId !== undefined){
+let data13 = data10.internetMessageId;
+if(typeof data13 === "string"){
+if(func2(data13) > 32768){
+const err31 = {instancePath:instancePath+"/warnings/" + i1+"/internetMessageId",schemaPath:"../outlook/conversation-warning.schema.json/properties/internetMessageId/maxLength",keyword:"maxLength",params:{limit: 32768},message:"must NOT have more than 32768 characters"};
+if(vErrors === null){
+vErrors = [err31];
+}
+else {
+vErrors.push(err31);
+}
+errors++;
+}
+}
+else {
+const err32 = {instancePath:instancePath+"/warnings/" + i1+"/internetMessageId",schemaPath:"../outlook/conversation-warning.schema.json/properties/internetMessageId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err32];
+}
+else {
+vErrors.push(err32);
+}
+errors++;
+}
+}
+}
+else {
+const err33 = {instancePath:instancePath+"/warnings/" + i1,schemaPath:"../outlook/conversation-warning.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err33];
+}
+else {
+vErrors.push(err33);
+}
+errors++;
+}
+}
+}
+else {
+const err34 = {instancePath:instancePath+"/warnings",schemaPath:"#/properties/warnings/type",keyword:"type",params:{type: "array"},message:"must be array"};
+if(vErrors === null){
+vErrors = [err34];
+}
+else {
+vErrors.push(err34);
+}
+errors++;
+}
+}
+}
+else {
+const err35 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err35];
+}
+else {
+vErrors.push(err35);
 }
 errors++;
 }

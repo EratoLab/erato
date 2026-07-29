@@ -75,22 +75,26 @@ const MOCK_OUTLOOK_EMAIL = {
   internetMessageId: "<mock-outlook-email@example.com>",
 };
 const MOCK_OUTLOOK_CONVERSATION_MESSAGE = {
+  internetMessageId: "<mock-outlook-email@example.com>",
   subject: "Mock Outlook message",
-  fromName: "Erato Test",
-  fromEmailAddress: "test@example.com",
+  from: { name: "Erato Test", emailAddress: "test@example.com" },
   to: [{ name: "Mock Outlook mailbox", emailAddress: "mock@example.com" }],
   cc: [],
   sentAtUnixSeconds: 1_774_291_200,
-  internetMessageId: "<mock-outlook-email@example.com>",
-  bodyText: "Mock Outlook conversation body.",
+  isDraft: false,
+  bodyHandle: {
+    handle: "0".repeat(32),
+    contentType: "text/plain",
+    size: 31,
+  },
   attachments: [
     {
       name: "mock-attachment.pdf",
-      mimeType: "application/pdf",
-      kind: "binary",
-      sizeBytes: 12,
+      contentType: "application/pdf",
+      size: 12,
+      isInline: false,
       sha256: "a".repeat(64),
-      transferHandle: "0".repeat(32),
+      contentHandle: "1".repeat(32),
     },
   ],
 };
@@ -421,8 +425,10 @@ export class MockSidecar {
         return rpcError(message.id, -32602, "Unknown Outlook mailbox.");
       }
       return rpcResult(message.id, {
+        state: "ok",
         mailbox: MOCK_OUTLOOK_MAILBOX,
         messages: [MOCK_OUTLOOK_CONVERSATION_MESSAGE],
+        warnings: [],
       });
     }
 

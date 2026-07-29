@@ -2,49 +2,48 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://schemas.erato.ai/desktop-sidecar/v1/outlook/attachment-reference.schema.json",
   "title": "OutlookAttachmentReference",
-  "description": "Metadata for one attachment. The bytes are fetched separately through the binary transfer profile, so any-size attachments stay out of the JSON-RPC body.",
+  "description": "Metadata for one attachment. When its bytes are available they are fetched through the binary transfer profile via contentHandle, so any-size attachments stay out of the JSON-RPC body; otherwise unavailableReason explains why.",
   "type": "object",
-  "required": ["transferHandle", "sizeBytes"],
   "properties": {
     "name": {
       "description": "File name, when present.",
       "type": "string",
       "maxLength": 4096
     },
-    "mimeType": {
-      "description": "MIME type. Embedded messages are reported as message/rfc822.",
+    "contentType": {
+      "description": "Media type of the bytes. Embedded messages are reported as message/rfc822.",
       "type": "string",
       "maxLength": 256
+    },
+    "size": {
+      "description": "Exact length of the transferable bytes.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "isInline": {
+      "description": "True when the attachment is referenced from the message body by contentId.",
+      "type": "boolean"
     },
     "contentId": {
       "description": "Content-ID for an inline attachment, without angle brackets.",
       "type": "string",
       "maxLength": 4096
     },
-    "isInline": {
-      "description": "True when the attachment is referenced from the message body by contentId.",
-      "type": "boolean"
-    },
-    "kind": {
-      "description": "Implementation-defined attachment kind. Known values include binary and embeddedMessage.",
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 128
-    },
-    "sizeBytes": {
-      "description": "Exact length of the transferable bytes.",
-      "type": "integer",
-      "minimum": 0
-    },
     "sha256": {
-      "description": "Lowercase hex SHA-256 of the transferable bytes.",
+      "description": "Lowercase hex SHA-256 of the transferable bytes, useful for de-duplicating attachments repeated across thread messages.",
       "type": "string",
       "pattern": "^[a-f0-9]{64}$"
     },
-    "transferHandle": {
-      "description": "Opaque handle for GET /erato/sidecar/transfer/v1/{handle} within the same sidecar runtime.",
+    "contentHandle": {
+      "description": "Opaque handle for GET /erato/sidecar/transfer/v1/{handle}. Present when the bytes are available.",
       "type": "string",
       "pattern": "^[0-9a-f]{32,128}$"
+    },
+    "unavailableReason": {
+      "description": "Stable code explaining why bytes are not available, present instead of contentHandle. Known values include unsupported_attachment.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
     }
   },
   "additionalProperties": true

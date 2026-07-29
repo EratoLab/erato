@@ -133,6 +133,16 @@ const typeTargets = [
     "OutlookMessageRecipient",
   ],
   [
+    "schemas/outlook/body-handle.schema.json",
+    "outlook-body-handle.ts",
+    "OutlookBodyHandle",
+  ],
+  [
+    "schemas/outlook/conversation-warning.schema.json",
+    "outlook-conversation-warning.ts",
+    "OutlookConversationWarning",
+  ],
+  [
     "schemas/outlook/attachment-reference.schema.json",
     "outlook-attachment-reference.ts",
     "OutlookAttachmentReference",

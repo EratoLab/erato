@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/outlook/conversation-warning.schema.json",
+  "title": "OutlookConversationWarning",
+  "description": "A part of a conversation that could not be represented fully, without hiding the rest.",
+  "type": "object",
+  "required": ["code"],
+  "properties": {
+    "code": {
+      "description": "Stable machine-readable warning code. Known values include truncated, attachment_unavailable, and embedded_attachments_omitted.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "internetMessageId": {
+      "description": "The message the warning is about, when it is message-scoped.",
+      "type": "string",
+      "maxLength": 32768
+    }
+  },
+  "additionalProperties": true
+}

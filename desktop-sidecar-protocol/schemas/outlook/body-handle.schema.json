@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/outlook/body-handle.schema.json",
+  "title": "OutlookBodyHandle",
+  "description": "A reference to a message body fetched through the binary transfer profile, so large bodies stay out of the JSON-RPC response.",
+  "type": "object",
+  "required": ["handle", "contentType", "size"],
+  "properties": {
+    "handle": {
+      "description": "Opaque handle for GET /erato/sidecar/transfer/v1/{handle}.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{32,128}$"
+    },
+    "contentType": {
+      "description": "Media type of the body bytes, for example text/html or text/plain.",
+      "type": "string",
+      "maxLength": 256
+    },
+    "size": {
+      "description": "Exact length of the body bytes.",
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": true
+}
