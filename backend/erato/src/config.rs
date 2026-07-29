@@ -380,6 +380,9 @@ pub struct AppConfig {
     pub server: ServerConfig,
 
     #[serde(default)]
+    pub generation: GenerationConfig,
+
+    #[serde(default)]
     pub frontend: FrontendConfig,
 
     #[serde(default)]
@@ -774,6 +777,10 @@ impl AppConfig {
 
         if let Err(e) = config.server.validate() {
             panic!("Invalid server configuration: {}", e);
+        }
+
+        if let Err(e) = config.generation.validate() {
+            panic!("Invalid generation configuration: {}", e);
         }
 
         // Migrate single chat_provider to new chat_providers structure and handle Azure OpenAI migration
@@ -1551,6 +1558,40 @@ impl ServerConfig {
 
         Ok(())
     }
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct GenerationConfig {
+    // Maximum number of tool calls that may be executed while generating one
+    // assistant message.
+    //
+    // Defaults to 15.
+    #[serde(default = "default_max_tool_calls_per_message")]
+    pub max_tool_calls_per_message: u32,
+}
+
+impl Default for GenerationConfig {
+    fn default() -> Self {
+        Self {
+            max_tool_calls_per_message: default_max_tool_calls_per_message(),
+        }
+    }
+}
+
+impl GenerationConfig {
+    pub fn validate(&self) -> Result<(), Report> {
+        if self.max_tool_calls_per_message == 0 {
+            return Err(eyre!(
+                "generation.max_tool_calls_per_message must be greater than 0"
+            ));
+        }
+
+        Ok(())
+    }
+}
+
+fn default_max_tool_calls_per_message() -> u32 {
+    15
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy, Default, Facet)]

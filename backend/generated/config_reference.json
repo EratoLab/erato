@@ -349,6 +349,7 @@
       "planned_removal_version": "0.6.0"
     }
   },
+  "generation.max_tool_calls_per_message": {},
   "generation_status.heartbeat_interval_secs": {},
   "generation_status.stale_after_secs": {},
   "generation_status.terminal_retention_secs": {},

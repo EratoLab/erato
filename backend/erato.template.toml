@@ -7,6 +7,11 @@ default_file_storage_provider = "seaweedfs"
 # Generate one with: openssl rand -base64 32
 # encryption_key = "replace-with-openssl-output"
 
+# Generation configuration
+# [generation]
+# Maximum number of tool calls that may be executed while generating one assistant message (default: 15).
+# max_tool_calls_per_message = 15
+
 [file_storage_providers.seaweedfs]
 provider_kind = "s3"
 config = { endpoint = "http://localhost:8333", bucket = "erato-storage", region = "us-east-1", access_key_id = "admin", secret_access_key = "admin" }
