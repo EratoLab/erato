@@ -133,6 +133,7 @@ MCP servers are configured in your `erato.toml` file under the `[mcp_servers]` s
 3. Server URL endpoint
 4. Authentication configuration
 5. Optional per-server idle timeout override
+6. Optional per-server tool allow/exclude filters
 
 **Example:**
 
@@ -144,6 +145,8 @@ max_session_idle_seconds = 1200
 [mcp_servers.file_provider]
 transport_type = "sse"
 url = "http://127.0.0.1:63490/sse"
+allow_tools = ["list_*", "read_file"]
+exclude_tools = ["list_private_*"]
 
 [mcp_servers.file_provider.authentication]
 mode = "none"
@@ -176,6 +179,12 @@ credential = "oidc_id_token"
 See the [Configuration Reference](../configuration#mcp_servers) for detailed configuration options.
 
 **Session timeout guidance:** If an MCP server allocates a lot of resources per session, set `mcp_servers_global.max_session_idle_seconds` (or that server's `max_session_idle_seconds`) to a low value so idle sessions are cleaned up quickly.
+
+### Tool filtering
+
+Each MCP server can define `allow_tools` and `exclude_tools` wildcard patterns over its unqualified tool names. Erato first keeps tools matching `allow_tools`, then removes tools matching `exclude_tools`. This happens before request-level permission filtering.
+
+Omitting `allow_tools` permits every tool and is equivalent to `allow_tools = ["*"]`. Setting `allow_tools = []` permits none. An omitted or empty `exclude_tools` removes nothing.
 
 ## Access to MCP servers
 

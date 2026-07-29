@@ -87,6 +87,8 @@ chat_provider_ids = ["test-token-limit"]
 # [mcp_servers.file_provider]
 # transport_type = "sse"
 # url = "http://127.0.0.1:63490/sse"
+# allow_tools = ["get_*", "list_pages"]
+# exclude_tools = ["get_secret_*"]
 # [mcp_servers.file_provider.authentication]
 # mode = "none"
 # # Optional per-server override (seconds)
