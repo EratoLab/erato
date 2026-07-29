@@ -2551,11 +2551,11 @@ async fn stream_generate_chat_completion<
     let langfuse_trace_id = tracing_client
         .as_ref()
         .map(|client| client.trace_id().to_string());
-    let max_tool_call_iterations = 15;
+    let max_tool_calls_per_message = app_state.config.generation.max_tool_calls_per_message;
     // Default time the loop holds a turn open awaiting a client tool's result
     // before giving up (the backstop that prevents a never-answering client
     // from leaking the parked turn). A client tool counts as one normal
-    // iteration against `max_tool_call_iterations`, but this park time is NOT a
+    // iteration against `max_tool_calls_per_message`, but this park time is NOT a
     // generation wall-clock budget. A per-facet `client_tool.timeout_ms` (see
     // the park below) overrides this default per tool.
     const DEFAULT_CLIENT_TOOL_PARK_TIMEOUT_MS: u64 = 60_000;
@@ -2723,9 +2723,9 @@ async fn stream_generate_chat_completion<
                 break 'loop_call_turns Ok((current_message_content, generation_metadata));
             }
 
-            if current_tool_call_count >= max_tool_call_iterations {
+            if current_tool_call_count >= max_tool_calls_per_message {
                 let error = eyre!(
-                    "Maximum tool-call iteration count ({max_tool_call_iterations}) exceeded"
+                    "Maximum tool call count per message ({max_tool_calls_per_message}) exceeded"
                 );
                 return Err(error);
             } else {

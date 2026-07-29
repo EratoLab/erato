@@ -79,6 +79,29 @@ When providing this value via an environment variable, use `SERVER__ENCRYPTION_K
 encryption_key = "replace-with-openssl-output"
 ```
 
+### `generation`
+
+{/* erato_toml_config_key: generation */}
+
+#### `generation.max_tool_calls_per_message`
+
+{/* erato_toml_config_key: generation.max_tool_calls_per_message */}
+
+Maximum number of tool calls the backend may execute while generating one assistant message. Increase this value for tasks that require longer chains of tool use.
+
+The limit applies across all sequential and parallel tool calls made for the message.
+
+**Default value:** `15`
+
+**Type:** `integer` (greater than 0)
+
+**Example**
+
+```toml
+[generation]
+max_tool_calls_per_message = 30
+```
+
 ### `frontend`
 
 {/* erato_toml_config_key: frontend */}

@@ -282,7 +282,7 @@ sequenceDiagram
     participant 🤖 LLM Provider
     participant 🔧 MCP Servers
 
-    Note over 🖥️ Backend API: Turn Loop (max 15 iterations)
+    Note over 🖥️ Backend API: Turn Loop (tool calls capped by configuration)
     loop For each turn (turn_number++)
 
         alt Turn > 1: Process pending tool calls
@@ -323,7 +323,7 @@ sequenceDiagram
 - Each turn starts by executing any pending tool calls from the previous turn
 - Tool calls are executed via MCP servers with real-time SSE updates
 - LLM generation is streamed with text deltas sent to frontend
-- If LLM requests more tool calls, loop continues (up to 15 turns)
+- If the LLM requests more tool calls, the loop continues until it reaches `generation.max_tool_calls_per_message` (15 by default)
 - Langfuse tracks each turn separately with detailed metrics
 
 ### Phase 4: Finalization

@@ -3,7 +3,7 @@
 use crate::test_utils::hermetic_app_config;
 use crate::{MIGRATOR, test_app_state};
 use erato::config::{
-    AppConfig, ModelReasoningEffort, ModelVerbosity, PromptSourceSpecification,
+    AppConfig, GenerationConfig, ModelReasoningEffort, ModelVerbosity, PromptSourceSpecification,
     SharepointAllDrivesSource,
 };
 use sqlx::Pool;
@@ -162,6 +162,7 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
     assert!(!config.integrations.ms_office.ews_skip_tls_validation);
     assert!(!config.cleanup_enabled);
     assert_eq!(config.cleanup_archived_max_age_days, 30);
+    assert_eq!(config.generation.max_tool_calls_per_message, 15);
 
     // The temp file will be automatically cleaned up when temp_file goes out of scope
 }
@@ -3555,7 +3556,7 @@ client_actions_always_ask = ["outlook.reply_all "]
 }
 
 #[test]
-fn test_config_server_encryption_key_parses() {
+fn test_config_server_encryption_key_and_generation_parses() {
     let mut temp_file = Builder::new()
         .suffix(".toml")
         .tempfile()
@@ -3567,6 +3568,9 @@ model_name = "gpt-3.5-turbo"
 
 [server]
 encryption_key = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+
+[generation]
+max_tool_calls_per_message = 30
 
 [file_storage_providers.azblob_demo]
 provider_kind = "azblob"
@@ -3594,6 +3598,23 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
     assert_eq!(
         config.server.encryption_key.as_deref(),
         Some("MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
+    );
+    assert_eq!(config.generation.max_tool_calls_per_message, 30);
+}
+
+#[test]
+fn test_config_generation_rejects_zero_max_tool_calls_per_message() {
+    let config = GenerationConfig {
+        max_tool_calls_per_message: 0,
+    };
+
+    let error = config
+        .validate()
+        .expect_err("zero max_tool_calls_per_message should be rejected");
+
+    assert_eq!(
+        error.to_string(),
+        "generation.max_tool_calls_per_message must be greater than 0"
     );
 }
 
