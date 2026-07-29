@@ -113,7 +113,7 @@ pub struct ServedFrontend {
     pub content_security_policy: Option<HeaderValue>,
     /// Pre-serialized import map injected as the first `<head>` child so
     /// component kits resolve shared bare specifiers to app-bundle chunks.
-    /// Only set for the web frontend.
+    /// Set for host frontends that expose component-kit shared modules.
     pub import_map_json: Option<String>,
 }
 
@@ -158,10 +158,12 @@ pub fn build_frontend_registry(config: &AppConfig) -> FrontendRegistry {
         &config.integrations.ms_office.addin.frontend_bundle_path,
         "/public/platform-office-addin",
     );
-    let addin_legacy_import_map_json = load_import_map_json(
-        &config.integrations.ms_office.addin.frontend_bundle_path,
-        "/office-addin",
-    );
+    // The production bundle's module scripts always use Vite's canonical
+    // `/public/platform-office-addin` base, even when the HTML document itself
+    // is served from the legacy `/office-addin` route. Keep the import-map URLs
+    // canonical as well: ESM module identity is URL-based, so prefixing these
+    // entries with the legacy route would create second React/Lingui instances.
+    let addin_legacy_import_map_json = addin_import_map_json.clone();
     let mut frontends = vec![ServedFrontend {
         bundle_path: config
             .integrations
@@ -1482,6 +1484,45 @@ mod tests {
         assert!(addin.contains(
             r#""@erato/frontend/shared":"/public/platform-office-addin/shared-erato-y.mjs""#
         ));
+    }
+
+    #[test]
+    fn legacy_office_addin_route_uses_canonical_import_map_urls() {
+        let bundle_dir = tempfile::tempdir().expect("temporary bundle directory should be created");
+        std::fs::write(
+            bundle_dir.path().join(IMPORT_MAP_MANIFEST_FILE_NAME),
+            r#"{"imports":{"react":"assets/shared-react-x.mjs","@lingui/core":"assets/shared-lingui-core-x.mjs","@erato/frontend/shared":"assets/shared-erato-x.mjs"}}"#,
+        )
+        .expect("import map manifest should be written");
+
+        let mut config = AppConfig::default();
+        config.integrations.ms_office.addin.enabled = true;
+        config.integrations.ms_office.addin.serve_bundle_legacy_path = true;
+        config.integrations.ms_office.addin.frontend_bundle_path =
+            bundle_dir.path().to_string_lossy().into_owned();
+
+        let registry = build_frontend_registry(&config);
+        let legacy_frontend = registry
+            .frontends
+            .iter()
+            .find(|frontend| frontend.mount_path == "/office-addin")
+            .expect("legacy Office add-in route should be registered");
+        let import_map = legacy_frontend
+            .import_map_json
+            .as_deref()
+            .expect("legacy Office add-in route should inject an import map");
+
+        assert!(
+            import_map
+                .contains(r#""react":"/public/platform-office-addin/assets/shared-react-x.mjs""#)
+        );
+        assert!(import_map.contains(
+            r#""@lingui/core":"/public/platform-office-addin/assets/shared-lingui-core-x.mjs""#
+        ));
+        assert!(import_map.contains(
+            r#""@erato/frontend/shared":"/public/platform-office-addin/assets/shared-erato-x.mjs""#
+        ));
+        assert!(!import_map.contains("/office-addin/assets/"));
     }
 
     #[test]
