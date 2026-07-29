@@ -2124,6 +2124,13 @@ pub struct McpServerConfig {
     // Optional static HTTP headers to be sent with every request.
     // This is useful for non-authentication headers that should accompany MCP requests.
     pub http_headers: Option<HashMap<String, String>>,
+    // Optional wildcard patterns selecting the tools exposed by this MCP server.
+    // When omitted, all tools are allowed. An explicitly empty list allows no tools.
+    #[serde(default)]
+    pub allow_tools: Option<Vec<String>>,
+    // Wildcard patterns selecting tools to remove after `allow_tools` is applied.
+    #[serde(default)]
+    pub exclude_tools: Vec<String>,
     // Authentication settings for requests to this MCP server.
     #[serde(default)]
     pub authentication: McpServerAuthenticationConfig,

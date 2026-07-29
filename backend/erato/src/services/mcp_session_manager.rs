@@ -84,7 +84,7 @@ impl McpSession {
             _service: service, // Keep the service alive!
             peer,
             server_id,
-            tools: tools_result.tools,
+            tools: filter_tools_by_server_config(tools_result.tools, config),
             last_activity: SystemTime::now(),
             max_idle_duration: Duration::from_secs(
                 config
@@ -109,14 +109,14 @@ impl McpSession {
     }
 
     /// Refresh the tools list from the server
-    async fn refresh_tools(&mut self) -> Result<(), Report> {
+    async fn refresh_tools(&mut self, config: &McpServerConfig) -> Result<(), Report> {
         let tools_result = self
             .peer
             .list_tools(Default::default())
             .await
             .map_err(|e| eyre!("Failed to refresh tools: {}", e))?;
 
-        self.tools = tools_result.tools;
+        self.tools = filter_tools_by_server_config(tools_result.tools, config);
         self.touch();
         Ok(())
     }
@@ -132,6 +132,59 @@ impl McpSession {
         self.touch();
         Ok(result)
     }
+}
+
+fn filter_tools_by_server_config(tools: Vec<Tool>, config: &McpServerConfig) -> Vec<Tool> {
+    tools
+        .into_iter()
+        .filter(|tool| is_tool_allowed_by_server_config(&tool.name, config))
+        .collect()
+}
+
+fn is_tool_allowed_by_server_config(tool_name: &str, config: &McpServerConfig) -> bool {
+    let allowed = config.allow_tools.as_ref().is_none_or(|patterns| {
+        patterns
+            .iter()
+            .any(|pattern| wildcard_matches(pattern, tool_name))
+    });
+
+    allowed
+        && !config
+            .exclude_tools
+            .iter()
+            .any(|pattern| wildcard_matches(pattern, tool_name))
+}
+
+fn wildcard_matches(pattern: &str, value: &str) -> bool {
+    let pattern = pattern.as_bytes();
+    let value = value.as_bytes();
+    let mut pattern_index = 0;
+    let mut value_index = 0;
+    let mut last_star_index = None;
+    let mut star_match_value_index = 0;
+
+    while value_index < value.len() {
+        if pattern_index < pattern.len() && pattern[pattern_index] == value[value_index] {
+            pattern_index += 1;
+            value_index += 1;
+        } else if pattern_index < pattern.len() && pattern[pattern_index] == b'*' {
+            last_star_index = Some(pattern_index);
+            pattern_index += 1;
+            star_match_value_index = value_index;
+        } else if let Some(star_index) = last_star_index {
+            pattern_index = star_index + 1;
+            star_match_value_index += 1;
+            value_index = star_match_value_index;
+        } else {
+            return false;
+        }
+    }
+
+    while pattern_index < pattern.len() && pattern[pattern_index] == b'*' {
+        pattern_index += 1;
+    }
+
+    pattern_index == pattern.len()
 }
 
 type SessionAuthKey = Option<String>;
@@ -631,6 +684,10 @@ impl McpSessionManager {
         server_id: &str,
         auth_context: &McpRequestAuthContext<'_>,
     ) -> Result<(), Report> {
+        let config = self
+            .server_configs
+            .get(server_id)
+            .ok_or_else(|| eyre!("MCP server '{}' not found in configuration", server_id))?;
         let key = self
             .get_or_create_session(chat_id, server_id, auth_context)
             .await?;
@@ -638,7 +695,7 @@ impl McpSessionManager {
         let mut sessions_guard = self.sessions.write().await;
 
         if let Some(session) = sessions_guard.get_mut(&key) {
-            session.refresh_tools().await?;
+            session.refresh_tools(config).await?;
         }
 
         Ok(())
@@ -763,4 +820,94 @@ impl McpSessionManager {
 pub struct ManagedTool {
     pub server_id: String,
     pub tool: Tool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        filter_tools_by_server_config, is_tool_allowed_by_server_config, wildcard_matches,
+    };
+    use crate::config::{McpServerAuthenticationConfig, McpServerConfig};
+    use rmcp::model::Tool;
+
+    fn server_config(allow_tools: Option<Vec<&str>>, exclude_tools: Vec<&str>) -> McpServerConfig {
+        McpServerConfig {
+            transport_type: "streamable_http".to_string(),
+            url: "http://localhost/mcp".to_string(),
+            http_headers: None,
+            allow_tools: allow_tools
+                .map(|patterns| patterns.into_iter().map(str::to_string).collect()),
+            exclude_tools: exclude_tools.into_iter().map(str::to_string).collect(),
+            authentication: McpServerAuthenticationConfig::None,
+            max_session_idle_seconds: None,
+        }
+    }
+
+    #[test]
+    fn wildcard_patterns_match_tool_names() {
+        assert!(wildcard_matches("*", "get_page"));
+        assert!(wildcard_matches("get_*", "get_page"));
+        assert!(wildcard_matches("*_page", "get_page"));
+        assert!(wildcard_matches("get*page", "get_cached_page"));
+        assert!(!wildcard_matches("get_*", "list_pages"));
+        assert!(!wildcard_matches("get_page", "get_pages"));
+    }
+
+    #[test]
+    fn omitted_allowlist_is_equivalent_to_wildcard() {
+        let omitted_allowlist = server_config(None, vec![]);
+        let wildcard_allowlist = server_config(Some(vec!["*"]), vec![]);
+
+        for tool_name in ["get_page", "delete_page"] {
+            assert!(is_tool_allowed_by_server_config(
+                tool_name,
+                &omitted_allowlist
+            ));
+            assert!(is_tool_allowed_by_server_config(
+                tool_name,
+                &wildcard_allowlist
+            ));
+        }
+    }
+
+    #[test]
+    fn explicitly_empty_allowlist_allows_no_tools() {
+        let config = server_config(Some(vec![]), vec![]);
+
+        assert!(!is_tool_allowed_by_server_config("get_page", &config));
+    }
+
+    #[test]
+    fn allowlist_is_applied_before_excludelist() {
+        let config = server_config(
+            Some(vec!["get_*", "list_pages"]),
+            vec!["*_secret", "get_raw*"],
+        );
+
+        assert!(is_tool_allowed_by_server_config("get_page", &config));
+        assert!(is_tool_allowed_by_server_config("list_pages", &config));
+        assert!(!is_tool_allowed_by_server_config("delete_page", &config));
+        assert!(!is_tool_allowed_by_server_config("get_secret", &config));
+        assert!(!is_tool_allowed_by_server_config("get_raw_page", &config));
+    }
+
+    #[test]
+    fn server_tool_list_is_filtered_in_original_order() {
+        let config = server_config(Some(vec!["get_*", "list_pages"]), vec!["get_secret"]);
+        let tools = ["delete_page", "get_page", "get_secret", "list_pages"]
+            .into_iter()
+            .map(|name| {
+                let mut tool = Tool::default();
+                tool.name = name.to_string().into();
+                tool
+            })
+            .collect();
+
+        let filtered_names = filter_tools_by_server_config(tools, &config)
+            .into_iter()
+            .map(|tool| tool.name.into_owned())
+            .collect::<Vec<_>>();
+
+        assert_eq!(filtered_names, vec!["get_page", "list_pages"]);
+    }
 }

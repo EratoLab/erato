@@ -2757,6 +2757,40 @@ url = "https://mcp-server.example.com/sse"
 http_headers = { "X-Tenant-ID" = "tenant-123", "X-Environment" = "production" }
 ```
 
+#### `mcp_servers.<server-id>.allow_tools`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.allow_tools.[] */}
+
+Optional list of wildcard patterns selecting which tools from this MCP server Erato exposes. Patterns match the unqualified MCP tool name, and `*` matches any sequence of characters.
+
+If this option is omitted, all tools are allowed, which is equivalent to `allow_tools = ["*"]`. An explicitly empty list allows no tools.
+
+**Type:** `array<string> | None`
+
+**Examples:**
+
+```toml
+# Expose only the exact get_page tool and tools beginning with "list_".
+allow_tools = ["get_page", "list_*"]
+```
+
+#### `mcp_servers.<server-id>.exclude_tools`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.exclude_tools.[] */}
+
+List of wildcard patterns selecting tools to remove from the tools permitted by `allow_tools`. Exclusions are applied after the allowlist, and both filters are applied before request-level assistant, facet, and permission filtering.
+
+**Type:** `array<string>`
+
+**Default value:** `[]`
+
+**Example:**
+
+```toml
+allow_tools = ["get_*"]
+exclude_tools = ["get_secret_*"]
+```
+
 #### `mcp_servers.<server-id>.authentication`
 
 {/* erato_toml_config_key: mcp_servers.<server-id>.authentication */}
