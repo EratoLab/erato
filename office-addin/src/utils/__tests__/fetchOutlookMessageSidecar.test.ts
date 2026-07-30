@@ -21,6 +21,7 @@ function stubInner(): OutlookMessageFetcher {
 interface FakeClientOptions {
   supports?: boolean;
   mailboxes?: { id: string; emailAddress?: string }[];
+  conversation?: unknown;
   transfer?: (handle: string) => Promise<Uint8Array>;
 }
 
@@ -56,14 +57,14 @@ function fakeClient(options: FakeClientOptions = {}): DesktopSidecarClient {
   const {
     supports = true,
     mailboxes = [{ id: "m1", emailAddress: "user@example.test" }],
+    conversation = defaultConversation(),
     transfer = async (handle: string) => new TextEncoder().encode(handle),
   } = options;
   return {
     supports: () => supports,
     invoke: async (method: string) => {
       if (method === "outlook.list_mailboxes.v1") return { mailboxes };
-      if (method === "outlook.get_conversation.v1")
-        return defaultConversation();
+      if (method === "outlook.get_conversation.v1") return conversation;
       throw new Error(`unexpected invoke ${method}`);
     },
     fetchTransfer: (handle: string) => transfer(handle),
@@ -126,6 +127,19 @@ describe("createSidecarOutlookMessageFetcher", () => {
     );
 
     expect(await fetcher.fetchConversationMessages("conv-1")).toBe(FALLBACK);
+  });
+
+  it("falls back when the anchor resolves to no messages", async () => {
+    const inner = stubInner();
+    const fetcher = createSidecarOutlookMessageFetcher(
+      context(
+        fakeClient({ conversation: { state: "ok", messages: [] } }),
+        inner,
+      ),
+    );
+
+    expect(await fetcher.fetchConversationMessages("conv-1")).toBe(FALLBACK);
+    expect(inner.fetchConversationMessages).toHaveBeenCalledOnce();
   });
 
   it("degrades a failed attachment transfer to a marker + partial, not a full fallback", async () => {

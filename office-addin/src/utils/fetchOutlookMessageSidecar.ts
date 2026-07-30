@@ -101,6 +101,14 @@ async function fetchConversationViaSidecar(
     { signal },
   );
 
+  if (conversation.messages.length === 0) {
+    // A conversation always contains at least its anchor, so an empty result
+    // means the anchor Message-ID was not resolvable in the local store (a
+    // format mismatch, or an item not yet synced to the OST). Fall back to EWS
+    // rather than presenting an empty thread.
+    throw new Error("The sidecar returned no messages for the anchor.");
+  }
+
   const progress: ConversionProgress = { partial: conversation.state !== "ok" };
   const messages = await mapWithConcurrency(
     conversation.messages,
