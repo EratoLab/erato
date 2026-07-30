@@ -114,9 +114,11 @@ is best effort: the original request still ends with at most one response.
 Cancellation is independently authorized using the same Origin, OS user, and
 organization policy as the original request.
 
-JSON-RPC bodies carry ordinary JSON only. Bulk or binary data MUST use an opaque
-handle and a separately versioned transfer profile; base64 payloads are not
-permitted in ordinary 1.0 RPC bodies.
+JSON-RPC request bodies carry ordinary JSON only and are capped at 262,144
+bytes. Response bodies MAY carry inline base64 bytes — for example the message
+bodies and attachments of `outlook.get_conversation.v1` — and are bounded by a
+separate, larger response cap. A dedicated transfer profile for very large
+payloads may be introduced later, but is not part of 1.0.
 
 ## 6. Errors
 

@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://schemas.erato.ai/desktop-sidecar/v1/outlook/attachment-reference.schema.json",
   "title": "OutlookAttachmentReference",
-  "description": "Metadata for one attachment. When its bytes are available they are fetched through the binary transfer profile via contentHandle, so any-size attachments stay out of the JSON-RPC body; otherwise unavailableReason explains why.",
+  "description": "Metadata and inline bytes for one attachment. When the bytes are available they are base64-encoded in contentBytes; otherwise unavailableReason explains why.",
   "type": "object",
   "properties": {
     "name": {
@@ -16,7 +16,7 @@
       "maxLength": 256
     },
     "size": {
-      "description": "Exact length of the transferable bytes.",
+      "description": "Exact length of the attachment bytes.",
       "type": "integer",
       "minimum": 0
     },
@@ -30,17 +30,16 @@
       "maxLength": 4096
     },
     "sha256": {
-      "description": "Lowercase hex SHA-256 of the transferable bytes, useful for de-duplicating attachments repeated across thread messages.",
+      "description": "Lowercase hex SHA-256 of the attachment bytes, useful for de-duplicating attachments repeated across thread messages.",
       "type": "string",
       "pattern": "^[a-f0-9]{64}$"
     },
-    "contentHandle": {
-      "description": "Opaque handle for GET /erato/sidecar/transfer/v1/{handle}. Present when the bytes are available.",
-      "type": "string",
-      "pattern": "^[0-9a-f]{32,128}$"
+    "contentBytes": {
+      "description": "Base64-encoded attachment bytes, present when the bytes are available.",
+      "type": "string"
     },
     "unavailableReason": {
-      "description": "Stable code explaining why bytes are not available, present instead of contentHandle. Known values include unsupported_attachment.",
+      "description": "Stable code explaining why bytes are not available, present instead of contentBytes. Known values include unsupported_attachment.",
       "type": "string",
       "minLength": 1,
       "maxLength": 128

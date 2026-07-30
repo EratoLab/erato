@@ -133,9 +133,9 @@ const typeTargets = [
     "OutlookMessageRecipient",
   ],
   [
-    "schemas/outlook/body-handle.schema.json",
-    "outlook-body-handle.ts",
-    "OutlookBodyHandle",
+    "schemas/outlook/message-body.schema.json",
+    "outlook-message-body.ts",
+    "OutlookMessageBody",
   ],
   [
     "schemas/outlook/conversation-warning.schema.json",

@@ -75,7 +75,7 @@ describe("DesktopSidecarClient", () => {
     });
   });
 
-  it("supports outlook.get_conversation.v1 and fetches transfer bytes", async () => {
+  it("supports outlook.get_conversation.v1 with inline body and attachment bytes", async () => {
     const { client } = await setup();
     await client.discover();
 
@@ -88,17 +88,17 @@ describe("DesktopSidecarClient", () => {
     });
     expect(conversation.state).toBe("ok");
 
-    const handle = conversation.messages[0]?.attachments[0]?.contentHandle;
-    expect(handle).toBeDefined();
-    const bytes = await client.fetchTransfer(handle!);
-    expect(new TextDecoder().decode(bytes)).toBe(handle);
-  });
+    const message = conversation.messages[0];
+    expect(message?.body).toEqual({
+      contentType: "text/plain",
+      content: "Mock Outlook message body.",
+    });
 
-  it("rejects fetchTransfer before discovery", async () => {
-    const { client } = await setup();
-    await expect(client.fetchTransfer("0".repeat(32))).rejects.toBeInstanceOf(
-      SidecarClientError,
-    );
+    const attachment = message?.attachments[0];
+    expect(attachment?.contentBytes).toBeDefined();
+    expect(
+      Buffer.from(attachment!.contentBytes!, "base64").toString("utf8"),
+    ).toBe("mock attachment bytes");
   });
 
   it("acknowledges a sidecar restart request", async () => {

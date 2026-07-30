@@ -1,7 +1,7 @@
 /* This file is generated from the canonical JSON schemas. Do not edit. */
 
 /**
- * Metadata for one attachment. When its bytes are available they are fetched through the binary transfer profile via contentHandle, so any-size attachments stay out of the JSON-RPC body; otherwise unavailableReason explains why.
+ * Metadata and inline bytes for one attachment. When the bytes are available they are base64-encoded in contentBytes; otherwise unavailableReason explains why.
  */
 export interface OutlookAttachmentReference {
   /**
@@ -13,7 +13,7 @@ export interface OutlookAttachmentReference {
    */
   contentType?: string;
   /**
-   * Exact length of the transferable bytes.
+   * Exact length of the attachment bytes.
    */
   size?: number;
   /**
@@ -25,15 +25,15 @@ export interface OutlookAttachmentReference {
    */
   contentId?: string;
   /**
-   * Lowercase hex SHA-256 of the transferable bytes, useful for de-duplicating attachments repeated across thread messages.
+   * Lowercase hex SHA-256 of the attachment bytes, useful for de-duplicating attachments repeated across thread messages.
    */
   sha256?: string;
   /**
-   * Opaque handle for GET /erato/sidecar/transfer/v1/{handle}. Present when the bytes are available.
+   * Base64-encoded attachment bytes, present when the bytes are available.
    */
-  contentHandle?: string;
+  contentBytes?: string;
   /**
-   * Stable code explaining why bytes are not available, present instead of contentHandle. Known values include unsupported_attachment.
+   * Stable code explaining why bytes are not available, present instead of contentBytes. Known values include unsupported_attachment.
    */
   unavailableReason?: string;
   [k: string]: unknown;

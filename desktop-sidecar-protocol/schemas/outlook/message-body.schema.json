@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/outlook/message-body.schema.json",
+  "title": "OutlookMessageBody",
+  "description": "A message body carried inline in the JSON-RPC result. The sidecar decodes the stored bytes to text using the message code page before sending.",
+  "type": "object",
+  "required": ["contentType", "content"],
+  "properties": {
+    "contentType": {
+      "description": "Media type of the body, for example text/html or text/plain.",
+      "type": "string",
+      "maxLength": 256
+    },
+    "content": {
+      "description": "The decoded body text.",
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

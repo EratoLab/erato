@@ -1,6 +1,7 @@
 import { SidecarClientError } from "./errors.js";
 
 export const MAX_BODY_BYTES = 262_144;
+export const MAX_RESPONSE_BYTES = 67_108_864;
 
 export interface SidecarTransportRequestOptions {
   signal?: AbortSignal;
@@ -11,14 +12,6 @@ export interface SidecarTransport {
     body: string,
     options?: SidecarTransportRequestOptions,
   ): Promise<string>;
-  /**
-   * Fetch the bytes referenced by a transfer handle from the binary transfer
-   * profile. Unbounded — the JSON-RPC body cap does not apply.
-   */
-  transfer(
-    handle: string,
-    options?: SidecarTransportRequestOptions,
-  ): Promise<Uint8Array>;
 }
 
 export type SidecarFetch = (
@@ -29,24 +22,27 @@ export type SidecarFetch = (
 export interface HttpTransportOptions {
   fetch?: SidecarFetch;
   maxBodyBytes?: number;
+  maxResponseBytes?: number;
 }
 
 export class HttpTransport implements SidecarTransport {
   readonly #url: string;
   readonly #fetch: SidecarFetch;
   readonly #maxBodyBytes: number;
+  readonly #maxResponseBytes: number;
 
   constructor(url: string, options: HttpTransportOptions = {}) {
     this.#url = url;
     this.#fetch = options.fetch ?? globalThis.fetch.bind(globalThis);
     this.#maxBodyBytes = options.maxBodyBytes ?? MAX_BODY_BYTES;
+    this.#maxResponseBytes = options.maxResponseBytes ?? MAX_RESPONSE_BYTES;
   }
 
   async request(
     body: string,
     options: SidecarTransportRequestOptions = {},
   ): Promise<string> {
-    this.#assertBodySize(body, "Request");
+    this.#assertBodySize(body, this.#maxBodyBytes, "Request");
 
     let response: Response;
     try {
@@ -90,65 +86,24 @@ export class HttpTransport implements SidecarTransport {
     if (
       contentLength !== null &&
       Number.isFinite(Number(contentLength)) &&
-      Number(contentLength) > this.#maxBodyBytes
+      Number(contentLength) > this.#maxResponseBytes
     ) {
       throw new SidecarClientError(
         "malformed_message",
-        `Response body exceeds ${this.#maxBodyBytes} bytes.`,
+        `Response body exceeds ${this.#maxResponseBytes} bytes.`,
       );
     }
 
     const responseBody = await response.text();
-    this.#assertBodySize(responseBody, "Response");
+    this.#assertBodySize(responseBody, this.#maxResponseBytes, "Response");
     return responseBody;
   }
 
-  async transfer(
-    handle: string,
-    options: SidecarTransportRequestOptions = {},
-  ): Promise<Uint8Array> {
-    // The transfer path shares the RPC endpoint's directory, so resolve it
-    // relative to the configured URL to preserve any deployment prefix.
-    const url = new URL(`transfer/v1/${encodeURIComponent(handle)}`, this.#url);
-
-    let response: Response;
-    try {
-      response = await this.#fetch(url, {
-        method: "GET",
-        headers: { Accept: "application/octet-stream" },
-        cache: "no-store",
-        credentials: "omit",
-        signal: options.signal,
-      });
-    } catch (cause) {
-      throw new SidecarClientError(
-        "transport_error",
-        "The sidecar transfer request failed.",
-        { cause },
-      );
-    }
-
-    if (response.status === 404) {
-      throw new SidecarClientError(
-        "transport_error",
-        "The transfer handle is unknown or has expired.",
-      );
-    }
-    if (response.status !== 200) {
-      throw new SidecarClientError(
-        "transport_error",
-        `The sidecar transfer returned HTTP ${response.status}.`,
-      );
-    }
-
-    return new Uint8Array(await response.arrayBuffer());
-  }
-
-  #assertBodySize(body: string, label: string): void {
-    if (new TextEncoder().encode(body).byteLength > this.#maxBodyBytes) {
+  #assertBodySize(body: string, limit: number, label: string): void {
+    if (new TextEncoder().encode(body).byteLength > limit) {
       throw new SidecarClientError(
         "malformed_message",
-        `${label} body exceeds ${this.#maxBodyBytes} bytes.`,
+        `${label} body exceeds ${limit} bytes.`,
       );
     }
   }

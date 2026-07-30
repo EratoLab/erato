@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://schemas.erato.ai/desktop-sidecar/v1/outlook/conversation-message.schema.json",
   "title": "OutlookConversationMessage",
-  "description": "One message of an Outlook conversation. Its body is referenced by transfer handle and its attachments by transfer handle, so no bytes are inline.",
+  "description": "One message of an Outlook conversation, with its body and attachment bytes carried inline.",
   "type": "object",
   "required": ["attachments"],
   "properties": {
@@ -50,8 +50,8 @@
       "type": "string",
       "maxLength": 8192
     },
-    "bodyHandle": {
-      "$ref": "../outlook/body-handle.schema.json"
+    "body": {
+      "$ref": "../outlook/message-body.schema.json"
     },
     "attachments": {
       "type": "array",

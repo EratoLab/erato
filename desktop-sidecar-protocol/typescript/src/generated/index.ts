@@ -22,7 +22,7 @@ export type { OutlookListMailboxesV1Result } from "./outlook-list-mailboxes-v1-r
 export type { OutlookListEmailsV1Params } from "./outlook-list-emails-v1-params.js";
 export type { OutlookListEmailsV1Result } from "./outlook-list-emails-v1-result.js";
 export type { OutlookMessageRecipient } from "./outlook-message-recipient.js";
-export type { OutlookBodyHandle } from "./outlook-body-handle.js";
+export type { OutlookMessageBody } from "./outlook-message-body.js";
 export type { OutlookConversationWarning } from "./outlook-conversation-warning.js";
 export type { OutlookAttachmentReference } from "./outlook-attachment-reference.js";
 export type { OutlookConversationMessage } from "./outlook-conversation-message.js";
