@@ -10,7 +10,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict OgMyXiD0qMy8Yv6AS98scvu47rTgc9sOdcIoV5vqrwn2bY4RfVpb0slCZnesMTn
+\restrict COARnzCndo4jr7UQYSy5xnyNT8RcqmM5Dkrqzey8i1T00XhkdmoMPSI2HWpF2f5
 
 -- Dumped from database version 17.2 (Debian 17.2-1.pgdg120+1)
 -- Dumped by pg_dump version 17.6
@@ -38,7 +38,7 @@ CREATE SCHEMA public;
 -- Name: SCHEMA public; Type: COMMENT; Schema: -; Owner: -
 --
 
-COMMENT ON SCHEMA public IS 'Sqitch database deployment metadata v1.1.';
+COMMENT ON SCHEMA public IS 'standard public schema';
 
 
 --
@@ -140,6 +140,68 @@ CREATE TABLE public.assistant_file_uploads (
 
 
 --
+-- Name: assistant_hub_assistant_versions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.assistant_hub_assistant_versions (
+    id uuid DEFAULT public.uuidv7() NOT NULL,
+    assistant_hub_assistant_id uuid NOT NULL,
+    assistant_id uuid NOT NULL,
+    status text NOT NULL,
+    is_published boolean DEFAULT false NOT NULL,
+    is_current_published_version boolean DEFAULT false NOT NULL,
+    version_number text NOT NULL,
+    version_comment text,
+    creator_review_comment text,
+    reviewer_review_comment text,
+    long_description text NOT NULL,
+    category_ids text[],
+    keywords text[],
+    diff_summary jsonb DEFAULT '{}'::jsonb NOT NULL,
+    submitted_at timestamp with time zone DEFAULT now() NOT NULL,
+    reviewed_at timestamp with time zone,
+    withdrawn_at timestamp with time zone,
+    published_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT assistant_hub_assistant_versions_current_published_check CHECK (((NOT is_current_published_version) OR (is_published AND (status = 'review_accepted'::text)))),
+    CONSTRAINT assistant_hub_assistant_versions_published_status_check CHECK (((NOT is_published) OR (status = 'review_accepted'::text))),
+    CONSTRAINT assistant_hub_assistant_versions_status_check CHECK ((status = ANY (ARRAY['submitted'::text, 'review_accepted'::text, 'review_declined'::text, 'withdrawn'::text])))
+);
+
+
+--
+-- Name: assistant_hub_assistants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.assistant_hub_assistants (
+    id uuid DEFAULT public.uuidv7() NOT NULL,
+    source_assistant_id uuid NOT NULL,
+    owner_user_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    featured boolean DEFAULT false NOT NULL
+);
+
+
+--
+-- Name: assistant_hub_reviews; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.assistant_hub_reviews (
+    id uuid DEFAULT public.uuidv7() NOT NULL,
+    assistant_hub_assistant_id uuid NOT NULL,
+    assistant_hub_assistant_version_id uuid NOT NULL,
+    reviewer_user_id uuid NOT NULL,
+    score integer NOT NULL,
+    comment text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT assistant_hub_reviews_score_check CHECK (((score >= 1) AND (score <= 10)))
+);
+
+
+--
 -- Name: assistants; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -184,7 +246,12 @@ CREATE TABLE public.chats (
     archived_at timestamp with time zone,
     assistant_configuration jsonb,
     assistant_id uuid GENERATED ALWAYS AS (((assistant_configuration ->> 'assistant_id'::text))::uuid) STORED,
-    title_by_user_provided text
+    title_by_user_provided text,
+    active_generation_id uuid,
+    generation_state text,
+    generation_started_at timestamp with time zone,
+    generation_heartbeat_at timestamp with time zone,
+    generation_ended_at timestamp with time zone
 );
 
 
@@ -300,6 +367,20 @@ CREATE TABLE public.message_feedbacks (
 
 
 --
+-- Name: runtime_configuration; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.runtime_configuration (
+    id uuid DEFAULT public.uuidv7() NOT NULL,
+    source_service text NOT NULL,
+    source_filename text,
+    config text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
 -- Name: share_grants; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -409,6 +490,54 @@ ALTER TABLE ONLY public.assistant_file_uploads
 
 
 --
+-- Name: assistant_hub_assistant_versions assistant_hub_assistant_versions_assistant_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assistant_hub_assistant_versions
+    ADD CONSTRAINT assistant_hub_assistant_versions_assistant_id_key UNIQUE (assistant_id);
+
+
+--
+-- Name: assistant_hub_assistant_versions assistant_hub_assistant_versions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assistant_hub_assistant_versions
+    ADD CONSTRAINT assistant_hub_assistant_versions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: assistant_hub_assistants assistant_hub_assistants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assistant_hub_assistants
+    ADD CONSTRAINT assistant_hub_assistants_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: assistant_hub_assistants assistant_hub_assistants_source_assistant_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assistant_hub_assistants
+    ADD CONSTRAINT assistant_hub_assistants_source_assistant_id_key UNIQUE (source_assistant_id);
+
+
+--
+-- Name: assistant_hub_reviews assistant_hub_reviews_assistant_reviewer_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assistant_hub_reviews
+    ADD CONSTRAINT assistant_hub_reviews_assistant_reviewer_key UNIQUE (assistant_hub_assistant_id, reviewer_user_id);
+
+
+--
+-- Name: assistant_hub_reviews assistant_hub_reviews_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assistant_hub_reviews
+    ADD CONSTRAINT assistant_hub_reviews_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: assistants assistants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -489,6 +618,14 @@ ALTER TABLE ONLY public.messages
 
 
 --
+-- Name: runtime_configuration runtime_configuration_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.runtime_configuration
+    ADD CONSTRAINT runtime_configuration_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: share_grants share_grants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -537,6 +674,13 @@ ALTER TABLE ONLY public.users
 
 
 --
+-- Name: chats_generation_state_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX chats_generation_state_idx ON public.chats USING btree (owner_user_id) WHERE (generation_state IS NOT NULL);
+
+
+--
 -- Name: idx_assistant_file_uploads_assistant_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -548,6 +692,83 @@ CREATE INDEX idx_assistant_file_uploads_assistant_id ON public.assistant_file_up
 --
 
 CREATE INDEX idx_assistant_file_uploads_file_upload_id ON public.assistant_file_uploads USING btree (file_upload_id);
+
+
+--
+-- Name: idx_assistant_hub_assistants_featured; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_assistant_hub_assistants_featured ON public.assistant_hub_assistants USING btree (featured) WHERE featured;
+
+
+--
+-- Name: idx_assistant_hub_assistants_owner_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_assistant_hub_assistants_owner_user_id ON public.assistant_hub_assistants USING btree (owner_user_id);
+
+
+--
+-- Name: idx_assistant_hub_reviews_hub_assistant_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_assistant_hub_reviews_hub_assistant_id ON public.assistant_hub_reviews USING btree (assistant_hub_assistant_id);
+
+
+--
+-- Name: idx_assistant_hub_reviews_reviewer_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_assistant_hub_reviews_reviewer_user_id ON public.assistant_hub_reviews USING btree (reviewer_user_id);
+
+
+--
+-- Name: idx_assistant_hub_reviews_version_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_assistant_hub_reviews_version_id ON public.assistant_hub_reviews USING btree (assistant_hub_assistant_version_id);
+
+
+--
+-- Name: idx_assistant_hub_versions_category_ids; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_assistant_hub_versions_category_ids ON public.assistant_hub_assistant_versions USING gin (category_ids);
+
+
+--
+-- Name: idx_assistant_hub_versions_current; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_assistant_hub_versions_current ON public.assistant_hub_assistant_versions USING btree (assistant_hub_assistant_id) WHERE is_current_published_version;
+
+
+--
+-- Name: idx_assistant_hub_versions_hub_assistant_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_assistant_hub_versions_hub_assistant_id ON public.assistant_hub_assistant_versions USING btree (assistant_hub_assistant_id);
+
+
+--
+-- Name: idx_assistant_hub_versions_keywords; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_assistant_hub_versions_keywords ON public.assistant_hub_assistant_versions USING gin (keywords);
+
+
+--
+-- Name: idx_assistant_hub_versions_published; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_assistant_hub_versions_published ON public.assistant_hub_assistant_versions USING btree (is_published, is_current_published_version);
+
+
+--
+-- Name: idx_assistant_hub_versions_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_assistant_hub_versions_status ON public.assistant_hub_assistant_versions USING btree (status);
 
 
 --
@@ -691,6 +912,13 @@ CREATE UNIQUE INDEX idx_users_issuer_subject ON public.users USING btree (issuer
 
 
 --
+-- Name: runtime_configuration_source_service_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX runtime_configuration_source_service_idx ON public.runtime_configuration USING btree (source_service);
+
+
+--
 -- Name: messages ensure_single_active_message_in_thread; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -730,6 +958,27 @@ CREATE TRIGGER on_update_set_updated_columns BEFORE UPDATE ON public.users FOR E
 --
 
 CREATE TRIGGER on_update_set_updated_columns_assistant_file_uploads BEFORE UPDATE ON public.assistant_file_uploads FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
+
+
+--
+-- Name: assistant_hub_assistant_versions on_update_set_updated_columns_assistant_hub_assistant_versions; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER on_update_set_updated_columns_assistant_hub_assistant_versions BEFORE UPDATE ON public.assistant_hub_assistant_versions FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
+
+
+--
+-- Name: assistant_hub_assistants on_update_set_updated_columns_assistant_hub_assistants; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER on_update_set_updated_columns_assistant_hub_assistants BEFORE UPDATE ON public.assistant_hub_assistants FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
+
+
+--
+-- Name: assistant_hub_reviews on_update_set_updated_columns_assistant_hub_reviews; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER on_update_set_updated_columns_assistant_hub_reviews BEFORE UPDATE ON public.assistant_hub_reviews FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
 
 
 --
@@ -775,6 +1024,13 @@ CREATE TRIGGER on_update_set_updated_columns_message_feedbacks BEFORE UPDATE ON 
 
 
 --
+-- Name: runtime_configuration on_update_set_updated_columns_runtime_configuration; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER on_update_set_updated_columns_runtime_configuration BEFORE UPDATE ON public.runtime_configuration FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
+
+
+--
 -- Name: share_grants on_update_set_updated_columns_share_grants; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -809,6 +1065,62 @@ ALTER TABLE ONLY public.assistant_file_uploads
 
 ALTER TABLE ONLY public.assistant_file_uploads
     ADD CONSTRAINT assistant_file_uploads_file_upload_id_fkey FOREIGN KEY (file_upload_id) REFERENCES public.file_uploads(id) ON DELETE CASCADE;
+
+
+--
+-- Name: assistant_hub_assistant_versions assistant_hub_assistant_versions_assistant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assistant_hub_assistant_versions
+    ADD CONSTRAINT assistant_hub_assistant_versions_assistant_id_fkey FOREIGN KEY (assistant_id) REFERENCES public.assistants(id) ON DELETE CASCADE;
+
+
+--
+-- Name: assistant_hub_assistant_versions assistant_hub_assistant_versions_hub_assistant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assistant_hub_assistant_versions
+    ADD CONSTRAINT assistant_hub_assistant_versions_hub_assistant_id_fkey FOREIGN KEY (assistant_hub_assistant_id) REFERENCES public.assistant_hub_assistants(id) ON DELETE CASCADE;
+
+
+--
+-- Name: assistant_hub_assistants assistant_hub_assistants_owner_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assistant_hub_assistants
+    ADD CONSTRAINT assistant_hub_assistants_owner_user_id_fkey FOREIGN KEY (owner_user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: assistant_hub_assistants assistant_hub_assistants_source_assistant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assistant_hub_assistants
+    ADD CONSTRAINT assistant_hub_assistants_source_assistant_id_fkey FOREIGN KEY (source_assistant_id) REFERENCES public.assistants(id) ON DELETE CASCADE;
+
+
+--
+-- Name: assistant_hub_reviews assistant_hub_reviews_hub_assistant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assistant_hub_reviews
+    ADD CONSTRAINT assistant_hub_reviews_hub_assistant_id_fkey FOREIGN KEY (assistant_hub_assistant_id) REFERENCES public.assistant_hub_assistants(id) ON DELETE CASCADE;
+
+
+--
+-- Name: assistant_hub_reviews assistant_hub_reviews_reviewer_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assistant_hub_reviews
+    ADD CONSTRAINT assistant_hub_reviews_reviewer_user_id_fkey FOREIGN KEY (reviewer_user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: assistant_hub_reviews assistant_hub_reviews_version_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assistant_hub_reviews
+    ADD CONSTRAINT assistant_hub_reviews_version_id_fkey FOREIGN KEY (assistant_hub_assistant_version_id) REFERENCES public.assistant_hub_assistant_versions(id) ON DELETE CASCADE;
 
 
 --
@@ -903,5 +1215,5 @@ ALTER TABLE ONLY public.user_preferences
 -- PostgreSQL database dump complete
 --
 
-\unrestrict OgMyXiD0qMy8Yv6AS98scvu47rTgc9sOdcIoV5vqrwn2bY4RfVpb0slCZnesMTn
+\unrestrict COARnzCndo4jr7UQYSy5xnyNT8RcqmM5Dkrqzey8i1T00XhkdmoMPSI2HWpF2f5
 

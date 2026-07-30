@@ -4,7 +4,7 @@ use crate::test_utils::hermetic_app_config;
 use crate::{MIGRATOR, test_app_state};
 use erato::config::{
     AppConfig, FileTypeDetectionMode, GenerationConfig, ModelReasoningEffort, ModelVerbosity,
-    PromptSourceSpecification, SharepointAllDrivesSource,
+    PromptSourceSpecification, RuntimeConfigurationConfig, ServerConfig, SharepointAllDrivesSource,
 };
 use sqlx::Pool;
 use sqlx::postgres::Postgres;
@@ -3679,6 +3679,86 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
         Some("MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
     );
     assert_eq!(config.generation.max_tool_calls_per_message, 30);
+}
+
+#[test]
+fn test_runtime_configuration_defaults_to_disabled() {
+    assert!(!RuntimeConfigurationConfig::default().enabled);
+}
+
+#[test]
+fn test_config_source_debug_does_not_expose_contents() {
+    let source = erato::config::ConfigSourceFile {
+        source_filename: "erato.toml".to_string(),
+        contents: "secret-value".to_string(),
+    };
+
+    let debug = format!("{source:?}");
+
+    assert!(debug.contains("erato.toml"));
+    assert!(debug.contains("[REDACTED]"));
+    assert!(!debug.contains("secret-value"));
+}
+
+#[test]
+fn test_runtime_configuration_requires_encryption_key_when_enabled() {
+    let runtime_configuration = RuntimeConfigurationConfig { enabled: true };
+
+    let error = runtime_configuration
+        .validate(&ServerConfig::default())
+        .expect_err("enabled runtime configuration should require an encryption key");
+
+    assert_eq!(
+        error.to_string(),
+        "runtime_configuration.enabled requires server.encryption_key"
+    );
+}
+
+#[test]
+fn test_runtime_configuration_captures_source_files_verbatim_in_order() {
+    let base_contents = concat!(
+        "# base file\n",
+        "database_url = \"postgres://user:pass@localhost:5432/test\"\n",
+        "[chat_provider]\n",
+        "provider_kind = \"openai\"\n",
+        "model_name = \"gpt-4o\"\n",
+        "[server]\n",
+        "encryption_key = \"MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=\"\n",
+        "[runtime_configuration]\n",
+        "enabled = true\n",
+        "[file_storage_providers]\n",
+    );
+    let override_contents = concat!(
+        "# override file\n",
+        "[generation]\n",
+        "max_tool_calls_per_message = 42\n",
+    );
+    let mut base_file = Builder::new().suffix(".toml").tempfile().unwrap();
+    base_file.write_all(base_contents.as_bytes()).unwrap();
+    base_file.flush().unwrap();
+    let mut override_file = Builder::new().suffix(".toml").tempfile().unwrap();
+    override_file
+        .write_all(override_contents.as_bytes())
+        .unwrap();
+    override_file.flush().unwrap();
+    let missing_path = base_file
+        .path()
+        .with_file_name("missing-runtime-config.toml");
+    let source_paths = vec![
+        base_file.path().to_string_lossy().into_owned(),
+        override_file.path().to_string_lossy().into_owned(),
+        missing_path.to_string_lossy().into_owned(),
+    ];
+
+    let loaded = AppConfig::new_for_app_with_sources(Some(source_paths.clone())).unwrap();
+
+    assert!(loaded.config.runtime_configuration.enabled);
+    assert_eq!(loaded.config.generation.max_tool_calls_per_message, 42);
+    assert_eq!(loaded.source_files.len(), 2);
+    assert_eq!(loaded.source_files[0].source_filename, source_paths[0]);
+    assert_eq!(loaded.source_files[0].contents, base_contents);
+    assert_eq!(loaded.source_files[1].source_filename, source_paths[1]);
+    assert_eq!(loaded.source_files[1].contents, override_contents);
 }
 
 #[test]
