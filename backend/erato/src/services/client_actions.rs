@@ -13,7 +13,7 @@ use serde_json::{Value, json};
 
 /// Name of the synthetic tool offered to the model when the active action
 /// facet declares `client_actions`.
-pub const CLIENT_ACTION_TOOL_NAME: &str = "propose_client_action";
+pub use erato_config::config::CLIENT_ACTION_TOOL_NAME;
 
 /// Build the synthetic client-action tool with an enum-constrained input
 /// schema, so the model can only select one of the configured actions.

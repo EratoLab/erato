@@ -16,6 +16,9 @@ use utoipa::ToSchema;
 use crate::config_facet_attrs as erato_config;
 use crate::startup_log;
 
+/// Name reserved for the synthetic client-action tool exposed by the backend.
+pub const CLIENT_ACTION_TOOL_NAME: &str = "propose_client_action";
+
 const DEFAULT_PROMPT_OPTIMIZER_PROMPT: &str = r#"
 You are Lyra, a master-level AI prompt optimization specialist.
 Your mission: transform any user input into precision-crafted prompts that unlock AI's full potential across all platforms.
@@ -1014,7 +1017,7 @@ impl AppConfig {
                     tool.name
                 );
             }
-            if name == crate::services::client_actions::CLIENT_ACTION_TOOL_NAME {
+            if name == CLIENT_ACTION_TOOL_NAME {
                 panic!("Client tool named '{}' is reserved.", name);
             }
             let namespace = tool.namespace_or_default();
@@ -1038,7 +1041,7 @@ impl AppConfig {
                     .chars()
                     .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'))
             {
-                crate::startup_log::warn_preinit(format!(
+                startup_log::warn_preinit(format!(
                     "Client tool name '{}' does not match ^[a-zA-Z0-9_-]{{1,64}}$; \
                      OpenAI/Azure and Anthropic reject such tool names at request time.",
                     name

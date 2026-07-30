@@ -18,6 +18,8 @@ name = "record-chat-provider-reqwest"
 path = "./src/record_chat_provider_reqwest.rs"
 
 [dependencies]
+erato_config = { path = "../erato_config" }
+
 # Dependencies: Server
 axum = { version = "0.8.4", features = ["macros", "ws"] }
 axum-extra = { version = "0.10.1", features = ["typed-header", "multipart"] }
@@ -50,7 +52,6 @@ aes-gcm-siv = "0.11.1"
 hmac = "0.13.0"
 jsonwebtoken = "10.4.0"
 regorus = "0.5.0"
-secrecy = "0.10.3"
 sha2 = "0.11.0"
 
 # Dependencies: Async runtime
@@ -105,10 +106,8 @@ graph-rs-sdk = { version = "3.0", default-features = false, features = ["rustls-
 regex = "1.12.3"
 rand = "0.9.4"
 base64 = "0.22.1"
-facet = "0.44.3"
 # Newtype utility
 synonym = "0.1.5"
-config = "0.15.6"
 toml_edit = "0.23.10"
 dotenv-flow = "0.16.2"
 handlebars = "6"

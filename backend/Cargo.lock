@@ -2434,13 +2434,12 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "color-eyre",
- "config",
  "console-subscriber",
  "cron",
  "ctor 0.2.9",
  "dotenv-flow",
+ "erato_config",
  "eyre",
- "facet",
  "futures",
  "genai",
  "graph-rs-sdk",
@@ -2479,7 +2478,6 @@ dependencies = [
  "rmcp",
  "rmcp-sse",
  "sea-orm",
- "secrecy",
  "sentry",
  "sentry-tower",
  "serde",
@@ -2505,6 +2503,23 @@ dependencies = [
  "utoipa-axum",
  "utoipa-scalar",
  "xberg",
+]
+
+[[package]]
+name = "erato_config"
+version = "0.6.2"
+dependencies = [
+ "base64 0.22.1",
+ "config",
+ "eyre",
+ "facet",
+ "regex",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "tracing",
+ "url",
+ "utoipa",
 ]
 
 [[package]]
