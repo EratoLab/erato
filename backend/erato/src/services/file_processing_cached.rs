@@ -85,6 +85,11 @@ async fn parse_text_file_bytes(
     Ok(remove_null_characters(&parsed_content))
 }
 
+fn effective_detected_mime_type(filename: &str, detected_mime_type: &str) -> String {
+    effective_text_mime_type(filename, Some(detected_mime_type))
+        .unwrap_or_else(|| detected_mime_type.to_string())
+}
+
 /// Get raw file bytes from cache or storage
 #[instrument(
     skip_all,
@@ -164,6 +169,27 @@ pub async fn get_file_contents_cached<'a>(
     filename: &str,
     sharepoint_ctx: Option<&SharepointContext<'a>>,
 ) -> Result<String, Report> {
+    get_file_contents_cached_with_mime_type(
+        app_state,
+        cache_key,
+        file_storage,
+        file_storage_path,
+        filename,
+        sharepoint_ctx,
+        None,
+    )
+    .await
+}
+
+async fn get_file_contents_cached_with_mime_type<'a>(
+    app_state: &AppState,
+    cache_key: &FileCacheKey,
+    file_storage: &FileStorage,
+    file_storage_path: &str,
+    filename: &str,
+    sharepoint_ctx: Option<&SharepointContext<'a>>,
+    detected_mime_type: Option<&str>,
+) -> Result<String, Report> {
     let file_id_str = cache_key.file_id.to_string();
     let span = tracing::Span::current();
     span.record("file_id", &file_id_str);
@@ -190,9 +216,13 @@ pub async fn get_file_contents_cached<'a>(
             .await?;
 
             span.record("file_bytes_length", file_bytes.len());
-            let storage_mime_type = file_storage
-                .get_file_content_type_with_context(file_storage_path, sharepoint_ctx)
-                .await?;
+            let mime_type = if let Some(detected_mime_type) = detected_mime_type {
+                Some(effective_detected_mime_type(filename, detected_mime_type))
+            } else {
+                file_storage
+                    .get_file_content_type_with_context(file_storage_path, sharepoint_ctx)
+                    .await?
+            };
 
             // Parse the file using the configured file processor
             let _permit = app_state
@@ -204,7 +234,7 @@ pub async fn get_file_contents_cached<'a>(
                 app_state.file_processor.as_ref(),
                 file_bytes,
                 filename,
-                storage_mime_type.as_deref(),
+                mime_type.as_deref(),
             )
             .await?;
 
@@ -224,11 +254,93 @@ pub async fn get_file_contents_cached<'a>(
     Ok(result)
 }
 
-/// Get file contents (text or image) with auto-detection and unified caching.
+async fn get_file_cached_naive<'a>(
+    app_state: &AppState,
+    cache_key: &FileCacheKey,
+    file_id: &Uuid,
+    file_storage: &FileStorage,
+    file_storage_path: &str,
+    filename: &str,
+    sharepoint_ctx: Option<&SharepointContext<'a>>,
+) -> Result<FileContentsForGeneration, Report> {
+    let span = tracing::Span::current();
+    let is_image = is_image_file(filename);
+    span.record("file_type", if is_image { "image" } else { "text" });
+
+    if is_image {
+        tracing::debug!(
+            file_id = %file_id,
+            filename = %filename,
+            detection_mode = "naive",
+            "Processing as image file"
+        );
+
+        let raw_bytes = get_file_bytes_cached(
+            app_state,
+            cache_key,
+            file_storage,
+            file_storage_path,
+            sharepoint_ctx,
+        )
+        .await?;
+        let mime_type = get_mime_type_from_extension(filename);
+
+        tracing::debug!(
+            file_id = %file_id,
+            filename = %filename,
+            bytes_len = raw_bytes.len(),
+            mime_type = %mime_type,
+            detection_mode = "naive",
+            "Image file loaded (cached as raw bytes)"
+        );
+
+        Ok(FileContentsForGeneration {
+            id: *file_id,
+            filename: filename.to_string(),
+            content: FileContent::Image {
+                raw_bytes,
+                mime_type,
+            },
+        })
+    } else {
+        tracing::debug!(
+            file_id = %file_id,
+            filename = %filename,
+            detection_mode = "naive",
+            "Processing as text file"
+        );
+
+        let text = get_file_contents_cached(
+            app_state,
+            cache_key,
+            file_storage,
+            file_storage_path,
+            filename,
+            sharepoint_ctx,
+        )
+        .await?;
+
+        tracing::debug!(
+            file_id = %file_id,
+            filename = %filename,
+            text_len = text.len(),
+            detection_mode = "naive",
+            "Text file loaded and parsed"
+        );
+
+        Ok(FileContentsForGeneration {
+            id: *file_id,
+            filename: filename.to_string(),
+            content: FileContent::Text(text),
+        })
+    }
+}
+
+/// Get file contents (text or image) with configured type detection and unified caching.
 ///
-/// This is the new unified entry point that:
-/// - Auto-detects file type from filename
-/// - Routes to appropriate caching strategy
+/// This entry point:
+/// - Uses Magika when configured, otherwise preserves the naive filename/storage MIME flow
+/// - Routes images to raw bytes and other files to parsed content
 /// - Returns unified FileContentsForGeneration
 ///
 /// This function is boxed to reduce stack usage.
@@ -257,34 +369,80 @@ pub fn get_file_cached<'a>(
         let cache_key =
             get_file_cache_key(file_storage, file_id, file_storage_path, sharepoint_ctx).await?;
 
-        let is_image = is_image_file(filename);
-        span.record("file_type", if is_image { "image" } else { "text" });
+        let Some(file_type_detector) = app_state.file_type_detector.as_ref() else {
+            return get_file_cached_naive(
+                app_state,
+                &cache_key,
+                file_id,
+                file_storage,
+                file_storage_path,
+                filename,
+                sharepoint_ctx,
+            )
+            .await;
+        };
 
-        if is_image {
-            // Image path: cache raw bytes only
-            tracing::debug!(
-                file_id = %file_id,
-                filename = %filename,
-                "Processing as image file"
-            );
+        // Keep the explicit email compatibility override ahead of general detection.
+        if is_eml_file(filename) {
+            return get_file_cached_naive(
+                app_state,
+                &cache_key,
+                file_id,
+                file_storage,
+                file_storage_path,
+                filename,
+                sharepoint_ctx,
+            )
+            .await;
+        }
 
-            let raw_bytes = get_file_bytes_cached(
+        let file_bytes = Arc::new(
+            get_file_bytes_cached(
                 app_state,
                 &cache_key,
                 file_storage,
                 file_storage_path,
                 sharepoint_ctx,
             )
-            .await?;
+            .await?,
+        );
 
-            let mime_type = get_mime_type_from_extension(filename);
+        let detected_file_type = match file_type_detector
+            .detect(&cache_key, Arc::clone(&file_bytes))
+            .await
+        {
+            Ok(detected_file_type) => detected_file_type,
+            Err(error) => {
+                tracing::warn!(
+                    file_id = %file_id,
+                    filename = %filename,
+                    error = %error,
+                    "Magika detection failed; falling back to naive file type detection"
+                );
+                return get_file_cached_naive(
+                    app_state,
+                    &cache_key,
+                    file_id,
+                    file_storage,
+                    file_storage_path,
+                    filename,
+                    sharepoint_ctx,
+                )
+                .await;
+            }
+        };
 
+        if detected_file_type.is_image() {
+            span.record("file_type", "image");
+            let raw_bytes = Arc::try_unwrap(file_bytes)
+                .unwrap_or_else(|file_bytes| file_bytes.as_ref().clone());
             tracing::debug!(
                 file_id = %file_id,
                 filename = %filename,
                 bytes_len = raw_bytes.len(),
-                mime_type = %mime_type,
-                "Image file loaded (cached as raw bytes)"
+                mime_type = %detected_file_type.mime_type,
+                detection_mode = "magika",
+                "Processing Magika-detected image file"
             );
 
             Ok(FileContentsForGeneration {
@@ -292,32 +450,28 @@ pub fn get_file_cached<'a>(
                 filename: filename.to_string(),
                 content: FileContent::Image {
                     raw_bytes,
-                    mime_type,
+                    mime_type: detected_file_type.mime_type,
                 },
             })
         } else {
-            // Text path: cache both bytes and parsed content
-            tracing::debug!(
-                file_id = %file_id,
-                filename = %filename,
-                "Processing as text file"
-            );
-
-            let text = get_file_contents_cached(
+            span.record("file_type", "text");
+            let text = get_file_contents_cached_with_mime_type(
                 app_state,
                 &cache_key,
                 file_storage,
                 file_storage_path,
                 filename,
                 sharepoint_ctx,
+                Some(&detected_file_type.mime_type),
             )
             .await?;
-
             tracing::debug!(
                 file_id = %file_id,
                 filename = %filename,
                 text_len = text.len(),
-                "Text file loaded and parsed"
+                mime_type = %detected_file_type.mime_type,
+                detection_mode = "magika",
+                "Processed Magika-detected extractable file"
             );
 
             Ok(FileContentsForGeneration {
@@ -597,7 +751,7 @@ pub fn process_files_parallel_cached<'a>(
 
 #[cfg(test)]
 mod tests {
-    use super::{effective_text_mime_type, parse_text_file_bytes};
+    use super::{effective_detected_mime_type, effective_text_mime_type, parse_text_file_bytes};
     use crate::services::file_processor::XbergProcessor;
 
     #[test]
@@ -655,6 +809,18 @@ mod tests {
             Some("text/plain")
         );
         assert_eq!(effective_text_mime_type("notes.txt", None), None);
+    }
+
+    #[test]
+    fn detected_mime_type_keeps_eml_compatibility_override() {
+        assert_eq!(
+            effective_detected_mime_type("message.eml", "text/plain"),
+            "message/rfc822"
+        );
+        assert_eq!(
+            effective_detected_mime_type("report.pdf", "application/pdf"),
+            "application/pdf"
+        );
     }
 
     #[tokio::test]

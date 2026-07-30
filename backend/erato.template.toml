@@ -17,6 +17,10 @@ provider_kind = "s3"
 config = { endpoint = "http://localhost:8333", bucket = "erato-storage", region = "us-east-1", access_key_id = "admin", secret_access_key = "admin" }
 # max_upload_size_kb = 102400  # Optional: Maximum file upload size in KB (100 MB example)
 
+# File type detection configuration
+# [file_type_detection]
+# mode = "naive"  # Default: "naive"; set to "magika" for content-based detection
+
 # File processor configuration
 # Controls which file processing engine is used to extract text from uploaded documents.
 # [file_processor]

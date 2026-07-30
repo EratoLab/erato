@@ -6,6 +6,7 @@ use crate::query_metrics::install_postgres_query_metrics;
 use crate::services::background_tasks::BackgroundTaskManager;
 use crate::services::desktop_sidecar_distribution::DesktopSidecarDistribution;
 use crate::services::file_storage::{FileStorage, SHAREPOINT_PROVIDER_ID};
+use crate::services::file_type_detection::FileTypeDetector;
 use crate::services::genai::GenAIClient;
 use crate::services::langfuse::{LangfuseClient, LangfusePrompt};
 use crate::services::mcp_manager::McpServers;
@@ -142,6 +143,8 @@ pub struct AppState {
     pub file_processing_pipeline_semaphore: Arc<Semaphore>,
     /// File processor for extracting text from files
     pub file_processor: Arc<dyn crate::services::file_processor::FileProcessor>,
+    /// Optional Magika detector. `None` preserves the configured naive behavior.
+    pub file_type_detector: Option<Arc<dyn FileTypeDetector>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -191,6 +194,13 @@ impl std::fmt::Debug for AppState {
             .field("file_processing_semaphore", &"<Semaphore>")
             .field("file_processing_pipeline_semaphore", &"<Semaphore>")
             .field("file_processor", &"<FileProcessor>")
+            .field(
+                "file_type_detector",
+                &self
+                    .file_type_detector
+                    .as_ref()
+                    .map(|_| "<FileTypeDetector>"),
+            )
             .finish()
     }
 }
@@ -289,6 +299,9 @@ impl AppState {
         let file_processor = crate::services::file_processor::create_file_processor(
             &config.file_processor.processor,
         )?;
+        let file_type_detector = crate::services::file_type_detection::create_file_type_detector(
+            &config.file_type_detection,
+        )?;
 
         Ok(Self {
             db,
@@ -309,6 +322,7 @@ impl AppState {
             file_processing_semaphore,
             file_processing_pipeline_semaphore,
             file_processor,
+            file_type_detector,
         })
     }
 

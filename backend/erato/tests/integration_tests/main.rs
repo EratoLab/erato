@@ -159,6 +159,10 @@ async fn test_app_state_internal(
         &app_config.file_processor.processor,
     )
     .unwrap();
+    let file_type_detector = erato::services::file_type_detection::create_file_type_detector(
+        &app_config.file_type_detection,
+    )
+    .unwrap();
 
     let background_tasks =
         BackgroundTaskManager::new(Some(db.clone()), app_config.generation_status.clone());
@@ -184,6 +188,7 @@ async fn test_app_state_internal(
         file_processing_semaphore,
         file_processing_pipeline_semaphore,
         file_processor,
+        file_type_detector,
     };
 
     // For tests: Initialize policy engine and work around the middleware rebuild issue
