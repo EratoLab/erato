@@ -223,6 +223,21 @@ export class MockSidecar {
       this.#handlePreflight(request, response, origin);
       return;
     }
+    const transferPrefix = (this.#address?.path ?? "").replace(
+      /\/[^/]*$/,
+      "/transfer/v1/",
+    );
+    if (
+      request.method === "GET" &&
+      (request.url ?? "").startsWith(transferPrefix)
+    ) {
+      this.#handleTransfer(
+        response,
+        origin,
+        (request.url ?? "").slice(transferPrefix.length),
+      );
+      return;
+    }
     if (request.method !== "POST") {
       this.#sendHttpError(response, 405, "Method Not Allowed", origin);
       return;
@@ -279,7 +294,14 @@ export class MockSidecar {
 
   #validateHttpRequest(request: IncomingMessage): string | HttpRejection {
     if (!this.#address) return { status: 503, reason: "Not Ready" };
-    if (request.url !== this.#address.path) {
+    const transferPrefix = this.#address.path.replace(
+      /\/[^/]*$/,
+      "/transfer/v1/",
+    );
+    if (
+      request.url !== this.#address.path &&
+      !(request.url ?? "").startsWith(transferPrefix)
+    ) {
       return { status: 404, reason: "Not Found" };
     }
     const expectedHost = `${this.#address.host}:${this.#address.port}`;
@@ -299,6 +321,22 @@ export class MockSidecar {
     return this.#allowedOrigins.has(origin)
       ? origin
       : { status: 403, reason: "Forbidden" };
+  }
+
+  #handleTransfer(
+    response: ServerResponse,
+    origin: string,
+    encodedHandle: string,
+  ): void {
+    const handle = decodeURIComponent(encodedHandle);
+    // Echo the handle back as its bytes, so a transfer round-trip is verifiable.
+    const body = Buffer.from(handle, "utf8");
+    this.#setCorsHeaders(response, origin);
+    response.setHeader("Cache-Control", "no-store");
+    response.setHeader("Connection", "close");
+    response.setHeader("Content-Type", "application/octet-stream");
+    response.setHeader("Content-Length", body.byteLength);
+    response.writeHead(200).end(body);
   }
 
   #handlePreflight(

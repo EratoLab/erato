@@ -11,6 +11,14 @@ export interface SidecarTransport {
     body: string,
     options?: SidecarTransportRequestOptions,
   ): Promise<string>;
+  /**
+   * Fetch the bytes referenced by a transfer handle from the binary transfer
+   * profile. Unbounded — the JSON-RPC body cap does not apply.
+   */
+  transfer(
+    handle: string,
+    options?: SidecarTransportRequestOptions,
+  ): Promise<Uint8Array>;
 }
 
 export type SidecarFetch = (
@@ -93,6 +101,47 @@ export class HttpTransport implements SidecarTransport {
     const responseBody = await response.text();
     this.#assertBodySize(responseBody, "Response");
     return responseBody;
+  }
+
+  async transfer(
+    handle: string,
+    options: SidecarTransportRequestOptions = {},
+  ): Promise<Uint8Array> {
+    // The transfer path shares the RPC endpoint's directory, so resolve it
+    // relative to the configured URL to preserve any deployment prefix.
+    const url = new URL(`transfer/v1/${encodeURIComponent(handle)}`, this.#url);
+
+    let response: Response;
+    try {
+      response = await this.#fetch(url, {
+        method: "GET",
+        headers: { Accept: "application/octet-stream" },
+        cache: "no-store",
+        credentials: "omit",
+        signal: options.signal,
+      });
+    } catch (cause) {
+      throw new SidecarClientError(
+        "transport_error",
+        "The sidecar transfer request failed.",
+        { cause },
+      );
+    }
+
+    if (response.status === 404) {
+      throw new SidecarClientError(
+        "transport_error",
+        "The transfer handle is unknown or has expired.",
+      );
+    }
+    if (response.status !== 200) {
+      throw new SidecarClientError(
+        "transport_error",
+        `The sidecar transfer returned HTTP ${response.status}.`,
+      );
+    }
+
+    return new Uint8Array(await response.arrayBuffer());
   }
 
   #assertBodySize(body: string, label: string): void {

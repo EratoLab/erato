@@ -75,6 +75,32 @@ describe("DesktopSidecarClient", () => {
     });
   });
 
+  it("supports outlook.get_conversation.v1 and fetches transfer bytes", async () => {
+    const { client } = await setup();
+    await client.discover();
+
+    expect(client.supports("outlook.get_conversation.v1")).toBe(true);
+    expect(client.supports("outlook.get_conversation", 1)).toBe(true);
+
+    const conversation = await client.invoke("outlook.get_conversation.v1", {
+      mailboxId: "8b7d2f4a6c9e1035d8a1b2c3e4f50617",
+      anchor: { internetMessageId: "<mock-outlook-email@example.com>" },
+    });
+    expect(conversation.state).toBe("ok");
+
+    const handle = conversation.messages[0]?.attachments[0]?.contentHandle;
+    expect(handle).toBeDefined();
+    const bytes = await client.fetchTransfer(handle!);
+    expect(new TextDecoder().decode(bytes)).toBe(handle);
+  });
+
+  it("rejects fetchTransfer before discovery", async () => {
+    const { client } = await setup();
+    await expect(client.fetchTransfer("0".repeat(32))).rejects.toBeInstanceOf(
+      SidecarClientError,
+    );
+  });
+
   it("acknowledges a sidecar restart request", async () => {
     const { client, sidecar } = await setup();
     await client.discover();

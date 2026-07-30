@@ -5,6 +5,8 @@ import {
   validateDiagnosticsEchoV1Result,
   validateDiscoverResult,
   validateJsonRpcEnvelope,
+  validateOutlookGetConversationV1Params,
+  validateOutlookGetConversationV1Result,
   validateOutlookListEmailsV1Params,
   validateOutlookListEmailsV1Result,
   validateOutlookListMailboxesV1Params,
@@ -23,6 +25,8 @@ import type {
   DiscoverParams,
   DiscoverResult,
   DiscoveryDocument,
+  OutlookGetConversationV1Params,
+  OutlookGetConversationV1Result,
   OutlookListEmailsV1Params,
   OutlookListEmailsV1Result,
   OutlookListMailboxesV1Params,
@@ -121,6 +125,10 @@ const builtInContracts: Readonly<Record<string, SidecarMethodContract>> = {
     validateParams: validateOutlookListEmailsV1Params,
     validateResult: validateOutlookListEmailsV1Result,
   },
+  "outlook.get_conversation.v1": {
+    validateParams: validateOutlookGetConversationV1Params,
+    validateResult: validateOutlookGetConversationV1Result,
+  },
   "sidecar.restart.v1": {
     validateParams: validateSidecarRestartV1Params,
     validateResult: validateSidecarRestartV1Result,
@@ -211,6 +219,11 @@ export class DesktopSidecarClient {
     options?: InvokeOptions,
   ): Promise<OutlookListEmailsV1Result>;
   async invoke(
+    method: "outlook.get_conversation.v1",
+    params: OutlookGetConversationV1Params,
+    options?: InvokeOptions,
+  ): Promise<OutlookGetConversationV1Result>;
+  async invoke(
     method: "sidecar.configure.v1",
     params: SidecarConfigureV1Params,
     options?: InvokeOptions,
@@ -266,6 +279,28 @@ export class DesktopSidecarClient {
       throw error;
     }
     return result;
+  }
+
+  /**
+   * Fetch the bytes referenced by a transfer handle from a method result (for
+   * example an attachment's `contentHandle` or a message's `bodyHandle`) through
+   * the binary transfer profile. Unbounded, unlike JSON-RPC results.
+   */
+  async fetchTransfer(
+    handle: string,
+    options: InvokeOptions = {},
+  ): Promise<Uint8Array> {
+    if (this.#snapshot.state !== "ready") {
+      throw new SidecarClientError(
+        "capability_unavailable",
+        "The sidecar is not ready.",
+      );
+    }
+    try {
+      return await this.#transport.transfer(handle, { signal: options.signal });
+    } catch (error) {
+      throw this.#asClientError(error);
+    }
   }
 
   async #runDiscovery(signal?: AbortSignal): Promise<void> {
