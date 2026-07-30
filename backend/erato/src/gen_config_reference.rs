@@ -10,8 +10,10 @@ fn main() {
 
     let generated_reference = generate_config_reference();
     validate_config_reference(&generated_reference).expect("valid config reference metadata");
-    let generated_doc =
-        serde_json::to_string_pretty(&generated_reference).expect("config reference JSON");
+    let generated_doc = format!(
+        "{}\n",
+        serde_json::to_string_pretty(&generated_reference).expect("config reference JSON")
+    );
     let output_path = "./generated/config_reference.json";
 
     if check_mode {

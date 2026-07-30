@@ -1496,6 +1496,32 @@ config = { endpoint = "https://eratoeu.blob.core.windows.net", container = "erat
 default_file_storage_provider = "s3_primary"
 ```
 
+### `file_type_detection`
+
+{/* erato_toml_config_key: file_type_detection */}
+
+Controls how Erato decides whether an uploaded file is an image or should be sent to the configured text extractor.
+
+#### `file_type_detection.mode`
+
+{/* erato_toml_config_key: file_type_detection.mode */}
+
+**Default:** `"naive"`
+
+**Supported values:**
+
+- `"naive"` preserves the existing behavior: known image filename extensions are routed as images; other files use the storage-provided MIME type, with byte-signature inference in the file processor when no MIME type is available. `.eml` files remain explicitly treated as `message/rfc822`.
+- `"magika"` loads Magika at startup, detects the type from the file bytes, and uses its MIME type for image routing and text extraction. Detection failures fall back to `naive`.
+
+Magika inference runs on a blocking worker, uses one ONNX inter-op and intra-op thread, and caches results for unchanged files. This limits impact on async request handling and avoids repeating inference for cache hits.
+
+The equivalent environment variable is `FILE_TYPE_DETECTION__MODE`.
+
+```toml
+[file_type_detection]
+mode = "magika"
+```
+
 ### `file_processor`
 
 {/* erato_toml_config_key: file_processor */}

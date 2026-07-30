@@ -3,8 +3,8 @@
 use crate::test_utils::hermetic_app_config;
 use crate::{MIGRATOR, test_app_state};
 use erato::config::{
-    AppConfig, GenerationConfig, ModelReasoningEffort, ModelVerbosity, PromptSourceSpecification,
-    SharepointAllDrivesSource,
+    AppConfig, FileTypeDetectionMode, GenerationConfig, ModelReasoningEffort, ModelVerbosity,
+    PromptSourceSpecification, SharepointAllDrivesSource,
 };
 use sqlx::Pool;
 use sqlx::postgres::Postgres;
@@ -878,6 +878,85 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
         config.database_url,
         "postgres://user:pass@localhost:5432/test"
     );
+    assert_eq!(
+        config.file_type_detection.mode,
+        FileTypeDetectionMode::Naive
+    );
+}
+
+#[test]
+fn test_config_with_magika_file_type_detection() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    temp_file
+        .write_all(
+            br#"
+[file_type_detection]
+mode = "magika"
+
+[file_storage_providers]
+"#,
+        )
+        .expect("Failed to write file type detection configuration");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let mut builder = AppConfig::config_schema_builder(
+        Some(vec![temp_file.path().to_string_lossy().into_owned()]),
+        false,
+    )
+    .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config: AppConfig = builder
+        .build()
+        .expect("Failed to build config schema")
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    assert_eq!(
+        config.file_type_detection.mode,
+        FileTypeDetectionMode::Magika
+    );
+}
+
+#[test]
+fn test_config_rejects_unknown_file_type_detection_mode() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    temp_file
+        .write_all(
+            br#"
+[file_type_detection]
+mode = "unsupported"
+
+[file_storage_providers]
+"#,
+        )
+        .expect("Failed to write file type detection configuration");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let mut builder = AppConfig::config_schema_builder(
+        Some(vec![temp_file.path().to_string_lossy().into_owned()]),
+        false,
+    )
+    .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let error = builder
+        .build()
+        .expect("Failed to build config schema")
+        .try_deserialize::<AppConfig>()
+        .expect_err("Unknown file type detection mode should be rejected");
+
+    assert!(error.to_string().contains("file_type_detection.mode"));
 }
 
 /// Tests multiple chat providers configuration.

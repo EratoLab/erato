@@ -21,6 +21,8 @@ const CHAT_PROVIDER_TIME_TO_FIRST_TOKEN_METRIC: &str =
 const CHAT_PROVIDER_TIME_TO_LAST_TOKEN_METRIC: &str =
     "erato_chat_provider_time_to_last_token_seconds";
 const CHAT_PROVIDER_GENERATION_ERRORS_METRIC: &str = "erato_chat_provider_generation_errors_total";
+const FILE_TYPE_DETECTION_DURATION_METRIC: &str = "erato_file_type_detection_duration_seconds";
+const FILE_TYPE_DETECTION_TOTAL_METRIC: &str = "erato_file_type_detection_total";
 
 pub fn init_prometheus_metrics(config: &AppConfig) -> Result<()> {
     if !config.integrations.prometheus.enabled {
@@ -218,6 +220,21 @@ pub fn report_chat_provider_generation_error(chat_provider_id: &str, error: &Gen
     .increment(1);
 }
 
+pub fn report_file_type_detection(mode: &str, outcome: &str, duration: Duration) {
+    histogram!(
+        FILE_TYPE_DETECTION_DURATION_METRIC,
+        "mode" => mode.to_string(),
+        "outcome" => outcome.to_string()
+    )
+    .record(duration_seconds_with_millisecond_precision(duration));
+    counter!(
+        FILE_TYPE_DETECTION_TOTAL_METRIC,
+        "mode" => mode.to_string(),
+        "outcome" => outcome.to_string()
+    )
+    .increment(1);
+}
+
 fn generation_error_type_label(error: &GenerationErrorType) -> &'static str {
     match error {
         GenerationErrorType::ContentFilter { .. } => "content_filter",
@@ -259,6 +276,16 @@ fn describe_application_metrics() {
         CHAT_PROVIDER_GENERATION_ERRORS_METRIC,
         Unit::Count,
         "Total number of chat-provider generation failures segmented by provider and normalized error type."
+    );
+    describe_histogram!(
+        FILE_TYPE_DETECTION_DURATION_METRIC,
+        Unit::Seconds,
+        "Cold file type detection duration segmented by configured mode and outcome."
+    );
+    describe_counter!(
+        FILE_TYPE_DETECTION_TOTAL_METRIC,
+        Unit::Count,
+        "Total cold file type detection attempts segmented by configured mode and outcome."
     );
     describe_gauge!(
         MCP_ACTIVE_SESSIONS_METRIC,

@@ -460,6 +460,10 @@ pub struct AppConfig {
     #[serde(default)]
     pub caches: CachesConfig,
 
+    // File type detection configuration.
+    #[serde(default)]
+    pub file_type_detection: FileTypeDetectionConfig,
+
     // File processor configuration for controlling which file parsing library to use.
     #[serde(default)]
     pub file_processor: FileProcessorConfig,
@@ -3097,6 +3101,28 @@ impl Default for GenerationStatusConfig {
             terminal_retention_secs: default_generation_status_terminal_retention_secs(),
         }
     }
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Copy, Facet)]
+#[serde(rename_all = "snake_case")]
+#[facet(rename_all = "snake_case")]
+#[repr(C)]
+pub enum FileTypeDetectionMode {
+    /// Preserve Erato's current extension, storage MIME, and byte-signature flow.
+    #[default]
+    Naive,
+    /// Detect file types from their contents with Magika.
+    Magika,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct FileTypeDetectionConfig {
+    /// File type detector to use.
+    ///
+    /// `naive` preserves Erato's current behavior and does not initialize Magika.
+    /// `magika` initializes a Magika session and uses its content-based result.
+    #[serde(default)]
+    pub mode: FileTypeDetectionMode,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
