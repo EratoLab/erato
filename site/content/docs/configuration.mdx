@@ -79,6 +79,33 @@ When providing this value via an environment variable, use `SERVER__ENCRYPTION_K
 encryption_key = "replace-with-openssl-output"
 ```
 
+### `runtime_configuration`
+
+{/* erato_toml_config_key: runtime_configuration */}
+
+#### `runtime_configuration.enabled`
+
+{/* erato_toml_config_key: runtime_configuration.enabled */}
+
+When enabled, the backend mirrors each loaded `erato.toml` or
+`*.auto.erato.toml` source file into the database during startup. Mirrored
+documents are encrypted at rest with `server.encryption_key`. The encryption
+key value is redacted from the mirrored document before encryption, while the
+rest of the source file formatting and contents are preserved.
+
+This setting requires `server.encryption_key`.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+**Example**
+
+```toml
+[runtime_configuration]
+enabled = true
+```
+
 ### `generation`
 
 {/* erato_toml_config_key: generation */}

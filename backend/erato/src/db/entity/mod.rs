@@ -15,6 +15,7 @@ pub mod mcp_server_oauth_clients;
 pub mod mcp_server_oauth_credentials;
 pub mod message_feedbacks;
 pub mod messages;
+pub mod runtime_configuration;
 pub mod share_grants;
 pub mod share_links;
 pub mod user_preferences;

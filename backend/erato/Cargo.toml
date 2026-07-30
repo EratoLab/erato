@@ -109,6 +109,7 @@ facet = "0.44.3"
 # Newtype utility
 synonym = "0.1.5"
 config = "0.15.6"
+toml_edit = "0.23.10"
 dotenv-flow = "0.16.2"
 handlebars = "6"
 percent-encoding = "2.3.1"

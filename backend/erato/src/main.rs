@@ -76,7 +76,8 @@ async fn async_main(worker_threads: usize) -> Result<(), Report> {
         }
     }
 
-    let config = AppConfig::new_for_app(None)?;
+    let loaded_config = AppConfig::new_for_app_with_sources(None)?;
+    let config = loaded_config.config;
 
     // initialize tracing
     let _telemetry_guard = erato::telemetry::init_telemetry(&config)?;
@@ -95,6 +96,14 @@ async fn async_main(worker_threads: usize) -> Result<(), Report> {
 
     // Verify that the database has been migrated to the latest version
     models::ensure_latest_migration(&state.db).await?;
+
+    if config.runtime_configuration.enabled {
+        models::runtime_configuration::mirror_erato_backend_sources(
+            &state,
+            &loaded_config.source_files,
+        )
+        .await?;
+    }
 
     let (router, _api) = server::router::router(state.clone()).split_for_parts();
 

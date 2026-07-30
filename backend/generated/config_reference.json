@@ -443,6 +443,7 @@
   "prompt_optimizer.prompt.prompt": {},
   "prompt_optimizer.prompt.prompt_name": {},
   "prompt_optimizer.prompt.source": {},
+  "runtime_configuration.enabled": {},
   "sentry_dsn": {
     "hide_in_docs": true,
     "deprecated": {

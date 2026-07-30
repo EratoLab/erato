@@ -145,6 +145,26 @@ impl<'de> Deserialize<'de> for SecretConfigString {
     }
 }
 
+#[derive(Clone, PartialEq, Eq)]
+pub struct ConfigSourceFile {
+    pub source_filename: String,
+    pub contents: String,
+}
+
+impl fmt::Debug for ConfigSourceFile {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ConfigSourceFile")
+            .field("source_filename", &self.source_filename)
+            .field("contents", &"[REDACTED]")
+            .finish()
+    }
+}
+
+pub struct LoadedAppConfig {
+    pub config: AppConfig,
+    pub source_files: Vec<ConfigSourceFile>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Facet)]
 #[facet(untagged)]
 #[repr(C)]
@@ -380,6 +400,9 @@ pub struct AppConfig {
     pub server: ServerConfig,
 
     #[serde(default)]
+    pub runtime_configuration: RuntimeConfigurationConfig,
+
+    #[serde(default)]
     pub generation: GenerationConfig,
 
     #[serde(default)]
@@ -583,15 +606,38 @@ pub struct DesktopSidecarOrganizationConfiguration {
 }
 
 impl AppConfig {
-    /// Separate builder, so we can also add overrides in tests.
-    ///
-    /// # Arguments
-    ///
-    /// * `config_file_paths` - An optional ordered list of paths to configuration files. If this is `Some`, auto-discovery is disabled.
-    /// * `auto_discover_config_files` - A boolean flag to enable or disable auto-discovery of `erato.toml` and `*.auto.erato.toml` files.
-    pub fn config_schema_builder(
+    fn resolve_config_file_paths(
         config_file_paths: Option<Vec<String>>,
         auto_discover_config_files: bool,
+    ) -> Vec<String> {
+        if let Some(paths) = config_file_paths {
+            paths
+        } else if auto_discover_config_files {
+            if let Ok(entries) = std::fs::read_dir(".") {
+                let mut discovered_paths: Vec<String> = entries
+                    .filter_map(Result::ok)
+                    .map(|entry| entry.path())
+                    .filter(|path| path.is_file())
+                    .filter_map(|path| {
+                        path.file_name()
+                            .and_then(|filename| filename.to_str().map(String::from))
+                    })
+                    .filter(|filename| {
+                        filename == "erato.toml" || filename.ends_with(".auto.erato.toml")
+                    })
+                    .collect();
+                discovered_paths.sort();
+                discovered_paths
+            } else {
+                vec![]
+            }
+        } else {
+            vec![]
+        }
+    }
+
+    fn config_schema_builder_for_resolved_paths(
+        config_files_to_load: &[String],
     ) -> Result<ConfigBuilder<DefaultState>, ConfigError> {
         let mut builder = Config::builder()
             .set_default("environment", "development")?
@@ -640,27 +686,7 @@ impl AppConfig {
             .set_default("prompt_optimizer.enabled", false)?
             .set_default("prompt_optimizer.prompt", DEFAULT_PROMPT_OPTIMIZER_PROMPT)?;
 
-        let config_files_to_load: Vec<String> = if let Some(paths) = config_file_paths {
-            paths
-        } else if auto_discover_config_files {
-            if let Ok(entries) = std::fs::read_dir(".") {
-                let mut discovered_paths: Vec<String> = entries
-                    .filter_map(Result::ok)
-                    .map(|e| e.path())
-                    .filter(|p| p.is_file())
-                    .filter_map(|p| p.file_name().and_then(|s| s.to_str().map(String::from)))
-                    .filter(|s| s == "erato.toml" || s.ends_with(".auto.erato.toml"))
-                    .collect();
-                discovered_paths.sort();
-                discovered_paths
-            } else {
-                vec![]
-            }
-        } else {
-            vec![]
-        };
-
-        for path in &config_files_to_load {
+        for path in config_files_to_load {
             startup_log::info_preinit(format!("Loading config from: {}", path));
             builder = builder.add_source(config::File::with_name(path).required(false));
         }
@@ -683,6 +709,21 @@ impl AppConfig {
         Ok(builder)
     }
 
+    /// Separate builder, so we can also add overrides in tests.
+    ///
+    /// # Arguments
+    ///
+    /// * `config_file_paths` - An optional ordered list of paths to configuration files. If this is `Some`, auto-discovery is disabled.
+    /// * `auto_discover_config_files` - A boolean flag to enable or disable auto-discovery of `erato.toml` and `*.auto.erato.toml` files.
+    pub fn config_schema_builder(
+        config_file_paths: Option<Vec<String>>,
+        auto_discover_config_files: bool,
+    ) -> Result<ConfigBuilder<DefaultState>, ConfigError> {
+        let config_files_to_load =
+            Self::resolve_config_file_paths(config_file_paths, auto_discover_config_files);
+        Self::config_schema_builder_for_resolved_paths(&config_files_to_load)
+    }
+
     pub fn config_schema(
         config_file_paths: Option<Vec<String>>,
         auto_discover_config_files: bool,
@@ -697,6 +738,42 @@ impl AppConfig {
         let mut config: Self = schema.try_deserialize()?;
         config = config.migrate();
         Ok(config)
+    }
+
+    pub fn new_for_app_with_sources(
+        config_file_paths: Option<Vec<String>>,
+    ) -> Result<LoadedAppConfig, Report> {
+        let config_files_to_load = Self::resolve_config_file_paths(config_file_paths, true);
+        let schema =
+            Self::config_schema_builder_for_resolved_paths(&config_files_to_load)?.build()?;
+        let config: Self = schema.try_deserialize::<Self>()?.migrate();
+
+        let source_files = if config.runtime_configuration.enabled {
+            config_files_to_load
+                .into_iter()
+                .filter_map(
+                    |source_filename| match std::fs::read_to_string(&source_filename) {
+                        Ok(contents) => Some(Ok(ConfigSourceFile {
+                            source_filename,
+                            contents,
+                        })),
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+                        Err(error) => Some(Err(eyre!(
+                            "Failed to read configuration source '{}': {}",
+                            source_filename,
+                            error
+                        ))),
+                    },
+                )
+                .collect::<Result<Vec<_>, Report>>()?
+        } else {
+            vec![]
+        };
+
+        Ok(LoadedAppConfig {
+            config,
+            source_files,
+        })
     }
 
     #[allow(deprecated)]
@@ -781,6 +858,10 @@ impl AppConfig {
 
         if let Err(e) = config.server.validate() {
             panic!("Invalid server configuration: {}", e);
+        }
+
+        if let Err(e) = config.runtime_configuration.validate(&config.server) {
+            panic!("Invalid runtime configuration: {}", e);
         }
 
         if let Err(e) = config.generation.validate() {
@@ -1538,6 +1619,26 @@ pub struct ServerConfig {
     // `openssl rand -base64 32`
     #[facet(sensitive)]
     pub encryption_key: Option<SecretConfigString>,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct RuntimeConfigurationConfig {
+    /// Mirror source configuration files into the runtime configuration table.
+    ///
+    /// Requires `server.encryption_key`.
+    #[serde(default)]
+    pub enabled: bool,
+}
+
+impl RuntimeConfigurationConfig {
+    pub fn validate(&self, server: &ServerConfig) -> Result<(), Report> {
+        if self.enabled && server.encryption_key.is_none() {
+            return Err(eyre!(
+                "runtime_configuration.enabled requires server.encryption_key"
+            ));
+        }
+        Ok(())
+    }
 }
 
 impl ServerConfig {

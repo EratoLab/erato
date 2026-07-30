@@ -29,7 +29,8 @@
     "deploy/0027_assistant_store_featured_assistant_wide.sql",
     "deploy/0028_rename_assistant_store_to_assistant_hub.sql",
     "deploy/0029_add_assistant_hub_reviews.sql",
-    "deploy/0030_add_generation_state_to_chats.sql"
+    "deploy/0030_add_generation_state_to_chats.sql",
+    "deploy/0031_add_runtime_configuration.sql"
   ],
-  "latest_change": "b66fc1be1b54728f3b853e7ce7d9b8ddc0375c0e"
+  "latest_change": "8a890b4d9541e598b65003d02aaf43a752f21dbe"
 }

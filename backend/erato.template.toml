@@ -7,6 +7,12 @@ default_file_storage_provider = "seaweedfs"
 # Generate one with: openssl rand -base64 32
 # encryption_key = "replace-with-openssl-output"
 
+# Runtime configuration mirroring
+# [runtime_configuration]
+# Mirror the loaded erato.toml files into the database on startup (default: false).
+# Requires server.encryption_key. The encryption key itself is redacted before mirroring.
+# enabled = false
+
 # Generation configuration
 # [generation]
 # Maximum number of tool calls that may be executed while generating one assistant message (default: 15).

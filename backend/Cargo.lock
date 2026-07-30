@@ -2495,6 +2495,7 @@ dependencies = [
  "tokio-metrics",
  "tokio-stream",
  "tokio-util",
+ "toml_edit",
  "tower-http",
  "tracing",
  "tracing-opentelemetry",
@@ -9250,6 +9251,7 @@ dependencies = [
  "indexmap 2.14.0",
  "toml_datetime 0.7.5+spec-1.1.0",
  "toml_parser",
+ "toml_writer",
  "winnow 0.7.14",
 ]
 

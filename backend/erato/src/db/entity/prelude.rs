@@ -13,6 +13,7 @@ pub use super::mcp_server_oauth_clients::Entity as McpServerOauthClients;
 pub use super::mcp_server_oauth_credentials::Entity as McpServerOauthCredentials;
 pub use super::message_feedbacks::Entity as MessageFeedbacks;
 pub use super::messages::Entity as Messages;
+pub use super::runtime_configuration::Entity as RuntimeConfiguration;
 pub use super::share_grants::Entity as ShareGrants;
 pub use super::share_links::Entity as ShareLinks;
 pub use super::user_preferences::Entity as UserPreferences;
