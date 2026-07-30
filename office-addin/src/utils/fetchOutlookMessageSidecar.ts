@@ -17,18 +17,29 @@ import type {
 } from "./fetchOutlookMessageGraph";
 
 const GET_CONVERSATION = "outlook.get_conversation.v1";
-/** Max simultaneous transfer fetches, mirroring the Graph item-enrich guard. */
+/** Max simultaneous transfer fetches per level — messages, and attachments
+ * within a message — so the effective ceiling is this squared plus one body
+ * fetch per message. Loopback transfers, so the bound is generous by design. */
 const TRANSFER_CONCURRENCY = 5;
+/** Discriminator that makes downstream treat a byte-less attachment as a plain
+ * file with no retrievable content (an accurate disclosure marker). */
+const FILE_ATTACHMENT_TYPE = "#microsoft.graph.fileAttachment";
 
 export interface SidecarFetcherContext {
   /** The fetcher to delegate to for everything but conversation loading, and
-   * to fall back to on any sidecar failure. */
+   * to fall back to when the conversation itself can't be fetched. */
   inner: OutlookMessageFetcher;
   client: DesktopSidecarClient;
   /** RFC 5322 Message-ID of the current item — the conversation anchor. */
   anchorInternetMessageId: string | null;
   /** The signed-in user's SMTP address, used to select the local mailbox. */
   userEmailAddress: string | null;
+}
+
+/** Tracks whether any part of a conversation had to be degraded (a body or
+ * attachment whose bytes could not be fetched), so the result is `partial`. */
+interface ConversionProgress {
+  partial: boolean;
 }
 
 /**
@@ -38,9 +49,11 @@ export interface SidecarFetcherContext {
  * size caps that otherwise degrade Exchange SE threads to byte-less markers.
  *
  * Only `fetchConversationMessages` is overridden; every other capability
- * delegates unchanged. **Any** sidecar failure (unsupported, no mailbox match,
- * RPC/transfer error) falls back to the wrapped fetcher, so the result is never
- * worse than the EWS path alone.
+ * delegates unchanged. The conversation itself failing (unsupported, no mailbox
+ * match, RPC error) falls back to the wrapped fetcher, so the result is never
+ * worse than the EWS path. Once the conversation is fetched, a single body or
+ * attachment transfer failure degrades just that item to a byte-less marker and
+ * marks the result `partial`, rather than discarding the whole thread.
  */
 export function createSidecarOutlookMessageFetcher(
   context: SidecarFetcherContext,
@@ -58,7 +71,10 @@ export function createSidecarOutlookMessageFetcher(
       }
       try {
         return await fetchConversationViaSidecar(context, options);
-      } catch {
+      } catch (error) {
+        if (options?.signal?.aborted) {
+          throw error;
+        }
         return inner.fetchConversationMessages(conversationId, options);
       }
     },
@@ -85,13 +101,14 @@ async function fetchConversationViaSidecar(
     { signal },
   );
 
+  const progress: ConversionProgress = { partial: conversation.state !== "ok" };
   const messages = await mapWithConcurrency(
     conversation.messages,
     TRANSFER_CONCURRENCY,
-    (message) => mapConversationMessage(client, message, signal),
+    (message) => mapConversationMessage(client, message, signal, progress),
   );
 
-  return { messages, state: conversation.state === "ok" ? "ok" : "partial" };
+  return { messages, state: progress.partial ? "partial" : "ok" };
 }
 
 async function resolveMailboxId(
@@ -115,11 +132,15 @@ async function mapConversationMessage(
   client: DesktopSidecarClient,
   message: OutlookConversationMessage,
   signal: AbortSignal | undefined,
+  progress: ConversionProgress,
 ): Promise<GraphConversationMessage> {
   const [body, attachments] = await Promise.all([
-    mapBody(client, message.bodyHandle, signal),
-    mapWithConcurrency(message.attachments, TRANSFER_CONCURRENCY, (attachment) =>
-      mapAttachment(client, attachment, signal),
+    mapBody(client, message.bodyHandle, signal, progress),
+    mapWithConcurrency(
+      message.attachments,
+      TRANSFER_CONCURRENCY,
+      (attachment, index) =>
+        mapAttachment(client, attachment, index, signal, progress),
     ),
   ]);
 
@@ -141,11 +162,21 @@ async function mapBody(
   client: DesktopSidecarClient,
   bodyHandle: OutlookBodyHandle | undefined,
   signal: AbortSignal | undefined,
+  progress: ConversionProgress,
 ): Promise<GraphBody | undefined> {
   if (!bodyHandle) {
     return undefined;
   }
-  const bytes = await client.fetchTransfer(bodyHandle.handle, { signal });
+  let bytes: Uint8Array;
+  try {
+    bytes = await client.fetchTransfer(bodyHandle.handle, { signal });
+  } catch (error) {
+    if (signal?.aborted) {
+      throw error;
+    }
+    progress.partial = true;
+    return undefined;
+  }
   return {
     contentType: bodyHandle.contentType.includes("html") ? "html" : "text",
     content: new TextDecoder().decode(bytes),
@@ -155,9 +186,19 @@ async function mapBody(
 async function mapAttachment(
   client: DesktopSidecarClient,
   attachment: OutlookAttachmentReference,
+  index: number,
   signal: AbortSignal | undefined,
+  progress: ConversionProgress,
 ): Promise<GraphAttachment> {
+  // A stable, unique id is required downstream — `transformAttachment` drops any
+  // attachment without one. The sha256 is stable across re-fetch (so per-item
+  // dismissal persists); the index disambiguates byte-identical siblings and
+  // covers unavailable attachments that carry no hash.
   const base: GraphAttachment = {
+    "@odata.type": FILE_ATTACHMENT_TYPE,
+    id: attachment.sha256
+      ? `${attachment.sha256}-${index}`
+      : `sidecar-attachment-${index}`,
     name: attachment.name,
     contentType: attachment.contentType,
     size: attachment.size,
@@ -165,9 +206,19 @@ async function mapAttachment(
     contentId: attachment.contentId,
   };
   if (!attachment.contentHandle) {
+    progress.partial = true;
     return base;
   }
-  const bytes = await client.fetchTransfer(attachment.contentHandle, { signal });
+  let bytes: Uint8Array;
+  try {
+    bytes = await client.fetchTransfer(attachment.contentHandle, { signal });
+  } catch (error) {
+    if (signal?.aborted) {
+      throw error;
+    }
+    progress.partial = true;
+    return base;
+  }
   return { ...base, contentBytes: bytesToBase64(bytes) };
 }
 
@@ -179,7 +230,9 @@ function toGraphRecipients(
   }
   return recipients
     .map(toGraphRecipient)
-    .filter((recipient): recipient is GraphRecipient => recipient !== undefined);
+    .filter(
+      (recipient): recipient is GraphRecipient => recipient !== undefined,
+    );
 }
 
 function toGraphRecipient(
