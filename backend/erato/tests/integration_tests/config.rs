@@ -2,7 +2,7 @@
 
 use crate::test_utils::hermetic_app_config;
 use crate::{MIGRATOR, test_app_state};
-use erato::config::{
+use erato_config::config::{
     AppConfig, FileTypeDetectionMode, GenerationConfig, ModelReasoningEffort, ModelVerbosity,
     PromptSourceSpecification, RuntimeConfigurationConfig, ServerConfig, SharepointAllDrivesSource,
 };

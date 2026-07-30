@@ -2,7 +2,7 @@
 use std::fs;
 use std::process;
 
-use erato::config_reference::{generate_config_reference, validate_config_reference};
+use erato_config::config_reference::{generate_config_reference, validate_config_reference};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
