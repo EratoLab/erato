@@ -2,11 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createSidecarOutlookMessageFetcher } from "../fetchOutlookMessageSidecar";
 
-import type { DesktopSidecarClient } from "@erato/frontend/library";
 import type { OutlookMessageFetcher } from "../fetchOutlookMessage";
 import type { FetchConversationResult } from "../fetchOutlookMessageGraph";
+import type { DesktopSidecarClient } from "@erato/frontend/library";
 
 const FALLBACK: FetchConversationResult = { messages: [], state: "error" };
+// Base64 as the sidecar carries it inline on the wire.
+const ATTACHMENT_BYTES = btoa("att01");
 
 function stubInner(): OutlookMessageFetcher {
   return {
@@ -15,14 +17,13 @@ function stubInner(): OutlookMessageFetcher {
     fetchMessageBytesByInternetMessageId: vi.fn(),
     fetchConversationMessages: vi.fn(async () => FALLBACK),
     fetchParentMessageInConversation: vi.fn(),
-  } as unknown as OutlookMessageFetcher;
+  };
 }
 
 interface FakeClientOptions {
   supports?: boolean;
   mailboxes?: { id: string; emailAddress?: string }[];
   conversation?: unknown;
-  transfer?: (handle: string) => Promise<Uint8Array>;
 }
 
 function defaultConversation() {
@@ -37,7 +38,7 @@ function defaultConversation() {
         cc: [],
         sentAtUnixSeconds: 1_700_000_000,
         isDraft: false,
-        bodyHandle: { handle: "body01", contentType: "text/html", size: 6 },
+        body: { contentType: "text/html", content: "<p>Hi</p>" },
         attachments: [
           {
             name: "doc.pdf",
@@ -45,7 +46,7 @@ function defaultConversation() {
             size: 5,
             isInline: false,
             sha256: "a".repeat(64),
-            contentHandle: "att01",
+            contentBytes: ATTACHMENT_BYTES,
           },
         ],
       },
@@ -58,7 +59,6 @@ function fakeClient(options: FakeClientOptions = {}): DesktopSidecarClient {
     supports = true,
     mailboxes = [{ id: "m1", emailAddress: "user@example.test" }],
     conversation = defaultConversation(),
-    transfer = async (handle: string) => new TextEncoder().encode(handle),
   } = options;
   return {
     supports: () => supports,
@@ -67,7 +67,6 @@ function fakeClient(options: FakeClientOptions = {}): DesktopSidecarClient {
       if (method === "outlook.get_conversation.v1") return conversation;
       throw new Error(`unexpected invoke ${method}`);
     },
-    fetchTransfer: (handle: string) => transfer(handle),
   } as unknown as DesktopSidecarClient;
 }
 
@@ -81,7 +80,7 @@ function context(client: DesktopSidecarClient, inner: OutlookMessageFetcher) {
 }
 
 describe("createSidecarOutlookMessageFetcher", () => {
-  it("maps a conversation with fetchable body and attachment bytes", async () => {
+  it("maps a conversation with inline body and attachment bytes", async () => {
     const inner = stubInner();
     const fetcher = createSidecarOutlookMessageFetcher(
       context(fakeClient(), inner),
@@ -93,13 +92,13 @@ describe("createSidecarOutlookMessageFetcher", () => {
     expect(result.state).toBe("ok");
     const message = result.messages[0];
     expect(message.internetMessageId).toBe("<a@b>");
-    expect(message.body).toEqual({ contentType: "html", content: "body01" });
+    expect(message.body).toEqual({ contentType: "html", content: "<p>Hi</p>" });
 
     const attachment = message.attachments![0];
     // The bug review caught: attachments must carry an id, or transformAttachment
     // drops them downstream — defeating the whole sidecar-attachments feature.
     expect(attachment.id).toBeDefined();
-    expect(attachment.contentBytes).toBeDefined();
+    expect(attachment.contentBytes).toBe(ATTACHMENT_BYTES);
     expect(atob(attachment.contentBytes!)).toBe("att01");
   });
 
@@ -142,18 +141,36 @@ describe("createSidecarOutlookMessageFetcher", () => {
     expect(inner.fetchConversationMessages).toHaveBeenCalledOnce();
   });
 
-  it("degrades a failed attachment transfer to a marker + partial, not a full fallback", async () => {
+  it("degrades an attachment with no bytes to a marker + partial, not a full fallback", async () => {
     const inner = stubInner();
+    // The sidecar could not read this attachment: no contentBytes, only a reason.
+    const conversation = {
+      state: "ok",
+      messages: [
+        {
+          internetMessageId: "<a@b>",
+          subject: "Hello",
+          from: { name: "A", emailAddress: "a@example.test" },
+          to: [],
+          cc: [],
+          sentAtUnixSeconds: 1_700_000_000,
+          isDraft: false,
+          body: { contentType: "text/html", content: "<p>Hi</p>" },
+          attachments: [
+            {
+              name: "doc.pdf",
+              contentType: "application/pdf",
+              size: 5,
+              isInline: false,
+              sha256: "a".repeat(64),
+              unavailableReason: "unsupported_attachment",
+            },
+          ],
+        },
+      ],
+    };
     const fetcher = createSidecarOutlookMessageFetcher(
-      context(
-        fakeClient({
-          transfer: async (handle) => {
-            if (handle === "att01") throw new Error("transfer failed");
-            return new TextEncoder().encode(handle);
-          },
-        }),
-        inner,
-      ),
+      context(fakeClient({ conversation }), inner),
     );
 
     const result = await fetcher.fetchConversationMessages("conv-1");

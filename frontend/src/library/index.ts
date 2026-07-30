@@ -128,8 +128,8 @@ export {
 export type {
   DesktopSidecarClient,
   OutlookAttachmentReference,
-  OutlookBodyHandle,
   OutlookConversationMessage,
+  OutlookMessageBody,
   OutlookMessageRecipient,
 } from "@erato/desktop-sidecar-protocol";
 export {
