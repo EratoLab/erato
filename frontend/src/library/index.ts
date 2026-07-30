@@ -124,6 +124,14 @@ export {
   type DesktopSidecarContextValue,
   type DesktopSidecarProviderProps,
 } from "@/providers/DesktopSidecarProvider";
+// Protocol types the Outlook add-in needs to map a sidecar conversation.
+export type {
+  DesktopSidecarClient,
+  OutlookAttachmentReference,
+  OutlookBodyHandle,
+  OutlookConversationMessage,
+  OutlookMessageRecipient,
+} from "@erato/desktop-sidecar-protocol";
 export {
   FileCapabilitiesProvider,
   useFileCapabilitiesContext,
