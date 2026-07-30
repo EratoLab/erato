@@ -153,6 +153,39 @@
       }
     },
     {
+      "name": "outlook.get_conversation.v1",
+      "summary": "Load a whole Outlook conversation with message bodies and any-size attachments from the local store, bypassing host attachment-size limits.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/outlook-get-conversation-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/outlook-get-conversation-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        { "$ref": "#/components/errors/CapabilityUnavailable" },
+        { "$ref": "#/components/errors/InvalidParams" },
+        { "$ref": "#/components/errors/PermissionDenied" },
+        { "$ref": "#/components/errors/RequestCancelled" },
+        { "$ref": "#/components/errors/Timeout" },
+        { "$ref": "#/components/errors/SidecarInternal" }
+      ],
+      "x-erato-capability": {
+        "id": "outlook.get_conversation",
+        "major": 1,
+        "method": "outlook.get_conversation.v1",
+        "availability": { "state": "enabled" }
+      }
+    },
+    {
       "name": "sidecar.configure.v1",
       "summary": "Replace and persist the current user and organization configuration layers.",
       "params": [
@@ -253,7 +286,7 @@
     }
   },
   "x-erato-catalogue": {
-    "revision": "5",
-    "digest": "sha256:13f936659b24d6888f6d81e78ca3438af7cdfedc136b947f213b51dd0aa5342f"
+    "revision": "6",
+    "digest": "sha256:40e6ad89ee4c04e34af71322db9bb6a19c387e6c927a9aa21e0a870ced377ff6"
   }
 }

@@ -1,6 +1,7 @@
 export {
   DesktopSidecarClient,
   MAX_BODY_BYTES,
+  MAX_RESPONSE_BYTES,
   PROTOCOL_VERSIONS,
   createBrowserClientInfo,
   type DesktopSidecarClientOptions,

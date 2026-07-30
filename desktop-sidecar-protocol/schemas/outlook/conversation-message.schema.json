@@ -1,0 +1,64 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/outlook/conversation-message.schema.json",
+  "title": "OutlookConversationMessage",
+  "description": "One message of an Outlook conversation, with its body and attachment bytes carried inline.",
+  "type": "object",
+  "required": ["attachments"],
+  "properties": {
+    "internetMessageId": {
+      "type": "string",
+      "maxLength": 32768
+    },
+    "subject": {
+      "type": "string",
+      "maxLength": 32768
+    },
+    "from": {
+      "$ref": "../outlook/message-recipient.schema.json"
+    },
+    "to": {
+      "type": "array",
+      "items": {
+        "$ref": "../outlook/message-recipient.schema.json"
+      }
+    },
+    "cc": {
+      "type": "array",
+      "items": {
+        "$ref": "../outlook/message-recipient.schema.json"
+      }
+    },
+    "sentAtUnixSeconds": {
+      "description": "UTC Unix timestamp in whole seconds.",
+      "type": "integer",
+      "minimum": -62135596800,
+      "maximum": 253402300799
+    },
+    "receivedAtUnixSeconds": {
+      "description": "UTC Unix timestamp in whole seconds.",
+      "type": "integer",
+      "minimum": -62135596800,
+      "maximum": 253402300799
+    },
+    "isDraft": {
+      "description": "True when the message is an unsent draft.",
+      "type": "boolean"
+    },
+    "conversationIndex": {
+      "description": "Lowercase hex PidTagConversationIndex; its embedded GUID groups the thread.",
+      "type": "string",
+      "maxLength": 8192
+    },
+    "body": {
+      "$ref": "../outlook/message-body.schema.json"
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "$ref": "../outlook/attachment-reference.schema.json"
+      }
+    }
+  },
+  "additionalProperties": true
+}

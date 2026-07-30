@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-get-conversation-v1-result.schema.json",
+  "title": "OutlookGetConversationV1Result",
+  "description": "The messages of the anchored conversation, oldest first, with bodies and attachment bytes carried inline.",
+  "type": "object",
+  "required": ["state", "messages"],
+  "properties": {
+    "state": {
+      "description": "Completeness of the conversation. ok means every message and byte reference was produced; partial means some were omitted (see warnings), for example because maxMessages was reached or an attachment could not be read.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32
+    },
+    "mailbox": {
+      "$ref": "../outlook/mailbox.schema.json"
+    },
+    "messages": {
+      "type": "array",
+      "items": {
+        "$ref": "../outlook/conversation-message.schema.json"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "$ref": "../outlook/conversation-warning.schema.json"
+      }
+    }
+  },
+  "additionalProperties": true
+}

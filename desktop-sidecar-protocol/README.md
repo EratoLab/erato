@@ -115,7 +115,6 @@ implementations. Archive entries use the stable `package/` root; the release
 package version appears in the archive filename and package metadata, not in
 its directory structure.
 
-Production sidecar implementation, dynamic Origin enrollment, and bulk or
-binary transfer are intentionally outside this package's scope. Backend
-artifact discovery and deployment are defined in
-[`DISTRIBUTION.md`](DISTRIBUTION.md).
+Production sidecar implementation and dynamic Origin enrollment are
+intentionally outside this package's scope. Backend artifact discovery and
+deployment are defined in [`DISTRIBUTION.md`](DISTRIBUTION.md).

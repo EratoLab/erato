@@ -16,6 +16,7 @@ import {
   validateCancelParams,
   validateDiagnosticsEchoV1Params,
   validateDiscoverParams,
+  validateOutlookGetConversationV1Params,
   validateOutlookListEmailsV1Params,
   validateOutlookListMailboxesV1Params,
   validateSidecarConfigureV1Params,
@@ -72,6 +73,35 @@ const MOCK_OUTLOOK_EMAIL = {
   senderEmailAddress: "test@example.com",
   receivedAtUnixSeconds: 1_774_291_200,
   internetMessageId: "<mock-outlook-email@example.com>",
+};
+const MOCK_OUTLOOK_ATTACHMENT_BYTES = Buffer.from(
+  "mock attachment bytes",
+  "utf8",
+);
+const MOCK_OUTLOOK_CONVERSATION_MESSAGE = {
+  internetMessageId: "<mock-outlook-email@example.com>",
+  subject: "Mock Outlook message",
+  from: { name: "Erato Test", emailAddress: "test@example.com" },
+  to: [{ name: "Mock Outlook mailbox", emailAddress: "mock@example.com" }],
+  cc: [],
+  sentAtUnixSeconds: 1_774_291_200,
+  isDraft: false,
+  body: {
+    contentType: "text/plain",
+    content: "Mock Outlook message body.",
+  },
+  attachments: [
+    {
+      name: "mock-attachment.pdf",
+      contentType: "application/pdf",
+      size: MOCK_OUTLOOK_ATTACHMENT_BYTES.byteLength,
+      isInline: false,
+      sha256: createHash("sha256")
+        .update(MOCK_OUTLOOK_ATTACHMENT_BYTES)
+        .digest("hex"),
+      contentBytes: MOCK_OUTLOOK_ATTACHMENT_BYTES.toString("base64"),
+    },
+  ],
 };
 const openRpcUrl = [
   new URL("../../openrpc.json", import.meta.url),
@@ -386,6 +416,24 @@ export class MockSidecar {
       return rpcResult(message.id, {
         mailbox: MOCK_OUTLOOK_MAILBOX,
         emails: [MOCK_OUTLOOK_EMAIL],
+      });
+    }
+
+    if (message.method === "outlook.get_conversation.v1") {
+      if (!validateOutlookGetConversationV1Params(message.params)) {
+        return rpcError(message.id, -32602, "Invalid method parameters.");
+      }
+      if (
+        (message.params as { mailboxId: string }).mailboxId !==
+        MOCK_OUTLOOK_MAILBOX.id
+      ) {
+        return rpcError(message.id, -32602, "Unknown Outlook mailbox.");
+      }
+      return rpcResult(message.id, {
+        state: "ok",
+        mailbox: MOCK_OUTLOOK_MAILBOX,
+        messages: [MOCK_OUTLOOK_CONVERSATION_MESSAGE],
+        warnings: [],
       });
     }
 

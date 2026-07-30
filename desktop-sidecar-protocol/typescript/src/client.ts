@@ -5,6 +5,8 @@ import {
   validateDiagnosticsEchoV1Result,
   validateDiscoverResult,
   validateJsonRpcEnvelope,
+  validateOutlookGetConversationV1Params,
+  validateOutlookGetConversationV1Result,
   validateOutlookListEmailsV1Params,
   validateOutlookListEmailsV1Result,
   validateOutlookListMailboxesV1Params,
@@ -23,6 +25,8 @@ import type {
   DiscoverParams,
   DiscoverResult,
   DiscoveryDocument,
+  OutlookGetConversationV1Params,
+  OutlookGetConversationV1Result,
   OutlookListEmailsV1Params,
   OutlookListEmailsV1Result,
   OutlookListMailboxesV1Params,
@@ -36,6 +40,14 @@ import type { SidecarTransport } from "./transport.js";
 
 export const PROTOCOL_VERSIONS = ["1.0"] as const;
 export const MAX_BODY_BYTES = 262_144;
+/**
+ * Cap for response bodies. Far larger than the request cap because
+ * `outlook.get_conversation.v1` carries a whole thread's message bodies and
+ * attachment bytes inline (base64). The trusted local sidecar is the only
+ * writer, so this bounds memory rather than an untrusted peer. Override with
+ * `maxResponseBytes` when a deployment needs larger threads.
+ */
+export const MAX_RESPONSE_BYTES = 67_108_864;
 
 export interface SidecarClientInfo {
   name: string;
@@ -90,6 +102,7 @@ export interface DesktopSidecarClientOptions {
   discoveryTimeoutMs?: number;
   requestTimeoutMs?: number;
   maxBodyBytes?: number;
+  maxResponseBytes?: number;
 }
 
 export interface InvokeOptions {
@@ -121,6 +134,10 @@ const builtInContracts: Readonly<Record<string, SidecarMethodContract>> = {
     validateParams: validateOutlookListEmailsV1Params,
     validateResult: validateOutlookListEmailsV1Result,
   },
+  "outlook.get_conversation.v1": {
+    validateParams: validateOutlookGetConversationV1Params,
+    validateResult: validateOutlookGetConversationV1Result,
+  },
   "sidecar.restart.v1": {
     validateParams: validateSidecarRestartV1Params,
     validateResult: validateSidecarRestartV1Result,
@@ -141,6 +158,7 @@ export class DesktopSidecarClient {
   readonly #discoveryTimeoutMs: number;
   readonly #requestTimeoutMs: number;
   readonly #maxBodyBytes: number;
+  readonly #maxResponseBytes: number;
   readonly #listeners = new Set<() => void>();
   #snapshot: SidecarSnapshot = emptySnapshot();
   #discovery: Promise<void> | undefined;
@@ -163,6 +181,7 @@ export class DesktopSidecarClient {
     this.#discoveryTimeoutMs = options.discoveryTimeoutMs ?? 5_000;
     this.#requestTimeoutMs = options.requestTimeoutMs ?? 10_000;
     this.#maxBodyBytes = options.maxBodyBytes ?? MAX_BODY_BYTES;
+    this.#maxResponseBytes = options.maxResponseBytes ?? MAX_RESPONSE_BYTES;
   }
 
   getSnapshot = (): SidecarSnapshot => this.#snapshot;
@@ -210,6 +229,11 @@ export class DesktopSidecarClient {
     params: OutlookListEmailsV1Params,
     options?: InvokeOptions,
   ): Promise<OutlookListEmailsV1Result>;
+  async invoke(
+    method: "outlook.get_conversation.v1",
+    params: OutlookGetConversationV1Params,
+    options?: InvokeOptions,
+  ): Promise<OutlookGetConversationV1Result>;
   async invoke(
     method: "sidecar.configure.v1",
     params: SidecarConfigureV1Params,
@@ -392,7 +416,7 @@ export class DesktopSidecarClient {
       "x-erato-deadline-at": new Date(Date.now() + timeoutMs).toISOString(),
     };
     const body = JSON.stringify(request);
-    this.#assertBodySize(body);
+    this.#assertBodySize(body, this.#maxBodyBytes, "Request");
 
     const controller = new AbortController();
     let timedOut = false;
@@ -408,7 +432,7 @@ export class DesktopSidecarClient {
       const responseBody = await this.#transport.request(body, {
         signal: controller.signal,
       });
-      this.#assertBodySize(responseBody);
+      this.#assertBodySize(responseBody, this.#maxResponseBytes, "Response");
       return this.#parseResponse(responseBody, id);
     } catch (error) {
       if (controller.signal.aborted) {
@@ -493,11 +517,11 @@ export class DesktopSidecarClient {
     return response.result;
   }
 
-  #assertBodySize(body: string): void {
-    if (new TextEncoder().encode(body).byteLength > this.#maxBodyBytes) {
+  #assertBodySize(body: string, limit: number, label: string): void {
+    if (new TextEncoder().encode(body).byteLength > limit) {
       throw new SidecarClientError(
         "malformed_message",
-        `Protocol body exceeds ${this.#maxBodyBytes} bytes.`,
+        `${label} body exceeds ${limit} bytes.`,
       );
     }
   }

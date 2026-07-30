@@ -127,6 +127,41 @@ const typeTargets = [
     "outlook-list-emails-v1-result.ts",
     "OutlookListEmailsV1Result",
   ],
+  [
+    "schemas/outlook/message-recipient.schema.json",
+    "outlook-message-recipient.ts",
+    "OutlookMessageRecipient",
+  ],
+  [
+    "schemas/outlook/message-body.schema.json",
+    "outlook-message-body.ts",
+    "OutlookMessageBody",
+  ],
+  [
+    "schemas/outlook/conversation-warning.schema.json",
+    "outlook-conversation-warning.ts",
+    "OutlookConversationWarning",
+  ],
+  [
+    "schemas/outlook/attachment-reference.schema.json",
+    "outlook-attachment-reference.ts",
+    "OutlookAttachmentReference",
+  ],
+  [
+    "schemas/outlook/conversation-message.schema.json",
+    "outlook-conversation-message.ts",
+    "OutlookConversationMessage",
+  ],
+  [
+    "schemas/methods/outlook-get-conversation-v1-params.schema.json",
+    "outlook-get-conversation-v1-params.ts",
+    "OutlookGetConversationV1Params",
+  ],
+  [
+    "schemas/methods/outlook-get-conversation-v1-result.schema.json",
+    "outlook-get-conversation-v1-result.ts",
+    "OutlookGetConversationV1Result",
+  ],
 ];
 
 const validatorTargets = {
@@ -162,6 +197,10 @@ const validatorTargets = {
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-emails-v1-params.schema.json",
   validateOutlookListEmailsV1Result:
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-list-emails-v1-result.schema.json",
+  validateOutlookGetConversationV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-get-conversation-v1-params.schema.json",
+  validateOutlookGetConversationV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-get-conversation-v1-result.schema.json",
 };
 
 await rm(outputDirectory, { recursive: true, force: true });

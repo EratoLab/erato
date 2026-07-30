@@ -27,16 +27,17 @@ not invalidate otherwise valid ready data.
 
 ## Candidate loopback HTTP profile (unqualified)
 
-| Property              | Candidate value                                     |
-| --------------------- | --------------------------------------------------- |
-| URL                   | `http://127.0.0.1:23123/erato/sidecar/rpc`          |
-| Methods               | `POST` for RPC; `OPTIONS` for browser preflight     |
-| Request content type  | `application/json`                                  |
-| Response content type | `application/json`                                  |
-| Address               | IPv4 loopback only until IPv6 behavior is qualified |
-| Maximum body          | 262,144 bytes for each request and response         |
-| Discovery timeout     | 5 seconds                                           |
-| Idle policy           | none; there is no persistent protocol connection    |
+| Property              | Candidate value                                       |
+| --------------------- | ----------------------------------------------------- |
+| URL                   | `http://127.0.0.1:23123/erato/sidecar/rpc`            |
+| Methods               | `POST` for RPC; `OPTIONS` for browser preflight       |
+| Request content type  | `application/json`                                    |
+| Response content type | `application/json`                                    |
+| Address               | IPv4 loopback only until IPv6 behavior is qualified   |
+| Maximum request body  | 262,144 bytes                                         |
+| Maximum response body | larger response cap (default 64 MiB) for inline bytes |
+| Discovery timeout     | 5 seconds                                             |
+| Idle policy           | none; there is no persistent protocol connection      |
 
 Each `POST` body contains exactly one JSON-RPC 2.0 request or notification.
 Batch arrays remain disabled. A request with an `id` receives exactly one
@@ -52,8 +53,18 @@ for a request that was not admitted. Clients MUST NOT try to interpret a
 non-JSON HTTP error body as a JSON-RPC response.
 
 `OPTIONS` is a transport-level preflight and never advances protocol state.
-`GET` is not supported, so JSON-RPC payloads cannot appear in URLs, browser
+`GET` is not accepted, so JSON-RPC payloads cannot appear in URLs, browser
 history, or intermediary caches. RPC responses set `Cache-Control: no-store`.
+
+## Inline bytes
+
+The bytes that a result references — the message bodies and attachments of
+`outlook.get_conversation.v1` — are carried inline in the JSON-RPC response:
+bodies as decoded text, attachments as base64. Requests stay within the small
+262,144-byte cap; responses are bounded by the larger response cap in the table
+above, which sizes the ceiling on a whole thread's inline bytes. A dedicated
+transfer channel for very large payloads may be added later behind the same
+request semantics, but is not part of the 1.0 profile.
 
 ## Request-composed readiness state machine
 

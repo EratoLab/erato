@@ -1,6 +1,7 @@
 import { SidecarClientError } from "./errors.js";
 
 export const MAX_BODY_BYTES = 262_144;
+export const MAX_RESPONSE_BYTES = 67_108_864;
 
 export interface SidecarTransportRequestOptions {
   signal?: AbortSignal;
@@ -21,24 +22,27 @@ export type SidecarFetch = (
 export interface HttpTransportOptions {
   fetch?: SidecarFetch;
   maxBodyBytes?: number;
+  maxResponseBytes?: number;
 }
 
 export class HttpTransport implements SidecarTransport {
   readonly #url: string;
   readonly #fetch: SidecarFetch;
   readonly #maxBodyBytes: number;
+  readonly #maxResponseBytes: number;
 
   constructor(url: string, options: HttpTransportOptions = {}) {
     this.#url = url;
     this.#fetch = options.fetch ?? globalThis.fetch.bind(globalThis);
     this.#maxBodyBytes = options.maxBodyBytes ?? MAX_BODY_BYTES;
+    this.#maxResponseBytes = options.maxResponseBytes ?? MAX_RESPONSE_BYTES;
   }
 
   async request(
     body: string,
     options: SidecarTransportRequestOptions = {},
   ): Promise<string> {
-    this.#assertBodySize(body, "Request");
+    this.#assertBodySize(body, this.#maxBodyBytes, "Request");
 
     let response: Response;
     try {
@@ -82,24 +86,24 @@ export class HttpTransport implements SidecarTransport {
     if (
       contentLength !== null &&
       Number.isFinite(Number(contentLength)) &&
-      Number(contentLength) > this.#maxBodyBytes
+      Number(contentLength) > this.#maxResponseBytes
     ) {
       throw new SidecarClientError(
         "malformed_message",
-        `Response body exceeds ${this.#maxBodyBytes} bytes.`,
+        `Response body exceeds ${this.#maxResponseBytes} bytes.`,
       );
     }
 
     const responseBody = await response.text();
-    this.#assertBodySize(responseBody, "Response");
+    this.#assertBodySize(responseBody, this.#maxResponseBytes, "Response");
     return responseBody;
   }
 
-  #assertBodySize(body: string, label: string): void {
-    if (new TextEncoder().encode(body).byteLength > this.#maxBodyBytes) {
+  #assertBodySize(body: string, limit: number, label: string): void {
+    if (new TextEncoder().encode(body).byteLength > limit) {
       throw new SidecarClientError(
         "malformed_message",
-        `${label} body exceeds ${this.#maxBodyBytes} bytes.`,
+        `${label} body exceeds ${limit} bytes.`,
       );
     }
   }

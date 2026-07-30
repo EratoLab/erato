@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/outlook/attachment-reference.schema.json",
+  "title": "OutlookAttachmentReference",
+  "description": "Metadata and inline bytes for one attachment. When the bytes are available they are base64-encoded in contentBytes; otherwise unavailableReason explains why.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "description": "File name, when present.",
+      "type": "string",
+      "maxLength": 4096
+    },
+    "contentType": {
+      "description": "Media type of the bytes. Embedded messages are reported as message/rfc822.",
+      "type": "string",
+      "maxLength": 256
+    },
+    "size": {
+      "description": "Exact length of the attachment bytes.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "isInline": {
+      "description": "True when the attachment is referenced from the message body by contentId.",
+      "type": "boolean"
+    },
+    "contentId": {
+      "description": "Content-ID for an inline attachment, without angle brackets.",
+      "type": "string",
+      "maxLength": 4096
+    },
+    "sha256": {
+      "description": "Lowercase hex SHA-256 of the attachment bytes, useful for de-duplicating attachments repeated across thread messages.",
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "contentBytes": {
+      "description": "Base64-encoded attachment bytes, present when the bytes are available.",
+      "type": "string"
+    },
+    "unavailableReason": {
+      "description": "Stable code explaining why bytes are not available, present instead of contentBytes. Known values include unsupported_attachment.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    }
+  },
+  "additionalProperties": true
+}

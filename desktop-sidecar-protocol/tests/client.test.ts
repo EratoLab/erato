@@ -75,6 +75,32 @@ describe("DesktopSidecarClient", () => {
     });
   });
 
+  it("supports outlook.get_conversation.v1 with inline body and attachment bytes", async () => {
+    const { client } = await setup();
+    await client.discover();
+
+    expect(client.supports("outlook.get_conversation.v1")).toBe(true);
+    expect(client.supports("outlook.get_conversation", 1)).toBe(true);
+
+    const conversation = await client.invoke("outlook.get_conversation.v1", {
+      mailboxId: "8b7d2f4a6c9e1035d8a1b2c3e4f50617",
+      anchor: { internetMessageId: "<mock-outlook-email@example.com>" },
+    });
+    expect(conversation.state).toBe("ok");
+
+    const message = conversation.messages[0];
+    expect(message?.body).toEqual({
+      contentType: "text/plain",
+      content: "Mock Outlook message body.",
+    });
+
+    const attachment = message?.attachments[0];
+    expect(attachment?.contentBytes).toBeDefined();
+    expect(
+      Buffer.from(attachment!.contentBytes!, "base64").toString("utf8"),
+    ).toBe("mock attachment bytes");
+  });
+
   it("acknowledges a sidecar restart request", async () => {
     const { client, sidecar } = await setup();
     await client.discover();

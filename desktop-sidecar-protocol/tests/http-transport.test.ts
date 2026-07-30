@@ -55,15 +55,35 @@ describe("HttpTransport", () => {
     });
   });
 
-  it("rejects oversized request and response bodies", async () => {
+  it("rejects an oversized request body", async () => {
     const transport = new HttpTransport("http://127.0.0.1:23123/rpc", {
-      fetch: async () => jsonResponse("x".repeat(MAX_BODY_BYTES + 1)),
+      fetch: async () =>
+        jsonResponse('{"jsonrpc":"2.0","id":"c-1","result":{}}'),
     });
 
     await expect(
       transport.request("x".repeat(MAX_BODY_BYTES + 1)),
     ).rejects.toMatchObject({ kind: "malformed_message" });
-    await expect(transport.request("{}")).rejects.toMatchObject({
+  });
+
+  it("allows a response above the request cap and rejects one above the response cap", async () => {
+    const maxResponseBytes = MAX_BODY_BYTES * 4;
+    // A JSON response larger than the request cap but within the response cap:
+    // inline get_conversation bytes routinely exceed the small request cap.
+    const withinResponseCap = `{"jsonrpc":"2.0","id":"c-1","result":{"pad":"${"x".repeat(
+      MAX_BODY_BYTES + 1,
+    )}"}}`;
+    const okTransport = new HttpTransport("http://127.0.0.1:23123/rpc", {
+      fetch: async () => jsonResponse(withinResponseCap),
+      maxResponseBytes,
+    });
+    await expect(okTransport.request("{}")).resolves.toContain('"result"');
+
+    const rejectTransport = new HttpTransport("http://127.0.0.1:23123/rpc", {
+      fetch: async () => jsonResponse("x".repeat(maxResponseBytes + 1)),
+      maxResponseBytes,
+    });
+    await expect(rejectTransport.request("{}")).rejects.toMatchObject({
       kind: "malformed_message",
     });
   });

@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-get-conversation-v1-params.schema.json",
+  "title": "OutlookGetConversationV1Params",
+  "type": "object",
+  "required": ["mailboxId", "anchor"],
+  "properties": {
+    "mailboxId": {
+      "description": "Short opaque identifier returned by outlook.list_mailboxes.v1.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "anchor": {
+      "description": "The message the conversation is resolved from.",
+      "type": "object",
+      "required": ["internetMessageId"],
+      "properties": {
+        "internetMessageId": {
+          "description": "RFC 5322 Message-ID of the anchor message, including angle brackets, as reported by outlook.list_emails.v1. Not the Office.js conversationId.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32768
+        }
+      },
+      "additionalProperties": true
+    },
+    "maxMessages": {
+      "description": "Cap on the number of returned messages. When the conversation has more, the result is reported as partial.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000
+    }
+  },
+  "additionalProperties": true
+}
