@@ -19,16 +19,25 @@ describe("detectExchangeOnPrem", () => {
   });
 
   it.each(["office365", "outlook", "outlookCom", "gmail"])(
-    "treats accountType %s as not on-prem",
+    "treats accountType %s without on-prem endpoints as not on-prem",
     (accountType) => {
       installMailbox({
         userProfile: { accountType },
-        // The URL fallback must not override the authoritative accountType.
-        ewsUrl: "https://mail.corp.example.com/EWS/Exchange.asmx",
+        ewsUrl: "https://outlook.office365.com/EWS/Exchange.asmx",
       });
       expect(detectExchangeOnPrem()).toBe(false);
     },
   );
+
+  it("trusts a non-Microsoft ewsUrl over a cloud accountType", () => {
+    // New Outlook on Mac reports "office365" for a hybrid account whose
+    // mailbox lives on-prem — the endpoint host is the truthful signal.
+    installMailbox({
+      userProfile: { accountType: "office365" },
+      ewsUrl: "https://mail.corp.example.com/EWS/Exchange.asmx",
+    });
+    expect(detectExchangeOnPrem()).toBe(true);
+  });
 
   it("falls back to a non-Microsoft ewsUrl host when accountType is missing", () => {
     installMailbox({

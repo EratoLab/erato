@@ -37,16 +37,6 @@ function isMicrosoftCloudHostname(hostname: string): boolean {
   );
 }
 
-/** `accountType` values that are definitively NOT on-prem Exchange:
- * Microsoft-hosted ("office365", consumer "outlookCom") or a non-Exchange
- * backend entirely ("outlook" = classic-desktop-connected, "gmail"). */
-const NON_ON_PREM_ACCOUNT_TYPES = new Set([
-  "office365",
-  "outlook",
-  "outlookCom",
-  "gmail",
-]);
-
 /**
  * Whether the current mailbox is served by an on-prem Exchange (SE) rather
  * than Exchange Online — i.e. whether mail must be fetched via EWS SOAP
@@ -54,13 +44,15 @@ const NON_ON_PREM_ACCOUNT_TYPES = new Set([
  * Graph (Graph can't reach on-prem mailboxes).
  *
  * Signals, in order of authority:
- * (a) `userProfile.accountType`: "enterprise" ⇒ on-prem; any of the known
- *     cloud/non-Exchange values ⇒ not.
- * (b) `accountType` is officially Mailbox 1.6+ and may be absent (the SE probe
- *     on a 1.5-ceiling OWA empirically still returned "enterprise", but we
- *     don't rely on that): fall back to where the mailbox's service endpoints
- *     (`ewsUrl`/`restUrl`) live — a non-Microsoft host means on-prem.
- * (c) No usable signal ⇒ false. Conservative on purpose: better that a cloud
+ * (a) `userProfile.accountType` "enterprise" ⇒ on-prem. Only the positive
+ *     direction is trusted: new Outlook on Mac reports "office365" for a
+ *     hybrid account whose mailbox lives on-prem (the value tracks the
+ *     signed-in Entra identity, not the mailbox host), so a cloud accountType
+ *     must never veto endpoint evidence. The property is also Mailbox 1.6+ and
+ *     may be absent entirely.
+ * (b) Where the mailbox's service endpoints (`ewsUrl`/`restUrl`) live — a
+ *     non-Microsoft host means on-prem.
+ * (c) No on-prem signal ⇒ false. Conservative on purpose: better that a cloud
  *     host falls through to the Graph path than fetching mail via the on-prem
  *     EWS path its host won't broker or issue callback tokens for.
  */
@@ -74,12 +66,8 @@ export function detectExchangeOnPrem(): boolean {
       return false;
     }
 
-    const accountType = mailbox.userProfile?.accountType;
-    if (accountType === "enterprise") {
+    if (mailbox.userProfile?.accountType === "enterprise") {
       return true;
-    }
-    if (accountType && NON_ON_PREM_ACCOUNT_TYPES.has(accountType)) {
-      return false;
     }
 
     for (const serviceUrl of [mailbox.ewsUrl, mailbox.restUrl]) {
