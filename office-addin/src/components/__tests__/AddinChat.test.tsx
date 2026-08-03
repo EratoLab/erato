@@ -87,6 +87,8 @@ vi.mock("@erato/frontend/library", () => ({
     currentChatLastModel: undefined,
   }),
   useConversationDropzone: useConversationDropzoneMock,
+  // useOutlookMessageFetcher reads the sidecar client; none is mounted here.
+  useDesktopSidecar: () => ({ client: null }),
   useFileCapabilitiesContext: () => ({ capabilities: {} }),
   useFilePreviewModal: () => ({
     isPreviewModalOpen: false,

@@ -1,12 +1,15 @@
+import { useDesktopSidecar } from "@erato/frontend/library";
 import { useMemo } from "react";
 
 import { useGraphTokenOptional } from "../providers/EntraGraphTokenProvider";
+import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
 import { useSessionAuth } from "../providers/SessionAuthProvider";
 import { detectExchangeOnPrem } from "../utils/detectExchangeOnPrem";
 import {
   createEwsOutlookMessageFetcher,
   createGraphOutlookMessageFetcher,
 } from "../utils/fetchOutlookMessage";
+import { createSidecarOutlookMessageFetcher } from "../utils/fetchOutlookMessageSidecar";
 
 import type { OutlookMessageFetcher } from "../utils/fetchOutlookMessage";
 import type { AcquireGraphToken } from "../utils/fetchOutlookMessageGraph";
@@ -55,16 +58,27 @@ export function useOutlookMessageFetcher(): UseOutlookMessageFetcherResult {
   // The mailbox host can't change within a session, so the probe is stable —
   // compute it once and feed the stable value into the dispatch memo.
   const isOnPrem = useMemo(() => detectExchangeOnPrem(), []);
+  // The desktop sidecar augments only the on-prem/SE conversation path.
+  const { client: sidecarClient } = useDesktopSidecar();
+  const { mailItem } = useOutlookMailItem();
+  const anchorInternetMessageId = mailItem?.internetMessageId ?? null;
 
   return useMemo<UseOutlookMessageFetcherResult>(() => {
     if (mode !== "entra-msal") {
       return { fetcher: null, unavailableReason: "unsupported-mode" };
     }
     if (isOnPrem) {
-      return {
-        fetcher: createEwsOutlookMessageFetcher(),
-        unavailableReason: null,
-      };
+      const ews = createEwsOutlookMessageFetcher();
+      const fetcher = sidecarClient
+        ? createSidecarOutlookMessageFetcher({
+            inner: ews,
+            client: sidecarClient,
+            anchorInternetMessageId,
+            userEmailAddress:
+              Office.context?.mailbox?.userProfile?.emailAddress ?? null,
+          })
+        : ews;
+      return { fetcher, unavailableReason: null };
     }
     if (!graph) {
       return { fetcher: null, unavailableReason: "graph-unavailable" };
@@ -75,5 +89,5 @@ export function useOutlookMessageFetcher(): UseOutlookMessageFetcherResult {
       fetcher: createGraphOutlookMessageFetcher(acquireGraphToken),
       unavailableReason: null,
     };
-  }, [graph, mode, isOnPrem]);
+  }, [graph, mode, isOnPrem, sidecarClient, anchorInternetMessageId]);
 }

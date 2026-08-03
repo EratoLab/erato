@@ -4,6 +4,10 @@ export function injectFrontendEnv() {
   window.FRONTEND_PUBLIC_BASE_PATH ??= "/public/platform-office-addin";
   window.COMMON_PUBLIC_BASE_PATH ??= "/public/common";
 
+  if (import.meta.env.VITE_DESKTOP_SIDECAR_URL) {
+    window.DESKTOP_SIDECAR_URL ??= import.meta.env.VITE_DESKTOP_SIDECAR_URL;
+  }
+
   if (import.meta.env.VITE_CUSTOMER_NAME) {
     window.THEME_CUSTOMER_NAME ??= import.meta.env.VITE_CUSTOMER_NAME;
   }
