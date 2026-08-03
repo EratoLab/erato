@@ -203,14 +203,14 @@ As of 2026-07-21, this environment cannot execute the required Outlook desktop
 hosts. No row below is claimed as qualified, so the candidate URL is opt-in and
 there is no built-in production endpoint.
 
-| Platform/host             | Runtime                 | `http://`  | `https://` | Origin observed | Permissions/prerequisites                                      | Status  |
-| ------------------------- | ----------------------- | ---------- | ---------- | --------------- | -------------------------------------------------------------- | ------- |
-| Windows classic Outlook   | embedded Office browser | Not tested | Not tested | Not captured    | WebView2/legacy runtime must be recorded                       | Pending |
-| Windows new Outlook       | WebView2                | Not tested | Not tested | Not captured    | Loopback exemption and private-network prompts must be checked | Pending |
-| macOS Outlook             | WKWebView               | Not tested | Not tested | Not captured    | Local-network permission and certificate trust must be checked | Pending |
-| Office on the web, Edge   | Chromium                | Not tested | Not tested | Not captured    | Mixed-content and private-network policy must be checked       | Pending |
-| Office on the web, Chrome | Chromium                | Not tested | Not tested | Not captured    | Mixed-content and private-network policy must be checked       | Pending |
-| Office on the web, Safari | WebKit                  | Not tested | Not tested | Not captured    | Local-network permission and certificate trust must be checked | Pending |
+| Platform/host             | Runtime                 | `http://`  | `https://` | Origin observed  | Permissions/prerequisites                                      | Status               |
+| ------------------------- | ----------------------- | ---------- | ---------- | ---------------- | -------------------------------------------------------------- | -------------------- |
+| Windows classic Outlook   | WebView2 150.0.4078.105 | Pass       | Not tested | See record below | None: no loopback exemption, no PNA preflight, no prompts      | Qualified 2026-08-03 |
+| Windows new Outlook       | WebView2                | Not tested | Not tested | Not captured     | Loopback exemption and private-network prompts must be checked | Pending              |
+| macOS Outlook             | WKWebView               | Not tested | Not tested | Not captured     | Local-network permission and certificate trust must be checked | Pending              |
+| Office on the web, Edge   | Chromium                | Not tested | Not tested | Not captured     | Mixed-content and private-network policy must be checked       | Pending              |
+| Office on the web, Chrome | Chromium                | Not tested | Not tested | Not captured     | Mixed-content and private-network policy must be checked       | Pending              |
+| Office on the web, Safari | WebKit                  | Not tested | Not tested | Not captured     | Local-network permission and certificate trust must be checked | Pending              |
 
 Qualification records, for every row:
 
@@ -230,3 +230,33 @@ The acceptance outcome is either one loopback profile that passes every row or
 multiple named profiles behind the unchanged request semantics. Results replace
 the `Pending` cells with tested application/runtime/OS versions, date, outcome,
 and installer prerequisites.
+
+### Qualification record: Windows classic Outlook (2026-08-03)
+
+Environment: Windows 11 Pro build 26200; classic Outlook Version 2607
+(Build 20228.20124 Click-to-Run, Current Channel); WebView2 Runtime
+150.0.4078.105 (`Edg/150.0.0.0`); sidecar 0.1.0; add-in task pane served from
+`https://node.tail1f0fbd.ts.net`; sidecar launched with that origin dev-allowed.
+
+1. CORS preflight and RPC: `OPTIONS` answered `204` with exact-origin
+   `Access-Control-Allow-Origin`, methods `POST`, headers `Content-Type`, and
+   `Cache-Control: no-store`; `POST diagnostics.echo.v1` returned a valid
+   result.
+2. Discovery on a fresh connection produced ready data (`protocolVersion 1.0`,
+   server info, instance ID).
+3. Sequential plus three concurrent echoes with distinct UUID request IDs were
+   served by the same instance with no rediscovery.
+4. Restart recovery: after a sidecar restart, discovery returned a new instance
+   ID. Catalogue-change recovery was not separately exercised (same binary).
+5. Exact values: `Origin: https://node.tail1f0fbd.ts.net`,
+   `Host: 127.0.0.1:23123`.
+6. Mixed content: the HTTPS page fetched `http://127.0.0.1:23123` without a
+   warning or block; Chromium treats loopback as potentially trustworthy.
+7. Private-network handling: Chromium 150 sent no
+   `Access-Control-Request-Private-Network` (the PNA preflight scheme was
+   retired upstream) and showed no local-network permission prompt; plain CORS
+   sufficed. Managed-policy controls were not exercised.
+8. WebView2 loopback exemption: not required; no `CheckNetIsolation` change.
+9. Installer-managed certificate trust: not applicable (plain HTTP loopback).
+10. Hostile rejections, all without CORS headers: forged `Host` → `421`;
+    `Origin: null` → `403`; unlisted origin → `403`; absent origin → `403`.
