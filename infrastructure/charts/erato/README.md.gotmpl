@@ -223,6 +223,42 @@ oauth2Proxy:
     cookie_secret = "your-secret-here"
 ```
 
+### Intermediate sticky load balancer
+
+For multi-replica backend deployments, enable the optional Traefik layer to route
+requests consistently to the same backend pod based on the original client IP:
+
+```yaml
+backend:
+  replicaCount: 3
+  loadBalancer:
+    enabled: true
+```
+
+This layer uses Traefik's Kubernetes CRD provider and therefore requires the
+Traefik `IngressRoute` CRD to be installed in the cluster. The chart deploys a
+namespaced Traefik instance, configures its HRW strategy, and automatically
+points oauth2-proxy at the generated load-balancer Service. oauth2-proxy is
+configured to preserve the ingress-provided `X-Forwarded-For` header.
+
+The default `forwardedHeaders.insecure` setting is suitable only when the
+load-balancer Service is reachable exclusively by trusted in-cluster clients.
+For production, set it to `false` and provide the CIDRs of the trusted
+oauth2-proxy pods or network:
+
+```yaml
+backend:
+  loadBalancer:
+    forwardedHeaders:
+      insecure: false
+      trustedIPs:
+        - 10.42.0.0/16
+```
+
+The backend adds its pod and node names to the `Server` response header and to
+the `pod_name` and `node_name` labels on `erato_info`, which makes it easier to
+verify routing and diagnose cache behavior.
+
 ### Ingress Configuration
 
 To expose Erato externally, configure the ingress:

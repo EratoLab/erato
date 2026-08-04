@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=../tests_schema/helm-testsuite.json
+suite: test intermediate backend load balancer deployment
+minimumVersion: 1.0.1
+templates:
+  - backend-load-balancer-deployment.yaml
+tests:
+  - it: should not render when disabled
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render Traefik with HRW and forwarded headers when enabled
+    set:
+      backend.loadBalancer.enabled: true
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-erato-backend-load-balancer
+      - equal:
+          path: spec.replicas
+          value: 1
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: traefik:v3.6.1
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --entryPoints.web.forwardedHeaders.insecure=true
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --providers.kubernetescrd.ingressclass=RELEASE-NAME-erato-backend-load-balancer
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: RELEASE-NAME-erato-backend-load-balancer

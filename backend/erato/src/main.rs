@@ -5,6 +5,7 @@ use eyre::{Report, WrapErr};
 use utoipa_scalar::{Scalar, Servable as ScalarServable};
 
 use erato::config::AppConfig;
+use erato::deployment_identity::DeploymentIdentity;
 use erato::frontend_environment::{
     DeploymentVersion, build_frontend_registry, discover_translation_po_sources,
     serve_files_with_script,
@@ -15,6 +16,7 @@ use erato::startup_log;
 use erato::state::AppState;
 use erato::{ApiDoc, server};
 use tower_http::cors::CorsLayer;
+use tower_http::set_header::SetResponseHeaderLayer;
 
 #[cfg(all(feature = "profiling", target_os = "linux"))]
 #[global_allocator]
@@ -130,7 +132,11 @@ async fn async_main(worker_threads: usize) -> Result<(), Report> {
         .fallback_service(serve_files_with_script.into_service())
         .layer(Extension(build_frontend_registry(&config)))
         .layer(Extension(DeploymentVersion::from_env()))
-        .layer(CorsLayer::very_permissive());
+        .layer(CorsLayer::very_permissive())
+        .layer(SetResponseHeaderLayer::overriding(
+            axum::http::header::SERVER,
+            DeploymentIdentity::from_env().server_header(),
+        ));
 
     let app = if config.integrations.otel.enabled {
         app

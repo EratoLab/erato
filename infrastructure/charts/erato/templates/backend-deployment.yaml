@@ -90,6 +90,14 @@ spec:
               value: {{ .Values.global.environment }}
             - name: ERATO_DEPLOYMENT_VERSION
               value: {{ include "erato.deploymentVersion" . | quote }}
+            - name: ERATO_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: ERATO_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
             {{- if .Values.backend.rustLog }}
             - name: RUST_LOG
               value: {{ .Values.backend.rustLog | quote }}

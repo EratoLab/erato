@@ -11,6 +11,7 @@ use moka::future::Cache;
 use tokio_metrics::RuntimeMetricsReporterBuilder;
 
 use crate::config::AppConfig;
+use crate::deployment_identity::DeploymentIdentity;
 use crate::models::message::GenerationErrorType;
 use crate::query_metrics::{POSTGRES_QUERY_DURATION_METRIC, init_known_postgres_query_metrics};
 use crate::state::AppState;
@@ -56,13 +57,16 @@ pub fn init_prometheus_metrics(config: &AppConfig) -> Result<()> {
 
     let deployment_version =
         std::env::var("ERATO_DEPLOYMENT_VERSION").unwrap_or_else(|_| "unknown".to_string());
+    let deployment_identity = DeploymentIdentity::from_env();
 
     gauge!(
         "erato_info",
         "version" => env!("CARGO_PKG_VERSION").to_string(),
         "environment" => config.environment.clone(),
         "service" => "erato-backend",
-        "deployment_version" => deployment_version
+        "deployment_version" => deployment_version,
+        "pod_name" => deployment_identity.pod_name,
+        "node_name" => deployment_identity.node_name
     )
     .set(1.0);
 

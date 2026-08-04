@@ -78,7 +78,7 @@ value: {{ .Values.postgresql.external.connectionString.value }}
 Return the proper Docker Image Registry Secret Names
 */}}
 {{- define "erato.imagePullSecrets" -}}
-{{- include "common.images.renderPullSecrets" (dict "images" (list .Values.oauth2Proxy.image .Values.backend.image .Values.backend.migrations.image) "context" $) -}}
+{{- include "common.images.renderPullSecrets" (dict "images" (list .Values.oauth2Proxy.image .Values.backend.image .Values.backend.migrations.image .Values.backend.loadBalancer.image) "context" $) -}}
 {{- end -}}
 
 {{/*
@@ -198,4 +198,33 @@ Return the Service port used to expose the application.
 {{- else -}}
 3130
 {{- end -}}
+{{- end -}}
+
+{{/*
+Return the Service name used by oauth2-proxy for the backend upstream.
+*/}}
+{{- define "erato.backendUpstreamName" -}}
+{{- if .Values.backend.loadBalancer.enabled -}}
+{{- printf "%s-erato-backend-load-balancer" .Release.Name -}}
+{{- else -}}
+{{- printf "%s-erato-app" .Release.Name -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Return the ServiceAccount name used by the intermediate load balancer.
+*/}}
+{{- define "erato.loadBalancerServiceAccountName" -}}
+{{- if .Values.backend.loadBalancer.serviceAccount.name -}}
+{{- .Values.backend.loadBalancer.serviceAccount.name -}}
+{{- else -}}
+{{- printf "%s-erato-backend-load-balancer" .Release.Name -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Return the Traefik ingress class used by the intermediate load balancer.
+*/}}
+{{- define "erato.loadBalancerIngressClass" -}}
+{{- printf "%s-erato-backend-load-balancer" .Release.Name | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
