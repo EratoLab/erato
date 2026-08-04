@@ -30,7 +30,8 @@
     "deploy/0028_rename_assistant_store_to_assistant_hub.sql",
     "deploy/0029_add_assistant_hub_reviews.sql",
     "deploy/0030_add_generation_state_to_chats.sql",
-    "deploy/0031_add_runtime_configuration.sql"
+    "deploy/0031_add_runtime_configuration.sql",
+    "deploy/0032_add_runtime_configuration_source_type.sql"
   ],
-  "latest_change": "8a890b4d9541e598b65003d02aaf43a752f21dbe"
+  "latest_change": "5f360640f11d3d08a9631d9952c85d7486e7f997"
 }
