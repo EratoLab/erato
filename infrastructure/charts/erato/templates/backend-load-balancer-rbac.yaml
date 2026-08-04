@@ -1,0 +1,45 @@
+{{- if .Values.backend.loadBalancer.enabled }}
+{{- if .Values.backend.loadBalancer.serviceAccount.create }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "erato.loadBalancerServiceAccountName" . }}
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: erato-backend-load-balancer
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-erato-backend-load-balancer
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: erato-backend-load-balancer
+rules:
+  - apiGroups: [""]
+    resources: ["endpoints", "pods", "services", "secrets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["traefik.io"]
+    resources: ["ingressroutes", "traefikservices", "middlewares", "serverstransports", "tlsoptions", "tlsstores"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Release.Name }}-erato-backend-load-balancer
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: erato-backend-load-balancer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ .Release.Name }}-erato-backend-load-balancer
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "erato.loadBalancerServiceAccountName" . }}
+    namespace: {{ include "common.names.namespace" . | quote }}
+{{- end }}

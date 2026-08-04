@@ -19,6 +19,11 @@ spec:
         - podSelector:
             matchLabels: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 14 }}
               app.kubernetes.io/component: oauth2-proxy
+        {{- if .Values.backend.loadBalancer.enabled }}
+        - podSelector:
+            matchLabels: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 14 }}
+              app.kubernetes.io/component: erato-backend-load-balancer
+        {{- end }}
       ports:
         - protocol: TCP
           port: 3130
@@ -27,6 +32,52 @@ spec:
           port: {{ .Values.backend.metrics.port }}
   egress:
     - {}
+{{- $_ := set $state "rendered" true }}
+{{- end }}
+
+{{- if and .Values.backend.loadBalancer.enabled .Values.backend.loadBalancer.networkPolicy.enabled }}
+{{- if $state.rendered }}
+---
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-backend-load-balancer-network-policy
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: erato-backend-load-balancer
+spec:
+  podSelector:
+    matchLabels: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 6 }}
+      app.kubernetes.io/component: erato-backend-load-balancer
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 14 }}
+              app.kubernetes.io/component: oauth2-proxy
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 14 }}
+              app.kubernetes.io/component: erato-app
+      ports:
+        - protocol: TCP
+          port: 3130
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
 {{- $_ := set $state "rendered" true }}
 {{- end }}
 

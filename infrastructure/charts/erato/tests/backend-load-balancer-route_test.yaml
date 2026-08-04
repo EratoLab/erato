@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=../tests_schema/helm-testsuite.json
+suite: test intermediate backend load balancer route
+minimumVersion: 1.0.1
+templates:
+  - backend-load-balancer-route.yaml
+tests:
+  - it: should not render when disabled
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should route to backend pods using HRW when enabled
+    set:
+      backend.loadBalancer.enabled: true
+    capabilities:
+      apiVersions:
+        - traefik.io/v1alpha1
+    asserts:
+      - isKind:
+          of: IngressRoute
+      - equal:
+          path: metadata.annotations["kubernetes.io/ingress.class"]
+          value: RELEASE-NAME-erato-backend-load-balancer
+      - equal:
+          path: spec.routes[0].services[0].name
+          value: RELEASE-NAME-erato-app
+      - equal:
+          path: spec.routes[0].services[0].port
+          value: 3130
+      - equal:
+          path: spec.routes[0].services[0].strategy
+          value: hrw

@@ -247,6 +247,56 @@ backend:
   networkPolicy:
     # -- Enable NetworkPolicy for backend pods
     enabled: true
+  loadBalancer:
+    # -- Add an optional intermediate Traefik load balancer between oauth2-proxy and backend pods.
+    enabled: false
+    image:
+      # -- Intermediate load balancer image repository
+      repository: traefik
+      # -- Intermediate load balancer image tag
+      tag: v3.6.1
+      # -- Intermediate load balancer image pull policy
+      pullPolicy: IfNotPresent
+      # -- Intermediate load balancer image pull secrets
+      pullSecrets: []
+    # -- Number of intermediate load balancer replicas
+    replicaCount: 1
+    # -- Traefik load-balancing strategy. `hrw` provides client-IP affinity.
+    strategy: hrw
+    # -- Trust forwarded headers from oauth2-proxy so HRW sees the original client IP.
+    forwardedHeaders:
+      # -- Trust forwarded headers from every source. Restrict this with trustedIPs in production.
+      insecure: true
+      # -- Trusted proxy CIDRs. Used when insecure is false.
+      trustedIPs: []
+    service:
+      # -- Intermediate load balancer Service type
+      type: ClusterIP
+      # -- Intermediate load balancer HTTP port
+      port: 8080
+    serviceAccount:
+      # -- Create a ServiceAccount for Traefik Kubernetes endpoint discovery
+      create: true
+      # -- ServiceAccount name. Defaults to the release-specific name.
+      name: ""
+    # -- Annotations to add to the intermediate load balancer Deployment
+    deploymentAnnotations: {}
+    # -- Annotations to add to the intermediate load balancer pods
+    podAnnotations: {}
+    networkPolicy:
+      # -- Enable NetworkPolicy for intermediate load balancer pods
+      enabled: true
+    resources:
+      requests:
+        # -- The requested CPU for the intermediate load balancer
+        cpu: 50m
+        # -- The requested memory for the intermediate load balancer
+        memory: 64Mi
+      limits:
+        # -- The CPU limit for the intermediate load balancer
+        cpu: 200m
+        # -- The memory limit for the intermediate load balancer
+        memory: 128Mi
   configFile:
     # -- Name of the secret containing the erato.toml file
     secretName: ""

@@ -24,7 +24,7 @@ erato_config = { path = "../erato_config" }
 axum = { version = "0.8.4", features = ["macros", "ws"] }
 axum-extra = { version = "0.10.1", features = ["typed-header", "multipart"] }
 headers = "0.4.0"
-tower-http = { version = "0.6.2",  features = ["fs", "cors", "limit", "trace"] }
+tower-http = { version = "0.6.2",  features = ["fs", "cors", "limit", "set-header", "trace"] }
 http-body-util = "0.1.2"
 lol_html = "2.2.0"
 ordered-multimap = { version = "0.7.3",  features = ["serde"]}

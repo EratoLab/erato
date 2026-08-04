@@ -221,6 +221,42 @@ oauth2Proxy:
     cookie_secret = "your-secret-here"
 ```
 
+### Intermediate sticky load balancer
+
+For multi-replica backend deployments, enable the optional Traefik layer to route
+requests consistently to the same backend pod based on the original client IP:
+
+```yaml
+backend:
+  replicaCount: 3
+  loadBalancer:
+    enabled: true
+```
+
+This layer uses Traefik's Kubernetes CRD provider and therefore requires the
+Traefik `IngressRoute` CRD to be installed in the cluster. The chart deploys a
+namespaced Traefik instance, configures its HRW strategy, and automatically
+points oauth2-proxy at the generated load-balancer Service. oauth2-proxy is
+configured to preserve the ingress-provided `X-Forwarded-For` header.
+
+The default `forwardedHeaders.insecure` setting is suitable only when the
+load-balancer Service is reachable exclusively by trusted in-cluster clients.
+For production, set it to `false` and provide the CIDRs of the trusted
+oauth2-proxy pods or network:
+
+```yaml
+backend:
+  loadBalancer:
+    forwardedHeaders:
+      insecure: false
+      trustedIPs:
+        - 10.42.0.0/16
+```
+
+The backend adds its pod and node names to the `Server` response header and to
+the `pod_name` and `node_name` labels on `erato_info`, which makes it easier to
+verify routing and diagnose cache behavior.
+
 ### Ingress Configuration
 
 To expose Erato externally, configure the ingress:
@@ -298,6 +334,27 @@ chart.
 | backend.image.pullSecrets | list | `[]` | Backend image pull secrets |
 | backend.image.repository | string | `"registry.eratolabs.com/erato/app"` | Backend image repository |
 | backend.image.tag | string | `""` | Backend image tag (immutable tags are recommended) |
+| backend.loadBalancer.deploymentAnnotations | object | `{}` | Annotations to add to the intermediate load balancer Deployment |
+| backend.loadBalancer.enabled | bool | `false` | Add an optional intermediate Traefik load balancer between oauth2-proxy and backend pods. |
+| backend.loadBalancer.forwardedHeaders | object | `{"insecure":true,"trustedIPs":[]}` | Trust forwarded headers from oauth2-proxy so HRW sees the original client IP. |
+| backend.loadBalancer.forwardedHeaders.insecure | bool | `true` | Trust forwarded headers from every source. Restrict this with trustedIPs in production. |
+| backend.loadBalancer.forwardedHeaders.trustedIPs | list | `[]` | Trusted proxy CIDRs. Used when insecure is false. |
+| backend.loadBalancer.image.pullPolicy | string | `"IfNotPresent"` | Intermediate load balancer image pull policy |
+| backend.loadBalancer.image.pullSecrets | list | `[]` | Intermediate load balancer image pull secrets |
+| backend.loadBalancer.image.repository | string | `"traefik"` | Intermediate load balancer image repository |
+| backend.loadBalancer.image.tag | string | `"v3.6.1"` | Intermediate load balancer image tag |
+| backend.loadBalancer.networkPolicy.enabled | bool | `true` | Enable NetworkPolicy for intermediate load balancer pods |
+| backend.loadBalancer.podAnnotations | object | `{}` | Annotations to add to the intermediate load balancer pods |
+| backend.loadBalancer.replicaCount | int | `1` | Number of intermediate load balancer replicas |
+| backend.loadBalancer.resources.limits.cpu | string | `"200m"` | The CPU limit for the intermediate load balancer |
+| backend.loadBalancer.resources.limits.memory | string | `"128Mi"` | The memory limit for the intermediate load balancer |
+| backend.loadBalancer.resources.requests.cpu | string | `"50m"` | The requested CPU for the intermediate load balancer |
+| backend.loadBalancer.resources.requests.memory | string | `"64Mi"` | The requested memory for the intermediate load balancer |
+| backend.loadBalancer.service.port | int | `8080` | Intermediate load balancer HTTP port |
+| backend.loadBalancer.service.type | string | `"ClusterIP"` | Intermediate load balancer Service type |
+| backend.loadBalancer.serviceAccount.create | bool | `true` | Create a ServiceAccount for Traefik Kubernetes endpoint discovery |
+| backend.loadBalancer.serviceAccount.name | string | `""` | ServiceAccount name. Defaults to the release-specific name. |
+| backend.loadBalancer.strategy | string | `"hrw"` | Traefik load-balancing strategy. `hrw` provides client-IP affinity. |
 | backend.logJson | bool | `true` | Emit backend logs as JSON by setting LOGGING__FORMAT=json |
 | backend.metrics.configFile.enabled | bool | `true` | Render and mount an additional `*.auto.erato.toml` config file that enables `integrations.prometheus`. |
 | backend.metrics.enabled | bool | `false` | Enable backend Prometheus metrics integration and related chart resources. |

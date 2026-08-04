@@ -114,6 +114,23 @@ tests:
             name: CUSTOM_VAR
             value: test-value
 
+  - it: should pass pod and node identity through the Downward API
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ERATO_POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ERATO_NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+
   - it: should set default logging environment variables
     asserts:
       - contains:

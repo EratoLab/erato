@@ -1,0 +1,67 @@
+{{- if .Values.backend.loadBalancer.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-erato-backend-load-balancer
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: erato-backend-load-balancer
+  {{- if or .Values.backend.loadBalancer.deploymentAnnotations .Values.commonAnnotations }}
+  {{- $annotations := include "common.tplvalues.merge" ( dict "values" ( list .Values.backend.loadBalancer.deploymentAnnotations .Values.commonAnnotations ) "context" . ) }}
+  annotations: {{- include "common.tplvalues.render" ( dict "value" $annotations "context" $) | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.backend.loadBalancer.replicaCount }}
+  selector:
+    matchLabels: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 6 }}
+      app.kubernetes.io/component: erato-backend-load-balancer
+  template:
+    metadata:
+      labels: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 8 }}
+        app.kubernetes.io/component: erato-backend-load-balancer
+      {{- if or .Values.backend.loadBalancer.podAnnotations .Values.commonAnnotations }}
+      annotations: {{- $annotations := include "common.tplvalues.merge" ( dict "values" ( list .Values.backend.loadBalancer.podAnnotations .Values.commonAnnotations ) "context" . ) }}{{ include "common.tplvalues.render" ( dict "value" $annotations "context" $) | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- include "erato.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "erato.loadBalancerServiceAccountName" . }}
+      containers:
+        - name: traefik
+          image: {{ include "common.images.image" ( dict "imageRoot" .Values.backend.loadBalancer.image "global" .Values.global "chart" .Chart ) }}
+          imagePullPolicy: {{ .Values.backend.loadBalancer.image.pullPolicy }}
+          args:
+            - --entryPoints.web.address=:8080
+            - --entryPoints.web.http.encodeQuerySemicolons=true
+            {{- if .Values.backend.loadBalancer.forwardedHeaders.insecure }}
+            - --entryPoints.web.forwardedHeaders.insecure=true
+            {{- else if .Values.backend.loadBalancer.forwardedHeaders.trustedIPs }}
+            - --entryPoints.web.forwardedHeaders.trustedIPs={{ join "," .Values.backend.loadBalancer.forwardedHeaders.trustedIPs }}
+            {{- end }}
+            - --ping=true
+            - --ping.entrypoint=web
+            - --providers.kubernetescrd=true
+            - --providers.kubernetescrd.allowcrossnamespace=false
+            - --providers.kubernetescrd.ingressclass={{ include "erato.loadBalancerIngressClass" . }}
+            - --providers.kubernetescrd.namespaces={{ include "common.names.namespace" . }}
+            - --providers.kubernetescrd.disableclusterscoperesources=true
+            - --api.dashboard=false
+            - --accesslog=false
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.backend.loadBalancer.resources | nindent 12 }}
+{{- end }}

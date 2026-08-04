@@ -69,6 +69,26 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --config=/etc/oauth2-proxy/oauth2-proxy.cfg
 
+  - it: should route through the intermediate load balancer when enabled
+    set:
+      backend.loadBalancer.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OAUTH2_PROXY_UPSTREAMS
+            value: http://RELEASE-NAME-erato-backend-load-balancer:8080
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OAUTH2_PROXY_REVERSE_PROXY
+            value: "true"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OAUTH2_PROXY_REAL_CLIENT_IP_HEADER
+            value: X-Forwarded-For
+
   - it: should set environment variables when specified
     set:
       oauth2Proxy.extraEnvVars:

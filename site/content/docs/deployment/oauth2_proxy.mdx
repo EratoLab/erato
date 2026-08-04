@@ -8,6 +8,11 @@ It sits in front of the application and handles OIDC authentication flows with y
 The configuration for OAuth2 Proxy is provided via the `oauth2Proxy.config` value in the Helm chart.
 This value corresponds to the content of the `oauth2-proxy.cfg` file.
 
+When `backend.loadBalancer.enabled` is true, the chart injects the upstream and
+reverse-proxy settings through environment variables so authenticated requests
+automatically pass through the intermediate load balancer. The load balancer
+uses the original `X-Forwarded-For` client address for consistent routing.
+
 ### Recommended Configuration
 
 Below is a commented version of a recommended configuration file.
