@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/setup",
-      "destination": "/index.html"
+      "destination": "index.html"
     }
   ]
 }

@@ -941,6 +941,16 @@ fn load_server_config(bundle_path: String) -> Option<ServerConfig> {
 }
 
 fn matches_rewrite_rule(path: &str, rule: &RewriteRule) -> bool {
+    // Dynamic SPA routes must not swallow requests for missing assets such as
+    // `/chat/missing.js`. Those requests need to remain real 404s so browsers,
+    // crawlers, and observability can distinguish them from page navigations.
+    if Path::new(path)
+        .extension()
+        .is_some_and(|extension| !extension.is_empty())
+    {
+        return false;
+    }
+
     let pattern_parts: Vec<&str> = rule.source.split('/').collect();
     let path_parts: Vec<&str> = path.split('/').collect();
 
@@ -1153,6 +1163,20 @@ pub mod axum {
         Request::from_parts(parts, body)
     }
 
+    pub(super) fn frontend_relative_path(request_path: &str, mount_path: &str) -> String {
+        let stripped_path = request_path
+            .strip_prefix(mount_path)
+            .unwrap_or(request_path);
+
+        if stripped_path.is_empty() {
+            "/".to_string()
+        } else if stripped_path.starts_with('/') {
+            stripped_path.to_string()
+        } else {
+            format!("/{}", stripped_path)
+        }
+    }
+
     fn full_body(bytes: Bytes) -> UnsyncBoxBody<Bytes, BoxError> {
         http_body_util::Full::from(bytes)
             .map_err(|never| -> BoxError { match never {} })
@@ -1260,17 +1284,7 @@ pub mod axum {
         let client_etag = req.headers().get(http::header::IF_NONE_MATCH).cloned();
 
         // Check if we have any rewrite rules that match
-        let stripped_path = req
-            .uri()
-            .path()
-            .strip_prefix(&frontend.mount_path)
-            .unwrap_or(req.uri().path())
-            .to_string();
-        let stripped_path = if stripped_path.is_empty() {
-            "/".to_string()
-        } else {
-            stripped_path
-        };
+        let stripped_path = frontend_relative_path(req.uri().path(), &frontend.mount_path);
         let req = rewrite_request_path(req, &frontend.mount_path);
         let rewritten_request_path = req.uri().path().to_string();
 
@@ -1552,6 +1566,33 @@ mod tests {
         };
 
         assert!(registry.resolve("/office-addin").is_none());
+    }
+
+    #[test]
+    fn frontend_relative_path_keeps_rewrite_paths_slash_prefixed() {
+        assert_eq!(axum::frontend_relative_path("/", "/"), "/");
+        assert_eq!(
+            axum::frontend_relative_path("/assistants", "/"),
+            "/assistants"
+        );
+        assert_eq!(
+            axum::frontend_relative_path(
+                "/public/platform-office-addin/setup",
+                "/public/platform-office-addin"
+            ),
+            "/setup"
+        );
+    }
+
+    #[test]
+    fn dynamic_rewrite_rules_do_not_match_asset_paths() {
+        let rule = RewriteRule {
+            source: "/chat/:id".to_string(),
+            destination: "index.html".to_string(),
+        };
+
+        assert!(matches_rewrite_rule("/chat/some-chat", &rule));
+        assert!(!matches_rewrite_rule("/chat/missing.js", &rule));
     }
 
     #[test]

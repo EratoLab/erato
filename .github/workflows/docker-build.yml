@@ -114,6 +114,10 @@ jobs:
         working-directory: ./office-addin
         run: pnpm run build
 
+      - name: "Served route manifests"
+        if: success() || failure()
+        run: node scripts/generate-served-routes.mjs --check
+
       - name: "Install Rustfmt"
         run: rustup component add rustfmt
         working-directory: backend

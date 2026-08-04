@@ -17,6 +17,22 @@ export const login = async (page: Page, email: string, password = "admin") => {
 };
 
 /**
+ * Navigate to an application page and fail at the navigation boundary when
+ * the backend serves it as an error. API requests made while the page loads
+ * can legitimately return 4xx responses; only the document response belongs
+ * in this helper.
+ */
+export const gotoAppPage = async (page: Page, url: string) => {
+  const response = await page.goto(url);
+  expect(response, `Expected a document response for ${url}`).not.toBeNull();
+  expect(
+    response?.status(),
+    `${url} should be served as a page, not through the 404 fallback`,
+  ).toBe(200);
+  return response;
+};
+
+/**
  * Login via Azure Entra ID (Microsoft) authentication
  * This handles the Microsoft login flow which redirects to login.microsoftonline.com
  */
@@ -91,12 +107,16 @@ export const createAuthenticatedContext = async (
 
   // Local nginx-jwt environments support direct auth via ?user=<username>.
   // Fall back to the interactive login flow for environments that use oauth.
+  // The bootstrap response is produced by the auth proxy, so its status is
+  // not the status of the application document that follows.
   await page.goto(`/?user=${encodeURIComponent(localAuthUsername)}`);
 
   try {
     await expect(chatTextbox).toBeVisible({ timeout: 5000 });
     return { context, page };
   } catch {
+    // The unauthenticated login page may intentionally be returned with an
+    // auth-proxy status; login() needs the page body regardless of that status.
     await page.goto("/");
     await login(page, email, password);
   }
@@ -457,7 +477,7 @@ export async function ensureTestScenario(
     try {
       await test.step(`Navigate to Erato and check environment`, async () => {
         // Navigate to root and wait for Erato to be properly loaded
-        await helperPage.goto("/");
+        await gotoAppPage(helperPage, "/");
 
         // Wait for Erato page to be ready (API_ROOT_URL should be present)
         await waitForEratoPageReady(helperPage);

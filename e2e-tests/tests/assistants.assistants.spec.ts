@@ -2,15 +2,14 @@ import { test, expect } from "@playwright/test";
 import path from "path";
 import { fileURLToPath } from "url";
 import { TAG_CI } from "./tags";
-import { chatIsReadyToChat, ensureOpenSidebar } from "./shared";
+import { chatIsReadyToChat, ensureOpenSidebar, gotoAppPage } from "./shared";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 test.describe("Assistant Management", () => {
   test.beforeEach(async ({ page }) => {
-    // Navigate to assistants page (don't use networkidle due to potential 404 responses)
-    await page.goto("/assistants");
+    await gotoAppPage(page, "/assistants");
 
     await expect(
       page.getByRole("button", { name: /create.*assistant|new.*assistant/i }),

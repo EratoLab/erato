@@ -50,6 +50,8 @@
     "codegen:fix-types": "node scripts/fix-codegen-types.mjs",
     "codegen": "pnpm codegen:generate && pnpm codegen:fix-types",
     "generate:component-registry-shared": "node scripts/generate-component-registry-shared-exports.mjs",
+    "generate:served-routes": "node ../scripts/generate-served-routes.mjs --target frontend",
+    "check:served-routes": "node ../scripts/generate-served-routes.mjs --check --target frontend",
     "typecheck": "tsc --noEmit",
     "check": "pnpm lint:strict && pnpm typecheck",
     "i18n:extract": "lingui extract",
