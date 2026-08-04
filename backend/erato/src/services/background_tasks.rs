@@ -8,7 +8,10 @@ use crate::config::GenerationStatusConfig;
 use crate::metrics_constants::{
     POSTGRES_QUERY_GENERATION_CLEANUP, POSTGRES_QUERY_GENERATION_FINISH,
     POSTGRES_QUERY_GENERATION_HEARTBEAT, POSTGRES_QUERY_GENERATION_REAP,
-    POSTGRES_QUERY_GENERATION_START,
+    POSTGRES_QUERY_GENERATION_SHARED_CLEANUP, POSTGRES_QUERY_GENERATION_SHARED_COMMAND,
+    POSTGRES_QUERY_GENERATION_SHARED_COMMAND_CONSUME, POSTGRES_QUERY_GENERATION_SHARED_COMMANDS,
+    POSTGRES_QUERY_GENERATION_SHARED_EVENTS, POSTGRES_QUERY_GENERATION_SHARED_FINISH,
+    POSTGRES_QUERY_GENERATION_SHARED_START, POSTGRES_QUERY_GENERATION_START,
 };
 use crate::models::message::ContentPart;
 use crate::query_metrics::named_statement_from_sql_and_values;
@@ -27,6 +30,13 @@ use crate::services::client_tools::{ClientToolDelivery, ClientToolOutcome};
 
 /// Maximum number of events to store in history per task
 const MAX_EVENT_HISTORY: usize = 10_000;
+const SHARED_COMMAND_POLL_INTERVAL: Duration = Duration::from_millis(100);
+
+fn owner_pod() -> String {
+    std::env::var("POD_NAME")
+        .or_else(|_| std::env::var("HOSTNAME"))
+        .unwrap_or_else(|_| "local".to_string())
+}
 
 /// Terminal outcome of a generation, persisted as the chat's generation state.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -87,7 +97,11 @@ impl BackgroundTaskManager {
         message_id: Uuid,
     ) -> (broadcast::Receiver<StreamingEvent>, Arc<StreamingTask>) {
         // Create a new streaming task
-        let task = Arc::new(StreamingTask::new(message_id, Uuid::new_v4()));
+        let generation_id = Uuid::new_v4();
+        let task = Arc::new(
+            StreamingTask::new(message_id, generation_id)
+                .with_shared_state(self.db.clone(), chat_id),
+        );
         let receiver = task.subscribe();
 
         // Insert into the map, replacing any existing task
@@ -99,6 +113,35 @@ impl BackgroundTaskManager {
         // Best-effort lease claim: a failed status write must never fail a
         // healthy generation.
         if let Some(db) = &self.db {
+            let delete_statement = named_statement_from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                POSTGRES_QUERY_GENERATION_SHARED_START,
+                "DELETE FROM temp_chat_generations WHERE chat_id = $1",
+                [chat_id.into()],
+            );
+            if let Err(err) = db.execute_raw(delete_statement).await {
+                tracing::warn!(chat_id = %chat_id, error = %err, "Failed to clear previous shared generation");
+            }
+
+            let shared_statement = named_statement_from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                POSTGRES_QUERY_GENERATION_SHARED_START,
+                r#"
+                INSERT INTO temp_chat_generations
+                    (generation_id, chat_id, message_id, owner_pod)
+                VALUES ($1, $2, $3, $4)
+                "#,
+                [
+                    task.generation_id.into(),
+                    chat_id.into(),
+                    message_id.into(),
+                    owner_pod().into(),
+                ],
+            );
+            if let Err(err) = db.execute_raw(shared_statement).await {
+                tracing::warn!(chat_id = %chat_id, error = %err, "Failed to persist shared generation start");
+            }
+
             let statement = named_statement_from_sql_and_values(
                 sea_orm::DatabaseBackend::Postgres,
                 POSTGRES_QUERY_GENERATION_START,
@@ -120,6 +163,12 @@ impl BackgroundTaskManager {
                     "Failed to persist generation start"
                 );
             }
+
+            let task_for_commands = Arc::clone(&task);
+            let db_for_commands = db.clone();
+            tokio::spawn(async move {
+                Self::run_command_listener(db_for_commands, task_for_commands).await;
+            });
         }
 
         (receiver, task)
@@ -148,6 +197,20 @@ impl BackgroundTaskManager {
         }
 
         if let Some(db) = &self.db {
+            let shared_statement = named_statement_from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                POSTGRES_QUERY_GENERATION_SHARED_FINISH,
+                r#"
+                UPDATE temp_chat_generations
+                SET state = $1, ended_at = now(), heartbeat_at = now()
+                WHERE generation_id = $2 AND state = 'running'
+                "#,
+                [outcome.as_db_str().into(), generation_id.into()],
+            );
+            if let Err(err) = db.execute_raw(shared_statement).await {
+                tracing::warn!(chat_id = %chat_id, error = %err, "Failed to persist shared generation outcome");
+            }
+
             let statement = named_statement_from_sql_and_values(
                 sea_orm::DatabaseBackend::Postgres,
                 POSTGRES_QUERY_GENERATION_FINISH,
@@ -172,6 +235,194 @@ impl BackgroundTaskManager {
                 );
             }
         }
+    }
+
+    async fn run_command_listener(db: DatabaseConnection, task: Arc<StreamingTask>) {
+        loop {
+            if task.is_completed() {
+                return;
+            }
+
+            let statement = named_statement_from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                POSTGRES_QUERY_GENERATION_SHARED_COMMANDS,
+                r#"
+                SELECT command_id, command_type, tool_call_id, payload
+                FROM temp_chat_generation_commands
+                WHERE generation_id = $1 AND consumed_at IS NULL
+                ORDER BY command_id
+                "#,
+                [task.generation_id.into()],
+            );
+
+            match db.query_all_raw(statement).await {
+                Ok(commands) => {
+                    for command in commands {
+                        let command_id = match command.try_get::<i64>("", "command_id") {
+                            Ok(value) => value,
+                            Err(err) => {
+                                tracing::warn!(error = %err, "Invalid shared generation command id");
+                                continue;
+                            }
+                        };
+                        let command_type = match command.try_get::<String>("", "command_type") {
+                            Ok(value) => value,
+                            Err(err) => {
+                                tracing::warn!(error = %err, "Invalid shared generation command type");
+                                continue;
+                            }
+                        };
+
+                        if command_type == "abort" {
+                            task.request_abort();
+                        } else if command_type == "client_tool_result" {
+                            let tool_call_id =
+                                match command.try_get::<Option<String>>("", "tool_call_id") {
+                                    Ok(Some(value)) => value,
+                                    _ => continue,
+                                };
+                            let payload = command
+                                .try_get::<Option<JsonValue>>("", "payload")
+                                .ok()
+                                .flatten()
+                                .unwrap_or(JsonValue::Null);
+                            let outcome = match payload {
+                                JsonValue::Object(ref object) if object.get("error").is_some() => {
+                                    ClientToolOutcome::Error(
+                                        object
+                                            .get("error")
+                                            .and_then(|value| value.as_str())
+                                            .unwrap_or("client tool failed")
+                                            .to_string(),
+                                    )
+                                }
+                                JsonValue::Object(ref object) if object.get("result").is_some() => {
+                                    ClientToolOutcome::Result(
+                                        object.get("result").cloned().unwrap_or(JsonValue::Null),
+                                    )
+                                }
+                                _ => ClientToolOutcome::Error(
+                                    "client tool returned neither a result nor an error"
+                                        .to_string(),
+                                ),
+                            };
+                            let _ = task
+                                .deliver_client_tool_result(&tool_call_id, outcome)
+                                .await;
+                        }
+
+                        let consume_statement = named_statement_from_sql_and_values(
+                            sea_orm::DatabaseBackend::Postgres,
+                            POSTGRES_QUERY_GENERATION_SHARED_COMMAND_CONSUME,
+                            "UPDATE temp_chat_generation_commands SET consumed_at = now() WHERE command_id = $1 AND consumed_at IS NULL",
+                            [command_id.into()],
+                        );
+                        if let Err(err) = db.execute_raw(consume_statement).await {
+                            tracing::warn!(error = %err, "Failed to consume shared generation command");
+                        }
+                    }
+                }
+                Err(err) => {
+                    tracing::warn!(error = %err, "Failed to poll shared generation commands")
+                }
+            }
+
+            tokio::time::sleep(SHARED_COMMAND_POLL_INTERVAL).await;
+        }
+    }
+
+    /// Return the active shared generation for a chat, if one is registered.
+    pub async fn get_shared_generation(&self, chat_id: &Uuid) -> Option<(Uuid, Option<Uuid>)> {
+        let db = self.db.as_ref()?;
+        let statement = named_statement_from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            POSTGRES_QUERY_GENERATION_SHARED_START,
+            "SELECT generation_id, message_id FROM temp_chat_generations WHERE chat_id = $1 AND state = 'running'",
+            [(*chat_id).into()],
+        );
+        let row = db.query_one_raw(statement).await.ok().flatten()?;
+        Some((
+            row.try_get("", "generation_id").ok()?,
+            row.try_get("", "message_id").ok()?,
+        ))
+    }
+
+    /// Read persisted events after the given global event id.
+    pub async fn get_shared_events(
+        &self,
+        generation_id: Uuid,
+        after_event_id: i64,
+    ) -> Result<Vec<(i64, StreamingEvent)>, String> {
+        let db = self
+            .db
+            .as_ref()
+            .ok_or_else(|| "database unavailable".to_string())?;
+        let statement = named_statement_from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            POSTGRES_QUERY_GENERATION_SHARED_EVENTS,
+            "SELECT event_id, event FROM temp_chat_generation_events WHERE generation_id = $1 AND event_id > $2 ORDER BY event_id",
+            [generation_id.into(), after_event_id.into()],
+        );
+        let rows = db
+            .query_all_raw(statement)
+            .await
+            .map_err(|err| err.to_string())?;
+        rows.into_iter()
+            .map(|row| {
+                let event_id = row.try_get("", "event_id").map_err(|err| err.to_string())?;
+                let payload: JsonValue = row.try_get("", "event").map_err(|err| err.to_string())?;
+                let event = serde_json::from_value(payload).map_err(|err| err.to_string())?;
+                Ok((event_id, event))
+            })
+            .collect()
+    }
+
+    pub async fn enqueue_abort(&self, generation_id: Uuid) -> Result<(), String> {
+        self.enqueue_command(generation_id, "abort", None, None)
+            .await
+    }
+
+    pub async fn enqueue_client_tool_result(
+        &self,
+        generation_id: Uuid,
+        tool_call_id: &str,
+        payload: JsonValue,
+    ) -> Result<(), String> {
+        self.enqueue_command(
+            generation_id,
+            "client_tool_result",
+            Some(tool_call_id),
+            Some(payload),
+        )
+        .await
+    }
+
+    async fn enqueue_command(
+        &self,
+        generation_id: Uuid,
+        command_type: &str,
+        tool_call_id: Option<&str>,
+        payload: Option<JsonValue>,
+    ) -> Result<(), String> {
+        let db = self
+            .db
+            .as_ref()
+            .ok_or_else(|| "database unavailable".to_string())?;
+        let statement = named_statement_from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            POSTGRES_QUERY_GENERATION_SHARED_COMMAND,
+            "INSERT INTO temp_chat_generation_commands (generation_id, command_type, tool_call_id, payload) VALUES ($1, $2, $3, $4)",
+            [
+                generation_id.into(),
+                command_type.into(),
+                tool_call_id.map(|value| value.to_string()).into(),
+                payload.into(),
+            ],
+        );
+        db.execute_raw(statement)
+            .await
+            .map_err(|err| err.to_string())?;
+        Ok(())
     }
 
     /// Periodically heartbeat all in-flight generations and reap rows whose
@@ -215,10 +466,24 @@ impl BackgroundTaskManager {
                     WHERE chats.id = active.chat_id
                       AND chats.generation_state = 'running'
                     "#,
-                    [chat_ids.into(), generation_ids.into()],
+                    [chat_ids.into(), generation_ids.clone().into()],
                 );
                 if let Err(err) = db.execute_raw(statement).await {
                     tracing::warn!(error = %err, "Failed to heartbeat running generations");
+                }
+
+                let shared_statement = named_statement_from_sql_and_values(
+                    sea_orm::DatabaseBackend::Postgres,
+                    POSTGRES_QUERY_GENERATION_HEARTBEAT,
+                    r#"
+                    UPDATE temp_chat_generations
+                    SET heartbeat_at = now()
+                    WHERE generation_id = ANY($1::uuid[]) AND state = 'running'
+                    "#,
+                    [generation_ids.clone().into()],
+                );
+                if let Err(err) = db.execute_raw(shared_statement).await {
+                    tracing::warn!(error = %err, "Failed to heartbeat shared generations");
                 }
             }
 
@@ -235,6 +500,21 @@ impl BackgroundTaskManager {
             );
             if let Err(err) = db.execute_raw(statement).await {
                 tracing::warn!(error = %err, "Failed to reap stale generations");
+            }
+
+            let shared_reap_statement = named_statement_from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                POSTGRES_QUERY_GENERATION_REAP,
+                r#"
+                UPDATE temp_chat_generations
+                SET state = 'errored', ended_at = now()
+                WHERE state = 'running'
+                  AND heartbeat_at < now() - make_interval(secs => $1::double precision)
+                "#,
+                [(config.stale_after_secs as f64).into()],
+            );
+            if let Err(err) = db.execute_raw(shared_reap_statement).await {
+                tracing::warn!(error = %err, "Failed to reap stale shared generations");
             }
 
             // Clear terminal rows once past the retention window, so the
@@ -256,6 +536,20 @@ impl BackgroundTaskManager {
             );
             if let Err(err) = db.execute_raw(statement).await {
                 tracing::warn!(error = %err, "Failed to clean up expired generation rows");
+            }
+
+            let shared_cleanup_statement = named_statement_from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                POSTGRES_QUERY_GENERATION_SHARED_CLEANUP,
+                r#"
+                DELETE FROM temp_chat_generations
+                WHERE state IN ('completed', 'errored')
+                  AND ended_at < now() - make_interval(secs => $1::double precision)
+                "#,
+                [(config.terminal_retention_secs as f64).into()],
+            );
+            if let Err(err) = db.execute_raw(shared_cleanup_statement).await {
+                tracing::warn!(error = %err, "Failed to clean up shared generation rows");
             }
         }
     }
@@ -321,6 +615,8 @@ pub struct StreamingTask {
     /// Identity of this generation attempt, distinguishing it from other
     /// generations of the same chat in the map and the chats-row lease.
     pub generation_id: Uuid,
+    chat_id: Uuid,
+    db: Option<DatabaseConnection>,
     /// The id of the assistant message being generated. Set to a placeholder at
     /// construction (the real id is only known once the generation task creates
     /// the message) and updated via `set_message_id`. Behind a lock so it can be
@@ -369,6 +665,8 @@ impl StreamingTask {
 
         Self {
             generation_id,
+            chat_id: Uuid::nil(),
+            db: None,
             message_id: std::sync::RwLock::new(message_id),
             event_tx,
             event_history: Arc::new(RwLock::new(Vec::new())),
@@ -378,6 +676,12 @@ impl StreamingTask {
             abort_notify: Arc::new(Notify::new()),
             pending_client_tools: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    fn with_shared_state(mut self, db: Option<DatabaseConnection>, chat_id: Uuid) -> Self {
+        self.db = db;
+        self.chat_id = chat_id;
+        self
     }
 
     /// The id of the assistant message this task is generating.
@@ -421,9 +725,45 @@ impl StreamingTask {
 
         // Then broadcast to live subscribers
         // If there are no subscribers, this will just drop the event
-        let _ = self.event_tx.send(event);
+        let _ = self.event_tx.send(event.clone());
+
+        self.persist_shared_event(&event).await;
 
         Ok(())
+    }
+
+    async fn persist_shared_event(&self, event: &StreamingEvent) {
+        let Some(db) = &self.db else {
+            return;
+        };
+        let payload = match serde_json::to_value(event) {
+            Ok(payload) => payload,
+            Err(err) => {
+                tracing::warn!(generation_id = %self.generation_id, error = %err, "Failed to serialize shared generation event");
+                return;
+            }
+        };
+        let event_statement = named_statement_from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            crate::metrics_constants::POSTGRES_QUERY_GENERATION_SHARED_EVENT,
+            "INSERT INTO temp_chat_generation_events (generation_id, event) VALUES ($1, $2)",
+            [self.generation_id.into(), payload.into()],
+        );
+        if let Err(err) = db.execute_raw(event_statement).await {
+            tracing::warn!(generation_id = %self.generation_id, error = %err, "Failed to persist shared generation event");
+        }
+
+        if let StreamingEvent::AssistantMessageStarted { message_id } = event {
+            let message_statement = named_statement_from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                crate::metrics_constants::POSTGRES_QUERY_GENERATION_SHARED_EVENT,
+                "UPDATE temp_chat_generations SET message_id = $1 WHERE generation_id = $2",
+                [(*message_id).into(), self.generation_id.into()],
+            );
+            if let Err(err) = db.execute_raw(message_statement).await {
+                tracing::warn!(chat_id = %self.chat_id, error = %err, "Failed to persist shared generation message id");
+            }
+        }
     }
 
     /// Get a copy of all events sent so far

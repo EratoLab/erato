@@ -520,6 +520,117 @@ def wait_for_webhook(namespace: str, service_name: str, webhook_name: str, max_a
     sys.exit(1)
 
 
+def start_kubernetes_event_stream(namespace: str) -> subprocess.Popen:
+    """Stream namespace events while the local chart is being deployed."""
+    print(f"Streaming Kubernetes events in namespace {namespace}...")
+    return subprocess.Popen(
+        [
+            "kubectl",
+            "get",
+            "events",
+            "--namespace",
+            namespace,
+            "--watch",
+            "--output=wide",
+        ],
+        stdout=sys.stdout,
+        stderr=sys.stderr,
+        text=True,
+    )
+
+
+def ensure_kubernetes_namespace(namespace: str) -> None:
+    """Ensure the event stream's namespace exists before watching it."""
+    result = run_command(
+        ["kubectl", "get", "namespace", namespace],
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        run_command(["kubectl", "create", "namespace", namespace])
+
+
+def stop_kubernetes_event_stream(event_stream: subprocess.Popen) -> None:
+    """Stop the namespace event stream after the chart command finishes."""
+    if event_stream.poll() is not None:
+        return
+
+    event_stream.terminate()
+    try:
+        event_stream.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        event_stream.kill()
+        event_stream.wait()
+
+
+def print_kubernetes_diagnostics(namespace: str) -> None:
+    """Print cluster and workload diagnostics after a failed chart deployment."""
+    diagnostics = [
+        (
+            f"All Kubernetes events (including node/scheduling events)"
+            f" when deployment failed:",
+            [
+                "kubectl",
+                "get",
+                "events",
+                "--all-namespaces",
+                "--output=wide",
+                "--sort-by=.lastTimestamp",
+            ],
+        ),
+        (
+            "Node status and capacity:",
+            ["kubectl", "get", "nodes", "--output=wide"],
+        ),
+        (
+            "Node conditions and allocatable resources:",
+            ["kubectl", "describe", "nodes"],
+        ),
+        (
+            f"Workload status in namespace {namespace}:",
+            [
+                "kubectl",
+                "get",
+                "pods,deployments,replicasets,statefulsets,jobs",
+                "--namespace",
+                namespace,
+                "--output=wide",
+            ],
+        ),
+        (
+            f"Deployment details in namespace {namespace}:",
+            ["kubectl", "describe", "deployments", "--namespace", namespace],
+        ),
+        (
+            f"Pod details in namespace {namespace}:",
+            ["kubectl", "describe", "pods", "--namespace", namespace],
+        ),
+        (
+            f"Recent backend container logs in namespace {namespace}:",
+            [
+                "kubectl",
+                "logs",
+                "--namespace",
+                namespace,
+                "--selector=app.kubernetes.io/component=erato-app",
+                "--all-containers",
+                "--prefix",
+                "--tail=200",
+            ],
+        ),
+    ]
+
+    for heading, command in diagnostics:
+        print(f"\n{heading}", flush=True)
+        result = run_command(command, check=False, capture_output=True)
+        if result.stdout:
+            print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
+        if result.stderr:
+            print(result.stderr, end="" if result.stderr.endswith("\n") else "\n", file=sys.stderr)
+        if not result.stdout and not result.stderr:
+            print(f"(no output; kubectl exited with status {result.returncode})")
+
+
 def install_erato_chart(config: ScriptConfig, cluster_config: ClusterConfig, helm_args: list[str]):
     """Install/upgrade Erato local development chart."""
     print("Installing/upgrading Erato local development chart...")
@@ -536,7 +647,16 @@ def install_erato_chart(config: ScriptConfig, cluster_config: ClusterConfig, hel
     cmd.extend(helm_args)
     
     print(f"Running: {' '.join(cmd)}")
-    run_command(cmd)
+    ensure_kubernetes_namespace("erato-local-ns")
+    event_stream = start_kubernetes_event_stream("erato-local-ns")
+    try:
+        result = run_command(cmd, check=False)
+    finally:
+        stop_kubernetes_event_stream(event_stream)
+
+    if result.returncode != 0:
+        print_kubernetes_diagnostics("erato-local-ns")
+        sys.exit(result.returncode)
 
 
 def ensure_hosts_entries(cluster_config: ClusterConfig):

@@ -447,6 +447,7 @@ export async function ensureTestScenario(
     | "tight-budget"
     | "assistants"
     | "many-models"
+    | "multi-replica"
     | "entra_id",
 ): Promise<void> {
   await test.step(`Ensure test scenario: ${requiredScenario}`, async () => {

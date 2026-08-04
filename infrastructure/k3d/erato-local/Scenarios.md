@@ -28,6 +28,14 @@ Enables the assistants feature. This allows testing assistant creation, manageme
 
 Configures a large set of chat models to validate model selector behavior (menu size, scrolling, selection) in the UI.
 
+### `multi-replica` - Shared Streaming State Testing
+
+**Configuration File:** `config/erato.scenario-multi-replica.toml`
+
+Deploys three backend replicas and enables the mock-LLM provider. The dedicated
+E2E test keeps a long-running generation active while reloading the page five
+times, exercising cross-replica event replay through the Kubernetes Service.
+
 ## Scenario Infrastructure
 
 ### Directory Structure
@@ -55,7 +63,7 @@ Scenarios can be switched using the `switch-test-scenario` script:
 infrastructure/scripts/switch-test-scenario --scenario <scenario-name>
 ```
 
-Valid scenario names: `basic`, `tight-budget`, `assistants`, `many-models`
+Valid scenario names: `basic`, `tight-budget`, `assistants`, `many-models`, `multi-replica`
 
 The script:
 1. Validates the scenario name

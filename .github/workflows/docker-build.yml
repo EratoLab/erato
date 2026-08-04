@@ -481,6 +481,8 @@ jobs:
             shard: "2/2"
             shard_name: "-2of2"
             workers: 2
+          - scenario: multi-replica
+            projects: "--project chromium-multi-replica --project firefox-multi-replica"
           - scenario: entra_id
             projects: "--project chromium-entra-id --project firefox-entra-id"
     permissions:
