@@ -226,17 +226,17 @@ msgstr "Kontaktieren Sie diesen Ersteller und bitten Sie ihn, die Dateien zu tei
 #: src/pages/AssistantHubReviewPage.tsx
 #: src/pages/AssistantsPage.tsx
 msgid "assistantHub.action.backToHub"
-msgstr "Zurueck zum Hub"
+msgstr "Zurück zum Hub"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
 msgid "assistantHub.action.backToMySubmissions"
-msgstr "Zurueck zu meinen Einreichungen"
+msgstr "Zurück zu meinen Einreichungen"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
 msgid "assistantHub.action.backToReviewQueue"
-msgstr "Zurueck zur Review-Warteschlange"
+msgstr "Zurück zur Review-Warteschlange"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
@@ -349,7 +349,7 @@ msgstr "Beschreibung"
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubDetailPage.tsx
 msgid "assistantHub.detail.diff"
-msgstr "Aenderungen zur vorherigen Version"
+msgstr "Änderungen zur vorherigen Version"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubDetailPage.tsx
@@ -415,12 +415,12 @@ msgstr "Dateien"
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
 msgid "assistantHub.diff.firstVersion"
-msgstr "Fuer diesen Assistant gibt es keine vorherige Version."
+msgstr "Für diesen Assistant gibt es keine vorherige Version."
 
 #. js-lingui-explicit-id
 #: src/pages/assistantHubUtils.tsx
 msgid "assistantHub.diff.noChanges"
-msgstr "Keine Aenderungen gegenueber der vorherigen akzeptierten Version."
+msgstr "Keine Änderungen gegenüber der vorherigen akzeptierten Version."
 
 #. js-lingui-explicit-id
 #: src/pages/assistantHubUtils.tsx
@@ -435,12 +435,12 @@ msgstr "Der Assistant Hub ist nicht aktiviert."
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
 msgid "assistantHub.empty.description"
-msgstr "Akzeptierte und veroeffentlichte Assistant-Versionen werden hier angezeigt."
+msgstr "Akzeptierte und veröffentlichte Assistant-Versionen werden hier angezeigt."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
 msgid "assistantHub.empty.title"
-msgstr "Noch keine veroeffentlichten Assistants"
+msgstr "Noch keine veröffentlichten Assistants"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
@@ -470,7 +470,7 @@ msgstr "Assistant Hub wird geladen..."
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
 msgid "assistantHub.my.chooseAssistant"
-msgstr "Assistant auswaehlen"
+msgstr "Assistant auswählen"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
@@ -480,12 +480,12 @@ msgstr "Notiz an Reviewer"
 #. js-lingui-explicit-id
 #: src/pages/assistantHubUtils.tsx
 msgid "assistantHub.my.currentPublished"
-msgstr "Aktuell veroeffentlichte Version"
+msgstr "Aktuell veröffentlichte Version"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
 msgid "assistantHub.my.diff"
-msgstr "Aenderungen zur vorherigen Version"
+msgstr "Änderungen zur vorherigen Version"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
@@ -495,7 +495,7 @@ msgstr "Entwurf bearbeiten"
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
 msgid "assistantHub.my.empty.description"
-msgstr "Reiche einen deiner Assistants ein, um eine gepruefte Hub-Version zu erstellen."
+msgstr "Reiche einen deiner Assistants ein, um eine geprüfte Hub-Version zu erstellen."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
@@ -520,7 +520,7 @@ msgstr "Als aktuell setzen"
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
 msgid "assistantHub.my.notFound.description"
-msgstr "Diese Assistant-Hub-Einreichung ist nicht verfuegbar."
+msgstr "Diese Assistant-Hub-Einreichung ist nicht verfügbar."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
@@ -530,7 +530,7 @@ msgstr "Einreichung nicht gefunden"
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
 msgid "assistantHub.my.publish"
-msgstr "Veroeffentlichen"
+msgstr "Veröffentlichen"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
@@ -570,7 +570,7 @@ msgstr "Version {versionNumber}"
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
 msgid "assistantHub.my.subtitle"
-msgstr "Eingereichte, akzeptierte, abgelehnte und zurueckgezogene Assistant-Versionen pruefen"
+msgstr "Eingereichte, akzeptierte, abgelehnte und zurückgezogene Assistant-Versionen prüfen"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
@@ -580,7 +580,7 @@ msgstr "Meine Hub-Einreichungen"
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
 msgid "assistantHub.my.unpublish"
-msgstr "Veroeffentlichung aufheben"
+msgstr "Veröffentlichung aufheben"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
@@ -595,17 +595,17 @@ msgstr "Einreichung anzeigen"
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
 msgid "assistantHub.my.withdraw"
-msgstr "Zurueckziehen"
+msgstr "Zurückziehen"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
 msgid "assistantHub.my.withdrawConfirmMessage"
-msgstr "Diese eingereichte Version aus dem Review zurueckziehen?"
+msgstr "Diese eingereichte Version aus dem Review zurückziehen?"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
 msgid "assistantHub.my.withdrawConfirmTitle"
-msgstr "Einreichung zurueckziehen"
+msgstr "Einreichung zurückziehen"
 
 #. js-lingui-explicit-id
 #: src/pages/assistantHubUtils.tsx
@@ -645,17 +645,17 @@ msgstr "Ablehnen"
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
 msgid "assistantHub.review.diff"
-msgstr "Aenderungen zur vorherigen Version"
+msgstr "Änderungen zur vorherigen Version"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
 msgid "assistantHub.review.empty.description"
-msgstr "Eingereichte Assistant-Versionen werden hier zur Pruefung angezeigt."
+msgstr "Eingereichte Assistant-Versionen werden hier zur Prüfung angezeigt."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
 msgid "assistantHub.review.empty.title"
-msgstr "Keine Versionen zur Pruefung"
+msgstr "Keine Versionen zur Prüfung"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
@@ -685,12 +685,12 @@ msgstr "Als aktuell setzen"
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
 msgid "assistantHub.review.notAllowed"
-msgstr "Du hast keine Berechtigung, Assistant-Hub-Einreichungen zu pruefen."
+msgstr "Du hast keine Berechtigung, Assistant-Hub-Einreichungen zu prüfen."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
 msgid "assistantHub.review.notFound.description"
-msgstr "Dieser Assistant-Hub-Review-Eintrag ist nicht verfuegbar."
+msgstr "Dieser Assistant-Hub-Review-Eintrag ist nicht verfügbar."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
@@ -700,7 +700,7 @@ msgstr "Review-Eintrag nicht gefunden"
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
 msgid "assistantHub.review.publish"
-msgstr "Veroeffentlichen"
+msgstr "Veröffentlichen"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
@@ -710,7 +710,7 @@ msgstr "Reviewer-Kommentar"
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
 #~ msgid "assistantHub.review.subtitle"
-#~ msgstr "Unveraenderliche Assistant-Versionen pruefen, bevor sie veroeffentlicht werden koennen"
+#~ msgstr "Unveränderliche Assistant-Versionen prüfen, bevor sie veröffentlicht werden können"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
@@ -725,7 +725,7 @@ msgstr "Assistant-Hervorhebung entfernen"
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
 msgid "assistantHub.review.unpublish"
-msgstr "Veroeffentlichung aufheben"
+msgstr "Veröffentlichung aufheben"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
@@ -745,7 +745,7 @@ msgstr "Kommentar"
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubDetailPage.tsx
 msgid "assistantHub.reviews.commentHelp"
-msgstr "Optional: Kontext zu deiner Punktzahl hinzufuegen."
+msgstr "Optional: Kontext zu deiner Punktzahl hinzufügen."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubDetailPage.tsx
@@ -850,12 +850,12 @@ msgstr "Abgelehnt"
 #. js-lingui-explicit-id
 #: src/pages/assistantHubUtils.tsx
 msgid "assistantHub.status.submitted"
-msgstr "In Pruefung"
+msgstr "In Prüfung"
 
 #. js-lingui-explicit-id
 #: src/pages/assistantHubUtils.tsx
 msgid "assistantHub.status.withdrawn"
-msgstr "Zurueckgezogen"
+msgstr "Zurückgezogen"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
@@ -865,7 +865,7 @@ msgstr "Hub-Zielgruppe"
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.audienceHelp"
-msgstr "Diese Share Grants werden dieser Hub-Version zugeordnet und werden erst wirksam, wenn die akzeptierte Version veroeffentlicht wird."
+msgstr "Diese Share Grants werden dieser Hub-Version zugeordnet und werden erst wirksam, wenn die akzeptierte Version veröffentlicht wird."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
@@ -875,7 +875,7 @@ msgstr "Kategorien"
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.currentPublishedVersion"
-msgstr "Aktuell veroeffentlichte Version:"
+msgstr "Aktuell veröffentlichte Version:"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
@@ -905,17 +905,17 @@ msgstr "Assistant-Version konnte nicht eingereicht werden."
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.keywords"
-msgstr "Schluesselwoerter"
+msgstr "Schlüsselwörter"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.keywordsHelp"
-msgstr "Schluesselwoerter durch Kommas trennen."
+msgstr "Schlüsselwörter durch Kommas trennen."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.latestPublishedVersion"
-msgstr "Keine aktuell veroeffentlichte Version ausgewaehlt. Zuletzt veroeffentlichte Version:"
+msgstr "Keine aktuell veröffentlichte Version ausgewählt. Zuletzt veröffentlichte Version:"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
@@ -925,12 +925,12 @@ msgstr "Assistant wird geladen..."
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.noPublishedVersion"
-msgstr "Fuer diesen Assistant gibt es noch keine veroeffentlichte Version."
+msgstr "Für diesen Assistant gibt es noch keine veröffentlichte Version."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.preview"
-msgstr "Aenderungen anzeigen"
+msgstr "Änderungen anzeigen"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
@@ -944,8 +944,13 @@ msgstr "Reviewer-Notiz"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
+msgid "assistantHub.submit.reviewCommentHelp"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.snapshotNotice"
-msgstr "Die Einreichung klont den Assistant in einen unveraenderlichen Snapshot. Zukuenftige Bearbeitungen des Draft-Assistants aendern diese Hub-Version nicht."
+msgstr "Die Einreichung klont den Assistant in einen unveränderlichen Snapshot. Zukünftige Bearbeitungen des Draft-Assistants ändern diese Hub-Version nicht."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
@@ -955,7 +960,7 @@ msgstr "Version einreichen"
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.subtitle"
-msgstr "Eine unveraenderliche gepruefte Version aus dem aktuellen Assistant-Draft erstellen"
+msgstr "Eine unveränderliche geprüfte Version aus dem aktuellen Assistant-Draft erstellen"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
@@ -965,22 +970,27 @@ msgstr "Im Hub einreichen"
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.validation.category"
-msgstr "Waehle mindestens eine Hub-Kategorie aus."
+msgstr "Wähle mindestens eine Hub-Kategorie aus."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.validation.description"
-msgstr "Fuege vor dem Einreichen eine Hub-Beschreibung hinzu."
+msgstr "Füge vor dem Einreichen eine Hub-Beschreibung hinzu."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.validation.version"
-msgstr "Fuege vor dem Einreichen eine Versionsnummer hinzu."
+msgstr "Füge vor dem Einreichen eine Versionsnummer hinzu."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.versionComment"
 msgstr "Versionskommentar"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubSubmitPage.tsx
+msgid "assistantHub.submit.versionCommentHelp"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
@@ -990,7 +1000,7 @@ msgstr "Versionsnummer"
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
 #~ msgid "assistantHub.subtitle"
-#~ msgstr "Gepruefte Assistants durchsuchen, die deiner Organisation zur Verfuegung stehen"
+#~ msgstr "Geprüfte Assistants durchsuchen, die deiner Organisation zur Verfügung stehen"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx

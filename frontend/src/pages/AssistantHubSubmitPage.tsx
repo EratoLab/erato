@@ -494,6 +494,11 @@ export default function AssistantHubSubmitPage() {
                     message: "Version comment",
                   })}
                   htmlFor="assistant-hub-version-comment"
+                  helpText={t({
+                    id: "assistantHub.submit.versionCommentHelp",
+                    message:
+                      "Explain what changed in this version for users browsing the Assistant Hub.",
+                  })}
                 >
                   <Textarea
                     id="assistant-hub-version-comment"
@@ -509,6 +514,11 @@ export default function AssistantHubSubmitPage() {
                     message: "Note for reviewer",
                   })}
                   htmlFor="assistant-hub-review-comment"
+                  helpText={t({
+                    id: "assistantHub.submit.reviewCommentHelp",
+                    message:
+                      "Share context or specific details that will help the reviewer evaluate this submission.",
+                  })}
                 >
                   <Textarea
                     id="assistant-hub-review-comment"
