@@ -237,6 +237,39 @@ ingress:
     secretName: erato-tls
 ```
 
+### Gateway API Configuration
+
+As an alternative to Ingress, the chart can create a v1 `HTTPRoute` that attaches to
+an existing Gateway. Gateway API CRDs and a compatible controller must already be
+installed in the cluster; this chart does not create or configure the Gateway,
+GatewayClass, controller, or CRDs.
+
+Ingress and Gateway API exposure are mutually exclusive. Disable the Ingress before
+enabling Gateway API:
+
+```yaml
+ingress:
+  enabled: false
+
+gatewayApi:
+  enabled: true
+  parentRefs:
+    - name: shared-gateway
+      namespace: gateway-system
+      sectionName: https
+  hostnames:
+    - chat.example.com
+```
+
+The default HTTPRoute sends `/` to the OAuth2 Proxy when it is enabled, or directly
+to the Erato application Service otherwise. Add `gatewayApi.extraRules` for additional
+matches, filters, redirects, rewrites, or backend references.
+
+For a Gateway in another namespace, set `parentRefs.namespace` and configure the
+required `ReferenceGrant` in the Gateway namespace. Gateway listeners, including TLS
+termination and their certificates, are configured on the Gateway rather than in this
+chart.
+
 {{ template "chart.requirementsSection" . }}
 
 {{ template "chart.valuesSection" . }}
