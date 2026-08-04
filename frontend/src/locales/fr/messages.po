@@ -944,6 +944,11 @@ msgstr "Note pour le relecteur"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
+msgid "assistantHub.submit.reviewCommentHelp"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.snapshotNotice"
 msgstr "La soumission clone l'assistant dans un instantane immuable. Les modifications futures du brouillon ne changeront pas cette version du hub."
 
@@ -981,6 +986,11 @@ msgstr "Ajoutez un numero de version avant de soumettre."
 #: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.versionComment"
 msgstr "Commentaire de version"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubSubmitPage.tsx
+msgid "assistantHub.submit.versionCommentHelp"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx

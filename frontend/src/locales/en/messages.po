@@ -944,6 +944,11 @@ msgstr "Note for reviewer"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
+msgid "assistantHub.submit.reviewCommentHelp"
+msgstr "Share context or specific details that will help the reviewer evaluate this submission."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.snapshotNotice"
 msgstr "Submission clones the assistant into an immutable snapshot. Future edits to the draft assistant will not change this hub version."
 
@@ -981,6 +986,11 @@ msgstr "Add a version number before submitting."
 #: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.versionComment"
 msgstr "Version comment"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubSubmitPage.tsx
+msgid "assistantHub.submit.versionCommentHelp"
+msgstr "Explain what changed in this version for users browsing the Assistant Hub."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx

@@ -944,6 +944,11 @@ msgstr "Nota para el revisor"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
+msgid "assistantHub.submit.reviewCommentHelp"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.snapshotNotice"
 msgstr "El envio clona el asistente en una instantanea inmutable. Las ediciones futuras del asistente borrador no cambiaran esta version de la tienda."
 
@@ -981,6 +986,11 @@ msgstr "Agrega un numero de version antes de enviar."
 #: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.versionComment"
 msgstr "Comentario de version"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubSubmitPage.tsx
+msgid "assistantHub.submit.versionCommentHelp"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx

@@ -944,6 +944,11 @@ msgstr "Notatka dla recenzenta"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
+msgid "assistantHub.submit.reviewCommentHelp"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.snapshotNotice"
 msgstr "Zgloszenie klonuje asystenta do niezmiennej migawki. Przyszle edycje wersji roboczej nie zmienia tej wersji sklepowej."
 
@@ -981,6 +986,11 @@ msgstr "Dodaj numer wersji przed zgloszeniem."
 #: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.versionComment"
 msgstr "Komentarz wersji"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubSubmitPage.tsx
+msgid "assistantHub.submit.versionCommentHelp"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
