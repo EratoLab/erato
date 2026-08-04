@@ -1,6 +1,6 @@
 //! Inlined version of the frontend-environment crate (to simplify dependency version alignment)
 pub use self::axum::serve_files_with_script;
-use crate::config::{AppConfig, TranslationPoCompilationMode};
+use crate::config::{AppConfig, ConfigSourceFile, TranslationPoCompilationMode};
 use crate::translation_po::TranslationPoCache;
 use ::axum::http::HeaderValue;
 use lol_html::html_content::ContentType;
@@ -8,6 +8,7 @@ use lol_html::{HtmlRewriter, Settings, element};
 use ordered_multimap::ListOrderedMultimap;
 use serde::Deserialize;
 use serde_json::Value;
+use std::collections::HashSet;
 use std::fmt::Write;
 use std::fs;
 use std::io;
@@ -147,6 +148,94 @@ impl FrontendRegistry {
         self.frontends
             .iter()
             .find(|frontend| frontend.mount_path == "/" && frontend.enabled)
+    }
+}
+
+/// Finds the PO catalogs that can be served as `messages.json` by the
+/// configured frontend bundles. A catalog is considered served only when its
+/// compiled sibling exists, matching the JIT serving path.
+pub fn discover_translation_po_sources(config: &AppConfig) -> Vec<ConfigSourceFile> {
+    let mut roots = vec![PathBuf::from(&config.frontend.web_frontend_bundle_path)];
+    if config.integrations.ms_office.addin.enabled {
+        roots.push(PathBuf::from(
+            &config.integrations.ms_office.addin.frontend_bundle_path,
+        ));
+    }
+
+    let component_kits_directory = Path::new(&config.frontend.component_kits.directory);
+    if let Ok(entries) = fs::read_dir(component_kits_directory) {
+        for entry in entries.flatten() {
+            if entry.file_type().is_ok_and(|file_type| file_type.is_dir()) {
+                roots.push(entry.path());
+            }
+        }
+    }
+
+    let mut sources = Vec::new();
+    let mut seen = HashSet::new();
+    for root in roots {
+        collect_translation_po_sources(&root, &mut seen, &mut sources);
+    }
+    sources.sort_by(|left, right| left.source_filename.cmp(&right.source_filename));
+    sources
+}
+
+fn collect_translation_po_sources(
+    directory: &Path,
+    seen: &mut HashSet<PathBuf>,
+    sources: &mut Vec<ConfigSourceFile>,
+) {
+    let mut entries = match fs::read_dir(directory) {
+        Ok(entries) => entries.flatten().collect::<Vec<_>>(),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return,
+        Err(error) => {
+            tracing::warn!(
+                directory = %directory.display(),
+                error = %error,
+                "Failed to scan frontend directory for translation PO catalogs"
+            );
+            return;
+        }
+    };
+    entries.sort_by_key(|entry| entry.path());
+
+    for entry in entries {
+        let path = entry.path();
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if file_type.is_dir() {
+            collect_translation_po_sources(&path, seen, sources);
+            continue;
+        }
+
+        if !file_type.is_file()
+            || path.file_name().and_then(|name| name.to_str()) != Some("messages.po")
+            || path
+                .parent()
+                .and_then(|locale| locale.parent())
+                .and_then(|locales| locales.file_name())
+                != Some(std::ffi::OsStr::new("locales"))
+            || !path.with_extension("json").is_file()
+        {
+            continue;
+        }
+
+        let canonical_path = path.canonicalize().unwrap_or(path);
+        if !seen.insert(canonical_path.clone()) {
+            continue;
+        }
+        match fs::read_to_string(&canonical_path) {
+            Ok(contents) => sources.push(ConfigSourceFile {
+                source_filename: canonical_path.to_string_lossy().into_owned(),
+                contents,
+            }),
+            Err(error) => tracing::warn!(
+                source_filename = %canonical_path.display(),
+                error = %error,
+                "Failed to read frontend translation PO catalog"
+            ),
+        }
     }
 }
 
@@ -1734,6 +1823,51 @@ mod tests {
                 "/public/common/locales/../messages.json"
             ),
             None
+        );
+    }
+
+    #[test]
+    fn discovers_translation_pos_from_served_frontend_roots() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let web_root = tempdir.path().join("web");
+        let addin_root = tempdir.path().join("addin");
+        let kits_root = tempdir.path().join("kits");
+        let write_catalog = |root: &Path, relative: &str, contents: &str| {
+            let po_path = root.join(relative).join("messages.po");
+            std::fs::create_dir_all(po_path.parent().unwrap()).unwrap();
+            std::fs::write(&po_path, contents).unwrap();
+            std::fs::write(po_path.with_extension("json"), "{\"messages\":{}}").unwrap();
+        };
+
+        write_catalog(&web_root, "public/common/locales/en", "web-en");
+        write_catalog(
+            &web_root,
+            "public/common/custom-theme/acme/locales/de",
+            "theme-de",
+        );
+        let excluded = web_root.join("public/common/locales/fr/messages.po");
+        std::fs::create_dir_all(excluded.parent().unwrap()).unwrap();
+        std::fs::write(excluded, "not-served").unwrap();
+        write_catalog(&addin_root, "locales/pl", "addin-pl");
+        write_catalog(&kits_root.join("example"), "locales/es", "kit-es");
+
+        let mut config = AppConfig::default();
+        config.frontend.web_frontend_bundle_path = web_root.to_string_lossy().into_owned();
+        config.integrations.ms_office.addin.enabled = true;
+        config.integrations.ms_office.addin.frontend_bundle_path =
+            addin_root.to_string_lossy().into_owned();
+        config.frontend.component_kits.directory = kits_root.to_string_lossy().into_owned();
+
+        let sources = discover_translation_po_sources(&config);
+        assert_eq!(sources.len(), 4);
+        assert!(sources.iter().any(|source| source.contents == "web-en"));
+        assert!(sources.iter().any(|source| source.contents == "theme-de"));
+        assert!(sources.iter().any(|source| source.contents == "addin-pl"));
+        assert!(sources.iter().any(|source| source.contents == "kit-es"));
+        assert!(
+            sources
+                .iter()
+                .all(|source| !source.contents.contains("not-served"))
         );
     }
 

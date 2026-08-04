@@ -376,7 +376,8 @@ CREATE TABLE public.runtime_configuration (
     source_filename text,
     config text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    source_type text DEFAULT 'erato_toml'::text NOT NULL
 );
 
 
@@ -1216,4 +1217,3 @@ ALTER TABLE ONLY public.user_preferences
 --
 
 \unrestrict COARnzCndo4jr7UQYSy5xnyNT8RcqmM5Dkrqzey8i1T00XhkdmoMPSI2HWpF2f5
-

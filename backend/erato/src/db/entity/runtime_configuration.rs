@@ -9,6 +9,8 @@ pub struct Model {
     pub id: Uuid,
     #[sea_orm(column_type = "Text")]
     pub source_service: String,
+    #[sea_orm(column_type = "Text")]
+    pub source_type: String,
     #[sea_orm(column_type = "Text", nullable)]
     pub source_filename: Option<String>,
     #[sea_orm(column_type = "Text")]

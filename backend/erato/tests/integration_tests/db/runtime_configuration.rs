@@ -4,7 +4,8 @@ use erato::config::ConfigSourceFile;
 use erato::db::entity::prelude::RuntimeConfiguration;
 use erato::db::entity::runtime_configuration;
 use erato::models::runtime_configuration::{
-    ERATO_BACKEND_SOURCE_SERVICE, mirror_erato_backend_sources,
+    ERATO_BACKEND_SOURCE_SERVICE, ERATO_TOML_SOURCE_TYPE, TRANSLATION_PO_SOURCE_TYPE,
+    mirror_erato_backend_sources, mirror_erato_backend_sources_with_translation_pos,
 };
 use erato::services::config_redaction::REDACTION_MARKER;
 use sea_orm::{
@@ -153,6 +154,69 @@ async fn mirror_replaces_only_backend_rows_and_redacts_encryption_key(pool: Pool
             .await
             .unwrap(),
         1
+    );
+}
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn mirror_includes_and_replaces_translation_po_rows(pool: Pool<Postgres>) {
+    let app_state = app_state_with_encryption(pool).await;
+    let config_sources = vec![ConfigSourceFile {
+        source_filename: "erato.toml".to_string(),
+        contents: "[server]\nhttp_port = 8080\n".to_string(),
+    }];
+    let translation_sources = vec![ConfigSourceFile {
+        source_filename: "/public/common/locales/de/messages.po".to_string(),
+        contents: "msgid \"Hello\"\nmsgstr \"Hallo\"\n".to_string(),
+    }];
+
+    mirror_erato_backend_sources_with_translation_pos(
+        &app_state,
+        &config_sources,
+        &translation_sources,
+    )
+    .await
+    .unwrap();
+
+    let rows = RuntimeConfiguration::find()
+        .filter(runtime_configuration::Column::SourceService.eq(ERATO_BACKEND_SOURCE_SERVICE))
+        .order_by_asc(runtime_configuration::Column::SourceFilename)
+        .all(&app_state.db)
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 2);
+    let toml_row = rows
+        .iter()
+        .find(|row| row.source_filename.as_deref() == Some("erato.toml"))
+        .unwrap();
+    assert_eq!(toml_row.source_type, ERATO_TOML_SOURCE_TYPE);
+    let po_row = rows
+        .iter()
+        .find(|row| row.source_filename.as_deref() == Some("/public/common/locales/de/messages.po"))
+        .unwrap();
+    assert_eq!(po_row.source_type, TRANSLATION_PO_SOURCE_TYPE);
+    assert_eq!(
+        app_state.decrypt(&po_row.config).unwrap(),
+        translation_sources[0].contents
+    );
+
+    let replacement = vec![ConfigSourceFile {
+        source_filename: "/public/component-kits/example/locales/en/messages.po".to_string(),
+        contents: "msgid \"Goodbye\"\nmsgstr \"Auf Wiedersehen\"\n".to_string(),
+    }];
+    mirror_erato_backend_sources_with_translation_pos(&app_state, &[], &replacement)
+        .await
+        .unwrap();
+
+    let rows = RuntimeConfiguration::find()
+        .filter(runtime_configuration::Column::SourceService.eq(ERATO_BACKEND_SOURCE_SERVICE))
+        .all(&app_state.db)
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].source_type, TRANSLATION_PO_SOURCE_TYPE);
+    assert_eq!(
+        rows[0].source_filename.as_deref(),
+        Some("/public/component-kits/example/locales/en/messages.po")
     );
 }
 

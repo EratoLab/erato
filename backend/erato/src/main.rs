@@ -6,7 +6,8 @@ use utoipa_scalar::{Scalar, Servable as ScalarServable};
 
 use erato::config::AppConfig;
 use erato::frontend_environment::{
-    DeploymentVersion, build_frontend_registry, serve_files_with_script,
+    DeploymentVersion, build_frontend_registry, discover_translation_po_sources,
+    serve_files_with_script,
 };
 use erato::models;
 use erato::services::sentry::{extend_with_sentry_layers, setup_sentry};
@@ -98,9 +99,11 @@ async fn async_main(worker_threads: usize) -> Result<(), Report> {
     models::ensure_latest_migration(&state.db).await?;
 
     if config.runtime_configuration.enabled {
-        models::runtime_configuration::mirror_erato_backend_sources(
+        let translation_po_sources = discover_translation_po_sources(&config);
+        models::runtime_configuration::mirror_erato_backend_sources_with_translation_pos(
             &state,
             &loaded_config.source_files,
+            &translation_po_sources,
         )
         .await?;
     }

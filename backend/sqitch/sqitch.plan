@@ -32,3 +32,4 @@
 0029_add_assistant_hub_reviews 2026-06-30T00:00:00Z System Administrator <root@localhost> # Add assistant hub reviews
 0030_add_generation_state_to_chats 2026-07-22T00:00:00Z System Administrator <root@localhost> # Add generation state to chats
 0031_add_runtime_configuration 2026-07-30T09:00:00Z System Administrator <root@localhost> # Add runtime configuration table
+0032_add_runtime_configuration_source_type 2026-08-02T00:00:00Z System Administrator <root@localhost> # Add runtime configuration source type
