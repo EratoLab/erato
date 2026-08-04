@@ -1,3 +1,6 @@
+{{- if and .Values.ingress.enabled .Values.gatewayApi.enabled -}}
+{{- fail "ingress.enabled and gatewayApi.enabled cannot both be true; choose one exposure method" -}}
+{{- end -}}
 {{- if .Values.ingress.enabled -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -29,11 +32,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                {{- if .Values.oauth2Proxy.enabled }}
-                name: {{ .Release.Name }}-oauth2-proxy
-                {{- else }}
-                name: {{ .Release.Name }}-backend
-                {{- end }}
+                name: {{ include "erato.exposureBackendName" . }}
                 port:
-                  name: http
+                  number: {{ include "erato.exposureBackendPort" . }}
 {{- end }}

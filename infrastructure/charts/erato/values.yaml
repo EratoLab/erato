@@ -39,6 +39,29 @@ ingress:
   #           name: http
   extraPaths: []
 
+gatewayApi:
+  # -- Enable Gateway API HTTPRoute generation. Requires an existing Gateway API v1 Gateway.
+  enabled: false
+  # -- Additional annotations for the HTTPRoute resource
+  annotations: {}
+  # -- Gateway resources to attach the HTTPRoute to. A namespace is required for cross-namespace attachment.
+  # Example:
+  # parentRefs:
+  #   - name: shared-gateway
+  #     namespace: gateway-system
+  #     sectionName: https
+  parentRefs: []
+  # -- Optional hostnames for the HTTPRoute. Omit to match all hostnames accepted by the Gateway listener.
+  hostnames: []
+  # -- Additional HTTPRoute rules, rendered with tpl for advanced matches, filters, redirects, rewrites, or backends.
+  # Example:
+  # extraRules:
+  #   - matches:
+  #       - path:
+  #           type: PathPrefix
+  #           value: /custom-path
+  extraRules: []
+
 oauth2Proxy:
   # -- Enable OAuth2 Proxy for authentication
   enabled: true

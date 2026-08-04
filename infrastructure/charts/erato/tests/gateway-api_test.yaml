@@ -1,0 +1,133 @@
+# yaml-language-server: $schema=../tests_schema/helm-testsuite.json
+suite: test Gateway API HTTPRoute
+minimumVersion: 1.0.1
+templates:
+  - gateway-api.yaml
+capabilities:
+  apiVersions:
+    - gateway.networking.k8s.io/v1
+tests:
+  - it: should not render HTTPRoute by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render HTTPRoute with its Gateway attachment and hostname
+    set:
+      ingress.enabled: false
+      gatewayApi.enabled: true
+      gatewayApi.parentRefs:
+        - name: shared-gateway
+          namespace: gateway-system
+          sectionName: https
+      gatewayApi.hostnames:
+        - chat.example.com
+      commonLabels:
+        environment: test
+      commonAnnotations:
+        team: platform
+      gatewayApi.annotations:
+        example.com/route: configured
+      namespaceOverride: custom-namespace
+    asserts:
+      - isAPIVersion:
+          of: gateway.networking.k8s.io/v1
+      - isKind:
+          of: HTTPRoute
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-http-route
+      - equal:
+          path: metadata.namespace
+          value: custom-namespace
+      - equal:
+          path: metadata.labels.environment
+          value: test
+      - equal:
+          path: metadata.annotations.team
+          value: platform
+      - equal:
+          path: metadata.annotations["example.com/route"]
+          value: configured
+      - equal:
+          path: spec.parentRefs[0].name
+          value: shared-gateway
+      - equal:
+          path: spec.parentRefs[0].namespace
+          value: gateway-system
+      - equal:
+          path: spec.parentRefs[0].sectionName
+          value: https
+      - equal:
+          path: spec.hostnames[0]
+          value: chat.example.com
+      - equal:
+          path: spec.rules[0].matches[0].path.type
+          value: PathPrefix
+      - equal:
+          path: spec.rules[0].matches[0].path.value
+          value: /
+
+  - it: should route through oauth2-proxy with its numeric port
+    set:
+      ingress.enabled: false
+      gatewayApi.enabled: true
+      gatewayApi.parentRefs:
+        - name: shared-gateway
+      oauth2Proxy.enabled: true
+    asserts:
+      - equal:
+          path: spec.rules[0].backendRefs[0].name
+          value: RELEASE-NAME-oauth2-proxy
+      - equal:
+          path: spec.rules[0].backendRefs[0].port
+          value: 4180
+
+  - it: should route directly to the Erato Service with its numeric port
+    set:
+      ingress.enabled: false
+      gatewayApi.enabled: true
+      gatewayApi.parentRefs:
+        - name: shared-gateway
+      oauth2Proxy.enabled: false
+    asserts:
+      - equal:
+          path: spec.rules[0].backendRefs[0].name
+          value: RELEASE-NAME-erato-app
+      - equal:
+          path: spec.rules[0].backendRefs[0].port
+          value: 3130
+
+  - it: should render extra rules with tpl
+    set:
+      ingress.enabled: false
+      gatewayApi.enabled: true
+      gatewayApi.parentRefs:
+        - name: shared-gateway
+      gatewayApi.extraRules:
+        - matches:
+            - path:
+                type: PathPrefix
+                value: /{{ .Release.Name }}
+          filters:
+            - type: RequestHeaderModifier
+              requestHeaderModifier:
+                add:
+                  - name: X-Erato-Route
+                    value: enabled
+    asserts:
+      - equal:
+          path: spec.rules[1].matches[0].path.value
+          value: /RELEASE-NAME
+      - equal:
+          path: spec.rules[1].filters[0].requestHeaderModifier.add[0].value
+          value: enabled
+
+  - it: should fail when parentRefs are missing
+    set:
+      ingress.enabled: false
+      gatewayApi.enabled: true
+      gatewayApi.parentRefs: []
+    asserts:
+      - failedTemplate:
+          errorMessage: gatewayApi.parentRefs must contain at least one Gateway reference when gatewayApi.enabled is true

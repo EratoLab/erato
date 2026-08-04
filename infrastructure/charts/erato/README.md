@@ -235,6 +235,39 @@ ingress:
     secretName: erato-tls
 ```
 
+### Gateway API Configuration
+
+As an alternative to Ingress, the chart can create a v1 `HTTPRoute` that attaches to
+an existing Gateway. Gateway API CRDs and a compatible controller must already be
+installed in the cluster; this chart does not create or configure the Gateway,
+GatewayClass, controller, or CRDs.
+
+Ingress and Gateway API exposure are mutually exclusive. Disable the Ingress before
+enabling Gateway API:
+
+```yaml
+ingress:
+  enabled: false
+
+gatewayApi:
+  enabled: true
+  parentRefs:
+    - name: shared-gateway
+      namespace: gateway-system
+      sectionName: https
+  hostnames:
+    - chat.example.com
+```
+
+The default HTTPRoute sends `/` to the OAuth2 Proxy when it is enabled, or directly
+to the Erato application Service otherwise. Add `gatewayApi.extraRules` for additional
+matches, filters, redirects, rewrites, or backend references.
+
+For a Gateway in another namespace, set `parentRefs.namespace` and configure the
+required `ReferenceGrant` in the Gateway namespace. Gateway listeners, including TLS
+termination and their certificates, are configured on the Gateway rather than in this
+chart.
+
 ## Requirements
 
 | Repository | Name | Version |
@@ -299,6 +332,11 @@ ingress:
 | backend.service.type | string | `"ClusterIP"` | Backend service type |
 | commonAnnotations | object | `{}` | Annotations to add to all deployed objects |
 | commonLabels | object | `{}` | Labels to add to all deployed objects |
+| gatewayApi.annotations | object | `{}` | Additional annotations for the HTTPRoute resource |
+| gatewayApi.enabled | bool | `false` | Enable Gateway API HTTPRoute generation. Requires an existing Gateway API v1 Gateway. |
+| gatewayApi.extraRules | list | `[]` | Additional HTTPRoute rules, rendered with tpl for advanced matches, filters, redirects, rewrites, or backends. Example: extraRules:   - matches:       - path:           type: PathPrefix           value: /custom-path |
+| gatewayApi.hostnames | list | `[]` | Optional hostnames for the HTTPRoute. Omit to match all hostnames accepted by the Gateway listener. |
+| gatewayApi.parentRefs | list | `[]` | Gateway resources to attach the HTTPRoute to. A namespace is required for cross-namespace attachment. Example: parentRefs:   - name: shared-gateway     namespace: gateway-system     sectionName: https |
 | global.environment | string | `"production"` | Environment marker for diagnostic/observability tools (not parsed by application) |
 | global.imagePullSecrets | list | `[]` | Global Docker registry secret names as an array |
 | ingress.annotations | object | `{}` | Additional annotations for the Ingress resource |

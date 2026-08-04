@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=../tests_schema/helm-testsuite.json
+suite: test Gateway API capability validation
+minimumVersion: 1.0.1
+templates:
+  - gateway-api.yaml
+capabilities:
+  apiVersions:
+    - apps/v1
+tests:
+  - it: should fail when Gateway API v1 is unavailable
+    set:
+      ingress.enabled: false
+      gatewayApi.enabled: true
+      gatewayApi.parentRefs:
+        - name: shared-gateway
+    asserts:
+      - failedTemplate:
+          errorMessage: gatewayApi.enabled requires the Gateway API v1 HTTPRoute capability (gateway.networking.k8s.io/v1); install Gateway API CRDs and a compatible controller

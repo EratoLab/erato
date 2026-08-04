@@ -177,3 +177,25 @@ Falls back to the backend image tag if deploymentVersion is not explicitly set
 {{- .Values.backend.image.tag -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Return the Service name used to expose the application.
+*/}}
+{{- define "erato.exposureBackendName" -}}
+{{- if .Values.oauth2Proxy.enabled -}}
+{{- printf "%s-oauth2-proxy" .Release.Name -}}
+{{- else -}}
+{{- printf "%s-erato-app" .Release.Name -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Return the Service port used to expose the application.
+*/}}
+{{- define "erato.exposureBackendPort" -}}
+{{- if .Values.oauth2Proxy.enabled -}}
+4180
+{{- else -}}
+3130
+{{- end -}}
+{{- end -}}

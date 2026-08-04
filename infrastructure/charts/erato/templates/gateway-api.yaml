@@ -1,0 +1,38 @@
+{{- if .Values.gatewayApi.enabled -}}
+{{- if not (.Capabilities.APIVersions.Has "gateway.networking.k8s.io/v1") -}}
+{{- fail "gatewayApi.enabled requires the Gateway API v1 HTTPRoute capability (gateway.networking.k8s.io/v1); install Gateway API CRDs and a compatible controller" -}}
+{{- end -}}
+{{- if not .Values.gatewayApi.parentRefs -}}
+{{- fail "gatewayApi.parentRefs must contain at least one Gateway reference when gatewayApi.enabled is true" -}}
+{{- end -}}
+{{- $parentRefs := .Values.gatewayApi.parentRefs -}}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ .Release.Name }}-http-route
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+  {{- if or .Values.gatewayApi.annotations .Values.commonAnnotations }}
+  {{- $annotations := include "common.tplvalues.merge" ( dict "values" ( list .Values.gatewayApi.annotations .Values.commonAnnotations ) "context" . ) }}
+  annotations:
+    {{- include "common.tplvalues.render" ( dict "value" $annotations "context" $ ) | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    {{- tpl ($parentRefs | toYaml) $ | nindent 4 }}
+  {{- with .Values.gatewayApi.hostnames }}
+  hostnames:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: {{ include "erato.exposureBackendName" . }}
+          port: {{ include "erato.exposureBackendPort" . }}
+    {{- with .Values.gatewayApi.extraRules }}
+    {{- tpl (. | toYaml) $ | nindent 4 }}
+    {{- end }}
+{{- end }}

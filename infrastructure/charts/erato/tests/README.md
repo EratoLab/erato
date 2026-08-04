@@ -75,6 +75,7 @@ tests:
 | `backend-deployment_test.yaml` | Tests for the main backend deployment |
 | `services_test.yaml` | Tests for the backend service |
 | `ingress_test.yaml` | Tests for the ingress configuration |
+| `gateway-api_test.yaml` | Tests for the Gateway API HTTPRoute configuration |
 | `oauth2-proxy-deployment_test.yaml` | Tests for OAuth2 proxy deployment |
 | `oauth2-proxy-service_test.yaml` | Tests for OAuth2 proxy service |
 | `oauth2-proxy-configmap_test.yaml` | Tests for OAuth2 proxy configuration |
