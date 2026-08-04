@@ -1,7 +1,7 @@
 use crate::actors::manager::ActorManager;
 use crate::config::{AppConfig, ChatProviderConfig, PromptSourceSpecification, SummaryConfig};
-use crate::policy::engine::PolicyEngine;
-use crate::policy::types::Subject;
+use crate::policy::engine::{PolicyEngine, PolicyRebuildContext};
+use crate::policy::types::{Action, ResourceKind, Subject};
 use crate::query_metrics::install_postgres_query_metrics;
 use crate::services::background_tasks::BackgroundTaskManager;
 use crate::services::desktop_sidecar_distribution::DesktopSidecarDistribution;
@@ -33,7 +33,7 @@ use std::hash::Hash;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{RwLock, Semaphore};
+use tokio::sync::{Mutex, RwLock, Semaphore};
 use tracing::instrument;
 
 const ENCRYPTED_VALUE_PREFIX: &str = "enc-v1";
@@ -45,6 +45,7 @@ const DEFAULT_SUMMARY_SYSTEM_PROMPT: &str = "Generate a summary for the topic of
 pub struct GlobalPolicyEngine {
     engine: PolicyEngine,
     last_rebuild_time: Arc<RwLock<Option<Instant>>>,
+    last_miss_rebuild: Arc<Mutex<HashMap<(ResourceKind, Action), Instant>>>,
 }
 
 impl Default for GlobalPolicyEngine {
@@ -58,6 +59,7 @@ impl GlobalPolicyEngine {
         Self {
             engine: PolicyEngine::new(),
             last_rebuild_time: Arc::new(RwLock::new(None)),
+            last_miss_rebuild: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -92,15 +94,17 @@ impl GlobalPolicyEngine {
 
         self.engine.rebuild_data_if_needed(db, config).await?;
 
-        // Use clone_for_request to create an independent data_needs_rebuild state
-        // This prevents invalidate_data() on the global engine from affecting
-        // request-scoped clones during request processing
-        Ok(self.engine.clone_for_request())
+        Ok(self
+            .engine
+            .clone_for_request_with_context(PolicyRebuildContext {
+                db: db.clone(),
+                config: config.clone(),
+                last_miss_rebuild: self.last_miss_rebuild.clone(),
+                last_rebuild_time: self.last_rebuild_time.clone(),
+            }))
     }
 
     /// Rebuild after an invalidation, coalescing with any concurrent rebuild.
-    /// For background tasks, whose request-scoped engine clones cannot observe
-    /// invalidations of the global engine.
     pub async fn rebuild_data_if_needed(
         &self,
         db: &DatabaseConnection,

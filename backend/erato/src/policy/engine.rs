@@ -16,10 +16,40 @@ use sea_orm::{DatabaseConnection, EntityTrait, FromQueryResult, QuerySelect};
 use serde_json::{Value as JsonValue, json};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, RwLock};
 use tracing::instrument;
 
 const BACKEND_POLICY: &str = include_str!("../../../policy/backend/backend.rego");
+const UNKNOWN_RESOURCE_REBUILD_INTERVAL: Duration = Duration::from_secs(10);
+
+/// Database/configuration access used by request-scoped engines when an
+/// authorization miss reveals that the local snapshot does not contain the
+/// requested resource.
+#[derive(Debug, Clone)]
+pub struct PolicyRebuildContext {
+    pub db: DatabaseConnection,
+    pub config: AppConfig,
+    pub last_miss_rebuild: Arc<Mutex<HashMap<(ResourceKind, Action), Instant>>>,
+    pub last_rebuild_time: Arc<RwLock<Option<Instant>>>,
+}
+
+impl PolicyRebuildContext {
+    async fn claim_miss_rebuild(&self, resource_kind: ResourceKind, action: Action) -> bool {
+        let mut last_rebuild = self.last_miss_rebuild.lock().await;
+        let now = Instant::now();
+        let key = (resource_kind, action);
+        if last_rebuild
+            .get(&key)
+            .is_some_and(|instant| now.duration_since(*instant) < UNKNOWN_RESOURCE_REBUILD_INTERVAL)
+        {
+            return false;
+        }
+
+        last_rebuild.insert(key, now);
+        true
+    }
+}
 
 /// Minimal chat attributes required for policy evaluation.
 #[derive(Debug, FromQueryResult)]
@@ -344,6 +374,7 @@ pub struct PolicyEngine {
     /// concurrent stale observers queue here and re-check staleness after
     /// acquiring, so they coalesce into a single rebuild.
     rebuild_lock: Arc<Mutex<()>>,
+    rebuild_context: Option<Arc<PolicyRebuildContext>>,
 }
 
 impl Default for PolicyEngine {
@@ -365,18 +396,31 @@ impl PolicyEngine {
             engine: Arc::new(RwLock::new(engine)),
             data_needs_rebuild: Arc::new(RwLock::new(true)),
             rebuild_lock: Arc::new(Mutex::new(())),
+            rebuild_context: None,
         }
     }
 
     /// Clone the engine for use in a request handler.
-    /// Unlike regular Clone, this creates an independent `data_needs_rebuild` state
-    /// set to `false`, so that invalidating the global engine doesn't affect
-    /// cloned request-scoped engines.
+    /// This clone has no request-specific rebuild access. The staleness flag
+    /// remains shared so invalidations made by a request are visible to
+    /// subsequent requests.
     pub fn clone_for_request(&self) -> Self {
         Self {
             engine: self.engine.clone(),
-            data_needs_rebuild: Arc::new(RwLock::new(false)),
+            data_needs_rebuild: self.data_needs_rebuild.clone(),
             rebuild_lock: self.rebuild_lock.clone(),
+            rebuild_context: None,
+        }
+    }
+
+    /// Clone the engine for a request that may perform a second-chance rebuild
+    /// after an unknown-resource authorization miss.
+    pub fn clone_for_request_with_context(&self, context: PolicyRebuildContext) -> Self {
+        Self {
+            engine: self.engine.clone(),
+            data_needs_rebuild: self.data_needs_rebuild.clone(),
+            rebuild_lock: self.rebuild_lock.clone(),
+            rebuild_context: Some(Arc::new(context)),
         }
     }
 
@@ -524,13 +568,85 @@ impl PolicyEngine {
         groups: &[String],
     ) -> Result<(), Report> {
         // info!("Authorizing");
-        if *self.data_needs_rebuild.read().await {
-            return Err(eyre!(
-                "Policy data is stale and needs to be rebuilt before authorization"
-            ));
-        }
         // First validate the resource_kind-action combination as an assertion
         authorize_general(resource_kind, action);
+
+        let (allowed, resource_exists) = self
+            .evaluate_authorization(
+                subject_kind,
+                subject_id,
+                resource_kind,
+                resource_id,
+                action,
+                organization_group_ids,
+                groups,
+            )
+            .await?;
+
+        if allowed {
+            return Ok(());
+        }
+
+        if !resource_exists
+            && resource_kind.is_snapshot_backed()
+            && let Some(context) = &self.rebuild_context
+            && context.claim_miss_rebuild(resource_kind, action).await
+        {
+            tracing::debug!(
+                ?resource_kind,
+                ?resource_id,
+                ?action,
+                "Authorization missed an unknown resource; rebuilding policy data once"
+            );
+            self.invalidate_data().await;
+            self.rebuild_data_if_needed(&context.db, &context.config)
+                .await
+                .wrap_err(
+                    "Failed to rebuild policy data after unknown-resource authorization miss",
+                )?;
+            *context.last_rebuild_time.write().await = Some(Instant::now());
+
+            let (allowed_after_rebuild, _) = self
+                .evaluate_authorization(
+                    subject_kind,
+                    subject_id,
+                    resource_kind,
+                    resource_id,
+                    action,
+                    organization_group_ids,
+                    groups,
+                )
+                .await?;
+            if allowed_after_rebuild {
+                return Ok(());
+            }
+        }
+
+        Err(eyre!("User is not authorized to perform this action"))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn evaluate_authorization(
+        &self,
+        subject_kind: SubjectKind,
+        subject_id: &SubjectId,
+        resource_kind: ResourceKind,
+        resource_id: &ResourceId,
+        action: Action,
+        organization_group_ids: &[String],
+        groups: &[String],
+    ) -> Result<(bool, bool), Report> {
+        if *self.data_needs_rebuild.read().await {
+            if let Some(context) = &self.rebuild_context {
+                self.rebuild_data_if_needed(&context.db, &context.config)
+                    .await
+                    .wrap_err("Failed to rebuild stale policy data before authorization")?;
+            } else {
+                return Err(eyre!(
+                    "Policy data is stale and needs to be rebuilt before authorization"
+                ));
+            }
+        }
 
         let engine = self.engine.read().await;
         let mut engine = engine.clone();
@@ -549,15 +665,15 @@ impl PolicyEngine {
             .set_input_json(&serde_json::to_string(&input)?)
             .map_err(|e| eyre!(e))?;
 
-        let result = engine
+        let allowed = engine
             .eval_bool_query("data.backend.allow".to_string(), false)
             .map_err(|e| eyre!(e))?;
+        let resource_exists = resource_kind.is_snapshot_backed()
+            && engine
+                .eval_bool_query("data.backend.resource_exists".to_string(), false)
+                .map_err(|e| eyre!(e))?;
 
-        if result {
-            Ok(())
-        } else {
-            Err(eyre!("User is not authorized to perform this action"))
-        }
+        Ok((allowed, resource_exists))
     }
 
     async fn filter_authorized_config_resources(
@@ -657,6 +773,20 @@ impl PolicyEngine {
     ) -> Result<Vec<String>, Report> {
         self.filter_authorized_config_resources(subject, groups, resource_ids, Resource::Facet)
             .await
+    }
+}
+
+impl ResourceKind {
+    const fn is_snapshot_backed(self) -> bool {
+        matches!(
+            self,
+            Self::Chat
+                | Self::Assistant
+                | Self::FileUpload
+                | Self::ChatProvider
+                | Self::McpServer
+                | Self::Facet
+        )
     }
 }
 
@@ -1159,6 +1289,30 @@ mod tests {
 
         let result = authorize!(engine, &subject, &resource, action);
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_authorize_unknown_chat_is_denied_without_policy_error() {
+        let engine = PolicyEngine::new();
+        engine
+            .set_data(json!({
+                "resource_attributes": {
+                    "chat": {}
+                }
+            }))
+            .await
+            .unwrap();
+
+        let result = authorize!(
+            engine,
+            &Subject::User("user_1".to_string()),
+            &Resource::Chat("missing-chat".to_string()),
+            Action::Read
+        );
+
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("not authorized"));
     }
 
     async fn build_config_resource_test_engine() -> PolicyEngine {
