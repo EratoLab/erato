@@ -131,6 +131,15 @@ has_enabled_share_link(resource_type, resource_id) if {
 # Default deny all access
 default allow = false
 
+# True when the requested ID is present in the in-memory resource snapshot.
+# Authorization can still deny an existing resource; callers use this rule to
+# distinguish that case from a replica-local snapshot miss.
+default resource_exists = false
+
+resource_exists if {
+	data.resource_attributes[input.resource_kind][input.resource_id].id == input.resource_id
+}
+
 config_permission_rule_applies(rule, resource_id) if {
 	rule.rule_type == "allow-all"
 	resource_id in rule.resource_ids

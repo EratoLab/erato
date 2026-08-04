@@ -62,7 +62,7 @@ impl Subject {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ResourceKind {
     #[serde(rename = "chat")]
     Chat,
@@ -152,7 +152,7 @@ impl Resource {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Action {
     #[serde(rename = "read")]
     Read,
