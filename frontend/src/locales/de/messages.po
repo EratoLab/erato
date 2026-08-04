@@ -539,6 +539,11 @@ msgstr "Reviewer-Antwort"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.showMoreVersions"
+msgstr "Mehr anzeigen"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
 msgid "assistantHub.my.submitNewVersion"
 msgstr "Neue Version einreichen"
 
