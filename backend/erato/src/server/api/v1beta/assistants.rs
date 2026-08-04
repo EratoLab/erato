@@ -103,11 +103,11 @@ pub struct AssistantFile {
 /// A share grant to create with the assistant
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct ShareGrantInput {
-    /// The type of subject to grant access to (e.g., "user")
+    /// The type of subject to grant access to (e.g., "user", "organization_group", or "organization")
     pub subject_type: String,
-    /// The type of subject ID (e.g., "id" or "oidc_issuer_and_subject")
+    /// The type of subject ID (e.g., "id", "organization_group_id", or "organization_id")
     pub subject_id_type: String,
-    /// The ID of the subject to grant access to
+    /// The ID of the subject to grant access to. Organization-wide grants use "__organization__".
     pub subject_id: String,
     /// The role to grant (e.g., "viewer")
     pub role: String,

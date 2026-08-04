@@ -1045,6 +1045,42 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_authorize_with_organization_share_grant() {
+        let subject = Subject::UserWithOrganizationInfo {
+            id: "user_3".to_string(),
+            organization_user_id: None,
+            organization_group_ids: vec![],
+        };
+        let resource = Resource::Assistant("assistant_2".to_string());
+
+        let engine = PolicyEngine::new();
+        engine
+            .set_data(json!({
+                "resource_attributes": {
+                    "assistant": {
+                        "assistant_2": {
+                            "id": "assistant_2",
+                            "owner_id": "user_2"
+                        }
+                    }
+                },
+                "share_grants": [{
+                    "id": "grant-organization-1",
+                    "resource_type": "assistant",
+                    "resource_id": "assistant_2",
+                    "subject_type": "organization",
+                    "subject_id_type": "organization_id",
+                    "subject_id": "__organization__",
+                    "role": "viewer"
+                }]
+            }))
+            .await
+            .unwrap();
+
+        assert!(authorize!(engine, &subject, &resource, Action::Read).is_ok());
+    }
+
+    #[tokio::test]
     async fn test_authorize_file_upload_read_via_linked_chat() {
         let subject = Subject::User("user_1".to_string());
         let resource = Resource::FileUpload("file_1".to_string());

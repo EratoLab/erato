@@ -6,6 +6,10 @@ import { useDebounce } from "use-debounce";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { Input } from "@/components/ui/Input/Input";
 import { useOrganizationMembersSearch } from "@/hooks/sharing";
+import {
+  ORGANIZATION_SUBJECT_ID,
+  ORGANIZATION_SUBJECT_ID_TYPE,
+} from "@/types/sharing";
 
 import type { ShareGrant } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { OrganizationMember } from "@/types/sharing";
@@ -38,6 +42,7 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
     existingGrants = [],
     subjectTypeFilter = "all",
   }) => {
+    const { _ } = useLingui();
     const [searchQuery, setSearchQuery] = useState("");
     // Use use-debounce library for consistent debounce behavior across the app
     // isPending() returns true while the debounce timer is running
@@ -55,6 +60,21 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
       minQueryLength: 0, // Allow empty query to load initial results
     });
 
+    const organizationTarget = useMemo<OrganizationMember>(
+      () => ({
+        id: ORGANIZATION_SUBJECT_ID,
+        display_name: _(
+          msg({
+            id: "sharing.target.fullOrganization",
+            message: "Full organization",
+          }),
+        ),
+        subject_type_id: ORGANIZATION_SUBJECT_ID_TYPE,
+        type: "organization",
+      }),
+      [_],
+    );
+
     // Create a set of subject IDs that already have grants
     const grantedSubjectIds = useMemo(() => {
       return new Set(existingGrants.map((grant) => grant.subject_id));
@@ -69,16 +89,37 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
 
     // Group filtered subjects by type (only needed for "all" view)
     const { users, groups } = useMemo(() => {
+      const organizationTargets =
+        subjectTypeFilter !== "user" &&
+        !grantedSubjectIds.has(organizationTarget.id)
+          ? [organizationTarget]
+          : [];
+
       if (subjectTypeFilter !== "all") {
         // When filtered, all subjects are the same type
         return subjectTypeFilter === "user"
           ? { users: filteredSubjects, groups: [] }
-          : { users: [], groups: filteredSubjects };
+          : {
+              users: [],
+              groups: [...organizationTargets, ...filteredSubjects],
+            };
       }
       const usersList = filteredSubjects.filter((s) => s.type === "user");
       const groupsList = filteredSubjects.filter((s) => s.type === "group");
-      return { users: usersList, groups: groupsList };
-    }, [filteredSubjects, subjectTypeFilter]);
+      return {
+        users: usersList,
+        groups: [...organizationTargets, ...groupsList],
+      };
+    }, [
+      filteredSubjects,
+      grantedSubjectIds,
+      organizationTarget,
+      subjectTypeFilter,
+    ]);
+
+    const hasAvailableOrganizationTarget =
+      subjectTypeFilter !== "user" &&
+      !grantedSubjectIds.has(organizationTarget.id);
 
     // Check if search is still pending (debounce timer is running)
     const isSearchPending = isPending();
@@ -128,6 +169,7 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
     const allGranted =
       filteredSubjects.length === 0 &&
       searchResults.length > 0 &&
+      !hasAvailableOrganizationTarget &&
       !isLoading &&
       !isSearching;
 
@@ -169,16 +211,19 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
           )}
 
           {/* Empty search results */}
-          {filteredSubjects.length === 0 && !isLoading && !isSearching && (
-            <div className="py-8 text-center">
-              <p className="text-sm text-theme-fg-muted">
-                {t({
-                  id: "sharing.empty.noResults",
-                  message: "No matches found",
-                })}
-              </p>
-            </div>
-          )}
+          {filteredSubjects.length === 0 &&
+            !hasAvailableOrganizationTarget &&
+            !isLoading &&
+            !isSearching && (
+              <div className="py-8 text-center">
+                <p className="text-sm text-theme-fg-muted">
+                  {t({
+                    id: "sharing.empty.noResults",
+                    message: "No matches found",
+                  })}
+                </p>
+              </div>
+            )}
 
           {/* Users section - show header only in "all" view */}
           {users.length > 0 && (
@@ -298,7 +343,12 @@ const SubjectRow = memo<SubjectRowProps>(
             <span className="shrink-0 rounded-full bg-theme-bg-secondary px-2 py-0.5 text-xs text-theme-fg-secondary">
               {subject.type === "user"
                 ? t({ id: "sharing.type.user", message: "User" })
-                : t({ id: "sharing.type.group", message: "Group" })}
+                : subject.type === "organization"
+                  ? t({
+                      id: "sharing.type.organization",
+                      message: "Organization",
+                    })
+                  : t({ id: "sharing.type.group", message: "Group" })}
             </span>
           </div>
         </div>

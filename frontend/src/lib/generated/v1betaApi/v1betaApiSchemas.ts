@@ -247,8 +247,17 @@ export type AssistantHubAssistantSnapshot = {
 
 export type AssistantHubAudienceGrantInput = {
   role: string;
+  /**
+   * The ID of the subject. Organization-wide grants use "__organization__".
+   */
   subject_id: string;
+  /**
+   * The type of subject ID (e.g., "id", "organization_group_id", or "organization_id")
+   */
   subject_id_type: string;
+  /**
+   * The type of subject to grant access to (e.g., "user", "organization_group", or "organization")
+   */
   subject_type: string;
 };
 
@@ -913,15 +922,15 @@ export type CreateShareGrantRequest = {
    */
   role: string;
   /**
-   * The ID of the subject to grant access to
+   * The ID of the subject to grant access to. Organization-wide grants use "__organization__".
    */
   subject_id: string;
   /**
-   * The type of subject ID (e.g., "id" or "oidc_issuer_and_subject")
+   * The type of subject ID (e.g., "id", "organization_group_id", or "organization_id")
    */
   subject_id_type: string;
   /**
-   * The type of subject to grant access to (e.g., "user")
+   * The type of subject to grant access to (e.g., "user", "organization_group", or "organization")
    */
   subject_type: string;
 };
@@ -1960,15 +1969,15 @@ export type ShareGrant = {
    */
   role: string;
   /**
-   * The ID of the subject being granted access
+   * The ID of the subject being granted access. Organization-wide grants use "__organization__".
    */
   subject_id: string;
   /**
-   * The type of subject ID (e.g., "id" or "oidc_issuer_and_subject")
+   * The type of subject ID (e.g., "id", "organization_group_id", or "organization_id")
    */
   subject_id_type: string;
   /**
-   * The type of subject being granted access (e.g., "user")
+   * The type of subject being granted access (e.g., "user", "organization_group", or "organization")
    */
   subject_type: string;
   /**
@@ -1989,15 +1998,15 @@ export type ShareGrantInput = {
    */
   role: string;
   /**
-   * The ID of the subject to grant access to
+   * The ID of the subject to grant access to. Organization-wide grants use "__organization__".
    */
   subject_id: string;
   /**
-   * The type of subject ID (e.g., "id" or "oidc_issuer_and_subject")
+   * The type of subject ID (e.g., "id", "organization_group_id", or "organization_id")
    */
   subject_id_type: string;
   /**
-   * The type of subject to grant access to (e.g., "user")
+   * The type of subject to grant access to (e.g., "user", "organization_group", or "organization")
    */
   subject_type: string;
 };

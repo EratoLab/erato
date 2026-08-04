@@ -42,8 +42,8 @@ package backend
 #     "id": "some-grant-id",
 #     "resource_type": "assistant",
 #     "resource_id": "some-assistant-id",
-#     "subject_type": "user", # or "organization_group"
-#     "subject_id_type": "id", # or "organization_group_id"
+#     "subject_type": "user", # or "organization_group" or "organization"
+#     "subject_id_type": "id", # or "organization_group_id" or "organization_id"
 #     "subject_id": "some-user-id",
 #     "role": "viewer"
 #   }
@@ -82,6 +82,9 @@ package backend
 subject_kind_user = "user"
 
 not_logged_in := "__not_logged_in__"
+organization_subject_type := "organization"
+organization_subject_id_type := "organization_id"
+organization_subject_id := "__organization__"
 
 # Resource kinds
 resource_kind_chat := "chat"
@@ -197,6 +200,17 @@ can_read_assistant(assistant_id) if {
 	grant.resource_id == assistant_id
 	grant.subject_type == "user"
 	grant.subject_id == input.subject_id
+	grant.role == "viewer"
+	assistant_share_grant_active(assistant_id)
+}
+
+can_read_assistant(assistant_id) if {
+	some grant in data.share_grants
+	grant.resource_type == "assistant"
+	grant.resource_id == assistant_id
+	grant.subject_type == organization_subject_type
+	grant.subject_id_type == organization_subject_id_type
+	grant.subject_id == organization_subject_id
 	grant.role == "viewer"
 	assistant_share_grant_active(assistant_id)
 }
@@ -396,6 +410,25 @@ allow if {
 	grant.resource_id == input.resource_id
 	grant.subject_type == "user"
 	grant.subject_id == input.subject_id
+	grant.role == "viewer"
+	assistant_share_grant_active(input.resource_id)
+}
+
+# A logged-in user can read an assistant shared with the whole organization.
+allow if {
+	# Ensure the subject is a logged-in user.
+	input.subject_kind == subject_kind_user
+	input.subject_id != not_logged_in
+
+	# Check for an organization-wide share grant.
+	input.resource_kind == resource_kind_assistant
+	input.action == action_read
+	some grant in data.share_grants
+	grant.resource_type == "assistant"
+	grant.resource_id == input.resource_id
+	grant.subject_type == organization_subject_type
+	grant.subject_id_type == organization_subject_id_type
+	grant.subject_id == organization_subject_id
 	grant.role == "viewer"
 	assistant_share_grant_active(input.resource_id)
 }
