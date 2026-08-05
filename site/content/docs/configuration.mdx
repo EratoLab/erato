@@ -2669,7 +2669,7 @@ When the Entra ID integration is enabled, the user profile will include addition
 - `organization_user_id` - Extracted from the `oid` claim (Entra ID specific)
 - `organization_group_ids` - Extracted from the `groups` claim
 
-These fields enable sharing assistants with organization groups via share grants with `subject_type = "organization_group"` and `subject_id_type = "organization_group_id"`.
+These fields enable sharing assistants with organization groups via share grants with `subject_type = "organization_group"` and `subject_id_type = "organization_group_id"`. Assistants can also be shared with every logged-in user in the organization using `subject_type = "organization"`, `subject_id_type = "organization_id"`, and `subject_id = "__organization__"`.
 
 ### `logging`
 

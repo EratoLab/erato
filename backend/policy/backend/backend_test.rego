@@ -234,6 +234,20 @@ share_grants_with_org_group := [
 	},
 ]
 
+# Share grants data with the whole organization - assistant_2 is shared with
+# every logged-in user in the organization.
+share_grants_with_organization := [
+	{
+		"id": "grant-organization-1",
+		"resource_type": "assistant",
+		"resource_id": assistant_2_id,
+		"subject_type": "organization",
+		"subject_id_type": "organization_id",
+		"subject_id": "__organization__",
+		"role": "viewer",
+	},
+]
+
 # A user can read their own chat.
 test_user_can_read_own_chat if {
 	backend.allow with input as {
@@ -916,6 +930,30 @@ test_user_in_org_group_can_read_shared_assistant if {
 		"organization_group_ids": [org_group_1_id, org_group_2_id],
 	} with data.resource_attributes as resource_attributes
 		with data.share_grants as share_grants_with_org_group
+}
+
+# Any logged-in user can read an assistant shared with the whole organization.
+test_logged_in_user_can_read_organization_shared_assistant if {
+	backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_2_id,
+		"resource_kind": "assistant",
+		"resource_id": assistant_2_id,
+		"action": "read",
+	} with data.resource_attributes as resource_attributes
+		with data.share_grants as share_grants_with_organization
+}
+
+# An anonymous subject cannot use an organization-wide share grant.
+test_anonymous_user_cannot_read_organization_shared_assistant if {
+	not backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": "__not_logged_in__",
+		"resource_kind": "assistant",
+		"resource_id": assistant_2_id,
+		"action": "read",
+	} with data.resource_attributes as resource_attributes
+		with data.share_grants as share_grants_with_organization
 }
 
 # A user NOT in the organization_group cannot read the assistant shared with that group.

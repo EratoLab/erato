@@ -33,8 +33,11 @@ pub struct AssistantHubConfigResponse {
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct AssistantHubAudienceGrantInput {
+    /// The type of subject to grant access to (e.g., "user", "organization_group", or "organization")
     pub subject_type: String,
+    /// The type of subject ID (e.g., "id", "organization_group_id", or "organization_id")
     pub subject_id_type: String,
+    /// The ID of the subject. Organization-wide grants use "__organization__".
     pub subject_id: String,
     pub role: String,
 }

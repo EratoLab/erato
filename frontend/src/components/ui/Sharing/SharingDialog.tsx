@@ -107,8 +107,12 @@ export function SharingDialog({
         selectedSubjects.map((subject) =>
           createGrant({
             subject_type:
-              // eslint-disable-next-line lingui/no-unlocalized-strings
-              subject.type === "user" ? "user" : "organization_group",
+              subject.type === "user"
+                ? "user"
+                : subject.type === "organization"
+                  ? "organization"
+                  : // eslint-disable-next-line lingui/no-unlocalized-strings -- API discriminator value
+                    "organization_group",
             subject_id_type: subject.subject_type_id,
             subject_id: subject.id,
             role: "viewer",

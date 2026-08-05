@@ -7,6 +7,12 @@ use sea_orm::{ColumnTrait, Condition, DatabaseConnection, EntityTrait, QueryFilt
 use serde::Serialize;
 use sqlx::types::Uuid;
 
+/// The stable subject values used for grants that target every user in the
+/// organization.
+pub const ORGANIZATION_SUBJECT_TYPE: &str = "organization";
+pub const ORGANIZATION_SUBJECT_ID_TYPE: &str = "organization_id";
+pub const ORGANIZATION_SUBJECT_ID: &str = "__organization__";
+
 /// Serializable share grant information for API responses
 #[derive(Debug, Clone, Serialize)]
 pub struct ShareGrantInfo {
@@ -103,9 +109,12 @@ pub async fn create_share_grant(
     }
 
     // Validate subject_type
-    if subject_type != "user" && subject_type != "organization_group" {
+    if subject_type != "user"
+        && subject_type != "organization_group"
+        && subject_type != ORGANIZATION_SUBJECT_TYPE
+    {
         return Err(eyre!(
-            "Invalid subject_type: {}. Only 'user' and 'organization_group' are currently supported",
+            "Invalid subject_type: {}. Only 'user', 'organization_group', and 'organization' are currently supported",
             subject_type
         ));
     }
@@ -114,10 +123,29 @@ pub async fn create_share_grant(
     if subject_id_type != "id"
         && subject_id_type != "organization_user_id"
         && subject_id_type != "organization_group_id"
+        && subject_id_type != ORGANIZATION_SUBJECT_ID_TYPE
     {
         return Err(eyre!(
-            "Invalid subject_id_type: {}. Only 'id', 'organization_user_id', and 'organization_group_id' are currently supported",
+            "Invalid subject_id_type: {}. Only 'id', 'organization_user_id', 'organization_group_id', and 'organization_id' are currently supported",
             subject_id_type
+        ));
+    }
+
+    let valid_subject_target = match subject_type.as_str() {
+        "user" => subject_id_type == "id" || subject_id_type == "organization_user_id",
+        "organization_group" => subject_id_type == "organization_group_id",
+        ORGANIZATION_SUBJECT_TYPE => {
+            subject_id_type == ORGANIZATION_SUBJECT_ID_TYPE
+                && subject_id_value == ORGANIZATION_SUBJECT_ID
+        }
+        _ => false,
+    };
+    if !valid_subject_target {
+        return Err(eyre!(
+            "Invalid subject target: subject_type '{}' cannot use subject_id_type '{}' and subject_id '{}'",
+            subject_type,
+            subject_id_type,
+            subject_id_value
         ));
     }
 
@@ -260,6 +288,7 @@ pub async fn delete_share_grant(
 /// This function checks for:
 /// - Direct user shares (subject_type = "user" and subject_id = user_id)
 /// - Organization group shares (subject_type = "organization_group" and subject_id in organization_group_ids)
+/// - Whole organization shares (subject_type = "organization")
 pub async fn get_resources_shared_with_subject(
     conn: &DatabaseConnection,
     subject_id: &str,
@@ -312,6 +341,17 @@ pub async fn get_resources_shared_with_subject_and_groups(
                 .add(share_grants::Column::ResourceType.eq(resource_type)),
         );
     }
+
+    // An organization grant applies to every logged-in user in the
+    // organization. The caller is authenticated before this helper is used,
+    // so no per-user identifier is needed for this target.
+    condition = condition.add(
+        Condition::all()
+            .add(share_grants::Column::SubjectType.eq(ORGANIZATION_SUBJECT_TYPE))
+            .add(share_grants::Column::SubjectIdType.eq(ORGANIZATION_SUBJECT_ID_TYPE))
+            .add(share_grants::Column::SubjectId.eq(ORGANIZATION_SUBJECT_ID))
+            .add(share_grants::Column::ResourceType.eq(resource_type)),
+    );
 
     let grants = ShareGrants::find().filter(condition).all(conn).await?;
 

@@ -102,8 +102,14 @@ const GrantRow = memo<GrantRowProps>(
     const displayName =
       profileDisplayName ??
       subjectLookup.get(grant.subject_id) ??
-      grant.subject_id;
+      (grant.subject_type === "organization"
+        ? t({
+            id: "sharing.target.fullOrganization",
+            message: "Full organization",
+          })
+        : grant.subject_id);
     const isGroup = grant.subject_type === "organization_group";
+    const isOrganization = grant.subject_type === "organization";
 
     return (
       <div className="flex items-start gap-3 px-4 py-3 text-sm sm:items-center">
@@ -116,7 +122,12 @@ const GrantRow = memo<GrantRowProps>(
             <span className="shrink-0 rounded-full bg-theme-bg-secondary px-2 py-0.5 text-xs text-theme-fg-secondary">
               {isGroup
                 ? t({ id: "sharing.type.group", message: "Group" })
-                : t({ id: "sharing.type.user", message: "User" })}
+                : isOrganization
+                  ? t({
+                      id: "sharing.type.organization",
+                      message: "Organization",
+                    })
+                  : t({ id: "sharing.type.user", message: "User" })}
             </span>
             <span className="shrink-0 rounded-full bg-theme-bg-secondary px-2 py-0.5 text-xs text-theme-fg-secondary">
               {t({ id: "sharing.role.viewer", message: "Viewer" })}

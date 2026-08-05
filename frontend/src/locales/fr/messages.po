@@ -3099,8 +3099,20 @@ msgstr "Sélectionner {name}"
 #. js-lingui-explicit-id
 #: src/components/ui/Sharing/ShareGrantsList.tsx
 #: src/components/ui/Sharing/SubjectSelector.tsx
+msgid "sharing.target.fullOrganization"
+msgstr "Organisation entière"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/ShareGrantsList.tsx
+#: src/components/ui/Sharing/SubjectSelector.tsx
 msgid "sharing.type.group"
 msgstr "Groupe"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/ShareGrantsList.tsx
+#: src/components/ui/Sharing/SubjectSelector.tsx
+msgid "sharing.type.organization"
+msgstr "Organisation"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Sharing/ShareGrantsList.tsx
