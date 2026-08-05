@@ -549,12 +549,20 @@ pub async fn list_review_versions(
     ensure_enabled(config)?;
     ensure_reviewer(config, groups)?;
 
-    let versions = AssistantHubAssistantVersions::find()
-        .order_by_desc(assistant_hub_assistant_versions::Column::SubmittedAt)
-        .all(conn)
-        .await?;
+    let versions = AssistantHubAssistantVersions::find().all(conn).await?;
 
-    records_for_versions(conn, versions).await
+    let mut records = records_for_versions(conn, versions).await?;
+    records.sort_by(|left, right| {
+        review_status_sort_order(&left.version.status)
+            .cmp(&review_status_sort_order(&right.version.status))
+            .then_with(|| left.version.submitted_at.cmp(&right.version.submitted_at))
+    });
+
+    Ok(records)
+}
+
+fn review_status_sort_order(status: &str) -> u8 {
+    if status == STATUS_SUBMITTED { 0 } else { 1 }
 }
 
 async fn records_for_versions(
