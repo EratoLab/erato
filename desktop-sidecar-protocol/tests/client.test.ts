@@ -5,6 +5,7 @@ import {
   HttpTransport,
   SidecarClientError,
   type SidecarClientInfo,
+  type SidecarProgressV1Result,
 } from "../typescript/src/index.js";
 import {
   MockSidecar,
@@ -306,5 +307,102 @@ describe("DesktopSidecarClient", () => {
       client.invoke("diagnostics.echo.v1", { message: 42 } as never),
     ).rejects.toBeInstanceOf(SidecarClientError);
     expect(client.getSnapshot().state).toBe("ready");
+  });
+
+  it("observes progress steps while a delayed echo runs and after it settles", async () => {
+    const { client } = await setup();
+    await client.discover();
+
+    const observations: SidecarProgressV1Result[] = [];
+    await expect(
+      client.invoke(
+        "diagnostics.echo.v1",
+        { message: "slow", delayMs: 300 },
+        {
+          progress: {
+            intervalMs: 50,
+            onProgress: (progress) => observations.push(progress),
+          },
+        },
+      ),
+    ).resolves.toMatchObject({ message: "slow" });
+
+    const running = observations.find(
+      (observation) => observation.state === "running",
+    );
+    expect(running?.trace?.steps).toEqual([
+      expect.objectContaining({
+        sequence: 0,
+        id: "delay",
+        status: "running",
+      }),
+    ]);
+    expect(observations.at(-1)).toMatchObject({ state: "finished" });
+    expect(observations.at(-1)?.trace?.steps).toEqual([
+      expect.objectContaining({ sequence: 0, id: "delay", status: "ok" }),
+    ]);
+    expect(client.getSnapshot().state).toBe("ready");
+  });
+
+  it("cancels a timed-out delayed echo and leaves its final trace observable", async () => {
+    const { client } = await setup();
+    await client.discover();
+
+    const observations: SidecarProgressV1Result[] = [];
+    await expect(
+      client.invoke(
+        "diagnostics.echo.v1",
+        { message: "slow", delayMs: 5000 },
+        {
+          timeoutMs: 150,
+          progress: {
+            intervalMs: 50,
+            onProgress: (progress) => observations.push(progress),
+          },
+        },
+      ),
+    ).rejects.toMatchObject({ kind: "timeout" });
+
+    expect(observations.at(-1)).toMatchObject({ state: "finished" });
+    expect(observations.at(-1)?.trace?.steps).toEqual([
+      expect.objectContaining({
+        sequence: 0,
+        id: "delay",
+        status: "skipped",
+        detail: "cancelled",
+      }),
+    ]);
+    expect(client.getSnapshot().state).toBe("ready");
+  });
+
+  it("completes a call untouched when the sidecar predates sidecar.progress.v1", async () => {
+    const { client } = await setup({ omitMethods: ["sidecar.progress.v1"] });
+    await client.discover();
+
+    expect(client.supports("sidecar.progress.v1")).toBe(false);
+    const observations: SidecarProgressV1Result[] = [];
+    await expect(
+      client.invoke(
+        "diagnostics.echo.v1",
+        { message: "old sidecar", delayMs: 120 },
+        {
+          progress: {
+            intervalMs: 30,
+            onProgress: (progress) => observations.push(progress),
+          },
+        },
+      ),
+    ).resolves.toMatchObject({ message: "old sidecar" });
+    expect(observations).toEqual([]);
+    expect(client.getSnapshot().state).toBe("ready");
+  });
+
+  it("answers unknown for a request id the sidecar does not track", async () => {
+    const { client } = await setup();
+    await client.discover();
+
+    await expect(
+      client.invoke("sidecar.progress.v1", { requestId: "c-never-sent" }),
+    ).resolves.toEqual({ state: "unknown" });
   });
 });

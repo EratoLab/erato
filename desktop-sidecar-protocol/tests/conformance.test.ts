@@ -8,6 +8,8 @@ import {
   validateJsonRpcEnvelope,
   validateOutlookListEmailsV1Params,
   validateOutlookListMailboxesV1Result,
+  validateSidecarProgressV1Params,
+  validateSidecarProgressV1Result,
 } from "../typescript/src/generated/validators.mjs";
 
 interface InvalidMessageFixture {
@@ -49,6 +51,68 @@ describe("language-neutral conformance fixtures", () => {
     };
 
     expect(validateDiscoveryDocument(document)).toBe(true);
+  });
+
+  it("validates the sidecar.progress.v1 boundary", () => {
+    expect(validateSidecarProgressV1Params({ requestId: "c-123" })).toBe(true);
+    expect(validateSidecarProgressV1Params({ requestId: 7 })).toBe(true);
+    expect(validateSidecarProgressV1Params({})).toBe(false);
+    expect(validateSidecarProgressV1Params({ requestId: "" })).toBe(false);
+  });
+
+  it("accepts progress results for both rollout directions", () => {
+    // A sidecar that does not track the request answers with a bare state.
+    expect(validateSidecarProgressV1Result({ state: "unknown" })).toBe(true);
+    // Unknown future states and additive fields stay valid; receivers treat
+    // unrecognized states as running.
+    expect(
+      validateSidecarProgressV1Result({
+        state: "futureState",
+        futureField: { revision: 2 },
+      }),
+    ).toBe(true);
+    // A running request returns the log so far, including nested work and a
+    // superseding update for a step already reported.
+    expect(
+      validateSidecarProgressV1Result({
+        state: "running",
+        trace: {
+          steps: [
+            {
+              sequence: 0,
+              id: "delay",
+              status: "running",
+              startedAtOffsetMs: 0,
+            },
+            { sequence: 1, id: "readEmail", status: "ok", parentSequence: 0 },
+            { sequence: 0, id: "delay", status: "ok", durationMs: 120 },
+          ],
+        },
+      }),
+    ).toBe(true);
+    // The state is required, and a step without its sequence identity is
+    // rejected.
+    expect(validateSidecarProgressV1Result({ trace: { steps: [] } })).toBe(
+      false,
+    );
+    expect(
+      validateSidecarProgressV1Result({
+        state: "finished",
+        trace: { steps: [{ id: "delay", status: "ok" }] },
+      }),
+    ).toBe(false);
+  });
+
+  it("bounds the diagnostic echo delay", () => {
+    expect(
+      validateDiagnosticsEchoV1Params({ message: "hi", delayMs: 250 }),
+    ).toBe(true);
+    expect(
+      validateDiagnosticsEchoV1Params({ message: "hi", delayMs: 60001 }),
+    ).toBe(false);
+    expect(
+      validateDiagnosticsEchoV1Params({ message: "hi", delayMs: -1 }),
+    ).toBe(false);
   });
 
   it("validates the Outlook action boundary", () => {

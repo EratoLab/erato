@@ -1,0 +1,160 @@
+{
+  "name": "poll progress for a delayed echo, then cancel a second one",
+  "messages": [
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-echo-slow",
+        "method": "diagnostics.echo.v1",
+        "params": { "message": "hello", "delayMs": 20000 },
+        "x-erato-deadline-at": "2026-07-21T10:01:00.000Z"
+      }
+    },
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-poll-1",
+        "method": "sidecar.progress.v1",
+        "params": { "requestId": "c-echo-slow" }
+      }
+    },
+    {
+      "direction": "sidecar-to-client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-poll-1",
+        "result": {
+          "state": "running",
+          "trace": {
+            "steps": [
+              {
+                "sequence": 0,
+                "id": "delay",
+                "status": "running",
+                "startedAtOffsetMs": 0
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "direction": "sidecar-to-client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-echo-slow",
+        "result": {
+          "message": "hello",
+          "sidecarInstanceId": "sidecar-instance-id"
+        }
+      }
+    },
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-poll-2",
+        "method": "sidecar.progress.v1",
+        "params": { "requestId": "c-echo-slow" }
+      }
+    },
+    {
+      "direction": "sidecar-to-client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-poll-2",
+        "result": {
+          "state": "finished",
+          "trace": {
+            "steps": [
+              {
+                "sequence": 0,
+                "id": "delay",
+                "status": "ok",
+                "startedAtOffsetMs": 0,
+                "durationMs": 20000
+              }
+            ],
+            "totalDurationMs": 20000
+          }
+        }
+      }
+    },
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-echo-cancelled",
+        "method": "diagnostics.echo.v1",
+        "params": { "message": "stopped early", "delayMs": 20000 },
+        "x-erato-deadline-at": "2026-07-21T10:02:00.000Z"
+      }
+    },
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-cancel",
+        "method": "erato.cancel",
+        "params": { "requestId": "c-echo-cancelled", "reason": "user" }
+      }
+    },
+    {
+      "direction": "sidecar-to-client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-cancel",
+        "result": { "accepted": true }
+      }
+    },
+    {
+      "direction": "sidecar-to-client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-echo-cancelled",
+        "error": {
+          "code": -32014,
+          "message": "The request was cancelled.",
+          "data": {
+            "kind": "request_cancelled",
+            "requestId": "c-echo-cancelled"
+          }
+        }
+      }
+    },
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-poll-3",
+        "method": "sidecar.progress.v1",
+        "params": { "requestId": "c-echo-cancelled" }
+      }
+    },
+    {
+      "direction": "sidecar-to-client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-poll-3",
+        "result": {
+          "state": "finished",
+          "trace": {
+            "steps": [
+              {
+                "sequence": 0,
+                "id": "delay",
+                "status": "skipped",
+                "startedAtOffsetMs": 0,
+                "durationMs": 350,
+                "detail": "cancelled"
+              }
+            ],
+            "totalDurationMs": 350
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/outlook/local-trace.schema.json",
+  "title": "SidecarLocalTrace",
+  "description": "The sidecar's internal on-device steps for one request, as an append-only event log. Protocol 1.0 delivers the whole log with the result; a future delivery mode may append to it incrementally, and a client that applies steps by `sequence` (last one wins) renders both identically. Contains no message content, so it can be shown even when the user declines to share the result.",
+  "type": "object",
+  "required": ["steps"],
+  "properties": {
+    "steps": {
+      "type": "array",
+      "items": {
+        "$ref": "../outlook/local-trace-step.schema.json"
+      },
+      "maxItems": 32
+    },
+    "totalDurationMs": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": true
+}

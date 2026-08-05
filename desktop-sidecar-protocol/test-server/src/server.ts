@@ -20,6 +20,7 @@ import {
   validateOutlookListEmailsV1Params,
   validateOutlookListMailboxesV1Params,
   validateSidecarConfigureV1Params,
+  validateSidecarProgressV1Params,
   validateSidecarRestartV1Params,
 } from "../../typescript/src/generated/validators.mjs";
 
@@ -36,6 +37,12 @@ export interface MockSidecarOptions {
   catalogueDigestOverride?: string;
   echoDelayMs?: number;
   echoResultOverride?: unknown;
+  /**
+   * Method names this mock pretends not to know: they are removed from the
+   * advertised catalogue and answered with -32601, simulating a previously
+   * released sidecar for additive-rollout tests.
+   */
+  omitMethods?: readonly string[];
 }
 
 export interface MockSidecarAddress {
@@ -57,6 +64,14 @@ interface HttpRejection {
   status: number;
   reason: string;
 }
+
+interface MockProgressEntry {
+  state: "running" | "finished";
+  steps: Array<Record<string, unknown>>;
+  totalDurationMs?: number;
+}
+
+const MAX_PROGRESS_ENTRIES = 256;
 
 const INSTANCE_ID = "mock-sidecar-instance";
 const MOCK_OUTLOOK_MAILBOX = {
@@ -123,6 +138,7 @@ export class MockSidecar {
     MockSidecarOptions;
   readonly #allowedOrigins: Set<string>;
   readonly #inFlight = new Map<string, AbortController>();
+  readonly #progress = new Map<string, MockProgressEntry>();
   readonly #httpServer = createServer((request, response) => {
     void this.#handleHttpRequest(request, response).catch((error: unknown) => {
       if (response.headersSent) {
@@ -194,6 +210,7 @@ export class MockSidecar {
   async stop(): Promise<void> {
     for (const controller of this.#inFlight.values()) controller.abort();
     this.#inFlight.clear();
+    this.#progress.clear();
     this.#httpServer.closeAllConnections();
     await new Promise<void>((resolve, reject) => {
       this.#httpServer.close((error) => (error ? reject(error) : resolve()));
@@ -339,6 +356,9 @@ export class MockSidecar {
     origin: string,
     message: RequestMessage & { id: string | number },
   ): Promise<unknown> {
+    if (this.#options.omitMethods?.includes(message.method)) {
+      return rpcError(message.id, -32601, "Method not found.");
+    }
     if (message.method === "rpc.discover") {
       if (!validateDiscoverParams(message.params)) {
         return rpcError(message.id, -32602, "Invalid discovery parameters.");
@@ -375,6 +395,27 @@ export class MockSidecar {
       const controller = this.#inFlight.get(requestKey(origin, requestId));
       controller?.abort();
       return rpcResult(message.id, { accepted: controller !== undefined });
+    }
+
+    if (message.method === "sidecar.progress.v1") {
+      if (!validateSidecarProgressV1Params(message.params)) {
+        return rpcError(message.id, -32602, "Invalid method parameters.");
+      }
+      const requestId = (message.params as { requestId: string | number })
+        .requestId;
+      const entry = this.#progress.get(requestKey(origin, requestId));
+      if (!entry) {
+        return rpcResult(message.id, { state: "unknown" });
+      }
+      return rpcResult(message.id, {
+        state: entry.state,
+        trace: {
+          steps: entry.steps.map((step) => ({ ...step })),
+          ...(entry.totalDurationMs === undefined
+            ? {}
+            : { totalDurationMs: entry.totalDurationMs }),
+        },
+      });
     }
 
     if (message.method === "sidecar.restart.v1") {
@@ -471,16 +512,47 @@ export class MockSidecar {
     }
     const controller = new AbortController();
     this.#inFlight.set(key, controller);
+    const delayMs =
+      (message.params as { delayMs?: number }).delayMs ??
+      this.#options.echoDelayMs;
+    const startedAt = Date.now();
+    const progress: MockProgressEntry = {
+      state: "running",
+      steps: [
+        { sequence: 0, id: "delay", status: "running", startedAtOffsetMs: 0 },
+      ],
+    };
+    this.#recordProgress(key, progress);
     try {
-      if (this.#options.echoDelayMs > 0) {
-        await abortableDelay(this.#options.echoDelayMs, controller.signal);
+      if (delayMs > 0) {
+        await abortableDelay(delayMs, controller.signal);
       }
+      const durationMs = Date.now() - startedAt;
       if (controller.signal.aborted) {
+        progress.steps = [
+          {
+            sequence: 0,
+            id: "delay",
+            status: "skipped",
+            startedAtOffsetMs: 0,
+            durationMs,
+            detail: "cancelled",
+          },
+        ];
         return rpcError(message.id, -32014, "The request was cancelled.", {
           kind: "request_cancelled",
           requestId: message.id,
         });
       }
+      progress.steps = [
+        {
+          sequence: 0,
+          id: "delay",
+          status: "ok",
+          startedAtOffsetMs: 0,
+          durationMs,
+        },
+      ];
       return rpcResult(
         message.id,
         this.#options.echoResultOverride ?? {
@@ -489,12 +561,34 @@ export class MockSidecar {
         },
       );
     } finally {
+      progress.state = "finished";
+      progress.totalDurationMs = Date.now() - startedAt;
       this.#inFlight.delete(key);
+    }
+  }
+
+  /**
+   * Remember a request's step log so `sidecar.progress.v1` can answer for it,
+   * evicting the oldest finished entries beyond a small cap. Finished entries
+   * stay observable, mirroring a real sidecar's short retention window.
+   */
+  #recordProgress(key: string, entry: MockProgressEntry): void {
+    this.#progress.delete(key);
+    this.#progress.set(key, entry);
+    if (this.#progress.size <= MAX_PROGRESS_ENTRIES) return;
+    for (const [staleKey, stale] of this.#progress) {
+      if (this.#progress.size <= MAX_PROGRESS_ENTRIES) break;
+      if (stale.state === "finished") this.#progress.delete(staleKey);
     }
   }
 
   #discoveryDocument(): DiscoveryDocument {
     const document = structuredClone(canonicalOpenRpc);
+    if (this.#options.omitMethods?.length) {
+      document.methods = document.methods.filter(
+        (method) => !this.#options.omitMethods?.includes(method.name),
+      );
+    }
     const echoMethod = document.methods.find(
       (method) => method.name === "diagnostics.echo.v1",
     );

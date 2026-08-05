@@ -186,6 +186,36 @@
       }
     },
     {
+      "name": "sidecar.progress.v1",
+      "summary": "Report a pending request's point-in-time progress as the sidecar's on-device step log.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/sidecar-progress-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/sidecar-progress-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        { "$ref": "#/components/errors/CapabilityUnavailable" },
+        { "$ref": "#/components/errors/InvalidParams" },
+        { "$ref": "#/components/errors/SidecarInternal" }
+      ],
+      "x-erato-capability": {
+        "id": "sidecar.progress",
+        "major": 1,
+        "method": "sidecar.progress.v1",
+        "availability": { "state": "enabled" }
+      }
+    },
+    {
       "name": "sidecar.configure.v1",
       "summary": "Replace and persist the current user and organization configuration layers.",
       "params": [
@@ -286,7 +316,7 @@
     }
   },
   "x-erato-catalogue": {
-    "revision": "6",
-    "digest": "sha256:40e6ad89ee4c04e34af71322db9bb6a19c387e6c927a9aa21e0a870ced377ff6"
+    "revision": "7",
+    "digest": "sha256:c0fcd17ff72b25c516bc69a6405897a76d11695b26eec188fc782f4707af5af4"
   }
 }

@@ -261,3 +261,51 @@ action returns message bodies or attachments. Implementations MUST use
 read-only storage access. A mailbox enumeration MAY succeed partially and
 report inaccessible local sources in `warnings`; a failure to enumerate the
 active platform's Outlook profile is a `sidecar_internal` error.
+
+## 14. Incremental progress
+
+Protocol 1.0 has no server-to-client push (§2), so observing a long-running
+request while it runs is a poll pair: the client MAY call
+`sidecar.progress.v1` with the JSON-RPC request ID of a pending application
+request and receives that request's `state` and step log so far. Polling is
+read-only observation and MUST NOT affect the observed request; a client that
+never polls sees exactly the behavior it sees today.
+
+`state` is an open string. Known values are `running`, `finished`, and
+`unknown`; receivers MUST treat unrecognized values as `running`. Polling an
+ID the sidecar does not recognize — never seen, not tracked by that method, or
+already past retention — is a successful result with `state: "unknown"`, never
+an error.
+
+The `trace` is the sidecar's own on-device step log, shaped as an append-only
+event log. It carries metadata only — step identifiers, statuses, durations,
+local model identifiers, and item counts — and MUST NOT contain message
+content, snippets, or file names, so a client may display it even when the
+user declines to share the result itself. Each step carries a `sequence` that
+identifies it within the request and orders it; a step MUST NOT change its
+`sequence`, and a later step with an existing `sequence` supersedes the
+earlier one. Clients MUST apply steps by `sequence` rather than by position,
+so that a log delivered complete with a result and a log delivered in parts
+through polling render identically. A method's result MAY still embed the
+complete log; polling only changes when steps become visible, not what they
+mean.
+
+Progress is authorized like cancellation (§5): a request's progress is visible
+only to the same Origin, OS user, and organization policy as the original
+request, and request IDs are unguessable. Each poll returns the whole log so
+far — the schema's step cap keeps the response bounded within §2's body caps,
+so no cursor is needed. A sidecar SHOULD keep a finished request observable
+for a short retention window so a poll racing completion still sees
+`finished`, and MUST NOT persist anything about the request beyond that
+window.
+
+Cancellation composes with progress: `erato.cancel` (§5) sets a flag that
+running work observes at step boundaries. Work that stops early answers the
+original request with `request_cancelled` (-32014), and its final step log
+stays observable through the poll for the retention window.
+
+For testing without a long-running application capability,
+`diagnostics.echo.v1` accepts an optional `delayMs` parameter (at most 60,000
+ms; sidecars MAY cap it lower) and reports the pause as a `delay` step, so
+the poll pair and both rollout directions can be exercised against a delayed
+echo alone.

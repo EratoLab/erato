@@ -32,6 +32,12 @@
       "advertised": { "method": "sidecar.restart.v1", "state": "enabled" },
       "compiledMethods": ["diagnostics.echo.v1", "sidecar.restart.v1"],
       "supports": true
+    },
+    {
+      "name": "enabled progress capability",
+      "advertised": { "method": "sidecar.progress.v1", "state": "enabled" },
+      "compiledMethods": ["diagnostics.echo.v1", "sidecar.progress.v1"],
+      "supports": true
     }
   ]
 }

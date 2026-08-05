@@ -30,3 +30,5 @@ export const validateOutlookListEmailsV1Params: Validator;
 export const validateOutlookListEmailsV1Result: Validator;
 export const validateOutlookGetConversationV1Params: Validator;
 export const validateOutlookGetConversationV1Result: Validator;
+export const validateSidecarProgressV1Params: Validator;
+export const validateSidecarProgressV1Result: Validator;

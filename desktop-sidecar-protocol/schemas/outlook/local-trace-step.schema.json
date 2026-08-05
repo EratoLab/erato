@@ -1,0 +1,66 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/outlook/local-trace-step.schema.json",
+  "title": "SidecarLocalTraceStep",
+  "description": "One internal on-device processing step, shaped as an event: a stable `sequence` identity carrying a status that may evolve. Metadata only: never message content, snippets, or file names.",
+  "type": "object",
+  "required": ["sequence", "id", "status"],
+  "properties": {
+    "sequence": {
+      "description": "Stable identity of this step within the request, and its ordering key. A later step with the same sequence supersedes an earlier one, so the same payload works whether the log arrives complete or is appended to over time.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "id": {
+      "description": "Step identifier. Known values include expandQuery, buildIndex, match, and summarize. Receivers ignore unknown values and render them by their raw id.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "status": {
+      "description": "Step outcome. Known values include running, ok, skipped, degraded, and error. Receivers treat unknown values as running.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "parentSequence": {
+      "description": "Sequence of the step this one runs inside, when the sidecar nests work (for example a tool call made during a local model turn). Absent for top-level steps.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "startedAtOffsetMs": {
+      "description": "Milliseconds between the start of the request and the start of this step, so a client can order and place steps identically in both delivery modes.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "durationMs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "model": {
+      "description": "Identifier of the local model this step used, when it used one.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "cacheHit": {
+      "description": "Whether this step was served from a local cache (for example the in-memory mailbox index).",
+      "type": "boolean"
+    },
+    "detail": {
+      "description": "Short non-sensitive note \u2014 the sidecar's counterpart of a progress message: why a step was skipped or degraded, or what it is doing.",
+      "type": "string",
+      "maxLength": 512
+    },
+    "counts": {
+      "description": "Item counts keyed by an open string. Known keys include keywordsIn, keywordsOut, messagesScanned, matched, and hitsReturned.",
+      "type": "object",
+      "maxProperties": 16,
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      }
+    }
+  },
+  "additionalProperties": true
+}
