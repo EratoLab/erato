@@ -30,3 +30,26 @@ tests:
       - equal:
           path: spec.routes[0].services[0].strategy
           value: hrw
+
+  - it: should route through a standard Kubernetes Ingress when configured
+    set:
+      backend.loadBalancer.enabled: true
+      backend.loadBalancer.provider: kubernetesingress
+    asserts:
+      - isKind:
+          of: Ingress
+      - equal:
+          path: metadata.annotations["kubernetes.io/ingress.class"]
+          value: RELEASE-NAME-erato-backend-load-balancer
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: /
+      - equal:
+          path: spec.rules[0].http.paths[0].pathType
+          value: Prefix
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: RELEASE-NAME-erato-app
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 3130

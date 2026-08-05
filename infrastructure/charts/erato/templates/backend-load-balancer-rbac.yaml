@@ -18,14 +18,19 @@ metadata:
     app.kubernetes.io/component: erato-backend-load-balancer
 rules:
   - apiGroups: [""]
-    resources: ["endpoints", "pods", "services", "secrets"]
+    resources: ["configmaps", "endpoints", "pods", "services", "secrets"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["discovery.k8s.io"]
     resources: ["endpointslices"]
     verbs: ["get", "list", "watch"]
-  - apiGroups: ["traefik.io"]
-    resources: ["ingressroutes", "traefikservices", "middlewares", "serverstransports", "tlsoptions", "tlsstores"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
     verbs: ["get", "list", "watch"]
+{{- if eq .Values.backend.loadBalancer.provider "kubernetescrd" }}
+  - apiGroups: ["traefik.io"]
+    resources: ["ingressroutes", "ingressrouteudps", "ingressroutetcps", "traefikservices", "middlewares", "middlewaretcps", "serverstransports", "serverstransporttcps", "tlsoptions", "tlsstores"]
+    verbs: ["get", "list", "watch"]
+{{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

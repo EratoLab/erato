@@ -43,9 +43,17 @@ tests:
           path: spec.ingress[0].from[1].podSelector.matchLabels["app.kubernetes.io/component"]
           value: erato-backend-load-balancer
 
-  - it: should render an intermediate load balancer policy when enabled
+  - it: should not render an intermediate load balancer policy when only the load balancer is enabled
     set:
       backend.loadBalancer.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 3
+
+  - it: should render an intermediate load balancer policy when explicitly enabled
+    set:
+      backend.loadBalancer.enabled: true
+      backend.loadBalancer.networkPolicy.enabled: true
     documentSelector:
       path: metadata.name
       value: RELEASE-NAME-backend-load-balancer-network-policy
@@ -55,6 +63,22 @@ tests:
       - equal:
           path: spec.ingress[0].from[0].podSelector.matchLabels["app.kubernetes.io/component"]
           value: oauth2-proxy
+
+  - it: should allow configured API server CIDRs for an explicitly enabled load balancer policy
+    set:
+      backend.loadBalancer.enabled: true
+      backend.loadBalancer.networkPolicy.enabled: true
+      backend.loadBalancer.networkPolicy.apiServerCIDRs:
+        - 20.101.197.138/32
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-backend-load-balancer-network-policy
+    asserts:
+      - contains:
+          path: spec.egress[1].to
+          content:
+            ipBlock:
+              cidr: 20.101.197.138/32
 
   - it: should render oauth2-proxy network policy with ingress on 4180 and open egress
     documentSelector:

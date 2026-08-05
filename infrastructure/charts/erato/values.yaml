@@ -261,7 +261,9 @@ backend:
       pullSecrets: []
     # -- Number of intermediate load balancer replicas
     replicaCount: 1
-    # -- Traefik load-balancing strategy. `hrw` provides client-IP affinity.
+    # -- Traefik provider used to discover the intermediate load balancer route. `kubernetescrd` supports the full Traefik CRD feature set; `kubernetesingress` uses standard Kubernetes Ingress resources.
+    provider: kubernetescrd
+    # -- Traefik CRD-provider load-balancing strategy. `hrw` provides client-IP affinity.
     strategy: hrw
     # -- Trust forwarded headers from oauth2-proxy so HRW sees the original client IP.
     forwardedHeaders:
@@ -284,8 +286,10 @@ backend:
     # -- Annotations to add to the intermediate load balancer pods
     podAnnotations: {}
     networkPolicy:
-      # -- Enable NetworkPolicy for intermediate load balancer pods
-      enabled: true
+      # -- Enable NetworkPolicy for intermediate load balancer pods. This is opt-in because the Kubernetes API endpoint may be reached through a Service and its post-DNAT address is cluster-specific.
+      enabled: false
+      # -- CIDRs for the Kubernetes API endpoint after Service DNAT. Required when the load balancer NetworkPolicy is enabled and the API endpoint is external to the cluster.
+      apiServerCIDRs: []
     resources:
       requests:
         # -- The requested CPU for the intermediate load balancer

@@ -253,6 +253,23 @@ backend:
         - 10.42.0.0/16
 ```
 
+The load-balancer NetworkPolicy is disabled by default because Kubernetes
+NetworkPolicy egress is evaluated after Service DNAT on some clusters. If you
+enable it, configure the Kubernetes API endpoint's post-DNAT CIDR(s) for the
+target cluster so Traefik can discover routes and services:
+
+```yaml
+backend:
+  loadBalancer:
+    networkPolicy:
+      enabled: true
+      apiServerCIDRs:
+        - 20.101.197.138/32
+```
+
+Use the actual API endpoint address for the target cluster; the example above
+is cluster-specific.
+
 The backend adds its pod and node names to the `Server` response header and to
 the `pod_name` and `node_name` labels on `erato_info`, which makes it easier to
 verify routing and diagnose cache behavior.
@@ -343,8 +360,10 @@ chart.
 | backend.loadBalancer.image.pullSecrets | list | `[]` | Intermediate load balancer image pull secrets |
 | backend.loadBalancer.image.repository | string | `"traefik"` | Intermediate load balancer image repository |
 | backend.loadBalancer.image.tag | string | `"v3.6.1"` | Intermediate load balancer image tag |
-| backend.loadBalancer.networkPolicy.enabled | bool | `true` | Enable NetworkPolicy for intermediate load balancer pods |
+| backend.loadBalancer.networkPolicy.apiServerCIDRs | list | `[]` | CIDRs for the Kubernetes API endpoint after Service DNAT. Required when the load balancer NetworkPolicy is enabled and the API endpoint is external to the cluster. |
+| backend.loadBalancer.networkPolicy.enabled | bool | `false` | Enable NetworkPolicy for intermediate load balancer pods. This is opt-in because the Kubernetes API endpoint may be reached through a Service and its post-DNAT address is cluster-specific. |
 | backend.loadBalancer.podAnnotations | object | `{}` | Annotations to add to the intermediate load balancer pods |
+| backend.loadBalancer.provider | string | `"kubernetescrd"` | Traefik provider used to discover the intermediate load balancer route. `kubernetescrd` supports the full Traefik CRD feature set; `kubernetesingress` uses standard Kubernetes Ingress resources. |
 | backend.loadBalancer.replicaCount | int | `1` | Number of intermediate load balancer replicas |
 | backend.loadBalancer.resources.limits.cpu | string | `"200m"` | The CPU limit for the intermediate load balancer |
 | backend.loadBalancer.resources.limits.memory | string | `"128Mi"` | The memory limit for the intermediate load balancer |
@@ -354,7 +373,7 @@ chart.
 | backend.loadBalancer.service.type | string | `"ClusterIP"` | Intermediate load balancer Service type |
 | backend.loadBalancer.serviceAccount.create | bool | `true` | Create a ServiceAccount for Traefik Kubernetes endpoint discovery |
 | backend.loadBalancer.serviceAccount.name | string | `""` | ServiceAccount name. Defaults to the release-specific name. |
-| backend.loadBalancer.strategy | string | `"hrw"` | Traefik load-balancing strategy. `hrw` provides client-IP affinity. |
+| backend.loadBalancer.strategy | string | `"hrw"` | Traefik CRD-provider load-balancing strategy. `hrw` provides client-IP affinity. |
 | backend.logJson | bool | `true` | Emit backend logs as JSON by setting LOGGING__FORMAT=json |
 | backend.metrics.configFile.enabled | bool | `true` | Render and mount an additional `*.auto.erato.toml` config file that enables `integrations.prometheus`. |
 | backend.metrics.enabled | bool | `false` | Enable backend Prometheus metrics integration and related chart resources. |

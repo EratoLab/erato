@@ -32,9 +32,12 @@ Configures a large set of chat models to validate model selector behavior (menu 
 
 **Configuration File:** `config/erato.scenario-multi-replica.toml`
 
-Deploys three backend replicas and enables the mock-LLM provider. The dedicated
+Deploys two backend replicas and enables the mock-LLM provider. The dedicated
 E2E test keeps a long-running generation active while reloading the page five
 times, exercising cross-replica event replay through the Kubernetes Service.
+The scenario also enables the Erato intermediate load balancer; setup installs
+Traefik's standard Kubernetes Ingress provider while retaining nginx as the
+cluster's external ingress.
 
 ## Scenario Infrastructure
 

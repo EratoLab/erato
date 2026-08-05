@@ -3,7 +3,8 @@ import { ensureTestScenario } from "./shared";
 
 /**
  * Deploy the dedicated shared-streaming scenario before its tests. The
- * scenario switch also sets backend.replicaCount=3 and enables mock-LLM.
+ * scenario switch also sets backend.replicaCount=2, enables the load balancer,
+ * and enables mock-LLM.
  */
 setup("switch to multi-replica scenario", async ({ page }) => {
   await ensureTestScenario(page, "multi-replica");

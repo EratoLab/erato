@@ -71,6 +71,10 @@ spec:
           port: 3130
     - to:
         - namespaceSelector: {}
+        {{- range .Values.backend.loadBalancer.networkPolicy.apiServerCIDRs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
       ports:
         - protocol: TCP
           port: 443

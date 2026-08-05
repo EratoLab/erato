@@ -98,7 +98,7 @@ def wait_for_rollout(namespace: str, timeout: int = 300) -> None:
         print("Error: Deployment rollout failed or timed out", file=sys.stderr)
         print(result.stderr, file=sys.stderr)
         sys.exit(1)
-    
+
     print("Deployment rollout completed successfully!")
 
 
@@ -170,4 +170,3 @@ It preserves existing Helm values like image repository and tag.
 
 if __name__ == "__main__":
     main()
-

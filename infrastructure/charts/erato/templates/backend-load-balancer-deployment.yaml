@@ -1,4 +1,7 @@
 {{- if .Values.backend.loadBalancer.enabled }}
+{{- if not (or (eq .Values.backend.loadBalancer.provider "kubernetescrd") (eq .Values.backend.loadBalancer.provider "kubernetesingress")) }}
+{{- fail "backend.loadBalancer.provider must be kubernetescrd or kubernetesingress" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -39,11 +42,18 @@ spec:
             {{- end }}
             - --ping=true
             - --ping.entrypoint=web
+            {{- if eq .Values.backend.loadBalancer.provider "kubernetescrd" }}
             - --providers.kubernetescrd=true
             - --providers.kubernetescrd.allowcrossnamespace=false
             - --providers.kubernetescrd.ingressclass={{ include "erato.loadBalancerIngressClass" . }}
             - --providers.kubernetescrd.namespaces={{ include "common.names.namespace" . }}
             - --providers.kubernetescrd.disableclusterscoperesources=true
+            {{- else }}
+            - --providers.kubernetesingress=true
+            - --providers.kubernetesingress.ingressclass={{ include "erato.loadBalancerIngressClass" . }}
+            - --providers.kubernetesingress.namespaces={{ include "common.names.namespace" . }}
+            - --providers.kubernetesingress.disableclusterscoperesources=true
+            {{- end }}
             - --api.dashboard=false
             - --accesslog=false
           ports:
