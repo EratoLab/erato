@@ -9,6 +9,7 @@ VALID_SCENARIOS = [
     "assistants",
     "entra_id",
     "many-models",
+    "multi-replica",
     "nginx-auth",
 ]
 
@@ -53,4 +54,22 @@ def get_helm_scenario_args(scenario: str) -> List[str]:
         raise ValueError(f"Invalid scenario: {scenario}. Valid scenarios: {VALID_SCENARIOS}")
     
     source_file = get_scenario_source_file(scenario)
-    return ["--set", f"testScenarioConfig.sourceFile={source_file}"]
+    args = ["--set", f"testScenarioConfig.sourceFile={source_file}"]
+    if scenario == "multi-replica":
+        args.extend(
+            [
+                "--set",
+                "erato.backend.replicaCount=2",
+                "--set",
+                "erato.backend.resources.requests.cpu=100m",
+                "--set",
+                "erato.backend.resources.requests.memory=250Mi",
+                "--set",
+                "erato.backend.resources.limits.cpu=100m",
+                "--set",
+                "erato.backend.resources.limits.memory=250Mi",
+                "--set",
+                "mockLlmServer.enabled=true",
+            ]
+        )
+    return args

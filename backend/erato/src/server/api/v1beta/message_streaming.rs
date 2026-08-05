@@ -73,7 +73,8 @@ use sea_orm::JsonValue;
 use sea_orm::prelude::Uuid;
 use serde::Serialize;
 use serde_json::{Value, json};
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::mpsc::Sender;
@@ -1048,6 +1049,80 @@ fn streaming_event_to_sse(event: &StreamingEvent) -> Result<Event, Report> {
     };
 
     Ok(Event::default().event(event_name).data(data))
+}
+
+type SseEventStream = Pin<Box<dyn Stream<Item = Result<Event, Report>> + Send>>;
+type SseEventStreamWithKeepAlive = axum::response::sse::KeepAliveStream<SseEventStream>;
+
+fn streaming_events_to_sse<S>(events: S) -> SseEventStream
+where
+    S: Stream<Item = Result<StreamingEvent, Report>> + Send + 'static,
+{
+    Box::pin(futures::StreamExt::filter_map(events, |result| {
+        futures::future::ready(match result {
+            Ok(streaming_event) => match streaming_event_to_sse(&streaming_event) {
+                Ok(sse_event) => Some(Ok(sse_event)),
+                Err(error) => Some(Err(error)),
+            },
+            Err(error) => Some(Err(error)),
+        })
+    }))
+}
+
+struct SharedResumeState {
+    manager: crate::services::background_tasks::BackgroundTaskManager,
+    generation_id: Uuid,
+    last_event_id: i64,
+    pending: VecDeque<StreamingEvent>,
+    finished: bool,
+}
+
+fn shared_generation_event_stream(
+    manager: crate::services::background_tasks::BackgroundTaskManager,
+    generation_id: Uuid,
+) -> impl Stream<Item = Result<StreamingEvent, Report>> + Send {
+    futures::stream::unfold(
+        SharedResumeState {
+            manager,
+            generation_id,
+            last_event_id: 0,
+            pending: VecDeque::new(),
+            finished: false,
+        },
+        |mut state| async move {
+            loop {
+                if let Some(event) = state.pending.pop_front() {
+                    return Some((Ok(event), state));
+                }
+                if state.finished {
+                    return None;
+                }
+
+                match state
+                    .manager
+                    .get_shared_events(state.generation_id, state.last_event_id)
+                    .await
+                {
+                    Ok(events) if !events.is_empty() => {
+                        for (event_id, event) in events {
+                            state.last_event_id = state.last_event_id.max(event_id);
+                            if matches!(event, StreamingEvent::StreamEnd) {
+                                state.finished = true;
+                            }
+                            state.pending.push_back(event);
+                        }
+                    }
+                    Ok(_) => {
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                    }
+                    Err(error) => {
+                        state.finished = true;
+                        return Some((Err(eyre!(error)), state));
+                    }
+                }
+            }
+        },
+    )
 }
 
 #[derive(serde::Deserialize, ToSchema)]
@@ -8291,16 +8366,29 @@ pub async fn abort_message_stream(
     })?
     .0;
 
-    let task = app_state
+    if let Some(task) = app_state.background_tasks.get_task(&request.chat_id).await {
+        task.request_abort();
+    } else if let Some((generation_id, _)) = app_state
         .background_tasks
-        .get_task(&request.chat_id)
+        .get_shared_generation(&request.chat_id)
         .await
-        .ok_or((
+    {
+        app_state
+            .background_tasks
+            .enqueue_abort(generation_id)
+            .await
+            .map_err(|error| {
+                (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to request abort: {error}"),
+                )
+            })?;
+    } else {
+        return Err((
             axum::http::StatusCode::NOT_FOUND,
             "No active generation task found for this chat".to_string(),
-        ))?;
-
-    task.request_abort();
+        ));
+    }
 
     Ok(Json(AbortStreamResponse {
         abort_requested: true,
@@ -8348,14 +8436,48 @@ pub async fn client_tool_result(
     })?
     .0;
 
-    let task = app_state
-        .background_tasks
-        .get_task(&request.chat_id)
-        .await
-        .ok_or((
-            axum::http::StatusCode::NOT_FOUND,
-            "No active generation task found for this chat".to_string(),
-        ))?;
+    let task = app_state.background_tasks.get_task(&request.chat_id).await;
+
+    if task.is_none() {
+        let Some((generation_id, message_id)) = app_state
+            .background_tasks
+            .get_shared_generation(&request.chat_id)
+            .await
+        else {
+            return Err((
+                axum::http::StatusCode::NOT_FOUND,
+                "No active generation task found for this chat".to_string(),
+            ));
+        };
+        if let Some(message_id) = message_id
+            && message_id != request.message_id
+        {
+            return Err((
+                axum::http::StatusCode::NOT_FOUND,
+                "No suspended generation matches this message".to_string(),
+            ));
+        }
+        let payload = match (request.result, request.error) {
+            (_, Some(error)) => json!({ "error": error }),
+            (Some(result), None) => json!({ "result": result }),
+            (None, None) => json!({
+                "error": "client tool returned neither a result nor an error"
+            }),
+        };
+        app_state
+            .background_tasks
+            .enqueue_client_tool_result(generation_id, &request.tool_call_id, payload)
+            .await
+            .map_err(|error| {
+                (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to deliver client tool result: {error}"),
+                )
+            })?;
+        return Ok(Json(ClientToolResultResponse { delivered: true }));
+    }
+
+    let task = task.expect("task checked above");
 
     // Route by task identity, not chat_id alone: a concurrent submit/regenerate
     // replaces the task (new message_id), so refuse to deliver to the wrong turn.
@@ -8406,7 +8528,7 @@ pub async fn resume_message_sse(
     Extension(policy): Extension<PolicyEngine>,
     Extension(me_user): Extension<MeProfile>,
     Json(request): Json<ResumeStreamRequest>,
-) -> Result<Sse<impl Stream<Item = Result<Event, Report>>>, (axum::http::StatusCode, String)> {
+) -> Result<Sse<SseEventStreamWithKeepAlive>, (axum::http::StatusCode, String)> {
     // Verify user has access to this chat
     let _chat = get_or_create_chat(
         &app_state.db,
@@ -8426,58 +8548,41 @@ pub async fn resume_message_sse(
     })?
     .0;
 
-    // Get the background task for this chat
-    let task = app_state
-        .background_tasks
-        .get_task(&request.chat_id)
-        .await
-        .ok_or((
-            axum::http::StatusCode::NOT_FOUND,
-            "No active generation task found for this chat".to_string(),
-        ))?;
-
-    // Get the event history
-    let event_history = task.get_event_history().await;
-
-    // Subscribe to live events
-    let broadcast_rx = task.subscribe();
-
-    // Create a stream that first replays history, then switches to live events
-    use futures::stream::{self, StreamExt};
-
-    // Convert history to a stream
-    let history_stream = stream::iter(event_history.into_iter().map(Ok::<_, eyre::Report>));
-
-    // Convert broadcast receiver to stream
-    let broadcast_stream = tokio_stream::wrappers::BroadcastStream::new(broadcast_rx);
-    let live_stream = futures::StreamExt::filter_map(broadcast_stream, |result| {
-        futures::future::ready(match result {
-            Ok(event) => Some(Ok(event)),
-            Err(tokio_stream::wrappers::errors::BroadcastStreamRecvError::Lagged(n)) => {
-                tracing::warn!("Resume client lagged behind by {} events", n);
-                None
-            }
-        })
-    });
-
-    // Chain history and live streams
-    let combined_stream = futures::StreamExt::chain(history_stream, live_stream);
-
-    // Convert StreamingEvents to SSE Events
-    let event_stream = futures::StreamExt::filter_map(combined_stream, |result| {
-        futures::future::ready(match result {
-            Ok(streaming_event) => match streaming_event_to_sse(&streaming_event) {
-                Ok(sse_event) => Some(Ok(sse_event)),
-                Err(e) => Some(Err(e)),
-            },
-            Err(e) => Some(Err(e)),
-        })
-    })
-    .inspect(|event| {
-        if let Err(err) = event {
-            log_and_capture_error("resume SSE serialization", err);
-        }
-    });
+    let event_stream: SseEventStream =
+        if let Some(task) = app_state.background_tasks.get_task(&request.chat_id).await {
+            // The owner pod can use its in-memory history and broadcast channel.
+            let event_history = task.get_event_history().await;
+            let broadcast_rx = task.subscribe();
+            use futures::stream;
+            let history_stream = stream::iter(event_history.into_iter().map(Ok::<_, eyre::Report>));
+            let broadcast_stream = tokio_stream::wrappers::BroadcastStream::new(broadcast_rx);
+            let live_stream = futures::StreamExt::filter_map(broadcast_stream, |result| {
+                futures::future::ready(match result {
+                    Ok(event) => Some(Ok(event)),
+                    Err(tokio_stream::wrappers::errors::BroadcastStreamRecvError::Lagged(n)) => {
+                        tracing::warn!("Resume client lagged behind by {} events", n);
+                        None
+                    }
+                })
+            });
+            streaming_events_to_sse(futures::StreamExt::chain(history_stream, live_stream))
+        } else if let Some((generation_id, _message_id)) = app_state
+            .background_tasks
+            .get_shared_generation(&request.chat_id)
+            .await
+        {
+            // A request routed to another pod tails the shared event log instead of
+            // looking for a task in that pod's process-local map.
+            streaming_events_to_sse(shared_generation_event_stream(
+                app_state.background_tasks.clone(),
+                generation_id,
+            ))
+        } else {
+            return Err((
+                axum::http::StatusCode::NOT_FOUND,
+                "No active generation task found for this chat".to_string(),
+            ));
+        };
 
     Ok(Sse::new(event_stream).keep_alive(
         axum::response::sse::KeepAlive::new()
