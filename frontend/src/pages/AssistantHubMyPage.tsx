@@ -44,7 +44,7 @@ type AssistantSubmissionGroup = {
   versions: AssistantHubVersion[];
 };
 
-const groupVersionsByAssistant = (
+export const groupVersionsByAssistant = (
   versions: AssistantHubVersion[],
 ): AssistantSubmissionGroup[] => {
   const groups = new Map<string, AssistantSubmissionGroup>();
@@ -64,9 +64,19 @@ const groupVersionsByAssistant = (
     }
   }
 
-  return [...groups.values()].sort((left, right) =>
-    left.name.localeCompare(right.name),
-  );
+  return [...groups.values()].sort((left, right) => {
+    const leftLatestSubmission = Math.max(
+      ...left.versions.map((version) => Date.parse(version.submitted_at)),
+    );
+    const rightLatestSubmission = Math.max(
+      ...right.versions.map((version) => Date.parse(version.submitted_at)),
+    );
+
+    return (
+      rightLatestSubmission - leftLatestSubmission ||
+      left.name.localeCompare(right.name)
+    );
+  });
 };
 
 export const getVisibleAssistantHubVersions = (

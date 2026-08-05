@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { getVisibleAssistantHubVersions } from "../AssistantHubMyPage";
+import {
+  getVisibleAssistantHubVersions,
+  groupVersionsByAssistant,
+} from "../AssistantHubMyPage";
 
 import type { AssistantHubVersion } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
@@ -8,6 +11,21 @@ const versions = [
   { version_id: "latest" },
   { version_id: "previous" },
   { version_id: "oldest" },
+] as AssistantHubVersion[];
+
+const groupedVersions = [
+  {
+    version_id: "older-assistant-version",
+    hub_assistant_id: "older-assistant",
+    submitted_at: "2026-08-04T12:00:00Z",
+    assistant: { name: "Alpha" },
+  },
+  {
+    version_id: "newer-assistant-version",
+    hub_assistant_id: "newer-assistant",
+    submitted_at: "2026-08-05T12:00:00Z",
+    assistant: { name: "Zulu" },
+  },
 ] as AssistantHubVersion[];
 
 describe("getVisibleAssistantHubVersions", () => {
@@ -33,5 +51,15 @@ describe("getVisibleAssistantHubVersions", () => {
         (version) => version.version_id,
       ),
     ).toEqual(["latest", "previous"]);
+  });
+});
+
+describe("groupVersionsByAssistant", () => {
+  it("orders assistants by their most recent submission", () => {
+    expect(
+      groupVersionsByAssistant(groupedVersions).map(
+        (group) => group.hubAssistantId,
+      ),
+    ).toEqual(["newer-assistant", "older-assistant"]);
   });
 });
