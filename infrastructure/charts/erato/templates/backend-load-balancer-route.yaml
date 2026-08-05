@@ -1,7 +1,8 @@
 {{- if .Values.backend.loadBalancer.enabled }}
-{{- if not (.Capabilities.APIVersions.Has "traefik.io/v1alpha1") }}
+{{- if and (eq .Values.backend.loadBalancer.provider "kubernetescrd") (not (.Capabilities.APIVersions.Has "traefik.io/v1alpha1")) }}
 {{- fail "backend.loadBalancer.enabled requires the Traefik CRDs (traefik.io/v1alpha1); install the IngressRoute CRD before enabling the intermediate load balancer" }}
 {{- end }}
+{{- if eq .Values.backend.loadBalancer.provider "kubernetescrd" }}
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -21,4 +22,26 @@ spec:
         - name: {{ .Release.Name }}-erato-app
           port: 3130
           strategy: {{ .Values.backend.loadBalancer.strategy }}
+{{- else if eq .Values.backend.loadBalancer.provider "kubernetesingress" }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-erato-backend-load-balancer
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: erato-backend-load-balancer
+  annotations:
+    kubernetes.io/ingress.class: {{ include "erato.loadBalancerIngressClass" . | quote }}
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-erato-app
+                port:
+                  number: 3130
+{{- end }}
 {{- end }}

@@ -255,6 +255,23 @@ backend:
         - 10.42.0.0/16
 ```
 
+The load-balancer NetworkPolicy is disabled by default because Kubernetes
+NetworkPolicy egress is evaluated after Service DNAT on some clusters. If you
+enable it, configure the Kubernetes API endpoint's post-DNAT CIDR(s) for the
+target cluster so Traefik can discover routes and services:
+
+```yaml
+backend:
+  loadBalancer:
+    networkPolicy:
+      enabled: true
+      apiServerCIDRs:
+        - 20.101.197.138/32
+```
+
+Use the actual API endpoint address for the target cluster; the example above
+is cluster-specific.
+
 The backend adds its pod and node names to the `Server` response header and to
 the `pod_name` and `node_name` labels on `erato_info`, which makes it easier to
 verify routing and diagnose cache behavior.

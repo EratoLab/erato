@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=../tests_schema/helm-testsuite.json
+suite: test intermediate backend load balancer RBAC
+minimumVersion: 1.0.1
+templates:
+  - backend-load-balancer-rbac.yaml
+tests:
+  - it: should not render when disabled
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render a service account, role, and role binding when enabled
+    set:
+      backend.loadBalancer.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 3
+
+  - it: should grant the load balancer all required discovery permissions
+    set:
+      backend.loadBalancer.enabled: true
+    documentSelector:
+      path: kind
+      value: Role
+    asserts:
+      - contains:
+          path: rules[0].resources
+          content: configmaps
+      - contains:
+          path: rules[3].resources
+          content: ingressrouteudps
+      - contains:
+          path: rules[3].resources
+          content: ingressroutetcps
+      - contains:
+          path: rules[3].resources
+          content: middlewaretcps
+      - contains:
+          path: rules[3].resources
+          content: serverstransporttcps
+
+  - it: should grant the Kubernetes Ingress provider ingress discovery permissions
+    set:
+      backend.loadBalancer.enabled: true
+      backend.loadBalancer.provider: kubernetesingress
+    documentSelector:
+      path: kind
+      value: Role
+    asserts:
+      - contains:
+          path: rules[2].resources
+          content: ingresses

@@ -33,3 +33,15 @@ tests:
       - equal:
           path: spec.template.spec.serviceAccountName
           value: RELEASE-NAME-erato-backend-load-balancer
+
+  - it: should configure the CRD-free Kubernetes Ingress provider when selected
+    set:
+      backend.loadBalancer.enabled: true
+      backend.loadBalancer.provider: kubernetesingress
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --providers.kubernetesingress=true
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --providers.kubernetesingress.disableclusterscoperesources=true
