@@ -817,6 +817,13 @@ pub async fn review_version(
     } else {
         STATUS_REVIEW_DECLINED.to_string()
     });
+    if !accepted {
+        // A declined version must not remain visible as published if it was
+        // previously marked for publication by another workflow.
+        active.is_published = Set(false);
+        active.is_current_published_version = Set(false);
+        active.published_at = Set(None);
+    }
     active.reviewer_review_comment = Set(reviewer_review_comment);
     active.reviewed_at = Set(Some(Utc::now().into()));
     let version = active.update(conn).await?;

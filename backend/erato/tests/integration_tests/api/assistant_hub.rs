@@ -839,6 +839,43 @@ async fn test_published_current_assistant_hub_version_is_listed_for_audience_vie
     assert_eq!(versions[0]["status"], "review_accepted");
     assert_eq!(versions[0]["is_published"], true);
     assert_eq!(versions[0]["is_current_published_version"], true);
+
+    let unpublish_response = server
+        .put(&format!(
+            "/api/v1beta/assistant-hub/versions/{version_id}/published"
+        ))
+        .json(&json!({ "is_published": false }))
+        .with_bearer_token(&reviewer_token)
+        .await;
+    assert_eq!(unpublish_response.status_code(), http::StatusCode::OK);
+    let unpublished: Value = unpublish_response.json();
+    assert_eq!(unpublished["version"]["is_published"], false);
+    assert_eq!(
+        unpublished["version"]["is_current_published_version"],
+        false
+    );
+
+    let owner_versions_response = server
+        .get("/api/v1beta/assistant-hub/my/versions")
+        .with_bearer_token(&owner_token)
+        .await;
+    assert_eq!(owner_versions_response.status_code(), http::StatusCode::OK);
+    let owner_versions: Value = owner_versions_response.json();
+    assert_eq!(owner_versions["versions"][0]["is_published"], false);
+
+    let viewer_after_unpublish_response = server
+        .get("/api/v1beta/assistant-hub/assistants")
+        .with_bearer_token(&viewer_token)
+        .await;
+    assert_eq!(
+        viewer_after_unpublish_response.status_code(),
+        http::StatusCode::OK
+    );
+    assert_eq!(
+        version_count(&viewer_after_unpublish_response.json()),
+        0,
+        "unpublishing by a reviewer should remove the assistant from the hub"
+    );
 }
 
 /// Verifies that Assistant Hub publication also works for an organization
