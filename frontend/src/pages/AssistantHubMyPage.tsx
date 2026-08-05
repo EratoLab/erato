@@ -27,6 +27,8 @@ import {
   AssistantHubVersionCard,
   AssistantHubVersionConfigurationSection,
   AssistantHubVersionOverviewSection,
+  getAssistantHubDisplayScore,
+  getAssistantHubRatingScale,
   EmptyAssistantHubState,
   isAssistantHubReviewAcceptedStatus,
 } from "./assistantHubUtils";
@@ -85,34 +87,46 @@ export const getVisibleAssistantHubVersions = (
 ): AssistantHubVersion[] =>
   versions.length > 2 && !isExpanded ? versions.slice(0, 1) : versions;
 
-const REVIEW_SCORE_VALUES = Array.from({ length: 10 }, (_, index) => index + 1);
+function ReviewScoreStars({
+  score,
+  ratingMode,
+}: {
+  score: number;
+  ratingMode?: string;
+}) {
+  const displayScore = getAssistantHubDisplayScore(score, ratingMode);
+  const ratingScale = getAssistantHubRatingScale(ratingMode);
 
-function ReviewScoreStars({ score }: { score: number }) {
   return (
     <div className="flex gap-0.5" aria-hidden="true">
-      {REVIEW_SCORE_VALUES.map((value) => {
-        const isSelected = value <= Math.round(score);
+      {Array.from({ length: ratingScale }, (_, index) => index + 1).map(
+        (value) => {
+          const isSelected = value <= Math.round(displayScore);
 
-        return (
-          <Star
-            key={value}
-            className={clsx(
-              "size-4 text-theme-fg-muted",
-              isSelected && "fill-current text-theme-warning-fg",
-            )}
-          />
-        );
-      })}
+          return (
+            <Star
+              key={value}
+              className={clsx(
+                "size-4 text-theme-fg-muted",
+                isSelected && "fill-current text-theme-warning-fg",
+              )}
+            />
+          );
+        },
+      )}
     </div>
   );
 }
 
 function AssistantHubSubmittedReviewItem({
   review,
+  ratingMode,
 }: {
   review: AssistantHubUserReview;
+  ratingMode?: string;
 }) {
-  const score = review.score;
+  const score = getAssistantHubDisplayScore(review.score, ratingMode);
+  const ratingScale = getAssistantHubRatingScale(ratingMode);
   const versionNumber = review.version_number;
   const reviewerName = review.reviewer.display_name;
 
@@ -122,12 +136,14 @@ function AssistantHubSubmittedReviewItem({
         <span className="font-medium text-theme-fg-primary">
           {reviewerName}
         </span>
-        <ReviewScoreStars score={score} />
+        <ReviewScoreStars score={review.score} ratingMode={ratingMode} />
         <span className="text-theme-fg-muted">
-          {t({
-            id: "assistantHub.my.submittedReviews.scoreValue",
-            message: `${score} / 10`,
-          })}
+          {ratingMode === "5_stars"
+            ? `${score} / ${ratingScale}`
+            : t({
+                id: "assistantHub.my.submittedReviews.scoreValue",
+                message: `${score} / 10`,
+              })}
         </span>
         <span className="text-theme-fg-muted">
           {t({
@@ -148,9 +164,11 @@ function AssistantHubSubmittedReviewItem({
 function AssistantHubSubmittedReviewsSection({
   reviews,
   isLoading,
+  ratingMode,
 }: {
   reviews: AssistantHubUserReview[];
   isLoading: boolean;
+  ratingMode?: string;
 }) {
   return (
     <section className="rounded-lg border border-theme-border bg-theme-bg-primary p-6">
@@ -181,6 +199,7 @@ function AssistantHubSubmittedReviewsSection({
               <AssistantHubSubmittedReviewItem
                 key={review.id}
                 review={review}
+                ratingMode={ratingMode}
               />
             ))}
           </div>
@@ -472,6 +491,7 @@ export default function AssistantHubMyPage() {
               <AssistantHubVersionOverviewSection
                 version={selectedVersion}
                 categories={config?.categories ?? []}
+                ratingMode={config?.rating_mode}
                 onStartChat={() =>
                   navigate(`/a/${selectedVersion.assistant_id}`)
                 }
@@ -485,6 +505,7 @@ export default function AssistantHubMyPage() {
               <AssistantHubSubmittedReviewsSection
                 reviews={selectedVersionReviews}
                 isLoading={isLoadingReviews}
+                ratingMode={config?.rating_mode}
               />
 
               <section className="rounded-lg border border-theme-border bg-theme-bg-primary p-6">
@@ -665,6 +686,7 @@ export default function AssistantHubMyPage() {
                         key={version.version_id}
                         version={version}
                         categories={config?.categories ?? []}
+                        ratingMode={config?.rating_mode}
                         showStatusBadge
                         showCurrentPublishedIndicator
                         onOpen={() =>

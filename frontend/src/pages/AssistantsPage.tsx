@@ -517,6 +517,7 @@ function HubLandingView({
                       key={version.version_id}
                       version={version}
                       categories={config.categories}
+                      ratingMode={config.rating_mode}
                       onOpen={() =>
                         navigate(`/assistant-hub/${version.hub_assistant_id}`)
                       }
@@ -573,6 +574,7 @@ function HubLandingView({
                     key={version.version_id}
                     version={version}
                     categories={config.categories}
+                    ratingMode={config.rating_mode}
                     onOpen={() =>
                       navigate(`/assistant-hub/${version.hub_assistant_id}`)
                     }
@@ -617,6 +619,7 @@ function HubLandingView({
                   key={version.version_id}
                   version={version}
                   categories={config.categories}
+                  ratingMode={config.rating_mode}
                   onOpen={() =>
                     navigate(`/assistant-hub/${version.hub_assistant_id}`)
                   }

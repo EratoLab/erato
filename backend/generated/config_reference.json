@@ -19,6 +19,7 @@
   "assistant_hub.categories.<key>.display_name": {},
   "assistant_hub.categories.<key>.icon": {},
   "assistant_hub.enabled": {},
+  "assistant_hub.rating_mode": {},
   "assistant_hub.reviewers.rules.<rule-name>.groups.[]": {},
   "assistant_hub.reviewers.rules.<rule-name>.rule_type": {},
   "assistants.context_file_contributor_threshold": {},

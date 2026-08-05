@@ -22,7 +22,10 @@ import {
 import {
   AssistantHubBreadcrumb,
   AssistantHubDiff,
+  getAssistantHubDisplayScore,
   getAssistantHubRatingLabel,
+  getAssistantHubRatingScale,
+  getAssistantHubStoredScore,
   AssistantHubVersionConfigurationSection,
   AssistantHubVersionOverviewSection,
 } from "./assistantHubUtils";
@@ -36,9 +39,11 @@ import type React from "react";
 function AssistantHubReviewsSection({
   hubAssistantId,
   version,
+  ratingMode,
 }: {
   hubAssistantId: string;
   version: AssistantHubVersion;
+  ratingMode?: string;
 }) {
   const queryClient = useQueryClient();
   const { data: profile } = useProfile({});
@@ -54,17 +59,22 @@ function AssistantHubReviewsSection({
     () => reviews.find((review) => review.reviewer.id === profile?.id) ?? null,
     [profile?.id, reviews],
   );
-  const [score, setScore] = useState(10);
+  const ratingScale = getAssistantHubRatingScale(ratingMode);
+  const [score, setScore] = useState(ratingScale);
   const [comment, setComment] = useState("");
   const [submitError, setSubmitError] = useState(false);
 
   useEffect(() => {
-    if (!myReview) return;
-    setScore(myReview.score);
+    if (!myReview) {
+      setScore(ratingScale);
+      return;
+    }
+    setScore(getAssistantHubDisplayScore(myReview.score, ratingMode));
     setComment(myReview.comment ?? "");
-  }, [myReview]);
+  }, [myReview, ratingMode, ratingScale]);
 
-  const canSubmit = Number.isInteger(score) && score >= 1 && score <= 10;
+  const canSubmit =
+    Number.isInteger(score) && score >= 1 && score <= ratingScale;
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -75,7 +85,7 @@ function AssistantHubReviewsSection({
       await submitReview.mutateAsync({
         pathParams: { hubAssistantId },
         body: {
-          score,
+          score: getAssistantHubStoredScore(score, ratingMode),
           comment: comment.trim().length > 0 ? comment.trim() : null,
         },
       });
@@ -102,9 +112,12 @@ function AssistantHubReviewsSection({
             })}
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-3">
-            <ScoreStars score={version.review_average_score ?? 0} />
+            <ScoreStars
+              score={version.review_average_score ?? 0}
+              ratingMode={ratingMode}
+            />
             <span className="text-sm text-theme-fg-secondary">
-              {getAssistantHubRatingLabel(version)}
+              {getAssistantHubRatingLabel(version, ratingMode)}
             </span>
           </div>
         </div>
@@ -134,7 +147,11 @@ function AssistantHubReviewsSection({
         ) : (
           <div className="divide-y divide-theme-border rounded-lg border border-theme-border">
             {reviews.map((review) => (
-              <ReviewComment key={review.id} review={review} />
+              <ReviewComment
+                key={review.id}
+                review={review}
+                ratingMode={ratingMode}
+              />
             ))}
           </div>
         )}
@@ -162,7 +179,11 @@ function AssistantHubReviewsSection({
           })}
           required
         >
-          <StarScoreSelector score={score} onChange={setScore} />
+          <StarScoreSelector
+            score={score}
+            ratingMode={ratingMode}
+            onChange={setScore}
+          />
         </FormField>
         <FormField
           label={t({
@@ -205,15 +226,17 @@ function AssistantHubReviewsSection({
   );
 }
 
-const REVIEW_SCORE_VALUES = Array.from({ length: 10 }, (_, index) => index + 1);
-
 function StarScoreSelector({
   score,
+  ratingMode,
   onChange,
 }: {
   score: number;
+  ratingMode?: string;
   onChange: (score: number) => void;
 }) {
+  const ratingScale = getAssistantHubRatingScale(ratingMode);
+
   return (
     <div
       className="flex flex-wrap gap-1"
@@ -223,70 +246,96 @@ function StarScoreSelector({
         message: "Review score",
       })}
     >
-      {REVIEW_SCORE_VALUES.map((value) => {
-        const isSelected = value <= score;
-        const scoreLabel = value;
+      {Array.from({ length: ratingScale }, (_, index) => index + 1).map(
+        (value) => {
+          const isSelected = value <= score;
+          const scoreLabel = value;
 
-        return (
-          <button
-            key={value}
-            type="button"
-            role="radio"
-            aria-checked={value === score}
-            aria-label={t({
-              id: "assistantHub.reviews.scoreOption",
-              message: `${scoreLabel} out of 10`,
-            })}
-            onClick={() => onChange(value)}
-            className={clsx(
-              "focus-ring theme-transition flex size-8 items-center justify-center rounded text-theme-fg-muted hover:bg-theme-bg-hover",
-              isSelected && "text-theme-warning-fg",
-            )}
-          >
-            <Star
-              className={clsx("size-6", isSelected && "fill-current")}
-              aria-hidden="true"
-            />
-          </button>
-        );
-      })}
+          return (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={value === score}
+              aria-label={
+                ratingMode === "5_stars"
+                  ? `${scoreLabel} out of ${ratingScale}`
+                  : t({
+                      id: "assistantHub.reviews.scoreOption",
+                      message: `${scoreLabel} out of 10`,
+                    })
+              }
+              onClick={() => onChange(value)}
+              className={clsx(
+                "focus-ring theme-transition flex size-8 items-center justify-center rounded text-theme-fg-muted hover:bg-theme-bg-hover",
+                isSelected && "text-theme-warning-fg",
+              )}
+            >
+              <Star
+                className={clsx("size-6", isSelected && "fill-current")}
+                aria-hidden="true"
+              />
+            </button>
+          );
+        },
+      )}
     </div>
   );
 }
 
-function ScoreStars({ score }: { score: number }) {
+function ScoreStars({
+  score,
+  ratingMode,
+}: {
+  score: number;
+  ratingMode?: string;
+}) {
+  const displayScore = getAssistantHubDisplayScore(score, ratingMode);
+  const ratingScale = getAssistantHubRatingScale(ratingMode);
+
   return (
     <div className="flex gap-0.5" aria-hidden="true">
-      {REVIEW_SCORE_VALUES.map((value) => {
-        const isSelected = value <= Math.round(score);
+      {Array.from({ length: ratingScale }, (_, index) => index + 1).map(
+        (value) => {
+          const isSelected = value <= Math.round(displayScore);
 
-        return (
-          <Star
-            key={value}
-            className={clsx(
-              "size-4 text-theme-fg-muted",
-              isSelected && "fill-current text-theme-warning-fg",
-            )}
-          />
-        );
-      })}
+          return (
+            <Star
+              key={value}
+              className={clsx(
+                "size-4 text-theme-fg-muted",
+                isSelected && "fill-current text-theme-warning-fg",
+              )}
+            />
+          );
+        },
+      )}
     </div>
   );
 }
 
-function ReviewComment({ review }: { review: AssistantHubUserReview }) {
-  const score = review.score;
+function ReviewComment({
+  review,
+  ratingMode,
+}: {
+  review: AssistantHubUserReview;
+  ratingMode?: string;
+}) {
+  const score = getAssistantHubDisplayScore(review.score, ratingMode);
+  const ratingScale = getAssistantHubRatingScale(ratingMode);
   const versionNumber = review.version_number;
 
   return (
     <article className="p-4">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-        <ScoreStars score={score} />
+        <ScoreStars score={review.score} ratingMode={ratingMode} />
         <span className="text-theme-fg-muted">
-          {t({
-            id: "assistantHub.reviews.scoreValue",
-            message: `${score} / 10`,
-          })}
+          {ratingMode === "5_stars"
+            ? `${score} / ${ratingScale}`
+            : t({
+                id: "assistantHub.reviews.scoreValue",
+                message: `${score} / 10`,
+              })}
         </span>
         <span className="text-theme-fg-muted">
           {t({
@@ -370,6 +419,7 @@ export default function AssistantHubDetailPage() {
               <AssistantHubVersionOverviewSection
                 version={version}
                 categories={config?.categories ?? []}
+                ratingMode={config?.rating_mode}
                 onStartChat={() => navigate(`/a/${version.assistant_id}`)}
               />
 
@@ -381,6 +431,7 @@ export default function AssistantHubDetailPage() {
               <AssistantHubReviewsSection
                 hubAssistantId={version.hub_assistant_id}
                 version={version}
+                ratingMode={config?.rating_mode}
               />
 
               <section className="rounded-lg border border-theme-border bg-theme-bg-primary p-6">

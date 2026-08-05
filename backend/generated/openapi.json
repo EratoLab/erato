@@ -3798,6 +3798,7 @@
         "required": [
           "enabled",
           "can_review",
+          "rating_mode",
           "categories"
         ],
         "properties": {
@@ -3812,6 +3813,9 @@
           },
           "enabled": {
             "type": "boolean"
+          },
+          "rating_mode": {
+            "type": "string"
           }
         }
       },

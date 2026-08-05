@@ -271,6 +271,7 @@ export type AssistantHubConfigResponse = {
   can_review: boolean;
   categories: AssistantHubCategory[];
   enabled: boolean;
+  rating_mode: string;
 };
 
 export type AssistantHubCreator = {
