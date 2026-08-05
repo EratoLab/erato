@@ -19,6 +19,21 @@ import type {
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type React from "react";
 
+export type AssistantHubRatingMode = "5_stars" | "10_stars";
+
+export const getAssistantHubRatingScale = (ratingMode?: string) =>
+  ratingMode === "5_stars" ? 5 : 10;
+
+export const getAssistantHubDisplayScore = (
+  storedScore: number,
+  ratingMode?: string,
+) => (ratingMode === "5_stars" ? storedScore / 2 : storedScore);
+
+export const getAssistantHubStoredScore = (
+  displayScore: number,
+  ratingMode?: string,
+) => (ratingMode === "5_stars" ? displayScore * 2 : displayScore);
+
 export const isAssistantHubReviewAcceptedStatus = (status: string) =>
   status === "review_accepted" || status === "accepted";
 
@@ -62,7 +77,10 @@ export const getAssistantHubStatusClassName = (status: string) =>
       "border border-theme-warning-border bg-theme-warning-bg text-theme-warning-fg",
   );
 
-export const getAssistantHubRatingLabel = (version: AssistantHubVersion) => {
+export const getAssistantHubRatingLabel = (
+  version: AssistantHubVersion,
+  ratingMode?: string,
+) => {
   const averageScore = version.review_average_score;
 
   if (version.review_count === 0 || averageScore == null) {
@@ -72,20 +90,34 @@ export const getAssistantHubRatingLabel = (version: AssistantHubVersion) => {
     });
   }
 
-  const formattedScore = averageScore.toFixed(1);
+  const formattedScore = getAssistantHubDisplayScore(
+    averageScore,
+    ratingMode,
+  ).toFixed(1);
+  const ratingScale = getAssistantHubRatingScale(ratingMode);
   const reviewCount = version.review_count;
 
-  if (reviewCount === 1) {
+  if (ratingMode !== "5_stars") {
+    if (reviewCount === 1) {
+      return t({
+        id: "assistantHub.rating.summary.one",
+        message: `${formattedScore} / 10 (1 rating)`,
+      });
+    }
+
     return t({
-      id: "assistantHub.rating.summary.one",
-      message: `${formattedScore} / 10 (1 rating)`,
+      id: "assistantHub.rating.summary.many",
+      message: `${formattedScore} / 10 (${reviewCount} ratings)`,
     });
   }
 
-  return t({
-    id: "assistantHub.rating.summary.many",
-    message: `${formattedScore} / 10 (${reviewCount} ratings)`,
-  });
+  if (reviewCount === 1) {
+    // eslint-disable-next-line lingui/no-unlocalized-strings -- The rating scale is runtime configuration.
+    return `${formattedScore} / ${ratingScale} (1 rating)`;
+  }
+
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- The rating scale is runtime configuration.
+  return `${formattedScore} / ${ratingScale} (${reviewCount} ratings)`;
 };
 
 export function AssistantHubCurrentPublishedIndicator() {
@@ -311,6 +343,7 @@ export function AssistantHubDiff({
 export function AssistantHubVersionCard({
   version,
   categories,
+  ratingMode,
   onOpen,
   actions,
   showStatusBadge = false,
@@ -318,6 +351,7 @@ export function AssistantHubVersionCard({
 }: {
   version: AssistantHubVersion;
   categories: AssistantHubCategory[];
+  ratingMode?: string;
   onOpen?: () => void;
   actions?: React.ReactNode;
   showStatusBadge?: boolean;
@@ -332,7 +366,10 @@ export function AssistantHubVersionCard({
   const creatorName = version.creator.display_name;
   const assistantName = version.assistant.name;
   const avatarLetter = assistantName.trim().charAt(0).toLocaleUpperCase();
-  const currentRating = version.review_average_score;
+  const currentRating =
+    version.review_average_score == null
+      ? null
+      : getAssistantHubDisplayScore(version.review_average_score, ratingMode);
 
   const publicContent = (
     <>
@@ -513,10 +550,12 @@ export function AssistantHubVersionCard({
 export function AssistantHubVersionOverviewSection({
   version,
   categories,
+  ratingMode,
   onStartChat,
 }: {
   version: AssistantHubVersion;
   categories: AssistantHubCategory[];
+  ratingMode?: string;
   onStartChat?: () => void;
 }) {
   const categoryNames = version.category_ids
@@ -528,7 +567,10 @@ export function AssistantHubVersionOverviewSection({
   const creatorName = version.creator.display_name;
   const assistantName = version.assistant.name;
   const avatarLetter = assistantName.trim().charAt(0).toLocaleUpperCase();
-  const currentRating = version.review_average_score;
+  const currentRating =
+    version.review_average_score == null
+      ? null
+      : getAssistantHubDisplayScore(version.review_average_score, ratingMode);
   const hasRating = currentRating != null && version.review_count > 0;
   const description =
     version.long_description.length > 0

@@ -2633,12 +2633,18 @@ impl AssistantsConfig {
     }
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct AssistantHubConfig {
     // Whether the assistant hub feature is enabled.
     // Defaults to `false`.
     #[serde(default)]
     pub enabled: bool,
+
+    // Rating scale shown in the Assistant Hub. Scores are always persisted on
+    // the 10-point scale; the frontend converts them for display and input.
+    // Defaults to `10_stars`.
+    #[serde(default = "default_assistant_hub_rating_mode")]
+    pub rating_mode: String,
 
     // Configured reviewer rules.
     #[serde(default)]
@@ -2649,6 +2655,21 @@ pub struct AssistantHubConfig {
     // The map key is the category ID used by the backend.
     #[serde(default)]
     pub categories: HashMap<String, AssistantHubCategoryConfig>,
+}
+
+fn default_assistant_hub_rating_mode() -> String {
+    "10_stars".to_string()
+}
+
+impl Default for AssistantHubConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            rating_mode: default_assistant_hub_rating_mode(),
+            reviewers: AssistantHubReviewerPermissionsConfig::default(),
+            categories: HashMap::new(),
+        }
+    }
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
@@ -2679,6 +2700,13 @@ pub struct AssistantHubCategoryConfig {
 
 impl AssistantHubConfig {
     pub fn validate(&self) -> Result<(), Report> {
+        if self.rating_mode != "5_stars" && self.rating_mode != "10_stars" {
+            return Err(eyre!(
+                "assistant_hub.rating_mode must be '5_stars' or '10_stars', got '{}'",
+                self.rating_mode
+            ));
+        }
+
         self.reviewers.validate()?;
 
         for (category_id, category) in &self.categories {

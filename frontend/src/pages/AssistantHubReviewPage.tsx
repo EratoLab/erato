@@ -300,6 +300,7 @@ export default function AssistantHubReviewPage() {
               <AssistantHubVersionOverviewSection
                 version={selectedVersion}
                 categories={config.categories}
+                ratingMode={config.rating_mode}
                 onStartChat={() =>
                   navigate(`/a/${selectedVersion.assistant_id}`)
                 }
@@ -452,6 +453,7 @@ export default function AssistantHubReviewPage() {
                 key={version.version_id}
                 version={version}
                 categories={config.categories}
+                ratingMode={config.rating_mode}
                 showStatusBadge
                 onOpen={() =>
                   navigate(`/assistant-hub/review/${version.version_id}`)

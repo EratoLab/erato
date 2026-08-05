@@ -8,6 +8,9 @@ import { messages as enMessages } from "@/locales/en/messages.json";
 import {
   AssistantHubVersionCard,
   AssistantHubVersionOverviewSection,
+  getAssistantHubDisplayScore,
+  getAssistantHubRatingLabel,
+  getAssistantHubStoredScore,
 } from "../assistantHubUtils";
 
 import type { AssistantHubVersion } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -74,6 +77,14 @@ describe("AssistantHubVersionCard", () => {
   beforeEach(() => {
     i18n.load("en", enMessages as unknown as Messages);
     i18n.activate("en");
+  });
+
+  it("converts stored ten-point scores for five-star display", () => {
+    expect(getAssistantHubDisplayScore(8, "5_stars")).toBe(4);
+    expect(getAssistantHubStoredScore(4, "5_stars")).toBe(8);
+    expect(getAssistantHubRatingLabel(acceptedVersion, "5_stars")).toBe(
+      "4.2 / 5 (3 ratings)",
+    );
   });
 
   it("renders the simplified public Hub card layout", () => {
