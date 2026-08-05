@@ -162,6 +162,26 @@ const typeTargets = [
     "outlook-get-conversation-v1-result.ts",
     "OutlookGetConversationV1Result",
   ],
+  [
+    "schemas/outlook/local-trace-step.schema.json",
+    "sidecar-local-trace-step.ts",
+    "SidecarLocalTraceStep",
+  ],
+  [
+    "schemas/outlook/local-trace.schema.json",
+    "sidecar-local-trace.ts",
+    "SidecarLocalTrace",
+  ],
+  [
+    "schemas/methods/sidecar-progress-v1-params.schema.json",
+    "sidecar-progress-v1-params.ts",
+    "SidecarProgressV1Params",
+  ],
+  [
+    "schemas/methods/sidecar-progress-v1-result.schema.json",
+    "sidecar-progress-v1-result.ts",
+    "SidecarProgressV1Result",
+  ],
 ];
 
 const validatorTargets = {
@@ -201,6 +221,10 @@ const validatorTargets = {
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-get-conversation-v1-params.schema.json",
   validateOutlookGetConversationV1Result:
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-get-conversation-v1-result.schema.json",
+  validateSidecarProgressV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-progress-v1-params.schema.json",
+  validateSidecarProgressV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-progress-v1-result.schema.json",
 };
 
 await rm(outputDirectory, { recursive: true, force: true });

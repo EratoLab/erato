@@ -5,7 +5,13 @@
   "type": "object",
   "required": ["message"],
   "properties": {
-    "message": { "type": "string", "maxLength": 4096 }
+    "message": { "type": "string", "maxLength": 4096 },
+    "delayMs": {
+      "description": "Artificial pause before the sidecar answers, in milliseconds, so long-call mechanics — progress polling and cancellation — can be exercised without a real long-running capability. Sidecars report the pause as a `delay` trace step and MAY cap it lower.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 60000
+    }
   },
   "additionalProperties": true
 }

@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-progress-v1-result.schema.json",
+  "title": "SidecarProgressV1Result",
+  "description": "A point-in-time view of one request's on-device progress. `trace` carries the same append-only event log a result may embed, so a client that applies steps by `sequence` (last one wins) renders a polled log and a complete log identically.",
+  "type": "object",
+  "required": ["state"],
+  "properties": {
+    "state": {
+      "description": "Where the named request is in its lifecycle. Known values are running, finished, and unknown. Receivers treat unrecognized values as running.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "trace": {
+      "description": "The sidecar's step log for the named request so far. Metadata only — never message content. Absent when the request is unknown or recorded no steps.",
+      "$ref": "../outlook/local-trace.schema.json"
+    }
+  },
+  "additionalProperties": true
+}

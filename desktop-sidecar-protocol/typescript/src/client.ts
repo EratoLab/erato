@@ -11,6 +11,8 @@ import {
   validateOutlookListEmailsV1Result,
   validateOutlookListMailboxesV1Params,
   validateOutlookListMailboxesV1Result,
+  validateSidecarProgressV1Params,
+  validateSidecarProgressV1Result,
   validateSidecarRestartV1Params,
   validateSidecarRestartV1Result,
   validateSidecarConfigureV1Params,
@@ -31,6 +33,8 @@ import type {
   OutlookListEmailsV1Result,
   OutlookListMailboxesV1Params,
   OutlookListMailboxesV1Result,
+  SidecarProgressV1Params,
+  SidecarProgressV1Result,
   SidecarRestartV1Params,
   SidecarRestartV1Result,
   SidecarConfigureV1Params,
@@ -108,10 +112,25 @@ export interface DesktopSidecarClientOptions {
 export interface InvokeOptions {
   signal?: AbortSignal;
   timeoutMs?: number;
+  /**
+   * Observe the sidecar's on-device step log while this request runs, by
+   * polling `sidecar.progress.v1` with the request's own ID. Polling is best
+   * effort: it starts only when the sidecar advertises the capability, a
+   * failed poll never affects the invoked request, and one final poll runs
+   * after the request settles so the terminal state is observed.
+   */
+  progress?: InvokeProgressOptions;
+}
+
+export interface InvokeProgressOptions {
+  onProgress: (progress: SidecarProgressV1Result) => void;
+  /** Delay between polls. Defaults to 1000 ms; the minimum is 50 ms. */
+  intervalMs?: number;
 }
 
 interface RequestOptions extends InvokeOptions {
   cancelOnAbort?: boolean;
+  id?: string;
 }
 
 interface JsonRpcResponse {
@@ -138,6 +157,10 @@ const builtInContracts: Readonly<Record<string, SidecarMethodContract>> = {
     validateParams: validateOutlookGetConversationV1Params,
     validateResult: validateOutlookGetConversationV1Result,
   },
+  "sidecar.progress.v1": {
+    validateParams: validateSidecarProgressV1Params,
+    validateResult: validateSidecarProgressV1Result,
+  },
   "sidecar.restart.v1": {
     validateParams: validateSidecarRestartV1Params,
     validateResult: validateSidecarRestartV1Result,
@@ -162,6 +185,7 @@ export class DesktopSidecarClient {
   readonly #listeners = new Set<() => void>();
   #snapshot: SidecarSnapshot = emptySnapshot();
   #discovery: Promise<void> | undefined;
+  #progressUnsupported = false;
 
   constructor(options: DesktopSidecarClientOptions) {
     if (options.supportedProtocolVersions?.length === 0) {
@@ -235,6 +259,11 @@ export class DesktopSidecarClient {
     options?: InvokeOptions,
   ): Promise<OutlookGetConversationV1Result>;
   async invoke(
+    method: "sidecar.progress.v1",
+    params: SidecarProgressV1Params,
+    options?: InvokeOptions,
+  ): Promise<SidecarProgressV1Result>;
+  async invoke(
     method: "sidecar.configure.v1",
     params: SidecarConfigureV1Params,
     options?: InvokeOptions,
@@ -264,9 +293,15 @@ export class DesktopSidecarClient {
       );
     }
 
+    const id = createRequestId();
+    const stopProgressPolling =
+      options.progress && method !== "sidecar.progress.v1"
+        ? this.#startProgressPolling(id, options.progress)
+        : undefined;
+
     let result: unknown;
     try {
-      result = await this.#request(method, params, options);
+      result = await this.#request(method, params, { ...options, id });
     } catch (error) {
       const clientError = this.#asClientError(error);
       if (clientError.kind === "capability_unavailable") {
@@ -278,6 +313,8 @@ export class DesktopSidecarClient {
         this.#failReadiness(clientError);
       }
       throw clientError;
+    } finally {
+      await stopProgressPolling?.();
     }
 
     if (!contract.validateResult(result)) {
@@ -346,6 +383,7 @@ export class DesktopSidecarClient {
         );
       }
       const capabilities = this.#buildCapabilityRegistry(result.document);
+      this.#progressUnsupported = false;
       this.#setSnapshot({
         state: "ready",
         protocolVersion: result.protocolVersion,
@@ -406,7 +444,7 @@ export class DesktopSidecarClient {
     params: unknown,
     options: RequestOptions = {},
   ): Promise<unknown> {
-    const id = createRequestId();
+    const id = options.id ?? createRequestId();
     const timeoutMs = options.timeoutMs ?? this.#requestTimeoutMs;
     const request = {
       jsonrpc: "2.0",
@@ -454,6 +492,70 @@ export class DesktopSidecarClient {
     } finally {
       clearTimeout(timer);
       options.signal?.removeEventListener("abort", onAbort);
+    }
+  }
+
+  /**
+   * Poll `sidecar.progress.v1` for `requestId` until stopped. Returns an
+   * async stop function that waits for the in-flight poll and then makes one
+   * final observation, so the caller always sees the terminal state when the
+   * sidecar still remembers the request.
+   */
+  #startProgressPolling(
+    requestId: string,
+    progress: InvokeProgressOptions,
+  ): () => Promise<void> {
+    const intervalMs = Math.max(progress.intervalMs ?? 1_000, 50);
+    let active = true;
+    let pending: Promise<void> = Promise.resolve();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const tick = (): void => {
+      pending = this.#pollProgress(requestId, progress.onProgress).finally(
+        () => {
+          if (active) timer = setTimeout(tick, intervalMs);
+        },
+      );
+    };
+    timer = setTimeout(tick, intervalMs);
+    return async () => {
+      active = false;
+      clearTimeout(timer);
+      await pending;
+      await this.#pollProgress(requestId, progress.onProgress);
+    };
+  }
+
+  /**
+   * One best-effort progress poll. Never throws and never touches readiness:
+   * observing a request must not affect the request being observed.
+   */
+  async #pollProgress(
+    requestId: string,
+    onProgress: (progress: SidecarProgressV1Result) => void,
+  ): Promise<void> {
+    if (this.#progressUnsupported || !this.supports("sidecar.progress.v1")) {
+      return;
+    }
+    let result: unknown;
+    try {
+      result = await this.#request(
+        "sidecar.progress.v1",
+        { requestId } satisfies SidecarProgressV1Params,
+        {
+          timeoutMs: Math.min(this.#requestTimeoutMs, 2_000),
+          cancelOnAbort: false,
+        },
+      );
+    } catch (error) {
+      // A sidecar that advertises the method but predates its implementation
+      // answers -32601; remember that and stop asking for this session.
+      if (error instanceof SidecarRpcError && error.code === -32601) {
+        this.#progressUnsupported = true;
+      }
+      return;
+    }
+    if (validateSidecarProgressV1Result(result)) {
+      onProgress(result as SidecarProgressV1Result);
     }
   }
 

@@ -28,3 +28,7 @@ export type { OutlookAttachmentReference } from "./outlook-attachment-reference.
 export type { OutlookConversationMessage } from "./outlook-conversation-message.js";
 export type { OutlookGetConversationV1Params } from "./outlook-get-conversation-v1-params.js";
 export type { OutlookGetConversationV1Result } from "./outlook-get-conversation-v1-result.js";
+export type { SidecarLocalTraceStep } from "./sidecar-local-trace-step.js";
+export type { SidecarLocalTrace } from "./sidecar-local-trace.js";
+export type { SidecarProgressV1Params } from "./sidecar-progress-v1-params.js";
+export type { SidecarProgressV1Result } from "./sidecar-progress-v1-result.js";
