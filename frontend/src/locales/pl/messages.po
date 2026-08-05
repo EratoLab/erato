@@ -539,6 +539,11 @@ msgstr "Odpowiedz recenzenta"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.showMoreVersions"
+msgstr "Pokaż więcej"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
 msgid "assistantHub.my.submitNewVersion"
 msgstr "Zglos nowa wersje"
 

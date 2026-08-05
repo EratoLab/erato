@@ -2,7 +2,7 @@ import { t } from "@lingui/core/macro";
 import { skipToken, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import { Star } from "iconoir-react";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { PageHeader } from "@/components/ui/Container/PageHeader";
@@ -68,6 +68,12 @@ const groupVersionsByAssistant = (
     left.name.localeCompare(right.name),
   );
 };
+
+export const getVisibleAssistantHubVersions = (
+  versions: AssistantHubVersion[],
+  isExpanded: boolean,
+): AssistantHubVersion[] =>
+  versions.length > 2 && !isExpanded ? versions.slice(0, 1) : versions;
 
 const REVIEW_SCORE_VALUES = Array.from({ length: 10 }, (_, index) => index + 1);
 
@@ -185,6 +191,9 @@ export default function AssistantHubMyPage() {
   const withdrawVersion = useWithdrawAssistantHubVersion();
   const setPublished = useSetAssistantHubVersionPublished();
   const setCurrent = useSetAssistantHubVersionCurrent();
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   useEffect(() => {
     document.title = `${t({
@@ -582,70 +591,102 @@ export default function AssistantHubMyPage() {
 
           {!isLoading &&
             !versionId &&
-            groups.map((group) => (
-              <section
-                key={group.hubAssistantId}
-                className="rounded-lg border border-theme-border bg-theme-bg-primary p-4"
-              >
-                <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                  <div>
-                    <h2 className="text-base font-semibold text-theme-fg-primary">
-                      {group.name}
-                    </h2>
-                    {group.description && (
-                      <p className="mt-1 text-sm text-theme-fg-secondary">
-                        {group.description}
-                      </p>
-                    )}
+            groups.map((group) => {
+              const isExpanded = expandedGroups.has(group.hubAssistantId);
+              const visibleVersions = getVisibleAssistantHubVersions(
+                group.versions,
+                isExpanded,
+              );
+              const hasHiddenVersions =
+                visibleVersions.length < group.versions.length;
+
+              return (
+                <section
+                  key={group.hubAssistantId}
+                  className="rounded-lg border border-theme-border bg-theme-bg-primary p-4"
+                >
+                  <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <h2 className="text-base font-semibold text-theme-fg-primary">
+                        {group.name}
+                      </h2>
+                      {group.description && (
+                        <p className="mt-1 text-sm text-theme-fg-secondary">
+                          {group.description}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 flex-wrap gap-2">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        icon={<EditIcon className="size-4" />}
+                        onClick={() =>
+                          navigate(
+                            `/assistants/${group.sourceAssistantId}/edit`,
+                          )
+                        }
+                      >
+                        {t({
+                          id: "assistantHub.my.editDraft",
+                          message: "Edit draft",
+                        })}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        icon={<PlusIcon className="size-4" />}
+                        onClick={() =>
+                          navigate(
+                            `/assistant-hub/submit/${group.sourceAssistantId}`,
+                          )
+                        }
+                      >
+                        {t({
+                          id: "assistantHub.my.submitNewVersion",
+                          message: "Submit new version",
+                        })}
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex shrink-0 flex-wrap gap-2">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      icon={<EditIcon className="size-4" />}
-                      onClick={() =>
-                        navigate(`/assistants/${group.sourceAssistantId}/edit`)
-                      }
-                    >
-                      {t({
-                        id: "assistantHub.my.editDraft",
-                        message: "Edit draft",
-                      })}
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      icon={<PlusIcon className="size-4" />}
-                      onClick={() =>
-                        navigate(
-                          `/assistant-hub/submit/${group.sourceAssistantId}`,
-                        )
-                      }
-                    >
-                      {t({
-                        id: "assistantHub.my.submitNewVersion",
-                        message: "Submit new version",
-                      })}
-                    </Button>
+                  <div className="space-y-3">
+                    {visibleVersions.map((version) => (
+                      <AssistantHubVersionCard
+                        key={version.version_id}
+                        version={version}
+                        categories={config?.categories ?? []}
+                        showStatusBadge
+                        showCurrentPublishedIndicator
+                        onOpen={() =>
+                          navigate(`/assistant-hub/my/${version.version_id}`)
+                        }
+                        actions={renderVersionActions(version)}
+                      />
+                    ))}
                   </div>
-                </div>
-                <div className="space-y-3">
-                  {group.versions.map((version) => (
-                    <AssistantHubVersionCard
-                      key={version.version_id}
-                      version={version}
-                      categories={config?.categories ?? []}
-                      showStatusBadge
-                      showCurrentPublishedIndicator
-                      onOpen={() =>
-                        navigate(`/assistant-hub/my/${version.version_id}`)
-                      }
-                      actions={renderVersionActions(version)}
-                    />
-                  ))}
-                </div>
-              </section>
-            ))}
+                  {hasHiddenVersions && (
+                    <div className="mt-3 flex justify-center">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() =>
+                          setExpandedGroups((current) => {
+                            const next = new Set(current);
+                            next.add(group.hubAssistantId);
+                            return next;
+                          })
+                        }
+                      >
+                        {t({
+                          id: "assistantHub.my.showMoreVersions",
+                          message: "Show more",
+                        })}
+                      </Button>
+                    </div>
+                  )}
+                </section>
+              );
+            })}
         </div>
       </div>
     </div>
