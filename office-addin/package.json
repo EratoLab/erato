@@ -9,6 +9,8 @@
     "dev:with-library": "uv run --script scripts/dev.py",
     "dev:with-library:linked": "uv run --script scripts/dev.py --mode linked",
     "build": "pnpm i18n:compile && tsc && vite build && node scripts/copy-runtime-manifest.mjs",
+    "generate:served-routes": "node ../scripts/generate-served-routes.mjs --target office-addin",
+    "check:served-routes": "node ../scripts/generate-served-routes.mjs --check --target office-addin",
     "check": "pnpm run format:check && pnpm run lint:strict && pnpm run typecheck",
     "format": "prettier . --write",
     "format:check": "prettier . --check",

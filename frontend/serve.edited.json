@@ -1,6 +1,18 @@
 {
   "rewrites": [
     {
+      "source": "/about",
+      "destination": "index.html"
+    },
+    {
+      "source": "/desktop-sidecar/setup",
+      "destination": "index.html"
+    },
+    {
+      "source": "/chat",
+      "destination": "index.html"
+    },
+    {
       "source": "/chat/new",
       "destination": "index.html"
     },
@@ -9,7 +21,27 @@
       "destination": "index.html"
     },
     {
+      "source": "/chat-share/:shareId",
+      "destination": "index.html"
+    },
+    {
+      "source": "/a/:assistantId",
+      "destination": "index.html"
+    },
+    {
+      "source": "/a/:assistantId/:chatId",
+      "destination": "index.html"
+    },
+    {
+      "source": "/search",
+      "destination": "index.html"
+    },
+    {
       "source": "/assistants",
+      "destination": "index.html"
+    },
+    {
+      "source": "/assistants/created",
       "destination": "index.html"
     },
     {
@@ -21,11 +53,35 @@
       "destination": "index.html"
     },
     {
-      "source": "/a/:assistantId",
+      "source": "/assistant-hub",
       "destination": "index.html"
     },
     {
-      "source": "/a/:assistantId/:chatId",
+      "source": "/assistant-hub/my",
+      "destination": "index.html"
+    },
+    {
+      "source": "/assistant-hub/my/:versionId",
+      "destination": "index.html"
+    },
+    {
+      "source": "/assistant-hub/review",
+      "destination": "index.html"
+    },
+    {
+      "source": "/assistant-hub/review/:versionId",
+      "destination": "index.html"
+    },
+    {
+      "source": "/assistant-hub/category/:categoryId",
+      "destination": "index.html"
+    },
+    {
+      "source": "/assistant-hub/submit/:sourceAssistantId",
+      "destination": "index.html"
+    },
+    {
+      "source": "/assistant-hub/:hubAssistantId",
       "destination": "index.html"
     }
   ]
