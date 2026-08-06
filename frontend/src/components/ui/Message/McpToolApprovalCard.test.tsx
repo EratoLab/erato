@@ -1,7 +1,13 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
+import { ChatContext } from "@/providers/ChatProvider";
+
 import { McpToolApprovalCard } from "./McpToolApprovalCard";
+
+import type { ChatContextValue } from "@/providers/ChatProvider";
+import type { ReactNode } from "react";
 
 vi.mock("@/auth/tokenStore", () => ({
   getIdToken: () => null,
@@ -16,8 +22,22 @@ const approvalRequest = {
   allow_always: true,
 };
 
+const withChatContext = (ui: ReactNode, chatId = "chat-1") => (
+  <ChatContext.Provider
+    value={
+      {
+        currentChatId: chatId,
+        refetchMessages: async () => undefined,
+      } as unknown as ChatContextValue
+    }
+  >
+    {ui}
+  </ChatContext.Provider>
+);
+
 afterEach(() => {
   vi.unstubAllGlobals();
+  useConfirmationRegistryStore.setState({ pendingIdsByChatId: {} });
 });
 
 describe("McpToolApprovalCard", () => {
@@ -64,5 +84,67 @@ describe("McpToolApprovalCard", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("mcp-tool-approval")).not.toBeInTheDocument();
     });
+  });
+
+  it("holds the chat's confirmation registry while the decision is pending", () => {
+    const { unmount } = render(
+      withChatContext(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={approvalRequest}
+          resolution={null}
+        />,
+      ),
+    );
+
+    expect(useConfirmationRegistryStore.getState().hasPending("chat-1")).toBe(
+      true,
+    );
+
+    unmount();
+    expect(useConfirmationRegistryStore.getState().hasPending("chat-1")).toBe(
+      false,
+    );
+  });
+
+  it("releases the registry hold once the decision resolves", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response("", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      withChatContext(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={approvalRequest}
+          resolution={null}
+        />,
+      ),
+    );
+
+    fireEvent.click(screen.getByText("Deny"));
+
+    await waitFor(() => {
+      expect(useConfirmationRegistryStore.getState().hasPending("chat-1")).toBe(
+        false,
+      );
+    });
+  });
+
+  it("does not register an already-resolved request", () => {
+    render(
+      withChatContext(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={approvalRequest}
+          resolution="approved"
+        />,
+      ),
+    );
+
+    expect(useConfirmationRegistryStore.getState().hasPending("chat-1")).toBe(
+      false,
+    );
   });
 });

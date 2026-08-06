@@ -1,7 +1,8 @@
 import { t } from "@lingui/core/macro";
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 
 import { getIdToken } from "@/auth/tokenStore";
+import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { ChatContext } from "@/providers/ChatProvider";
 
 import { ActionConfirmationCard } from "./ActionConfirmationCard";
@@ -51,6 +52,32 @@ export const McpToolApprovalCard = ({
     "approved" | "rejected" | null
   >(null);
 
+  // While the decision is pending, hold the chat's message-queue auto-send
+  // and surface the sidebar "action required" state, exactly like the
+  // add-in's client-action cards (ERMAIN-470).
+  const isPending = resolution === null && localResolution === null;
+  const chatId = chatContext?.currentChatId ?? null;
+  const [registrationId] = useState(() => globalThis.crypto.randomUUID());
+  const registerConfirmation = useConfirmationRegistryStore(
+    (state) => state.registerConfirmation,
+  );
+  const unregisterConfirmation = useConfirmationRegistryStore(
+    (state) => state.unregisterConfirmation,
+  );
+  useEffect(() => {
+    if (!chatId || !isPending) {
+      return;
+    }
+    registerConfirmation(chatId, registrationId);
+    return () => unregisterConfirmation(chatId, registrationId);
+  }, [
+    chatId,
+    isPending,
+    registrationId,
+    registerConfirmation,
+    unregisterConfirmation,
+  ]);
+
   const decide = async (decision: "approve" | "reject" | "approve_always") => {
     setIsBusy(true);
     setError(null);
@@ -91,7 +118,7 @@ export const McpToolApprovalCard = ({
 
   // Resolved decisions are represented beside the matching tool call in the
   // thinking trace. Keep this card solely for the pending decision UI.
-  if (resolution !== null || localResolution !== null) {
+  if (!isPending) {
     return null;
   }
 
