@@ -11,6 +11,7 @@ use erato::frontend_environment::{
     serve_files_with_script,
 };
 use erato::models;
+use erato::services::configuration_reload_listener::ConfigurationReloadListener;
 use erato::services::sentry::{extend_with_sentry_layers, setup_sentry};
 use erato::startup_log;
 use erato::state::AppState;
@@ -99,6 +100,10 @@ async fn async_main(worker_threads: usize) -> Result<(), Report> {
 
     // Verify that the database has been migrated to the latest version
     models::ensure_latest_migration(&state.db).await?;
+
+    let _configuration_reload_listener = config.runtime_configuration.enabled.then(|| {
+        ConfigurationReloadListener::spawn(config.database_url.expose_secret().to_owned())
+    });
 
     if config.runtime_configuration.enabled {
         let translation_po_sources = discover_translation_po_sources(&config);
