@@ -31,6 +31,8 @@ pub enum Relation {
     McpServerOauthCredentials,
     #[sea_orm(has_one = "super::user_preferences::Entity")]
     UserPreferences,
+    #[sea_orm(has_many = "super::user_tool_approval_settings::Entity")]
+    UserToolApprovalSettings,
 }
 
 impl Related<super::assistant_hub_assistants::Entity> for Entity {
@@ -66,6 +68,12 @@ impl Related<super::mcp_server_oauth_credentials::Entity> for Entity {
 impl Related<super::user_preferences::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::UserPreferences.def()
+    }
+}
+
+impl Related<super::user_tool_approval_settings::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::UserToolApprovalSettings.def()
     }
 }
 

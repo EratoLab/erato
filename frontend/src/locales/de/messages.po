@@ -2313,6 +2313,21 @@ msgid "library.toast.region"
 msgstr "Benachrichtigungen"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "mcpApproval.inputPreview"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "mcpApproval.openWorldWarning"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "mcpApproval.title"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "message.copy.aria"
 msgstr "Nachricht kopieren"
@@ -3184,6 +3199,16 @@ msgstr "Denkt nach"
 #: src/components/ui/Trace/TraceThinkingPlaceholder.tsx
 msgid "trace.thinking.placeholder"
 msgstr "Denkt nach…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.approved"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.denied"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ToolUseStep.tsx

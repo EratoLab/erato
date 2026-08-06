@@ -3712,6 +3712,178 @@ export const useGeneratingChats = <TData = Schemas.GeneratingChatsResponse,>(
   });
 };
 
+export type ListUserToolApprovalSettingsError = Fetcher.ErrorWrapper<undefined>;
+
+export type ListUserToolApprovalSettingsVariables =
+  V1betaApiContext["fetcherOptions"];
+
+export const fetchListUserToolApprovalSettings = (
+  variables: ListUserToolApprovalSettingsVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.UserToolApprovalSettingsResponse,
+    ListUserToolApprovalSettingsError,
+    undefined,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/mcp-tool-approval-settings",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function listUserToolApprovalSettingsQuery(
+  variables: ListUserToolApprovalSettingsVariables,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (
+    options: QueryFnOptions,
+  ) => Promise<Schemas.UserToolApprovalSettingsResponse>;
+};
+
+export function listUserToolApprovalSettingsQuery(
+  variables: ListUserToolApprovalSettingsVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((
+        options: QueryFnOptions,
+      ) => Promise<Schemas.UserToolApprovalSettingsResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function listUserToolApprovalSettingsQuery(
+  variables: ListUserToolApprovalSettingsVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/mcp-tool-approval-settings",
+      operationId: "listUserToolApprovalSettings",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchListUserToolApprovalSettings(variables, signal),
+  };
+}
+
+export const useSuspenseListUserToolApprovalSettings = <
+  TData = Schemas.UserToolApprovalSettingsResponse,
+>(
+  variables: ListUserToolApprovalSettingsVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.UserToolApprovalSettingsResponse,
+      ListUserToolApprovalSettingsError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.UserToolApprovalSettingsResponse,
+    ListUserToolApprovalSettingsError,
+    TData
+  >({
+    ...listUserToolApprovalSettingsQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useListUserToolApprovalSettings = <
+  TData = Schemas.UserToolApprovalSettingsResponse,
+>(
+  variables: ListUserToolApprovalSettingsVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.UserToolApprovalSettingsResponse,
+      ListUserToolApprovalSettingsError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.UserToolApprovalSettingsResponse,
+    ListUserToolApprovalSettingsError,
+    TData
+  >({
+    ...listUserToolApprovalSettingsQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export type DeactivateUserToolApprovalSettingPathParams = {
+  /**
+   * Approval setting ID
+   *
+   * @format uuid
+   */
+  settingId: string;
+};
+
+export type DeactivateUserToolApprovalSettingError =
+  Fetcher.ErrorWrapper<undefined>;
+
+export type DeactivateUserToolApprovalSettingVariables = {
+  pathParams: DeactivateUserToolApprovalSettingPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchDeactivateUserToolApprovalSetting = (
+  variables: DeactivateUserToolApprovalSettingVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    undefined,
+    DeactivateUserToolApprovalSettingError,
+    undefined,
+    {},
+    {},
+    DeactivateUserToolApprovalSettingPathParams
+  >({
+    url: "/api/v1beta/me/mcp-tool-approval-settings/{settingId}",
+    method: "delete",
+    ...variables,
+    signal,
+  });
+
+export const useDeactivateUserToolApprovalSetting = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      undefined,
+      DeactivateUserToolApprovalSettingError,
+      DeactivateUserToolApprovalSettingVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    undefined,
+    DeactivateUserToolApprovalSettingError,
+    DeactivateUserToolApprovalSettingVariables
+  >({
+    mutationFn: (variables: DeactivateUserToolApprovalSettingVariables) =>
+      fetchDeactivateUserToolApprovalSetting(
+        deepMerge(fetcherOptions, variables),
+      ),
+    ...options,
+  });
+};
+
 export type ListMcpServersError = Fetcher.ErrorWrapper<undefined>;
 
 export type ListMcpServersVariables = V1betaApiContext["fetcherOptions"];
@@ -4140,6 +4312,52 @@ export const useClientToolResult = (
   >({
     mutationFn: (variables: ClientToolResultVariables) =>
       fetchClientToolResult(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type ContinueMessageSseError = Fetcher.ErrorWrapper<undefined>;
+
+export type ContinueMessageSseVariables = {
+  body: Schemas.ContinueStreamRequest;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchContinueMessageSse = (
+  variables: ContinueMessageSseVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    undefined,
+    ContinueMessageSseError,
+    Schemas.ContinueStreamRequest,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/messages/continuestream",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useContinueMessageSse = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      undefined,
+      ContinueMessageSseError,
+      ContinueMessageSseVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    undefined,
+    ContinueMessageSseError,
+    ContinueMessageSseVariables
+  >({
+    mutationFn: (variables: ContinueMessageSseVariables) =>
+      fetchContinueMessageSse(deepMerge(fetcherOptions, variables)),
     ...options,
   });
 };
@@ -6426,6 +6644,11 @@ export type QueryOperation =
       path: "/api/v1beta/me/generating";
       operationId: "generatingChats";
       variables: GeneratingChatsVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/me/mcp-tool-approval-settings";
+      operationId: "listUserToolApprovalSettings";
+      variables: ListUserToolApprovalSettingsVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/me/mcp_servers";

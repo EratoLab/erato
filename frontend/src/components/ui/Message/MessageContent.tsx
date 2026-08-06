@@ -24,7 +24,9 @@ import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { EratoEmailSuggestion } from "./EratoEmailSuggestion";
 import { ImageContentDisplay } from "./ImageContentDisplay";
+import { McpToolApprovalCard } from "./McpToolApprovalCard";
 
+import type { ToolApprovalStatus } from "../Trace/Trace";
 import type {
   ContentPart,
   FileUploadItem,
@@ -398,6 +400,7 @@ const isRenderableContentPart = (part: ContentPart): boolean =>
   part.content_type === "text" ||
   part.content_type === "reasoning" ||
   part.content_type === "tool_use" ||
+  part.content_type === "tool_approval_request" ||
   part.content_type === "image" ||
   part.content_type === "image_file_pointer";
 
@@ -474,6 +477,20 @@ export const MessageContent = memo(function MessageContent({
 }: MessageContentProps) {
   const imageAdvisory = useOptionalTranslation("chat.message.image_advisory");
   const { maskReasoningText } = useTraceFeature();
+  const toolApprovalStatuses = React.useMemo<
+    Record<string, ToolApprovalStatus>
+  >(
+    () =>
+      content.reduce<Record<string, ToolApprovalStatus>>((statuses, part) => {
+        if (part.content_type === "tool_approval") {
+          statuses[part.tool_call_id] = "approved";
+        } else if (part.content_type === "tool_rejection") {
+          statuses[part.tool_call_id] = "denied";
+        }
+        return statuses;
+      }, {}),
+    [content],
+  );
 
   const generatedImageFileIds = React.useMemo(() => {
     const fileIds = new Set<string>();
@@ -1067,12 +1084,36 @@ export const MessageContent = memo(function MessageContent({
               renderMarkdown={renderMarkdown}
               durationMs={traceDurationMs}
               hasError={hasError}
+              toolApprovalStatuses={toolApprovalStatuses}
             />
           );
         }
 
         const { part, index } = cluster;
         const isLastRenderablePart = index === lastRenderableIndex;
+
+        if (part.content_type === "tool_approval_request" && messageId) {
+          const resolution = content.find(
+            (candidate) =>
+              (candidate.content_type === "tool_approval" ||
+                candidate.content_type === "tool_rejection") &&
+              candidate.tool_call_id === part.tool_call_id,
+          );
+          return (
+            <McpToolApprovalCard
+              key={`tool-approval-${part.tool_call_id}`}
+              messageId={messageId}
+              request={part}
+              resolution={
+                resolution?.content_type === "tool_approval"
+                  ? "approved"
+                  : resolution?.content_type === "tool_rejection"
+                    ? "rejected"
+                    : null
+              }
+            />
+          );
+        }
 
         if (part.content_type === "text") {
           if (wholeBodyArtifact) {

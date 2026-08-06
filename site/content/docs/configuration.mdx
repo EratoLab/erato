@@ -2716,6 +2716,46 @@ Global configuration for MCP server behavior across all configured servers.
 
 **Type:** `McpServersGlobalConfig`
 
+#### `mcp_servers_global.approval`
+
+{/* erato_toml_config_key: mcp_servers_global.approval */}
+
+Global policy for pausing MCP tool calls until a user approves them.
+
+**Type:** `McpToolApprovalConfig`
+
+**Default value:** disabled
+
+#### `mcp_servers_global.approval.enabled`
+
+{/* erato_toml_config_key: mcp_servers_global.approval.enabled */}
+
+Whether MCP tool calls can require approval. Defaults to `false` for backwards compatibility.
+
+**Type:** `boolean`
+
+**Default value:** `false`
+
+#### `mcp_servers_global.approval.preset`
+
+{/* erato_toml_config_key: mcp_servers_global.approval.preset */}
+
+Annotation policy: `permissive` permits explicitly non-destructive tools; `restrictive` also requires explicitly read-only and closed-world tools.
+
+**Type:** `"permissive" | "restrictive"`
+
+**Default value:** `"permissive"`
+
+#### `mcp_servers_global.approval.allow_always`
+
+{/* erato_toml_config_key: mcp_servers_global.approval.allow_always */}
+
+Whether users may save an **Always allow** setting for a user + MCP server + tool. Defaults to `false`.
+
+**Type:** `boolean`
+
+**Default value:** `false`
+
 #### `mcp_servers_global.max_session_idle_seconds`
 
 {/* erato_toml_config_key: mcp_servers_global.max_session_idle_seconds */}

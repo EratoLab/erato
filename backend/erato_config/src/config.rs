@@ -2341,6 +2341,47 @@ pub struct McpServersGlobalConfig {
     // Defaults to `false`.
     #[serde(default)]
     pub show_frontend_tab: bool,
+
+    /// Global policy for confirming MCP tool calls. Disabled by default to
+    /// preserve the historical behavior of executing configured MCP tools.
+    #[serde(default)]
+    pub approval: McpToolApprovalConfig,
+}
+
+/// The global MCP tool-call approval policy.
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct McpToolApprovalConfig {
+    /// Whether the approval gate is enabled for MCP tool calls.
+    #[serde(default)]
+    pub enabled: bool,
+    /// How MCP tool annotations are interpreted when the gate is enabled.
+    #[serde(default)]
+    pub preset: McpToolApprovalPreset,
+    /// Whether users may create persistent, per-tool "Always allow" settings.
+    #[serde(default)]
+    pub allow_always: bool,
+}
+
+impl Default for McpToolApprovalConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            preset: McpToolApprovalPreset::Permissive,
+            allow_always: false,
+        }
+    }
+}
+
+/// Annotation policy presets for MCP tool-call approval.
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
+#[serde(rename_all = "snake_case")]
+#[repr(C)]
+pub enum McpToolApprovalPreset {
+    /// Non-destructive tools can proceed, including open-world tools.
+    #[default]
+    Permissive,
+    /// Only explicitly read-only, non-destructive, closed-world tools proceed.
+    Restrictive,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]

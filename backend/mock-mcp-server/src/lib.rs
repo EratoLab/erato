@@ -175,14 +175,30 @@ impl FileServer {
 
 #[tool_router]
 impl FileServer {
-    #[tool(description = "List available mock files")]
+    #[tool(
+        description = "List available mock files",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
     fn list_files(&self) -> rmcp::Json<ListFilesResult> {
         rmcp::Json(ListFilesResult {
             files: list_mock_files(),
         })
     }
 
-    #[tool(description = "Read a mock file by path")]
+    #[tool(
+        description = "Read a mock file by path",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
     fn read_file(
         &self,
         Parameters(ReadFileParams { path }): Parameters<ReadFileParams>,
@@ -231,14 +247,30 @@ impl ErrorFileServer {
 
 #[tool_router]
 impl ErrorFileServer {
-    #[tool(description = "List available mock files")]
+    #[tool(
+        description = "List available mock files",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
     fn list_files(&self) -> rmcp::Json<ListFilesResult> {
         rmcp::Json(ListFilesResult {
             files: list_mock_files(),
         })
     }
 
-    #[tool(description = "Read a mock file by path (always returns an error)")]
+    #[tool(
+        description = "Read a mock file by path (always returns an error)",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
     fn read_file(
         &self,
         Parameters(ReadFileParams { path }): Parameters<ReadFileParams>,
@@ -288,14 +320,30 @@ impl ProgressFileServer {
 
 #[tool_router]
 impl ProgressFileServer {
-    #[tool(description = "List available mock files")]
+    #[tool(
+        description = "List available mock files",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
     fn list_files(&self) -> rmcp::Json<ListFilesResult> {
         rmcp::Json(ListFilesResult {
             files: list_mock_files(),
         })
     }
 
-    #[tool(description = "Read a mock file by path while emitting progress messages")]
+    #[tool(
+        description = "Read a mock file by path while emitting progress messages",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
     async fn read_file(
         meta: Meta,
         client: Peer<RoleServer>,
@@ -359,7 +407,15 @@ impl ContentFilterFileServer {
 
 #[tool_router]
 impl ContentFilterFileServer {
-    #[tool(description = "Always returns a content_filter tool error payload")]
+    #[tool(
+        description = "Always returns a content_filter tool error payload",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
     fn trigger_content_filter(&self) -> Result<rmcp::model::CallToolResult, McpError> {
         Ok(rmcp::model::CallToolResult::structured_error(json!({
             "type": "content_filter",
@@ -414,7 +470,8 @@ impl ImageGenerationServer {
 impl ImageGenerationServer {
     #[tool(
         description = "Generate images from text prompts. Returns base64-encoded image data in the data_base64 field (no data URI prefix).",
-        output_schema = rmcp::handler::server::tool::schema_for_type::<ImageGenerationResponse>()
+        output_schema = rmcp::handler::server::tool::schema_for_type::<ImageGenerationResponse>(),
+        annotations(read_only_hint = true, destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
     fn generate_image(
         &self,
@@ -492,7 +549,15 @@ impl NoneAuthProbeServer {
 
 #[tool_router]
 impl NoneAuthProbeServer {
-    #[tool(description = "Probe MCP endpoint configured with authentication.mode = none")]
+    #[tool(
+        description = "Probe MCP endpoint configured with authentication.mode = none",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
     fn auth_none_probe(&self) -> String {
         "none-auth probe succeeded".to_string()
     }
@@ -536,12 +601,28 @@ impl FixedApiKeyProbeServer {
 
 #[tool_router]
 impl FixedApiKeyProbeServer {
-    #[tool(description = "Probe MCP endpoint configured with fixed API key authentication")]
+    #[tool(
+        description = "Probe MCP endpoint configured with fixed API key authentication",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
     fn auth_fixed_api_key_probe(&self) -> String {
         "fixed-auth probe succeeded".to_string()
     }
 
-    #[tool(description = "Probe MCP endpoint configured with custom fixed header authentication")]
+    #[tool(
+        description = "Probe MCP endpoint configured with custom fixed header authentication",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
     fn auth_fixed_custom_header_probe(&self) -> String {
         "fixed-auth custom-header probe succeeded".to_string()
     }
@@ -586,7 +667,13 @@ impl ForwardedAccessProbeServer {
 #[tool_router]
 impl ForwardedAccessProbeServer {
     #[tool(
-        description = "Probe MCP endpoint configured with forwarded access token authentication"
+        description = "Probe MCP endpoint configured with forwarded access token authentication",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     fn auth_forwarded_access_probe(&self) -> String {
         "forwarded-access probe succeeded".to_string()
@@ -631,7 +718,15 @@ impl ForwardedOidcProbeServer {
 
 #[tool_router]
 impl ForwardedOidcProbeServer {
-    #[tool(description = "Probe MCP endpoint configured with forwarded OIDC token authentication")]
+    #[tool(
+        description = "Probe MCP endpoint configured with forwarded OIDC token authentication",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
     fn auth_forwarded_oidc_probe(&self) -> String {
         "forwarded-oidc probe succeeded".to_string()
     }
@@ -656,6 +751,74 @@ impl ServerHandler for ForwardedOidcProbeServer {
 
     fn get_info(&self) -> ServerInfo {
         server_info("Mock MCP forwarded-oidc probe server")
+    }
+}
+
+/// Tools whose annotations exercise the approval policy without relying on an
+/// external service. `publish_approval_probe` is deliberately open-world: it
+/// is allowed by the permissive preset but must be confirmed by restrictive.
+#[derive(Clone)]
+struct ApprovalPolicyServer {
+    #[allow(dead_code)]
+    tool_router: ToolRouter<Self>,
+}
+
+impl ApprovalPolicyServer {
+    fn new() -> Self {
+        Self {
+            tool_router: Self::tool_router(),
+        }
+    }
+}
+
+#[tool_router]
+impl ApprovalPolicyServer {
+    #[tool(
+        description = "Reads a closed-world approval policy fixture",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    fn read_approval_fixture(&self) -> String {
+        "closed-world approval fixture read".to_string()
+    }
+
+    #[tool(
+        description = "Publishes an approval policy fixture to an external destination",
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = true
+        )
+    )]
+    fn publish_approval_probe(&self) -> String {
+        "approval probe published".to_string()
+    }
+}
+
+impl ServerHandler for ApprovalPolicyServer {
+    fn call_tool(
+        &self,
+        request: CallToolRequestParams,
+        context: RequestContext<RoleServer>,
+    ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
+        call_tool_from_router(self, &self.tool_router, request, context)
+    }
+
+    fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
+        std::future::ready(Ok(list_tools_from_router(&self.tool_router)))
+    }
+
+    fn get_info(&self) -> ServerInfo {
+        server_info("Mock MCP tool-approval policy server")
     }
 }
 
@@ -922,6 +1085,12 @@ fn builtin_mechanisms() -> Vec<MechanismSummary> {
             tools: &["generate_image"],
         },
         MechanismSummary {
+            name: "Tool approval policy server",
+            description: "Provides closed-world and open-world annotated tools",
+            endpoint: "Streamable HTTP /mcp/approval-policy",
+            tools: &["read_approval_fixture", "publish_approval_probe"],
+        },
+        MechanismSummary {
             name: "500 simulation endpoint",
             description: "Always returns HTTP 500 to simulate an unavailable MCP server",
             endpoint: "HTTP /mcp/list-tools-500",
@@ -994,6 +1163,11 @@ fn log_startup(addr: &str, mechanisms: &[MechanismSummary]) {
     );
     println!(
         "  {} {}",
+        "MCP HTTP".bright_cyan(),
+        "/mcp/approval-policy".bright_yellow()
+    );
+    println!(
+        "  {} {}",
         "HTTP".bright_cyan(),
         "/mcp/list-tools-500".bright_yellow()
     );
@@ -1042,6 +1216,8 @@ pub fn app() -> Router {
         create_streamable_http_service(|| Ok(ContentFilterFileServer::new()));
     let image_generation_service =
         create_streamable_http_service(|| Ok(ImageGenerationServer::new()));
+    let approval_policy_service =
+        create_streamable_http_service(|| Ok(ApprovalPolicyServer::new()));
 
     let none_auth_service = create_streamable_http_service(|| Ok(NoneAuthProbeServer::new()));
     let fixed_auth_service = create_streamable_http_service(|| Ok(FixedApiKeyProbeServer::new()));
@@ -1066,6 +1242,7 @@ pub fn app() -> Router {
         .nest_service("/mcp/progress", progress_service)
         .nest_service("/mcp/content-filter", content_filter_service)
         .nest_service("/mcp/image-generation", image_generation_service)
+        .nest_service("/mcp/approval-policy", approval_policy_service)
         .route(
             "/mcp/auth-none",
             any(move |request| {

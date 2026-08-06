@@ -448,6 +448,22 @@ CREATE TABLE public.user_preferences (
 
 
 --
+-- Name: user_tool_approval_settings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.user_tool_approval_settings (
+    id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    mcp_server_id text NOT NULL,
+    tool_name text NOT NULL,
+    active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    deactivated_at timestamp with time zone
+);
+
+
+--
 -- Name: users; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -664,6 +680,22 @@ ALTER TABLE ONLY public.share_links
 
 ALTER TABLE ONLY public.user_preferences
     ADD CONSTRAINT user_preferences_pkey PRIMARY KEY (user_id);
+
+
+--
+-- Name: user_tool_approval_settings user_tool_approval_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_tool_approval_settings
+    ADD CONSTRAINT user_tool_approval_settings_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: user_tool_approval_settings user_tool_approval_settings_user_server_tool_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_tool_approval_settings
+    ADD CONSTRAINT user_tool_approval_settings_user_server_tool_key UNIQUE (user_id, mcp_server_id, tool_name);
 
 
 --
@@ -1053,6 +1085,13 @@ CREATE TRIGGER set_updated_at_column BEFORE UPDATE ON public.user_preferences FO
 
 
 --
+-- Name: user_tool_approval_settings on_update_set_updated_columns_user_tool_approval_settings; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER on_update_set_updated_columns_user_tool_approval_settings BEFORE UPDATE ON public.user_tool_approval_settings FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
+
+
+--
 -- Name: assistant_file_uploads assistant_file_uploads_assistant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1210,6 +1249,14 @@ ALTER TABLE ONLY public.messages
 
 ALTER TABLE ONLY public.user_preferences
     ADD CONSTRAINT user_preferences_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: user_tool_approval_settings user_tool_approval_settings_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_tool_approval_settings
+    ADD CONSTRAINT user_tool_approval_settings_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --

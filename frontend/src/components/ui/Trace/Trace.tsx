@@ -40,7 +40,11 @@ interface TraceProps {
   durationMs?: number | null;
   /** When true, the cold-load pill flips to a "Stopped after Xs" label. */
   hasError?: boolean;
+  /** Durable user decisions keyed by MCP tool-call id. */
+  toolApprovalStatuses?: Record<string, ToolApprovalStatus>;
 }
+
+export type ToolApprovalStatus = "approved" | "denied";
 
 /**
  * Vertical timeline of reasoning + tool-call steps. Renders the rail-with-line
@@ -62,6 +66,7 @@ export const Trace = ({
   renderMarkdown,
   durationMs = null,
   hasError = false,
+  toolApprovalStatuses = {},
 }: TraceProps) => {
   const logicalSteps = flattenToLogicalSteps(parts);
   const { maskReasoningText } = useTraceFeature();
@@ -90,6 +95,7 @@ export const Trace = ({
         showDoneMarker={!isTraceActive}
         showThinkingPlaceholder={showThinkingPlaceholder}
         maskReasoningText={maskReasoningText}
+        toolApprovalStatuses={toolApprovalStatuses}
       />
     );
   }
@@ -102,6 +108,7 @@ export const Trace = ({
       durationMs={durationMs}
       hasError={hasError}
       maskReasoningText={maskReasoningText}
+      toolApprovalStatuses={toolApprovalStatuses}
     />
   );
 };
@@ -113,6 +120,7 @@ interface ColdLoadTraceProps {
   durationMs: number | null;
   hasError: boolean;
   maskReasoningText: boolean;
+  toolApprovalStatuses: Record<string, ToolApprovalStatus>;
 }
 
 const ColdLoadTrace = ({
@@ -122,6 +130,7 @@ const ColdLoadTrace = ({
   durationMs,
   hasError,
   maskReasoningText,
+  toolApprovalStatuses,
 }: ColdLoadTraceProps) => {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -142,6 +151,7 @@ const ColdLoadTrace = ({
           showDoneMarker
           showThinkingPlaceholder={false}
           maskReasoningText={maskReasoningText}
+          toolApprovalStatuses={toolApprovalStatuses}
         />
       </TraceCollapse>
     </div>
@@ -162,6 +172,7 @@ interface TraceTimelineProps {
   showThinkingPlaceholder: boolean;
   /** When true, reasoning step titles and bodies are replaced with the mask label. */
   maskReasoningText: boolean;
+  toolApprovalStatuses: Record<string, ToolApprovalStatus>;
 }
 
 const TraceTimeline = ({
@@ -172,6 +183,7 @@ const TraceTimeline = ({
   showDoneMarker,
   showThinkingPlaceholder,
   maskReasoningText,
+  toolApprovalStatuses,
 }: TraceTimelineProps) => {
   const placeholderIsLastNode = !showDoneMarker;
 
@@ -195,6 +207,7 @@ const TraceTimeline = ({
           isLastStep: isLastNodeInTimeline,
           renderMarkdown,
           maskReasoningText,
+          toolApprovalStatuses,
         });
 
         return (
@@ -271,6 +284,7 @@ interface RenderStepArgs {
   isLastStep: boolean;
   renderMarkdown: (text: string) => ReactNode;
   maskReasoningText: boolean;
+  toolApprovalStatuses: Record<string, ToolApprovalStatus>;
 }
 
 const renderStep = (args: RenderStepArgs): ReactNode => {
@@ -295,6 +309,11 @@ const renderStep = (args: RenderStepArgs): ReactNode => {
           isStreaming={args.isStreaming}
           isCollapsed={args.isCollapsed}
           isLastStep={args.isLastStep}
+          approvalStatus={
+            args.step.part.tool_call_id
+              ? args.toolApprovalStatuses[args.step.part.tool_call_id]
+              : undefined
+          }
         />
       );
     default: {

@@ -1,4 +1,7 @@
-use crate::config::{ExperimentalFacetsConfig, HallucinationSuppressionConfig};
+use crate::config::{
+    ExperimentalFacetsConfig, HallucinationSuppressionConfig, McpToolApprovalConfig,
+    McpToolApprovalPreset,
+};
 use crate::db::entity_ext::{chats, messages};
 use crate::metrics::{
     report_chat_provider_generation_error, report_chat_provider_time_to_first_token,
@@ -9,12 +12,13 @@ use crate::models::chat::{
     get_or_create_chat_by_previous_message_id,
 };
 use crate::models::message::{
-    ContentPart, ContentPartImage, ContentPartReasoning, ContentPartText, GenerationErrorType,
+    ContentPart, ContentPartImage, ContentPartReasoning, ContentPartText, ContentPartToolApproval,
+    ContentPartToolApprovalRequest, ContentPartToolRejection, GenerationErrorType,
     GenerationInputMessages, GenerationMetadata, GenerationParameters, GenerationRequestContext,
-    MessageRole, MessageSchema, ToolCallStatus as MessageToolCallStatus, ToolUse,
-    get_generation_chat_provider_id_for_replaced_user_message,
+    MessageRole, MessageSchema, ToolApprovalAnnotations, ToolCallStatus as MessageToolCallStatus,
+    ToolUse, get_generation_chat_provider_id_for_replaced_user_message,
     get_generation_chat_provider_id_from_message, get_message_by_id, submit_message,
-    update_message_generation_metadata,
+    update_message_content, update_message_generation_metadata,
 };
 use crate::policy::engine::PolicyEngine;
 use crate::policy::types::Subject;
@@ -71,7 +75,7 @@ use genai::chat::{
 };
 use sea_orm::JsonValue;
 use sea_orm::prelude::Uuid;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::pin::Pin;
@@ -116,6 +120,49 @@ fn reasoning_summary_part(summary: Option<&str>) -> ReasoningSummaryText {
 
 fn now_timestamp() -> String {
     Utc::now().to_rfc3339()
+}
+
+/// Normalize optional MCP annotation hints to their protocol defaults and
+/// determine whether the configured policy requires a user approval.
+fn mcp_tool_approval_request(
+    config: &McpToolApprovalConfig,
+    server_id: &str,
+    tool: &rmcp::model::Tool,
+    tool_call: &genai::chat::ToolCall,
+) -> Option<ContentPartToolApprovalRequest> {
+    if !config.enabled {
+        return None;
+    }
+
+    let hints = tool.annotations.as_ref();
+    let annotations = ToolApprovalAnnotations {
+        read_only_hint: hints.and_then(|hint| hint.read_only_hint).unwrap_or(false),
+        destructive_hint: hints.and_then(|hint| hint.destructive_hint).unwrap_or(true),
+        idempotent_hint: hints.and_then(|hint| hint.idempotent_hint).unwrap_or(false),
+        open_world_hint: hints.and_then(|hint| hint.open_world_hint).unwrap_or(true),
+    };
+    let requires_approval = match config.preset {
+        McpToolApprovalPreset::Permissive => annotations.destructive_hint,
+        McpToolApprovalPreset::Restrictive => {
+            !annotations.read_only_hint
+                || annotations.destructive_hint
+                || annotations.open_world_hint
+        }
+    };
+    requires_approval.then(|| ContentPartToolApprovalRequest {
+        tool_call_id: tool_call.call_id.clone(),
+        tool_name: tool_call.fn_name.clone(),
+        mcp_server_id: server_id.to_string(),
+        input: tool_call.fn_arguments.clone(),
+        annotations,
+        preset: match config.preset {
+            McpToolApprovalPreset::Permissive => "permissive",
+            McpToolApprovalPreset::Restrictive => "restrictive",
+        }
+        .to_string(),
+        allow_always: config.allow_always,
+        requested_at: now_timestamp(),
+    })
 }
 
 fn build_openai_responses_reasoning_replay_parts(
@@ -1284,6 +1331,24 @@ pub struct ResumeStreamRequest {
     #[schema(example = "00000000-0000-0000-0000-000000000000")]
     /// The ID of the chat to resume streaming for.
     chat_id: Uuid,
+}
+
+/// Decision submitted for a generation stopped at an MCP approval gate.
+#[derive(Debug, Clone, Copy, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolApprovalDecision {
+    Approve,
+    Reject,
+    ApproveAlways,
+}
+
+/// Rehydrates a generation that was deliberately stopped for MCP tool approval.
+#[derive(Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct ContinueStreamRequest {
+    /// The assistant message/generation that contains the pending approval request.
+    message_id: Uuid,
+    decision: ToolApprovalDecision,
 }
 
 #[derive(serde::Deserialize, ToSchema)]
@@ -2562,6 +2627,7 @@ async fn stream_generate_chat_completion<
     chat_provider_headers_context: &'a ChatProviderHeadersContext<'a>,
     streaming_task: Option<&Arc<StreamingTask>>,
     assistant_id: Option<Uuid>,
+    initial_message_content: Vec<ContentPart>,
 ) -> Result<(Vec<ContentPart>, Option<GenerationMetadata>), Report> {
     // Record the real assistant message id on the streaming task. `start_task`
     // only had a placeholder id; client-tool results are routed to a task by
@@ -2643,7 +2709,7 @@ async fn stream_generate_chat_completion<
     // conflicting calls after the first are answered with an error.
     let mut client_action_already_proposed = false;
 
-    let mut current_message_content: Vec<ContentPart> = vec![];
+    let mut current_message_content = initial_message_content;
     let mut current_turn_chat_request = chat_request.clone();
     let fallback_chat_provider_id = if chat_provider_id.is_none() {
         match app_state.config.determine_chat_provider(None, None) {
@@ -3271,6 +3337,51 @@ async fn stream_generate_chat_completion<
                 tool_call: unfinished_tool_call.clone(),
                 tool: managed_tool.tool.clone(),
             };
+
+            // MCP approval is a durable stop, not an in-memory park. Persist
+            // the request in the assistant message and let `continuestream`
+            // rehydrate this point after a user decision.
+            if let Some(approval_request) = mcp_tool_approval_request(
+                &app_state.config.mcp_servers_global.approval,
+                &managed_tool_call.server_id,
+                &managed_tool_call.tool,
+                &unfinished_tool_call,
+            ) {
+                let has_active_always_allow =
+                    if app_state.config.mcp_servers_global.approval.allow_always {
+                        match Uuid::parse_str(&user_id) {
+                            Ok(user_id) => crate::models::user_tool_approval_setting::find_active(
+                                &app_state.db,
+                                user_id,
+                                &approval_request.mcp_server_id,
+                                &approval_request.tool_name,
+                            )
+                            .await?
+                            .is_some(),
+                            Err(_) => false,
+                        }
+                    } else {
+                        false
+                    };
+
+                if !has_active_always_allow {
+                    current_message_content
+                        .push(ContentPart::ToolApprovalRequest(approval_request));
+                    let generation_metadata = build_generation_metadata(
+                        total_prompt_tokens,
+                        total_completion_tokens,
+                        total_total_tokens,
+                        total_reasoning_tokens,
+                        langfuse_trace_id.clone(),
+                        false,
+                        None,
+                        non_empty_string(&captured_reasoning_summary),
+                        non_empty_vec(&captured_reasoning_items),
+                        non_empty_vec(&captured_reasoning_item_encrypted_content),
+                    );
+                    break 'loop_call_turns Ok((current_message_content, generation_metadata));
+                }
+            }
             let output_schema = managed_tool_call.tool.output_schema.clone();
             let tool_call_span_start_time = if langfuse_enabled {
                 Some(SystemTime::now())
@@ -4951,6 +5062,9 @@ fn summary_user_message_text_from_generation_input(
                 }
                 ContentPart::Reasoning(_)
                 | ContentPart::ToolUse(_)
+                | ContentPart::ToolApprovalRequest(_)
+                | ContentPart::ToolApproval(_)
+                | ContentPart::ToolRejection(_)
                 | ContentPart::TextFilePointer(_)
                 | ContentPart::ImageFilePointer(_)
                 | ContentPart::Image(_)
@@ -5446,8 +5560,12 @@ mod tests {
     use super::{
         apply_assistant_server_filter, derive_requested_server_ids_from_allowlist,
         effective_client_tool_allowlist, expand_tool_patterns_with_discovered_tools,
-        merge_action_facet_into_mcp_allowlist,
+        mcp_tool_approval_request, merge_action_facet_into_mcp_allowlist,
     };
+    use crate::config::{McpToolApprovalConfig, McpToolApprovalPreset};
+    use genai::chat::ToolCall;
+    use rmcp::model::{Tool, ToolAnnotations};
+    use serde_json::{Map, json};
     use std::collections::HashSet;
 
     #[test]
@@ -5566,6 +5684,41 @@ mod tests {
             ),
             vec!["client/*".to_string()]
         );
+    }
+
+    #[test]
+    fn approval_presets_interpret_open_world_and_missing_annotations() {
+        let call = ToolCall {
+            call_id: "call-1".to_string(),
+            fn_name: "publish".to_string(),
+            fn_arguments: json!({}),
+            thought_signatures: None,
+        };
+        let open_world_non_destructive =
+            Tool::new("publish", "publish", Map::new()).with_annotations(
+                ToolAnnotations::from_raw(None, Some(false), Some(false), Some(true), Some(true)),
+            );
+        let unannotated = Tool::new("unknown", "unknown", Map::new());
+        let permissive = McpToolApprovalConfig {
+            enabled: true,
+            preset: McpToolApprovalPreset::Permissive,
+            allow_always: false,
+        };
+        let restrictive = McpToolApprovalConfig {
+            preset: McpToolApprovalPreset::Restrictive,
+            ..permissive.clone()
+        };
+
+        assert!(
+            mcp_tool_approval_request(&permissive, "server", &open_world_non_destructive, &call,)
+                .is_none()
+        );
+        assert!(
+            mcp_tool_approval_request(&restrictive, "server", &open_world_non_destructive, &call,)
+                .is_some()
+        );
+        assert!(mcp_tool_approval_request(&permissive, "server", &unannotated, &call).is_some());
+        assert!(mcp_tool_approval_request(&restrictive, "server", &unannotated, &call).is_some());
     }
 
     #[test]
@@ -7498,6 +7651,7 @@ async fn run_message_submit_task(
         &chat_provider_headers_context,
         Some(task),
         chat.assistant_id,
+        vec![],
     );
 
     let (end_content, generation_metadata) = match generation_task.await {
@@ -7852,6 +8006,7 @@ pub async fn regenerate_message_sse(
                     &chat_provider_headers_context,
                     Some(&task_for_stream),
                     chat.assistant_id,
+                    vec![],
                 )
                 .await;
             let (end_content, generation_metadata) = match generation_result {
@@ -8245,6 +8400,7 @@ pub async fn edit_message_sse(
                     &chat_provider_headers_context,
                     Some(&task_for_stream),
                     chat.assistant_id,
+                    vec![],
                 )
                 .await;
             let (end_content, generation_metadata) = match generation_result {
@@ -8507,6 +8663,325 @@ pub async fn client_tool_result(
     Ok(Json(ClientToolResultResponse {
         delivered: matches!(delivery, ClientToolDelivery::Delivered),
     }))
+}
+
+#[utoipa::path(
+    post,
+    path = "/me/messages/continuestream",
+    request_body = ContinueStreamRequest,
+    responses(
+        (status = OK, content_type = "text/event-stream", body = MessageSubmitStreamingResponseMessage),
+        (status = BAD_REQUEST, description = "The message has no pending approval or the decision is invalid"),
+        (status = UNAUTHORIZED, description = "When no valid JWT token is provided")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn continue_message_sse(
+    State(app_state): State<AppState>,
+    Extension(policy): Extension<PolicyEngine>,
+    Extension(me_user): Extension<MeProfile>,
+    Json(request): Json<ContinueStreamRequest>,
+) -> Result<Sse<SseEventStreamWithKeepAlive>, (axum::http::StatusCode, String)> {
+    // Check ownership and fail before opening an SSE response. The worker reads
+    // the message again so the approval transition is based on current state.
+    let message = get_message_by_id(
+        &app_state.db,
+        &policy,
+        &me_user.to_subject(),
+        &request.message_id,
+    )
+    .await
+    .map_err(|error| (axum::http::StatusCode::NOT_FOUND, error.to_string()))?;
+    let parsed = MessageSchema::validate(&message.raw_message)
+        .map_err(|error| (axum::http::StatusCode::BAD_REQUEST, error.to_string()))?;
+    if !matches!(
+        parsed.content.last(),
+        Some(ContentPart::ToolApprovalRequest(_))
+    ) {
+        return Err((
+            axum::http::StatusCode::BAD_REQUEST,
+            "Message generation is not awaiting tool approval".to_string(),
+        ));
+    }
+    if matches!(request.decision, ToolApprovalDecision::ApproveAlways)
+        && !app_state.config.mcp_servers_global.approval.allow_always
+    {
+        return Err((
+            axum::http::StatusCode::BAD_REQUEST,
+            "Always allow is disabled by MCP approval policy".to_string(),
+        ));
+    }
+
+    let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
+    let app_state_for_worker = app_state.clone();
+    let policy_for_worker = policy.clone();
+    tokio::spawn(async move {
+        let result = run_continue_message_task(
+            tx.clone(),
+            &app_state_for_worker,
+            &policy_for_worker,
+            &me_user,
+            request,
+        )
+        .await;
+        if let Err(error) = result {
+            log_and_capture_error("continue message background task", &error);
+            forward_error_report(&tx, &error).await;
+        }
+    });
+
+    let stream: SseEventStream = Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx));
+    Ok(Sse::new(stream).keep_alive(
+        axum::response::sse::KeepAlive::new()
+            .interval(Duration::from_secs(1))
+            .text("keep-alive-text"),
+    ))
+}
+
+async fn run_continue_message_task(
+    tx: Sender<Result<Event, Report>>,
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    request: ContinueStreamRequest,
+) -> Result<(), Report> {
+    let message = get_message_by_id(
+        &app_state.db,
+        policy,
+        &me_user.to_subject(),
+        &request.message_id,
+    )
+    .await?;
+    let mut parsed = MessageSchema::validate(&message.raw_message)?;
+    let Some(ContentPart::ToolApprovalRequest(approval_request)) = parsed.content.last().cloned()
+    else {
+        return Err(eyre!("Message generation is not awaiting tool approval"));
+    };
+    let chat = get_or_create_chat(
+        &app_state.db,
+        policy,
+        &me_user.to_subject(),
+        Some(&message.chat_id),
+        &me_user.id,
+        None,
+        None,
+    )
+    .await?
+    .0;
+    reject_if_archived(&chat).map_err(|(_, message)| eyre!(message))?;
+
+    let user_id = Uuid::parse_str(&me_user.id)
+        .map_err(|_| eyre!("MCP approvals require a UUID-backed user"))?;
+    let is_approved = !matches!(request.decision, ToolApprovalDecision::Reject);
+    let always_allow_setting = if matches!(request.decision, ToolApprovalDecision::ApproveAlways) {
+        Some(
+            crate::models::user_tool_approval_setting::upsert_active(
+                &app_state.db,
+                user_id,
+                &approval_request.mcp_server_id,
+                &approval_request.tool_name,
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
+
+    if is_approved {
+        parsed
+            .content
+            .push(ContentPart::ToolApproval(ContentPartToolApproval {
+                tool_call_id: approval_request.tool_call_id.clone(),
+                always_allow: always_allow_setting.is_some(),
+                user_tool_approval_setting_id: always_allow_setting
+                    .as_ref()
+                    .map(|setting| setting.id),
+                approved_at: now_timestamp(),
+            }));
+    } else {
+        parsed
+            .content
+            .push(ContentPart::ToolRejection(ContentPartToolRejection {
+                tool_call_id: approval_request.tool_call_id.clone(),
+                rejected_at: now_timestamp(),
+            }));
+    }
+
+    let mcp_auth_context = McpRequestAuthContext {
+        app_state: Some(app_state),
+        user_id: Some(user_id),
+        oidc_token: Some(&me_user.oidc_token),
+        access_token: me_user.access_token.as_deref(),
+    };
+    let available_mcp_tools = app_state
+        .mcp_servers
+        .list_tools(chat.id, &mcp_auth_context)
+        .await?;
+    let tool_use = if is_approved {
+        let managed_tool = available_mcp_tools
+            .iter()
+            .find(|tool| {
+                tool.server_id == approval_request.mcp_server_id
+                    && tool.tool.name == approval_request.tool_name
+            })
+            .ok_or_else(|| eyre!("Approved MCP tool is no longer available"))?
+            .clone();
+        let call = genai::chat::ToolCall {
+            call_id: approval_request.tool_call_id.clone(),
+            fn_name: approval_request.tool_name.clone(),
+            fn_arguments: approval_request.input.clone(),
+            thought_signatures: None,
+        };
+        let result = app_state
+            .mcp_servers
+            .call_tool(
+                chat.id,
+                crate::services::mcp_manager::ManagedToolCall {
+                    server_id: managed_tool.server_id,
+                    tool_call: call,
+                    tool: managed_tool.tool,
+                },
+                &mcp_auth_context,
+            )
+            .await?;
+        ToolUse {
+            tool_call_id: approval_request.tool_call_id.clone(),
+            status: MessageToolCallStatus::Success,
+            tool_name: approval_request.tool_name.clone(),
+            input: Some(approval_request.input.clone()),
+            progress_message: None,
+            output: Some(serde_json::to_value(result)?),
+            started_at: Some(now_timestamp()),
+            ended_at: Some(now_timestamp()),
+        }
+    } else {
+        ToolUse {
+            tool_call_id: approval_request.tool_call_id.clone(),
+            status: MessageToolCallStatus::Error,
+            tool_name: approval_request.tool_name.clone(),
+            input: Some(approval_request.input.clone()),
+            progress_message: None,
+            output: Some(json!({"status": "rejected", "error": "The user denied this tool call."})),
+            started_at: Some(now_timestamp()),
+            ended_at: Some(now_timestamp()),
+        }
+    };
+    let tool_response = serde_json::to_string(&tool_use.output)?;
+    parsed.content.push(ContentPart::ToolUse(tool_use.clone()));
+
+    // Persist the decision and tool outcome before contacting the model. This
+    // makes retrying `continuestream` safe after a backend restart.
+    update_message_content(
+        &app_state.db,
+        policy,
+        &me_user.to_subject(),
+        &message.id,
+        parsed.content.clone(),
+    )
+    .await?;
+
+    let generation_input_messages: GenerationInputMessages = serde_json::from_value(
+        message
+            .generation_input_messages
+            .clone()
+            .ok_or_else(|| eyre!("Interrupted message has no generation input"))?,
+    )?;
+    let generation_parameters: GenerationParameters = serde_json::from_value(
+        message
+            .generation_parameters
+            .clone()
+            .ok_or_else(|| eyre!("Interrupted message has no generation parameters"))?,
+    )?;
+    let chat_provider_id = generation_parameters
+        .generation_chat_provider_id
+        .ok_or_else(|| eyre!("Interrupted message has no chat provider"))?;
+    let generation_input_messages = resolve_file_pointers_in_generation_input(
+        app_state,
+        generation_input_messages,
+        me_user.access_token.as_deref(),
+    )
+    .await?;
+    let generation_input_messages =
+        resolve_action_facet_markers_in_generation_input(app_state, generation_input_messages);
+    let mut chat_request = generation_input_messages.into_chat_request();
+    chat_request.tools = (!available_mcp_tools.is_empty())
+        .then(|| convert_mcp_tools_to_genai_tools(available_mcp_tools.clone(), false));
+    chat_request.messages.push(GenAiChatMessage {
+        role: ChatRole::Assistant,
+        content: MessageContent::from_tool_calls(vec![genai::chat::ToolCall {
+            call_id: approval_request.tool_call_id.clone(),
+            fn_name: approval_request.tool_name.clone(),
+            fn_arguments: approval_request.input.clone(),
+            thought_signatures: None,
+        }]),
+        options: None,
+    });
+    chat_request.messages.push(GenAiChatMessage {
+        role: ChatRole::Tool,
+        content: MessageContent::from_parts(vec![GenAiContentPart::ToolResponse(
+            genai::chat::ToolResponse {
+                call_id: approval_request.tool_call_id.clone(),
+                content: tool_response,
+            },
+        )]),
+        options: None,
+    });
+
+    let provider = app_state.config.get_chat_provider(&chat_provider_id);
+    let chat_options =
+        build_chat_options_for_completion(&provider.model_settings, &provider.model_capabilities);
+    let allowed_tool_names = chat_request
+        .tools
+        .as_ref()
+        .map(|tools| tools.iter().map(|tool| tool.name.to_string()).collect())
+        .unwrap_or_default();
+    let headers_context = ChatProviderHeadersContext::new(&me_user.id, &me_user.id_token_claims);
+    let (end_content, generation_metadata) =
+        stream_generate_chat_completion::<MessageSubmitStreamingResponseMessage>(
+            tx.clone(),
+            app_state,
+            policy,
+            &me_user.to_subject(),
+            chat_request,
+            LangfuseTraceEnrichment::default(),
+            chat_options,
+            message.id,
+            me_user.id.clone(),
+            chat.id,
+            Some(&chat_provider_id),
+            &me_user.groups,
+            mcp_auth_context,
+            vec![],
+            allowed_tool_names,
+            available_mcp_tools,
+            HashMap::new(),
+            &headers_context,
+            None,
+            chat.assistant_id,
+            parsed.content,
+        )
+        .await?;
+    if let Some(metadata) = generation_metadata {
+        update_message_generation_metadata(
+            &app_state.db,
+            policy,
+            &me_user.to_subject(),
+            &message.id,
+            metadata,
+        )
+        .await?;
+    }
+    stream_update_assistant_message_completion::<MessageSubmitStreamingResponseMessage>(
+        tx,
+        app_state,
+        policy,
+        end_content,
+        me_user,
+        message.id,
+    )
+    .await
 }
 
 #[utoipa::path(

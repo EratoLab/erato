@@ -17,4 +17,5 @@ pub use super::runtime_configuration::Entity as RuntimeConfiguration;
 pub use super::share_grants::Entity as ShareGrants;
 pub use super::share_links::Entity as ShareLinks;
 pub use super::user_preferences::Entity as UserPreferences;
+pub use super::user_tool_approval_settings::Entity as UserToolApprovalSettings;
 pub use super::users::Entity as Users;
