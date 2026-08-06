@@ -16,20 +16,26 @@ const emitCompiledLocaleCatalogs = (): Plugin => {
       }
 
       for (const locale of fs.readdirSync(sourceLocalesDir)) {
-        const catalogPath = path.join(
+        const jsonCatalogPath = path.join(
           sourceLocalesDir,
           locale,
           "messages.json",
         );
-        if (!fs.existsSync(catalogPath)) {
+        if (!fs.existsSync(jsonCatalogPath)) {
           continue;
         }
 
-        this.emitFile({
-          type: "asset",
-          fileName: `locales/${locale}/messages.json`,
-          source: fs.readFileSync(catalogPath),
-        });
+        for (const filename of ["messages.json", "messages.po"]) {
+          const catalogPath = path.join(sourceLocalesDir, locale, filename);
+          if (!fs.existsSync(catalogPath)) {
+            continue;
+          }
+          this.emitFile({
+            type: "asset",
+            fileName: `locales/${locale}/${filename}`,
+            source: fs.readFileSync(catalogPath),
+          });
+        }
       }
     },
   };

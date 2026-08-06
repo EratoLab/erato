@@ -200,7 +200,10 @@ const stagePublicLayoutPlugin = (): Plugin => {
       emitVoiceRuntimePackageAssets(this, rootDir, voiceRuntimeOutputBasePath);
 
       for (const filePath of walkFiles(sourceLocalesDir)) {
-        if (!filePath.endsWith(`${path.sep}messages.json`)) {
+        if (
+          !filePath.endsWith(`${path.sep}messages.json`) &&
+          !filePath.endsWith(`${path.sep}messages.po`)
+        ) {
           continue;
         }
 
