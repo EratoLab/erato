@@ -2314,6 +2314,11 @@ msgstr "Benachrichtigungen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "mcpApproval.alwaysAllowDisabled"
+msgstr "Gesperrt: Ihre Organisation verlangt jedes Mal eine Bestätigung, wenn dieses Tool ausgeführt wird."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
 msgid "mcpApproval.inputPreview"
 msgstr ""
 

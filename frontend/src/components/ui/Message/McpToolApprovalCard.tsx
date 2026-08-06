@@ -148,11 +148,19 @@ export const McpToolApprovalCard = ({
           </div>
         }
         onAllowOnce={() => void decide("approve")}
-        onAlwaysAllow={
+        // Keep "Always allow" discoverable when the deployment enforces
+        // per-use confirmation: greyed out with the reason, like the add-in's
+        // locked client-action decisions, instead of silently missing.
+        // eslint-disable-next-line lingui/no-unlocalized-strings -- API decision value
+        onAlwaysAllow={() => void decide("approve_always")}
+        alwaysAllowDisabledReason={
           request.allow_always
-            ? // eslint-disable-next-line lingui/no-unlocalized-strings -- API decision value
-              () => void decide("approve_always")
-            : undefined
+            ? undefined
+            : t({
+                id: "mcpApproval.alwaysAllowDisabled",
+                message:
+                  "Locked: your organization requires confirmation each time this tool runs.",
+              })
         }
         onDeny={() => void decide("reject")}
         status="pending"

@@ -132,6 +132,28 @@ describe("McpToolApprovalCard", () => {
     });
   });
 
+  it("greys out Always allow with the policy reason instead of hiding it", () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={{ ...approvalRequest, allow_always: false }}
+        resolution={null}
+      />,
+    );
+
+    const alwaysAllow = screen.getByRole("button", { name: "Always allow" });
+    expect(alwaysAllow).toHaveAttribute("aria-disabled", "true");
+    expect(
+      screen.getByText(/requires confirmation each time/),
+    ).toBeInTheDocument();
+
+    fireEvent.click(alwaysAllow);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("does not register an already-resolved request", () => {
     render(
       withChatContext(
