@@ -7,6 +7,7 @@ import { ChatContext } from "@/providers/ChatProvider";
 
 import { ActionConfirmationCard } from "./ActionConfirmationCard";
 
+import type { ToolApprovalStatus } from "../Trace/Trace";
 import type { ContentPartToolApprovalRequest } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 /**
@@ -44,16 +45,15 @@ export const McpToolApprovalCard = ({
 }: {
   messageId: string;
   request: McpToolApprovalRequestPart;
-  resolution: "approved" | "rejected" | null;
+  resolution: ToolApprovalStatus | null;
 }) => {
   // This component is also rendered in isolated stories/tests, where the chat
   // provider is deliberately absent. The in-app path always has it.
   const chatContext = useContext(ChatContext);
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [localResolution, setLocalResolution] = useState<
-    "approved" | "rejected" | null
-  >(null);
+  const [localResolution, setLocalResolution] =
+    useState<ToolApprovalStatus | null>(null);
 
   // While the decision is pending, hold the chat's message-queue auto-send
   // and surface the sidebar "action required" state, exactly like the
@@ -100,7 +100,7 @@ export const McpToolApprovalCard = ({
         throw new Error(await response.text());
       }
       await response.text();
-      setLocalResolution(decision === "reject" ? "rejected" : "approved");
+      setLocalResolution(decision === "reject" ? "denied" : "approved");
       // Keep the user in the current chat. This refreshes the persisted
       // decision and the resumed assistant output without a document reload.
       await chatContext?.refetchMessages();

@@ -8815,10 +8815,16 @@ async fn run_continue_message_task(
         oidc_token: Some(&me_user.oidc_token),
         access_token: me_user.access_token.as_deref(),
     };
-    let available_mcp_tools = app_state
+    // Keep discovery consistent with the initial generation. A chat can have
+    // an unrelated MCP server that is temporarily unavailable; that must not
+    // prevent a previously approved tool from continuing. The strict
+    // `list_tools` helper turns any such server into a generation failure.
+    let mcp_tool_discovery = app_state
         .mcp_servers
-        .list_tools(chat.id, &mcp_auth_context)
-        .await?;
+        .discover_tools_for_server_ids(chat.id, None, &mcp_auth_context)
+        .await;
+    let available_mcp_tools = mcp_tool_discovery.tools;
+    let mcp_servers_unavailable = mcp_tool_discovery.unavailable_server_ids;
     let tool_use = if is_approved {
         let managed_tool = available_mcp_tools
             .iter()
@@ -8953,7 +8959,7 @@ async fn run_continue_message_task(
             Some(&chat_provider_id),
             &me_user.groups,
             mcp_auth_context,
-            vec![],
+            mcp_servers_unavailable,
             allowed_tool_names,
             available_mcp_tools,
             HashMap::new(),

@@ -1093,24 +1093,12 @@ export const MessageContent = memo(function MessageContent({
         const isLastRenderablePart = index === lastRenderableIndex;
 
         if (part.content_type === "tool_approval_request" && messageId) {
-          const resolution = content.find(
-            (candidate) =>
-              (candidate.content_type === "tool_approval" ||
-                candidate.content_type === "tool_rejection") &&
-              candidate.tool_call_id === part.tool_call_id,
-          );
           return (
             <McpToolApprovalCard
               key={`tool-approval-${part.tool_call_id}`}
               messageId={messageId}
               request={part}
-              resolution={
-                resolution?.content_type === "tool_approval"
-                  ? "approved"
-                  : resolution?.content_type === "tool_rejection"
-                    ? "rejected"
-                    : null
-              }
+              resolution={toolApprovalStatuses[part.tool_call_id] ?? null}
             />
           );
         }
