@@ -7,16 +7,19 @@ import { ChatContext } from "@/providers/ChatProvider";
 
 import { ActionConfirmationCard } from "./ActionConfirmationCard";
 
-export interface McpToolApprovalRequestPart {
-  tool_call_id: string;
-  tool_name: string;
-  mcp_server_id: string;
+import type { ContentPartToolApprovalRequest } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+
+/**
+ * The generated schema collapses `serde_json::Value` to `void`, which would
+ * make `input` unusable; track every other field from the generated type and
+ * override just that one.
+ */
+export type McpToolApprovalRequestPart = Omit<
+  ContentPartToolApprovalRequest,
+  "input"
+> & {
   input: unknown;
-  annotations: {
-    openWorldHint: boolean;
-  };
-  allow_always: boolean;
-}
+};
 
 const formatInputPreview = (input: unknown): string => {
   try {

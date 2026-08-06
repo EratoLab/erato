@@ -18,8 +18,15 @@ const approvalRequest = {
   tool_name: "publish_approval_probe",
   mcp_server_id: "mock_mcp_approval",
   input: { channel: "release", message: "Ready to publish" },
-  annotations: { openWorldHint: true },
+  annotations: {
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
+  preset: "permissive",
   allow_always: true,
+  requested_at: "2026-08-06T00:00:00Z",
 };
 
 const withChatContext = (ui: ReactNode, chatId = "chat-1") => (
