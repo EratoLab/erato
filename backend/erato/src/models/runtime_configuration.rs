@@ -27,6 +27,26 @@ pub async fn mirror_erato_backend_sources_with_translation_pos(
     source_files: &[ConfigSourceFile],
     translation_po_files: &[ConfigSourceFile],
 ) -> Result<(), Report> {
+    tracing::debug!(
+        erato_toml_source_count = source_files.len(),
+        translation_po_source_count = translation_po_files.len(),
+        "Preparing runtime configuration mirror"
+    );
+    for source_file in source_files {
+        tracing::debug!(
+            source_type = ERATO_TOML_SOURCE_TYPE,
+            source_filename = %source_file.source_filename,
+            "Mirroring runtime configuration source"
+        );
+    }
+    for source_file in translation_po_files {
+        tracing::debug!(
+            source_type = TRANSLATION_PO_SOURCE_TYPE,
+            source_filename = %source_file.source_filename,
+            "Mirroring runtime configuration source"
+        );
+    }
+
     let rows = source_files
         .iter()
         .map(|source_file| {
@@ -44,7 +64,7 @@ pub async fn mirror_erato_backend_sources_with_translation_pos(
         ))
         .await?;
 
-    RuntimeConfiguration::delete_many()
+    let deleted = RuntimeConfiguration::delete_many()
         .filter(runtime_configuration::Column::SourceService.eq(ERATO_BACKEND_SOURCE_SERVICE))
         .exec(&transaction)
         .await?;
@@ -56,6 +76,11 @@ pub async fn mirror_erato_backend_sources_with_translation_pos(
     }
 
     transaction.commit().await?;
+    tracing::debug!(
+        deleted_row_count = deleted.rows_affected,
+        inserted_row_count = source_files.len() + translation_po_files.len(),
+        "Completed runtime configuration mirror"
+    );
     Ok(())
 }
 

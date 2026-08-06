@@ -155,28 +155,87 @@ impl FrontendRegistry {
 /// configured frontend bundles. A catalog is considered served only when its
 /// compiled sibling exists, matching the JIT serving path.
 pub fn discover_translation_po_sources(config: &AppConfig) -> Vec<ConfigSourceFile> {
-    let mut roots = vec![PathBuf::from(&config.frontend.web_frontend_bundle_path)];
-    if config.integrations.ms_office.addin.enabled {
-        roots.push(PathBuf::from(
-            &config.integrations.ms_office.addin.frontend_bundle_path,
+    let web_frontend_bundle_path = PathBuf::from(&config.frontend.web_frontend_bundle_path);
+    let mut roots = vec![
+        (
+            "core frontend translations",
+            web_frontend_bundle_path.join("public/common/locales"),
+        ),
+        // Keep supporting bundles configured directly at the common public
+        // mount, as used by older local/dev layouts.
+        (
+            "core frontend translations (legacy)",
+            web_frontend_bundle_path.join("locales"),
+        ),
+    ];
+
+    if let Some(theme) = config.frontend.theme.as_deref() {
+        roots.push((
+            "active shared theme",
+            web_frontend_bundle_path
+                .join("public/common/custom-theme")
+                .join(theme),
         ));
+        // Runtime theme mounts are placed directly below the bundle root in
+        // some deployments, rather than under the built public/common tree.
+        roots.push((
+            "active runtime theme",
+            web_frontend_bundle_path.join("custom-theme").join(theme),
+        ));
+    }
+
+    if config.integrations.ms_office.addin.enabled {
+        let addin_bundle_path =
+            PathBuf::from(&config.integrations.ms_office.addin.frontend_bundle_path);
+        roots.push((
+            "Office add-in translations",
+            addin_bundle_path.join("locales"),
+        ));
+        if let Some(theme) = config.frontend.theme.as_deref() {
+            roots.push((
+                "active Office add-in theme",
+                addin_bundle_path.join("custom-theme").join(theme),
+            ));
+        }
     }
 
     let component_kits_directory = Path::new(&config.frontend.component_kits.directory);
     if let Ok(entries) = fs::read_dir(component_kits_directory) {
         for entry in entries.flatten() {
             if entry.file_type().is_ok_and(|file_type| file_type.is_dir()) {
-                roots.push(entry.path());
+                let path = entry.path();
+                roots.push(("component kit", path));
             }
         }
     }
 
     let mut sources = Vec::new();
     let mut seen = HashSet::new();
-    for root in roots {
+    tracing::debug!(
+        root_count = roots.len(),
+        "Scanning frontend roots for translation PO catalogs"
+    );
+    for (root_kind, root) in roots {
+        let source_count_before = sources.len();
+        tracing::debug!(
+            root_kind,
+            root = %root.display(),
+            exists = root.exists(),
+            "Scanning translation PO source root"
+        );
         collect_translation_po_sources(&root, &mut seen, &mut sources);
+        tracing::debug!(
+            root_kind,
+            root = %root.display(),
+            discovered = sources.len() - source_count_before,
+            "Finished scanning translation PO source root"
+        );
     }
     sources.sort_by(|left, right| left.source_filename.cmp(&right.source_filename));
+    tracing::debug!(
+        source_count = sources.len(),
+        "Finished scanning frontend roots for translation PO catalogs"
+    );
     sources
 }
 
@@ -216,15 +275,33 @@ fn collect_translation_po_sources(
                 .and_then(|locale| locale.parent())
                 .and_then(|locales| locales.file_name())
                 != Some(std::ffi::OsStr::new("locales"))
-            || !path.with_extension("json").is_file()
         {
+            continue;
+        }
+
+        let compiled_path = path.with_extension("json");
+        if !compiled_path.is_file() {
+            tracing::debug!(
+                source_filename = %path.display(),
+                compiled_filename = %compiled_path.display(),
+                "Skipping frontend translation PO catalog without a served compiled catalog"
+            );
             continue;
         }
 
         let canonical_path = path.canonicalize().unwrap_or(path);
         if !seen.insert(canonical_path.clone()) {
+            tracing::debug!(
+                source_filename = %canonical_path.display(),
+                "Skipping duplicate frontend translation PO catalog"
+            );
             continue;
         }
+        tracing::debug!(
+            source_filename = %canonical_path.display(),
+            compiled_filename = %compiled_path.display(),
+            "Found served frontend translation PO catalog"
+        );
         match fs::read_to_string(&canonical_path) {
             Ok(contents) => sources.push(ConfigSourceFile {
                 source_filename: canonical_path.to_string_lossy().into_owned(),
@@ -1886,6 +1963,16 @@ mod tests {
             "public/common/custom-theme/acme/locales/de",
             "theme-de",
         );
+        write_catalog(
+            &web_root,
+            "custom-theme/acme/locales/fr",
+            "runtime-theme-fr",
+        );
+        write_catalog(
+            &web_root,
+            "public/common/custom-theme/unused/locales/de",
+            "unused-theme-de",
+        );
         let excluded = web_root.join("public/common/locales/fr/messages.po");
         std::fs::create_dir_all(excluded.parent().unwrap()).unwrap();
         std::fs::write(excluded, "not-served").unwrap();
@@ -1894,15 +1981,26 @@ mod tests {
 
         let mut config = AppConfig::default();
         config.frontend.web_frontend_bundle_path = web_root.to_string_lossy().into_owned();
+        config.frontend.theme = Some("acme".to_string());
         config.integrations.ms_office.addin.enabled = true;
         config.integrations.ms_office.addin.frontend_bundle_path =
             addin_root.to_string_lossy().into_owned();
         config.frontend.component_kits.directory = kits_root.to_string_lossy().into_owned();
 
         let sources = discover_translation_po_sources(&config);
-        assert_eq!(sources.len(), 4);
+        assert_eq!(sources.len(), 5);
         assert!(sources.iter().any(|source| source.contents == "web-en"));
         assert!(sources.iter().any(|source| source.contents == "theme-de"));
+        assert!(
+            sources
+                .iter()
+                .any(|source| source.contents == "runtime-theme-fr")
+        );
+        assert!(
+            sources
+                .iter()
+                .all(|source| !source.contents.contains("unused-theme-de"))
+        );
         assert!(sources.iter().any(|source| source.contents == "addin-pl"));
         assert!(sources.iter().any(|source| source.contents == "kit-es"));
         assert!(

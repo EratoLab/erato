@@ -469,12 +469,17 @@ const stagePlatformLocalesPlugin = () => {
       const targetDir = path.join(targetRoot, locale);
       fs.mkdirSync(targetDir, { recursive: true });
 
-      const sourcePath = path.join(sourceRoot, locale, "messages.json");
-      const targetPath = path.join(targetDir, "messages.json");
-      if (fs.existsSync(sourcePath)) {
-        fs.copyFileSync(sourcePath, targetPath);
-      } else if (!fs.existsSync(targetPath)) {
-        fs.writeFileSync(targetPath, JSON.stringify({ messages: {} }, null, 2));
+      for (const filename of ["messages.json", "messages.po"]) {
+        const sourcePath = path.join(sourceRoot, locale, filename);
+        const targetPath = path.join(targetDir, filename);
+        if (fs.existsSync(sourcePath)) {
+          fs.copyFileSync(sourcePath, targetPath);
+        } else if (filename === "messages.json" && !fs.existsSync(targetPath)) {
+          fs.writeFileSync(
+            targetPath,
+            JSON.stringify({ messages: {} }, null, 2),
+          );
+        }
       }
     }
   };
