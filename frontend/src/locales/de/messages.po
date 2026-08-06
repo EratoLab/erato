@@ -2769,6 +2769,36 @@ msgid "preferences.dialog.fields.nickname.placeholder"
 msgstr "Wie soll dich der Assistent nennen? z. B. Max Mustermann"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.description"
+msgstr "Tools, die Sie über die Bestätigung im Chat dauerhaft erlaubt haben. Entfernen Sie einen Eintrag, um wieder gefragt zu werden."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.heading"
+msgstr "Immer erlaubte Tools"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.loadError"
+msgstr "Immer erlaubte Tools konnten nicht geladen werden. Bitte versuchen Sie es erneut."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.remove"
+msgstr "Entfernen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.removeError"
+msgstr "Die Genehmigung konnte nicht entfernt werden. Bitte versuchen Sie es erneut."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.removing"
+msgstr "Wird entfernt..."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.mcpServers.authenticationMode"
 msgstr "Authentifizierungsmodus"
