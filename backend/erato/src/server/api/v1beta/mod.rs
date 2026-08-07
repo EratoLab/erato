@@ -82,7 +82,8 @@ use crate::server::api::v1beta::share_links::{
     set_share_link,
 };
 use crate::server::api::v1beta::user_tool_approval_settings::{
-    __path_deactivate_user_tool_approval_setting, __path_list_user_tool_approval_settings,
+    __path_create_user_tool_approval_setting, __path_deactivate_user_tool_approval_setting,
+    __path_list_user_tool_approval_settings, create_user_tool_approval_setting,
     deactivate_user_tool_approval_setting, list_user_tool_approval_settings,
 };
 use crate::services::file_storage::{
@@ -146,7 +147,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/messages/clienttoolresult", post(client_tool_result))
         .route(
             "/mcp-tool-approval-settings",
-            get(list_user_tool_approval_settings),
+            get(list_user_tool_approval_settings).post(create_user_tool_approval_setting),
         )
         .route(
             "/mcp-tool-approval-settings/{setting_id}",
@@ -389,6 +390,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         continue_message_sse,
         client_tool_result,
         list_user_tool_approval_settings,
+        create_user_tool_approval_setting,
         deactivate_user_tool_approval_setting,
         create_chat,
         update_chat,

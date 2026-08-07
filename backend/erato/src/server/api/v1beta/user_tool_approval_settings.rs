@@ -54,6 +54,79 @@ pub async fn list_user_tool_approval_settings(
     }))
 }
 
+#[derive(serde::Deserialize, ToSchema)]
+pub struct CreateUserToolApprovalSettingRequest {
+    pub mcp_server_id: String,
+    pub tool_name: String,
+}
+
+/// Grant "always allow" for a tool from the settings surface. The in-stream
+/// ApproveAlways decision remains the other writer of the same rows; this
+/// endpoint exists so a grant flipped back to ask-per-use in settings can be
+/// re-granted without waiting for the next in-chat approval stop.
+#[utoipa::path(
+    post,
+    path = "/me/mcp-tool-approval-settings",
+    request_body = CreateUserToolApprovalSettingRequest,
+    responses(
+        (status = OK, body = UserToolApprovalSetting),
+        (status = BAD_REQUEST, description = "Persistent approvals are disabled by policy or the MCP server is unknown")
+    ),
+    security(("bearer_auth" = []))
+)]
+pub async fn create_user_tool_approval_setting(
+    State(app_state): State<AppState>,
+    Extension(me_user): Extension<MeProfile>,
+    Json(request): Json<CreateUserToolApprovalSettingRequest>,
+) -> Result<Json<UserToolApprovalSetting>, (axum::http::StatusCode, String)> {
+    if !app_state.config.mcp_servers_global.approval.allow_always {
+        return Err((
+            axum::http::StatusCode::BAD_REQUEST,
+            "Always allow is disabled by MCP approval policy".to_string(),
+        ));
+    }
+    if !app_state
+        .config
+        .mcp_servers
+        .contains_key(&request.mcp_server_id)
+    {
+        return Err((
+            axum::http::StatusCode::BAD_REQUEST,
+            "Unknown MCP server".to_string(),
+        ));
+    }
+    if request.tool_name.trim().is_empty() {
+        return Err((
+            axum::http::StatusCode::BAD_REQUEST,
+            "Tool name must not be empty".to_string(),
+        ));
+    }
+    let user_id = Uuid::parse_str(&me_user.id).map_err(|_| {
+        (
+            axum::http::StatusCode::BAD_REQUEST,
+            "MCP approval settings require a UUID-backed user".to_string(),
+        )
+    })?;
+    let setting = user_tool_approval_setting::upsert_active(
+        &app_state.db,
+        user_id,
+        &request.mcp_server_id,
+        &request.tool_name,
+    )
+    .await
+    .map_err(|error| {
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            error.to_string(),
+        )
+    })?;
+    Ok(Json(UserToolApprovalSetting {
+        id: setting.id,
+        mcp_server_id: setting.mcp_server_id,
+        tool_name: setting.tool_name,
+    }))
+}
+
 #[utoipa::path(
     delete,
     path = "/me/mcp-tool-approval-settings/{setting_id}",

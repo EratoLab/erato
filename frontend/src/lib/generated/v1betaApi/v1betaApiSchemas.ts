@@ -1002,6 +1002,11 @@ export type CreateShareGrantRequest = {
  */
 export type CreateShareGrantResponse = ShareGrant;
 
+export type CreateUserToolApprovalSettingRequest = {
+  mcp_server_id: string;
+  tool_name: string;
+};
+
 export type DesktopSidecarDistributionFileResponse = {
   download_filename: string;
   id: string;
