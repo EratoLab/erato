@@ -3359,42 +3359,38 @@ describe("ChatInput", () => {
       useMessageQueueStore.setState({ queuedBySessionId: {} });
     });
 
-    it("shows an action-required chip while a consent card is pending and jumps to it", async () => {
+    it("explains a held queue while a confirmation card is pending", async () => {
       const { i18n } = await import("@lingui/core");
-      useConfirmationRegistryStore
-        .getState()
-        .registerConfirmation(CHAT_ID, "confirmation-1");
+      const onSendMessage = vi.fn();
+      const rerender = renderQueue(
+        { isPendingResponse: true },
+        onSendMessage,
+        i18n,
+      );
 
-      renderQueue({ isPendingResponse: false }, vi.fn(), i18n);
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      fireEvent.change(textarea, { target: { value: "next message" } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
 
       expect(
-        screen.getByTestId("chat-input-pending-confirmation"),
+        screen.getByText("Queued — sends when response finishes"),
       ).toBeInTheDocument();
 
-      // The consent card renders in the message list subtree; the chip finds
-      // it via its data marker.
-      const card = document.createElement("div");
-      card.setAttribute("data-pending-confirmation", "true");
-      card.tabIndex = -1;
-      const scrollSpy = vi.fn();
-      card.scrollIntoView = scrollSpy;
-      document.body.appendChild(card);
-
-      fireEvent.click(
-        screen.getByTestId("chat-input-pending-confirmation-view"),
-      );
-      expect(scrollSpy).toHaveBeenCalled();
-      expect(document.activeElement).toBe(card);
-      card.remove();
-
+      // The turn completes into a pending consent card: the queue is held,
+      // and the chip says why instead of a separate action-required banner.
       act(() => {
         useConfirmationRegistryStore
           .getState()
-          .unregisterConfirmation(CHAT_ID, "confirmation-1");
+          .registerConfirmation(CHAT_ID, "card-1");
       });
+      rerender({ isPendingResponse: false });
+      await flushTimers();
+      expect(onSendMessage).not.toHaveBeenCalled();
       expect(
-        screen.queryByTestId("chat-input-pending-confirmation"),
-      ).not.toBeInTheDocument();
+        screen.getByText(
+          "Queued — sends after you respond to the confirmation",
+        ),
+      ).toBeInTheDocument();
     });
 
     it("queues the draft on Enter while generating instead of sending", async () => {

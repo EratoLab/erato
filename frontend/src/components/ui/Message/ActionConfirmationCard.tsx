@@ -182,9 +182,6 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
       tabIndex={-1}
       role={isPending ? "group" : undefined}
       aria-label={isPending ? resolvedTitle : undefined}
-      // DOM marker for the composer's "action required" chip to jump to; the
-      // cards live in the message list, a different subtree than the chip.
-      data-pending-confirmation={isPending ? "true" : undefined}
       className={
         isPending
           ? `mt-2 space-y-2 rounded-md border border-theme-border bg-theme-bg-primary p-3 ${className}`
