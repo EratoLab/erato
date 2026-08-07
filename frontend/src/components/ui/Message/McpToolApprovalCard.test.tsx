@@ -48,7 +48,7 @@ afterEach(() => {
 });
 
 describe("McpToolApprovalCard", () => {
-  it("keeps the tool input preview collapsed until the user asks to view it", () => {
+  it("shows the pending tool call as a visible referent above the consent card", () => {
     render(
       <McpToolApprovalCard
         messageId="message-1"
@@ -57,11 +57,16 @@ describe("McpToolApprovalCard", () => {
       />,
     );
 
-    const preview = screen
-      .getByText("View input parameters")
-      .closest("details");
-    expect(preview).not.toHaveAttribute("open");
-    expect(preview).toHaveTextContent('"channel": "release"');
+    expect(screen.getByTestId("mcp-tool-approval")).toHaveAttribute(
+      "data-tool-name",
+      "publish_approval_probe",
+    );
+    expect(screen.getByText("publish_approval_probe")).toBeInTheDocument();
+    expect(screen.getByText("mock_mcp_approval")).toBeInTheDocument();
+    // The input is visible without interaction — the user sees what they
+    // approve, like the add-in's confirmation summary.
+    expect(screen.getByText("Input Parameters")).toBeInTheDocument();
+    expect(screen.getByText(/"release"/)).toBeInTheDocument();
   });
 
   it("resolves the card in place after a decision instead of navigating", async () => {

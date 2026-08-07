@@ -2319,8 +2319,8 @@ msgstr "Locked: your organization requires confirmation each time this tool runs
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/McpToolApprovalCard.tsx
-msgid "mcpApproval.inputPreview"
-msgstr "View input parameters"
+#~ msgid "mcpApproval.inputPreview"
+#~ msgstr "View input parameters"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/McpToolApprovalCard.tsx

@@ -2319,8 +2319,8 @@ msgstr "Verrouillé : votre organisation exige une confirmation chaque fois que 
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/McpToolApprovalCard.tsx
-msgid "mcpApproval.inputPreview"
-msgstr ""
+#~ msgid "mcpApproval.inputPreview"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/McpToolApprovalCard.tsx
