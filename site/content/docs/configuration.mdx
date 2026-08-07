@@ -572,6 +572,26 @@ show_settings_tab = true
 show_settings_tab_office_addin = false
 ```
 
+#### `desktop_sidecar.allowed_origins`
+
+{/* erato_toml_config_key: desktop_sidecar.allowed_origins */}
+
+Browser origins that are embedded as immutable policy in Windows desktop-sidecar
+downloads. Entries must be normalized, non-loopback origins in lowercase
+`scheme://host[:port]` form; do not include a path, trailing slash, query, or
+fragment. An empty list is valid and refuses all production browser origins.
+
+**Default value:** `[]`
+
+**Type:** `array of strings`
+
+**Example**
+
+```toml
+[desktop_sidecar]
+allowed_origins = ["https://app.example.com"]
+```
+
 #### `desktop_sidecar.distribution.enabled`
 
 {/* erato_toml_config_key: desktop_sidecar.distribution.enabled */}
