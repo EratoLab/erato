@@ -818,6 +818,11 @@ msgstr "Mikrofon"
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.tabs.desktopSidecar"
+msgstr "Desktop Sidecar"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.tabs.user"
 msgstr "Benutzereinstellungen"
 

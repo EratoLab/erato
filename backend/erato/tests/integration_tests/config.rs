@@ -22,6 +22,10 @@ fn test_desktop_sidecar_organization_configuration() {
     temp_file
         .write_all(
             br#"
+[desktop_sidecar]
+show_settings_tab = true
+show_settings_tab_office_addin = false
+
 [desktop_sidecar.organization_configuration]
 show_tray_icon = false
 
@@ -55,6 +59,11 @@ directory = "/tmp/desktop-sidecar-artifacts"
             .desktop_sidecar
             .organization_configuration
             .show_tray_icon,
+        Some(false)
+    );
+    assert!(config.desktop_sidecar.show_settings_tab);
+    assert_eq!(
+        config.desktop_sidecar.show_settings_tab_office_addin,
         Some(false)
     );
     assert!(config.desktop_sidecar.distribution.enabled);

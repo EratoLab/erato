@@ -53,6 +53,7 @@ export type Env = {
   msalClientId: string | null;
   msalAuthority: string | null;
   maskReasoningTraceText: boolean;
+  desktopSidecarSettingsTabEnabled: boolean;
 };
 
 declare global {
@@ -107,6 +108,7 @@ declare global {
     MSAL_CLIENT_ID?: string;
     MSAL_AUTHORITY?: string;
     MASK_REASONING_TRACE_TEXT?: boolean;
+    DESKTOP_SIDECAR_SHOW_SETTINGS_TAB?: boolean;
     __E2E_COMPONENT_VARIANT__?: string;
     __E2E_FACET_ID__?: string;
   }
@@ -349,6 +351,10 @@ export const env = (): Env => {
     import.meta.env.VITE_MASK_REASONING_TRACE_TEXT === "true"
       ? true
       : (window.MASK_REASONING_TRACE_TEXT ?? false);
+  const desktopSidecarSettingsTabEnabled =
+    import.meta.env.VITE_DESKTOP_SIDECAR_SHOW_SETTINGS_TAB === "true"
+      ? true
+      : (window.DESKTOP_SIDECAR_SHOW_SETTINGS_TAB ?? false);
 
   return {
     apiRootUrl,
@@ -400,5 +406,6 @@ export const env = (): Env => {
     msalClientId,
     msalAuthority,
     maskReasoningTraceText,
+    desktopSidecarSettingsTabEnabled,
   };
 };

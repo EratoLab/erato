@@ -1,6 +1,7 @@
 import {
   AppearanceTabContent,
   AudioInputTabContent,
+  DesktopSidecarTabContent,
   ModalBase,
   useFeatureConfig,
 } from "@erato/frontend/library";
@@ -11,7 +12,7 @@ import { BehaviorTabContent } from "./BehaviorTabContent";
 import { UserSettingsTabContent } from "./UserSettingsTabContent";
 import { useOffice } from "../providers/OfficeProvider";
 
-type SettingsTab = "appearance" | "user" | "audio" | "addin";
+type SettingsTab = "appearance" | "user" | "audio" | "desktopSidecar" | "addin";
 
 interface AddinSettingsDialogProps {
   isOpen: boolean;
@@ -32,6 +33,8 @@ export function AddinSettingsDialog({
     featureConfig.audioTranscription.enabled ||
     featureConfig.audioDictation.enabled ||
     featureConfig.audioConversational.enabled;
+  const desktopSidecarTabEnabled =
+    featureConfig.userPreferences.desktopSidecarTabEnabled;
   const [activeTab, setActiveTab] = useState<SettingsTab>("appearance");
 
   const tabOrder = useMemo<SettingsTab[]>(
@@ -39,9 +42,10 @@ export function AddinSettingsDialog({
       "appearance",
       "user",
       ...(audioSettingsEnabled ? (["audio"] as const) : []),
+      ...(desktopSidecarTabEnabled ? (["desktopSidecar"] as const) : []),
       "addin",
     ],
-    [audioSettingsEnabled],
+    [audioSettingsEnabled, desktopSidecarTabEnabled],
   );
 
   const tabLabels: Record<SettingsTab, string> = {
@@ -57,6 +61,10 @@ export function AddinSettingsDialog({
       id: "officeAddin.settings.tabs.audio",
       message: "Microphone",
     }),
+    desktopSidecar: t({
+      id: "officeAddin.settings.tabs.desktopSidecar",
+      message: "Desktop Sidecar",
+    }),
     addin: t({
       id: "officeAddin.settings.tabs.addin",
       message: "Add-in",
@@ -67,6 +75,7 @@ export function AddinSettingsDialog({
     appearance: "addin-settings-tab-appearance",
     user: "addin-settings-tab-user",
     audio: "addin-settings-tab-audio",
+    desktopSidecar: "addin-settings-tab-desktop-sidecar",
     addin: "addin-settings-tab-addin",
   };
 
@@ -74,6 +83,7 @@ export function AddinSettingsDialog({
     appearance: "addin-settings-panel-appearance",
     user: "addin-settings-panel-user",
     audio: "addin-settings-panel-audio",
+    desktopSidecar: "addin-settings-panel-desktop-sidecar",
     addin: "addin-settings-panel-addin",
   };
 
@@ -250,6 +260,20 @@ export function AddinSettingsDialog({
               <AudioInputTabContent
                 isActive={isOpen && activeTab === "audio"}
               />
+            </section>
+          ) : null}
+
+          {desktopSidecarTabEnabled ? (
+            <section
+              id={panelIds.desktopSidecar}
+              role="tabpanel"
+              aria-labelledby={tabIds.desktopSidecar}
+              hidden={activeTab !== "desktopSidecar"}
+              className="h-full space-y-4 overflow-y-auto"
+            >
+              {activeTab === "desktopSidecar" ? (
+                <DesktopSidecarTabContent />
+              ) : null}
             </section>
           ) : null}
 

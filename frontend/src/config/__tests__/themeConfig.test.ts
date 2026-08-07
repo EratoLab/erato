@@ -71,6 +71,7 @@ describe("themeConfig", () => {
     msalClientId: null,
     msalAuthority: null,
     maskReasoningTraceText: false,
+    desktopSidecarSettingsTabEnabled: false,
     ...overrides,
   });
 

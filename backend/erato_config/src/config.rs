@@ -564,6 +564,17 @@ pub struct AppConfig {
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct DesktopSidecarConfig {
+    /// Show the desktop sidecar connection-status tab in the web frontend's
+    /// preferences dialog.
+    #[serde(default)]
+    pub show_settings_tab: bool,
+
+    /// Override `show_settings_tab` for the Microsoft Office add-in.
+    ///
+    /// When unset, the Office add-in inherits the general setting.
+    #[serde(default)]
+    pub show_settings_tab_office_addin: Option<bool>,
+
     /// Distribution settings for desktop-sidecar installers and executables.
     #[serde(default)]
     pub distribution: DesktopSidecarDistributionConfig,

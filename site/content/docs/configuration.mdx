@@ -540,6 +540,38 @@ directory = "/app/component-kits"
 
 Settings for distributing and configuring the local Erato desktop sidecar.
 
+#### `desktop_sidecar.show_settings_tab`
+
+{/* erato_toml_config_key: desktop_sidecar.show_settings_tab */}
+
+Shows a Desktop Sidecar tab in the web frontend's Preferences dialog. The tab
+checks the local sidecar connection and can launch the sidecar when it is not
+running.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+#### `desktop_sidecar.show_settings_tab_office_addin`
+
+{/* erato_toml_config_key: desktop_sidecar.show_settings_tab_office_addin */}
+
+Overrides `desktop_sidecar.show_settings_tab` for the Microsoft Office add-in.
+When omitted, the add-in inherits the general setting.
+
+**Default value:** `None`
+
+**Type:** `boolean | None`
+
+**Example**
+
+```toml
+[desktop_sidecar]
+show_settings_tab = true
+# Set this only when the Office add-in should behave differently.
+show_settings_tab_office_addin = false
+```
+
 #### `desktop_sidecar.distribution.enabled`
 
 {/* erato_toml_config_key: desktop_sidecar.distribution.enabled */}
