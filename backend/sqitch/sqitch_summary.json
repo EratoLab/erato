@@ -33,7 +33,8 @@
     "deploy/0031_add_runtime_configuration.sql",
     "deploy/0032_add_runtime_configuration_source_type.sql",
     "deploy/0033_add_shared_generation_streaming_state.sql",
-    "deploy/0034_add_user_tool_approval_settings.sql"
+    "deploy/0034_add_user_tool_approval_settings.sql",
+    "deploy/0035_add_chat_pending_tool_approval.sql"
   ],
-  "latest_change": "569e20dec6b85828fee1715bfc06b0ece0c8f09a"
+  "latest_change": "da626f454cf6a0396c3071fd2701a8894f95b391"
 }

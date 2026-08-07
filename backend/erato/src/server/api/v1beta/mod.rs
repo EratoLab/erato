@@ -1241,6 +1241,11 @@ pub struct RecentChat {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     active_generation_started_at: Option<DateTime<FixedOffset>>,
+    /// Present while the chat's generation is stopped on an MCP tool approval
+    /// awaiting the user's decision
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pending_tool_approval_at: Option<DateTime<FixedOffset>>,
 }
 
 /// Sentiment for message feedback
@@ -1402,6 +1407,10 @@ pub enum GenerationChatState {
     Running,
     Completed,
     Errored,
+    /// The generation is stopped on an MCP tool approval awaiting the user's
+    /// decision. Unlike the terminal states this does not age out.
+    #[serde(rename = "action_required")]
+    ActionRequired,
 }
 
 /// A chat with a running or recently finished generation
@@ -2661,18 +2670,30 @@ pub async fn generating_chats(
             continue;
         }
 
-        let state = match row.generation_state.as_str() {
-            "running" => GenerationChatState::Running,
-            "completed" => GenerationChatState::Completed,
-            "errored" => GenerationChatState::Errored,
-            other => {
-                tracing::warn!(
-                    chat_id = %row.id,
-                    generation_state = other,
-                    "Skipping chat with unknown generation state"
-                );
+        // A pending approval outranks the generation lifecycle: the durable
+        // stop is finalized like a normal completion, but the chat is waiting
+        // on the user, not finished.
+        let (state, started_at, ended_at) = if let Some(pending_at) = row.pending_tool_approval_at {
+            (GenerationChatState::ActionRequired, pending_at, None)
+        } else {
+            let state = match row.generation_state.as_deref() {
+                Some("running") => GenerationChatState::Running,
+                Some("completed") => GenerationChatState::Completed,
+                Some("errored") => GenerationChatState::Errored,
+                other => {
+                    tracing::warn!(
+                        chat_id = %row.id,
+                        generation_state = ?other,
+                        "Skipping chat with unknown generation state"
+                    );
+                    continue;
+                }
+            };
+            // The non-pending branch of the query requires this column.
+            let Some(started_at) = row.generation_started_at else {
                 continue;
-            }
+            };
+            (state, started_at, row.generation_ended_at)
         };
 
         let title = row
@@ -2685,8 +2706,8 @@ pub async fn generating_chats(
         chats.push(GeneratingChat {
             chat_id: row.id.to_string(),
             state,
-            started_at: row.generation_started_at,
-            ended_at: row.generation_ended_at,
+            started_at,
+            ended_at,
             title,
         });
     }
@@ -2774,6 +2795,7 @@ async fn extend_recent_chats_to_api_model(
             assistant_id: chat.assistant_id.map(|id| id.to_string()),
             assistant_name: chat.assistant_name,
             active_generation_started_at: chat.active_generation_started_at,
+            pending_tool_approval_at: chat.pending_tool_approval_at,
         });
     }
 

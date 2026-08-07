@@ -9,6 +9,7 @@ pub const POSTGRES_QUERY_GENERATION_HEARTBEAT: &str = "generation_heartbeat";
 pub const POSTGRES_QUERY_GENERATION_REAP: &str = "generation_reap";
 pub const POSTGRES_QUERY_GENERATION_CLEANUP: &str = "generation_cleanup";
 pub const POSTGRES_QUERY_LIST_GENERATING_CHATS: &str = "list_generating_chats";
+pub const POSTGRES_QUERY_SET_PENDING_TOOL_APPROVAL: &str = "set_pending_tool_approval";
 pub const POSTGRES_QUERY_GENERATION_SHARED_START: &str = "generation_shared_start";
 pub const POSTGRES_QUERY_GENERATION_SHARED_EVENT: &str = "generation_shared_event";
 pub const POSTGRES_QUERY_GENERATION_SHARED_EVENTS: &str = "generation_shared_events";
@@ -31,6 +32,7 @@ pub const KNOWN_POSTGRES_QUERY_IDS: &[&str] = &[
     POSTGRES_QUERY_GENERATION_REAP,
     POSTGRES_QUERY_GENERATION_CLEANUP,
     POSTGRES_QUERY_LIST_GENERATING_CHATS,
+    POSTGRES_QUERY_SET_PENDING_TOOL_APPROVAL,
     POSTGRES_QUERY_GENERATION_SHARED_START,
     POSTGRES_QUERY_GENERATION_SHARED_EVENT,
     POSTGRES_QUERY_GENERATION_SHARED_EVENTS,

@@ -4668,6 +4668,28 @@ async fn stream_generate_chat_completion<
     }
 }
 
+/// Keep the chat's durable "awaiting tool approval" marker in sync with the
+/// message that was just finalized: a generation that stopped on an approval
+/// request always ends with that part last, and any other completed
+/// generation clears a leftover marker (e.g. after the parked message was
+/// superseded by an edit or regeneration). Best-effort — a marker failure
+/// must not fail the finished generation.
+async fn sync_pending_tool_approval_marker(
+    app_state: &AppState,
+    chat_id: &Uuid,
+    final_content_parts: &[ContentPart],
+) {
+    let pending = matches!(
+        final_content_parts.last(),
+        Some(ContentPart::ToolApprovalRequest(_))
+    );
+    if let Err(error) =
+        crate::models::chat::set_pending_tool_approval(&app_state.db, chat_id, pending).await
+    {
+        tracing::warn!(chat_id = %chat_id, %error, "Failed to sync pending tool approval marker");
+    }
+}
+
 // New background task version
 #[allow(clippy::too_many_arguments)]
 async fn bg_stream_update_assistant_message_completion(
@@ -4687,6 +4709,13 @@ async fn bg_stream_update_assistant_message_completion(
     )
     .await
     .wrap_err("Failed to update assistant message content")?;
+
+    sync_pending_tool_approval_marker(
+        app_state,
+        &updated_assistant_message.chat_id,
+        &final_content_parts,
+    )
+    .await;
 
     let updated_assistant_message_wrapped =
         ChatMessage::from_model(updated_assistant_message.clone())
@@ -4733,6 +4762,13 @@ async fn stream_update_assistant_message_completion<
     )
     .await
     .wrap_err("Failed to update assistant message content")?;
+
+    sync_pending_tool_approval_marker(
+        app_state,
+        &updated_assistant_message.chat_id,
+        &final_content_parts,
+    )
+    .await;
 
     let mut updated_assistant_message_wrapped =
         ChatMessage::from_model(updated_assistant_message.clone())
@@ -8887,6 +8923,14 @@ async fn run_continue_message_task(
         parsed.content.clone(),
     )
     .await?;
+    // The decision is durable — the chat is no longer waiting on the user.
+    // The completion of this continuation re-evaluates the marker, so a
+    // chained approval stop sets it again.
+    if let Err(error) =
+        crate::models::chat::set_pending_tool_approval(&app_state.db, &chat.id, false).await
+    {
+        tracing::warn!(chat_id = %chat.id, %error, "Failed to clear pending tool approval marker");
+    }
 
     let generation_input_messages: GenerationInputMessages = serde_json::from_value(
         message
