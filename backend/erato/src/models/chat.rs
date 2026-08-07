@@ -203,6 +203,9 @@ pub struct RecentChat {
     /// Start time of the chat's generation, present only while it is running
     /// with a fresh heartbeat.
     pub active_generation_started_at: Option<DateTimeWithTimeZone>,
+    /// Present while the chat's generation is stopped on an MCP tool approval
+    /// awaiting the user's decision.
+    pub pending_tool_approval_at: Option<DateTimeWithTimeZone>,
 }
 
 /// Statistics for a list of chats
@@ -238,6 +241,7 @@ struct ChatWithLatestMessage {
     archived_at: Option<DateTimeWithTimeZone>,
     assistant_id: Option<Uuid>,
     active_generation_started_at: Option<DateTimeWithTimeZone>,
+    pending_tool_approval_at: Option<DateTimeWithTimeZone>,
     // Latest message fields
     latest_message_at: DateTimeWithTimeZone,
 }
@@ -317,6 +321,10 @@ pub async fn get_recent_chats(
                     AND "chats"."generation_heartbeat_at" > now() - make_interval(secs => {generation_stale_after_secs})
                 THEN "chats"."generation_started_at"
             END AS "active_generation_started_at",
+            CASE
+                WHEN "chats"."generation_state" = 'awaiting_approval'
+                THEN "chats"."generation_ended_at"
+            END AS "pending_tool_approval_at",
             "latest_msg"."created_at" AS "latest_message_at"
         FROM "chats"
         INNER JOIN LATERAL (
@@ -528,6 +536,7 @@ pub async fn get_recent_chats(
                 assistant_id: chat_with_msg.assistant_id,
                 assistant_name,
                 active_generation_started_at: chat_with_msg.active_generation_started_at,
+                pending_tool_approval_at: chat_with_msg.pending_tool_approval_at,
             }
         })
         .collect();
@@ -543,7 +552,8 @@ pub async fn get_recent_chats(
     Ok((recent_chats, stats))
 }
 
-/// A chat with a running or recently ended generation.
+/// A chat with a running or recently ended generation, or one stopped on a
+/// pending tool approval.
 #[derive(Debug, FromQueryResult)]
 pub struct GeneratingChatRow {
     pub id: Uuid,
@@ -555,7 +565,9 @@ pub struct GeneratingChatRow {
 }
 
 /// Get the chats of a user whose generation is currently running (with a
-/// fresh heartbeat) or reached a terminal state within the retention window.
+/// fresh heartbeat), reached a terminal state within the retention window, or
+/// is stopped awaiting a tool approval (no heartbeat and no retention — the
+/// stop is durable until a later generation takes over the state).
 #[instrument(skip_all)]
 pub async fn get_generating_chats(
     conn: &DatabaseConnection,
@@ -576,7 +588,8 @@ pub async fn get_generating_chats(
             AND "chats"."archived_at" IS NULL
             AND "chats"."generation_started_at" IS NOT NULL
             AND (
-                (
+                "chats"."generation_state" = 'awaiting_approval'
+                OR (
                     "chats"."generation_state" = 'running'
                     AND "chats"."generation_heartbeat_at" > now() - make_interval(secs => $2::double precision)
                 )

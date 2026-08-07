@@ -245,6 +245,10 @@ export function BehaviorTabContent({
               id: "officeAddin.settings.addin.clientActions.intro",
               message:
                 "Your decisions from the in-chat confirmation are stored here and can be changed any time. Nothing is sent until you press Send in Outlook.",
+            })}{" "}
+            {t({
+              id: "officeAddin.settings.addin.clientActions.scope",
+              message: "These decisions are stored on this device only.",
             })}
           </p>
           {clientActionGroups.map((group) => (

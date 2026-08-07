@@ -2163,7 +2163,9 @@ export const ChatInput = ({
             {/* flex-auto, not flex-1: a zero basis would collapse the message
                 to nothing in the add-in's ~320px pane. */}
             <span className="min-w-0 truncate text-theme-fg-muted">
-              {t`Queued — sends when response finishes`}
+              {hasPendingConfirmation
+                ? t`Queued — sends after you respond to the confirmation`
+                : t`Queued — sends when response finishes`}
             </span>
             <button
               type="button"

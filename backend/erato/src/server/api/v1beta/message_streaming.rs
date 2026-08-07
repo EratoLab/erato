@@ -4668,6 +4668,23 @@ async fn stream_generate_chat_completion<
     }
 }
 
+/// Mark the task's outcome as parked when the finalized message stops on an
+/// approval request (always its last part). The outcome lands on the chat's
+/// generation state via `remove_task`, and any other generation taking the
+/// lease overwrites it — so a marker left by a superseded parked message
+/// self-heals without dedicated clearing.
+fn mark_task_awaiting_approval_if_parked(
+    task: &Arc<StreamingTask>,
+    final_content_parts: &[ContentPart],
+) {
+    if matches!(
+        final_content_parts.last(),
+        Some(ContentPart::ToolApprovalRequest(_))
+    ) {
+        task.mark_awaiting_approval();
+    }
+}
+
 // New background task version
 #[allow(clippy::too_many_arguments)]
 async fn bg_stream_update_assistant_message_completion(
@@ -4687,6 +4704,8 @@ async fn bg_stream_update_assistant_message_completion(
     )
     .await
     .wrap_err("Failed to update assistant message content")?;
+
+    mark_task_awaiting_approval_if_parked(task, &final_content_parts);
 
     let updated_assistant_message_wrapped =
         ChatMessage::from_model(updated_assistant_message.clone())
@@ -4717,6 +4736,7 @@ async fn stream_update_assistant_message_completion<
     MSG: SendAsSseEvent + From<MessageSubmitStreamingResponseMessageComplete>,
 >(
     tx: Sender<Result<Event, Report>>,
+    task: &Arc<StreamingTask>,
     app_state: &AppState,
     policy: &PolicyEngine,
     final_content_parts: Vec<ContentPart>,
@@ -4733,6 +4753,8 @@ async fn stream_update_assistant_message_completion<
     )
     .await
     .wrap_err("Failed to update assistant message content")?;
+
+    mark_task_awaiting_approval_if_parked(task, &final_content_parts);
 
     let mut updated_assistant_message_wrapped =
         ChatMessage::from_model(updated_assistant_message.clone())
@@ -8052,6 +8074,7 @@ pub async fn regenerate_message_sse(
             };
             stream_update_assistant_message_completion::<RegenerateMessageStreamingResponseMessage>(
                 tx.clone(),
+                &task_for_stream,
                 &app_state,
                 &policy,
                 end_content,
@@ -8446,6 +8469,7 @@ pub async fn edit_message_sse(
             };
             stream_update_assistant_message_completion::<EditMessageStreamingResponseMessage>(
                 tx.clone(),
+                &task_for_stream,
                 &app_state,
                 &policy,
                 end_content,
@@ -8717,19 +8741,41 @@ pub async fn continue_message_sse(
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
     let app_state_for_worker = app_state.clone();
     let policy_for_worker = policy.clone();
+    let chat_id = message.chat_id;
     tokio::spawn(async move {
+        // The decision starts a new generation on the chat's lease: the state
+        // leaves 'awaiting_approval' for 'running' here, and the outcome
+        // parks it again when the continuation stops on a chained approval.
+        let (_abort_rx, task) = app_state_for_worker
+            .background_tasks
+            .start_task(chat_id, request.message_id)
+            .await;
+        let mut cleanup_guard = TaskCleanupGuard::new(
+            app_state_for_worker.background_tasks.clone(),
+            chat_id,
+            task.generation_id,
+        );
         let result = run_continue_message_task(
             tx.clone(),
             &app_state_for_worker,
             &policy_for_worker,
             &me_user,
             request,
+            &task,
         )
         .await;
+        let generation_failed = result.is_err();
         if let Err(error) = result {
             log_and_capture_error("continue message background task", &error);
             forward_error_report(&tx, &error).await;
         }
+        let outcome = task.derive_outcome(generation_failed);
+        task.mark_completed();
+        cleanup_guard.disarm();
+        app_state_for_worker
+            .background_tasks
+            .remove_task(&chat_id, task.generation_id, outcome)
+            .await;
     });
 
     let stream: SseEventStream = Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx));
@@ -8746,6 +8792,7 @@ async fn run_continue_message_task(
     policy: &PolicyEngine,
     me_user: &MeProfile,
     request: ContinueStreamRequest,
+    task: &Arc<StreamingTask>,
 ) -> Result<(), Report> {
     let message = get_message_by_id(
         &app_state.db,
@@ -8964,7 +9011,7 @@ async fn run_continue_message_task(
             available_mcp_tools,
             HashMap::new(),
             &headers_context,
-            None,
+            Some(task),
             chat.assistant_id,
             parsed.content,
         )
@@ -8981,6 +9028,7 @@ async fn run_continue_message_task(
     }
     stream_update_assistant_message_completion::<MessageSubmitStreamingResponseMessage>(
         tx,
+        task,
         app_state,
         policy,
         end_content,

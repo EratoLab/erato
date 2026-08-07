@@ -19,6 +19,13 @@ import type { GeneratingChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas"
  */
 export type ChatGenerationStatus =
   | { kind: "running"; startedAt: string; localSeenAt: number }
+  /**
+   * Generation stopped on a tool approval awaiting the user. Server-durable
+   * (the chat's generation state parks as awaiting_approval), so unlike the
+   * terminal kinds it may be seeded fresh after a refresh and never ages out
+   * on its own.
+   */
+  | { kind: "action_required"; startedAt: string; localSeenAt: number }
   | { kind: "finished"; startedAt: string | null }
   | { kind: "error"; startedAt: string | null }
   | { kind: "cleared"; startedAt: string | null };
@@ -39,6 +46,12 @@ interface GenerationStatusStore {
   currentChatId: string | null;
   seedRunning: (chatId: string, startedAt: string) => void;
   seedRunningLocal: (chatId: string, startedAt: string) => void;
+  /** Seed from a durable pending-approval marker (list row, poll, or the
+   * mounted approval card itself). */
+  seedActionRequired: (chatId: string, pendingAt: string) => void;
+  /** The user decided; tombstone the entry so stale rows and in-flight polls
+   * carrying the same marker cannot resurrect it. */
+  markApprovalDecided: (chatId: string) => void;
   applyPollSnapshot: (entries: GeneratingChat[]) => void;
   markTerminalLocal: (chatId: string, kind: "finished" | "error") => void;
   setCurrentChatId: (chatId: string | null) => void;
@@ -117,6 +130,52 @@ export const useGenerationStatusStore = create<GenerationStatusStore>()(
           "generationStatus/seedRunningLocal",
         ),
 
+      seedActionRequired: (chatId, pendingAt) =>
+        set(
+          (prev) => {
+            const existing = prev.statusByChatId[chatId];
+            // The marker is stamped when the generation parks, so it is newer
+            // than that generation's start (wins) but not newer than a
+            // decided tombstone carrying the same timestamp (loses).
+            if (!seedWins(existing, pendingAt)) {
+              return prev;
+            }
+            return {
+              statusByChatId: {
+                ...prev.statusByChatId,
+                [chatId]: {
+                  kind: "action_required",
+                  startedAt: pendingAt,
+                  localSeenAt:
+                    existing?.kind === "action_required"
+                      ? existing.localSeenAt
+                      : Date.now(),
+                },
+              },
+            };
+          },
+          false,
+          "generationStatus/seedActionRequired",
+        ),
+
+      markApprovalDecided: (chatId) =>
+        set(
+          (prev) => {
+            const existing = prev.statusByChatId[chatId];
+            if (existing?.kind !== "action_required") {
+              return prev;
+            }
+            return {
+              statusByChatId: {
+                ...prev.statusByChatId,
+                [chatId]: { kind: "cleared", startedAt: existing.startedAt },
+              },
+            };
+          },
+          false,
+          "generationStatus/markApprovalDecided",
+        ),
+
       applyPollSnapshot: (entries) =>
         set(
           (prev) => {
@@ -135,6 +194,23 @@ export const useGenerationStatusStore = create<GenerationStatusStore>()(
                     existing,
                     now,
                   );
+                  changed = true;
+                }
+                continue;
+              }
+              // Server-durable, so applied regardless of what this client saw
+              // — this is the running → parked flip for a chat the user is
+              // not looking at.
+              if (entry.state === "action_required") {
+                if (seedWins(existing, entry.started_at)) {
+                  next[entry.chat_id] = {
+                    kind: "action_required",
+                    startedAt: entry.started_at,
+                    localSeenAt:
+                      existing?.kind === "action_required"
+                        ? existing.localSeenAt
+                        : now,
+                  };
                   changed = true;
                 }
                 continue;
@@ -164,12 +240,18 @@ export const useGenerationStatusStore = create<GenerationStatusStore>()(
               changed = true;
             }
 
-            // A running chat absent from the snapshot loses its indicator,
-            // but a tombstone keeps stale list rows from re-seeding it.
+            // A running or parked chat absent from the snapshot loses its
+            // indicator (for parked: the approval was decided elsewhere), but
+            // a tombstone keeps stale list rows from re-seeding it.
             for (const [chatId, status] of Object.entries(
               prev.statusByChatId,
             )) {
-              if (status?.kind !== "running") continue;
+              if (
+                status?.kind !== "running" &&
+                status?.kind !== "action_required"
+              ) {
+                continue;
+              }
               if (snapshotChatIds.has(chatId)) continue;
               if (now - status.localSeenAt < SEED_GRACE_MS) continue;
               next[chatId] = { kind: "cleared", startedAt: status.startedAt };
@@ -213,11 +295,13 @@ export const useGenerationStatusStore = create<GenerationStatusStore>()(
         set(
           (prev) => {
             // Opening a chat consumes its terminal notification into a
-            // tombstone; a still-running generation keeps its indicator.
+            // tombstone; a still-running generation keeps its indicator, and
+            // a pending approval stays until the user actually decides.
             const status = chatId ? prev.statusByChatId[chatId] : undefined;
             if (
               status &&
               status.kind !== "running" &&
+              status.kind !== "action_required" &&
               status.kind !== "cleared"
             ) {
               return {
@@ -274,7 +358,21 @@ export const selectRunningCount = (state: GenerationStatusStore): number =>
     (status) => status?.kind === "running",
   ).length;
 
-/** Finished + error; "action required" lives in the confirmation registry. */
+/**
+ * Chats that should keep the status poll alive: running ones (to observe
+ * their outcome) and parked ones (to observe an approval decided on another
+ * device or tab).
+ */
+export const selectPollDriverCount = (state: GenerationStatusStore): number =>
+  Object.values(state.statusByChatId).filter(
+    (status) =>
+      status?.kind === "running" || status?.kind === "action_required",
+  ).length;
+
+/**
+ * Finished + error. Store-tracked "action_required" is counted by the rail
+ * badge itself, deduplicated against the confirmation registry.
+ */
 export const selectAttentionCount = (state: GenerationStatusStore): number =>
   Object.values(state.statusByChatId).filter(
     (status) => status?.kind === "finished" || status?.kind === "error",

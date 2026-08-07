@@ -74,13 +74,30 @@ const generationBadgeClassName =
   // eslint-disable-next-line lingui/no-unlocalized-strings -- CSS utility classes, not user-facing text
   "flex min-w-4 items-center justify-center rounded-full bg-theme-action-primary-bg px-1 text-[10px] font-semibold leading-4 text-theme-action-primary-fg";
 
-/** Running + session-observed finished/error + pending tool confirmations. */
+/**
+ * Running + session-observed finished/error + chats awaiting a tool
+ * decision. The latter come from two channels — the mount-driven
+ * confirmation registry (open chat) and the server-seeded status store
+ * (everything else) — deduplicated by chat id.
+ */
 const useGenerationIndicatorCount = (): number => {
   const runningCount = useGenerationStatusStore(selectRunningCount);
   const attentionCount = useGenerationStatusStore(selectAttentionCount);
-  const actionRequiredCount = useConfirmationRegistryStore(
-    (state) => Object.keys(state.pendingIdsByChatId).length,
+  const statusByChatId = useGenerationStatusStore(
+    (state) => state.statusByChatId,
   );
+  const pendingIdsByChatId = useConfirmationRegistryStore(
+    (state) => state.pendingIdsByChatId,
+  );
+  const actionRequiredCount = useMemo(() => {
+    const chatIds = new Set(Object.keys(pendingIdsByChatId));
+    for (const [chatId, status] of Object.entries(statusByChatId)) {
+      if (status?.kind === "action_required") {
+        chatIds.add(chatId);
+      }
+    }
+    return chatIds.size;
+  }, [pendingIdsByChatId, statusByChatId]);
   return runningCount + attentionCount + actionRequiredCount;
 };
 

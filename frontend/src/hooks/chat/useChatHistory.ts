@@ -325,17 +325,23 @@ export function useChatHistory() {
       last_model: undefined,
       // The placeholder exists precisely while the first turn streams.
       active_generation_started_at: pendingChat.createdAt,
+      pending_tool_approval_at: undefined,
     };
     return [placeholder, ...listedChats];
   }, [listedChats, pendingChat, isPendingChatListed]);
 
-  // Seed the status store from the backend's running markers, so generations
-  // started elsewhere get an indicator without waiting for a poll.
+  // Seed the status store from the backend's running and pending-approval
+  // markers, so generations started (or parked) elsewhere get an indicator
+  // without waiting for a poll.
   useEffect(() => {
-    const { seedRunning } = useGenerationStatusStore.getState();
+    const { seedRunning, seedActionRequired } =
+      useGenerationStatusStore.getState();
     for (const chat of chats) {
       if (chat.active_generation_started_at) {
         seedRunning(chat.id, chat.active_generation_started_at);
+      }
+      if (chat.pending_tool_approval_at) {
+        seedActionRequired(chat.id, chat.pending_tool_approval_at);
       }
     }
   }, [chats]);

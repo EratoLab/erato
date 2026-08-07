@@ -2319,8 +2319,8 @@ msgstr "Zablokowane: Twoja organizacja wymaga potwierdzenia za każdym razem, gd
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/McpToolApprovalCard.tsx
-msgid "mcpApproval.inputPreview"
-msgstr ""
+#~ msgid "mcpApproval.inputPreview"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/McpToolApprovalCard.tsx
@@ -2820,38 +2820,68 @@ msgstr "Jak asystent powinien się do Ciebie zwracać? np. Max Mustermann"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.always.helper"
+msgstr "Uruchamia to narzędzie bez pytania."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.always.label"
+msgstr "Zawsze zezwalaj"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.ask.helper"
+msgstr "Pokazuje potwierdzenie w czacie za każdym razem, gdy to narzędzie chce zostać uruchomione."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.ask.label"
+msgstr "Pytaj przed uruchomieniem"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.approvals.description"
-msgstr "Narzędzia, które zawsze są dozwolone na podstawie Twojej decyzji w czacie. Usuń wpis, aby ponownie otrzymać pytanie."
+msgstr "Twoje decyzje z potwierdzenia w czacie są zapisywane tutaj i można je zmienić w dowolnym momencie. Obowiązują dla Twojego konta na wszystkich urządzeniach."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.empty"
+msgstr "Brak decyzji. Gdy wybierzesz „Zawsze zezwalaj” w czacie, narzędzie pojawi się tutaj."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.approvals.heading"
-msgstr "Zawsze dozwolone narzędzia"
+msgstr "Zatwierdzenia narzędzi"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.approvals.loadError"
-msgstr "Nie udało się załadować zawsze dozwolonych narzędzi. Spróbuj ponownie."
+msgstr "Nie udało się załadować zatwierdzeń narzędzi. Spróbuj ponownie."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.remove"
-msgstr "Usuń"
+#~ msgid "preferences.dialog.mcpServers.approvals.remove"
+#~ msgstr "Usuń"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.removeError"
-msgstr "Nie udało się usunąć zgody. Spróbuj ponownie."
+#~ msgid "preferences.dialog.mcpServers.approvals.removeError"
+#~ msgstr "Nie udało się usunąć zgody. Spróbuj ponownie."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.removing"
-msgstr "Usuwanie..."
+#~ msgid "preferences.dialog.mcpServers.approvals.removing"
+#~ msgstr "Usuwanie..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.updateError"
+msgstr "Nie udało się zaktualizować decyzji. Spróbuj ponownie."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.mcpServers.authenticationMode"
-msgstr "Tryb uwierzytelniania"
+#~ msgid "preferences.dialog.mcpServers.authenticationMode"
+#~ msgstr "Tryb uwierzytelniania"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -2916,7 +2946,7 @@ msgstr "Pomyślnie rozłączono."
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.mcpServers.oauth.failureAfterCallback"
-msgstr "Autoryzacja została zakończona, ale serwer nadal jest niedostępny. Spróbuj odświeżyć jego status."
+msgstr "Autoryzacja została zakończona, ale serwer jest nadal niedostępny. Otwórz tę kartę ponownie, aby sprawdzić jeszcze raz."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -2940,13 +2970,13 @@ msgstr "Autoryzacja zakończona. Serwer jest gotowy do użycia."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.mcpServers.refresh"
-msgstr "Odśwież status"
+#~ msgid "preferences.dialog.mcpServers.refresh"
+#~ msgstr "Odśwież status"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.mcpServers.refreshing"
-msgstr "Odświeżanie..."
+#~ msgid "preferences.dialog.mcpServers.refreshing"
+#~ msgstr "Odświeżanie..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -3433,6 +3463,10 @@ msgstr "1 element"
 #: src/components/ui/FileUpload/FileUpload.tsx
 msgid "Accepted types:"
 msgstr "Akceptowane typy plików:"
+
+#: src/components/ui/Chat/ChatInput.tsx
+#~ msgid "Action required — the assistant is waiting for your approval"
+#~ msgstr "Wymagane działanie — asystent czeka na Twoją zgodę"
 
 #: src/components/ui/FileUpload/FileUpload.tsx
 msgid "All file types accepted"
@@ -4352,6 +4386,10 @@ msgid "Queue message"
 msgstr ""
 
 #: src/components/ui/Chat/ChatInput.tsx
+msgid "Queued — sends after you respond to the confirmation"
+msgstr "W kolejce — zostanie wysłane, gdy odpowiesz na potwierdzenie"
+
+#: src/components/ui/Chat/ChatInput.tsx
 msgid "Queued — sends when response finishes"
 msgstr ""
 
@@ -4843,6 +4881,10 @@ msgstr "Używam narzędzi"
 #: src/pages/assistantHubUtils.tsx
 #~ msgid "Version {versionNumber}"
 #~ msgstr "Wersja {versionNumber}"
+
+#: src/components/ui/Chat/ChatInput.tsx
+#~ msgid "View"
+#~ msgstr "Pokaż"
 
 #: src/components/ui/Chat/FrequentAssistantsList.tsx
 #~ msgid "View all assistants"

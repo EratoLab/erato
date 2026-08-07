@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   selectAttentionCount,
+  selectPollDriverCount,
   selectRunningCount,
   useGenerationStatusStore,
 } from "../generationStatusStore";
@@ -359,6 +360,89 @@ describe("generationStatusStore", () => {
       store().reset();
       expect(store().statusByChatId).toEqual({});
       expect(store().currentChatId).toBeNull();
+    });
+  });
+
+  describe("action required (pending tool approval)", () => {
+    const pendingEntry = (
+      chatId: string,
+      pendingAtOffsetMs = 0,
+    ): GeneratingChat => ({
+      chat_id: chatId,
+      state: "action_required",
+      started_at: iso(pendingAtOffsetMs),
+    });
+
+    it("seeds a durable action-required entry", () => {
+      store().seedActionRequired("chat-1", iso(0));
+      expect(statusOf("chat-1")).toEqual({
+        kind: "action_required",
+        startedAt: iso(0),
+        localSeenAt: T0.getTime(),
+      });
+      expect(selectPollDriverCount(store())).toBe(1);
+      // Not part of the finished/error attention set; the rail badge counts
+      // it separately, deduplicated against the confirmation registry.
+      expect(selectAttentionCount(store())).toBe(0);
+    });
+
+    it("outranks the generation the park interrupted, but not a newer one", () => {
+      store().seedRunning("chat-1", iso(0));
+      // The marker is stamped when that generation parks — later timestamp.
+      store().seedActionRequired("chat-1", iso(5_000));
+      expect(statusOf("chat-1")).toMatchObject({ kind: "action_required" });
+
+      // A newer generation (user sent another message) takes over again.
+      store().seedRunning("chat-1", iso(10_000));
+      expect(statusOf("chat-1")).toMatchObject({
+        kind: "running",
+        startedAt: iso(10_000),
+      });
+    });
+
+    it("markApprovalDecided tombstones and blocks re-seeding the same marker", () => {
+      store().seedActionRequired("chat-1", iso(0));
+      store().markApprovalDecided("chat-1");
+      expect(statusOf("chat-1")).toMatchObject({ kind: "cleared" });
+
+      // A stale list row or in-flight poll carrying the same marker loses.
+      store().seedActionRequired("chat-1", iso(0));
+      expect(statusOf("chat-1")).toMatchObject({ kind: "cleared" });
+      store().applyPollSnapshot([pendingEntry("chat-1", 0)]);
+      expect(statusOf("chat-1")).toMatchObject({ kind: "cleared" });
+
+      // A genuinely newer park shows up again.
+      store().seedActionRequired("chat-1", iso(60_000));
+      expect(statusOf("chat-1")).toMatchObject({ kind: "action_required" });
+    });
+
+    it("poll snapshot flips a running chat to action required", () => {
+      store().seedRunning("chat-1", iso(0));
+      store().applyPollSnapshot([pendingEntry("chat-1", 5_000)]);
+      expect(statusOf("chat-1")).toEqual({
+        kind: "action_required",
+        startedAt: iso(5_000),
+        localSeenAt: T0.getTime(),
+      });
+    });
+
+    it("clears a parked chat absent from the snapshot once the grace passed", () => {
+      store().seedActionRequired("chat-1", iso(0));
+      vi.setSystemTime(new Date(T0.getTime() + 60_000));
+      store().applyPollSnapshot([]);
+      expect(statusOf("chat-1")).toMatchObject({ kind: "cleared" });
+    });
+
+    it("keeps a parked chat within the seed grace when a stale snapshot misses it", () => {
+      store().seedActionRequired("chat-1", iso(0));
+      store().applyPollSnapshot([]);
+      expect(statusOf("chat-1")).toMatchObject({ kind: "action_required" });
+    });
+
+    it("opening the chat does not consume the action-required entry", () => {
+      store().seedActionRequired("chat-1", iso(0));
+      store().setCurrentChatId("chat-1");
+      expect(statusOf("chat-1")).toMatchObject({ kind: "action_required" });
     });
   });
 });

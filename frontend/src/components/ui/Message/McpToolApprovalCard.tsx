@@ -2,9 +2,12 @@ import { t } from "@lingui/core/macro";
 import { useContext, useEffect, useState } from "react";
 
 import { getIdToken } from "@/auth/tokenStore";
+import { ToolCallInput } from "@/components/ui/ToolCall";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
+import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { ChatContext } from "@/providers/ChatProvider";
 
+import { ResolvedIcon } from "../icons";
 import { ActionConfirmationCard } from "./ActionConfirmationCard";
 
 import type { ToolApprovalStatus } from "../Trace/Trace";
@@ -22,21 +25,17 @@ export type McpToolApprovalRequestPart = Omit<
   input: unknown;
 };
 
-const formatInputPreview = (input: unknown): string => {
-  try {
-    return JSON.stringify(input, null, 2);
-  } catch {
-    // Tool inputs arrive as JSON, but retain a readable fallback if a caller
-    // supplies a non-serializable value in a story or extension.
-    return String(input);
-  }
-};
-
 /**
  * Message-scoped UI for a durable MCP approval request. The continuation is
  * an SSE response; consuming it to completion before refetching the current
  * chat lets the regular message query render the rehydrated transcript
  * without duplicating the chat streaming state machine here.
+ *
+ * Layout follows the add-in's client-action grammar — the thing being
+ * approved above, the consent card attached below: the pending tool call is
+ * rendered as a visible referent (name, server, input) inside an artifact
+ * fence, because its tool_use step sits in the thinking trace, which is
+ * collapsed exactly when this card appears.
  */
 export const McpToolApprovalCard = ({
   messageId,
@@ -81,6 +80,18 @@ export const McpToolApprovalCard = ({
     unregisterConfirmation,
   ]);
 
+  // Unlike the registry (mount-scoped by design, so it can't wedge the send
+  // queue), the status-store entry is durable: it keeps the sidebar's
+  // "action required" indicator alive after navigating away, matching the
+  // server-side awaiting_approval generation state this card renders.
+  const requestedAt = request.requested_at;
+  useEffect(() => {
+    if (!chatId || !isPending) {
+      return;
+    }
+    useGenerationStatusStore.getState().seedActionRequired(chatId, requestedAt);
+  }, [chatId, isPending, requestedAt]);
+
   const decide = async (decision: "approve" | "reject" | "approve_always") => {
     setIsBusy(true);
     setError(null);
@@ -101,6 +112,11 @@ export const McpToolApprovalCard = ({
       }
       await response.text();
       setLocalResolution(decision === "reject" ? "denied" : "approved");
+      if (chatId) {
+        // Tombstone the durable indicator: the server marker is already
+        // cleared, but a stale list row or in-flight poll may still carry it.
+        useGenerationStatusStore.getState().markApprovalDecided(chatId);
+      }
       // Keep the user in the current chat. This refreshes the persisted
       // decision and the resumed assistant output without a document reload.
       await chatContext?.refetchMessages();
@@ -117,7 +133,6 @@ export const McpToolApprovalCard = ({
         message: "This tool may send data to an external service.",
       })
     : null;
-  const inputPreview = formatInputPreview(request.input);
 
   // Resolved decisions are represented beside the matching tool call in the
   // thinking trace. Keep this card solely for the pending decision UI.
@@ -126,30 +141,32 @@ export const McpToolApprovalCard = ({
   }
 
   return (
-    <div data-testid="mcp-tool-approval" data-tool-name={request.tool_name}>
+    <div
+      data-testid="mcp-tool-approval"
+      data-tool-name={request.tool_name}
+      className="my-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary p-3"
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <ResolvedIcon
+          iconId="simpleicons-modelcontextprotocol"
+          className="size-4 shrink-0 text-theme-fg-secondary"
+        />
+        <span className="text-sm font-medium text-theme-fg-primary">
+          {request.tool_name}
+        </span>
+        <span className="text-xs text-theme-fg-muted">
+          {request.mcp_server_id}
+        </span>
+      </div>
+      <div className="mt-2 max-h-48 overflow-y-auto">
+        <ToolCallInput input={request.input} />
+      </div>
       <ActionConfirmationCard
         title={t({
           id: "mcpApproval.title",
           message: "Allow MCP tool call?",
         })}
-        description={
-          <div className="space-y-1 text-sm text-theme-fg-secondary">
-            <p>{request.tool_name}</p>
-            <p>{request.mcp_server_id}</p>
-            {openWorldDescription && <p>{openWorldDescription}</p>}
-            <details className="rounded border border-theme-border bg-theme-bg-secondary px-2 py-1.5">
-              <summary className="cursor-pointer text-sm font-medium text-theme-fg-primary">
-                {t({
-                  id: "mcpApproval.inputPreview",
-                  message: "View input parameters",
-                })}
-              </summary>
-              <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words text-xs text-theme-fg-secondary">
-                {inputPreview}
-              </pre>
-            </details>
-          </div>
-        }
+        description={openWorldDescription ?? undefined}
         onAllowOnce={() => void decide("approve")}
         // Keep "Always allow" discoverable when the deployment enforces
         // per-use confirmation: greyed out with the reason, like the add-in's

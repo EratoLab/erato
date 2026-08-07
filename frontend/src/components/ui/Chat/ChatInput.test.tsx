@@ -3359,6 +3359,40 @@ describe("ChatInput", () => {
       useMessageQueueStore.setState({ queuedBySessionId: {} });
     });
 
+    it("explains a held queue while a confirmation card is pending", async () => {
+      const { i18n } = await import("@lingui/core");
+      const onSendMessage = vi.fn();
+      const rerender = renderQueue(
+        { isPendingResponse: true },
+        onSendMessage,
+        i18n,
+      );
+
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      fireEvent.change(textarea, { target: { value: "next message" } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      expect(
+        screen.getByText("Queued — sends when response finishes"),
+      ).toBeInTheDocument();
+
+      // The turn completes into a pending consent card: the queue is held,
+      // and the chip says why instead of a separate action-required banner.
+      act(() => {
+        useConfirmationRegistryStore
+          .getState()
+          .registerConfirmation(CHAT_ID, "card-1");
+      });
+      rerender({ isPendingResponse: false });
+      await flushTimers();
+      expect(onSendMessage).not.toHaveBeenCalled();
+      expect(
+        screen.getByText(
+          "Queued — sends after you respond to the confirmation",
+        ),
+      ).toBeInTheDocument();
+    });
+
     it("queues the draft on Enter while generating instead of sending", async () => {
       const { i18n } = await import("@lingui/core");
       const onSendMessage = vi.fn();

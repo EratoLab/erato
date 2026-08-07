@@ -43,6 +43,12 @@ fn owner_pod() -> String {
 pub enum TaskOutcome {
     Completed,
     Errored,
+    /// The generation finished by stopping on an MCP tool approval awaiting
+    /// the user's decision. Unlike the terminal outcomes this state has no
+    /// retention window: the reaper and cleanup only touch 'running',
+    /// 'completed' and 'errored', so a parked chat stays marked until a later
+    /// generation (usually the approval's continuation) takes over the lease.
+    AwaitingApproval,
 }
 
 impl TaskOutcome {
@@ -50,6 +56,18 @@ impl TaskOutcome {
         match self {
             TaskOutcome::Completed => "completed",
             TaskOutcome::Errored => "errored",
+            TaskOutcome::AwaitingApproval => "awaiting_approval",
+        }
+    }
+
+    /// State written to `temp_chat_generations`, which tracks the live stream
+    /// lifecycle rather than the chat. A parked generation's stream did
+    /// complete, and mapping it to 'completed' keeps the shared rows eligible
+    /// for retention cleanup.
+    fn as_stream_db_str(self) -> &'static str {
+        match self {
+            TaskOutcome::AwaitingApproval => "completed",
+            other => other.as_db_str(),
         }
     }
 }
@@ -205,7 +223,7 @@ impl BackgroundTaskManager {
                 SET state = $1, ended_at = now(), heartbeat_at = now()
                 WHERE generation_id = $2 AND state = 'running'
                 "#,
-                [outcome.as_db_str().into(), generation_id.into()],
+                [outcome.as_stream_db_str().into(), generation_id.into()],
             );
             if let Err(err) = db.execute_raw(shared_statement).await {
                 tracing::warn!(chat_id = %chat_id, error = %err, "Failed to persist shared generation outcome");
@@ -629,6 +647,10 @@ pub struct StreamingTask {
     /// Whether any `Error` event was sent; tracked separately because
     /// `event_history` stops recording at `MAX_EVENT_HISTORY`.
     saw_error: Arc<AtomicBool>,
+    /// Whether the generation finalized with a pending tool approval as its
+    /// last content part; set by the completion paths, consumed by
+    /// `derive_outcome`.
+    awaiting_approval: Arc<AtomicBool>,
     /// Whether the generation is complete
     completed: Arc<AtomicBool>,
     /// Whether cancellation was requested by the user
@@ -671,6 +693,7 @@ impl StreamingTask {
             event_tx,
             event_history: Arc::new(RwLock::new(Vec::new())),
             saw_error: Arc::new(AtomicBool::new(false)),
+            awaiting_approval: Arc::new(AtomicBool::new(false)),
             completed: Arc::new(AtomicBool::new(false)),
             abort_requested: Arc::new(AtomicBool::new(false)),
             abort_notify: Arc::new(Notify::new()),
@@ -772,11 +795,20 @@ impl StreamingTask {
         history.clone()
     }
 
+    /// Record that the generation finalized on a pending tool approval, so
+    /// its outcome parks the chat instead of completing it.
+    pub fn mark_awaiting_approval(&self) {
+        self.awaiting_approval.store(true, Ordering::SeqCst);
+    }
+
     /// Derive the terminal outcome of this task. An abort is a user-initiated
-    /// stop and deliberately counts as `Completed`.
+    /// stop and deliberately counts as `Completed`; an error outranks a
+    /// pending approval.
     pub fn derive_outcome(&self, generation_failed: bool) -> TaskOutcome {
         if generation_failed || self.saw_error.load(Ordering::SeqCst) {
             TaskOutcome::Errored
+        } else if self.awaiting_approval.load(Ordering::SeqCst) {
+            TaskOutcome::AwaitingApproval
         } else {
             TaskOutcome::Completed
         }

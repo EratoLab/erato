@@ -1944,6 +1944,41 @@
             "bearer_auth": []
           }
         ]
+      },
+      "post": {
+        "tags": [],
+        "summary": "Grant \"always allow\" for a tool from the settings surface. The in-stream\nApproveAlways decision remains the other writer of the same rows; this\nendpoint exists so a grant flipped back to ask-per-use in settings can be\nre-granted without waiting for the next in-chat approval stop.",
+        "operationId": "create_user_tool_approval_setting",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserToolApprovalSettingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserToolApprovalSetting"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Persistent approvals are disabled by policy or the MCP server is unknown"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
       }
     },
     "/api/v1beta/me/mcp-tool-approval-settings/{setting_id}": {
@@ -5365,6 +5400,21 @@
         ],
         "description": "Response when creating a share grant"
       },
+      "CreateUserToolApprovalSettingRequest": {
+        "type": "object",
+        "required": [
+          "mcp_server_id",
+          "tool_name"
+        ],
+        "properties": {
+          "mcp_server_id": {
+            "type": "string"
+          },
+          "tool_name": {
+            "type": "string"
+          }
+        }
+      },
       "DesktopSidecarDistributionFileResponse": {
         "type": "object",
         "required": [
@@ -6143,7 +6193,8 @@
         "enum": [
           "running",
           "completed",
-          "errored"
+          "errored",
+          "action_required"
         ]
       },
       "GenerationErrorType": {
@@ -7230,6 +7281,11 @@
               "type": "string"
             },
             "description": "The facets selected for the most recent message"
+          },
+          "pending_tool_approval_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Present while the chat's generation is stopped on an MCP tool approval\nawaiting the user's decision"
           },
           "title_by_summary": {
             "type": [

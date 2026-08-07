@@ -82,7 +82,8 @@ use crate::server::api::v1beta::share_links::{
     set_share_link,
 };
 use crate::server::api::v1beta::user_tool_approval_settings::{
-    __path_deactivate_user_tool_approval_setting, __path_list_user_tool_approval_settings,
+    __path_create_user_tool_approval_setting, __path_deactivate_user_tool_approval_setting,
+    __path_list_user_tool_approval_settings, create_user_tool_approval_setting,
     deactivate_user_tool_approval_setting, list_user_tool_approval_settings,
 };
 use crate::services::file_storage::{
@@ -146,7 +147,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/messages/clienttoolresult", post(client_tool_result))
         .route(
             "/mcp-tool-approval-settings",
-            get(list_user_tool_approval_settings),
+            get(list_user_tool_approval_settings).post(create_user_tool_approval_setting),
         )
         .route(
             "/mcp-tool-approval-settings/{setting_id}",
@@ -389,6 +390,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         continue_message_sse,
         client_tool_result,
         list_user_tool_approval_settings,
+        create_user_tool_approval_setting,
         deactivate_user_tool_approval_setting,
         create_chat,
         update_chat,
@@ -1239,6 +1241,11 @@ pub struct RecentChat {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     active_generation_started_at: Option<DateTime<FixedOffset>>,
+    /// Present while the chat's generation is stopped on an MCP tool approval
+    /// awaiting the user's decision
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pending_tool_approval_at: Option<DateTime<FixedOffset>>,
 }
 
 /// Sentiment for message feedback
@@ -1400,6 +1407,10 @@ pub enum GenerationChatState {
     Running,
     Completed,
     Errored,
+    /// The generation is stopped on an MCP tool approval awaiting the user's
+    /// decision. Unlike the terminal states this does not age out.
+    #[serde(rename = "action_required")]
+    ActionRequired,
 }
 
 /// A chat with a running or recently finished generation
@@ -2659,10 +2670,30 @@ pub async fn generating_chats(
             continue;
         }
 
-        let state = match row.generation_state.as_str() {
-            "running" => GenerationChatState::Running,
-            "completed" => GenerationChatState::Completed,
-            "errored" => GenerationChatState::Errored,
+        let (state, started_at, ended_at) = match row.generation_state.as_str() {
+            "running" => (
+                GenerationChatState::Running,
+                row.generation_started_at,
+                row.generation_ended_at,
+            ),
+            // A parked chat is waiting on the user, not finished; its
+            // "started" timestamp is the moment it parked, and it carries no
+            // end because the wait has no terminal retention.
+            "awaiting_approval" => (
+                GenerationChatState::ActionRequired,
+                row.generation_ended_at.unwrap_or(row.generation_started_at),
+                None,
+            ),
+            "completed" => (
+                GenerationChatState::Completed,
+                row.generation_started_at,
+                row.generation_ended_at,
+            ),
+            "errored" => (
+                GenerationChatState::Errored,
+                row.generation_started_at,
+                row.generation_ended_at,
+            ),
             other => {
                 tracing::warn!(
                     chat_id = %row.id,
@@ -2683,8 +2714,8 @@ pub async fn generating_chats(
         chats.push(GeneratingChat {
             chat_id: row.id.to_string(),
             state,
-            started_at: row.generation_started_at,
-            ended_at: row.generation_ended_at,
+            started_at,
+            ended_at,
             title,
         });
     }
@@ -2772,6 +2803,7 @@ async fn extend_recent_chats_to_api_model(
             assistant_id: chat.assistant_id.map(|id| id.to_string()),
             assistant_name: chat.assistant_name,
             active_generation_started_at: chat.active_generation_started_at,
+            pending_tool_approval_at: chat.pending_tool_approval_at,
         });
     }
 

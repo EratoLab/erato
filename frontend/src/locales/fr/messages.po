@@ -2319,8 +2319,8 @@ msgstr "Verrouillé : votre organisation exige une confirmation chaque fois que 
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/McpToolApprovalCard.tsx
-msgid "mcpApproval.inputPreview"
-msgstr ""
+#~ msgid "mcpApproval.inputPreview"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/McpToolApprovalCard.tsx
@@ -2820,38 +2820,68 @@ msgstr "Comment l’assistant doit-il vous appeler ? ex. Max Mustermann"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.always.helper"
+msgstr "Exécute cet outil sans demander."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.always.label"
+msgstr "Toujours autoriser"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.ask.helper"
+msgstr "Affiche la confirmation dans le chat chaque fois que cet outil veut s'exécuter."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.ask.label"
+msgstr "Demander avant l'exécution"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.approvals.description"
-msgstr "Outils que vous avez choisi de toujours autoriser depuis la confirmation dans le chat. Supprimez une entrée pour être à nouveau interrogé."
+msgstr "Vos décisions issues de la confirmation dans le chat sont enregistrées ici et peuvent être modifiées à tout moment. Elles s'appliquent à votre compte sur tous les appareils."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.empty"
+msgstr "Aucune décision pour le moment. Lorsque vous choisissez « Toujours autoriser » dans un chat, l'outil apparaît ici."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.approvals.heading"
-msgstr "Outils toujours autorisés"
+msgstr "Autorisations d'outils"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.approvals.loadError"
-msgstr "Impossible de charger les outils toujours autorisés. Veuillez réessayer."
+msgstr "Impossible de charger les autorisations d'outils. Veuillez réessayer."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.remove"
-msgstr "Supprimer"
+#~ msgid "preferences.dialog.mcpServers.approvals.remove"
+#~ msgstr "Supprimer"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.removeError"
-msgstr "Impossible de supprimer l'autorisation. Veuillez réessayer."
+#~ msgid "preferences.dialog.mcpServers.approvals.removeError"
+#~ msgstr "Impossible de supprimer l'autorisation. Veuillez réessayer."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.removing"
-msgstr "Suppression..."
+#~ msgid "preferences.dialog.mcpServers.approvals.removing"
+#~ msgstr "Suppression..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.updateError"
+msgstr "Impossible de mettre à jour la décision. Veuillez réessayer."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.mcpServers.authenticationMode"
-msgstr "Mode d’authentification"
+#~ msgid "preferences.dialog.mcpServers.authenticationMode"
+#~ msgstr "Mode d’authentification"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -2916,7 +2946,7 @@ msgstr "Déconnexion réussie."
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.mcpServers.oauth.failureAfterCallback"
-msgstr "L’autorisation est terminée, mais le serveur est toujours indisponible. Essayez d’actualiser son état."
+msgstr "L'autorisation est terminée, mais le serveur est toujours indisponible. Rouvrez cet onglet pour vérifier à nouveau."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -2940,13 +2970,13 @@ msgstr "Autorisation terminée. Le serveur est prêt à être utilisé."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.mcpServers.refresh"
-msgstr "Actualiser l’état"
+#~ msgid "preferences.dialog.mcpServers.refresh"
+#~ msgstr "Actualiser l’état"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.mcpServers.refreshing"
-msgstr "Actualisation..."
+#~ msgid "preferences.dialog.mcpServers.refreshing"
+#~ msgstr "Actualisation..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -3433,6 +3463,10 @@ msgstr "1 élément"
 #: src/components/ui/FileUpload/FileUpload.tsx
 msgid "Accepted types:"
 msgstr "Types acceptés :"
+
+#: src/components/ui/Chat/ChatInput.tsx
+#~ msgid "Action required — the assistant is waiting for your approval"
+#~ msgstr "Action requise — l'assistant attend votre approbation"
 
 #: src/components/ui/FileUpload/FileUpload.tsx
 msgid "All file types accepted"
@@ -4352,6 +4386,10 @@ msgid "Queue message"
 msgstr ""
 
 #: src/components/ui/Chat/ChatInput.tsx
+msgid "Queued — sends after you respond to the confirmation"
+msgstr "En file d'attente — envoyé après votre réponse à la confirmation"
+
+#: src/components/ui/Chat/ChatInput.tsx
 msgid "Queued — sends when response finishes"
 msgstr ""
 
@@ -4843,6 +4881,10 @@ msgstr "Utilisation d'outils"
 #: src/pages/assistantHubUtils.tsx
 #~ msgid "Version {versionNumber}"
 #~ msgstr "Version {versionNumber}"
+
+#: src/components/ui/Chat/ChatInput.tsx
+#~ msgid "View"
+#~ msgstr "Afficher"
 
 #: src/components/ui/Chat/FrequentAssistantsList.tsx
 #~ msgid "View all assistants"

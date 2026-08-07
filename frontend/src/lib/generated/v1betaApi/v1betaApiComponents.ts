@@ -3826,6 +3826,53 @@ export const useListUserToolApprovalSettings = <
   });
 };
 
+export type CreateUserToolApprovalSettingError =
+  Fetcher.ErrorWrapper<undefined>;
+
+export type CreateUserToolApprovalSettingVariables = {
+  body: Schemas.CreateUserToolApprovalSettingRequest;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchCreateUserToolApprovalSetting = (
+  variables: CreateUserToolApprovalSettingVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.UserToolApprovalSetting,
+    CreateUserToolApprovalSettingError,
+    Schemas.CreateUserToolApprovalSettingRequest,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/mcp-tool-approval-settings",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useCreateUserToolApprovalSetting = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.UserToolApprovalSetting,
+      CreateUserToolApprovalSettingError,
+      CreateUserToolApprovalSettingVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.UserToolApprovalSetting,
+    CreateUserToolApprovalSettingError,
+    CreateUserToolApprovalSettingVariables
+  >({
+    mutationFn: (variables: CreateUserToolApprovalSettingVariables) =>
+      fetchCreateUserToolApprovalSetting(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
 export type DeactivateUserToolApprovalSettingPathParams = {
   /**
    * Approval setting ID

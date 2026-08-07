@@ -658,6 +658,11 @@ msgstr "Nie"
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.clientActions.scope"
+msgstr "Diese Entscheidungen werden nur auf diesem Gerät gespeichert."
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.composeInherits.helper"
 msgstr "Beim Antworten oder Weiterleiten einer E-Mail den aktuellen Chat beibehalten, anstatt einen neuen zu starten."
 
