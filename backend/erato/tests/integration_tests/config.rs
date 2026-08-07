@@ -25,6 +25,7 @@ fn test_desktop_sidecar_organization_configuration() {
 [desktop_sidecar]
 show_settings_tab = true
 show_settings_tab_office_addin = false
+allowed_origins = ["https://app.example.test"]
 
 [desktop_sidecar.organization_configuration]
 show_tray_icon = false
@@ -65,6 +66,10 @@ directory = "/tmp/desktop-sidecar-artifacts"
     assert_eq!(
         config.desktop_sidecar.show_settings_tab_office_addin,
         Some(false)
+    );
+    assert_eq!(
+        config.desktop_sidecar.allowed_origins,
+        ["https://app.example.test"]
     );
     assert!(config.desktop_sidecar.distribution.enabled);
     assert_eq!(

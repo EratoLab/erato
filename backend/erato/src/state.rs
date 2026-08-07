@@ -212,7 +212,10 @@ impl std::fmt::Debug for AppState {
 impl AppState {
     pub async fn new(config: AppConfig) -> Result<Self, Report> {
         let desktop_sidecar_distribution = if config.desktop_sidecar.distribution.enabled {
-            match DesktopSidecarDistribution::load(&config.desktop_sidecar.distribution.directory) {
+            match DesktopSidecarDistribution::load_with_allowed_origins(
+                &config.desktop_sidecar.distribution.directory,
+                &config.desktop_sidecar.allowed_origins,
+            ) {
                 Ok(distribution) => {
                     tracing::info!(
                         directory = %config.desktop_sidecar.distribution.directory,

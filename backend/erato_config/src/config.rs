@@ -575,6 +575,14 @@ pub struct DesktopSidecarConfig {
     #[serde(default)]
     pub show_settings_tab_office_addin: Option<bool>,
 
+    /// Browser origins that downloaded desktop-sidecar artifacts may accept.
+    ///
+    /// Each origin must use the normalized `scheme://host[:port]` form. The
+    /// value is embedded in Windows downloads as immutable bootstrap policy,
+    /// so it cannot be changed by a user-local sidecar configuration file.
+    #[serde(default)]
+    pub allowed_origins: Vec<String>,
+
     /// Distribution settings for desktop-sidecar installers and executables.
     #[serde(default)]
     pub distribution: DesktopSidecarDistributionConfig,

@@ -3,7 +3,8 @@ use crate::policy::engine::{PolicyEngine, authorize};
 use crate::policy::types::{Action, Resource};
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::services::desktop_sidecar_distribution::{
-    DesktopSidecarDistribution, DistributionArtifact, DistributionTarget,
+    BootstrapTransport, DesktopSidecarDistribution, DistributionArtifact, DistributionTarget,
+    EMBEDDED_BOOTSTRAP_SLOT_CAPACITY, encode_executable_bootstrap_slot,
 };
 use crate::services::file_storage::{ContentDispositionKind, build_content_disposition};
 use crate::state::AppState;
@@ -14,6 +15,7 @@ use axum::http::{HeaderValue, StatusCode};
 use axum::response::Response;
 use axum::{Extension, Json};
 use serde::{Deserialize, Serialize};
+use std::io::{Read, Seek, SeekFrom};
 use tokio_util::io::ReaderStream;
 use utoipa::{IntoParams, ToSchema};
 
@@ -181,21 +183,81 @@ async fn build_download_response(
     let artifact = distribution
         .artifact(&query.target, query.file.as_deref())
         .ok_or(StatusCode::NOT_FOUND)?;
-    let source = artifact.try_clone_source().map_err(|error| {
-        tracing::error!(
-            target = %query.target,
-            file = ?query.file,
-            %error,
-            "Failed to clone an open desktop sidecar artifact"
-        );
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let (body, size) = match artifact.bootstrap_transport() {
+        BootstrapTransport::None => {
+            let source = artifact.try_clone_source().map_err(|error| {
+                tracing::error!(
+                    target = %query.target,
+                    file = ?query.file,
+                    %error,
+                    "Failed to clone an open desktop sidecar artifact"
+                );
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+            (
+                Body::from_stream(ReaderStream::new(tokio::fs::File::from_std(source))),
+                artifact.size,
+            )
+        }
+        BootstrapTransport::WindowsExecutable { slot_offset } => {
+            let slot = encode_executable_bootstrap_slot(distribution.bootstrap()).map_err(|error| {
+                tracing::error!(%error, "Failed to encode desktop sidecar executable bootstrap");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+            let mut source = artifact.try_clone_source().map_err(|error| {
+                tracing::error!(%error, "Failed to clone desktop sidecar executable template");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+            source.seek(SeekFrom::Start(0)).map_err(|error| {
+                tracing::error!(%error, "Failed to seek desktop sidecar executable template");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+            let mut executable = Vec::new();
+            source.read_to_end(&mut executable).map_err(|error| {
+                tracing::error!(%error, "Failed to read desktop sidecar executable template");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+            let slot_offset = usize::try_from(slot_offset).map_err(|error| {
+                tracing::error!(%error, "Desktop sidecar executable slot offset could not be encoded");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+            let slot_end = slot_offset
+                .checked_add(EMBEDDED_BOOTSTRAP_SLOT_CAPACITY)
+                .ok_or_else(|| {
+                    tracing::error!("Desktop sidecar executable slot offset overflows");
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
+            let destination = executable.get_mut(slot_offset..slot_end).ok_or_else(|| {
+                tracing::error!("Desktop sidecar executable slot is outside the template");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+            destination.copy_from_slice(&slot);
+            let size = u64::try_from(executable.len()).map_err(|error| {
+                tracing::error!(%error, "Desktop sidecar executable size could not be encoded");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+            (Body::from(executable), size)
+        }
+        BootstrapTransport::WindowsMsi => {
+            let personalized = artifact
+                .personalized_msi(distribution.bootstrap())
+                .map_err(|error| {
+                    tracing::error!(%error, "Failed to personalize desktop sidecar MSI");
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
+            let size = u64::try_from(personalized.len()).map_err(|error| {
+                tracing::error!(%error, "Desktop sidecar MSI size could not be encoded");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+            (Body::from(personalized), size)
+        }
+    };
 
     let content_type = HeaderValue::from_str(&artifact.media_type).map_err(|error| {
         tracing::error!(%error, "Validated desktop sidecar media type became invalid");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
-    let content_length = HeaderValue::from_str(&artifact.size.to_string()).map_err(|error| {
+    let content_length = HeaderValue::from_str(&size.to_string()).map_err(|error| {
         tracing::error!(%error, "Desktop sidecar artifact size could not be encoded");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
@@ -208,8 +270,7 @@ async fn build_download_response(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    let file = tokio::fs::File::from_std(source);
-    let mut response = Response::new(Body::from_stream(ReaderStream::new(file)));
+    let mut response = Response::new(body);
     response
         .headers_mut()
         .insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
@@ -238,9 +299,10 @@ mod tests {
         let directory = tempdir().unwrap();
         let target_directory = directory.path().join("targets/windows-x86_64");
         fs::create_dir_all(&target_directory).unwrap();
+        let template = windows_executable_template();
         fs::write(
             target_directory.join("erato-desktop-sidecar.exe"),
-            b"desktop-sidecar-binary",
+            &template,
         )
         .unwrap();
         fs::write(
@@ -267,10 +329,14 @@ mod tests {
         )
         .unwrap();
 
-        let distribution = DesktopSidecarDistribution::load(directory.path()).unwrap();
+        let distribution = DesktopSidecarDistribution::load_with_allowed_origins(
+            directory.path(),
+            &["https://app.example.test".to_owned()],
+        )
+        .unwrap();
         let metadata = DesktopSidecarDistributionResponse::from(&distribution);
         assert_eq!(metadata.targets[0].id, "windows-x86_64");
-        assert_eq!(metadata.targets[0].files[0].size, 22);
+        assert_eq!(metadata.targets[0].files[0].size, template.len() as u64);
 
         let response = build_download_response(
             Some(&distribution),
@@ -285,7 +351,15 @@ mod tests {
             response.headers().get(CONTENT_TYPE).unwrap(),
             "application/vnd.microsoft.portable-executable"
         );
-        assert_eq!(response.headers().get(CONTENT_LENGTH).unwrap(), "22");
+        assert_eq!(
+            response
+                .headers()
+                .get(CONTENT_LENGTH)
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            template.len().to_string()
+        );
         assert!(
             response
                 .headers()
@@ -295,9 +369,15 @@ mod tests {
                 .unwrap()
                 .contains("erato-desktop-sidecar-windows-x86_64.exe")
         );
+        let mut expected = template.clone();
+        expected[0x200 + 32..0x200 + 32 + 4096]
+            .copy_from_slice(&encode_executable_bootstrap_slot(distribution.bootstrap()).unwrap());
         assert_eq!(
-            to_bytes(response.into_body(), 64).await.unwrap().as_ref(),
-            b"desktop-sidecar-binary"
+            to_bytes(response.into_body(), template.len())
+                .await
+                .unwrap()
+                .as_ref(),
+            expected
         );
 
         let missing = build_download_response(
@@ -309,5 +389,28 @@ mod tests {
         )
         .await;
         assert!(matches!(missing, Err(StatusCode::NOT_FOUND)));
+    }
+
+    fn windows_executable_template() -> Vec<u8> {
+        const SLOT_CAPACITY: usize = 4096;
+        const HEADER_BYTES: usize = 26;
+        let section_offset = 0x200;
+        let section_size = SLOT_CAPACITY + 64;
+        let mut binary = vec![0; section_offset + section_size];
+        binary[..2].copy_from_slice(b"MZ");
+        binary[0x3c..0x40].copy_from_slice(&(0x80_u32).to_le_bytes());
+        binary[0x80..0x84].copy_from_slice(b"PE\0\0");
+        binary[0x86..0x88].copy_from_slice(&1_u16.to_le_bytes());
+        binary[0x94..0x96].copy_from_slice(&0x20_u16.to_le_bytes());
+        let header = 0x80 + 24 + 0x20;
+        binary[header..header + 6].copy_from_slice(b".erato");
+        binary[header + 16..header + 20].copy_from_slice(&(section_size as u32).to_le_bytes());
+        binary[header + 20..header + 24].copy_from_slice(&(section_offset as u32).to_le_bytes());
+        let slot_offset = section_offset + 32;
+        binary[slot_offset..slot_offset + 16].copy_from_slice(b"ERATO_BOOTSTRAP!");
+        binary[slot_offset + 16..slot_offset + 18].copy_from_slice(&1_u16.to_le_bytes());
+        binary[slot_offset + 22..slot_offset + 26]
+            .copy_from_slice(&((SLOT_CAPACITY - HEADER_BYTES) as u32).to_le_bytes());
+        binary
     }
 }

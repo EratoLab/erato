@@ -269,6 +269,7 @@
   "client_tools.tools.<key>.timeout_ms": {},
   "database_url": {},
   "default_file_storage_provider": {},
+  "desktop_sidecar.allowed_origins.[]": {},
   "desktop_sidecar.distribution.directory": {},
   "desktop_sidecar.distribution.enabled": {},
   "desktop_sidecar.organization_configuration.show_tray_icon": {},

@@ -5,10 +5,10 @@ desktop-sidecar artifacts from the backend filesystem. The terms MUST, MUST NOT,
 REQUIRED, SHOULD, SHOULD NOT, and MAY are interpreted as described by BCP 14.
 
 This contract covers the artifact root, target and file discovery, backend
-validation, and deployment replacement. It does not define how an application
-personalizes a download. Signing artifacts and establishing their integrity are
-responsibilities of the build and deployment pipeline, not fields in the
-distribution manifest.
+validation, and deployment replacement. It also defines the bootstrap-policy convention
+used when the backend personalizes a Windows artifact. Signing artifacts and
+establishing their integrity are responsibilities of the build and deployment
+pipeline, not fields in the distribution manifest.
 
 ## 1. One unversioned artifact set
 
@@ -306,14 +306,85 @@ directory = "/app/desktop-sidecar-artifacts"
 The configuration may select another root without changing manifest paths,
 target IDs, download filenames, or API routing.
 
-## 6. Responsibility boundaries
+## 6. Organization bootstrap personalization
+
+A backend MAY personalize a Windows download with a single immutable
+organization bootstrap document. The document configures policy needed before
+the sidecar accepts browser requests; it is not user preferences, user
+identity, enrollment state, a client private key, or a reusable credential.
+
+The bootstrap document is UTF-8 JSON with this versioned, extensible shape:
+
+```json
+{
+  "version": 1,
+  "organization_configuration": {
+    "allowed_origins": ["https://app.example.test"]
+  }
+}
+```
+
+`version` is required and currently MUST be `1`. Both the root object and
+`organization_configuration` are extensible: consumers MUST ignore fields they
+do not understand. `organization_configuration.allowed_origins` is required
+and is an array of normalized, non-loopback origins. Each entry MUST be an
+exact lowercase `scheme://host[:non-default-port]` origin, with no path,
+query, fragment, wildcard, or trailing slash. An empty array is valid and
+refuses every production browser request.
+
+The bootstrap policy takes precedence over every user-writable configuration
+file. In particular, `sidecar.configure.v1` and files in a user's platform
+configuration directory MUST NOT add or replace production allowed origins.
+Development origins remain an explicit local development-mode option.
+
+### 6.1 Windows executable personalization
+
+The Windows executable template contains exactly one file-backed, non-executable
+`.erato` section with a 4096-byte slot. Its bytes are:
+
+| Offset | Length | Value                                                |
+| ------ | ------ | ---------------------------------------------------- |
+| 0      | 16     | ASCII magic `ERATO_BOOTSTRAP!`                       |
+| 16     | 2      | Little-endian format version (`1`)                   |
+| 18     | 4      | Little-endian JSON payload length                    |
+| 22     | 4      | Little-endian payload capacity (`4070`)              |
+| 26     | 4070   | UTF-8 bootstrap JSON followed by ASCII space padding |
+
+A personalizer MUST parse the PE section table, find exactly one `.erato`
+section, then find the magic exactly once inside that section. It MUST validate
+the template header, replace the complete 4096-byte slot, and reject an
+oversized document. It MUST NOT replace a JSON substring or append an EOF
+trailer. The sidecar validates the header, version, length, JSON, and origin
+policy before opening its browser listener. A template slot with a zero length
+is an unpersonalized artifact and has an empty, fail-closed allowlist.
+
+### 6.2 Windows MSI personalization
+
+The x86_64 Windows MSI contains a normal `bootstrap.json` file beside
+`erato-desktop-sidecar.exe`. WiX places that file in its own embedded
+`bootstrap.cab` stream (with the `OrganizationBootstrapFile` identifier),
+separate from the executable cabinet. A personalizer replaces only that CAB
+stream and updates the corresponding `File.FileSize` value; it MUST NOT
+recompress or byte-patch the executable cabinet. The MSI template is built
+with the same document supplied to the WiX `BootstrapConfiguration`
+preprocessor variable. On startup, the sidecar reads this installed file before
+its embedded slot, so the MSI and standalone forms implement the same policy
+with no post-install user action.
+
+A personalizer MAY build one artifact per organization policy revision and
+target. It MUST use the same bootstrap document for the MSI and standalone
+executable emitted for that revision. It MUST read each output back and verify
+the exact bootstrap bytes before signing or publishing it. Personalized output
+MUST remain in memory or temporary deployment storage and MUST NOT be written
+into the immutable artifact root.
+
+## 7. Responsibility boundaries
 
 This contract answers which target artifacts exist, which file is selected,
 where its immutable source file resides, and how the backend deploys and serves
-that set. It intentionally does not define:
+that set. Apart from the bootstrap convention above, it intentionally does not
+define:
 
-- personalization content or behavior, which is an application-level
-  convention;
 - artifact signing or signing metadata, which belongs to platform build and
   deployment tooling; or
 - artifact hashes, checksums, declared sizes, or deployment-integrity policy,
