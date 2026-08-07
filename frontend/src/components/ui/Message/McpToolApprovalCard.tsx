@@ -89,9 +89,7 @@ export const McpToolApprovalCard = ({
     if (!chatId || !isPending) {
       return;
     }
-    useGenerationStatusStore
-      .getState()
-      .seedActionRequired(chatId, requestedAt);
+    useGenerationStatusStore.getState().seedActionRequired(chatId, requestedAt);
   }, [chatId, isPending, requestedAt]);
 
   const decide = async (decision: "approve" | "reject" | "approve_always") => {
