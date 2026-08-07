@@ -2,7 +2,7 @@ import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { useEffect } from "react";
 
 import {
-  useGenerationRunningCount,
+  selectPollDriverCount,
   useGenerationStatusStore,
   type ChatGenerationStatus,
 } from "@/hooks/chat/store/generationStatusStore";
@@ -22,12 +22,17 @@ const SLOW_POLL_INTERVAL_MS = 10_000;
 
 const pollInterval = (): number | false => {
   const { statusByChatId } = useGenerationStatusStore.getState();
-  const running = Object.values(statusByChatId).filter(
+  const statuses = Object.values(statusByChatId);
+  const running = statuses.filter(
     (status): status is Extract<ChatGenerationStatus, { kind: "running" }> =>
       status?.kind === "running",
   );
   if (running.length === 0) {
-    return false;
+    // A parked approval can sit for a long time; poll slowly just to observe
+    // a decision made on another device or tab.
+    return statuses.some((status) => status?.kind === "action_required")
+      ? SLOW_POLL_INTERVAL_MS
+      : false;
   }
   const now = Date.now();
   const hasYoungRun = running.some(
@@ -47,7 +52,8 @@ const patchTerminalChats = (
 ) => {
   const terminal = new Map<string, GeneratingChat>();
   for (const entry of entries) {
-    if (entry.state !== "running") {
+    // "action_required" is a durable wait, not a terminal outcome.
+    if (entry.state !== "running" && entry.state !== "action_required") {
       terminal.set(entry.chat_id, entry);
     }
   }
@@ -65,14 +71,18 @@ const patchTerminalChats = (
           const title = entry.title ?? chat.title_resolved;
           if (
             chat.title_resolved === title &&
-            chat.active_generation_started_at === undefined
+            chat.active_generation_started_at === undefined &&
+            chat.pending_tool_approval_at === undefined
           ) {
             return chat;
           }
+          // Clearing the pending marker keeps a stale row from re-seeding an
+          // approval that was already decided.
           return {
             ...chat,
             title_resolved: title,
             active_generation_started_at: undefined,
+            pending_tool_approval_at: undefined,
           };
         });
         return chats.every((chat, index) => chat === page.chats[index])
@@ -87,18 +97,20 @@ const patchTerminalChats = (
 };
 
 /**
- * Polls `GET /me/generating` while any chat is known to be running and feeds
- * each snapshot into the generation-status store. Renders nothing; while
- * nothing is running the query is fully disabled (zero idle requests).
+ * Polls `GET /me/generating` while any chat is known to be running or parked
+ * on a tool approval, and feeds each snapshot into the generation-status
+ * store. Renders nothing; otherwise the query is fully disabled (zero idle
+ * requests). Parked chats keep the poll alive so a decision made on another
+ * device or tab clears the indicator here.
  */
 export function GenerationStatusPoller() {
-  const runningCount = useGenerationRunningCount();
+  const pollDriverCount = useGenerationStatusStore(selectPollDriverCount);
   const queryClient = useQueryClient();
 
   const { data, dataUpdatedAt } = useGeneratingChats(
     {},
     {
-      enabled: runningCount > 0,
+      enabled: pollDriverCount > 0,
       staleTime: 0,
       refetchOnWindowFocus: false,
       refetchInterval: pollInterval,
