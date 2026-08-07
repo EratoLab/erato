@@ -658,6 +658,11 @@ msgstr "Nigdy"
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.clientActions.scope"
+msgstr "Te decyzje są zapisywane tylko na tym urządzeniu."
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.composeInherits.helper"
 msgstr "Podczas odpowiadania na wiadomość lub jej przesyłania dalej zachowaj bieżący czat zamiast rozpoczynać nowy."
 

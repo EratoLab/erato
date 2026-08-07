@@ -658,6 +658,11 @@ msgstr "Jamais"
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.clientActions.scope"
+msgstr "Ces décisions sont enregistrées uniquement sur cet appareil."
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.composeInherits.helper"
 msgstr "Lors d'une réponse ou d'un transfert d'e-mail, conserver le chat en cours plutôt que d'en démarrer un nouveau."
 
