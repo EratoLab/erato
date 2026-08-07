@@ -2880,8 +2880,8 @@ msgstr "Die Entscheidung konnte nicht aktualisiert werden. Bitte versuchen Sie e
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.mcpServers.authenticationMode"
-msgstr "Authentifizierungsmodus"
+#~ msgid "preferences.dialog.mcpServers.authenticationMode"
+#~ msgstr "Authentifizierungsmodus"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -2946,7 +2946,7 @@ msgstr "Verbindung erfolgreich getrennt."
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.mcpServers.oauth.failureAfterCallback"
-msgstr "Die Autorisierung wurde abgeschlossen, aber der Server ist weiterhin nicht verfügbar. Versuche, seinen Status zu aktualisieren."
+msgstr "Die Autorisierung wurde abgeschlossen, aber der Server ist weiterhin nicht verfügbar. Öffnen Sie diesen Tab erneut, um es noch einmal zu prüfen."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -2970,13 +2970,13 @@ msgstr "Autorisierung abgeschlossen. Der Server ist einsatzbereit."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.mcpServers.refresh"
-msgstr "Status aktualisieren"
+#~ msgid "preferences.dialog.mcpServers.refresh"
+#~ msgstr "Status aktualisieren"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.mcpServers.refreshing"
-msgstr "Wird aktualisiert ..."
+#~ msgid "preferences.dialog.mcpServers.refreshing"
+#~ msgstr "Wird aktualisiert ..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -3465,8 +3465,8 @@ msgid "Accepted types:"
 msgstr "Akzeptierte Dateitypen:"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Action required — the assistant is waiting for your approval"
-msgstr "Aktion erforderlich — der Assistent wartet auf Ihre Freigabe"
+#~ msgid "Action required — the assistant is waiting for your approval"
+#~ msgstr "Aktion erforderlich — der Assistent wartet auf Ihre Freigabe"
 
 #: src/components/ui/FileUpload/FileUpload.tsx
 msgid "All file types accepted"
@@ -4386,6 +4386,10 @@ msgid "Queue message"
 msgstr "Nachricht in Warteschlange stellen"
 
 #: src/components/ui/Chat/ChatInput.tsx
+msgid "Queued — sends after you respond to the confirmation"
+msgstr "In Warteschlange – wird nach Ihrer Antwort auf die Bestätigung gesendet"
+
+#: src/components/ui/Chat/ChatInput.tsx
 msgid "Queued — sends when response finishes"
 msgstr "In Warteschlange – wird nach der Antwort gesendet"
 
@@ -4879,8 +4883,8 @@ msgstr "Tools werden verwendet"
 #~ msgstr "Version {versionNumber}"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "View"
-msgstr "Anzeigen"
+#~ msgid "View"
+#~ msgstr "Anzeigen"
 
 #: src/components/ui/Chat/FrequentAssistantsList.tsx
 #~ msgid "View all assistants"

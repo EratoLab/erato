@@ -2880,8 +2880,8 @@ msgstr "Could not update the decision. Please try again."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.mcpServers.authenticationMode"
-msgstr "Authentication mode"
+#~ msgid "preferences.dialog.mcpServers.authenticationMode"
+#~ msgstr "Authentication mode"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -2946,7 +2946,7 @@ msgstr "Disconnected successfully."
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.mcpServers.oauth.failureAfterCallback"
-msgstr "Authorization finished, but the server is still unavailable. Try refreshing its status."
+msgstr "Authorization finished, but the server is still unavailable. Reopen this tab to check again."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -2970,13 +2970,13 @@ msgstr "Authorization complete. The server is ready to use."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.mcpServers.refresh"
-msgstr "Refresh status"
+#~ msgid "preferences.dialog.mcpServers.refresh"
+#~ msgstr "Refresh status"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.mcpServers.refreshing"
-msgstr "Refreshing..."
+#~ msgid "preferences.dialog.mcpServers.refreshing"
+#~ msgstr "Refreshing..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -3465,8 +3465,8 @@ msgid "Accepted types:"
 msgstr "Accepted types:"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Action required — the assistant is waiting for your approval"
-msgstr "Action required — the assistant is waiting for your approval"
+#~ msgid "Action required — the assistant is waiting for your approval"
+#~ msgstr "Action required — the assistant is waiting for your approval"
 
 #: src/components/ui/FileUpload/FileUpload.tsx
 msgid "All file types accepted"
@@ -4386,6 +4386,10 @@ msgid "Queue message"
 msgstr "Queue message"
 
 #: src/components/ui/Chat/ChatInput.tsx
+msgid "Queued — sends after you respond to the confirmation"
+msgstr "Queued — sends after you respond to the confirmation"
+
+#: src/components/ui/Chat/ChatInput.tsx
 msgid "Queued — sends when response finishes"
 msgstr "Queued — sends when response finishes"
 
@@ -4879,8 +4883,8 @@ msgstr "Using tools"
 #~ msgstr "Version {versionNumber}"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "View"
-msgstr "View"
+#~ msgid "View"
+#~ msgstr "View"
 
 #: src/components/ui/Chat/FrequentAssistantsList.tsx
 #~ msgid "View all assistants"
