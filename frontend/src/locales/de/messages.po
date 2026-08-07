@@ -2820,33 +2820,63 @@ msgstr "Wie soll dich der Assistent nennen? z. B. Max Mustermann"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.always.helper"
+msgstr "Führt dieses Tool ohne Nachfrage aus."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.always.label"
+msgstr "Immer erlauben"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.ask.helper"
+msgstr "Zeigt jedes Mal die Bestätigung im Chat, wenn dieses Tool ausgeführt werden soll."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.ask.label"
+msgstr "Vor der Ausführung fragen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.approvals.description"
-msgstr "Tools, die Sie über die Bestätigung im Chat dauerhaft erlaubt haben. Entfernen Sie einen Eintrag, um wieder gefragt zu werden."
+msgstr "Ihre Entscheidungen aus der Bestätigung im Chat werden hier gespeichert und können jederzeit geändert werden. Sie gelten für Ihr Konto auf allen Geräten."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.empty"
+msgstr "Noch keine Entscheidungen. Wenn Sie im Chat „Immer erlauben“ wählen, erscheint das Tool hier."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.approvals.heading"
-msgstr "Immer erlaubte Tools"
+msgstr "Tool-Genehmigungen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.approvals.loadError"
-msgstr "Immer erlaubte Tools konnten nicht geladen werden. Bitte versuchen Sie es erneut."
+msgstr "Tool-Genehmigungen konnten nicht geladen werden. Bitte versuchen Sie es erneut."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.remove"
-msgstr "Entfernen"
+#~ msgid "preferences.dialog.mcpServers.approvals.remove"
+#~ msgstr "Entfernen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.removeError"
-msgstr "Die Genehmigung konnte nicht entfernt werden. Bitte versuchen Sie es erneut."
+#~ msgid "preferences.dialog.mcpServers.approvals.removeError"
+#~ msgstr "Die Genehmigung konnte nicht entfernt werden. Bitte versuchen Sie es erneut."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.removing"
-msgstr "Wird entfernt..."
+#~ msgid "preferences.dialog.mcpServers.approvals.removing"
+#~ msgstr "Wird entfernt..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.updateError"
+msgstr "Die Entscheidung konnte nicht aktualisiert werden. Bitte versuchen Sie es erneut."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

@@ -2820,33 +2820,63 @@ msgstr "Jak asystent powinien się do Ciebie zwracać? np. Max Mustermann"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.always.helper"
+msgstr "Uruchamia to narzędzie bez pytania."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.always.label"
+msgstr "Zawsze zezwalaj"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.ask.helper"
+msgstr "Pokazuje potwierdzenie w czacie za każdym razem, gdy to narzędzie chce zostać uruchomione."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.ask.label"
+msgstr "Pytaj przed uruchomieniem"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.approvals.description"
-msgstr "Narzędzia, które zawsze są dozwolone na podstawie Twojej decyzji w czacie. Usuń wpis, aby ponownie otrzymać pytanie."
+msgstr "Twoje decyzje z potwierdzenia w czacie są zapisywane tutaj i można je zmienić w dowolnym momencie. Obowiązują dla Twojego konta na wszystkich urządzeniach."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.empty"
+msgstr "Brak decyzji. Gdy wybierzesz „Zawsze zezwalaj” w czacie, narzędzie pojawi się tutaj."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.approvals.heading"
-msgstr "Zawsze dozwolone narzędzia"
+msgstr "Zatwierdzenia narzędzi"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.approvals.loadError"
-msgstr "Nie udało się załadować zawsze dozwolonych narzędzi. Spróbuj ponownie."
+msgstr "Nie udało się załadować zatwierdzeń narzędzi. Spróbuj ponownie."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.remove"
-msgstr "Usuń"
+#~ msgid "preferences.dialog.mcpServers.approvals.remove"
+#~ msgstr "Usuń"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.removeError"
-msgstr "Nie udało się usunąć zgody. Spróbuj ponownie."
+#~ msgid "preferences.dialog.mcpServers.approvals.removeError"
+#~ msgstr "Nie udało się usunąć zgody. Spróbuj ponownie."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.removing"
-msgstr "Usuwanie..."
+#~ msgid "preferences.dialog.mcpServers.approvals.removing"
+#~ msgstr "Usuwanie..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.updateError"
+msgstr "Nie udało się zaktualizować decyzji. Spróbuj ponownie."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
