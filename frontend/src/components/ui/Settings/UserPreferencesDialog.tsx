@@ -121,11 +121,13 @@ export function UserPreferencesDialog({
     data: mcpServersResponse,
     error: mcpServersError,
     isLoading: isMcpServersLoading,
-    isRefetching: isMcpServersRefetching,
     refetch: refetchMcpServers,
   } = useListMcpServers(isOpen && activeTab === "mcpServers" ? {} : skipToken, {
     retry: false,
     refetchOnWindowFocus: false,
+    // Opening the tab IS the refresh: the endpoint live-probes every server,
+    // so entering the tab must re-probe rather than show a cached snapshot.
+    staleTime: 0,
   });
 
   const visibleTabs = useMemo(
@@ -246,7 +248,7 @@ export function UserPreferencesDialog({
             t({
               id: "preferences.dialog.mcpServers.oauth.failureAfterCallback",
               message:
-                "Authorization finished, but the server is still unavailable. Try refreshing its status.",
+                "Authorization finished, but the server is still unavailable. Reopen this tab to check again.",
             }),
           );
         }
@@ -730,40 +732,20 @@ export function UserPreferencesDialog({
               hidden={activeTab !== "mcpServers"}
               className="space-y-4"
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="space-y-1">
-                  <h2 className="text-sm font-medium text-theme-fg-primary">
-                    {t({
-                      id: "preferences.dialog.mcpServers.heading",
-                      message: "MCP server connections",
-                    })}
-                  </h2>
-                  <p className="text-sm text-theme-fg-secondary">
-                    {t({
-                      id: "preferences.dialog.mcpServers.description",
-                      message:
-                        "Review the MCP servers available to your account and complete any required authorization.",
-                    })}
-                  </p>
-                </div>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    void refetchMcpServers();
-                  }}
-                  disabled={isMcpServersLoading || isMcpServersRefetching}
-                >
-                  {isMcpServersRefetching
-                    ? t({
-                        id: "preferences.dialog.mcpServers.refreshing",
-                        message: "Refreshing...",
-                      })
-                    : t({
-                        id: "preferences.dialog.mcpServers.refresh",
-                        message: "Refresh status",
-                      })}
-                </Button>
+              <div className="space-y-1">
+                <h2 className="text-sm font-medium text-theme-fg-primary">
+                  {t({
+                    id: "preferences.dialog.mcpServers.heading",
+                    message: "MCP server connections",
+                  })}
+                </h2>
+                <p className="text-sm text-theme-fg-secondary">
+                  {t({
+                    id: "preferences.dialog.mcpServers.description",
+                    message:
+                      "Review the MCP servers available to your account and complete any required authorization.",
+                  })}
+                </p>
               </div>
 
               {mcpSuccess ? <Alert type="success">{mcpSuccess}</Alert> : null}
@@ -925,42 +907,45 @@ function McpServerCard({
   onAuthorize: () => void;
   server: McpServerStatus;
 }) {
+  // Same status-pane idiom as the Desktop Sidecar tab: a toned status icon,
+  // the entity, and a sentence — the status word itself travels on the icon
+  // for assistive tech.
   const statusTone = {
     SUCCESS: {
-      badgeClass:
-        "border-theme-success-border bg-theme-success-bg text-theme-success-fg",
       description: t({
         id: "preferences.dialog.mcpServers.status.success.description",
         message: "Connected and ready to use.",
       }),
-      icon: <CheckCircleIcon className="size-4" />,
+      icon: (
+        <CheckCircleIcon className="mt-0.5 size-5 shrink-0 text-theme-success-fg" />
+      ),
       label: t({
         id: "preferences.dialog.mcpServers.status.success.label",
         message: "Connected",
       }),
     },
     NEEDS_AUTHENTICATION: {
-      badgeClass:
-        "border-theme-warning-border bg-theme-warning-bg text-theme-warning-fg",
       description: t({
         id: "preferences.dialog.mcpServers.status.needsAuthentication.description",
         message: "Authorization is required before this server can be used.",
       }),
-      icon: <WarningCircleIcon className="size-4" />,
+      icon: (
+        <WarningCircleIcon className="mt-0.5 size-5 shrink-0 text-theme-warning-fg" />
+      ),
       label: t({
         id: "preferences.dialog.mcpServers.status.needsAuthentication.label",
         message: "Needs authentication",
       }),
     },
     FAILURE: {
-      badgeClass:
-        "border-theme-error-border bg-theme-error-bg text-theme-error-fg",
       description: t({
         id: "preferences.dialog.mcpServers.status.failure.description",
         message:
           "The server is configured, but the backend could not connect to it.",
       }),
-      icon: <ErrorIcon className="size-4" />,
+      icon: (
+        <ErrorIcon className="mt-0.5 size-5 shrink-0 text-theme-error-fg" />
+      ),
       label: t({
         id: "preferences.dialog.mcpServers.status.failure.label",
         message: "Connection failed",
@@ -969,7 +954,6 @@ function McpServerCard({
   } satisfies Record<
     McpServerStatusValue,
     {
-      badgeClass: string;
       description: string;
       icon: ReactNode;
       label: string;
@@ -979,76 +963,62 @@ function McpServerCard({
   const status = statusTone[server.connection_status];
 
   return (
-    <article className="rounded-lg border border-theme-border bg-theme-bg-primary p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <ResolvedIcon
-              iconId="simpleicons-modelcontextprotocol"
-              className="size-4 text-theme-fg-secondary"
-            />
-            <h3 className="font-medium text-theme-fg-primary">{server.id}</h3>
-            <span
-              className={clsx(
-                "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium",
-                status.badgeClass,
-              )}
-            >
-              <span aria-hidden="true">{status.icon}</span>
-              {status.label}
-            </span>
-          </div>
-          <p className="text-sm text-theme-fg-secondary">
-            {status.description}
-          </p>
-          <p className="text-xs uppercase tracking-wide text-theme-fg-muted">
-            {t({
-              id: "preferences.dialog.mcpServers.authenticationMode",
-              message: "Authentication mode",
-            })}
-            {": "}
-            {server.authentication_mode}
-          </p>
+    <article className="flex items-start gap-3 rounded-[var(--theme-radius-control)] border border-theme-border bg-theme-bg-secondary p-4">
+      <span role="img" aria-label={status.label} title={status.label}>
+        {status.icon}
+      </span>
+      <div className="min-w-0 flex-1 space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <ResolvedIcon
+            iconId="simpleicons-modelcontextprotocol"
+            className="size-4 shrink-0 text-theme-fg-secondary"
+          />
+          <h3 className="text-sm font-medium text-theme-fg-primary">
+            {server.id}
+          </h3>
         </div>
-
-        {server.connection_status === "NEEDS_AUTHENTICATION" ? (
-          <Button
-            variant="primary"
-            size="sm"
-            icon={<LinkIcon className="size-4" />}
-            disabled={isAuthorizing}
-            onClick={onAuthorize}
-          >
-            {isAuthorizing
-              ? t({
-                  id: "preferences.dialog.mcpServers.oauth.authorizing",
-                  message: "Authorizing...",
-                })
-              : t({
-                  id: "preferences.dialog.mcpServers.oauth.authorize",
-                  message: "Authorize",
-                })}
-          </Button>
-        ) : server.authentication_mode === "oauth2" ? (
-          <Button
-            variant="secondary"
-            size="sm"
-            icon={<LinkSlashIcon className="size-4" />}
-            disabled={isDisconnecting}
-            onClick={onDisconnect}
-          >
-            {isDisconnecting
-              ? t({
-                  id: "preferences.dialog.mcpServers.oauth.disconnecting",
-                  message: "Disconnecting...",
-                })
-              : t({
-                  id: "preferences.dialog.mcpServers.oauth.disconnect",
-                  message: "Disconnect",
-                })}
-          </Button>
-        ) : null}
+        <p className="text-sm text-theme-fg-secondary">{status.description}</p>
       </div>
+
+      {server.connection_status === "NEEDS_AUTHENTICATION" ? (
+        <Button
+          variant="primary"
+          size="sm"
+          icon={<LinkIcon className="size-4" />}
+          disabled={isAuthorizing}
+          onClick={onAuthorize}
+          className="shrink-0"
+        >
+          {isAuthorizing
+            ? t({
+                id: "preferences.dialog.mcpServers.oauth.authorizing",
+                message: "Authorizing...",
+              })
+            : t({
+                id: "preferences.dialog.mcpServers.oauth.authorize",
+                message: "Authorize",
+              })}
+        </Button>
+      ) : server.authentication_mode === "oauth2" ? (
+        <Button
+          variant="secondary"
+          size="sm"
+          icon={<LinkSlashIcon className="size-4" />}
+          disabled={isDisconnecting}
+          onClick={onDisconnect}
+          className="shrink-0"
+        >
+          {isDisconnecting
+            ? t({
+                id: "preferences.dialog.mcpServers.oauth.disconnecting",
+                message: "Disconnecting...",
+              })
+            : t({
+                id: "preferences.dialog.mcpServers.oauth.disconnect",
+                message: "Disconnect",
+              })}
+        </Button>
+      ) : null}
     </article>
   );
 }
