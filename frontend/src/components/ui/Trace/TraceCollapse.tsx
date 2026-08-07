@@ -1,1 +1,4 @@
-export { Collapse as TraceCollapse } from "../Controls/Collapse";
+import { Collapse } from "../Controls/Collapse";
+
+/** Compatibility alias — the generic component moved to Controls/Collapse. */
+export const TraceCollapse = Collapse;

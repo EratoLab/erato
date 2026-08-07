@@ -2,7 +2,7 @@ import clsx from "clsx";
 
 import type { ReactNode } from "react";
 
-interface CollapseProps {
+export interface CollapseProps {
   /** When true, the children are rendered at full height. */
   isOpen: boolean;
   /** Optional class on the inner overflow-clipping wrapper. */
