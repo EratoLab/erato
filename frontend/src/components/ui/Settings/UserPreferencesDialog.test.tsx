@@ -115,7 +115,7 @@ function renderDialog({
     | "personalization"
     | "appearance"
     | "audio"
-    | "mcpServers"
+    | "serversTools"
     | "data";
   mcpServersTabEnabled?: boolean;
   desktopSidecarTabEnabled?: boolean;
@@ -199,18 +199,25 @@ afterEach(() => {
 });
 
 describe("UserPreferencesDialog", () => {
-  it("shows the desktop sidecar tab only when enabled", () => {
-    renderDialog({ desktopSidecarTabEnabled: true });
+  it("shows the servers & tools tab when either capability is enabled", () => {
+    // Sidecar alone is enough for the merged tab.
+    renderDialog({
+      desktopSidecarTabEnabled: true,
+      mcpServersTabEnabled: false,
+    });
 
     expect(
-      screen.getByRole("tab", { name: "Desktop Sidecar" }),
+      screen.getByRole("tab", { name: "Servers & Tools" }),
     ).toBeInTheDocument();
 
     cleanup();
-    renderDialog({ desktopSidecarTabEnabled: false });
+    renderDialog({
+      desktopSidecarTabEnabled: false,
+      mcpServersTabEnabled: false,
+    });
 
     expect(
-      screen.queryByRole("tab", { name: "Desktop Sidecar" }),
+      screen.queryByRole("tab", { name: "Servers & Tools" }),
     ).not.toBeInTheDocument();
   });
 
@@ -222,7 +229,9 @@ describe("UserPreferencesDialog", () => {
       name: "Personalization",
     });
     const appearanceTab = screen.getByRole("tab", { name: "Appearance" });
-    const mcpServersTab = screen.getByRole("tab", { name: "MCP servers" });
+    const mcpServersTab = screen.getByRole("tab", {
+      name: "Servers & Tools",
+    });
     const dataTab = screen.getByRole("tab", { name: "Data" });
     const personalizationPanel = screen.getByRole("tabpanel", {
       name: "Personalization",
@@ -326,7 +335,7 @@ describe("UserPreferencesDialog", () => {
     });
 
     expect(
-      screen.queryByRole("tab", { name: "MCP servers" }),
+      screen.queryByRole("tab", { name: "Servers & Tools" }),
     ).not.toBeInTheDocument();
   });
 
@@ -425,7 +434,7 @@ describe("UserPreferencesDialog", () => {
 
     renderDialog();
 
-    fireEvent.click(screen.getByRole("tab", { name: "MCP servers" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Servers & Tools" }));
 
     expect(
       await screen.findByText(
@@ -502,7 +511,7 @@ describe("UserPreferencesDialog", () => {
 
     renderDialog();
 
-    fireEvent.click(screen.getByRole("tab", { name: "MCP servers" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Servers & Tools" }));
     await screen.findByRole("button", { name: "Authorize" });
 
     fireEvent.click(screen.getByRole("button", { name: "Authorize" }));
@@ -558,7 +567,7 @@ describe("UserPreferencesDialog", () => {
 
     renderDialog();
 
-    fireEvent.click(screen.getByRole("tab", { name: "MCP servers" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Servers & Tools" }));
     await screen.findByRole("button", { name: "Disconnect" });
 
     fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
@@ -611,7 +620,7 @@ describe("UserPreferencesDialog", () => {
       });
 
     renderDialog({
-      initialTab: "mcpServers",
+      initialTab: "serversTools",
       onMcpOauthCallbackHandled,
       pendingMcpOauthCallback: {
         code: "oauth-code",

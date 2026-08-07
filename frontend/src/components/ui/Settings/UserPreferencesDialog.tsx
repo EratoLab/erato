@@ -21,30 +21,21 @@ import {
 } from "@/providers/FeatureConfigProvider";
 
 import { AudioInputTabContent } from "./AudioInputTabContent";
-import { McpToolApprovalSettings } from "./McpToolApprovalSettings";
+import { ServersToolsPane } from "./ServersToolsPane";
 import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";
 import { FormField, Input, Textarea } from "../Input";
 import { ModalBase } from "../Modal/ModalBase";
 import {
-  ErrorIcon,
   LockIcon,
-  LinkIcon,
-  LinkSlashIcon,
   MediaImageIcon,
   MenuScaleIcon,
   ResolvedIcon,
-  CheckCircleIcon,
-  ComputerIcon,
   VoiceIcon,
-  WarningCircleIcon,
 } from "../icons";
 import { AppearanceTabContent } from "./AppearanceTabContent";
-import { DesktopSidecarTabContent } from "./DesktopSidecarTabContent";
 
 import type {
-  McpServerStatus,
-  McpServerStatusValue,
   UpdateProfilePreferencesRequest,
   UserProfile,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -54,8 +45,7 @@ type PreferencesTab =
   | "personalization"
   | "appearance"
   | "audio"
-  | "desktopSidecar"
-  | "mcpServers"
+  | "serversTools"
   | "data";
 
 interface UserPreferencesDialogProps {
@@ -117,18 +107,18 @@ export function UserPreferencesDialog({
   const { mutateAsync: disconnectMcpServerOauthMutation } =
     useDisconnectMcpServerOauth();
   const { mutateAsync: startMcpServerOauthMutation } = useStartMcpServerOauth();
-  const {
-    data: mcpServersResponse,
-    error: mcpServersError,
-    isLoading: isMcpServersLoading,
-    refetch: refetchMcpServers,
-  } = useListMcpServers(isOpen && activeTab === "mcpServers" ? {} : skipToken, {
-    retry: false,
-    refetchOnWindowFocus: false,
-    // Opening the tab IS the refresh: the endpoint live-probes every server,
-    // so entering the tab must re-probe rather than show a cached snapshot.
-    staleTime: 0,
-  });
+  // The pane owns rendering the server list; this instance shares its query
+  // key and exists so the OAuth callback/disconnect flows can refetch.
+  const { refetch: refetchMcpServers } = useListMcpServers(
+    isOpen && activeTab === "serversTools" && mcpServersTabEnabled
+      ? {}
+      : skipToken,
+    {
+      retry: false,
+      refetchOnWindowFocus: false,
+      staleTime: 0,
+    },
+  );
 
   const visibleTabs = useMemo(
     () =>
@@ -137,26 +127,18 @@ export function UserPreferencesDialog({
             "personalization",
             "appearance",
             ...(audioInputSettingsEnabled ? (["audio"] as const) : []),
-            ...(desktopSidecarTabEnabled
+            ...(desktopSidecarTabEnabled || mcpServersTabEnabled
               ? // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal preferences tab id
-                (["desktopSidecar"] as const)
-              : []),
-            ...(mcpServersTabEnabled
-              ? // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal preferences tab id
-                (["mcpServers"] as const)
+                (["serversTools"] as const)
               : []),
             ...(dataTabEnabled ? (["data"] as const) : []),
           ]
         : [
             "appearance",
             ...(audioInputSettingsEnabled ? (["audio"] as const) : []),
-            ...(desktopSidecarTabEnabled
+            ...(desktopSidecarTabEnabled || mcpServersTabEnabled
               ? // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal preferences tab id
-                (["desktopSidecar"] as const)
-              : []),
-            ...(mcpServersTabEnabled
-              ? // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal preferences tab id
-                (["mcpServers"] as const)
+                (["serversTools"] as const)
               : []),
             ...(dataTabEnabled ? (["data"] as const) : []),
           ]) satisfies PreferencesTab[],
@@ -200,7 +182,7 @@ export function UserPreferencesDialog({
   }, [activeTab, visibleTabs]);
 
   useEffect(() => {
-    if (!isOpen || activeTab !== "mcpServers" || !pendingMcpOauthCallback) {
+    if (!isOpen || activeTab !== "serversTools" || !pendingMcpOauthCallback) {
       return;
     }
 
@@ -309,13 +291,9 @@ export function UserPreferencesDialog({
       id: "preferences.dialog.tabs.audio",
       message: "Audio",
     }),
-    desktopSidecar: t({
-      id: "preferences.dialog.tabs.desktopSidecar",
-      message: "Desktop Sidecar",
-    }),
-    mcpServers: t({
-      id: "preferences.dialog.tabs.mcpServers",
-      message: "MCP servers",
+    serversTools: t({
+      id: "preferences.dialog.tabs.serversTools",
+      message: "Servers & Tools",
     }),
     data: t({ id: "preferences.dialog.tabs.data", message: "Data" }),
   } satisfies Record<PreferencesTab, string>;
@@ -324,13 +302,7 @@ export function UserPreferencesDialog({
     personalization: <MenuScaleIcon className="size-4" />,
     appearance: <MediaImageIcon className="size-4" />,
     audio: <VoiceIcon className="size-4" />,
-    desktopSidecar: <ComputerIcon className="size-4" />,
-    mcpServers: (
-      <ResolvedIcon
-        iconId="simpleicons-modelcontextprotocol"
-        className="size-4"
-      />
-    ),
+    serversTools: <ResolvedIcon iconId="tools" className="size-4" />,
     data: <LockIcon className="size-4" />,
   } satisfies Record<PreferencesTab, ReactNode>;
 
@@ -339,8 +311,7 @@ export function UserPreferencesDialog({
     personalization: `${tabGroupId}-tab-personalization`,
     appearance: `${tabGroupId}-tab-appearance`,
     audio: `${tabGroupId}-tab-audio`,
-    desktopSidecar: `${tabGroupId}-tab-desktop-sidecar`,
-    mcpServers: `${tabGroupId}-tab-mcp-servers`,
+    serversTools: `${tabGroupId}-tab-servers-tools`,
     data: `${tabGroupId}-tab-data`,
   } satisfies Record<PreferencesTab, string>;
 
@@ -348,13 +319,10 @@ export function UserPreferencesDialog({
     personalization: `${tabGroupId}-panel-personalization`,
     appearance: `${tabGroupId}-panel-appearance`,
     audio: `${tabGroupId}-panel-audio`,
-    desktopSidecar: `${tabGroupId}-panel-desktop-sidecar`,
-    mcpServers: `${tabGroupId}-panel-mcp-servers`,
+    serversTools: `${tabGroupId}-panel-servers-tools`,
     data: `${tabGroupId}-panel-data`,
   } satisfies Record<PreferencesTab, string>;
   /* eslint-enable lingui/no-unlocalized-strings */
-
-  const mcpServers = mcpServersResponse?.servers ?? [];
 
   const focusTab = (tab: PreferencesTab) => {
     const element = document.getElementById(tabIds[tab]);
@@ -711,96 +679,52 @@ export function UserPreferencesDialog({
               </section>
             ) : null}
 
-            {desktopSidecarTabEnabled ? (
-              <section
-                id={panelIds.desktopSidecar}
-                role="tabpanel"
-                aria-labelledby={tabIds.desktopSidecar}
-                hidden={activeTab !== "desktopSidecar"}
-                className="space-y-4"
-              >
-                {activeTab === "desktopSidecar" ? (
-                  <DesktopSidecarTabContent />
-                ) : null}
-              </section>
-            ) : null}
-
             <section
-              id={panelIds.mcpServers}
+              id={panelIds.serversTools}
               role="tabpanel"
-              aria-labelledby={tabIds.mcpServers}
-              hidden={activeTab !== "mcpServers"}
+              aria-labelledby={tabIds.serversTools}
+              hidden={activeTab !== "serversTools"}
               className="space-y-4"
             >
               <div className="space-y-1">
                 <h2 className="text-sm font-medium text-theme-fg-primary">
                   {t({
-                    id: "preferences.dialog.mcpServers.heading",
-                    message: "MCP server connections",
+                    id: "preferences.dialog.serversTools.heading",
+                    message: "Servers & Tools",
                   })}
                 </h2>
                 <p className="text-sm text-theme-fg-secondary">
                   {t({
-                    id: "preferences.dialog.mcpServers.description",
+                    id: "preferences.dialog.serversTools.description",
                     message:
-                      "Review the MCP servers available to your account and complete any required authorization.",
+                      "Everything the assistant can connect to or act through. Open an entry to fix its connection or adjust what it may do.",
                   })}
                 </p>
               </div>
 
               {mcpSuccess ? <Alert type="success">{mcpSuccess}</Alert> : null}
               {mcpError ? <Alert type="error">{mcpError}</Alert> : null}
-              {mcpServersError ? (
-                <Alert type="error">
-                  {t({
-                    id: "preferences.dialog.mcpServers.load.error",
-                    message: "Could not load MCP servers. Please try again.",
-                  })}
-                </Alert>
-              ) : null}
 
-              {isMcpServersLoading ? (
-                <Alert type="info">
-                  {t({
-                    id: "preferences.dialog.mcpServers.loading",
-                    message: "Loading MCP server status...",
-                  })}
-                </Alert>
+              {activeTab === "serversTools" ? (
+                <ServersToolsPane
+                  isActive={isOpen}
+                  mcp={
+                    mcpServersTabEnabled
+                      ? {
+                          onAuthorize: (serverId) => {
+                            void handleStartMcpOauth(serverId);
+                          },
+                          onDisconnect: (serverId) => {
+                            void handleDisconnectMcpOauth(serverId);
+                          },
+                          authorizingServerId,
+                          disconnectingServerId,
+                        }
+                      : null
+                  }
+                  showDesktopSidecar={desktopSidecarTabEnabled}
+                />
               ) : null}
-
-              {!isMcpServersLoading &&
-              !mcpServersError &&
-              mcpServers.length === 0 ? (
-                <Alert type="info">
-                  {t({
-                    id: "preferences.dialog.mcpServers.empty",
-                    message: "No MCP servers are currently available to you.",
-                  })}
-                </Alert>
-              ) : null}
-
-              {!isMcpServersLoading && !mcpServersError ? (
-                <div className="space-y-3">
-                  {mcpServers.map((server) => (
-                    <McpServerCard
-                      key={server.id}
-                      server={server}
-                      isAuthorizing={authorizingServerId === server.id}
-                      isDisconnecting={disconnectingServerId === server.id}
-                      onAuthorize={() => {
-                        void handleStartMcpOauth(server.id);
-                      }}
-                      onDisconnect={() => {
-                        void handleDisconnectMcpOauth(server.id);
-                      }}
-                    />
-                  ))}
-                </div>
-              ) : null}
-
-              <McpToolApprovalSettings
-                isActive={isOpen && activeTab === "mcpServers"}
-              />
             </section>
 
             <section
@@ -893,132 +817,3 @@ export function UserPreferencesDialog({
 
 // eslint-disable-next-line lingui/no-unlocalized-strings
 UserPreferencesDialog.displayName = "UserPreferencesDialog";
-
-function McpServerCard({
-  isAuthorizing,
-  isDisconnecting,
-  onDisconnect,
-  onAuthorize,
-  server,
-}: {
-  isAuthorizing: boolean;
-  isDisconnecting: boolean;
-  onDisconnect: () => void;
-  onAuthorize: () => void;
-  server: McpServerStatus;
-}) {
-  // Same status-pane idiom as the Desktop Sidecar tab: a toned status icon,
-  // the entity, and a sentence — the status word itself travels on the icon
-  // for assistive tech.
-  const statusTone = {
-    SUCCESS: {
-      description: t({
-        id: "preferences.dialog.mcpServers.status.success.description",
-        message: "Connected and ready to use.",
-      }),
-      icon: (
-        <CheckCircleIcon className="mt-0.5 size-5 shrink-0 text-theme-success-fg" />
-      ),
-      label: t({
-        id: "preferences.dialog.mcpServers.status.success.label",
-        message: "Connected",
-      }),
-    },
-    NEEDS_AUTHENTICATION: {
-      description: t({
-        id: "preferences.dialog.mcpServers.status.needsAuthentication.description",
-        message: "Authorization is required before this server can be used.",
-      }),
-      icon: (
-        <WarningCircleIcon className="mt-0.5 size-5 shrink-0 text-theme-warning-fg" />
-      ),
-      label: t({
-        id: "preferences.dialog.mcpServers.status.needsAuthentication.label",
-        message: "Needs authentication",
-      }),
-    },
-    FAILURE: {
-      description: t({
-        id: "preferences.dialog.mcpServers.status.failure.description",
-        message:
-          "The server is configured, but the backend could not connect to it.",
-      }),
-      icon: (
-        <ErrorIcon className="mt-0.5 size-5 shrink-0 text-theme-error-fg" />
-      ),
-      label: t({
-        id: "preferences.dialog.mcpServers.status.failure.label",
-        message: "Connection failed",
-      }),
-    },
-  } satisfies Record<
-    McpServerStatusValue,
-    {
-      description: string;
-      icon: ReactNode;
-      label: string;
-    }
-  >;
-
-  const status = statusTone[server.connection_status];
-
-  return (
-    <article className="flex items-start gap-3 rounded-[var(--theme-radius-control)] border border-theme-border bg-theme-bg-secondary p-4">
-      <span role="img" aria-label={status.label} title={status.label}>
-        {status.icon}
-      </span>
-      <div className="min-w-0 flex-1 space-y-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <ResolvedIcon
-            iconId="simpleicons-modelcontextprotocol"
-            className="size-4 shrink-0 text-theme-fg-secondary"
-          />
-          <h3 className="text-sm font-medium text-theme-fg-primary">
-            {server.id}
-          </h3>
-        </div>
-        <p className="text-sm text-theme-fg-secondary">{status.description}</p>
-      </div>
-
-      {server.connection_status === "NEEDS_AUTHENTICATION" ? (
-        <Button
-          variant="primary"
-          size="sm"
-          icon={<LinkIcon className="size-4" />}
-          disabled={isAuthorizing}
-          onClick={onAuthorize}
-          className="shrink-0"
-        >
-          {isAuthorizing
-            ? t({
-                id: "preferences.dialog.mcpServers.oauth.authorizing",
-                message: "Authorizing...",
-              })
-            : t({
-                id: "preferences.dialog.mcpServers.oauth.authorize",
-                message: "Authorize",
-              })}
-        </Button>
-      ) : server.authentication_mode === "oauth2" ? (
-        <Button
-          variant="secondary"
-          size="sm"
-          icon={<LinkSlashIcon className="size-4" />}
-          disabled={isDisconnecting}
-          onClick={onDisconnect}
-          className="shrink-0"
-        >
-          {isDisconnecting
-            ? t({
-                id: "preferences.dialog.mcpServers.oauth.disconnecting",
-                message: "Disconnecting...",
-              })
-            : t({
-                id: "preferences.dialog.mcpServers.oauth.disconnect",
-                message: "Disconnect",
-              })}
-        </Button>
-      ) : null}
-    </article>
-  );
-}
