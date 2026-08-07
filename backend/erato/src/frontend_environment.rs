@@ -75,6 +75,8 @@ const FRONTEND_ENV_KEY_SIDEBAR_CHAT_HISTORY_SHOW_METADATA: &str =
 const FRONTEND_ENV_KEY_MSAL_CLIENT_ID: &str = "MSAL_CLIENT_ID";
 const FRONTEND_ENV_KEY_MSAL_AUTHORITY: &str = "MSAL_AUTHORITY";
 const FRONTEND_ENV_KEY_MASK_REASONING_TRACE_TEXT: &str = "MASK_REASONING_TRACE_TEXT";
+const FRONTEND_ENV_KEY_DESKTOP_SIDECAR_SHOW_SETTINGS_TAB: &str =
+    "DESKTOP_SIDECAR_SHOW_SETTINGS_TAB";
 const COMPONENT_KITS_PUBLIC_MOUNT_BASE: &str = "/public/component-kits";
 // Frontend bundles built before ERMAIN-460 used this stable runtime path.
 const LEGACY_COMPONENT_KIT_REACT_RUNTIME_SCRIPT_PATH: &str =
@@ -918,6 +920,16 @@ fn build_frontend_environment(
         FRONTEND_ENV_KEY_MASK_REASONING_TRACE_TEXT.to_string(),
         Value::Bool(config.frontend.mask_reasoning_trace_text),
     );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_DESKTOP_SIDECAR_SHOW_SETTINGS_TAB.to_string(),
+        Value::Bool(match frontend_kind {
+            FrontendKind::Web => config.desktop_sidecar.show_settings_tab,
+            FrontendKind::OfficeAddin => config
+                .desktop_sidecar
+                .show_settings_tab_office_addin
+                .unwrap_or(config.desktop_sidecar.show_settings_tab),
+        }),
+    );
 
     // Inject pairs from frontend.additional_environment
     for (key, value) in &config.additional_frontend_environment() {
@@ -1611,6 +1623,45 @@ mod tests {
             key == FRONTEND_ENV_KEY_ERROR_REPORT_ENVIRONMENT
                 && value == &Value::String("test-environment".to_string())
         }));
+    }
+
+    #[test]
+    fn desktop_sidecar_settings_tab_uses_the_office_addin_override() {
+        let mut config = AppConfig::default();
+        config.desktop_sidecar.show_settings_tab = true;
+
+        let web_environment = build_frontend_environment(&config, FrontendKind::Web);
+        let office_environment = build_frontend_environment(&config, FrontendKind::OfficeAddin);
+        assert!(
+            web_environment
+                .additional_environment
+                .iter()
+                .any(|(key, value)| {
+                    key == FRONTEND_ENV_KEY_DESKTOP_SIDECAR_SHOW_SETTINGS_TAB
+                        && value == &Value::Bool(true)
+                })
+        );
+        assert!(
+            office_environment
+                .additional_environment
+                .iter()
+                .any(|(key, value)| {
+                    key == FRONTEND_ENV_KEY_DESKTOP_SIDECAR_SHOW_SETTINGS_TAB
+                        && value == &Value::Bool(true)
+                })
+        );
+
+        config.desktop_sidecar.show_settings_tab_office_addin = Some(false);
+        let office_environment = build_frontend_environment(&config, FrontendKind::OfficeAddin);
+        assert!(
+            office_environment
+                .additional_environment
+                .iter()
+                .any(|(key, value)| {
+                    key == FRONTEND_ENV_KEY_DESKTOP_SIDECAR_SHOW_SETTINGS_TAB
+                        && value == &Value::Bool(false)
+                })
+        );
     }
 
     #[test]

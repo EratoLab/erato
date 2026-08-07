@@ -95,6 +95,7 @@ function renderDialog({
   initialEntries = ["/"],
   initialTab,
   mcpServersTabEnabled = true,
+  desktopSidecarTabEnabled = false,
   dataTabEnabled = true,
   audioTranscriptionEnabled = false,
   onMcpOauthCallbackHandled,
@@ -117,6 +118,7 @@ function renderDialog({
     | "mcpServers"
     | "data";
   mcpServersTabEnabled?: boolean;
+  desktopSidecarTabEnabled?: boolean;
   dataTabEnabled?: boolean;
   audioTranscriptionEnabled?: boolean;
   onMcpOauthCallbackHandled?: () => void;
@@ -139,6 +141,7 @@ function renderDialog({
             enabled: userPreferencesEnabled,
             dataTabEnabled,
             mcpServersTabEnabled,
+            desktopSidecarTabEnabled,
           },
           audioTranscription: {
             enabled: audioTranscriptionEnabled,
@@ -196,6 +199,21 @@ afterEach(() => {
 });
 
 describe("UserPreferencesDialog", () => {
+  it("shows the desktop sidecar tab only when enabled", () => {
+    renderDialog({ desktopSidecarTabEnabled: true });
+
+    expect(
+      screen.getByRole("tab", { name: "Desktop Sidecar" }),
+    ).toBeInTheDocument();
+
+    cleanup();
+    renderDialog({ desktopSidecarTabEnabled: false });
+
+    expect(
+      screen.queryByRole("tab", { name: "Desktop Sidecar" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("renders accessible vertical tabs and linked tabpanels", () => {
     renderDialog();
 

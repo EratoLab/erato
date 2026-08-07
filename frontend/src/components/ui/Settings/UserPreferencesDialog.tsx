@@ -34,10 +34,12 @@ import {
   MenuScaleIcon,
   ResolvedIcon,
   CheckCircleIcon,
+  ComputerIcon,
   VoiceIcon,
   WarningCircleIcon,
 } from "../icons";
 import { AppearanceTabContent } from "./AppearanceTabContent";
+import { DesktopSidecarTabContent } from "./DesktopSidecarTabContent";
 
 import type {
   McpServerStatus,
@@ -51,6 +53,7 @@ type PreferencesTab =
   | "personalization"
   | "appearance"
   | "audio"
+  | "desktopSidecar"
   | "mcpServers"
   | "data";
 
@@ -81,6 +84,7 @@ export function UserPreferencesDialog({
   const {
     enabled: personalizationEnabled,
     dataTabEnabled,
+    desktopSidecarTabEnabled,
     mcpServersTabEnabled,
   } = useUserPreferencesFeature();
   const { enabled: audioTranscriptionEnabled } = useAudioTranscriptionFeature();
@@ -130,6 +134,10 @@ export function UserPreferencesDialog({
             "personalization",
             "appearance",
             ...(audioInputSettingsEnabled ? (["audio"] as const) : []),
+            ...(desktopSidecarTabEnabled
+              ? // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal preferences tab id
+                (["desktopSidecar"] as const)
+              : []),
             ...(mcpServersTabEnabled
               ? // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal preferences tab id
                 (["mcpServers"] as const)
@@ -139,6 +147,10 @@ export function UserPreferencesDialog({
         : [
             "appearance",
             ...(audioInputSettingsEnabled ? (["audio"] as const) : []),
+            ...(desktopSidecarTabEnabled
+              ? // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal preferences tab id
+                (["desktopSidecar"] as const)
+              : []),
             ...(mcpServersTabEnabled
               ? // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal preferences tab id
                 (["mcpServers"] as const)
@@ -148,6 +160,7 @@ export function UserPreferencesDialog({
     [
       audioInputSettingsEnabled,
       dataTabEnabled,
+      desktopSidecarTabEnabled,
       mcpServersTabEnabled,
       personalizationEnabled,
     ],
@@ -293,6 +306,10 @@ export function UserPreferencesDialog({
       id: "preferences.dialog.tabs.audio",
       message: "Audio",
     }),
+    desktopSidecar: t({
+      id: "preferences.dialog.tabs.desktopSidecar",
+      message: "Desktop Sidecar",
+    }),
     mcpServers: t({
       id: "preferences.dialog.tabs.mcpServers",
       message: "MCP servers",
@@ -304,6 +321,7 @@ export function UserPreferencesDialog({
     personalization: <MenuScaleIcon className="size-4" />,
     appearance: <MediaImageIcon className="size-4" />,
     audio: <VoiceIcon className="size-4" />,
+    desktopSidecar: <ComputerIcon className="size-4" />,
     mcpServers: (
       <ResolvedIcon
         iconId="simpleicons-modelcontextprotocol"
@@ -318,6 +336,7 @@ export function UserPreferencesDialog({
     personalization: `${tabGroupId}-tab-personalization`,
     appearance: `${tabGroupId}-tab-appearance`,
     audio: `${tabGroupId}-tab-audio`,
+    desktopSidecar: `${tabGroupId}-tab-desktop-sidecar`,
     mcpServers: `${tabGroupId}-tab-mcp-servers`,
     data: `${tabGroupId}-tab-data`,
   } satisfies Record<PreferencesTab, string>;
@@ -326,6 +345,7 @@ export function UserPreferencesDialog({
     personalization: `${tabGroupId}-panel-personalization`,
     appearance: `${tabGroupId}-panel-appearance`,
     audio: `${tabGroupId}-panel-audio`,
+    desktopSidecar: `${tabGroupId}-panel-desktop-sidecar`,
     mcpServers: `${tabGroupId}-panel-mcp-servers`,
     data: `${tabGroupId}-panel-data`,
   } satisfies Record<PreferencesTab, string>;
@@ -685,6 +705,20 @@ export function UserPreferencesDialog({
                 <AudioInputTabContent
                   isActive={isOpen && activeTab === "audio"}
                 />
+              </section>
+            ) : null}
+
+            {desktopSidecarTabEnabled ? (
+              <section
+                id={panelIds.desktopSidecar}
+                role="tabpanel"
+                aria-labelledby={tabIds.desktopSidecar}
+                hidden={activeTab !== "desktopSidecar"}
+                className="space-y-4"
+              >
+                {activeTab === "desktopSidecar" ? (
+                  <DesktopSidecarTabContent />
+                ) : null}
               </section>
             ) : null}
 

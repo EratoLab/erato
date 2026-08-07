@@ -95,6 +95,7 @@ describe("FeatureConfigProvider", () => {
       msalClientId: null,
       msalAuthority: null,
       maskReasoningTraceText: false,
+      desktopSidecarSettingsTabEnabled: false,
     });
   });
 
@@ -168,6 +169,7 @@ describe("FeatureConfigProvider", () => {
           enabled: true,
           dataTabEnabled: true,
           mcpServersTabEnabled: false,
+          desktopSidecarTabEnabled: false,
         },
         cloudProviders: {
           availableProviders: [],

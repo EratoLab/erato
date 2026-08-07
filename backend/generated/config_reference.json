@@ -272,6 +272,8 @@
   "desktop_sidecar.distribution.directory": {},
   "desktop_sidecar.distribution.enabled": {},
   "desktop_sidecar.organization_configuration.show_tray_icon": {},
+  "desktop_sidecar.show_settings_tab": {},
+  "desktop_sidecar.show_settings_tab_office_addin": {},
   "environment": {
     "hide_in_docs": true
   },

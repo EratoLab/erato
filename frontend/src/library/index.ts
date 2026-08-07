@@ -59,6 +59,7 @@ export {
 } from "@/components/ui/Message/ActionConfirmationCard";
 export { AppearanceTabContent } from "@/components/ui/Settings/AppearanceTabContent";
 export { AudioInputTabContent } from "@/components/ui/Settings/AudioInputTabContent";
+export { DesktopSidecarTabContent } from "@/components/ui/Settings/DesktopSidecarTabContent";
 export {
   AssistantWelcomeScreen,
   type AssistantWelcomeScreenProps,
@@ -119,6 +120,7 @@ export { I18nProvider } from "@/providers/I18nProvider";
 export { ProfileProvider } from "@/providers/ProfileProvider";
 export {
   DesktopSidecarProvider,
+  DEFAULT_DESKTOP_SIDECAR_ENDPOINT,
   resolveDesktopSidecarEndpoint,
   useDesktopSidecar,
   type DesktopSidecarContextValue,

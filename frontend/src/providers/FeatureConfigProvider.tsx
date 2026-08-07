@@ -105,6 +105,8 @@ interface UserPreferencesFeatureConfig {
   dataTabEnabled: boolean;
   /** Whether the MCP servers tab is shown in the preferences dialog */
   mcpServersTabEnabled: boolean;
+  /** Whether the desktop sidecar connection tab is shown in preferences */
+  desktopSidecarTabEnabled: boolean;
 }
 
 /**
@@ -258,6 +260,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
     enabled: false,
     dataTabEnabled: true,
     mcpServersTabEnabled: false,
+    desktopSidecarTabEnabled: false,
   },
   cloudProviders: {
     availableProviders: [],
@@ -361,6 +364,7 @@ function createFeatureConfig(
       enabled: environment.userPreferencesEnabled,
       dataTabEnabled: environment.userPreferencesDataTabEnabled,
       mcpServersTabEnabled: environment.mcpServersTabEnabled,
+      desktopSidecarTabEnabled: environment.desktopSidecarSettingsTabEnabled,
     },
     cloudProviders: {
       availableProviders,

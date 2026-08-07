@@ -32,6 +32,9 @@ export interface DesktopSidecarProviderProps extends PropsWithChildren {
   retryDiscovery?: boolean;
 }
 
+export const DEFAULT_DESKTOP_SIDECAR_ENDPOINT =
+  "http://127.0.0.1:23123/erato/sidecar/rpc";
+
 const emptySnapshot: SidecarSnapshot = {
   state: "unavailable",
   protocolVersion: null,

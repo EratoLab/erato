@@ -64,6 +64,7 @@ const createMockEnv = (overrides: Partial<Env> = {}): Env => ({
   sidebarLogoDarkPath: null,
   sidebarChatHistoryShowMetadata: true,
   maskReasoningTraceText: false,
+  desktopSidecarSettingsTabEnabled: false,
   ...overrides,
 });
 
