@@ -824,7 +824,7 @@ msgstr "Everything the assistant can connect to or act through. Open an entry to
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.serversTools.heading"
-msgstr "Servers & Tools"
+msgstr "MCP & Apps"
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
@@ -864,7 +864,7 @@ msgstr "Behavior"
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.tabs.serversTools"
-msgstr "Servers & Tools"
+msgstr "MCP & Apps"
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx

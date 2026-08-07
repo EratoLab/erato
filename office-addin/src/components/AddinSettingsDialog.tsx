@@ -71,7 +71,7 @@ export function AddinSettingsDialog({
     }),
     serversTools: t({
       id: "officeAddin.settings.tabs.serversTools",
-      message: "Servers & Tools",
+      message: "MCP & Apps",
     }),
     addin: t({
       id: "officeAddin.settings.tabs.behavior",
@@ -283,7 +283,7 @@ export function AddinSettingsDialog({
                 <h2 className="text-sm font-medium text-theme-fg-primary">
                   {t({
                     id: "officeAddin.settings.serversTools.heading",
-                    message: "Servers & Tools",
+                    message: "MCP & Apps",
                   })}
                 </h2>
                 <p className="text-sm text-theme-fg-secondary">

@@ -3021,7 +3021,7 @@ msgstr "Todo aquello a lo que el asistente puede conectarse o a través de lo qu
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.serversTools.heading"
-msgstr "Servidores y herramientas"
+msgstr "MCP & Apps"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
@@ -3061,7 +3061,7 @@ msgstr "Personalización"
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.tabs.serversTools"
-msgstr "Servidores y herramientas"
+msgstr "MCP & Apps"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

@@ -293,7 +293,7 @@ export function UserPreferencesDialog({
     }),
     serversTools: t({
       id: "preferences.dialog.tabs.serversTools",
-      message: "Servers & Tools",
+      message: "MCP & Apps",
     }),
     data: t({ id: "preferences.dialog.tabs.data", message: "Data" }),
   } satisfies Record<PreferencesTab, string>;
@@ -690,7 +690,7 @@ export function UserPreferencesDialog({
                 <h2 className="text-sm font-medium text-theme-fg-primary">
                   {t({
                     id: "preferences.dialog.serversTools.heading",
-                    message: "Servers & Tools",
+                    message: "MCP & Apps",
                   })}
                 </h2>
                 <p className="text-sm text-theme-fg-secondary">

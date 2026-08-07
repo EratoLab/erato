@@ -824,7 +824,7 @@ msgstr "Alles, womit sich der Assistent verbinden oder handeln kann. Öffnen Sie
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.serversTools.heading"
-msgstr "Server & Tools"
+msgstr "MCP & Apps"
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
@@ -864,7 +864,7 @@ msgstr "Verhalten"
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.tabs.serversTools"
-msgstr "Server & Tools"
+msgstr "MCP & Apps"
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx

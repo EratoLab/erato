@@ -206,9 +206,7 @@ describe("UserPreferencesDialog", () => {
       mcpServersTabEnabled: false,
     });
 
-    expect(
-      screen.getByRole("tab", { name: "Servers & Tools" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "MCP & Apps" })).toBeInTheDocument();
 
     cleanup();
     renderDialog({
@@ -217,7 +215,7 @@ describe("UserPreferencesDialog", () => {
     });
 
     expect(
-      screen.queryByRole("tab", { name: "Servers & Tools" }),
+      screen.queryByRole("tab", { name: "MCP & Apps" }),
     ).not.toBeInTheDocument();
   });
 
@@ -230,7 +228,7 @@ describe("UserPreferencesDialog", () => {
     });
     const appearanceTab = screen.getByRole("tab", { name: "Appearance" });
     const mcpServersTab = screen.getByRole("tab", {
-      name: "Servers & Tools",
+      name: "MCP & Apps",
     });
     const dataTab = screen.getByRole("tab", { name: "Data" });
     const personalizationPanel = screen.getByRole("tabpanel", {
@@ -335,7 +333,7 @@ describe("UserPreferencesDialog", () => {
     });
 
     expect(
-      screen.queryByRole("tab", { name: "Servers & Tools" }),
+      screen.queryByRole("tab", { name: "MCP & Apps" }),
     ).not.toBeInTheDocument();
   });
 
@@ -434,7 +432,7 @@ describe("UserPreferencesDialog", () => {
 
     renderDialog();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Servers & Tools" }));
+    fireEvent.click(screen.getByRole("tab", { name: "MCP & Apps" }));
 
     expect(
       await screen.findByText(
@@ -511,7 +509,7 @@ describe("UserPreferencesDialog", () => {
 
     renderDialog();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Servers & Tools" }));
+    fireEvent.click(screen.getByRole("tab", { name: "MCP & Apps" }));
     await screen.findByRole("button", { name: "Authorize" });
 
     fireEvent.click(screen.getByRole("button", { name: "Authorize" }));
@@ -567,7 +565,7 @@ describe("UserPreferencesDialog", () => {
 
     renderDialog();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Servers & Tools" }));
+    fireEvent.click(screen.getByRole("tab", { name: "MCP & Apps" }));
     await screen.findByRole("button", { name: "Disconnect" });
 
     fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));

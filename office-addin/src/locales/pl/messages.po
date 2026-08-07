@@ -824,7 +824,7 @@ msgstr "Wszystko, z czym asystent może się łączyć lub przez co może dział
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.serversTools.heading"
-msgstr "Serwery i narzędzia"
+msgstr "MCP & Apps"
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
@@ -864,7 +864,7 @@ msgstr "Zachowanie"
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.tabs.serversTools"
-msgstr "Serwery i narzędzia"
+msgstr "MCP & Apps"
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
