@@ -597,12 +597,12 @@ msgid "officeAddin.sessionPick.title"
 msgstr "Wybierz ostatni czat"
 
 #. js-lingui-explicit-id
-#: src/components/BehaviorTabContent.tsx
+#: src/components/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.always.helper"
 msgstr "Wykonuje akcję bez pytania. Nic nie zostanie wysłane, dopóki nie klikniesz Wyślij w Outlooku."
 
 #. js-lingui-explicit-id
-#: src/components/BehaviorTabContent.tsx
+#: src/components/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.always.label"
 msgstr "Zawsze zezwalaj"
 
@@ -622,42 +622,47 @@ msgstr "Zawsze zezwalaj"
 #~ msgstr "Pytaj za każdym razem"
 
 #. js-lingui-explicit-id
-#: src/components/BehaviorTabContent.tsx
+#: src/components/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.clickConsent.always.locked"
 msgstr "Zablokowane: Twoja organizacja wymaga potwierdzenia za każdym razem, gdy ta akcja jest uruchamiana automatycznie."
 
 #. js-lingui-explicit-id
-#: src/components/BehaviorTabContent.tsx
+#: src/components/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.clickConsent.ask.helper"
 msgstr "Wyświetla krok potwierdzenia tylko wtedy, gdy asystent uruchamia tę akcję samodzielnie. Kliknięcie przycisku akcji zawsze wykonuje ją bezpośrednio."
 
 #. js-lingui-explicit-id
-#: src/components/BehaviorTabContent.tsx
+#: src/components/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.clickConsent.ask.label"
 msgstr "Pytaj przed automatycznym uruchomieniem"
 
 #. js-lingui-explicit-id
-#: src/components/BehaviorTabContent.tsx
+#: src/components/ClientActionsSettings.tsx
+msgid "officeAddin.settings.addin.clientActions.empty"
+msgstr "Obecnie nie ma dostępnych akcji sugerowanych przez asystenta."
+
+#. js-lingui-explicit-id
+#: src/components/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.intro"
 msgstr "Twoje decyzje z potwierdzenia na czacie są zapisywane tutaj i można je zmienić w dowolnym momencie. Nic nie zostanie wysłane, dopóki nie klikniesz Wyślij w Outlooku."
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
-msgid "officeAddin.settings.addin.clientActions.legend"
-msgstr "Akcje sugerowane przez asystenta"
+#~ msgid "officeAddin.settings.addin.clientActions.legend"
+#~ msgstr "Akcje sugerowane przez asystenta"
 
 #. js-lingui-explicit-id
-#: src/components/BehaviorTabContent.tsx
+#: src/components/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.never.helper"
 msgstr "Ukrywa tę akcję i ignoruje sugestię asystenta."
 
 #. js-lingui-explicit-id
-#: src/components/BehaviorTabContent.tsx
+#: src/components/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.never.label"
 msgstr "Nigdy"
 
 #. js-lingui-explicit-id
-#: src/components/BehaviorTabContent.tsx
+#: src/components/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.scope"
 msgstr "Te decyzje są zapisywane tylko na tym urządzeniu."
 
@@ -808,8 +813,33 @@ msgstr "Brak dostępnych ustawień."
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
-msgid "officeAddin.settings.tabs.addin"
-msgstr "Dodatek"
+msgid "officeAddin.settings.serversTools.authorizeInBrowser"
+msgstr "Autoryzuj w przeglądarce"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.serversTools.description"
+msgstr "Wszystko, z czym asystent może się łączyć lub przez co może działać. Otwórz pozycję, aby sprawdzić połączenie lub ustawić, co może robić."
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.serversTools.heading"
+msgstr "Serwery i narzędzia"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.serversTools.outlookActions"
+msgstr "Akcje programu Outlook"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.serversTools.outlookActions.caption"
+msgstr "Wbudowane w Outlooka · to urządzenie"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+#~ msgid "officeAddin.settings.tabs.addin"
+#~ msgstr "Dodatek"
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
@@ -823,8 +853,18 @@ msgstr "Mikrofon"
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
-msgid "officeAddin.settings.tabs.desktopSidecar"
-msgstr "Desktop Sidecar"
+msgid "officeAddin.settings.tabs.behavior"
+msgstr "Zachowanie"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+#~ msgid "officeAddin.settings.tabs.desktopSidecar"
+#~ msgstr "Desktop Sidecar"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.tabs.serversTools"
+msgstr "Serwery i narzędzia"
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx

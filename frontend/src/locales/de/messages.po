@@ -2885,36 +2885,36 @@ msgstr "Die Entscheidung konnte nicht aktualisiert werden. Bitte versuchen Sie e
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.mcpServers.description"
-msgstr "Prüfe die für dein Konto verfügbaren MCP-Server und schließe bei Bedarf die Autorisierung ab."
+#~ msgid "preferences.dialog.mcpServers.description"
+#~ msgstr "Prüfe die für dein Konto verfügbaren MCP-Server und schließe bei Bedarf die Autorisierung ab."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.empty"
 msgstr "Derzeit sind keine MCP-Server für dich verfügbar."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.mcpServers.heading"
-msgstr "MCP-Serververbindungen"
+#~ msgid "preferences.dialog.mcpServers.heading"
+#~ msgstr "MCP-Serververbindungen"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.load.error"
 msgstr "MCP-Server konnten nicht geladen werden. Bitte versuche es erneut."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.loading"
 msgstr "MCP-Serverstatus wird geladen ..."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.oauth.authorize"
 msgstr "Autorisieren"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.oauth.authorizing"
 msgstr "Autorisierung läuft ..."
 
@@ -2924,7 +2924,7 @@ msgstr "Autorisierung läuft ..."
 #~ msgstr "Das Autorisierungsfenster wurde geschlossen, bevor die Verbindung abgeschlossen war."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.oauth.disconnect"
 msgstr "Trennen"
 
@@ -2934,7 +2934,7 @@ msgid "preferences.dialog.mcpServers.oauth.disconnectError"
 msgstr "Die Verbindung konnte nicht getrennt werden. Bitte versuche es erneut."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.oauth.disconnecting"
 msgstr "Trennen..."
 
@@ -2979,32 +2979,32 @@ msgstr "Autorisierung abgeschlossen. Der Server ist einsatzbereit."
 #~ msgstr "Wird aktualisiert ..."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.status.failure.description"
 msgstr "Der Server ist konfiguriert, aber das Backend konnte keine Verbindung zu ihm herstellen."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.status.failure.label"
 msgstr "Verbindung fehlgeschlagen"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.status.needsAuthentication.description"
 msgstr "Eine Autorisierung ist erforderlich, bevor dieser Server verwendet werden kann."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.status.needsAuthentication.label"
 msgstr "Authentifizierung erforderlich"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.status.success.description"
 msgstr "Verbunden und einsatzbereit."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.status.success.label"
 msgstr "Verbunden"
 
@@ -3012,6 +3012,21 @@ msgstr "Verbunden"
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.save.error"
 msgstr "Einstellungen konnten nicht gespeichert werden. Bitte versuche es erneut."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.serversTools.description"
+msgstr "Alles, womit sich der Assistent verbinden oder handeln kann. Öffnen Sie einen Eintrag, um die Verbindung zu prüfen oder festzulegen, was er tun darf."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.serversTools.heading"
+msgstr "Server & Tools"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
+msgid "preferences.dialog.serversTools.scope.thisDevice"
+msgstr "{status} · dieses Gerät"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -3030,18 +3045,23 @@ msgstr "Daten"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.tabs.desktopSidecar"
-msgstr ""
+#~ msgid "preferences.dialog.tabs.desktopSidecar"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.tabs.mcpServers"
-msgstr ""
+#~ msgid "preferences.dialog.tabs.mcpServers"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.tabs.personalization"
 msgstr "Personalisierung"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.tabs.serversTools"
+msgstr "Server & Tools"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

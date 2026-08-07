@@ -2885,36 +2885,36 @@ msgstr "Could not update the decision. Please try again."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.mcpServers.description"
-msgstr "Review the MCP servers available to your account and complete any required authorization."
+#~ msgid "preferences.dialog.mcpServers.description"
+#~ msgstr "Review the MCP servers available to your account and complete any required authorization."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.empty"
 msgstr "No MCP servers are currently available to you."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.mcpServers.heading"
-msgstr "MCP server connections"
+#~ msgid "preferences.dialog.mcpServers.heading"
+#~ msgstr "MCP server connections"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.load.error"
 msgstr "Could not load MCP servers. Please try again."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.loading"
 msgstr "Loading MCP server status..."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.oauth.authorize"
 msgstr "Authorize"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.oauth.authorizing"
 msgstr "Authorizing..."
 
@@ -2924,7 +2924,7 @@ msgstr "Authorizing..."
 #~ msgstr "The authorization window was closed before the connection finished."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.oauth.disconnect"
 msgstr "Disconnect"
 
@@ -2934,7 +2934,7 @@ msgid "preferences.dialog.mcpServers.oauth.disconnectError"
 msgstr "Could not disconnect. Please try again."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.oauth.disconnecting"
 msgstr "Disconnecting..."
 
@@ -2979,32 +2979,32 @@ msgstr "Authorization complete. The server is ready to use."
 #~ msgstr "Refreshing..."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.status.failure.description"
 msgstr "The server is configured, but the backend could not connect to it."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.status.failure.label"
 msgstr "Connection failed"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.status.needsAuthentication.description"
 msgstr "Authorization is required before this server can be used."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.status.needsAuthentication.label"
 msgstr "Needs authentication"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.status.success.description"
 msgstr "Connected and ready to use."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.status.success.label"
 msgstr "Connected"
 
@@ -3012,6 +3012,21 @@ msgstr "Connected"
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.save.error"
 msgstr "Could not save preferences. Please try again."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.serversTools.description"
+msgstr "Everything the assistant can connect to or act through. Open an entry to fix its connection or adjust what it may do."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.serversTools.heading"
+msgstr "Servers & Tools"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
+msgid "preferences.dialog.serversTools.scope.thisDevice"
+msgstr "{status} · this device"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -3030,18 +3045,23 @@ msgstr "Data"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.tabs.desktopSidecar"
-msgstr "Desktop Sidecar"
+#~ msgid "preferences.dialog.tabs.desktopSidecar"
+#~ msgstr "Desktop Sidecar"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.tabs.mcpServers"
-msgstr "MCP servers"
+#~ msgid "preferences.dialog.tabs.mcpServers"
+#~ msgstr "MCP servers"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.tabs.personalization"
 msgstr "Personalization"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.tabs.serversTools"
+msgstr "Servers & Tools"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
