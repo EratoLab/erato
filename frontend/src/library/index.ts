@@ -61,6 +61,14 @@ export { AppearanceTabContent } from "@/components/ui/Settings/AppearanceTabCont
 export { AudioInputTabContent } from "@/components/ui/Settings/AudioInputTabContent";
 export { DesktopSidecarTabContent } from "@/components/ui/Settings/DesktopSidecarTabContent";
 export {
+  EntityRow,
+  type EntityRowStatus,
+} from "@/components/ui/Settings/EntityRow";
+export {
+  ServersToolsPane,
+  type ServersToolsMcpConfig,
+} from "@/components/ui/Settings/ServersToolsPane";
+export {
   AssistantWelcomeScreen,
   type AssistantWelcomeScreenProps,
 } from "@/components/ui/Assistant/AssistantWelcomeScreen";
@@ -194,6 +202,7 @@ export {
 export {
   ComputerIcon,
   DocumentIcon,
+  MailIcon,
   MoonIcon,
   SunIcon,
 } from "@/components/ui/icons";
