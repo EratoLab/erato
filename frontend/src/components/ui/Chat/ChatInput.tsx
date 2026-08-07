@@ -626,6 +626,18 @@ export const ChatInput = ({
   const [queueReplacePending, setQueueReplacePending] = useState(false);
   const hasPendingConfirmation = useHasPendingConfirmation(chatId);
 
+  // Jump to the newest unresolved consent card. A DOM query, not a ref: the
+  // cards render inside the message list, an entirely different subtree, and
+  // the shared confirmation registry tracks only opaque ids.
+  const scrollToPendingConfirmation = useCallback(() => {
+    const cards = document.querySelectorAll("[data-pending-confirmation]");
+    const card = cards.item(cards.length - 1);
+    if (card instanceof HTMLElement) {
+      card.scrollIntoView({ block: "center" });
+      card.focus({ preventScroll: true });
+    }
+  }, []);
+
   // Enter-while-a-turn-is-generating queues the draft instead of sending.
   // Gated on isPendingResponse specifically (a turn is in flight) — not the
   // broader send lock, which also covers the initial history load that produces
@@ -2142,6 +2154,38 @@ export const ChatInput = ({
           >
             {dictationError ?? recordingError}
           </Alert>
+        )}
+
+        {/* Unresolved consent card in the transcript: the turn is paused and
+            a queued message will not send until it is answered, so point at
+            it from the composer, where the user is looking. Same geometry as
+            the queued-message chip below. */}
+        {hasPendingConfirmation && (
+          <div
+            className="theme-transition mb-2 flex items-center gap-2 border bg-theme-bg-primary text-sm [border-color:var(--theme-border-attachment)]"
+            style={{
+              borderRadius: "var(--theme-radius-message)",
+              padding:
+                "var(--theme-spacing-message-padding-y) var(--theme-spacing-message-padding-x)",
+            }}
+            data-ui="chat-input-pending-confirmation"
+            data-testid="chat-input-pending-confirmation"
+            role="status"
+            aria-live="polite"
+          >
+            <span className="min-w-0 flex-auto truncate text-theme-warning-fg">
+              {t`Action required — the assistant is waiting for your approval`}
+            </span>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={scrollToPendingConfirmation}
+              className="shrink-0"
+              data-testid="chat-input-pending-confirmation-view"
+            >
+              {t`View`}
+            </Button>
+          </div>
         )}
 
         {/* Queued next message: auto-sends when the current turn finishes.

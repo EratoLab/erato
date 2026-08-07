@@ -3464,6 +3464,10 @@ msgstr "1 element"
 msgid "Accepted types:"
 msgstr "Akceptowane typy plików:"
 
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Action required — the assistant is waiting for your approval"
+msgstr "Wymagane działanie — asystent czeka na Twoją zgodę"
+
 #: src/components/ui/FileUpload/FileUpload.tsx
 msgid "All file types accepted"
 msgstr "Wszystkie typy plików akceptowane"
@@ -4873,6 +4877,10 @@ msgstr "Używam narzędzi"
 #: src/pages/assistantHubUtils.tsx
 #~ msgid "Version {versionNumber}"
 #~ msgstr "Wersja {versionNumber}"
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "View"
+msgstr "Pokaż"
 
 #: src/components/ui/Chat/FrequentAssistantsList.tsx
 #~ msgid "View all assistants"

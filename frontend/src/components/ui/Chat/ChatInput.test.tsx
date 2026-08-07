@@ -3359,6 +3359,44 @@ describe("ChatInput", () => {
       useMessageQueueStore.setState({ queuedBySessionId: {} });
     });
 
+    it("shows an action-required chip while a consent card is pending and jumps to it", async () => {
+      const { i18n } = await import("@lingui/core");
+      useConfirmationRegistryStore
+        .getState()
+        .registerConfirmation(CHAT_ID, "confirmation-1");
+
+      renderQueue({ isPendingResponse: false }, vi.fn(), i18n);
+
+      expect(
+        screen.getByTestId("chat-input-pending-confirmation"),
+      ).toBeInTheDocument();
+
+      // The consent card renders in the message list subtree; the chip finds
+      // it via its data marker.
+      const card = document.createElement("div");
+      card.setAttribute("data-pending-confirmation", "true");
+      card.tabIndex = -1;
+      const scrollSpy = vi.fn();
+      card.scrollIntoView = scrollSpy;
+      document.body.appendChild(card);
+
+      fireEvent.click(
+        screen.getByTestId("chat-input-pending-confirmation-view"),
+      );
+      expect(scrollSpy).toHaveBeenCalled();
+      expect(document.activeElement).toBe(card);
+      card.remove();
+
+      act(() => {
+        useConfirmationRegistryStore
+          .getState()
+          .unregisterConfirmation(CHAT_ID, "confirmation-1");
+      });
+      expect(
+        screen.queryByTestId("chat-input-pending-confirmation"),
+      ).not.toBeInTheDocument();
+    });
+
     it("queues the draft on Enter while generating instead of sending", async () => {
       const { i18n } = await import("@lingui/core");
       const onSendMessage = vi.fn();
