@@ -7368,6 +7368,7 @@ async fn persist_background_generation_failure(
     app_state: &AppState,
     policy: &PolicyEngine,
     me_user: &MeProfile,
+    chat_id: &Uuid,
     assistant_message_id: Uuid,
     chat_provider_id: &str,
     report: &Report,
@@ -7390,6 +7391,16 @@ async fn persist_background_generation_failure(
             "Failed to persist generation failure metadata"
         );
         capture_report(&error);
+    }
+
+    // The turn ended in an error, so the chat is no longer stopped on a tool
+    // approval; without this a marker left by a superseded parked message
+    // would report action_required indefinitely, as this path skips the
+    // completion sync that otherwise maintains it.
+    if let Err(error) =
+        crate::models::chat::set_pending_tool_approval(&app_state.db, chat_id, false).await
+    {
+        tracing::warn!(chat_id = %chat_id, %error, "Failed to clear pending tool approval marker");
     }
 
     let error_event = MessageSubmitStreamingResponseError {
@@ -7699,6 +7710,7 @@ async fn run_message_submit_task(
                 app_state,
                 policy,
                 me_user,
+                &chat.id,
                 initial_assistant_message.id,
                 &chat_provider_id,
                 &error,
@@ -8054,6 +8066,7 @@ pub async fn regenerate_message_sse(
                         &app_state,
                         &policy,
                         &me_user,
+                        &chat.id,
                         initial_assistant_message.id,
                         &chat_provider_id,
                         &error,
@@ -8448,6 +8461,7 @@ pub async fn edit_message_sse(
                         &app_state,
                         &policy,
                         &me_user,
+                        &chat.id,
                         initial_assistant_message.id,
                         &chat_provider_id,
                         &error,
