@@ -200,6 +200,51 @@ pub struct ToolUse {
     pub ended_at: Option<String>,
 }
 
+/// Snapshot of the MCP annotations used to decide whether a tool call needs
+/// user approval. The values are normalized to the MCP defaults so an absent
+/// annotation remains auditable as the pessimistic interpretation.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolApprovalAnnotations {
+    pub read_only_hint: bool,
+    pub destructive_hint: bool,
+    pub idempotent_hint: bool,
+    pub open_world_hint: bool,
+}
+
+/// A durable request for user approval before an MCP tool call is executed.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+pub struct ContentPartToolApprovalRequest {
+    pub tool_call_id: String,
+    pub tool_name: String,
+    pub mcp_server_id: String,
+    pub input: JsonValue,
+    pub annotations: ToolApprovalAnnotations,
+    pub preset: String,
+    /// Snapshot the global policy so the client can hide the option when
+    /// persistent approval settings are disabled.
+    pub allow_always: bool,
+    pub requested_at: String,
+}
+
+/// Records a user approval in the assistant message lifecycle.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+pub struct ContentPartToolApproval {
+    pub tool_call_id: String,
+    #[serde(default)]
+    pub always_allow: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_tool_approval_setting_id: Option<Uuid>,
+    pub approved_at: String,
+}
+
+/// Records a user rejection in the assistant message lifecycle.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+pub struct ContentPartToolRejection {
+    pub tool_call_id: String,
+    pub rejected_at: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "content_type")]
@@ -207,6 +252,9 @@ pub enum ContentPart {
     Text(ContentPartText),
     Reasoning(ContentPartReasoning),
     ToolUse(ToolUse),
+    ToolApprovalRequest(ContentPartToolApprovalRequest),
+    ToolApproval(ContentPartToolApproval),
+    ToolRejection(ContentPartToolRejection),
     TextFilePointer(ContentPartTextFilePointer),
     ImageFilePointer(ContentPartImageFilePointer),
     Image(ContentPartImage),
@@ -319,7 +367,71 @@ pub struct MessageSchema {
 impl MessageSchema {
     /// Validate a JSON value against the MessageSchema
     pub fn validate(json: &JsonValue) -> Result<Self, Report> {
-        serde_json::from_value(json.clone()).map_err(|e| eyre!("Invalid message format: {}", e))
+        let message: Self = serde_json::from_value(json.clone())
+            .map_err(|e| eyre!("Invalid message format: {}", e))?;
+        message.validate_tool_approval_lifecycle()?;
+        Ok(message)
+    }
+
+    /// Validate the durable approval lifecycle while leaving historical tool
+    /// messages (which predate approval content parts) untouched.
+    fn validate_tool_approval_lifecycle(&self) -> Result<(), Report> {
+        use std::collections::HashMap;
+
+        #[derive(Clone, Copy)]
+        enum State {
+            Requested,
+            Resolved,
+        }
+
+        let mut pending: HashMap<&str, State> = HashMap::new();
+        for part in &self.content {
+            match part {
+                ContentPart::ToolApprovalRequest(request) => {
+                    if pending
+                        .insert(request.tool_call_id.as_str(), State::Requested)
+                        .is_some()
+                    {
+                        return Err(eyre!(
+                            "Duplicate tool approval request for {}",
+                            request.tool_call_id
+                        ));
+                    }
+                }
+                ContentPart::ToolApproval(approval) => {
+                    match pending.get_mut(approval.tool_call_id.as_str()) {
+                        Some(state @ State::Requested) => *state = State::Resolved,
+                        _ => {
+                            return Err(eyre!(
+                                "Tool approval without a pending request for {}",
+                                approval.tool_call_id
+                            ));
+                        }
+                    }
+                }
+                ContentPart::ToolRejection(rejection) => {
+                    match pending.get_mut(rejection.tool_call_id.as_str()) {
+                        Some(state @ State::Requested) => *state = State::Resolved,
+                        _ => {
+                            return Err(eyre!(
+                                "Tool rejection without a pending request for {}",
+                                rejection.tool_call_id
+                            ));
+                        }
+                    }
+                }
+                ContentPart::ToolUse(tool_use) => {
+                    if matches!(
+                        pending.get(tool_use.tool_call_id.as_str()),
+                        Some(State::Resolved)
+                    ) {
+                        pending.remove(tool_use.tool_call_id.as_str());
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(())
     }
 
     /// Convert the schema to a JSON value
@@ -334,6 +446,9 @@ impl MessageSchema {
                 ContentPart::Text(text) => Some(text.text.as_str()),
                 ContentPart::Reasoning(_) => None,
                 ContentPart::ToolUse(_) => None,
+                ContentPart::ToolApprovalRequest(_) => None,
+                ContentPart::ToolApproval(_) => None,
+                ContentPart::ToolRejection(_) => None,
                 ContentPart::TextFilePointer(_) => None,
                 ContentPart::ImageFilePointer(_) => None,
                 ContentPart::Image(_) => None,
@@ -851,6 +966,9 @@ impl InputMessage {
             ContentPart::Text(content) => content.text.to_string(),
             ContentPart::Reasoning(_) => String::new(),
             ContentPart::ToolUse(_) => String::new(),
+            ContentPart::ToolApprovalRequest(_) => String::new(),
+            ContentPart::ToolApproval(_) => String::new(),
+            ContentPart::ToolRejection(_) => String::new(),
             ContentPart::TextFilePointer(_) => String::new(),
             ContentPart::ImageFilePointer(_) => String::new(),
             ContentPart::Image(_) => String::new(),

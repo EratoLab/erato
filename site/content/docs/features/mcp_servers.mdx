@@ -142,6 +142,13 @@ MCP servers are configured in your `erato.toml` file under the `[mcp_servers]` s
 [mcp_servers_global]
 max_session_idle_seconds = 1200
 
+# Disabled by default for backwards compatibility. When enabled, the
+# annotation policy determines whether an MCP tool call pauses for approval.
+[mcp_servers_global.approval]
+enabled = false
+preset = "permissive" # "permissive" or "restrictive"
+allow_always = false
+
 [mcp_servers.file_provider]
 transport_type = "sse"
 url = "http://127.0.0.1:63490/sse"
@@ -179,6 +186,14 @@ credential = "oidc_id_token"
 See the [Configuration Reference](../configuration#mcp_servers) for detailed configuration options.
 
 **Session timeout guidance:** If an MCP server allocates a lot of resources per session, set `mcp_servers_global.max_session_idle_seconds` (or that server's `max_session_idle_seconds`) to a low value so idle sessions are cleaned up quickly.
+
+### Tool-call approval
+
+`[mcp_servers_global.approval]` controls the global MCP approval gate and is disabled by default for backwards compatibility. With `preset = "permissive"`, a tool is paused only when its MCP `destructiveHint` is `true` (or absent). With `preset = "restrictive"`, a tool proceeds without a prompt only when it explicitly declares `readOnlyHint = true`, `destructiveHint = false`, and `openWorldHint = false`.
+
+`openWorldHint` represents the likelihood that a tool can send data outside the local trust boundary: permissive mode permits an explicitly non-destructive open-world tool, whereas restrictive mode prompts before it runs. `idempotentHint` remains retry metadata; it never changes the first-call approval decision. Missing annotations use pessimistic MCP defaults, so they require approval under both presets.
+
+Set `allow_always = true` to expose an **Always allow** choice. The resulting user setting is scoped to the user, MCP server ID, and tool name; it can be deactivated through the MCP approval settings API. Disabling `allow_always` hides the choice and prevents those persisted settings from bypassing future gates.
 
 ### Tool filtering
 

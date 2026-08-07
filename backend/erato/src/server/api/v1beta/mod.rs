@@ -16,6 +16,7 @@ pub mod share_grants;
 pub mod share_links;
 pub mod sharepoint;
 pub mod token_usage;
+pub mod user_tool_approval_settings;
 
 use crate::db::entity_ext::{chats, messages};
 use crate::models;
@@ -62,12 +63,13 @@ use crate::server::api::v1beta::mcp_servers::{
 };
 use crate::server::api::v1beta::me_profile_middleware::{MeProfile, UserProfile};
 use crate::server::api::v1beta::message_streaming::{
-    __path_abort_message_stream, __path_client_tool_result, __path_edit_message_sse,
-    __path_message_submit_sse, __path_regenerate_message_sse, __path_resume_message_sse,
-    AbortStreamRequest, AbortStreamResponse, ActionFacetRequest, ClientToolResultRequest,
-    ClientToolResultResponse, EditMessageRequest, EditMessageStreamingResponseMessage,
-    MessageSubmitRequest, MessageSubmitStreamingResponseMessage, ResumeStreamRequest,
-    abort_message_stream, client_tool_result, edit_message_sse, message_submit_sse,
+    __path_abort_message_stream, __path_client_tool_result, __path_continue_message_sse,
+    __path_edit_message_sse, __path_message_submit_sse, __path_regenerate_message_sse,
+    __path_resume_message_sse, AbortStreamRequest, AbortStreamResponse, ActionFacetRequest,
+    ClientToolResultRequest, ClientToolResultResponse, EditMessageRequest,
+    EditMessageStreamingResponseMessage, MessageSubmitRequest,
+    MessageSubmitStreamingResponseMessage, ResumeStreamRequest, abort_message_stream,
+    client_tool_result, continue_message_sse, edit_message_sse, message_submit_sse,
     regenerate_message_sse, resume_message_sse,
 };
 use crate::server::api::v1beta::share_grants::{
@@ -78,6 +80,10 @@ use crate::server::api::v1beta::share_links::{
     ResolveShareLinkResponse, SetShareLinkRequest, SetShareLinkResponse, ShareLink,
     ShareLinkForResourceResponse, ShareLinkQuery, get_share_link_for_resource, resolve_share_link,
     set_share_link,
+};
+use crate::server::api::v1beta::user_tool_approval_settings::{
+    __path_deactivate_user_tool_approval_setting, __path_list_user_tool_approval_settings,
+    deactivate_user_tool_approval_setting, list_user_tool_approval_settings,
 };
 use crate::services::file_storage::{
     ContentDispositionKind, SHAREPOINT_PROVIDER_ID, build_content_disposition,
@@ -136,7 +142,16 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/messages/editstream", post(edit_message_sse))
         .route("/messages/abortstream", post(abort_message_stream))
         .route("/messages/resumestream", post(resume_message_sse))
+        .route("/messages/continuestream", post(continue_message_sse))
         .route("/messages/clienttoolresult", post(client_tool_result))
+        .route(
+            "/mcp-tool-approval-settings",
+            get(list_user_tool_approval_settings),
+        )
+        .route(
+            "/mcp-tool-approval-settings/{setting_id}",
+            axum::routing::delete(deactivate_user_tool_approval_setting),
+        )
         .route("/recent_chats", get(recent_chats))
         .route("/generating", get(generating_chats))
         .route("/frequent_assistants", get(frequent_assistants))
@@ -371,7 +386,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         edit_message_sse,
         abort_message_stream,
         resume_message_sse,
+        continue_message_sse,
         client_tool_result,
+        list_user_tool_approval_settings,
+        deactivate_user_tool_approval_setting,
         create_chat,
         update_chat,
         archive_all_chats_endpoint,

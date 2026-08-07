@@ -2313,6 +2313,26 @@ msgid "library.toast.region"
 msgstr "Notifications"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "mcpApproval.alwaysAllowDisabled"
+msgstr "Locked: your organization requires confirmation each time this tool runs."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "mcpApproval.inputPreview"
+msgstr "View input parameters"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "mcpApproval.openWorldWarning"
+msgstr "This tool may send data to an external service."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "mcpApproval.title"
+msgstr "Allow MCP tool call?"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "message.copy.aria"
 msgstr "Copy message"
@@ -2799,6 +2819,36 @@ msgid "preferences.dialog.fields.nickname.placeholder"
 msgstr "What should the assistant call you? e.g. Max Mustermann"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.description"
+msgstr "Tools you chose to always allow from the in-chat confirmation. Remove an entry to be asked again."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.heading"
+msgstr "Always-allowed tools"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.loadError"
+msgstr "Could not load always-allowed tools. Please try again."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.remove"
+msgstr "Remove"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.removeError"
+msgstr "Could not remove the approval. Please try again."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.removing"
+msgstr "Removing..."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.mcpServers.authenticationMode"
 msgstr "Authentication mode"
@@ -3239,6 +3289,16 @@ msgstr "Thinking"
 #: src/components/ui/Trace/TraceThinkingPlaceholder.tsx
 msgid "trace.thinking.placeholder"
 msgstr "Thinking…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.approved"
+msgstr "Approved"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.denied"
+msgstr "Denied"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ToolUseStep.tsx

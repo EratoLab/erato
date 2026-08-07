@@ -6,11 +6,13 @@ import { ToolCallInput, ToolCallOutput } from "@/components/ui/ToolCall";
 import { TraceStep } from "../TraceStep";
 import { railIconFor } from "../icons";
 
+import type { ToolApprovalStatus } from "../Trace";
 import type { BaseStepProps, TraceStepStatus } from "../types";
 import type { ToolUse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 interface ToolUseStepProps extends BaseStepProps {
   part: ToolUse & { content_type: "tool_use" };
+  approvalStatus?: ToolApprovalStatus;
 }
 
 // Pills are only shown for states that need extra emphasis beyond the rail
@@ -26,6 +28,17 @@ const STATUS_LABEL = {
   error: () => t({ id: "trace.tool.failed", message: "Failed" }),
 } as const;
 
+const APPROVAL_PILL = {
+  approved: {
+    className: "bg-theme-success-bg text-theme-success-fg",
+    label: () => t({ id: "trace.tool.approved", message: "Approved" }),
+  },
+  denied: {
+    className: "bg-theme-error-bg text-theme-error-fg",
+    label: () => t({ id: "trace.tool.denied", message: "Denied" }),
+  },
+} as const;
+
 type StatusWithPill = keyof typeof STATUS_PILL_CLASS;
 const hasPill = (status: TraceStepStatus): status is StatusWithPill =>
   status === "running" || status === "error";
@@ -36,11 +49,21 @@ export const ToolUseStep = ({
   isStreaming,
   isCollapsed,
   isLastStep,
+  approvalStatus,
 }: ToolUseStepProps) => {
   const resolvedStatus = part.status;
   const isRunning = status === "running" && isStreaming;
   const toolName = part.tool_name ?? "";
-  const titleSlot = hasPill(status) ? (
+  const titleSlot = approvalStatus ? (
+    <span
+      className={clsx(
+        "shrink-0 rounded-full px-2 py-0.5 text-xs font-medium",
+        APPROVAL_PILL[approvalStatus].className,
+      )}
+    >
+      {APPROVAL_PILL[approvalStatus].label()}
+    </span>
+  ) : hasPill(status) ? (
     <span
       className={clsx(
         "shrink-0 rounded-full px-2 py-0.5 text-xs font-medium",

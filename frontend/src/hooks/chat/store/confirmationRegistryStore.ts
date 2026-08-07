@@ -2,14 +2,13 @@ import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 
 /**
- * Tracks unresolved client-action confirmation cards (the add-in's
- * `ActionConfirmationCard`) per chat, so the message queue's auto-send drain
- * can hold while a tool-consent question is still pending (ERMAIN-470).
+ * Tracks unresolved tool-consent confirmation cards per chat — the add-in's
+ * client-action `ActionConfirmationCard`s and the shared `McpToolApprovalCard`
+ * — so the message queue's auto-send drain can hold while a consent question
+ * is still pending (ERMAIN-470).
  *
  * A card registers itself while it is in the "pending" state and deregisters
- * once resolved (allow/deny) or when its renderer unmounts. The web surface
- * has no confirmation cards, so nothing ever registers and every drain reads
- * `hasPending === false`.
+ * once resolved (allow/deny) or when its renderer unmounts.
  *
  * The hold is best-effort: a card whose renderer is unmounted (e.g. scrolled
  * out of a virtualized message list) deregisters, so it can't wedge the queue.

@@ -58,6 +58,15 @@ max_backoff_ms = 50
 [mcp_servers_global]
 max_session_idle_seconds = 3600
 
+[mcp_servers_global.approval]
+enabled = true
+preset = "restrictive"
+allow_always = true
+
+[mcp_servers.mock_mcp_approval]
+transport_type = "streamable_http"
+url = "http://erato-local-mock-mcp-server:44321/mcp/approval-policy"
+
 [mcp_servers.mock_mcp_progress]
 transport_type = "streamable_http"
 url = "http://erato-local-mock-mcp-server:44321/mcp/progress"
@@ -106,6 +115,10 @@ url = "http://erato-local-mock-mcp-server:44321/mcp/list-tools-500"
 [mcp_server_permissions.rules.allow_mock_mcp_progress_for_all]
 rule_type = "allow-all"
 mcp_server_ids = ["mock_mcp_progress"]
+
+[mcp_server_permissions.rules.allow_mock_mcp_approval_for_all]
+rule_type = "allow-all"
+mcp_server_ids = ["mock_mcp_approval"]
 
 [mcp_server_permissions.rules.allow_mock_mcp_auth_none_for_group]
 rule_type = "allow-for-group-members"

@@ -395,8 +395,14 @@ describe("UserPreferencesDialog", () => {
   });
 
   it("loads MCP server statuses in the MCP servers tab", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      createJsonResponse({
+    // Fresh response per call: the tab issues independent requests for the
+    // server list and the persisted tool approvals, and a Response body can
+    // only be consumed once.
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input).includes("/me/mcp-tool-approval-settings")) {
+        return createJsonResponse({ settings: [] });
+      }
+      return createJsonResponse({
         servers: [
           {
             id: "notion",
@@ -414,8 +420,8 @@ describe("UserPreferencesDialog", () => {
             connection_status: "FAILURE",
           },
         ],
-      }),
-    );
+      });
+    });
 
     renderDialog();
 

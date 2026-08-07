@@ -567,6 +567,12 @@ pub async fn resolve_sequence(
                 let parsed = MessageSchema::validate(&message.raw_message)?;
                 for content_part in parsed.content {
                     match content_part {
+                        // Approval lifecycle content is host-side state. The
+                        // ToolUse appended after its resolution is the only
+                        // portion that must be replayed to the provider.
+                        ContentPart::ToolApprovalRequest(_)
+                        | ContentPart::ToolApproval(_)
+                        | ContentPart::ToolRejection(_) => {}
                         ContentPart::ToolUse(tool_use) => {
                             // Synthetic client-action proposals never replay
                             // — see is_client_action_tool_use_message.

@@ -19,4 +19,5 @@ pub mod runtime_configuration;
 pub mod share_grants;
 pub mod share_links;
 pub mod user_preferences;
+pub mod user_tool_approval_settings;
 pub mod users;

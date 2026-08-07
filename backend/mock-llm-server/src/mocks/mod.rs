@@ -916,6 +916,22 @@ pub fn get_default_mocks() -> Vec<Mock> {
             }),
         },
         Mock {
+            name: "McpApprovalPolicyToolCall".to_string(),
+            description:
+                "Returns an open-world MCP call that must be approved under the restrictive preset"
+                    .to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: "mcp approval probe".to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCall(ToolCallResponseConfig {
+                tool_name: "publish_approval_probe".to_string(),
+                arguments: "{}".to_string(),
+                delay_ms: 100,
+            }),
+        },
+        Mock {
             name: "ToolResultResponse".to_string(),
             description: "Returns a text response when the last message is a tool result"
                 .to_string(),

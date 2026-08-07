@@ -2313,6 +2313,26 @@ msgid "library.toast.region"
 msgstr "Benachrichtigungen"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "mcpApproval.alwaysAllowDisabled"
+msgstr "Gesperrt: Ihre Organisation verlangt jedes Mal eine Bestätigung, wenn dieses Tool ausgeführt wird."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "mcpApproval.inputPreview"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "mcpApproval.openWorldWarning"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "mcpApproval.title"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "message.copy.aria"
 msgstr "Nachricht kopieren"
@@ -2799,6 +2819,36 @@ msgid "preferences.dialog.fields.nickname.placeholder"
 msgstr "Wie soll dich der Assistent nennen? z. B. Max Mustermann"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.description"
+msgstr "Tools, die Sie über die Bestätigung im Chat dauerhaft erlaubt haben. Entfernen Sie einen Eintrag, um wieder gefragt zu werden."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.heading"
+msgstr "Immer erlaubte Tools"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.loadError"
+msgstr "Immer erlaubte Tools konnten nicht geladen werden. Bitte versuchen Sie es erneut."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.remove"
+msgstr "Entfernen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.removeError"
+msgstr "Die Genehmigung konnte nicht entfernt werden. Bitte versuchen Sie es erneut."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.removing"
+msgstr "Wird entfernt..."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.mcpServers.authenticationMode"
 msgstr "Authentifizierungsmodus"
@@ -3239,6 +3289,16 @@ msgstr "Denkt nach"
 #: src/components/ui/Trace/TraceThinkingPlaceholder.tsx
 msgid "trace.thinking.placeholder"
 msgstr "Denkt nach…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.approved"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.denied"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ToolUseStep.tsx

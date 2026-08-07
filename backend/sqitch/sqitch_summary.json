@@ -32,7 +32,8 @@
     "deploy/0030_add_generation_state_to_chats.sql",
     "deploy/0031_add_runtime_configuration.sql",
     "deploy/0032_add_runtime_configuration_source_type.sql",
-    "deploy/0033_add_shared_generation_streaming_state.sql"
+    "deploy/0033_add_shared_generation_streaming_state.sql",
+    "deploy/0034_add_user_tool_approval_settings.sql"
   ],
-  "latest_change": "872fd7115dee9fe794a0bc3cb59e3e02b8e66b73"
+  "latest_change": "569e20dec6b85828fee1715bfc06b0ece0c8f09a"
 }

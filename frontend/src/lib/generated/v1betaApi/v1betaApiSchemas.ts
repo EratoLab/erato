@@ -765,6 +765,15 @@ export type ContentPart =
   | (ToolUse & {
       content_type: "tool_use";
     })
+  | (ContentPartToolApprovalRequest & {
+      content_type: "tool_approval_request";
+    })
+  | (ContentPartToolApproval & {
+      content_type: "tool_approval";
+    })
+  | (ContentPartToolRejection & {
+      content_type: "tool_rejection";
+    })
   | (ContentPartTextFilePointer & {
       content_type: "text_file_pointer";
     })
@@ -832,6 +841,58 @@ export type ContentPartTextFilePointer = {
    * @format uuid
    */
   file_upload_id: string;
+};
+
+/**
+ * Records a user approval in the assistant message lifecycle.
+ */
+export type ContentPartToolApproval = {
+  always_allow?: boolean;
+  approved_at: string;
+  tool_call_id: string;
+  /**
+   * @format uuid
+   */
+  user_tool_approval_setting_id?: null | undefined;
+};
+
+/**
+ * A durable request for user approval before an MCP tool call is executed.
+ */
+export type ContentPartToolApprovalRequest = {
+  /**
+   * Snapshot the global policy so the client can hide the option when
+   * persistent approval settings are disabled.
+   */
+  allow_always: boolean;
+  annotations: ToolApprovalAnnotations;
+  input: Value;
+  mcp_server_id: string;
+  preset: string;
+  requested_at: string;
+  tool_call_id: string;
+  tool_name: string;
+};
+
+/**
+ * Records a user rejection in the assistant message lifecycle.
+ */
+export type ContentPartToolRejection = {
+  rejected_at: string;
+  tool_call_id: string;
+};
+
+/**
+ * Rehydrates a generation that was deliberately stopped for MCP tool approval.
+ */
+export type ContinueStreamRequest = {
+  decision: ToolApprovalDecision;
+  /**
+   * The assistant message/generation that contains the pending approval request.
+   *
+   * @format uuid
+   */
+  message_id: string;
 };
 
 /**
@@ -2266,6 +2327,23 @@ export type TokenUsageVirtualFile = {
   filename: string;
 };
 
+/**
+ * Snapshot of the MCP annotations used to decide whether a tool call needs
+ * user approval. The values are normalized to the MCP defaults so an absent
+ * annotation remains auditable as the pessimistic interpretation.
+ */
+export type ToolApprovalAnnotations = {
+  destructiveHint: boolean;
+  idempotentHint: boolean;
+  openWorldHint: boolean;
+  readOnlyHint: boolean;
+};
+
+/**
+ * Decision submitted for a generation stopped at an MCP approval gate.
+ */
+export type ToolApprovalDecision = "approve" | "reject" | "approve_always";
+
 export type ToolCallStatus = "in_progress" | "success" | "error";
 
 export type ToolUse = {
@@ -2464,6 +2542,19 @@ export type UserProfile = {
    * - "en"
    */
   preferred_language: string;
+};
+
+export type UserToolApprovalSetting = {
+  /**
+   * @format uuid
+   */
+  id: string;
+  mcp_server_id: string;
+  tool_name: string;
+};
+
+export type UserToolApprovalSettingsResponse = {
+  settings: UserToolApprovalSetting[];
 };
 
 export type Value = void;

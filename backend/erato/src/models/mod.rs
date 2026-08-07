@@ -12,6 +12,7 @@ pub mod share_grant;
 pub mod share_link;
 pub mod user;
 pub mod user_preference;
+pub mod user_tool_approval_setting;
 
 /// Pagination utilities for consistent pagination implementation across models
 pub mod pagination {

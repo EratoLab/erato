@@ -27,9 +27,9 @@ const reasoningPart = (text: string): ContentPart => ({
   text,
 });
 
-const toolUsePart = (): ContentPart => ({
+const toolUsePart = (status: "success" | "error" = "success"): ContentPart => ({
   content_type: "tool_use",
-  status: "success",
+  status,
   tool_call_id: "tool-abc",
   tool_name: "web_search",
   input: null,
@@ -41,7 +41,10 @@ const toolUsePart = (): ContentPart => ({
 
 const renderTrace = (
   parts: ContentPart[],
-  overrides: { maskReasoningText?: boolean } = {},
+  overrides: {
+    maskReasoningText?: boolean;
+    toolApprovalStatuses?: Record<string, "approved" | "denied">;
+  } = {},
 ) => {
   mockUseTraceFeature.mockReturnValue({
     maskReasoningText: overrides.maskReasoningText ?? false,
@@ -55,6 +58,7 @@ const renderTrace = (
         hasLaterContent={false}
         renderMarkdown={(text) => <span>{text}</span>}
         durationMs={null}
+        toolApprovalStatuses={overrides.toolApprovalStatuses}
       />
     </I18nProvider>,
   );
@@ -106,5 +110,22 @@ describe("Trace — masked mode (cold-load / done state)", () => {
     expect(screen.getByText("Thinking complete")).toBeInTheDocument();
     // Tool use step still renders normally
     expect(screen.getByText("web_search")).toBeInTheDocument();
+  });
+
+  it("shows an Approved badge beside an approved MCP tool call", () => {
+    renderTrace([toolUsePart()], {
+      toolApprovalStatuses: { "tool-abc": "approved" },
+    });
+
+    expect(screen.getByText("Approved")).toBeInTheDocument();
+  });
+
+  it("shows Denied instead of Failed for a rejected MCP tool call", () => {
+    renderTrace([toolUsePart("error")], {
+      toolApprovalStatuses: { "tool-abc": "denied" },
+    });
+
+    expect(screen.getByText("Denied")).toBeInTheDocument();
+    expect(screen.queryByText("Failed")).not.toBeInTheDocument();
   });
 });

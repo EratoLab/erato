@@ -21,6 +21,7 @@ import {
 } from "@/providers/FeatureConfigProvider";
 
 import { AudioInputTabContent } from "./AudioInputTabContent";
+import { McpToolApprovalSettings } from "./McpToolApprovalSettings";
 import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";
 import { FormField, Input, Textarea } from "../Input";
@@ -814,6 +815,10 @@ export function UserPreferencesDialog({
                   ))}
                 </div>
               ) : null}
+
+              <McpToolApprovalSettings
+                isActive={isOpen && activeTab === "mcpServers"}
+              />
             </section>
 
             <section

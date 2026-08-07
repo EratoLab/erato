@@ -172,6 +172,27 @@ pub fn convert_content_parts_to_json(content_parts: &[ContentPart]) -> Result<Js
                     "args": marker.args,
                 }));
             }
+            ContentPart::ToolApprovalRequest(request) => {
+                output_parts.push(json!({
+                    "type": "tool_approval_request",
+                    "tool_call_id": request.tool_call_id,
+                    "tool_name": request.tool_name,
+                    "mcp_server_id": request.mcp_server_id,
+                }));
+            }
+            ContentPart::ToolApproval(approval) => {
+                output_parts.push(json!({
+                    "type": "tool_approval",
+                    "tool_call_id": approval.tool_call_id,
+                    "always_allow": approval.always_allow,
+                }));
+            }
+            ContentPart::ToolRejection(rejection) => {
+                output_parts.push(json!({
+                    "type": "tool_rejection",
+                    "tool_call_id": rejection.tool_call_id,
+                }));
+            }
         }
     }
 

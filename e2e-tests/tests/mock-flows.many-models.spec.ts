@@ -64,6 +64,41 @@ const navigateToNewChatViaSidebar = async (page: Page) => {
 };
 
 test(
+  "MCP tool calls pause for approval and continue after an allow-once decision",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    await page.goto("/");
+    await chatIsReadyToChat(page);
+    await selectMockModel(page);
+
+    const textbox = page.getByRole("textbox", { name: "Type a message..." });
+    await textbox.fill("mcp approval probe");
+    await textbox.press("Enter");
+
+    const approval = page.getByTestId("mcp-tool-approval");
+    await expect(approval).toBeVisible({ timeout: 30000 });
+    await expect(approval).toHaveAttribute(
+      "data-tool-name",
+      "publish_approval_probe",
+    );
+    await expect(
+      page.getByRole("button", { name: "Always allow", exact: true }),
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: "Allow once", exact: true }).click();
+
+    await expect(page.getByTestId("message-assistant").last()).toContainText(
+      "The secret content has been read successfully.",
+      { timeout: 30000 },
+    );
+    await expect(page.getByTestId("tool-call-item")).toHaveAttribute(
+      "data-tool-name",
+      "publish_approval_probe",
+    );
+  },
+);
+
+test(
   "Mock-LLM hallucination loop is aborted with a user-facing error",
   { tag: TAG_CI },
   async ({ page }) => {
