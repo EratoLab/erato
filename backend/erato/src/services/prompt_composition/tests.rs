@@ -309,7 +309,6 @@ mod test_cases {
             generation_started_at: None,
             generation_heartbeat_at: None,
             generation_ended_at: None,
-            pending_tool_approval_at: None,
         }
     }
 

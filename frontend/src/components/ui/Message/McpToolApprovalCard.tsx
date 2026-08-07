@@ -83,7 +83,7 @@ export const McpToolApprovalCard = ({
   // Unlike the registry (mount-scoped by design, so it can't wedge the send
   // queue), the status-store entry is durable: it keeps the sidebar's
   // "action required" indicator alive after navigating away, matching the
-  // server-side pending_tool_approval_at marker this card renders.
+  // server-side awaiting_approval generation state this card renders.
   const requestedAt = request.requested_at;
   useEffect(() => {
     if (!chatId || !isPending) {

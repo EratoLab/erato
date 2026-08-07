@@ -25,7 +25,6 @@ pub struct Model {
     pub generation_started_at: Option<DateTimeWithTimeZone>,
     pub generation_heartbeat_at: Option<DateTimeWithTimeZone>,
     pub generation_ended_at: Option<DateTimeWithTimeZone>,
-    pub pending_tool_approval_at: Option<DateTimeWithTimeZone>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

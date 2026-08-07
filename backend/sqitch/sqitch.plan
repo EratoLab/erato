@@ -35,4 +35,3 @@
 0032_add_runtime_configuration_source_type 2026-08-02T00:00:00Z System Administrator <root@localhost> # Add runtime configuration source type
 0033_add_shared_generation_streaming_state 2026-08-04T00:00:00Z System Administrator <root@localhost> # Add shared generation streaming state
 0034_add_user_tool_approval_settings 2026-08-06T00:00:00Z Codex <codex@openai.com> # Add persistent user MCP tool approval settings
-0035_add_chat_pending_tool_approval 2026-08-07T00:00:00Z bdart <dfiebig@bdart.de> # Add durable pending tool approval marker to chats

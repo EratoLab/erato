@@ -251,8 +251,7 @@ CREATE TABLE public.chats (
     generation_state text,
     generation_started_at timestamp with time zone,
     generation_heartbeat_at timestamp with time zone,
-    generation_ended_at timestamp with time zone,
-    pending_tool_approval_at timestamp with time zone
+    generation_ended_at timestamp with time zone
 );
 
 

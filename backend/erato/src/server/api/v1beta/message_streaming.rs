@@ -4668,25 +4668,20 @@ async fn stream_generate_chat_completion<
     }
 }
 
-/// Keep the chat's durable "awaiting tool approval" marker in sync with the
-/// message that was just finalized: a generation that stopped on an approval
-/// request always ends with that part last, and any other completed
-/// generation clears a leftover marker (e.g. after the parked message was
-/// superseded by an edit or regeneration). Best-effort — a marker failure
-/// must not fail the finished generation.
-async fn sync_pending_tool_approval_marker(
-    app_state: &AppState,
-    chat_id: &Uuid,
+/// Mark the task's outcome as parked when the finalized message stops on an
+/// approval request (always its last part). The outcome lands on the chat's
+/// generation state via `remove_task`, and any other generation taking the
+/// lease overwrites it — so a marker left by a superseded parked message
+/// self-heals without dedicated clearing.
+fn mark_task_awaiting_approval_if_parked(
+    task: &Arc<StreamingTask>,
     final_content_parts: &[ContentPart],
 ) {
-    let pending = matches!(
+    if matches!(
         final_content_parts.last(),
         Some(ContentPart::ToolApprovalRequest(_))
-    );
-    if let Err(error) =
-        crate::models::chat::set_pending_tool_approval(&app_state.db, chat_id, pending).await
-    {
-        tracing::warn!(chat_id = %chat_id, %error, "Failed to sync pending tool approval marker");
+    ) {
+        task.mark_awaiting_approval();
     }
 }
 
@@ -4710,12 +4705,7 @@ async fn bg_stream_update_assistant_message_completion(
     .await
     .wrap_err("Failed to update assistant message content")?;
 
-    sync_pending_tool_approval_marker(
-        app_state,
-        &updated_assistant_message.chat_id,
-        &final_content_parts,
-    )
-    .await;
+    mark_task_awaiting_approval_if_parked(task, &final_content_parts);
 
     let updated_assistant_message_wrapped =
         ChatMessage::from_model(updated_assistant_message.clone())
@@ -4746,6 +4736,7 @@ async fn stream_update_assistant_message_completion<
     MSG: SendAsSseEvent + From<MessageSubmitStreamingResponseMessageComplete>,
 >(
     tx: Sender<Result<Event, Report>>,
+    task: &Arc<StreamingTask>,
     app_state: &AppState,
     policy: &PolicyEngine,
     final_content_parts: Vec<ContentPart>,
@@ -4763,12 +4754,7 @@ async fn stream_update_assistant_message_completion<
     .await
     .wrap_err("Failed to update assistant message content")?;
 
-    sync_pending_tool_approval_marker(
-        app_state,
-        &updated_assistant_message.chat_id,
-        &final_content_parts,
-    )
-    .await;
+    mark_task_awaiting_approval_if_parked(task, &final_content_parts);
 
     let mut updated_assistant_message_wrapped =
         ChatMessage::from_model(updated_assistant_message.clone())
@@ -7368,7 +7354,6 @@ async fn persist_background_generation_failure(
     app_state: &AppState,
     policy: &PolicyEngine,
     me_user: &MeProfile,
-    chat_id: &Uuid,
     assistant_message_id: Uuid,
     chat_provider_id: &str,
     report: &Report,
@@ -7391,16 +7376,6 @@ async fn persist_background_generation_failure(
             "Failed to persist generation failure metadata"
         );
         capture_report(&error);
-    }
-
-    // The turn ended in an error, so the chat is no longer stopped on a tool
-    // approval; without this a marker left by a superseded parked message
-    // would report action_required indefinitely, as this path skips the
-    // completion sync that otherwise maintains it.
-    if let Err(error) =
-        crate::models::chat::set_pending_tool_approval(&app_state.db, chat_id, false).await
-    {
-        tracing::warn!(chat_id = %chat_id, %error, "Failed to clear pending tool approval marker");
     }
 
     let error_event = MessageSubmitStreamingResponseError {
@@ -7710,7 +7685,6 @@ async fn run_message_submit_task(
                 app_state,
                 policy,
                 me_user,
-                &chat.id,
                 initial_assistant_message.id,
                 &chat_provider_id,
                 &error,
@@ -8066,7 +8040,6 @@ pub async fn regenerate_message_sse(
                         &app_state,
                         &policy,
                         &me_user,
-                        &chat.id,
                         initial_assistant_message.id,
                         &chat_provider_id,
                         &error,
@@ -8101,6 +8074,7 @@ pub async fn regenerate_message_sse(
             };
             stream_update_assistant_message_completion::<RegenerateMessageStreamingResponseMessage>(
                 tx.clone(),
+                &task_for_stream,
                 &app_state,
                 &policy,
                 end_content,
@@ -8461,7 +8435,6 @@ pub async fn edit_message_sse(
                         &app_state,
                         &policy,
                         &me_user,
-                        &chat.id,
                         initial_assistant_message.id,
                         &chat_provider_id,
                         &error,
@@ -8496,6 +8469,7 @@ pub async fn edit_message_sse(
             };
             stream_update_assistant_message_completion::<EditMessageStreamingResponseMessage>(
                 tx.clone(),
+                &task_for_stream,
                 &app_state,
                 &policy,
                 end_content,
@@ -8767,19 +8741,41 @@ pub async fn continue_message_sse(
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
     let app_state_for_worker = app_state.clone();
     let policy_for_worker = policy.clone();
+    let chat_id = message.chat_id;
     tokio::spawn(async move {
+        // The decision starts a new generation on the chat's lease: the state
+        // leaves 'awaiting_approval' for 'running' here, and the outcome
+        // parks it again when the continuation stops on a chained approval.
+        let (_abort_rx, task) = app_state_for_worker
+            .background_tasks
+            .start_task(chat_id, request.message_id)
+            .await;
+        let mut cleanup_guard = TaskCleanupGuard::new(
+            app_state_for_worker.background_tasks.clone(),
+            chat_id,
+            task.generation_id,
+        );
         let result = run_continue_message_task(
             tx.clone(),
             &app_state_for_worker,
             &policy_for_worker,
             &me_user,
             request,
+            &task,
         )
         .await;
+        let generation_failed = result.is_err();
         if let Err(error) = result {
             log_and_capture_error("continue message background task", &error);
             forward_error_report(&tx, &error).await;
         }
+        let outcome = task.derive_outcome(generation_failed);
+        task.mark_completed();
+        cleanup_guard.disarm();
+        app_state_for_worker
+            .background_tasks
+            .remove_task(&chat_id, task.generation_id, outcome)
+            .await;
     });
 
     let stream: SseEventStream = Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx));
@@ -8796,6 +8792,7 @@ async fn run_continue_message_task(
     policy: &PolicyEngine,
     me_user: &MeProfile,
     request: ContinueStreamRequest,
+    task: &Arc<StreamingTask>,
 ) -> Result<(), Report> {
     let message = get_message_by_id(
         &app_state.db,
@@ -8937,14 +8934,6 @@ async fn run_continue_message_task(
         parsed.content.clone(),
     )
     .await?;
-    // The decision is durable — the chat is no longer waiting on the user.
-    // The completion of this continuation re-evaluates the marker, so a
-    // chained approval stop sets it again.
-    if let Err(error) =
-        crate::models::chat::set_pending_tool_approval(&app_state.db, &chat.id, false).await
-    {
-        tracing::warn!(chat_id = %chat.id, %error, "Failed to clear pending tool approval marker");
-    }
 
     let generation_input_messages: GenerationInputMessages = serde_json::from_value(
         message
@@ -9022,7 +9011,7 @@ async fn run_continue_message_task(
             available_mcp_tools,
             HashMap::new(),
             &headers_context,
-            None,
+            Some(task),
             chat.assistant_id,
             parsed.content,
         )
@@ -9039,6 +9028,7 @@ async fn run_continue_message_task(
     }
     stream_update_assistant_message_completion::<MessageSubmitStreamingResponseMessage>(
         tx,
+        task,
         app_state,
         policy,
         end_content,

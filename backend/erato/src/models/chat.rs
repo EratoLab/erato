@@ -4,7 +4,6 @@ use crate::db::entity_ext::prelude::*;
 use crate::metrics_constants::{
     POSTGRES_QUERY_COUNT_RECENT_CHATS, POSTGRES_QUERY_FREQUENT_ASSISTANTS,
     POSTGRES_QUERY_LIST_GENERATING_CHATS, POSTGRES_QUERY_LIST_RECENT_CHATS,
-    POSTGRES_QUERY_SET_PENDING_TOOL_APPROVAL,
 };
 use crate::models::message::GenerationParameters;
 use crate::models::pagination;
@@ -322,7 +321,10 @@ pub async fn get_recent_chats(
                     AND "chats"."generation_heartbeat_at" > now() - make_interval(secs => {generation_stale_after_secs})
                 THEN "chats"."generation_started_at"
             END AS "active_generation_started_at",
-            "chats"."pending_tool_approval_at",
+            CASE
+                WHEN "chats"."generation_state" = 'awaiting_approval'
+                THEN "chats"."generation_ended_at"
+            END AS "pending_tool_approval_at",
             "latest_msg"."created_at" AS "latest_message_at"
         FROM "chats"
         INNER JOIN LATERAL (
@@ -555,18 +557,17 @@ pub async fn get_recent_chats(
 #[derive(Debug, FromQueryResult)]
 pub struct GeneratingChatRow {
     pub id: Uuid,
-    pub generation_state: Option<String>,
-    pub generation_started_at: Option<DateTimeWithTimeZone>,
+    pub generation_state: String,
+    pub generation_started_at: DateTimeWithTimeZone,
     pub generation_ended_at: Option<DateTimeWithTimeZone>,
-    pub pending_tool_approval_at: Option<DateTimeWithTimeZone>,
     pub title_by_user_provided: Option<String>,
     pub title_by_summary: Option<String>,
 }
 
 /// Get the chats of a user whose generation is currently running (with a
 /// fresh heartbeat), reached a terminal state within the retention window, or
-/// is stopped on a pending tool approval (no heartbeat and no retention — the
-/// stop is durable until the user decides).
+/// is stopped awaiting a tool approval (no heartbeat and no retention — the
+/// stop is durable until a later generation takes over the state).
 #[instrument(skip_all)]
 pub async fn get_generating_chats(
     conn: &DatabaseConnection,
@@ -580,26 +581,21 @@ pub async fn get_generating_chats(
             "chats"."generation_state",
             "chats"."generation_started_at",
             "chats"."generation_ended_at",
-            "chats"."pending_tool_approval_at",
             "chats"."title_by_user_provided",
             "chats"."title_by_summary"
         FROM "chats"
         WHERE "chats"."owner_user_id" = $1
             AND "chats"."archived_at" IS NULL
+            AND "chats"."generation_started_at" IS NOT NULL
             AND (
-                "chats"."pending_tool_approval_at" IS NOT NULL
+                "chats"."generation_state" = 'awaiting_approval'
                 OR (
-                    "chats"."generation_started_at" IS NOT NULL
-                    AND (
-                        (
-                            "chats"."generation_state" = 'running'
-                            AND "chats"."generation_heartbeat_at" > now() - make_interval(secs => $2::double precision)
-                        )
-                        OR (
-                            "chats"."generation_state" IN ('completed', 'errored')
-                            AND "chats"."generation_ended_at" > now() - make_interval(secs => $3::double precision)
-                        )
-                    )
+                    "chats"."generation_state" = 'running'
+                    AND "chats"."generation_heartbeat_at" > now() - make_interval(secs => $2::double precision)
+                )
+                OR (
+                    "chats"."generation_state" IN ('completed', 'errored')
+                    AND "chats"."generation_ended_at" > now() - make_interval(secs => $3::double precision)
                 )
             )
         "#;
@@ -618,30 +614,6 @@ pub async fn get_generating_chats(
     .await?;
 
     Ok(rows)
-}
-
-/// Set or clear the durable "generation stopped on a tool approval" marker.
-/// Writes only on an actual flip, so completion paths can call it
-/// unconditionally for every finished generation.
-#[instrument(skip_all)]
-pub async fn set_pending_tool_approval(
-    conn: &DatabaseConnection,
-    chat_id: &Uuid,
-    pending: bool,
-) -> Result<(), Report> {
-    let statement = named_statement_from_sql_and_values(
-        sea_orm::DatabaseBackend::Postgres,
-        POSTGRES_QUERY_SET_PENDING_TOOL_APPROVAL,
-        r#"
-        UPDATE chats
-        SET pending_tool_approval_at = CASE WHEN $2 THEN now() ELSE NULL END
-        WHERE id = $1
-          AND ("pending_tool_approval_at" IS NOT NULL) != $2
-        "#,
-        [(*chat_id).into(), pending.into()],
-    );
-    conn.execute_raw(statement).await?;
-    Ok(())
 }
 
 /// Get the most frequently used assistants for a user over a specified time period.

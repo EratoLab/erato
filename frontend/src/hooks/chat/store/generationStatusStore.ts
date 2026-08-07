@@ -21,8 +21,9 @@ export type ChatGenerationStatus =
   | { kind: "running"; startedAt: string; localSeenAt: number }
   /**
    * Generation stopped on a tool approval awaiting the user. Server-durable
-   * (chats.pending_tool_approval_at), so unlike the terminal kinds it may be
-   * seeded fresh after a refresh and never ages out on its own.
+   * (the chat's generation state parks as awaiting_approval), so unlike the
+   * terminal kinds it may be seeded fresh after a refresh and never ages out
+   * on its own.
    */
   | { kind: "action_required"; startedAt: string; localSeenAt: number }
   | { kind: "finished"; startedAt: string | null }
