@@ -3,8 +3,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { OutlookAddinChat as AddinChat } from "../../outlook/OutlookAddinChat";
 import { OutlookEmailSourceProvider } from "../../providers/OutlookEmailSourceProvider";
-import { AddinChat } from "../AddinChat";
 
 import type { ReactNode } from "react";
 

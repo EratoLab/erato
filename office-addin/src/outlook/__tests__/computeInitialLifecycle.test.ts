@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { computeInitialLifecycle } from "../AddinChatProvider";
+import { computeInitialLifecycle } from "../OutlookAddinSessionController";
 
 import type {
   OutlookSessionAnchor,
