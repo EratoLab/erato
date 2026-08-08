@@ -3000,8 +3000,8 @@ msgstr "Authentification requise"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/ServersToolsPane.tsx
-msgid "preferences.dialog.mcpServers.status.success.description"
-msgstr "Connecté et prêt à être utilisé."
+#~ msgid "preferences.dialog.mcpServers.status.success.description"
+#~ msgstr "Connecté et prêt à être utilisé."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/ServersToolsPane.tsx

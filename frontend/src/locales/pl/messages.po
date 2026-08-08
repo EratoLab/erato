@@ -3000,8 +3000,8 @@ msgstr "Wymaga uwierzytelnienia"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/ServersToolsPane.tsx
-msgid "preferences.dialog.mcpServers.status.success.description"
-msgstr "Połączono i gotowe do użycia."
+#~ msgid "preferences.dialog.mcpServers.status.success.description"
+#~ msgstr "Połączono i gotowe do użycia."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/ServersToolsPane.tsx

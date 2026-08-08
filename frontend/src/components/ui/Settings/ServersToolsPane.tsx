@@ -58,13 +58,15 @@ const mcpServerStatus = (server: McpServerStatus): EntityRowStatus => {
   }
 };
 
-const mcpServerDescription = (server: McpServerStatus): string => {
+/**
+ * Detail sentence only where it adds something beyond the header's status
+ * word: what to do (authorize) or what failed. A healthy connection needs no
+ * restatement.
+ */
+const mcpServerDescription = (server: McpServerStatus): string | null => {
   switch (server.connection_status) {
     case "SUCCESS":
-      return t({
-        id: "preferences.dialog.mcpServers.status.success.description",
-        message: "Connected and ready to use.",
-      });
+      return null;
     case "NEEDS_AUTHENTICATION":
       return t({
         id: "preferences.dialog.mcpServers.status.needsAuthentication.description",
@@ -89,6 +91,7 @@ function McpServerEntityRow({
   isActive: boolean;
 }) {
   const status = mcpServerStatus(server);
+  const description = mcpServerDescription(server);
   const isAuthorizing = mcp.authorizingServerId === server.id;
   const isDisconnecting = mcp.disconnectingServerId === server.id;
 
@@ -126,9 +129,9 @@ function McpServerEntityRow({
         ) : undefined
       }
     >
-      <p className="text-sm text-theme-fg-secondary">
-        {mcpServerDescription(server)}
-      </p>
+      {description !== null ? (
+        <p className="text-sm text-theme-fg-secondary">{description}</p>
+      ) : null}
       {(mcp.showDisconnect ?? true) &&
       server.authentication_mode === "oauth2" &&
       server.connection_status !== "NEEDS_AUTHENTICATION" ? (

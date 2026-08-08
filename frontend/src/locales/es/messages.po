@@ -3000,8 +3000,8 @@ msgstr "Necesita autenticación"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/ServersToolsPane.tsx
-msgid "preferences.dialog.mcpServers.status.success.description"
-msgstr "Conectado y listo para usar."
+#~ msgid "preferences.dialog.mcpServers.status.success.description"
+#~ msgstr "Conectado y listo para usar."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/ServersToolsPane.tsx

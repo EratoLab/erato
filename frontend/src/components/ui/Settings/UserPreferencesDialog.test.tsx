@@ -448,9 +448,9 @@ describe("UserPreferencesDialog", () => {
     expect(
       screen.getAllByTitle("Model Context Protocol").length,
     ).toBeGreaterThan(0);
-    // The status word travels on the toned icon, sidecar-pane style.
-    expect(screen.getByLabelText("Connected")).toBeInTheDocument();
-    expect(screen.getByLabelText("Connection failed")).toBeInTheDocument();
+    // The status word is visible text on the row's caption line.
+    expect(screen.getByText("Connected")).toBeInTheDocument();
+    expect(screen.getByText("Connection failed")).toBeInTheDocument();
   });
 
   it("starts OAuth in the current tab", async () => {

@@ -15,18 +15,21 @@ export type EntityRowTone = "success" | "warning" | "error";
 
 export interface EntityRowStatus {
   tone: EntityRowTone;
-  /** Accessible status word; also shown as the row caption fallback. */
+  /** Status word on the caption line; also the caption fallback. */
   label: string;
 }
 
+// Icons inherit the caption's tone color via currentColor.
 const toneIcon: Record<EntityRowTone, ReactNode> = {
-  success: (
-    <CheckCircleIcon className="size-5 shrink-0 text-theme-success-fg" />
-  ),
-  warning: (
-    <WarningCircleIcon className="size-5 shrink-0 text-theme-warning-fg" />
-  ),
-  error: <ErrorIcon className="size-5 shrink-0 text-theme-error-fg" />,
+  success: <CheckCircleIcon className="size-3.5 shrink-0" />,
+  warning: <WarningCircleIcon className="size-3.5 shrink-0" />,
+  error: <ErrorIcon className="size-3.5 shrink-0" />,
+};
+
+const toneText: Record<EntityRowTone, string> = {
+  success: "text-theme-success-fg",
+  warning: "text-theme-warning-fg",
+  error: "text-theme-error-fg",
 };
 
 interface EntityRowProps {
@@ -50,13 +53,14 @@ interface EntityRowProps {
 
 /**
  * One expandable capability-provider row of the Servers & Tools pane. The
- * header carries identity and health; everything else about the entity —
- * status sentence, connection actions, permission rows — lives in the
- * details, so new capability classes become rows, never new sections.
+ * header carries identity (kind icon + name) with a one-line caption below
+ * that doubles as the status line — toned icon and text on the same line;
+ * everything else about the entity (connection actions, permission rows)
+ * lives in the details, so new capability classes become rows, never new
+ * sections.
  *
- * Skin matches the settings status panes (Desktop Sidecar); the disclosure
- * idiom (leading chevron rotating 90°, `aria-expanded` button) matches the
- * thinking trace and sidebar sections.
+ * The disclosure idiom (leading chevron rotating 90°, `aria-expanded`
+ * button) matches the thinking trace and sidebar sections.
  */
 export function EntityRow({
   icon,
@@ -90,11 +94,6 @@ export function EntityRow({
               isExpanded && "rotate-90",
             )}
           />
-          {status ? (
-            <span role="img" aria-label={status.label} title={status.label}>
-              {toneIcon[status.tone]}
-            </span>
-          ) : null}
           <span className="min-w-0 flex-1">
             <span className="flex items-center gap-2">
               <span aria-hidden="true" className="shrink-0">
@@ -104,8 +103,16 @@ export function EntityRow({
                 {name}
               </span>
             </span>
-            <span className="block truncate text-xs text-theme-fg-secondary">
-              {caption ?? status?.label}
+            <span
+              className={clsx(
+                "flex items-center gap-1 text-xs",
+                status ? toneText[status.tone] : "text-theme-fg-secondary",
+              )}
+            >
+              {status ? (
+                <span aria-hidden="true">{toneIcon[status.tone]}</span>
+              ) : null}
+              <span className="truncate">{caption ?? status?.label}</span>
             </span>
           </span>
         </button>
