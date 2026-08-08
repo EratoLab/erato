@@ -5,6 +5,7 @@ import {
   I18nProvider,
   ThemeProvider,
   Toaster,
+  type SidecarClientInfo,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 
@@ -76,9 +77,19 @@ export const SHARED_ADDIN_FEATURE_CONFIG = {
  * authentication providers are deliberately supplied as children so loading
  * this module never initializes Office.js (or a future Teams SDK).
  */
-export function SharedAddinShell({ children }: { children: ReactNode }) {
+export function SharedAddinShell({
+  children,
+  sidecarClientInfo,
+}: {
+  children: ReactNode;
+  /**
+   * Sidecar identity for this host composition. Without it the provider's
+   * legacy platform sniff reports every add-in host as the Office add-in.
+   */
+  sidecarClientInfo?: SidecarClientInfo;
+}) {
   return (
-    <DesktopSidecarProvider>
+    <DesktopSidecarProvider clientInfo={sidecarClientInfo}>
       <I18nProvider>
         <ThemeProvider enableCustomTheme persistThemeMode={true}>
           <FeatureConfigProvider config={SHARED_ADDIN_FEATURE_CONFIG}>

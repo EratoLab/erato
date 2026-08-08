@@ -145,7 +145,10 @@ export type {
   OutlookConversationMessage,
   OutlookMessageBody,
   OutlookMessageRecipient,
+  SidecarClientInfo,
 } from "@erato/desktop-sidecar-protocol";
+// Host compositions build their sidecar identity with this.
+export { createBrowserClientInfo } from "@erato/desktop-sidecar-protocol";
 export {
   FileCapabilitiesProvider,
   useFileCapabilitiesContext,
