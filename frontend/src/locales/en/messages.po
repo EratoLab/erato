@@ -2841,7 +2841,7 @@ msgstr "Ask before running"
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.approvals.description"
-msgstr "Tools you chose to always allow from the in-chat confirmation. Remove an entry to be asked again."
+msgstr "Your decisions from the in-chat confirmation are stored here and can be changed any time. They apply to your account on every device."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
@@ -2851,12 +2851,12 @@ msgstr "No decisions yet. When you choose \"Always allow\" in a chat, the tool a
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.approvals.heading"
-msgstr "Always-allowed tools"
+msgstr "Tool approvals"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.approvals.loadError"
-msgstr "Could not load always-allowed tools. Please try again."
+msgstr "Could not load tool approvals. Please try again."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
