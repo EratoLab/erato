@@ -190,10 +190,11 @@ describe("NeutralAddinChatPage host boundary", () => {
     expect(screen.getByTestId("neutral-message-list")).toBeInTheDocument();
     expect(screen.getByTestId("neutral-chat-input")).toBeInTheDocument();
     expect(
-      appendChild.mock.calls.some(([node]) =>
-        node instanceof HTMLScriptElement
-          ? node.src.includes("appsforoffice.microsoft.com")
-          : false,
+      appendChild.mock.calls.some(
+        ([node]) =>
+          node instanceof HTMLScriptElement &&
+          URL.canParse(node.src) &&
+          new URL(node.src).hostname === "appsforoffice.microsoft.com",
       ),
     ).toBe(false);
   });
