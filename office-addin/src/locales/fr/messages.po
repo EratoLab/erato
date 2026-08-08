@@ -597,12 +597,12 @@ msgid "officeAddin.sessionPick.title"
 msgstr "Choisir un chat récent"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/BehaviorTabContent.tsx
+#: src/outlook/components/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.always.helper"
 msgstr "Exécute l'action sans demander. Rien n'est envoyé tant que vous n'appuyez pas sur Envoyer dans Outlook."
 
 #. js-lingui-explicit-id
-#: src/outlook/components/BehaviorTabContent.tsx
+#: src/outlook/components/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.always.label"
 msgstr "Toujours autoriser"
 
@@ -622,42 +622,47 @@ msgstr "Toujours autoriser"
 #~ msgstr "Demander à chaque fois"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/BehaviorTabContent.tsx
+#: src/outlook/components/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.clickConsent.always.locked"
 msgstr "Verrouillé : votre organisation exige une confirmation chaque fois que cette action s'exécute automatiquement."
 
 #. js-lingui-explicit-id
-#: src/outlook/components/BehaviorTabContent.tsx
+#: src/outlook/components/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.clickConsent.ask.helper"
 msgstr "Affiche une étape de confirmation uniquement lorsque l'assistant déclenche cette action de lui-même. Un clic sur le bouton de l'action l'exécute toujours directement."
 
 #. js-lingui-explicit-id
-#: src/outlook/components/BehaviorTabContent.tsx
+#: src/outlook/components/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.clickConsent.ask.label"
 msgstr "Demander avant l'exécution automatique"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/BehaviorTabContent.tsx
+#: src/outlook/components/ClientActionsSettings.tsx
+msgid "officeAddin.settings.addin.clientActions.empty"
+msgstr "Aucune action suggérée par l'assistant n'est disponible pour le moment."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.intro"
 msgstr "Vos décisions prises lors de la confirmation dans la discussion sont enregistrées ici et peuvent être modifiées à tout moment. Rien n'est envoyé tant que vous n'appuyez pas sur Envoyer dans Outlook."
 
 #. js-lingui-explicit-id
 #: src/outlook/components/BehaviorTabContent.tsx
-msgid "officeAddin.settings.addin.clientActions.legend"
-msgstr "Actions suggérées par l'assistant"
+#~ msgid "officeAddin.settings.addin.clientActions.legend"
+#~ msgstr "Actions suggérées par l'assistant"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/BehaviorTabContent.tsx
+#: src/outlook/components/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.never.helper"
 msgstr "Masque cette action et ignore la suggestion de l'assistant."
 
 #. js-lingui-explicit-id
-#: src/outlook/components/BehaviorTabContent.tsx
+#: src/outlook/components/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.never.label"
 msgstr "Jamais"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/BehaviorTabContent.tsx
+#: src/outlook/components/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.scope"
 msgstr "Ces décisions sont enregistrées uniquement sur cet appareil."
 
@@ -809,7 +814,7 @@ msgstr "Microphone"
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.outlook.description"
-msgstr "Configurez la manière dont le passage d’un e-mail Outlook à un autre est associé aux conversations, ainsi que le comportement des actions Outlook suggérées."
+msgstr "Configurez la manière dont le passage d’un e-mail Outlook à un autre est associé aux conversations."
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinSettingsDialog.tsx
@@ -820,6 +825,31 @@ msgstr "Comportement d’Outlook"
 #: src/outlook/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.placeholder.empty"
 msgstr "Aucun paramètre disponible pour le moment."
+
+#. js-lingui-explicit-id
+#: src/core/AddinSettingsDialogCore.tsx
+msgid "officeAddin.settings.serversTools.authorizeInBrowser"
+msgstr "Autoriser dans le navigateur"
+
+#. js-lingui-explicit-id
+#: src/core/AddinSettingsDialogCore.tsx
+msgid "officeAddin.settings.serversTools.description"
+msgstr "Tout ce à quoi l'assistant peut se connecter ou par quoi il peut agir. Ouvrez une entrée pour vérifier sa connexion ou ajuster ce qu'il peut faire."
+
+#. js-lingui-explicit-id
+#: src/core/AddinSettingsDialogCore.tsx
+msgid "officeAddin.settings.serversTools.heading"
+msgstr "MCP & Apps"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.serversTools.outlookActions"
+msgstr "Actions Outlook"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.serversTools.outlookActions.caption"
+msgstr "Intégré à Outlook · cet appareil"
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
@@ -838,13 +868,18 @@ msgstr "Microphone"
 
 #. js-lingui-explicit-id
 #: src/core/AddinSettingsDialogCore.tsx
-msgid "officeAddin.settings.tabs.desktopSidecar"
-msgstr "Desktop Sidecar"
+#~ msgid "officeAddin.settings.tabs.desktopSidecar"
+#~ msgstr "Desktop Sidecar"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.tabs.outlook"
 msgstr "Outlook"
+
+#. js-lingui-explicit-id
+#: src/core/AddinSettingsDialogCore.tsx
+msgid "officeAddin.settings.tabs.serversTools"
+msgstr "MCP & Apps"
 
 #. js-lingui-explicit-id
 #: src/core/AddinSettingsDialogCore.tsx

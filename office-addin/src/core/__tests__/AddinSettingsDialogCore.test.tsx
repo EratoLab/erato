@@ -9,7 +9,7 @@ import type { ReactNode } from "react";
 vi.mock("@erato/frontend/library", () => ({
   AppearanceTabContent: () => <div data-testid="appearance-settings" />,
   AudioInputTabContent: () => null,
-  DesktopSidecarTabContent: () => null,
+  ServersToolsPane: () => null,
   ModalBase: ({
     children,
     isOpen,
@@ -21,7 +21,10 @@ vi.mock("@erato/frontend/library", () => ({
     audioTranscription: { enabled: false },
     audioDictation: { enabled: false },
     audioConversational: { enabled: false },
-    userPreferences: { desktopSidecarTabEnabled: false },
+    userPreferences: {
+      desktopSidecarTabEnabled: false,
+      mcpServersTabEnabled: false,
+    },
   }),
 }));
 vi.mock("../UserSettingsTabContent", () => ({
@@ -40,5 +43,6 @@ describe("AddinSettingsDialogCore", () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Outlook" })).toBeNull();
     expect(screen.queryByText("Outlook behavior")).toBeNull();
+    expect(screen.queryByRole("tab", { name: "MCP & Apps" })).toBeNull();
   });
 });

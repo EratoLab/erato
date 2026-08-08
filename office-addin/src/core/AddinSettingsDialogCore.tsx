@@ -1,8 +1,8 @@
 import {
   AppearanceTabContent,
   AudioInputTabContent,
-  DesktopSidecarTabContent,
   ModalBase,
+  ServersToolsPane,
   useFeatureConfig,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
@@ -10,7 +10,7 @@ import { useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { UserSettingsTabContent } from "./UserSettingsTabContent";
 
-type SettingsTab = "appearance" | "user" | "audio" | "desktopSidecar" | "host";
+type SettingsTab = "appearance" | "user" | "audio" | "serversTools" | "host";
 
 export interface AddinSettingsHostContribution {
   tabLabel: string;
@@ -19,6 +19,11 @@ export interface AddinSettingsHostContribution {
   content: ReactNode;
   systemDescription?: string;
   appearanceNotice?: ReactNode;
+  /**
+   * Host-provided entity rows for the shared "MCP & Apps" pane (e.g. the
+   * Outlook-actions entity). Their presence alone enables the pane tab.
+   */
+  serversToolsEntities?: ReactNode;
 }
 
 export interface AddinSettingsDialogCoreProps {
@@ -38,8 +43,13 @@ export function AddinSettingsDialogCore({
     featureConfig.audioTranscription.enabled ||
     featureConfig.audioDictation.enabled ||
     featureConfig.audioConversational.enabled;
-  const desktopSidecarTabEnabled =
+  const desktopSidecarEnabled =
     featureConfig.userPreferences.desktopSidecarTabEnabled;
+  const mcpServersEnabled = featureConfig.userPreferences.mcpServersTabEnabled;
+  const serversToolsTabEnabled =
+    hostContribution?.serversToolsEntities != null ||
+    desktopSidecarEnabled ||
+    mcpServersEnabled;
   const [activeTab, setActiveTab] = useState<SettingsTab>("appearance");
 
   const tabOrder = useMemo<SettingsTab[]>(
@@ -47,10 +57,10 @@ export function AddinSettingsDialogCore({
       "appearance",
       "user",
       ...(audioSettingsEnabled ? (["audio"] as const) : []),
-      ...(desktopSidecarTabEnabled ? (["desktopSidecar"] as const) : []),
+      ...(serversToolsTabEnabled ? (["serversTools"] as const) : []),
       ...(hostContribution ? (["host"] as const) : []),
     ],
-    [audioSettingsEnabled, desktopSidecarTabEnabled, hostContribution],
+    [audioSettingsEnabled, serversToolsTabEnabled, hostContribution],
   );
 
   const tabLabels: Record<SettingsTab, string> = {
@@ -66,9 +76,9 @@ export function AddinSettingsDialogCore({
       id: "officeAddin.settings.tabs.audio",
       message: "Microphone",
     }),
-    desktopSidecar: t({
-      id: "officeAddin.settings.tabs.desktopSidecar",
-      message: "Desktop Sidecar",
+    serversTools: t({
+      id: "officeAddin.settings.tabs.serversTools",
+      message: "MCP & Apps",
     }),
     host: hostContribution?.tabLabel ?? "",
   };
@@ -77,7 +87,7 @@ export function AddinSettingsDialogCore({
     appearance: "addin-settings-tab-appearance",
     user: "addin-settings-tab-user",
     audio: "addin-settings-tab-audio",
-    desktopSidecar: "addin-settings-tab-desktop-sidecar",
+    serversTools: "addin-settings-tab-servers-tools",
     host: "addin-settings-tab-host",
   };
 
@@ -85,7 +95,7 @@ export function AddinSettingsDialogCore({
     appearance: "addin-settings-panel-appearance",
     user: "addin-settings-panel-user",
     audio: "addin-settings-panel-audio",
-    desktopSidecar: "addin-settings-panel-desktop-sidecar",
+    serversTools: "addin-settings-panel-servers-tools",
     host: "addin-settings-panel-host",
   };
 
@@ -248,16 +258,64 @@ export function AddinSettingsDialogCore({
             </section>
           ) : null}
 
-          {desktopSidecarTabEnabled ? (
+          {serversToolsTabEnabled ? (
             <section
-              id={panelIds.desktopSidecar}
+              id={panelIds.serversTools}
               role="tabpanel"
-              aria-labelledby={tabIds.desktopSidecar}
-              hidden={activeTab !== "desktopSidecar"}
+              aria-labelledby={tabIds.serversTools}
+              hidden={activeTab !== "serversTools"}
               className="h-full space-y-4 overflow-y-auto"
             >
-              {activeTab === "desktopSidecar" ? (
-                <DesktopSidecarTabContent />
+              <div className="space-y-1">
+                <h2 className="text-sm font-medium text-theme-fg-primary">
+                  {t({
+                    id: "officeAddin.settings.serversTools.heading",
+                    message: "MCP & Apps",
+                  })}
+                </h2>
+                <p className="text-sm text-theme-fg-secondary">
+                  {t({
+                    id: "officeAddin.settings.serversTools.description",
+                    message:
+                      "Everything the assistant can connect to or act through. Open an entry to check its connection or adjust what it may do.",
+                  })}
+                </p>
+              </div>
+              {activeTab === "serversTools" ? (
+                <ServersToolsPane
+                  isActive={isOpen && activeTab === "serversTools"}
+                  mcp={
+                    mcpServersEnabled
+                      ? {
+                          // The OAuth round-trip is web-shaped (full-page IdP
+                          // redirect; backend mints a web return URL), so the
+                          // add-in hands authorization to the browser.
+                          onAuthorize: () => {
+                            window.open(
+                              "/?preferencesDialog=open&preferencesTab=serversTools",
+                              "_blank",
+                              "noopener",
+                            );
+                          },
+                          onDisconnect: () => {
+                            window.open(
+                              "/?preferencesDialog=open&preferencesTab=serversTools",
+                              "_blank",
+                              "noopener",
+                            );
+                          },
+                          showDisconnect: false,
+                          authorizeLabel: t({
+                            id: "officeAddin.settings.serversTools.authorizeInBrowser",
+                            message: "Authorize in browser",
+                          }),
+                        }
+                      : null
+                  }
+                  showDesktopSidecar={desktopSidecarEnabled}
+                >
+                  {hostContribution?.serversToolsEntities}
+                </ServersToolsPane>
               ) : null}
             </section>
           ) : null}

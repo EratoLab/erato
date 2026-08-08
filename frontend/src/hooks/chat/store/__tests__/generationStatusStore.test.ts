@@ -400,6 +400,25 @@ describe("generationStatusStore", () => {
       });
     });
 
+    it("markApprovalDecided consumes a running continuation entry too", () => {
+      store().seedActionRequired("chat-1", iso(0));
+      // A poll observed the decision's continuation running before the
+      // decide call resolved.
+      store().applyPollSnapshot([
+        { chat_id: "chat-1", state: "running", started_at: iso(5_000) },
+      ]);
+      expect(statusOf("chat-1")).toMatchObject({ kind: "running" });
+
+      store().markApprovalDecided("chat-1");
+      expect(statusOf("chat-1")).toMatchObject({ kind: "cleared" });
+
+      // A stale in-flight poll still carrying the continuation loses.
+      store().applyPollSnapshot([
+        { chat_id: "chat-1", state: "running", started_at: iso(5_000) },
+      ]);
+      expect(statusOf("chat-1")).toMatchObject({ kind: "cleared" });
+    });
+
     it("markApprovalDecided tombstones and blocks re-seeding the same marker", () => {
       store().seedActionRequired("chat-1", iso(0));
       store().markApprovalDecided("chat-1");

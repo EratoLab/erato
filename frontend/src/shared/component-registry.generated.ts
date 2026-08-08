@@ -27,6 +27,8 @@ export type { AnchoredPopoverProps } from "@/components/ui/Controls/AnchoredPopo
 export type { AnchoredPopoverTriggerProps } from "@/components/ui/Controls/AnchoredPopover";
 export { Button } from "@/components/ui/Controls/Button";
 export type { ButtonVariant } from "@/components/ui/Controls/Button";
+export { Collapse } from "@/components/ui/Controls/Collapse";
+export type { CollapseProps } from "@/components/ui/Controls/Collapse";
 export { DropdownMenu } from "@/components/ui/Controls/DropdownMenu";
 export type { DropdownMenuItem } from "@/components/ui/Controls/DropdownMenu";
 export type { DropdownMenuProps } from "@/components/ui/Controls/DropdownMenu";

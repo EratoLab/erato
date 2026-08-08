@@ -102,6 +102,7 @@ vi.mock("@/utils/sse/sseClient", () => {
   };
 });
 
+import { useGenerationStatusStore } from "../store/generationStatusStore";
 import { useMessagingStore } from "../store/messagingStore";
 import { useChatMessaging } from "../useChatMessaging";
 
@@ -927,6 +928,56 @@ describe("useChatMessaging", () => {
       { content_type: "text", text: "final answer" },
     ]);
     expect(result.current.isFinalizing).toBe(false);
+  });
+
+  it("marks the chat action-required instead of finished when the turn parks on a tool approval", async () => {
+    useGenerationStatusStore.setState({
+      statusByChatId: {},
+      currentChatId: null,
+    });
+    // Newer than the local running seed's client-clock timestamp, mirroring
+    // the real ordering (the request part is stamped after the send).
+    const requestedAt = new Date(Date.now() + 60_000).toISOString();
+
+    const { startStreaming, sendSSEEvent } = setupChatMessagingTest();
+
+    await startStreaming("delayed mcp approval probe");
+    await sendSSEEvent({
+      message_type: "assistant_message_started",
+      message_id: "assistant-parked-1",
+    });
+    await sendSSEEvent({
+      message_type: "assistant_message_completed",
+      message_id: "assistant-parked-1",
+      message: {
+        id: "assistant-parked-1",
+        role: "assistant",
+        created_at: "2026-02-18T12:00:01.000Z",
+        updated_at: "2026-02-18T12:00:11.000Z",
+        content: [
+          {
+            content_type: "tool_approval_request",
+            tool_call_id: "call-1",
+            tool_name: "publish_approval_probe",
+            mcp_server_id: "mock_mcp_approval",
+            input: {},
+            requested_at: requestedAt,
+            preset: "restrictive",
+            allow_always: true,
+            annotations: {},
+          },
+        ],
+        input_files_ids: [],
+        is_message_in_active_thread: true,
+      },
+    });
+
+    expect(
+      useGenerationStatusStore.getState().statusByChatId["chat1"],
+    ).toMatchObject({
+      kind: "action_required",
+      startedAt: requestedAt,
+    });
   });
 
   it("should force completion refetch via newly created chat id when hook chatId is null", async () => {
