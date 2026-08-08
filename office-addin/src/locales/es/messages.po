@@ -85,7 +85,7 @@ msgstr "Cuándo:"
 # Explicit IDs
 # ==============================
 #. js-lingui-explicit-id
-#: src/App.tsx
+#: src/core/SharedAddinShell.tsx
 msgid "officeAddin.auth.authenticating"
 msgstr "Autenticando..."
 
@@ -160,7 +160,7 @@ msgstr "Se agotó el tiempo de espera del inicio de sesión. Inténtalo de nuevo
 #~ msgstr "El inicio de sesión en Exchange local (heredado) aún no es compatible."
 
 #. js-lingui-explicit-id
-#: src/App.tsx
+#: src/core/SharedAddinShell.tsx
 msgid "officeAddin.auth.signIn"
 msgstr ""
 
@@ -171,7 +171,7 @@ msgstr ""
 #~ msgstr "Se requiere iniciar sesión"
 
 #. js-lingui-explicit-id
-#: src/App.tsx
+#: src/core/SharedAddinShell.tsx
 #: src/providers/SessionAuthProvider.tsx
 msgid "officeAddin.auth.signInToContinue"
 msgstr ""
@@ -187,22 +187,22 @@ msgstr "El inicio de sesión no está disponible en este entorno"
 #~ msgstr "Intentar de nuevo"
 
 #. js-lingui-explicit-id
-#: src/components/AddinChat.tsx
+#: src/core/AddinChatCore.tsx
 msgid "officeAddin.chat.conversation.aria"
 msgstr "Conversación del chat"
 
 #. js-lingui-explicit-id
-#: src/components/AddinChat.tsx
+#: src/core/AddinChatCore.tsx
 msgid "officeAddin.chat.conversation.dropzone.ariaLabel"
 msgstr "Suelta archivos en cualquier parte de la conversación para subirlos"
 
 #. js-lingui-explicit-id
-#: src/components/AddinChat.tsx
+#: src/core/AddinChatCore.tsx
 msgid "officeAddin.chat.fileDrop.overlay.label"
 msgstr "Suelta para subir"
 
 #. js-lingui-explicit-id
-#: src/components/AddinChat.tsx
+#: src/core/AddinChatCore.tsx
 msgid "officeAddin.chat.newChat"
 msgstr "Nuevo chat"
 
@@ -527,7 +527,7 @@ msgid "officeAddin.fileSource.updatingThread"
 msgstr "Actualizando…"
 
 #. js-lingui-explicit-id
-#: src/components/AddinChat.tsx
+#: src/core/AddinChatCore.tsx
 msgid "officeAddin.headerMenu.settings"
 msgstr "Configuración"
 
@@ -673,13 +673,13 @@ msgstr "Mantener el mismo chat al responder o reenviar"
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
-msgid "officeAddin.settings.addin.description"
-msgstr "Configura el comportamiento del complemento dentro de Office, por ejemplo cómo se asocian los correos con los chats al cambiar entre ellos."
+#~ msgid "officeAddin.settings.addin.description"
+#~ msgstr "Configura el comportamiento del complemento dentro de Office, por ejemplo cómo se asocian los correos con los chats al cambiar entre ellos."
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
-msgid "officeAddin.settings.addin.heading"
-msgstr "Comportamiento del complemento"
+#~ msgid "officeAddin.settings.addin.heading"
+#~ msgstr "Comportamiento del complemento"
 
 #. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
@@ -767,12 +767,12 @@ msgstr "Retomar último chat"
 #~ msgstr "Responder a todos los destinatarios"
 
 #. js-lingui-explicit-id
-#: src/components/AddinSettingsDialog.tsx
+#: src/core/AddinSettingsDialogCore.tsx
 msgid "officeAddin.settings.appearance.description"
 msgstr "Elige cómo debe verse Erato en este complemento."
 
 #. js-lingui-explicit-id
-#: src/components/AddinSettingsDialog.tsx
+#: src/core/AddinSettingsDialogCore.tsx
 msgid "officeAddin.settings.appearance.heading"
 msgstr "Modo de color"
 
@@ -782,9 +782,14 @@ msgid "officeAddin.settings.appearance.outlook.staleness.note"
 msgstr "Outlook para Windows requiere un reinicio completo para aplicar los cambios de tema (error conocido de Office). Selecciona Claro u Oscuro arriba para anular el tema del host."
 
 #. js-lingui-explicit-id
-#: src/components/AddinSettingsDialog.tsx
-msgid "officeAddin.settings.appearance.system.description"
-msgstr "Sigue la apariencia del host de Office."
+#: src/core/AddinSettingsDialogCore.tsx
+#~ msgid "officeAddin.settings.appearance.system.description"
+#~ msgstr "Sigue la apariencia del host de Office."
+
+#. js-lingui-explicit-id
+#: src/core/AddinSettingsDialogCore.tsx
+msgid "officeAddin.settings.appearance.system.description.neutral"
+msgstr "Adaptar a la apariencia del host."
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
@@ -792,14 +797,24 @@ msgid "officeAddin.settings.appearance.system.description.outlook"
 msgstr "Sigue tu tema de Outlook."
 
 #. js-lingui-explicit-id
-#: src/components/AddinSettingsDialog.tsx
+#: src/core/AddinSettingsDialogCore.tsx
 msgid "officeAddin.settings.audio.description"
 msgstr "Elige y prueba el micrófono que se usa para la entrada de voz en este complemento."
 
 #. js-lingui-explicit-id
-#: src/components/AddinSettingsDialog.tsx
+#: src/core/AddinSettingsDialogCore.tsx
 msgid "officeAddin.settings.audio.heading"
 msgstr "Micrófono"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.outlook.description"
+msgstr "Configura cómo se asigna el cambio entre correos de Outlook a los chats y cómo se comportan las acciones de Outlook sugeridas."
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.outlook.heading"
+msgstr "Comportamiento de Outlook"
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
@@ -808,31 +823,36 @@ msgstr "Aún no hay configuraciones disponibles."
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
-msgid "officeAddin.settings.tabs.addin"
-msgstr "Complemento"
+#~ msgid "officeAddin.settings.tabs.addin"
+#~ msgstr "Complemento"
 
 #. js-lingui-explicit-id
-#: src/components/AddinSettingsDialog.tsx
+#: src/core/AddinSettingsDialogCore.tsx
 msgid "officeAddin.settings.tabs.appearance"
 msgstr "Apariencia"
 
 #. js-lingui-explicit-id
-#: src/components/AddinSettingsDialog.tsx
+#: src/core/AddinSettingsDialogCore.tsx
 msgid "officeAddin.settings.tabs.audio"
 msgstr "Micrófono"
 
 #. js-lingui-explicit-id
-#: src/components/AddinSettingsDialog.tsx
+#: src/core/AddinSettingsDialogCore.tsx
 msgid "officeAddin.settings.tabs.desktopSidecar"
 msgstr "Desktop Sidecar"
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.tabs.outlook"
+msgstr "Outlook"
+
+#. js-lingui-explicit-id
+#: src/core/AddinSettingsDialogCore.tsx
 msgid "officeAddin.settings.tabs.user"
 msgstr "Mi perfil"
 
 #. js-lingui-explicit-id
-#: src/components/AddinSettingsDialog.tsx
+#: src/core/AddinSettingsDialogCore.tsx
 msgid "officeAddin.settings.title"
 msgstr "Configuración"
 

@@ -11,7 +11,7 @@
  * off for Microsoft 365 tenants in October 2025); on-prem mailboxes use the
  * EWS SOAP backend in `./fetchOutlookMessageEws.ts` instead. Callers
  * provide an `acquireGraphToken` function bound to the `Mail.Read` scope via
- * MSAL NAA; see `AddinChat.tsx` for the wiring.
+ * MSAL NAA; see `OutlookAddinChat.tsx` for the wiring.
  */
 
 export const GRAPH_BASE = "https://graph.microsoft.com/v1.0";

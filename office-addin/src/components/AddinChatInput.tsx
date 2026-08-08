@@ -1,5 +1,4 @@
 import {
-  ChatInput,
   FileTypeUtil,
   GroupedFileAttachmentsPreview,
   fetchUploadFile,
@@ -16,6 +15,7 @@ import {
 import { t } from "@lingui/core/macro";
 import { forwardRef, useCallback, useMemo, useRef, useState } from "react";
 
+import { AddinChatInputCore } from "../core/AddinChatInputCore";
 import { useAvailableActionFacetIds } from "../hooks/useAvailableActionFacets";
 import { useOutlookCalendarFetcher } from "../hooks/useOutlookCalendarFetcher";
 import { useOutlookComposeSelection } from "../hooks/useOutlookComposeSelection";
@@ -905,15 +905,10 @@ export const AddinChatInput = forwardRef<
         </div>
       )}
 
-      <ChatInput
+      <AddinChatInputCore
         ref={ref}
-        className="p-2 sm:p-4"
-        showControls={true}
-        showFileTypes={true}
         chatId={chatId}
         {...chatInputProps}
-        uploadFiles={chatInputProps.uploadFiles}
-        uploadError={chatInputProps.uploadError}
         onSendMessage={(message, inputFileIds, modelId, selectedFacetIds) => {
           void wrappedOnSendMessage(
             message,

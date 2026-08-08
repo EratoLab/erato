@@ -69,7 +69,7 @@ function formatAttendees(details: AppointmentDetails): string {
 /**
  * Office-aware renderer for erato-appointment code blocks (the JSON payload
  * the scheduling facet's confirm step emits). Registered via componentRegistry
- * in main.tsx.
+ * by the Outlook composition before its first chat render.
  *
  * Renders the parsed appointment as a summary card. When the producing facet
  * allows `outlook.create_appointment` (from `GET /me/facets`, intersected with

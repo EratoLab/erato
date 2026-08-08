@@ -124,6 +124,40 @@ const eslintConfig = [
       "react/prop-types": "off",
     },
   },
+  {
+    files: ["src/core/**/*.ts", "src/core/**/*.tsx"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "**/OfficeProvider",
+                "**/Outlook*",
+                "**/outlook/**",
+                "**/sessionPolicy/**",
+                "**/useOutlook*",
+              ],
+              message:
+                "Host-neutral core files must receive host behavior through explicit components or props.",
+            },
+          ],
+        },
+      ],
+      "no-restricted-globals": [
+        "error",
+        {
+          name: "Office",
+          message: "Office.js is owned by the Outlook composition.",
+        },
+        {
+          name: "OfficeRuntime",
+          message: "Office.js is owned by the Outlook composition.",
+        },
+      ],
+    },
+  },
 ];
 
 export default eslintConfig;

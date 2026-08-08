@@ -40,7 +40,7 @@ import type { EratoEmailCodeBlockProps } from "@erato/frontend/library";
 
 /**
  * Office-aware renderer for erato-email code blocks.
- * Registered via componentRegistry in main.tsx so the shared MessageContent
+ * Registered by the Outlook composition before the shared MessageContent
  * delegates to this component when running inside the Outlook addin.
  *
  * Compose mode: action buttons that write back into the Outlook compose body
