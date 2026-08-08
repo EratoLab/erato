@@ -42,6 +42,10 @@ export {
   DefaultEratoEmailCodeBlock,
   EratoEmailSuggestion,
 } from "@/components/ui/Message/EratoEmailSuggestion";
+export {
+  DefaultEratoAppointmentCodeBlock,
+  EratoAppointmentBlock,
+} from "@/components/ui/Message/EratoAppointmentBlock";
 export { ImageContentDisplay } from "@/components/ui/Message/ImageContentDisplay";
 export {
   Trace,

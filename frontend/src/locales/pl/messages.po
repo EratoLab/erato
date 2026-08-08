@@ -1411,6 +1411,26 @@ msgid "chat.message.action_facet.selection_label"
 msgstr "Zaznaczenie"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/EratoAppointmentBlock.tsx
+msgid "chat.message.appointment.attendees"
+msgstr "Uczestnicy"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/EratoAppointmentBlock.tsx
+msgid "chat.message.appointment.suggested"
+msgstr "Proponowany termin"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/EratoAppointmentBlock.tsx
+msgid "chat.message.appointment.when"
+msgstr "Kiedy"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/EratoAppointmentBlock.tsx
+msgid "chat.message.appointment.where"
+msgstr "Gdzie"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
 msgid "chat.message.aria"
 msgstr "wiadomość"
