@@ -172,6 +172,31 @@ const eslintConfig = [
       ],
     },
   },
+  {
+    files: [
+      "src/hooks/**/*.ts",
+      "src/hooks/**/*.tsx",
+      "src/providers/**/*.ts",
+      "src/providers/**/*.tsx",
+      "src/utils/**/*.ts",
+      "src/utils/**/*.tsx",
+      "src/auth/**/*.ts",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["**/outlook/**", "!**/test/mocks/outlook/**"],
+              message:
+                "The shared ring must not depend on the Outlook host module; move shared code out or invert the dependency.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 ];
 
 export default eslintConfig;

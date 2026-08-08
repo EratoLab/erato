@@ -13,13 +13,13 @@ const { registry, addMenu, appointmentRenderer, emailRenderer } = vi.hoisted(
 );
 
 vi.mock("@erato/frontend/library", () => ({ componentRegistry: registry }));
-vi.mock("../../components/AddinChatAddMenuExtraContent", () => ({
+vi.mock("../components/AddinChatAddMenuExtraContent", () => ({
   AddinChatAddMenuExtraContent: addMenu,
 }));
-vi.mock("../../components/OutlookEratoAppointmentRenderer", () => ({
+vi.mock("../components/OutlookEratoAppointmentRenderer", () => ({
   OutlookEratoAppointmentRenderer: appointmentRenderer,
 }));
-vi.mock("../../components/OutlookEratoEmailRenderer", () => ({
+vi.mock("../components/OutlookEratoEmailRenderer", () => ({
   OutlookEratoEmailRenderer: emailRenderer,
 }));
 

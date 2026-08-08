@@ -17,17 +17,17 @@ msgstr ""
 # Explicit IDs
 # ==============================
 #. js-lingui-explicit-id
-#: src/components/OutlookEratoAppointmentRenderer.tsx
+#: src/outlook/components/OutlookEratoAppointmentRenderer.tsx
 msgid "officeAddin.appointmentRenderer.alwaysAllowLocked"
 msgstr "Your organization requires confirmation each time this action runs automatically."
 
 #. js-lingui-explicit-id
-#: src/components/OutlookEratoAppointmentRenderer.tsx
+#: src/outlook/components/OutlookEratoAppointmentRenderer.tsx
 msgid "officeAddin.appointmentRenderer.attendees"
 msgstr "Attendees:"
 
 #. js-lingui-explicit-id
-#: src/components/OutlookEratoAppointmentRenderer.tsx
+#: src/outlook/components/OutlookEratoAppointmentRenderer.tsx
 msgid "officeAddin.appointmentRenderer.confirmMessage"
 msgstr "This opens a prefilled appointment form in Outlook. Nothing is saved or sent until you do it there."
 
@@ -42,42 +42,42 @@ msgstr "This opens a prefilled appointment form in Outlook. Nothing is saved or 
 #~ msgstr "Appointment form opened"
 
 #. js-lingui-explicit-id
-#: src/components/OutlookEratoAppointmentRenderer.tsx
+#: src/outlook/components/OutlookEratoAppointmentRenderer.tsx
 msgid "officeAddin.appointmentRenderer.location"
 msgstr "Location:"
 
 #. js-lingui-explicit-id
-#: src/components/OutlookEratoAppointmentRenderer.tsx
+#: src/outlook/components/OutlookEratoAppointmentRenderer.tsx
 msgid "officeAddin.appointmentRenderer.noSubject"
 msgstr "(none)"
 
 #. js-lingui-explicit-id
-#: src/components/OutlookEratoAppointmentRenderer.tsx
+#: src/outlook/components/OutlookEratoAppointmentRenderer.tsx
 msgid "officeAddin.appointmentRenderer.openAppointment"
 msgstr "Open appointment"
 
 #. js-lingui-explicit-id
-#: src/components/OutlookEratoAppointmentRenderer.tsx
+#: src/outlook/components/OutlookEratoAppointmentRenderer.tsx
 msgid "officeAddin.appointmentRenderer.opened"
 msgstr "Opened!"
 
 #. js-lingui-explicit-id
-#: src/components/OutlookEratoAppointmentRenderer.tsx
+#: src/outlook/components/OutlookEratoAppointmentRenderer.tsx
 msgid "officeAddin.appointmentRenderer.openFailed"
 msgstr "Failed to open the appointment form. You can create the appointment manually in Outlook."
 
 #. js-lingui-explicit-id
-#: src/components/OutlookEratoAppointmentRenderer.tsx
+#: src/outlook/components/OutlookEratoAppointmentRenderer.tsx
 msgid "officeAddin.appointmentRenderer.opening"
 msgstr "Opening..."
 
 #. js-lingui-explicit-id
-#: src/components/OutlookEratoAppointmentRenderer.tsx
+#: src/outlook/components/OutlookEratoAppointmentRenderer.tsx
 msgid "officeAddin.appointmentRenderer.subject"
 msgstr "Subject:"
 
 #. js-lingui-explicit-id
-#: src/components/OutlookEratoAppointmentRenderer.tsx
+#: src/outlook/components/OutlookEratoAppointmentRenderer.tsx
 msgid "officeAddin.appointmentRenderer.when"
 msgstr "When:"
 
@@ -135,12 +135,12 @@ msgstr "MSAL not initialized"
 #~ msgstr "Nested App Authentication is not supported in this environment"
 
 #. js-lingui-explicit-id
-#: src/providers/Oauth2ProxyLoginProvider.tsx
+#: src/outlook/providers/Oauth2ProxyLoginProvider.tsx
 msgid "officeAddin.auth.oauth2ProxyPopupBlocked"
 msgstr "Sign-in popup was blocked. Allow popups for this site and try again."
 
 #. js-lingui-explicit-id
-#: src/providers/Oauth2ProxyLoginProvider.tsx
+#: src/outlook/providers/Oauth2ProxyLoginProvider.tsx
 msgid "officeAddin.auth.oauth2ProxyProbeFailed"
 msgstr "Could not reach the sign-in service. Try again."
 
@@ -150,7 +150,7 @@ msgid "officeAddin.auth.oauth2ProxySessionFailed"
 msgstr "Could not establish a secure Erato session. Try signing in again."
 
 #. js-lingui-explicit-id
-#: src/providers/Oauth2ProxyLoginProvider.tsx
+#: src/outlook/providers/Oauth2ProxyLoginProvider.tsx
 msgid "officeAddin.auth.oauth2ProxySignInTimedOut"
 msgstr "Sign-in timed out. Try again."
 
@@ -207,182 +207,182 @@ msgid "officeAddin.chat.newChat"
 msgstr "New Chat"
 
 #. js-lingui-explicit-id
-#: src/components/AddinChatInput.tsx
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.dismissDraftContext"
 msgstr "Don't include draft"
 
 #. js-lingui-explicit-id
-#: src/components/AddinChatInput.tsx
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.dismissSelection"
 msgstr "Dismiss selection"
 
 #. js-lingui-explicit-id
-#: src/components/AddinChatInput.tsx
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.draftContext"
 msgstr "Your draft is included as context"
 
 #. js-lingui-explicit-id
-#: src/components/AddinChatInput.tsx
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.emailBody"
 msgstr "Email body"
 
 #. js-lingui-explicit-id
-#: src/components/AddinChatInput.tsx
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.emailFallback"
 msgstr "Email"
 
 #. js-lingui-explicit-id
-#: src/components/AddinChatInput.tsx
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.emailLabel"
 msgstr "Email"
 
 #. js-lingui-explicit-id
-#: src/components/AddinChatInput.tsx
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.emailSourcePreviewRegion"
 msgstr "Email context preview"
 
 #. js-lingui-explicit-id
-#: src/components/AddinChatInput.tsx
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.emailThreadLoadError"
 msgstr "Couldn't load the email thread"
 
 #. js-lingui-explicit-id
-#: src/components/AddinChatInput.tsx
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.emailThreadLoadErrorDescription"
 msgstr "You can still send without this email context."
 
 #. js-lingui-explicit-id
-#: src/components/AddinChatInput.tsx
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.expandingDroppedEmails"
 msgstr "Processing dropped emails…"
 
 #. js-lingui-explicit-id
-#: src/components/AddinChatInput.tsx
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.loadingEmailThread"
 msgstr "Loading email thread..."
 
 #. js-lingui-explicit-id
-#: src/components/AddinChatInput.tsx
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.loadingEmailThreadDescription"
 msgstr "Preparing the email context"
 
 #. js-lingui-explicit-id
-#: src/components/AddinChatInput.tsx
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.replyContext.groupLabel"
 msgstr "Reply context"
 
 #. js-lingui-explicit-id
-#: src/components/AddinChatInput.tsx
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.replyContext.label"
 msgstr "Reply context"
 
 #. js-lingui-explicit-id
-#: src/components/AddinChatInput.tsx
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.replyContext.untitled"
 msgstr "(no subject)"
 
 #. js-lingui-explicit-id
-#: src/components/AddinChatInput.tsx
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.unknownSender"
 msgstr "Unknown sender"
 
 #. js-lingui-explicit-id
-#: src/components/AddinChatInput.tsx
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.validation.tooLarge"
 msgstr "File exceeds the server limit of {globalMaxFormatted}"
 
 #. js-lingui-explicit-id
-#: src/utils/outlookClientActions.ts
+#: src/outlook/utils/outlookClientActions.ts
 msgid "officeAddin.clientActions.createAppointment"
 msgstr "Open a prefilled appointment"
 
 #. js-lingui-explicit-id
-#: src/utils/outlookClientActions.ts
+#: src/outlook/utils/outlookClientActions.ts
 msgid "officeAddin.clientActions.reply"
 msgstr "Reply to sender"
 
 #. js-lingui-explicit-id
-#: src/utils/outlookClientActions.ts
+#: src/outlook/utils/outlookClientActions.ts
 msgid "officeAddin.clientActions.replyAll"
 msgstr "Reply to all recipients"
 
 #. js-lingui-explicit-id
-#: src/providers/EntraGraphTokenProvider.tsx
+#: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.signedIn.title"
 msgstr "Signed in. Add the email again to attach it."
 
 #. js-lingui-explicit-id
-#: src/providers/EntraGraphTokenProvider.tsx
+#: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.signInToLoad.action"
 msgstr "Sign in"
 
 #. js-lingui-explicit-id
-#: src/providers/EntraGraphTokenProvider.tsx
+#: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.signInToLoad.description"
 msgstr "This email wasn't attached because reading it needs a quick sign-in."
 
 #. js-lingui-explicit-id
-#: src/providers/EntraGraphTokenProvider.tsx
+#: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.signInToLoad.title"
 msgstr "Sign in to load email"
 
 #. js-lingui-explicit-id
-#: src/components/OutlookEratoEmailRenderer.tsx
+#: src/outlook/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.alwaysAllowLocked"
 msgstr "Your organization requires confirmation each time this action runs automatically."
 
 #. js-lingui-explicit-id
-#: src/components/OutlookEratoEmailRenderer.tsx
+#: src/outlook/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.copied"
 msgstr "Copied!"
 
 #. js-lingui-explicit-id
-#: src/components/OutlookEratoEmailRenderer.tsx
+#: src/outlook/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.copy"
 msgstr "Copy"
 
 #. js-lingui-explicit-id
-#: src/components/OutlookEratoEmailRenderer.tsx
+#: src/outlook/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.done"
 msgstr "Done!"
 
 #. js-lingui-explicit-id
-#: src/components/OutlookEratoEmailRenderer.tsx
+#: src/outlook/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.insertAtCursor"
 msgstr "Insert at Cursor"
 
 #. js-lingui-explicit-id
-#: src/components/OutlookEratoEmailRenderer.tsx
+#: src/outlook/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.insertFailed"
 msgstr "Failed to insert into compose body."
 
 #. js-lingui-explicit-id
-#: src/components/OutlookEratoEmailRenderer.tsx
+#: src/outlook/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.inserting"
 msgstr "Inserting..."
 
 #. js-lingui-explicit-id
-#: src/components/OutlookEratoEmailRenderer.tsx
+#: src/outlook/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.opened"
 msgstr "Opened!"
 
 #. js-lingui-explicit-id
-#: src/components/OutlookEratoEmailRenderer.tsx
+#: src/outlook/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.opening"
 msgstr "Opening..."
 
 #. js-lingui-explicit-id
-#: src/components/OutlookEratoEmailRenderer.tsx
+#: src/outlook/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.replaceSelection"
 msgstr "Replace Selection"
 
 #. js-lingui-explicit-id
-#: src/components/OutlookEratoEmailRenderer.tsx
+#: src/outlook/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.reply"
 msgstr "Reply"
 
 #. js-lingui-explicit-id
-#: src/components/OutlookEratoEmailRenderer.tsx
+#: src/outlook/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.replyAll"
 msgstr "Reply All"
 
@@ -392,7 +392,7 @@ msgstr "Reply All"
 #~ msgstr "Open Reply All"
 
 #. js-lingui-explicit-id
-#: src/components/OutlookEratoEmailRenderer.tsx
+#: src/outlook/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.replyAllConfirmMessage"
 msgstr "{confirmRecipientCount, plural, one {This opens a reply addressed to # person from the email you are reading. Nothing is sent until you press Send in Outlook.} other {This opens a reply addressed to # people from the email you are reading. Nothing is sent until you press Send in Outlook.}}"
 
@@ -412,7 +412,7 @@ msgstr "{confirmRecipientCount, plural, one {This opens a reply addressed to # p
 #~ msgstr "Open Reply"
 
 #. js-lingui-explicit-id
-#: src/components/OutlookEratoEmailRenderer.tsx
+#: src/outlook/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.replyConfirmMessage"
 msgstr "This opens a prefilled reply to the sender of the email you are reading. Nothing is sent until you press Send in Outlook."
 
@@ -422,7 +422,7 @@ msgstr "This opens a prefilled reply to the sender of the email you are reading.
 #~ msgstr "Open this reply?"
 
 #. js-lingui-explicit-id
-#: src/components/OutlookEratoEmailRenderer.tsx
+#: src/outlook/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.replyFailed"
 msgstr "Failed to open the reply form. Make sure the received email is still open, or use Copy."
 
@@ -437,12 +437,12 @@ msgstr "Failed to open the reply form. Make sure the received email is still ope
 #~ msgstr "Reply form opened"
 
 #. js-lingui-explicit-id
-#: src/components/OutlookEratoEmailRenderer.tsx
+#: src/outlook/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.replyStaleItem"
 msgstr "This draft was written for a different email. Open that email again, or use Copy."
 
 #. js-lingui-explicit-id
-#: src/components/OutlookEratoEmailRenderer.tsx
+#: src/outlook/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.replyTooLarge"
 msgstr "Draft is too large to prefill a reply. Use Copy and paste it into a reply instead."
 
@@ -452,32 +452,32 @@ msgstr "Draft is too large to prefill a reply. Use Copy and paste it into a repl
 #~ msgstr "Add files"
 
 #. js-lingui-explicit-id
-#: src/components/AddinChatAddMenuExtraContent.tsx
+#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.alreadyAdded"
 msgstr "Already added"
 
 #. js-lingui-explicit-id
-#: src/components/AddinChatAddMenuExtraContent.tsx
+#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.attachmentFallback"
 msgstr "Attachment"
 
 #. js-lingui-explicit-id
-#: src/components/AddinChatAddMenuExtraContent.tsx
+#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.cloudAttachmentUnsupported"
 msgstr "Cloud attachment cannot be uploaded from Outlook"
 
 #. js-lingui-explicit-id
-#: src/components/AddinChatAddMenuExtraContent.tsx
+#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.emailContent"
 msgstr "Email content"
 
 #. js-lingui-explicit-id
-#: src/components/AddinChatAddMenuExtraContent.tsx
+#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.emailThread"
 msgstr "Email thread"
 
 #. js-lingui-explicit-id
-#: src/components/AddinChatAddMenuExtraContent.tsx
+#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.emailThreadLoadError"
 msgstr "Couldn't load this conversation from the server. Some messages or attachments may be missing — try reopening the item."
 
@@ -502,12 +502,12 @@ msgstr "Couldn't load this conversation from the server. Some messages or attach
 #~ msgstr "..."
 
 #. js-lingui-explicit-id
-#: src/components/AddinChatAddMenuExtraContent.tsx
+#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.loadingAttachments"
 msgstr "Loading attachments..."
 
 #. js-lingui-explicit-id
-#: src/components/AddinChatAddMenuExtraContent.tsx
+#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.loadingEmailThread"
 msgstr "Loading email thread..."
 
@@ -522,7 +522,7 @@ msgstr "Loading email thread..."
 #~ msgstr "Show"
 
 #. js-lingui-explicit-id
-#: src/components/AddinChatAddMenuExtraContent.tsx
+#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.updatingThread"
 msgstr "Updating…"
 
@@ -537,72 +537,72 @@ msgid "officeAddin.office.loading"
 msgstr "Loading Office Add-in..."
 
 #. js-lingui-explicit-id
-#: src/components/AddinPinHintBanner.tsx
+#: src/outlook/components/AddinPinHintBanner.tsx
 msgid "officeAddin.pinHint.description"
 msgstr "Until it's pinned, this add-in stays on the message you opened it from. Select the pin icon to keep it in sync as you read."
 
 #. js-lingui-explicit-id
-#: src/components/AddinPinHintBanner.tsx
+#: src/outlook/components/AddinPinHintBanner.tsx
 msgid "officeAddin.pinHint.dismiss"
 msgstr "Dismiss"
 
 #. js-lingui-explicit-id
-#: src/components/AddinPinHintBanner.tsx
+#: src/outlook/components/AddinPinHintBanner.tsx
 msgid "officeAddin.pinHint.title"
 msgstr "Pin to follow your mail"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.tsx
+#: src/outlook/components/sessionAskToast.tsx
 msgid "officeAddin.sessionAsk.actions.continue"
 msgstr "Continue"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.tsx
+#: src/outlook/components/sessionAskToast.tsx
 msgid "officeAddin.sessionAsk.actions.new"
 msgstr "New"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.tsx
+#: src/outlook/components/sessionAskToast.tsx
 msgid "officeAddin.sessionAsk.actions.pick"
 msgstr "Pick"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.tsx
+#: src/outlook/components/sessionAskToast.tsx
 msgid "officeAddin.sessionAsk.descriptionNoSuggestion"
 msgstr "Start a fresh chat for this email?"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.tsx
+#: src/outlook/components/sessionAskToast.tsx
 msgid "officeAddin.sessionAsk.descriptionWithSuggestion"
 msgstr "Continue the previous chat for this email, or start a fresh one?"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.tsx
+#: src/outlook/components/sessionAskToast.tsx
 msgid "officeAddin.sessionAsk.title"
 msgstr "You switched conversation"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.tsx
+#: src/outlook/components/sessionAskToast.tsx
 msgid "officeAddin.sessionAsk.untitledChat"
 msgstr "Untitled chat"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.tsx
+#: src/outlook/components/sessionAskToast.tsx
 msgid "officeAddin.sessionPick.actions.back"
 msgstr "Back"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.tsx
+#: src/outlook/components/sessionAskToast.tsx
 msgid "officeAddin.sessionPick.title"
 msgstr "Pick a recent chat"
 
 #. js-lingui-explicit-id
-#: src/components/BehaviorTabContent.tsx
+#: src/outlook/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.clientActions.always.helper"
 msgstr "Performs the action without asking. Nothing is sent until you press Send in Outlook."
 
 #. js-lingui-explicit-id
-#: src/components/BehaviorTabContent.tsx
+#: src/outlook/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.clientActions.always.label"
 msgstr "Always allow"
 
@@ -622,52 +622,52 @@ msgstr "Always allow"
 #~ msgstr "Ask every time"
 
 #. js-lingui-explicit-id
-#: src/components/BehaviorTabContent.tsx
+#: src/outlook/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.clientActions.clickConsent.always.locked"
 msgstr "Locked: your organization requires confirmation each time this action runs automatically."
 
 #. js-lingui-explicit-id
-#: src/components/BehaviorTabContent.tsx
+#: src/outlook/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.clientActions.clickConsent.ask.helper"
 msgstr "Shows a confirmation step only when the assistant triggers this action on its own. Clicking the action's button always runs it directly."
 
 #. js-lingui-explicit-id
-#: src/components/BehaviorTabContent.tsx
+#: src/outlook/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.clientActions.clickConsent.ask.label"
 msgstr "Ask before running automatically"
 
 #. js-lingui-explicit-id
-#: src/components/BehaviorTabContent.tsx
+#: src/outlook/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.clientActions.intro"
 msgstr "Your decisions from the in-chat confirmation are stored here and can be changed any time. Nothing is sent until you press Send in Outlook."
 
 #. js-lingui-explicit-id
-#: src/components/BehaviorTabContent.tsx
+#: src/outlook/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.clientActions.legend"
 msgstr "Assistant-suggested actions"
 
 #. js-lingui-explicit-id
-#: src/components/BehaviorTabContent.tsx
+#: src/outlook/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.clientActions.never.helper"
 msgstr "Hides this action and ignores the assistant's suggestion."
 
 #. js-lingui-explicit-id
-#: src/components/BehaviorTabContent.tsx
+#: src/outlook/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.clientActions.never.label"
 msgstr "Never"
 
 #. js-lingui-explicit-id
-#: src/components/BehaviorTabContent.tsx
+#: src/outlook/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.clientActions.scope"
 msgstr "These decisions are stored on this device only."
 
 #. js-lingui-explicit-id
-#: src/components/BehaviorTabContent.tsx
+#: src/outlook/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.composeInherits.helper"
 msgstr "When replying or forwarding an email, keep the current chat instead of starting a new one."
 
 #. js-lingui-explicit-id
-#: src/components/BehaviorTabContent.tsx
+#: src/outlook/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.composeInherits.label"
 msgstr "Stay same chat on Forward or Reply"
 
@@ -682,37 +682,37 @@ msgstr "Stay same chat on Forward or Reply"
 #~ msgstr "Add-in behavior"
 
 #. js-lingui-explicit-id
-#: src/components/BehaviorTabContent.tsx
+#: src/outlook/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.mode.ask.helper"
 msgstr "When opening a different email, ask to continue previous chat or start a new one."
 
 #. js-lingui-explicit-id
-#: src/components/BehaviorTabContent.tsx
+#: src/outlook/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.mode.ask.label"
 msgstr "Ask on conversation change"
 
 #. js-lingui-explicit-id
-#: src/components/BehaviorTabContent.tsx
+#: src/outlook/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.mode.legend"
 msgstr "When you switch to a different email"
 
 #. js-lingui-explicit-id
-#: src/components/BehaviorTabContent.tsx
+#: src/outlook/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.mode.new.helper"
 msgstr "Start a new chat each time when opening or switching to a different conversation."
 
 #. js-lingui-explicit-id
-#: src/components/BehaviorTabContent.tsx
+#: src/outlook/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.mode.new.label"
 msgstr "Start new chat"
 
 #. js-lingui-explicit-id
-#: src/components/BehaviorTabContent.tsx
+#: src/outlook/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.mode.resume.helper"
 msgstr "Reopens the previous conversation when opening or switching emails."
 
 #. js-lingui-explicit-id
-#: src/components/BehaviorTabContent.tsx
+#: src/outlook/components/BehaviorTabContent.tsx
 msgid "officeAddin.settings.addin.mode.resume.label"
 msgstr "Resume last chat"
 
@@ -777,7 +777,7 @@ msgid "officeAddin.settings.appearance.heading"
 msgstr "Color mode"
 
 #. js-lingui-explicit-id
-#: src/components/AddinSettingsDialog.tsx
+#: src/outlook/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.appearance.outlook.staleness.note"
 msgstr "Outlook for Windows requires a full restart to pick up theme changes (known Office bug). Pick Light or Dark above to override the host theme."
 
@@ -792,7 +792,7 @@ msgid "officeAddin.settings.appearance.system.description.neutral"
 msgstr "Match your host appearance."
 
 #. js-lingui-explicit-id
-#: src/components/AddinSettingsDialog.tsx
+#: src/outlook/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.appearance.system.description.outlook"
 msgstr "Follow your Outlook theme."
 
@@ -807,17 +807,17 @@ msgid "officeAddin.settings.audio.heading"
 msgstr "Microphone"
 
 #. js-lingui-explicit-id
-#: src/components/AddinSettingsDialog.tsx
+#: src/outlook/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.outlook.description"
 msgstr "Configure how switching between Outlook emails maps to chats and how suggested Outlook actions behave."
 
 #. js-lingui-explicit-id
-#: src/components/AddinSettingsDialog.tsx
+#: src/outlook/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.outlook.heading"
 msgstr "Outlook behavior"
 
 #. js-lingui-explicit-id
-#: src/components/AddinSettingsDialog.tsx
+#: src/outlook/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.placeholder.empty"
 msgstr "No settings available yet."
 
@@ -842,7 +842,7 @@ msgid "officeAddin.settings.tabs.desktopSidecar"
 msgstr "Desktop Sidecar"
 
 #. js-lingui-explicit-id
-#: src/components/AddinSettingsDialog.tsx
+#: src/outlook/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.tabs.outlook"
 msgstr "Outlook"
 
@@ -1061,10 +1061,10 @@ msgstr "Upload the generated manifest"
 # ==============================
 # Unstable IDs
 # ==============================
-#: src/components/AddinChatInput.tsx
+#: src/outlook/components/AddinChatInput.tsx
 msgid "{messageCount} messages"
 msgstr "{messageCount} messages"
 
-#: src/components/AddinChatInput.tsx
+#: src/outlook/components/AddinChatInput.tsx
 msgid "1 message"
 msgstr "1 message"

@@ -6,7 +6,7 @@ import type {
   OutlookSessionAnchor,
   OutlookSessionPreferences,
   OutlookSessionStorageValue,
-} from "../../sessionPolicy";
+} from "../sessionPolicy";
 
 const read = (conv: string | null): OutlookSessionAnchor => ({
   conversationId: conv,

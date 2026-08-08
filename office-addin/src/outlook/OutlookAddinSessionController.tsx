@@ -8,8 +8,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   dismissSessionToasts,
   showSessionAskToast,
-} from "../components/sessionAskToast";
-import { useOutlookSessionAnchor } from "../hooks/useOutlookSessionAnchor";
+} from "./components/sessionAskToast";
+import { useOutlookSessionAnchor } from "./hooks/useOutlookSessionAnchor";
 import {
   DEFAULT_OUTLOOK_SESSION,
   DEFAULT_OUTLOOK_SESSION_PREFERENCES,
@@ -23,7 +23,7 @@ import {
   resolveSupportedMailboxItem,
   type OutlookSessionAnchor,
   type OutlookSessionStorageValue,
-} from "../sessionPolicy";
+} from "./sessionPolicy";
 
 import type {
   AddinSessionController,

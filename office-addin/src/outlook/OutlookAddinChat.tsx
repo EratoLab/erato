@@ -6,36 +6,36 @@ import {
 } from "@erato/frontend/library";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { AddinChatInput } from "../components/AddinChatInput";
-import { AddinPinHintBanner } from "../components/AddinPinHintBanner";
-import { AddinSettingsDialog } from "../components/AddinSettingsDialog";
+import { AddinChatInput } from "./components/AddinChatInput";
+import { AddinPinHintBanner } from "./components/AddinPinHintBanner";
+import { AddinSettingsDialog } from "./components/AddinSettingsDialog";
 import {
   AddinChatCore,
   AddinChatCoreView,
   type AddinChatHostProps,
 } from "../core/AddinChatCore";
-import { useActionFacetClientActions } from "../hooks/useAvailableActionFacets";
-import { useEmailDedupSet } from "../hooks/useEmailDedupSet";
+import { useActionFacetClientActions } from "./hooks/useAvailableActionFacets";
+import { useEmailDedupSet } from "./hooks/useEmailDedupSet";
 import { useOfficeDragAndDrop } from "../hooks/useOfficeDragAndDrop";
-import { useOutlookClientTools } from "../hooks/useOutlookClientTools";
-import { useOutlookMailListDrag } from "../hooks/useOutlookMailListDrag";
-import { useOutlookMessageFetcher } from "../hooks/useOutlookMessageFetcher";
+import { useOutlookClientTools } from "./hooks/useOutlookClientTools";
+import { useOutlookMailListDrag } from "./hooks/useOutlookMailListDrag";
+import { useOutlookMessageFetcher } from "./hooks/useOutlookMessageFetcher";
 import { useOffice } from "../providers/OfficeProvider";
-import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
-import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
-import { resolveEditExchangeItemIdentity } from "../utils/exchangeItemIdentity";
-import { FreshCompletionTracker } from "../utils/freshCompletionTracker";
+import { useOutlookEmailSource } from "./providers/OutlookEmailSourceProvider";
+import { useOutlookMailItem } from "./providers/OutlookMailItemProvider";
+import { resolveEditExchangeItemIdentity } from "./utils/exchangeItemIdentity";
+import { FreshCompletionTracker } from "./utils/freshCompletionTracker";
 import {
   OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
   runWithGraphTimeout,
-} from "../utils/graphRequestTimeout";
-import { buildOutlookArtifact } from "../utils/outlookClientActions";
-import { newestSchedulingSignalAt } from "../utils/outlookScheduleTool";
-import { parseDroppedFiles } from "../utils/parseDroppedFiles";
-import { parseEmlBytes } from "../utils/parsedEmail";
+} from "./utils/graphRequestTimeout";
+import { buildOutlookArtifact } from "./utils/outlookClientActions";
+import { newestSchedulingSignalAt } from "./utils/outlookScheduleTool";
+import { parseDroppedFiles } from "./utils/parseDroppedFiles";
+import { parseEmlBytes } from "./utils/parsedEmail";
 
-import type { FetchOutlookMessageBytesResult } from "../utils/fetchOutlookMessage";
-import type { OutlookMailListDragItem } from "../utils/outlookMailListDragParse";
+import type { FetchOutlookMessageBytesResult } from "./utils/fetchOutlookMessage";
+import type { OutlookMailListDragItem } from "./utils/outlookMailListDragParse";
 
 const EML_MIME_TYPES: Record<string, string[]> = {
   "message/rfc822": [".eml"],

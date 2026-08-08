@@ -1,0 +1,563 @@
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+import { callOfficeAsync } from "../../utils/officeAsync";
+import { isMessageRead, resolveSupportedMailboxItem } from "../sessionPolicy";
+
+interface EmailAddress {
+  displayName: string;
+  emailAddress: string;
+}
+
+export interface OutlookAttachmentData {
+  id: string;
+  name: string;
+  size: number;
+  isInline: boolean;
+  attachmentType: string;
+  contentType: string;
+}
+
+export interface OutlookMailItemData {
+  subject: string;
+  from: EmailAddress | null;
+  to: EmailAddress[];
+  cc: EmailAddress[];
+  dateTimeCreated: Date | null;
+  conversationId: string | null;
+  internetMessageId: string | null;
+  // EWS item id for read-mode messages. Null for compose mode (no Graph-
+  // reachable id until the draft is saved) — callers gate Graph fetches on
+  // this being present.
+  itemId: string | null;
+  bodyText: string | null;
+  bodyHtml: string | null;
+  isLoadingBody: boolean;
+  // True when the underlying Office item is a `MessageCompose` (the user is
+  // drafting). False for `MessageRead` (the user is reading an email). Used
+  // by the action-facet wrapper to gate `outlook_review_draft`, which only
+  // makes sense for the user's own draft — never for received mail.
+  isComposeMode: boolean;
+}
+
+interface OutlookMailItemContextValue {
+  itemIdentity: string | null;
+  mailItem: OutlookMailItemData | null;
+  attachments: OutlookAttachmentData[];
+  isLoading: boolean;
+  isLoadingAttachments: boolean;
+  // True once the resolved item has actually CHANGED to a different one — a
+  // real navigation, which only a pinned/tracking pane observes. The host's
+  // initial same-item selection event does NOT count (it would otherwise clear
+  // the hint the instant the first message loads). On new Outlook for Mac an
+  // unpinned pane never sees a real change, so this stays false. Drives the
+  // "pin this add-in" hint's self-clear.
+  hasItemChangedFired: boolean;
+  refresh: () => void;
+  getAttachmentFile: (attachmentId: string) => Promise<File>;
+}
+
+const OutlookMailItemContext = createContext<OutlookMailItemContextValue>({
+  itemIdentity: null,
+  mailItem: null,
+  attachments: [],
+  isLoading: true,
+  isLoadingAttachments: false,
+  hasItemChangedFired: false,
+  refresh: () => {},
+  getAttachmentFile: async () => {
+    throw new Error("Outlook mail item provider unavailable");
+  },
+});
+
+function parseRecipients(
+  recipients: Office.EmailAddressDetails[] | undefined,
+): EmailAddress[] {
+  if (!recipients) {
+    return [];
+  }
+
+  return recipients.map((recipient) => ({
+    displayName: recipient.displayName,
+    emailAddress: recipient.emailAddress,
+  }));
+}
+
+/**
+ * Sentinel send-time identity for a send with NO Outlook item open (neutral
+ * context: pinned pane with nothing selected). A REAL captured value — not a
+ * capture failure — so completions from neutral sends still count as fresh
+ * and item-INDEPENDENT actions (create appointment) can auto-prompt there.
+ * Item-BOUND executors (reply) treat it like any mismatching identity and
+ * fail closed. Distinct by construction from every built identity (message
+ * ids, `subject:date`, `compose:` mints).
+ */
+export const NO_ITEM_SEND_IDENTITY = "no-item";
+
+function buildMailItemIdentity(
+  item: Office.MessageRead | Office.MessageCompose | null,
+): string | null {
+  if (!item) {
+    return null;
+  }
+
+  if (isMessageRead(item)) {
+    return (
+      item.internetMessageId ??
+      item.conversationId ??
+      `${item.subject ?? ""}:${item.dateTimeCreated?.toISOString() ?? "no-date"}`
+    );
+  }
+
+  return (
+    item.conversationId ??
+    `${UNSAVED_COMPOSE_IDENTITY_PREFIX}${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`
+  );
+}
+
+const UNSAVED_COMPOSE_IDENTITY_PREFIX = "compose:";
+
+// Minted fallbacks differ on every resolve of the SAME unsaved draft, so
+// comparing two of them can't prove a navigation happened.
+function isStableItemIdentity(identity: string | null): identity is string {
+  return (
+    identity !== null && !identity.startsWith(UNSAVED_COMPOSE_IDENTITY_PREFIX)
+  );
+}
+
+function parseAttachmentDetails(
+  attachment: Office.AttachmentDetails | Office.AttachmentDetailsCompose,
+): OutlookAttachmentData {
+  return {
+    id: attachment.id,
+    name: attachment.name,
+    size: attachment.size,
+    isInline: attachment.isInline,
+    attachmentType: String(attachment.attachmentType),
+    contentType:
+      "contentType" in attachment && typeof attachment.contentType === "string"
+        ? attachment.contentType
+        : "",
+  };
+}
+
+async function readAttachmentMetadata(
+  item: Office.MessageRead | Office.MessageCompose,
+): Promise<OutlookAttachmentData[]> {
+  if (isMessageRead(item)) {
+    return item.attachments.map(parseAttachmentDetails);
+  }
+
+  const attachments = await callOfficeAsync<Office.AttachmentDetailsCompose[]>(
+    (callback) => item.getAttachmentsAsync(callback),
+  );
+  return attachments.map(parseAttachmentDetails);
+}
+
+function base64ToArrayBuffer(content: string): ArrayBuffer {
+  const binaryString = window.atob(content);
+  const bytes = new Uint8Array(binaryString.length);
+
+  for (let index = 0; index < binaryString.length; index += 1) {
+    bytes[index] = binaryString.charCodeAt(index);
+  }
+
+  return bytes.buffer;
+}
+
+function inferAttachmentMimeType(
+  attachment: OutlookAttachmentData | undefined,
+  format: string,
+): string {
+  if (attachment?.contentType) {
+    return attachment.contentType;
+  }
+
+  switch (format) {
+    case Office.MailboxEnums.AttachmentContentFormat.Eml:
+      return "message/rfc822";
+    case Office.MailboxEnums.AttachmentContentFormat.ICalendar:
+      return "text/calendar";
+    default:
+      return "application/octet-stream";
+  }
+}
+
+function attachmentContentToFile(
+  attachmentContent: Office.AttachmentContent,
+  attachment: OutlookAttachmentData,
+): File {
+  switch (attachmentContent.format) {
+    case Office.MailboxEnums.AttachmentContentFormat.Base64:
+      return new File(
+        [base64ToArrayBuffer(attachmentContent.content)],
+        attachment.name,
+        {
+          type: inferAttachmentMimeType(attachment, attachmentContent.format),
+        },
+      );
+    case Office.MailboxEnums.AttachmentContentFormat.Eml:
+    case Office.MailboxEnums.AttachmentContentFormat.ICalendar:
+      return new File([attachmentContent.content], attachment.name, {
+        type: inferAttachmentMimeType(attachment, attachmentContent.format),
+      });
+    case Office.MailboxEnums.AttachmentContentFormat.Url:
+      throw new Error(
+        `Cloud attachments are not supported for upload: ${attachment.name}`,
+      );
+    default:
+      throw new Error(
+        `Unsupported attachment content format: ${attachmentContent.format}`,
+      );
+  }
+}
+
+function readMailItemSync(item: Office.MessageRead): OutlookMailItemData {
+  const from = item.from
+    ? {
+        displayName: item.from.displayName,
+        emailAddress: item.from.emailAddress,
+      }
+    : null;
+
+  return {
+    subject: item.subject ?? "",
+    from,
+    to: parseRecipients(item.to),
+    cc: parseRecipients(item.cc),
+    dateTimeCreated: item.dateTimeCreated ?? null,
+    conversationId: item.conversationId ?? null,
+    internetMessageId: item.internetMessageId ?? null,
+    itemId: item.itemId ?? null,
+    bodyText: null,
+    bodyHtml: null,
+    isLoadingBody: true,
+    isComposeMode: false,
+  };
+}
+
+function readMailItemCompose(
+  item: Office.MessageCompose,
+  setMailItem: React.Dispatch<React.SetStateAction<OutlookMailItemData | null>>,
+  canCommit: () => boolean,
+) {
+  setMailItem({
+    subject: "",
+    from: null,
+    to: [],
+    cc: [],
+    dateTimeCreated: null,
+    conversationId: item.conversationId ?? null,
+    internetMessageId: null,
+    itemId: null,
+    bodyText: null,
+    bodyHtml: null,
+    isLoadingBody: true,
+    isComposeMode: true,
+  });
+
+  item.subject.getAsync((result) => {
+    if (result.status === Office.AsyncResultStatus.Succeeded && canCommit()) {
+      setMailItem((previous) =>
+        previous ? { ...previous, subject: result.value } : previous,
+      );
+    }
+  });
+
+  item.to.getAsync((result) => {
+    if (result.status === Office.AsyncResultStatus.Succeeded && canCommit()) {
+      setMailItem((previous) =>
+        previous
+          ? { ...previous, to: parseRecipients(result.value) }
+          : previous,
+      );
+    }
+  });
+
+  item.cc.getAsync((result) => {
+    if (result.status === Office.AsyncResultStatus.Succeeded && canCommit()) {
+      setMailItem((previous) =>
+        previous
+          ? { ...previous, cc: parseRecipients(result.value) }
+          : previous,
+      );
+    }
+  });
+
+  let textDone = false;
+  let htmlDone = false;
+
+  const checkDone = () => {
+    if (textDone && htmlDone && canCommit()) {
+      setMailItem((previous) =>
+        previous ? { ...previous, isLoadingBody: false } : previous,
+      );
+    }
+  };
+
+  item.body.getAsync(Office.CoercionType.Text, (result) => {
+    if (result.status === Office.AsyncResultStatus.Succeeded && canCommit()) {
+      setMailItem((previous) =>
+        previous ? { ...previous, bodyText: result.value } : previous,
+      );
+    }
+
+    textDone = true;
+    checkDone();
+  });
+
+  item.body.getAsync(Office.CoercionType.Html, (result) => {
+    if (result.status === Office.AsyncResultStatus.Succeeded && canCommit()) {
+      setMailItem((previous) =>
+        previous ? { ...previous, bodyHtml: result.value } : previous,
+      );
+    }
+
+    htmlDone = true;
+    checkDone();
+  });
+}
+
+export function useOutlookMailItem() {
+  return useContext(OutlookMailItemContext);
+}
+
+export function OutlookMailItemProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const [itemIdentity, setItemIdentity] = useState<string | null>(null);
+  const [mailItem, setMailItem] = useState<OutlookMailItemData | null>(null);
+  const [attachments, setAttachments] = useState<OutlookAttachmentData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingAttachments, setIsLoadingAttachments] = useState(true);
+  const [hasItemChangedFired, setHasItemChangedFired] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const currentItemRef = useRef<
+    Office.MessageRead | Office.MessageCompose | null
+  >(null);
+  const selectionVersionRef = useRef(0);
+  // Identity of the last resolved item — lets us tell a real navigation (the
+  // pin-hint tracking signal) from the host's initial same-item selection
+  // event.
+  const lastItemIdentityRef = useRef<string | null>(null);
+
+  const refresh = useCallback(() => {
+    setRefreshKey((previous) => previous + 1);
+  }, []);
+
+  const getAttachmentFile = useCallback(
+    async (attachmentId: string): Promise<File> => {
+      const currentItem = currentItemRef.current;
+      if (!currentItem) {
+        throw new Error("No Outlook item is currently selected");
+      }
+
+      const currentAttachment = attachments.find(
+        (attachment) => attachment.id === attachmentId,
+      );
+      if (!currentAttachment) {
+        throw new Error(`Attachment not found: ${attachmentId}`);
+      }
+
+      const attachmentContent = await callOfficeAsync<Office.AttachmentContent>(
+        (callback) =>
+          currentItem.getAttachmentContentAsync(attachmentId, callback),
+      );
+
+      return attachmentContentToFile(attachmentContent, currentAttachment);
+    },
+    [attachments],
+  );
+
+  useEffect(() => {
+    // Appointments resolve to the neutral no-item context: a host leaking the
+    // pane into the calendar module (no manifest surface declares one) must
+    // not crash this effect — it runs above every error boundary.
+    const item = resolveSupportedMailboxItem(Office.context.mailbox.item);
+    const selectionVersion = selectionVersionRef.current + 1;
+    selectionVersionRef.current = selectionVersion;
+    currentItemRef.current = item;
+    const canCommit = () => selectionVersionRef.current === selectionVersion;
+    const nextItemIdentity = buildMailItemIdentity(item);
+    const previousItemIdentity = lastItemIdentityRef.current;
+    if (nextItemIdentity !== null) {
+      // Keep the last real identity across null-item events (pinned panes
+      // receive ItemChanged with item == null on deselect), so A → null → B
+      // still registers as a navigation.
+      lastItemIdentityRef.current = nextItemIdentity;
+    }
+    setItemIdentity(nextItemIdentity);
+    // The pane is effectively pinned/tracking only once the selected item
+    // actually changes to a *different* one (a real navigation). The host also
+    // fires a selection event on the initial bind with the SAME item — that
+    // must not count, or the pin hint clears the instant the first message
+    // loads and is never seen. See ERMAIN-411.
+    if (
+      isStableItemIdentity(previousItemIdentity) &&
+      isStableItemIdentity(nextItemIdentity) &&
+      nextItemIdentity !== previousItemIdentity
+    ) {
+      setHasItemChangedFired(true);
+    }
+
+    if (!item) {
+      setMailItem(null);
+      setAttachments([]);
+      setIsLoading(false);
+      setIsLoadingAttachments(false);
+      return;
+    }
+
+    setAttachments([]);
+    setIsLoadingAttachments(true);
+    void readAttachmentMetadata(item)
+      .then((nextAttachments) => {
+        if (!canCommit()) {
+          return;
+        }
+        setAttachments(nextAttachments);
+      })
+      .catch((error) => {
+        if (!canCommit()) {
+          return;
+        }
+        console.warn("Failed to read Outlook attachments:", error);
+        setAttachments([]);
+      })
+      .finally(() => {
+        if (!canCommit()) {
+          return;
+        }
+        setIsLoadingAttachments(false);
+      });
+
+    if (isMessageRead(item)) {
+      setMailItem(readMailItemSync(item));
+      setIsLoading(false);
+
+      let textDone = false;
+      let htmlDone = false;
+
+      const checkDone = () => {
+        if (textDone && htmlDone && canCommit()) {
+          setMailItem((previous) =>
+            previous ? { ...previous, isLoadingBody: false } : previous,
+          );
+        }
+      };
+
+      item.body.getAsync(Office.CoercionType.Text, (result) => {
+        if (
+          result.status === Office.AsyncResultStatus.Succeeded &&
+          canCommit()
+        ) {
+          setMailItem((previous) =>
+            previous ? { ...previous, bodyText: result.value } : previous,
+          );
+        } else if (canCommit()) {
+          console.warn("Failed to read email body:", result.error?.message);
+        }
+
+        textDone = true;
+        checkDone();
+      });
+
+      item.body.getAsync(Office.CoercionType.Html, (result) => {
+        if (
+          result.status === Office.AsyncResultStatus.Succeeded &&
+          canCommit()
+        ) {
+          setMailItem((previous) =>
+            previous ? { ...previous, bodyHtml: result.value } : previous,
+          );
+        } else if (canCommit()) {
+          console.warn(
+            "Failed to read email HTML body:",
+            result.error?.message,
+          );
+        }
+
+        htmlDone = true;
+        checkDone();
+      });
+    } else {
+      readMailItemCompose(item, setMailItem, canCommit);
+      setIsLoading(false);
+    }
+  }, [refreshKey]);
+
+  useEffect(() => {
+    const mailbox = Office.context.mailbox;
+
+    function onSelectionChanged() {
+      setRefreshKey((previous) => previous + 1);
+    }
+
+    // OWA and New Outlook drop `ItemChanged` for in-thread navigation
+    // (selecting between replies in the same conversation), so layer in
+    // `SelectedItemsChanged` (Mailbox 1.13+) as a redundant signal. Both
+    // funnel through the same refresh; the read effect's `selectionVersion`
+    // ref discards stale callbacks if both fire for the same change.
+    function subscribe(eventType: Office.EventType, label: string) {
+      try {
+        mailbox.addHandlerAsync(eventType, onSelectionChanged, (result) => {
+          if (result.status !== Office.AsyncResultStatus.Succeeded) {
+            console.warn(
+              `Failed to register ${label} handler:`,
+              result.error?.message,
+            );
+          }
+        });
+      } catch (error) {
+        console.warn(`${label} not supported:`, error);
+      }
+    }
+
+    subscribe(Office.EventType.ItemChanged, "ItemChanged");
+    if (Office.EventType.SelectedItemsChanged !== undefined) {
+      subscribe(Office.EventType.SelectedItemsChanged, "SelectedItemsChanged");
+    }
+
+    return () => {
+      function unsubscribe(eventType: Office.EventType) {
+        try {
+          // Mailbox.removeHandlerAsync removes ALL handlers for the event
+          // type; its optional second arg is a completion callback, not a
+          // handler filter — passing a handler there gets it invoked.
+          mailbox.removeHandlerAsync(eventType);
+        } catch {
+          // Best-effort cleanup.
+        }
+      }
+      unsubscribe(Office.EventType.ItemChanged);
+      if (Office.EventType.SelectedItemsChanged !== undefined) {
+        unsubscribe(Office.EventType.SelectedItemsChanged);
+      }
+    };
+  }, []);
+
+  return (
+    <OutlookMailItemContext.Provider
+      value={{
+        itemIdentity,
+        mailItem,
+        attachments,
+        isLoading,
+        isLoadingAttachments,
+        hasItemChangedFired,
+        refresh,
+        getAttachmentFile,
+      }}
+    >
+      {children}
+    </OutlookMailItemContext.Provider>
+  );
+}

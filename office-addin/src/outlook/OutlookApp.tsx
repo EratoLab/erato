@@ -9,9 +9,9 @@ import {
 } from "../core/SharedAddinShell";
 import { OfficeProvider, useOffice } from "../providers/OfficeProvider";
 import { OfficeThemeProvider } from "../providers/OfficeThemeProvider";
-import { OutlookAuthProvider } from "../providers/OutlookAuthProvider";
-import { OutlookEmailSourceProvider } from "../providers/OutlookEmailSourceProvider";
-import { OutlookMailItemProvider } from "../providers/OutlookMailItemProvider";
+import { OutlookAuthProvider } from "./providers/OutlookAuthProvider";
+import { OutlookEmailSourceProvider } from "./providers/OutlookEmailSourceProvider";
+import { OutlookMailItemProvider } from "./providers/OutlookMailItemProvider";
 
 import "../styles.css";
 
