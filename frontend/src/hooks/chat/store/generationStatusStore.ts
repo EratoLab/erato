@@ -162,7 +162,15 @@ export const useGenerationStatusStore = create<GenerationStatusStore>()(
         set(
           (prev) => {
             const existing = prev.statusByChatId[chatId];
-            if (existing?.kind !== "action_required") {
+            // The decision resolves only after the continuation's stream
+            // closed, and the server persists the terminal outcome before
+            // closing it — so besides the parked entry, a "running" entry a
+            // poll observed for the continuation is also stale by now and
+            // must not be left for grace-gated cleanup.
+            if (
+              existing?.kind !== "action_required" &&
+              existing?.kind !== "running"
+            ) {
               return prev;
             }
             return {

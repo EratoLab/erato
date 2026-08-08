@@ -27,8 +27,18 @@ const rowKey = (row: ApprovalRow) => `${row.mcpServerId}/${row.toolName}`;
  * row flipped back to "ask" stays visible for the rest of the settings
  * session so the flip feels stable and reversible; it drops off on the next
  * visit.
+ *
+ * With `serverId` the component becomes one server's permissions block for
+ * an entity row: rows filter to that server and the redundant headings (the
+ * section title and the per-server label) collapse to the scope sentence.
  */
-export function McpToolApprovalSettings({ isActive }: { isActive: boolean }) {
+export function McpToolApprovalSettings({
+  isActive,
+  serverId,
+}: {
+  isActive: boolean;
+  serverId?: string;
+}) {
   const radioGroupName = useId();
   const [knownRows, setKnownRows] = useState<Map<string, ApprovalRow>>(
     () => new Map(),
@@ -81,6 +91,9 @@ export function McpToolApprovalSettings({ isActive }: { isActive: boolean }) {
   const serverGroups = useMemo(() => {
     const groups = new Map<string, ApprovalRow[]>();
     for (const row of knownRows.values()) {
+      if (serverId !== undefined && row.mcpServerId !== serverId) {
+        continue;
+      }
       const rows = groups.get(row.mcpServerId) ?? [];
       rows.push(row);
       groups.set(row.mcpServerId, rows);
@@ -89,7 +102,7 @@ export function McpToolApprovalSettings({ isActive }: { isActive: boolean }) {
       rows.sort((a, b) => a.toolName.localeCompare(b.toolName));
     }
     return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [knownRows]);
+  }, [knownRows, serverId]);
 
   const setDecision = async (row: ApprovalRow, decision: "ask" | "always") => {
     const key = rowKey(row);
@@ -129,7 +142,13 @@ export function McpToolApprovalSettings({ isActive }: { isActive: boolean }) {
             message: "Tool approvals",
           })}
         </h3>
-        <p className="text-sm text-theme-fg-secondary">
+        <p
+          className={
+            serverId !== undefined
+              ? "text-xs text-theme-fg-secondary"
+              : "text-sm text-theme-fg-secondary"
+          }
+        >
           {t({
             id: "preferences.dialog.mcpServers.approvals.description",
             message:
@@ -158,11 +177,14 @@ export function McpToolApprovalSettings({ isActive }: { isActive: boolean }) {
         </p>
       ) : null}
 
-      {serverGroups.map(([serverId, rows]) => (
-        <div key={serverId} className="space-y-3">
-          <p className="text-xs font-medium text-theme-fg-primary">
-            {serverId}
-          </p>
+      {serverGroups.map(([groupServerId, rows]) => (
+        <div key={groupServerId} className="space-y-3">
+          {/* Inside an entity row the server is already the row's identity. */}
+          {serverId === undefined ? (
+            <p className="text-xs font-medium text-theme-fg-primary">
+              {groupServerId}
+            </p>
+          ) : null}
           {rows.map((row) => {
             const key = rowKey(row);
             const decision =

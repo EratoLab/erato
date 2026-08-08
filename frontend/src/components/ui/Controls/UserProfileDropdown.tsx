@@ -106,9 +106,13 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
           isOpen={isPreferencesDialogOpen}
           onClose={closePreferencesDialog}
           initialTab={
-            requestedPreferencesTab === "mcpServers" && mcpServersTabEnabled
+            // "mcpServers" is the legacy param value the backend still mints
+            // in OAuth return URLs; both land on the merged tab.
+            (requestedPreferencesTab === "mcpServers" ||
+              requestedPreferencesTab === "serversTools") &&
+            mcpServersTabEnabled
               ? // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal tab id
-                "mcpServers"
+                "serversTools"
               : undefined
           }
           pendingMcpOauthCallback={

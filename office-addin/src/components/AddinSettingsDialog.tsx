@@ -1,18 +1,21 @@
 import {
   AppearanceTabContent,
   AudioInputTabContent,
-  DesktopSidecarTabContent,
+  EntityRow,
+  MailIcon,
   ModalBase,
+  ServersToolsPane,
   useFeatureConfig,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useMemo, useState, type KeyboardEvent } from "react";
 
 import { BehaviorTabContent } from "./BehaviorTabContent";
+import { ClientActionsSettings } from "./ClientActionsSettings";
 import { UserSettingsTabContent } from "./UserSettingsTabContent";
 import { useOffice } from "../providers/OfficeProvider";
 
-type SettingsTab = "appearance" | "user" | "audio" | "desktopSidecar" | "addin";
+type SettingsTab = "appearance" | "user" | "audio" | "serversTools" | "addin";
 
 interface AddinSettingsDialogProps {
   isOpen: boolean;
@@ -35,6 +38,11 @@ export function AddinSettingsDialog({
     featureConfig.audioConversational.enabled;
   const desktopSidecarTabEnabled =
     featureConfig.userPreferences.desktopSidecarTabEnabled;
+  const mcpServersEnabled = featureConfig.userPreferences.mcpServersTabEnabled;
+  // The merged pane always has content in Outlook (the Outlook-actions
+  // entity), so only non-Outlook hosts depend on the capability flags.
+  const serversToolsTabEnabled =
+    isOutlookHost || desktopSidecarTabEnabled || mcpServersEnabled;
   const [activeTab, setActiveTab] = useState<SettingsTab>("appearance");
 
   const tabOrder = useMemo<SettingsTab[]>(
@@ -42,10 +50,10 @@ export function AddinSettingsDialog({
       "appearance",
       "user",
       ...(audioSettingsEnabled ? (["audio"] as const) : []),
-      ...(desktopSidecarTabEnabled ? (["desktopSidecar"] as const) : []),
+      ...(serversToolsTabEnabled ? (["serversTools"] as const) : []),
       "addin",
     ],
-    [audioSettingsEnabled, desktopSidecarTabEnabled],
+    [audioSettingsEnabled, serversToolsTabEnabled],
   );
 
   const tabLabels: Record<SettingsTab, string> = {
@@ -61,13 +69,13 @@ export function AddinSettingsDialog({
       id: "officeAddin.settings.tabs.audio",
       message: "Microphone",
     }),
-    desktopSidecar: t({
-      id: "officeAddin.settings.tabs.desktopSidecar",
-      message: "Desktop Sidecar",
+    serversTools: t({
+      id: "officeAddin.settings.tabs.serversTools",
+      message: "MCP & Apps",
     }),
     addin: t({
-      id: "officeAddin.settings.tabs.addin",
-      message: "Add-in",
+      id: "officeAddin.settings.tabs.behavior",
+      message: "Behavior",
     }),
   };
 
@@ -75,7 +83,7 @@ export function AddinSettingsDialog({
     appearance: "addin-settings-tab-appearance",
     user: "addin-settings-tab-user",
     audio: "addin-settings-tab-audio",
-    desktopSidecar: "addin-settings-tab-desktop-sidecar",
+    serversTools: "addin-settings-tab-servers-tools",
     addin: "addin-settings-tab-addin",
   };
 
@@ -83,7 +91,7 @@ export function AddinSettingsDialog({
     appearance: "addin-settings-panel-appearance",
     user: "addin-settings-panel-user",
     audio: "addin-settings-panel-audio",
-    desktopSidecar: "addin-settings-panel-desktop-sidecar",
+    serversTools: "addin-settings-panel-servers-tools",
     addin: "addin-settings-panel-addin",
   };
 
@@ -263,16 +271,81 @@ export function AddinSettingsDialog({
             </section>
           ) : null}
 
-          {desktopSidecarTabEnabled ? (
+          {serversToolsTabEnabled ? (
             <section
-              id={panelIds.desktopSidecar}
+              id={panelIds.serversTools}
               role="tabpanel"
-              aria-labelledby={tabIds.desktopSidecar}
-              hidden={activeTab !== "desktopSidecar"}
+              aria-labelledby={tabIds.serversTools}
+              hidden={activeTab !== "serversTools"}
               className="h-full space-y-4 overflow-y-auto"
             >
-              {activeTab === "desktopSidecar" ? (
-                <DesktopSidecarTabContent />
+              <div className="space-y-1">
+                <h2 className="text-sm font-medium text-theme-fg-primary">
+                  {t({
+                    id: "officeAddin.settings.serversTools.heading",
+                    message: "MCP & Apps",
+                  })}
+                </h2>
+                <p className="text-sm text-theme-fg-secondary">
+                  {t({
+                    id: "officeAddin.settings.serversTools.description",
+                    message:
+                      "Everything the assistant can connect to or act through. Open an entry to check its connection or adjust what it may do.",
+                  })}
+                </p>
+              </div>
+              {activeTab === "serversTools" ? (
+                <ServersToolsPane
+                  isActive={isOpen && activeTab === "serversTools"}
+                  mcp={
+                    mcpServersEnabled
+                      ? {
+                          // The OAuth round-trip is web-shaped (full-page IdP
+                          // redirect; backend mints a web return URL), so the
+                          // add-in hands authorization to the browser.
+                          onAuthorize: () => {
+                            window.open(
+                              "/?preferencesDialog=open&preferencesTab=serversTools",
+                              "_blank",
+                              "noopener",
+                            );
+                          },
+                          onDisconnect: () => {
+                            window.open(
+                              "/?preferencesDialog=open&preferencesTab=serversTools",
+                              "_blank",
+                              "noopener",
+                            );
+                          },
+                          showDisconnect: false,
+                          authorizeLabel: t({
+                            id: "officeAddin.settings.serversTools.authorizeInBrowser",
+                            message: "Authorize in browser",
+                          }),
+                        }
+                      : null
+                  }
+                  showDesktopSidecar={desktopSidecarTabEnabled}
+                >
+                  {isOutlookHost ? (
+                    <EntityRow
+                      icon={
+                        <MailIcon className="size-4 text-theme-fg-secondary" />
+                      }
+                      name={t({
+                        id: "officeAddin.settings.serversTools.outlookActions",
+                        message: "Outlook actions",
+                      })}
+                      caption={t({
+                        id: "officeAddin.settings.serversTools.outlookActions.caption",
+                        message: "Built into Outlook · this device",
+                      })}
+                      data-testid="servers-tools-outlook-actions-row"
+                    >
+                      <ClientActionsSettings />
+                    </EntityRow>
+                  ) : null}
+                </ServersToolsPane>
               ) : null}
             </section>
           ) : null}
