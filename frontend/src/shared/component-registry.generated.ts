@@ -164,6 +164,8 @@ export type { ActionConfirmationStatus } from "@/components/ui/Message/ActionCon
 export { ACTION_FACET_ARG_KEYS } from "@/components/ui/Message/ActionFacetContext";
 export { ActionFacetContext } from "@/components/ui/Message/ActionFacetContext";
 export { DefaultMessageControls } from "@/components/ui/Message/DefaultMessageControls";
+export { DefaultEratoAppointmentCodeBlock } from "@/components/ui/Message/EratoAppointmentBlock";
+export { EratoAppointmentBlock } from "@/components/ui/Message/EratoAppointmentBlock";
 export { DefaultEratoEmailCodeBlock } from "@/components/ui/Message/EratoEmailSuggestion";
 export { EratoEmailSuggestion } from "@/components/ui/Message/EratoEmailSuggestion";
 export { ImageContentDisplay } from "@/components/ui/Message/ImageContentDisplay";

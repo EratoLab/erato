@@ -1012,7 +1012,23 @@ describe("MessageContent", () => {
     }
   });
 
-  it("keeps erato-appointment fences as plain code blocks without a registered renderer", () => {
+  it("renders the default summary card without a registered renderer", () => {
+    const { container } = renderWithTheme(
+      <MessageContent
+        content={textContent(
+          '```erato-appointment\n{"start":"2026-07-09T10:00:00+02:00","end":"2026-07-09T11:00:00+02:00","subject":"Quarterly sync"}\n```',
+        )}
+      />,
+    );
+
+    expect(screen.getByText("Quarterly sync")).toBeInTheDocument();
+    expect(screen.getByText("Suggested appointment")).toBeInTheDocument();
+    expect(
+      container.querySelector("pre.message-content-code-block"),
+    ).toBeNull();
+  });
+
+  it("shows the raw payload muted while an erato-appointment fence is incomplete", () => {
     const { container } = renderWithTheme(
       <MessageContent
         content={textContent(
@@ -1021,9 +1037,11 @@ describe("MessageContent", () => {
       />,
     );
 
+    expect(screen.getByText(/"start"/)).toBeInTheDocument();
+    expect(screen.queryByText("Suggested appointment")).toBeNull();
     expect(
-      container.querySelector("pre.message-content-code-block code"),
-    ).toHaveTextContent('"start"');
+      container.querySelector("pre.message-content-code-block"),
+    ).toBeNull();
   });
 
   it("does NOT whole-body-fallback for review_draft (feedback stays markdown)", () => {
