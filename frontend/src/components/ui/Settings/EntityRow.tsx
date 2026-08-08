@@ -94,7 +94,7 @@ export function EntityRow({
               isExpanded && "rotate-90",
             )}
           />
-          <span className="min-w-0 flex-1">
+          <span className="min-w-0 flex-1 space-y-1">
             <span className="flex items-center gap-2">
               <span aria-hidden="true" className="shrink-0">
                 {icon}
@@ -103,9 +103,11 @@ export function EntityRow({
                 {name}
               </span>
             </span>
+            {/* pl-6 = kind icon (size-4) + gap-2, so the caption aligns with
+                the title text rather than the icon column. */}
             <span
               className={clsx(
-                "flex items-center gap-1 text-xs",
+                "flex items-center gap-1 pl-6 text-xs",
                 status ? toneText[status.tone] : "text-theme-fg-secondary",
               )}
             >
