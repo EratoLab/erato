@@ -103,11 +103,9 @@ export function EntityRow({
                 {name}
               </span>
             </span>
-            {/* pl-6 = kind icon (size-4) + gap-2, so the caption aligns with
-                the title text rather than the icon column. */}
             <span
               className={clsx(
-                "flex items-center gap-1 pl-6 text-xs",
+                "flex items-center gap-1 text-xs",
                 status ? toneText[status.tone] : "text-theme-fg-secondary",
               )}
             >
