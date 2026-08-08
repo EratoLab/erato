@@ -582,6 +582,26 @@ pub fn get_default_mocks() -> Vec<Mock> {
         },
         // Must precede the "Delay" mock: its "delay" pattern also matches "delayed error"
         Mock {
+            // Ordered before every "delay"-substring mock (its trigger
+            // contains "delay") AND before McpApprovalPolicyToolCall (it
+            // contains "mcp approval probe") — matching is first-match
+            // substring over this list.
+            name: "DelayedMcpApprovalPolicyToolCall".to_string(),
+            description:
+                "Approval-required MCP call after 10s of visible generation, to observe the running -> action-required transition"
+                    .to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: "delayed mcp approval probe".to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCall(ToolCallResponseConfig {
+                tool_name: "publish_approval_probe".to_string(),
+                arguments: "{}".to_string(),
+                delay_ms: 10_000,
+            }),
+        },
+        Mock {
             name: "DelayedContentFilterError".to_string(),
             description: "Returns the content filter error after a 5 second wait".to_string(),
             match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
@@ -913,24 +933,6 @@ pub fn get_default_mocks() -> Vec<Mock> {
                 tool_name: "auth_forwarded_oidc_probe".to_string(),
                 arguments: "{}".to_string(),
                 delay_ms: 100,
-            }),
-        },
-        Mock {
-            // Ordered before McpApprovalPolicyToolCall: its trigger contains
-            // the shorter phrase and matching is first-match substring.
-            name: "DelayedMcpApprovalPolicyToolCall".to_string(),
-            description:
-                "Approval-required MCP call after 10s of visible generation, to observe the running -> action-required transition"
-                    .to_string(),
-            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
-                MatchRuleLastMessageIsUserWithPattern {
-                    pattern: "delayed mcp approval probe".to_string(),
-                },
-            )],
-            response: ResponseConfig::ToolCall(ToolCallResponseConfig {
-                tool_name: "publish_approval_probe".to_string(),
-                arguments: "{}".to_string(),
-                delay_ms: 10_000,
             }),
         },
         Mock {
