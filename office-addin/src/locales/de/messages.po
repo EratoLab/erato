@@ -1089,13 +1089,6 @@ msgstr "Generiertes Manifest hochladen"
 # ==============================
 # Unstable IDs
 # ==============================
-#: src/components/OutlookEratoEmailRenderer.tsx
-#~ msgid "{confirmRecipientCount, plural, id {officeAddin.emailRenderer.replyAllConfirmMessage} one {This opens a reply addressed to # person from the email you are reading. Nothing is sent until you press Send in Outlook.} other {This opens a reply addressed to # people from the email you are reading. Nothing is sent until you press Send in Outlook.}}"
-#~ msgstr ""
-
-# ==============================
-# Unstable IDs
-# ==============================
 #: src/outlook/components/AddinChatInput.tsx
 msgid "{messageCount} messages"
 msgstr "{messageCount} Nachrichten"
