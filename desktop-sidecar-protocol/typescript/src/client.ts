@@ -555,7 +555,13 @@ export class DesktopSidecarClient {
       return;
     }
     if (validateSidecarProgressV1Result(result)) {
-      onProgress(result as SidecarProgressV1Result);
+      try {
+        onProgress(result as SidecarProgressV1Result);
+      } catch {
+        // A throwing observer callback must never reject the polling chain:
+        // that would surface inside invoke's cleanup and replace the observed
+        // request's real outcome with the observer's error.
+      }
     }
   }
 

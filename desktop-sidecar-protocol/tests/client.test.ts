@@ -344,6 +344,30 @@ describe("DesktopSidecarClient", () => {
     expect(client.getSnapshot().state).toBe("ready");
   });
 
+  it("delivers the result even when the progress observer throws", async () => {
+    const { client } = await setup();
+    await client.discover();
+
+    let observations = 0;
+    await expect(
+      client.invoke(
+        "diagnostics.echo.v1",
+        { message: "sturdy", delayMs: 200 },
+        {
+          progress: {
+            intervalMs: 50,
+            onProgress: () => {
+              observations += 1;
+              throw new Error("observer bug");
+            },
+          },
+        },
+      ),
+    ).resolves.toMatchObject({ message: "sturdy" });
+    expect(observations).toBeGreaterThan(0);
+    expect(client.getSnapshot().state).toBe("ready");
+  });
+
   it("cancels a timed-out delayed echo and leaves its final trace observable", async () => {
     const { client } = await setup();
     await client.discover();
