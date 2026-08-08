@@ -13,8 +13,6 @@ import { OutlookAuthProvider } from "./providers/OutlookAuthProvider";
 import { OutlookEmailSourceProvider } from "./providers/OutlookEmailSourceProvider";
 import { OutlookMailItemProvider } from "./providers/OutlookMailItemProvider";
 
-import "../styles.css";
-
 // The route module resolves before React renders its default export. Registry
 // consumers can therefore memoize safely on their first render.
 installOutlookComponentRegistrations();

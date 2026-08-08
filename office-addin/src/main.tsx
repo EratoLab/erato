@@ -1,4 +1,5 @@
 import "@erato/frontend/library.css";
+import "./styles.css";
 import { applyComponentKitRegistrations } from "@erato/frontend/library";
 import React, { Suspense, lazy } from "react";
 import ReactDOM from "react-dom/client";
