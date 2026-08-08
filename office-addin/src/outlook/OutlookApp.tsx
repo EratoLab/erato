@@ -2,7 +2,11 @@ import { FeatureConfigProvider } from "@erato/frontend/library";
 
 import { OutlookAddinChatPage } from "./OutlookAddinChatPage";
 import { installOutlookComponentRegistrations } from "./installOutlookComponentRegistrations";
-import { AuthGate, SharedAddinShell } from "../core/SharedAddinShell";
+import {
+  AuthGate,
+  SHARED_ADDIN_FEATURE_CONFIG,
+  SharedAddinShell,
+} from "../core/SharedAddinShell";
 import { OfficeProvider, useOffice } from "../providers/OfficeProvider";
 import { OfficeThemeProvider } from "../providers/OfficeThemeProvider";
 import { OutlookAuthProvider } from "../providers/OutlookAuthProvider";
@@ -30,7 +34,7 @@ function OutlookFeatureConfig({ children }: { children: React.ReactNode }) {
   return (
     <FeatureConfigProvider
       config={{
-        chatInput: { showUsageAdvisory: false },
+        ...SHARED_ADDIN_FEATURE_CONFIG,
         ...(supportsAudioCapture
           ? {}
           : {

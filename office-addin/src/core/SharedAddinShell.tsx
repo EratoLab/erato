@@ -10,7 +10,7 @@ import { t } from "@lingui/core/macro";
 
 import { useSessionAuth } from "./SessionAuthProvider";
 
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const { isInitialized, isAuthenticated, retryAuthentication, error } =
@@ -58,6 +58,19 @@ export function AuthGate({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+type FeatureConfigOverrides = NonNullable<
+  ComponentProps<typeof FeatureConfigProvider>["config"]
+>;
+
+/**
+ * Baseline feature overrides for every add-in host composition. Nested
+ * FeatureConfigProvider instances replace (not merge with) ancestor providers,
+ * so host-specific providers must spread this constant.
+ */
+export const SHARED_ADDIN_FEATURE_CONFIG = {
+  chatInput: { showUsageAdvisory: false },
+} satisfies FeatureConfigOverrides;
+
 /**
  * Host-neutral providers shared by every add-in composition. Host SDK and
  * authentication providers are deliberately supplied as children so loading
@@ -68,9 +81,7 @@ export function SharedAddinShell({ children }: { children: ReactNode }) {
     <DesktopSidecarProvider>
       <I18nProvider>
         <ThemeProvider enableCustomTheme persistThemeMode={true}>
-          <FeatureConfigProvider
-            config={{ chatInput: { showUsageAdvisory: false } }}
-          >
+          <FeatureConfigProvider config={SHARED_ADDIN_FEATURE_CONFIG}>
             <ApiProvider enableDevtools={false}>
               {children}
               <Toaster placement="bottom-center" />
