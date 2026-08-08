@@ -2,13 +2,13 @@ import { toast } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { createContext, useCallback, useContext, useMemo } from "react";
 
-import { useSessionRedeem } from "./SessionAuthProvider";
+import { useSessionRedeem } from "../core/SessionAuthProvider";
 import {
   InteractionRequiredError,
   type AuthSource,
   type GraphCapableSource,
-} from "../auth/AuthSource";
-import { shouldRefreshOauth2ProxySession } from "../auth/oauth2ProxySession";
+} from "../core/auth/AuthSource";
+import { shouldRefreshOauth2ProxySession } from "../core/auth/oauth2ProxySession";
 
 /** Dedupe key so repeated failed email drops replace (not stack) the prompt. */
 const GRAPH_SIGNIN_TOAST_KEY = "graph-email-signin";

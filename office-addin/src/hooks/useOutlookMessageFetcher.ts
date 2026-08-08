@@ -1,9 +1,9 @@
 import { useDesktopSidecar } from "@erato/frontend/library";
 import { useMemo } from "react";
 
+import { useSessionAuth } from "../core/SessionAuthProvider";
 import { useGraphTokenOptional } from "../providers/EntraGraphTokenProvider";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
-import { useSessionAuth } from "../providers/SessionAuthProvider";
 import { detectExchangeOnPrem } from "../utils/detectExchangeOnPrem";
 import {
   createEwsOutlookMessageFetcher,

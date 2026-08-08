@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 
+import { useSessionAuth } from "../core/SessionAuthProvider";
 import { useGraphTokenOptional } from "../providers/EntraGraphTokenProvider";
-import { useSessionAuth } from "../providers/SessionAuthProvider";
 import { detectExchangeOnPrem } from "../utils/detectExchangeOnPrem";
 import {
   createEwsOutlookCalendarFetcher,

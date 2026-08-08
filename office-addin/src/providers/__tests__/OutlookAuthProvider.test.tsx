@@ -22,10 +22,10 @@ import {
   type Mock,
 } from "vitest";
 
-import { OAUTH2_PROXY_SESSION_REFRESH_AFTER_MS } from "../../auth/oauth2ProxySession";
+import { useSessionAuth } from "../../core/SessionAuthProvider";
+import { OAUTH2_PROXY_SESSION_REFRESH_AFTER_MS } from "../../core/auth/oauth2ProxySession";
 import { useGraphTokenOptional } from "../EntraGraphTokenProvider";
 import { OutlookAuthProvider } from "../OutlookAuthProvider";
-import { useSessionAuth } from "../SessionAuthProvider";
 
 import type {
   AccountInfo,

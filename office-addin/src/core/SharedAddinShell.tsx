@@ -8,7 +8,7 @@ import {
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 
-import { useSessionAuth } from "../providers/SessionAuthProvider";
+import { useSessionAuth } from "./SessionAuthProvider";
 
 import type { ReactNode } from "react";
 

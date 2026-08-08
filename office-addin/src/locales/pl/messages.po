@@ -90,7 +90,7 @@ msgid "officeAddin.auth.authenticating"
 msgstr "Uwierzytelnianie..."
 
 #. js-lingui-explicit-id
-#: src/providers/SessionAuthProvider.tsx
+#: src/core/SessionAuthProvider.tsx
 msgid "officeAddin.auth.authenticationFailed"
 msgstr "Uwierzytelnianie nie powiodło się"
 
@@ -145,7 +145,7 @@ msgid "officeAddin.auth.oauth2ProxyProbeFailed"
 msgstr "Nie udało się połączyć z usługą logowania. Spróbuj ponownie."
 
 #. js-lingui-explicit-id
-#: src/providers/SessionAuthProvider.tsx
+#: src/core/SessionAuthProvider.tsx
 msgid "officeAddin.auth.oauth2ProxySessionFailed"
 msgstr "Nie udało się ustanowić bezpiecznej sesji Erato. Zaloguj się ponownie."
 
@@ -171,8 +171,8 @@ msgstr ""
 #~ msgstr "Wymagane logowanie"
 
 #. js-lingui-explicit-id
+#: src/core/SessionAuthProvider.tsx
 #: src/core/SharedAddinShell.tsx
-#: src/providers/SessionAuthProvider.tsx
 msgid "officeAddin.auth.signInToContinue"
 msgstr ""
 
@@ -857,62 +857,62 @@ msgid "officeAddin.settings.title"
 msgstr "Ustawienia"
 
 #. js-lingui-explicit-id
-#: src/components/UserSettingsTabContent.tsx
+#: src/core/UserSettingsTabContent.tsx
 msgid "officeAddin.settings.user.actions.cancel"
 msgstr "Anuluj"
 
 #. js-lingui-explicit-id
-#: src/components/UserSettingsTabContent.tsx
+#: src/core/UserSettingsTabContent.tsx
 msgid "officeAddin.settings.user.actions.save"
 msgstr "Zapisz"
 
 #. js-lingui-explicit-id
-#: src/components/UserSettingsTabContent.tsx
+#: src/core/UserSettingsTabContent.tsx
 msgid "officeAddin.settings.user.actions.saving"
 msgstr "Zapisywanie..."
 
 #. js-lingui-explicit-id
-#: src/components/UserSettingsTabContent.tsx
+#: src/core/UserSettingsTabContent.tsx
 msgid "officeAddin.settings.user.additionalInformation.label"
 msgstr "Dodatkowe informacje"
 
 #. js-lingui-explicit-id
-#: src/components/UserSettingsTabContent.tsx
+#: src/core/UserSettingsTabContent.tsx
 msgid "officeAddin.settings.user.additionalInformation.placeholder"
 msgstr "Dodatkowy kontekst dla asystenta, np. Pracuję z klientami korporacyjnymi"
 
 #. js-lingui-explicit-id
-#: src/components/UserSettingsTabContent.tsx
+#: src/core/UserSettingsTabContent.tsx
 msgid "officeAddin.settings.user.customInstructions.label"
 msgstr "Niestandardowe instrukcje dla asystenta"
 
 #. js-lingui-explicit-id
-#: src/components/UserSettingsTabContent.tsx
+#: src/core/UserSettingsTabContent.tsx
 msgid "officeAddin.settings.user.customInstructions.placeholder"
 msgstr "Jak ma się zachowywać asystent? np. Preferuj zwięzłe wypunktowania"
 
 #. js-lingui-explicit-id
-#: src/components/UserSettingsTabContent.tsx
+#: src/core/UserSettingsTabContent.tsx
 msgid "officeAddin.settings.user.jobTitle.label"
 msgstr "Stanowisko"
 
 #. js-lingui-explicit-id
-#: src/components/UserSettingsTabContent.tsx
+#: src/core/UserSettingsTabContent.tsx
 msgid "officeAddin.settings.user.jobTitle.placeholder"
 msgstr "Jaka jest Twoja rola? np. Product Manager"
 
 #. js-lingui-explicit-id
-#: src/components/UserSettingsTabContent.tsx
+#: src/core/UserSettingsTabContent.tsx
 msgid "officeAddin.settings.user.nickname.label"
 msgstr "Pseudonim"
 
 #. js-lingui-explicit-id
-#: src/components/UserSettingsTabContent.tsx
+#: src/core/UserSettingsTabContent.tsx
 msgid "officeAddin.settings.user.nickname.placeholder"
 msgstr "Jak asystent ma się do Ciebie zwracać? np. Jan Kowalski"
 
 #. js-lingui-explicit-id
-#: src/components/UserSettingsTabContent.tsx
+#: src/core/UserSettingsTabContent.tsx
 msgid "officeAddin.settings.user.save.error"
 msgstr "Nie udało się zapisać ustawień. Spróbuj ponownie."
 

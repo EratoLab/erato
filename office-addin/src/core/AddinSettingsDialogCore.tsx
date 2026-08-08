@@ -8,7 +8,7 @@ import {
 import { t } from "@lingui/core/macro";
 import { useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 
-import { UserSettingsTabContent } from "../components/UserSettingsTabContent";
+import { UserSettingsTabContent } from "./UserSettingsTabContent";
 
 type SettingsTab = "appearance" | "user" | "audio" | "desktopSidecar" | "host";
 

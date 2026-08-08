@@ -14,14 +14,14 @@ import {
   type AuthMode,
   type AuthSource,
   type BootstrapToken,
-} from "../auth/AuthSource";
+} from "./auth/AuthSource";
 import {
   OAUTH2_PROXY_SESSION_REFRESH_AFTER_MS,
   Oauth2ProxySessionRedeemError,
   readStoredOauth2ProxySessionRedeemedAt,
   redeemOauth2ProxySession,
   shouldRefreshOauth2ProxySession,
-} from "../auth/oauth2ProxySession";
+} from "./auth/oauth2ProxySession";
 
 // When a timed refresh fails we keep the (now stale) session and retry on a
 // capped exponential backoff so a transient outage doesn't permanently stop the
@@ -75,7 +75,7 @@ export function useSessionAuth(): SessionAuthContextValue {
 
 /**
  * Internal re-redeem seam. NOT exported from the package barrel — consumed only
- * by the co-located Outlook {@link "./EntraGraphTokenProvider"} so a Graph token
+ * by the co-located Outlook {@link "../providers/EntraGraphTokenProvider"} so a Graph token
  * acquisition can opportunistically refresh the proxy session through the SAME
  * `redeemInFlightRef` dedup and the SAME live `lastRedeemedAtRef` gate the
  * timed/focus refreshes use (never re-derived from localStorage).

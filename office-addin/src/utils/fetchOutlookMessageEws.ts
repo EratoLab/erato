@@ -2,7 +2,7 @@ import PostalMime from "postal-mime";
 
 import { buildEmlFile } from "./fetchOutlookMessageGraph";
 import { callOfficeAsync } from "./officeAsync";
-import { checkOauth2ProxySession } from "../auth/oauth2ProxySession";
+import { checkOauth2ProxySession } from "../core/auth/oauth2ProxySession";
 
 import type {
   ConversationFetchState,

@@ -1,15 +1,15 @@
 /**
  * The auth strategy in effect for the current host/environment. The `entra-msal`
- * mode covers the EXO NAA {@link AuthSource} ({@link "./EntraNaaAuthSource"}),
+ * mode covers the EXO NAA {@link AuthSource} ({@link "../../auth/EntraNaaAuthSource"}),
  * which redeems an Entra id_token + Graph token for the proxy session. The
  * NAA-less hybrid mailbox (Exchange SE) ALSO reports `entra-msal` — but via the
  * oauth2-proxy redirect login (see
- * {@link "../providers/Oauth2ProxyLoginProvider"}), which has no client-side
+ * {@link "../../providers/Oauth2ProxyLoginProvider"}), which has no client-side
  * `AuthSource`: the user is still an Entra identity, so the mail-fetch hook
  * treats it as authenticated and routes SE mail to the EWS SOAP backend
  * (Erato backend proxy + host-brokered `makeEwsRequestAsync`).
  * `unsupported` is the one residual "can't sign in here" state — no NAA and no
- * mailbox to log in against (see {@link "./UnsupportedAuthSource"}).
+ * mailbox to log in against (see {@link "../../auth/UnsupportedAuthSource"}).
  */
 export type AuthMode = "entra-msal" | "unsupported";
 
@@ -76,7 +76,7 @@ export interface AuthSource {
 
 /**
  * Resolves an optional login hint for the bootstrap acquire. Injected per host:
- * {@link "../providers/OutlookAuthProvider"} adds a mailbox fallback; Excel/Word
+ * {@link "../../providers/OutlookAuthProvider"} adds a mailbox fallback; Excel/Word
  * supply a mailbox-less resolver (or none). Keeping this injected is what stops
  * the mailbox from leaking into the Entra source.
  */

@@ -8,7 +8,7 @@ import {
 } from "../../utils/fetchOutlookMessage";
 import { useOutlookMessageFetcher } from "../useOutlookMessageFetcher";
 
-import type { AuthMode } from "../../auth/AuthSource";
+import type { AuthMode } from "../../core/auth/AuthSource";
 import type { GraphTokenContextValue } from "../../providers/EntraGraphTokenProvider";
 
 // The hook gates on auth, then dispatches by mailbox location; both auth hooks,
@@ -17,7 +17,7 @@ import type { GraphTokenContextValue } from "../../providers/EntraGraphTokenProv
 const mockUseSessionAuth = vi.fn();
 const mockUseGraphTokenOptional = vi.fn();
 
-vi.mock("../../providers/SessionAuthProvider", () => ({
+vi.mock("../../core/SessionAuthProvider", () => ({
   useSessionAuth: () => mockUseSessionAuth(),
 }));
 

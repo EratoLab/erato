@@ -3,14 +3,17 @@ import { i18n } from "@lingui/core";
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { InteractionRequiredError } from "../../auth/AuthSource";
+import { InteractionRequiredError } from "../../core/auth/AuthSource";
 import {
   EntraGraphTokenProvider,
   useGraphTokenOptional,
   type GraphTokenContextValue,
 } from "../EntraGraphTokenProvider";
 
-import type { AuthSource, GraphCapableSource } from "../../auth/AuthSource";
+import type {
+  AuthSource,
+  GraphCapableSource,
+} from "../../core/auth/AuthSource";
 
 vi.mock("@erato/frontend/library", () => ({
   toast: {
@@ -23,7 +26,7 @@ vi.mock("@erato/frontend/library", () => ({
 
 // The provider only reads the redeem seam on the SUCCESS path; these tests
 // exercise the failure path, so a fresh-session stub suffices.
-vi.mock("../SessionAuthProvider", () => ({
+vi.mock("../../core/SessionAuthProvider", () => ({
   useSessionRedeem: () => ({
     redeemSessionForToken: vi.fn(),
     lastRedeemedAtRef: { current: Number.MAX_SAFE_INTEGER },

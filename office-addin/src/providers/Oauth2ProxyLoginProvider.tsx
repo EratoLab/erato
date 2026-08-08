@@ -2,11 +2,11 @@ import { setAuthRecoveryHandler } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { SessionAuthContext } from "./SessionAuthProvider";
+import { SessionAuthContext } from "../core/SessionAuthProvider";
 import {
   OAUTH2_PROXY_SIGN_IN_PATH,
   checkOauth2ProxySession,
-} from "../auth/oauth2ProxySession";
+} from "../core/auth/oauth2ProxySession";
 
 /** How often we re-probe the proxy session while the popup is open. */
 const SESSION_POLL_INTERVAL_MS = 1_500;

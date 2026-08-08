@@ -127,6 +127,20 @@ const eslintConfig = [
   {
     files: ["src/core/**/*.ts", "src/core/**/*.tsx"],
     rules: {
+      "import/no-restricted-paths": [
+        "error",
+        {
+          zones: [
+            {
+              target: "./src/core",
+              from: "./src",
+              except: ["./core"],
+              message:
+                "Host-neutral core files must receive host behavior through explicit components or props.",
+            },
+          ],
+        },
+      ],
       "no-restricted-imports": [
         "error",
         {

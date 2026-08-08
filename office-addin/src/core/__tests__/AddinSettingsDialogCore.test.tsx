@@ -24,7 +24,7 @@ vi.mock("@erato/frontend/library", () => ({
     userPreferences: { desktopSidecarTabEnabled: false },
   }),
 }));
-vi.mock("../../components/UserSettingsTabContent", () => ({
+vi.mock("../UserSettingsTabContent", () => ({
   UserSettingsTabContent: () => <div data-testid="user-settings" />,
 }));
 

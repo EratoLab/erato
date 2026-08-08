@@ -3,17 +3,17 @@ import { useCallback, useMemo, useState } from "react";
 import { EntraGraphTokenProvider } from "./EntraGraphTokenProvider";
 import { Oauth2ProxyLoginProvider } from "./Oauth2ProxyLoginProvider";
 import { useOffice } from "./OfficeProvider";
-import { SessionAuthProvider } from "./SessionAuthProvider";
 import { createEntraNaaAuthSource } from "../auth/EntraNaaAuthSource";
 import { UnsupportedAuthSource } from "../auth/UnsupportedAuthSource";
 import { isNestedAppAuthSupported } from "../auth/isNestedAppAuthSupported";
+import { SessionAuthProvider } from "../core/SessionAuthProvider";
 import { detectExchangeOnPrem } from "../utils/detectExchangeOnPrem";
 
 import type {
   AuthSource,
   GraphCapableSource,
   LoginHintResolver,
-} from "../auth/AuthSource";
+} from "../core/auth/AuthSource";
 
 /**
  * The Outlook host's auth composition root. This is the single place Outlook

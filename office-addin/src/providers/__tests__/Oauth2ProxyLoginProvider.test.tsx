@@ -3,8 +3,8 @@ import { i18n } from "@lingui/core";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useSessionAuth } from "../../core/SessionAuthProvider";
 import { Oauth2ProxyLoginProvider } from "../Oauth2ProxyLoginProvider";
-import { useSessionAuth } from "../SessionAuthProvider";
 
 vi.mock("@erato/frontend/library", () => ({
   setAuthRecoveryHandler: vi.fn(),
