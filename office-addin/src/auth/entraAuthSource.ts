@@ -14,7 +14,7 @@ import {
   type BootstrapToken,
   type GraphCapableSource,
   type LoginHintResolver,
-} from "./AuthSource";
+} from "../core/auth/AuthSource";
 
 /** Scopes for the Layer-1 bootstrap token that gets redeemed for the session. */
 const OAUTH2_PROXY_SESSION_SCOPES = ["User.Read"];

@@ -1,7 +1,7 @@
 import { i18n } from "@lingui/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { InteractionRequiredError } from "../AuthSource";
+import { InteractionRequiredError } from "../../core/auth/AuthSource";
 import { createEntraAuthSource } from "../entraAuthSource";
 
 import type { CreatePca } from "../entraAuthSource";

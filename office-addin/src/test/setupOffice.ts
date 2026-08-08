@@ -1,5 +1,10 @@
 import "@testing-library/jest-dom/vitest";
 
+// The app injects window.API_ROOT_URL before anything renders (src/app/env.ts).
+// Tests must mirror that invariant: without it, library API-root resolution
+// rejects inside effects on machines with no local VITE_API_ROOT_URL (CI).
+window.API_ROOT_URL ??= "http://erato.test";
+
 // Node 25 ships an experimental top-level `localStorage` that vitest enables
 // via `--localstorage-file`, but without a valid path it surfaces an object
 // whose methods aren't callable. Replace with a deterministic in-memory

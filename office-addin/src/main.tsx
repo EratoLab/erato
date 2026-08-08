@@ -1,30 +1,20 @@
 import "@erato/frontend/library.css";
-import {
-  applyComponentKitRegistrations,
-  componentRegistry,
-} from "@erato/frontend/library";
-import React from "react";
+import "./styles.css";
+import { applyComponentKitRegistrations } from "@erato/frontend/library";
+import React, { Suspense, lazy } from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
-import App from "./App";
 import { injectFrontendEnv } from "./app/env";
-import { AddinChatAddMenuExtraContent } from "./components/AddinChatAddMenuExtraContent";
-import { OutlookEratoAppointmentRenderer } from "./components/OutlookEratoAppointmentRenderer";
-import { OutlookEratoEmailRenderer } from "./components/OutlookEratoEmailRenderer";
 import { AddinSetupRoute } from "./pages/AddinSetupPage";
+
+const OutlookApp = lazy(() => import("./outlook/OutlookApp"));
 
 injectFrontendEnv();
 
-// Kit scripts have executed by now (document order); pick up their
-// registrations before stacking the add-in's own slot assignments on top.
+// Kit scripts have executed by now (document order). Host routes add their
+// own contributions synchronously when their lazy module is selected.
 applyComponentKitRegistrations();
-
-// The add-in's email-content sources ride into the shared "+" menu via the
-// ChatAddMenuExtraContent slot; file sources and tools come from the core menu.
-componentRegistry.ChatAddMenuExtraContent = AddinChatAddMenuExtraContent;
-componentRegistry.EratoEmailCodeBlock = OutlookEratoEmailRenderer;
-componentRegistry.EratoAppointmentCodeBlock = OutlookEratoAppointmentRenderer;
 
 const rootElement = document.getElementById("root");
 
@@ -36,7 +26,14 @@ ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <BrowserRouter basename="/office-addin">
       <Routes>
-        <Route path="/" element={<App />} />
+        <Route
+          path="/"
+          element={
+            <Suspense fallback={null}>
+              <OutlookApp />
+            </Suspense>
+          }
+        />
         <Route path="/setup" element={<AddinSetupRoute />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

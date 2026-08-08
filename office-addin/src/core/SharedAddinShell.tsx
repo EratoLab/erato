@@ -1,0 +1,94 @@
+import {
+  ApiProvider,
+  DesktopSidecarProvider,
+  FeatureConfigProvider,
+  I18nProvider,
+  ThemeProvider,
+  Toaster,
+} from "@erato/frontend/library";
+import { t } from "@lingui/core/macro";
+
+import { useSessionAuth } from "./SessionAuthProvider";
+
+import type { ComponentProps, ReactNode } from "react";
+
+export function AuthGate({ children }: { children: ReactNode }) {
+  const { isInitialized, isAuthenticated, retryAuthentication, error } =
+    useSessionAuth();
+
+  if (!isInitialized) {
+    return (
+      <div className="office-shell office-shell--centered">
+        <p className="office-status">
+          {t({
+            id: "officeAddin.auth.authenticating",
+            message: "Authenticating...",
+          })}
+        </p>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="office-shell office-shell--centered">
+        <p className="office-status office-status--error" role="alert">
+          {error ??
+            t({
+              id: "officeAddin.auth.signInToContinue",
+              message: "Sign in to continue",
+            })}
+        </p>
+        <button
+          className="office-status-action"
+          type="button"
+          onClick={() => {
+            void retryAuthentication();
+          }}
+        >
+          {t({
+            id: "officeAddin.auth.signIn",
+            message: "Sign in",
+          })}
+        </button>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+}
+
+type FeatureConfigOverrides = NonNullable<
+  ComponentProps<typeof FeatureConfigProvider>["config"]
+>;
+
+/**
+ * Baseline feature overrides for every add-in host composition. Nested
+ * FeatureConfigProvider instances replace (not merge with) ancestor providers,
+ * so host-specific providers must spread this constant.
+ */
+export const SHARED_ADDIN_FEATURE_CONFIG = {
+  chatInput: { showUsageAdvisory: false },
+} satisfies FeatureConfigOverrides;
+
+/**
+ * Host-neutral providers shared by every add-in composition. Host SDK and
+ * authentication providers are deliberately supplied as children so loading
+ * this module never initializes Office.js (or a future Teams SDK).
+ */
+export function SharedAddinShell({ children }: { children: ReactNode }) {
+  return (
+    <DesktopSidecarProvider>
+      <I18nProvider>
+        <ThemeProvider enableCustomTheme persistThemeMode={true}>
+          <FeatureConfigProvider config={SHARED_ADDIN_FEATURE_CONFIG}>
+            <ApiProvider enableDevtools={false}>
+              {children}
+              <Toaster placement="bottom-center" />
+            </ApiProvider>
+          </FeatureConfigProvider>
+        </ThemeProvider>
+      </I18nProvider>
+    </DesktopSidecarProvider>
+  );
+}

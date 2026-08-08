@@ -1,6 +1,10 @@
 import { t } from "@lingui/core/macro";
 
-import type { AuthMode, AuthSource, BootstrapToken } from "./AuthSource";
+import type {
+  AuthMode,
+  AuthSource,
+  BootstrapToken,
+} from "../core/auth/AuthSource";
 
 /** The single mode with no working {@link AuthSource}: no NAA and no mailbox to
  * log in against. The `entra-msal` mode authenticates (NAA or interactive), so

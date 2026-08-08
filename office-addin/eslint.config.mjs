@@ -124,6 +124,79 @@ const eslintConfig = [
       "react/prop-types": "off",
     },
   },
+  {
+    files: ["src/core/**/*.ts", "src/core/**/*.tsx"],
+    rules: {
+      "import/no-restricted-paths": [
+        "error",
+        {
+          zones: [
+            {
+              target: "./src/core",
+              from: "./src",
+              except: ["./core"],
+              message:
+                "Host-neutral core files must receive host behavior through explicit components or props.",
+            },
+          ],
+        },
+      ],
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "**/OfficeProvider",
+                "**/Outlook*",
+                "**/outlook/**",
+                "**/sessionPolicy/**",
+                "**/useOutlook*",
+              ],
+              message:
+                "Host-neutral core files must receive host behavior through explicit components or props.",
+            },
+          ],
+        },
+      ],
+      "no-restricted-globals": [
+        "error",
+        {
+          name: "Office",
+          message: "Office.js is owned by the Outlook composition.",
+        },
+        {
+          name: "OfficeRuntime",
+          message: "Office.js is owned by the Outlook composition.",
+        },
+      ],
+    },
+  },
+  {
+    files: [
+      "src/hooks/**/*.ts",
+      "src/hooks/**/*.tsx",
+      "src/providers/**/*.ts",
+      "src/providers/**/*.tsx",
+      "src/utils/**/*.ts",
+      "src/utils/**/*.tsx",
+      "src/auth/**/*.ts",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["**/outlook/**", "!**/test/mocks/outlook/**"],
+              message:
+                "The shared ring must not depend on the Outlook host module; move shared code out or invert the dependency.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 ];
 
 export default eslintConfig;
