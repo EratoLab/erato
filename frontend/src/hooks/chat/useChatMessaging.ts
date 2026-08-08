@@ -1015,9 +1015,24 @@ export function useChatMessaging(
               "[DEBUG_STREAMING] processStreamEvent: assistant_message_completed - calling handleRefetchAndClear.",
             );
             if (activeStreamKey !== NEW_CHAT_STREAM_KEY) {
-              useGenerationStatusStore
-                .getState()
-                .markTerminalLocal(activeStreamKey, "finished");
+              // A turn that stopped on a tool approval is parked, not
+              // finished. The server persists awaiting_approval only after
+              // emitting this event, so a completion-triggered refetch can
+              // read the pre-park row — derive the parked state locally from
+              // the final parts (the same last-part invariant the backend
+              // uses) instead of flashing "finished" and idling the poller.
+              const finalParts =
+                responseData.message?.content ?? responseData.content;
+              const lastPart = finalParts?.at(-1);
+              if (lastPart?.content_type === "tool_approval_request") {
+                useGenerationStatusStore
+                  .getState()
+                  .seedActionRequired(activeStreamKey, lastPart.requested_at);
+              } else {
+                useGenerationStatusStore
+                  .getState()
+                  .markTerminalLocal(activeStreamKey, "finished");
+              }
             }
             recentlyCompletedByKeyRef.current[activeStreamKey] = Date.now();
             void handleRefetchAndClear({
