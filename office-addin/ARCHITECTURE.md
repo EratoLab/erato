@@ -1,7 +1,7 @@
 # Office add-in architecture
 
 One host-neutral core drives the whole add-in chat experience; each Microsoft
-host (Outlook today; Teams, Word, Excel, PowerPoint later) is a thin
+host (Outlook and Teams today; Word, Excel, PowerPoint later) is a thin
 composition root that injects host behavior through a fixed set of seams.
 Adding a host is meant to be mechanical: compose the core with host providers,
 implement the seams listed below, and never modify the core itself.
@@ -17,6 +17,11 @@ implement the seams listed below, and never modify the core itself.
   `OutlookAddinSessionController.tsx`, `OutlookAddinChat.tsx` (the Outlook
   chat host), `installOutlookComponentRegistrations.ts`, and all Outlook-only
   code in `components/`, `hooks/`, `providers/`, `utils/`, `sessionPolicy/`.
+- `src/teams` — the Teams personal tab composition, a peer of `src/outlook`:
+  `TeamsApp.tsx` (root, served at `/office-addin/teams`), `teamsSession.ts`,
+  `providers/` (the TeamsJS lifecycle, theme and auth roots) and
+  `auth/isTeamsNestedAppAuthSupported.ts`. `@microsoft/teams-js` is imported
+  here and nowhere else.
 - The shared Office.js ring — stays in `src/providers`, `src/hooks`,
   `src/utils`: `OfficeProvider`, `OfficeThemeProvider`, `useOfficeTheme`,
   `utils/officeTheme/`, `officeAsync.ts`, the drag-drop broker
@@ -41,7 +46,9 @@ implement the seams listed below, and never modify the core itself.
    yields an `AddinSessionController`. The default
    `NeutralAddinSessionController` has no anchor policy and persists under
    isolated storage (`erato.addin.neutral.currentChat.v1`). Outlook supplies
-   `OutlookAddinSessionController` (mail-item anchor + session policy).
+   `OutlookAddinSessionController` (mail-item anchor + session policy); Teams
+   supplies `createNeutralAddinSessionController` bound to
+   `erato.addin.teams.currentChat.v1`, so its selection is independent of both.
 3. **Auth** — a host auth provider mounts `SessionAuthProvider`
    (`src/core/SessionAuthProvider.tsx`) with an `AuthSource`; `AuthGate` reads
    only the `SessionAuthCore` fields. The NAA source
@@ -56,13 +63,15 @@ implement the seams listed below, and never modify the core itself.
    host-module eval: `src/outlook/OutlookApp.tsx` calls
    `installOutlookComponentRegistrations()` at module scope, before React
    renders. The registry is a mutable global, so exactly one host per loaded
-   document. Component-kit registrations are re-applied at the entry point via
-   `applyComponentKitRegistrations()` in `src/main.tsx`.
+   document — contributions stay route-local because only the matched lazy
+   route module is evaluated. Teams installs none. Component-kit registrations
+   are re-applied at the entry point via `applyComponentKitRegistrations()` in
+   `src/main.tsx`.
 6. **Platform identifier** — stamped explicitly per host, never inferred from
    a host SDK: the `platform` prop on `AddinChatProviderCore` flows into
    messaging and is sent as the `X-Erato-Platform` request header. Values:
-   `web` (shared-frontend default), `outlook`, `addin-neutral`
-   (`NeutralAddinChatPage` default), future `teams`/`word`/`excel`.
+   `web` (shared-frontend default), `outlook`, `teams`, `addin-neutral`
+   (`NeutralAddinChatPage` default), future `word`/`excel`.
 
 ## Boundary enforcement (`eslint.config.mjs`)
 
@@ -70,14 +79,21 @@ implement the seams listed below, and never modify the core itself.
   import anything under `src/` outside `./core`. Backed by
   `no-restricted-globals` for `Office`/`OfficeRuntime` and a name-based
   `no-restricted-imports` denylist (`**/OfficeProvider`, `**/Outlook*`,
-  `**/outlook/**`, `**/sessionPolicy/**`, `**/useOutlook*`).
+  `**/outlook/**`, `**/sessionPolicy/**`, `**/useOutlook*`, `**/Teams*`,
+  `**/teams/**`, `@microsoft/teams-js`).
+- Host peer fence — `src/outlook/**` and `src/teams/**` may not import each
+  other: one host SDK and one set of registry overrides per document. The
+  Teams block also carries the `Office`/`OfficeRuntime` global ban.
 - Residue-ring guard — `src/hooks`, `src/providers`, `src/utils`, `src/auth`
-  may not import `**/outlook/**` (test mocks excepted): shared code must not
-  depend on the Outlook host module; move it out or invert the dependency.
+  may not import `**/outlook/**` or `**/teams/**` (test mocks excepted):
+  shared code must not depend on a host module; move it out or invert the
+  dependency.
 - Characterization tests —
   `src/core/__tests__/NeutralAddinChatPage.test.tsx` renders the full neutral
   page with the `Office` global deleted and asserts no office.js CDN script
   (`appsforoffice.microsoft.com`) is appended;
+  `src/teams/__tests__/TeamsApp.test.tsx` makes the same assertions for the
+  Teams route and pins its storage key, registry emptiness and MSAL ordering;
   `src/core/__tests__/AddinSettingsDialogCore.test.tsx` asserts the settings
   core shows no host tab without a contribution.
 
@@ -109,30 +125,37 @@ feature-specific overrides inline in `SharedAddinShell`.
 - Only one host SDK per loaded document: host SDKs patch globals, and the
   component registry holds exactly one host's overrides.
 
-## Adding a host: Teams walkthrough
+## The Teams host
 
-1. Create `src/teams/` with `TeamsApp.tsx`, composing outside-in:
-   `SharedAddinShell` → a teams-js provider (`app.initialize()` +
-   `app.getContext()`) → a Teams theme provider mapping
-   `default`/`dark`/`contrast` and subscribing via
-   `app.registerOnThemeChangeHandler` → a Teams auth provider reusing the NAA
-   `AuthSource` → `AuthGate` → `NeutralAddinChatPage` with
-   `platform="teams"`.
-   - Initialize teams-js BEFORE MSAL; the NAA redirect URI is
-     `brk-multihub://<origin>`.
-   - Write a Teams-side NAA-support probe: `isNestedAppAuthSupported` is
-     Office-gated and always false outside an Office host.
-2. Register a lazy route in `src/main.tsx` and regenerate served routes
-   (`pnpm generate:served-routes`).
-3. Install any Teams registry contributions at module eval, mirroring
-   `installOutlookComponentRegistrations`.
-4. Ship a separate Teams app manifest alongside `manifests/` — the unified
-   manifest cannot replace the Outlook manifest today (it excludes Outlook
-   Mac/mobile installs).
-5. Infra: extend CSP `frame-ancestors` (`frontend.extra_frame_ancestors` in
-   `erato.toml`) with `*.cloud.microsoft` plus `teams.microsoft.com`,
-   `*.teams.microsoft.com`, `*.microsoft365.com`, `*.office.com` and the
-   Outlook web hosts — the same personal tab also surfaces in Outlook and the
-   Microsoft 365 app.
-6. Split any diverging lingui copy into `.teams` ids and use
-   `erato.addin.teams.*` storage keys.
+`TeamsApp.tsx` composes outside-in: `SharedAddinShell` → `TeamsProvider` →
+`TeamsThemeProvider` → `TeamsAuthProvider` → `AuthGate` →
+`NeutralAddinChatPage` with `platform="teams"` and the Teams session
+controller. It loads no office.js, so unlike the Outlook route it is free to
+use the router.
+
+- `TeamsProvider` owns the TeamsJS lifecycle and nothing else: `app.initialize`,
+  `app.getContext`, the single-slot `app.registerOnThemeChangeHandler`,
+  and `app.notifySuccess`/`notifyFailure`. It gates children on the handshake,
+  which is what orders TeamsJS before MSAL — MSAL reads the NAA bridge exactly
+  once and otherwise degrades to a non-nested client for the life of the page,
+  silently. Only the handshake is fatal; a rejected `notifySuccess` is logged,
+  never surfaced, because the tab is already usable by then.
+- `isTeamsNestedAppAuthSupported` reads the `nestedAppAuthBridge` TeamsJS
+  installs. `src/auth/isNestedAppAuthSupported.ts` cannot be reused: it is
+  Office-gated, and `Office` does not exist in a tab. `TeamsAuthProvider` probes
+  it per source rebuild rather than caching a verdict, so the `AuthGate` retry
+  re-runs mode detection. TeamsJS skips its default bridge injection in a nested
+  iframe, so the absent-bridge case is logged with the host identity.
+- Auth is NAA-only, reusing `createEntraNaaAuthSource` and
+  `SessionAuthProvider` unchanged, with the login hint from the Teams context.
+  There is no Exchange or oauth2-proxy fallback on this route. The Entra app
+  registration needs the SPA redirect URI `brk-multihub://<origin>` (origin
+  only, no path).
+- Serving: `frame-ancestors` for the Teams and Microsoft 365 hosts is emitted
+  by `build_content_security_policy` in
+  `backend/erato/src/frontend_environment.rs` whenever the add-in integration
+  is enabled; deployments needing more origins still use
+  `frontend.extra_frame_ancestors`. Emit no `X-Frame-Options` — any value a
+  modern browser understands overrides the CSP and blanks the tab.
+- Not shipped: production manifest distribution (`manifests/manifest.json` is
+  the local unified package), Graph access, and Teams-specific chat surfaces.

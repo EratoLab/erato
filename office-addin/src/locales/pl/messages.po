@@ -1096,6 +1096,16 @@ msgstr "Prześlij wygenerowany manifest"
 #~ msgid "officeAddin.setup.uploadInstruction"
 #~ msgstr "i prześlij tam pobrany plik."
 
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsProvider.tsx
+msgid "officeAddin.teams.initFailed"
+msgstr "Nie można połączyć się z Microsoft Teams."
+
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsProvider.tsx
+msgid "officeAddin.teams.loading"
+msgstr "Ładowanie karty Microsoft Teams..."
+
 # ==============================
 # Unstable IDs
 # ==============================

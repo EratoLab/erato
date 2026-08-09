@@ -88,6 +88,18 @@ const OUTLOOK_OFFICE_FRAME_ANCESTORS: &[&str] = &[
     "https://outlook.office.com",
     "https://outlook.cloud.microsoft",
 ];
+/// Hosts that frame the Teams personal tab, per the Microsoft tab requirements
+/// table. `*.cloud.microsoft` is additive to the legacy origins, not a replacement.
+const TEAMS_M365_FRAME_ANCESTORS: &[&str] = &[
+    "https://teams.microsoft.com",
+    "https://*.teams.microsoft.com",
+    "https://*.microsoft365.com",
+    "https://*.office.com",
+    "https://*.cloud.microsoft",
+    // Outlook web also serves the tab from office365.com, which no wildcard above matches.
+    "https://outlook.office365.com",
+    "https://outlook-sdf.office365.com",
+];
 
 #[derive(Debug, Clone, Default)]
 /// Map of values that will be provided as environment-variable-like global variables to the frontend.
@@ -475,6 +487,7 @@ fn build_content_security_policy(config: &AppConfig) -> Option<HeaderValue> {
         frame_ancestors.extend(
             OUTLOOK_OFFICE_FRAME_ANCESTORS
                 .iter()
+                .chain(TEAMS_M365_FRAME_ANCESTORS.iter())
                 .map(ToString::to_string),
         );
     }
@@ -1571,15 +1584,19 @@ mod tests {
     }
 
     #[test]
-    fn content_security_policy_includes_outlook_when_office_addin_is_enabled() {
+    fn content_security_policy_includes_outlook_and_teams_when_office_addin_is_enabled() {
         let mut config = AppConfig::default();
         config.integrations.ms_office.addin.enabled = true;
 
         assert_eq!(
             content_security_policy_str(&config).as_deref(),
-            Some(
-                "frame-ancestors 'self' https://outlook.office.com https://outlook.cloud.microsoft"
-            )
+            Some(concat!(
+                "frame-ancestors 'self'",
+                " https://outlook.office.com https://outlook.cloud.microsoft",
+                " https://teams.microsoft.com https://*.teams.microsoft.com",
+                " https://*.microsoft365.com https://*.office.com https://*.cloud.microsoft",
+                " https://outlook.office365.com https://outlook-sdf.office365.com"
+            ))
         );
     }
 

@@ -30,6 +30,9 @@ importers:
       '@lingui/react':
         specifier: 5.9.4
         version: 5.9.4(@lingui/babel-plugin-lingui-macro@5.9.4(typescript@5.9.3))(react@19.2.7)
+      '@microsoft/teams-js':
+        specifier: 2.54.0
+        version: 2.54.0
       '@remix-run/router':
         specifier: 1.23.2
         version: 1.23.2
@@ -328,7 +331,7 @@ packages:
     hasBin: true
 
   '@erato/frontend@file:../frontend/dist-package/erato-frontend.tgz':
-    resolution: {integrity: sha512-sm2SvV9RRPgKxXa/LFp7mSRtLmtbYzkCx2G24BgcjLYEGATRbRC4AdIyxEkQk8p3j9k2/e8lcSd0cD0X8Q+NQg==, tarball: file:../frontend/dist-package/erato-frontend.tgz}
+    resolution: {integrity: sha512-T7OwCOhqpKZfg1jIxcLLe6ITm65ve83WiXoStQcddQnhAsG/onKutq8/nj10q9aVGT86JSRLpUlyb+wFLFy5xg==, tarball: file:../frontend/dist-package/erato-frontend.tgz}
     version: 0.1.0
     peerDependencies:
       '@lingui/core': ^5.9.4
@@ -692,6 +695,9 @@ packages:
 
   '@microsoft/app-manifest@1.0.6':
     resolution: {integrity: sha512-0+abQ2zlrq7VA/Rv/MwBKvN1CPe5FNmfM6a1bsinOXltpGduKDNlvmBTQ6LPUE2rXMA35VCmXMxkXXfn5IoVDw==}
+
+  '@microsoft/teams-js@2.54.0':
+    resolution: {integrity: sha512-d6iflwECR9E1cR55gZ+eLRiDeL01/uL0NJhBHZzbYuXi+H0iQmkKb29dXW8pdOGddyesWQNt8uK01zW0YUbvvg==}
 
   '@napi-rs/wasm-runtime@1.1.5':
     resolution: {integrity: sha512-AWPoBRJ9tsnVhor4sjO7rkni+7p+2IAEFj6cx06UgP10jkQHqay/36uRV/bFkgrh18D9vb4cr8Q0Pthskgzy+Q==}
@@ -4386,6 +4392,13 @@ snapshots:
       ajv-formats: 3.0.1(ajv@8.20.0)
       node-fetch: 3.3.2
       strip-bom: 5.0.0
+
+  '@microsoft/teams-js@2.54.0':
+    dependencies:
+      base64-js: 1.5.1
+      debug: 4.4.3
+    transitivePeerDependencies:
+      - supports-color
 
   '@napi-rs/wasm-runtime@1.1.5(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)':
     dependencies:

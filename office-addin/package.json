@@ -34,6 +34,7 @@
     "@erato/frontend-utils": "file:../frontend-utils",
     "@lingui/core": "5.9.4",
     "@lingui/react": "5.9.4",
+    "@microsoft/teams-js": "2.54.0",
     "@remix-run/router": "1.23.2",
     "@tanstack/query-core": "5.100.10",
     "@tanstack/react-query": "5.100.10",

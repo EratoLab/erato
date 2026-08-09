@@ -84,37 +84,47 @@ const neutralChatPersistedOptions: PersistedStateOptions<string | null> = {
     typeof value === "string" || value === null ? value : null,
 };
 
-/** Neutral session adapter: isolated storage and no anchor/context policy. */
-export function NeutralAddinSessionController({
-  children,
-}: AddinSessionControllerProps) {
-  const [currentChatId, setCurrentChatId] = usePersistedState<string | null>(
-    NEUTRAL_CURRENT_CHAT_KEY,
-    null,
-    neutralChatPersistedOptions,
-  );
-  const [newChatCounter, setNewChatCounter] = useState(0);
-  const clearNewlyCreatedChatIdRef = useRef<() => void>(() => {});
+/**
+ * Neutral session adapter: isolated storage and no anchor/context policy. Each
+ * host passes its own key so one host's selection never moves another's.
+ */
+export function createNeutralAddinSessionController(
+  storageKey: string,
+): ComponentType<AddinSessionControllerProps> {
+  return function NeutralAddinSessionController({
+    children,
+  }: AddinSessionControllerProps) {
+    const [currentChatId, setCurrentChatId] = usePersistedState<string | null>(
+      storageKey,
+      null,
+      neutralChatPersistedOptions,
+    );
+    const [newChatCounter, setNewChatCounter] = useState(0);
+    const clearNewlyCreatedChatIdRef = useRef<() => void>(() => {});
 
-  const beginNewChat = useCallback(() => {
-    setNewChatCounter((value) => value + 1);
-    setCurrentChatId(null);
-  }, [setCurrentChatId]);
-  const selectChat = useCallback(
-    (chatId: string) => setCurrentChatId(chatId),
-    [setCurrentChatId],
-  );
+    const beginNewChat = useCallback(() => {
+      setNewChatCounter((value) => value + 1);
+      setCurrentChatId(null);
+    }, [setCurrentChatId]);
+    const selectChat = useCallback(
+      (chatId: string) => setCurrentChatId(chatId),
+      [setCurrentChatId],
+    );
 
-  return children({
-    currentChatId,
-    effectiveChatId: currentChatId,
-    newChatCounter,
-    beginNewChat,
-    selectChat,
-    adoptNewChatId: selectChat,
-    clearNewlyCreatedChatIdRef,
-  });
+    return children({
+      currentChatId,
+      effectiveChatId: currentChatId,
+      newChatCounter,
+      beginNewChat,
+      selectChat,
+      adoptNewChatId: selectChat,
+      clearNewlyCreatedChatIdRef,
+    });
+  };
 }
+
+export const NeutralAddinSessionController =
+  createNeutralAddinSessionController(NEUTRAL_CURRENT_CHAT_KEY);
 
 function AddinChatDataProvider({
   children,
