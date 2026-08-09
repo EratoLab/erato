@@ -189,7 +189,8 @@ export interface ComponentRegistry {
    * Used by the Office addin to render the appointment summary + confirm
    * card that opens a prefilled Outlook appointment form.
    *
-   * When null, `erato-appointment` blocks render as a plain code block.
+   * When null, `erato-appointment` blocks render as the shared read-only
+   * summary card (`DefaultEratoAppointmentCodeBlock`).
    */
   EratoAppointmentCodeBlock: ComponentType<EratoAppointmentCodeBlockProps> | null;
 }

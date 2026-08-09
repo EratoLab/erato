@@ -42,6 +42,10 @@ export {
   DefaultEratoEmailCodeBlock,
   EratoEmailSuggestion,
 } from "@/components/ui/Message/EratoEmailSuggestion";
+export {
+  DefaultEratoAppointmentCodeBlock,
+  EratoAppointmentBlock,
+} from "@/components/ui/Message/EratoAppointmentBlock";
 export { ImageContentDisplay } from "@/components/ui/Message/ImageContentDisplay";
 export {
   Trace,
@@ -141,7 +145,10 @@ export type {
   OutlookConversationMessage,
   OutlookMessageBody,
   OutlookMessageRecipient,
+  SidecarClientInfo,
 } from "@erato/desktop-sidecar-protocol";
+// Host compositions build their sidecar identity with this.
+export { createBrowserClientInfo } from "@erato/desktop-sidecar-protocol";
 export {
   FileCapabilitiesProvider,
   useFileCapabilitiesContext,

@@ -17,11 +17,11 @@ import {
   DEFAULT_LIGHT_CODE_HIGHLIGHT_PRESET,
   resolvePrismCodeTheme,
 } from "@/config/codeHighlightThemes";
-import { componentRegistry } from "@/config/componentRegistry";
 import { useOptionalTranslation } from "@/hooks/i18n";
 import { useTraceFeature } from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
+import { EratoAppointmentBlock } from "./EratoAppointmentBlock";
 import { EratoEmailSuggestion } from "./EratoEmailSuggestion";
 import { ImageContentDisplay } from "./ImageContentDisplay";
 import { McpToolApprovalCard } from "./McpToolApprovalCard";
@@ -164,15 +164,12 @@ type MarkdownPreProps = React.ComponentPropsWithoutRef<"pre"> & {
 };
 
 /**
- * The `erato-appointment` fence renders as a card only when a host registered
- * a renderer for it (the Outlook add-in); otherwise it stays a plain code
- * block, exactly like before the registry key existed.
+ * The `erato-appointment` fence (the JSON payload a scheduling facet's
+ * confirm step emits) always renders as a card: a host-registered renderer
+ * when present (the Outlook add-in), otherwise the read-only default summary.
  */
 function isEratoAppointmentLanguage(language: string): boolean {
-  return (
-    language === "erato-appointment" &&
-    componentRegistry.EratoAppointmentCodeBlock !== null
-  );
+  return language === "erato-appointment";
 }
 
 function isCardCodeChild(
@@ -309,9 +306,8 @@ function MarkdownCode({
     );
   }
 
-  const AppointmentBlock = componentRegistry.EratoAppointmentCodeBlock;
-  if (isBlockCode && AppointmentBlock && isEratoAppointmentLanguage(language)) {
-    return <AppointmentBlock content={codeContent} />;
+  if (isBlockCode && isEratoAppointmentLanguage(language)) {
+    return <EratoAppointmentBlock content={codeContent} />;
   }
 
   if (isBlockCode) {

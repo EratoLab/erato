@@ -1,4 +1,7 @@
-import { FeatureConfigProvider } from "@erato/frontend/library";
+import {
+  FeatureConfigProvider,
+  createBrowserClientInfo,
+} from "@erato/frontend/library";
 
 import { OutlookAddinChatPage } from "./OutlookAddinChatPage";
 import { installOutlookComponentRegistrations } from "./installOutlookComponentRegistrations";
@@ -16,6 +19,14 @@ import { OutlookMailItemProvider } from "./providers/OutlookMailItemProvider";
 // The route module resolves before React renders its default export. Registry
 // consumers can therefore memoize safely on their first render.
 installOutlookComponentRegistrations();
+
+// Same identity the sidecar provider's legacy platform sniff produced, so the
+// wire contract to the sidecar is unchanged.
+const OUTLOOK_SIDECAR_CLIENT_INFO = createBrowserClientInfo({
+  name: "erato-office-addin",
+  version: import.meta.env.VITE_APP_VERSION ?? "unversioned",
+  hostApplication: "Microsoft Office add-in",
+});
 
 function OutlookProviders({ children }: { children: React.ReactNode }) {
   const { host } = useOffice();
@@ -49,7 +60,7 @@ function OutlookFeatureConfig({ children }: { children: React.ReactNode }) {
 
 export default function OutlookApp() {
   return (
-    <SharedAddinShell>
+    <SharedAddinShell sidecarClientInfo={OUTLOOK_SIDECAR_CLIENT_INFO}>
       <OfficeProvider>
         <OutlookFeatureConfig>
           <OfficeThemeProvider>
