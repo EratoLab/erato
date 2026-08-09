@@ -26,11 +26,7 @@ body {
   display: flex;
   min-height: 0;
   width: 100%;
-  /* Guard against the host resizing the pane very narrow (e.g. the
-     user-resizable task pane feature shipped in new Outlook mid-2026,
-     office-js #5337, and the Mac-specific resize instability in the same
-     release window). The minimum keeps the chat UI readable; content that
-     overflows is clipped by the overflow:hidden on html/body. */
+  /* Keeps the chat UI readable if the host narrows the pane unexpectedly. */
   min-width: 240px;
 }
 
