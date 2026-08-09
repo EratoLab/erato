@@ -22,6 +22,16 @@ const stringToBuffer = (s: string): ArrayBuffer => {
   return copy.buffer;
 };
 
+// jsdom implements neither `Blob.prototype.arrayBuffer` nor `.text`, so
+// FileReader is the only route from a Blob back to its bytes.
+const blobToArrayBuffer = (blob: Blob): Promise<ArrayBuffer> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as ArrayBuffer);
+    reader.onerror = () => reject(reader.error ?? new Error("read failed"));
+    reader.readAsArrayBuffer(blob);
+  });
+
 const mockFetchEml = (bytes: ArrayBuffer | string) => {
   const buffer = typeof bytes === "string" ? stringToBuffer(bytes) : bytes;
   global.fetch = vi.fn(async (input: RequestInfo | URL) => {
@@ -32,7 +42,7 @@ const mockFetchEml = (bytes: ArrayBuffer | string) => {
       return {
         ok: true,
         status: 200,
-        arrayBuffer: async () => blob.arrayBuffer(),
+        arrayBuffer: async () => blobToArrayBuffer(blob),
       } as Response;
     }
     return {
@@ -186,6 +196,43 @@ const PDF_OCTET_STREAM_EML = [
   "",
   MINIMAL_PDF_B64,
   "--BOUND--",
+  "",
+].join("\r\n");
+
+// Mirrors the bundle the add-in's `synthesizeThreadEml` emits: nested
+// message/rfc822 parts each carrying their own attachments. Those attachment
+// content types come from Graph/EWS and are stamped `application/octet-stream`
+// whenever the provider omits one, so a re-attached PDF arrives mis-typed.
+const THREAD_OCTET_STREAM_PDF_EML = [
+  "Subject: Re: Kickoff",
+  "Date: Mon, 18 May 2026 10:00:00 +0000",
+  "MIME-Version: 1.0",
+  'Content-Type: multipart/mixed; boundary="OUTER"',
+  "",
+  "--OUTER",
+  "Content-Type: message/rfc822",
+  'Content-Disposition: attachment; filename="msg-1.eml"',
+  "",
+  "From: Alice <alice@example.com>",
+  "Subject: Kickoff",
+  "Date: Mon, 11 May 2026 09:00:00 +0000",
+  "MIME-Version: 1.0",
+  'Content-Type: multipart/mixed; boundary="INNER"',
+  "",
+  "--INNER",
+  'Content-Type: text/plain; charset="utf-8"',
+  "",
+  "Report attached.",
+  "",
+  "--INNER",
+  "Content-Type: application/octet-stream",
+  'Content-Disposition: attachment; filename="report.pdf"',
+  "Content-Transfer-Encoding: base64",
+  "",
+  MINIMAL_PDF_B64,
+  "--INNER--",
+  "",
+  "--OUTER--",
   "",
 ].join("\r\n");
 
@@ -381,10 +428,9 @@ describe("EmlPreview", () => {
   });
 
   it("creates the attachment blob with application/pdf type when the email declares application/octet-stream", async () => {
-    // ERMAIN-550: emails that mis-declare a PDF as `application/octet-stream`
-    // caused the browser to download the blob URL (with a UUID filename) instead
-    // of rendering the PDF inline. The fix recovers the type from the filename
-    // extension before creating the blob.
+    // A blob URL typed `application/octet-stream` is downloaded rather than
+    // rendered by the iframe, and blob URLs carry no filename — so the user
+    // gets a bare UUID on disk instead of a preview.
     mockFetchEml(PDF_OCTET_STREAM_EML);
     renderEml(<EmlPreview filename={FILE.filename} url={FILE.url} />);
 
@@ -398,7 +444,7 @@ describe("EmlPreview", () => {
     expect(pdfBlob?.type).toBe("application/pdf");
   });
 
-  it("still opens an octet-stream PDF in the inline PDF viewer (ERMAIN-550 regression guard)", async () => {
+  it("still opens an octet-stream PDF in the inline PDF viewer", async () => {
     mockFetchEml(PDF_OCTET_STREAM_EML);
     renderEml(<EmlPreview filename={FILE.filename} url={FILE.url} />);
 
@@ -411,5 +457,20 @@ describe("EmlPreview", () => {
     // FilePreviewContent should route to the PDF iframe, not the
     // "preview unavailable" fallback.
     expect(screen.getByTestId("file-preview-pdf")).toBeInTheDocument();
+  });
+
+  it("recovers the MIME type of an octet-stream PDF attached to a nested thread message", async () => {
+    mockFetchEml(THREAD_OCTET_STREAM_PDF_EML);
+    renderEml(<EmlPreview filename={FILE.filename} url={FILE.url} />);
+
+    const attachmentButton = await screen.findByRole("button", {
+      name: /report\.pdf/,
+    });
+    fireEvent.click(attachmentButton);
+
+    // Assert on the blob the viewer was actually handed: an octet-stream URL
+    // here is what makes the browser download a UUID instead of previewing.
+    const blobUrl = screen.getByTestId("file-preview-pdf").getAttribute("src");
+    expect(blobUrlContent.get(blobUrl ?? "")?.type).toBe("application/pdf");
   });
 });
