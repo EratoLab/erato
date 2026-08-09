@@ -20,6 +20,9 @@
  * EWS/REST URL on any of these belongs to a cloud mailbox; any other host is
  * treated as customer-hosted (on-prem) Exchange. `.partner.outlook.cn` is
  * already covered by `.outlook.cn` but listed to document the full set.
+ * `.cloud.microsoft` is the unified domain Microsoft is migrating M365
+ * endpoints to; Outlook on the web reports `outlook.cloud.microsoft` service
+ * URLs for EXO mailboxes on migrated tenants.
  */
 const MICROSOFT_CLOUD_HOST_SUFFIXES = [
   ".office.com",
@@ -28,6 +31,7 @@ const MICROSOFT_CLOUD_HOST_SUFFIXES = [
   ".office365.us",
   ".outlook.cn",
   ".partner.outlook.cn",
+  ".cloud.microsoft",
 ];
 
 function isMicrosoftCloudHostname(hostname: string): boolean {
