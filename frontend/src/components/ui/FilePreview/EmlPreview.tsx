@@ -82,9 +82,26 @@ const OCTET_STREAM = "application/octet-stream";
 // eslint-disable-next-line lingui/no-unlocalized-strings
 const MESSAGE_RFC822 = "message/rfc822";
 
+// Browsers only render a blob URL inline when its MIME type names a renderable
+// format, so an octet-stream PDF downloads as a bare UUID instead of previewing.
+const EXT_TO_MIME: Readonly<Record<string, string>> = {
+  // eslint-disable-next-line lingui/no-unlocalized-strings
+  pdf: "application/pdf",
+  eml: MESSAGE_RFC822,
+} as const;
+
+function recoverMimeType(
+  mimeType: string,
+  filename: string | null | undefined,
+): string {
+  if (mimeType.length > 0 && mimeType !== OCTET_STREAM) return mimeType;
+  const ext = filename?.split(".").pop()?.toLowerCase() ?? "";
+  return EXT_TO_MIME[ext] ?? OCTET_STREAM;
+}
+
 function attachmentBlob(attachment: Attachment): Blob {
-  const { content, mimeType } = attachment;
-  const type = mimeType.length > 0 ? mimeType : OCTET_STREAM;
+  const { content, mimeType, filename } = attachment;
+  const type = recoverMimeType(mimeType, filename);
   if (content instanceof ArrayBuffer) return new Blob([content], { type });
   if (content instanceof Uint8Array) {
     const copy = new Uint8Array(content.byteLength);
@@ -167,7 +184,7 @@ export const EmlPreview: React.FC<EmlPreviewProps> = ({ url }) => {
               trimmedName && trimmedName.length > 0
                 ? trimmedName
                 : t`attachment`,
-            mimeType: att.mimeType.length > 0 ? att.mimeType : OCTET_STREAM,
+            mimeType: recoverMimeType(att.mimeType, att.filename),
             size: blob.size,
             blobUrl: objectUrl,
           });
@@ -424,8 +441,7 @@ const EmlThreadBody: React.FC<{ parsed: ParsedEml }> = ({ parsed }) => {
                 trimmedName && trimmedName.length > 0
                   ? trimmedName
                   : t`attachment`,
-              mimeType:
-                child.mimeType.length > 0 ? child.mimeType : OCTET_STREAM,
+              mimeType: recoverMimeType(child.mimeType, child.filename),
               size: blob.size,
               blobUrl: childUrl,
             });
