@@ -293,20 +293,18 @@ describe("useOutlookComposeSelection", () => {
     expect(result.current).toEqual({ data: "", sourceProperty: "body" });
   });
 
-  it("clears the held selection when the item becomes an appointment (grace elapsed)", () => {
+  it("clears the held selection when the item becomes an appointment attendee item", () => {
     setComposeItem({ data: "held text", sourceProperty: "body" });
 
     const { result, rerender } = renderHook(() => useOutlookComposeSelection());
 
     expect(result.current.data).toBe("held text");
 
-    // The pane leaks into the calendar module: an AppointmentCompose replaces
-    // the message. It must clear like a lost item — before the shared guard,
-    // the grace re-check saw a non-null non-read item and held the stale
-    // selection chip forever.
+    // Appointment attendee/read mode remains unsupported and must clear like
+    // a lost item rather than retaining a compose selection.
     const mailbox = installMockMailbox();
     mailbox.item = {
-      subject: { getAsync: vi.fn() },
+      subject: "Standup",
       itemType: "appointment",
     };
     mockUseOutlookMailItem.mockReturnValue({ mailItem: null });
@@ -322,6 +320,38 @@ describe("useOutlookComposeSelection", () => {
     });
 
     expect(result.current).toEqual({ data: "", sourceProperty: "body" });
+  });
+
+  it("reads selected description text from appointment organizer compose", () => {
+    const mailbox = installMockMailbox();
+    mailbox.item = {
+      itemType: "appointment",
+      subject: { getAsync: vi.fn() },
+      getSelectedDataAsync: vi.fn((_coercionType, callback) =>
+        callback(
+          createMockAsyncResult({
+            data: "<p>Agenda item</p>",
+            sourceProperty: "body",
+          }),
+        ),
+      ),
+    };
+    mockUseOutlookMailItem.mockReturnValue({
+      itemIdentity: "appointment:1",
+      mailItem: {
+        itemKind: "appointment",
+        subject: "Standup",
+        conversationId: null,
+        isComposeMode: true,
+      },
+    });
+
+    const { result } = renderHook(() => useOutlookComposeSelection());
+
+    expect(result.current).toEqual({
+      data: "Agenda item",
+      sourceProperty: "body",
+    });
   });
 
   it("clears interval and ignores callbacks after unmount", () => {

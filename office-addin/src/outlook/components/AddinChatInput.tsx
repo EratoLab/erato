@@ -23,11 +23,19 @@ import { useOutlookComposeSelection } from "../hooks/useOutlookComposeSelection"
 import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
 import {
   NO_ITEM_SEND_IDENTITY,
+  readAppointmentComposeSnapshot,
   useOutlookMailItem,
 } from "../providers/OutlookMailItemProvider";
+import {
+  isAppointmentCompose as isAppointmentComposeItem,
+  resolveSupportedMailboxItem,
+} from "../sessionPolicy";
 import { resolveOutlookActionFacet } from "../utils/outlookActionFacet";
 import { OUTLOOK_REPLY_FROM_READ_FACET_ID } from "../utils/outlookClientActions";
-import { getComposeBodyType } from "../utils/outlookComposeWrite";
+import {
+  getComposeBodyType,
+  type BodyFormat,
+} from "../utils/outlookComposeWrite";
 import {
   OUTLOOK_SCHEDULE_FACET_ID,
   isSchedulingThreadFresh,
@@ -153,6 +161,12 @@ export const AddinChatInput = forwardRef<
   const { host } = useOffice();
   const availableFacetIds = useAvailableActionFacetIds();
   const composeEmailAvailable = availableFacetIds.has("compose_email");
+  const appointmentRewriteAvailable = availableFacetIds.has(
+    "outlook_rewrite_appointment_selection",
+  );
+  const appointmentContextAvailable = availableFacetIds.has(
+    "outlook_review_appointment",
+  );
   const replyFromReadAvailable = availableFacetIds.has(
     OUTLOOK_REPLY_FROM_READ_FACET_ID,
   );
@@ -163,9 +177,16 @@ export const AddinChatInput = forwardRef<
   const [isUploadingEmail, setIsUploadingEmail] = useState(false);
   const composeSelection = useOutlookComposeSelection();
   const { mailItem, itemIdentity } = useOutlookMailItem();
+  const isAppointmentCompose = mailItem?.itemKind === "appointment";
   const [isSelectionDismissed, setIsSelectionDismissed] = useState(false);
+  // Appointment facets are config-defined (subscription content, not
+  // builtins): when the backend doesn't advertise them, the resolver would
+  // drop the facet — so the selection/draft context must not count as
+  // included, or the chips would promise context the send doesn't carry.
   const hasActiveSelection =
-    composeSelection.data.length > 0 && !isSelectionDismissed;
+    composeSelection.data.length > 0 &&
+    !isSelectionDismissed &&
+    (!isAppointmentCompose || appointmentRewriteAvailable);
 
   // Draft-as-context (#1): a non-empty compose body is eligible to ride along
   // as `outlook_review_draft`, but the user can switch it off via the draft
@@ -180,16 +201,21 @@ export const AddinChatInput = forwardRef<
     setIsSelectionDismissed(false);
   }
   const isDraftContextIncluded =
-    !!mailItem?.isComposeMode && draftBodyText.length > 0 && !isDraftDismissed;
+    !!mailItem?.isComposeMode &&
+    (draftBodyText.length > 0 || isAppointmentCompose) &&
+    !isDraftDismissed &&
+    (!isAppointmentCompose || appointmentContextAvailable);
   // Show the draft chip only when it's actually what we'd send: a live
   // selection takes priority (rewrite wins over review), so hide it then.
   const hasDraftContextChip =
     host === "Outlook" && isDraftContextIncluded && !hasActiveSelection;
 
-  // Draft de-dup marker (#4): the body we last sent as `review_draft` in this
-  // chat. Client-side by design — the backend is action-facet toggle-stateless.
-  // Reset when the chat changes so a fresh chat re-sends the draft.
-  const lastSentDraftBodyRef = useRef<string | null>(null);
+  // Draft de-dup marker (#4): the fingerprint of the draft context we last
+  // sent in this chat (raw body for message drafts, metadata fingerprint for
+  // appointments). Client-side by design — the backend is action-facet
+  // toggle-stateless. Reset when the chat changes so a fresh chat re-sends
+  // the draft.
+  const lastSentDraftFingerprintRef = useRef<string | null>(null);
   const lastDraftChatIdRef = useRef(chatId);
   if (chatId !== lastDraftChatIdRef.current) {
     // Reset the dedup marker when the chat genuinely changes — but NOT when a
@@ -200,7 +226,7 @@ export const AddinChatInput = forwardRef<
       lastDraftChatIdRef.current == null && chatId != null;
     lastDraftChatIdRef.current = chatId;
     if (!isNewChatGettingItsId) {
-      lastSentDraftBodyRef.current = null;
+      lastSentDraftFingerprintRef.current = null;
     }
   }
 
@@ -646,6 +672,28 @@ export const AddinChatInput = forwardRef<
       // executors treat it as a mismatch and fail closed.
       const sendItemIdentity = itemIdentity ?? NO_ITEM_SEND_IDENTITY;
 
+      // Appointment fields are re-read from the LIVE item at send time:
+      // editing an appointment form fires no ItemChanged, so the provider's
+      // bind-time state is frozen at pane-open and would ship a stale (often
+      // empty) snapshot — and poison the de-dup fingerprint with it. Reads
+      // are bounded and fall back per-field to the provider state, so a
+      // wedged host degrades to the old behavior instead of losing the send.
+      const liveItem = resolveSupportedMailboxItem(Office.context.mailbox.item);
+      const appointmentSnapshot =
+        isAppointmentCompose && liveItem && isAppointmentComposeItem(liveItem)
+          ? await readAppointmentComposeSnapshot(liveItem, {
+              subject: mailItem?.subject ?? "",
+              organizer: mailItem?.organizer ?? null,
+              requiredAttendees: mailItem?.requiredAttendees ?? [],
+              optionalAttendees: mailItem?.optionalAttendees ?? [],
+              location: mailItem?.location ?? "",
+              start: mailItem?.start ?? null,
+              end: mailItem?.end ?? null,
+              bodyText: mailItem?.bodyText ?? null,
+              bodyHtml: mailItem?.bodyHtml ?? null,
+            })
+          : null;
+
       // Build the action facet (selection rewrite vs. draft review) via a pure
       // resolver so the selection-priority and draft de-dup rules stay testable.
       //
@@ -656,31 +704,86 @@ export const AddinChatInput = forwardRef<
       // no value to a writing-review prompt and blow the backend's per-arg size
       // cap; text coercion still preserves quoted history (`>` lines), bullet
       // lists, and link URLs, so the model keeps the full conversation context.
-      const bodyFormat = mailItem ? await getComposeBodyType() : undefined;
-      const { facet: actionFacet, sentDraftBody } = resolveOutlookActionFacet({
-        hasActiveSelection,
-        selectionData: composeSelection.data,
-        selectionSource: composeSelection.sourceProperty,
-        draftContextIncluded: isDraftContextIncluded,
-        draftBody: draftBodyText,
-        lastSentDraftBody: lastSentDraftBodyRef.current,
-        bodyFormat,
-        isComposeMode: !!mailItem?.isComposeMode,
-        composeEmailAvailable,
-        isReadMode: !!mailItem && !mailItem.isComposeMode,
-        replyFromReadAvailable,
-        scheduleFacetAvailable,
-        calendarAvailable: calendarFetcher !== null,
-        schedulingThreadActive: isSchedulingThreadFresh(
-          lastSchedulingSignalAt,
-          Date.now(),
-        ),
-        nowIso: toLocalOffsetIso(new Date().toISOString()),
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      });
-      if (sentDraftBody !== null) {
+      let bodyFormat: BodyFormat | undefined;
+      if (mailItem?.isComposeMode) {
+        try {
+          bodyFormat = await getComposeBodyType();
+        } catch {
+          // The live item can race away from compose (pinned pane, the user
+          // clicked a received email mid-send). The message must still go
+          // out — just without a compose body format.
+          bodyFormat = undefined;
+        }
+      }
+      const draftBody = appointmentSnapshot
+        ? (appointmentSnapshot.bodyText ?? appointmentSnapshot.bodyHtml ?? "")
+        : draftBodyText;
+      const draftContextFingerprint = appointmentSnapshot
+        ? JSON.stringify({
+            subject: appointmentSnapshot.subject,
+            body: draftBody,
+            requiredAttendees: appointmentSnapshot.requiredAttendees,
+            optionalAttendees: appointmentSnapshot.optionalAttendees,
+            location: appointmentSnapshot.location,
+            start: appointmentSnapshot.start?.toISOString() ?? "",
+            end: appointmentSnapshot.end?.toISOString() ?? "",
+          })
+        : undefined;
+      const formatAttendees = (
+        attendees: { displayName: string; emailAddress: string }[] | undefined,
+      ) =>
+        attendees
+          ?.map((attendee) => attendee.emailAddress || attendee.displayName)
+          .join(", ");
+      const { facet: actionFacet, sentDraftFingerprint } =
+        resolveOutlookActionFacet({
+          itemKind: mailItem?.itemKind ?? null,
+          hasActiveSelection,
+          selectionData: composeSelection.data,
+          selectionSource: composeSelection.sourceProperty,
+          draftContextIncluded: isDraftContextIncluded,
+          draftBody,
+          lastSentDraftFingerprint: lastSentDraftFingerprintRef.current,
+          draftContextFingerprint,
+          bodyFormat,
+          isComposeMode: !!mailItem?.isComposeMode,
+          composeEmailAvailable,
+          appointmentRewriteAvailable,
+          appointmentContextAvailable,
+          appointmentSubject: appointmentSnapshot?.subject,
+          appointmentRequiredAttendees: formatAttendees(
+            appointmentSnapshot?.requiredAttendees,
+          ),
+          appointmentOptionalAttendees: formatAttendees(
+            appointmentSnapshot?.optionalAttendees,
+          ),
+          appointmentLocation: appointmentSnapshot?.location,
+          // Local wall time with offset — the template tells the model these
+          // are the user's local times; raw UTC would misreport the meeting
+          // time for every non-UTC user.
+          appointmentStart: appointmentSnapshot?.start
+            ? toLocalOffsetIso(appointmentSnapshot.start.toISOString())
+            : undefined,
+          appointmentEnd: appointmentSnapshot?.end
+            ? toLocalOffsetIso(appointmentSnapshot.end.toISOString())
+            : undefined,
+          isReadMode:
+            !!mailItem &&
+            mailItem.itemKind === "message" &&
+            !mailItem.isComposeMode,
+          replyFromReadAvailable,
+          scheduleFacetAvailable,
+          calendarAvailable: calendarFetcher !== null,
+          schedulingThreadActive: isSchedulingThreadFresh(
+            lastSchedulingSignalAt,
+            Date.now(),
+          ),
+          nowIso: toLocalOffsetIso(new Date().toISOString()),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        });
+      if (sentDraftFingerprint !== null) {
         // Remember what we sent so an unchanged follow-up de-dupes (#4).
-        lastSentDraftBodyRef.current = sentDraftBody;
+        lastSentDraftFingerprintRef.current = sentDraftFingerprint;
       }
 
       // Snapshot the dropped emails staged for this send. They are cleared only
@@ -783,10 +886,13 @@ export const AddinChatInput = forwardRef<
       chatId,
       chatInputProps,
       composeEmailAvailable,
+      appointmentContextAvailable,
+      appointmentRewriteAvailable,
       composeSelection.data,
       composeSelection.sourceProperty,
       draftBodyText,
       hasActiveSelection,
+      isAppointmentCompose,
       isDraftContextIncluded,
       itemIdentity,
       lastSchedulingSignalAt,
@@ -885,19 +991,31 @@ export const AddinChatInput = forwardRef<
           <div className="flex items-center gap-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary px-3 py-1.5 text-xs text-theme-fg-secondary">
             <span className="shrink-0">&#x1F4DD;</span>
             <span className="min-w-0 truncate">
-              {t({
-                id: "officeAddin.chatInput.draftContext",
-                message: "Your draft is included as context",
-              })}
+              {isAppointmentCompose
+                ? t({
+                    id: "officeAddin.chatInput.appointmentContext",
+                    message: "Appointment details are included as context",
+                  })
+                : t({
+                    id: "officeAddin.chatInput.draftContext",
+                    message: "Your draft is included as context",
+                  })}
             </span>
             <button
               type="button"
               onClick={() => setIsDraftDismissed(true)}
               className="ml-auto shrink-0 rounded-[var(--theme-radius-control)] p-0.5 hover:bg-theme-bg-tertiary"
-              aria-label={t({
-                id: "officeAddin.chatInput.dismissDraftContext",
-                message: "Don't include draft",
-              })}
+              aria-label={
+                isAppointmentCompose
+                  ? t({
+                      id: "officeAddin.chatInput.dismissAppointmentContext",
+                      message: "Don't include appointment details",
+                    })
+                  : t({
+                      id: "officeAddin.chatInput.dismissDraftContext",
+                      message: "Don't include draft",
+                    })
+              }
             >
               &#x2715;
             </button>

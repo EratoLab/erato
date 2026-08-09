@@ -68,7 +68,10 @@ export function OutlookEratoEmailRenderer({
   const hasSelection = composeSelection.data.length > 0;
   const { mailItem, itemIdentity } = useOutlookMailItem();
   const artifact = useOutlookArtifact();
-  const isReadMode = !!mailItem && !mailItem.isComposeMode;
+  const isReadMode =
+    !!mailItem &&
+    mailItem.itemKind !== "appointment" &&
+    !mailItem.isComposeMode;
   // Identity of the Outlook item open when the user SENT the request that
   // produced this draft (stamped on fresh completions only). When it no
   // longer matches the currently open item, the draft must not open a reply

@@ -24,9 +24,15 @@ const isStringOrNull = (value: unknown): value is string | null =>
 const isAnchor = (value: unknown): value is OutlookSessionAnchor => {
   if (value === null || typeof value !== "object") return false;
   const candidate = value as Record<string, unknown>;
+  const itemKind = candidate.itemKind;
+  const itemIdentity = candidate.itemIdentity;
   return (
     isStringOrNull(candidate.conversationId) &&
-    typeof candidate.isCompose === "boolean"
+    typeof candidate.isCompose === "boolean" &&
+    (itemKind === undefined ||
+      itemKind === "message" ||
+      itemKind === "appointment") &&
+    (itemIdentity === undefined || isStringOrNull(itemIdentity))
   );
 };
 

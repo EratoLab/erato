@@ -7,6 +7,7 @@ import {
   requestImmediateComposeSelectionPoll,
   resumeComposeSelectionPolling,
 } from "../hooks/composeSelectionStore";
+import { isMessageRead, resolveSupportedMailboxItem } from "../sessionPolicy";
 
 // A compose write (setSelectedDataAsync/prependAsync) drops a callback ~never,
 // but on a wedged host it could hang the whole insert forever — bound it.
@@ -38,7 +39,7 @@ interface ComposeWriteAttempt {
 }
 
 async function tryReadComposeBody(
-  item: Office.MessageCompose,
+  item: Office.MessageCompose | Office.AppointmentCompose,
   coercionType: Office.CoercionType,
 ): Promise<string | null> {
   const body = item.body as {
@@ -60,6 +61,16 @@ async function tryReadComposeBody(
   } catch {
     return null;
   }
+}
+
+function getActiveComposeItem():
+  | Office.MessageCompose
+  | Office.AppointmentCompose {
+  const item = resolveSupportedMailboxItem(Office.context.mailbox.item);
+  if (!item || isMessageRead(item)) {
+    throw new Error("No compose item available");
+  }
+  return item;
 }
 
 async function tryComposeWrite(
@@ -88,10 +99,7 @@ async function tryComposeWrite(
  * inspecting body reads instead of throwing.
  */
 export async function getComposeBodyType(): Promise<BodyFormat> {
-  const item = Office.context.mailbox.item as Office.MessageCompose | null;
-  if (!item) {
-    throw new Error("No compose item available");
-  }
+  const item = getActiveComposeItem();
 
   const body = item.body as {
     getTypeAsync?: (
@@ -142,10 +150,7 @@ export async function replaceComposeSelection(
   data: string,
   isHtml = false,
 ): Promise<void> {
-  const item = Office.context.mailbox.item as Office.MessageCompose | null;
-  if (!item) {
-    throw new Error("No compose item available");
-  }
+  const item = getActiveComposeItem();
 
   const bodyFormat = await getComposeBodyType();
   const writeAttempts: ComposeWriteAttempt[] = isHtml
@@ -199,10 +204,7 @@ export async function replaceComposeSelection(
  * Prepends content to the beginning of the compose body.
  */
 export async function prependComposeBody(data: string): Promise<void> {
-  const item = Office.context.mailbox.item as Office.MessageCompose | null;
-  if (!item) {
-    throw new Error("No compose item available");
-  }
+  const item = getActiveComposeItem();
 
   const bodyFormat = await getComposeBodyType();
   const writeAttempts: ComposeWriteAttempt[] =

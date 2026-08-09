@@ -55,6 +55,41 @@ function makeComposeItem(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function makeAppointmentCompose(overrides: Record<string, unknown> = {}) {
+  const asyncField = (value: unknown) => ({
+    getAsync: (cb: (r: unknown) => void) => cb(createMockAsyncResult(value)),
+  });
+  return {
+    itemType: "appointment",
+    seriesId: null,
+    subject: asyncField("Planning session"),
+    organizer: asyncField({
+      displayName: "Ana",
+      emailAddress: "ana@x",
+    }),
+    requiredAttendees: asyncField([
+      { displayName: "Bob", emailAddress: "bob@x" },
+    ]),
+    optionalAttendees: asyncField([]),
+    location: asyncField("Room 3"),
+    start: asyncField(new Date("2026-08-10T08:00:00Z")),
+    end: asyncField(new Date("2026-08-10T09:00:00Z")),
+    body: {
+      getAsync: (coercion: Office.CoercionType, cb: (r: unknown) => void) =>
+        cb(
+          createMockAsyncResult(
+            coercion === Office.CoercionType.Html
+              ? "<p>Discuss roadmap</p>"
+              : "Discuss roadmap",
+          ),
+        ),
+    },
+    getAttachmentsAsync: (cb: (r: unknown) => void) =>
+      cb(createMockAsyncResult([])),
+    ...overrides,
+  };
+}
+
 let mailbox: Mailbox;
 let captured: ContextValue | null;
 
@@ -100,14 +135,56 @@ describe("OutlookMailItemProvider", () => {
     expect(captured?.mailItem).toBeNull();
   });
 
-  // A host leaking the pane into the calendar module: an AppointmentRead has a
-  // string subject too, so without the guard it would masquerade as a read
-  // message instead of resolving to the neutral no-item context.
-  it("treats an appointment item as no item", async () => {
+  it("treats an appointment attendee/read item as no item", async () => {
     mailbox.item = makeReadItem({ itemType: "appointment" });
     await renderProvider();
     expect(captured?.mailItem).toBeNull();
     expect(captured?.itemIdentity).toBeNull();
+  });
+
+  it("loads organizer appointment fields and description", async () => {
+    mailbox.item = makeAppointmentCompose();
+    await renderProvider();
+
+    expect(captured?.mailItem).toMatchObject({
+      itemKind: "appointment",
+      subject: "Planning session",
+      organizer: { displayName: "Ana", emailAddress: "ana@x" },
+      requiredAttendees: [{ displayName: "Bob", emailAddress: "bob@x" }],
+      optionalAttendees: [],
+      location: "Room 3",
+      bodyText: "Discuss roadmap",
+      bodyHtml: "<p>Discuss roadmap</p>",
+      isLoadingBody: false,
+      isComposeMode: true,
+    });
+    expect(captured?.itemIdentity).toMatch(/^appointment:/);
+  });
+
+  it("never reads appointment attachments (isolation from email context)", async () => {
+    const getAttachmentsAsync = vi.fn((cb: (r: unknown) => void) =>
+      cb(createMockAsyncResult([{ id: "a1", name: "agenda.pdf" }])),
+    );
+    mailbox.item = makeAppointmentCompose({ getAttachmentsAsync });
+    await renderProvider();
+
+    expect(getAttachmentsAsync).not.toHaveBeenCalled();
+    expect(captured?.attachments).toEqual([]);
+    expect(captured?.isLoadingAttachments).toBe(false);
+  });
+
+  it("keeps the same per-window identity for an unsaved appointment", async () => {
+    mailbox.item = makeAppointmentCompose();
+    await renderProvider();
+    const firstIdentity = captured?.itemIdentity;
+
+    const handler = mailbox.addHandlerAsync.mock.calls[0][1] as () => void;
+    await act(async () => {
+      handler();
+    });
+
+    expect(captured?.itemIdentity).toBe(firstIdentity);
+    expect(captured?.hasItemChangedFired).toBe(false);
   });
 
   // Drives the "pin this add-in" hint: stays false on the host's initial

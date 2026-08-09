@@ -20,15 +20,18 @@ const ANCHOR_DEBOUNCE_MS = 400;
  * context yet) or when no Outlook item is available.
  */
 export function useOutlookSessionAnchor(): OutlookSessionAnchor | null {
-  const { mailItem, isLoading } = useOutlookMailItem();
+  const { itemIdentity, mailItem, isLoading } = useOutlookMailItem();
 
   const liveAnchor = useMemo<OutlookSessionAnchor | null>(() => {
     if (isLoading || !mailItem) return null;
     return {
       conversationId: mailItem.conversationId,
       isCompose: mailItem.isComposeMode,
+      itemKind: mailItem.itemKind,
+      itemIdentity:
+        mailItem.itemKind === "appointment" ? itemIdentity : undefined,
     };
-  }, [isLoading, mailItem]);
+  }, [isLoading, itemIdentity, mailItem]);
 
   // Leading-edge: the first observation passes through without waiting, so
   // cold-open lands the anchor instantly and the session policy can fire

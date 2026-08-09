@@ -211,9 +211,15 @@ export function OutlookEmailSourceProvider({
     useState<StagedEmailDismissalsMap>(() => new Map());
   const [droppedEmails, setDroppedEmails] = useState<DroppedEmailEntry[]>([]);
 
-  const itemId = mailItem?.itemId ?? null;
-  const conversationId = mailItem?.conversationId ?? null;
-  const isComposeMode = mailItem?.isComposeMode ?? false;
+  // This provider is intentionally email-only. Appointment descriptions ride
+  // through their action facet and must never appear as an email/thread card.
+  // The source is nulled ONCE here so every derivation below is
+  // appointment-blind by construction — never gate individual values.
+  const emailItem = mailItem?.itemKind === "appointment" ? null : mailItem;
+  const itemId = emailItem?.itemId ?? null;
+  const conversationId = emailItem?.conversationId ?? null;
+  const isComposeMode = emailItem?.isComposeMode ?? false;
+  const isLoadingEmailAttachments = emailItem ? isLoadingAttachments : false;
 
   // Conversation fetch lives in its own hook so it can be unit-tested in
   // isolation against an injected transport.
@@ -381,8 +387,10 @@ export function OutlookEmailSourceProvider({
   const isEmailBodyIncluded = !!emailBodyFile && !isEmailBodyDismissed;
 
   const selectableAttachments = useMemo(() => {
-    return attachments.filter((attachment) => !attachment.isInline);
-  }, [attachments]);
+    return emailItem
+      ? attachments.filter((attachment) => !attachment.isInline)
+      : [];
+  }, [attachments, emailItem]);
 
   const selectedAttachmentItems = useMemo<LocalFilePreviewItem[]>(() => {
     return selectableAttachments
@@ -561,7 +569,7 @@ export function OutlookEmailSourceProvider({
 
   const value = useMemo<OutlookEmailSourceContextValue>(
     () => ({
-      emailSubject: mailItem?.subject ?? "",
+      emailSubject: emailItem?.subject ?? "",
       isEmailBodyIncluded,
       emailBodyFile,
       isThreadEmlStale,
@@ -576,7 +584,7 @@ export function OutlookEmailSourceProvider({
       addDroppedEmail,
       removeDroppedEmail,
       selectedAttachmentItems,
-      isLoadingAttachments,
+      isLoadingAttachments: isLoadingEmailAttachments,
       removeEmailBody,
       removeAttachment,
       restoreEmailBody,
@@ -602,10 +610,10 @@ export function OutlookEmailSourceProvider({
       isEmailBodyDismissed,
       emailThreadLoadError,
       isEmailBodyIncluded,
-      isLoadingAttachments,
+      isLoadingEmailAttachments,
       isLoadingEmailBody,
       isLoadingParentReplyContext,
-      mailItem?.subject,
+      emailItem?.subject,
       parentReplyContext,
       removeAttachment,
       removeDroppedEmail,

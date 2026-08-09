@@ -10,6 +10,16 @@
 export interface OutlookSessionAnchor {
   conversationId: string | null;
   isCompose: boolean;
+  /** Defaults to `message` for anchors persisted by older add-in builds. */
+  itemKind?: "message" | "appointment";
+  /**
+   * Minted identity for appointment composes, which have no durable id before
+   * save (`seriesId` is unusable — it names the whole recurring series, not
+   * the occurrence). Page-load-scoped: a persisted appointment anchor never
+   * matches after a task-pane reload, so appointment chats don't resume
+   * across reloads by design.
+   */
+  itemIdentity?: string | null;
 }
 
 export interface OutlookSessionPreferences {

@@ -64,7 +64,7 @@ const NULL_GRACE_MS = 2500;
  * draft), or once the item is still gone after {@link NULL_GRACE_MS}.
  */
 export function useOutlookComposeSelection(): OutlookComposeSelection {
-  const { mailItem } = useOutlookMailItem();
+  const { itemIdentity, mailItem } = useOutlookMailItem();
   const [selection, setSelection] =
     useState<OutlookComposeSelection>(EMPTY_SELECTION);
   const lastDataRef = useRef("");
@@ -74,6 +74,8 @@ export function useOutlookComposeSelection(): OutlookComposeSelection {
   const selectionSurfaceRef = useRef<{
     conversationId: string | null;
     isCompose: boolean;
+    itemKind: "message" | "appointment";
+    appointmentIdentity: string | null;
   } | null>(null);
   // In-flight guard state — must SURVIVE effect re-runs (the effect re-runs on
   // every `mailItem` identity churn). It tracks the HOST's serialized API slot,
@@ -87,7 +89,6 @@ export function useOutlookComposeSelection(): OutlookComposeSelection {
   const lastRawHtmlRef = useRef<string | null>(null);
 
   useEffect(() => {
-    // Appointments resolve to null and clear like a lost item below.
     const item = resolveSupportedMailboxItem(Office.context.mailbox.item);
 
     const commitEmpty = () => {
@@ -108,7 +109,7 @@ export function useOutlookComposeSelection(): OutlookComposeSelection {
     // Transient/unknown context: the provider's `mailItem` or the raw Office
     // item is momentarily null. Clearing here is what made the chip flicker, so
     // instead hold the last selection and only clear if the context is STILL
-    // gone (or has become a read/appointment item) after a short grace period. If a valid
+    // gone (or has become a read item) after a short grace period. If a valid
     // compose item returns first, this effect re-runs and cancels the timer.
     if (!mailItem || !item) {
       const graceTimer = setTimeout(() => {
@@ -134,12 +135,18 @@ export function useOutlookComposeSelection(): OutlookComposeSelection {
     const currentSurface = {
       conversationId: mailItem.conversationId,
       isCompose: mailItem.isComposeMode,
+      itemKind: mailItem.itemKind,
+      appointmentIdentity:
+        mailItem.itemKind === "appointment" ? itemIdentity : null,
     };
     const previousSurface = selectionSurfaceRef.current;
     const isSameSurface =
       previousSurface !== null &&
       previousSurface.conversationId === currentSurface.conversationId &&
-      previousSurface.isCompose === currentSurface.isCompose;
+      previousSurface.isCompose === currentSurface.isCompose &&
+      previousSurface.itemKind === currentSurface.itemKind &&
+      previousSurface.appointmentIdentity ===
+        currentSurface.appointmentIdentity;
     selectionSurfaceRef.current = currentSurface;
 
     // Same surface: keep the dedup refs so the held selection survives a
@@ -161,8 +168,10 @@ export function useOutlookComposeSelection(): OutlookComposeSelection {
 
       const composeItem = resolveSupportedMailboxItem(
         Office.context.mailbox.item,
-      ) as Office.MessageCompose | null;
-      if (!composeItem) return;
+      );
+      if (!composeItem || isMessageRead(composeItem)) {
+        return;
+      }
 
       if (inFlightSeqRef.current !== null) {
         // A call is still outstanding — issuing another risks 5100. Skip this
@@ -265,7 +274,7 @@ export function useOutlookComposeSelection(): OutlookComposeSelection {
       clearInterval(intervalId);
       unsubscribeImmediate();
     };
-  }, [mailItem]);
+  }, [itemIdentity, mailItem]);
 
   return selection;
 }

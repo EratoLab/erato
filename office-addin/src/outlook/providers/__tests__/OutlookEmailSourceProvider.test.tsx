@@ -23,7 +23,7 @@ vi.mock("../OutlookMailItemProvider", () => ({
 }));
 
 vi.mock("../../hooks/useCurrentThread", () => ({
-  useCurrentThread: () => mockUseCurrentThread(),
+  useCurrentThread: (...args: unknown[]) => mockUseCurrentThread(...args),
 }));
 
 vi.mock("../../hooks/useOutlookMessageFetcher", () => ({
@@ -274,5 +274,57 @@ describe("OutlookEmailSourceProvider — compose reply-context via the dispatche
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(captured!.isLoadingParentReplyContext).toBe(false);
+  });
+});
+
+describe("OutlookEmailSourceProvider — appointment isolation", () => {
+  it("does not present an appointment description or attachments as email context", async () => {
+    const getAttachmentFile = vi.fn();
+    const fetchParentMessageInConversation = vi.fn();
+    mockUseOutlookMailItem.mockReturnValue({
+      itemIdentity: "appointment:1",
+      mailItem: {
+        itemKind: "appointment",
+        itemId: "saved-appointment",
+        conversationId: "must-not-be-used",
+        subject: "Planning session",
+        isComposeMode: true,
+      },
+      attachments: [
+        {
+          id: "agenda",
+          name: "agenda.pdf",
+          isInline: false,
+          attachmentType: "file",
+        },
+      ],
+      isLoadingAttachments: true,
+      getAttachmentFile,
+    });
+    mockUseCurrentThread.mockReturnValue({
+      thread: null,
+      isLoading: false,
+      error: false,
+    });
+    mockUseOutlookMessageFetcher.mockReturnValue({
+      fetcher: { fetchParentMessageInConversation },
+      unavailableReason: null,
+    });
+
+    renderProvider();
+
+    expect(mockUseCurrentThread).toHaveBeenCalledWith(null, null, null);
+    expect(captured!.emailSubject).toBe("");
+    expect(captured!.selectedAttachmentItems).toEqual([]);
+    expect(captured!.isLoadingAttachments).toBe(false);
+    expect(captured!.parentReplyContext).toBeNull();
+    expect(fetchParentMessageInConversation).not.toHaveBeenCalled();
+
+    let files: File[] = [];
+    await act(async () => {
+      files = await captured!.resolveSelectedFilesForSend();
+    });
+    expect(files).toEqual([]);
+    expect(getAttachmentFile).not.toHaveBeenCalled();
   });
 });
