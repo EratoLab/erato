@@ -136,6 +136,59 @@ const INLINE_IMAGE_EML = [
   "",
 ].join("\r\n");
 
+// %PDF-1.0 followed by a minimal %%EOF marker, base64-encoded.
+const MINIMAL_PDF_B64 = "JVBERi0xLjAKJSVFT0Y=";
+
+// An email whose PDF attachment correctly declares Content-Type: application/pdf.
+const PDF_ATTACHMENT_EML = [
+  "From: alice@example.com",
+  "To: bob@example.com",
+  "Subject: With PDF",
+  "Date: Mon, 18 May 2026 10:00:00 +0000",
+  "MIME-Version: 1.0",
+  'Content-Type: multipart/mixed; boundary="BOUND"',
+  "",
+  "--BOUND",
+  'Content-Type: text/plain; charset="utf-8"',
+  "",
+  "See the attached PDF.",
+  "",
+  "--BOUND",
+  "Content-Type: application/pdf",
+  'Content-Disposition: attachment; filename="report.pdf"',
+  "Content-Transfer-Encoding: base64",
+  "",
+  MINIMAL_PDF_B64,
+  "--BOUND--",
+  "",
+].join("\r\n");
+
+// Same as PDF_ATTACHMENT_EML but the sender mis-declares the PDF as the
+// generic binary fallback – a real-world encoding mistake that causes browsers
+// to download the blob URL instead of rendering it inline.
+const PDF_OCTET_STREAM_EML = [
+  "From: alice@example.com",
+  "To: bob@example.com",
+  "Subject: With mis-typed PDF",
+  "Date: Mon, 18 May 2026 10:00:00 +0000",
+  "MIME-Version: 1.0",
+  'Content-Type: multipart/mixed; boundary="BOUND"',
+  "",
+  "--BOUND",
+  'Content-Type: text/plain; charset="utf-8"',
+  "",
+  "See the attached PDF.",
+  "",
+  "--BOUND",
+  "Content-Type: application/octet-stream",
+  'Content-Disposition: attachment; filename="report.pdf"',
+  "Content-Transfer-Encoding: base64",
+  "",
+  MINIMAL_PDF_B64,
+  "--BOUND--",
+  "",
+].join("\r\n");
+
 describe("EmlPreview", () => {
   it("renders parsed headers and a sandboxed iframe for HTML body", async () => {
     mockFetchEml(HTML_EML);
@@ -304,5 +357,57 @@ describe("EmlPreview", () => {
     expect(
       screen.getByText("Preview unavailable: this email could not be parsed."),
     ).toBeInTheDocument();
+  });
+
+  it("opens a PDF attachment in the inline PDF viewer with a back button", async () => {
+    mockFetchEml(PDF_ATTACHMENT_EML);
+    renderEml(<EmlPreview filename={FILE.filename} url={FILE.url} />);
+
+    const attachmentButton = await screen.findByRole("button", {
+      name: /report\.pdf/,
+    });
+    fireEvent.click(attachmentButton);
+
+    expect(screen.getByTestId("eml-attachment-preview")).toBeInTheDocument();
+    expect(screen.getByTestId("file-preview-pdf")).toBeInTheDocument();
+
+    const backButton = screen.getByRole("button", { name: /back to email/i });
+    fireEvent.click(backButton);
+
+    expect(
+      screen.queryByTestId("eml-attachment-preview"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("eml-preview-attachments")).toBeInTheDocument();
+  });
+
+  it("creates the attachment blob with application/pdf type when the email declares application/octet-stream", async () => {
+    // ERMAIN-550: emails that mis-declare a PDF as `application/octet-stream`
+    // caused the browser to download the blob URL (with a UUID filename) instead
+    // of rendering the PDF inline. The fix recovers the type from the filename
+    // extension before creating the blob.
+    mockFetchEml(PDF_OCTET_STREAM_EML);
+    renderEml(<EmlPreview filename={FILE.filename} url={FILE.url} />);
+
+    await screen.findByTestId("eml-preview-attachments");
+
+    // The PDF attachment blob should be typed as application/pdf so browsers
+    // can render it inline rather than triggering a download.
+    const pdfBlob = blobUrlContent.get(createdBlobUrls[createdBlobUrls.length - 1]);
+    expect(pdfBlob?.type).toBe("application/pdf");
+  });
+
+  it("still opens an octet-stream PDF in the inline PDF viewer (ERMAIN-550 regression guard)", async () => {
+    mockFetchEml(PDF_OCTET_STREAM_EML);
+    renderEml(<EmlPreview filename={FILE.filename} url={FILE.url} />);
+
+    const attachmentButton = await screen.findByRole("button", {
+      name: /report\.pdf/,
+    });
+    fireEvent.click(attachmentButton);
+
+    expect(screen.getByTestId("eml-attachment-preview")).toBeInTheDocument();
+    // FilePreviewContent should route to the PDF iframe, not the
+    // "preview unavailable" fallback.
+    expect(screen.getByTestId("file-preview-pdf")).toBeInTheDocument();
   });
 });
