@@ -37,7 +37,7 @@ const mintedItemIdentities = new WeakMap<object, string>();
 export function getOrMintItemIdentity(item: object, prefix: string): string {
   const existing = mintedItemIdentities.get(item);
   if (existing) return existing;
-  const identity = `${prefix}${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
+  const identity = `${prefix}${globalThis.crypto.randomUUID()}`;
   mintedItemIdentities.set(item, identity);
   return identity;
 }

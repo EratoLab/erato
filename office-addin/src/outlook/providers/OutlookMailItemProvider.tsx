@@ -139,7 +139,7 @@ function buildMailItemIdentity(
 
   return (
     item.conversationId ??
-    `${UNSAVED_COMPOSE_IDENTITY_PREFIX}${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`
+    `${UNSAVED_COMPOSE_IDENTITY_PREFIX}${globalThis.crypto.randomUUID()}`
   );
 }
 
