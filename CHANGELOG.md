@@ -22,6 +22,23 @@ Typical "Notable changes" categories to copy & paste:
 
 -->
 
+## [Unreleased]
+
+### Notable changes
+
+#### Stability improvements
+
+- Investigated Outlook for Mac add-in pane resizing issue (ERMAIN-547): root cause is
+  a platform-level change in new Outlook — Microsoft shipped user-resizable task panes
+  for the reading pane in new Outlook around June 2026 (office-js #5337), concurrent
+  with several Mac-runtime bugs (office-js #6848: pinned pane loses mailbox.item;
+  office-js #6798: cold-start surfacing failure). The add-in's code, CSS, and manifest
+  are not the cause. No Office API for programmatic pane-width control exists in Outlook
+  (TaskPaneApi 1.1 / setWidth is Excel/Word-only). Two defensive hardening steps were
+  applied: a `ResizeObserver`-based `paneWidth` field added to `OfficeContext` so
+  consumers can detect and react to unexpected resize events, and a `min-width: 240px`
+  guard on `#root` to keep the chat UI readable if the host makes the pane very narrow.
+
 ## [0.6.2] - 2026-06-26
 
 ### Notable changes

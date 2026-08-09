@@ -1,5 +1,5 @@
 import { t } from "@lingui/core/macro";
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 
 import { detectExchangeOnPrem } from "../utils/detectExchangeOnPrem";
 
@@ -30,6 +30,25 @@ interface OfficeContextValue {
    * without pinning.
    */
   itemTrackingRequiresPin: boolean;
+  /**
+   * The measured width of the task pane iframe, in CSS pixels. Null before
+   * the first measurement fires. Updated whenever the pane is resized by the
+   * host — including the user-resizable pane feature shipped in new Outlook in
+   * mid-2026 (office-js #5337).
+   *
+   * Background: until mid-2026 the pane width was fixed by the host and not
+   * user-adjustable. Microsoft shipped a resize handle for new Outlook
+   * (web + Windows) around June 2026. On the Mac runtime the same period saw
+   * several related instability bugs (office-js #6848: pinned pane loses
+   * mailbox.item; office-js #6798: cold-start surfacing failure). The add-in
+   * cannot programmatically control pane width in Outlook — TaskPaneApi 1.1
+   * (Office.extensionLifeCycle.taskpane.setWidth) is only supported in Excel
+   * and Word, not Outlook. The CSS layout fills whatever size the host
+   * provides via the standard flex/100%-height pattern, which is the correct
+   * approach. This field is exposed purely for diagnostic and adaptive-layout
+   * use by consumers.
+   */
+  paneWidth: number | null;
 }
 
 const OfficeContext = createContext<OfficeContextValue>({
@@ -39,6 +58,7 @@ const OfficeContext = createContext<OfficeContextValue>({
   mailboxUser: null,
   supportsAudioCapture: false,
   itemTrackingRequiresPin: false,
+  paneWidth: null,
 });
 
 const OFFICE_JS_CDN =
@@ -111,6 +131,7 @@ export function OfficeProvider({ children }: { children: React.ReactNode }) {
     mailboxUser: null,
     supportsAudioCapture: false,
     itemTrackingRequiresPin: false,
+    paneWidth: null,
   });
 
   useEffect(() => {
@@ -134,7 +155,8 @@ export function OfficeProvider({ children }: { children: React.ReactNode }) {
             }
           }
 
-          setContext({
+          setContext((prev) => ({
+            ...prev,
             isReady: true,
             host,
             platform,
@@ -142,19 +164,48 @@ export function OfficeProvider({ children }: { children: React.ReactNode }) {
             supportsAudioCapture: isAudioCaptureSupportedPlatform(platform),
             itemTrackingRequiresPin:
               platform === "Mac" && !detectExchangeOnPrem(),
-          });
+          }));
         });
       })
       .catch(() => {
-        setContext({
+        setContext((prev) => ({
+          ...prev,
           isReady: true,
           host: null,
           platform: null,
           mailboxUser: null,
           supportsAudioCapture: false,
           itemTrackingRequiresPin: false,
-        });
+        }));
       });
+  }, []);
+
+  // Track the pane width via ResizeObserver on the document root. This
+  // surfaces unexpected resizes caused by the host — in particular the
+  // user-resizable task pane feature that shipped in new Outlook (mid-2026,
+  // office-js #5337) and the Mac-runtime bugs that coincide with it
+  // (office-js #6798, #6848). The add-in has no Office API to control pane
+  // width in Outlook (TaskPaneApi 1.1 / Office.extensionLifeCycle.taskpane
+  // .setWidth is Excel/Word-only), so this is diagnostic-only: consumers can
+  // react to narrow-pane conditions in their layouts.
+  const paneWidthRef = useRef<number | null>(null);
+  useEffect(() => {
+    const target = document.documentElement;
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const width = Math.round(entry.contentRect.width);
+        if (width !== paneWidthRef.current) {
+          paneWidthRef.current = width;
+          setContext((prev) => ({ ...prev, paneWidth: width }));
+        }
+      }
+    });
+
+    observer.observe(target);
+    return () => {
+      observer.disconnect();
+    };
   }, []);
 
   if (!context.isReady) {
