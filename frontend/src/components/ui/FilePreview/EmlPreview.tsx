@@ -82,28 +82,21 @@ const OCTET_STREAM = "application/octet-stream";
 // eslint-disable-next-line lingui/no-unlocalized-strings
 const MESSAGE_RFC822 = "message/rfc822";
 
-/**
- * Extension → MIME type map used to recover a specific type when an email
- * client sends `Content-Type: application/octet-stream` for a well-known
- * format. Browsers display blob URLs inline only when the MIME type matches a
- * renderable format; an octet-stream PDF triggers a download instead, and the
- * download filename becomes the bare UUID from the blob URL.
- */
+// Browsers only render a blob URL inline when its MIME type names a renderable
+// format, so an octet-stream PDF downloads as a bare UUID instead of previewing.
 const EXT_TO_MIME: Readonly<Record<string, string>> = {
   // eslint-disable-next-line lingui/no-unlocalized-strings
   pdf: "application/pdf",
   eml: MESSAGE_RFC822,
 } as const;
 
-/**
- * Returns the most specific MIME type we can derive for an attachment:
- * uses the declared type when it is non-generic, otherwise falls back to
- * an extension-based lookup, then to `application/octet-stream`.
- */
-function recoverMimeType(mimeType: string, filename: string | undefined): string {
+function recoverMimeType(
+  mimeType: string,
+  filename: string | null | undefined,
+): string {
   if (mimeType.length > 0 && mimeType !== OCTET_STREAM) return mimeType;
   const ext = filename?.split(".").pop()?.toLowerCase() ?? "";
-  return EXT_TO_MIME[ext] ?? (mimeType.length > 0 ? mimeType : OCTET_STREAM);
+  return EXT_TO_MIME[ext] ?? OCTET_STREAM;
 }
 
 function attachmentBlob(attachment: Attachment): Blob {

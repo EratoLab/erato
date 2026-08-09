@@ -392,7 +392,9 @@ describe("EmlPreview", () => {
 
     // The PDF attachment blob should be typed as application/pdf so browsers
     // can render it inline rather than triggering a download.
-    const pdfBlob = blobUrlContent.get(createdBlobUrls[createdBlobUrls.length - 1]);
+    const pdfBlob = blobUrlContent.get(
+      createdBlobUrls[createdBlobUrls.length - 1],
+    );
     expect(pdfBlob?.type).toBe("application/pdf");
   });
 
