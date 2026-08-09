@@ -29,6 +29,17 @@ describe("detectExchangeOnPrem", () => {
     },
   );
 
+  it("treats the unified cloud.microsoft endpoints as Exchange Online", () => {
+    // Outlook on the web reports outlook.cloud.microsoft service URLs on
+    // migrated tenants; misclassifying them as on-prem vetoes NAA.
+    installMailbox({
+      userProfile: { accountType: "office365" },
+      ewsUrl: "https://outlook.cloud.microsoft/EWS/Exchange.asmx",
+      restUrl: "https://outlook.cloud.microsoft/api",
+    });
+    expect(detectExchangeOnPrem()).toBe(false);
+  });
+
   it("trusts a non-Microsoft ewsUrl over a cloud accountType", () => {
     // New Outlook on Mac reports "office365" for a hybrid account whose
     // mailbox lives on-prem — the endpoint host is the truthful signal.
