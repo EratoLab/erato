@@ -1,4 +1,4 @@
-import type { NormalizedAttendeeAvailability } from "../../utils/fetchOutlookCalendar";
+import type { NormalizedAttendeeAvailability } from "../../outlook/utils/fetchOutlookCalendar";
 
 /**
  * The SHARED attendee-availability parity contract (ERMAIN-434): both backend

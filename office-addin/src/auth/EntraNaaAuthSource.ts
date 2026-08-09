@@ -6,7 +6,7 @@ import type {
   AuthSource,
   GraphCapableSource,
   LoginHintResolver,
-} from "./AuthSource";
+} from "../core/auth/AuthSource";
 
 interface EntraNaaAuthSourceOptions {
   /** Host-injected: Outlook adds a mailbox fallback, Excel/Word does not. */
