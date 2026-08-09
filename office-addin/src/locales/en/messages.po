@@ -208,6 +208,16 @@ msgstr "New Chat"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.appointmentContext"
+msgstr "Appointment details are included as context"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.dismissAppointmentContext"
+msgstr "Don't include appointment details"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.dismissDraftContext"
 msgstr "Don't include draft"
 
