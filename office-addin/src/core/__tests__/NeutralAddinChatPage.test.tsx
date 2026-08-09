@@ -199,6 +199,17 @@ describe("NeutralAddinChatPage host boundary", () => {
     ).toBe(false);
   });
 
+  it("uses the chat body surface behind both messages and the composer", () => {
+    renderPage();
+
+    const conversation = screen.getByRole("region", {
+      name: "Chat conversation",
+    });
+
+    expect(conversation).toHaveClass("chat-body-skin");
+    expect(conversation).not.toHaveClass("bg-theme-bg-secondary");
+  });
+
   it("threads the default neutral platform into messaging", () => {
     renderPage();
 

@@ -494,8 +494,8 @@ export function AddinChatCoreView({
 
   return (
     <ChatInputControlsProvider value={controller.chatInputControls}>
-      <div className="flex size-full min-w-0 flex-col">
-        <div className="flex items-center justify-between border-b border-theme-border px-4 py-2">
+      <div className="app-shell-skin flex size-full min-w-0 flex-col">
+        <div className="chat-header-skin flex items-center justify-between border-b border-theme-border px-4 py-2">
           <DropdownMenu
             id="addin-header-menu"
             align="left"
@@ -513,7 +513,7 @@ export function AddinChatCoreView({
         <ChatErrorBoundary onReset={() => void controller.refetchHistory()}>
           <div
             {...dropzone.getRootProps()}
-            className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-theme-bg-secondary"
+            className="chat-body-skin relative flex min-h-0 min-w-0 flex-1 flex-col"
             role="region"
             aria-label={t({
               id: "officeAddin.chat.conversation.aria",
