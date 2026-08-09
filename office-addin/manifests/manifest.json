@@ -1,8 +1,8 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/teams/vDevPreview/MicrosoftTeams.schema.json",
-  "manifestVersion": "devPreview",
+  "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.29/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.29",
   "version": "1.0.5",
-  "id": "ee94d041-bd77-446c-8854-421648f50e7c",
+  "id": "e82b2f76-3ebf-407e-be47-c6149716ccde",
   "developer": {
     "name": "Erato",
     "websiteUrl": "https://erato.app",
@@ -10,23 +10,63 @@
     "termsOfUseUrl": "https://erato.app/terms"
   },
   "name": {
-    "short": "Erato Office Extension",
-    "full": "Erato AI Assistant for Office"
+    "short": "Erato Office Extension (Local)",
+    "full": "Erato AI Assistant for Office (Local)"
   },
   "description": {
-    "short": "Erato AI assistant for Outlook",
-    "full": "Access the Erato AI assistant directly from your Outlook task pane to get help with emails and documents."
+    "short": "Erato AI assistant for Outlook and Microsoft Teams",
+    "full": "Access the Erato AI assistant directly from your Outlook task pane to get help with emails and documents, or as a personal chat tab in Microsoft Teams."
   },
   "icons": {
     "color": "assets/color-icon-192x192.png",
     "outline": "assets/outline-icon-32x32.png"
   },
   "accentColor": "#4F46E5",
+  "staticTabs": [
+    {
+      "entityId": "eratoChat",
+      "name": "Erato",
+      "contentUrl": "https://localhost:3002/office-addin/teams",
+      "websiteUrl": "https://localhost:3002/office-addin/teams",
+      "scopes": ["personal"],
+      "context": ["personalTab"]
+    }
+  ],
+  "validDomains": ["localhost:3002"],
+  "webApplicationInfo": {
+    "id": "06d98d69-523a-4c2e-893d-44bd98226b31",
+    "resource": "api://06d98d69-523a-4c2e-893d-44bd98226b31",
+    "nestedAppAuthInfo": [
+      {
+        "redirectUri": "brk-multihub://localhost:3002",
+        "scopes": ["User.Read"]
+      }
+    ]
+  },
+  "authorization": {
+    "permissions": {
+      "resourceSpecific": [
+        {
+          "name": "Mailbox.ReadWrite.User",
+          "type": "Delegated"
+        }
+      ]
+    }
+  },
   "extensions": [
     {
       "requirements": {
         "scopes": ["mail"]
       },
+      "alternates": [
+        {
+          "hide": {
+            "customOfficeAddin": {
+              "officeAddinId": "a106a734-c891-4e05-9739-eb9b5a39786e"
+            }
+          }
+        }
+      ],
       "runtimes": [
         {
           "requirements": {
@@ -40,14 +80,13 @@
           "id": "TaskPaneRuntime",
           "type": "general",
           "code": {
-            "page": "https://localhost:3002/public/platform-office-addin/"
+            "page": "https://localhost:3002/office-addin/"
           },
           "lifetime": "short",
           "actions": [
             {
               "id": "TaskPaneRuntimeShow",
               "type": "openPage",
-              "view": "dashboard",
               "pinnable": true,
               "supportsNoItemContext": true
             }
@@ -67,15 +106,15 @@
                   "icons": [
                     {
                       "size": 16,
-                      "url": "assets/outline-icon-32x32.png"
+                      "url": "https://localhost:3002/assets/outline-icon-32x32.png"
                     },
                     {
                       "size": 32,
-                      "url": "assets/outline-icon-32x32.png"
+                      "url": "https://localhost:3002/assets/outline-icon-32x32.png"
                     },
                     {
                       "size": 80,
-                      "url": "assets/color-icon-192x192.png"
+                      "url": "https://localhost:3002/assets/color-icon-192x192.png"
                     }
                   ],
                   "controls": [
@@ -86,15 +125,15 @@
                       "icons": [
                         {
                           "size": 16,
-                          "url": "assets/outline-icon-32x32.png"
+                          "url": "https://localhost:3002/assets/outline-icon-32x32.png"
                         },
                         {
                           "size": 32,
-                          "url": "assets/outline-icon-32x32.png"
+                          "url": "https://localhost:3002/assets/outline-icon-32x32.png"
                         },
                         {
                           "size": 80,
-                          "url": "assets/color-icon-192x192.png"
+                          "url": "https://localhost:3002/assets/color-icon-192x192.png"
                         }
                       ],
                       "supertip": {

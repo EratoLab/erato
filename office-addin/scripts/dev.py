@@ -19,6 +19,7 @@ import subprocess
 import sys
 import threading
 import time
+import zipfile
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -69,6 +70,13 @@ MANIFEST_V1_1_OPEN_TAG_PATTERN = re.compile(
     r'<VersionOverrides\b[^>]*xsi:type="VersionOverridesV1_1"[^>]*>'
 )
 MANIFEST_VERSION_OVERRIDES_CLOSE_TAG = "</VersionOverrides>"
+MANIFEST_UNIFIED_PATH = OFFICE_ADDIN_DIR / "manifests" / "manifest.json"
+MANIFEST_FUNNEL_UNIFIED_PATH = OFFICE_ADDIN_DIR / "manifests" / "manifest-funnel.json"
+MANIFEST_FUNNEL_APP_PACKAGE_PATH = (
+    OFFICE_ADDIN_DIR / "manifests" / "manifest-funnel.zip"
+)
+MANIFEST_UNIFIED_LOCAL_HOST = f"localhost:{OFFICE_ADDIN_PORT}"
+ADDIN_PUBLIC_DIR = OFFICE_ADDIN_DIR / "public"
 ENTRA_TEMPLATE_PATH = LOCAL_AUTH_DIR / "oauth2-proxy-entra-id.template.cfg"
 ENTRA_CONFIG_PATH = LOCAL_AUTH_DIR / "oauth2-proxy-entra-id.cfg"
 REQUIRED_COMMANDS = ("docker", "node", "pnpm", "tailscale")
@@ -447,6 +455,60 @@ def write_funnel_manifest(funnel_url: str) -> None:
     MANIFEST_FUNNEL_ONPREM_PATH.write_text(onprem_contents, encoding="utf-8")
 
 
+# The bare host is substituted rather than the https:// origin because
+# validDomains and the NAA redirect URI carry the host without a scheme.
+def render_funnel_app_manifest(funnel_url: str) -> str:
+    funnel_host = urlparse(funnel_url).netloc
+    if not funnel_host:
+        raise ValueError(f"Could not determine funnel host from {funnel_url}")
+
+    contents = MANIFEST_UNIFIED_PATH.read_text(encoding="utf-8")
+    rendered = contents.replace(MANIFEST_UNIFIED_LOCAL_HOST, funnel_host)
+
+    try:
+        json.loads(rendered)
+    except json.JSONDecodeError as error:
+        raise ValueError(
+            f"{MANIFEST_UNIFIED_PATH.name} is not valid JSON: {error}"
+        ) from error
+
+    for unresolved in ("localhost", "{{"):
+        if unresolved in rendered:
+            raise ValueError(
+                f"Rendered app manifest still contains {unresolved!r}; "
+                f"check the origins in {MANIFEST_UNIFIED_PATH.name}"
+            )
+
+    return rendered
+
+
+def write_funnel_app_package(funnel_url: str) -> None:
+    # Clear first so a failed render can never leave the previous run's package
+    # — pointing at a stale funnel URL — behind to be sideloaded by mistake.
+    MANIFEST_FUNNEL_UNIFIED_PATH.unlink(missing_ok=True)
+    MANIFEST_FUNNEL_APP_PACKAGE_PATH.unlink(missing_ok=True)
+
+    rendered = render_funnel_app_manifest(funnel_url)
+    icon_paths = json.loads(rendered)["icons"].values()
+    icon_sources = {icon_path: ADDIN_PUBLIC_DIR / icon_path for icon_path in icon_paths}
+    for icon_path, icon_source in icon_sources.items():
+        if not icon_source.is_file():
+            raise ValueError(
+                f"Manifest icon {icon_path} is missing from "
+                f"{ADDIN_PUBLIC_DIR.relative_to(OFFICE_ADDIN_DIR)}"
+            )
+
+    MANIFEST_FUNNEL_UNIFIED_PATH.write_text(rendered, encoding="utf-8")
+    with zipfile.ZipFile(
+        MANIFEST_FUNNEL_APP_PACKAGE_PATH,
+        "w",
+        zipfile.ZIP_DEFLATED,
+    ) as app_package:
+        app_package.writestr("manifest.json", rendered)
+        for icon_path, icon_source in icon_sources.items():
+            app_package.write(icon_source, icon_path)
+
+
 def funnel_is_correct(status: dict) -> bool:
     if not any(status.get("AllowFunnel", {}).values()):
         return False
@@ -489,6 +551,18 @@ def print_funnel_url() -> None:
         return
 
     write_funnel_manifest(funnel_url)
+    # Best-effort like the on-prem XML variant above: a Teams package that
+    # can't be rendered must not take the Outlook dev session down with it.
+    app_package_written = True
+    try:
+        write_funnel_app_package(funnel_url)
+    except ValueError as error:
+        app_package_written = False
+        print(
+            f"Warning: skipping {MANIFEST_FUNNEL_APP_PACKAGE_PATH.name} — {error}. "
+            "Outlook development is unaffected.",
+            file=sys.stderr,
+        )
     redirect_status = build_redirect_status_message(funnel_url)
 
     lines = [
@@ -498,6 +572,13 @@ def print_funnel_url() -> None:
         redirect_status,
         "",
         ("Upload manifests/manifest-funnel.xml via https://aka.ms/olksideload"),
+    ]
+    if app_package_written:
+        lines += [
+            ("In Teams, upload manifests/manifest-funnel.zip via"),
+            ("Apps → Manage your apps → Upload a custom app"),
+        ]
+    lines += [
         (
             "On Exchange SE OWA, sideload manifests/manifest-funnel-onprem.xml via"
         ),
