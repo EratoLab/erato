@@ -23,6 +23,19 @@ describe("outlookComposeWrite", () => {
     uninstallMockMailbox();
   });
 
+  function createAppointmentCompose(body: {
+    getAsync: ReturnType<typeof vi.fn>;
+    getTypeAsync?: ReturnType<typeof vi.fn>;
+    setSelectedDataAsync: ReturnType<typeof vi.fn>;
+    prependAsync: ReturnType<typeof vi.fn>;
+  }) {
+    return {
+      itemType: "appointment",
+      subject: { getAsync: vi.fn() },
+      body,
+    };
+  }
+
   describe("getComposeBodyType", () => {
     it("returns 'html' when body type is Html", async () => {
       const item = createMockMessageCompose({
@@ -124,6 +137,28 @@ describe("outlookComposeWrite", () => {
   });
 
   describe("replaceComposeSelection", () => {
+    it("writes into an appointment organizer description", async () => {
+      const setSelectedDataAsync = vi.fn((_data, _options, callback) =>
+        callback(createMockAsyncResult(undefined)),
+      );
+      mailbox.item = createAppointmentCompose({
+        getAsync: vi.fn(),
+        getTypeAsync: vi.fn((callback) =>
+          callback(createMockAsyncResult(Office.CoercionType.Html)),
+        ),
+        setSelectedDataAsync,
+        prependAsync: vi.fn(),
+      });
+
+      await replaceComposeSelection("Updated agenda");
+
+      expect(setSelectedDataAsync).toHaveBeenCalledWith(
+        "Updated agenda",
+        { coercionType: Office.CoercionType.Html },
+        expect.any(Function),
+      );
+    });
+
     it("converts plain text to HTML with line breaks for html body", async () => {
       const setSelectedDataAsync = vi.fn((_data, _options, callback) =>
         callback(createMockAsyncResult(undefined)),
@@ -267,6 +302,28 @@ describe("outlookComposeWrite", () => {
   });
 
   describe("prependComposeBody", () => {
+    it("prepends an appointment organizer description", async () => {
+      const prependAsync = vi.fn((_data, _options, callback) =>
+        callback(createMockAsyncResult(undefined)),
+      );
+      mailbox.item = createAppointmentCompose({
+        getAsync: vi.fn(),
+        getTypeAsync: vi.fn((callback) =>
+          callback(createMockAsyncResult(Office.CoercionType.Text)),
+        ),
+        setSelectedDataAsync: vi.fn(),
+        prependAsync,
+      });
+
+      await prependComposeBody("Important: agenda updated");
+
+      expect(prependAsync).toHaveBeenCalledWith(
+        "Important: agenda updated",
+        { coercionType: Office.CoercionType.Text },
+        expect.any(Function),
+      );
+    });
+
     it("calls prependAsync with matching coercion type", async () => {
       const prependAsync = vi.fn((_data, _options, callback) =>
         callback(createMockAsyncResult(undefined)),

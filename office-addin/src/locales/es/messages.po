@@ -162,7 +162,7 @@ msgstr "Se agotó el tiempo de espera del inicio de sesión. Inténtalo de nuevo
 #. js-lingui-explicit-id
 #: src/core/SharedAddinShell.tsx
 msgid "officeAddin.auth.signIn"
-msgstr ""
+msgstr "Iniciar sesión"
 
 #. js-lingui-explicit-id
 #: src/App.tsx
@@ -174,7 +174,7 @@ msgstr ""
 #: src/core/SessionAuthProvider.tsx
 #: src/core/SharedAddinShell.tsx
 msgid "officeAddin.auth.signInToContinue"
-msgstr ""
+msgstr "Inicia sesión para continuar"
 
 #. js-lingui-explicit-id
 #: src/auth/UnsupportedAuthSource.ts
@@ -205,6 +205,16 @@ msgstr "Suelta para subir"
 #: src/core/AddinChatCore.tsx
 msgid "officeAddin.chat.newChat"
 msgstr "Nuevo chat"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.appointmentContext"
+msgstr "Los detalles de la cita se incluyen como contexto"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.dismissAppointmentContext"
+msgstr "No incluir los detalles de la cita"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
@@ -309,22 +319,22 @@ msgstr "Responder a todos los destinatarios"
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.signedIn.title"
-msgstr ""
+msgstr "Sesión iniciada. Vuelve a añadir el correo para adjuntarlo."
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.signInToLoad.action"
-msgstr ""
+msgstr "Iniciar sesión"
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.signInToLoad.description"
-msgstr ""
+msgstr "Este correo no se adjuntó porque leerlo requiere un inicio de sesión rápido."
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.signInToLoad.title"
-msgstr ""
+msgstr "Inicia sesión para cargar el correo"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookEratoEmailRenderer.tsx

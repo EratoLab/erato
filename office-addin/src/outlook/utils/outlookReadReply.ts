@@ -49,8 +49,9 @@ export function isReplyFormBodyTooLarge(body: string): boolean {
 }
 
 function getReadModeItem(): Office.MessageRead | null {
-  // Appointments fail closed via the shared guard — a "reply" on an
-  // AppointmentRead would open a meeting reply form.
+  // Appointments fail closed — `isMessageRead` is false for every compose
+  // surface, and a "reply" on an AppointmentRead would open a meeting reply
+  // form (those never pass `resolveSupportedMailboxItem` anyway).
   const item = resolveSupportedMailboxItem(Office.context?.mailbox?.item);
   if (!item || !isMessageRead(item)) {
     return null;

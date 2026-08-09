@@ -21,6 +21,13 @@ const compose = (conv: string | null): OutlookSessionAnchor => ({
   isCompose: true,
 });
 
+const appointment = (identity: string | null): OutlookSessionAnchor => ({
+  conversationId: null,
+  isCompose: true,
+  itemKind: "appointment",
+  itemIdentity: identity,
+});
+
 describe("strictAnchorsEqual", () => {
   it("equal when both null", () => {
     expect(strictAnchorsEqual(null, null)).toBe(true);
@@ -41,6 +48,17 @@ describe("strictAnchorsEqual", () => {
 
   it("not equal when both have null conversationId (treated as distinct)", () => {
     expect(strictAnchorsEqual(compose(null), compose(null))).toBe(false);
+  });
+
+  it("compares appointments by their non-null item identity", () => {
+    expect(strictAnchorsEqual(appointment("A1"), appointment("A1"))).toBe(true);
+    expect(strictAnchorsEqual(appointment("A1"), appointment("A2"))).toBe(
+      false,
+    );
+    expect(strictAnchorsEqual(appointment(null), appointment(null))).toBe(
+      false,
+    );
+    expect(strictAnchorsEqual(appointment("T1"), compose("T1"))).toBe(false);
   });
 });
 
@@ -95,27 +113,28 @@ const composeItem = (conv: string | null) =>
     conversationId: conv ?? undefined,
   }) as unknown as Office.MessageCompose;
 
+const appointmentComposeItem = (seriesId: string | null) =>
+  ({
+    subject: { getAsync: () => undefined },
+    itemType: "appointment",
+    seriesId,
+  }) as unknown as Office.AppointmentCompose;
+
 describe("resolveSupportedMailboxItem", () => {
   it("returns null for a missing item", () => {
     expect(resolveSupportedMailboxItem(null)).toBeNull();
     expect(resolveSupportedMailboxItem(undefined)).toBeNull();
   });
 
-  it("treats appointment items as absent (read and compose shapes)", () => {
-    // AppointmentRead also has a string subject, AppointmentCompose an object
-    // one — both would pass the isMessageRead shape check if let through.
+  it("rejects appointment attendee/read mode but accepts organizer compose", () => {
     expect(
       resolveSupportedMailboxItem({
         subject: "Standup",
         itemType: "appointment",
       }),
     ).toBeNull();
-    expect(
-      resolveSupportedMailboxItem({
-        subject: { getAsync: () => undefined },
-        itemType: "appointment",
-      }),
-    ).toBeNull();
+    const compose = appointmentComposeItem(null);
+    expect(resolveSupportedMailboxItem(compose)).toBe(compose);
   });
 
   it("passes message items through, including without itemType (mocks/hosts omit it)", () => {
@@ -167,5 +186,33 @@ describe("outlookAnchorFromItem", () => {
       conversationId: null,
       isCompose: true,
     });
+  });
+
+  it("mints a per-item appointment identity and never uses seriesId", () => {
+    // seriesId names the PARENT series — every occurrence of a recurring
+    // series shares it, so it must never become the anchor identity.
+    const item = appointmentComposeItem("series-1");
+    const anchor = outlookAnchorFromItem(item);
+    expect(anchor).toMatchObject({
+      conversationId: null,
+      isCompose: true,
+      itemKind: "appointment",
+    });
+    expect(anchor?.itemIdentity).toMatch(/^appointment:/);
+    expect(anchor?.itemIdentity).not.toContain("series-1");
+  });
+
+  it("keeps the minted appointment identity stable for the same item object", () => {
+    const item = appointmentComposeItem(null);
+    expect(outlookAnchorFromItem(item)?.itemIdentity).toBe(
+      outlookAnchorFromItem(item)?.itemIdentity,
+    );
+  });
+
+  it("mints distinct identities for distinct appointment items of one series", () => {
+    const first = outlookAnchorFromItem(appointmentComposeItem("series-1"));
+    const second = outlookAnchorFromItem(appointmentComposeItem("series-1"));
+    expect(first?.itemIdentity).not.toBe(second?.itemIdentity);
+    expect(strictAnchorsEqual(first, second)).toBe(false);
   });
 });

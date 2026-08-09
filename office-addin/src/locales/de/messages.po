@@ -162,7 +162,7 @@ msgstr "Zeitüberschreitung bei der Anmeldung. Versuche es erneut."
 #. js-lingui-explicit-id
 #: src/core/SharedAddinShell.tsx
 msgid "officeAddin.auth.signIn"
-msgstr ""
+msgstr "Anmelden"
 
 #. js-lingui-explicit-id
 #: src/App.tsx
@@ -174,7 +174,7 @@ msgstr ""
 #: src/core/SessionAuthProvider.tsx
 #: src/core/SharedAddinShell.tsx
 msgid "officeAddin.auth.signInToContinue"
-msgstr ""
+msgstr "Melde dich an, um fortzufahren"
 
 #. js-lingui-explicit-id
 #: src/auth/UnsupportedAuthSource.ts
@@ -205,6 +205,16 @@ msgstr "Zum Hochladen ablegen"
 #: src/core/AddinChatCore.tsx
 msgid "officeAddin.chat.newChat"
 msgstr "Neuer Chat"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.appointmentContext"
+msgstr "Termindetails werden als Kontext einbezogen"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.dismissAppointmentContext"
+msgstr "Termindetails nicht einbeziehen"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
@@ -309,22 +319,22 @@ msgstr "Allen Empfängern antworten"
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.signedIn.title"
-msgstr ""
+msgstr "Angemeldet. Füge die E-Mail erneut hinzu, um sie anzuhängen."
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.signInToLoad.action"
-msgstr ""
+msgstr "Anmelden"
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.signInToLoad.description"
-msgstr ""
+msgstr "Diese E-Mail wurde nicht angehängt, da zum Lesen eine kurze Anmeldung nötig ist."
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.signInToLoad.title"
-msgstr ""
+msgstr "Anmelden, um die E-Mail zu laden"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookEratoEmailRenderer.tsx

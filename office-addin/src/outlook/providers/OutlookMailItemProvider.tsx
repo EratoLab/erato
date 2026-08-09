@@ -8,7 +8,15 @@ import {
 } from "react";
 
 import { callOfficeAsync } from "../../utils/officeAsync";
-import { isMessageRead, resolveSupportedMailboxItem } from "../sessionPolicy";
+import {
+  UNSAVED_APPOINTMENT_IDENTITY_PREFIX,
+  UNSAVED_COMPOSE_IDENTITY_PREFIX,
+  getOrMintItemIdentity,
+  isAppointmentCompose,
+  isMessageRead,
+  resolveSupportedMailboxItem,
+  type SupportedOutlookItem,
+} from "../sessionPolicy";
 
 interface EmailAddress {
   displayName: string;
@@ -25,10 +33,17 @@ export interface OutlookAttachmentData {
 }
 
 export interface OutlookMailItemData {
+  itemKind: "message" | "appointment";
   subject: string;
   from: EmailAddress | null;
   to: EmailAddress[];
   cc: EmailAddress[];
+  organizer: EmailAddress | null;
+  requiredAttendees: EmailAddress[];
+  optionalAttendees: EmailAddress[];
+  location: string;
+  start: Date | null;
+  end: Date | null;
   dateTimeCreated: Date | null;
   conversationId: string | null;
   internetMessageId: string | null;
@@ -101,7 +116,7 @@ function parseRecipients(
 export const NO_ITEM_SEND_IDENTITY = "no-item";
 
 function buildMailItemIdentity(
-  item: Office.MessageRead | Office.MessageCompose | null,
+  item: SupportedOutlookItem | null,
 ): string | null {
   if (!item) {
     return null;
@@ -115,19 +130,27 @@ function buildMailItemIdentity(
     );
   }
 
+  if (isAppointmentCompose(item)) {
+    // Never `seriesId` — it names the whole recurring series, so every
+    // occurrence would share an identity (and the insert gate would allow
+    // cross-occurrence inserts). Must agree with `outlookAnchorFromItem`.
+    return getOrMintItemIdentity(item, UNSAVED_APPOINTMENT_IDENTITY_PREFIX);
+  }
+
   return (
     item.conversationId ??
-    `${UNSAVED_COMPOSE_IDENTITY_PREFIX}${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`
+    `${UNSAVED_COMPOSE_IDENTITY_PREFIX}${globalThis.crypto.randomUUID()}`
   );
 }
 
-const UNSAVED_COMPOSE_IDENTITY_PREFIX = "compose:";
-
-// Minted fallbacks differ on every resolve of the SAME unsaved draft, so
-// comparing two of them can't prove a navigation happened.
+// Minted fallbacks differ on every resolve of the SAME unsaved draft (a host
+// may hand out a fresh item object at any time), so comparing two of them
+// can't prove a navigation happened.
 function isStableItemIdentity(identity: string | null): identity is string {
   return (
-    identity !== null && !identity.startsWith(UNSAVED_COMPOSE_IDENTITY_PREFIX)
+    identity !== null &&
+    !identity.startsWith(UNSAVED_COMPOSE_IDENTITY_PREFIX) &&
+    !identity.startsWith(UNSAVED_APPOINTMENT_IDENTITY_PREFIX)
   );
 }
 
@@ -227,10 +250,17 @@ function readMailItemSync(item: Office.MessageRead): OutlookMailItemData {
     : null;
 
   return {
+    itemKind: "message",
     subject: item.subject ?? "",
     from,
     to: parseRecipients(item.to),
     cc: parseRecipients(item.cc),
+    organizer: null,
+    requiredAttendees: [],
+    optionalAttendees: [],
+    location: "",
+    start: null,
+    end: null,
     dateTimeCreated: item.dateTimeCreated ?? null,
     conversationId: item.conversationId ?? null,
     internetMessageId: item.internetMessageId ?? null,
@@ -248,10 +278,17 @@ function readMailItemCompose(
   canCommit: () => boolean,
 ) {
   setMailItem({
+    itemKind: "message",
     subject: "",
     from: null,
     to: [],
     cc: [],
+    organizer: null,
+    requiredAttendees: [],
+    optionalAttendees: [],
+    location: "",
+    start: null,
+    end: null,
     dateTimeCreated: null,
     conversationId: item.conversationId ?? null,
     internetMessageId: null,
@@ -324,6 +361,177 @@ function readMailItemCompose(
   });
 }
 
+/**
+ * Every appointment-compose field the add-in uses, read in one awaitable
+ * sweep. Editing an appointment form fires no ItemChanged, so any state
+ * captured at bind time goes stale — the send path re-reads a fresh snapshot
+ * of the live item instead of trusting provider state.
+ */
+export interface AppointmentComposeSnapshot {
+  subject: string;
+  organizer: EmailAddress | null;
+  requiredAttendees: EmailAddress[];
+  optionalAttendees: EmailAddress[];
+  location: string;
+  start: Date | null;
+  end: Date | null;
+  bodyText: string | null;
+  bodyHtml: string | null;
+}
+
+export const EMPTY_APPOINTMENT_SNAPSHOT: AppointmentComposeSnapshot = {
+  subject: "",
+  organizer: null,
+  requiredAttendees: [],
+  optionalAttendees: [],
+  location: "",
+  start: null,
+  end: null,
+  bodyText: null,
+  bodyHtml: null,
+};
+
+// Bounds each property read so a wedged host (classic Win32 was seen dropping
+// callbacks entirely, ERMAIN-431) degrades to the fallback value instead of
+// hanging the caller — at send time that would hold the user's message.
+const APPOINTMENT_READ_TIMEOUT_MS = 5_000;
+
+function readOptionalProperty<TRaw, TValue>(
+  property:
+    | {
+        getAsync?: (
+          callback: (result: Office.AsyncResult<TRaw>) => void,
+        ) => void;
+      }
+    | undefined,
+  map: (value: TRaw) => TValue,
+  fallback: TValue,
+): Promise<TValue> {
+  if (typeof property?.getAsync !== "function") {
+    return Promise.resolve(fallback);
+  }
+  return callOfficeAsync<TRaw>((callback) => property.getAsync!(callback), {
+    timeoutMs: APPOINTMENT_READ_TIMEOUT_MS,
+  })
+    .then(map)
+    .catch(() => fallback);
+}
+
+/**
+ * Read a fresh snapshot of an appointment compose item. Individual reads that
+ * fail, time out, or aren't supported by the host resolve to the matching
+ * `fallback` field, so the result is always complete and the promise never
+ * rejects.
+ */
+export async function readAppointmentComposeSnapshot(
+  item: Office.AppointmentCompose,
+  fallback: AppointmentComposeSnapshot = EMPTY_APPOINTMENT_SNAPSHOT,
+): Promise<AppointmentComposeSnapshot> {
+  const readBody = (
+    coercionType: Office.CoercionType,
+    bodyFallback: string | null,
+  ): Promise<string | null> =>
+    callOfficeAsync<string>(
+      (callback) => item.body.getAsync(coercionType, callback),
+      { timeoutMs: APPOINTMENT_READ_TIMEOUT_MS },
+    ).catch(() => bodyFallback);
+
+  const [
+    subject,
+    organizer,
+    requiredAttendees,
+    optionalAttendees,
+    location,
+    start,
+    end,
+    bodyText,
+    bodyHtml,
+  ] = await Promise.all([
+    readOptionalProperty(
+      item.subject,
+      (value: string) => value,
+      fallback.subject,
+    ),
+    readOptionalProperty(
+      item.organizer,
+      (details: Office.EmailAddressDetails): EmailAddress | null =>
+        details
+          ? {
+              displayName: details.displayName,
+              emailAddress: details.emailAddress,
+            }
+          : null,
+      fallback.organizer,
+    ),
+    readOptionalProperty(
+      item.requiredAttendees,
+      parseRecipients,
+      fallback.requiredAttendees,
+    ),
+    readOptionalProperty(
+      item.optionalAttendees,
+      parseRecipients,
+      fallback.optionalAttendees,
+    ),
+    readOptionalProperty(
+      item.location,
+      (value: string) => value,
+      fallback.location,
+    ),
+    readOptionalProperty(item.start, (value: Date) => value, fallback.start),
+    readOptionalProperty(item.end, (value: Date) => value, fallback.end),
+    readBody(Office.CoercionType.Text, fallback.bodyText),
+    readBody(Office.CoercionType.Html, fallback.bodyHtml),
+  ]);
+
+  return {
+    subject,
+    organizer,
+    requiredAttendees,
+    optionalAttendees,
+    location,
+    start,
+    end,
+    bodyText,
+    bodyHtml,
+  };
+}
+
+function readAppointmentCompose(
+  item: Office.AppointmentCompose,
+  setMailItem: React.Dispatch<React.SetStateAction<OutlookMailItemData | null>>,
+  canCommit: () => boolean,
+) {
+  setMailItem({
+    itemKind: "appointment",
+    subject: "",
+    from: null,
+    to: [],
+    cc: [],
+    organizer: null,
+    requiredAttendees: [],
+    optionalAttendees: [],
+    location: "",
+    start: null,
+    end: null,
+    dateTimeCreated: null,
+    conversationId: null,
+    internetMessageId: null,
+    itemId: null,
+    bodyText: null,
+    bodyHtml: null,
+    isLoadingBody: true,
+    isComposeMode: true,
+  });
+
+  void readAppointmentComposeSnapshot(item).then((snapshot) => {
+    if (!canCommit()) return;
+    setMailItem((previous) =>
+      previous ? { ...previous, ...snapshot, isLoadingBody: false } : previous,
+    );
+  });
+}
+
 export function useOutlookMailItem() {
   return useContext(OutlookMailItemContext);
 }
@@ -340,9 +548,7 @@ export function OutlookMailItemProvider({
   const [isLoadingAttachments, setIsLoadingAttachments] = useState(true);
   const [hasItemChangedFired, setHasItemChangedFired] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const currentItemRef = useRef<
-    Office.MessageRead | Office.MessageCompose | null
-  >(null);
+  const currentItemRef = useRef<SupportedOutlookItem | null>(null);
   const selectionVersionRef = useRef(0);
   // Identity of the last resolved item — lets us tell a real navigation (the
   // pin-hint tracking signal) from the host's initial same-item selection
@@ -378,9 +584,8 @@ export function OutlookMailItemProvider({
   );
 
   useEffect(() => {
-    // Appointments resolve to the neutral no-item context: a host leaking the
-    // pane into the calendar module (no manifest surface declares one) must
-    // not crash this effect — it runs above every error boundary.
+    // Organizer appointment compose is a first-class surface. Appointment
+    // attendee/read items still resolve to neutral context and fail closed.
     const item = resolveSupportedMailboxItem(Office.context.mailbox.item);
     const selectionVersion = selectionVersionRef.current + 1;
     selectionVersionRef.current = selectionVersion;
@@ -417,6 +622,15 @@ export function OutlookMailItemProvider({
     }
 
     setAttachments([]);
+    if (isAppointmentCompose(item)) {
+      // Appointment attachments must never surface as email context — the
+      // '+' menu and the email-source provider both read this state, so the
+      // isolation has to hold at the source.
+      setIsLoadingAttachments(false);
+      readAppointmentCompose(item, setMailItem, canCommit);
+      setIsLoading(false);
+      return;
+    }
     setIsLoadingAttachments(true);
     void readAttachmentMetadata(item)
       .then((nextAttachments) => {

@@ -162,7 +162,7 @@ msgstr "Upłynął limit czasu logowania. Spróbuj ponownie."
 #. js-lingui-explicit-id
 #: src/core/SharedAddinShell.tsx
 msgid "officeAddin.auth.signIn"
-msgstr ""
+msgstr "Zaloguj się"
 
 #. js-lingui-explicit-id
 #: src/App.tsx
@@ -174,7 +174,7 @@ msgstr ""
 #: src/core/SessionAuthProvider.tsx
 #: src/core/SharedAddinShell.tsx
 msgid "officeAddin.auth.signInToContinue"
-msgstr ""
+msgstr "Zaloguj się, aby kontynuować"
 
 #. js-lingui-explicit-id
 #: src/auth/UnsupportedAuthSource.ts
@@ -205,6 +205,16 @@ msgstr "Upuść, aby przesłać"
 #: src/core/AddinChatCore.tsx
 msgid "officeAddin.chat.newChat"
 msgstr "Nowy czat"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.appointmentContext"
+msgstr "Szczegóły terminu są dołączone jako kontekst"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.dismissAppointmentContext"
+msgstr "Nie dołączaj szczegółów terminu"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
@@ -309,22 +319,22 @@ msgstr "Odpowiedz wszystkim odbiorcom"
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.signedIn.title"
-msgstr ""
+msgstr "Zalogowano. Dodaj e-mail ponownie, aby go załączyć."
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.signInToLoad.action"
-msgstr ""
+msgstr "Zaloguj się"
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.signInToLoad.description"
-msgstr ""
+msgstr "Ten e-mail nie został załączony, ponieważ jego odczytanie wymaga szybkiego zalogowania."
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.signInToLoad.title"
-msgstr ""
+msgstr "Zaloguj się, aby załadować e-mail"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookEratoEmailRenderer.tsx

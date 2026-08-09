@@ -9,6 +9,8 @@ import type { ActionFacetRequest } from "@erato/frontend/library";
  * priority and the draft de-duplication are unit-testable in isolation.
  */
 export interface OutlookActionFacetInput {
+  /** Current Outlook item kind; null for the pinned neutral surface. */
+  itemKind: "message" | "appointment" | null;
   /** A compose selection is active and not dismissed. */
   hasActiveSelection: boolean;
   /** The selected text (only meaningful when `hasActiveSelection`). */
@@ -25,13 +27,17 @@ export interface OutlookActionFacetInput {
   /** Plain-text coercion of the draft body. */
   draftBody: string;
   /**
-   * The draft body last sent as `outlook_review_draft` in this chat, or `null`
-   * if none yet. Encodes change #4 — client-side de-dup. (The backend is
-   * intentionally action-facet toggle-stateless and strips prior-turn facet
-   * directives on replay, so the "did we already send this?" memory must live
-   * on the client.)
+   * The draft-context fingerprint last sent in this chat, or `null` if none
+   * yet: the raw body for message drafts, the JSON metadata+description
+   * fingerprint for appointments (see `draftContextFingerprint`). Encodes
+   * change #4 — client-side de-dup. (The backend is intentionally
+   * action-facet toggle-stateless and strips prior-turn facet directives on
+   * replay, so the "did we already send this?" memory must live on the
+   * client.)
    */
-  lastSentDraftBody: string | null;
+  lastSentDraftFingerprint: string | null;
+  /** De-dup key for appointment metadata + description; defaults to draftBody. */
+  draftContextFingerprint?: string;
   /** Compose body format; included in the rewrite facet args when known. */
   bodyFormat?: string;
   /** The user is in an Outlook compose context (reply/new mail), body may be empty. */
@@ -44,6 +50,16 @@ export interface OutlookActionFacetInput {
    * false and the empty-draft case simply sends no facet (today's behavior).
    */
   composeEmailAvailable: boolean;
+  /** Backend advertises the appointment-specific selection facet. */
+  appointmentRewriteAvailable?: boolean;
+  /** Backend advertises the appointment-specific context facet. */
+  appointmentContextAvailable?: boolean;
+  appointmentSubject?: string;
+  appointmentRequiredAttendees?: string;
+  appointmentOptionalAttendees?: string;
+  appointmentLocation?: string;
+  appointmentStart?: string;
+  appointmentEnd?: string;
   /** The user is reading a received email (read mode, not compose). */
   isReadMode: boolean;
   /**
@@ -82,11 +98,12 @@ export interface OutlookActionFacetResult {
   /** The facet to attach, or `undefined` when none applies. */
   facet: ActionFacetRequest | undefined;
   /**
-   * When a `review_draft` facet was produced, the body to remember so the next
-   * unchanged send de-dupes. `null` means "leave the dedup marker untouched" —
-   * i.e. selection sends and skipped/unchanged drafts.
+   * When a review facet was produced, the fingerprint to remember so the next
+   * unchanged send de-dupes (raw body for message drafts, metadata fingerprint
+   * for appointments). `null` means "leave the dedup marker untouched" — i.e.
+   * selection sends and skipped/unchanged drafts.
    */
-  sentDraftBody: string | null;
+  sentDraftFingerprint: string | null;
 }
 
 /**
@@ -102,6 +119,8 @@ export interface OutlookActionFacetResult {
 export function resolveOutlookActionFacet(
   input: OutlookActionFacetInput,
 ): OutlookActionFacetResult {
+  const { itemKind } = input;
+  const draftFingerprint = input.draftContextFingerprint ?? input.draftBody;
   const scheduleReady = input.scheduleFacetAvailable && input.calendarAvailable;
   const scheduleFacet = (): OutlookActionFacetResult => ({
     facet: {
@@ -109,13 +128,19 @@ export function resolveOutlookActionFacet(
       args: { now_iso: input.nowIso, timezone: input.timezone },
     },
     // A scheduling send never touches the draft dedup marker.
-    sentDraftBody: null,
+    sentDraftFingerprint: null,
   });
 
   if (input.hasActiveSelection) {
+    if (itemKind === "appointment" && !input.appointmentRewriteAvailable) {
+      return { facet: undefined, sentDraftFingerprint: null };
+    }
     return {
       facet: {
-        id: "outlook_rewrite_selection",
+        id:
+          itemKind === "appointment"
+            ? "outlook_rewrite_appointment_selection"
+            : "outlook_rewrite_selection",
         args: {
           selected_text: input.selectionData,
           source_property: input.selectionSource,
@@ -123,7 +148,7 @@ export function resolveOutlookActionFacet(
         },
       },
       // A selection send never touches the draft dedup marker.
-      sentDraftBody: null,
+      sentDraftFingerprint: null,
     };
   }
 
@@ -139,15 +164,48 @@ export function resolveOutlookActionFacet(
   // draft — the draft body only ever rides as the review facet's `full_body`
   // arg, so the model doesn't just lose the review template, it never sees
   // the draft at all.
-  if (scheduleReady && input.schedulingThreadActive) {
+  //
+  // Never on appointment composes: the schedule facet's confirm path opens a
+  // NEW appointment, which is never the right continuation while the user is
+  // already editing one — and each proposal it produces would refresh the
+  // stickiness window, locking the chat into scheduling. The review facet
+  // owns this surface; calendar reads stay reachable mid-turn through its
+  // tool allowlist.
+  if (
+    scheduleReady &&
+    input.schedulingThreadActive &&
+    itemKind !== "appointment"
+  ) {
     return scheduleFacet();
   }
 
   if (
     input.draftContextIncluded &&
-    input.draftBody.length > 0 &&
-    input.draftBody !== input.lastSentDraftBody
+    (itemKind === "appointment" || input.draftBody.length > 0) &&
+    draftFingerprint !== input.lastSentDraftFingerprint
   ) {
+    if (itemKind === "appointment") {
+      if (!input.appointmentContextAvailable) {
+        return { facet: undefined, sentDraftFingerprint: null };
+      }
+      return {
+        facet: {
+          id: "outlook_review_appointment",
+          args: {
+            subject: input.appointmentSubject ?? "",
+            full_body: input.draftBody,
+            required_attendees: input.appointmentRequiredAttendees ?? "",
+            optional_attendees: input.appointmentOptionalAttendees ?? "",
+            location: input.appointmentLocation ?? "",
+            start: input.appointmentStart ?? "",
+            end: input.appointmentEnd ?? "",
+            body_format: "text",
+            timezone: input.timezone,
+          },
+        },
+        sentDraftFingerprint: draftFingerprint,
+      };
+    }
     return {
       facet: {
         id: "outlook_review_draft",
@@ -156,7 +214,7 @@ export function resolveOutlookActionFacet(
           body_format: "text",
         },
       },
-      sentDraftBody: input.draftBody,
+      sentDraftFingerprint: draftFingerprint,
     };
   }
 
@@ -166,6 +224,7 @@ export function resolveOutlookActionFacet(
   // availability because the unknown-facet path hard-400s the send.
   if (
     input.composeEmailAvailable &&
+    itemKind === "message" &&
     input.isComposeMode &&
     !input.hasActiveSelection &&
     input.draftBody.trim().length === 0
@@ -175,7 +234,7 @@ export function resolveOutlookActionFacet(
         id: "compose_email",
         args: { body_format: input.bodyFormat ?? "text" },
       },
-      sentDraftBody: null,
+      sentDraftFingerprint: null,
     };
   }
 
@@ -184,13 +243,17 @@ export function resolveOutlookActionFacet(
   // reply-vs-reply-all via the backend's `propose_client_action` tool when —
   // and only when — the user actually asks for a reply; other requests are
   // answered normally. The reply form prefill is HTML, so request html output.
-  if (input.replyFromReadAvailable && input.isReadMode) {
+  if (
+    input.replyFromReadAvailable &&
+    itemKind === "message" &&
+    input.isReadMode
+  ) {
     return {
       facet: {
         id: OUTLOOK_REPLY_FROM_READ_FACET_ID,
         args: { body_format: "html" },
       },
-      sentDraftBody: null,
+      sentDraftFingerprint: null,
     };
   }
 
@@ -206,5 +269,5 @@ export function resolveOutlookActionFacet(
     return scheduleFacet();
   }
 
-  return { facet: undefined, sentDraftBody: null };
+  return { facet: undefined, sentDraftFingerprint: null };
 }
