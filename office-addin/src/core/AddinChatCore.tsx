@@ -494,7 +494,7 @@ export function AddinChatCoreView({
 
   return (
     <ChatInputControlsProvider value={controller.chatInputControls}>
-      <div className="flex size-full min-w-0 flex-col">
+      <div className="flex size-full min-w-0 flex-col bg-theme-bg-secondary">
         <div className="flex items-center justify-between border-b border-theme-border px-4 py-2">
           <DropdownMenu
             id="addin-header-menu"
