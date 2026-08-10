@@ -7,6 +7,7 @@ import {
 } from "../../../test/mocks/teams/graph";
 import { collectTeamsTranscript } from "../collectTeamsTranscript";
 import { parseTeamsChat } from "../parsedTeamsChat";
+import { chatRef } from "../teamsConversationRef";
 
 import type { ParsedTeamsChat } from "../parsedTeamsChat";
 import type { TeamsChatFetcher } from "../teamsChatFetcher";
@@ -54,9 +55,9 @@ const messageSelection = (
   chatId = MOCK_CHAT_ID,
 ): TeamsChatSelection => ({
   kind: "message",
-  chatId,
+  ref: chatRef(chatId),
   messageId,
-  chatTitle: "Product sync",
+  conversationTitle: "Product sync",
   senderName: "Ada Lovelace",
   createdAt: "2026-03-03T09:14:00Z",
 });
@@ -128,7 +129,11 @@ describe("collectTeamsTranscript", () => {
     const result = await collectTeamsTranscript({
       fetcher: fakeFetcher({ pageChatBackwards, getMessage }),
       selections: [
-        { kind: "chat", chatId: MOCK_CHAT_ID, title: "Product sync" },
+        {
+          kind: "conversation",
+          ref: chatRef(MOCK_CHAT_ID),
+          title: "Product sync",
+        },
       ],
       knownChats,
       limit: 200,
@@ -157,7 +162,11 @@ describe("collectTeamsTranscript", () => {
     const result = await collectTeamsTranscript({
       fetcher: fakeFetcher({ pageChatBackwards, getMessage }),
       selections: [
-        { kind: "chat", chatId: MOCK_CHAT_ID, title: "Product sync" },
+        {
+          kind: "conversation",
+          ref: chatRef(MOCK_CHAT_ID),
+          title: "Product sync",
+        },
         messageSelection("a"),
       ],
       knownChats,
@@ -242,7 +251,11 @@ describe("collectTeamsTranscript", () => {
     await collectTeamsTranscript({
       fetcher: fakeFetcher({ pageChatBackwards }),
       selections: [
-        { kind: "chat", chatId: MOCK_CHAT_ID, title: "Product sync" },
+        {
+          kind: "conversation",
+          ref: chatRef(MOCK_CHAT_ID),
+          title: "Product sync",
+        },
       ],
       knownChats,
       onProgress: (progress) => seen.push(progress.messagesFetched),
@@ -266,8 +279,16 @@ describe("collectTeamsTranscript", () => {
     const result = await collectTeamsTranscript({
       fetcher: fakeFetcher({ pageChatBackwards }),
       selections: [
-        { kind: "chat", chatId: MOCK_CHAT_ID, title: "Product sync" },
-        { kind: "chat", chatId: OTHER_CHAT_ID, title: "Release train" },
+        {
+          kind: "conversation",
+          ref: chatRef(MOCK_CHAT_ID),
+          title: "Product sync",
+        },
+        {
+          kind: "conversation",
+          ref: chatRef(OTHER_CHAT_ID),
+          title: "Release train",
+        },
       ],
       knownChats,
     });

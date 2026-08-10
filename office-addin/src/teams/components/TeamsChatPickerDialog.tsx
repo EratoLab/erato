@@ -24,6 +24,7 @@ import { useTeamsChatPicker } from "../providers/TeamsChatPickerProvider";
 import { filterTeamsChats } from "../utils/filterTeamsChats";
 import { splitSearchSummaryHighlights } from "../utils/teamsChatGraph";
 import { MAX_SELECTED_MESSAGES } from "../utils/teamsChatSelection";
+import { chatRef } from "../utils/teamsConversationRef";
 
 import type { TeamsChatPickerContextValue } from "../providers/TeamsChatPickerProvider";
 import type { ParsedTeamsChat } from "../utils/parsedTeamsChat";
@@ -246,8 +247,8 @@ function TeamsChatPickerDialogBody({
   function renderChatRow(chat: ParsedTeamsChat): ReactNode {
     const chatTitle = chat.title;
     const selection = {
-      kind: "chat" as const,
-      chatId: chat.chatId,
+      kind: "conversation" as const,
+      ref: chatRef(chat.chatId),
       title: chatTitle,
     };
     return (
@@ -307,9 +308,9 @@ function TeamsChatPickerDialogBody({
             const senderName = message.senderName;
             const selection = {
               kind: "message" as const,
-              chatId: message.chatId,
+              ref: chatRef(message.chatId),
               messageId: message.messageId,
-              chatTitle,
+              conversationTitle: chatTitle,
               senderName,
               createdAt: message.createdAt,
             };
@@ -395,9 +396,9 @@ function TeamsChatPickerDialogBody({
             const chatTitle = chatTitleFor(hit.chatId);
             const selection = {
               kind: "message" as const,
-              chatId: hit.chatId,
+              ref: chatRef(hit.chatId),
               messageId: hit.messageId,
-              chatTitle: chatTitle ?? "",
+              conversationTitle: chatTitle ?? "",
               senderName,
               createdAt: hit.createdAt,
             };

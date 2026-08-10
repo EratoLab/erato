@@ -15,7 +15,8 @@ import {
   DEFAULT_CHAT_MESSAGE_LIMIT,
   expectedChatPageRequests,
 } from "./teamsChatPager";
-import { groupSelectionsByChat } from "./teamsChatSelection";
+import { groupSelectionsByConversation } from "./teamsChatSelection";
+import { conversationKey } from "./teamsConversationRef";
 import { runWithConcurrency } from "../../utils/graph/graphClient";
 
 import type { TeamsTranscriptSection } from "./buildTeamsTranscriptFile";
@@ -67,11 +68,11 @@ export async function collectTeamsTranscript(
 ): Promise<CollectTeamsTranscriptResult> {
   const { fetcher, selections, knownChats, self, onProgress, signal } = args;
   const limit = args.limit ?? DEFAULT_CHAT_MESSAGE_LIMIT;
-  const groups = groupSelectionsByChat(selections);
+  const groups = groupSelectionsByConversation(selections);
   const wholeChatRequests = expectedChatPageRequests(limit);
 
   const groupRequests = groups.map((group) =>
-    group.wholeChat ? wholeChatRequests : group.messageIds.length,
+    group.whole ? wholeChatRequests : group.messageIds.length,
   );
   const requestsTotal = groupRequests.reduce((sum, count) => sum + count, 0);
 
@@ -103,17 +104,23 @@ export async function collectTeamsTranscript(
   const tasks = groups.map((group, index) => async () => {
     let spent = 0;
     try {
-      const chat = await resolveChat(fetcher, group.chatId, group.title, {
+      if (group.ref.kind !== "chat") {
+        throw new Error(
+          `Unsupported conversation kind: ${group.ref.kind satisfies "channel"}`,
+        );
+      }
+      const chatId = group.ref.chatId;
+      const chat = await resolveChat(fetcher, chatId, group.title, {
         knownChats,
         self,
         signal,
       });
-      if (group.wholeChat) {
+      if (group.whole) {
         // The pager reports a running total per chat; the shared counter takes
         // the delta so a live count is visible while the walk is in progress.
         let counted = 0;
         const page = await fetcher.pageChatBackwards({
-          chatId: group.chatId,
+          chatId,
           limit,
           signal,
           onProgress: (progress) => {
@@ -126,7 +133,7 @@ export async function collectTeamsTranscript(
           },
         });
         outcomes[index] = page.state;
-        const messages = collectParsed(page.messages, group.chatId);
+        const messages = collectParsed(page.messages, chatId);
         messagesFetched += messages.length - counted;
         sections[index] = {
           chat,
@@ -139,12 +146,12 @@ export async function collectTeamsTranscript(
         const messages: ParsedTeamsMessage[] = [];
         let skipped = 0;
         for (const messageId of group.messageIds) {
-          const raw = await fetcher.getMessage(group.chatId, messageId, {
+          const raw = await fetcher.getMessage(chatId, messageId, {
             signal,
           });
           spent = Math.min(spent + 1, groupRequests[index]);
           requestsCompleted += 1;
-          const parsed = raw ? parseTeamsMessage(raw, group.chatId) : null;
+          const parsed = raw ? parseTeamsMessage(raw, chatId) : null;
           if (parsed) {
             messages.push(parsed);
             noteOldest(parsed.createdAt);
@@ -174,7 +181,7 @@ export async function collectTeamsTranscript(
       if (!signal?.aborted) {
         console.warn(
           "[collectTeamsTranscript] chat failed:",
-          group.chatId,
+          conversationKey(group.ref),
           error,
         );
       }
