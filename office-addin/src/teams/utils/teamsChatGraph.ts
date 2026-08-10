@@ -299,6 +299,8 @@ export interface GraphChannel {
   displayName?: string | null;
   description?: string | null;
   membershipType?: string | null;
+  layoutType?: string | null;
+  isArchived?: boolean | null;
   webUrl?: string | null;
 }
 
