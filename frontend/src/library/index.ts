@@ -207,6 +207,12 @@ export {
   useStandaloneFileUpload,
 } from "@/hooks/files";
 export {
+  UploadTooLargeError,
+  isUploadTooLarge,
+  type UploadError,
+} from "@/hooks/files/errors";
+export { validateFileSizes } from "@/utils/validateFileSizes";
+export {
   ComputerIcon,
   DocumentIcon,
   MailIcon,
