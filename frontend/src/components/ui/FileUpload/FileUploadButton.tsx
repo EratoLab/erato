@@ -3,6 +3,8 @@ import { memo, Suspense } from "react";
 import { useDropzone } from "react-dropzone";
 import { ErrorBoundary } from "react-error-boundary";
 
+import { UploadTooLargeError, type UploadError } from "@/hooks/files/errors";
+import { useUploadFeature } from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { Button } from "../Controls";
@@ -42,6 +44,12 @@ export interface FileUploadButtonProps {
   isUploading?: boolean;
   /** Any error that occurred during file upload */
   uploadError?: Error | null;
+  /**
+   * Called when file selection results in a validation error (e.g. file-too-large).
+   * If omitted, size errors are silently ignored at the dropzone layer and will
+   * instead be caught by the preflight inside the supplied `performFileUpload`.
+   */
+  onError?: (error: UploadError) => void;
 }
 
 /**
@@ -59,10 +67,25 @@ const FileUploadButtonInner = memo<FileUploadButtonProps>(
     performFileUpload,
     isUploading = false,
     uploadError = null,
+    onError,
   }) => {
+    const { maxSizeBytes, maxSizeFormatted } = useUploadFeature();
+
     // Setup react-dropzone
     const { getRootProps, getInputProps, open } = useDropzone({
-      onDrop: (acceptedFiles) => {
+      onDrop: (acceptedFiles, rejectedFiles) => {
+        // Surface file-too-large rejections immediately so the parent error
+        // state is updated even before the upload hook's own preflight runs.
+        if (rejectedFiles.length > 0) {
+          const hasSizeError = rejectedFiles.some((r) =>
+            r.errors.some((e) => e.code === "file-too-large"),
+          );
+          if (hasSizeError) {
+            onError?.(new UploadTooLargeError(maxSizeFormatted));
+            return;
+          }
+        }
+
         if (acceptedFiles.length > 0 && performFileUpload) {
           // Call the provided upload function
           void performFileUpload(acceptedFiles).then((files) => {
@@ -78,6 +101,7 @@ const FileUploadButtonInner = memo<FileUploadButtonProps>(
           : undefined,
       multiple,
       disabled: disabled || isUploading,
+      maxSize: maxSizeBytes,
       noClick: true, // We'll manually open the file dialog
       noKeyboard: true,
     });
