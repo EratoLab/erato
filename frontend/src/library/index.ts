@@ -289,6 +289,12 @@ export {
   useStandaloneFileUpload,
 } from "@/hooks/files";
 export {
+  UploadTooLargeError,
+  isUploadTooLarge,
+  type UploadError,
+} from "@/hooks/files/errors";
+export { validateFileSizes } from "@/utils/validateFileSizes";
+export {
   ChatBubbleIcon,
   CloseIcon,
   ComputerIcon,
