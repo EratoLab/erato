@@ -36,6 +36,8 @@ export const TEAMS_GRAPH_REQUEST_TIMEOUT_MS = 15_000;
 /** `$expand=members` returns at most this many members per chat. */
 export const CHAT_MEMBER_EXPAND_CAP = 25;
 
+export const CHANNEL_MESSAGE_PAGE_SIZE = 50;
+
 export type TeamsFetchState = "ok" | "partial" | "error";
 
 export interface GraphIdentity {
@@ -62,7 +64,14 @@ export interface GraphChatMessageAttachment {
   name?: string | null;
 }
 
+export interface GraphChannelIdentity {
+  teamId?: string | null;
+  channelId?: string | null;
+}
+
 export interface GraphChatMessage {
+  /** Populated only for channel messages; null in a chat. */
+  channelIdentity?: GraphChannelIdentity | null;
   id?: string;
   chatId?: string;
   messageType?: string;
@@ -128,11 +137,11 @@ interface GraphInit {
 async function requestGraphJson<T>(args: {
   url: string;
   tokenSource: GraphTokenSource;
-  chatId?: string | null;
+  gateKey?: string | null;
   init?: GraphInit;
   options: TeamsGraphCallOptions;
 }): Promise<GraphJsonResult<T>> {
-  const { url, tokenSource, chatId, init, options } = args;
+  const { url, tokenSource, gateKey, init, options } = args;
   const parentSignal = options.signal;
   const transport = options.transport ?? globalThis.fetch.bind(globalThis);
 
@@ -142,7 +151,7 @@ async function requestGraphJson<T>(args: {
   const send = (signal: AbortSignal) => {
     const call = () =>
       graphFetch(url, tokenSource, "application/json", signal, transport, init);
-    return chatId ? runGatedByChat(chatId, signal, call) : call();
+    return gateKey ? runGatedByChat(gateKey, signal, call) : call();
   };
 
   try {
@@ -217,7 +226,7 @@ export async function getTeamsChat(
   const result = await requestGraphJson<GraphChat>({
     url,
     tokenSource,
-    chatId,
+    gateKey: chatId,
     options,
   });
   return result.ok ? (result.payload ?? null) : null;
@@ -245,7 +254,7 @@ export async function listChatMessagesPage(
   const result = await requestGraphJson<{
     value?: GraphChatMessage[];
     "@odata.nextLink"?: string;
-  }>({ url, tokenSource, chatId, options });
+  }>({ url, tokenSource, gateKey: chatId, options });
   if (!result.ok || !result.payload) {
     return {
       messages: [],
@@ -273,7 +282,122 @@ export async function getChatMessage(
   const result = await requestGraphJson<GraphChatMessage>({
     url,
     tokenSource,
-    chatId,
+    gateKey: chatId,
+    options,
+  });
+  return result.ok ? (result.payload ?? null) : null;
+}
+
+export interface GraphTeam {
+  id?: string;
+  displayName?: string | null;
+  description?: string | null;
+}
+
+export interface GraphChannel {
+  id?: string;
+  displayName?: string | null;
+  description?: string | null;
+  membershipType?: string | null;
+  webUrl?: string | null;
+}
+
+/**
+ * Graph's one-request-per-second ceiling is per conversation, and a channel is
+ * a conversation — so channel reads share the chat gate under a composite key.
+ */
+export function channelGateKey(teamId: string, channelId: string): string {
+  return `channel:${teamId}/${channelId}`;
+}
+
+export interface ListJoinedTeamsResult {
+  teams: GraphTeam[];
+  state: TeamsFetchState;
+}
+
+/** Teams the signed-in user belongs to. Needs `Team.ReadBasic.All`. */
+export async function listJoinedTeams(
+  tokenSource: GraphTokenSource,
+  options: TeamsGraphCallOptions = {},
+): Promise<ListJoinedTeamsResult> {
+  const result = await requestGraphJson<{ value?: GraphTeam[] }>({
+    url: `${GRAPH_BASE}/me/joinedTeams`,
+    tokenSource,
+    options,
+  });
+  if (!result.ok || !result.payload) {
+    return { teams: [], state: "error" };
+  }
+  return { teams: result.payload.value ?? [], state: "ok" };
+}
+
+export interface ListTeamChannelsResult {
+  channels: GraphChannel[];
+  state: TeamsFetchState;
+}
+
+/**
+ * Channels of one team. Private and shared channels the user is not a member
+ * of are omitted by Graph, so the list matches what their Teams rail shows.
+ */
+export async function listTeamChannels(
+  teamId: string,
+  tokenSource: GraphTokenSource,
+  options: TeamsGraphCallOptions = {},
+): Promise<ListTeamChannelsResult> {
+  const result = await requestGraphJson<{ value?: GraphChannel[] }>({
+    url: `${GRAPH_BASE}/teams/${encodeURIComponent(teamId)}/channels`,
+    tokenSource,
+    options,
+  });
+  if (!result.ok || !result.payload) {
+    return { channels: [], state: "error" };
+  }
+  return { channels: result.payload.value ?? [], state: "ok" };
+}
+
+/** One page of a channel's messages, newest first, as with chats. */
+export async function listChannelMessagesPage(
+  teamId: string,
+  channelId: string,
+  tokenSource: GraphTokenSource,
+  options: TeamsGraphCallOptions & { nextLink?: string | null } = {},
+): Promise<ListChatMessagesPageResult> {
+  const url =
+    options.nextLink ??
+    `${GRAPH_BASE}/teams/${encodeURIComponent(teamId)}/channels/${encodeURIComponent(channelId)}/messages?$top=${CHANNEL_MESSAGE_PAGE_SIZE}`;
+  const result = await requestGraphJson<{
+    value?: GraphChatMessage[];
+    "@odata.nextLink"?: string;
+  }>({
+    url,
+    tokenSource,
+    gateKey: channelGateKey(teamId, channelId),
+    options,
+  });
+  if (!result.ok || !result.payload) {
+    return { messages: [], nextLink: null, status: result.status, ok: false };
+  }
+  return {
+    messages: result.payload.value ?? [],
+    nextLink: result.payload["@odata.nextLink"] ?? null,
+    status: result.status,
+    ok: true,
+  };
+}
+
+/** A single channel message with its body. */
+export async function getChannelMessage(
+  teamId: string,
+  channelId: string,
+  messageId: string,
+  tokenSource: GraphTokenSource,
+  options: TeamsGraphCallOptions = {},
+): Promise<GraphChatMessage | null> {
+  const result = await requestGraphJson<GraphChatMessage>({
+    url: `${GRAPH_BASE}/teams/${encodeURIComponent(teamId)}/channels/${encodeURIComponent(channelId)}/messages/${encodeURIComponent(messageId)}`,
+    tokenSource,
+    gateKey: channelGateKey(teamId, channelId),
     options,
   });
   return result.ok ? (result.payload ?? null) : null;

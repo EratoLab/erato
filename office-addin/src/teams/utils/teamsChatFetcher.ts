@@ -5,9 +5,13 @@
  */
 
 import {
+  getChannelMessage,
   getChatMessage,
   getTeamsChat,
+  listChannelMessagesPage,
   listChatMessagesPage,
+  listJoinedTeams,
+  listTeamChannels,
   listTeamsChatsPage,
   searchChatMessages,
 } from "./teamsChatGraph";
@@ -18,6 +22,8 @@ import type {
   GraphChat,
   GraphChatMessage,
   ListChatMessagesPageResult,
+  ListJoinedTeamsResult,
+  ListTeamChannelsResult,
   ListTeamsChatsResult,
   SearchChatMessagesResult,
   TeamsGraphCallOptions,
@@ -77,5 +83,46 @@ export function createGraphTeamsChatFetcher(
       pageChatMessagesBackwards({ ...args, tokenSource: tokenSource() }),
     getMessage: (chatId, messageId, options = {}) =>
       getChatMessage(chatId, messageId, tokenSource(), options),
+  };
+}
+
+/**
+ * Channels are a separate seam because they are a separate consent decision:
+ * `ChannelMessage.Read.All` needs an admin, so a tenant can have working chats
+ * and no channels. Callers treat a null channel fetcher as "chats only".
+ */
+export interface TeamsChannelFetcher {
+  listJoinedTeams(
+    options?: TeamsGraphCallOptions,
+  ): Promise<ListJoinedTeamsResult>;
+  listChannels(
+    teamId: string,
+    options?: TeamsGraphCallOptions,
+  ): Promise<ListTeamChannelsResult>;
+  listMessagesPage(
+    teamId: string,
+    channelId: string,
+    options?: TeamsGraphCallOptions & { nextLink?: string | null },
+  ): Promise<ListChatMessagesPageResult>;
+  getMessage(
+    teamId: string,
+    channelId: string,
+    messageId: string,
+    options?: TeamsGraphCallOptions,
+  ): Promise<GraphChatMessage | null>;
+}
+
+export function createGraphTeamsChannelFetcher(
+  acquireToken: AcquireGraphToken,
+): TeamsChannelFetcher {
+  const tokenSource = () => makeGraphTokenSource(acquireToken);
+  return {
+    listJoinedTeams: (options = {}) => listJoinedTeams(tokenSource(), options),
+    listChannels: (teamId, options = {}) =>
+      listTeamChannels(teamId, tokenSource(), options),
+    listMessagesPage: (teamId, channelId, options = {}) =>
+      listChannelMessagesPage(teamId, channelId, tokenSource(), options),
+    getMessage: (teamId, channelId, messageId, options = {}) =>
+      getChannelMessage(teamId, channelId, messageId, tokenSource(), options),
   };
 }
