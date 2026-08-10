@@ -36,6 +36,7 @@ const spies = vi.hoisted(() => ({
     resetStreaming: vi.fn(),
     setNavigationTransition: vi.fn(),
   },
+  chatListSelf: vi.fn(),
   useChatMessaging: vi.fn(() => ({
     messages: {},
     isLoading: false,
@@ -113,6 +114,21 @@ vi.mock("../../core/SessionAuthProvider", () => ({
     redeemSessionForToken: vi.fn(),
     lastRedeemedAtRef: { current: Number.MAX_SAFE_INTEGER },
   }),
+}));
+
+vi.mock("../hooks/useTeamsChatList", () => ({
+  useTeamsChatList: (_fetcher: unknown, self: unknown) => {
+    spies.chatListSelf(self);
+    return {
+      chats: [],
+      chatsById: new Map(),
+      isLoading: false,
+      error: null,
+      hasMore: false,
+      loadMore: vi.fn(),
+      reload: vi.fn(),
+    };
+  },
 }));
 
 vi.mock("../../core/AddinChatInputCore", () => ({
@@ -390,6 +406,16 @@ describe("Teams personal tab composition", () => {
         expect.stringContaining("nested app auth bridge"),
         expect.objectContaining({ hostName: "Teams", hostClientType: "web" }),
       );
+    });
+  });
+
+  it("identifies the viewer by Entra object id, not just the login hint", async () => {
+    renderTab();
+    await screen.findByTestId("teams-message-list");
+
+    expect(spies.chatListSelf).toHaveBeenCalledWith({
+      userId: "00000000-0000-0000-0000-000000000001",
+      userPrincipalName: MOCK_TEAMS_LOGIN_HINT,
     });
   });
 

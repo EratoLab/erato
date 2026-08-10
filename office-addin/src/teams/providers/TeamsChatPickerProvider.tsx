@@ -128,7 +128,7 @@ export function useTeamsChatPicker(): TeamsChatPickerContextValue {
  * cancels it instead of orphaning the fetch in an unmounted subtree.
  */
 export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
-  const { userPrincipalName } = useTeams();
+  const { userPrincipalName, userId } = useTeams();
   const { fetcher } = useTeamsChatFetcher();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -149,9 +149,13 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
 
+  // The object id is the reliable match; the login hint can differ from a
+  // member's primary SMTP address, which would leave the viewer in their own
+  // participant list and title a 1:1 chat with their own name.
   const self = useMemo<TeamsSelfIdentity | undefined>(
-    () => (userPrincipalName ? { userPrincipalName } : undefined),
-    [userPrincipalName],
+    () =>
+      userPrincipalName || userId ? { userPrincipalName, userId } : undefined,
+    [userPrincipalName, userId],
   );
 
   // Listing costs a Graph call, so it stays cold until the picker is first

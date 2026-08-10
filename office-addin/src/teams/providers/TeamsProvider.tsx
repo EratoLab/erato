@@ -14,6 +14,8 @@ interface TeamsContextValue {
   theme: TeamsTheme | null;
   /** MSAL login hint only; TeamsJS identity fields are never proof of identity. */
   userPrincipalName: string | null;
+  /** Entra object id, matched against chat member ids to recognise the viewer. */
+  userId: string | null;
 }
 
 const EMPTY_TEAMS_CONTEXT: TeamsContextValue = {
@@ -22,6 +24,7 @@ const EMPTY_TEAMS_CONTEXT: TeamsContextValue = {
   hostClientType: null,
   theme: null,
   userPrincipalName: null,
+  userId: null,
 };
 
 const TeamsContext = createContext<TeamsContextValue>(EMPTY_TEAMS_CONTEXT);
@@ -62,6 +65,7 @@ export function TeamsProvider({ children }: { children: ReactNode }) {
           teamsContext.user?.loginHint ??
           teamsContext.user?.userPrincipalName ??
           null,
+        userId: teamsContext.user?.id ?? null,
       });
 
       // Single-slot registration with no unregister, so it is claimed once here
