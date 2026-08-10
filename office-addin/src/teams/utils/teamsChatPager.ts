@@ -15,8 +15,22 @@ import type { GraphTokenSource } from "../../utils/graph/graphClient";
 
 /** Default ingest window — deliberately not the whole history. */
 export const DEFAULT_CHAT_MESSAGE_LIMIT = 200;
-/** Hard stop, so a chat of tiny pages cannot page forever. */
-export const MAX_CHAT_PAGES = 8;
+/** Ceiling "Include earlier" may raise the window to. */
+export const MAX_CHAT_MESSAGE_LIMIT = 400;
+/**
+ * Runaway guard only — the walk is bounded by the message limit. Graph serves
+ * short (and sometimes empty) pages, so a page budget derived from the limit
+ * would silently return a fraction of what the caller asked for.
+ */
+export const MAX_CHAT_PAGES = 24;
+
+/**
+ * Requests a full-size walk is expected to cost. A progress denominator, not a
+ * budget: short pages spend more than this, and the walk is free to.
+ */
+export function expectedChatPageRequests(limit: number): number {
+  return Math.max(1, Math.ceil(limit / CHAT_MESSAGE_PAGE_SIZE));
+}
 
 export interface ChatPagingProgress {
   chatId: string;
@@ -53,10 +67,6 @@ export async function pageChatMessagesBackwards(
     transport,
   } = args;
 
-  const maxPages = Math.min(
-    MAX_CHAT_PAGES,
-    Math.max(1, Math.ceil(limit / CHAT_MESSAGE_PAGE_SIZE)),
-  );
   const messages: GraphChatMessage[] = [];
   let nextLink: string | null = startingAfterLink ?? null;
   let pages = 0;
@@ -81,7 +91,11 @@ export async function pageChatMessagesBackwards(
       limit,
       oldestCreatedDateTime: oldestCreatedDateTime(messages),
     });
-  } while (nextLink !== null && messages.length < limit && pages < maxPages);
+  } while (
+    nextLink !== null &&
+    messages.length < limit &&
+    pages < MAX_CHAT_PAGES
+  );
 
   return {
     messages: messages.slice(0, limit),

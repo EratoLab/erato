@@ -115,6 +115,7 @@ vi.mock("@erato/frontend/library", () => ({
   FolderIcon: () => null,
   SearchIcon: () => null,
   FILE_PREVIEW_STYLES: { progress: { container: "", bar: "" } },
+  useFileUploadStore: { getState: () => hooks.uploadStore },
 }));
 
 function omitStyleProps(props: Record<string, unknown>) {
@@ -131,6 +132,8 @@ const hooks = vi.hoisted(() => ({
   chatList: null as UseTeamsChatListResult | null,
   messages: null as UseTeamsChatMessagesResult | null,
   search: null as UseTeamsChatSearchResult | null,
+  /** Stands in for the composer's shared upload store. */
+  uploadStore: { isUploading: false, error: null as Error | null },
 }));
 
 vi.mock("../../providers/TeamsProvider", () => ({
@@ -336,6 +339,7 @@ describe("TeamsChatPickerDialog", () => {
   beforeEach(() => {
     i18n.activate("en");
     uploads.length = 0;
+    hooks.uploadStore = { isUploading: false, error: null };
     hooks.fetcher = fakeFetcher();
     hooks.chatList = chatListResult();
     hooks.messages = messagesResult();
@@ -575,6 +579,73 @@ describe("TeamsChatPickerDialog", () => {
       fireEvent.click(screen.getByRole("button", { name: "Attach anyway" }));
     });
     await waitFor(() => expect(uploads).toHaveLength(1));
+  });
+
+  it("puts the partial transcript back on offer when the upload fails", async () => {
+    hooks.fetcher = fakeFetcher({ state: "partial" });
+    hooks.uploadStore.error = new Error("413");
+    renderPicker();
+    fireEvent.click(selectChat());
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Attach anyway" }));
+    });
+
+    expect(
+      screen.getByText("Couldn't attach the transcript. Try again."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Attach anyway" }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the selection and reuses the build when the upload fails", async () => {
+    const base = fakeFetcher();
+    const pageChatBackwards = vi.fn(base.pageChatBackwards);
+    hooks.fetcher = { ...base, pageChatBackwards };
+    hooks.uploadStore.error = new Error("413");
+
+    renderPicker();
+    fireEvent.click(selectChat());
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+    });
+
+    expect(
+      await screen.findByText("Couldn't attach the transcript. Try again."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBeVisible();
+    expect(selectChat()).toBeChecked();
+    expect(pageChatBackwards).toHaveBeenCalledTimes(1);
+
+    hooks.uploadStore.error = null;
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+    });
+
+    await waitFor(() => expect(uploads).toHaveLength(2));
+    // The transcript already fetched is re-offered rather than walked again.
+    expect(pageChatBackwards).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("offers older pages when the newest one holds nothing renderable", () => {
+    hooks.messages = messagesResult({ messages: [], hasMore: true });
+    renderPicker();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Product sync" }));
+
+    expect(
+      screen.getByText(
+        "Nothing to show on this page — load more to keep looking.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Load earlier messages" }),
+    ).toBeInTheDocument();
   });
 
   it("never uploads an empty transcript", async () => {

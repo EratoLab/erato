@@ -1158,6 +1158,11 @@ msgstr "Borrar la búsqueda"
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.emptyPage"
+msgstr "No hay nada que mostrar en esta página: carga más para seguir buscando."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.includeEarlier"
 msgstr "Incluir anteriores"
 

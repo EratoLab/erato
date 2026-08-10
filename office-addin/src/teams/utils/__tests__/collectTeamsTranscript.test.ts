@@ -211,6 +211,46 @@ describe("collectTeamsTranscript", () => {
     );
   });
 
+  it("counts messages as the whole-chat walk reports them", async () => {
+    const pageChatBackwards = vi.fn(
+      (args: Parameters<TeamsChatFetcher["pageChatBackwards"]>[0]) => {
+        args.onProgress?.({
+          chatId: args.chatId,
+          fetched: 1,
+          limit: 200,
+          oldestCreatedDateTime: "2026-03-03T09:14:00Z",
+        });
+        args.onProgress?.({
+          chatId: args.chatId,
+          fetched: 2,
+          limit: 200,
+          oldestCreatedDateTime: "2026-03-01T09:14:00Z",
+        });
+        return Promise.resolve({
+          messages: [
+            mockGraphChatMessage({ id: "a" }),
+            mockGraphChatMessage({ id: "b" }),
+          ],
+          nextLink: null,
+          oldestCreatedDateTime: "2026-03-01T09:14:00Z",
+          state: "ok" as const,
+        });
+      },
+    ) as TeamsChatFetcher["pageChatBackwards"];
+    const seen: number[] = [];
+
+    await collectTeamsTranscript({
+      fetcher: fakeFetcher({ pageChatBackwards }),
+      selections: [
+        { kind: "chat", chatId: MOCK_CHAT_ID, title: "Product sync" },
+      ],
+      knownChats,
+      onProgress: (progress) => seen.push(progress.messagesFetched),
+    });
+
+    expect(seen).toEqual([0, 1, 2, 2]);
+  });
+
   it("keeps the chats that landed when one fails", async () => {
     const pageChatBackwards = vi.fn((args: { chatId: string }) =>
       args.chatId === MOCK_CHAT_ID

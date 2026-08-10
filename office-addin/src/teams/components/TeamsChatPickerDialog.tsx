@@ -252,48 +252,53 @@ function TeamsChatPickerDialogBody({
         />
       );
     }
-    if (messages.messages.length === 0) {
-      return (
-        <EmptyState
-          icon={<FolderIcon className="mb-3 size-10 text-theme-fg-muted" />}
-          message={t({
-            id: "officeAddin.teams.picker.noMessages",
-            message: "No messages in this conversation yet.",
-          })}
-        />
-      );
-    }
     const chatTitle = chatTitleFor(chatId) ?? "";
     return (
       <>
-        {messages.messages.map((message) => {
-          const senderName = message.senderName;
-          const selection = {
-            kind: "message" as const,
-            chatId: message.chatId,
-            messageId: message.messageId,
-            chatTitle,
-            senderName,
-            createdAt: message.createdAt,
-          };
-          const checked = picker.isSelected(selection);
-          return (
-            <TeamsPickerRow
-              key={message.messageId}
-              checked={checked}
-              onToggle={() => picker.toggle(selection)}
-              disabled={!checked && picker.isMessageSelectionFull}
-              selectLabel={t({
-                id: "officeAddin.teams.picker.selectMessage",
-                message: `Select message from ${senderName}`,
-              })}
-              title={senderName}
-              subline={message.text}
-              createdAt={message.createdAt}
-              senderName={senderName}
-            />
-          );
-        })}
+        {messages.messages.length === 0 ? (
+          // A page of joins, renames and calls parses to nothing renderable,
+          // so an empty list is a dead end only once there is no older page.
+          <EmptyState
+            icon={<FolderIcon className="mb-3 size-10 text-theme-fg-muted" />}
+            message={
+              messages.hasMore
+                ? emptyPageMessage()
+                : t({
+                    id: "officeAddin.teams.picker.noMessages",
+                    message: "No messages in this conversation yet.",
+                  })
+            }
+          />
+        ) : (
+          messages.messages.map((message) => {
+            const senderName = message.senderName;
+            const selection = {
+              kind: "message" as const,
+              chatId: message.chatId,
+              messageId: message.messageId,
+              chatTitle,
+              senderName,
+              createdAt: message.createdAt,
+            };
+            const checked = picker.isSelected(selection);
+            return (
+              <TeamsPickerRow
+                key={message.messageId}
+                checked={checked}
+                onToggle={() => picker.toggle(selection)}
+                disabled={!checked && picker.isMessageSelectionFull}
+                selectLabel={t({
+                  id: "officeAddin.teams.picker.selectMessage",
+                  message: `Select message from ${senderName}`,
+                })}
+                title={senderName}
+                subline={message.text}
+                createdAt={message.createdAt}
+                senderName={senderName}
+              />
+            );
+          })
+        )}
         {messages.isPartial && <PartialNote />}
         <LoadMoreRow
           visible={messages.hasMore}
@@ -321,68 +326,77 @@ function TeamsChatPickerDialogBody({
         />
       );
     }
-    if (search.hits.length === 0) {
-      const searchTerm = trimmed;
-      return (
-        <EmptyState
-          icon={<SearchIcon className="mb-3 size-10 text-theme-fg-muted" />}
-          message={t({
-            id: "officeAddin.teams.picker.noSearchResults",
-            message: `No messages match “${searchTerm}”.`,
-          })}
-          hint={t({
-            id: "officeAddin.teams.picker.searchScope",
-            message: "Search covers messages you can access in Teams.",
-          })}
-        />
-      );
-    }
+    const searchTerm = trimmed;
     return (
       <>
-        {search.hits.map((hit) => {
-          const senderName =
-            hit.senderName ||
-            t({
-              id: "officeAddin.teams.picker.unknownSender",
-              message: "Unknown sender",
-            });
-          const chatTitle = chatTitleFor(hit.chatId);
-          const selection = {
-            kind: "message" as const,
-            chatId: hit.chatId,
-            messageId: hit.messageId,
-            chatTitle: chatTitle ?? "",
-            senderName,
-            createdAt: hit.createdAt,
-          };
-          const checked = picker.isSelected(selection);
-          return (
-            <TeamsPickerRow
-              key={`${hit.chatId}:${hit.messageId}`}
-              checked={checked}
-              onToggle={() => picker.toggle(selection)}
-              disabled={!checked && picker.isMessageSelectionFull}
-              selectLabel={t({
-                id: "officeAddin.teams.picker.selectMessage",
-                message: `Select message from ${senderName}`,
-              })}
-              title={
-                <>
-                  {senderName}
-                  {chatTitle && (
-                    <span className="font-normal text-theme-fg-muted">
-                      {" · "}
-                      {chatTitle}
-                    </span>
-                  )}
-                </>
-              }
-              subline={<SearchSnippet summary={hit.summary} />}
-              createdAt={hit.createdAt}
-              senderName={senderName}
-            />
-          );
-        })}
+        {search.hits.length === 0 ? (
+          // Hits without an addressable `(chatId, messageId)` are dropped, so
+          // a page can come back empty while later pages still hold results.
+          <EmptyState
+            icon={<SearchIcon className="mb-3 size-10 text-theme-fg-muted" />}
+            message={
+              search.hasMore
+                ? emptyPageMessage()
+                : t({
+                    id: "officeAddin.teams.picker.noSearchResults",
+                    message: `No messages match “${searchTerm}”.`,
+                  })
+            }
+            hint={
+              search.hasMore
+                ? undefined
+                : t({
+                    id: "officeAddin.teams.picker.searchScope",
+                    message: "Search covers messages you can access in Teams.",
+                  })
+            }
+          />
+        ) : (
+          search.hits.map((hit) => {
+            const senderName =
+              hit.senderName ||
+              t({
+                id: "officeAddin.teams.picker.unknownSender",
+                message: "Unknown sender",
+              });
+            const chatTitle = chatTitleFor(hit.chatId);
+            const selection = {
+              kind: "message" as const,
+              chatId: hit.chatId,
+              messageId: hit.messageId,
+              chatTitle: chatTitle ?? "",
+              senderName,
+              createdAt: hit.createdAt,
+            };
+            const checked = picker.isSelected(selection);
+            return (
+              <TeamsPickerRow
+                key={`${hit.chatId}:${hit.messageId}`}
+                checked={checked}
+                onToggle={() => picker.toggle(selection)}
+                disabled={!checked && picker.isMessageSelectionFull}
+                selectLabel={t({
+                  id: "officeAddin.teams.picker.selectMessage",
+                  message: `Select message from ${senderName}`,
+                })}
+                title={
+                  <>
+                    {senderName}
+                    {chatTitle && (
+                      <span className="font-normal text-theme-fg-muted">
+                        {" · "}
+                        {chatTitle}
+                      </span>
+                    )}
+                  </>
+                }
+                subline={<SearchSnippet summary={hit.summary} />}
+                createdAt={hit.createdAt}
+                senderName={senderName}
+              />
+            );
+          })
+        )}
         <LoadMoreRow
           visible={search.hasMore}
           busy={search.isLoadingMore}
@@ -624,6 +638,14 @@ function EmptyState({
       {hint && <p className="mt-1 text-xs text-theme-fg-muted">{hint}</p>}
     </div>
   );
+}
+
+/** Both lists drop unrenderable entries, so a page can arrive with no rows. */
+function emptyPageMessage(): string {
+  return t({
+    id: "officeAddin.teams.picker.emptyPage",
+    message: "Nothing to show on this page — load more to keep looking.",
+  });
 }
 
 function ListError({

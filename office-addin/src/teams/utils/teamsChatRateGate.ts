@@ -24,6 +24,37 @@ const gates = new Map<string, ChatGate>();
 /** Test seam — production code never resets the module-level gates. */
 export function resetTeamsChatRateGates(): void {
   gates.clear();
+  inFlightSlots = 0;
+  waitingForSlot.length = 0;
+}
+
+/**
+ * Chat reads in flight across DIFFERENT chats. The per-chat gate does not
+ * bound these — a search page can point at 25 unlisted chats, which would
+ * otherwise resolve as one burst against the per-user ceiling.
+ */
+export const MAX_CONCURRENT_CHAT_READS = 4;
+
+let inFlightSlots = 0;
+const waitingForSlot: Array<() => void> = [];
+
+export async function runWithChatReadSlot<T>(
+  run: () => Promise<T>,
+): Promise<T> {
+  if (inFlightSlots >= MAX_CONCURRENT_CHAT_READS) {
+    await new Promise<void>((resolve) => waitingForSlot.push(resolve));
+  } else {
+    inFlightSlots += 1;
+  }
+  try {
+    return await run();
+  } finally {
+    // Hand the slot straight to the next waiter: releasing it first would let
+    // an arriving caller take it and put one more request over the ceiling.
+    const next = waitingForSlot.shift();
+    if (next) next();
+    else inFlightSlots -= 1;
+  }
 }
 
 export async function runGatedByChat<T>(

@@ -165,7 +165,8 @@ use the router.
   with delegated `Chat.Read`. Everything chat-scoped goes through
   `runGatedByChat`: Graph allows only 1 rps against a single chat, so paging one
   conversation is inherently serial and a fan-out is a bug, not a missed
-  optimization.
+  optimization. Reads across _different_ chats are what that gate cannot bound;
+  `runWithChatReadSlot` caps those so a search page cannot land as one burst.
 - Chat picker: `TeamsChatPickerProvider` sits above `NeutralAddinChatPage` and
   owns the picker dialog plus the in-flight transcript build. It cannot live
   under the composer's "+" popover — `AnchoredPopover` dismisses on any

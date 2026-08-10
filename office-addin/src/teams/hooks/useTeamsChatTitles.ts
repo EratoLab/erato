@@ -3,6 +3,7 @@ import { useMemo } from "react";
 
 import { runWithGraphTimeout } from "../../utils/graph/graphRequestTimeout";
 import { parseTeamsChat } from "../utils/parsedTeamsChat";
+import { runWithChatReadSlot } from "../utils/teamsChatRateGate";
 import { TEAMS_GRAPH_LIST_TIMEOUT_MS } from "../utils/teamsGraphTimeouts";
 
 import type {
@@ -17,8 +18,10 @@ export const MAX_RESOLVED_CHAT_TITLES = 25;
 
 /**
  * Resolves chats a search hit points at but the browsed window never listed.
- * Different chats, so these parallelise cleanly under the per-chat gate; each
- * one is fetched at most once and then cached for the session.
+ * `useQueries` starts every one of them at once and the per-chat gate does not
+ * hold back different chats, so the shared read slot is what keeps a search
+ * page from landing as a single burst. Each chat is fetched at most once and
+ * then cached for the session.
  */
 export function useTeamsChatTitles(
   fetcher: TeamsChatFetcher | null,
@@ -40,11 +43,15 @@ export function useTeamsChatTitles(
       refetchOnReconnect: false,
       queryFn: ({ signal }: { signal: AbortSignal }) => {
         if (!fetcher) return null;
-        return runWithGraphTimeout(
-          TEAMS_GRAPH_LIST_TIMEOUT_MS,
-          `Teams chat lookup timed out after ${TEAMS_GRAPH_LIST_TIMEOUT_MS}ms`,
-          signal,
-          (timeoutSignal) => fetcher.getChat(chatId, { signal: timeoutSignal }),
+        // Timeout inside the slot: queueing is not the request's own budget.
+        return runWithChatReadSlot(() =>
+          runWithGraphTimeout(
+            TEAMS_GRAPH_LIST_TIMEOUT_MS,
+            `Teams chat lookup timed out after ${TEAMS_GRAPH_LIST_TIMEOUT_MS}ms`,
+            signal,
+            (timeoutSignal) =>
+              fetcher.getChat(chatId, { signal: timeoutSignal }),
+          ),
         );
       },
     })),

@@ -7,10 +7,7 @@ import {
   throttledResponse,
 } from "../../../test/mocks/teams/graph";
 import { makeGraphTokenSource } from "../../../utils/graph/graphClient";
-import {
-  CHAT_MESSAGE_PAGE_SIZE,
-  listChatMessagesPage,
-} from "../teamsChatGraph";
+import { listChatMessagesPage } from "../teamsChatGraph";
 import { MAX_CHAT_PAGES, pageChatMessagesBackwards } from "../teamsChatPager";
 import { resetTeamsChatRateGates } from "../teamsChatRateGate";
 
@@ -208,25 +205,25 @@ describe("pageChatMessagesBackwards", () => {
     expect(result.messages).toHaveLength(1);
   });
 
-  it("spends only the page budget the limit buys, keeping the nextLink visible", async () => {
-    // Short pages: the walk runs out of budget long before it reaches 200, and
-    // the surviving nextLink is what tells the transcript it was truncated.
-    const served = pagingTransport(50, 2);
+  it("keeps paging short pages until the message limit is met", async () => {
+    // Graph routinely serves fewer than $top: a page budget derived from the
+    // limit would stop at a fraction of the 60 messages that were asked for.
+    const served = pagingTransport(50, 5);
     const pending = pageChatMessagesBackwards({
       chatId: MOCK_CHAT_ID,
       tokenSource: tokenSource(),
-      limit: 200,
+      limit: 60,
       transport: served.transport,
     });
     await vi.advanceTimersByTimeAsync(60_000);
     const result = await pending;
 
-    expect(served.calls).toBe(200 / CHAT_MESSAGE_PAGE_SIZE);
-    expect(result.messages).toHaveLength(8);
+    expect(served.calls).toBe(12);
+    expect(result.messages).toHaveLength(60);
     expect(result.nextLink).not.toBeNull();
   });
 
-  it("hard-caps a large limit so one chat cannot page forever", async () => {
+  it("stops at the runaway guard when the pages stay tiny", async () => {
     const served = pagingTransport(50, 1);
     const pending = pageChatMessagesBackwards({
       chatId: MOCK_CHAT_ID,

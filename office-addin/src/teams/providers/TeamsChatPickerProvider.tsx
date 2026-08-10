@@ -1,3 +1,4 @@
+import { useFileUploadStore } from "@erato/frontend/library";
 import {
   createContext,
   useCallback,
@@ -12,14 +13,14 @@ import { TeamsChatPickerDialog } from "../components/TeamsChatPickerDialog";
 import { useTeamsChatFetcher } from "../hooks/useTeamsChatFetcher";
 import { useTeamsChatList } from "../hooks/useTeamsChatList";
 import { useTeamsTranscriptBuild } from "../hooks/useTeamsTranscriptBuild";
-import { CHAT_MESSAGE_PAGE_SIZE } from "../utils/teamsChatGraph";
 import {
   DEFAULT_CHAT_MESSAGE_LIMIT,
-  MAX_CHAT_PAGES,
+  MAX_CHAT_MESSAGE_LIMIT,
 } from "../utils/teamsChatPager";
 import {
   MAX_SELECTED_MESSAGES,
   countSelectedMessages,
+  teamsSelectionDedupeKey,
   teamsSelectionKey,
 } from "../utils/teamsChatSelection";
 
@@ -34,13 +35,10 @@ import type { TeamsChatFetcher } from "../utils/teamsChatFetcher";
 import type { TeamsChatSelection } from "../utils/teamsChatSelection";
 import type { ReactNode } from "react";
 
-/** The ceiling `pageChatMessagesBackwards` will actually walk to. */
-export const MAX_CHAT_MESSAGE_LIMIT = MAX_CHAT_PAGES * CHAT_MESSAGE_PAGE_SIZE;
-
 export type TeamsAttachFailure =
   /** Every selected message came back empty or unreadable. */
   | "nothing-to-attach"
-  /** The composer handed us no upload callback, or it threw. */
+  /** The composer never took the transcript, or the upload behind it failed. */
   | "upload-failed";
 
 export interface TeamsChatPickerContextValue {
@@ -147,6 +145,7 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
 
   const handoffRef = useRef<((files: File[]) => Promise<void>) | null>(null);
   const cancelledRef = useRef(false);
+  const lastBuildRef = useRef<{ key: string; file: File } | null>(null);
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
 
@@ -187,6 +186,7 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
     cancelBuild();
     reset();
     handoffRef.current = null;
+    lastBuildRef.current = null;
     setIsOpen(false);
     setSelection(new Map());
     setAttachError(null);
@@ -226,12 +226,22 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  /**
+   * The composer's callback resolves whether or not the upload landed, so the
+   * shared upload store is the only success signal available here. `retryKey`
+   * keeps the built transcript around after a failure: rebuilding it means
+   * walking Graph again, which is tens of seconds.
+   */
   const deliver = useCallback(
-    async (file: File) => {
+    async (file: File, retryKey?: string): Promise<boolean> => {
       const handoff = handoffRef.current;
-      if (!handoff) {
+      const fail = () => {
+        if (retryKey) lastBuildRef.current = { key: retryKey, file };
         setAttachError("upload-failed");
-        return;
+        return false;
+      };
+      if (!handoff || useFileUploadStore.getState().isUploading) {
+        return fail();
       }
       try {
         await handoff([file]);
@@ -240,10 +250,13 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
           "[TeamsChatPicker] attaching the transcript failed",
           error,
         );
-        setAttachError("upload-failed");
-        return;
+        return fail();
+      }
+      if (useFileUploadStore.getState().error) {
+        return fail();
       }
       close();
+      return true;
     },
     [close],
   );
@@ -254,6 +267,13 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
     cancelledRef.current = false;
     setAttachError(null);
     setPartialOutcome(null);
+
+    const key = teamsSelectionDedupeKey(selections, messageLimitRef.current);
+    const built = lastBuildRef.current;
+    if (built?.key === key) {
+      await deliver(built.file, key);
+      return;
+    }
 
     const outcome = await build({
       selections,
@@ -271,14 +291,16 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
       setPartialOutcome(outcome);
       return;
     }
-    await deliver(outcome.file);
+    await deliver(outcome.file, key);
   }, [build, deliver, self]);
 
   const attachPartial = useCallback(async () => {
-    const file = partialOutcome?.file;
-    if (!file) return;
+    const outcome = partialOutcome;
+    if (!outcome?.file) return;
     setPartialOutcome(null);
-    await deliver(file);
+    // Put the offer back if the composer never took it — the partial
+    // transcript is the only copy of a walk that already ran.
+    if (!(await deliver(outcome.file))) setPartialOutcome(outcome);
   }, [deliver, partialOutcome]);
 
   const value = useMemo<TeamsChatPickerContextValue>(

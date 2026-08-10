@@ -1,8 +1,9 @@
 /**
- * What the user ticked in the picker, and the identity that keeps them from
- * attaching it twice. The dedupe key deliberately describes the *selection*,
- * not the fetch result: the oldest message id is unknown until paging finishes,
- * and "the user asked for this chat again" is the identity that matters.
+ * What the user ticked in the picker, and the identity of the transcript that
+ * selection builds — what lets a retry reuse a build instead of walking Graph
+ * again. The key deliberately describes the *selection*, not the fetch result:
+ * the oldest message id is unknown until paging finishes, and "the user asked
+ * for this chat again" is the identity that matters.
  */
 
 import { DEFAULT_CHAT_MESSAGE_LIMIT } from "./teamsChatPager";

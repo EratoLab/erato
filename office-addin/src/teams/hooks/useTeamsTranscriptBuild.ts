@@ -109,7 +109,12 @@ export function useTeamsTranscriptBuild(
             }),
         );
         return {
-          file: buildTeamsTranscriptFile({ sections: collected.sections }),
+          file: buildTeamsTranscriptFile({
+            sections: collected.sections,
+            // The picker renders every row in the viewer's zone; a transcript
+            // in UTC would file those same messages under a different day.
+            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          }),
           state: collected.state,
           messageCount: collected.messageCount,
           skippedCount: collected.skippedCount,

@@ -1158,6 +1158,11 @@ msgstr "Suche löschen"
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.emptyPage"
+msgstr "Auf dieser Seite gibt es nichts anzuzeigen – laden Sie mehr, um weiterzusuchen."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.includeEarlier"
 msgstr "Ältere einbeziehen"
 

@@ -11,8 +11,10 @@
  */
 
 import { parseTeamsChat, parseTeamsMessage } from "./parsedTeamsChat";
-import { CHAT_MESSAGE_PAGE_SIZE } from "./teamsChatGraph";
-import { DEFAULT_CHAT_MESSAGE_LIMIT, MAX_CHAT_PAGES } from "./teamsChatPager";
+import {
+  DEFAULT_CHAT_MESSAGE_LIMIT,
+  expectedChatPageRequests,
+} from "./teamsChatPager";
 import { groupSelectionsByChat } from "./teamsChatSelection";
 import { runWithConcurrency } from "../../utils/graph/graphClient";
 
@@ -66,10 +68,7 @@ export async function collectTeamsTranscript(
   const { fetcher, selections, knownChats, self, onProgress, signal } = args;
   const limit = args.limit ?? DEFAULT_CHAT_MESSAGE_LIMIT;
   const groups = groupSelectionsByChat(selections);
-  const wholeChatRequests = Math.min(
-    MAX_CHAT_PAGES,
-    Math.max(1, Math.ceil(limit / CHAT_MESSAGE_PAGE_SIZE)),
-  );
+  const wholeChatRequests = expectedChatPageRequests(limit);
 
   const groupRequests = groups.map((group) =>
     group.wholeChat ? wholeChatRequests : group.messageIds.length,
@@ -110,6 +109,9 @@ export async function collectTeamsTranscript(
         signal,
       });
       if (group.wholeChat) {
+        // The pager reports a running total per chat; the shared counter takes
+        // the delta so a live count is visible while the walk is in progress.
+        let counted = 0;
         const page = await fetcher.pageChatBackwards({
           chatId: group.chatId,
           limit,
@@ -117,13 +119,15 @@ export async function collectTeamsTranscript(
           onProgress: (progress) => {
             spent = Math.min(spent + 1, groupRequests[index]);
             requestsCompleted += 1;
+            messagesFetched += progress.fetched - counted;
+            counted = progress.fetched;
             noteOldest(progress.oldestCreatedDateTime);
             emit();
           },
         });
         outcomes[index] = page.state;
         const messages = collectParsed(page.messages, group.chatId);
-        messagesFetched += messages.length;
+        messagesFetched += messages.length - counted;
         sections[index] = {
           chat,
           messages,
