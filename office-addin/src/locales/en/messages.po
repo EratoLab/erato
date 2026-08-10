@@ -1106,6 +1106,26 @@ msgstr "Could not connect to Microsoft Teams."
 msgid "officeAddin.teams.loading"
 msgstr "Loading Microsoft Teams tab..."
 
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsAuthProvider.tsx
+msgid "officeAddin.teams.signedIn.title"
+msgstr "Signed in. Try adding the chat again."
+
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsAuthProvider.tsx
+msgid "officeAddin.teams.signInToLoad.action"
+msgstr "Sign in"
+
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsAuthProvider.tsx
+msgid "officeAddin.teams.signInToLoad.description"
+msgstr "Reading your Teams chats needs a quick sign-in."
+
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsAuthProvider.tsx
+msgid "officeAddin.teams.signInToLoad.title"
+msgstr "Sign in to load Teams chats"
+
 # ==============================
 # Unstable IDs
 # ==============================

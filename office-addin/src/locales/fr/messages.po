@@ -1106,6 +1106,26 @@ msgstr "Impossible de se connecter à Microsoft Teams."
 msgid "officeAddin.teams.loading"
 msgstr "Chargement de l'onglet Microsoft Teams..."
 
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsAuthProvider.tsx
+msgid "officeAddin.teams.signedIn.title"
+msgstr "Connecté. Essayez à nouveau d'ajouter la conversation."
+
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsAuthProvider.tsx
+msgid "officeAddin.teams.signInToLoad.action"
+msgstr "Se connecter"
+
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsAuthProvider.tsx
+msgid "officeAddin.teams.signInToLoad.description"
+msgstr "La lecture de vos conversations Teams nécessite une connexion rapide."
+
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsAuthProvider.tsx
+msgid "officeAddin.teams.signInToLoad.title"
+msgstr "Connectez-vous pour charger les conversations Teams"
+
 # ==============================
 # Unstable IDs
 # ==============================

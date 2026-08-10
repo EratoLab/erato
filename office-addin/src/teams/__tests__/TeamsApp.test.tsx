@@ -109,6 +109,10 @@ vi.mock("../../core/SessionAuthProvider", () => ({
     retryAuthentication: () => Promise.resolve(),
     error: null,
   }),
+  useSessionRedeem: () => ({
+    redeemSessionForToken: vi.fn(),
+    lastRedeemedAtRef: { current: Number.MAX_SAFE_INTEGER },
+  }),
 }));
 
 vi.mock("../../core/AddinChatInputCore", () => ({
@@ -132,6 +136,12 @@ vi.mock("@erato/frontend/library", async () => {
     ProfileProvider: passthrough,
     ThemeProvider: passthrough,
     Toaster: () => null,
+    toast: {
+      info: vi.fn(),
+      success: vi.fn(),
+      warning: vi.fn(),
+      error: vi.fn(),
+    },
     createBrowserClientInfo: (info: unknown) => info,
     useTheme: () => ({
       setSystemThemeOverride: spies.setSystemThemeOverride,

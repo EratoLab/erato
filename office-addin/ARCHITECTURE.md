@@ -157,5 +157,13 @@ use the router.
   is enabled; deployments needing more origins still use
   `frontend.extra_frame_ancestors`. Emit no `X-Frame-Options` — any value a
   modern browser understands overrides the CSP and blanks the tab.
+- Graph: `TeamsAuthProvider` mounts the shared `GraphTokenProvider` over the NAA
+  source, so a Teams-hosted component can acquire a Graph token. The chat data
+  layer (`src/teams/utils`, `src/teams/hooks`) reads chats, messages and search
+  with delegated `Chat.Read`. Everything chat-scoped goes through
+  `runGatedByChat`: Graph allows only 1 rps against a single chat, so paging one
+  conversation is inherently serial and a fan-out is a bug, not a missed
+  optimization.
 - Not shipped: production manifest distribution (`manifests/manifest.json` is
-  the local unified package), Graph access, and Teams-specific chat surfaces.
+  the local unified package) and Teams-specific chat surfaces — no component
+  registry override is installed on this route yet.

@@ -1106,6 +1106,26 @@ msgstr "Verbindung zu Microsoft Teams nicht möglich."
 msgid "officeAddin.teams.loading"
 msgstr "Microsoft Teams-Registerkarte wird geladen..."
 
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsAuthProvider.tsx
+msgid "officeAddin.teams.signedIn.title"
+msgstr "Angemeldet. Versuche erneut, den Chat hinzuzufügen."
+
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsAuthProvider.tsx
+msgid "officeAddin.teams.signInToLoad.action"
+msgstr "Anmelden"
+
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsAuthProvider.tsx
+msgid "officeAddin.teams.signInToLoad.description"
+msgstr "Zum Lesen deiner Teams-Chats ist eine kurze Anmeldung nötig."
+
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsAuthProvider.tsx
+msgid "officeAddin.teams.signInToLoad.title"
+msgstr "Anmelden, um Teams-Chats zu laden"
+
 # ==============================
 # Unstable IDs
 # ==============================

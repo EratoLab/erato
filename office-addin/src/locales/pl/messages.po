@@ -1106,6 +1106,26 @@ msgstr "Nie można połączyć się z Microsoft Teams."
 msgid "officeAddin.teams.loading"
 msgstr "Ładowanie karty Microsoft Teams..."
 
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsAuthProvider.tsx
+msgid "officeAddin.teams.signedIn.title"
+msgstr "Zalogowano. Spróbuj ponownie dodać czat."
+
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsAuthProvider.tsx
+msgid "officeAddin.teams.signInToLoad.action"
+msgstr "Zaloguj się"
+
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsAuthProvider.tsx
+msgid "officeAddin.teams.signInToLoad.description"
+msgstr "Odczytanie czatów w usłudze Teams wymaga szybkiego zalogowania."
+
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsAuthProvider.tsx
+msgid "officeAddin.teams.signInToLoad.title"
+msgstr "Zaloguj się, aby załadować czaty z usługi Teams"
+
 # ==============================
 # Unstable IDs
 # ==============================
