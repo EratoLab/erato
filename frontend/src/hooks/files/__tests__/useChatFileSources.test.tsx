@@ -5,8 +5,13 @@
 import { renderHook, act, cleanup } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
+import { makeFileWithSize } from "@/test/fileFixtures";
+
 import { UploadTooLargeError } from "../errors";
+import { useChatFileSources } from "../useChatFileSources";
 import { useFileUploadStore } from "../useFileUploadStore";
+
+import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 const MiB = 1024 * 1024;
 const CUSTOM_LIMIT = 15 * MiB;
@@ -22,7 +27,8 @@ vi.mock("@/providers/FeatureConfigProvider", () => ({
   useCloudProvidersFeature: vi.fn(() => ({ availableProviders: [] })),
 }));
 
-const mockUploadFiles = vi.fn();
+const mockUploadFiles =
+  vi.fn<(files: File[]) => Promise<FileUploadItem[] | undefined>>();
 vi.mock("@/hooks/files/useFileUploadWithTokenCheck", () => ({
   useFileUploadWithTokenCheck: vi.fn(() => ({
     uploadFiles: mockUploadFiles,
@@ -50,8 +56,6 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useChatFileSources } from "../useChatFileSources";
-
 function renderUseChatFileSources(
   props: Partial<Parameters<typeof useChatFileSources>[0]> = {},
 ) {
@@ -62,11 +66,6 @@ function renderUseChatFileSources(
       ...props,
     }),
   );
-}
-
-function makeFileWithSize(name: string, size: number): File {
-  const blob = new Blob([new Uint8Array(size)]);
-  return new File([blob], name, { type: "application/octet-stream" });
 }
 
 describe("useChatFileSources — onSelectFiles preflight", () => {
@@ -83,7 +82,7 @@ describe("useChatFileSources — onSelectFiles preflight", () => {
   });
 
   it("does not call the upload function when a file is oversized", async () => {
-    const { result } = await renderUseChatFileSources();
+    const { result } = renderUseChatFileSources();
     const oversized = makeFileWithSize("big.bin", CUSTOM_LIMIT + 1);
 
     await act(async () => {
@@ -94,7 +93,7 @@ describe("useChatFileSources — onSelectFiles preflight", () => {
   });
 
   it("sets UploadTooLargeError with the formatted limit on size rejection", async () => {
-    const { result } = await renderUseChatFileSources();
+    const { result } = renderUseChatFileSources();
     const oversized = makeFileWithSize("big.bin", CUSTOM_LIMIT + 1);
 
     await act(async () => {
@@ -107,7 +106,7 @@ describe("useChatFileSources — onSelectFiles preflight", () => {
   });
 
   it("allows upload for a file exactly at the limit", async () => {
-    const { result } = await renderUseChatFileSources();
+    const { result } = renderUseChatFileSources();
     const exact = makeFileWithSize("exact.bin", CUSTOM_LIMIT);
 
     await act(async () => {
@@ -118,7 +117,7 @@ describe("useChatFileSources — onSelectFiles preflight", () => {
   });
 
   it("rejects the entire batch when one file is oversized", async () => {
-    const { result } = await renderUseChatFileSources();
+    const { result } = renderUseChatFileSources();
     const files = [
       makeFileWithSize("ok.bin", CUSTOM_LIMIT),
       makeFileWithSize("toobig.bin", CUSTOM_LIMIT + 1),
@@ -129,6 +128,8 @@ describe("useChatFileSources — onSelectFiles preflight", () => {
     });
 
     expect(mockUploadFiles).not.toHaveBeenCalled();
-    expect(useFileUploadStore.getState().error).toBeInstanceOf(UploadTooLargeError);
+    expect(useFileUploadStore.getState().error).toBeInstanceOf(
+      UploadTooLargeError,
+    );
   });
 });

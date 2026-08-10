@@ -2,6 +2,8 @@ import { renderHook, act, cleanup } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 import { fetchUploadFile } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { makeFileWithSize } from "@/test/fileFixtures";
+import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { UploadTooLargeError } from "../errors";
 import { useStandaloneFileUpload } from "../useStandaloneFileUpload";
@@ -21,11 +23,6 @@ vi.mock("@/providers/FeatureConfigProvider", () => ({
   })),
 }));
 
-function makeFileWithSize(name: string, size: number): File {
-  const blob = new Blob([new Uint8Array(size)]);
-  return new File([blob], name, { type: "application/octet-stream" });
-}
-
 describe("useStandaloneFileUpload", () => {
   afterEach(() => {
     cleanup();
@@ -41,7 +38,7 @@ describe("useStandaloneFileUpload", () => {
           download_url: "http://example.com/test.bin",
           file_contents_unavailable_missing_permissions: false,
           is_sharepoint_file: false,
-          file_capability: { id: "other", operations: [] },
+          file_capability: FileTypeUtil.createMockFileCapability("test.bin"),
         },
       ],
     });

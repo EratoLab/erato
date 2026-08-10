@@ -11,6 +11,7 @@ import {
   fetchUploadFile,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useUploadFeature } from "@/providers/FeatureConfigProvider";
+import { makeFileWithSize } from "@/test/fileFixtures";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { UploadTooLargeError } from "../errors";
@@ -454,11 +455,6 @@ describe("useFileDropzone", () => {
   describe("file size preflight", () => {
     const CUSTOM_LIMIT = 15 * MiB;
 
-    function makeFileWithSize(name: string, size: number): File {
-      const blob = new Blob([new Uint8Array(size)]);
-      return new File([blob], name, { type: "application/octet-stream" });
-    }
-
     beforeEach(() => {
       vi.mocked(useUploadFeature).mockReturnValue({
         enabled: true,
@@ -510,9 +506,11 @@ describe("useFileDropzone", () => {
       );
 
       // Use a PDF so it passes the capability check in the mock
-      const exactBytes = new Uint8Array(CUSTOM_LIMIT);
-      const blob = new Blob([exactBytes], { type: "application/pdf" });
-      const exactFile = new File([blob], "exact.pdf", { type: "application/pdf" });
+      const exactFile = makeFileWithSize(
+        "exact.pdf",
+        CUSTOM_LIMIT,
+        "application/pdf",
+      );
 
       await act(async () => {
         await result.current.uploadFiles([exactFile]);
@@ -567,9 +565,11 @@ describe("useFileDropzone", () => {
       );
 
       // Use a PDF so it passes the capability check in the mock
-      const validBytes = new Uint8Array(CUSTOM_LIMIT - 1);
-      const blob = new Blob([validBytes], { type: "application/pdf" });
-      const validFile = new File([blob], "valid.pdf", { type: "application/pdf" });
+      const validFile = makeFileWithSize(
+        "valid.pdf",
+        CUSTOM_LIMIT - 1,
+        "application/pdf",
+      );
 
       await act(async () => {
         await result.current.uploadFiles([validFile]);

@@ -857,7 +857,10 @@ export const AddinChatInput = forwardRef<
         // Preflight: reject any batch containing an oversized file before
         // constructing FormData or making any network request.
         if (globalMaxSizeBytes > 0) {
-          const sizeValidation = validateFileSizes(filesToUpload, globalMaxSizeBytes);
+          const sizeValidation = validateFileSizes(
+            filesToUpload,
+            globalMaxSizeBytes,
+          );
           if (!sizeValidation.valid) {
             setEmailUploadError(new UploadTooLargeError(maxSizeFormatted));
             uploadFailed = true;

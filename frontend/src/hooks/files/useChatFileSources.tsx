@@ -24,7 +24,6 @@ import { useDropzone } from "react-dropzone";
 import { CloudLinkError, UploadTooLargeError } from "@/hooks/files/errors";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { useFileUploadWithTokenCheck } from "@/hooks/files/useFileUploadWithTokenCheck";
-import { validateFileSizes } from "@/utils/validateFileSizes";
 import {
   useCreateChat,
   useLinkFile,
@@ -35,6 +34,7 @@ import {
 } from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
 import { DEFAULT_MAX_FILES_PER_MESSAGE } from "@/utils/fileUploadLimits";
+import { validateFileSizes } from "@/utils/validateFileSizes";
 
 import type { AddMenuActionItem } from "@/components/ui/Chat/ChatInputAddMenu";
 import type { CloudFilePickerModalProps } from "@/components/ui/FileUpload/CloudFilePickerModal";
