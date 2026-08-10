@@ -10,10 +10,15 @@ import {
   useCreateChat,
   fetchUploadFile,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { useUploadFeature } from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
+import { UploadTooLargeError } from "../errors";
 import { useFileDropzone } from "../useFileDropzone";
 import { useFileUploadStore } from "../useFileUploadStore";
+
+const MiB = 1024 * 1024;
+const DEFAULT_MAX_SIZE = 20 * MiB;
 
 // Mock the API hook
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
@@ -24,7 +29,11 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
 
 // Mock FeatureConfigProvider
 vi.mock("@/providers/FeatureConfigProvider", () => ({
-  useUploadFeature: vi.fn(() => ({ enabled: true })),
+  useUploadFeature: vi.fn(() => ({
+    enabled: true,
+    maxSizeBytes: DEFAULT_MAX_SIZE,
+    maxSizeFormatted: "20 MB",
+  })),
 }));
 
 // Mock FileCapabilitiesProvider
@@ -440,5 +449,134 @@ describe("useFileDropzone", () => {
       }),
     );
     expect(useFileUploadStore.getState().silentChatId).toBe("silent-chat-id");
+  });
+
+  describe("file size preflight", () => {
+    const CUSTOM_LIMIT = 15 * MiB;
+
+    function makeFileWithSize(name: string, size: number): File {
+      const blob = new Blob([new Uint8Array(size)]);
+      return new File([blob], name, { type: "application/octet-stream" });
+    }
+
+    beforeEach(() => {
+      vi.mocked(useUploadFeature).mockReturnValue({
+        enabled: true,
+        maxSizeBytes: CUSTOM_LIMIT,
+        maxSizeFormatted: "15 MiB",
+      });
+    });
+
+    it("does not call fetchUploadFile or useCreateChat when a file is oversized", async () => {
+      const mockFetchUploadFile = vi.mocked(fetchUploadFile);
+
+      const { result } = renderHook(() =>
+        useFileDropzone({ chatId: null, multiple: true }),
+      );
+
+      const oversizedFile = makeFileWithSize("big.bin", CUSTOM_LIMIT + 1);
+
+      await act(async () => {
+        await result.current.uploadFiles([oversizedFile]);
+      });
+
+      expect(mockFetchUploadFile).not.toHaveBeenCalled();
+      expect(mockCreateChatMutateAsync).not.toHaveBeenCalled();
+    });
+
+    it("sets an UploadTooLargeError with the formatted limit on size rejection", async () => {
+      const { result } = renderHook(() =>
+        useFileDropzone({ chatId: "existing-chat-id" }),
+      );
+
+      const oversizedFile = makeFileWithSize("big.bin", CUSTOM_LIMIT + 1);
+
+      await act(async () => {
+        await result.current.uploadFiles([oversizedFile]);
+      });
+
+      expect(result.current.error).toBeInstanceOf(UploadTooLargeError);
+      expect(result.current.error?.message).toContain("15 MiB");
+    });
+
+    it("accepts a file exactly at the limit", async () => {
+      const mockFetchUploadFile = vi.mocked(fetchUploadFile);
+      mockFetchUploadFile.mockResolvedValue({
+        files: [createMockUploadedFile("file1", "exact.pdf")],
+      });
+
+      const { result } = renderHook(() =>
+        useFileDropzone({ chatId: "existing-chat-id" }),
+      );
+
+      // Use a PDF so it passes the capability check in the mock
+      const exactBytes = new Uint8Array(CUSTOM_LIMIT);
+      const blob = new Blob([exactBytes], { type: "application/pdf" });
+      const exactFile = new File([blob], "exact.pdf", { type: "application/pdf" });
+
+      await act(async () => {
+        await result.current.uploadFiles([exactFile]);
+      });
+
+      expect(mockFetchUploadFile).toHaveBeenCalledTimes(1);
+      expect(result.current.error).toBeNull();
+    });
+
+    it("rejects the entire batch when one file is oversized, uploading nothing", async () => {
+      const mockFetchUploadFile = vi.mocked(fetchUploadFile);
+
+      const { result } = renderHook(() =>
+        useFileDropzone({ chatId: "existing-chat-id", multiple: true }),
+      );
+
+      const files = [
+        makeFileWithSize("ok.bin", CUSTOM_LIMIT),
+        makeFileWithSize("toobig.bin", CUSTOM_LIMIT + 1),
+      ];
+
+      await act(async () => {
+        await result.current.uploadFiles(files);
+      });
+
+      expect(mockFetchUploadFile).not.toHaveBeenCalled();
+      expect(result.current.error).toBeInstanceOf(UploadTooLargeError);
+    });
+
+    it("does not set isUploading to true when files are rejected by preflight", async () => {
+      const { result } = renderHook(() =>
+        useFileDropzone({ chatId: "existing-chat-id" }),
+      );
+
+      const oversizedFile = makeFileWithSize("big.bin", CUSTOM_LIMIT + 1);
+
+      await act(async () => {
+        await result.current.uploadFiles([oversizedFile]);
+      });
+
+      expect(result.current.isUploading).toBe(false);
+    });
+
+    it("still uploads valid files when they are within the limit", async () => {
+      const mockFetchUploadFile = vi.mocked(fetchUploadFile);
+      mockFetchUploadFile.mockResolvedValue({
+        files: [createMockUploadedFile("file1", "valid.pdf")],
+      });
+
+      const { result } = renderHook(() =>
+        useFileDropzone({ chatId: "existing-chat-id" }),
+      );
+
+      // Use a PDF so it passes the capability check in the mock
+      const validBytes = new Uint8Array(CUSTOM_LIMIT - 1);
+      const blob = new Blob([validBytes], { type: "application/pdf" });
+      const validFile = new File([blob], "valid.pdf", { type: "application/pdf" });
+
+      await act(async () => {
+        await result.current.uploadFiles([validFile]);
+      });
+
+      expect(mockFetchUploadFile).toHaveBeenCalledTimes(1);
+      expect(result.current.error).toBeNull();
+    });
   });
 });

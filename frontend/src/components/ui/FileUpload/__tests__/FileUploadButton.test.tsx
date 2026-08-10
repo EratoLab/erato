@@ -1,7 +1,45 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { render, renderHook, screen } from "@testing-library/react";
+import { describe, expect, it, vi, beforeEach } from "vitest";
+import { useDropzone } from "react-dropzone";
+
+import { UploadTooLargeError } from "@/hooks/files/errors";
 
 import { FileUploadButton } from "../FileUploadButton";
+
+const MiB = 1024 * 1024;
+const DEFAULT_LIMIT = 20 * MiB;
+
+vi.mock("@/providers/FeatureConfigProvider", () => ({
+  useUploadFeature: vi.fn(() => ({
+    enabled: true,
+    maxSizeBytes: DEFAULT_LIMIT,
+    maxSizeFormatted: "20 MB",
+  })),
+}));
+
+// Capture the onDrop and maxSize that react-dropzone receives
+let capturedOnDrop: (
+  accepted: File[],
+  rejected: { file: File; errors: { code: string; message: string }[] }[],
+) => void = () => {};
+let capturedMaxSize: number | undefined;
+
+vi.mock("react-dropzone", () => ({
+  useDropzone: vi.fn((opts) => {
+    capturedOnDrop = opts.onDrop ?? (() => {});
+    capturedMaxSize = opts.maxSize;
+    return {
+      getRootProps: vi.fn(() => ({})),
+      getInputProps: vi.fn(() => ({})),
+      open: vi.fn(),
+    };
+  }),
+}));
+
+function makeFileWithSize(name: string, size: number): File {
+  const blob = new Blob([new Uint8Array(size)]);
+  return new File([blob], name, { type: "application/octet-stream" });
+}
 
 /**
  * The idle button used to be a hand-rolled <button> whose hover swapped in a
@@ -10,6 +48,12 @@ import { FileUploadButton } from "../FileUploadButton";
  * palette literals, so a regression shows up here rather than in a theme.
  */
 describe("FileUploadButton", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    capturedOnDrop = () => {};
+    capturedMaxSize = undefined;
+  });
+
   it("uses shared icon geometry sized to match its composer siblings", () => {
     render(<FileUploadButton label="Attach" iconOnly />);
 
@@ -46,5 +90,61 @@ describe("FileUploadButton", () => {
     render(<FileUploadButton label="Attach" iconOnly disabled />);
 
     expect(screen.getByRole("button", { name: "Attach" })).toBeDisabled();
+  });
+
+  describe("file size enforcement", () => {
+    it("passes the configured maxSize from useUploadFeature to useDropzone", () => {
+      render(<FileUploadButton label="Attach" iconOnly />);
+      expect(capturedMaxSize).toBe(DEFAULT_LIMIT);
+    });
+
+    it("calls onError with UploadTooLargeError when a file-too-large rejection arrives", () => {
+      const onError = vi.fn();
+      render(<FileUploadButton label="Attach" iconOnly onError={onError} />);
+
+      const rejection = {
+        file: makeFileWithSize("big.bin", DEFAULT_LIMIT + 1),
+        errors: [{ code: "file-too-large", message: "File is too large" }],
+      };
+      capturedOnDrop([], [rejection]);
+
+      expect(onError).toHaveBeenCalledTimes(1);
+      const err = onError.mock.calls[0][0];
+      expect(err).toBeInstanceOf(UploadTooLargeError);
+      expect(err.message).toContain("20 MB");
+    });
+
+    it("does not invoke performFileUpload when a size rejection occurs", () => {
+      const performFileUpload = vi.fn();
+      const onError = vi.fn();
+      render(
+        <FileUploadButton
+          label="Attach"
+          iconOnly
+          performFileUpload={performFileUpload}
+          onError={onError}
+        />,
+      );
+
+      const rejection = {
+        file: makeFileWithSize("big.bin", DEFAULT_LIMIT + 1),
+        errors: [{ code: "file-too-large", message: "File is too large" }],
+      };
+      capturedOnDrop([], [rejection]);
+
+      expect(performFileUpload).not.toHaveBeenCalled();
+    });
+
+    it("does not call onError when there are no rejections (valid drop)", () => {
+      // Verify the rejection handler is NOT triggered for a valid (non-oversized)
+      // drop by inspecting the captured callback directly.
+      const onError = vi.fn();
+      render(<FileUploadButton label="Attach" iconOnly onError={onError} />);
+
+      // No rejections → onError must not fire
+      capturedOnDrop([], []);
+
+      expect(onError).not.toHaveBeenCalled();
+    });
   });
 });
