@@ -1,10 +1,12 @@
 import { useCallback, useMemo } from "react";
 import { useDropzone } from "react-dropzone";
 
+import { UploadTooLargeError, type UploadError } from "@/hooks/files/errors";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FileType } from "@/utils/fileTypes";
+import type { FileRejection } from "react-dropzone";
 
 interface UseConversationDropzoneOptions {
   uploadFiles: (files: File[]) => Promise<FileUploadItem[] | undefined>;
@@ -18,6 +20,23 @@ interface UseConversationDropzoneOptions {
    */
   extraAcceptMimeTypes?: Record<string, string[]>;
   isUploading?: boolean;
+  /**
+   * Maximum file size in bytes. When provided, react-dropzone rejects
+   * oversized files before they reach `uploadFiles`. Pair with `onError` to
+   * surface the rejection to the user. Read from `useUploadFeature()`.
+   */
+  maxSize?: number;
+  /**
+   * Human-readable formatted maximum size (e.g. "20 MB"). Included in the
+   * `UploadTooLargeError` passed to `onError` when a file exceeds `maxSize`.
+   */
+  maxSizeFormatted?: string;
+  /**
+   * Called when the dropzone rejects a file (e.g. file-too-large). Use this
+   * to route errors into the owning upload-error state so they are visible to
+   * the user without waiting for the upload hook's own preflight.
+   */
+  onError?: (error: UploadError) => void;
 }
 
 interface ConversationDropzoneBindings {
@@ -42,19 +61,35 @@ export function useConversationDropzone({
   acceptedFileTypes,
   extraAcceptMimeTypes,
   isUploading = false,
+  maxSize,
+  maxSizeFormatted,
+  onError,
 }: UseConversationDropzoneOptions): ConversationDropzoneBindings {
   const handleDrop = useCallback(
-    (files: File[]) => {
-      if (files.length === 0) {
+    (acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
+      // Surface file-too-large rejections immediately via the onError callback
+      // so the owning component can update its error state before the upload
+      // hook's own preflight fires.
+      if (rejectedFiles.length > 0 && onError != null) {
+        const hasSizeError = rejectedFiles.some((r) =>
+          r.errors.some((e) => e.code === "file-too-large"),
+        );
+        if (hasSizeError) {
+          onError(new UploadTooLargeError(maxSizeFormatted));
+          return;
+        }
+      }
+
+      if (acceptedFiles.length === 0) {
         return;
       }
-      void uploadFiles(files).then((uploaded) => {
+      void uploadFiles(acceptedFiles).then((uploaded) => {
         if (uploaded && uploaded.length > 0) {
           onUploaded(uploaded);
         }
       });
     },
-    [onUploaded, uploadFiles],
+    [onUploaded, uploadFiles, onError, maxSizeFormatted],
   );
 
   const accept = useMemo(() => {
@@ -77,6 +112,7 @@ export function useConversationDropzone({
       accept,
       multiple: true,
       disabled: isUploading,
+      maxSize,
       noClick: true,
       noKeyboard: true,
     });

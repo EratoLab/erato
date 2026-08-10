@@ -16,6 +16,7 @@ import { createLogger } from "@/utils/debugLogger";
 import { validateFiles } from "@/utils/fileCapabilities";
 import { FileTypeUtil } from "@/utils/fileTypes";
 import { DEFAULT_MAX_FILES_PER_MESSAGE } from "@/utils/fileUploadLimits";
+import { validateFileSizes } from "@/utils/validateFileSizes";
 
 import {
   UploadTooLargeError,
@@ -122,6 +123,8 @@ interface UseFileDropzoneResult {
   open: () => void;
   /** Error message from dropzone validation or upload */
   error: UploadError | null;
+  /** Set an error without triggering an upload (e.g. from a sibling dropzone rejection). */
+  setError: (error: UploadError | null) => void;
   /** Uploaded files */
   uploadedFiles: FileUploadItem[];
   /** Whether an upload is in progress */
@@ -226,6 +229,16 @@ export function useFileDropzone({
   const uploadFiles = useCallback(
     async (files: File[]) => {
       if (disabled || isUploading || files.length === 0) return;
+
+      // Preflight: reject the entire batch if any file exceeds the configured
+      // per-file limit. This guard runs before setUploading, silent-chat
+      // creation, FormData construction, or any network request so that
+      // oversized files never reach the backend.
+      const sizeValidation = validateFileSizes(files, maxSizeBytes);
+      if (!sizeValidation.valid) {
+        setError(new UploadTooLargeError(maxSizeFormatted));
+        return;
+      }
 
       let uploadedItems: FileUploadItem[] | undefined;
 
@@ -339,6 +352,8 @@ export function useFileDropzone({
       disabled,
       multiple,
       maxFiles,
+      maxSizeBytes,
+      maxSizeFormatted,
       chatId,
       assistantId,
       chatProviderId,
@@ -415,6 +430,7 @@ export function useFileDropzone({
     isDragReject,
     open,
     error,
+    setError,
     uploadedFiles,
     isUploading,
     clearFiles,
