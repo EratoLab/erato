@@ -1,23 +1,11 @@
 import { describe, it, expect } from "vitest";
 
+import { makeFileWithSize } from "@/test/fileFixtures";
+
 import { validateFileSizes } from "../validateFileSizes";
 
 const MiB = 1024 * 1024;
 const LIMIT = 15 * MiB; // non-default limit used throughout these tests
-
-function makeFile(name: string, size: number): File {
-  // File constructor: content (Blob parts), name, options
-  return new File(["x".repeat(0)], name, { type: "text/plain" }) as File & {
-    size: number;
-  };
-}
-
-// Real File objects have immutable `.size` (set from content). Override it for
-// tests where precise sizes matter.
-function makeFileWithSize(name: string, size: number): File {
-  const blob = new Blob([new Uint8Array(size)]);
-  return new File([blob], name, { type: "application/octet-stream" });
-}
 
 describe("validateFileSizes", () => {
   describe("single file at or around the limit", () => {

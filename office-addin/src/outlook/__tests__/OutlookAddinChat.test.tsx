@@ -97,10 +97,16 @@ vi.mock("@erato/frontend/library", () => ({
     closePreviewModal: vi.fn(),
   }),
   useFacets: () => ({ data: { action_facets: [] } }),
+  useFileUploadStore: () => ({ setError: vi.fn() }),
   useFileUploadWithTokenCheck: () => ({
     uploadFiles: vi.fn(async () => []),
     uploadError: null,
     isUploading: false,
+  }),
+  useUploadFeature: () => ({
+    enabled: true,
+    maxSizeBytes: 20 * 1024 * 1024,
+    maxSizeFormatted: "20 MB",
   }),
   useMessageFeedback: () => ({
     feedbackDialogState: { isOpen: false },
