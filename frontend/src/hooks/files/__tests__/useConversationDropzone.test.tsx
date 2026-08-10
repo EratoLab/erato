@@ -1,10 +1,14 @@
 import { renderHook, act, cleanup } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { useDropzone } from "react-dropzone";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+
+import { makeFileWithSize } from "@/test/fileFixtures";
+import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { UploadTooLargeError } from "../errors";
 import { useConversationDropzone } from "../useConversationDropzone";
 
+import type { UploadError } from "../errors";
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 // Capture the onDrop callback react-dropzone receives so we can invoke it
@@ -29,11 +33,6 @@ vi.mock("react-dropzone", () => ({
 const MiB = 1024 * 1024;
 const LIMIT = 15 * MiB;
 
-function makeFileWithSize(name: string, size: number): File {
-  const blob = new Blob([new Uint8Array(size)]);
-  return new File([blob], name, { type: "application/octet-stream" });
-}
-
 function makeUploadedItem(filename: string): FileUploadItem {
   return {
     id: "id-" + filename,
@@ -41,14 +40,18 @@ function makeUploadedItem(filename: string): FileUploadItem {
     download_url: "http://example.com/" + filename,
     file_contents_unavailable_missing_permissions: false,
     is_sharepoint_file: false,
-    file_capability: { id: "other", operations: [] },
+    file_capability: FileTypeUtil.createMockFileCapability(filename),
   };
 }
 
 describe("useConversationDropzone", () => {
-  let mockUploadFiles: ReturnType<typeof vi.fn>;
-  let mockOnUploaded: ReturnType<typeof vi.fn>;
-  let mockOnError: ReturnType<typeof vi.fn>;
+  let mockUploadFiles: ReturnType<
+    typeof vi.fn<(files: File[]) => Promise<FileUploadItem[] | undefined>>
+  >;
+  let mockOnUploaded: ReturnType<
+    typeof vi.fn<(items: FileUploadItem[]) => void>
+  >;
+  let mockOnError: ReturnType<typeof vi.fn<(error: UploadError) => void>>;
 
   afterEach(() => {
     cleanup();
@@ -56,11 +59,11 @@ describe("useConversationDropzone", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUploadFiles = vi.fn();
+    mockUploadFiles = vi.fn(() =>
+      Promise.resolve([makeUploadedItem("test.bin")]),
+    );
     mockOnUploaded = vi.fn();
     mockOnError = vi.fn();
-
-    mockUploadFiles.mockResolvedValue([makeUploadedItem("test.bin")]);
   });
 
   describe("without maxSize (backward-compatible defaults)", () => {

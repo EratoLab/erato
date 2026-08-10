@@ -1,8 +1,8 @@
-import { render, renderHook, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { useDropzone } from "react-dropzone";
 
 import { UploadTooLargeError } from "@/hooks/files/errors";
+import { makeFileWithSize } from "@/test/fileFixtures";
 
 import { FileUploadButton } from "../FileUploadButton";
 
@@ -35,11 +35,6 @@ vi.mock("react-dropzone", () => ({
     };
   }),
 }));
-
-function makeFileWithSize(name: string, size: number): File {
-  const blob = new Blob([new Uint8Array(size)]);
-  return new File([blob], name, { type: "application/octet-stream" });
-}
 
 /**
  * The idle button used to be a hand-rolled <button> whose hover swapped in a
