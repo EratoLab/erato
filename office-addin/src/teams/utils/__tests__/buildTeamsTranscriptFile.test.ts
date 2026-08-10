@@ -38,9 +38,10 @@ function message(
 }
 
 function section(
-  overrides: Partial<TeamsTranscriptSection> = {},
+  overrides: Partial<Extract<TeamsTranscriptSection, { kind: "chat" }>> = {},
 ): TeamsTranscriptSection {
   return {
+    kind: "chat",
     chat,
     messages: [message()],
     selection: "whole-chat",

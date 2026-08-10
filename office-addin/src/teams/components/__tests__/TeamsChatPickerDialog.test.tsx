@@ -250,7 +250,7 @@ function fakeFetcher(
       }),
     pageChatBackwards: (args) => {
       args.onProgress?.({
-        chatId: args.chatId,
+        conversationKey: args.chatId,
         fetched: 2,
         limit: args.limit ?? 200,
         oldestCreatedDateTime: OLDEST.createdDateTime ?? null,
@@ -280,7 +280,7 @@ function blockedFetcher(): {
       ...base,
       pageChatBackwards: async (args) => {
         args.onProgress?.({
-          chatId: args.chatId,
+          conversationKey: args.chatId,
           fetched: 2,
           limit: 200,
           oldestCreatedDateTime: OLDEST.createdDateTime ?? null,

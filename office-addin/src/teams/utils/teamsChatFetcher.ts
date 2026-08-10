@@ -15,7 +15,10 @@ import {
   listTeamsChatsPage,
   searchChatMessages,
 } from "./teamsChatGraph";
-import { pageChatMessagesBackwards } from "./teamsChatPager";
+import {
+  pageChannelMessagesBackwards,
+  pageChatMessagesBackwards,
+} from "./teamsChatPager";
 import { makeGraphTokenSource } from "../../utils/graph/graphClient";
 
 import type {
@@ -110,6 +113,15 @@ export interface TeamsChannelFetcher {
     messageId: string,
     options?: TeamsGraphCallOptions,
   ): Promise<GraphChatMessage | null>;
+  pageChannelBackwards(
+    args: {
+      teamId: string;
+      channelId: string;
+      limit?: number;
+      startingAfterLink?: string | null;
+      onProgress?: (progress: ChatPagingProgress) => void;
+    } & TeamsGraphCallOptions,
+  ): Promise<PageChatMessagesResult>;
 }
 
 export function createGraphTeamsChannelFetcher(
@@ -124,5 +136,7 @@ export function createGraphTeamsChannelFetcher(
       listChannelMessagesPage(teamId, channelId, tokenSource(), options),
     getMessage: (teamId, channelId, messageId, options = {}) =>
       getChannelMessage(teamId, channelId, messageId, tokenSource(), options),
+    pageChannelBackwards: (args) =>
+      pageChannelMessagesBackwards({ ...args, tokenSource: tokenSource() }),
   };
 }

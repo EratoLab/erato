@@ -20,12 +20,13 @@ import { conversationKey } from "./teamsConversationRef";
 import { runWithConcurrency } from "../../utils/graph/graphClient";
 
 import type { TeamsTranscriptSection } from "./buildTeamsTranscriptFile";
+import type { ParsedTeamsChannel } from "./parsedTeamsChannel";
 import type {
   ParsedTeamsChat,
   ParsedTeamsMessage,
   TeamsSelfIdentity,
 } from "./parsedTeamsChat";
-import type { TeamsChatFetcher } from "./teamsChatFetcher";
+import type { TeamsChannelFetcher, TeamsChatFetcher } from "./teamsChatFetcher";
 import type { GraphChatMessage, TeamsFetchState } from "./teamsChatGraph";
 import type { TeamsChatSelection } from "./teamsChatSelection";
 
@@ -57,6 +58,10 @@ export interface CollectTeamsTranscriptArgs {
   selections: readonly TeamsChatSelection[];
   /** Chat metadata already in the browse cache, keyed by chat id. */
   knownChats?: ReadonlyMap<string, ParsedTeamsChat>;
+  /** Present only where the channel scopes were granted. */
+  channelFetcher?: TeamsChannelFetcher | null;
+  /** Channel metadata from the browse cache, keyed by `teamId/channelId`. */
+  knownChannels?: ReadonlyMap<string, ParsedTeamsChannel>;
   self?: TeamsSelfIdentity;
   limit?: number;
   onProgress?: (progress: TeamsTranscriptProgress) => void;
@@ -66,7 +71,16 @@ export interface CollectTeamsTranscriptArgs {
 export async function collectTeamsTranscript(
   args: CollectTeamsTranscriptArgs,
 ): Promise<CollectTeamsTranscriptResult> {
-  const { fetcher, selections, knownChats, self, onProgress, signal } = args;
+  const {
+    fetcher,
+    channelFetcher,
+    selections,
+    knownChats,
+    knownChannels,
+    self,
+    onProgress,
+    signal,
+  } = args;
   const limit = args.limit ?? DEFAULT_CHAT_MESSAGE_LIMIT;
   const groups = groupSelectionsByConversation(selections);
   const wholeChatRequests = expectedChatPageRequests(limit);
@@ -104,10 +118,55 @@ export async function collectTeamsTranscript(
   const tasks = groups.map((group, index) => async () => {
     let spent = 0;
     try {
-      if (group.ref.kind !== "chat") {
-        throw new Error(
-          `Unsupported conversation kind: ${group.ref.kind satisfies "channel"}`,
-        );
+      if (group.ref.kind === "channel") {
+        const ref = group.ref;
+        if (!channelFetcher) {
+          // The channel scopes were not granted; say nothing rather than
+          // attaching an empty section that looks like an empty channel.
+          outcomes[index] = "error";
+          return;
+        }
+        let counted = 0;
+        const collected = await collectChannelMessages({
+          channelFetcher,
+          ref,
+          whole: group.whole,
+          messageIds: group.messageIds,
+          limit,
+          signal,
+          onPage: (fetched, oldest) => {
+            spent = Math.min(spent + 1, groupRequests[index]);
+            requestsCompleted += 1;
+            messagesFetched += fetched - counted;
+            counted = fetched;
+            noteOldest(oldest);
+            emit();
+          },
+          onMessage: () => {
+            spent = Math.min(spent + 1, groupRequests[index]);
+            requestsCompleted += 1;
+            emit();
+          },
+        });
+        if (!group.whole) {
+          messagesFetched += collected.messages.length;
+          for (const message of collected.messages)
+            noteOldest(message.createdAt);
+        }
+        skippedCount += collected.skipped;
+        outcomes[index] = collected.state;
+        sections[index] = {
+          kind: "channel",
+          channel:
+            knownChannels?.get(`${ref.teamId}/${ref.channelId}`) ??
+            fallbackChannel(ref, group.title),
+          messages: collected.messages,
+          selection: group.whole ? "whole-chat" : "messages",
+          limit: group.whole ? limit : undefined,
+          truncated: collected.truncated,
+          skippedCount: collected.skipped,
+        };
+        return;
       }
       const chatId = group.ref.chatId;
       const chat = await resolveChat(fetcher, chatId, group.title, {
@@ -136,6 +195,7 @@ export async function collectTeamsTranscript(
         const messages = collectParsed(page.messages, chatId);
         messagesFetched += messages.length - counted;
         sections[index] = {
+          kind: "chat",
           chat,
           messages,
           selection: "whole-chat",
@@ -168,6 +228,7 @@ export async function collectTeamsTranscript(
           outcomes[index] = "partial";
         }
         sections[index] = {
+          kind: "chat",
           chat,
           messages: sortNewestFirst(messages),
           selection: "messages",
@@ -175,8 +236,8 @@ export async function collectTeamsTranscript(
         };
       }
     } catch (error) {
-      // Abort and per-chat failure both degrade to a partial transcript; the
-      // caller decides whether to offer what landed.
+      // Abort and per-conversation failure both degrade to a partial
+      // transcript; the caller decides whether to offer what landed.
       outcomes[index] = sections[index] ? "partial" : "error";
       if (!signal?.aborted) {
         console.warn(
@@ -209,6 +270,87 @@ export async function collectTeamsTranscript(
     skippedCount,
     chatsTotal: groups.length,
     chatsCompleted,
+  };
+}
+
+/**
+ * Whole-channel ingest uses the same recency window as a chat: newest pages
+ * first, stopping at the limit, so a channel with years of history costs the
+ * same as a busy chat rather than minutes of gated paging.
+ */
+function fallbackChannel(
+  ref: { teamId: string; channelId: string },
+  title: string,
+): ParsedTeamsChannel {
+  return {
+    ref: { kind: "channel", ...ref },
+    teamId: ref.teamId,
+    channelId: ref.channelId,
+    name: title,
+    teamName: "",
+    membershipType: "standard",
+    isThreaded: true,
+  };
+}
+
+async function collectChannelMessages(args: {
+  channelFetcher: TeamsChannelFetcher;
+  ref: { teamId: string; channelId: string };
+  whole: boolean;
+  messageIds: readonly string[];
+  limit: number;
+  signal?: AbortSignal;
+  onPage?: (fetched: number, oldest: string | null) => void;
+  onMessage?: () => void;
+}): Promise<{
+  messages: ParsedTeamsMessage[];
+  state: TeamsFetchState;
+  truncated: boolean;
+  skipped: number;
+}> {
+  const { channelFetcher, ref, whole, messageIds, limit, signal } = args;
+  const conversationId = `${ref.teamId}/${ref.channelId}`;
+  if (whole) {
+    const page = await channelFetcher.pageChannelBackwards({
+      teamId: ref.teamId,
+      channelId: ref.channelId,
+      limit,
+      signal,
+      onProgress: (progress) =>
+        args.onPage?.(progress.fetched, progress.oldestCreatedDateTime),
+    });
+    return {
+      messages: collectParsed(page.messages, conversationId),
+      state: page.state,
+      truncated: page.nextLink !== null,
+      skipped: 0,
+    };
+  }
+  const messages: ParsedTeamsMessage[] = [];
+  let skipped = 0;
+  for (const messageId of messageIds) {
+    const raw = await channelFetcher.getMessage(
+      ref.teamId,
+      ref.channelId,
+      messageId,
+      { signal },
+    );
+    args.onMessage?.();
+    const parsed = raw ? parseTeamsMessage(raw, conversationId) : null;
+    if (parsed) messages.push(parsed);
+    else skipped += 1;
+  }
+  const state: TeamsFetchState =
+    skipped > 0 && messages.length === 0
+      ? "error"
+      : skipped > 0
+        ? "partial"
+        : "ok";
+  return {
+    messages: sortNewestFirst(messages),
+    state,
+    truncated: false,
+    skipped,
   };
 }
 

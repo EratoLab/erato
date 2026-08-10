@@ -261,7 +261,7 @@ describe("pageChatMessagesBackwards", () => {
       limit: 200,
       transport: served.transport,
       onProgress: (progress) => {
-        expect(progress.chatId).toBe(MOCK_CHAT_ID);
+        expect(progress.conversationKey).toBe(MOCK_CHAT_ID);
         expect(progress.limit).toBe(200);
         fetched.push(progress.fetched);
       },

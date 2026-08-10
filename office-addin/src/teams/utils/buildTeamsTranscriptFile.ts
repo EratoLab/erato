@@ -8,26 +8,39 @@
  * testable.
  */
 
+import { isRestrictedChannel } from "./parsedTeamsChannel";
 import {
   buildTeamsMessageDeepLink,
   teamsMessageDeepLinkBase,
   teamsMessageDeepLinkSuffix,
 } from "./teamsDeepLink";
 
+import type { ParsedTeamsChannel } from "./parsedTeamsChannel";
 import type { ParsedTeamsChat, ParsedTeamsMessage } from "./parsedTeamsChat";
 
-export interface TeamsTranscriptSection {
-  chat: ParsedTeamsChat;
+interface TeamsTranscriptSectionBase {
   /** Newest-first, as Graph returns them. */
   messages: ParsedTeamsMessage[];
   selection: "whole-chat" | "messages";
-  /** Requested window for a whole-chat ingest. */
+  /** Requested window for a whole-conversation ingest. */
   limit?: number;
   /** Older history exists beyond what was fetched. */
   truncated?: boolean;
   /** Messages that could not be loaded (deleted between search and attach). */
   skippedCount?: number;
 }
+
+/**
+ * Chats and channels render differently on purpose: attaching a private
+ * conversation and attaching a team-wide one are different acts, so the
+ * heading says which one this is rather than leaving it to be inferred.
+ */
+export type TeamsTranscriptSection =
+  | (TeamsTranscriptSectionBase & { kind: "chat"; chat: ParsedTeamsChat })
+  | (TeamsTranscriptSectionBase & {
+      kind: "channel";
+      channel: ParsedTeamsChannel;
+    });
 
 export interface TeamsTranscriptInput {
   sections: TeamsTranscriptSection[];
@@ -53,7 +66,14 @@ export function buildTeamsTranscriptFilename(
   sections: TeamsTranscriptSection[],
 ): string {
   if (sections.length > 1) return `teams-chats-${sections.length}.md`;
-  const title = sections[0]?.chat.title.trim() ?? "";
+  const first = sections[0];
+  const title = (
+    first === undefined
+      ? ""
+      : first.kind === "chat"
+        ? first.chat.title
+        : first.channel.name
+  ).trim();
   if (title.length === 0) return "teams-chat.md";
   const slug = title
     .replace(/[\\/:*?"<>|\s_-]+/g, "_")
@@ -78,19 +98,30 @@ function renderSection(
   timeZone: string,
 ): string {
   const lines: string[] = [];
-  lines.push(`# Teams chat: ${section.chat.title}`);
-  if (section.chat.participants.length > 0) {
-    const participants = section.chat.participants.join(", ");
+  if (section.kind === "channel") {
     lines.push(
-      `Participants: ${participants}${section.chat.participantsTruncated ? " (and possibly others)" : ""}`,
+      `# Teams channel: ${section.channel.name} · ${section.channel.teamName}`,
     );
+    if (isRestrictedChannel(section.channel)) {
+      lines.push(
+        `Audience: ${section.channel.membershipType} channel — not visible to the whole team.`,
+      );
+    }
+  } else {
+    lines.push(`# Teams chat: ${section.chat.title}`);
+    if (section.chat.participants.length > 0) {
+      const participants = section.chat.participants.join(", ");
+      lines.push(
+        `Participants: ${participants}${section.chat.participantsTruncated ? " (and possibly others)" : ""}`,
+      );
+    }
   }
   lines.push(
     `Exported: ${formatDateTime(input.exportedAt ?? new Date(), timeZone)}`,
   );
   lines.push(includedLine(section, timeZone));
   const wholeChat = section.selection === "whole-chat";
-  if (wholeChat) {
+  if (wholeChat && section.kind === "chat") {
     lines.push(
       `Message links: ${teamsMessageDeepLinkBase(section.chat.chatId)}/{id}${teamsMessageDeepLinkSuffix()} — substitute the id shown on each message.`,
     );

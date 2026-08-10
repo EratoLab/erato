@@ -7,10 +7,13 @@ import {
 } from "../../../test/mocks/teams/graph";
 import { collectTeamsTranscript } from "../collectTeamsTranscript";
 import { parseTeamsChat } from "../parsedTeamsChat";
-import { chatRef } from "../teamsConversationRef";
+import { channelRef, chatRef } from "../teamsConversationRef";
 
 import type { ParsedTeamsChat } from "../parsedTeamsChat";
-import type { TeamsChatFetcher } from "../teamsChatFetcher";
+import type {
+  TeamsChannelFetcher,
+  TeamsChatFetcher,
+} from "../teamsChatFetcher";
 import type { TeamsChatSelection } from "../teamsChatSelection";
 
 const OTHER_CHAT_ID = "19:def456@thread.v2";
@@ -18,6 +21,31 @@ const OTHER_CHAT_ID = "19:def456@thread.v2";
 const knownChats = new Map<string, ParsedTeamsChat>([
   [MOCK_CHAT_ID, parseTeamsChat(mockGraphChat())!],
 ]);
+
+function fakeChannelFetcher(overrides: Partial<TeamsChannelFetcher> = {}) {
+  const fetcher: TeamsChannelFetcher = {
+    listJoinedTeams: vi.fn(() =>
+      Promise.resolve({ teams: [], state: "ok" as const }),
+    ),
+    listChannels: vi.fn(() =>
+      Promise.resolve({ channels: [], state: "ok" as const }),
+    ),
+    listMessagesPage: vi.fn(() =>
+      Promise.resolve({ messages: [], nextLink: null, status: 200, ok: true }),
+    ),
+    getMessage: vi.fn(() => Promise.resolve(null)),
+    pageChannelBackwards: vi.fn(() =>
+      Promise.resolve({
+        messages: [],
+        nextLink: null,
+        oldestCreatedDateTime: null,
+        state: "ok" as const,
+      }),
+    ),
+    ...overrides,
+  };
+  return fetcher;
+}
 
 function fakeFetcher(overrides: Partial<TeamsChatFetcher> = {}) {
   const fetcher: TeamsChatFetcher = {
@@ -193,7 +221,8 @@ describe("collectTeamsTranscript", () => {
     });
 
     expect(getChat).toHaveBeenCalledWith(OTHER_CHAT_ID, expect.anything());
-    expect(result.sections[0].chat.title).toBe("Release train");
+    const first = result.sections[0];
+    expect(first?.kind === "chat" && first.chat.title).toBe("Release train");
   });
 
   it("reports progress against a request denominator known before fetching", async () => {
@@ -224,13 +253,13 @@ describe("collectTeamsTranscript", () => {
     const pageChatBackwards = vi.fn(
       (args: Parameters<TeamsChatFetcher["pageChatBackwards"]>[0]) => {
         args.onProgress?.({
-          chatId: args.chatId,
+          conversationKey: args.chatId,
           fetched: 1,
           limit: 200,
           oldestCreatedDateTime: "2026-03-03T09:14:00Z",
         });
         args.onProgress?.({
-          chatId: args.chatId,
+          conversationKey: args.chatId,
           fetched: 2,
           limit: 200,
           oldestCreatedDateTime: "2026-03-01T09:14:00Z",
@@ -303,6 +332,56 @@ describe("collectTeamsTranscript", () => {
       fetcher: fakeFetcher(),
       selections: [messageSelection("gone")],
       knownChats,
+    });
+
+    expect(result.sections).toEqual([]);
+    expect(result.state).toBe("error");
+  });
+});
+
+describe("channels", () => {
+  const channelSelection = {
+    kind: "conversation" as const,
+    ref: channelRef("team-1", "chan-1"),
+    title: "Test Channel 1",
+  };
+
+  it("pages a whole channel under the same recency limit as a chat", async () => {
+    const pageChannelBackwards = vi.fn(() =>
+      Promise.resolve({
+        messages: [mockGraphChatMessage({ id: "chan-msg-1" })],
+        nextLink: "more",
+        oldestCreatedDateTime: "2026-08-10T09:15:00Z",
+        state: "ok" as const,
+      }),
+    );
+
+    const result = await collectTeamsTranscript({
+      fetcher: fakeFetcher(),
+      channelFetcher: fakeChannelFetcher({ pageChannelBackwards }),
+      selections: [channelSelection],
+      limit: 200,
+    });
+
+    expect(pageChannelBackwards).toHaveBeenCalledWith(
+      expect.objectContaining({
+        teamId: "team-1",
+        channelId: "chan-1",
+        limit: 200,
+      }),
+    );
+    const section = result.sections[0];
+    expect(section?.kind).toBe("channel");
+    // nextLink present means older history was left behind, not lost silently.
+    expect(section?.truncated).toBe(true);
+    expect(result.messageCount).toBe(1);
+  });
+
+  it("reports an error instead of an empty channel when consent is missing", async () => {
+    const result = await collectTeamsTranscript({
+      fetcher: fakeFetcher(),
+      channelFetcher: null,
+      selections: [channelSelection],
     });
 
     expect(result.sections).toEqual([]);

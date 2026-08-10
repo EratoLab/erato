@@ -4,7 +4,11 @@
  * 1 rps against a single chat, so a fan-out would only queue behind itself.
  */
 
-import { CHAT_MESSAGE_PAGE_SIZE, listChatMessagesPage } from "./teamsChatGraph";
+import {
+  CHAT_MESSAGE_PAGE_SIZE,
+  listChannelMessagesPage,
+  listChatMessagesPage,
+} from "./teamsChatGraph";
 
 import type {
   GraphChatMessage,
@@ -33,7 +37,7 @@ export function expectedChatPageRequests(limit: number): number {
 }
 
 export interface ChatPagingProgress {
-  chatId: string;
+  conversationKey: string;
   fetched: number;
   limit: number;
   oldestCreatedDateTime: string | null;
@@ -47,37 +51,33 @@ export interface PageChatMessagesResult {
   state: TeamsFetchState;
 }
 
-export async function pageChatMessagesBackwards(
-  args: {
-    chatId: string;
-    tokenSource: GraphTokenSource;
-    limit?: number;
-    /** Continuation for "load earlier"; omit to start from the newest page. */
-    startingAfterLink?: string | null;
-    onProgress?: (progress: ChatPagingProgress) => void;
-  } & TeamsGraphCallOptions,
-): Promise<PageChatMessagesResult> {
-  const {
-    chatId,
-    tokenSource,
-    limit = DEFAULT_CHAT_MESSAGE_LIMIT,
-    startingAfterLink,
-    onProgress,
-    signal,
-    transport,
-  } = args;
+type PageFetcher = (nextLink: string | null) => Promise<{
+  ok: boolean;
+  messages: GraphChatMessage[];
+  nextLink: string | null;
+}>;
 
+/**
+ * Walks a conversation backwards until the limit is reached. Sequential by
+ * construction: the per-conversation gate bounds us to one page per second, so
+ * there is nothing to gain from overlapping pages of the same conversation.
+ */
+async function pageBackwards(args: {
+  conversationKey: string;
+  fetchPage: PageFetcher;
+  limit: number;
+  startingAfterLink?: string | null;
+  onProgress?: (progress: ChatPagingProgress) => void;
+}): Promise<PageChatMessagesResult> {
+  const { conversationKey, fetchPage, limit, startingAfterLink, onProgress } =
+    args;
   const messages: GraphChatMessage[] = [];
   let nextLink: string | null = startingAfterLink ?? null;
   let pages = 0;
   let state: TeamsFetchState = "ok";
 
   do {
-    const page = await listChatMessagesPage(chatId, tokenSource, {
-      nextLink,
-      signal,
-      transport,
-    });
+    const page = await fetchPage(nextLink);
     if (!page.ok) {
       state = pages === 0 ? "error" : "partial";
       break;
@@ -86,7 +86,7 @@ export async function pageChatMessagesBackwards(
     nextLink = page.nextLink;
     pages += 1;
     onProgress?.({
-      chatId,
+      conversationKey,
       fetched: messages.length,
       limit,
       oldestCreatedDateTime: oldestCreatedDateTime(messages),
@@ -103,6 +103,56 @@ export async function pageChatMessagesBackwards(
     oldestCreatedDateTime: oldestCreatedDateTime(messages.slice(0, limit)),
     state,
   };
+}
+
+export async function pageChatMessagesBackwards(
+  args: {
+    chatId: string;
+    tokenSource: GraphTokenSource;
+    limit?: number;
+    /** Continuation for "load earlier"; omit to start from the newest page. */
+    startingAfterLink?: string | null;
+    onProgress?: (progress: ChatPagingProgress) => void;
+  } & TeamsGraphCallOptions,
+): Promise<PageChatMessagesResult> {
+  const { chatId, tokenSource, signal, transport } = args;
+  return pageBackwards({
+    conversationKey: chatId,
+    limit: args.limit ?? DEFAULT_CHAT_MESSAGE_LIMIT,
+    startingAfterLink: args.startingAfterLink,
+    onProgress: args.onProgress,
+    fetchPage: (nextLink) =>
+      listChatMessagesPage(chatId, tokenSource, {
+        nextLink,
+        signal,
+        transport,
+      }),
+  });
+}
+
+export async function pageChannelMessagesBackwards(
+  args: {
+    teamId: string;
+    channelId: string;
+    tokenSource: GraphTokenSource;
+    limit?: number;
+    startingAfterLink?: string | null;
+    onProgress?: (progress: ChatPagingProgress) => void;
+  } & TeamsGraphCallOptions,
+): Promise<PageChatMessagesResult> {
+  const { teamId, channelId, tokenSource, signal, transport } = args;
+  return pageBackwards({
+    conversationKey: `${teamId}/${channelId}`,
+    limit: args.limit ?? DEFAULT_CHAT_MESSAGE_LIMIT,
+    startingAfterLink: args.startingAfterLink,
+    onProgress: args.onProgress,
+    fetchPage: (nextLink) =>
+      listChannelMessagesPage(teamId, channelId, tokenSource, {
+        nextLink,
+        signal,
+        transport,
+      }),
+  });
 }
 
 function oldestCreatedDateTime(messages: GraphChatMessage[]): string | null {
