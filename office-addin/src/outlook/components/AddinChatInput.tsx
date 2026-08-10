@@ -1,9 +1,12 @@
 import {
   FileTypeUtil,
   GroupedFileAttachmentsPreview,
+  UploadTooLargeError,
   fetchUploadFile,
   getIdToken,
+  isUploadTooLarge,
   useUploadFeature,
+  validateFileSizes,
   type ChatInputControlsHandle,
   type ChatModel,
   type FileAttachmentGroup,
@@ -267,6 +270,7 @@ export const AddinChatInput = forwardRef<
   } = useOutlookEmailSource();
   const { maxSizeBytes: globalMaxSizeBytes, maxSizeFormatted } =
     useUploadFeature();
+  const [emailUploadError, setEmailUploadError] = useState<Error | null>(null);
   // Drop-staged emails are always user-driven, so they bypass the
   // `showSuggestedEmailSource` gate (which is for the auto-suggest of the
   // currently-open email when the chat is still fresh). Without this the
@@ -815,6 +819,7 @@ export const AddinChatInput = forwardRef<
       }
 
       setIsUploadingEmail(true);
+      setEmailUploadError(null);
       let resolvedFileIds: string[] = [];
       let uploadFailed = false;
 
@@ -839,27 +844,45 @@ export const AddinChatInput = forwardRef<
           return;
         }
 
-        const formData = new FormData();
-        filesToUpload.forEach((file) => {
-          formData.append("file", file, file.name);
-        });
+        // Preflight: reject any batch containing an oversized file before
+        // constructing FormData or making any network request.
+        if (globalMaxSizeBytes > 0) {
+          const sizeValidation = validateFileSizes(filesToUpload, globalMaxSizeBytes);
+          if (!sizeValidation.valid) {
+            setEmailUploadError(new UploadTooLargeError(maxSizeFormatted));
+            uploadFailed = true;
+            // Fall through: message is sent without the file IDs. The chips
+            // remain so the user can dismiss the oversized file and retry.
+          }
+        }
 
-        const idToken = getIdToken();
-        const result = await fetchUploadFile({
-          queryParams: chatId ? { chat_id: chatId } : {},
-          body: formData as never,
-          headers: {
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
-        });
+        if (!uploadFailed) {
+          const formData = new FormData();
+          filesToUpload.forEach((file) => {
+            formData.append("file", file, file.name);
+          });
 
-        resolvedFileIds = result.files.map((file) => file.id);
+          const idToken = getIdToken();
+          const result = await fetchUploadFile({
+            queryParams: chatId ? { chat_id: chatId } : {},
+            body: formData as never,
+            headers: {
+              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+            },
+          });
+
+          resolvedFileIds = result.files.map((file) => file.id);
+        }
       } catch (error) {
         uploadFailed = true;
-        console.warn(
-          "Failed to upload Outlook email source files, sending without them:",
-          error,
-        );
+        if (isUploadTooLarge(error)) {
+          setEmailUploadError(new UploadTooLargeError(maxSizeFormatted));
+        } else {
+          console.warn(
+            "Failed to upload Outlook email source files, sending without them:",
+            error,
+          );
+        }
       } finally {
         setIsUploadingEmail(false);
       }
@@ -891,12 +914,14 @@ export const AddinChatInput = forwardRef<
       composeSelection.data,
       composeSelection.sourceProperty,
       draftBodyText,
+      globalMaxSizeBytes,
       hasActiveSelection,
       isAppointmentCompose,
       isDraftContextIncluded,
       itemIdentity,
       lastSchedulingSignalAt,
       mailItem,
+      maxSizeFormatted,
       onEmailSourceDropsSent,
       replyFromReadAvailable,
       resolveSelectedFilesForSend,
@@ -1027,6 +1052,7 @@ export const AddinChatInput = forwardRef<
         ref={ref}
         chatId={chatId}
         {...chatInputProps}
+        uploadError={emailUploadError ?? chatInputProps.uploadError}
         onSendMessage={(message, inputFileIds, modelId, selectedFacetIds) => {
           void wrappedOnSendMessage(
             message,
