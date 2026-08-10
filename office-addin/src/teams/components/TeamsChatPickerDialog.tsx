@@ -21,6 +21,7 @@ import {
 } from "../hooks/useTeamsChatSearch";
 import { useTeamsChatTitles } from "../hooks/useTeamsChatTitles";
 import { useTeamsChatPicker } from "../providers/TeamsChatPickerProvider";
+import { filterTeamsChats } from "../utils/filterTeamsChats";
 import { splitSearchSummaryHighlights } from "../utils/teamsChatGraph";
 import { MAX_SELECTED_MESSAGES } from "../utils/teamsChatSelection";
 
@@ -58,6 +59,11 @@ function TeamsChatPickerDialogBody({
     isSearching ? null : activeChatId,
   );
   const search = useTeamsChatSearch(picker.fetcher, isSearching ? trimmed : "");
+
+  const chatMatches = useMemo(
+    () => filterTeamsChats(picker.chatList.chats, query),
+    [picker.chatList.chats, query],
+  );
 
   const unknownChatIds = useMemo(
     () =>
@@ -119,11 +125,11 @@ function TeamsChatPickerDialogBody({
             onChange={(event) => setQuery(event.target.value)}
             placeholder={t({
               id: "officeAddin.teams.picker.searchPlaceholder",
-              message: "Search messages",
+              message: "Filter chats or search messages",
             })}
             aria-label={t({
               id: "officeAddin.teams.picker.searchLabel",
-              message: "Search Teams messages",
+              message: "Filter Teams chats or search messages",
             })}
           />
           {query.length > 0 && (
@@ -147,26 +153,53 @@ function TeamsChatPickerDialogBody({
         )}
 
         <div className="min-h-0 flex-1 divide-y divide-theme-border overflow-y-auto">
-          {showShortQueryHint ? (
-            <p className="px-2 py-3 text-xs text-theme-fg-muted">
-              {t({
-                id: "officeAddin.teams.picker.shortQuery",
-                message: "Type at least 3 characters to search messages.",
-              })}
-            </p>
-          ) : isSearching ? (
-            renderSearchList()
-          ) : activeChatId ? (
-            renderMessageList(activeChatId)
-          ) : (
-            renderChatList()
-          )}
+          {liveLength > 0
+            ? renderQueryResults()
+            : activeChatId
+              ? renderMessageList(activeChatId)
+              : renderChatList()}
         </div>
 
         {renderFooter()}
       </div>
     </ModalBase>
   );
+
+  function renderQueryResults(): ReactNode {
+    return (
+      <>
+        <SectionHeading>
+          {t({ id: "officeAddin.teams.picker.chatsSection", message: "Chats" })}
+        </SectionHeading>
+        {chatMatches.length === 0 ? (
+          <p className="px-3 py-2 text-xs text-theme-fg-muted">
+            {t({
+              id: "officeAddin.teams.picker.noChatMatches",
+              message: "No chat or person matches that name.",
+            })}
+          </p>
+        ) : (
+          chatMatches.map((chat) => renderChatRow(chat))
+        )}
+        <SectionHeading>
+          {t({
+            id: "officeAddin.teams.picker.messagesSection",
+            message: "Messages",
+          })}
+        </SectionHeading>
+        {showShortQueryHint ? (
+          <p className="px-3 py-2 text-xs text-theme-fg-muted">
+            {t({
+              id: "officeAddin.teams.picker.shortQuery",
+              message: "Type at least 3 characters to search messages.",
+            })}
+          </p>
+        ) : (
+          renderSearchList()
+        )}
+      </>
+    );
+  }
 
   function renderChatList(): ReactNode {
     const list = picker.chatList;
@@ -589,6 +622,14 @@ function BuildProgress({ picker }: { picker: TeamsChatPickerContextValue }) {
             })}
       </p>
     </div>
+  );
+}
+
+function SectionHeading({ children }: { children: ReactNode }) {
+  return (
+    <p className="px-3 pb-1 pt-2 text-xs font-medium uppercase tracking-wide text-theme-fg-muted">
+      {children}
+    </p>
   );
 }
 

@@ -1153,6 +1153,11 @@ msgstr "Nie udało się wczytać czatów Teams."
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.chatsSection"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.clearSearch"
 msgstr "Wyczyść wyszukiwanie"
 
@@ -1190,6 +1195,16 @@ msgstr "Jednorazowo możesz załączyć maksymalnie {MAX_SELECTED_MESSAGES} poje
 #: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.messagesError"
 msgstr "Nie udało się wczytać tej rozmowy."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.messagesSection"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.noChatMatches"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx

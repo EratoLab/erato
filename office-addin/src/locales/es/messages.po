@@ -1153,6 +1153,11 @@ msgstr "No se pudieron cargar tus chats de Teams."
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.chatsSection"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.clearSearch"
 msgstr "Borrar la búsqueda"
 
@@ -1190,6 +1195,16 @@ msgstr "Puedes adjuntar hasta {MAX_SELECTED_MESSAGES} mensajes individuales a la
 #: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.messagesError"
 msgstr "No se pudo cargar esta conversación."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.messagesSection"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.noChatMatches"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx

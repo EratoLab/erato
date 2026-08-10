@@ -1153,6 +1153,11 @@ msgstr "Ihre Teams-Chats konnten nicht geladen werden."
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.chatsSection"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.clearSearch"
 msgstr "Suche löschen"
 
@@ -1190,6 +1195,16 @@ msgstr "Sie können bis zu {MAX_SELECTED_MESSAGES} einzelne Nachrichten gleichze
 #: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.messagesError"
 msgstr "Diese Unterhaltung konnte nicht geladen werden."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.messagesSection"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.noChatMatches"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx

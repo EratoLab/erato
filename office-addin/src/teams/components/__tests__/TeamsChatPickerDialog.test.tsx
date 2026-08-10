@@ -361,7 +361,9 @@ describe("TeamsChatPickerDialog", () => {
 
     expect(screen.getByRole("dialog", { name: "Teams chats" })).toBeVisible();
     expect(screen.getByText("Product sync")).toBeInTheDocument();
-    expect(screen.getByLabelText("Search Teams messages")).toHaveValue("");
+    expect(
+      screen.getByLabelText("Filter Teams chats or search messages"),
+    ).toHaveValue("");
     expect(globalThis).not.toHaveProperty("Office");
   });
 
@@ -461,7 +463,9 @@ describe("TeamsChatPickerDialog", () => {
     fireEvent.click(selectChat());
     expect(selectChat()).toBeChecked();
 
-    const field = screen.getByLabelText("Search Teams messages");
+    const field = screen.getByLabelText(
+      "Filter Teams chats or search messages",
+    );
     fireEvent.change(field, { target: { value: "sync" } });
     expect(
       await screen.findByRole("checkbox", {
@@ -474,12 +478,47 @@ describe("TeamsChatPickerDialog", () => {
     await waitFor(() => expect(selectChat()).toBeChecked());
   });
 
+  it("finds a chat by a participant's name without waiting on search", () => {
+    renderPicker();
+
+    // Two characters is below the search threshold, so nothing has been asked
+    // of Graph — the chat must still surface from the loaded list.
+    fireEvent.change(
+      screen.getByLabelText("Filter Teams chats or search messages"),
+      { target: { value: "ho" } },
+    );
+
+    expect(
+      screen.getByRole("checkbox", { name: "Select Product sync" }),
+    ).toBeInTheDocument();
+    expect(hooks.search?.hits ?? []).toHaveLength(0);
+  });
+
+  it("says so when no chat or person matches", () => {
+    renderPicker();
+
+    fireEvent.change(
+      screen.getByLabelText("Filter Teams chats or search messages"),
+      { target: { value: "nobody" } },
+    );
+
+    expect(
+      screen.getByText("No chat or person matches that name."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("checkbox", { name: "Select Product sync" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("nudges rather than searches below the minimum query length", () => {
     renderPicker();
 
-    fireEvent.change(screen.getByLabelText("Search Teams messages"), {
-      target: { value: "sy" },
-    });
+    fireEvent.change(
+      screen.getByLabelText("Filter Teams chats or search messages"),
+      {
+        target: { value: "sy" },
+      },
+    );
 
     expect(
       screen.getByText("Type at least 3 characters to search messages."),
@@ -492,9 +531,12 @@ describe("TeamsChatPickerDialog", () => {
 
     expect(screen.getByText("No Teams chats found.")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Search Teams messages"), {
-      target: { value: "sync" },
-    });
+    fireEvent.change(
+      screen.getByLabelText("Filter Teams chats or search messages"),
+      {
+        target: { value: "sync" },
+      },
+    );
 
     expect(await screen.findByText("No messages match “sync”.")).toBeVisible();
   });
