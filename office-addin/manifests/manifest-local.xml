@@ -116,9 +116,9 @@
     </Hosts>
     <Resources>
       <bt:Images>
-        <bt:Image id="icon16" DefaultValue="https://localhost:3002/assets/outline-icon-32x32.png" />
-        <bt:Image id="icon32" DefaultValue="https://localhost:3002/assets/outline-icon-32x32.png" />
-        <bt:Image id="icon80" DefaultValue="https://localhost:3002/assets/color-icon-192x192.png" />
+        <bt:Image id="icon16" DefaultValue="https://localhost:3002/assets/ribbon-icon-16.png" />
+        <bt:Image id="icon32" DefaultValue="https://localhost:3002/assets/ribbon-icon-32.png" />
+        <bt:Image id="icon80" DefaultValue="https://localhost:3002/assets/ribbon-icon-80.png" />
       </bt:Images>
       <bt:Urls>
         <bt:Url id="taskPaneUrl" DefaultValue="https://localhost:3002/office-addin/" />
@@ -214,9 +214,9 @@
       </Hosts>
       <Resources>
         <bt:Images>
-          <bt:Image id="icon16" DefaultValue="https://localhost:3002/assets/outline-icon-32x32.png" />
-          <bt:Image id="icon32" DefaultValue="https://localhost:3002/assets/outline-icon-32x32.png" />
-          <bt:Image id="icon80" DefaultValue="https://localhost:3002/assets/color-icon-192x192.png" />
+          <bt:Image id="icon16" DefaultValue="https://localhost:3002/assets/ribbon-icon-16.png" />
+          <bt:Image id="icon32" DefaultValue="https://localhost:3002/assets/ribbon-icon-32.png" />
+          <bt:Image id="icon80" DefaultValue="https://localhost:3002/assets/ribbon-icon-80.png" />
         </bt:Images>
         <bt:Urls>
           <bt:Url id="taskPaneUrl" DefaultValue="https://localhost:3002/office-addin/" />
