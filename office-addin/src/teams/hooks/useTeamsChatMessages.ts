@@ -12,6 +12,8 @@ export interface UseTeamsChatMessagesResult {
   messages: ParsedTeamsMessage[];
   isLoading: boolean;
   isError: boolean;
+  /** A later page failed while earlier ones landed — show rows plus a note. */
+  isPartial: boolean;
   /** Older history exists — the "Load earlier" affordance. */
   hasMore: boolean;
   isLoadingMore: boolean;
@@ -68,10 +70,14 @@ export function useTeamsChatMessages(
     return parseTeamsMessages(raw, chatId);
   }, [chatId, query.data]);
 
+  const pages = query.data?.pages ?? [];
+  const firstPageFailed = query.isError || pages[0]?.ok === false;
+
   return {
     messages,
     isLoading: query.isPending && enabled,
-    isError: query.isError || query.data?.pages[0]?.ok === false,
+    isError: firstPageFailed,
+    isPartial: !firstPageFailed && pages.some((page) => !page.ok),
     hasMore: query.hasNextPage,
     isLoadingMore: query.isFetchingNextPage,
     loadEarlier: () => void query.fetchNextPage(),

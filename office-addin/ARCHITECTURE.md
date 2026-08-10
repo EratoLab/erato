@@ -64,9 +64,10 @@ implement the seams listed below, and never modify the core itself.
    `installOutlookComponentRegistrations()` at module scope, before React
    renders. The registry is a mutable global, so exactly one host per loaded
    document — contributions stay route-local because only the matched lazy
-   route module is evaluated. Teams installs none. Component-kit registrations
-   are re-applied at the entry point via `applyComponentKitRegistrations()` in
-   `src/main.tsx`.
+   route module is evaluated. `src/teams/TeamsApp.tsx` mirrors this with
+   `installTeamsComponentRegistrations()`, which contributes only
+   `ChatAddMenuExtraContent`. Component-kit registrations are re-applied at the
+   entry point via `applyComponentKitRegistrations()` in `src/main.tsx`.
 6. **Platform identifier** — stamped explicitly per host, never inferred from
    a host SDK: the `platform` prop on `AddinChatProviderCore` flows into
    messaging and is sent as the `X-Erato-Platform` request header. Values:
@@ -93,7 +94,8 @@ implement the seams listed below, and never modify the core itself.
   page with the `Office` global deleted and asserts no office.js CDN script
   (`appsforoffice.microsoft.com`) is appended;
   `src/teams/__tests__/TeamsApp.test.tsx` makes the same assertions for the
-  Teams route and pins its storage key, registry emptiness and MSAL ordering;
+  Teams route and pins its storage key, MSAL ordering and the exact registry
+  contribution (the add-menu row, and no Outlook renderers);
   `src/core/__tests__/AddinSettingsDialogCore.test.tsx` asserts the settings
   core shows no host tab without a contribution.
 
@@ -164,6 +166,12 @@ use the router.
   `runGatedByChat`: Graph allows only 1 rps against a single chat, so paging one
   conversation is inherently serial and a fan-out is a bug, not a missed
   optimization.
+- Chat picker: `TeamsChatPickerProvider` sits above `NeutralAddinChatPage` and
+  owns the picker dialog plus the in-flight transcript build. It cannot live
+  under the composer's "+" popover — `AnchoredPopover` dismisses on any
+  `pointerdown` outside its panel, and a portalled dialog is a DOM sibling of
+  that panel, so it would close itself on first click. The menu row only hands
+  over the composer's `onSelectFiles` and closes the menu; the selection is
+  serialized to one markdown `File` and goes through the ordinary upload path.
 - Not shipped: production manifest distribution (`manifests/manifest.json` is
-  the local unified package) and Teams-specific chat surfaces — no component
-  registry override is installed on this route yet.
+  the local unified package).

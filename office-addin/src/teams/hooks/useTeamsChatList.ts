@@ -17,6 +17,8 @@ export interface UseTeamsChatListResult {
   chatsById: ReadonlyMap<string, ParsedTeamsChat>;
   isLoading: boolean;
   isError: boolean;
+  /** A later page failed while earlier ones landed — show rows plus a note. */
+  isPartial: boolean;
   hasMore: boolean;
   isLoadingMore: boolean;
   loadMore: () => void;
@@ -72,14 +74,15 @@ export function useTeamsChatList(
     [chats],
   );
 
-  const firstPageFailed =
-    query.isError || query.data?.pages[0]?.state === "error";
+  const pages = query.data?.pages ?? [];
+  const firstPageFailed = query.isError || pages[0]?.state === "error";
 
   return {
     chats,
     chatsById,
     isLoading: query.isPending && fetcher !== null,
     isError: firstPageFailed,
+    isPartial: !firstPageFailed && pages.some((page) => page.state === "error"),
     hasMore: query.hasNextPage,
     isLoadingMore: query.isFetchingNextPage,
     loadMore: () => void query.fetchNextPage(),

@@ -314,11 +314,11 @@ describe("Teams personal tab composition", () => {
     );
   });
 
-  it("installs no component-registry overrides, so no Outlook affordances appear", async () => {
+  it("installs only the add-menu contribution, so no Outlook affordances appear", async () => {
     renderTab();
     await screen.findByTestId("teams-message-list");
 
-    expect(Object.keys(componentRegistry)).toHaveLength(0);
+    expect(Object.keys(componentRegistry)).toEqual(["ChatAddMenuExtraContent"]);
   });
 
   it("selects chats under the Teams storage key, never the neutral one", async () => {
