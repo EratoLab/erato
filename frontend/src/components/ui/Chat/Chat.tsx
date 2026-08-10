@@ -23,6 +23,7 @@ import {
 } from "@/hooks/chat";
 import { useMessageFeedback } from "@/hooks/chat/useMessageFeedback";
 import { useConversationDropzone } from "@/hooks/files/useConversationDropzone";
+import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { useFileUploadWithTokenCheck } from "@/hooks/files/useFileUploadWithTokenCheck";
 import { useSidebar, useFilePreviewModal } from "@/hooks/ui";
 import { useChatShareLink } from "@/hooks/useChatShareLink";
@@ -33,6 +34,7 @@ import {
   useChatInputFeature,
   useChatSharingFeature,
   useSidebarFeature,
+  useUploadFeature,
 } from "@/providers/FeatureConfigProvider";
 import { createLogger } from "@/utils/debugLogger";
 
@@ -265,6 +267,9 @@ export const Chat = ({
       multiple: true,
     },
   );
+
+  const { maxSizeBytes, maxSizeFormatted } = useUploadFeature();
+  const { setError: setUploadError } = useFileUploadStore();
 
   const { profile } = useProfile();
   const { enabled: chatSharingEnabled } = useChatSharingFeature();
@@ -621,6 +626,9 @@ export const Chat = ({
     onUploaded: handleDropUploaded,
     acceptedFileTypes,
     isUploading,
+    maxSize: maxSizeBytes,
+    maxSizeFormatted,
+    onError: setUploadError,
   });
 
   if (process.env.NODE_ENV === "development") {

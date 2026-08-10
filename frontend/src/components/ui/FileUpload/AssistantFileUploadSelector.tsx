@@ -10,10 +10,13 @@ import { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 
 import { componentRegistry } from "@/config/componentRegistry";
-import { CloudLinkError } from "@/hooks/files/errors";
+import { CloudLinkError, UploadTooLargeError } from "@/hooks/files/errors";
 import { useStandaloneFileUpload } from "@/hooks/files/useStandaloneFileUpload";
 import { fetchLinkFile } from "@/lib/generated/v1betaApi/v1betaApiComponents";
-import { useCloudProvidersFeature } from "@/providers/FeatureConfigProvider";
+import {
+  useCloudProvidersFeature,
+  useUploadFeature,
+} from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { CloudFilePickerModal } from "./CloudFilePickerModal";
@@ -75,6 +78,7 @@ export const AssistantFileUploadSelector: React.FC<
 }) => {
   // Get cloud providers configuration
   const { availableProviders } = useCloudProvidersFeature();
+  const { maxSizeBytes, maxSizeFormatted } = useUploadFeature();
   const hasCloudProviders = availableProviders.length > 0;
   const hasCustomSelector =
     componentRegistry.AssistantFileSourceSelector != null;
@@ -109,7 +113,18 @@ export const AssistantFileUploadSelector: React.FC<
     getRootProps,
     getInputProps,
   } = useDropzone({
-    onDrop: (acceptedFiles) => {
+    onDrop: (acceptedFiles, rejectedFiles) => {
+      // Surface file-too-large rejections before the upload hook's preflight.
+      if (rejectedFiles.length > 0) {
+        const hasSizeError = rejectedFiles.some((r) =>
+          r.errors.some((e) => e.code === "file-too-large"),
+        );
+        if (hasSizeError) {
+          setCloudLinkError(new UploadTooLargeError(maxSizeFormatted));
+          return;
+        }
+      }
+
       if (acceptedFiles.length > 0) {
         clearErrors();
         void (async () => {
@@ -126,6 +141,7 @@ export const AssistantFileUploadSelector: React.FC<
         : undefined,
     multiple,
     disabled: disabled || externalIsUploading || isLinkingFiles,
+    maxSize: maxSizeBytes,
     noClick: true, // We'll manually open via the selector
     noKeyboard: true,
   });
