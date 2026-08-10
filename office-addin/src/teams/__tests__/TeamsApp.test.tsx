@@ -1,7 +1,7 @@
 import { componentRegistry } from "@erato/frontend/library";
 import { i18n } from "@lingui/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NEUTRAL_CURRENT_CHAT_KEY } from "../../core/AddinChatProviderCore";
@@ -373,10 +373,14 @@ describe("Teams personal tab composition", () => {
     expect(spies.sessionAuthSource).toHaveBeenCalledWith(
       expect.objectContaining({ mode: "unsupported" }),
     );
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining("nested app auth bridge"),
-      expect.objectContaining({ hostName: "Teams", hostClientType: "web" }),
-    );
+    // The warning comes from a passive effect, which can still be pending when
+    // the message list is already in the DOM.
+    await waitFor(() => {
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("nested app auth bridge"),
+        expect.objectContaining({ hostName: "Teams", hostClientType: "web" }),
+      );
+    });
   });
 
   it("maps host themes onto the system theme override", async () => {
