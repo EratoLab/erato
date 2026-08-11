@@ -205,7 +205,7 @@ async function requestGraph<T>(args: {
   }
 }
 
-async function requestGraphJson<T>(args: {
+export async function requestGraphJson<T>(args: {
   url: string;
   tokenSource: GraphTokenSource;
   gateKey?: string | null;

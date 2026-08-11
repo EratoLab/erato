@@ -164,6 +164,12 @@ vi.mock("../../hooks/useTeamsChannelFetcher", () => ({
     unavailableReason: hooks.channelFetcher ? null : "graph-unavailable",
   }),
 }));
+vi.mock("../../hooks/useTeamsFileFetcher", () => ({
+  useTeamsFileFetcher: () => ({
+    fetcher: null,
+    unavailableReason: "graph-unavailable",
+  }),
+}));
 vi.mock("../../hooks/useTeamsChannelList", () => ({
   useTeamsChannelList: () => hooks.channelList,
 }));

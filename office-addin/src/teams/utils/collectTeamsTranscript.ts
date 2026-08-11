@@ -19,8 +19,8 @@ import {
 import { groupSelectionsByConversation } from "./teamsChatSelection";
 import { conversationKey } from "./teamsConversationRef";
 import {
-  collectTeamsImageAssets,
-  planTeamsImageFetches,
+  collectTeamsMessageAssets,
+  planTeamsAssetFetches,
 } from "./teamsTranscriptAssets";
 import { runWithConcurrency } from "../../utils/graph/graphClient";
 
@@ -31,7 +31,11 @@ import type {
   ParsedTeamsMessage,
   TeamsSelfIdentity,
 } from "./parsedTeamsChat";
-import type { TeamsChannelFetcher, TeamsChatFetcher } from "./teamsChatFetcher";
+import type {
+  TeamsChannelFetcher,
+  TeamsChatFetcher,
+  TeamsFileFetcher,
+} from "./teamsChatFetcher";
 import type { GraphChatMessage, TeamsFetchState } from "./teamsChatGraph";
 import type {
   TeamsChatSelection,
@@ -75,6 +79,8 @@ export interface CollectTeamsTranscriptArgs {
   knownChats?: ReadonlyMap<string, ParsedTeamsChat>;
   /** Present only where the channel scopes were granted. */
   channelFetcher?: TeamsChannelFetcher | null;
+  /** Present only where `Files.Read.All` was granted. */
+  fileFetcher?: TeamsFileFetcher | null;
   /** Channel metadata from the browse cache, keyed by `teamId/channelId`. */
   knownChannels?: ReadonlyMap<string, ParsedTeamsChannel>;
   self?: TeamsSelfIdentity;
@@ -89,6 +95,7 @@ export async function collectTeamsTranscript(
   const {
     fetcher,
     channelFetcher,
+    fileFetcher,
     selections,
     knownChats,
     knownChannels,
@@ -292,10 +299,13 @@ export async function collectTeamsTranscript(
   );
 
   let assetFiles: File[] = [];
-  if (!signal?.aborted && planTeamsImageFetches(present) > 0) {
-    requestsTotal += planTeamsImageFetches(present);
+  const plannedAssets = signal?.aborted
+    ? 0
+    : planTeamsAssetFetches(present, fileFetcher != null);
+  if (plannedAssets > 0) {
+    requestsTotal += plannedAssets;
     emit();
-    const assets = await collectTeamsImageAssets({
+    const assets = await collectTeamsMessageAssets({
       sections: present,
       fetchImage: (section, url) =>
         section.kind === "chat"
@@ -306,6 +316,12 @@ export async function collectTeamsTranscript(
               url,
               { signal },
             ) ?? Promise.resolve(null)),
+      downloadFile: fileFetcher
+        ? (ref, maxBytes) =>
+            fileFetcher.downloadSharedFile(ref.contentUrl, maxBytes, {
+              signal,
+            })
+        : null,
       onFetched: () => {
         requestsCompleted += 1;
         emit();

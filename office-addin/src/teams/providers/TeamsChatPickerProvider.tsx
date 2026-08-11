@@ -15,6 +15,7 @@ import { useTeamsChannelList } from "../hooks/useTeamsChannelList";
 import { useTeamsChatFetcher } from "../hooks/useTeamsChatFetcher";
 import { useTeamsChatList } from "../hooks/useTeamsChatList";
 import { useTeamsDevProbe } from "../hooks/useTeamsDevProbe";
+import { useTeamsFileFetcher } from "../hooks/useTeamsFileFetcher";
 import { useTeamsTranscriptBuild } from "../hooks/useTeamsTranscriptBuild";
 import {
   DEFAULT_CHAT_MESSAGE_LIMIT,
@@ -153,6 +154,7 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
   const { userPrincipalName, userId } = useTeams();
   const { fetcher } = useTeamsChatFetcher();
   const { fetcher: channelFetcher } = useTeamsChannelFetcher();
+  const { fetcher: fileFetcher } = useTeamsFileFetcher();
   useTeamsDevProbe();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -194,7 +196,7 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
   chatsByIdRef.current = chatList.chatsById;
 
   const { build, progress, isBuilding, cancel, reset } =
-    useTeamsTranscriptBuild(fetcher, channelFetcher);
+    useTeamsTranscriptBuild(fetcher, channelFetcher, fileFetcher);
 
   const messageLimitRef = useRef(messageLimit);
   messageLimitRef.current = messageLimit;

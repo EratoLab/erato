@@ -14,6 +14,7 @@ import type {
 import type {
   TeamsChannelFetcher,
   TeamsChatFetcher,
+  TeamsFileFetcher,
 } from "../utils/teamsChatFetcher";
 import type { TeamsFetchState } from "../utils/teamsChatGraph";
 import type { TeamsChatSelection } from "../utils/teamsChatSelection";
@@ -68,6 +69,7 @@ const ABORTED_OUTCOME: TeamsTranscriptBuildOutcome = {
 export function useTeamsTranscriptBuild(
   fetcher: TeamsChatFetcher | null,
   channelFetcher: TeamsChannelFetcher | null = null,
+  fileFetcher: TeamsFileFetcher | null = null,
 ): UseTeamsTranscriptBuildResult {
   const [progress, setProgress] = useState<TeamsTranscriptProgress | null>(
     null,
@@ -112,6 +114,7 @@ export function useTeamsTranscriptBuild(
               fetcher,
               selections: args.selections,
               channelFetcher,
+              fileFetcher,
               knownChats: args.knownChats,
               knownChannels: args.knownChannels,
               self: args.self,
@@ -144,7 +147,7 @@ export function useTeamsTranscriptBuild(
         setIsBuilding(false);
       }
     },
-    [channelFetcher, fetcher],
+    [channelFetcher, fetcher, fileFetcher],
   );
 
   return { build, progress, isBuilding, cancel, reset };

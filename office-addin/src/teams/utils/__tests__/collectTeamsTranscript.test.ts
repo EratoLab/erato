@@ -348,6 +348,107 @@ describe("collectTeamsTranscript", () => {
     expect(Math.max(...totals)).toBe(Math.min(...totals) + 1);
   });
 
+  it("downloads shared files when the grant exists and stamps their markers", async () => {
+    const pageChatBackwards = vi.fn(() =>
+      Promise.resolve({
+        messages: [
+          mockGraphChatMessage({
+            id: "a",
+            body: { contentType: "text" as const, content: "see the plan" },
+            attachments: [
+              {
+                id: "att-1",
+                contentType: "reference",
+                name: "Q3 Plan.docx",
+                contentUrl: "https://contoso.sharepoint.com/q3",
+              },
+            ],
+          }),
+        ],
+        nextLink: null,
+        truncated: false,
+        oldestCreatedDateTime: "2026-03-03T09:14:00Z",
+        state: "ok" as const,
+      }),
+    );
+    const downloadSharedFile = vi.fn(() =>
+      Promise.resolve({
+        state: "ok" as const,
+        content: {
+          bytes: new TextEncoder().encode("docx-bytes").buffer,
+          contentType: "application/vnd.openxmlformats",
+        },
+      }),
+    );
+
+    const result = await collectTeamsTranscript({
+      fetcher: fakeFetcher({ pageChatBackwards }),
+      fileFetcher: { downloadSharedFile },
+      selections: [
+        {
+          kind: "conversation",
+          ref: chatRef(MOCK_CHAT_ID),
+          title: "Product sync",
+        },
+      ],
+      knownChats,
+    });
+
+    expect(downloadSharedFile).toHaveBeenCalledWith(
+      "https://contoso.sharepoint.com/q3",
+      expect.any(Number),
+      expect.anything(),
+    );
+    expect(result.assetFiles).toHaveLength(1);
+    const name = result.assetFiles[0].name;
+    expect(name).toMatch(/^teams-file-[0-9a-f]{8}-Q3_Plan\.docx$/);
+    expect(result.sections[0].messages[0].markers).toEqual([
+      `[attachment: Q3 Plan.docx — attached as ${name}]`,
+    ]);
+  });
+
+  it("leaves file markers bare without the file grant", async () => {
+    const pageChatBackwards = vi.fn(() =>
+      Promise.resolve({
+        messages: [
+          mockGraphChatMessage({
+            id: "a",
+            body: { contentType: "text" as const, content: "see the plan" },
+            attachments: [
+              {
+                id: "att-1",
+                contentType: "reference",
+                name: "Q3 Plan.docx",
+                contentUrl: "https://contoso.sharepoint.com/q3",
+              },
+            ],
+          }),
+        ],
+        nextLink: null,
+        truncated: false,
+        oldestCreatedDateTime: "2026-03-03T09:14:00Z",
+        state: "ok" as const,
+      }),
+    );
+
+    const result = await collectTeamsTranscript({
+      fetcher: fakeFetcher({ pageChatBackwards }),
+      selections: [
+        {
+          kind: "conversation",
+          ref: chatRef(MOCK_CHAT_ID),
+          title: "Product sync",
+        },
+      ],
+      knownChats,
+    });
+
+    expect(result.assetFiles).toEqual([]);
+    expect(result.sections[0].messages[0].markers).toEqual([
+      "[attachment: Q3 Plan.docx]",
+    ]);
+  });
+
   it("names a conversation while it is being fetched and clears it after", async () => {
     const getMessage = vi.fn((chatId: string, messageId: string) =>
       Promise.resolve(mockGraphChatMessage({ id: messageId, chatId })),

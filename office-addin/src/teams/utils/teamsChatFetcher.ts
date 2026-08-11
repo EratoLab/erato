@@ -22,6 +22,7 @@ import {
   pageChannelMessagesBackwards,
   pageChatMessagesBackwards,
 } from "./teamsChatPager";
+import { downloadTeamsSharedFile } from "./teamsSharedFilesGraph";
 import { makeGraphTokenSource } from "../../utils/graph/graphClient";
 
 import type {
@@ -40,6 +41,7 @@ import type {
   ChatPagingProgress,
   PageChatMessagesResult,
 } from "./teamsChatPager";
+import type { TeamsSharedFileDownload } from "./teamsSharedFilesGraph";
 import type { AcquireGraphToken } from "../../utils/graph/graphClient";
 
 export interface TeamsChatFetcher {
@@ -182,5 +184,28 @@ export function createGraphTeamsChannelFetcher(
         tokenSource(),
         options,
       ),
+  };
+}
+
+/**
+ * Shared files are a third consent decision: `Files.Read.All` is broad and
+ * admin-gated, so a tenant can have working chats and channels while file
+ * bytes stay out of reach. Callers treat a null file fetcher as "markers only".
+ */
+export interface TeamsFileFetcher {
+  downloadSharedFile(
+    contentUrl: string,
+    maxBytes: number,
+    options?: TeamsGraphCallOptions,
+  ): Promise<TeamsSharedFileDownload>;
+}
+
+export function createGraphTeamsFileFetcher(
+  acquireToken: AcquireGraphToken,
+): TeamsFileFetcher {
+  const tokenSource = () => makeGraphTokenSource(acquireToken);
+  return {
+    downloadSharedFile: (contentUrl, maxBytes, options = {}) =>
+      downloadTeamsSharedFile(contentUrl, maxBytes, tokenSource(), options),
   };
 }

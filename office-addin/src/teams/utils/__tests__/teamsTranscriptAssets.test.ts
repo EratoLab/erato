@@ -3,9 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import { MOCK_CHAT_ID } from "../../../test/mocks/teams/graph";
 import {
   MAX_IMAGE_BYTES,
+  MAX_TRANSCRIPT_FILES,
   MAX_TRANSCRIPT_IMAGES,
-  collectTeamsImageAssets,
-  planTeamsImageFetches,
+  collectTeamsMessageAssets,
+  planTeamsAssetFetches,
   stampImageMarkers,
 } from "../teamsTranscriptAssets";
 
@@ -62,7 +63,7 @@ describe("stampImageMarkers", () => {
   });
 });
 
-describe("planTeamsImageFetches", () => {
+describe("planTeamsAssetFetches", () => {
   it("counts unique fetchable urls up to the cap", () => {
     const many = Array.from({ length: MAX_TRANSCRIPT_IMAGES + 5 }, (_, i) =>
       url(`u${i}`),
@@ -73,11 +74,11 @@ describe("planTeamsImageFetches", () => {
         message({ messageId: "m2", imageUrls: many }),
       ]),
     ];
-    expect(planTeamsImageFetches(sections)).toBe(MAX_TRANSCRIPT_IMAGES);
+    expect(planTeamsAssetFetches(sections, false)).toBe(MAX_TRANSCRIPT_IMAGES);
   });
 });
 
-describe("collectTeamsImageAssets", () => {
+describe("collectTeamsMessageAssets", () => {
   it("uploads one file per distinct image and stamps every marker", async () => {
     // The same bytes behind two urls — one upload, two stamps.
     const fetchImage = vi.fn((_section, requested: string) =>
@@ -97,7 +98,11 @@ describe("collectTeamsImageAssets", () => {
       ]),
     ];
 
-    const result = await collectTeamsImageAssets({ sections, fetchImage });
+    const result = await collectTeamsMessageAssets({
+      sections,
+      fetchImage,
+      downloadFile: null,
+    });
 
     expect(fetchImage).toHaveBeenCalledTimes(2);
     expect(result.files).toHaveLength(1);
@@ -127,9 +132,10 @@ describe("collectTeamsImageAssets", () => {
       ]),
     ];
 
-    const result = await collectTeamsImageAssets({
+    const result = await collectTeamsMessageAssets({
       sections,
       fetchImage,
+      downloadFile: null,
       onFetched,
     });
 
@@ -137,5 +143,131 @@ describe("collectTeamsImageAssets", () => {
     expect(result.sections[0].messages[0].text).toBe("[image] [image]");
     // Progress accounting: exactly once per planned fetch, success or not.
     expect(onFetched).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("shared files", () => {
+  const fileRef = (name: string, contentUrl: string) => ({
+    attachmentId: `att-${name}`,
+    name,
+    contentUrl,
+  });
+  const okDownload = (text: string, contentType = "application/pdf") =>
+    Promise.resolve({
+      state: "ok" as const,
+      content: { bytes: bytesOf(text), contentType },
+    });
+
+  it("counts files in the plan only when the grant exists", () => {
+    const sections = [
+      section([
+        message({
+          imageUrls: [url("a")],
+          sharedFiles: [fileRef("plan.pdf", "https://c.sharepoint.com/p")],
+        }),
+      ]),
+    ];
+    expect(planTeamsAssetFetches(sections, false)).toBe(1);
+    expect(planTeamsAssetFetches(sections, true)).toBe(2);
+  });
+
+  it("stamps the inline marker and the appended marker with the upload name", async () => {
+    const downloadFile = vi.fn(() => okDownload("pdf-bytes"));
+    const sections = [
+      section([
+        message({
+          // Referenced in the body: the marker sits inline.
+          text: "see [attachment: Q3 Plan.docx]",
+          sharedFiles: [fileRef("Q3 Plan.docx", "https://c.sharepoint.com/q3")],
+        }),
+        message({
+          messageId: "m2",
+          // Never referenced: the marker was appended after the text.
+          text: "and this",
+          markers: ["[attachment: notes.pdf]"],
+          sharedFiles: [fileRef("notes.pdf", "https://c.sharepoint.com/notes")],
+        }),
+      ]),
+    ];
+
+    const result = await collectTeamsMessageAssets({
+      sections,
+      fetchImage: () => Promise.resolve(null),
+      downloadFile,
+    });
+
+    // Identical bytes behind both urls dedupe to one upload.
+    expect(result.files).toHaveLength(1);
+    const name = result.files[0].name;
+    expect(name).toMatch(/^teams-file-[0-9a-f]{8}-Q3_Plan\.docx$/);
+    expect(result.sections[0].messages[0].text).toBe(
+      `see [attachment: Q3 Plan.docx — attached as ${name}]`,
+    );
+    expect(result.sections[0].messages[1].markers).toEqual([
+      `[attachment: notes.pdf — attached as ${name}]`,
+    ]);
+  });
+
+  it("discloses a file refused for size instead of staying silent", async () => {
+    const downloadFile = vi.fn(() =>
+      Promise.resolve({ state: "too-large" as const }),
+    );
+    const sections = [
+      section([
+        message({
+          text: "see [attachment: video.mp4]",
+          sharedFiles: [fileRef("video.mp4", "https://c.sharepoint.com/v")],
+        }),
+      ]),
+    ];
+
+    const result = await collectTeamsMessageAssets({
+      sections,
+      fetchImage: () => Promise.resolve(null),
+      downloadFile,
+    });
+
+    expect(result.files).toEqual([]);
+    expect(result.sections[0].messages[0].text).toBe(
+      "see [attachment: video.mp4 — too large to attach]",
+    );
+  });
+
+  it("leaves markers untouched without the file grant", async () => {
+    const sections = [
+      section([
+        message({
+          text: "see [attachment: plan.pdf]",
+          sharedFiles: [fileRef("plan.pdf", "https://c.sharepoint.com/p")],
+        }),
+      ]),
+    ];
+
+    const result = await collectTeamsMessageAssets({
+      sections,
+      fetchImage: () => Promise.resolve(null),
+      downloadFile: null,
+    });
+
+    expect(result.files).toEqual([]);
+    expect(result.sections[0].messages[0].text).toBe(
+      "see [attachment: plan.pdf]",
+    );
+  });
+
+  it("caps the number of files it will download", async () => {
+    const downloadFile = vi.fn(() => okDownload("x"));
+    const refs = Array.from({ length: MAX_TRANSCRIPT_FILES + 3 }, (_, i) =>
+      fileRef(`f${i}.pdf`, `https://c.sharepoint.com/f${i}`),
+    );
+    const sections = [section([message({ sharedFiles: refs })])];
+
+    await collectTeamsMessageAssets({
+      sections,
+      fetchImage: () => Promise.resolve(null),
+      downloadFile,
+    });
+
+    expect(downloadFile).toHaveBeenCalledTimes(MAX_TRANSCRIPT_FILES);
   });
 });
