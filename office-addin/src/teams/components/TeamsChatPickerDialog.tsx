@@ -410,7 +410,7 @@ function TeamsChatPickerDialogBody({
           busy={channelMessages.isLoadingMore}
           onClick={channelMessages.loadEarlier}
           label={t({
-            id: "officeAddin.teams.picker.loadEarlier",
+            id: "officeAddin.teams.picker.loadEarlierMessages",
             message: "Load earlier messages",
           })}
         />

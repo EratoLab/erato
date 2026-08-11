@@ -1203,8 +1203,8 @@ msgstr "Include earlier"
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
-msgid "officeAddin.teams.picker.loadEarlier"
-msgstr "Load earlier messages"
+#~ msgid "officeAddin.teams.picker.loadEarlier"
+#~ msgstr "Load earlier messages"
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
@@ -1244,7 +1244,7 @@ msgstr "No messages in this channel yet."
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.noChatMatches"
-msgstr "No chat or person matches that name."
+msgstr "No chat, channel or person matches that name."
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
@@ -1325,12 +1325,12 @@ msgstr "Couldn't search Teams messages."
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.searchLabel"
-msgstr "Search Teams messages"
+msgstr "Filter Teams chats or search messages"
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.searchPlaceholder"
-msgstr "Search messages"
+msgstr "Filter chats or search messages"
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
