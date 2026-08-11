@@ -10,6 +10,8 @@ import {
 
 import { useTeams } from "./TeamsProvider";
 import { TeamsChatPickerDialog } from "../components/TeamsChatPickerDialog";
+import { useTeamsChannelFetcher } from "../hooks/useTeamsChannelFetcher";
+import { useTeamsChannelList } from "../hooks/useTeamsChannelList";
 import { useTeamsChatFetcher } from "../hooks/useTeamsChatFetcher";
 import { useTeamsChatList } from "../hooks/useTeamsChatList";
 import { useTeamsTranscriptBuild } from "../hooks/useTeamsTranscriptBuild";
@@ -24,14 +26,19 @@ import {
   teamsSelectionKey,
 } from "../utils/teamsChatSelection";
 
+import type { UseTeamsChannelListResult } from "../hooks/useTeamsChannelList";
 import type { UseTeamsChatListResult } from "../hooks/useTeamsChatList";
 import type { TeamsTranscriptBuildOutcome } from "../hooks/useTeamsTranscriptBuild";
 import type { TeamsTranscriptProgress } from "../utils/collectTeamsTranscript";
+import type { ParsedTeamsChannel } from "../utils/parsedTeamsChannel";
 import type {
   ParsedTeamsChat,
   TeamsSelfIdentity,
 } from "../utils/parsedTeamsChat";
-import type { TeamsChatFetcher } from "../utils/teamsChatFetcher";
+import type {
+  TeamsChannelFetcher,
+  TeamsChatFetcher,
+} from "../utils/teamsChatFetcher";
 import type { TeamsChatSelection } from "../utils/teamsChatSelection";
 import type { ReactNode } from "react";
 
@@ -48,8 +55,11 @@ export interface TeamsChatPickerContextValue {
   close: () => void;
 
   fetcher: TeamsChatFetcher | null;
+  /** Null when the channel scopes were not granted — the picker shows chats only. */
+  channelFetcher: TeamsChannelFetcher | null;
   self: TeamsSelfIdentity | undefined;
   chatList: UseTeamsChatListResult;
+  channelList: UseTeamsChannelListResult;
 
   selection: ReadonlyMap<string, TeamsChatSelection>;
   isSelected: (selection: TeamsChatSelection) => boolean;
@@ -86,13 +96,24 @@ const EMPTY_CHAT_LIST: UseTeamsChatListResult = {
   refetch: () => {},
 };
 
+const EMPTY_CHANNEL_LIST: UseTeamsChannelListResult = {
+  channels: [],
+  channelsByKey: new Map<string, ParsedTeamsChannel>(),
+  isLoading: false,
+  isError: false,
+  isPartial: false,
+  refetch: () => {},
+};
+
 const CLOSED_PICKER: TeamsChatPickerContextValue = {
   isOpen: false,
   open: () => {},
   close: () => {},
   fetcher: null,
+  channelFetcher: null,
   self: undefined,
   chatList: EMPTY_CHAT_LIST,
+  channelList: EMPTY_CHANNEL_LIST,
   selection: new Map<string, TeamsChatSelection>(),
   isSelected: () => false,
   toggle: () => {},
@@ -130,6 +151,7 @@ export function useTeamsChatPicker(): TeamsChatPickerContextValue {
 export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
   const { userPrincipalName, userId } = useTeams();
   const { fetcher } = useTeamsChatFetcher();
+  const { fetcher: channelFetcher } = useTeamsChannelFetcher();
 
   const [isOpen, setIsOpen] = useState(false);
   const [hasEverOpened, setHasEverOpened] = useState(false);
@@ -161,11 +183,16 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
   // Listing costs a Graph call, so it stays cold until the picker is first
   // opened and warm afterwards — reopening is then free.
   const chatList = useTeamsChatList(hasEverOpened ? fetcher : null, self);
+  const channelList = useTeamsChannelList(
+    hasEverOpened ? channelFetcher : null,
+  );
+  const channelsByKeyRef = useRef(channelList.channelsByKey);
+  channelsByKeyRef.current = channelList.channelsByKey;
   const chatsByIdRef = useRef(chatList.chatsById);
   chatsByIdRef.current = chatList.chatsById;
 
   const { build, progress, isBuilding, cancel, reset } =
-    useTeamsTranscriptBuild(fetcher);
+    useTeamsTranscriptBuild(fetcher, channelFetcher);
 
   const messageLimitRef = useRef(messageLimit);
   messageLimitRef.current = messageLimit;
@@ -282,6 +309,7 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
     const outcome = await build({
       selections,
       knownChats: chatsByIdRef.current,
+      knownChannels: channelsByKeyRef.current,
       self,
       limit: messageLimitRef.current,
     });
@@ -313,8 +341,10 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
       open,
       close,
       fetcher,
+      channelFetcher,
       self,
       chatList,
+      channelList,
       selection,
       isSelected,
       toggle,
@@ -336,6 +366,8 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
       attachError,
       attachPartial,
       cancelBuild,
+      channelFetcher,
+      channelList,
       chatList,
       close,
       fetcher,

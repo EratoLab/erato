@@ -6,11 +6,15 @@ import { collectTeamsTranscript } from "../utils/collectTeamsTranscript";
 import { TEAMS_GRAPH_TRANSCRIPT_TIMEOUT_MS } from "../utils/teamsGraphTimeouts";
 
 import type { TeamsTranscriptProgress } from "../utils/collectTeamsTranscript";
+import type { ParsedTeamsChannel } from "../utils/parsedTeamsChannel";
 import type {
   ParsedTeamsChat,
   TeamsSelfIdentity,
 } from "../utils/parsedTeamsChat";
-import type { TeamsChatFetcher } from "../utils/teamsChatFetcher";
+import type {
+  TeamsChannelFetcher,
+  TeamsChatFetcher,
+} from "../utils/teamsChatFetcher";
 import type { TeamsFetchState } from "../utils/teamsChatGraph";
 import type { TeamsChatSelection } from "../utils/teamsChatSelection";
 
@@ -28,6 +32,7 @@ export interface UseTeamsTranscriptBuildResult {
   build: (args: {
     selections: readonly TeamsChatSelection[];
     knownChats?: ReadonlyMap<string, ParsedTeamsChat>;
+    knownChannels?: ReadonlyMap<string, ParsedTeamsChannel>;
     self?: TeamsSelfIdentity;
     limit?: number;
   }) => Promise<TeamsTranscriptBuildOutcome>;
@@ -59,6 +64,7 @@ const ABORTED_OUTCOME: TeamsTranscriptBuildOutcome = {
  */
 export function useTeamsTranscriptBuild(
   fetcher: TeamsChatFetcher | null,
+  channelFetcher: TeamsChannelFetcher | null = null,
 ): UseTeamsTranscriptBuildResult {
   const [progress, setProgress] = useState<TeamsTranscriptProgress | null>(
     null,
@@ -81,6 +87,7 @@ export function useTeamsTranscriptBuild(
     async (args: {
       selections: readonly TeamsChatSelection[];
       knownChats?: ReadonlyMap<string, ParsedTeamsChat>;
+      knownChannels?: ReadonlyMap<string, ParsedTeamsChannel>;
       self?: TeamsSelfIdentity;
       limit?: number;
     }): Promise<TeamsTranscriptBuildOutcome> => {
@@ -101,7 +108,9 @@ export function useTeamsTranscriptBuild(
             collectTeamsTranscript({
               fetcher,
               selections: args.selections,
+              channelFetcher,
               knownChats: args.knownChats,
+              knownChannels: args.knownChannels,
               self: args.self,
               limit: args.limit,
               signal,
@@ -131,7 +140,7 @@ export function useTeamsTranscriptBuild(
         setIsBuilding(false);
       }
     },
-    [fetcher],
+    [channelFetcher, fetcher],
   );
 
   return { build, progress, isBuilding, cancel, reset };

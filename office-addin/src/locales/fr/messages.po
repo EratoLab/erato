@@ -1148,6 +1148,11 @@ msgstr "Annuler"
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.channelMessagesError"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.chatsError"
 msgstr "Impossible de charger vos conversations Teams."
 
@@ -1170,6 +1175,11 @@ msgstr "Rien à afficher sur cette page — chargez-en davantage pour poursuivre
 #: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.includeEarlier"
 msgstr "Inclure les plus anciens"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.loadEarlier"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
@@ -1203,6 +1213,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.noChannelMessages"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.noChatMatches"
 msgstr ""
 
@@ -1227,6 +1242,12 @@ msgid "officeAddin.teams.picker.nothingToAttach"
 msgstr "Rien à joindre — les messages sélectionnés ne contiennent aucun contenu lisible."
 
 #. js-lingui-explicit-id
+#. placeholder {0}: channel.name
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.openChannel"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.openChat"
 msgstr "Ouvrir {chatTitle}"
@@ -1240,6 +1261,11 @@ msgstr "{chatsCompleted} conversation(s) sur {chatsTotal} chargée(s). Joindre c
 #: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.partialList"
 msgstr "Résultats partiels — Teams limite actuellement les requêtes."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.privateChannel"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
@@ -1282,6 +1308,12 @@ msgid "officeAddin.teams.picker.searchScope"
 msgstr "La recherche couvre les messages auxquels vous avez accès dans Teams."
 
 #. js-lingui-explicit-id
+#. placeholder {0}: channel.name
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.selectChannel"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.selectChat"
 msgstr "Sélectionner {chatTitle}"
@@ -1295,6 +1327,11 @@ msgstr "{selectedCount, plural, one {# élément sélectionné} other {# éléme
 #: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.selectMessage"
 msgstr "Sélectionner le message de {senderName}"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.sharedChannel"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx

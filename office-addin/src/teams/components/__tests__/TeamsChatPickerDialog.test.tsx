@@ -17,7 +17,9 @@ import {
   TeamsChatPickerProvider,
   useTeamsChatPicker,
 } from "../../providers/TeamsChatPickerProvider";
+import { parseTeamChannels } from "../../utils/parsedTeamsChannel";
 
+import type { UseTeamsChannelListResult } from "../../hooks/useTeamsChannelList";
 import type { UseTeamsChatListResult } from "../../hooks/useTeamsChatList";
 import type { UseTeamsChatMessagesResult } from "../../hooks/useTeamsChatMessages";
 import type { UseTeamsChatSearchResult } from "../../hooks/useTeamsChatSearch";
@@ -130,6 +132,7 @@ function omitStyleProps(props: Record<string, unknown>) {
 const hooks = vi.hoisted(() => ({
   fetcher: null as TeamsChatFetcher | null,
   chatList: null as UseTeamsChatListResult | null,
+  channelList: null as UseTeamsChannelListResult | null,
   messages: null as UseTeamsChatMessagesResult | null,
   search: null as UseTeamsChatSearchResult | null,
   /** Stands in for the composer's shared upload store. */
@@ -147,6 +150,27 @@ vi.mock("../../hooks/useTeamsChatFetcher", () => ({
 }));
 vi.mock("../../hooks/useTeamsChatList", () => ({
   useTeamsChatList: () => hooks.chatList,
+}));
+vi.mock("../../hooks/useTeamsChannelFetcher", () => ({
+  useTeamsChannelFetcher: () => ({
+    fetcher: null,
+    unavailableReason: "graph-unavailable",
+  }),
+}));
+vi.mock("../../hooks/useTeamsChannelList", () => ({
+  useTeamsChannelList: () => hooks.channelList,
+}));
+vi.mock("../../hooks/useTeamsChannelMessages", () => ({
+  useTeamsChannelMessages: () => ({
+    messages: [],
+    isLoading: false,
+    isError: false,
+    isPartial: false,
+    hasMore: false,
+    isLoadingMore: false,
+    loadEarlier: vi.fn(),
+    refetch: vi.fn(),
+  }),
 }));
 vi.mock("../../hooks/useTeamsChatMessages", () => ({
   useTeamsChatMessages: () => hooks.messages,
@@ -182,6 +206,26 @@ const NEWEST = mockGraphChatMessage({
   from: { user: { id: "u2", displayName: "Grace Hopper" } },
   body: { contentType: "text", content: "Works for me." },
 });
+
+function channelListResult(
+  overrides: Partial<UseTeamsChannelListResult> = {},
+): UseTeamsChannelListResult {
+  const channels = overrides.channels ?? [];
+  return {
+    channels,
+    channelsByKey: new Map(
+      channels.map((channel) => [
+        `${channel.teamId}/${channel.channelId}`,
+        channel,
+      ]),
+    ),
+    isLoading: false,
+    isError: false,
+    isPartial: false,
+    refetch: vi.fn(),
+    ...overrides,
+  };
+}
 
 function chatListResult(
   overrides: Partial<UseTeamsChatListResult> = {},
@@ -342,6 +386,7 @@ describe("TeamsChatPickerDialog", () => {
     hooks.uploadStore = { isUploading: false, error: null };
     hooks.fetcher = fakeFetcher();
     hooks.chatList = chatListResult();
+    hooks.channelList = channelListResult();
     hooks.messages = messagesResult();
     hooks.search = searchResult();
     // The Teams route never loads Office.js, so nothing here may need it.
@@ -494,6 +539,46 @@ describe("TeamsChatPickerDialog", () => {
     expect(hooks.search?.hits ?? []).toHaveLength(0);
   });
 
+  it("lists channels flat beneath chats, badging restricted ones", () => {
+    hooks.channelList = channelListResult({
+      channels: [
+        ...parseTeamChannels({ id: "t1", displayName: "Erato Labs" }, [
+          { id: "c1", displayName: "Test Channel 1" },
+          { id: "c2", displayName: "Leads", membershipType: "private" },
+        ]),
+      ],
+    });
+    renderPicker();
+
+    expect(
+      screen.getByRole("checkbox", { name: "Select Test Channel 1" }),
+    ).toBeInTheDocument();
+    // The team name disambiguates channels that share a name across teams.
+    expect(screen.getAllByText("Erato Labs").length).toBeGreaterThan(0);
+    expect(screen.getByText("Private")).toBeInTheDocument();
+  });
+
+  it("finds a channel by its team name", () => {
+    hooks.channelList = channelListResult({
+      channels: parseTeamChannels({ id: "t1", displayName: "Erato Labs" }, [
+        { id: "c1", displayName: "Test Channel 1" },
+      ]),
+    });
+    renderPicker();
+
+    fireEvent.change(
+      screen.getByLabelText("Filter Teams chats or search messages"),
+      { target: { value: "erato" } },
+    );
+
+    expect(
+      screen.getByRole("checkbox", { name: "Select Test Channel 1" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("checkbox", { name: "Select Product sync" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("says so when no chat or person matches", () => {
     renderPicker();
 
@@ -503,7 +588,7 @@ describe("TeamsChatPickerDialog", () => {
     );
 
     expect(
-      screen.getByText("No chat or person matches that name."),
+      screen.getByText("No chat, channel or person matches that name."),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("checkbox", { name: "Select Product sync" }),

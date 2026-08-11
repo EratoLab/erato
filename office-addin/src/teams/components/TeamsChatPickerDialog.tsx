@@ -14,6 +14,7 @@ import { useMemo, useState } from "react";
 
 import { TeamsPickerRow, TeamsPickerRowSkeleton } from "./TeamsPickerRow";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
+import { useTeamsChannelMessages } from "../hooks/useTeamsChannelMessages";
 import { useTeamsChatMessages } from "../hooks/useTeamsChatMessages";
 import {
   MIN_SEARCH_QUERY_LENGTH,
@@ -21,12 +22,17 @@ import {
 } from "../hooks/useTeamsChatSearch";
 import { useTeamsChatTitles } from "../hooks/useTeamsChatTitles";
 import { useTeamsChatPicker } from "../providers/TeamsChatPickerProvider";
-import { filterTeamsChats } from "../utils/filterTeamsChats";
+import {
+  filterTeamsChannels,
+  filterTeamsChats,
+} from "../utils/filterTeamsChats";
+import { isRestrictedChannel } from "../utils/parsedTeamsChannel";
 import { splitSearchSummaryHighlights } from "../utils/teamsChatGraph";
 import { MAX_SELECTED_MESSAGES } from "../utils/teamsChatSelection";
-import { chatRef } from "../utils/teamsConversationRef";
+import { channelRef, chatRef } from "../utils/teamsConversationRef";
 
 import type { TeamsChatPickerContextValue } from "../providers/TeamsChatPickerProvider";
+import type { ParsedTeamsChannel } from "../utils/parsedTeamsChannel";
 import type { ParsedTeamsChat } from "../utils/parsedTeamsChat";
 import type { ReactNode } from "react";
 
@@ -47,6 +53,12 @@ function TeamsChatPickerDialogBody({
 }) {
   const [query, setQuery] = useState("");
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [activeChannel, setActiveChannel] = useState<{
+    teamId: string;
+    channelId: string;
+    name: string;
+    teamName: string;
+  } | null>(null);
   const debouncedQuery = useDebouncedValue(query, SEARCH_DEBOUNCE_MS);
 
   const trimmed = debouncedQuery.trim();
@@ -59,11 +71,19 @@ function TeamsChatPickerDialogBody({
     picker.fetcher,
     isSearching ? null : activeChatId,
   );
+  const channelMessages = useTeamsChannelMessages(
+    picker.channelFetcher,
+    isSearching ? null : activeChannel,
+  );
   const search = useTeamsChatSearch(picker.fetcher, isSearching ? trimmed : "");
 
   const chatMatches = useMemo(
     () => filterTeamsChats(picker.chatList.chats, query),
     [picker.chatList.chats, query],
+  );
+  const channelMatches = useMemo(
+    () => filterTeamsChannels(picker.channelList.channels, query),
+    [picker.channelList.channels, query],
   );
 
   const unknownChatIds = useMemo(
@@ -104,12 +124,15 @@ function TeamsChatPickerDialogBody({
     >
       <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
         <div className="flex shrink-0 items-center gap-2">
-          {activeChat && !isSearching && (
+          {(activeChat || activeChannel) && !isSearching && (
             <Button
               variant="ghost"
               geometry="icon"
               icon={<ArrowLeftIcon className="size-4" />}
-              onClick={() => setActiveChatId(null)}
+              onClick={() => {
+                setActiveChatId(null);
+                setActiveChannel(null);
+              }}
               aria-label={t({
                 id: "officeAddin.teams.picker.back",
                 message: "Back to chats",
@@ -156,9 +179,11 @@ function TeamsChatPickerDialogBody({
         <div className="min-h-0 flex-1 divide-y divide-theme-border overflow-y-auto">
           {liveLength > 0
             ? renderQueryResults()
-            : activeChatId
-              ? renderMessageList(activeChatId)
-              : renderChatList()}
+            : activeChannel
+              ? renderChannelMessageList(activeChannel)
+              : activeChatId
+                ? renderMessageList(activeChatId)
+                : renderChatList()}
         </div>
 
         {renderFooter()}
@@ -172,15 +197,18 @@ function TeamsChatPickerDialogBody({
         <SectionHeading>
           {t({ id: "officeAddin.teams.picker.chatsSection", message: "Chats" })}
         </SectionHeading>
-        {chatMatches.length === 0 ? (
+        {chatMatches.length === 0 && channelMatches.length === 0 ? (
           <p className="px-3 py-2 text-xs text-theme-fg-muted">
             {t({
               id: "officeAddin.teams.picker.noChatMatches",
-              message: "No chat or person matches that name.",
+              message: "No chat, channel or person matches that name.",
             })}
           </p>
         ) : (
-          chatMatches.map((chat) => renderChatRow(chat))
+          <>
+            {chatMatches.map((chat) => renderChatRow(chat))}
+            {channelMatches.map((channel) => renderChannelRow(channel))}
+          </>
         )}
         <SectionHeading>
           {t({
@@ -230,6 +258,9 @@ function TeamsChatPickerDialogBody({
     return (
       <>
         {list.chats.map((chat) => renderChatRow(chat))}
+        {picker.channelList.channels.map((channel) =>
+          renderChannelRow(channel),
+        )}
         {list.isPartial && <PartialNote />}
         <LoadMoreRow
           visible={list.hasMore}
@@ -269,6 +300,131 @@ function TeamsChatPickerDialogBody({
         })}
         createdAt={chat.lastActivityAt}
         senderName={chatTitle}
+      />
+    );
+  }
+
+  function renderChannelMessageList(channel: {
+    teamId: string;
+    channelId: string;
+    name: string;
+    teamName: string;
+  }): ReactNode {
+    if (channelMessages.isLoading) return <SkeletonRows />;
+    if (channelMessages.isError) {
+      return (
+        <ListError
+          message={t({
+            id: "officeAddin.teams.picker.channelMessagesError",
+            message: "Couldn't load this channel.",
+          })}
+          onRetry={channelMessages.refetch}
+        />
+      );
+    }
+    const ref = channelRef(channel.teamId, channel.channelId);
+    return (
+      <>
+        {channelMessages.messages.length === 0 ? (
+          <EmptyState
+            icon={<FolderIcon className="mb-3 size-10 text-theme-fg-muted" />}
+            message={t({
+              id: "officeAddin.teams.picker.noChannelMessages",
+              message: "No messages in this channel yet.",
+            })}
+          />
+        ) : (
+          channelMessages.messages.map((message) => {
+            const senderName = message.senderName;
+            const selection = {
+              kind: "message" as const,
+              ref,
+              messageId: message.messageId,
+              conversationTitle: channel.name,
+              senderName,
+              createdAt: message.createdAt,
+            };
+            const checked = picker.isSelected(selection);
+            return (
+              <TeamsPickerRow
+                key={message.messageId}
+                checked={checked}
+                onToggle={() => picker.toggle(selection)}
+                disabled={!checked && picker.isMessageSelectionFull}
+                selectLabel={t({
+                  id: "officeAddin.teams.picker.selectMessage",
+                  message: `Select message from ${senderName}`,
+                })}
+                title={senderName}
+                subline={message.text}
+                createdAt={message.createdAt}
+                senderName={senderName}
+              />
+            );
+          })
+        )}
+        {channelMessages.isPartial && <PartialNote />}
+        <LoadMoreRow
+          visible={channelMessages.hasMore}
+          busy={channelMessages.isLoadingMore}
+          onClick={channelMessages.loadEarlier}
+          label={t({
+            id: "officeAddin.teams.picker.loadEarlier",
+            message: "Load earlier messages",
+          })}
+        />
+      </>
+    );
+  }
+
+  function renderChannelRow(channel: ParsedTeamsChannel): ReactNode {
+    const selection = {
+      kind: "conversation" as const,
+      ref: channelRef(channel.teamId, channel.channelId),
+      title: channel.name,
+    };
+    const restricted = isRestrictedChannel(channel);
+    return (
+      <TeamsPickerRow
+        key={`${channel.teamId}/${channel.channelId}`}
+        isChannel
+        checked={picker.isSelected(selection)}
+        onToggle={() => picker.toggle(selection)}
+        selectLabel={t({
+          id: "officeAddin.teams.picker.selectChannel",
+          message: `Select ${channel.name}`,
+        })}
+        title={
+          <>
+            {channel.name}
+            {restricted && (
+              <span className="ml-2 rounded bg-theme-bg-accent px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-theme-fg-muted">
+                {channel.membershipType === "shared"
+                  ? t({
+                      id: "officeAddin.teams.picker.sharedChannel",
+                      message: "Shared",
+                    })
+                  : t({
+                      id: "officeAddin.teams.picker.privateChannel",
+                      message: "Private",
+                    })}
+              </span>
+            )}
+          </>
+        }
+        subline={channel.teamName || undefined}
+        onOpen={() =>
+          setActiveChannel({
+            teamId: channel.teamId,
+            channelId: channel.channelId,
+            name: channel.name,
+            teamName: channel.teamName,
+          })
+        }
+        openLabel={t({
+          id: "officeAddin.teams.picker.openChannel",
+          message: `Open ${channel.name}`,
+        })}
       />
     );
   }

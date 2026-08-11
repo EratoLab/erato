@@ -22,6 +22,8 @@ export interface TeamsPickerRowProps {
   createdAt?: string | null;
   /** Display name the initials avatar is derived from. */
   senderName?: string;
+  /** Renders a channel glyph in the avatar slot instead of initials. */
+  isChannel?: boolean;
 }
 
 /**
@@ -40,6 +42,7 @@ export function TeamsPickerRow({
   openLabel,
   createdAt,
   senderName,
+  isChannel = false,
 }: TeamsPickerRowProps) {
   const timestamp = createdAt ? new Date(createdAt) : null;
 
@@ -54,7 +57,11 @@ export function TeamsPickerRow({
         className={CHECKBOX_CLASS}
       />
 
-      {senderName !== undefined && <TeamsInitialsAvatar name={senderName} />}
+      {isChannel ? (
+        <ChannelGlyph />
+      ) : (
+        senderName !== undefined && <TeamsInitialsAvatar name={senderName} />
+      )}
 
       <div className="min-w-0 flex-1">
         {onOpen ? (
@@ -93,6 +100,21 @@ export function TeamsPickerRow({
  * The library `Avatar` renders the signed-in erato profile and takes no name,
  * so an arbitrary Teams sender needs its own initials badge.
  */
+/**
+ * `#` is the cross-product convention for a channel, and it reads instantly in
+ * the slot where a chat shows a face — no legend, no extra row width.
+ */
+function ChannelGlyph() {
+  return (
+    <span
+      aria-hidden
+      className="flex size-8 shrink-0 items-center justify-center rounded bg-theme-bg-accent text-sm font-semibold text-theme-fg-muted"
+    >
+      #
+    </span>
+  );
+}
+
 export function TeamsInitialsAvatar({ name }: { name: string }) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   const initials =
