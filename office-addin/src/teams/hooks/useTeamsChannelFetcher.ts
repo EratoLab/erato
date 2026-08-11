@@ -42,8 +42,14 @@ export function useTeamsChannelFetcher(): UseTeamsChannelFetcherResult {
     if (!graph) {
       return { fetcher: null, unavailableReason: "graph-unavailable" };
     }
+    // No sign-in toast: a tenant that never granted the admin consent is a
+    // steady state the picker degrades on (chats only), not a session the user
+    // can repair by signing in — the popup would fail the same way.
     const acquireGraphToken: AcquireGraphToken = (options) =>
-      graph.acquireToken(GRAPH_TEAMS_CHANNEL_SCOPES, options);
+      graph.acquireToken(GRAPH_TEAMS_CHANNEL_SCOPES, {
+        ...options,
+        suppressSignInPrompt: true,
+      });
     return {
       fetcher: createGraphTeamsChannelFetcher(acquireGraphToken),
       unavailableReason: null,
