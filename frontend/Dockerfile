@@ -15,14 +15,14 @@ RUN pnpm run build
 WORKDIR /app/frontend
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --config.confirmModulesPurge=false
 RUN mkdir -p /app/sbom && pnpm sbom --sbom-format cyclonedx --sbom-spec-version 1.7 > /app/sbom/frontend.cdx.json
-RUN NODE_OPTIONS=--max-old-space-size=4096 pnpm run build:lib
-RUN NODE_OPTIONS=--max-old-space-size=4096 pnpm run build
+RUN NODE_OPTIONS=--max-old-space-size=8192 pnpm run build:lib
+RUN NODE_OPTIONS=--max-old-space-size=8192 pnpm run build
 
 WORKDIR /app/office-addin
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm update @erato/frontend --config.confirmModulesPurge=false
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --config.confirmModulesPurge=false
 RUN mkdir -p /app/sbom && pnpm sbom --sbom-format cyclonedx --sbom-spec-version 1.7 > /app/sbom/office-addin.cdx.json
-RUN NODE_OPTIONS=--max-old-space-size=4096 pnpm run build
+RUN NODE_OPTIONS=--max-old-space-size=8192 pnpm run build
 
 # Final stage - empty image with just the static files for all served frontends
 FROM scratch

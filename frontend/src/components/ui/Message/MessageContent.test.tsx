@@ -14,6 +14,15 @@ import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { MessageContent } from "./MessageContent";
 
+const mermaidMock = vi.hoisted(() => ({
+  initialize: vi.fn(),
+  render: vi.fn(async () => ({
+    svg: '<svg data-testid="mermaid-svg"><text>Rendered diagram</text></svg>',
+  })),
+}));
+
+vi.mock("mermaid", () => ({ default: mermaidMock }));
+
 import type {
   ContentPart,
   FileUploadItem,
@@ -256,6 +265,27 @@ describe("MessageContent", () => {
       "style",
       expect.stringContaining("color: rgb(212, 212, 212);"),
     );
+  });
+
+  it("routes Mermaid fences through the diagram block outside the generic pre", async () => {
+    const { container } = renderWithTheme(
+      <MessageContent
+        content={textContent("```mermaid\nflowchart TD\n  A --> B\n```")}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(
+        container.querySelector("svg[data-testid='mermaid-svg']"),
+      ).toBeInTheDocument();
+    });
+
+    expect(
+      container.querySelector("pre.message-content-code-block"),
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Show code" }),
+    ).toBeInTheDocument();
   });
 
   it("uses the same code block contract for raw markdown view", () => {

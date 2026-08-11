@@ -83,6 +83,7 @@
     "immer": "^10.1.1",
     "lettersanitizer": "^1.0.7",
     "lodash": "^4.18.1",
+    "mermaid": "^11.16.1",
     "non.geist": "^1.0.4",
     "onnxruntime-web": "1.22.0",
     "postal-mime": "2.7.4",

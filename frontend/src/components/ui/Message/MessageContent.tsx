@@ -2,21 +2,14 @@ import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import React, { memo } from "react";
 import Markdown, { defaultUrlTransform } from "react-markdown";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import remarkGfm from "remark-gfm";
 
-import { useTheme } from "@/components/providers/ThemeProvider";
 import {
   Trace,
   durationFromTracePartsOrLegacyMessageTimestamps,
   groupIntoTraceClusters,
 } from "@/components/ui/Trace";
 import { CheckIcon, CopyIcon } from "@/components/ui/icons";
-import {
-  DEFAULT_DARK_CODE_HIGHLIGHT_PRESET,
-  DEFAULT_LIGHT_CODE_HIGHLIGHT_PRESET,
-  resolvePrismCodeTheme,
-} from "@/config/codeHighlightThemes";
 import { useOptionalTranslation } from "@/hooks/i18n";
 import { useTraceFeature } from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
@@ -25,6 +18,8 @@ import { EratoAppointmentBlock } from "./EratoAppointmentBlock";
 import { EratoEmailSuggestion } from "./EratoEmailSuggestion";
 import { ImageContentDisplay } from "./ImageContentDisplay";
 import { McpToolApprovalCard } from "./McpToolApprovalCard";
+import { MermaidBlock } from "./MermaidBlock";
+import { SyntaxHighlightedCode } from "./SyntaxHighlightedCode";
 
 import type { ToolApprovalStatus } from "../Trace/Trace";
 import type {
@@ -149,11 +144,15 @@ export function useOutlookArtifact(): OutlookArtifact | null {
 
 const INLINE_CODE_CLASS_NAME =
   "rounded-md border border-theme-code-inline-border bg-theme-code-inline-bg px-1.5 py-0.5 font-mono text-sm text-theme-code-inline-fg";
-const BlockCodeContext = React.createContext(false);
-const BASE_BLOCK_CODE_CUSTOM_STYLE = {
-  margin: 0,
-  overflow: "visible",
-} as const;
+interface BlockCodeContextValue {
+  isBlockCode: boolean;
+  isStreaming: boolean;
+}
+
+const BlockCodeContext = React.createContext<BlockCodeContextValue>({
+  isBlockCode: false,
+  isStreaming: false,
+});
 
 type MarkdownCodeProps = React.ComponentPropsWithoutRef<"code"> & {
   node?: unknown;
@@ -172,21 +171,33 @@ function isEratoAppointmentLanguage(language: string): boolean {
   return language === "erato-appointment";
 }
 
-function isCardCodeChild(
-  children: React.ReactNode,
-  artifact: OutlookArtifact | null,
-): boolean {
+function getCodeChildLanguage(children: React.ReactNode): string {
   const child = React.Children.only(children) as React.ReactElement<{
     className?: string;
   }>;
   const cls = child.props.className ?? "";
   const match = /language-([\w-]+)/.exec(cls);
-  const language = match ? match[1] : "";
+  return match ? match[1] : "";
+}
+
+function isMermaidLanguage(language: string): boolean {
+  return language.toLowerCase() === "mermaid";
+}
+
+function isCardCodeChild(
+  children: React.ReactNode,
+  artifact: OutlookArtifact | null,
+): boolean {
+  const language = getCodeChildLanguage(children);
   // Only isEmail is consumed here; it doesn't depend on content.
   return (
     classifyEratoEmailBlock(language, artifact, "").isEmail ||
     isEratoAppointmentLanguage(language)
   );
+}
+
+function isMermaidCodeChild(children: React.ReactNode): boolean {
+  return isMermaidLanguage(getCodeChildLanguage(children));
 }
 
 function MarkdownPre({
@@ -196,6 +207,7 @@ function MarkdownPre({
   ...props
 }: MarkdownPreProps) {
   const artifact = React.useContext(OutlookArtifactContext);
+  const { isStreaming } = React.useContext(BlockCodeContext);
   const [copied, setCopied] = React.useState(false);
 
   // Extract the raw code text from the child <code> element so the copy button
@@ -224,10 +236,10 @@ function MarkdownPre({
   // code block — use a plain <div> to avoid inheriting <pre> monospace font
   // and horizontal scroll from message-content-code-block styling.
   try {
-    if (isCardCodeChild(children, artifact)) {
+    if (isCardCodeChild(children, artifact) || isMermaidCodeChild(children)) {
       return (
         <div>
-          <BlockCodeContext.Provider value={true}>
+          <BlockCodeContext.Provider value={{ isBlockCode: true, isStreaming }}>
             {children}
           </BlockCodeContext.Provider>
         </div>
@@ -245,7 +257,7 @@ function MarkdownPre({
           .join(" ")}
         {...props}
       >
-        <BlockCodeContext.Provider value={true}>
+        <BlockCodeContext.Provider value={{ isBlockCode: true, isStreaming }}>
           {children}
         </BlockCodeContext.Provider>
       </pre>
@@ -280,25 +292,12 @@ function MarkdownCode({
   children,
   ...props
 }: MarkdownCodeProps) {
-  const { effectiveTheme, theme } = useTheme();
-  const isBlockCode = React.useContext(BlockCodeContext);
+  const { isBlockCode, isStreaming } = React.useContext(BlockCodeContext);
   const artifact = React.useContext(OutlookArtifactContext);
   const codeContent = String(children).replace(/\n$/, "");
   const match = /language-([\w-]+)/.exec(className ?? "");
   const language = match ? match[1] : "";
   const emailBlock = classifyEratoEmailBlock(language, artifact, codeContent);
-  const fallbackPreset =
-    effectiveTheme === "dark"
-      ? DEFAULT_DARK_CODE_HIGHLIGHT_PRESET
-      : DEFAULT_LIGHT_CODE_HIGHLIGHT_PRESET;
-  const syntaxTheme = resolvePrismCodeTheme(
-    theme.codeHighlight.preset,
-    fallbackPreset,
-  );
-  const blockCustomStyle = {
-    ...BASE_BLOCK_CODE_CUSTOM_STYLE,
-    ...theme.codeHighlight.blockStyle,
-  };
 
   if (isBlockCode && emailBlock.isEmail) {
     return (
@@ -310,17 +309,12 @@ function MarkdownCode({
     return <EratoAppointmentBlock content={codeContent} />;
   }
 
+  if (isBlockCode && isMermaidLanguage(language)) {
+    return <MermaidBlock content={codeContent} isStreaming={isStreaming} />;
+  }
+
   if (isBlockCode) {
-    return (
-      <SyntaxHighlighter
-        customStyle={blockCustomStyle}
-        language={language || undefined}
-        PreTag="div"
-        style={syntaxTheme}
-      >
-        {codeContent}
-      </SyntaxHighlighter>
-    );
+    return <SyntaxHighlightedCode code={codeContent} language={language} />;
   }
 
   return (
@@ -949,21 +943,23 @@ export const MessageContent = memo(function MessageContent({
     const linkedTextContent = autolinkEratoFiles(text);
 
     return (
-      <OutlookArtifactContext.Provider value={outlookArtifact ?? null}>
-        <Markdown
-          remarkPlugins={[remarkGfm]}
-          components={components}
-          urlTransform={(url) =>
-            // eslint-disable-next-line lingui/no-unlocalized-strings
-            url.startsWith("erato-file://") ? url : defaultUrlTransform(url)
-          }
-          // Handle incomplete markdown patterns gracefully
-          skipHtml={false}
-          unwrapDisallowed={false}
-        >
-          {linkedTextContent}
-        </Markdown>
-      </OutlookArtifactContext.Provider>
+      <BlockCodeContext.Provider value={{ isBlockCode: false, isStreaming }}>
+        <OutlookArtifactContext.Provider value={outlookArtifact ?? null}>
+          <Markdown
+            remarkPlugins={[remarkGfm]}
+            components={components}
+            urlTransform={(url) =>
+              // eslint-disable-next-line lingui/no-unlocalized-strings
+              url.startsWith("erato-file://") ? url : defaultUrlTransform(url)
+            }
+            // Handle incomplete markdown patterns gracefully
+            skipHtml={false}
+            unwrapDisallowed={false}
+          >
+            {linkedTextContent}
+          </Markdown>
+        </OutlookArtifactContext.Provider>
+      </BlockCodeContext.Provider>
     );
   };
 

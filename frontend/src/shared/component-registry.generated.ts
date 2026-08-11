@@ -172,9 +172,12 @@ export { ImageContentDisplay } from "@/components/ui/Message/ImageContentDisplay
 export { ImageLightbox } from "@/components/ui/Message/ImageLightbox";
 export { McpToolApprovalCard } from "@/components/ui/Message/McpToolApprovalCard";
 export type { McpToolApprovalRequestPart } from "@/components/ui/Message/McpToolApprovalCard";
+export { MermaidBlock } from "@/components/ui/Message/MermaidBlock";
 export { MessageContent } from "@/components/ui/Message/MessageContent";
 export { useOutlookArtifact } from "@/components/ui/Message/MessageContent";
 export { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
+export { SyntaxHighlightedCode } from "@/components/ui/Message/SyntaxHighlightedCode";
+export type { SyntaxHighlightedCodeProps } from "@/components/ui/Message/SyntaxHighlightedCode";
 export { ConfirmationDialog } from "@/components/ui/Modal/ConfirmationDialog";
 export { ModalBase } from "@/components/ui/Modal/ModalBase";
 export { messageStyles } from "@/components/ui/styles/chatMessageStyles";

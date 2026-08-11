@@ -1436,11 +1436,13 @@ msgid "chat.message.aria"
 msgstr "Nachricht"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/MermaidBlock.tsx
 #: src/components/ui/Message/MessageContent.tsx
 msgid "chat.message.code.copied"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/MermaidBlock.tsx
 #: src/components/ui/Message/MessageContent.tsx
 msgid "chat.message.code.copy"
 msgstr ""
@@ -1568,6 +1570,26 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/components/ui/Message/MessageContent.tsx
 msgid "chat.message.link.fallback"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/MermaidBlock.tsx
+msgid "chat.message.mermaid.diagram"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/MermaidBlock.tsx
+msgid "chat.message.mermaid.renderError"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/MermaidBlock.tsx
+msgid "chat.message.mermaid.showCode"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/MermaidBlock.tsx
+msgid "chat.message.mermaid.showDiagram"
 msgstr ""
 
 #. js-lingui-explicit-id

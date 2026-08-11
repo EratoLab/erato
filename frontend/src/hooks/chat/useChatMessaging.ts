@@ -671,6 +671,13 @@ export function useChatMessaging(
 
   // For backward compatibility with tests
   const cancelMessage = useCallback(() => {
+    const currentStreaming = useMessagingStore
+      .getState()
+      .getStreaming(streamKey);
+    if (!isSubmittingForKey(streamKey) && !currentStreaming.isStreaming) {
+      return;
+    }
+
     const storeSnapshot = useMessagingStore.getState();
     const aliasResolvedNewChatKey = resolveStreamAlias(
       storeSnapshot.streamKeyAliases,
@@ -719,6 +726,7 @@ export function useChatMessaging(
     newlyCreatedChatId,
     streamKey,
     getSSECleanupForKey,
+    isSubmittingForKey,
     setSSECleanupForKey,
     resetStreaming,
     setSubmittingForKey,

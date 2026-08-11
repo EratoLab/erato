@@ -13,7 +13,7 @@ RUN pnpm run build
 
 WORKDIR /app/frontend
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --config.confirmModulesPurge=false
-RUN NODE_OPTIONS=--max-old-space-size=4096 pnpm run build:lib
+RUN NODE_OPTIONS=--max-old-space-size=8192 pnpm run build:lib
 
 WORKDIR /app/component-kit-example
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --no-frozen-lockfile --lockfile=false --config.confirmModulesPurge=false
