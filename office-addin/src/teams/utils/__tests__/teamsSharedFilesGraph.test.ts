@@ -75,8 +75,9 @@ describe("downloadTeamsSharedFile", () => {
     expect(new TextDecoder().decode(result.content.bytes)).toBe("pdf-bytes");
     expect(result.content.contentType).toBe("application/pdf");
 
+    // No $select — naming properties suppresses the downloadUrl annotation.
     expect(calls[0].url).toBe(
-      `https://graph.microsoft.com/v1.0/shares/${shareTokenForUrl(CONTENT_URL)}/driveItem?$select=name,size,file,@microsoft.graph.downloadUrl`,
+      `https://graph.microsoft.com/v1.0/shares/${shareTokenForUrl(CONTENT_URL)}/driveItem`,
     );
     expect(
       (calls[0].init?.headers as Record<string, string>).Authorization,

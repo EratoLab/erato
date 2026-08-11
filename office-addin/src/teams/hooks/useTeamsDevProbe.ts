@@ -137,7 +137,7 @@ export function useTeamsDevProbe(): void {
       /** The `/shares` metadata leg alone — does the driveItem resolve? */
       share: (contentUrl: string) =>
         raw(
-          `/shares/${shareTokenForUrl(contentUrl)}/driveItem?$select=name,size,file,@microsoft.graph.downloadUrl`,
+          `/shares/${shareTokenForUrl(contentUrl)}/driveItem`,
           {},
           GRAPH_TEAMS_FILE_SCOPES,
         ),

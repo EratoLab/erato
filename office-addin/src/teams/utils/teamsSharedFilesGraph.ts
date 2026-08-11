@@ -50,8 +50,10 @@ export async function downloadTeamsSharedFile(
   tokenSource: GraphTokenSource,
   options: TeamsGraphCallOptions = {},
 ): Promise<TeamsSharedFileDownload> {
+  // No $select: naming properties suppresses the @microsoft.graph.downloadUrl
+  // annotation (wire-observed), and it is the whole point of this request.
   const item = await requestGraphJson<ShareDriveItem>({
-    url: `${GRAPH_BASE}/shares/${shareTokenForUrl(contentUrl)}/driveItem?$select=name,size,file,@microsoft.graph.downloadUrl`,
+    url: `${GRAPH_BASE}/shares/${shareTokenForUrl(contentUrl)}/driveItem`,
     tokenSource,
     options,
   });
