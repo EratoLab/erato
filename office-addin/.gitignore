@@ -2,6 +2,8 @@
 /node_modules
 /manifests/manifest-funnel.xml
 /manifests/manifest-funnel-onprem.xml
+/manifests/manifest-funnel.json
+/manifests/manifest-funnel.zip
 src/locales/**/*.json
 src/locales/**/*.ts
 /public/locales/

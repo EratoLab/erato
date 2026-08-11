@@ -22,6 +22,7 @@
     "lint:strict": "eslint . --max-warnings=0",
     "preview": "vite preview",
     "office:validate": "office-addin-manifest validate manifests/manifest.xml",
+    "office:validate:unified": "office-addin-manifest validate manifests/manifest.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
