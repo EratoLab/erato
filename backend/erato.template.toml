@@ -173,9 +173,9 @@ chat_provider_ids = ["test-token-limit"]
 # # Office add-in bundle such as "assets/color-icon-192x192.png".
 # icon_path = "assets/color-icon-192x192.png"
 # high_resolution_icon_path = "assets/color-icon-192x192.png"
-# icon_16_path = "assets/outline-icon-32x32.png"
-# icon_32_path = "assets/outline-icon-32x32.png"
-# icon_80_path = "assets/color-icon-192x192.png"
+# icon_16_path = "assets/ribbon-icon-16.png"
+# icon_32_path = "assets/ribbon-icon-32.png"
+# icon_80_path = "assets/ribbon-icon-80.png"
 
 # Frontend configuration options for embedded scenarios
 # [frontend]

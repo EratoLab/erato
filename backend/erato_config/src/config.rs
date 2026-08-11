@@ -3845,15 +3845,15 @@ fn default_ms_office_addin_manifest_high_resolution_icon_path() -> String {
 }
 
 fn default_ms_office_addin_manifest_icon_16_path() -> String {
-    "assets/outline-icon-32x32.png".to_string()
+    "assets/ribbon-icon-16.png".to_string()
 }
 
 fn default_ms_office_addin_manifest_icon_32_path() -> String {
-    "assets/outline-icon-32x32.png".to_string()
+    "assets/ribbon-icon-32.png".to_string()
 }
 
 fn default_ms_office_addin_manifest_icon_80_path() -> String {
-    "assets/color-icon-192x192.png".to_string()
+    "assets/ribbon-icon-80.png".to_string()
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
