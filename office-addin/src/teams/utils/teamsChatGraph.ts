@@ -63,6 +63,11 @@ export interface GraphChatMessageBody {
 export interface GraphChatMessageAttachment {
   id?: string;
   contentType?: string;
+  /**
+   * SharePoint/OneDrive web URL for `reference` attachments — the bytes are
+   * reachable only through the `/shares` endpoint, never directly.
+   */
+  contentUrl?: string | null;
   name?: string | null;
 }
 

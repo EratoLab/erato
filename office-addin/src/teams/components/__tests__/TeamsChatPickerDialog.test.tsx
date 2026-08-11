@@ -931,6 +931,8 @@ describe("TeamsChatPickerDialog", () => {
           editedAt: null,
           text: "Works for me.",
           markers: [],
+          sharedFiles: [],
+          imageUrls: [],
           replyToId: null,
           deepLink: "https://example.invalid/m",
         },

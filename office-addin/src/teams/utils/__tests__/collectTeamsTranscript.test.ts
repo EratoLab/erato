@@ -139,6 +139,8 @@ describe("collectTeamsTranscript", () => {
             editedAt: null,
             text: "the body the picker already showed",
             markers: [],
+            sharedFiles: [],
+            imageUrls: [],
             replyToId: null,
             deepLink: "https://example.invalid/a",
           },

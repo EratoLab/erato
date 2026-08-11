@@ -8,6 +8,7 @@ import { CHAT_MEMBER_EXPAND_CAP } from "./teamsChatGraph";
 import { buildTeamsMessageDeepLink } from "./teamsDeepLink";
 import {
   referencedAttachmentIds,
+  teamsBodyImageUrls,
   teamsMessageBodyToText,
 } from "./teamsMessageText";
 
@@ -35,6 +36,15 @@ export interface ParsedTeamsChat {
   previewText: string;
 }
 
+/** A file shared with a message, living in OneDrive/SharePoint. */
+export interface TeamsSharedFileRef {
+  /** `chatMessageAttachment` id — joins the ref to its inline body marker. */
+  attachmentId: string;
+  name: string;
+  /** Web URL of the file; bytes resolve only through the `/shares` endpoint. */
+  contentUrl: string;
+}
+
 export interface ParsedTeamsMessage {
   chatId: string;
   messageId: string;
@@ -47,6 +57,13 @@ export interface ParsedTeamsMessage {
   /** Root message of a channel reply; null for roots and for chat messages. */
   replyToId: string | null;
   deepLink: string;
+  /** Files shared as OneDrive/SharePoint references, in attachment order. */
+  sharedFiles: TeamsSharedFileRef[];
+  /**
+   * Body images in `[image]` occurrence order; null entries are images the
+   * message-reading token cannot fetch.
+   */
+  imageUrls: (string | null)[];
 }
 
 const UNKNOWN_SENDER = "Unknown";
@@ -132,7 +149,23 @@ export function parseTeamsMessage(
     markers,
     replyToId: message.replyToId ?? null,
     deepLink: message.webUrl ?? buildTeamsMessageDeepLink(chatId, message.id),
+    sharedFiles: sharedFileRefs(message),
+    imageUrls: teamsBodyImageUrls(message.body),
   };
+}
+
+function sharedFileRefs(message: GraphChatMessage): TeamsSharedFileRef[] {
+  const refs: TeamsSharedFileRef[] = [];
+  for (const attachment of message.attachments ?? []) {
+    if (attachment.contentType !== "reference") continue;
+    if (!attachment.id || !attachment.contentUrl || !attachment.name) continue;
+    refs.push({
+      attachmentId: attachment.id,
+      name: attachment.name,
+      contentUrl: attachment.contentUrl,
+    });
+  }
+  return refs;
 }
 
 /** Newest first, matching the order Graph returns chat messages in. */

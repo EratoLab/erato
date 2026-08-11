@@ -93,6 +93,8 @@ describe("groupSelectionsByConversation", () => {
       editedAt: null,
       text: "already parsed",
       markers: [],
+      sharedFiles: [],
+      imageUrls: [],
       replyToId: null,
       deepLink: "https://example.invalid/a",
     };
