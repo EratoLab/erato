@@ -7,6 +7,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -415,10 +416,14 @@ function Opener() {
 }
 
 function renderPicker() {
+  // StrictMode on purpose: the app runs under it, and its double-mount is what
+  // exposed the alive-ref arming bug the plain renderer never would.
   const view = render(
-    <TeamsChatPickerProvider>
-      <Opener />
-    </TeamsChatPickerProvider>,
+    <StrictMode>
+      <TeamsChatPickerProvider>
+        <Opener />
+      </TeamsChatPickerProvider>
+    </StrictMode>,
   );
   fireEvent.click(screen.getByText("open picker"));
   return view;

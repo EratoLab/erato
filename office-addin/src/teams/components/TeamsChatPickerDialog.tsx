@@ -131,14 +131,15 @@ function TeamsChatPickerDialogBody({
   );
 
   // A probe can resolve after the dialog is gone; a late auto-tick would
-  // otherwise plant a selection into the next opening.
+  // otherwise plant a selection into the next opening. Re-armed in the effect
+  // body because StrictMode runs the cleanup once between its double mounts.
   const aliveRef = useRef(true);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
       aliveRef.current = false;
-    },
-    [],
-  );
+    };
+  }, []);
 
   const chatMatches = useMemo(
     () => filterTeamsChats(picker.chatList.chats, query),
