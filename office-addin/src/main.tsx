@@ -9,6 +9,7 @@ import { injectFrontendEnv } from "./app/env";
 import { AddinSetupRoute } from "./pages/AddinSetupPage";
 
 const OutlookApp = lazy(() => import("./outlook/OutlookApp"));
+const TeamsApp = lazy(() => import("./teams/TeamsApp"));
 
 injectFrontendEnv();
 
@@ -31,6 +32,14 @@ ReactDOM.createRoot(rootElement).render(
           element={
             <Suspense fallback={null}>
               <OutlookApp />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/teams"
+          element={
+            <Suspense fallback={null}>
+              <TeamsApp />
             </Suspense>
           }
         />

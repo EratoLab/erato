@@ -1096,6 +1096,16 @@ msgstr "Generiertes Manifest hochladen"
 #~ msgid "officeAddin.setup.uploadInstruction"
 #~ msgstr "und laden Sie die heruntergeladene Datei dort hoch."
 
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsProvider.tsx
+msgid "officeAddin.teams.initFailed"
+msgstr "Verbindung zu Microsoft Teams nicht möglich."
+
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsProvider.tsx
+msgid "officeAddin.teams.loading"
+msgstr "Microsoft Teams-Registerkarte wird geladen..."
+
 # ==============================
 # Unstable IDs
 # ==============================

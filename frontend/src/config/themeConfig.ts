@@ -3,6 +3,7 @@
  * Defines how custom themes are loaded and configured
  */
 import { env } from "@/app/env";
+import { debugLog } from "@/utils/debugLogger";
 
 import type { CustomThemeConfig } from "@/utils/themeUtils";
 
@@ -392,11 +393,11 @@ export async function loadResolvedThemeConfig(
         }
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
       } catch (error) {
-        console.log(`Theme not found at ${path}, trying next location`);
+        debugLog("UI", `Theme not found at ${path}, trying next location`);
       }
     }
 
-    console.log("No custom theme found, using default theme");
+    debugLog("UI", "No custom theme found, using default theme");
     return null;
   } catch (error) {
     console.error("Failed to load any theme", error);

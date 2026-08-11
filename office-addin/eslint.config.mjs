@@ -152,6 +152,9 @@ const eslintConfig = [
                 "**/outlook/**",
                 "**/sessionPolicy/**",
                 "**/useOutlook*",
+                "**/Teams*",
+                "**/teams/**",
+                "@microsoft/teams-js",
               ],
               message:
                 "Host-neutral core files must receive host behavior through explicit components or props.",
@@ -188,9 +191,67 @@ const eslintConfig = [
         {
           patterns: [
             {
-              group: ["**/outlook/**", "!**/test/mocks/outlook/**"],
+              group: [
+                "**/outlook/**",
+                "!**/test/mocks/outlook/**",
+                "**/teams/**",
+                "!**/test/mocks/teams/**",
+              ],
               message:
-                "The shared ring must not depend on the Outlook host module; move shared code out or invert the dependency.",
+                "The shared ring must not depend on a host module; move shared code out or invert the dependency.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ["src/teams/**/*.ts", "src/teams/**/*.tsx"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "**/OfficeProvider",
+                "**/OfficeThemeProvider",
+                "**/Outlook*",
+                "**/outlook/**",
+                "**/sessionPolicy/**",
+                "**/useOffice*",
+                "**/useOutlook*",
+              ],
+              message:
+                "The Teams composition is a peer of the Outlook one: only one host SDK and one set of registry overrides per document.",
+            },
+          ],
+        },
+      ],
+      "no-restricted-globals": [
+        "error",
+        {
+          name: "Office",
+          message: "Office.js is owned by the Outlook composition.",
+        },
+        {
+          name: "OfficeRuntime",
+          message: "Office.js is owned by the Outlook composition.",
+        },
+      ],
+    },
+  },
+  {
+    files: ["src/outlook/**/*.ts", "src/outlook/**/*.tsx"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["**/Teams*", "**/teams/**", "@microsoft/teams-js"],
+              message:
+                "The Outlook composition is a peer of the Teams one: only one host SDK and one set of registry overrides per document.",
             },
           ],
         },

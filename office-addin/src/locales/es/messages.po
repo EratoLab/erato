@@ -1096,6 +1096,16 @@ msgstr "Cargue el manifiesto generado"
 #~ msgid "officeAddin.setup.uploadInstruction"
 #~ msgstr "y cargue allí el archivo descargado."
 
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsProvider.tsx
+msgid "officeAddin.teams.initFailed"
+msgstr "No se pudo conectar con Microsoft Teams."
+
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsProvider.tsx
+msgid "officeAddin.teams.loading"
+msgstr "Cargando la pestaña de Microsoft Teams..."
+
 # ==============================
 # Unstable IDs
 # ==============================

@@ -5,8 +5,13 @@ vi.mock("@/app/env", () => ({
   env: vi.fn(),
 }));
 
-// eslint-disable-next-line import/order
+vi.mock("@/utils/debugLogger", () => ({
+  debugLog: vi.fn(),
+}));
+
 import { env } from "@/app/env";
+import { debugLog } from "@/utils/debugLogger";
+
 import {
   defaultThemeConfig,
   loadThemeConfig,
@@ -18,6 +23,7 @@ import type { Env } from "@/app/env";
 import type { CustomThemeConfig } from "@/utils/themeUtils";
 
 const mockEnv = env as ReturnType<typeof vi.fn>;
+const mockDebugLog = debugLog as ReturnType<typeof vi.fn>;
 
 describe("themeConfig", () => {
   // Default env mock
@@ -501,6 +507,7 @@ describe("themeConfig", () => {
 
     beforeEach(() => {
       global.fetch = vi.fn();
+      mockDebugLog.mockClear();
       vi.spyOn(console, "log").mockImplementation(() => {});
       vi.spyOn(console, "error").mockImplementation(() => {});
     });
@@ -625,7 +632,8 @@ describe("themeConfig", () => {
 
       expect(result).toEqual(mockTheme);
       expect(global.fetch).toHaveBeenCalledTimes(2);
-      expect(console.log).toHaveBeenCalledWith(
+      expect(mockDebugLog).toHaveBeenCalledWith(
+        "UI",
         "Theme not found at /custom/theme.json, trying next location",
       );
     });
@@ -640,7 +648,8 @@ describe("themeConfig", () => {
       const result = await loadThemeConfig();
 
       expect(result).toBeNull();
-      expect(console.log).toHaveBeenCalledWith(
+      expect(mockDebugLog).toHaveBeenCalledWith(
+        "UI",
         "No custom theme found, using default theme",
       );
     });
@@ -667,10 +676,12 @@ describe("themeConfig", () => {
       const result = await loadThemeConfig();
 
       expect(result).toBeNull();
-      expect(console.log).toHaveBeenCalledWith(
+      expect(mockDebugLog).toHaveBeenCalledWith(
+        "UI",
         "Theme not found at /custom/theme.json, trying next location",
       );
-      expect(console.log).toHaveBeenCalledWith(
+      expect(mockDebugLog).toHaveBeenCalledWith(
+        "UI",
         "No custom theme found, using default theme",
       );
     });

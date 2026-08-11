@@ -1096,6 +1096,16 @@ msgstr "Téléverser le manifeste généré"
 #~ msgid "officeAddin.setup.uploadInstruction"
 #~ msgstr "et téléversez-y le fichier téléchargé."
 
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsProvider.tsx
+msgid "officeAddin.teams.initFailed"
+msgstr "Impossible de se connecter à Microsoft Teams."
+
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsProvider.tsx
+msgid "officeAddin.teams.loading"
+msgstr "Chargement de l'onglet Microsoft Teams..."
+
 # ==============================
 # Unstable IDs
 # ==============================
