@@ -14,6 +14,7 @@ import { useTeamsChannelFetcher } from "../hooks/useTeamsChannelFetcher";
 import { useTeamsChannelList } from "../hooks/useTeamsChannelList";
 import { useTeamsChatFetcher } from "../hooks/useTeamsChatFetcher";
 import { useTeamsChatList } from "../hooks/useTeamsChatList";
+import { useTeamsDevProbe } from "../hooks/useTeamsDevProbe";
 import { useTeamsTranscriptBuild } from "../hooks/useTeamsTranscriptBuild";
 import {
   DEFAULT_CHAT_MESSAGE_LIMIT,
@@ -152,6 +153,7 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
   const { userPrincipalName, userId } = useTeams();
   const { fetcher } = useTeamsChatFetcher();
   const { fetcher: channelFetcher } = useTeamsChannelFetcher();
+  useTeamsDevProbe();
 
   const [isOpen, setIsOpen] = useState(false);
   const [hasEverOpened, setHasEverOpened] = useState(false);
