@@ -18,6 +18,10 @@ import {
 } from "./teamsChatPager";
 import { groupSelectionsByConversation } from "./teamsChatSelection";
 import { conversationKey } from "./teamsConversationRef";
+import {
+  collectTeamsImageAssets,
+  planTeamsImageFetches,
+} from "./teamsTranscriptAssets";
 import { runWithConcurrency } from "../../utils/graph/graphClient";
 
 import type { TeamsTranscriptSection } from "./buildTeamsTranscriptFile";
@@ -60,6 +64,8 @@ export interface CollectTeamsTranscriptResult {
   skippedCount: number;
   chatsTotal: number;
   chatsCompleted: number;
+  /** Image files fetched from the messages, to upload beside the transcript. */
+  assetFiles: File[];
 }
 
 export interface CollectTeamsTranscriptArgs {
@@ -100,7 +106,9 @@ export async function collectTeamsTranscript(
       ? wholeChatRequests
       : group.messages.filter((entry) => entry.message === null).length,
   );
-  const requestsTotal = groupRequests.reduce((sum, count) => sum + count, 0);
+  // Grows once when the image phase starts: how many images a selection holds
+  // is unknowable before its messages are fetched.
+  let requestsTotal = groupRequests.reduce((sum, count) => sum + count, 0);
 
   let requestsCompleted = 0;
   let chatsCompleted = 0;
@@ -278,10 +286,36 @@ export async function collectTeamsTranscript(
   emit();
   await runWithConcurrency(tasks, TEAMS_CHAT_CONCURRENCY);
 
-  const present = sections.filter(
+  let present = sections.filter(
     (section): section is TeamsTranscriptSection =>
       section !== null && section.messages.length > 0,
   );
+
+  let assetFiles: File[] = [];
+  if (!signal?.aborted && planTeamsImageFetches(present) > 0) {
+    requestsTotal += planTeamsImageFetches(present);
+    emit();
+    const assets = await collectTeamsImageAssets({
+      sections: present,
+      fetchImage: (section, url) =>
+        section.kind === "chat"
+          ? fetcher.getHostedContent(section.chat.chatId, url, { signal })
+          : (channelFetcher?.getHostedContent(
+              section.channel.teamId,
+              section.channel.channelId,
+              url,
+              { signal },
+            ) ?? Promise.resolve(null)),
+      onFetched: () => {
+        requestsCompleted += 1;
+        emit();
+      },
+      signal,
+    });
+    present = assets.sections;
+    assetFiles = assets.files;
+  }
+
   return {
     sections: present,
     state: overallState(outcomes, present.length),
@@ -292,6 +326,7 @@ export async function collectTeamsTranscript(
     skippedCount,
     chatsTotal: groups.length,
     chatsCompleted,
+    assetFiles,
   };
 }
 

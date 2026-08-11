@@ -21,6 +21,8 @@ import type { TeamsChatSelection } from "../utils/teamsChatSelection";
 export interface TeamsTranscriptBuildOutcome {
   /** Null when nothing renderable was fetched — never upload an empty file. */
   file: File | null;
+  /** Images fetched from the messages, uploaded beside the transcript. */
+  assets: File[];
   state: TeamsFetchState;
   messageCount: number;
   skippedCount: number;
@@ -44,6 +46,7 @@ export interface UseTeamsTranscriptBuildResult {
 
 const ABORTED_OUTCOME: TeamsTranscriptBuildOutcome = {
   file: null,
+  assets: [],
   state: "error",
   messageCount: 0,
   skippedCount: 0,
@@ -124,6 +127,7 @@ export function useTeamsTranscriptBuild(
             // in UTC would file those same messages under a different day.
             timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           }),
+          assets: collected.assetFiles,
           state: collected.state,
           messageCount: collected.messageCount,
           skippedCount: collected.skippedCount,

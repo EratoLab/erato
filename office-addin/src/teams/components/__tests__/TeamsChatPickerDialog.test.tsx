@@ -121,6 +121,8 @@ vi.mock("@erato/frontend/library", () => ({
   SearchIcon: () => null,
   FILE_PREVIEW_STYLES: { progress: { container: "", bar: "" } },
   useFileUploadStore: { getState: () => hooks.uploadStore },
+  // Tag-stripping stand-in; the real block handling has its own unit tests.
+  htmlToPlainText: (html: string) => html.replace(/<[^>]+>/g, ""),
 }));
 
 function omitStyleProps(props: Record<string, unknown>) {
@@ -309,6 +311,7 @@ function fakeFetcher(
       });
     },
     getMessage: () => Promise.resolve(NEWEST),
+    getHostedContent: () => Promise.resolve(null),
   };
 }
 
@@ -321,6 +324,7 @@ function fakeChannelFetcher(
     listMessagesPage: () =>
       Promise.resolve({ messages: [], nextLink: null, status: 200, ok: true }),
     probeMessage: () => Promise.resolve({ message: null, status: 404 }),
+    getHostedContent: () => Promise.resolve(null),
     getReply: () => Promise.resolve(null),
     pageChannelBackwards: () =>
       Promise.resolve({
@@ -954,6 +958,50 @@ describe("TeamsChatPickerDialog", () => {
     expect(getMessage).not.toHaveBeenCalled();
     const text = await uploads[0][0].text();
     expect(text).toContain("Works for me.");
+  });
+
+  it("uploads pasted images beside the transcript", async () => {
+    const hosted = `https://graph.microsoft.com/v1.0/chats/x/messages/1/hostedContents/aWQ9/$value`;
+    const base = fakeFetcher();
+    hooks.fetcher = {
+      ...base,
+      pageChatBackwards: () =>
+        Promise.resolve({
+          messages: [
+            mockGraphChatMessage({
+              id: "a",
+              body: {
+                contentType: "html",
+                content: `<p>see this</p><img src="${hosted}">`,
+              },
+            }),
+          ],
+          nextLink: null,
+          truncated: false,
+          oldestCreatedDateTime: "2026-03-03T09:14:00Z",
+          state: "ok",
+        }),
+      getHostedContent: () =>
+        Promise.resolve({
+          bytes: new TextEncoder().encode("png-bytes").buffer,
+          contentType: "image/png",
+        }),
+    };
+    renderPicker();
+    fireEvent.click(selectChat());
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+    });
+    await waitFor(() => expect(uploads).toHaveLength(1));
+
+    expect(uploads[0]).toHaveLength(2);
+    const [transcript, image] = uploads[0];
+    expect(transcript.name).toBe("teams-Product_sync.md");
+    expect(image.name).toMatch(/^teams-img-[0-9a-f]{16}\.png$/);
+    await expect(transcript.text()).resolves.toContain(
+      `[image: attached as ${image.name}]`,
+    );
   });
 
   it("never uploads an empty transcript", async () => {

@@ -34,6 +34,7 @@ function fakeChannelFetcher(overrides: Partial<TeamsChannelFetcher> = {}) {
       Promise.resolve({ messages: [], nextLink: null, status: 200, ok: true }),
     ),
     probeMessage: vi.fn(() => Promise.resolve({ message: null, status: 404 })),
+    getHostedContent: vi.fn(() => Promise.resolve(null)),
     getReply: vi.fn(() => Promise.resolve(null)),
     pageChannelBackwards: vi.fn(() =>
       Promise.resolve({
@@ -76,6 +77,7 @@ function fakeFetcher(overrides: Partial<TeamsChatFetcher> = {}) {
       }),
     ),
     getMessage: vi.fn(() => Promise.resolve(null)),
+    getHostedContent: vi.fn(() => Promise.resolve(null)),
     ...overrides,
   };
   return fetcher;
@@ -289,6 +291,61 @@ describe("collectTeamsTranscript", () => {
     expect(seen.map((entry) => entry.completed)).toEqual(
       [...seen.map((entry) => entry.completed)].sort((a, b) => a - b),
     );
+  });
+
+  it("fetches pasted images and stamps their markers with the upload name", async () => {
+    const hosted = `https://graph.microsoft.com/v1.0/chats/x/messages/1/hostedContents/aWQ9/$value`;
+    const pageChatBackwards = vi.fn(() =>
+      Promise.resolve({
+        messages: [
+          mockGraphChatMessage({
+            id: "a",
+            body: {
+              contentType: "html" as const,
+              content: `<p>see this</p><img src="${hosted}">`,
+            },
+          }),
+        ],
+        nextLink: null,
+        truncated: false,
+        oldestCreatedDateTime: "2026-03-03T09:14:00Z",
+        state: "ok" as const,
+      }),
+    );
+    const getHostedContent = vi.fn(() =>
+      Promise.resolve({
+        bytes: new TextEncoder().encode("png-bytes").buffer,
+        contentType: "image/png",
+      }),
+    );
+    const totals: number[] = [];
+
+    const result = await collectTeamsTranscript({
+      fetcher: fakeFetcher({ pageChatBackwards, getHostedContent }),
+      selections: [
+        {
+          kind: "conversation",
+          ref: chatRef(MOCK_CHAT_ID),
+          title: "Product sync",
+        },
+      ],
+      knownChats,
+      onProgress: (progress) => totals.push(progress.requestsTotal),
+    });
+
+    expect(getHostedContent).toHaveBeenCalledWith(
+      MOCK_CHAT_ID,
+      hosted,
+      expect.anything(),
+    );
+    expect(result.assetFiles).toHaveLength(1);
+    const name = result.assetFiles[0].name;
+    expect(name).toMatch(/^teams-img-[0-9a-f]{16}\.png$/);
+    expect(result.sections[0].messages[0].text).toContain(
+      `[image: attached as ${name}]`,
+    );
+    // The denominator grows by the image fetch once its count is known.
+    expect(Math.max(...totals)).toBe(Math.min(...totals) + 1);
   });
 
   it("names a conversation while it is being fetched and clears it after", async () => {

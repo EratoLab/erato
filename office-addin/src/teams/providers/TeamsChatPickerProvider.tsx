@@ -169,7 +169,7 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
 
   const handoffRef = useRef<((files: File[]) => Promise<void>) | null>(null);
   const cancelledRef = useRef(false);
-  const lastBuildRef = useRef<{ key: string; file: File } | null>(null);
+  const lastBuildRef = useRef<{ key: string; files: File[] } | null>(null);
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
 
@@ -266,10 +266,10 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
    * walking Graph again, which is tens of seconds.
    */
   const deliver = useCallback(
-    async (file: File, retryKey?: string): Promise<boolean> => {
+    async (files: File[], retryKey?: string): Promise<boolean> => {
       const handoff = handoffRef.current;
       const fail = () => {
-        if (retryKey) lastBuildRef.current = { key: retryKey, file };
+        if (retryKey) lastBuildRef.current = { key: retryKey, files };
         setAttachError("upload-failed");
         return false;
       };
@@ -277,7 +277,7 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
         return fail();
       }
       try {
-        await handoff([file]);
+        await handoff(files);
       } catch (error) {
         console.warn(
           "[TeamsChatPicker] attaching the transcript failed",
@@ -304,7 +304,7 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
     const key = teamsSelectionDedupeKey(selections, messageLimitRef.current);
     const built = lastBuildRef.current;
     if (built?.key === key) {
-      await deliver(built.file, key);
+      await deliver(built.files, key);
       return;
     }
 
@@ -325,7 +325,7 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
       setPartialOutcome(outcome);
       return;
     }
-    await deliver(outcome.file, key);
+    await deliver([outcome.file, ...outcome.assets], key);
   }, [build, deliver, self]);
 
   const attachPartial = useCallback(async () => {
@@ -334,7 +334,9 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
     setPartialOutcome(null);
     // Put the offer back if the composer never took it — the partial
     // transcript is the only copy of a walk that already ran.
-    if (!(await deliver(outcome.file))) setPartialOutcome(outcome);
+    if (!(await deliver([outcome.file, ...outcome.assets]))) {
+      setPartialOutcome(outcome);
+    }
   }, [deliver, partialOutcome]);
 
   const value = useMemo<TeamsChatPickerContextValue>(
