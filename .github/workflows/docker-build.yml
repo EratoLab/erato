@@ -92,6 +92,8 @@ jobs:
 
       - name: "Build frontend library package"
         working-directory: ./frontend
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
         run: pnpm run build:lib
 
       - name: "Install component-kit-example packages"
