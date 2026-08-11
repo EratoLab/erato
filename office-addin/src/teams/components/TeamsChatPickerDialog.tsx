@@ -547,6 +547,16 @@ function TeamsChatPickerDialogBody({
     const searchTerm = trimmed;
     return (
       <>
+        {search.isRefreshing && (
+          // `keepPreviousData` keeps the previous query's hits on screen while
+          // the new one runs; without this line that reads as a finished search.
+          <p className="px-3 py-1 text-xs text-theme-fg-muted" role="status">
+            {t({
+              id: "officeAddin.teams.picker.searchRefreshing",
+              message: "Searching…",
+            })}
+          </p>
+        )}
         {search.hits.length === 0 ? (
           // Hits without an addressable `(chatId, messageId)` are dropped, so
           // a page can come back empty while later pages still hold results.
@@ -888,6 +898,9 @@ function BuildProgress({ picker }: { picker: TeamsChatPickerContextValue }) {
   const chatsTotal = progress.chatsTotal;
   const messagesFetched = progress.messagesFetched;
   const oldest = formatDay(progress.oldestCreatedDateTime);
+  const titles = progress.inFlightTitles
+    .filter((title) => title.length > 0)
+    .join(", ");
 
   return (
     <div className="space-y-1">
@@ -922,6 +935,14 @@ function BuildProgress({ picker }: { picker: TeamsChatPickerContextValue }) {
               message: `${chatsCompleted} of ${chatsTotal} conversations loaded — ${messagesFetched} messages`,
             })}
       </p>
+      {titles.length > 0 && (
+        <p className="truncate text-xs text-theme-fg-muted" role="status">
+          {t({
+            id: "officeAddin.teams.picker.progressLoading",
+            message: `Loading: ${titles}…`,
+          })}
+        </p>
+      )}
     </div>
   );
 }

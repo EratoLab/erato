@@ -1299,6 +1299,11 @@ msgstr "Teams-Nachrichten werden geladen"
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.progressLoading"
+msgstr "Wird geladen: {titles}…"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.progressWithDate"
 msgstr "{chatsCompleted} von {chatsTotal} Unterhaltungen geladen – {messagesFetched} Nachrichten, zurück bis {oldest}"
 
@@ -1321,6 +1326,11 @@ msgstr "Teams-Nachrichten durchsuchen"
 #: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.searchPlaceholder"
 msgstr "Nachrichten durchsuchen"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.searchRefreshing"
+msgstr "Suche läuft…"
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx

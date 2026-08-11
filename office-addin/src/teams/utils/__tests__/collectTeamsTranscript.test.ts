@@ -289,6 +289,23 @@ describe("collectTeamsTranscript", () => {
     );
   });
 
+  it("names a conversation while it is being fetched and clears it after", async () => {
+    const getMessage = vi.fn((chatId: string, messageId: string) =>
+      Promise.resolve(mockGraphChatMessage({ id: messageId, chatId })),
+    );
+    const seen: string[][] = [];
+
+    await collectTeamsTranscript({
+      fetcher: fakeFetcher({ getMessage }),
+      selections: [messageSelection("a")],
+      knownChats,
+      onProgress: (progress) => seen.push(progress.inFlightTitles),
+    });
+
+    expect(seen.some((titles) => titles.includes("Product sync"))).toBe(true);
+    expect(seen[seen.length - 1]).toEqual([]);
+  });
+
   it("counts messages as the whole-chat walk reports them", async () => {
     const pageChatBackwards = vi.fn(
       (args: Parameters<TeamsChatFetcher["pageChatBackwards"]>[0]) => {
@@ -331,7 +348,8 @@ describe("collectTeamsTranscript", () => {
       onProgress: (progress) => seen.push(progress.messagesFetched),
     });
 
-    expect(seen).toEqual([0, 1, 2, 2]);
+    // The second 0 is the task-start emit that begins naming the conversation.
+    expect(seen).toEqual([0, 0, 1, 2, 2]);
   });
 
   it("keeps the chats that landed when one fails", async () => {

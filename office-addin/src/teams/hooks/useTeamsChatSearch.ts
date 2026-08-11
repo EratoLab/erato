@@ -14,6 +14,12 @@ export const MIN_SEARCH_QUERY_LENGTH = 3;
 export interface UseTeamsChatSearchResult {
   hits: TeamsSearchHit[];
   isLoading: boolean;
+  /**
+   * A changed query is running while `hits` still shows the previous results —
+   * the trade `keepPreviousData` makes, which otherwise looks like a finished
+   * search.
+   */
+  isRefreshing: boolean;
   isError: boolean;
   hasMore: boolean;
   isLoadingMore: boolean;
@@ -77,6 +83,8 @@ export function useTeamsChatSearch(
   return {
     hits,
     isLoading: search.isPending && enabled,
+    isRefreshing:
+      search.isFetching && !search.isPending && !search.isFetchingNextPage,
     isError: search.isError || search.data?.pages[0]?.state === "error",
     hasMore: search.hasNextPage,
     isLoadingMore: search.isFetchingNextPage,

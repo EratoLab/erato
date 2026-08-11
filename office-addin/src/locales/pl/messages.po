@@ -1299,6 +1299,11 @@ msgstr "Wczytywanie wiadomości Teams"
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.progressLoading"
+msgstr "Ładowanie: {titles}…"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.progressWithDate"
 msgstr "Wczytano {chatsCompleted} z {chatsTotal} rozmów — {messagesFetched} wiadomości, wstecz do {oldest}"
 
@@ -1321,6 +1326,11 @@ msgstr "Przeszukaj wiadomości Teams"
 #: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.searchPlaceholder"
 msgstr "Szukaj wiadomości"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.searchRefreshing"
+msgstr "Wyszukiwanie…"
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx

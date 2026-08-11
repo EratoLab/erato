@@ -271,6 +271,7 @@ function searchResult(
   return {
     hits: [],
     isLoading: false,
+    isRefreshing: false,
     isError: false,
     hasMore: false,
     isLoadingMore: false,
@@ -555,6 +556,36 @@ describe("TeamsChatPickerDialog", () => {
     await waitFor(() => expect(selectChat()).toBeChecked());
   });
 
+  it("signals a re-running search instead of passing off stale hits as done", async () => {
+    hooks.search = searchResult({
+      hits: [
+        {
+          ref: { kind: "chat" as const, chatId: MOCK_CHAT_ID },
+          webLink: null,
+          messageId: "1754000000000",
+          senderName: "Grace Hopper",
+          createdAt: "2026-08-10T09:15:00Z",
+          summary: "Works <c0>for</c0> me.",
+        },
+      ],
+      isRefreshing: true,
+    });
+    renderPicker();
+
+    fireEvent.change(
+      screen.getByLabelText("Filter Teams chats or search messages"),
+      { target: { value: "thursday" } },
+    );
+
+    expect(await screen.findByText("Searching…")).toBeInTheDocument();
+    // The previous results stay on screen behind the indicator.
+    expect(
+      screen.getByRole("checkbox", {
+        name: "Select message from Grace Hopper",
+      }),
+    ).toBeInTheDocument();
+  });
+
   it("finds a chat by a participant's name without waiting on search", () => {
     renderPicker();
 
@@ -693,6 +724,8 @@ describe("TeamsChatPickerDialog", () => {
     });
     expect(bar).toHaveAttribute("aria-valuenow", "1");
     expect(bar).toHaveAttribute("aria-valuemax", "4");
+    // Which conversation is still fetching, not just how many.
+    expect(screen.getByText("Loading: Product sync…")).toBeInTheDocument();
 
     await act(async () => {
       blocked.release();

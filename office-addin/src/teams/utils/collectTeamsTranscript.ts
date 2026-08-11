@@ -45,6 +45,11 @@ export interface TeamsTranscriptProgress {
   chatsCompleted: number;
   messagesFetched: number;
   oldestCreatedDateTime: string | null;
+  /**
+   * Titles of the conversations being fetched right now. What separates "the
+   * big channel is slow" from "the build hung" when several are ticked.
+   */
+  inFlightTitles: string[];
 }
 
 export interface CollectTeamsTranscriptResult {
@@ -101,6 +106,7 @@ export async function collectTeamsTranscript(
   let chatsCompleted = 0;
   let messagesFetched = 0;
   let oldest: string | null = null;
+  const inFlight = new Set<number>();
   const emit = () =>
     onProgress?.({
       requestsTotal,
@@ -109,6 +115,9 @@ export async function collectTeamsTranscript(
       chatsCompleted,
       messagesFetched,
       oldestCreatedDateTime: oldest,
+      inFlightTitles: groups
+        .filter((_, index) => inFlight.has(index))
+        .map((group) => group.title),
     });
 
   const noteOldest = (candidate: string | null) => {
@@ -124,6 +133,8 @@ export async function collectTeamsTranscript(
 
   const tasks = groups.map((group, index) => async () => {
     let spent = 0;
+    inFlight.add(index);
+    emit();
     try {
       if (group.ref.kind === "channel") {
         const ref = group.ref;
@@ -259,6 +270,7 @@ export async function collectTeamsTranscript(
     } finally {
       requestsCompleted += groupRequests[index] - spent;
       chatsCompleted += 1;
+      inFlight.delete(index);
       emit();
     }
   });
