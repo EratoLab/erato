@@ -602,6 +602,58 @@ describe("TeamsChatPickerDialog", () => {
     expect(hooks.search?.hits ?? []).toHaveLength(0);
   });
 
+  it("holds the channels' place while they load behind the chats", () => {
+    hooks.channelList = channelListResult({ isLoading: true });
+    renderPicker();
+
+    // Chats are already interactive while the channel rows are still coming.
+    expect(selectChat()).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Loading channels…" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows channels even when there are no personal chats", () => {
+    hooks.chatList = chatListResult({ chats: [] });
+    hooks.channelList = channelListResult({
+      channels: parseTeamChannels({ id: "t1", displayName: "Erato Labs" }, [
+        { id: "c1", displayName: "Test Channel 1" },
+      ]),
+    });
+    renderPicker();
+
+    expect(screen.queryByText("No Teams chats found.")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("checkbox", { name: "Select Test Channel 1" }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not claim 'no matches' while channels are still loading", () => {
+    hooks.channelList = channelListResult({ isLoading: true });
+    renderPicker();
+
+    fireEvent.change(
+      screen.getByLabelText("Filter Teams chats or search messages"),
+      { target: { value: "nobody" } },
+    );
+
+    expect(
+      screen.queryByText("No chat, channel or person matches that name."),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Loading channels…" }),
+    ).toBeInTheDocument();
+  });
+
+  it("notes rate-limited channel listing like it does for chats", () => {
+    hooks.channelList = channelListResult({ isPartial: true });
+    renderPicker();
+
+    expect(
+      screen.getByText("Showing partial results — Teams is rate-limiting."),
+    ).toBeInTheDocument();
+  });
+
   it("lists channels flat beneath chats, badging restricted ones", () => {
     hooks.channelList = channelListResult({
       channels: [

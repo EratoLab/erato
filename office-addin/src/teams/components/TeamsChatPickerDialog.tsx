@@ -222,7 +222,9 @@ function TeamsChatPickerDialogBody({
         <SectionHeading>
           {t({ id: "officeAddin.teams.picker.chatsSection", message: "Chats" })}
         </SectionHeading>
-        {chatMatches.length === 0 && channelMatches.length === 0 ? (
+        {chatMatches.length === 0 &&
+        channelMatches.length === 0 &&
+        !picker.channelList.isLoading ? (
           <p className="px-3 py-2 text-xs text-theme-fg-muted">
             {t({
               id: "officeAddin.teams.picker.noChatMatches",
@@ -233,6 +235,7 @@ function TeamsChatPickerDialogBody({
           <>
             {chatMatches.map((chat) => renderChatRow(chat))}
             {channelMatches.map((channel) => renderChannelRow(channel))}
+            {picker.channelList.isLoading && <ChannelListLoading />}
           </>
         )}
         <SectionHeading>
@@ -269,7 +272,11 @@ function TeamsChatPickerDialogBody({
         />
       );
     }
-    if (list.chats.length === 0) {
+    if (
+      list.chats.length === 0 &&
+      picker.channelList.channels.length === 0 &&
+      !picker.channelList.isLoading
+    ) {
       return (
         <EmptyState
           icon={<FolderIcon className="mb-3 size-10 text-theme-fg-muted" />}
@@ -286,7 +293,8 @@ function TeamsChatPickerDialogBody({
         {picker.channelList.channels.map((channel) =>
           renderChannelRow(channel),
         )}
-        {list.isPartial && <PartialNote />}
+        {picker.channelList.isLoading && <ChannelListLoading />}
+        {(list.isPartial || picker.channelList.isPartial) && <PartialNote />}
         <LoadMoreRow
           visible={list.hasMore}
           busy={list.isLoadingMore}
@@ -1002,6 +1010,25 @@ function SkeletonRows() {
         <TeamsPickerRowSkeleton key={index} />
       ))}
     </>
+  );
+}
+
+/**
+ * Channels land a beat after the chats — one call for the teams, then one per
+ * team — so the list holds their place instead of growing without warning.
+ */
+function ChannelListLoading() {
+  return (
+    <div
+      role="status"
+      aria-label={t({
+        id: "officeAddin.teams.picker.channelsLoading",
+        message: "Loading channels…",
+      })}
+    >
+      <TeamsPickerRowSkeleton />
+      <TeamsPickerRowSkeleton />
+    </div>
   );
 }
 
