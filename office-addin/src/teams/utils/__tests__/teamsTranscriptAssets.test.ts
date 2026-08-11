@@ -255,6 +255,29 @@ describe("shared files", () => {
     );
   });
 
+  it("hands the deployment's upload limit to the download as the per-file cap", async () => {
+    const downloadFile = vi.fn(() => okDownload("x"));
+    const sections = [
+      section([
+        message({
+          sharedFiles: [fileRef("big.pdf", "https://c.sharepoint.com/big")],
+        }),
+      ]),
+    ];
+
+    await collectTeamsMessageAssets({
+      sections,
+      fetchImage: () => Promise.resolve(null),
+      downloadFile,
+      maxFileBytes: 50 * 1024 * 1024,
+    });
+
+    expect(downloadFile).toHaveBeenCalledWith(
+      expect.anything(),
+      50 * 1024 * 1024,
+    );
+  });
+
   it("caps the number of files it will download", async () => {
     const downloadFile = vi.fn(() => okDownload("x"));
     const refs = Array.from({ length: MAX_TRANSCRIPT_FILES + 3 }, (_, i) =>

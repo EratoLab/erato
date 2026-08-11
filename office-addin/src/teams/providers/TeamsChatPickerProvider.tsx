@@ -1,4 +1,4 @@
-import { useFileUploadStore } from "@erato/frontend/library";
+import { useFeatureConfig, useFileUploadStore } from "@erato/frontend/library";
 import {
   createContext,
   useCallback,
@@ -155,6 +155,8 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
   const { fetcher } = useTeamsChatFetcher();
   const { fetcher: channelFetcher } = useTeamsChannelFetcher();
   const { fetcher: fileFetcher } = useTeamsFileFetcher();
+  // Shared-file downloads cap at what the deployment's upload limit accepts.
+  const maxFileBytes = useFeatureConfig().upload.maxSizeBytes;
   useTeamsDevProbe();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -316,6 +318,7 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
       knownChannels: channelsByKeyRef.current,
       self,
       limit: messageLimitRef.current,
+      maxFileBytes,
     });
     // A user-initiated cancel is not a failure to report.
     if (cancelledRef.current) return;
@@ -328,7 +331,7 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
       return;
     }
     await deliver([outcome.file, ...outcome.assets], key);
-  }, [build, deliver, self]);
+  }, [build, deliver, maxFileBytes, self]);
 
   const attachPartial = useCallback(async () => {
     const outcome = partialOutcome;

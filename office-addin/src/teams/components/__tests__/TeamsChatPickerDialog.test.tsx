@@ -122,6 +122,7 @@ vi.mock("@erato/frontend/library", () => ({
   SearchIcon: () => null,
   FILE_PREVIEW_STYLES: { progress: { container: "", bar: "" } },
   useFileUploadStore: { getState: () => hooks.uploadStore },
+  useFeatureConfig: () => ({ upload: { maxSizeBytes: 10 * 1024 * 1024 } }),
   // Tag-stripping stand-in; the real block handling has its own unit tests.
   htmlToPlainText: (html: string) => html.replace(/<[^>]+>/g, ""),
 }));

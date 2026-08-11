@@ -38,6 +38,7 @@ export interface UseTeamsTranscriptBuildResult {
     knownChannels?: ReadonlyMap<string, ParsedTeamsChannel>;
     self?: TeamsSelfIdentity;
     limit?: number;
+    maxFileBytes?: number;
   }) => Promise<TeamsTranscriptBuildOutcome>;
   progress: TeamsTranscriptProgress | null;
   isBuilding: boolean;
@@ -95,6 +96,7 @@ export function useTeamsTranscriptBuild(
       knownChannels?: ReadonlyMap<string, ParsedTeamsChannel>;
       self?: TeamsSelfIdentity;
       limit?: number;
+      maxFileBytes?: number;
     }): Promise<TeamsTranscriptBuildOutcome> => {
       if (!fetcher || args.selections.length === 0) {
         return ABORTED_OUTCOME;
@@ -119,6 +121,7 @@ export function useTeamsTranscriptBuild(
               knownChannels: args.knownChannels,
               self: args.self,
               limit: args.limit,
+              maxFileBytes: args.maxFileBytes,
               signal,
               onProgress: setProgress,
             }),

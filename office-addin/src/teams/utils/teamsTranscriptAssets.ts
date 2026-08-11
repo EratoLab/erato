@@ -22,6 +22,10 @@ export const MAX_TRANSCRIPT_IMAGES = 10;
 /** Pasted screenshots are small; anything bigger is not worth the tokens. */
 export const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 export const MAX_TRANSCRIPT_FILES = 10;
+/**
+ * Fallback per-file cap for when the deployment's configured upload limit is
+ * not available — normally the backend's own `max_upload_size_kb` governs.
+ */
 export const MAX_SHARED_FILE_BYTES = 10 * 1024 * 1024;
 /** Ceiling across all shared files, so ten maximal ones can't stack up. */
 export const MAX_TOTAL_FILE_BYTES = 25 * 1024 * 1024;
@@ -60,6 +64,8 @@ export async function collectTeamsMessageAssets(args: {
   fetchImage: FetchTeamsImage;
   /** Null when `Files.Read.All` was not granted — file markers stay bare. */
   downloadFile: DownloadTeamsFile | null;
+  /** The deployment's upload limit; what the backend would refuse anyway. */
+  maxFileBytes?: number;
   /** Called exactly once per planned fetch, success or not. */
   onFetched?: () => void;
   signal?: AbortSignal;
@@ -68,6 +74,9 @@ export async function collectTeamsMessageAssets(args: {
   const uploadedFileByUrl = new Map<string, string>();
   const tooLargeFileUrls = new Set<string>();
   const filesByHash = new Map<string, File>();
+  const maxFileBytes = args.maxFileBytes ?? MAX_SHARED_FILE_BYTES;
+  // The total budget must never undercut a single file the deployment allows.
+  const totalFileBudget = Math.max(MAX_TOTAL_FILE_BYTES, maxFileBytes);
   let fileBudgetUsed = 0;
 
   const imageTasks = imageFetchPlan(args.sections).map(
@@ -102,14 +111,14 @@ export async function collectTeamsMessageAssets(args: {
     ? fileFetchPlan(args.sections).map((ref) => async () => {
         try {
           if (args.signal?.aborted) return;
-          const remaining = MAX_TOTAL_FILE_BYTES - fileBudgetUsed;
+          const remaining = totalFileBudget - fileBudgetUsed;
           if (remaining <= 0) {
             tooLargeFileUrls.add(ref.contentUrl);
             return;
           }
           const result = await downloadFile(
             ref,
-            Math.min(MAX_SHARED_FILE_BYTES, remaining),
+            Math.min(maxFileBytes, remaining),
           );
           if (result.state === "too-large") {
             tooLargeFileUrls.add(ref.contentUrl);

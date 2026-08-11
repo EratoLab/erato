@@ -81,6 +81,8 @@ export interface CollectTeamsTranscriptArgs {
   channelFetcher?: TeamsChannelFetcher | null;
   /** Present only where `Files.Read.All` was granted. */
   fileFetcher?: TeamsFileFetcher | null;
+  /** The deployment's configured upload limit, as the per-file cap. */
+  maxFileBytes?: number;
   /** Channel metadata from the browse cache, keyed by `teamId/channelId`. */
   knownChannels?: ReadonlyMap<string, ParsedTeamsChannel>;
   self?: TeamsSelfIdentity;
@@ -322,6 +324,7 @@ export async function collectTeamsTranscript(
               signal,
             })
         : null,
+      maxFileBytes: args.maxFileBytes,
       onFetched: () => {
         requestsCompleted += 1;
         emit();

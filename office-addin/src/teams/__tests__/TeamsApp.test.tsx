@@ -188,6 +188,9 @@ vi.mock("@erato/frontend/library", async () => {
       error: null,
       clearFiles: vi.fn(),
     }),
+    useFeatureConfig: () => ({
+      upload: { maxSizeBytes: 10 * 1024 * 1024 },
+    }),
     useFileUploadStore: (
       selector: (state: { silentChatId: string | null }) => unknown,
     ) => selector({ silentChatId: null }),
