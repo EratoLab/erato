@@ -2,7 +2,10 @@ import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import React, { memo } from "react";
 import Markdown, { defaultUrlTransform } from "react-markdown";
+import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import "katex/dist/katex.min.css";
 
 import {
   Trace,
@@ -946,7 +949,8 @@ export const MessageContent = memo(function MessageContent({
       <BlockCodeContext.Provider value={{ isBlockCode: false, isStreaming }}>
         <OutlookArtifactContext.Provider value={outlookArtifact ?? null}>
           <Markdown
-            remarkPlugins={[remarkGfm]}
+            remarkPlugins={[remarkGfm, remarkMath]}
+            rehypePlugins={[rehypeKatex]}
             components={components}
             urlTransform={(url) =>
               // eslint-disable-next-line lingui/no-unlocalized-strings
