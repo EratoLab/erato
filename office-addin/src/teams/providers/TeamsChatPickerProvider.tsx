@@ -181,8 +181,6 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
   const handoffRef = useRef<((files: File[]) => Promise<void>) | null>(null);
   const cancelledRef = useRef(false);
   const lastBuildRef = useRef<{ key: string; files: File[] } | null>(null);
-  const selectionRef = useRef(selection);
-  selectionRef.current = selection;
 
   // The object id is the reliable match; the login hint can differ from a
   // member's primary SMTP address, which would leave the viewer in their own
@@ -199,16 +197,9 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
   const channelList = useTeamsChannelList(
     hasEverOpened ? channelFetcher : null,
   );
-  const channelsByKeyRef = useRef(channelList.channelsByKey);
-  channelsByKeyRef.current = channelList.channelsByKey;
-  const chatsByIdRef = useRef(chatList.chatsById);
-  chatsByIdRef.current = chatList.chatsById;
 
   const { build, progress, isBuilding, cancel, reset } =
     useTeamsTranscriptBuild(fetcher, channelFetcher, fileFetcher);
-
-  const messageLimitRef = useRef(messageLimit);
-  messageLimitRef.current = messageLimit;
 
   const open = useCallback(
     (onSelectFiles: (files: File[]) => Promise<void>) => {
@@ -306,13 +297,13 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
   );
 
   const attach = useCallback(async () => {
-    const selections = [...selectionRef.current.values()];
+    const selections = [...selection.values()];
     if (selections.length === 0) return;
     cancelledRef.current = false;
     setAttachError(null);
     setPartialOutcome(null);
 
-    const key = teamsSelectionDedupeKey(selections, messageLimitRef.current);
+    const key = teamsSelectionDedupeKey(selections, messageLimit);
     const built = lastBuildRef.current;
     if (built?.key === key) {
       await deliver(built.files, key);
@@ -321,10 +312,10 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
 
     const outcome = await build({
       selections,
-      knownChats: chatsByIdRef.current,
-      knownChannels: channelsByKeyRef.current,
+      knownChats: chatList.chatsById,
+      knownChannels: channelList.channelsByKey,
       self,
-      limit: messageLimitRef.current,
+      limit: messageLimit,
       maxFileBytes,
     });
     // A user-initiated cancel is not a failure to report.
@@ -338,7 +329,16 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
       return;
     }
     await deliver([outcome.file, ...outcome.assets], key);
-  }, [build, deliver, maxFileBytes, self]);
+  }, [
+    build,
+    chatList.chatsById,
+    channelList.channelsByKey,
+    deliver,
+    maxFileBytes,
+    messageLimit,
+    selection,
+    self,
+  ]);
 
   const attachPartial = useCallback(async () => {
     const outcome = partialOutcome;

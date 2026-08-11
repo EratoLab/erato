@@ -1083,9 +1083,59 @@ describe("TeamsChatPickerDialog", () => {
     expect(downloadSharedFile).toHaveBeenCalledWith(
       "https://contoso.sharepoint.com/multipage-test.pdf",
       10 * 1024 * 1024,
-      expect.anything(),
+      // Closing the dialog must be able to abort the transfer.
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(openSpy).not.toHaveBeenCalled();
+  });
+
+  it("revokes the preview's blob url when the picker unmounts around it", async () => {
+    const downloadSharedFile = vi.fn(() =>
+      Promise.resolve({
+        state: "ok" as const,
+        content: {
+          bytes: new TextEncoder().encode("pdf").buffer,
+          contentType: "application/pdf",
+        },
+      }),
+    );
+    hooks.fileFetcher = { downloadSharedFile };
+    hooks.messages = messagesResult({
+      messages: [
+        {
+          chatId: MOCK_CHAT_ID,
+          messageId: "1754000000000",
+          senderName: "Max Token",
+          createdAt: "2026-08-10T09:15:00Z",
+          editedAt: null,
+          text: "check this PDF guys",
+          markers: [],
+          replyToId: null,
+          deepLink: "https://example.invalid/m",
+          sharedFiles: [
+            {
+              attachmentId: "att-1",
+              name: "multipage-test.pdf",
+              contentUrl: "https://contoso.sharepoint.com/multipage-test.pdf",
+            },
+          ],
+          imageUrls: [],
+        },
+      ],
+    });
+    URL.createObjectURL = vi.fn(() => "blob:preview");
+    const revoke = vi.fn();
+    URL.revokeObjectURL = revoke;
+    const view = renderPicker();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Product sync" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open multipage-test.pdf" }),
+    );
+    await screen.findByRole("dialog", { name: "Preview multipage-test.pdf" });
+
+    view.unmount();
+    expect(revoke).toHaveBeenCalledWith("blob:preview");
   });
 
   it("uploads pasted images beside the transcript", async () => {

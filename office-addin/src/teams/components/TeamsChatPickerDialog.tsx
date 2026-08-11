@@ -141,6 +141,28 @@ function TeamsChatPickerDialogBody({
     };
   }, []);
 
+  // Closing the dialog aborts an in-flight preview download instead of
+  // letting a multi-megabyte transfer finish for nobody.
+  const previewAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    previewAbortRef.current = controller;
+    return () => controller.abort();
+  }, []);
+
+  // The preview's blob URL must also die with the dialog, not only with the
+  // preview modal's own close button.
+  const previewUrlRef = useRef<string | null>(null);
+  useEffect(() => {
+    previewUrlRef.current = sharedFilePreview?.url ?? null;
+  }, [sharedFilePreview]);
+  useEffect(
+    () => () => {
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    },
+    [],
+  );
+
   const chatMatches = useMemo(
     () => filterTeamsChats(picker.chatList.chats, query),
     [picker.chatList.chats, query],
@@ -195,10 +217,11 @@ function TeamsChatPickerDialogBody({
       return;
     }
     setSharedFileLoadingId(file.attachmentId);
+    const signal = previewAbortRef.current?.signal;
     void fileFetcher
-      .downloadSharedFile(file.contentUrl, picker.maxFileBytes, {})
+      .downloadSharedFile(file.contentUrl, picker.maxFileBytes, { signal })
       .then((result) => {
-        if (!aliveRef.current) return;
+        if (signal?.aborted || !aliveRef.current) return;
         setSharedFilePreview(
           result.state === "ok"
             ? {
