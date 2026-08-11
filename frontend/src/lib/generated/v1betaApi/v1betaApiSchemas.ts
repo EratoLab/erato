@@ -980,7 +980,7 @@ export type CreateShareGrantRequest = {
    */
   resource_type: string;
   /**
-   * The role to grant (e.g., "viewer")
+   * The role to grant ("viewer" or "editor")
    */
   role: string;
   /**
@@ -2043,7 +2043,7 @@ export type ShareGrant = {
    */
   resource_type: string;
   /**
-   * The role being granted (e.g., "viewer")
+   * The role being granted ("viewer" or "editor")
    */
   role: string;
   /**
@@ -2072,7 +2072,7 @@ export type ShareGrant = {
  */
 export type ShareGrantInput = {
   /**
-   * The role to grant (e.g., "viewer")
+   * The role to grant ("viewer" or "editor")
    */
   role: string;
   /**

@@ -30,6 +30,7 @@ const FRONTEND_ENV_KEY_DISABLE_CHAT_INPUT_AUTOFOCUS: &str = "DISABLE_CHAT_INPUT_
 const FRONTEND_ENV_KEY_CHAT_INPUT_EMPTY_STATE_LAYOUT: &str = "CHAT_INPUT_EMPTY_STATE_LAYOUT";
 const FRONTEND_ENV_KEY_DISABLE_LOGOUT: &str = "DISABLE_LOGOUT";
 const FRONTEND_ENV_KEY_ASSISTANTS_ENABLED: &str = "ASSISTANTS_ENABLED";
+const FRONTEND_ENV_KEY_ASSISTANTS_ENABLE_EDIT_SHARING: &str = "ASSISTANTS_ENABLE_EDIT_SHARING";
 const FRONTEND_ENV_KEY_ASSISTANTS_SHOW_RECENT_ITEMS: &str = "ASSISTANTS_SHOW_RECENT_ITEMS";
 const FRONTEND_ENV_KEY_ASSISTANTS_SHOW_RECENT_ITEMS_COLLAPSIBLE: &str =
     "ASSISTANTS_SHOW_RECENT_ITEMS_COLLAPSIBLE";
@@ -757,6 +758,10 @@ fn build_frontend_environment(
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_ASSISTANTS_ENABLED.to_string(),
         Value::Bool(config.assistants.enabled),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_ASSISTANTS_ENABLE_EDIT_SHARING.to_string(),
+        Value::Bool(config.assistants.enable_edit_sharing),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_ASSISTANTS_SHOW_RECENT_ITEMS.to_string(),

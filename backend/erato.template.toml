@@ -316,6 +316,8 @@ chat_provider_ids = ["test-token-limit"]
 # [assistants]
 # # Whether to enable the assistants feature in the frontend (default: false)
 # enabled = false
+# # Whether assistants can be shared with edit access (default: true)
+# enable_edit_sharing = true
 # # Whether to show recent assistant items in the chat sidebar (default: false)
 # show_recent_items = false
 # # Whether the recent assistants sidebar section is rendered as a collapsible

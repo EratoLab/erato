@@ -19,6 +19,7 @@ export type Env = {
   chatInputEmptyStateLayout: "bottom" | "centered";
   disableLogout: boolean;
   assistantsEnabled: boolean;
+  assistantsEnableEditSharing?: boolean;
   assistantsShowRecentItems: boolean;
   assistantsShowRecentItemsCollapsible: boolean;
   assistantContextWarningThreshold: number;
@@ -74,6 +75,7 @@ declare global {
     CHAT_INPUT_EMPTY_STATE_LAYOUT?: string;
     DISABLE_LOGOUT?: boolean;
     ASSISTANTS_ENABLED?: boolean;
+    ASSISTANTS_ENABLE_EDIT_SHARING?: boolean;
     ASSISTANTS_SHOW_RECENT_ITEMS?: boolean;
     ASSISTANTS_SHOW_RECENT_ITEMS_COLLAPSIBLE?: boolean;
     ASSISTANTS_CONTEXT_WARNING_THRESHOLD?: number;
@@ -205,6 +207,10 @@ export const env = (): Env => {
     import.meta.env.VITE_ASSISTANTS_ENABLED === "true"
       ? true
       : (window.ASSISTANTS_ENABLED ?? false);
+  const assistantsEnableEditSharing =
+    import.meta.env.VITE_ASSISTANTS_ENABLE_EDIT_SHARING === "false"
+      ? false
+      : (window.ASSISTANTS_ENABLE_EDIT_SHARING ?? true);
   const assistantsShowRecentItems =
     import.meta.env.VITE_ASSISTANTS_SHOW_RECENT_ITEMS === "true"
       ? true
@@ -372,6 +378,7 @@ export const env = (): Env => {
     chatInputEmptyStateLayout,
     disableLogout,
     assistantsEnabled,
+    assistantsEnableEditSharing,
     assistantsShowRecentItems,
     assistantsShowRecentItemsCollapsible,
     assistantContextWarningThreshold,

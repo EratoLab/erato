@@ -3257,6 +3257,22 @@ msgid "sharing.remove.success"
 msgstr "Zugriff erfolgreich entfernt"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Sharing/SharingDialog.tsx
+msgid "sharing.role.ariaLabel"
+msgstr "Zugriffsebene auswählen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/ShareGrantsList.tsx
+#: src/components/ui/Sharing/SharingDialog.tsx
+msgid "sharing.role.editor"
+msgstr "Bearbeiter"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SharingDialog.tsx
+msgid "sharing.role.read"
+msgstr "Lesen"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Sharing/ShareGrantsList.tsx
 msgid "sharing.role.viewer"
 msgstr "Betrachter"

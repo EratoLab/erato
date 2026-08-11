@@ -47,7 +47,7 @@ pub struct ShareGrant {
     pub subject_id_type: String,
     /// The ID of the subject being granted access. Organization-wide grants use "__organization__".
     pub subject_id: String,
-    /// The role being granted (e.g., "viewer")
+    /// The role being granted ("viewer" or "editor")
     pub role: String,
     /// When this share grant was created
     pub created_at: DateTime<FixedOffset>,
@@ -72,7 +72,7 @@ pub struct CreateShareGrantRequest {
     pub subject_id_type: String,
     /// The ID of the subject to grant access to. Organization-wide grants use "__organization__".
     pub subject_id: String,
-    /// The role to grant (e.g., "viewer")
+    /// The role to grant ("viewer" or "editor")
     pub role: String,
 }
 
@@ -289,9 +289,10 @@ pub async fn create_share_grant(
     Json(request): Json<CreateShareGrantRequest>,
 ) -> Result<(StatusCode, Json<CreateShareGrantResponse>), StatusCode> {
     // Create the share grant
-    let created_grant = share_grant::create_share_grant(
+    let created_grant = share_grant::create_share_grant_with_config(
         &app_state.db,
         &policy,
+        &app_state.config,
         &me_user.to_subject(),
         request.resource_type,
         request.resource_id,

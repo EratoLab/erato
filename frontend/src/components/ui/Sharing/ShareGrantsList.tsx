@@ -130,7 +130,9 @@ const GrantRow = memo<GrantRowProps>(
                   : t({ id: "sharing.type.user", message: "User" })}
             </span>
             <span className="shrink-0 rounded-full bg-theme-bg-secondary px-2 py-0.5 text-xs text-theme-fg-secondary">
-              {t({ id: "sharing.role.viewer", message: "Viewer" })}
+              {grant.role === "editor"
+                ? t({ id: "sharing.role.editor", message: "Editor" })
+                : t({ id: "sharing.role.viewer", message: "Viewer" })}
             </span>
           </div>
           <div className="text-xs text-theme-fg-muted">

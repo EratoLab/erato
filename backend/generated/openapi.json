@@ -3710,7 +3710,7 @@
           },
           "can_edit": {
             "type": "boolean",
-            "description": "Whether the current user can edit this assistant\n\nNOTE: Currently this is true only for the assistant owner. In the future,\nthis may include collaborators/roles/policy-based permissions."
+            "description": "Whether the current user can edit this assistant\n\nThis is true for the owner and users with an editor share grant."
           },
           "created_at": {
             "type": "string",
@@ -5375,7 +5375,7 @@
           },
           "role": {
             "type": "string",
-            "description": "The role to grant (e.g., \"viewer\")"
+            "description": "The role to grant (\"viewer\" or \"editor\")"
           },
           "subject_id": {
             "type": "string",
@@ -7703,7 +7703,7 @@
           },
           "role": {
             "type": "string",
-            "description": "The role being granted (e.g., \"viewer\")"
+            "description": "The role being granted (\"viewer\" or \"editor\")"
           },
           "subject_id": {
             "type": "string",
@@ -7747,7 +7747,7 @@
         "properties": {
           "role": {
             "type": "string",
-            "description": "The role to grant (e.g., \"viewer\")"
+            "description": "The role to grant (\"viewer\" or \"editor\")"
           },
           "subject_id": {
             "type": "string",

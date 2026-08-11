@@ -156,6 +156,7 @@ describe("FeatureConfigProvider", () => {
         },
         assistants: {
           enabled: false,
+          enableEditSharing: true,
           showRecentItems: false,
           showRecentItemsCollapsible: false,
           contextWarningThreshold: 0.5,
@@ -827,6 +828,7 @@ describe("FeatureConfigProvider", () => {
 
       expect(result.current).toEqual({
         enabled: false,
+        enableEditSharing: true,
         showRecentItems: false,
         showRecentItemsCollapsible: false,
         contextWarningThreshold: 0.5,
@@ -872,6 +874,7 @@ describe("FeatureConfigProvider", () => {
 
       expect(result.current).toEqual({
         enabled: true,
+        enableEditSharing: true,
         showRecentItems: true,
         showRecentItemsCollapsible: true,
         contextWarningThreshold: 0.1,
