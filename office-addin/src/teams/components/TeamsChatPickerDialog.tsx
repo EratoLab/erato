@@ -359,12 +359,18 @@ function TeamsChatPickerDialogBody({
     return (
       <>
         {channelMessages.messages.length === 0 ? (
+          // A page of system events parses to nothing renderable, so "empty"
+          // is only a verdict once there is no older page left.
           <EmptyState
             icon={<FolderIcon className="mb-3 size-10 text-theme-fg-muted" />}
-            message={t({
-              id: "officeAddin.teams.picker.noChannelMessages",
-              message: "No messages in this channel yet.",
-            })}
+            message={
+              channelMessages.hasMore
+                ? emptyPageMessage()
+                : t({
+                    id: "officeAddin.teams.picker.noChannelMessages",
+                    message: "No messages in this channel yet.",
+                  })
+            }
           />
         ) : (
           channelMessages.messages.map((message) => {
@@ -768,6 +774,9 @@ function TeamsChatPickerDialogBody({
     const partial = picker.partialOutcome;
     const chatsCompleted = partial?.chatsCompleted ?? 0;
     const chatsTotal = partial?.chatsTotal ?? 0;
+    const hasWholeSelection = [...picker.selection.values()].some(
+      (selection) => selection.kind === "conversation",
+    );
 
     return (
       <div className="shrink-0 space-y-3 border-t border-theme-border pt-3">
@@ -833,7 +842,9 @@ function TeamsChatPickerDialogBody({
               message: `Whole chats add the last ${messageLimit} messages.`,
             })}
           </span>
-          {picker.canRaiseMessageLimit && (
+          {/* The window only binds whole-conversation ticks; offering to raise
+              it with none selected reads as a second list-paging control. */}
+          {picker.canRaiseMessageLimit && hasWholeSelection && (
             <Button
               variant="ghost"
               onClick={picker.raiseMessageLimit}

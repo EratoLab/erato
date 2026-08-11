@@ -138,6 +138,7 @@ const hooks = vi.hoisted(() => ({
   chatList: null as UseTeamsChatListResult | null,
   channelList: null as UseTeamsChannelListResult | null,
   messages: null as UseTeamsChatMessagesResult | null,
+  channelMessages: null as UseTeamsChatMessagesResult | null,
   search: null as UseTeamsChatSearchResult | null,
   /** Stands in for the composer's shared upload store. */
   uploadStore: { isUploading: false, error: null as Error | null },
@@ -165,16 +166,7 @@ vi.mock("../../hooks/useTeamsChannelList", () => ({
   useTeamsChannelList: () => hooks.channelList,
 }));
 vi.mock("../../hooks/useTeamsChannelMessages", () => ({
-  useTeamsChannelMessages: () => ({
-    messages: [],
-    isLoading: false,
-    isError: false,
-    isPartial: false,
-    hasMore: false,
-    isLoadingMore: false,
-    loadEarlier: vi.fn(),
-    refetch: vi.fn(),
-  }),
+  useTeamsChannelMessages: () => hooks.channelMessages,
 }));
 vi.mock("../../hooks/useTeamsChatMessages", () => ({
   useTeamsChatMessages: () => hooks.messages,
@@ -420,6 +412,7 @@ describe("TeamsChatPickerDialog", () => {
     hooks.chatList = chatListResult();
     hooks.channelList = channelListResult();
     hooks.messages = messagesResult();
+    hooks.channelMessages = messagesResult();
     hooks.search = searchResult();
     // The Teams route never loads Office.js, so nothing here may need it.
     originalOffice = Object.getOwnPropertyDescriptor(globalThis, "Office");
@@ -461,11 +454,43 @@ describe("TeamsChatPickerDialog", () => {
     expect(
       screen.getByText("Whole chats add the last 200 messages."),
     ).toBeInTheDocument();
+    // The window binds whole-conversation ticks only; with none selected the
+    // control would read as a second list-paging button.
+    expect(
+      screen.queryByRole("button", { name: "Include earlier" }),
+    ).not.toBeInTheDocument();
 
+    fireEvent.click(selectChat());
     fireEvent.click(screen.getByRole("button", { name: "Include earlier" }));
 
     expect(
       screen.getByText("Whole chats add the last 400 messages."),
+    ).toBeInTheDocument();
+  });
+
+  it("does not call an unreadable page the end of the channel", () => {
+    hooks.channelList = channelListResult({
+      channels: parseTeamChannels({ id: "t1", displayName: "Erato Labs" }, [
+        { id: "c1", displayName: "Test Channel 1" },
+      ]),
+    });
+    hooks.channelMessages = messagesResult({ messages: [], hasMore: true });
+    renderPicker();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open Test Channel 1" }),
+    );
+
+    expect(
+      screen.getByText(
+        "Nothing to show on this page — load more to keep looking.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("No messages in this channel yet."),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Load earlier messages" }),
     ).toBeInTheDocument();
   });
 
