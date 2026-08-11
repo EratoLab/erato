@@ -1278,6 +1278,12 @@ msgid "officeAddin.teams.picker.openChat"
 msgstr "Otwórz {chatTitle}"
 
 #. js-lingui-explicit-id
+#. placeholder {0}: file.name
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.openSharedFile"
+
+
+#. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.partialBuild"
 msgstr "Wczytano {chatsCompleted} z {chatsTotal} rozmów. Załączyć to, co się wczytało?"

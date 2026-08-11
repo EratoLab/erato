@@ -118,6 +118,7 @@ vi.mock("@erato/frontend/library", () => ({
   ArrowLeftIcon: () => null,
   CloseIcon: () => null,
   FolderIcon: () => null,
+  PageIcon: () => null,
   SearchIcon: () => null,
   FILE_PREVIEW_STYLES: { progress: { container: "", bar: "" } },
   useFileUploadStore: { getState: () => hooks.uploadStore },
@@ -964,6 +965,47 @@ describe("TeamsChatPickerDialog", () => {
     expect(getMessage).not.toHaveBeenCalled();
     const text = await uploads[0][0].text();
     expect(text).toContain("Works for me.");
+  });
+
+  it("shows a shared file as a chip that opens the SharePoint preview", () => {
+    hooks.messages = messagesResult({
+      messages: [
+        {
+          chatId: MOCK_CHAT_ID,
+          messageId: "1754000000000",
+          senderName: "Max Token",
+          createdAt: "2026-08-10T09:15:00Z",
+          editedAt: null,
+          text: "check this PDF guys [attachment: multipage-test.pdf]",
+          markers: [],
+          replyToId: null,
+          deepLink: "https://example.invalid/m",
+          sharedFiles: [
+            {
+              attachmentId: "att-1",
+              name: "multipage-test.pdf",
+              contentUrl: "https://contoso.sharepoint.com/multipage-test.pdf",
+            },
+          ],
+          imageUrls: [],
+        },
+      ],
+    });
+    const openSpy = vi
+      .spyOn(window, "open")
+      .mockReturnValue(null) as unknown as ReturnType<typeof vi.fn>;
+    renderPicker();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Product sync" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open multipage-test.pdf" }),
+    );
+
+    expect(openSpy).toHaveBeenCalledWith(
+      "https://contoso.sharepoint.com/multipage-test.pdf",
+      "_blank",
+      "noopener,noreferrer",
+    );
   });
 
   it("uploads pasted images beside the transcript", async () => {

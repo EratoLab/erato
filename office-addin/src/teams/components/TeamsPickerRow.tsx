@@ -19,6 +19,8 @@ export interface TeamsPickerRowProps {
   /** Present only for rows that drill in; renders the title as a button. */
   onOpen?: () => void;
   openLabel?: string;
+  /** Compact affordances under the subline, e.g. shared-file chips. */
+  chips?: ReactNode;
   /** Status line under the subline — why this row can't be ticked right now. */
   note?: ReactNode;
   createdAt?: string | null;
@@ -42,6 +44,7 @@ export function TeamsPickerRow({
   subline,
   onOpen,
   openLabel,
+  chips,
   note,
   createdAt,
   senderName,
@@ -86,6 +89,7 @@ export function TeamsPickerRow({
             {subline}
           </div>
         )}
+        {chips}
         {note !== undefined && (
           <div
             className="mt-0.5 text-xs italic text-theme-fg-muted"

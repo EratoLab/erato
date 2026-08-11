@@ -7,6 +7,7 @@ import {
   FolderIcon,
   Input,
   ModalBase,
+  PageIcon,
   SearchIcon,
 } from "@erato/frontend/library";
 import { plural, t } from "@lingui/core/macro";
@@ -38,7 +39,10 @@ import {
 
 import type { TeamsChatPickerContextValue } from "../providers/TeamsChatPickerProvider";
 import type { ParsedTeamsChannel } from "../utils/parsedTeamsChannel";
-import type { ParsedTeamsChat } from "../utils/parsedTeamsChat";
+import type {
+  ParsedTeamsChat,
+  TeamsSharedFileRef,
+} from "../utils/parsedTeamsChat";
 import type { TeamsSearchHit } from "../utils/teamsChatGraph";
 import type { TeamsMessageSelection } from "../utils/teamsChatSelection";
 import type {
@@ -398,6 +402,7 @@ function TeamsChatPickerDialogBody({
                 })}
                 title={senderName}
                 subline={message.text}
+                chips={<SharedFileChips files={message.sharedFiles} />}
                 createdAt={message.createdAt}
                 senderName={senderName}
               />
@@ -525,6 +530,7 @@ function TeamsChatPickerDialogBody({
                 })}
                 title={senderName}
                 subline={message.text}
+                chips={<SharedFileChips files={message.sharedFiles} />}
                 createdAt={message.createdAt}
                 senderName={senderName}
               />
@@ -962,6 +968,37 @@ function BuildProgress({ picker }: { picker: TeamsChatPickerContextValue }) {
           })}
         </p>
       )}
+    </div>
+  );
+}
+
+/**
+ * One compact chip per file shared with the message. Clicking opens the file
+ * where it lives — SharePoint's own preview — which costs no download, no
+ * consent and no space in this pane.
+ */
+function SharedFileChips({ files }: { files: readonly TeamsSharedFileRef[] }) {
+  if (files.length === 0) return null;
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {files.map((file) => (
+        <button
+          key={file.attachmentId}
+          type="button"
+          onClick={() =>
+            window.open(file.contentUrl, "_blank", "noopener,noreferrer")
+          }
+          title={file.name}
+          aria-label={t({
+            id: "officeAddin.teams.picker.openSharedFile",
+            message: `Open ${file.name}`,
+          })}
+          className="theme-transition flex max-w-44 items-center gap-1 rounded-full border border-theme-border bg-theme-bg-accent px-2 py-0.5 text-[11px] text-theme-fg-muted hover:bg-theme-bg-hover hover:text-theme-fg-primary"
+        >
+          <PageIcon className="size-3 shrink-0" aria-hidden />
+          <span className="truncate">{file.name}</span>
+        </button>
+      ))}
     </div>
   );
 }
