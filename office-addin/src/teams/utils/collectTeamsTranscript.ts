@@ -132,6 +132,7 @@ export async function collectTeamsTranscript(
           ref,
           whole: group.whole,
           messageIds: group.messageIds,
+          parents: group.parents,
           limit,
           signal,
           onPage: (fetched, oldest) => {
@@ -298,6 +299,7 @@ async function collectChannelMessages(args: {
   ref: { teamId: string; channelId: string };
   whole: boolean;
   messageIds: readonly string[];
+  parents: Record<string, string>;
   limit: number;
   signal?: AbortSignal;
   onPage?: (fetched: number, oldest: string | null) => void;
@@ -329,12 +331,20 @@ async function collectChannelMessages(args: {
   const messages: ParsedTeamsMessage[] = [];
   let skipped = 0;
   for (const messageId of messageIds) {
-    const raw = await channelFetcher.getMessage(
-      ref.teamId,
-      ref.channelId,
-      messageId,
-      { signal },
-    );
+    // A reply is not addressable through the messages endpoint, so a ticked
+    // one is fetched under its parent instead.
+    const parentId = args.parents[messageId];
+    const raw = parentId
+      ? await channelFetcher.getReply(
+          ref.teamId,
+          ref.channelId,
+          parentId,
+          messageId,
+          { signal },
+        )
+      : await channelFetcher.getMessage(ref.teamId, ref.channelId, messageId, {
+          signal,
+        });
     args.onMessage?.();
     const parsed = raw ? parseTeamsMessage(raw, conversationId) : null;
     if (parsed) messages.push(parsed);

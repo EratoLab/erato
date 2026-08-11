@@ -32,6 +32,7 @@ function message(
     editedAt: null,
     text: "Can we move the sync to Thursday?",
     markers: [],
+    replyToId: null,
     deepLink: buildTeamsMessageDeepLink(MOCK_CHAT_ID, messageId),
     ...overrides,
   };

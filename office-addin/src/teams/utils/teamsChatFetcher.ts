@@ -6,6 +6,7 @@
 
 import {
   getChannelMessage,
+  getChannelReply,
   getChatMessage,
   getTeamsChat,
   listChannelMessagesPage,
@@ -113,6 +114,13 @@ export interface TeamsChannelFetcher {
     messageId: string,
     options?: TeamsGraphCallOptions,
   ): Promise<GraphChatMessage | null>;
+  getReply(
+    teamId: string,
+    channelId: string,
+    parentMessageId: string,
+    replyId: string,
+    options?: TeamsGraphCallOptions,
+  ): Promise<GraphChatMessage | null>;
   pageChannelBackwards(
     args: {
       teamId: string;
@@ -136,6 +144,15 @@ export function createGraphTeamsChannelFetcher(
       listChannelMessagesPage(teamId, channelId, tokenSource(), options),
     getMessage: (teamId, channelId, messageId, options = {}) =>
       getChannelMessage(teamId, channelId, messageId, tokenSource(), options),
+    getReply: (teamId, channelId, parentMessageId, replyId, options = {}) =>
+      getChannelReply(
+        teamId,
+        channelId,
+        parentMessageId,
+        replyId,
+        tokenSource(),
+        options,
+      ),
     pageChannelBackwards: (args) =>
       pageChannelMessagesBackwards({ ...args, tokenSource: tokenSource() }),
   };

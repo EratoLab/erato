@@ -54,12 +54,14 @@ describe("groupSelectionsByConversation", () => {
         title: "Product sync",
         whole: false,
         messageIds: ["a", "b"],
+        parents: {},
       },
       {
         ref: chatRef(OTHER_CHAT_ID),
         title: "Product sync",
         whole: false,
         messageIds: ["c"],
+        parents: {},
       },
     ]);
   });

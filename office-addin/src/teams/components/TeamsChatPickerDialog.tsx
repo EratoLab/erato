@@ -347,6 +347,7 @@ function TeamsChatPickerDialogBody({
               kind: "message" as const,
               ref,
               messageId: message.messageId,
+              parentMessageId: message.replyToId,
               conversationTitle: channel.name,
               senderName,
               createdAt: message.createdAt,

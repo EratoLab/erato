@@ -83,6 +83,8 @@ export interface GraphChatMessage {
   from?: GraphChatMessageFrom | null;
   body?: GraphChatMessageBody;
   attachments?: GraphChatMessageAttachment[];
+  /** Set on channel replies; the root message they hang under. */
+  replyToId?: string | null;
   /**
    * Populated for channel messages and null in a chat. Graph's own link
    * carries groupId, tenantId and parentMessageId, none of which we can
@@ -429,7 +431,28 @@ function flattenChannelReplies(
   return flattened;
 }
 
-/** A single channel message with its body. */
+/**
+ * A single channel REPLY. Replies are not addressable through the messages
+ * endpoint — that returns 404 for a reply id — so the parent is required.
+ */
+export async function getChannelReply(
+  teamId: string,
+  channelId: string,
+  parentMessageId: string,
+  replyId: string,
+  tokenSource: GraphTokenSource,
+  options: TeamsGraphCallOptions = {},
+): Promise<GraphChatMessage | null> {
+  const result = await requestGraphJson<GraphChatMessage>({
+    url: `${GRAPH_BASE}/teams/${encodeURIComponent(teamId)}/channels/${encodeURIComponent(channelId)}/messages/${encodeURIComponent(parentMessageId)}/replies/${encodeURIComponent(replyId)}`,
+    tokenSource,
+    gateKey: channelGateKey(teamId, channelId),
+    options,
+  });
+  return result.ok ? (result.payload ?? null) : null;
+}
+
+/** A single channel root message with its body. */
 export async function getChannelMessage(
   teamId: string,
   channelId: string,

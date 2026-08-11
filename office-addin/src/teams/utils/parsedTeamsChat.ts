@@ -44,6 +44,8 @@ export interface ParsedTeamsMessage {
   text: string;
   /** Bracketed disclosures for attachments the body never referenced. */
   markers: string[];
+  /** Root message of a channel reply; null for roots and for chat messages. */
+  replyToId: string | null;
   deepLink: string;
 }
 
@@ -128,6 +130,7 @@ export function parseTeamsMessage(
     editedAt: message.lastEditedDateTime ?? null,
     text,
     markers,
+    replyToId: message.replyToId ?? null,
     deepLink: message.webUrl ?? buildTeamsMessageDeepLink(chatId, message.id),
   };
 }

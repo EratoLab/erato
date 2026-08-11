@@ -17,6 +17,8 @@ export type TeamsChatSelection =
       kind: "message";
       ref: TeamsConversationRef;
       messageId: string;
+      /** Required to re-fetch a channel reply, which has no addressable id. */
+      parentMessageId?: string | null;
       conversationTitle: string;
       senderName: string;
       createdAt: string | null;
@@ -34,6 +36,8 @@ export interface TeamsChatSelectionGroup {
   /** Whole-conversation ingest wins over individual ticks within the same one. */
   whole: boolean;
   messageIds: string[];
+  /** Parent id per ticked message, for channel replies only. */
+  parents: Record<string, string>;
 }
 
 export function teamsSelectionKey(selection: TeamsChatSelection): string {
@@ -57,12 +61,16 @@ export function groupSelectionsByConversation(
           : selection.conversationTitle,
       whole: false,
       messageIds: [],
+      parents: {},
     };
     if (selection.kind === "conversation") {
       existing.whole = true;
       existing.title = selection.title;
     } else {
       existing.messageIds.push(selection.messageId);
+      if (selection.parentMessageId) {
+        existing.parents[selection.messageId] = selection.parentMessageId;
+      }
     }
     groups.set(key, existing);
   }

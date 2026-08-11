@@ -34,6 +34,7 @@ function fakeChannelFetcher(overrides: Partial<TeamsChannelFetcher> = {}) {
       Promise.resolve({ messages: [], nextLink: null, status: 200, ok: true }),
     ),
     getMessage: vi.fn(() => Promise.resolve(null)),
+    getReply: vi.fn(() => Promise.resolve(null)),
     pageChannelBackwards: vi.fn(() =>
       Promise.resolve({
         messages: [],
@@ -374,6 +375,41 @@ describe("channels", () => {
     expect(section?.kind).toBe("channel");
     // nextLink present means older history was left behind, not lost silently.
     expect(section?.truncated).toBe(true);
+    expect(result.messageCount).toBe(1);
+  });
+
+  it("fetches a ticked reply under its parent, which is the only way it resolves", async () => {
+    // Proven against a live tenant: GET .../messages/{replyId} is a 404, while
+    // the same id under .../messages/{parentId}/replies/{replyId} resolves.
+    const getMessage = vi.fn(() => Promise.resolve(null));
+    const getReply = vi.fn(() =>
+      Promise.resolve(mockGraphChatMessage({ id: "reply-1" })),
+    );
+
+    const result = await collectTeamsTranscript({
+      fetcher: fakeFetcher(),
+      channelFetcher: fakeChannelFetcher({ getMessage, getReply }),
+      selections: [
+        {
+          kind: "message",
+          ref: channelRef("team-1", "chan-1"),
+          messageId: "reply-1",
+          parentMessageId: "root-1",
+          conversationTitle: "Test Channel 1",
+          senderName: "Max Token",
+          createdAt: "2026-08-11T10:00:00Z",
+        },
+      ],
+    });
+
+    expect(getReply).toHaveBeenCalledWith(
+      "team-1",
+      "chan-1",
+      "root-1",
+      "reply-1",
+      expect.anything(),
+    );
+    expect(getMessage).not.toHaveBeenCalled();
     expect(result.messageCount).toBe(1);
   });
 
