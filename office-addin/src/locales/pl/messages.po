@@ -1097,6 +1097,26 @@ msgstr "Prześlij wygenerowany manifest"
 #~ msgstr "i prześlij tam pobrany plik."
 
 #. js-lingui-explicit-id
+#: src/teams/components/TeamsChatAddMenuExtraContent.tsx
+msgid "officeAddin.teams.fileSource.chats"
+msgstr "Czaty Teams…"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatAddMenuExtraContent.tsx
+msgid "officeAddin.teams.fileSource.chatsHint"
+msgstr "Wybierz rozmowy lub wiadomości do załączenia"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatAddMenuExtraContent.tsx
+msgid "officeAddin.teams.fileSource.heading"
+msgstr "Zawartość Teams"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatAddMenuExtraContent.tsx
+msgid "officeAddin.teams.fileSource.textUnsupported"
+msgstr "Ten obszar roboczy nie przyjmuje plików tekstowych"
+
+#. js-lingui-explicit-id
 #: src/teams/providers/TeamsProvider.tsx
 msgid "officeAddin.teams.initFailed"
 msgstr "Nie można połączyć się z Microsoft Teams."
@@ -1105,6 +1125,293 @@ msgstr "Nie można połączyć się z Microsoft Teams."
 #: src/teams/providers/TeamsProvider.tsx
 msgid "officeAddin.teams.loading"
 msgstr "Ładowanie karty Microsoft Teams..."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.attach"
+msgstr "Załącz"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.attachAnyway"
+msgstr "Załącz mimo to"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.back"
+msgstr "Powrót do czatów"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.cancel"
+msgstr "Anuluj"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.channelHitIsReply"
+msgstr "Odpowiedzi nie można załączyć z wyszukiwania — otwórz kanał, aby ją wybrać."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.channelHitProbeFailed"
+msgstr "Nie udało się sprawdzić tej wiadomości. Zaznacz ją ponownie, aby spróbować jeszcze raz."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.channelHitProbing"
+msgstr "Sprawdzanie, czy tę wiadomość można załączyć…"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.channelHitUnavailable"
+msgstr "Wiadomości z kanałów nie można załączać — nie przyznano dostępu do kanałów."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.channelMessagesError"
+msgstr "Nie udało się załadować tego kanału."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.channelsLoading"
+msgstr "Ładowanie kanałów…"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.chatsError"
+msgstr "Nie udało się wczytać czatów Teams."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.chatsSection"
+msgstr "Czaty"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.clearSearch"
+msgstr "Wyczyść wyszukiwanie"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.emptyPage"
+msgstr "Nic do pokazania na tej stronie — wczytaj więcej, aby szukać dalej."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.includeEarlier"
+msgstr "Uwzględnij wcześniejsze"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+#~ msgid "officeAddin.teams.picker.loadEarlier"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.loadEarlierMessages"
+msgstr "Wczytaj wcześniejsze wiadomości"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.loadMoreChats"
+msgstr "Wczytaj więcej czatów"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.loadMoreResults"
+msgstr "Wczytaj więcej wyników"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.messageCapReached"
+msgstr "Jednorazowo możesz załączyć maksymalnie {MAX_SELECTED_MESSAGES} pojedynczych wiadomości."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.messagesError"
+msgstr "Nie udało się wczytać tej rozmowy."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.messagesSection"
+msgstr "Wiadomości"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.noChannelMessages"
+msgstr "W tym kanale nie ma jeszcze wiadomości."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.noChatMatches"
+msgstr "Żaden czat, kanał ani osoba nie pasuje do tej nazwy."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.noChats"
+msgstr "Nie znaleziono czatów Teams."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.noMessages"
+msgstr "W tej rozmowie nie ma jeszcze wiadomości."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.noSearchResults"
+msgstr "Brak wiadomości pasujących do „{searchTerm}”."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.nothingToAttach"
+msgstr "Nie ma czego załączyć — wybrane wiadomości nie zawierają czytelnej treści."
+
+#. js-lingui-explicit-id
+#. placeholder {0}: channel.name
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.openChannel"
+msgstr "Otwórz {0}"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.openChat"
+msgstr "Otwórz {chatTitle}"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.partialBuild"
+msgstr "Wczytano {chatsCompleted} z {chatsTotal} rozmów. Załączyć to, co się wczytało?"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.partialList"
+msgstr "Wyniki częściowe — Teams ogranicza liczbę żądań."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.privateChannel"
+msgstr "Prywatny"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.progress"
+msgstr "Wczytano {chatsCompleted} z {chatsTotal} rozmów — {messagesFetched} wiadomości"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.progressLabel"
+msgstr "Wczytywanie wiadomości Teams"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.progressLoading"
+msgstr "Ładowanie: {titles}…"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.progressWithDate"
+msgstr "Wczytano {chatsCompleted} z {chatsTotal} rozmów — {messagesFetched} wiadomości, wstecz do {oldest}"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.retry"
+msgstr "Ponów"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.searchError"
+msgstr "Nie udało się przeszukać wiadomości Teams."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.searchLabel"
+msgstr "Filtruj czaty Teams lub szukaj wiadomości"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.searchPlaceholder"
+msgstr "Filtruj czaty lub szukaj wiadomości"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.searchRefreshing"
+msgstr "Wyszukiwanie…"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.searchScope"
+msgstr "Wyszukiwanie obejmuje wiadomości, do których masz dostęp w Teams."
+
+#. js-lingui-explicit-id
+#. placeholder {0}: channel.name
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.selectChannel"
+msgstr "Wybierz {0}"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.selectChat"
+msgstr "Wybierz {chatTitle}"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.selectionCount"
+msgstr "{selectedCount, plural, one {wybrano # element} few {wybrano # elementy} many {wybrano # elementów} other {wybrano # elementu}}"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.selectMessage"
+msgstr "Wybierz wiadomość od {senderName}"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.sharedChannel"
+msgstr "Udostępniony"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.shortQuery"
+msgstr "Wpisz co najmniej 3 znaki, aby wyszukać wiadomości."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.title"
+msgstr "Czaty Teams"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.unknownSender"
+msgstr "Nieznany nadawca"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.uploadFailed"
+msgstr "Nie udało się załączyć transkrypcji. Spróbuj ponownie."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.wholeChatBound"
+msgstr "Całe czaty dodają ostatnie {messageLimit} wiadomości."
+
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsAuthProvider.tsx
+msgid "officeAddin.teams.signedIn.title"
+msgstr "Zalogowano. Spróbuj ponownie dodać czat."
+
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsAuthProvider.tsx
+msgid "officeAddin.teams.signInToLoad.action"
+msgstr "Zaloguj się"
+
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsAuthProvider.tsx
+msgid "officeAddin.teams.signInToLoad.description"
+msgstr "Odczytanie czatów w usłudze Teams wymaga szybkiego zalogowania."
+
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsAuthProvider.tsx
+msgid "officeAddin.teams.signInToLoad.title"
+msgstr "Zaloguj się, aby załadować czaty z usługi Teams"
 
 # ==============================
 # Unstable IDs

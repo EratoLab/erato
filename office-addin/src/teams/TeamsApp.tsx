@@ -1,6 +1,8 @@
 import { createBrowserClientInfo } from "@erato/frontend/library";
 
+import { installTeamsComponentRegistrations } from "./installTeamsComponentRegistrations";
 import { TeamsAuthProvider } from "./providers/TeamsAuthProvider";
+import { TeamsChatPickerProvider } from "./providers/TeamsChatPickerProvider";
 import { TeamsProvider } from "./providers/TeamsProvider";
 import { TeamsThemeProvider } from "./providers/TeamsThemeProvider";
 import { TeamsAddinSessionController } from "./teamsSession";
@@ -13,8 +15,11 @@ const TEAMS_SIDECAR_CLIENT_INFO = createBrowserClientInfo({
   hostApplication: "Microsoft Teams tab",
 });
 
+// Module scope, so the registry is populated before the first chat render.
+installTeamsComponentRegistrations();
+
 /**
- * Installs no component-registry overrides: the Outlook contributions stay
+ * Installs only the Teams "+" menu contribution: the Outlook renderers stay
  * route-local to `OutlookApp`, and this route loads no Office.js.
  */
 export default function TeamsApp() {
@@ -24,12 +29,14 @@ export default function TeamsApp() {
         <TeamsThemeProvider>
           <TeamsAuthProvider>
             <AuthGate>
-              <div className="office-shell">
-                <NeutralAddinChatPage
-                  platform="teams"
-                  SessionController={TeamsAddinSessionController}
-                />
-              </div>
+              <TeamsChatPickerProvider>
+                <div className="office-shell">
+                  <NeutralAddinChatPage
+                    platform="teams"
+                    SessionController={TeamsAddinSessionController}
+                  />
+                </div>
+              </TeamsChatPickerProvider>
             </AuthGate>
           </TeamsAuthProvider>
         </TeamsThemeProvider>
