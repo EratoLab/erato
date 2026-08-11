@@ -2265,6 +2265,47 @@ msgid "filePreview.docxTheme.useLight"
 msgstr "Usar tema claro del documento"
 
 #. js-lingui-explicit-id
+#: src/components/ui/FilePreview/PdfPreview.tsx
+msgid "filePreview.pdf.nextPage"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/PdfPreview.tsx
+msgid "filePreview.pdf.pageIndicator"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/PdfPreview.tsx
+msgid "filePreview.pdf.previousPage"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/PdfPreview.tsx
+msgid "filePreview.pdf.rotate"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/PdfPreview.tsx
+msgid "filePreview.pdf.zoomIn"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/PdfPreview.tsx
+msgid "filePreview.pdf.zoomOut"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/FilePreviewContent.tsx
+#: src/components/ui/FilePreview/PdfPreview.tsx
+msgid "filePreview.pdfLoading"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/PdfPreview.tsx
+msgid "filePreview.pdfPreviewUnavailable"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/FilePreview/PptxPreview.tsx
 msgid "filePreview.pptxEmpty"
 msgstr "La vista previa de la presentación está vacía."
