@@ -4,9 +4,20 @@
  * team that owns it — so the reference stays structured rather than collapsing
  * into one string that later has to be re-parsed.
  */
+export interface TeamsChatConversationRef {
+  kind: "chat";
+  chatId: string;
+}
+
+export interface TeamsChannelConversationRef {
+  kind: "channel";
+  teamId: string;
+  channelId: string;
+}
+
 export type TeamsConversationRef =
-  | { kind: "chat"; chatId: string }
-  | { kind: "channel"; teamId: string; channelId: string };
+  | TeamsChatConversationRef
+  | TeamsChannelConversationRef;
 
 /** Stable identity for grouping, dedupe keys and the per-conversation gate. */
 export function conversationKey(ref: TeamsConversationRef): string {
@@ -15,13 +26,13 @@ export function conversationKey(ref: TeamsConversationRef): string {
     : `channel:${ref.teamId}/${ref.channelId}`;
 }
 
-export function chatRef(chatId: string): TeamsConversationRef {
+export function chatRef(chatId: string): TeamsChatConversationRef {
   return { kind: "chat", chatId };
 }
 
 export function channelRef(
   teamId: string,
   channelId: string,
-): TeamsConversationRef {
+): TeamsChannelConversationRef {
   return { kind: "channel", teamId, channelId };
 }

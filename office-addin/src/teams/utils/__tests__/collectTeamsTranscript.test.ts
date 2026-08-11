@@ -33,7 +33,7 @@ function fakeChannelFetcher(overrides: Partial<TeamsChannelFetcher> = {}) {
     listMessagesPage: vi.fn(() =>
       Promise.resolve({ messages: [], nextLink: null, status: 200, ok: true }),
     ),
-    getMessage: vi.fn(() => Promise.resolve(null)),
+    probeMessage: vi.fn(() => Promise.resolve({ message: null, status: 404 })),
     getReply: vi.fn(() => Promise.resolve(null)),
     pageChannelBackwards: vi.fn(() =>
       Promise.resolve({
@@ -388,14 +388,16 @@ describe("channels", () => {
   it("fetches a ticked reply under its parent, which is the only way it resolves", async () => {
     // Proven against a live tenant: GET .../messages/{replyId} is a 404, while
     // the same id under .../messages/{parentId}/replies/{replyId} resolves.
-    const getMessage = vi.fn(() => Promise.resolve(null));
+    const probeMessage = vi.fn(() =>
+      Promise.resolve({ message: null, status: 404 }),
+    );
     const getReply = vi.fn(() =>
       Promise.resolve(mockGraphChatMessage({ id: "reply-1" })),
     );
 
     const result = await collectTeamsTranscript({
       fetcher: fakeFetcher(),
-      channelFetcher: fakeChannelFetcher({ getMessage, getReply }),
+      channelFetcher: fakeChannelFetcher({ probeMessage, getReply }),
       selections: [
         {
           kind: "message",
@@ -416,7 +418,42 @@ describe("channels", () => {
       "reply-1",
       expect.anything(),
     );
-    expect(getMessage).not.toHaveBeenCalled();
+    expect(probeMessage).not.toHaveBeenCalled();
+    expect(result.messageCount).toBe(1);
+  });
+
+  it("fetches a ticked root at the top-level path", async () => {
+    const probeMessage = vi.fn(() =>
+      Promise.resolve({
+        message: mockGraphChatMessage({ id: "root-1" }),
+        status: 200,
+      }),
+    );
+    const getReply = vi.fn(() => Promise.resolve(null));
+
+    const result = await collectTeamsTranscript({
+      fetcher: fakeFetcher(),
+      channelFetcher: fakeChannelFetcher({ probeMessage, getReply }),
+      selections: [
+        {
+          kind: "message",
+          ref: channelRef("team-1", "chan-1"),
+          messageId: "root-1",
+          parentMessageId: null,
+          conversationTitle: "Test Channel 1",
+          senderName: "Max Token",
+          createdAt: "2026-08-11T10:00:00Z",
+        },
+      ],
+    });
+
+    expect(probeMessage).toHaveBeenCalledWith(
+      "team-1",
+      "chan-1",
+      "root-1",
+      expect.anything(),
+    );
+    expect(getReply).not.toHaveBeenCalled();
     expect(result.messageCount).toBe(1);
   });
 

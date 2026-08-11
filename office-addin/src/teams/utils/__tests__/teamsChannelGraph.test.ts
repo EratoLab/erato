@@ -7,10 +7,10 @@ import {
 import { makeGraphTokenSource } from "../../../utils/graph/graphClient";
 import {
   channelGateKey,
-  getChannelMessage,
   listChannelMessagesPage,
   listJoinedTeams,
   listTeamChannels,
+  probeChannelMessage,
 } from "../teamsChatGraph";
 import { resetTeamsChatRateGates } from "../teamsChatRateGate";
 
@@ -138,12 +138,12 @@ describe("listChannelMessagesPage", () => {
   });
 });
 
-describe("getChannelMessage", () => {
+describe("probeChannelMessage", () => {
   it("hydrates by channel identity rather than chat id", async () => {
     const transport = transportReturning(() =>
       jsonResponse(mockGraphChatMessage({ id: "m9" })),
     );
-    const message = await getChannelMessage(
+    const probe = await probeChannelMessage(
       TEAM_ID,
       CHANNEL_ID,
       "m9",
@@ -151,26 +151,27 @@ describe("getChannelMessage", () => {
       { transport },
     );
 
-    expect(message?.id).toBe("m9");
+    expect(probe.message?.id).toBe("m9");
+    expect(probe.status).toBe(200);
     const url = String(transport.mock.calls[0]?.[0]);
     expect(url).toContain(
       `/channels/${encodeURIComponent(CHANNEL_ID)}/messages/m9`,
     );
   });
 
-  it("returns null instead of throwing when the message is gone", async () => {
+  it("surfaces a 404 as a status, not a throw — it means the id is a reply", async () => {
     const transport = transportReturning(
       () => new Response("", { status: 404 }),
     );
-    const message = await getChannelMessage(
+    const probe = await probeChannelMessage(
       TEAM_ID,
       CHANNEL_ID,
-      "gone",
+      "a-reply-id",
       tokenSource(),
       { transport },
     );
 
-    expect(message).toBeNull();
+    expect(probe).toEqual({ message: null, status: 404 });
   });
 });
 

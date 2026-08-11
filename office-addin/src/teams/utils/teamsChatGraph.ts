@@ -453,21 +453,33 @@ export async function getChannelReply(
   return result.ok ? (result.payload ?? null) : null;
 }
 
-/** A single channel root message with its body. */
-export async function getChannelMessage(
+export interface ChannelMessageProbe {
+  message: GraphChatMessage | null;
+  status: number;
+}
+
+/**
+ * A single channel message at the top-level path, with the status exposed:
+ * only roots resolve here, so a 404 is information — the id belongs to a
+ * reply — rather than a failure.
+ */
+export async function probeChannelMessage(
   teamId: string,
   channelId: string,
   messageId: string,
   tokenSource: GraphTokenSource,
   options: TeamsGraphCallOptions = {},
-): Promise<GraphChatMessage | null> {
+): Promise<ChannelMessageProbe> {
   const result = await requestGraphJson<GraphChatMessage>({
     url: `${GRAPH_BASE}/teams/${encodeURIComponent(teamId)}/channels/${encodeURIComponent(channelId)}/messages/${encodeURIComponent(messageId)}`,
     tokenSource,
     gateKey: channelGateKey(teamId, channelId),
     options,
   });
-  return result.ok ? (result.payload ?? null) : null;
+  return {
+    message: result.ok ? (result.payload ?? null) : null,
+    status: result.status,
+  };
 }
 
 export interface SearchChatMessagesResult {

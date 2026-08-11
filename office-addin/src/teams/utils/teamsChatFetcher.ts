@@ -5,7 +5,6 @@
  */
 
 import {
-  getChannelMessage,
   getChannelReply,
   getChatMessage,
   getTeamsChat,
@@ -14,6 +13,7 @@ import {
   listJoinedTeams,
   listTeamChannels,
   listTeamsChatsPage,
+  probeChannelMessage,
   searchChatMessages,
 } from "./teamsChatGraph";
 import {
@@ -23,6 +23,7 @@ import {
 import { makeGraphTokenSource } from "../../utils/graph/graphClient";
 
 import type {
+  ChannelMessageProbe,
   GraphChat,
   GraphChatMessage,
   ListChatMessagesPageResult,
@@ -108,12 +109,13 @@ export interface TeamsChannelFetcher {
     channelId: string,
     options?: TeamsGraphCallOptions & { nextLink?: string | null },
   ): Promise<ListChatMessagesPageResult>;
-  getMessage(
+  /** Top-level fetch with the status exposed — a 404 means "this is a reply". */
+  probeMessage(
     teamId: string,
     channelId: string,
     messageId: string,
     options?: TeamsGraphCallOptions,
-  ): Promise<GraphChatMessage | null>;
+  ): Promise<ChannelMessageProbe>;
   getReply(
     teamId: string,
     channelId: string,
@@ -142,8 +144,8 @@ export function createGraphTeamsChannelFetcher(
       listTeamChannels(teamId, tokenSource(), options),
     listMessagesPage: (teamId, channelId, options = {}) =>
       listChannelMessagesPage(teamId, channelId, tokenSource(), options),
-    getMessage: (teamId, channelId, messageId, options = {}) =>
-      getChannelMessage(teamId, channelId, messageId, tokenSource(), options),
+    probeMessage: (teamId, channelId, messageId, options = {}) =>
+      probeChannelMessage(teamId, channelId, messageId, tokenSource(), options),
     getReply: (teamId, channelId, parentMessageId, replyId, options = {}) =>
       getChannelReply(
         teamId,

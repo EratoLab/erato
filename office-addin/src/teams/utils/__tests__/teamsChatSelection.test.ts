@@ -7,7 +7,7 @@ import {
   teamsSelectionDedupeKey,
   teamsSelectionKey,
 } from "../teamsChatSelection";
-import { chatRef } from "../teamsConversationRef";
+import { channelRef, chatRef } from "../teamsConversationRef";
 
 import type { TeamsChatSelection } from "../teamsChatSelection";
 
@@ -53,16 +53,34 @@ describe("groupSelectionsByConversation", () => {
         ref: chatRef(MOCK_CHAT_ID),
         title: "Product sync",
         whole: false,
-        messageIds: ["a", "b"],
-        parents: {},
+        messages: [
+          { messageId: "a", parentMessageId: null },
+          { messageId: "b", parentMessageId: null },
+        ],
       },
       {
         ref: chatRef(OTHER_CHAT_ID),
         title: "Product sync",
         whole: false,
-        messageIds: ["c"],
-        parents: {},
+        messages: [{ messageId: "c", parentMessageId: null }],
       },
+    ]);
+  });
+
+  it("carries a channel reply's thread root into the group", () => {
+    const groups = groupSelectionsByConversation([
+      {
+        kind: "message",
+        ref: channelRef("team-1", "chan-1"),
+        messageId: "reply-1",
+        parentMessageId: "root-1",
+        conversationTitle: "Test Channel 1",
+        senderName: "Max Token",
+        createdAt: "2026-08-11T10:00:00Z",
+      },
+    ]);
+    expect(groups[0].messages).toEqual([
+      { messageId: "reply-1", parentMessageId: "root-1" },
     ]);
   });
 

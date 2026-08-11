@@ -24,7 +24,10 @@ import type { UseTeamsChatListResult } from "../../hooks/useTeamsChatList";
 import type { UseTeamsChatMessagesResult } from "../../hooks/useTeamsChatMessages";
 import type { UseTeamsChatSearchResult } from "../../hooks/useTeamsChatSearch";
 import type { ParsedTeamsChat } from "../../utils/parsedTeamsChat";
-import type { TeamsChatFetcher } from "../../utils/teamsChatFetcher";
+import type {
+  TeamsChannelFetcher,
+  TeamsChatFetcher,
+} from "../../utils/teamsChatFetcher";
 import type { PageChatMessagesResult } from "../../utils/teamsChatPager";
 import type { ReactNode } from "react";
 
@@ -131,6 +134,7 @@ function omitStyleProps(props: Record<string, unknown>) {
 
 const hooks = vi.hoisted(() => ({
   fetcher: null as TeamsChatFetcher | null,
+  channelFetcher: null as TeamsChannelFetcher | null,
   chatList: null as UseTeamsChatListResult | null,
   channelList: null as UseTeamsChannelListResult | null,
   messages: null as UseTeamsChatMessagesResult | null,
@@ -153,8 +157,8 @@ vi.mock("../../hooks/useTeamsChatList", () => ({
 }));
 vi.mock("../../hooks/useTeamsChannelFetcher", () => ({
   useTeamsChannelFetcher: () => ({
-    fetcher: null,
-    unavailableReason: "graph-unavailable",
+    fetcher: hooks.channelFetcher,
+    unavailableReason: hooks.channelFetcher ? null : "graph-unavailable",
   }),
 }));
 vi.mock("../../hooks/useTeamsChannelList", () => ({
@@ -315,6 +319,28 @@ function fakeFetcher(
   };
 }
 
+function fakeChannelFetcher(
+  overrides: Partial<TeamsChannelFetcher> = {},
+): TeamsChannelFetcher {
+  return {
+    listJoinedTeams: () => Promise.resolve({ teams: [], state: "ok" }),
+    listChannels: () => Promise.resolve({ channels: [], state: "ok" }),
+    listMessagesPage: () =>
+      Promise.resolve({ messages: [], nextLink: null, status: 200, ok: true }),
+    probeMessage: () => Promise.resolve({ message: null, status: 404 }),
+    getReply: () => Promise.resolve(null),
+    pageChannelBackwards: () =>
+      Promise.resolve({
+        messages: [],
+        nextLink: null,
+        truncated: false,
+        oldestCreatedDateTime: null,
+        state: "ok",
+      }),
+    ...overrides,
+  };
+}
+
 /** A fetcher whose paging parks until released, and honours an abort. */
 function blockedFetcher(): {
   fetcher: TeamsChatFetcher;
@@ -389,6 +415,7 @@ describe("TeamsChatPickerDialog", () => {
     uploads.length = 0;
     hooks.uploadStore = { isUploading: false, error: null };
     hooks.fetcher = fakeFetcher();
+    hooks.channelFetcher = null;
     hooks.chatList = chatListResult();
     hooks.channelList = channelListResult();
     hooks.messages = messagesResult();
@@ -796,5 +823,125 @@ describe("TeamsChatPickerDialog", () => {
     ).toBeInTheDocument();
     expect(uploads).toHaveLength(0);
     expect(selectChat()).toBeChecked();
+  });
+
+  describe("channel search hits", () => {
+    const CHANNEL_HIT = {
+      ref: { kind: "channel" as const, teamId: "t1", channelId: "c1" },
+      webLink: null,
+      messageId: "1786384303161",
+      senderName: "Max Token",
+      createdAt: "2026-08-10T17:51:44Z",
+      summary: "hey <c0>folks</c0> whats up?",
+    };
+
+    function arrangeChannelHit(
+      probeMessage?: TeamsChannelFetcher["probeMessage"],
+    ) {
+      hooks.search = searchResult({ hits: [CHANNEL_HIT] });
+      hooks.channelList = channelListResult({
+        channels: parseTeamChannels({ id: "t1", displayName: "Erato Labs" }, [
+          { id: "c1", displayName: "Test Channel 1" },
+        ]),
+      });
+      if (probeMessage) {
+        hooks.channelFetcher = fakeChannelFetcher({ probeMessage });
+      }
+    }
+
+    const hitCheckbox = () =>
+      screen.findByRole("checkbox", { name: "Select message from Max Token" });
+
+    async function searchForHit() {
+      renderPicker();
+      fireEvent.change(
+        screen.getByLabelText("Filter Teams chats or search messages"),
+        { target: { value: "folks" } },
+      );
+      return hitCheckbox();
+    }
+
+    it("probes on the first tick and selects the hit once it proves a root", async () => {
+      const probeMessage = vi.fn(() =>
+        Promise.resolve({
+          message: mockGraphChatMessage({ id: CHANNEL_HIT.messageId }),
+          status: 200,
+        }),
+      );
+      arrangeChannelHit(probeMessage);
+      const checkbox = await searchForHit();
+
+      await act(async () => {
+        fireEvent.click(checkbox);
+      });
+
+      expect(probeMessage).toHaveBeenCalledWith(
+        "t1",
+        "c1",
+        CHANNEL_HIT.messageId,
+        expect.anything(),
+      );
+      await waitFor(() => expect(checkbox).toBeChecked());
+    });
+
+    it("turns a reply hit into a pointer at its channel instead of a doomed attach", async () => {
+      arrangeChannelHit(() => Promise.resolve({ message: null, status: 404 }));
+      const checkbox = await searchForHit();
+
+      await act(async () => {
+        fireEvent.click(checkbox);
+      });
+
+      expect(
+        await screen.findByText(
+          "A reply can't be attached from search — open the channel to pick it.",
+        ),
+      ).toBeInTheDocument();
+      expect(checkbox).not.toBeChecked();
+      expect(checkbox).toBeDisabled();
+
+      // The remedy is one click away: the row opens the channel drill-in.
+      fireEvent.click(
+        screen.getByRole("button", { name: "Open Test Channel 1" }),
+      );
+      expect(
+        screen.getByText("No messages in this channel yet."),
+      ).toBeInTheDocument();
+    });
+
+    it("keeps a transient probe failure retryable", async () => {
+      const probeMessage = vi.fn(() =>
+        Promise.resolve({ message: null, status: 0 }),
+      );
+      arrangeChannelHit(probeMessage);
+      const checkbox = await searchForHit();
+
+      await act(async () => {
+        fireEvent.click(checkbox);
+      });
+      expect(
+        await screen.findByText(
+          "Couldn't check this message. Select it again to retry.",
+        ),
+      ).toBeInTheDocument();
+      expect(checkbox).toBeEnabled();
+
+      await act(async () => {
+        fireEvent.click(checkbox);
+      });
+      expect(probeMessage).toHaveBeenCalledTimes(2);
+    });
+
+    it("says why a channel hit is inert when channel access is missing", async () => {
+      arrangeChannelHit();
+      const checkbox = await searchForHit();
+
+      expect(checkbox).toBeDisabled();
+      expect(
+        screen.getByText(
+          "Channel messages can't be attached — channel access hasn't been granted.",
+        ),
+      ).toBeInTheDocument();
+    });
   });
 });

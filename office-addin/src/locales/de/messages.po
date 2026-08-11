@@ -1148,6 +1148,26 @@ msgstr "Abbrechen"
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.channelHitIsReply"
+msgstr "Eine Antwort kann nicht aus der Suche angehängt werden – öffnen Sie den Kanal, um sie auszuwählen."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.channelHitProbeFailed"
+msgstr "Diese Nachricht konnte nicht geprüft werden. Wählen Sie sie erneut aus, um es noch einmal zu versuchen."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.channelHitProbing"
+msgstr "Es wird geprüft, ob diese Nachricht angehängt werden kann…"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.channelHitUnavailable"
+msgstr "Kanalnachrichten können nicht angehängt werden – der Kanalzugriff wurde nicht gewährt."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.channelMessagesError"
 msgstr ""
 

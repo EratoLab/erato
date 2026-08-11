@@ -10,10 +10,11 @@ import {
   SearchIcon,
 } from "@erato/frontend/library";
 import { plural, t } from "@lingui/core/macro";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { TeamsPickerRow, TeamsPickerRowSkeleton } from "./TeamsPickerRow";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
+import { useTeamsChannelHitProbe } from "../hooks/useTeamsChannelHitProbe";
 import { useTeamsChannelMessages } from "../hooks/useTeamsChannelMessages";
 import { useTeamsChatMessages } from "../hooks/useTeamsChatMessages";
 import {
@@ -38,6 +39,12 @@ import {
 import type { TeamsChatPickerContextValue } from "../providers/TeamsChatPickerProvider";
 import type { ParsedTeamsChannel } from "../utils/parsedTeamsChannel";
 import type { ParsedTeamsChat } from "../utils/parsedTeamsChat";
+import type { TeamsSearchHit } from "../utils/teamsChatGraph";
+import type { TeamsMessageSelection } from "../utils/teamsChatSelection";
+import type {
+  TeamsChannelConversationRef,
+  TeamsChatConversationRef,
+} from "../utils/teamsConversationRef";
 import type { ReactNode } from "react";
 
 const SEARCH_DEBOUNCE_MS = 350;
@@ -80,6 +87,17 @@ function TeamsChatPickerDialogBody({
     isSearching ? null : activeChannel,
   );
   const search = useTeamsChatSearch(picker.fetcher, isSearching ? trimmed : "");
+  const hitProbe = useTeamsChannelHitProbe(picker.channelFetcher);
+
+  // A probe can resolve after the dialog is gone; a late auto-tick would
+  // otherwise plant a selection into the next opening.
+  const aliveRef = useRef(true);
+  useEffect(
+    () => () => {
+      aliveRef.current = false;
+    },
+    [],
+  );
 
   const chatMatches = useMemo(
     () => filterTeamsChats(picker.chatList.chats, query),
@@ -557,47 +575,9 @@ function TeamsChatPickerDialogBody({
                 id: "officeAddin.teams.picker.unknownSender",
                 message: "Unknown sender",
               });
-            const chatTitle =
-              hit.ref.kind === "chat"
-                ? chatTitleFor(hit.ref.chatId)
-                : (picker.channelList.channelsByKey.get(
-                    `${hit.ref.teamId}/${hit.ref.channelId}`,
-                  )?.name ?? null);
-            const selection = {
-              kind: "message" as const,
-              ref: hit.ref,
-              messageId: hit.messageId,
-              conversationTitle: chatTitle ?? "",
-              senderName,
-              createdAt: hit.createdAt,
-            };
-            const checked = picker.isSelected(selection);
-            return (
-              <TeamsPickerRow
-                key={`${conversationKey(hit.ref)}:${hit.messageId}`}
-                checked={checked}
-                onToggle={() => picker.toggle(selection)}
-                disabled={!checked && picker.isMessageSelectionFull}
-                selectLabel={t({
-                  id: "officeAddin.teams.picker.selectMessage",
-                  message: `Select message from ${senderName}`,
-                })}
-                title={
-                  <>
-                    {senderName}
-                    {chatTitle && (
-                      <span className="font-normal text-theme-fg-muted">
-                        {" · "}
-                        {chatTitle}
-                      </span>
-                    )}
-                  </>
-                }
-                subline={<SearchSnippet summary={hit.summary} />}
-                createdAt={hit.createdAt}
-                senderName={senderName}
-              />
-            );
+            return hit.ref.kind === "chat"
+              ? renderChatHitRow(hit, hit.ref, senderName)
+              : renderChannelHitRow(hit, hit.ref, senderName);
           })
         )}
         <LoadMoreRow
@@ -610,6 +590,155 @@ function TeamsChatPickerDialogBody({
           })}
         />
       </>
+    );
+  }
+
+  function renderChatHitRow(
+    hit: TeamsSearchHit,
+    ref: TeamsChatConversationRef,
+    senderName: string,
+  ): ReactNode {
+    const chatTitle = chatTitleFor(ref.chatId);
+    const selection: TeamsMessageSelection = {
+      kind: "message",
+      ref,
+      messageId: hit.messageId,
+      conversationTitle: chatTitle ?? "",
+      senderName,
+      createdAt: hit.createdAt,
+    };
+    const checked = picker.isSelected(selection);
+    return (
+      <TeamsPickerRow
+        key={`${conversationKey(ref)}:${hit.messageId}`}
+        checked={checked}
+        onToggle={() => picker.toggle(selection)}
+        disabled={!checked && picker.isMessageSelectionFull}
+        selectLabel={t({
+          id: "officeAddin.teams.picker.selectMessage",
+          message: `Select message from ${senderName}`,
+        })}
+        title={<HitTitle senderName={senderName} conversation={chatTitle} />}
+        subline={<SearchSnippet summary={hit.summary} />}
+        createdAt={hit.createdAt}
+        senderName={senderName}
+      />
+    );
+  }
+
+  /**
+   * A channel hit does not say whether it is a thread root or a reply, and
+   * only roots can be fetched by id — so the first tick probes, a root then
+   * ticks itself, and a reply turns the row into a pointer at its channel.
+   */
+  function renderChannelHitRow(
+    hit: TeamsSearchHit,
+    ref: TeamsChannelConversationRef,
+    senderName: string,
+  ): ReactNode {
+    const channel =
+      picker.channelList.channelsByKey.get(`${ref.teamId}/${ref.channelId}`) ??
+      null;
+    const probe = hitProbe.probeFor(ref, hit.messageId);
+    const unavailable = picker.channelFetcher === null;
+
+    const selection: TeamsMessageSelection = {
+      kind: "message",
+      ref,
+      messageId: hit.messageId,
+      parentMessageId: null,
+      conversationTitle: channel?.name ?? "",
+      senderName,
+      createdAt: hit.createdAt,
+    };
+    const checked = picker.isSelected(selection);
+
+    const note = unavailable
+      ? t({
+          id: "officeAddin.teams.picker.channelHitUnavailable",
+          message:
+            "Channel messages can't be attached — channel access hasn't been granted.",
+        })
+      : probe?.state === "probing"
+        ? t({
+            id: "officeAddin.teams.picker.channelHitProbing",
+            message: "Checking whether this message can be attached…",
+          })
+        : probe?.state === "reply"
+          ? t({
+              id: "officeAddin.teams.picker.channelHitIsReply",
+              message:
+                "A reply can't be attached from search — open the channel to pick it.",
+            })
+          : probe?.state === "failed"
+            ? t({
+                id: "officeAddin.teams.picker.channelHitProbeFailed",
+                message:
+                  "Couldn't check this message. Select it again to retry.",
+              })
+            : undefined;
+
+    const onToggle = () => {
+      if (checked) {
+        picker.toggle(selection);
+        return;
+      }
+      if (unavailable || probe?.state === "probing" || probe?.state === "reply")
+        return;
+      if (probe?.state === "root") {
+        picker.toggle(selection);
+        return;
+      }
+      void hitProbe.probe(ref, hit.messageId).then((result) => {
+        if (result.state === "root" && aliveRef.current)
+          picker.toggle(selection);
+      });
+    };
+
+    const openChannel = channel
+      ? () => {
+          setQuery("");
+          setActiveChannel({
+            teamId: channel.teamId,
+            channelId: channel.channelId,
+            name: channel.name,
+            teamName: channel.teamName,
+          });
+        }
+      : undefined;
+
+    return (
+      <TeamsPickerRow
+        key={`${conversationKey(ref)}:${hit.messageId}`}
+        checked={checked}
+        onToggle={onToggle}
+        disabled={
+          unavailable ||
+          probe?.state === "probing" ||
+          probe?.state === "reply" ||
+          (!checked && picker.isMessageSelectionFull)
+        }
+        selectLabel={t({
+          id: "officeAddin.teams.picker.selectMessage",
+          message: `Select message from ${senderName}`,
+        })}
+        title={
+          <HitTitle senderName={senderName} conversation={channel?.name} />
+        }
+        subline={<SearchSnippet summary={hit.summary} />}
+        note={note}
+        onOpen={probe?.state === "reply" ? openChannel : undefined}
+        openLabel={
+          channel
+            ? t({
+                id: "officeAddin.teams.picker.openChannel",
+                message: `Open ${channel.name}`,
+              })
+            : undefined
+        }
+        createdAt={hit.createdAt}
+        senderName={senderName}
+      />
     );
   }
 
@@ -792,6 +921,26 @@ function BuildProgress({ picker }: { picker: TeamsChatPickerContextValue }) {
             })}
       </p>
     </div>
+  );
+}
+
+function HitTitle({
+  senderName,
+  conversation,
+}: {
+  senderName: string;
+  conversation?: string | null;
+}) {
+  return (
+    <>
+      {senderName}
+      {conversation && (
+        <span className="font-normal text-theme-fg-muted">
+          {" · "}
+          {conversation}
+        </span>
+      )}
+    </>
   );
 }
 

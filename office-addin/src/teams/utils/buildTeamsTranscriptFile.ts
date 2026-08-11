@@ -29,7 +29,7 @@ interface TeamsTranscriptSectionBase {
   limit?: number;
   /** Older history exists beyond what was fetched. */
   truncated?: boolean;
-  /** Messages that could not be loaded (deleted between search and attach). */
+  /** Messages that could not be loaded — deleted, or the fetch failed. */
   skippedCount?: number;
 }
 

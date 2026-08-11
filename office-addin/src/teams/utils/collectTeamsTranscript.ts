@@ -28,7 +28,10 @@ import type {
 } from "./parsedTeamsChat";
 import type { TeamsChannelFetcher, TeamsChatFetcher } from "./teamsChatFetcher";
 import type { GraphChatMessage, TeamsFetchState } from "./teamsChatGraph";
-import type { TeamsChatSelection } from "./teamsChatSelection";
+import type {
+  TeamsChatSelection,
+  TeamsSelectedMessage,
+} from "./teamsChatSelection";
 
 /** Simultaneous chats. Lower than the Outlook fan-out: each task is serial. */
 export const TEAMS_CHAT_CONCURRENCY = 3;
@@ -86,7 +89,7 @@ export async function collectTeamsTranscript(
   const wholeChatRequests = expectedChatPageRequests(limit);
 
   const groupRequests = groups.map((group) =>
-    group.whole ? wholeChatRequests : group.messageIds.length,
+    group.whole ? wholeChatRequests : group.messages.length,
   );
   const requestsTotal = groupRequests.reduce((sum, count) => sum + count, 0);
 
@@ -131,8 +134,7 @@ export async function collectTeamsTranscript(
           channelFetcher,
           ref,
           whole: group.whole,
-          messageIds: group.messageIds,
-          parents: group.parents,
+          selected: group.messages,
           limit,
           signal,
           onPage: (fetched, oldest) => {
@@ -206,7 +208,7 @@ export async function collectTeamsTranscript(
       } else {
         const messages: ParsedTeamsMessage[] = [];
         let skipped = 0;
-        for (const messageId of group.messageIds) {
+        for (const { messageId } of group.messages) {
           const raw = await fetcher.getMessage(chatId, messageId, {
             signal,
           });
@@ -298,8 +300,7 @@ async function collectChannelMessages(args: {
   channelFetcher: TeamsChannelFetcher;
   ref: { teamId: string; channelId: string };
   whole: boolean;
-  messageIds: readonly string[];
-  parents: Record<string, string>;
+  selected: readonly TeamsSelectedMessage[];
   limit: number;
   signal?: AbortSignal;
   onPage?: (fetched: number, oldest: string | null) => void;
@@ -310,7 +311,7 @@ async function collectChannelMessages(args: {
   truncated: boolean;
   skipped: number;
 }> {
-  const { channelFetcher, ref, whole, messageIds, limit, signal } = args;
+  const { channelFetcher, ref, whole, selected, limit, signal } = args;
   const conversationId = `${ref.teamId}/${ref.channelId}`;
   if (whole) {
     const page = await channelFetcher.pageChannelBackwards({
@@ -330,21 +331,25 @@ async function collectChannelMessages(args: {
   }
   const messages: ParsedTeamsMessage[] = [];
   let skipped = 0;
-  for (const messageId of messageIds) {
+  for (const { messageId, parentMessageId } of selected) {
     // A reply is not addressable through the messages endpoint, so a ticked
     // one is fetched under its parent instead.
-    const parentId = args.parents[messageId];
-    const raw = parentId
+    const raw = parentMessageId
       ? await channelFetcher.getReply(
           ref.teamId,
           ref.channelId,
-          parentId,
+          parentMessageId,
           messageId,
           { signal },
         )
-      : await channelFetcher.getMessage(ref.teamId, ref.channelId, messageId, {
-          signal,
-        });
+      : (
+          await channelFetcher.probeMessage(
+            ref.teamId,
+            ref.channelId,
+            messageId,
+            { signal },
+          )
+        ).message;
     args.onMessage?.();
     const parsed = raw ? parseTeamsMessage(raw, conversationId) : null;
     if (parsed) messages.push(parsed);

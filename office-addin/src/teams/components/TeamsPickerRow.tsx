@@ -19,6 +19,8 @@ export interface TeamsPickerRowProps {
   /** Present only for rows that drill in; renders the title as a button. */
   onOpen?: () => void;
   openLabel?: string;
+  /** Status line under the subline — why this row can't be ticked right now. */
+  note?: ReactNode;
   createdAt?: string | null;
   /** Display name the initials avatar is derived from. */
   senderName?: string;
@@ -40,6 +42,7 @@ export function TeamsPickerRow({
   subline,
   onOpen,
   openLabel,
+  note,
   createdAt,
   senderName,
   isChannel = false,
@@ -81,6 +84,14 @@ export function TeamsPickerRow({
         {subline !== undefined && (
           <div className="line-clamp-2 text-xs text-theme-fg-muted">
             {subline}
+          </div>
+        )}
+        {note !== undefined && (
+          <div
+            className="mt-0.5 text-xs italic text-theme-fg-muted"
+            role="status"
+          >
+            {note}
           </div>
         )}
       </div>

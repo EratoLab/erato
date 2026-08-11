@@ -1148,6 +1148,26 @@ msgstr "Cancelar"
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.channelHitIsReply"
+msgstr "Una respuesta no se puede adjuntar desde la búsqueda: abre el canal para seleccionarla."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.channelHitProbeFailed"
+msgstr "No se pudo comprobar este mensaje. Selecciónalo de nuevo para reintentar."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.channelHitProbing"
+msgstr "Comprobando si este mensaje se puede adjuntar…"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.channelHitUnavailable"
+msgstr "Los mensajes de canal no se pueden adjuntar: no se ha concedido acceso a los canales."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.channelMessagesError"
 msgstr ""
 

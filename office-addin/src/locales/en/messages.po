@@ -1148,6 +1148,26 @@ msgstr "Cancel"
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.channelHitIsReply"
+msgstr "A reply can't be attached from search — open the channel to pick it."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.channelHitProbeFailed"
+msgstr "Couldn't check this message. Select it again to retry."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.channelHitProbing"
+msgstr "Checking whether this message can be attached…"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.channelHitUnavailable"
+msgstr "Channel messages can't be attached — channel access hasn't been granted."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.channelMessagesError"
 msgstr "Couldn't load this channel."
 

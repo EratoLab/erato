@@ -1148,6 +1148,26 @@ msgstr "Anuluj"
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.channelHitIsReply"
+msgstr "Odpowiedzi nie można załączyć z wyszukiwania — otwórz kanał, aby ją wybrać."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.channelHitProbeFailed"
+msgstr "Nie udało się sprawdzić tej wiadomości. Zaznacz ją ponownie, aby spróbować jeszcze raz."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.channelHitProbing"
+msgstr "Sprawdzanie, czy tę wiadomość można załączyć…"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.channelHitUnavailable"
+msgstr "Wiadomości z kanałów nie można załączać — nie przyznano dostępu do kanałów."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.channelMessagesError"
 msgstr ""
 

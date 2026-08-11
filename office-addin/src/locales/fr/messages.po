@@ -1148,6 +1148,26 @@ msgstr "Annuler"
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.channelHitIsReply"
+msgstr "Une réponse ne peut pas être jointe depuis la recherche — ouvrez le canal pour la sélectionner."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.channelHitProbeFailed"
+msgstr "Impossible de vérifier ce message. Sélectionnez-le à nouveau pour réessayer."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.channelHitProbing"
+msgstr "Vérification de la possibilité de joindre ce message…"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.channelHitUnavailable"
+msgstr "Les messages de canal ne peuvent pas être joints — l'accès aux canaux n'a pas été accordé."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.channelMessagesError"
 msgstr ""
 
