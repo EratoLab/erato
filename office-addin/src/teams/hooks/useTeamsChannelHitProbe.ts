@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { parseTeamsMessage } from "../utils/parsedTeamsChat";
 import { conversationKey } from "../utils/teamsConversationRef";
@@ -45,6 +45,15 @@ export function useTeamsChannelHitProbe(fetcher: TeamsChannelFetcher | null): {
     ReadonlyMap<string, TeamsChannelHitProbe>
   >(new Map());
 
+  // A probe is a gated request against the channel; a closed dialog has no use
+  // for the answer, so it is dropped rather than left holding a slot.
+  const abortRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    abortRef.current = controller;
+    return () => controller.abort();
+  }, []);
+
   const put = useCallback((key: string, value: TeamsChannelHitProbe) => {
     setProbes((current) => new Map(current).set(key, value));
   }, []);
@@ -58,7 +67,9 @@ export function useTeamsChannelHitProbe(fetcher: TeamsChannelFetcher | null): {
       if (!fetcher) return { state: "failed" };
       put(key, { state: "probing" });
       const result = await fetcher
-        .probeMessage(ref.teamId, ref.channelId, messageId, {})
+        .probeMessage(ref.teamId, ref.channelId, messageId, {
+          signal: abortRef.current?.signal,
+        })
         .catch(() => null);
       const next: TeamsChannelHitProbe = result?.message
         ? {

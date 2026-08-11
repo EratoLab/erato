@@ -108,10 +108,6 @@ export function TeamsPickerRow({
 }
 
 /**
- * The library `Avatar` renders the signed-in erato profile and takes no name,
- * so an arbitrary Teams sender needs its own initials badge.
- */
-/**
  * `#` is the cross-product convention for a channel, and it reads instantly in
  * the slot where a chat shows a face — no legend, no extra row width.
  */
@@ -126,6 +122,10 @@ function ChannelGlyph() {
   );
 }
 
+/**
+ * The library `Avatar` renders the signed-in erato profile and takes no name,
+ * so an arbitrary Teams sender needs its own initials badge.
+ */
 export function TeamsInitialsAvatar({ name }: { name: string }) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   const initials =

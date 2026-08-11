@@ -295,11 +295,7 @@ export async function collectTeamsTranscript(
   };
 }
 
-/**
- * Whole-channel ingest uses the same recency window as a chat: newest pages
- * first, stopping at the limit, so a channel with years of history costs the
- * same as a busy chat rather than minutes of gated paging.
- */
+/** Stand-in metadata for a channel the browse cache never listed. */
 function fallbackChannel(
   ref: { teamId: string; channelId: string },
   title: string,
@@ -315,6 +311,11 @@ function fallbackChannel(
   };
 }
 
+/**
+ * Whole-channel ingest uses the same recency window as a chat: newest pages
+ * first, stopping at the limit, so a channel with years of history costs the
+ * same as a busy chat rather than minutes of gated paging.
+ */
 async function collectChannelMessages(args: {
   channelFetcher: TeamsChannelFetcher;
   ref: { teamId: string; channelId: string };
