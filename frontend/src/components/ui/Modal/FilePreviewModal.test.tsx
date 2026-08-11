@@ -18,6 +18,13 @@ const useDocxModelMock = vi.hoisted(() =>
 );
 const setWasmSourceMock = vi.hoisted(() => vi.fn());
 
+// PDFium needs a worker and WebAssembly, neither of which jsdom provides.
+vi.mock("@/components/ui/FilePreview/PdfPreview", () => ({
+  PdfPreview: ({ url }: { url: string }) => (
+    <div data-testid="file-preview-pdf" data-url={url} />
+  ),
+}));
+
 vi.mock("@extend-ai/react-docx", () => ({
   ReactDocxViewer: ({ model }: { model?: unknown }) => (
     <div data-testid="mock-react-docx-viewer">
@@ -60,6 +67,49 @@ const renderWithTheme = (ui: React.ReactElement) =>
   render(<ThemeProvider>{ui}</ThemeProvider>);
 
 describe("FilePreviewModal", () => {
+  it("previews PDF files from the preview URL", async () => {
+    renderWithTheme(
+      <FilePreviewModal isOpen={true} onClose={vi.fn()} file={makeFile()} />,
+    );
+
+    expect(await screen.findByTestId("file-preview-pdf")).toHaveAttribute(
+      "data-url",
+      "https://files.example.com/preview/shared-report.pdf",
+    );
+  });
+
+  it("states the caller's reason instead of blaming the file type", () => {
+    renderWithTheme(
+      <FilePreviewModal
+        isOpen={true}
+        onClose={vi.fn()}
+        file={makeFile({ preview_url: null })}
+        notPreviewableReason="This file is too large to preview here."
+      />,
+    );
+
+    expect(
+      screen.getByText("This file is too large to preview here."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Preview is not available for this file type."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("falls back to the file-type message with no reason given", () => {
+    renderWithTheme(
+      <FilePreviewModal
+        isOpen={true}
+        onClose={vi.fn()}
+        file={makeFile({ preview_url: null })}
+      />,
+    );
+
+    expect(
+      screen.getByText("Preview is not available for this file type."),
+    ).toBeInTheDocument();
+  });
+
   it("previews DOCX files from the preview URL", async () => {
     global.fetch = vi.fn(async () => {
       return {

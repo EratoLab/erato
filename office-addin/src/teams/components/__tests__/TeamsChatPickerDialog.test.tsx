@@ -126,13 +126,15 @@ vi.mock("@erato/frontend/library", () => ({
   FilePreviewModal: ({
     isOpen,
     file,
+    notPreviewableReason,
   }: {
     isOpen: boolean;
     file: { filename: string; preview_url?: string | null } | null;
+    notPreviewableReason?: string;
   }) =>
     isOpen && file ? (
       <div role="dialog" aria-label={`Preview ${file.filename}`}>
-        {file.preview_url}
+        {file.preview_url ?? notPreviewableReason}
       </div>
     ) : null,
   FILE_PREVIEW_STYLES: { progress: { container: "", bar: "" } },
@@ -1094,6 +1096,47 @@ describe("TeamsChatPickerDialog", () => {
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(openSpy).not.toHaveBeenCalled();
+  });
+
+  it("says a refused shared file was too large, not the wrong file type", async () => {
+    const downloadSharedFile = vi.fn(() =>
+      Promise.resolve({ state: "too-large" as const }),
+    );
+    hooks.fileFetcher = { downloadSharedFile };
+    hooks.messages = messagesResult({
+      messages: [
+        {
+          chatId: MOCK_CHAT_ID,
+          messageId: "1754000000000",
+          senderName: "Max Token",
+          createdAt: "2026-08-10T09:15:00Z",
+          editedAt: null,
+          text: "check this PDF guys",
+          markers: ["[attachment: multipage-test.pdf]"],
+          replyToId: null,
+          deepLink: "https://example.invalid/m",
+          sharedFiles: [
+            {
+              attachmentId: "att-1",
+              name: "multipage-test.pdf",
+              contentUrl: "https://contoso.sharepoint.com/multipage-test.pdf",
+            },
+          ],
+          imageUrls: [],
+        },
+      ],
+    });
+    renderPicker();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Product sync" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open multipage-test.pdf" }),
+    );
+
+    const preview = await screen.findByRole("dialog", {
+      name: "Preview multipage-test.pdf",
+    });
+    expect(preview).toHaveTextContent("too large");
   });
 
   it("revokes the preview's blob url when the picker unmounts around it", async () => {

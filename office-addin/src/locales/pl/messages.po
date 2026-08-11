@@ -1198,6 +1198,16 @@ msgstr "Nic do pokazania na tej stronie — wczytaj więcej, aby szukać dalej."
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.filePreviewFailed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.filePreviewTooLarge"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.includeEarlier"
 msgstr "Uwzględnij wcześniejsze"
 
