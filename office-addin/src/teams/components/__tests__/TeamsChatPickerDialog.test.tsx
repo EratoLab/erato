@@ -807,6 +807,43 @@ describe("TeamsChatPickerDialog", () => {
     ).toBeInTheDocument();
   });
 
+  it("attaches a drill-in tick from the body already on screen, without re-fetching", async () => {
+    const base = fakeFetcher();
+    const getMessage = vi.fn(base.getMessage);
+    hooks.fetcher = { ...base, getMessage };
+    hooks.messages = messagesResult({
+      messages: [
+        {
+          chatId: MOCK_CHAT_ID,
+          messageId: "1754000000000",
+          senderName: "Grace Hopper",
+          createdAt: "2026-08-10T09:15:00Z",
+          editedAt: null,
+          text: "Works for me.",
+          markers: [],
+          replyToId: null,
+          deepLink: "https://example.invalid/m",
+        },
+      ],
+    });
+    renderPicker();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Product sync" }));
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Select message from Grace Hopper",
+      }),
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+    });
+
+    await waitFor(() => expect(uploads).toHaveLength(1));
+    expect(getMessage).not.toHaveBeenCalled();
+    const text = await uploads[0][0].text();
+    expect(text).toContain("Works for me.");
+  });
+
   it("never uploads an empty transcript", async () => {
     hooks.fetcher = fakeFetcher({ messages: [] });
     renderPicker();

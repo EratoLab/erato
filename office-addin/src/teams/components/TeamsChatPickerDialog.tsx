@@ -369,6 +369,7 @@ function TeamsChatPickerDialogBody({
               conversationTitle: channel.name,
               senderName,
               createdAt: message.createdAt,
+              message,
             };
             const checked = picker.isSelected(selection);
             return (
@@ -495,6 +496,7 @@ function TeamsChatPickerDialogBody({
               conversationTitle: chatTitle,
               senderName,
               createdAt: message.createdAt,
+              message,
             };
             const checked = picker.isSelected(selection);
             return (
@@ -686,12 +688,12 @@ function TeamsChatPickerDialogBody({
       if (unavailable || probe?.state === "probing" || probe?.state === "reply")
         return;
       if (probe?.state === "root") {
-        picker.toggle(selection);
+        picker.toggle({ ...selection, message: probe.message ?? undefined });
         return;
       }
       void hitProbe.probe(ref, hit.messageId).then((result) => {
         if (result.state === "root" && aliveRef.current)
-          picker.toggle(selection);
+          picker.toggle({ ...selection, message: result.message ?? undefined });
       });
     };
 

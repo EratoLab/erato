@@ -54,15 +54,15 @@ describe("groupSelectionsByConversation", () => {
         title: "Product sync",
         whole: false,
         messages: [
-          { messageId: "a", parentMessageId: null },
-          { messageId: "b", parentMessageId: null },
+          { messageId: "a", parentMessageId: null, message: null },
+          { messageId: "b", parentMessageId: null, message: null },
         ],
       },
       {
         ref: chatRef(OTHER_CHAT_ID),
         title: "Product sync",
         whole: false,
-        messages: [{ messageId: "c", parentMessageId: null }],
+        messages: [{ messageId: "c", parentMessageId: null, message: null }],
       },
     ]);
   });
@@ -80,8 +80,34 @@ describe("groupSelectionsByConversation", () => {
       },
     ]);
     expect(groups[0].messages).toEqual([
-      { messageId: "reply-1", parentMessageId: "root-1" },
+      { messageId: "reply-1", parentMessageId: "root-1", message: null },
     ]);
+  });
+
+  it("carries an already-parsed body through to the group", () => {
+    const body = {
+      chatId: MOCK_CHAT_ID,
+      messageId: "a",
+      senderName: "Ada Lovelace",
+      createdAt: "2026-03-03T09:14:00Z",
+      editedAt: null,
+      text: "already parsed",
+      markers: [],
+      replyToId: null,
+      deepLink: "https://example.invalid/a",
+    };
+    const groups = groupSelectionsByConversation([
+      {
+        kind: "message",
+        ref: chatRef(MOCK_CHAT_ID),
+        messageId: "a",
+        conversationTitle: "Product sync",
+        senderName: "Ada Lovelace",
+        createdAt: "2026-03-03T09:14:00Z",
+        message: body,
+      },
+    ]);
+    expect(groups[0].messages[0].message).toBe(body);
   });
 
   it("lets a whole-chat tick subsume individual ones regardless of order", () => {

@@ -9,6 +9,7 @@
 import { DEFAULT_CHAT_MESSAGE_LIMIT } from "./teamsChatPager";
 import { conversationKey } from "./teamsConversationRef";
 
+import type { ParsedTeamsMessage } from "./parsedTeamsChat";
 import type {
   TeamsChannelConversationRef,
   TeamsChatConversationRef,
@@ -21,6 +22,12 @@ interface TeamsMessageSelectionCommon {
   conversationTitle: string;
   senderName: string;
   createdAt: string | null;
+  /**
+   * The body as the picker already parsed it — from the drill-in list or the
+   * tick-time probe. When present the collector attaches it directly; only
+   * search-origin chat hits, which carry no body, still hydrate.
+   */
+  message?: ParsedTeamsMessage;
 }
 
 /**
@@ -43,8 +50,9 @@ export type TeamsChatSelection =
   | TeamsMessageSelection;
 
 /**
- * Individually-ticked messages each cost a gated round-trip, so the count is
- * bounded before the user commits rather than discovered as a stall.
+ * Individually-ticked messages are bounded before the user commits: one
+ * without a cached body costs a gated round-trip, and the transcript should
+ * stay a curated excerpt rather than a bulk export.
  */
 export const MAX_SELECTED_MESSAGES = 25;
 
@@ -52,6 +60,8 @@ export interface TeamsSelectedMessage {
   messageId: string;
   /** Thread root for channel replies; null for roots and for chat messages. */
   parentMessageId: string | null;
+  /** Already-parsed body; null means the collector must fetch it. */
+  message: ParsedTeamsMessage | null;
 }
 
 export interface TeamsChatSelectionGroup {
@@ -92,6 +102,7 @@ export function groupSelectionsByConversation(
         messageId: selection.messageId,
         parentMessageId:
           "parentMessageId" in selection ? selection.parentMessageId : null,
+        message: selection.message ?? null,
       });
     }
     groups.set(key, existing);

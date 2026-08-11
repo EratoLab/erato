@@ -1,8 +1,9 @@
 /**
  * Fetches the bodies behind a picker selection and assembles the transcript
  * sections. This is where the two-phase search contract is paid off: a hit
- * carries no body, so every selected message is hydrated here by
- * `(chatId, messageId)` before anything is serialized.
+ * carries no body, so a selection without a cached body is hydrated here
+ * before anything is serialized. Ticks from the drill-in lists arrive with
+ * their bodies and cost no request.
  *
  * Chats run three at a time — each task is itself a multi-second serial pager
  * against a 1 rps-per-chat ceiling, and the tenant-wide budget is shared with
@@ -88,8 +89,11 @@ export async function collectTeamsTranscript(
   const groups = groupSelectionsByConversation(selections);
   const wholeChatRequests = expectedChatPageRequests(limit);
 
+  // Ticks whose body the picker already parsed cost no request at all.
   const groupRequests = groups.map((group) =>
-    group.whole ? wholeChatRequests : group.messages.length,
+    group.whole
+      ? wholeChatRequests
+      : group.messages.filter((entry) => entry.message === null).length,
   );
   const requestsTotal = groupRequests.reduce((sum, count) => sum + count, 0);
 
@@ -208,13 +212,16 @@ export async function collectTeamsTranscript(
       } else {
         const messages: ParsedTeamsMessage[] = [];
         let skipped = 0;
-        for (const { messageId } of group.messages) {
-          const raw = await fetcher.getMessage(chatId, messageId, {
-            signal,
-          });
-          spent = Math.min(spent + 1, groupRequests[index]);
-          requestsCompleted += 1;
-          const parsed = raw ? parseTeamsMessage(raw, chatId) : null;
+        for (const entry of group.messages) {
+          let parsed = entry.message;
+          if (!parsed) {
+            const raw = await fetcher.getMessage(chatId, entry.messageId, {
+              signal,
+            });
+            spent = Math.min(spent + 1, groupRequests[index]);
+            requestsCompleted += 1;
+            parsed = raw ? parseTeamsMessage(raw, chatId) : null;
+          }
           if (parsed) {
             messages.push(parsed);
             noteOldest(parsed.createdAt);
@@ -331,27 +338,30 @@ async function collectChannelMessages(args: {
   }
   const messages: ParsedTeamsMessage[] = [];
   let skipped = 0;
-  for (const { messageId, parentMessageId } of selected) {
-    // A reply is not addressable through the messages endpoint, so a ticked
-    // one is fetched under its parent instead.
-    const raw = parentMessageId
-      ? await channelFetcher.getReply(
-          ref.teamId,
-          ref.channelId,
-          parentMessageId,
-          messageId,
-          { signal },
-        )
-      : (
-          await channelFetcher.probeMessage(
+  for (const { messageId, parentMessageId, message } of selected) {
+    let parsed = message;
+    if (!parsed) {
+      // A reply is not addressable through the messages endpoint, so a ticked
+      // one is fetched under its parent instead.
+      const raw = parentMessageId
+        ? await channelFetcher.getReply(
             ref.teamId,
             ref.channelId,
+            parentMessageId,
             messageId,
             { signal },
           )
-        ).message;
-    args.onMessage?.();
-    const parsed = raw ? parseTeamsMessage(raw, conversationId) : null;
+        : (
+            await channelFetcher.probeMessage(
+              ref.teamId,
+              ref.channelId,
+              messageId,
+              { signal },
+            )
+          ).message;
+      args.onMessage?.();
+      parsed = raw ? parseTeamsMessage(raw, conversationId) : null;
+    }
     if (parsed) messages.push(parsed);
     else skipped += 1;
   }

@@ -14,7 +14,7 @@ import type {
   TeamsChannelFetcher,
   TeamsChatFetcher,
 } from "../teamsChatFetcher";
-import type { TeamsChatSelection } from "../teamsChatSelection";
+import type { TeamsMessageSelection } from "../teamsChatSelection";
 
 const OTHER_CHAT_ID = "19:def456@thread.v2";
 
@@ -84,7 +84,7 @@ function fakeFetcher(overrides: Partial<TeamsChatFetcher> = {}) {
 const messageSelection = (
   messageId: string,
   chatId = MOCK_CHAT_ID,
-): TeamsChatSelection => ({
+): TeamsMessageSelection => ({
   kind: "message",
   ref: chatRef(chatId),
   messageId,
@@ -120,6 +120,41 @@ describe("collectTeamsTranscript", () => {
     expect(result.sections[0].messages[0].text).toBe("the real body");
     expect(result.sections[0].selection).toBe("messages");
     expect(result.state).toBe("ok");
+  });
+
+  it("attaches a cached body without spending a request on it", async () => {
+    const getMessage = vi.fn(() => Promise.resolve(null));
+    const totals: number[] = [];
+
+    const result = await collectTeamsTranscript({
+      fetcher: fakeFetcher({ getMessage }),
+      selections: [
+        {
+          ...messageSelection("a"),
+          message: {
+            chatId: MOCK_CHAT_ID,
+            messageId: "a",
+            senderName: "Ada Lovelace",
+            createdAt: "2026-03-03T09:14:00Z",
+            editedAt: null,
+            text: "the body the picker already showed",
+            markers: [],
+            replyToId: null,
+            deepLink: "https://example.invalid/a",
+          },
+        },
+      ],
+      knownChats,
+      onProgress: (progress) => totals.push(progress.requestsTotal),
+    });
+
+    expect(getMessage).not.toHaveBeenCalled();
+    expect(result.messageCount).toBe(1);
+    expect(result.sections[0].messages[0].text).toBe(
+      "the body the picker already showed",
+    );
+    // The denominator never promised a request that was not going to happen.
+    expect(Math.max(...totals)).toBe(0);
   });
 
   it("skips and counts a message that vanished between search and attach", async () => {
