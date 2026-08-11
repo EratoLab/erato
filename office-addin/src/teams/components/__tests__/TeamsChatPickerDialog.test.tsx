@@ -121,6 +121,19 @@ vi.mock("@erato/frontend/library", () => ({
   FolderIcon: () => null,
   PageIcon: () => null,
   SearchIcon: () => null,
+  SpinnerIcon: () => null,
+  FilePreviewModal: ({
+    isOpen,
+    file,
+  }: {
+    isOpen: boolean;
+    file: { filename: string; preview_url?: string | null } | null;
+  }) =>
+    isOpen && file ? (
+      <div role="dialog" aria-label={`Preview ${file.filename}`}>
+        {file.preview_url}
+      </div>
+    ) : null,
   FILE_PREVIEW_STYLES: { progress: { container: "", bar: "" } },
   useFileUploadStore: { getState: () => hooks.uploadStore },
   useFeatureConfig: () => ({ upload: { maxSizeBytes: 10 * 1024 * 1024 } }),
@@ -1046,10 +1059,9 @@ describe("TeamsChatPickerDialog", () => {
         },
       ],
     });
-    const viewer = { location: { href: "" }, close: vi.fn() };
-    const openSpy = vi
-      .spyOn(window, "open")
-      .mockReturnValue(viewer as unknown as Window);
+    // spyOn returns the previous test's spy when one exists; drop its calls.
+    const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
+    openSpy.mockClear();
     URL.createObjectURL = vi.fn(() => "blob:preview");
     renderPicker();
 
@@ -1058,14 +1070,17 @@ describe("TeamsChatPickerDialog", () => {
       screen.getByRole("button", { name: "Open multipage-test.pdf" }),
     );
 
-    // The tab opens synchronously; the bytes stream in behind it.
-    expect(openSpy).toHaveBeenCalledWith("about:blank", "_blank");
-    await waitFor(() => expect(viewer.location.href).toBe("blob:preview"));
+    // The in-app preview modal takes the bytes; no tab, no SharePoint login.
+    const preview = await screen.findByRole("dialog", {
+      name: "Preview multipage-test.pdf",
+    });
+    expect(preview).toHaveTextContent("blob:preview");
     expect(downloadSharedFile).toHaveBeenCalledWith(
       "https://contoso.sharepoint.com/multipage-test.pdf",
       10 * 1024 * 1024,
       expect.anything(),
     );
+    expect(openSpy).not.toHaveBeenCalled();
   });
 
   it("uploads pasted images beside the transcript", async () => {

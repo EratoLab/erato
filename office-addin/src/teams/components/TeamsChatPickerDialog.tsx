@@ -4,11 +4,13 @@ import {
   Button,
   CloseIcon,
   FILE_PREVIEW_STYLES,
+  FilePreviewModal,
   FolderIcon,
   Input,
   ModalBase,
   PageIcon,
   SearchIcon,
+  SpinnerIcon,
 } from "@erato/frontend/library";
 import { plural, t } from "@lingui/core/macro";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -43,17 +45,46 @@ import type {
   ParsedTeamsChat,
   TeamsSharedFileRef,
 } from "../utils/parsedTeamsChat";
-import type { TeamsFileFetcher } from "../utils/teamsChatFetcher";
 import type { TeamsSearchHit } from "../utils/teamsChatGraph";
 import type { TeamsMessageSelection } from "../utils/teamsChatSelection";
 import type {
   TeamsChannelConversationRef,
   TeamsChatConversationRef,
 } from "../utils/teamsConversationRef";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 
 const SEARCH_DEBOUNCE_MS = 350;
 const SKELETON_ROWS = 5;
+
+interface SharedFilePreview {
+  name: string;
+  /** Object URL of the fetched bytes; null when only SharePoint remains. */
+  url: string | null;
+  mimeType: string | null;
+  contentUrl: string;
+}
+
+type FilePreviewModalFile = NonNullable<
+  ComponentProps<typeof FilePreviewModal>["file"]
+>;
+
+/**
+ * The preview modal wants the backend's upload shape; a Teams shared file has
+ * no upload behind it, so the minimum the modal renders from is faked here.
+ * A null `url` takes the modal's "not previewable" path, whose Download
+ * button then opens SharePoint from a user gesture — no popup blocking.
+ */
+function previewModalFile(preview: SharedFilePreview): FilePreviewModalFile {
+  return {
+    id: "teams-shared-file",
+    filename: preview.name,
+    preview_url: preview.url,
+    download_url: preview.url ?? preview.contentUrl,
+    file_capability: {
+      mime_types: preview.mimeType ? [preview.mimeType] : [],
+    },
+  } as FilePreviewModalFile;
+}
 
 export function TeamsChatPickerDialog() {
   const picker = useTeamsChatPicker();
@@ -93,6 +124,11 @@ function TeamsChatPickerDialogBody({
   );
   const search = useTeamsChatSearch(picker.fetcher, isSearching ? trimmed : "");
   const hitProbe = useTeamsChannelHitProbe(picker.channelFetcher);
+  const [sharedFilePreview, setSharedFilePreview] =
+    useState<SharedFilePreview | null>(null);
+  const [sharedFileLoadingId, setSharedFileLoadingId] = useState<string | null>(
+    null,
+  );
 
   // A probe can resolve after the dialog is gone; a late auto-tick would
   // otherwise plant a selection into the next opening.
@@ -145,80 +181,135 @@ function TeamsChatPickerDialogBody({
     resolvedChats.get(chatId)?.title ??
     null;
 
+  /**
+   * The bytes come through our own token into the same preview modal the chat
+   * uses — a dev browser profile rarely holds a SharePoint session, so a
+   * SharePoint tab would mostly show a login wall. That tab remains the
+   * fallback when the file grant is missing.
+   */
+  const openSharedFile = (file: TeamsSharedFileRef) => {
+    const fileFetcher = picker.fileFetcher;
+    if (!fileFetcher) {
+      window.open(file.contentUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    setSharedFileLoadingId(file.attachmentId);
+    void fileFetcher
+      .downloadSharedFile(file.contentUrl, picker.maxFileBytes, {})
+      .then((result) => {
+        if (!aliveRef.current) return;
+        setSharedFilePreview(
+          result.state === "ok"
+            ? {
+                name: file.name,
+                url: URL.createObjectURL(
+                  new Blob([result.content.bytes], {
+                    type: result.content.contentType,
+                  }),
+                ),
+                mimeType: result.content.contentType,
+                contentUrl: file.contentUrl,
+              }
+            : {
+                name: file.name,
+                url: null,
+                mimeType: null,
+                contentUrl: file.contentUrl,
+              },
+        );
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (aliveRef.current) setSharedFileLoadingId(null);
+      });
+  };
+
+  const closeSharedFilePreview = () => {
+    if (sharedFilePreview?.url) URL.revokeObjectURL(sharedFilePreview.url);
+    setSharedFilePreview(null);
+  };
+
   return (
-    <ModalBase
-      isOpen
-      onClose={picker.close}
-      title={dialogTitle}
-      contentClassName="h-[80vh] max-h-[600px] max-w-xl"
-    >
-      <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
-        <div className="flex shrink-0 items-center gap-2">
-          {(activeChat || activeChannel) && !isSearching && (
-            <Button
-              variant="ghost"
-              geometry="icon"
-              icon={<ArrowLeftIcon className="size-4" />}
-              onClick={() => {
-                setActiveChatId(null);
-                setActiveChannel(null);
-              }}
+    <>
+      <ModalBase
+        isOpen
+        onClose={picker.close}
+        title={dialogTitle}
+        contentClassName="h-[80vh] max-h-[600px] max-w-xl"
+      >
+        <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
+          <div className="flex shrink-0 items-center gap-2">
+            {(activeChat || activeChannel) && !isSearching && (
+              <Button
+                variant="ghost"
+                geometry="icon"
+                icon={<ArrowLeftIcon className="size-4" />}
+                onClick={() => {
+                  setActiveChatId(null);
+                  setActiveChannel(null);
+                }}
+                aria-label={t({
+                  id: "officeAddin.teams.picker.back",
+                  message: "Back to chats",
+                })}
+              />
+            )}
+            <SearchIcon
+              className="size-4 shrink-0 text-theme-fg-muted"
+              aria-hidden="true"
+            />
+            <Input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={t({
+                id: "officeAddin.teams.picker.searchPlaceholder",
+                message: "Filter chats or search messages",
+              })}
               aria-label={t({
-                id: "officeAddin.teams.picker.back",
-                message: "Back to chats",
+                id: "officeAddin.teams.picker.searchLabel",
+                message: "Filter Teams chats or search messages",
               })}
             />
+            {query.length > 0 && (
+              <Button
+                variant="ghost"
+                geometry="icon"
+                icon={<CloseIcon className="size-4" />}
+                onClick={() => setQuery("")}
+                aria-label={t({
+                  id: "officeAddin.teams.picker.clearSearch",
+                  message: "Clear search",
+                })}
+              />
+            )}
+          </div>
+
+          {activeChat && !isSearching && (
+            <p className="shrink-0 truncate text-sm font-medium text-theme-fg-primary">
+              {activeChat.title}
+            </p>
           )}
-          <SearchIcon
-            className="size-4 shrink-0 text-theme-fg-muted"
-            aria-hidden="true"
-          />
-          <Input
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder={t({
-              id: "officeAddin.teams.picker.searchPlaceholder",
-              message: "Filter chats or search messages",
-            })}
-            aria-label={t({
-              id: "officeAddin.teams.picker.searchLabel",
-              message: "Filter Teams chats or search messages",
-            })}
-          />
-          {query.length > 0 && (
-            <Button
-              variant="ghost"
-              geometry="icon"
-              icon={<CloseIcon className="size-4" />}
-              onClick={() => setQuery("")}
-              aria-label={t({
-                id: "officeAddin.teams.picker.clearSearch",
-                message: "Clear search",
-              })}
-            />
-          )}
+
+          <div className="min-h-0 flex-1 divide-y divide-theme-border overflow-y-auto">
+            {liveLength > 0
+              ? renderQueryResults()
+              : activeChannel
+                ? renderChannelMessageList(activeChannel)
+                : activeChatId
+                  ? renderMessageList(activeChatId)
+                  : renderChatList()}
+          </div>
+
+          {renderFooter()}
         </div>
-
-        {activeChat && !isSearching && (
-          <p className="shrink-0 truncate text-sm font-medium text-theme-fg-primary">
-            {activeChat.title}
-          </p>
-        )}
-
-        <div className="min-h-0 flex-1 divide-y divide-theme-border overflow-y-auto">
-          {liveLength > 0
-            ? renderQueryResults()
-            : activeChannel
-              ? renderChannelMessageList(activeChannel)
-              : activeChatId
-                ? renderMessageList(activeChatId)
-                : renderChatList()}
-        </div>
-
-        {renderFooter()}
-      </div>
-    </ModalBase>
+      </ModalBase>
+      <FilePreviewModal
+        isOpen={sharedFilePreview !== null}
+        onClose={closeSharedFilePreview}
+        file={sharedFilePreview ? previewModalFile(sharedFilePreview) : null}
+      />
+    </>
   );
 
   function renderQueryResults(): ReactNode {
@@ -406,8 +497,8 @@ function TeamsChatPickerDialogBody({
                 chips={
                   <SharedFileChips
                     files={message.sharedFiles}
-                    fileFetcher={picker.fileFetcher}
-                    maxFileBytes={picker.maxFileBytes}
+                    loadingId={sharedFileLoadingId}
+                    onOpen={openSharedFile}
                   />
                 }
                 createdAt={message.createdAt}
@@ -540,8 +631,8 @@ function TeamsChatPickerDialogBody({
                 chips={
                   <SharedFileChips
                     files={message.sharedFiles}
-                    fileFetcher={picker.fileFetcher}
-                    maxFileBytes={picker.maxFileBytes}
+                    loadingId={sharedFileLoadingId}
+                    onOpen={openSharedFile}
                   />
                 }
                 createdAt={message.createdAt}
@@ -993,61 +1084,46 @@ function BuildProgress({ picker }: { picker: TeamsChatPickerContextValue }) {
  */
 function SharedFileChips({
   files,
-  fileFetcher,
-  maxFileBytes,
+  loadingId,
+  onOpen,
 }: {
   files: readonly TeamsSharedFileRef[];
-  fileFetcher: TeamsFileFetcher | null;
-  maxFileBytes: number;
+  /** Attachment id whose bytes are being fetched for the preview. */
+  loadingId: string | null;
+  onOpen: (file: TeamsSharedFileRef) => void;
 }) {
   if (files.length === 0) return null;
 
-  const openFile = (file: TeamsSharedFileRef) => {
-    if (!fileFetcher) {
-      window.open(file.contentUrl, "_blank", "noopener,noreferrer");
-      return;
-    }
-    // The tab must open synchronously with the click or the popup blocker
-    // eats it; the content streams in afterwards.
-    const viewer = window.open("about:blank", "_blank");
-    if (!viewer) return;
-    void fileFetcher
-      .downloadSharedFile(file.contentUrl, maxFileBytes, {})
-      .then((result) => {
-        if (result.state === "ok") {
-          viewer.location.href = URL.createObjectURL(
-            new Blob([result.content.bytes], {
-              type: result.content.contentType,
-            }),
-          );
-        } else {
-          // Oversized or unresolvable here — let SharePoint have it.
-          viewer.location.href = file.contentUrl;
-        }
-      })
-      .catch(() => {
-        viewer.location.href = file.contentUrl;
-      });
-  };
-
   return (
     <div className="mt-1 flex flex-wrap gap-1">
-      {files.map((file) => (
-        <button
-          key={file.attachmentId}
-          type="button"
-          onClick={() => openFile(file)}
-          title={file.name}
-          aria-label={t({
-            id: "officeAddin.teams.picker.openSharedFile",
-            message: `Open ${file.name}`,
-          })}
-          className="theme-transition flex max-w-44 items-center gap-1 rounded-full border border-theme-border bg-theme-bg-accent px-2 py-0.5 text-[11px] text-theme-fg-muted hover:bg-theme-bg-hover hover:text-theme-fg-primary"
-        >
-          <PageIcon className="size-3 shrink-0" aria-hidden />
-          <span className="truncate">{file.name}</span>
-        </button>
-      ))}
+      {files.map((file) => {
+        const isLoading = loadingId === file.attachmentId;
+        return (
+          <button
+            key={file.attachmentId}
+            type="button"
+            onClick={() => onOpen(file)}
+            disabled={isLoading}
+            aria-busy={isLoading}
+            title={file.name}
+            aria-label={t({
+              id: "officeAddin.teams.picker.openSharedFile",
+              message: `Open ${file.name}`,
+            })}
+            className="theme-transition flex max-w-44 items-center gap-1 rounded-full border border-theme-border bg-theme-bg-accent px-2 py-0.5 text-[11px] text-theme-fg-muted hover:bg-theme-bg-hover hover:text-theme-fg-primary"
+          >
+            {isLoading ? (
+              <SpinnerIcon
+                className="size-3 shrink-0 animate-spin"
+                aria-hidden
+              />
+            ) : (
+              <PageIcon className="size-3 shrink-0" aria-hidden />
+            )}
+            <span className="truncate">{file.name}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
