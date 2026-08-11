@@ -2621,6 +2621,11 @@ pub struct AssistantsConfig {
     #[serde(default)]
     pub enabled: bool,
 
+    // Whether assistants can be shared with edit access.
+    // Defaults to `true`.
+    #[serde(default = "default_assistants_enable_edit_sharing")]
+    pub enable_edit_sharing: bool,
+
     // Whether to show recent assistants in the chat sidebar.
     // Defaults to `false`.
     #[serde(default)]
@@ -2655,6 +2660,7 @@ impl Default for AssistantsConfig {
     fn default() -> Self {
         Self {
             enabled: false,
+            enable_edit_sharing: default_assistants_enable_edit_sharing(),
             show_recent_items: false,
             show_recent_items_collapsible: false,
             context_warning_threshold: default_assistant_context_warning_threshold(),
@@ -2663,6 +2669,10 @@ impl Default for AssistantsConfig {
             max_system_prompt_length: None,
         }
     }
+}
+
+fn default_assistants_enable_edit_sharing() -> bool {
+    true
 }
 
 fn default_assistant_context_warning_threshold() -> f64 {

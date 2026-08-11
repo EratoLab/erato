@@ -492,6 +492,9 @@ impl PolicyEngine {
                 "chat_sharing": {
                     "enabled": config.chat_sharing.enabled,
                 },
+                "assistants": {
+                    "enable_edit_sharing": config.assistants.enable_edit_sharing,
+                },
             },
             "config_permissions": build_config_permissions_policy_data(config),
         });

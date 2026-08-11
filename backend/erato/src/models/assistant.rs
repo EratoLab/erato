@@ -287,9 +287,10 @@ async fn get_assistant_by_id_internal(
     )
     .await?;
 
-    let has_viewer_access = share_grants
-        .iter()
-        .any(|grant| grant.resource_id == assistant_id.to_string() && grant.role == "viewer");
+    let has_viewer_access = share_grants.iter().any(|grant| {
+        grant.resource_id == assistant_id.to_string()
+            && matches!(grant.role.as_str(), "viewer" | "editor")
+    });
 
     if has_viewer_access
         && assistant_hub::hub_version_allows_generic_assistant_read(conn, subject, assistant_id)
@@ -303,7 +304,7 @@ async fn get_assistant_by_id_internal(
     ))
 }
 
-/// Get an assistant by ID (user must be the owner or have viewer access)
+/// Get an assistant by ID (user must be the owner or have viewer/editor access)
 ///
 /// This function excludes archived assistants. For user-facing API endpoints only.
 /// For internal operations that need to access archived assistants (e.g., continuing
@@ -317,14 +318,16 @@ pub async fn get_assistant_by_id(
     get_assistant_by_id_internal(conn, subject, assistant_id, false).await
 }
 
-/// Get an assistant by ID for update/delete operations (user must be the owner)
+/// Get an assistant by ID for modification operations.
 ///
-/// This is stricter than get_assistant_by_id - it requires ownership, not just viewer access.
+/// Updates allow editor grants when requested; destructive operations remain owner-only.
 async fn get_assistant_by_id_for_modification(
     conn: &DatabaseConnection,
+    policy: &PolicyEngine,
     subject: &Subject,
     assistant_id: Uuid,
     allow_archived: bool,
+    allow_shared_edit: bool,
 ) -> Result<assistants::Model, Report> {
     // Build query
     let mut query = Assistants::find_by_id(assistant_id);
@@ -354,14 +357,51 @@ async fn get_assistant_by_id_for_modification(
         .await?
         .wrap_err("User not found")?;
 
-    // Check if the user is the owner of the assistant (no viewer access for modifications)
-    if assistant.owner_user_id != user.id {
-        return Err(eyre::eyre!(
-            "Access denied: Only the owner can modify this assistant"
-        ));
+    if assistant.owner_user_id == user.id {
+        return Ok(assistant);
     }
 
-    Ok(assistant)
+    if allow_shared_edit {
+        let (subject_kind, subject_id) = subject.clone().into_parts();
+        policy
+            .authorize_with_context(
+                subject_kind,
+                &subject_id,
+                ResourceKind::Assistant,
+                &ResourceId(assistant_id.to_string()),
+                Action::Update,
+                subject.organization_group_ids(),
+                &[],
+            )
+            .await
+            .wrap_err("Access denied: User cannot edit this assistant")?;
+        return Ok(assistant);
+    }
+
+    Err(eyre::eyre!(
+        "Access denied: Only the owner can modify this assistant"
+    ))
+}
+
+/// Returns whether the subject can edit an assistant according to policy.
+pub async fn can_subject_edit_assistant(
+    policy: &PolicyEngine,
+    subject: &Subject,
+    assistant_id: Uuid,
+) -> bool {
+    let (subject_kind, subject_id) = subject.clone().into_parts();
+    policy
+        .authorize_with_context(
+            subject_kind,
+            &subject_id,
+            ResourceKind::Assistant,
+            &ResourceId(assistant_id.to_string()),
+            Action::Update,
+            subject.organization_group_ids(),
+            &[],
+        )
+        .await
+        .is_ok()
 }
 
 /// Get an assistant with its associated files
@@ -422,10 +462,10 @@ pub async fn update_assistant(
     default_chat_provider: Option<Option<String>>,
     enforce_facet_settings: Option<bool>,
 ) -> Result<assistants::Model, Report> {
-    let _ = policy; // Unused but kept for API consistency
-    // Get the assistant (includes ownership check - viewers cannot update)
+    // Get the assistant (owners and editor grants can update)
     let assistant =
-        get_assistant_by_id_for_modification(conn, subject, assistant_id, false).await?;
+        get_assistant_by_id_for_modification(conn, policy, subject, assistant_id, false, true)
+            .await?;
 
     // Update the assistant record
     let mut active_assistant = assistant.into_active_model();
@@ -472,10 +512,10 @@ pub async fn archive_assistant(
     subject: &Subject,
     assistant_id: Uuid,
 ) -> Result<assistants::Model, Report> {
-    let _ = policy; // Unused but kept for API consistency
-    // Get the assistant (includes ownership check - viewers cannot archive)
+    // Get the assistant (only owners can archive)
     let assistant =
-        get_assistant_by_id_for_modification(conn, subject, assistant_id, false).await?;
+        get_assistant_by_id_for_modification(conn, policy, subject, assistant_id, false, false)
+            .await?;
 
     // Archive the assistant
     let mut active_assistant = assistant.into_active_model();
@@ -498,7 +538,8 @@ pub async fn add_file_to_assistant(
     let _ = policy; // Unused but kept for API consistency
     // Get the assistant (includes ownership check - viewers cannot add files)
     let _assistant =
-        get_assistant_by_id_for_modification(conn, subject, assistant_id, false).await?;
+        get_assistant_by_id_for_modification(conn, policy, subject, assistant_id, false, false)
+            .await?;
 
     // Verify the file upload exists
     let _file_upload = file_upload::get_file_upload_by_id(conn, policy, subject, &file_upload_id)
@@ -531,7 +572,8 @@ pub async fn remove_file_from_assistant(
     let _ = policy; // Unused but kept for API consistency
     // Get the assistant (includes ownership check - viewers cannot remove files)
     let _assistant =
-        get_assistant_by_id_for_modification(conn, subject, assistant_id, false).await?;
+        get_assistant_by_id_for_modification(conn, policy, subject, assistant_id, false, false)
+            .await?;
 
     // Remove the association from the join table
     assistant_file_uploads::Entity::delete_many()
@@ -590,7 +632,8 @@ pub async fn upload_file_to_assistant(
 ) -> Result<file_uploads::Model, Report> {
     // Get the assistant (includes ownership check - viewers cannot upload files)
     let _assistant =
-        get_assistant_by_id_for_modification(conn, subject, assistant_id, false).await?;
+        get_assistant_by_id_for_modification(conn, policy, subject, assistant_id, false, false)
+            .await?;
 
     // Create the file upload record (independent of chat)
     let file_upload = create_standalone_file_upload(

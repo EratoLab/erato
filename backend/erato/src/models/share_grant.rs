@@ -1,5 +1,7 @@
+use crate::config::AppConfig;
 use crate::db::entity::prelude::*;
 use crate::db::entity::share_grants;
+use crate::models::assistant_hub;
 use crate::policy::prelude::*;
 use eyre::{ContextCompat, Report, WrapErr, eyre};
 use sea_orm::prelude::*;
@@ -59,10 +61,37 @@ pub async fn create_share_grant(
     subject_id_value: String,
     role: String,
 ) -> Result<share_grants::Model, Report> {
+    create_share_grant_with_config(
+        conn,
+        policy,
+        &AppConfig::default(),
+        subject,
+        resource_type,
+        resource_id,
+        subject_type,
+        subject_id_type,
+        subject_id_value,
+        role,
+    )
+    .await
+}
+
+/// Create a share grant using the active application configuration.
+#[allow(clippy::too_many_arguments)]
+pub async fn create_share_grant_with_config(
+    conn: &DatabaseConnection,
+    policy: &PolicyEngine,
+    config: &AppConfig,
+    subject: &Subject,
+    resource_type: String,
+    resource_id: String,
+    subject_type: String,
+    subject_id_type: String,
+    subject_id_value: String,
+    role: String,
+) -> Result<share_grants::Model, Report> {
     // Rebuild policy data if needed
-    policy
-        .rebuild_data_if_needed(conn, &crate::config::AppConfig::default())
-        .await?;
+    policy.rebuild_data_if_needed(conn, config).await?;
 
     // Get the user ID from subject
     let user_id_str = subject.user_id();
@@ -84,6 +113,14 @@ pub async fn create_share_grant(
                 return Err(eyre!("Access denied: User does not own this resource"));
             }
 
+            if role == "editor"
+                && assistant_hub::is_hub_version_assistant(conn, resource_uuid).await?
+            {
+                return Err(eyre!(
+                    "Assistant hub version assistants cannot be shared with edit access"
+                ));
+            }
+
             // Authorize the share action
             authorize!(
                 policy,
@@ -101,9 +138,9 @@ pub async fn create_share_grant(
     }
 
     // Validate role
-    if role != "viewer" {
+    if role != "viewer" && (role != "editor" || !config.assistants.enable_edit_sharing) {
         return Err(eyre!(
-            "Invalid role: {}. Only 'viewer' role is currently supported",
+            "Invalid role: {}. Only 'viewer' role is supported, and 'editor' requires assistant edit sharing to be enabled",
             role
         ));
     }

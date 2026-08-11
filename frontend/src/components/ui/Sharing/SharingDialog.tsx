@@ -7,6 +7,7 @@ import { SegmentedControl } from "@/components/ui/Controls/SegmentedControl";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { ModalBase } from "@/components/ui/Modal/ModalBase";
 import { useShareGrants } from "@/hooks/sharing";
+import { useAssistantsFeature } from "@/providers/FeatureConfigProvider";
 
 import { ShareGrantsList } from "./ShareGrantsList";
 import { SubjectSelector } from "./SubjectSelector";
@@ -37,6 +38,7 @@ export function SharingDialog({
   hasSharepointFiles = false,
 }: SharingDialogProps) {
   const { _ } = useLingui();
+  const { enableEditSharing } = useAssistantsFeature();
 
   // State for selected subjects
   const [selectedSubjects, setSelectedSubjects] = useState<
@@ -47,6 +49,7 @@ export function SharingDialog({
   // State for subject type toggle (users vs groups)
   const [subjectTypeFilter, setSubjectTypeFilter] =
     useState<SubjectTypeFilter>("user");
+  const [accessRole, setAccessRole] = useState<"viewer" | "editor">("viewer");
 
   // Fetch and manage share grants
   const {
@@ -115,7 +118,7 @@ export function SharingDialog({
                     "organization_group",
             subject_id_type: subject.subject_type_id,
             subject_id: subject.id,
-            role: "viewer",
+            role: enableEditSharing ? accessRole : "viewer",
           }),
         ),
       );
@@ -174,6 +177,7 @@ export function SharingDialog({
     setSuccessMessage("");
     setErrorMessage("");
     setSubjectTypeFilter("user"); // Reset to default
+    setAccessRole("viewer");
     onClose();
   };
 
@@ -239,6 +243,35 @@ export function SharingDialog({
               })}
             />
           </div>
+
+          {enableEditSharing ? (
+            <div className="mb-3">
+              <SegmentedControl
+                options={[
+                  {
+                    value: "viewer" as const,
+                    label: t({
+                      id: "sharing.role.read",
+                      message: "Read",
+                    }),
+                  },
+                  {
+                    value: "editor" as const,
+                    label: t({
+                      id: "sharing.role.editor",
+                      message: "Editor",
+                    }),
+                  },
+                ]}
+                value={accessRole}
+                onChange={setAccessRole}
+                aria-label={t({
+                  id: "sharing.role.ariaLabel",
+                  message: "Choose access level",
+                })}
+              />
+            </div>
+          ) : null}
 
           <SubjectSelector
             selectedIds={selectedIds}

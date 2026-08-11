@@ -668,6 +668,75 @@ async fn test_viewer_cannot_update_assistant(pool: Pool<Postgres>) {
     assert_eq!(response.status_code(), http::StatusCode::NOT_FOUND);
 }
 
+/// Test that an assistant editor can update a shared assistant.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_editor_can_update_assistant(pool: Pool<Postgres>) {
+    let app_state = test_app_state(hermetic_app_config(None, None), pool).await;
+
+    let owner = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        "editor-owner",
+        None,
+    )
+    .await
+    .expect("Failed to create owner");
+    let editor = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .expect("Failed to create editor");
+
+    let assistant = erato::models::assistant::create_assistant(
+        &app_state.db,
+        &PolicyEngine::new(),
+        &erato::policy::types::Subject::User(owner.id.to_string()),
+        "Original Name".to_string(),
+        None,
+        "Original prompt".to_string(),
+        None,
+        None,
+        None,
+        false,
+    )
+    .await
+    .expect("Failed to create assistant");
+
+    erato::models::share_grant::create_share_grant(
+        &app_state.db,
+        &PolicyEngine::new(),
+        &erato::policy::types::Subject::User(owner.id.to_string()),
+        "assistant".to_string(),
+        assistant.id.to_string(),
+        "user".to_string(),
+        "id".to_string(),
+        editor.id.to_string(),
+        "editor".to_string(),
+    )
+    .await
+    .expect("Failed to create editor share grant");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let response = server
+        .put(&format!("/api/v1beta/assistants/{}", assistant.id))
+        .json(&json!({"name": "Updated by editor"}))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+
+    response.assert_status_ok();
+    let body: Value = response.json();
+    assert_eq!(body["name"], "Updated by editor");
+    assert_eq!(body["can_edit"], true);
+}
+
 /// Test listing share grants for a resource
 ///
 /// # Test Categories

@@ -139,6 +139,18 @@ share_grants := [
 	},
 ]
 
+share_grants_editor := [
+	{
+		"id": "grant-editor-1",
+		"resource_type": "assistant",
+		"resource_id": assistant_1_id,
+		"subject_type": "user",
+		"subject_id_type": "id",
+		"subject_id": user_2_id,
+		"role": "editor",
+	},
+]
+
 share_grants_hub_version := [
 	{
 		"id": "grant-hub-version-1",
@@ -622,6 +634,65 @@ test_viewer_cannot_share_shared_assistant if {
 		"action": "share",
 	} with data.resource_attributes as resource_attributes
 		with data.share_grants as share_grants
+}
+
+# An editor can update an ordinary assistant when edit sharing is enabled.
+test_editor_can_read_and_update_shared_assistant if {
+	backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_2_id,
+		"resource_kind": "assistant",
+		"resource_id": assistant_1_id,
+		"action": "read",
+	} with data.resource_attributes as resource_attributes
+		with data.share_grants as share_grants_editor
+		with data.config as {"assistants": {"enable_edit_sharing": true}}
+	backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_2_id,
+		"resource_kind": "assistant",
+		"resource_id": assistant_1_id,
+		"action": "update",
+	} with data.resource_attributes as resource_attributes
+		with data.share_grants as share_grants_editor
+		with data.config as {"assistants": {"enable_edit_sharing": true}}
+}
+
+# Disabling edit sharing removes editor update access, while viewer behavior
+# remains covered by the tests above.
+test_editor_cannot_update_shared_assistant_when_disabled if {
+	not backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_2_id,
+		"resource_kind": "assistant",
+		"resource_id": assistant_1_id,
+		"action": "update",
+	} with data.resource_attributes as resource_attributes
+		with data.share_grants as share_grants_editor
+		with data.config as {"assistants": {"enable_edit_sharing": false}}
+}
+
+# Assistant Hub version assistants remain immutable even when edit sharing is
+# enabled.
+test_editor_cannot_update_assistant_hub_version if {
+	not backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_2_id,
+		"resource_kind": "assistant",
+		"resource_id": assistant_hub_version_1_id,
+		"action": "update",
+	} with data.resource_attributes as resource_attributes
+		with data.share_grants as [{
+			"id": "grant-hub-editor-1",
+			"resource_type": "assistant",
+			"resource_id": assistant_hub_version_1_id,
+			"subject_type": "user",
+			"subject_id_type": "id",
+			"subject_id": user_2_id,
+			"role": "editor",
+		}]
+		with data.assistant_hub_versions as assistant_hub_versions_review_accepted_current_published
+		with data.config as {"assistants": {"enable_edit_sharing": true}}
 }
 
 # --- Assistant Hub Review / Publication Workflow Tests ---

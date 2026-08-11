@@ -78,6 +78,8 @@ interface AuthFeatureConfig {
 interface AssistantsFeatureConfig {
   /** Whether the assistants feature is enabled */
   enabled: boolean;
+  /** Whether assistants may be shared with edit access */
+  enableEditSharing: boolean;
   /** Whether recent assistants should be shown in the sidebar */
   showRecentItems: boolean;
   /** Whether the recent assistants sidebar section is rendered as a collapsible section */
@@ -247,6 +249,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
   },
   assistants: {
     enabled: false,
+    enableEditSharing: true,
     showRecentItems: false,
     showRecentItemsCollapsible: false,
     contextWarningThreshold: 0.5,
@@ -349,6 +352,7 @@ function createFeatureConfig(
     },
     assistants: {
       enabled: environment.assistantsEnabled,
+      enableEditSharing: environment.assistantsEnableEditSharing ?? true,
       showRecentItems: environment.assistantsShowRecentItems,
       showRecentItemsCollapsible:
         environment.assistantsShowRecentItemsCollapsible,

@@ -24,6 +24,7 @@
   "assistant_hub.reviewers.rules.<rule-name>.rule_type": {},
   "assistants.context_file_contributor_threshold": {},
   "assistants.context_warning_threshold": {},
+  "assistants.enable_edit_sharing": {},
   "assistants.enabled": {},
   "assistants.max_system_prompt_length": {},
   "assistants.show_recent_items": {},

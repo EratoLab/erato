@@ -2885,10 +2885,15 @@ pub async fn frequent_assistants(
         get_file_capabilities(supports_image_understanding, supports_audio_input);
 
     // Convert from model FrequentAssistant to API FrequentAssistantItem
-    let current_user_id = &user_id;
+    let subject = me_user.to_subject();
+    let editable_assistants = futures::future::join_all(frequent.iter().map(|fa| {
+        models::assistant::can_subject_edit_assistant(&policy, &subject, fa.assistant.id)
+    }))
+    .await;
     let api_assistants: Vec<FrequentAssistantItem> = frequent
         .into_iter()
-        .map(|fa| {
+        .zip(editable_assistants)
+        .map(|(fa, can_edit)| {
             // Convert files to API format with download URLs
             let api_files = fa
                 .assistant
@@ -2924,10 +2929,7 @@ pub async fn frequent_assistants(
                     created_at: fa.assistant.created_at,
                     updated_at: fa.assistant.updated_at,
                     archived_at: fa.assistant.archived_at,
-                    can_edit: permissions::can_user_edit_assistant(
-                        current_user_id,
-                        &fa.assistant.owner_user_id.to_string(),
-                    ),
+                    can_edit,
                 },
                 files: api_files,
             };

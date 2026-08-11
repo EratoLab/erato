@@ -124,6 +124,19 @@ chat_sharing_enabled if {
 	data.config.chat_sharing.enabled
 }
 
+assistant_edit_sharing_enabled if {
+	data.config.assistants.enable_edit_sharing
+}
+
+assistant_share_grant_read_role(grant) if {
+	grant.role == "viewer"
+}
+
+assistant_share_grant_read_role(grant) if {
+	assistant_edit_sharing_enabled
+	grant.role == "editor"
+}
+
 has_enabled_share_link(resource_type, resource_id) if {
 	some link in data.share_links
 	link.resource_type == resource_type
@@ -200,8 +213,45 @@ can_read_assistant(assistant_id) if {
 	grant.resource_id == assistant_id
 	grant.subject_type == "user"
 	grant.subject_id == input.subject_id
-	grant.role == "viewer"
+	assistant_share_grant_read_role(grant)
 	assistant_share_grant_active(assistant_id)
+}
+
+can_edit_assistant(assistant_id) if {
+	data.resource_attributes[resource_kind_assistant][assistant_id].owner_id == input.subject_id
+}
+
+can_edit_assistant(assistant_id) if {
+	assistant_edit_sharing_enabled
+	not assistant_hub_version_for_assistant(assistant_id)
+	some grant in data.share_grants
+	grant.resource_type == "assistant"
+	grant.resource_id == assistant_id
+	grant.subject_type == "user"
+	grant.subject_id == input.subject_id
+	grant.role == "editor"
+}
+
+can_edit_assistant(assistant_id) if {
+	assistant_edit_sharing_enabled
+	not assistant_hub_version_for_assistant(assistant_id)
+	some grant in data.share_grants
+	grant.resource_type == "assistant"
+	grant.subject_type == "organization"
+	grant.subject_id_type == organization_subject_id_type
+	grant.subject_id == organization_subject_id
+	grant.role == "editor"
+}
+
+can_edit_assistant(assistant_id) if {
+	assistant_edit_sharing_enabled
+	not assistant_hub_version_for_assistant(assistant_id)
+	some grant in data.share_grants
+	grant.resource_type == "assistant"
+	grant.subject_type == "organization_group"
+	grant.role == "editor"
+	some group_id in input.organization_group_ids
+	group_id == grant.subject_id
 }
 
 can_read_assistant(assistant_id) if {
@@ -318,10 +368,21 @@ allow if {
 
 	# Check for assistant read/update/share action
 	input.resource_kind == resource_kind_assistant
-	input.action in [action_read, action_update, action_share]
+	input.action in [action_read, action_share]
 
 	# Check ownership
 	data.resource_attributes[resource_kind_assistant][input.resource_id].owner_id == input.subject_id
+}
+
+# An editor share grant allows updating an ordinary assistant when edit sharing
+# is enabled. Assistant Hub version assistants are immutable and are excluded
+# by can_edit_assistant.
+allow if {
+	input.subject_kind == subject_kind_user
+	input.subject_id != not_logged_in
+	input.resource_kind == resource_kind_assistant
+	input.action == action_update
+	can_edit_assistant(input.resource_id)
 }
 
 # A user can read file uploads they own.
@@ -410,7 +471,7 @@ allow if {
 	grant.resource_id == input.resource_id
 	grant.subject_type == "user"
 	grant.subject_id == input.subject_id
-	grant.role == "viewer"
+	assistant_share_grant_read_role(grant)
 	assistant_share_grant_active(input.resource_id)
 }
 
@@ -429,7 +490,7 @@ allow if {
 	grant.subject_type == organization_subject_type
 	grant.subject_id_type == organization_subject_id_type
 	grant.subject_id == organization_subject_id
-	grant.role == "viewer"
+	assistant_share_grant_read_role(grant)
 	assistant_share_grant_active(input.resource_id)
 }
 
@@ -448,7 +509,7 @@ allow if {
 	grant.resource_type == "assistant"
 	grant.resource_id == input.resource_id
 	grant.subject_type == "organization_group"
-	grant.role == "viewer"
+	assistant_share_grant_read_role(grant)
 	assistant_share_grant_active(input.resource_id)
 
 	# Check if the user belongs to this organization group
