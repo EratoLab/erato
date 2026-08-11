@@ -8,6 +8,7 @@ import {
 import { buildTeamsMessageDeepLink } from "../teamsDeepLink";
 
 import type { TeamsTranscriptSection } from "../buildTeamsTranscriptFile";
+import type { ParsedTeamsChannel } from "../parsedTeamsChannel";
 import type { ParsedTeamsChat, ParsedTeamsMessage } from "../parsedTeamsChat";
 
 const chat: ParsedTeamsChat = {
@@ -45,6 +46,30 @@ function section(
     kind: "chat",
     chat,
     messages: [message()],
+    selection: "whole-chat",
+    limit: 200,
+    ...overrides,
+  };
+}
+
+const channel: ParsedTeamsChannel = {
+  ref: { kind: "channel", teamId: "team-1", channelId: "chan-1" },
+  teamId: "team-1",
+  channelId: "chan-1",
+  name: "Test Channel 1",
+  teamName: "Contoso",
+  membershipType: "standard",
+  isThreaded: true,
+};
+
+function channelSection(
+  messages: ParsedTeamsMessage[],
+  overrides: Partial<Extract<TeamsTranscriptSection, { kind: "channel" }>> = {},
+): TeamsTranscriptSection {
+  return {
+    kind: "channel",
+    channel,
+    messages,
     selection: "whole-chat",
     limit: 200,
     ...overrides,
@@ -204,5 +229,113 @@ describe("buildTeamsTranscriptMarkdown", () => {
     expect(
       buildTeamsTranscriptMarkdown({ sections: [section({ messages: [] })] }),
     ).toBeNull();
+  });
+});
+
+describe("channel sections", () => {
+  // Wire order: newest root first, each root followed by its replies
+  // oldest-first — the flattened shape the channel pager returns.
+  const channelWireOrder = [
+    message({
+      messageId: "root-b",
+      createdAt: "2026-08-10T17:51:00Z",
+      text: "second thread opener",
+    }),
+    message({
+      messageId: "reply-b1",
+      createdAt: "2026-08-10T18:00:00Z",
+      replyToId: "root-b",
+      text: "answer on b",
+    }),
+    message({
+      messageId: "root-a",
+      createdAt: "2026-08-01T09:00:00Z",
+      text: "first thread opener",
+    }),
+    message({
+      messageId: "reply-a1",
+      createdAt: "2026-08-01T09:05:00Z",
+      replyToId: "root-a",
+      text: "first answer on a",
+    }),
+    message({
+      messageId: "reply-a2",
+      createdAt: "2026-08-01T09:10:00Z",
+      replyToId: "root-a",
+      text: "second answer on a",
+    }),
+  ];
+
+  it("renders threads oldest-opener-first, each root before its replies", () => {
+    const markdown = render([channelSection(channelWireOrder)]);
+    const order = [
+      "first thread opener",
+      "first answer on a",
+      "second answer on a",
+      "second thread opener",
+      "answer on b",
+    ].map((text) => markdown.indexOf(text));
+    expect(Math.min(...order)).toBeGreaterThan(-1);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+  });
+
+  it("keeps day headings chronological when an old thread has fresh replies", () => {
+    const markdown = render([
+      channelSection([
+        message({
+          messageId: "root-new",
+          createdAt: "2026-08-09T08:00:00Z",
+          text: "newer opener",
+        }),
+        message({
+          messageId: "root-old",
+          createdAt: "2026-08-01T09:00:00Z",
+          text: "older opener",
+        }),
+        message({
+          messageId: "late-reply",
+          createdAt: "2026-08-10T10:30:00Z",
+          replyToId: "root-old",
+          text: "late reply",
+        }),
+      ]),
+    ]);
+    // Headings follow the openers; the late reply never forces "10 August"
+    // in front of the 9 August thread.
+    expect(markdown.indexOf("## 1 August 2026")).toBeLessThan(
+      markdown.indexOf("## 9 August 2026"),
+    );
+    expect(markdown).not.toContain("## 10 August 2026");
+    // The reply's own day is disclosed inline instead.
+    expect(markdown).toContain("**Ada Lovelace** — 10 August 2026, 10:30");
+  });
+
+  it("anchors a reply whose root is absent at its own timestamp", () => {
+    const markdown = render([
+      channelSection(
+        [
+          message({
+            messageId: "lone-reply",
+            createdAt: "2026-08-05T12:00:00Z",
+            replyToId: "missing-root",
+            text: "orphan reply",
+          }),
+          message({
+            messageId: "root-x",
+            createdAt: "2026-08-06T12:00:00Z",
+            text: "later opener",
+          }),
+        ],
+        { selection: "messages", limit: undefined },
+      ),
+    ]);
+    expect(markdown.indexOf("orphan reply")).toBeLessThan(
+      markdown.indexOf("later opener"),
+    );
+  });
+
+  it("titles the section with the channel and its team", () => {
+    const markdown = render([channelSection([message()])]);
+    expect(markdown).toContain("# Teams channel: Test Channel 1 · Contoso");
   });
 });

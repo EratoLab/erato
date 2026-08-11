@@ -201,7 +201,7 @@ export async function collectTeamsTranscript(
           messages,
           selection: "whole-chat",
           limit,
-          truncated: page.nextLink !== null,
+          truncated: page.truncated,
         };
       } else {
         const messages: ParsedTeamsMessage[] = [];
@@ -324,7 +324,7 @@ async function collectChannelMessages(args: {
     return {
       messages: collectParsed(page.messages, conversationId),
       state: page.state,
-      truncated: page.nextLink !== null,
+      truncated: page.truncated,
       skipped: 0,
     };
   }

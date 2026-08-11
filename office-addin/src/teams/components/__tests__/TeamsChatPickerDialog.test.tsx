@@ -299,12 +299,16 @@ function fakeFetcher(
         limit: args.limit ?? 200,
         oldestCreatedDateTime: OLDEST.createdDateTime ?? null,
       });
-      return Promise.resolve({
+      const merged = {
         messages: [NEWEST, OLDEST],
-        nextLink: "https://graph.microsoft.com/next",
+        nextLink: "https://graph.microsoft.com/next" as string | null,
         oldestCreatedDateTime: OLDEST.createdDateTime ?? null,
-        state: "ok",
+        state: "ok" as const,
         ...page,
+      };
+      return Promise.resolve({
+        truncated: merged.nextLink !== null,
+        ...merged,
       });
     },
     getMessage: () => Promise.resolve(NEWEST),

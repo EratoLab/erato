@@ -39,6 +39,7 @@ function fakeChannelFetcher(overrides: Partial<TeamsChannelFetcher> = {}) {
       Promise.resolve({
         messages: [],
         nextLink: null,
+        truncated: false,
         oldestCreatedDateTime: null,
         state: "ok" as const,
       }),
@@ -69,6 +70,7 @@ function fakeFetcher(overrides: Partial<TeamsChatFetcher> = {}) {
       Promise.resolve({
         messages: [],
         nextLink: null,
+        truncated: false,
         oldestCreatedDateTime: null,
         state: "ok" as const,
       }),
@@ -149,6 +151,7 @@ describe("collectTeamsTranscript", () => {
           mockGraphChatMessage({ id: "b" }),
         ],
         nextLink: "https://graph.microsoft.com/v1.0/next",
+        truncated: true,
         oldestCreatedDateTime: "2026-03-03T09:14:00Z",
         state: "ok" as const,
       }),
@@ -182,6 +185,7 @@ describe("collectTeamsTranscript", () => {
       Promise.resolve({
         messages: [mockGraphChatMessage({ id: "a" })],
         nextLink: null,
+        truncated: false,
         oldestCreatedDateTime: "2026-03-03T09:14:00Z",
         state: "ok" as const,
       }),
@@ -271,6 +275,7 @@ describe("collectTeamsTranscript", () => {
             mockGraphChatMessage({ id: "b" }),
           ],
           nextLink: null,
+          truncated: false,
           oldestCreatedDateTime: "2026-03-01T09:14:00Z",
           state: "ok" as const,
         });
@@ -300,6 +305,7 @@ describe("collectTeamsTranscript", () => {
         ? Promise.resolve({
             messages: [mockGraphChatMessage({ id: "a" })],
             nextLink: null,
+            truncated: false,
             oldestCreatedDateTime: "2026-03-03T09:14:00Z",
             state: "ok" as const,
           })
@@ -352,6 +358,7 @@ describe("channels", () => {
       Promise.resolve({
         messages: [mockGraphChatMessage({ id: "chan-msg-1" })],
         nextLink: "more",
+        truncated: true,
         oldestCreatedDateTime: "2026-08-10T09:15:00Z",
         state: "ok" as const,
       }),

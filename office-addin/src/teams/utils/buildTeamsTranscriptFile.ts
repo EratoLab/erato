@@ -19,7 +19,10 @@ import type { ParsedTeamsChannel } from "./parsedTeamsChannel";
 import type { ParsedTeamsChat, ParsedTeamsMessage } from "./parsedTeamsChat";
 
 interface TeamsTranscriptSectionBase {
-  /** Newest-first, as Graph returns them. */
+  /**
+   * Chat messages newest-first, as Graph returns them. Channel messages in any
+   * order — rendering rebuilds their threads from `replyToId`.
+   */
   messages: ParsedTeamsMessage[];
   selection: "whole-chat" | "messages";
   /** Requested window for a whole-conversation ingest. */
@@ -127,33 +130,106 @@ function renderSection(
     );
   }
 
+  let currentDay: string | null = null;
+  const pushMessage = (
+    message: ParsedTeamsMessage,
+    dateLabel: string | null,
+  ) => {
+    lines.push(
+      "",
+      renderMessageHeading(message, wholeChat, timeZone, dateLabel),
+    );
+    if (message.text.length > 0) lines.push(message.text);
+    for (const marker of message.markers) lines.push(marker);
+  };
+
+  if (section.kind === "channel") {
+    // A channel is threads, not a timeline: a reply belongs under its root no
+    // matter when it was written, so order is rebuilt from `replyToId` rather
+    // than taken from the fetch. Day headings follow the thread openers and a
+    // reply from another day carries its date inline, keeping the headings
+    // chronological even when an old thread has fresh replies.
+    for (const thread of orderChannelThreads(section.messages)) {
+      const day = formatDate(thread[0].createdAt, timeZone);
+      if (day !== currentDay) {
+        currentDay = day;
+        lines.push("", `## ${day}`);
+      }
+      for (const message of thread) {
+        const messageDay = formatDate(message.createdAt, timeZone);
+        pushMessage(message, messageDay === day ? null : messageDay);
+      }
+    }
+    return lines.join("\n");
+  }
+
   // Oldest first reads as a conversation; Graph hands them back newest first.
   const ordered = [...section.messages].reverse();
-  let currentDay: string | null = null;
   for (const message of ordered) {
     const day = formatDate(message.createdAt, timeZone);
     if (day !== currentDay) {
       currentDay = day;
       lines.push("", `## ${day}`);
     }
-    lines.push("", renderMessageHeading(message, wholeChat, timeZone));
-    if (message.text.length > 0) lines.push(message.text);
-    for (const marker of message.markers) lines.push(marker);
+    pushMessage(message, null);
   }
   return lines.join("\n");
+}
+
+/**
+ * Thread blocks oldest-opener first: each root followed by its replies in
+ * chronological order, and a reply whose root is not in the section standing
+ * alone at its own timestamp.
+ */
+function orderChannelThreads(
+  messages: readonly ParsedTeamsMessage[],
+): ParsedTeamsMessage[][] {
+  const roots = new Map<string, ParsedTeamsMessage>();
+  for (const message of messages) {
+    if (!message.replyToId) roots.set(message.messageId, message);
+  }
+  const replies = new Map<string, ParsedTeamsMessage[]>();
+  const orphans: ParsedTeamsMessage[] = [];
+  for (const message of messages) {
+    if (!message.replyToId) continue;
+    if (!roots.has(message.replyToId)) {
+      orphans.push(message);
+      continue;
+    }
+    const list = replies.get(message.replyToId);
+    if (list) list.push(message);
+    else replies.set(message.replyToId, [message]);
+  }
+  const threads: ParsedTeamsMessage[][] = [];
+  for (const [rootId, root] of roots) {
+    threads.push([root, ...(replies.get(rootId) ?? []).sort(byCreatedAsc)]);
+  }
+  for (const orphan of orphans) threads.push([orphan]);
+  return threads.sort((a, b) => createdAtMs(a[0]) - createdAtMs(b[0]));
+}
+
+function createdAtMs(message: ParsedTeamsMessage): number {
+  const parsed = Date.parse(message.createdAt ?? "");
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function byCreatedAsc(a: ParsedTeamsMessage, b: ParsedTeamsMessage): number {
+  return createdAtMs(a) - createdAtMs(b);
 }
 
 function renderMessageHeading(
   message: ParsedTeamsMessage,
   wholeChat: boolean,
   timeZone: string,
+  dateLabel: string | null,
 ): string {
   const time = formatTime(message.createdAt, timeZone);
   const edited = message.editedAt ? " (edited)" : "";
   const link = wholeChat
     ? `id ${message.messageId}`
     : buildTeamsMessageDeepLink(message.chatId, message.messageId);
-  return `**${message.senderName}** — ${time}${edited} · ${link}`;
+  const when = dateLabel ? `${dateLabel}, ${time}` : time;
+  return `**${message.senderName}** — ${when}${edited} · ${link}`;
 }
 
 function includedLine(

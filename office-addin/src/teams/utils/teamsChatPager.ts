@@ -45,8 +45,14 @@ export interface ChatPagingProgress {
 
 export interface PageChatMessagesResult {
   messages: GraphChatMessage[];
-  /** Non-null when older history remains — i.e. the window is truncated. */
+  /** Continuation for the next-older page, when one exists. */
   nextLink: string | null;
+  /**
+   * The window did not cover everything: older history remains, or the final
+   * page straddled the limit and its excess was dropped. `nextLink` alone
+   * misses the second case.
+   */
+  truncated: boolean;
   oldestCreatedDateTime: string | null;
   state: TeamsFetchState;
 }
@@ -97,10 +103,12 @@ async function pageBackwards(args: {
     pages < MAX_CHAT_PAGES
   );
 
+  const window = messages.slice(0, limit);
   return {
-    messages: messages.slice(0, limit),
+    messages: window,
     nextLink,
-    oldestCreatedDateTime: oldestCreatedDateTime(messages.slice(0, limit)),
+    truncated: nextLink !== null || messages.length > limit,
+    oldestCreatedDateTime: oldestCreatedDateTime(window),
     state,
   };
 }

@@ -412,8 +412,9 @@ export async function listChannelMessagesPage(
 }
 
 /**
- * Interleaves each root post with its replies, oldest reply first, so the
- * transcript reads as a conversation rather than a list of openers.
+ * Interleaves each root post with its replies, oldest reply first. A flat list
+ * is what the pager and the drill-in list consume; thread structure survives in
+ * `replyToId` for consumers that need to rebuild it.
  */
 function flattenChannelReplies(
   roots: readonly (GraphChatMessage & { replies?: GraphChatMessage[] })[],

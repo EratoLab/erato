@@ -90,6 +90,7 @@ describe("pageChatMessagesBackwards", () => {
     expect(result.messages).toHaveLength(6);
     expect(result.messages[0].id).toBe("p1-m0");
     expect(result.nextLink).toBeNull();
+    expect(result.truncated).toBe(false);
     expect(result.state).toBe("ok");
     // The oldest message is the last one served, and it is what the transcript
     // header reports as the back edge of the window.
@@ -250,6 +251,24 @@ describe("pageChatMessagesBackwards", () => {
     const result = await pending;
 
     expect(result.messages).toHaveLength(120);
+  });
+
+  it("reports truncation when the final page straddles the limit", async () => {
+    // One page of 50 with no nextLink: 20 messages are dropped, and nextLink
+    // alone would misreport the window as complete.
+    const served = pagingTransport(1, 50);
+    const pending = pageChatMessagesBackwards({
+      chatId: MOCK_CHAT_ID,
+      tokenSource: tokenSource(),
+      limit: 30,
+      transport: served.transport,
+    });
+    await vi.advanceTimersByTimeAsync(10_000);
+    const result = await pending;
+
+    expect(result.messages).toHaveLength(30);
+    expect(result.nextLink).toBeNull();
+    expect(result.truncated).toBe(true);
   });
 
   it("reports progress once per page, monotonically", async () => {
