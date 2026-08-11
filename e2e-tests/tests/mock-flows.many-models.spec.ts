@@ -1157,8 +1157,15 @@ test(
     await expect(previewDialog).toBeVisible({ timeout: 10000 });
     await expect(previewDialog).toContainText("sample-report-compressed.pdf");
 
-    const previewFrame = previewDialog.getByTestId("file-preview-pdf");
-    await expect(previewFrame).toBeVisible({ timeout: 10000 });
+    // The container renders while loading and on failure alike, so assert the
+    // toolbar, which only appears once PDFium has the document open — and the
+    // page the citation anchored to, which is what this test is named for.
+    await expect(
+      previewDialog.getByTestId("file-preview-pdf-page-indicator"),
+    ).toHaveText(/Page 4 of \d+/, { timeout: 30000 });
+    await expect(
+      previewDialog.getByTestId("file-preview-pdf-error"),
+    ).toHaveCount(0);
     // eslint-disable-next-line playwright/no-wait-for-timeout -- bounded absence window: proves no popup tab opened
     await page.waitForTimeout(1000);
     await expect

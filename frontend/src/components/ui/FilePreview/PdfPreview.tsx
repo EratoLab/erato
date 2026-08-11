@@ -22,8 +22,8 @@ import {
   Scroller,
   ScrollPluginPackage,
   useScroll,
+  useScrollCapability,
 } from "@embedpdf/plugin-scroll/react";
-import { SelectionPluginPackage } from "@embedpdf/plugin-selection/react";
 import {
   TilingLayer,
   TilingPluginPackage,
@@ -51,9 +51,8 @@ import {
   ZoomOutIcon,
 } from "@/components/ui/icons";
 
-import { createPdfEngine } from "./pdfEngine";
+import { getPdfEngine } from "./pdfEngine";
 
-import type { PdfEngine } from "@embedpdf/models";
 import type React from "react";
 
 const MIN_ZOOM = 0.25;
@@ -75,9 +74,6 @@ const PDF_PLUGINS = [
     extraRings: 0,
   }),
   createPluginRegistration(InteractionManagerPluginPackage),
-  createPluginRegistration(SelectionPluginPackage, {
-    marquee: { enabled: false },
-  }),
   createPluginRegistration(ZoomPluginPackage, {
     defaultZoomLevel: ZoomMode.FitWidth,
     minZoom: MIN_ZOOM,
@@ -159,6 +155,7 @@ const PdfToolbar: React.FC<{ documentId: string }> = ({ documentId }) => {
         <Button
           variant="icon-only"
           size="sm"
+          disabled={zoomState.currentZoomLevel <= MIN_ZOOM}
           aria-label={t({ id: "filePreview.pdf.zoomOut", message: "Zoom out" })}
           icon={<ZoomOutIcon className="size-4" />}
           onClick={() => zoom?.zoomOut()}
@@ -172,6 +169,7 @@ const PdfToolbar: React.FC<{ documentId: string }> = ({ documentId }) => {
         <Button
           variant="icon-only"
           size="sm"
+          disabled={zoomState.currentZoomLevel >= MAX_ZOOM}
           aria-label={t({ id: "filePreview.pdf.zoomIn", message: "Zoom in" })}
           icon={<ZoomInIcon className="size-4" />}
           onClick={() => zoom?.zoomIn()}
@@ -191,6 +189,62 @@ const PdfToolbar: React.FC<{ documentId: string }> = ({ documentId }) => {
   );
 };
 
+const PAGE_ANCHOR = "#page=";
+
+/**
+ * Citations deep-link into a document as "…document.pdf#page=4" (see the
+ * erato-file:// handling in MessageContent). The browser's own viewer honoured
+ * that fragment; PDFium has to be told, and it wants the address without it.
+ */
+export function splitPageAnchor(url: string): {
+  documentUrl: string;
+  anchoredPage: number | null;
+} {
+  const anchorAt = url.lastIndexOf(PAGE_ANCHOR);
+  if (anchorAt === -1) {
+    return { documentUrl: url, anchoredPage: null };
+  }
+
+  const page = Number(url.slice(anchorAt + PAGE_ANCHOR.length));
+  return {
+    documentUrl: url.slice(0, anchorAt),
+    anchoredPage: Number.isInteger(page) && page > 0 ? page : null,
+  };
+}
+
+/**
+ * Jumps to the citation's page once. Waits for the scroller's layout-ready
+ * event rather than a page count: the count lands first, and a jump issued
+ * before the virtual layout exists is silently dropped.
+ */
+const PdfPageAnchor: React.FC<{ documentId: string; page: number }> = ({
+  documentId,
+  page,
+}) => {
+  const { provides: scroll } = useScrollCapability();
+  const jumpedRef = useRef(false);
+
+  useEffect(() => {
+    if (!scroll) {
+      return;
+    }
+
+    return scroll.onLayoutReady((event) => {
+      if (jumpedRef.current || event.documentId !== documentId) {
+        return;
+      }
+
+      jumpedRef.current = true;
+      scroll.forDocument(documentId).scrollToPage({
+        pageNumber: Math.min(page, event.totalPages),
+        behavior: "auto",
+      });
+    });
+  }, [documentId, page, scroll]);
+
+  return null;
+};
+
 /**
  * Opens `url` in the document manager and renders its pages. Split out because
  * the manager capability only resolves inside the `EmbedPDF` plugin registry.
@@ -200,17 +254,21 @@ const PdfDocument: React.FC<PdfPreviewProps> = ({ url }) => {
   const { activeDocumentId, activeDocument } = useActiveDocument();
   const [openFailed, setOpenFailed] = useState(false);
   const openedUrlRef = useRef<string | null>(null);
+  const { documentUrl, anchoredPage } = splitPageAnchor(url);
 
   useEffect(() => {
-    if (!documentManager || openedUrlRef.current === url) {
+    if (!documentManager || openedUrlRef.current === documentUrl) {
       return;
     }
 
-    openedUrlRef.current = url;
+    const previousDocumentIds = documentManager
+      .getOpenDocuments()
+      .map((openDocument) => openDocument.id);
+    openedUrlRef.current = documentUrl;
     setOpenFailed(false);
 
     const failOpen = () => {
-      if (openedUrlRef.current === url) {
+      if (openedUrlRef.current === documentUrl) {
         setOpenFailed(true);
       }
     };
@@ -220,12 +278,22 @@ const PdfDocument: React.FC<PdfPreviewProps> = ({ url }) => {
     // not either. Previewable files are size-capped, so the one-shot cost is
     // bounded and the behaviour is the same everywhere.
     documentManager
-      .openDocumentUrl({ url, mode: "full-fetch" })
+      .openDocumentUrl({ url: documentUrl, mode: "full-fetch" })
       .wait(
-        (response) => response.task.wait(() => undefined, failOpen),
+        (response) =>
+          response.task.wait(() => {
+            // Swapping attachments inside one email preview reuses this viewer,
+            // so the superseded document has to give its PDFium memory back.
+            previousDocumentIds.forEach((documentId) => {
+              documentManager.closeDocument(documentId).wait(
+                () => undefined,
+                () => undefined,
+              );
+            });
+          }, failOpen),
         failOpen,
       );
-  }, [documentManager, url]);
+  }, [documentManager, documentUrl]);
 
   if (openFailed || activeDocument?.status === "error") {
     return <PdfPreviewError />;
@@ -237,6 +305,9 @@ const PdfDocument: React.FC<PdfPreviewProps> = ({ url }) => {
 
   return (
     <>
+      {anchoredPage !== null && (
+        <PdfPageAnchor documentId={activeDocumentId} page={anchoredPage} />
+      )}
       <PdfToolbar documentId={activeDocumentId} />
       <Viewport
         documentId={activeDocumentId}
@@ -282,33 +353,20 @@ const PdfDocument: React.FC<PdfPreviewProps> = ({ url }) => {
  * frame, exactly as the DOCX/PPTX/XLSX viewers already do.
  */
 export const PdfPreview: React.FC<PdfPreviewProps> = ({ url }) => {
-  const [engine, setEngine] = useState<PdfEngine | null>(null);
-
-  useEffect(() => {
-    // Owned per mount rather than at module scope: the engine holds a worker
-    // and a multi-megabyte PDFium heap that an add-in task pane should not
-    // carry for the rest of the session.
-    const createdEngine = createPdfEngine();
-    setEngine(createdEngine);
-
-    return () => {
-      setEngine(null);
-      createdEngine.destroy?.();
-    };
-  }, []);
+  // Building the engine is synchronous — it hands the worker a wasm URL and
+  // returns; the compile happens over there. Unmounting tears the plugin
+  // registry down, which closes the documents, but leaves the engine up for
+  // the next preview.
+  const [engine] = useState(getPdfEngine);
 
   return (
     <div
       className="pdf-preview-theme flex h-[75vh] flex-col overflow-hidden rounded-md border border-[var(--theme-border-muted)]"
       data-testid="file-preview-pdf"
     >
-      {engine ? (
-        <EmbedPDF engine={engine} plugins={PDF_PLUGINS}>
-          <PdfDocument url={url} />
-        </EmbedPDF>
-      ) : (
-        <PdfPreviewLoading />
-      )}
+      <EmbedPDF engine={engine} plugins={PDF_PLUGINS}>
+        <PdfDocument url={url} />
+      </EmbedPDF>
     </div>
   );
 };

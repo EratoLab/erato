@@ -2301,6 +2301,7 @@ msgid "filePreview.pdfLoading"
 msgstr "Loading document preview..."
 
 #. js-lingui-explicit-id
+#: src/components/ui/FilePreview/FilePreviewContent.tsx
 #: src/components/ui/FilePreview/PdfPreview.tsx
 msgid "filePreview.pdfPreviewUnavailable"
 msgstr "Preview unavailable: this document could not be loaded."

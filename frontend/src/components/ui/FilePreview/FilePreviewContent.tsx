@@ -1,5 +1,6 @@
 import { t } from "@lingui/core/macro";
 import { lazy, Suspense } from "react";
+import { ErrorBoundary } from "react-error-boundary";
 
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { FilePreviewLoading } from "@/components/ui/FileUpload/FilePreviewLoading";
@@ -18,6 +19,17 @@ const PdfPreview = lazy(async () => ({
   // eslint-disable-next-line lingui/no-unlocalized-strings
   default: (await import("./PdfPreview")).PdfPreview,
 }));
+
+const PdfPreviewUnavailable: React.FC = () => (
+  <div className="p-4 text-center" data-testid="file-preview-pdf-error">
+    <Alert type="warning" className="mb-4">
+      {t({
+        id: "filePreview.pdfPreviewUnavailable",
+        message: "Preview unavailable: this document could not be loaded.",
+      })}
+    </Alert>
+  </div>
+);
 
 const IMAGE_EXTENSIONS = [
   "jpg",
@@ -101,21 +113,27 @@ export const FilePreviewContent: React.FC<FilePreviewContentProps> = ({
 
   if (isPdf) {
     return (
-      <Suspense
-        fallback={
-          <div className="flex min-h-[50vh] items-center justify-center">
-            <FilePreviewLoading
-              label={t({
-                id: "filePreview.pdfLoading",
-                message: "Loading document preview...",
-              })}
-              description=""
-            />
-          </div>
-        }
-      >
-        <PdfPreview url={url} />
-      </Suspense>
+      // Nothing above this renders a boundary — not Chat, not the add-in shell
+      // — so a rejected chunk import (a deploy rotated the hash under an open
+      // tab, or the network dropped) would otherwise unmount the whole React
+      // root and leave a blank page behind.
+      <ErrorBoundary FallbackComponent={PdfPreviewUnavailable}>
+        <Suspense
+          fallback={
+            <div className="flex min-h-[50vh] items-center justify-center">
+              <FilePreviewLoading
+                label={t({
+                  id: "filePreview.pdfLoading",
+                  message: "Loading document preview...",
+                })}
+                description=""
+              />
+            </div>
+          }
+        >
+          <PdfPreview url={url} />
+        </Suspense>
+      </ErrorBoundary>
     );
   }
 
