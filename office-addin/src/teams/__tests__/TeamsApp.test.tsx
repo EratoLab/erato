@@ -387,7 +387,10 @@ describe("Teams personal tab composition", () => {
     renderTab();
     await screen.findByTestId("teams-message-list");
 
-    expect(spies.setSystemThemeOverride).toHaveBeenLastCalledWith("light");
+    // Set from a passive effect, which can still be pending here.
+    await waitFor(() =>
+      expect(spies.setSystemThemeOverride).toHaveBeenLastCalledWith("light"),
+    );
 
     act(() => {
       spies.themeHandlers.forEach((handler) => handler("contrast"));
