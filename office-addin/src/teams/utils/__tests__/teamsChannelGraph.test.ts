@@ -90,6 +90,42 @@ describe("listChannelMessagesPage", () => {
     expect(url).not.toContain("/chats/");
   });
 
+  it("expands replies, since the plain list returns root posts only", async () => {
+    const transport = transportReturning(() =>
+      jsonResponse({
+        value: [
+          {
+            ...mockGraphChatMessage({ id: "root" }),
+            replies: [
+              mockGraphChatMessage({
+                id: "reply-2",
+                createdDateTime: "2026-08-10T12:00:00Z",
+              }),
+              mockGraphChatMessage({
+                id: "reply-1",
+                createdDateTime: "2026-08-10T10:00:00Z",
+              }),
+            ],
+          },
+        ],
+      }),
+    );
+    const result = await listChannelMessagesPage(
+      TEAM_ID,
+      CHANNEL_ID,
+      tokenSource(),
+      { transport },
+    );
+
+    expect(String(transport.mock.calls[0]?.[0])).toContain("$expand=replies");
+    // Root first, then its replies oldest-first, so the thread reads in order.
+    expect(result.messages.map((message) => message.id)).toEqual([
+      "root",
+      "reply-1",
+      "reply-2",
+    ]);
+  });
+
   it("follows the paging link verbatim", async () => {
     const nextLink = "https://graph.microsoft.com/v1.0/next-page";
     const transport = transportReturning(() => jsonResponse({ value: [] }));

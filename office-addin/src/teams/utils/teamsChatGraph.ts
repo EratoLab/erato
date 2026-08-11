@@ -81,6 +81,12 @@ export interface GraphChatMessage {
   from?: GraphChatMessageFrom | null;
   body?: GraphChatMessageBody;
   attachments?: GraphChatMessageAttachment[];
+  /**
+   * Populated for channel messages and null in a chat. Graph's own link
+   * carries groupId, tenantId and parentMessageId, none of which we can
+   * reconstruct, so it is always preferred over building one.
+   */
+  webUrl?: string | null;
 }
 
 export interface GraphChatMember {
@@ -358,7 +364,13 @@ export async function listTeamChannels(
   return { channels: result.payload.value ?? [], state: "ok" };
 }
 
-/** One page of a channel's messages, newest first, as with chats. */
+/**
+ * One page of a channel's root posts, with their replies expanded. The plain
+ * list returns roots only, so without `$expand` a post-layout channel reads as
+ * a series of openers with every answer missing. Expanding costs nothing extra
+ * against the per-channel ceiling; fetching replies per post would cost one
+ * gated request each.
+ */
 export async function listChannelMessagesPage(
   teamId: string,
   channelId: string,
@@ -367,9 +379,9 @@ export async function listChannelMessagesPage(
 ): Promise<ListChatMessagesPageResult> {
   const url =
     options.nextLink ??
-    `${GRAPH_BASE}/teams/${encodeURIComponent(teamId)}/channels/${encodeURIComponent(channelId)}/messages?$top=${CHANNEL_MESSAGE_PAGE_SIZE}`;
+    `${GRAPH_BASE}/teams/${encodeURIComponent(teamId)}/channels/${encodeURIComponent(channelId)}/messages?$top=${CHANNEL_MESSAGE_PAGE_SIZE}&$expand=replies`;
   const result = await requestGraphJson<{
-    value?: GraphChatMessage[];
+    value?: (GraphChatMessage & { replies?: GraphChatMessage[] })[];
     "@odata.nextLink"?: string;
   }>({
     url,
@@ -381,11 +393,31 @@ export async function listChannelMessagesPage(
     return { messages: [], nextLink: null, status: result.status, ok: false };
   }
   return {
-    messages: result.payload.value ?? [],
+    messages: flattenChannelReplies(result.payload.value ?? []),
     nextLink: result.payload["@odata.nextLink"] ?? null,
     status: result.status,
     ok: true,
   };
+}
+
+/**
+ * Interleaves each root post with its replies, oldest reply first, so the
+ * transcript reads as a conversation rather than a list of openers.
+ */
+function flattenChannelReplies(
+  roots: readonly (GraphChatMessage & { replies?: GraphChatMessage[] })[],
+): GraphChatMessage[] {
+  const flattened: GraphChatMessage[] = [];
+  for (const root of roots) {
+    flattened.push(root);
+    const replies = [...(root.replies ?? [])].sort(
+      (a, b) =>
+        Date.parse(a.createdDateTime ?? "") -
+        Date.parse(b.createdDateTime ?? ""),
+    );
+    flattened.push(...replies);
+  }
+  return flattened;
 }
 
 /** A single channel message with its body. */

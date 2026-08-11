@@ -88,6 +88,31 @@ describe("parseTeamsChat", () => {
   });
 });
 
+describe("parseTeamsMessage deep links", () => {
+  it("prefers the link Graph supplies, which is the only correct one for a channel", () => {
+    const parsed = parseTeamsMessage(
+      mockGraphChatMessage({
+        id: "m1",
+        webUrl: "https://teams.microsoft.com/l/message/19%3Achan/1?groupId=g",
+      }),
+      "team-1/chan-1",
+    );
+
+    expect(parsed?.deepLink).toBe(
+      "https://teams.microsoft.com/l/message/19%3Achan/1?groupId=g",
+    );
+  });
+
+  it("falls back to the constructed chat link when Graph gives none", () => {
+    const parsed = parseTeamsMessage(
+      mockGraphChatMessage({ id: "m1", webUrl: null }),
+      MOCK_CHAT_ID,
+    );
+
+    expect(parsed?.deepLink).toContain(encodeURIComponent(MOCK_CHAT_ID));
+  });
+});
+
 describe("messageSenderName", () => {
   it("prefers the user, then the application, then a placeholder", () => {
     expect(messageSenderName(mockGraphChatMessage())).toBe("Ada Lovelace");

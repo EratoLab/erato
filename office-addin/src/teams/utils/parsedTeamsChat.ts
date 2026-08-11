@@ -128,7 +128,7 @@ export function parseTeamsMessage(
     editedAt: message.lastEditedDateTime ?? null,
     text,
     markers,
-    deepLink: buildTeamsMessageDeepLink(chatId, message.id),
+    deepLink: message.webUrl ?? buildTeamsMessageDeepLink(chatId, message.id),
   };
 }
 
