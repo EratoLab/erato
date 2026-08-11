@@ -50,6 +50,7 @@ import {
 } from "@/providers/FeatureConfigProvider";
 import { resolveChatSendErrorMessage } from "@/utils/chatSendErrorMessage";
 import { createLogger } from "@/utils/debugLogger";
+import { disambiguatePastedImageFileNames } from "@/utils/file/disambiguatePastedImageFileNames";
 import { mergeUniqueFilesById } from "@/utils/file/mergeUniqueFilesById";
 
 import {
@@ -404,6 +405,7 @@ export const ChatInput = ({
   } = useChatContext();
   const setMessagingError = useMessagingStore((state) => state.setError);
   const silentChatId = useFileUploadStore((state) => state.silentChatId);
+  const uploadedFiles = useFileUploadStore((state) => state.uploadedFiles);
   const setSilentChatId = useFileUploadStore((state) => state.setSilentChatId);
   const sendErrorText = useMemo(
     () => resolveChatSendErrorMessage(messagingError),
@@ -1404,9 +1406,21 @@ export const ChatInput = ({
 
       // Image paste should attach files, not insert text/HTML into the input.
       event.preventDefault();
-      void uploadFiles(imageFiles);
+      const existingFileNames = [
+        ...uploadedFiles.map((file) => file.filename),
+        ...attachedFiles.map((file) => file.filename),
+      ];
+      void uploadFiles(
+        disambiguatePastedImageFileNames(imageFiles, existingFileNames),
+      );
     },
-    [composeLocked, externalUploadFiles, uploadFiles],
+    [
+      attachedFiles,
+      composeLocked,
+      externalUploadFiles,
+      uploadedFiles,
+      uploadFiles,
+    ],
   );
 
   // Collapse the file-upload button and the Tools dropdown into a single "+"
