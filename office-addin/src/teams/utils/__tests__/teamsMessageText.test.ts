@@ -99,6 +99,20 @@ describe("teamsMessageBodyToText", () => {
     );
   });
 
+  it("unwraps only the wrapper's own host, not any url that names it", () => {
+    const impostor =
+      "https://attacker.example/safelinks.protection.outlook.com?url=https%3A%2F%2Ferato.example%2Ftrusted";
+    expect(teamsMessageBodyToText(html(`<a href="${impostor}">docs</a>`))).toBe(
+      `docs (${impostor})`,
+    );
+
+    const subdomainImpostor =
+      "https://safelinks.protection.outlook.com.attacker.example/?url=https%3A%2F%2Ferato.example%2Ftrusted";
+    expect(
+      teamsMessageBodyToText(html(`<a href="${subdomainImpostor}">docs</a>`)),
+    ).toBe(`docs (${subdomainImpostor})`);
+  });
+
   it("decodes entities and drops script and style content", () => {
     expect(
       teamsMessageBodyToText(

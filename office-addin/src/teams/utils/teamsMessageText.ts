@@ -126,17 +126,29 @@ function replaceWithText(
   }
 }
 
+/** Tenants are served by regional subdomains, so the suffix is what matches. */
+const SAFE_LINKS_HOST = "safelinks.protection.outlook.com";
+
 /**
  * ATP rewrites every link through a Safe Links wrapper whose query string is
  * routinely longer than the message. The original url is a query parameter.
+ *
+ * Decided on the host, never on a substring of the whole url: the wrapper's
+ * name sitting in anyone's path or query would otherwise let a message rewrite
+ * its own link into whatever the transcript should show.
  */
 function unwrapSafeLink(href: string): string {
-  if (!href.includes("safelinks.protection.outlook.com")) return href;
+  let wrapper: URL;
   try {
-    return new URL(href).searchParams.get("url") ?? href;
+    wrapper = new URL(href);
   } catch {
     return href;
   }
+  const host = wrapper.hostname.toLowerCase();
+  if (host !== SAFE_LINKS_HOST && !host.endsWith(`.${SAFE_LINKS_HOST}`)) {
+    return href;
+  }
+  return wrapper.searchParams.get("url") ?? href;
 }
 
 function normalizeText(text: string): string {
