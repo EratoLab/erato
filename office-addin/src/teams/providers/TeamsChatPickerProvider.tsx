@@ -40,6 +40,7 @@ import type {
 import type {
   TeamsChannelFetcher,
   TeamsChatFetcher,
+  TeamsFileFetcher,
 } from "../utils/teamsChatFetcher";
 import type { TeamsChatSelection } from "../utils/teamsChatSelection";
 import type { ReactNode } from "react";
@@ -59,6 +60,10 @@ export interface TeamsChatPickerContextValue {
   fetcher: TeamsChatFetcher | null;
   /** Null when the channel scopes were not granted — the picker shows chats only. */
   channelFetcher: TeamsChannelFetcher | null;
+  /** Null when `Files.Read.All` was not granted. */
+  fileFetcher: TeamsFileFetcher | null;
+  /** The deployment's upload limit; also caps chip-preview downloads. */
+  maxFileBytes: number;
   self: TeamsSelfIdentity | undefined;
   chatList: UseTeamsChatListResult;
   channelList: UseTeamsChannelListResult;
@@ -113,6 +118,8 @@ const CLOSED_PICKER: TeamsChatPickerContextValue = {
   close: () => {},
   fetcher: null,
   channelFetcher: null,
+  fileFetcher: null,
+  maxFileBytes: 0,
   self: undefined,
   chatList: EMPTY_CHAT_LIST,
   channelList: EMPTY_CHANNEL_LIST,
@@ -351,6 +358,8 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
       close,
       fetcher,
       channelFetcher,
+      fileFetcher,
+      maxFileBytes,
       self,
       chatList,
       channelList,
@@ -380,10 +389,12 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
       chatList,
       close,
       fetcher,
+      fileFetcher,
       isBuilding,
       isMessageSelectionFull,
       isOpen,
       isSelected,
+      maxFileBytes,
       messageLimit,
       open,
       partialOutcome,

@@ -43,6 +43,7 @@ import type {
   ParsedTeamsChat,
   TeamsSharedFileRef,
 } from "../utils/parsedTeamsChat";
+import type { TeamsFileFetcher } from "../utils/teamsChatFetcher";
 import type { TeamsSearchHit } from "../utils/teamsChatGraph";
 import type { TeamsMessageSelection } from "../utils/teamsChatSelection";
 import type {
@@ -402,7 +403,13 @@ function TeamsChatPickerDialogBody({
                 })}
                 title={senderName}
                 subline={message.text}
-                chips={<SharedFileChips files={message.sharedFiles} />}
+                chips={
+                  <SharedFileChips
+                    files={message.sharedFiles}
+                    fileFetcher={picker.fileFetcher}
+                    maxFileBytes={picker.maxFileBytes}
+                  />
+                }
                 createdAt={message.createdAt}
                 senderName={senderName}
               />
@@ -530,7 +537,13 @@ function TeamsChatPickerDialogBody({
                 })}
                 title={senderName}
                 subline={message.text}
-                chips={<SharedFileChips files={message.sharedFiles} />}
+                chips={
+                  <SharedFileChips
+                    files={message.sharedFiles}
+                    fileFetcher={picker.fileFetcher}
+                    maxFileBytes={picker.maxFileBytes}
+                  />
+                }
                 createdAt={message.createdAt}
                 senderName={senderName}
               />
@@ -973,21 +986,57 @@ function BuildProgress({ picker }: { picker: TeamsChatPickerContextValue }) {
 }
 
 /**
- * One compact chip per file shared with the message. Clicking opens the file
- * where it lives — SharePoint's own preview — which costs no download, no
- * consent and no space in this pane.
+ * One compact chip per file shared with the message. With the file grant the
+ * bytes come through our own token into a tab-local blob — no SharePoint
+ * session needed, which a dev browser profile rarely has. Without the grant
+ * the chip falls back to the file's SharePoint page.
  */
-function SharedFileChips({ files }: { files: readonly TeamsSharedFileRef[] }) {
+function SharedFileChips({
+  files,
+  fileFetcher,
+  maxFileBytes,
+}: {
+  files: readonly TeamsSharedFileRef[];
+  fileFetcher: TeamsFileFetcher | null;
+  maxFileBytes: number;
+}) {
   if (files.length === 0) return null;
+
+  const openFile = (file: TeamsSharedFileRef) => {
+    if (!fileFetcher) {
+      window.open(file.contentUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    // The tab must open synchronously with the click or the popup blocker
+    // eats it; the content streams in afterwards.
+    const viewer = window.open("about:blank", "_blank");
+    if (!viewer) return;
+    void fileFetcher
+      .downloadSharedFile(file.contentUrl, maxFileBytes, {})
+      .then((result) => {
+        if (result.state === "ok") {
+          viewer.location.href = URL.createObjectURL(
+            new Blob([result.content.bytes], {
+              type: result.content.contentType,
+            }),
+          );
+        } else {
+          // Oversized or unresolvable here — let SharePoint have it.
+          viewer.location.href = file.contentUrl;
+        }
+      })
+      .catch(() => {
+        viewer.location.href = file.contentUrl;
+      });
+  };
+
   return (
     <div className="mt-1 flex flex-wrap gap-1">
       {files.map((file) => (
         <button
           key={file.attachmentId}
           type="button"
-          onClick={() =>
-            window.open(file.contentUrl, "_blank", "noopener,noreferrer")
-          }
+          onClick={() => openFile(file)}
           title={file.name}
           aria-label={t({
             id: "officeAddin.teams.picker.openSharedFile",

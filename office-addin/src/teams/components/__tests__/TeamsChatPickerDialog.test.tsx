@@ -27,6 +27,7 @@ import type { ParsedTeamsChat } from "../../utils/parsedTeamsChat";
 import type {
   TeamsChannelFetcher,
   TeamsChatFetcher,
+  TeamsFileFetcher,
 } from "../../utils/teamsChatFetcher";
 import type { PageChatMessagesResult } from "../../utils/teamsChatPager";
 import type { ReactNode } from "react";
@@ -139,6 +140,7 @@ function omitStyleProps(props: Record<string, unknown>) {
 const hooks = vi.hoisted(() => ({
   fetcher: null as TeamsChatFetcher | null,
   channelFetcher: null as TeamsChannelFetcher | null,
+  fileFetcher: null as TeamsFileFetcher | null,
   chatList: null as UseTeamsChatListResult | null,
   channelList: null as UseTeamsChannelListResult | null,
   messages: null as UseTeamsChatMessagesResult | null,
@@ -168,8 +170,8 @@ vi.mock("../../hooks/useTeamsChannelFetcher", () => ({
 }));
 vi.mock("../../hooks/useTeamsFileFetcher", () => ({
   useTeamsFileFetcher: () => ({
-    fetcher: null,
-    unavailableReason: "graph-unavailable",
+    fetcher: hooks.fileFetcher,
+    unavailableReason: hooks.fileFetcher ? null : "graph-unavailable",
   }),
 }));
 vi.mock("../../hooks/useTeamsChannelList", () => ({
@@ -421,6 +423,7 @@ describe("TeamsChatPickerDialog", () => {
     hooks.uploadStore = { isUploading: false, error: null };
     hooks.fetcher = fakeFetcher();
     hooks.channelFetcher = null;
+    hooks.fileFetcher = null;
     hooks.chatList = chatListResult();
     hooks.channelList = channelListResult();
     hooks.messages = messagesResult();
@@ -1006,6 +1009,62 @@ describe("TeamsChatPickerDialog", () => {
       "https://contoso.sharepoint.com/multipage-test.pdf",
       "_blank",
       "noopener,noreferrer",
+    );
+  });
+
+  it("previews a shared file through our own token when the grant exists", async () => {
+    const downloadSharedFile = vi.fn(() =>
+      Promise.resolve({
+        state: "ok" as const,
+        content: {
+          bytes: new TextEncoder().encode("pdf").buffer,
+          contentType: "application/pdf",
+        },
+      }),
+    );
+    hooks.fileFetcher = { downloadSharedFile };
+    hooks.messages = messagesResult({
+      messages: [
+        {
+          chatId: MOCK_CHAT_ID,
+          messageId: "1754000000000",
+          senderName: "Max Token",
+          createdAt: "2026-08-10T09:15:00Z",
+          editedAt: null,
+          text: "check this PDF guys",
+          markers: ["[attachment: multipage-test.pdf]"],
+          replyToId: null,
+          deepLink: "https://example.invalid/m",
+          sharedFiles: [
+            {
+              attachmentId: "att-1",
+              name: "multipage-test.pdf",
+              contentUrl: "https://contoso.sharepoint.com/multipage-test.pdf",
+            },
+          ],
+          imageUrls: [],
+        },
+      ],
+    });
+    const viewer = { location: { href: "" }, close: vi.fn() };
+    const openSpy = vi
+      .spyOn(window, "open")
+      .mockReturnValue(viewer as unknown as Window);
+    URL.createObjectURL = vi.fn(() => "blob:preview");
+    renderPicker();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Product sync" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open multipage-test.pdf" }),
+    );
+
+    // The tab opens synchronously; the bytes stream in behind it.
+    expect(openSpy).toHaveBeenCalledWith("about:blank", "_blank");
+    await waitFor(() => expect(viewer.location.href).toBe("blob:preview"));
+    expect(downloadSharedFile).toHaveBeenCalledWith(
+      "https://contoso.sharepoint.com/multipage-test.pdf",
+      10 * 1024 * 1024,
+      expect.anything(),
     );
   });
 
