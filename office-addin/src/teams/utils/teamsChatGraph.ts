@@ -13,6 +13,7 @@
  */
 
 import { runGatedByChat } from "./teamsChatRateGate";
+import { channelRef, chatRef } from "./teamsConversationRef";
 import {
   GRAPH_BASE,
   graphFetch,
@@ -21,6 +22,7 @@ import {
 } from "../../utils/graph/graphClient";
 import { runWithGraphTimeout } from "../../utils/graph/graphRequestTimeout";
 
+import type { TeamsConversationRef } from "./teamsConversationRef";
 import type {
   GraphTokenSource,
   GraphTransport,
@@ -109,13 +111,20 @@ export interface GraphChat {
 
 /** A search hit as returned by `/search/query` — metadata and a snippet only. */
 export interface TeamsSearchHit {
-  chatId: string;
+  /**
+   * Classified from `channelIdentity`, never from `chatId`: a channel hit
+   * carries the channel's thread id in `chatId`, so trusting it routes the
+   * hydration at the chat endpoint and 404s.
+   */
+  ref: TeamsConversationRef;
   /** `resource.id`, the Teams message id. Never `hitId`. */
   messageId: string;
   senderName: string;
   createdAt: string | null;
   /** Raw highlight snippet; still carries `<c0>` markers. */
   summary: string;
+  /** Shorter than the resource's `webUrl` and without `parentMessageId`. */
+  webLink: string | null;
 }
 
 export interface TeamsGraphCallOptions {
@@ -454,13 +463,36 @@ interface GraphSearchResponse {
         resource?: {
           id?: string;
           chatId?: string;
+          channelIdentity?: GraphChannelIdentity | null;
           createdDateTime?: string;
-          from?: GraphChatMessageFrom | null;
+          /**
+           * Substrate-shaped, not the Graph identity set the resource docs
+           * describe — a live search hit carries `from.emailAddress`.
+           */
+          from?:
+            | (GraphChatMessageFrom & {
+                emailAddress?: { name?: string; address?: string } | null;
+              })
+            | null;
+          /** Search returns `webLink`, not the resource's `webUrl`. */
+          webLink?: string | null;
         };
       }>;
       moreResultsAvailable?: boolean;
     }>;
   }>;
+}
+
+function searchHitRef(resource?: {
+  chatId?: string;
+  channelIdentity?: GraphChannelIdentity | null;
+}): TeamsConversationRef | null {
+  if (!resource) return null;
+  const teamId = resource.channelIdentity?.teamId;
+  const channelId = resource.channelIdentity?.channelId;
+  if (teamId && channelId) return channelRef(teamId, channelId);
+  if (resource.chatId) return chatRef(resource.chatId);
+  return null;
 }
 
 export async function searchChatMessages(
@@ -516,18 +548,21 @@ export async function searchChatMessages(
   const container = result.payload.value?.[0]?.hitsContainers?.[0];
   const hits: TeamsSearchHit[] = [];
   for (const hit of container?.hits ?? []) {
-    const chatId = hit.resource?.chatId;
     const messageId = hit.resource?.id;
-    if (!chatId || !messageId) continue;
+    if (!messageId) continue;
+    const ref = searchHitRef(hit.resource);
+    if (!ref) continue;
     hits.push({
-      chatId,
+      ref,
       messageId,
       senderName:
         hit.resource?.from?.user?.displayName ??
+        hit.resource?.from?.emailAddress?.name ??
         hit.resource?.from?.application?.displayName ??
         "",
       createdAt: hit.resource?.createdDateTime ?? null,
       summary: hit.summary ?? "",
+      webLink: hit.resource?.webLink ?? null,
     });
   }
   return {

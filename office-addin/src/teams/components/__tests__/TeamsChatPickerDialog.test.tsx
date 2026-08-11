@@ -495,7 +495,8 @@ describe("TeamsChatPickerDialog", () => {
     hooks.search = searchResult({
       hits: [
         {
-          chatId: MOCK_CHAT_ID,
+          ref: { kind: "chat" as const, chatId: MOCK_CHAT_ID },
+          webLink: null,
           messageId: "1754000000000",
           senderName: "Grace Hopper",
           createdAt: "2026-08-10T09:15:00Z",

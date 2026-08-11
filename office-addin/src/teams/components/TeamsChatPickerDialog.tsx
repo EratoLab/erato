@@ -29,7 +29,11 @@ import {
 import { isRestrictedChannel } from "../utils/parsedTeamsChannel";
 import { splitSearchSummaryHighlights } from "../utils/teamsChatGraph";
 import { MAX_SELECTED_MESSAGES } from "../utils/teamsChatSelection";
-import { channelRef, chatRef } from "../utils/teamsConversationRef";
+import {
+  channelRef,
+  chatRef,
+  conversationKey,
+} from "../utils/teamsConversationRef";
 
 import type { TeamsChatPickerContextValue } from "../providers/TeamsChatPickerProvider";
 import type { ParsedTeamsChannel } from "../utils/parsedTeamsChannel";
@@ -89,8 +93,11 @@ function TeamsChatPickerDialogBody({
   const unknownChatIds = useMemo(
     () =>
       search.hits
-        .map((hit) => hit.chatId)
-        .filter((chatId) => !picker.chatList.chatsById.has(chatId)),
+        .map((hit) => (hit.ref.kind === "chat" ? hit.ref.chatId : null))
+        .filter(
+          (chatId): chatId is string =>
+            chatId !== null && !picker.chatList.chatsById.has(chatId),
+        ),
     [picker.chatList.chatsById, search.hits],
   );
   const resolvedChats = useTeamsChatTitles(
@@ -549,10 +556,15 @@ function TeamsChatPickerDialogBody({
                 id: "officeAddin.teams.picker.unknownSender",
                 message: "Unknown sender",
               });
-            const chatTitle = chatTitleFor(hit.chatId);
+            const chatTitle =
+              hit.ref.kind === "chat"
+                ? chatTitleFor(hit.ref.chatId)
+                : (picker.channelList.channelsByKey.get(
+                    `${hit.ref.teamId}/${hit.ref.channelId}`,
+                  )?.name ?? null);
             const selection = {
               kind: "message" as const,
-              ref: chatRef(hit.chatId),
+              ref: hit.ref,
               messageId: hit.messageId,
               conversationTitle: chatTitle ?? "",
               senderName,
@@ -561,7 +573,7 @@ function TeamsChatPickerDialogBody({
             const checked = picker.isSelected(selection);
             return (
               <TeamsPickerRow
-                key={`${hit.chatId}:${hit.messageId}`}
+                key={`${conversationKey(hit.ref)}:${hit.messageId}`}
                 checked={checked}
                 onToggle={() => picker.toggle(selection)}
                 disabled={!checked && picker.isMessageSelectionFull}

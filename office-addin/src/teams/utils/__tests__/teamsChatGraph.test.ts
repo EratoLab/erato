@@ -187,11 +187,12 @@ describe("searchChatMessages", () => {
 
     expect(result.hits).toEqual([
       {
-        chatId: MOCK_CHAT_ID,
+        ref: { kind: "chat", chatId: MOCK_CHAT_ID },
         messageId: "1741000000000",
         senderName: "Ada Lovelace",
         createdAt: "2026-03-03T09:14:00Z",
         summary: "move the <c0>sync</c0> to Thursday",
+        webLink: null,
       },
     ]);
     expect(result.hits[0].messageId).not.toBe("AAMkAGI2exchange-item-id=");
@@ -239,6 +240,71 @@ describe("searchChatMessages", () => {
       size: 25,
     });
     expect(result.nextFrom).toBe(50);
+  });
+});
+
+describe("searchChatMessages hit classification", () => {
+  // Shapes below are copied from a live tenant response, not from the docs —
+  // the docs disagree with the service on both points tested here.
+  function hitResponse(resource: Record<string, unknown>) {
+    return jsonResponse({
+      value: [
+        {
+          hitsContainers: [
+            {
+              hits: [{ hitId: "AAMkAD...", summary: "hey folks", resource }],
+              moreResultsAvailable: false,
+            },
+          ],
+        },
+      ],
+    });
+  }
+
+  it("classifies a channel hit by channelIdentity, not by chatId", async () => {
+    // A channel hit carries the CHANNEL thread id in chatId; trusting it would
+    // route hydration at /chats/{id} and 404.
+    const transport = transportReturning(() =>
+      hitResponse({
+        id: "1786384303161",
+        chatId: "19:0894b8cd@thread.tacv2",
+        channelIdentity: {
+          teamId: "451d5606-a479-49d3-a849-c40bf373b753",
+          channelId: "19:0894b8cd@thread.tacv2",
+        },
+        from: { emailAddress: { name: "Max Token" } },
+      }),
+    );
+
+    const result = await searchChatMessages("folks", tokenSource(), {
+      transport,
+    });
+
+    expect(result.hits[0]?.ref).toEqual({
+      kind: "channel",
+      teamId: "451d5606-a479-49d3-a849-c40bf373b753",
+      channelId: "19:0894b8cd@thread.tacv2",
+    });
+  });
+
+  it("reads the sender from the Substrate-shaped from the service returns", async () => {
+    const transport = transportReturning(() =>
+      hitResponse({
+        id: "m1",
+        chatId: "19:chat@thread.v2",
+        from: { emailAddress: { name: "Max Token" } },
+      }),
+    );
+
+    const result = await searchChatMessages("folks", tokenSource(), {
+      transport,
+    });
+
+    expect(result.hits[0]?.senderName).toBe("Max Token");
+    expect(result.hits[0]?.ref).toEqual({
+      kind: "chat",
+      chatId: "19:chat@thread.v2",
+    });
   });
 });
 
