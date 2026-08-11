@@ -338,4 +338,32 @@ describe("channel sections", () => {
     const markdown = render([channelSection([message()])]);
     expect(markdown).toContain("# Teams channel: Test Channel 1 · Contoso");
   });
+
+  it("links a picked channel message by Graph's own url", () => {
+    const webUrl =
+      "https://teams.microsoft.com/l/message/19%3Achan%40thread.tacv2/1741000000000" +
+      "?tenantId=t1&groupId=g1&parentMessageId=1741000000000";
+    const markdown = render([
+      channelSection(
+        [
+          message({
+            chatId: "team-1/chan-1",
+            deepLink: webUrl,
+          }),
+        ],
+        { selection: "messages", limit: undefined },
+      ),
+    ]);
+    expect(markdown).toContain(`· ${webUrl}`);
+    // The team/channel pair is not a chat id, so nothing may address it as one.
+    expect(markdown).not.toContain("team-1%2Fchan-1");
+  });
+
+  it("says the ids are not links when the whole channel is ingested", () => {
+    const markdown = render([channelSection([message({ messageId: "a" })])]);
+    expect(markdown).toContain(
+      "Message links: not reconstructible for a whole channel — each message shows its Teams message id instead.",
+    );
+    expect(markdown).toContain("· id a");
+  });
 });

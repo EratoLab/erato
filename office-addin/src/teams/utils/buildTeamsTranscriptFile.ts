@@ -10,7 +10,6 @@
 
 import { isRestrictedChannel } from "./parsedTeamsChannel";
 import {
-  buildTeamsMessageDeepLink,
   teamsMessageDeepLinkBase,
   teamsMessageDeepLinkSuffix,
 } from "./teamsDeepLink";
@@ -123,10 +122,16 @@ function renderSection(
     `Exported: ${formatDateTime(input.exportedAt ?? new Date(), timeZone)}`,
   );
   lines.push(includedLine(section, timeZone));
-  const wholeChat = section.selection === "whole-chat";
-  if (wholeChat && section.kind === "chat") {
+  // A whole conversation repeats the link on every message, so a chat emits the
+  // invariant prefix once and bare ids after it. A channel permalink carries
+  // groupId, tenantId and parentMessageId, none of which factor out that way —
+  // so a whole channel keeps the ids and says they are not links.
+  const idOnly = section.selection === "whole-chat";
+  if (idOnly) {
     lines.push(
-      `Message links: ${teamsMessageDeepLinkBase(section.chat.chatId)}/{id}${teamsMessageDeepLinkSuffix()} — substitute the id shown on each message.`,
+      section.kind === "chat"
+        ? `Message links: ${teamsMessageDeepLinkBase(section.chat.chatId)}/{id}${teamsMessageDeepLinkSuffix()} — substitute the id shown on each message.`
+        : "Message links: not reconstructible for a whole channel — each message shows its Teams message id instead.",
     );
   }
 
@@ -135,10 +140,7 @@ function renderSection(
     message: ParsedTeamsMessage,
     dateLabel: string | null,
   ) => {
-    lines.push(
-      "",
-      renderMessageHeading(message, wholeChat, timeZone, dateLabel),
-    );
+    lines.push("", renderMessageHeading(message, idOnly, timeZone, dateLabel));
     if (message.text.length > 0) lines.push(message.text);
     for (const marker of message.markers) lines.push(marker);
   };
@@ -219,15 +221,16 @@ function byCreatedAsc(a: ParsedTeamsMessage, b: ParsedTeamsMessage): number {
 
 function renderMessageHeading(
   message: ParsedTeamsMessage,
-  wholeChat: boolean,
+  idOnly: boolean,
   timeZone: string,
   dateLabel: string | null,
 ): string {
   const time = formatTime(message.createdAt, timeZone);
   const edited = message.editedAt ? " (edited)" : "";
-  const link = wholeChat
-    ? `id ${message.messageId}`
-    : buildTeamsMessageDeepLink(message.chatId, message.messageId);
+  // The parsed link, never a rebuilt one: a channel message is addressed by
+  // Graph's own `webUrl`, and building one from `chatId` would encode the
+  // team/channel pair as if it were a chat id.
+  const link = idOnly ? `id ${message.messageId}` : message.deepLink;
   const when = dateLabel ? `${dateLabel}, ${time}` : time;
   return `**${message.senderName}** — ${when}${edited} · ${link}`;
 }
