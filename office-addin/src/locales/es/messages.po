@@ -1281,7 +1281,7 @@ msgstr "Abrir {chatTitle}"
 #. placeholder {0}: file.name
 #: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.openSharedFile"
-
+msgstr "Abrir {0}"
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
