@@ -276,8 +276,8 @@ jobs:
       # https://github.com/kubescape/github-action/issues/78
       # Re-enable after the action is fixed; the version override is not reliable.
       - name: "Kubescape main chart (DevOpsBest)"
-        if: false
-        uses: kubescape/github-action@7d90c1f159f02df1e3c79f839eeabe42ea30d4e3
+        if: success() || failure()
+        uses: EratoLab/kubescape-github-action@6cae5e17fae03c8450fb7841c7ccd77a8aed3bac
         with:
           version: v4.0.11
           files: infrastructure/charts/erato
@@ -285,8 +285,8 @@ jobs:
           failedThreshold: 20
 
       - name: "Kubescape main chart (MITRE)"
-        if: false
-        uses: kubescape/github-action@7d90c1f159f02df1e3c79f839eeabe42ea30d4e3
+        if: success() || failure()
+        uses: EratoLab/kubescape-github-action@6cae5e17fae03c8450fb7841c7ccd77a8aed3bac
         with:
           version: v4.0.11
           files: infrastructure/charts/erato
@@ -294,8 +294,8 @@ jobs:
           failedThreshold: 0
 
       - name: "Kubescape main chart (NSA)"
-        if: false
-        uses: kubescape/github-action@7d90c1f159f02df1e3c79f839eeabe42ea30d4e3
+        if: success() || failure()
+        uses: EratoLab/kubescape-github-action@6cae5e17fae03c8450fb7841c7ccd77a8aed3bac
         with:
           version: v4.0.11
           files: infrastructure/charts/erato
@@ -303,8 +303,8 @@ jobs:
           failedThreshold: 35
 
       - name: "Kubescape main chart (SOC2)"
-        if: false
-        uses: kubescape/github-action@7d90c1f159f02df1e3c79f839eeabe42ea30d4e3
+        if: success() || failure()
+        uses: EratoLab/kubescape-github-action@6cae5e17fae03c8450fb7841c7ccd77a8aed3bac
         with:
           version: v4.0.11
           files: infrastructure/charts/erato
