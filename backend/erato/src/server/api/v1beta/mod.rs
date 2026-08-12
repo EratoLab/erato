@@ -24,7 +24,7 @@ use crate::models::assistant::create_standalone_file_upload;
 use crate::models::chat::{
     RecentChatsFilter, archive_all_unarchived_chats_for_owner, archive_chat,
     get_frequent_assistants, get_generating_chats, get_or_create_chat, get_recent_chats,
-    resolve_chat_display_name, update_chat_title_by_user_provided,
+    resolve_chat_display_name, update_chat_is_pinned, update_chat_title_by_user_provided,
 };
 use crate::models::file_capability::{
     FileCapability, FileOperation, find_file_capability_by_filename, get_file_capabilities,
@@ -1211,6 +1211,8 @@ pub struct RecentChat {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     archived_at: Option<DateTime<FixedOffset>>,
+    /// Whether this chat is pinned by its owner.
+    is_pinned: bool,
     /// The chat provider ID used for the most recent message
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
@@ -2529,7 +2531,8 @@ async fn assemble_chat_messages_response(
         ("limit" = Option<u64>, Query, description = "Maximum number of chats to return per page. Defaults to 30 if not provided. Larger values may impact performance."),
         ("offset" = Option<u64>, Query, description = "Number of chats to skip for pagination. Defaults to 0 if not provided."),
         ("include_archived" = Option<bool>, Query, description = "Whether to include archived chats in results. Defaults to false if not provided."),
-        ("q" = Option<String>, Query, description = "Optional full-text search query for chat titles. User-provided titles take precedence over generated summary titles. Empty values are treated like an unfiltered recent chats list.")
+        ("q" = Option<String>, Query, description = "Optional full-text search query for chat titles. User-provided titles take precedence over generated summary titles. Empty values are treated like an unfiltered recent chats list."),
+        ("pinned" = Option<bool>, Query, description = "If provided, filter chats by their pinned state.")
     ),
     responses(
         (status = OK, body = RecentChatsResponse, description = "Successfully retrieved chats with pagination metadata"),
@@ -2559,6 +2562,7 @@ pub async fn recent_chats(
         .and_then(|a| a.parse::<bool>().ok())
         .unwrap_or(false);
     let search_query = params.get("q").map(String::as_str);
+    let pinned = params.get("pinned").and_then(|p| p.parse::<bool>().ok());
 
     policy
         .rebuild_data_if_needed(&app_state.db, &app_state.config)
@@ -2581,6 +2585,7 @@ pub async fn recent_chats(
             limit,
             offset,
             include_archived,
+            pinned,
             search_query,
         },
         app_state.config.generation_status.stale_after_secs,
@@ -2796,6 +2801,7 @@ async fn extend_recent_chats_to_api_model(
             last_message_at: chat.last_message_at,
             file_uploads: file_references,
             archived_at: chat.archived_at,
+            is_pinned: chat.is_pinned,
             last_chat_provider_id: chat.last_chat_provider_id.clone(),
             last_selected_facets: chat.last_selected_facets.clone(),
             last_model,
@@ -2981,6 +2987,9 @@ pub struct UpdateChatRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     title_by_user_provided: Option<String>,
+    /// Whether the chat should be pinned.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    is_pinned: Option<bool>,
 }
 
 /// Response for update_chat endpoint.
@@ -2994,6 +3003,8 @@ pub struct UpdateChatResponse {
     title_by_user_provided: Option<String>,
     /// Resolved chat title where user-provided title takes precedence over summary title.
     title_resolved: String,
+    /// Whether the chat is pinned by its owner.
+    is_pinned: bool,
 }
 
 /// Create a new chat without an initial message
@@ -3078,7 +3089,7 @@ pub async fn create_chat(
 
 /// Update mutable fields on a chat.
 ///
-/// Currently supports updating only `title_by_user_provided`.
+/// Supports updating the user-provided title and pin state.
 #[utoipa::path(
     put,
     path = "/me/chats/{chat_id}",
@@ -3110,14 +3121,48 @@ pub async fn update_chat(
         .rebuild_data_if_needed_req(&app_state.db, &app_state.config)
         .await?;
 
-    let updated_chat = update_chat_title_by_user_provided(
-        &app_state.db,
-        &policy,
-        &me_user.to_subject(),
-        &chat_id,
-        request.title_by_user_provided,
-    )
-    .await
+    let UpdateChatRequest {
+        title_by_user_provided,
+        is_pinned,
+    } = request;
+    let updated_chat = if let Some(is_pinned) = is_pinned {
+        match update_chat_is_pinned(
+            &app_state.db,
+            &policy,
+            &me_user.to_subject(),
+            &chat_id,
+            is_pinned,
+        )
+        .await
+        {
+            Ok(updated_chat) => {
+                // A pin-only request preserves the existing title. If both
+                // mutable fields are supplied, apply both updates.
+                if let Some(title_by_user_provided) = title_by_user_provided {
+                    update_chat_title_by_user_provided(
+                        &app_state.db,
+                        &policy,
+                        &me_user.to_subject(),
+                        &chat_id,
+                        Some(title_by_user_provided),
+                    )
+                    .await
+                } else {
+                    Ok(updated_chat)
+                }
+            }
+            Err(error) => Err(error),
+        }
+    } else {
+        update_chat_title_by_user_provided(
+            &app_state.db,
+            &policy,
+            &me_user.to_subject(),
+            &chat_id,
+            title_by_user_provided,
+        )
+        .await
+    }
     .map_err(|e| {
         if e.to_string().contains("not found") {
             StatusCode::NOT_FOUND
@@ -3136,6 +3181,7 @@ pub async fn update_chat(
         title_by_summary: updated_chat.title_by_summary,
         title_by_user_provided: updated_chat.title_by_user_provided,
         title_resolved,
+        is_pinned: updated_chat.is_pinned,
     }))
 }
 

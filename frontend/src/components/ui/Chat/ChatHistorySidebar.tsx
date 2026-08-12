@@ -61,6 +61,8 @@ const sidebarLinkClassName =
 
 const RECENT_CHATS_SECTION_EXPANDED_STORAGE_KEY =
   "erato.sidebar.recentChatsSectionExpanded";
+const PINNED_CHATS_SECTION_EXPANDED_STORAGE_KEY =
+  "erato.sidebar.pinnedChatsSectionExpanded";
 
 const ASSISTANTS_SECTION_EXPANDED_STORAGE_KEY =
   "erato.sidebar.assistantsSectionExpanded";
@@ -147,6 +149,8 @@ export interface ChatHistorySidebarProps {
   onSessionArchive: (sessionId: string) => void;
   onSessionEditTitle?: (sessionId: string) => void;
   onSessionShare?: (sessionId: string) => void;
+  pinnedSessions?: ChatSession[];
+  onSessionPin?: (sessionId: string, isPinned: boolean) => void;
   isLoading: boolean;
   error?: Error;
   userProfile?: UserProfile;
@@ -599,6 +603,8 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     onSessionArchive,
     onSessionEditTitle,
     onSessionShare,
+    pinnedSessions = [],
+    onSessionPin,
     isLoading,
     error,
     userProfile,
@@ -662,6 +668,11 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       {
         parse: parsePersistedBoolean,
       },
+    );
+    const [isPinnedChatsExpanded, setIsPinnedChatsExpanded] = usePersistedState(
+      PINNED_CHATS_SECTION_EXPANDED_STORAGE_KEY,
+      true,
+      { parse: parsePersistedBoolean },
     );
     const [isAssistantsExpanded, setIsAssistantsExpanded] = usePersistedState(
       ASSISTANTS_SECTION_EXPANDED_STORAGE_KEY,
@@ -966,25 +977,53 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                 ) : isLoading ? (
                   <ChatHistoryListSkeleton />
                 ) : (
-                  <CollapsibleSection
-                    title={t({ id: "chat.history.recent", message: "Recent" })}
-                    defaultExpanded={true}
-                    expanded={isRecentChatsExpanded}
-                    onExpandedChange={setIsRecentChatsExpanded}
-                  >
-                    <ResolvedChatHistoryList
-                      sessions={sessions}
-                      currentSessionId={currentSessionId}
-                      onSessionSelect={onSessionSelect}
-                      onSessionArchive={onSessionArchive}
-                      onSessionEditTitle={onSessionEditTitle}
-                      onSessionShare={onSessionShare}
-                      showTimestamps={showTimestamps}
-                      hasMore={hasMoreSessions}
-                      isLoadingMore={isLoadingMoreSessions}
-                      onLoadMore={onLoadMoreSessions}
-                    />
-                  </CollapsibleSection>
+                  <>
+                    {pinnedSessions.length > 0 && onSessionPin && (
+                      <CollapsibleSection
+                        title={t({
+                          id: "chat.history.pinned",
+                          message: "Pinned",
+                        })}
+                        defaultExpanded={true}
+                        expanded={isPinnedChatsExpanded}
+                        onExpandedChange={setIsPinnedChatsExpanded}
+                      >
+                        <ResolvedChatHistoryList
+                          sessions={pinnedSessions}
+                          currentSessionId={currentSessionId}
+                          onSessionSelect={onSessionSelect}
+                          onSessionArchive={onSessionArchive}
+                          onSessionEditTitle={onSessionEditTitle}
+                          onSessionShare={onSessionShare}
+                          onSessionPin={onSessionPin}
+                          showTimestamps={showTimestamps}
+                        />
+                      </CollapsibleSection>
+                    )}
+                    <CollapsibleSection
+                      title={t({
+                        id: "chat.history.recent",
+                        message: "Recent",
+                      })}
+                      defaultExpanded={true}
+                      expanded={isRecentChatsExpanded}
+                      onExpandedChange={setIsRecentChatsExpanded}
+                    >
+                      <ResolvedChatHistoryList
+                        sessions={sessions}
+                        currentSessionId={currentSessionId}
+                        onSessionSelect={onSessionSelect}
+                        onSessionArchive={onSessionArchive}
+                        onSessionEditTitle={onSessionEditTitle}
+                        onSessionShare={onSessionShare}
+                        onSessionPin={onSessionPin}
+                        showTimestamps={showTimestamps}
+                        hasMore={hasMoreSessions}
+                        isLoadingMore={isLoadingMoreSessions}
+                        onLoadMore={onLoadMoreSessions}
+                      />
+                    </CollapsibleSection>
+                  </>
                 )}
               </div>
             </div>

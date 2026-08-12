@@ -1324,9 +1324,24 @@ msgstr "Running"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.history.menu.pin"
+msgstr "Pin"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.menu.rename"
 msgstr "Rename"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.history.menu.unpin"
+msgstr "Unpin"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+msgid "chat.history.pinned"
+msgstr "Pinned"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistorySidebar.tsx

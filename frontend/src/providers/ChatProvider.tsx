@@ -13,6 +13,7 @@ import { useFileDropzone, useFileUploadStore } from "@/hooks/files";
 import { mapMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 import { getSupportedFileTypes } from "@/utils/capabilitiesToFileTypes";
 
+import { usePinnedChatsFeature } from "./FeatureConfigProvider";
 import { useFileCapabilitiesContext } from "./FileCapabilitiesProvider";
 
 import type {
@@ -45,6 +46,7 @@ interface ChatMessage extends Message {
 export interface ChatContextValue {
   // Chat history
   chats: ReturnType<typeof useChatHistory>["chats"];
+  pinnedChats: ReturnType<typeof useChatHistory>["pinnedChats"];
   currentChatId: string | null;
   isHistoryLoading: boolean;
   historyError: ChatsError | null;
@@ -54,6 +56,7 @@ export interface ChatContextValue {
     chatId: string,
     titleByUserProvided?: string,
   ) => Promise<void>;
+  pinChat: (chatId: string, isPinned: boolean) => Promise<void>;
   navigateToChat: (chatId: string) => void;
   refetchHistory: () => Promise<unknown>;
   fetchNextHistoryPage: () => Promise<unknown>;
@@ -146,6 +149,9 @@ export function ChatProvider({
     return getSupportedFileTypes(capabilities);
   }, [acceptedFileTypesProp, capabilities]);
 
+  const { enabled: pinnedChatsEnabled, maxItems: pinnedChatsLimit } =
+    usePinnedChatsFeature();
+
   // Get the chat history functionality
   const {
     chats,
@@ -161,7 +167,9 @@ export function ChatProvider({
     hasNextPage: hasNextHistoryPage,
     isFetchingNextPage: isFetchingNextHistoryPage,
     isNewChatPending,
-  } = useChatHistory();
+    pinnedChats,
+    pinChat,
+  } = useChatHistory({ pinnedChatsEnabled, pinnedChatsLimit });
 
   const [newChatCounter, setNewChatCounter] = useState(0);
 
@@ -314,12 +322,14 @@ export function ChatProvider({
     return {
       // Chat history
       chats,
+      pinnedChats,
       currentChatId,
       isHistoryLoading,
       historyError,
       createNewChat,
       archiveChat,
       updateChatTitle,
+      pinChat,
       navigateToChat,
       refetchHistory,
       fetchNextHistoryPage,
@@ -365,12 +375,14 @@ export function ChatProvider({
   }, [
     // Chat history dependencies
     chats,
+    pinnedChats,
     currentChatId,
     isHistoryLoading,
     historyError,
     createNewChat,
     archiveChat,
     updateChatTitle,
+    pinChat,
     navigateToChat,
     refetchHistory,
     fetchNextHistoryPage,

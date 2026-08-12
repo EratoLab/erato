@@ -285,12 +285,14 @@ function AddinChatDataProvider({
 
     return {
       chats,
+      pinnedChats: [],
       currentChatId: session.currentChatId,
       isHistoryLoading,
       historyError,
       createNewChat,
       archiveChat,
       updateChatTitle: async () => {},
+      pinChat: async () => {},
       navigateToChat,
       refetchHistory,
       fetchNextHistoryPage,

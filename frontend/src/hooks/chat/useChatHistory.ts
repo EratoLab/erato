@@ -195,15 +195,25 @@ export function deriveTitleHint(text: string): string | null {
  * Query key of the infinite recent-chats list; cache edits must target the
  * same key as the query itself.
  */
-export function buildInfiniteChatsQueryKey() {
+export function buildInfiniteChatsQueryKey(pinnedChatsEnabled = false) {
   return [
-    ...recentChatsQuery({}).queryKey,
+    ...recentChatsQuery({
+      queryParams: pinnedChatsEnabled ? { pinned: false } : {},
+    }).queryKey,
     "infinite",
     { limit: CHAT_HISTORY_PAGE_SIZE },
   ];
 }
 
-export function useChatHistory() {
+export interface ChatHistoryOptions {
+  pinnedChatsEnabled?: boolean;
+  pinnedChatsLimit?: number;
+}
+
+export function useChatHistory({
+  pinnedChatsEnabled = false,
+  pinnedChatsLimit = 5,
+}: ChatHistoryOptions = {}) {
   // const router = useRouter(); // Removed Next.js router
   const navigate = useNavigate(); // Added React Router navigate
   const location = useLocation();
@@ -233,7 +243,17 @@ export function useChatHistory() {
 
   // Stable query key for the infinite recent-chats list. Reused for both the
   // query itself and for cache mutations (e.g. optimistic archive removal).
-  const infiniteChatsQueryKey = useMemo(() => buildInfiniteChatsQueryKey(), []);
+  const infiniteChatsQueryKey = useMemo(
+    () => buildInfiniteChatsQueryKey(pinnedChatsEnabled),
+    [pinnedChatsEnabled],
+  );
+  const pinnedChatsQueryKey = useMemo(
+    () =>
+      recentChatsQuery({
+        queryParams: { pinned: true, limit: pinnedChatsLimit },
+      }).queryKey,
+    [pinnedChatsLimit],
+  );
 
   const {
     data,
@@ -257,6 +277,7 @@ export function useChatHistory() {
           queryParams: {
             limit: CHAT_HISTORY_PAGE_SIZE,
             offset,
+            ...(pinnedChatsEnabled ? { pinned: false } : {}),
           },
         },
         signal,
@@ -268,6 +289,24 @@ export function useChatHistory() {
       }
       return lastPage.stats.current_offset + lastPage.stats.returned_count;
     },
+  });
+
+  const { data: pinnedChatsData } = useInfiniteQuery<
+    Awaited<ReturnType<typeof fetchRecentChats>>,
+    RecentChatsError
+  >({
+    queryKey: pinnedChatsQueryKey,
+    initialPageParam: 0,
+    enabled: pinnedChatsEnabled,
+    queryFn: ({ signal }) =>
+      fetchRecentChats(
+        {
+          ...fetcherOptions,
+          queryParams: { limit: pinnedChatsLimit, pinned: true },
+        },
+        signal,
+      ),
+    getNextPageParam: () => undefined,
   });
 
   // Generated hook for archiving a chat
@@ -282,6 +321,10 @@ export function useChatHistory() {
   const listedChats = useMemo(
     () => data?.pages.flatMap((page) => page.chats) ?? emptyChats,
     [data?.pages, emptyChats],
+  );
+  const pinnedChats = useMemo(
+    () => pinnedChatsData?.pages.flatMap((page) => page.chats) ?? emptyChats,
+    [emptyChats, pinnedChatsData?.pages],
   );
 
   const isPendingChatListed = pendingChat
@@ -317,6 +360,7 @@ export function useChatHistory() {
       can_edit: false,
       file_uploads: [],
       last_message_at: pendingChat.createdAt,
+      is_pinned: false,
       assistant_id: pendingChat.assistantId,
       assistant_name: undefined,
       archived_at: undefined,
@@ -447,6 +491,8 @@ export function useChatHistory() {
       const previousData = queryClient.getQueryData<InfiniteRecentChats>(
         infiniteChatsQueryKey,
       );
+      const previousPinnedData =
+        queryClient.getQueryData<InfiniteRecentChats>(pinnedChatsQueryKey);
       const previousPendingChat = useChatHistoryStore.getState().pendingChat;
 
       // The archived row may be the pending-chat placeholder, which lives
@@ -493,6 +539,32 @@ export function useChatHistory() {
           };
         },
       );
+      queryClient.setQueryData<InfiniteRecentChats>(
+        pinnedChatsQueryKey,
+        (current) => {
+          if (!current) return current;
+          return {
+            ...current,
+            pages: current.pages.map((page) => {
+              const chats = page.chats.filter((chat) => chat.id !== chatId);
+              if (chats.length === page.chats.length) return page;
+              const removed = page.chats.length - chats.length;
+              return {
+                ...page,
+                chats,
+                stats: {
+                  ...page.stats,
+                  returned_count: Math.max(
+                    0,
+                    page.stats.returned_count - removed,
+                  ),
+                  total_count: Math.max(0, page.stats.total_count - removed),
+                },
+              };
+            }),
+          };
+        },
+      );
 
       try {
         // Call the mutation
@@ -512,6 +584,9 @@ export function useChatHistory() {
         if (previousData) {
           queryClient.setQueryData(infiniteChatsQueryKey, previousData);
         }
+        if (previousPinnedData) {
+          queryClient.setQueryData(pinnedChatsQueryKey, previousPinnedData);
+        }
         if (previousPendingChat?.id === chatId) {
           useChatHistoryStore.getState().setPendingChat(previousPendingChat);
         }
@@ -524,6 +599,7 @@ export function useChatHistory() {
       currentChatId,
       navigate,
       infiniteChatsQueryKey,
+      pinnedChatsQueryKey,
     ],
   );
 
@@ -550,8 +626,30 @@ export function useChatHistory() {
     [queryClient, updateChatMutation],
   );
 
+  const pinChat = useCallback(
+    async (chatId: string, isPinned: boolean) => {
+      try {
+        await updateChatMutation({
+          pathParams: { chatId },
+          body: { is_pinned: isPinned },
+        });
+        await queryClient.invalidateQueries({
+          queryKey: recentChatsQuery({}).queryKey,
+        });
+      } catch (error) {
+        logger.log(
+          `Failed to ${isPinned ? "pin" : "unpin"} chat ${chatId}:`,
+          error,
+        );
+        throw error;
+      }
+    },
+    [queryClient, updateChatMutation],
+  );
+
   return {
     chats,
+    pinnedChats,
     currentChatId,
     isLoading,
     error,
@@ -563,6 +661,7 @@ export function useChatHistory() {
     createNewChat,
     archiveChat,
     updateChatTitle,
+    pinChat,
     isNewChatPending,
   };
 }

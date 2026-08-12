@@ -170,6 +170,13 @@ interface ChatSharingFeatureConfig {
   enabled: boolean;
 }
 
+interface PinnedChatsFeatureConfig {
+  /** Whether the pinned chats section is enabled */
+  enabled: boolean;
+  /** Maximum number of pinned chats displayed */
+  maxItems: number;
+}
+
 /**
  * Configuration for trace/reasoning display features
  */
@@ -208,6 +215,8 @@ export interface FeatureConfig {
   errorReport: ErrorReportFeatureConfig;
   /** Sidebar feature flags */
   sidebar: SidebarFeatureConfig;
+  /** Pinned chat sidebar feature flags */
+  pinnedChats: PinnedChatsFeatureConfig;
   /** Chat sharing feature flags */
   chatSharing: ChatSharingFeatureConfig;
   /** Trace/reasoning display feature flags */
@@ -286,6 +295,10 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
     logoPath: null,
     logoDarkPath: null,
     chatHistoryShowMetadata: true,
+  },
+  pinnedChats: {
+    enabled: false,
+    maxItems: 5,
   },
   chatSharing: {
     enabled: false,
@@ -392,6 +405,10 @@ function createFeatureConfig(
       logoDarkPath: environment.sidebarLogoDarkPath,
       chatHistoryShowMetadata: environment.sidebarChatHistoryShowMetadata,
     },
+    pinnedChats: {
+      enabled: environment.pinnedChatsEnabled ?? false,
+      maxItems: environment.pinnedChatsLimit ?? 5,
+    },
     chatSharing: {
       enabled: environment.chatSharingEnabled,
     },
@@ -453,6 +470,7 @@ function mergeFeatureConfig(
       ...overrides.errorReport,
     },
     sidebar: { ...baseConfig.sidebar, ...overrides.sidebar },
+    pinnedChats: { ...baseConfig.pinnedChats, ...overrides.pinnedChats },
     chatSharing: {
       ...baseConfig.chatSharing,
       ...overrides.chatSharing,
@@ -719,6 +737,11 @@ export function useErrorReportFeature(): ErrorReportFeatureConfig {
 export function useSidebarFeature(): SidebarFeatureConfig {
   const config = useFeatureConfig();
   return config.sidebar;
+}
+
+export function usePinnedChatsFeature(): PinnedChatsFeatureConfig {
+  const config = useFeatureConfig();
+  return config.pinnedChats;
 }
 
 export function useChatSharingFeature(): ChatSharingFeatureConfig {

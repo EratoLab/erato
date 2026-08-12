@@ -32,6 +32,7 @@ import { useChatContext } from "@/providers/ChatProvider";
 import {
   useChatInputFeature,
   useChatSharingFeature,
+  usePinnedChatsFeature,
   useSidebarFeature,
 } from "@/providers/FeatureConfigProvider";
 import { createLogger } from "@/utils/debugLogger";
@@ -240,6 +241,8 @@ export const Chat = ({
     navigateToChat: switchSession,
     archiveChat,
     updateChatTitle,
+    pinChat,
+    pinnedChats: pinnedChatHistory,
     createNewChat: createChat,
     isHistoryLoading: chatHistoryLoading,
     historyError: chatHistoryError,
@@ -268,6 +271,7 @@ export const Chat = ({
 
   const { profile } = useProfile();
   const { enabled: chatSharingEnabled } = useChatSharingFeature();
+  const { enabled: pinnedChatsEnabled } = usePinnedChatsFeature();
 
   // Get sidebar feature configuration
   const { chatHistoryShowMetadata } = useSidebarFeature();
@@ -289,6 +293,7 @@ export const Chat = ({
               (chat.title_by_user_provided as string | null | undefined) ??
               null,
             canEdit: chat.can_edit,
+            isPinned: chat.is_pinned,
             updatedAt: chat.last_message_at || new Date().toISOString(),
             messages: [],
             metadata: {
@@ -301,6 +306,32 @@ export const Chat = ({
           }))
         : [],
     [chatHistory],
+  );
+  const pinnedSessions: ChatSession[] = useMemo(
+    () =>
+      pinnedChatHistory.map((chat) => ({
+        id: chat.id,
+        title:
+          chat.title_resolved ||
+          t({ id: "chat.newChat.title", message: "New Chat" }),
+        titleResolved: chat.title_resolved,
+        titleBySummary:
+          (chat.title_by_summary as string | null | undefined) ?? null,
+        titleByUserProvided:
+          (chat.title_by_user_provided as string | null | undefined) ?? null,
+        canEdit: chat.can_edit,
+        isPinned: chat.is_pinned,
+        updatedAt: chat.last_message_at || new Date().toISOString(),
+        messages: [],
+        metadata: {
+          lastMessage: {
+            content: chat.title_resolved || "",
+            timestamp: chat.last_message_at || new Date().toISOString(),
+          },
+          fileCount: chat.file_uploads.length,
+        },
+      })),
+    [pinnedChatHistory],
   );
 
   const canEditForCurrentChat = Array.isArray(chatHistory)
@@ -708,6 +739,14 @@ export const Chat = ({
           onSessionSelect={handleSessionSelectWrapper}
           onSessionArchive={handleArchiveSession}
           onSessionEditTitle={handleEditTitleSession}
+          pinnedSessions={pinnedSessions}
+          onSessionPin={
+            pinnedChatsEnabled
+              ? (sessionId, isPinned) => {
+                  void pinChat(sessionId, isPinned);
+                }
+              : undefined
+          }
           onSessionShare={
             chatSharingEnabled ? handleOpenShareDialog : undefined
           }

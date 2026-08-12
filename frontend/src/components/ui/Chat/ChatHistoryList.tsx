@@ -141,6 +141,7 @@ export interface ChatHistoryListProps {
   onSessionArchive?: (sessionId: string) => void;
   onSessionEditTitle?: (sessionId: string) => void;
   onSessionShare?: (sessionId: string) => void;
+  onSessionPin?: (sessionId: string, isPinned: boolean) => void;
   onShowDetails?: (sessionId: string) => void;
   className?: string;
   /**
@@ -171,6 +172,8 @@ const ChatHistoryListItem = memo<{
   onArchive?: () => void;
   onEditTitle?: () => void;
   onShare?: () => void;
+  onPin?: () => void;
+  isPinned?: boolean;
   canEdit?: boolean;
   onShowDetails?: () => void;
   showTimestamps?: boolean;
@@ -183,6 +186,8 @@ const ChatHistoryListItem = memo<{
     onArchive,
     onEditTitle,
     onShare,
+    onPin,
+    isPinned = false,
     canEdit = true,
     onShowDetails,
     showTimestamps = true,
@@ -239,6 +244,23 @@ const ChatHistoryListItem = memo<{
             >
               <DropdownMenu
                 items={[
+                  ...(onPin
+                    ? [
+                        {
+                          label: isPinned
+                            ? t({
+                                id: "chat.history.menu.unpin",
+                                message: "Unpin",
+                              })
+                            : t({
+                                id: "chat.history.menu.pin",
+                                message: "Pin",
+                              }),
+                          onClick: onPin,
+                          disabled: !canEdit,
+                        },
+                      ]
+                    : []),
                   ...(onShare
                     ? [
                         {
@@ -325,6 +347,7 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
     onSessionArchive,
     onSessionEditTitle,
     onSessionShare,
+    onSessionPin,
     onShowDetails,
     className,
     layout = "default",
@@ -409,6 +432,12 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
             onShare={
               onSessionShare ? () => onSessionShare(session.id) : undefined
             }
+            onPin={
+              onSessionPin
+                ? () => onSessionPin(session.id, !session.isPinned)
+                : undefined
+            }
+            isPinned={session.isPinned}
             canEdit={session.canEdit}
             onShowDetails={
               onShowDetails ? () => onShowDetails(session.id) : undefined

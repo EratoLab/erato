@@ -194,6 +194,10 @@ describe("FeatureConfigProvider", () => {
           logoDarkPath: null,
           chatHistoryShowMetadata: true,
         },
+        pinnedChats: {
+          enabled: false,
+          maxItems: 5,
+        },
         trace: {
           maskReasoningText: false,
         },

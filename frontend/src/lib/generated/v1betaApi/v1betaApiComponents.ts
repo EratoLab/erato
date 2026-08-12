@@ -5169,6 +5169,10 @@ export type RecentChatsQueryParams = {
    * Optional full-text search query for chat titles. User-provided titles take precedence over generated summary titles. Empty values are treated like an unfiltered recent chats list.
    */
   q?: string;
+  /**
+   * If provided, filter chats by their pinned state.
+   */
+  pinned?: boolean;
 };
 
 export type RecentChatsError = Fetcher.ErrorWrapper<undefined>;

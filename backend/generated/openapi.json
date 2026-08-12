@@ -1591,7 +1591,7 @@
       "put": {
         "tags": [],
         "summary": "Update mutable fields on a chat.",
-        "description": "Currently supports updating only `title_by_user_provided`.",
+        "description": "Supports updating the user-provided title and pin state.",
         "operationId": "update_chat",
         "parameters": [
           {
@@ -2753,6 +2753,15 @@
             "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "pinned",
+            "in": "query",
+            "description": "If provided, filter chats by their pinned state.",
+            "required": false,
+            "schema": {
+              "type": "boolean"
             }
           }
         ],
@@ -7227,6 +7236,7 @@
           "title_resolved",
           "last_message_at",
           "file_uploads",
+          "is_pinned",
           "can_edit"
         ],
         "properties": {
@@ -7261,6 +7271,10 @@
           },
           "id": {
             "type": "string"
+          },
+          "is_pinned": {
+            "type": "boolean",
+            "description": "Whether this chat is pinned by its owner."
           },
           "last_chat_provider_id": {
             "type": "string",
@@ -8361,6 +8375,13 @@
         "type": "object",
         "description": "Request to update mutable chat fields.",
         "properties": {
+          "is_pinned": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether the chat should be pinned."
+          },
           "title_by_user_provided": {
             "type": "string",
             "description": "Optional user-provided title update.\n- `\\\"some title\\\"` sets the title\n- `null` removes a previously set title\n- omitted is treated the same as `null`"
@@ -8372,12 +8393,17 @@
         "description": "Response for update_chat endpoint.",
         "required": [
           "chat_id",
-          "title_resolved"
+          "title_resolved",
+          "is_pinned"
         ],
         "properties": {
           "chat_id": {
             "type": "string",
             "description": "The ID of the updated chat"
+          },
+          "is_pinned": {
+            "type": "boolean",
+            "description": "Whether the chat is pinned by its owner."
           },
           "title_by_summary": {
             "type": [

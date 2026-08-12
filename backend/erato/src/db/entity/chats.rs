@@ -19,6 +19,7 @@ pub struct Model {
     pub assistant_id: Option<Uuid>,
     #[sea_orm(column_type = "Text", nullable)]
     pub title_by_user_provided: Option<String>,
+    pub is_pinned: bool,
     pub active_generation_id: Option<Uuid>,
     #[sea_orm(column_type = "Text", nullable)]
     pub generation_state: Option<String>,

@@ -364,6 +364,7 @@ pub async fn token_usage_estimate(
             title_by_summary: None,
             archived_at: None,
             title_by_user_provided: None,
+            is_pinned: false,
             assistant_configuration,
             assistant_id: new_chat.assistant_id,
             active_generation_id: None,

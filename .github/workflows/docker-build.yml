@@ -271,34 +271,42 @@ jobs:
         if: success() || failure()
         run: ./check-docs.sh
 
+      # Temporarily disabled due to upstream Kubescape bugs:
+      # https://github.com/kubescape/kubescape/issues/3056
+      # https://github.com/kubescape/github-action/issues/78
+      # Re-enable after the action is fixed; the version override is not reliable.
       - name: "Kubescape main chart (DevOpsBest)"
-        if: success() || failure()
-        uses: kubescape/github-action@47d8e4561a2a1be8e22a4edfbd02c0b97f7335cb
+        if: false
+        uses: kubescape/github-action@7d90c1f159f02df1e3c79f839eeabe42ea30d4e3
         with:
+          version: v4.0.11
           files: infrastructure/charts/erato
           frameworks: DevOpsBest
           failedThreshold: 20
 
       - name: "Kubescape main chart (MITRE)"
-        if: success() || failure()
-        uses: kubescape/github-action@47d8e4561a2a1be8e22a4edfbd02c0b97f7335cb
+        if: false
+        uses: kubescape/github-action@7d90c1f159f02df1e3c79f839eeabe42ea30d4e3
         with:
+          version: v4.0.11
           files: infrastructure/charts/erato
           frameworks: MITRE
           failedThreshold: 0
 
       - name: "Kubescape main chart (NSA)"
-        if: success() || failure()
-        uses: kubescape/github-action@47d8e4561a2a1be8e22a4edfbd02c0b97f7335cb
+        if: false
+        uses: kubescape/github-action@7d90c1f159f02df1e3c79f839eeabe42ea30d4e3
         with:
+          version: v4.0.11
           files: infrastructure/charts/erato
           frameworks: NSA
           failedThreshold: 35
 
       - name: "Kubescape main chart (SOC2)"
-        if: success() || failure()
-        uses: kubescape/github-action@47d8e4561a2a1be8e22a4edfbd02c0b97f7335cb
+        if: false
+        uses: kubescape/github-action@7d90c1f159f02df1e3c79f839eeabe42ea30d4e3
         with:
+          version: v4.0.11
           files: infrastructure/charts/erato
           frameworks: SOC2
           failedThreshold: 35
