@@ -191,11 +191,31 @@ function includedSummary(section: TeamsTranscriptSection): string {
   return parts.join(" · ");
 }
 
+/** Enough of a message to tell two from the same sender apart, no more. */
+const EXCERPT_LENGTH = 100;
+
 function messageSublabel(message: ParsedTeamsMessage): string {
   const when = message.createdAt ? toDate(message.createdAt) : null;
-  return [when ? when.toLocaleString() : "", message.subject ?? ""]
+  return [
+    when ? when.toLocaleString() : "",
+    message.subject ?? "",
+    excerpt(message.text),
+  ]
     .filter((part) => part.length > 0)
     .join(" · ");
+}
+
+/**
+ * A card carrying only sender and timestamp is unreviewable: chat messages
+ * rarely have a subject, so two messages from one person minutes apart read
+ * identically — and reviewing the picked messages is the whole point of
+ * showing them individually.
+ */
+function excerpt(text: string): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > EXCERPT_LENGTH
+    ? `${flat.slice(0, EXCERPT_LENGTH).trimEnd()}…`
+    : flat;
 }
 
 /**

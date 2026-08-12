@@ -190,6 +190,43 @@ describe("buildTeamsAttachmentGroups", () => {
     );
   });
 
+  it("shows an excerpt so two messages from one sender are distinguishable", () => {
+    const messages = [
+      message({ messageId: "m1", text: "Can we move the sync to Thursday?" }),
+      message({ messageId: "m2", text: "Actually Friday works better." }),
+    ];
+    const preview = buildTeamsAttachmentGroups(
+      {
+        fileName: TRANSCRIPT.filename,
+        sections: [chatSection({ messages, selection: "messages" })],
+      },
+      [TRANSCRIPT],
+    );
+
+    const rows = threadRows(preview!.groups[0]);
+    expect(rows[0].sublabel).toContain("Can we move the sync to Thursday?");
+    expect(rows[1].sublabel).toContain("Actually Friday works better.");
+  });
+
+  it("truncates a long excerpt and flattens its whitespace", () => {
+    const messages = [
+      message({ messageId: "m1", text: `A${"b".repeat(200)}` }),
+      message({ messageId: "m2", text: "line one\n\n  line two" }),
+    ];
+    const preview = buildTeamsAttachmentGroups(
+      {
+        fileName: TRANSCRIPT.filename,
+        sections: [chatSection({ messages, selection: "messages" })],
+      },
+      [TRANSCRIPT],
+    );
+
+    const rows = threadRows(preview!.groups[0]);
+    expect(rows[0].sublabel).toContain(`A${"b".repeat(99)}…`);
+    expect(rows[0].sublabel).not.toContain("b".repeat(101));
+    expect(rows[1].sublabel).toContain("line one line two");
+  });
+
   it("keeps one group per conversation across chats and channels", () => {
     const preview = buildTeamsAttachmentGroups(
       {

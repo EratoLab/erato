@@ -2,6 +2,7 @@ import {
   FileAttachmentsPreview,
   GroupedFileAttachmentsPreview,
 } from "@erato/frontend/library";
+import { t } from "@lingui/core/macro";
 import { useMemo } from "react";
 
 import { useTeamsChatPicker } from "../providers/TeamsChatPickerProvider";
@@ -36,14 +37,28 @@ export function TeamsAttachmentsPreview(props: FileAttachmentsPreviewProps) {
 
   return (
     <>
-      <GroupedFileAttachmentsPreview
-        groups={preview.groups}
-        onRemoveFile={props.onRemoveFile}
-        disabled={props.disabled}
-        showFileTypes={props.showFileTypes}
-        showFileSizes={props.showFileSizes}
-        defaultVisibleItems={10}
-      />
+      <div
+        className="max-h-[40vh] overflow-y-auto overscroll-none pr-1 focus:outline-none focus:ring-2 focus:ring-theme-focus"
+        role="region"
+        // A bounded scroll area needs a focus target before a keyboard user can
+        // arrow or page through it.
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+        tabIndex={0}
+        aria-label={t({
+          id: "officeAddin.teams.preview.conversationRegion",
+          message: "Teams conversation preview",
+        })}
+      >
+        <GroupedFileAttachmentsPreview
+          groups={preview.groups}
+          onRemoveFile={props.onRemoveFile}
+          disabled={props.disabled}
+          showFileTypes={props.showFileTypes}
+          showFileSizes={props.showFileSizes}
+          defaultVisibleItems={10}
+          stickyGroupHeaders={true}
+        />
+      </div>
       <FileAttachmentsPreview {...props} attachedFiles={rest} />
     </>
   );
