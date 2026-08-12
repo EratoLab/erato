@@ -328,6 +328,25 @@ describe("MessageContent", () => {
     expect(screen.getByText("Two").tagName).toBe("LI");
   });
 
+  it("renders inline and display math with KaTeX", () => {
+    const { container } = renderWithTheme(
+      <MessageContent
+        content={textContent(
+          "Inline math: $x^2 + y^2 = z^2$\n\n$$\n\\frac{\\partial u}{\\partial t} = 0\n$$",
+        )}
+      />,
+    );
+
+    expect(
+      container.querySelector(".katex:not(.katex-display)"),
+    ).toBeInTheDocument();
+    expect(container.querySelector(".katex-display")).toBeInTheDocument();
+    expect(container.querySelector(".katex .mord")).toBeInTheDocument();
+    expect(
+      container.querySelector(".katex-display .mfrac"),
+    ).toBeInTheDocument();
+  });
+
   it("renders cold-load reasoning behind a 'Thought for' pill that toggles the timeline", () => {
     renderWithTheme(
       <MessageContent

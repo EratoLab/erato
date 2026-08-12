@@ -23,12 +23,14 @@ Text content renderer with markdown support, syntax highlighting, and raw/format
 - Full markdown rendering with react-markdown
 - Syntax highlighting for code blocks
 - GitHub Flavored Markdown (GFM) support
+- Inline and display math equation rendering
 - Raw markdown view toggle
 - Streaming support with visual cursor
 - XSS-safe rendering
 
 ## Technical Notes
 - Uses \`react-markdown\` with \`remark-gfm\` for parsing
+- Uses \`remark-math\` and \`rehype-katex\` for math equations
 - Code highlighting via \`react-syntax-highlighter\`
 - Memoized to optimize re-renders in chat lists
 - Handles incomplete markdown during streaming
@@ -165,6 +167,27 @@ export const Table: Story = {
   },
 };
 
+export const MathEquations: Story = {
+  args: {
+    content: textContent(`Inline math: $x^2 + y^2 = z^2$
+
+The Navier-Stokes equation for incompressible flow:
+
+$$
+\\frac{\\partial \\mathbf{u}}{\\partial t} + (\\mathbf{u} \\cdot \\nabla)\\mathbf{u} = -\\frac{1}{\\rho}\\nabla p + \\nu \\nabla^2 \\mathbf{u} + \\mathbf{f}
+$$
+`),
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Inline and display equations are parsed with remark-math and rendered with KaTeX.",
+      },
+    },
+  },
+};
+
 export const ThemedCodeBlocks: Story = {
   args: {
     content: textContent(`## Code with Theme-Aware Styling
@@ -235,7 +258,7 @@ const greetUser = (user: User): string => {
 - [x] Add syntax highlighting
 - [x] Support GFM features
 - [ ] Add mermaid diagrams
-- [ ] Implement math equations
+- [x] Implement math equations
 
 ---
 
