@@ -2497,6 +2497,16 @@ pub struct FrontendConfig {
     #[serde(default = "default_sidebar_chat_history_show_metadata")]
     pub sidebar_chat_history_show_metadata: bool,
 
+    // Whether to show the optional pinned chats section in the sidebar.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub enable_pinned_chats: bool,
+
+    // Maximum number of pinned chats shown in the sidebar.
+    // Defaults to `5`.
+    #[serde(default = "default_pinned_chats_limit")]
+    pub pinned_chats_limit: u64,
+
     // Whether to mask model-generated reasoning trace text in the chat UI.
     // When enabled, the visible reasoning title and body are replaced with a
     // configurable translation string. Tool calls and final assistant output
@@ -2612,6 +2622,10 @@ fn default_chat_input_empty_state_layout() -> String {
 
 fn default_sidebar_chat_history_show_metadata() -> bool {
     true
+}
+
+fn default_pinned_chats_limit() -> u64 {
+    5
 }
 
 #[derive(Debug, Deserialize, PartialEq, Clone, Facet)]

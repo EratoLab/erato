@@ -95,6 +95,7 @@ export const handlers = [
           title_by_user_provided: null,
           title_resolved: "Recent Chat 1 Title",
           last_message_at: new Date().toISOString(),
+          is_pinned: false,
           file_uploads: [],
           can_edit: true,
         },

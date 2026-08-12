@@ -73,6 +73,8 @@ const FRONTEND_ENV_KEY_SIDEBAR_LOGO_PATH: &str = "SIDEBAR_LOGO_PATH";
 const FRONTEND_ENV_KEY_SIDEBAR_LOGO_DARK_PATH: &str = "SIDEBAR_LOGO_DARK_PATH";
 const FRONTEND_ENV_KEY_SIDEBAR_CHAT_HISTORY_SHOW_METADATA: &str =
     "SIDEBAR_CHAT_HISTORY_SHOW_METADATA";
+const FRONTEND_ENV_KEY_PINNED_CHATS_ENABLED: &str = "PINNED_CHATS_ENABLED";
+const FRONTEND_ENV_KEY_PINNED_CHATS_LIMIT: &str = "PINNED_CHATS_LIMIT";
 const FRONTEND_ENV_KEY_MSAL_CLIENT_ID: &str = "MSAL_CLIENT_ID";
 const FRONTEND_ENV_KEY_MSAL_AUTHORITY: &str = "MSAL_AUTHORITY";
 const FRONTEND_ENV_KEY_MASK_REASONING_TRACE_TEXT: &str = "MASK_REASONING_TRACE_TEXT";
@@ -932,6 +934,14 @@ fn build_frontend_environment(
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_SIDEBAR_CHAT_HISTORY_SHOW_METADATA.to_string(),
         Value::Bool(config.frontend.sidebar_chat_history_show_metadata),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_PINNED_CHATS_ENABLED.to_string(),
+        Value::Bool(config.frontend.enable_pinned_chats),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_PINNED_CHATS_LIMIT.to_string(),
+        Value::Number(config.frontend.pinned_chats_limit.into()),
     );
 
     env.additional_environment.insert(

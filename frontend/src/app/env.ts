@@ -51,6 +51,8 @@ export type Env = {
   sidebarLogoPath: string | null;
   sidebarLogoDarkPath: string | null;
   sidebarChatHistoryShowMetadata: boolean;
+  pinnedChatsEnabled?: boolean;
+  pinnedChatsLimit?: number;
   msalClientId: string | null;
   msalAuthority: string | null;
   maskReasoningTraceText: boolean;
@@ -107,6 +109,8 @@ declare global {
     SIDEBAR_LOGO_PATH?: string;
     SIDEBAR_LOGO_DARK_PATH?: string;
     SIDEBAR_CHAT_HISTORY_SHOW_METADATA?: boolean;
+    PINNED_CHATS_ENABLED?: boolean;
+    PINNED_CHATS_LIMIT?: number;
     MSAL_CLIENT_ID?: string;
     MSAL_AUTHORITY?: string;
     MASK_REASONING_TRACE_TEXT?: boolean;
@@ -349,6 +353,13 @@ export const env = (): Env => {
     import.meta.env.VITE_SIDEBAR_CHAT_HISTORY_SHOW_METADATA === "false"
       ? false
       : (window.SIDEBAR_CHAT_HISTORY_SHOW_METADATA ?? true);
+  const pinnedChatsEnabled =
+    import.meta.env.VITE_PINNED_CHATS_ENABLED === "true"
+      ? true
+      : (window.PINNED_CHATS_ENABLED ?? false);
+  const pinnedChatsLimit = import.meta.env.VITE_PINNED_CHATS_LIMIT
+    ? Number(import.meta.env.VITE_PINNED_CHATS_LIMIT)
+    : (window.PINNED_CHATS_LIMIT ?? 5);
   const msalClientId =
     import.meta.env.VITE_MSAL_CLIENT_ID ?? window.MSAL_CLIENT_ID ?? null;
   const msalAuthority =
@@ -410,6 +421,8 @@ export const env = (): Env => {
     sidebarLogoPath,
     sidebarLogoDarkPath,
     sidebarChatHistoryShowMetadata,
+    pinnedChatsEnabled,
+    pinnedChatsLimit,
     msalClientId,
     msalAuthority,
     maskReasoningTraceText,

@@ -268,6 +268,41 @@ enable_message_feedback = true
 enable_message_feedback_comments = true
 ```
 
+#### `frontend.enable_pinned_chats`
+
+{/* erato_toml_config_key: frontend.enable_pinned_chats */}
+
+Whether to enable the pinned chats section in the chat history sidebar. When enabled, users can pin chats from the chat menu and access them in a dedicated section.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+**Example**
+
+```toml
+[frontend]
+enable_pinned_chats = true
+```
+
+#### `frontend.pinned_chats_limit`
+
+{/* erato_toml_config_key: frontend.pinned_chats_limit */}
+
+Maximum number of pinned chats displayed in the sidebar when pinned chats are enabled.
+
+**Default value:** `5`
+
+**Type:** `integer`
+
+**Example**
+
+```toml
+[frontend]
+enable_pinned_chats = true
+pinned_chats_limit = 10
+```
+
 #### `frontend.message_feedback_edit_time_limit_seconds`
 
 {/* erato_toml_config_key: frontend.message_feedback_edit_time_limit_seconds */}

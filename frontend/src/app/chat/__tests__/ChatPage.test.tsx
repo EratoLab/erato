@@ -281,6 +281,8 @@ describe("ChatPage", () => {
         archiveChat: vi.fn(),
         navigateToChat: vi.fn(),
         refetchHistory: vi.fn(),
+        pinnedChats: [],
+        pinChat: vi.fn(),
 
         // Messaging - messages as object with messageOrder array
         messages: {
@@ -419,6 +421,8 @@ describe("ChatPage", () => {
         archiveChat: vi.fn(),
         navigateToChat: vi.fn(),
         refetchHistory: vi.fn(),
+        pinnedChats: [],
+        pinChat: vi.fn(),
 
         // Messaging - empty messages with loading state
         messages: {},
@@ -530,6 +534,8 @@ describe("ChatPage", () => {
         archiveChat: vi.fn(),
         navigateToChat: vi.fn(),
         refetchHistory: vi.fn(),
+        pinnedChats: [],
+        pinChat: vi.fn(),
         messages: {},
         messageOrder: [],
         isStreaming: false,
@@ -587,6 +593,8 @@ describe("ChatPage", () => {
         archiveChat: vi.fn(),
         navigateToChat: vi.fn(),
         refetchHistory: vi.fn(),
+        pinnedChats: [],
+        pinChat: vi.fn(),
         messages: {},
         messageOrder: [],
         isStreaming: false,

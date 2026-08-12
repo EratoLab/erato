@@ -115,6 +115,7 @@ export class MockDataGenerator {
       title_by_user_provided: overrides?.title_by_user_provided,
       title_resolved: overrides?.title_resolved ?? faker.company.catchPhrase(),
       last_message_at: overrides?.last_message_at ?? new Date().toISOString(),
+      is_pinned: overrides?.is_pinned ?? false,
       file_uploads: overrides?.file_uploads ?? [],
       can_edit: overrides?.can_edit ?? true,
     };

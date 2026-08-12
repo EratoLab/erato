@@ -176,6 +176,7 @@ export interface ChatSession {
   titleBySummary?: string | null;
   titleByUserProvided?: string | null;
   canEdit?: boolean;
+  isPinned?: boolean;
   updatedAt: string;
   messages: Message[];
   metadata?: ChatSessionMetadata;

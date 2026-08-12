@@ -302,6 +302,7 @@ mod test_cases {
             title_by_summary: Some("Test Chat".to_string()),
             archived_at: None,
             title_by_user_provided: None,
+            is_pinned: false,
             assistant_configuration: None,
             assistant_id: None,
             active_generation_id: None,

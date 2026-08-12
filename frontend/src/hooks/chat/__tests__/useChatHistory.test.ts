@@ -56,6 +56,7 @@ const listedChat = (id: string): RecentChat => ({
   can_edit: true,
   file_uploads: [],
   last_message_at: "2026-01-01T12:00:00.000Z",
+  is_pinned: false,
   last_selected_facets: ["listed-facet"],
 });
 

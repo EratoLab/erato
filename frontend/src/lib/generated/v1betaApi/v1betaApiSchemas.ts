@@ -1870,6 +1870,10 @@ export type RecentChat = {
   file_uploads: FileReference[];
   id: string;
   /**
+   * Whether this chat is pinned by its owner.
+   */
+  is_pinned: boolean;
+  /**
    * The chat provider ID used for the most recent message
    */
   last_chat_provider_id?: string;
@@ -2451,6 +2455,10 @@ export type UpdateChatRequest = {
    * - omitted is treated the same as `null`
    */
   title_by_user_provided?: string;
+  /**
+   * Whether the chat should be pinned.
+   */
+  is_pinned?: boolean;
 };
 
 /**
@@ -2473,6 +2481,10 @@ export type UpdateChatResponse = {
    * Resolved chat title where user-provided title takes precedence over summary title.
    */
   title_resolved: string;
+  /**
+   * Whether the chat is pinned by its owner.
+   */
+  is_pinned: boolean;
 };
 
 export type UpdateProfilePreferencesRequest = {

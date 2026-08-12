@@ -190,6 +190,8 @@ pub struct RecentChat {
     /// Time of the last message in the chat.
     pub last_message_at: DateTimeWithTimeZone,
     pub archived_at: Option<DateTimeWithTimeZone>,
+    /// Whether the chat is pinned by its owner.
+    pub is_pinned: bool,
     /// Owner of the chat (for permission checks at the API boundary)
     pub owner_user_id: String,
     /// The chat provider ID used for the most recent message
@@ -239,6 +241,7 @@ struct ChatWithLatestMessage {
     title_by_summary: Option<String>,
     title_by_user_provided: Option<String>,
     archived_at: Option<DateTimeWithTimeZone>,
+    is_pinned: bool,
     assistant_id: Option<Uuid>,
     active_generation_started_at: Option<DateTimeWithTimeZone>,
     pending_tool_approval_at: Option<DateTimeWithTimeZone>,
@@ -255,6 +258,8 @@ pub struct RecentChatsFilter<'a> {
     pub offset: u64,
     /// Whether archived chats should be included.
     pub include_archived: bool,
+    /// If set, only chats with the matching pinned state are returned.
+    pub pinned: Option<bool>,
     /// Optional full-text search query for chat titles.
     pub search_query: Option<&'a str>,
 }
@@ -282,6 +287,11 @@ pub async fn get_recent_chats(
         "AND \"chats\".\"archived_at\" IS NULL"
     } else {
         ""
+    };
+    let pinned_condition = match filter.pinned {
+        Some(true) => "AND \"chats\".\"is_pinned\" = TRUE",
+        Some(false) => "AND \"chats\".\"is_pinned\" = FALSE",
+        None => "",
     };
     let resolved_title_search_vector = r#"to_tsvector(
                 'simple'::regconfig,
@@ -315,6 +325,7 @@ pub async fn get_recent_chats(
             "chats"."title_by_summary",
             "chats"."title_by_user_provided",
             "chats"."archived_at",
+            "chats"."is_pinned",
             "chats"."assistant_id",
             CASE
                 WHEN "chats"."generation_state" = 'running'
@@ -337,12 +348,14 @@ pub async fn get_recent_chats(
         WHERE "chats"."owner_user_id" = $1
             {}
             {}
+            {}
         ORDER BY latest_msg.created_at DESC
         LIMIT $2
         OFFSET $3
         "#,
         archived_condition,
-        search_condition(4)
+        search_condition(4),
+        pinned_condition
     );
 
     let mut query_values = vec![
@@ -386,10 +399,12 @@ pub async fn get_recent_chats(
                     WHERE "chats"."owner_user_id" = $1
                         {}
                         {}
+                        {}
                 ) AS sub_query
                 "#,
                 archived_condition,
-                search_condition(2)
+                search_condition(2),
+                pinned_condition
             );
 
             #[derive(Debug, FromQueryResult)]
@@ -530,6 +545,7 @@ pub async fn get_recent_chats(
                 ),
                 last_message_at: chat_with_msg.latest_message_at,
                 archived_at: chat_with_msg.archived_at,
+                is_pinned: chat_with_msg.is_pinned,
                 owner_user_id: chat_with_msg.owner_user_id.clone(),
                 last_chat_provider_id,
                 last_selected_facets,
@@ -803,6 +819,31 @@ pub async fn update_chat_title_by_user_provided(
 
     let updated_chat = chat_active.update(conn).await?;
     Ok(updated_chat)
+}
+
+/// Update whether a chat is pinned by its owner.
+pub async fn update_chat_is_pinned(
+    conn: &DatabaseConnection,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    chat_id: &Uuid,
+    is_pinned: bool,
+) -> Result<chats::Model, Report> {
+    let chat = Chats::find_by_id(*chat_id)
+        .one(conn)
+        .await?
+        .ok_or_else(|| eyre!("Chat with ID {} not found", chat_id))?;
+
+    authorize!(
+        policy,
+        subject,
+        &Resource::Chat(chat.id.to_string()),
+        Action::Update
+    )?;
+
+    let mut chat_active: chats::ActiveModel = chat.into();
+    chat_active.is_pinned = ActiveValue::Set(is_pinned);
+    Ok(chat_active.update(conn).await?)
 }
 
 /// Archive a chat by setting its archived_at timestamp
