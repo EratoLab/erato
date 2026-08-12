@@ -13,7 +13,10 @@ import {
 import { FileAttachmentsPreview } from "@/components/ui/FileUpload";
 import { FileUploadWithTokenCheck } from "@/components/ui/FileUpload/FileUploadWithTokenCheck";
 import { ConfirmationDialog } from "@/components/ui/Modal/ConfirmationDialog";
-import { componentRegistry } from "@/config/componentRegistry";
+import {
+  componentRegistry,
+  resolveComponentOverride,
+} from "@/config/componentRegistry";
 import { useAudioDictationRecorder } from "@/hooks/audio/useAudioDictationRecorder";
 import { useAudioTranscriptionRecorder } from "@/hooks/audio/useAudioTranscriptionRecorder";
 import { useTokenManagement, useActiveModelSelection } from "@/hooks/chat";
@@ -1984,6 +1987,10 @@ export const ChatInput = ({
   const ChatInputAttachmentPreview =
     componentRegistry.ChatInputAttachmentPreview;
   const hasAttachmentPreviewOverride = ChatInputAttachmentPreview !== null;
+  const AttachmentsPreview = resolveComponentOverride(
+    componentRegistry.ChatAttachmentsPreview,
+    FileAttachmentsPreview,
+  );
   const hasTopLeftAccessoryOverride =
     componentRegistry.ChatTopLeftAccessory !== null;
 
@@ -2099,7 +2106,7 @@ export const ChatInput = ({
         )}
 
         {!hasAttachmentPreviewOverride && (
-          <FileAttachmentsPreview
+          <AttachmentsPreview
             attachedFiles={attachedFiles}
             maxFiles={maxFiles}
             onRemoveFile={handleRemoveFileById}

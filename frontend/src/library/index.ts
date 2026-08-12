@@ -327,6 +327,7 @@ export type {
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 export { FileTypeUtil, type FileType } from "@/utils/fileTypes";
 export type { LocalFilePreviewItem } from "@/components/ui/FileUpload/FilePreviewBase";
+export type { FileAttachmentsPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";
 export type {
   FileAttachmentGroup,
   FileAttachmentGroupItem,
