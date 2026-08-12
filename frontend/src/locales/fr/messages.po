@@ -2267,44 +2267,44 @@ msgstr "Utiliser le thème clair du document"
 #. js-lingui-explicit-id
 #: src/components/ui/FilePreview/PdfPreview.tsx
 msgid "filePreview.pdf.nextPage"
-msgstr ""
+msgstr "Page suivante"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FilePreview/PdfPreview.tsx
 msgid "filePreview.pdf.pageIndicator"
-msgstr ""
+msgstr "Page {currentPage} sur {totalPages}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FilePreview/PdfPreview.tsx
 msgid "filePreview.pdf.previousPage"
-msgstr ""
+msgstr "Page précédente"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FilePreview/PdfPreview.tsx
 msgid "filePreview.pdf.rotate"
-msgstr ""
+msgstr "Pivoter dans le sens horaire"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FilePreview/PdfPreview.tsx
 msgid "filePreview.pdf.zoomIn"
-msgstr ""
+msgstr "Zoom avant"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FilePreview/PdfPreview.tsx
 msgid "filePreview.pdf.zoomOut"
-msgstr ""
+msgstr "Zoom arrière"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FilePreview/FilePreviewContent.tsx
 #: src/components/ui/FilePreview/PdfPreview.tsx
 msgid "filePreview.pdfLoading"
-msgstr ""
+msgstr "Chargement de l'aperçu du document..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/FilePreview/FilePreviewContent.tsx
 #: src/components/ui/FilePreview/PdfPreview.tsx
 msgid "filePreview.pdfPreviewUnavailable"
-msgstr ""
+msgstr "Aperçu indisponible : ce document n'a pas pu être chargé."
 
 #. js-lingui-explicit-id
 #: src/components/ui/FilePreview/PptxPreview.tsx

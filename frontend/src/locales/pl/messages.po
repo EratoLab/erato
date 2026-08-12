@@ -2267,44 +2267,44 @@ msgstr "Użyj jasnego motywu dokumentu"
 #. js-lingui-explicit-id
 #: src/components/ui/FilePreview/PdfPreview.tsx
 msgid "filePreview.pdf.nextPage"
-msgstr ""
+msgstr "Następna strona"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FilePreview/PdfPreview.tsx
 msgid "filePreview.pdf.pageIndicator"
-msgstr ""
+msgstr "Strona {currentPage} z {totalPages}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FilePreview/PdfPreview.tsx
 msgid "filePreview.pdf.previousPage"
-msgstr ""
+msgstr "Poprzednia strona"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FilePreview/PdfPreview.tsx
 msgid "filePreview.pdf.rotate"
-msgstr ""
+msgstr "Obróć w prawo"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FilePreview/PdfPreview.tsx
 msgid "filePreview.pdf.zoomIn"
-msgstr ""
+msgstr "Powiększ"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FilePreview/PdfPreview.tsx
 msgid "filePreview.pdf.zoomOut"
-msgstr ""
+msgstr "Pomniejsz"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FilePreview/FilePreviewContent.tsx
 #: src/components/ui/FilePreview/PdfPreview.tsx
 msgid "filePreview.pdfLoading"
-msgstr ""
+msgstr "Ładowanie podglądu dokumentu..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/FilePreview/FilePreviewContent.tsx
 #: src/components/ui/FilePreview/PdfPreview.tsx
 msgid "filePreview.pdfPreviewUnavailable"
-msgstr ""
+msgstr "Podgląd niedostępny: nie udało się załadować tego dokumentu."
 
 #. js-lingui-explicit-id
 #: src/components/ui/FilePreview/PptxPreview.tsx

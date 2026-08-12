@@ -1199,12 +1199,12 @@ msgstr "No hay nada que mostrar en esta página: carga más para seguir buscando
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.filePreviewFailed"
-msgstr ""
+msgstr "No se pudo cargar este archivo para la vista previa."
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.filePreviewTooLarge"
-msgstr ""
+msgstr "Este archivo es demasiado grande para previsualizarlo aquí."
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
