@@ -25,6 +25,11 @@ import {
   useScrollCapability,
 } from "@embedpdf/plugin-scroll/react";
 import {
+  SelectionLayer,
+  SelectionPluginPackage,
+  useSelectionCapability,
+} from "@embedpdf/plugin-selection/react";
+import {
   TilingLayer,
   TilingPluginPackage,
 } from "@embedpdf/plugin-tiling/react";
@@ -51,6 +56,7 @@ import {
   ZoomOutIcon,
 } from "@/components/ui/icons";
 
+import { copyTextToClipboard } from "./copySelectionText";
 import { getPdfEngine } from "./pdfEngine";
 
 import type React from "react";
@@ -58,6 +64,7 @@ import type React from "react";
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 8;
 const PAGE_GAP = 12;
+const SELECTION_HIGHLIGHT = "rgba(59, 130, 246, 0.35)";
 
 const PDF_PLUGINS = [
   createPluginRegistration(DocumentManagerPluginPackage),
@@ -74,6 +81,9 @@ const PDF_PLUGINS = [
     extraRings: 0,
   }),
   createPluginRegistration(InteractionManagerPluginPackage),
+  createPluginRegistration(SelectionPluginPackage, {
+    marquee: { enabled: false },
+  }),
   createPluginRegistration(ZoomPluginPackage, {
     defaultZoomLevel: ZoomMode.FitWidth,
     minZoom: MIN_ZOOM,
@@ -188,6 +198,44 @@ const PdfToolbar: React.FC<{ documentId: string }> = ({ documentId }) => {
     </div>
   );
 };
+
+/**
+ * Copies the current PDF selection on Cmd/Ctrl+C.
+ *
+ * The selection plugin tracks the selection but binds no shortcut — its own
+ * `CopyToClipboard` only listens for a copy request that something else has to
+ * raise. Bound to the document rather than a container because the page layers
+ * are not focusable, so the keystroke never reaches them.
+ */
+const PdfCopyShortcut: React.FC<{ documentId: string }> = ({ documentId }) => {
+  const { provides: selection } = useSelectionCapability();
+
+  useEffect(() => {
+    if (!selection) {
+      return;
+    }
+
+    const scope = selection.forDocument(documentId);
+
+    const onCopy = (event: Event) => {
+      scope.getSelectedText().wait((lines) => {
+        const text = Array.isArray(lines) ? lines.join("\n") : String(lines);
+        if (!text) {
+          return;
+        }
+        event.preventDefault();
+        void copyTextToClipboard(text);
+      }, ignoreCopyFailure);
+    };
+
+    document.addEventListener("copy", onCopy);
+    return () => document.removeEventListener("copy", onCopy);
+  }, [documentId, selection]);
+
+  return null;
+};
+
+const ignoreCopyFailure = () => undefined;
 
 const PAGE_ANCHOR = "#page=";
 
@@ -308,10 +356,11 @@ const PdfDocument: React.FC<PdfPreviewProps> = ({ url }) => {
       {anchoredPage !== null && (
         <PdfPageAnchor documentId={activeDocumentId} page={anchoredPage} />
       )}
+      <PdfCopyShortcut documentId={activeDocumentId} />
       <PdfToolbar documentId={activeDocumentId} />
       <Viewport
         documentId={activeDocumentId}
-        className="min-h-0 flex-1 overflow-auto bg-[var(--pdf-preview-surface-bg)]"
+        className="min-h-0 flex-1 select-none overflow-auto bg-[var(--pdf-preview-surface-bg)]"
       >
         <Scroller
           documentId={activeDocumentId}
@@ -327,14 +376,28 @@ const PdfDocument: React.FC<PdfPreviewProps> = ({ url }) => {
                   boxShadow: "var(--pdf-preview-page-shadow)",
                 }}
               >
+                {/*
+                 * Both raster layers have to opt out of pointer events. The
+                 * page image is an <img>, so a drag across it starts a native
+                 * HTML5 image drag, and the pointercancel that follows kills
+                 * the selection mid-gesture — it freezes on the first glyph.
+                 * EmbedPDF v3 sets these upstream; v2 does not.
+                 */}
                 <RenderLayer
                   documentId={activeDocumentId}
                   pageIndex={pageIndex}
-                  style={{ position: "absolute" }}
+                  draggable={false}
+                  style={{ position: "absolute", pointerEvents: "none" }}
                 />
                 <TilingLayer
                   documentId={activeDocumentId}
                   pageIndex={pageIndex}
+                  style={{ pointerEvents: "none" }}
+                />
+                <SelectionLayer
+                  documentId={activeDocumentId}
+                  pageIndex={pageIndex}
+                  textStyle={{ background: SELECTION_HIGHLIGHT }}
                 />
               </PagePointerProvider>
             </Rotate>
