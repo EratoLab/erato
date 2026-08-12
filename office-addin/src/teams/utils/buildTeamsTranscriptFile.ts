@@ -236,7 +236,11 @@ function renderMessageHeading(
   // team/channel pair as if it were a chat id.
   const link = idOnly ? `id ${message.messageId}` : message.deepLink;
   const when = dateLabel ? `${dateLabel}, ${time}` : time;
-  return `**${message.senderName}** — ${when}${edited} · ${link}`;
+  // Most chat messages carry no subject at all, so the label is emitted only
+  // when there is one — an empty field on every heading would cost more tokens
+  // than the subjects it exists to carry.
+  const subject = message.subject ? ` · Subject: ${message.subject}` : "";
+  return `**${message.senderName}** — ${when}${edited}${subject} · ${link}`;
 }
 
 function includedLine(

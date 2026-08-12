@@ -164,6 +164,24 @@ describe("parseTeamsMessage", () => {
     expect(parsed?.deepLink).toContain("19%3Aabc123%40thread.v2/1741000000000");
   });
 
+  it("trims the subject Graph supplies", () => {
+    const parsed = parseTeamsMessage(
+      mockGraphChatMessage({ subject: "  Release checklist  " }),
+      MOCK_CHAT_ID,
+    );
+    expect(parsed?.subject).toBe("Release checklist");
+  });
+
+  it("treats an absent, null or blank subject as none", () => {
+    for (const subject of [undefined, null, "", "   "]) {
+      const parsed = parseTeamsMessage(
+        mockGraphChatMessage({ subject }),
+        MOCK_CHAT_ID,
+      );
+      expect(parsed?.subject).toBeNull();
+    }
+  });
+
   it("discloses an attachment the body never referenced", () => {
     const parsed = parseTeamsMessage(
       mockGraphChatMessage({

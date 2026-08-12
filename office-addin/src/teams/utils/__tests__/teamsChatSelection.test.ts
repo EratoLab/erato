@@ -91,6 +91,7 @@ describe("groupSelectionsByConversation", () => {
       senderName: "Ada Lovelace",
       createdAt: "2026-03-03T09:14:00Z",
       editedAt: null,
+      subject: null,
       text: "already parsed",
       markers: [],
       sharedFiles: [],

@@ -139,6 +139,7 @@ describe("collectTeamsTranscript", () => {
             senderName: "Ada Lovelace",
             createdAt: "2026-03-03T09:14:00Z",
             editedAt: null,
+            subject: null,
             text: "the body the picker already showed",
             markers: [],
             sharedFiles: [],

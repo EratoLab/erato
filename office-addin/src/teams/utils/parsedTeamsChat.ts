@@ -51,6 +51,8 @@ export interface ParsedTeamsMessage {
   senderName: string;
   createdAt: string | null;
   editedAt: string | null;
+  /** Trimmed; null when Graph sent none or sent it blank. */
+  subject: string | null;
   text: string;
   /** Bracketed disclosures for attachments the body never referenced. */
   markers: string[];
@@ -145,6 +147,7 @@ export function parseTeamsMessage(
     senderName: messageSenderName(message),
     createdAt: message.createdDateTime ?? null,
     editedAt: message.lastEditedDateTime ?? null,
+    subject: messageSubject(message),
     text,
     markers,
     replyToId: message.replyToId ?? null,
@@ -152,6 +155,11 @@ export function parseTeamsMessage(
     sharedFiles: sharedFileRefs(message),
     imageUrls: teamsBodyImageUrls(message.body),
   };
+}
+
+function messageSubject(message: GraphChatMessage): string | null {
+  const subject = message.subject?.trim();
+  return subject === undefined || subject.length === 0 ? null : subject;
 }
 
 function sharedFileRefs(message: GraphChatMessage): TeamsSharedFileRef[] {
