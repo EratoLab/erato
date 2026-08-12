@@ -1329,6 +1329,11 @@ msgstr "Przypnij"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.history.menu.pinLimitReached"
+msgstr "Osiągnięto limit przypięć"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.menu.rename"
 msgstr "Zmień nazwę"

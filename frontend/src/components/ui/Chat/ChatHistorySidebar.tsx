@@ -151,6 +151,7 @@ export interface ChatHistorySidebarProps {
   onSessionShare?: (sessionId: string) => void;
   pinnedSessions?: ChatSession[];
   onSessionPin?: (sessionId: string, isPinned: boolean) => void;
+  pinnedChatsLimit?: number;
   isLoading: boolean;
   error?: Error;
   userProfile?: UserProfile;
@@ -605,6 +606,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     onSessionShare,
     pinnedSessions = [],
     onSessionPin,
+    pinnedChatsLimit = 5,
     isLoading,
     error,
     userProfile,
@@ -996,6 +998,8 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                           onSessionEditTitle={onSessionEditTitle}
                           onSessionShare={onSessionShare}
                           onSessionPin={onSessionPin}
+                          pinnedChatsCount={pinnedSessions.length}
+                          pinnedChatsLimit={pinnedChatsLimit}
                           showTimestamps={showTimestamps}
                         />
                       </CollapsibleSection>
@@ -1017,6 +1021,8 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                         onSessionEditTitle={onSessionEditTitle}
                         onSessionShare={onSessionShare}
                         onSessionPin={onSessionPin}
+                        pinnedChatsCount={pinnedSessions.length}
+                        pinnedChatsLimit={pinnedChatsLimit}
                         showTimestamps={showTimestamps}
                         hasMore={hasMoreSessions}
                         isLoadingMore={isLoadingMoreSessions}
