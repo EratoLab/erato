@@ -198,4 +198,51 @@ describe("parseTeamsMessage", () => {
       ),
     ).toBeNull();
   });
+
+  it("keeps a shared file as a structured ref, not only a marker", () => {
+    const parsed = parseTeamsMessage(
+      mockGraphChatMessage({
+        body: { contentType: "text", content: "see the plan" },
+        attachments: [
+          {
+            id: "att-1",
+            contentType: "reference",
+            name: "Q3 Plan.docx",
+            contentUrl: "https://contoso.sharepoint.com/sites/x/Q3%20Plan.docx",
+          },
+          // A card has no file behind it and must not become a ref.
+          {
+            id: "att-2",
+            contentType: "application/vnd.microsoft.card.adaptive",
+            name: null,
+          },
+        ],
+      }),
+      MOCK_CHAT_ID,
+    );
+    expect(parsed?.sharedFiles).toEqual([
+      {
+        attachmentId: "att-1",
+        name: "Q3 Plan.docx",
+        contentUrl: "https://contoso.sharepoint.com/sites/x/Q3%20Plan.docx",
+      },
+    ]);
+  });
+
+  it("keeps hosted image urls aligned with their [image] markers", () => {
+    const hosted = `https://graph.microsoft.com/v1.0/chats/${encodeURIComponent(
+      MOCK_CHAT_ID,
+    )}/messages/1741000000000/hostedContents/aWQ9/$value`;
+    const parsed = parseTeamsMessage(
+      mockGraphChatMessage({
+        body: {
+          contentType: "html",
+          content: `<img src="https://media.example/sticker.gif"><img src="${hosted}">`,
+        },
+      }),
+      MOCK_CHAT_ID,
+    );
+    expect(parsed?.text).toBe("[image][image]");
+    expect(parsed?.imageUrls).toEqual([null, hosted]);
+  });
 });

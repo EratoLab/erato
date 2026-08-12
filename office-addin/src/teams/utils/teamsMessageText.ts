@@ -36,6 +36,27 @@ export function teamsMessageBodyToText(
   return normalizeText(htmlToPlainText(doc.body.innerHTML));
 }
 
+/**
+ * `img` sources in body order — the same order their `[image]` markers take in
+ * the rendered text. Only Graph hosted-content URLs are fetchable with the
+ * message-reading token; anything else (external stickers, data URIs) stays
+ * null so occurrence indexes still line up.
+ */
+export function teamsBodyImageUrls(
+  body: GraphChatMessageBody | null | undefined,
+): (string | null)[] {
+  const content = body?.content ?? "";
+  if (body?.contentType !== "html" || content.length === 0) return [];
+  const doc = new DOMParser().parseFromString(content, "text/html");
+  return Array.from(doc.body.querySelectorAll("img")).map((element) => {
+    const src = element.getAttribute("src") ?? "";
+    return HOSTED_CONTENT_URL.test(src) ? src : null;
+  });
+}
+
+const HOSTED_CONTENT_URL =
+  /^https:\/\/graph\.microsoft\.com\/(?:v1\.0|beta)\/.+\/hostedContents\/[^/]+\/\$value$/;
+
 /** Attachment ids referenced by an `<attachment>` element in the body. */
 export function referencedAttachmentIds(
   body: GraphChatMessageBody | null | undefined,

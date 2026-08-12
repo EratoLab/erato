@@ -63,6 +63,11 @@ export interface GraphChatMessageBody {
 export interface GraphChatMessageAttachment {
   id?: string;
   contentType?: string;
+  /**
+   * SharePoint/OneDrive web URL for `reference` attachments — the bytes are
+   * reachable only through the `/shares` endpoint, never directly.
+   */
+  contentUrl?: string | null;
   name?: string | null;
 }
 
@@ -147,18 +152,21 @@ interface GraphInit {
 }
 
 /**
- * One Graph JSON round-trip under a per-request timeout, optionally behind the
- * per-chat gate, honouring a single `Retry-After` on 429. Returns the status
- * instead of throwing so callers can degrade to `partial`; aborts propagate.
+ * One Graph round-trip under a per-request timeout, optionally behind the
+ * per-chat gate, honouring a single `Retry-After` on 429. Aborts propagate;
+ * everything else resolves through `read` so callers can degrade to `partial`.
  */
-async function requestGraphJson<T>(args: {
+async function requestGraph<T>(args: {
   url: string;
   tokenSource: GraphTokenSource;
   gateKey?: string | null;
+  accept: string;
   init?: GraphInit;
   options: TeamsGraphCallOptions;
-}): Promise<GraphJsonResult<T>> {
-  const { url, tokenSource, gateKey, init, options } = args;
+  read: (response: Response) => Promise<T>;
+  fallback: T;
+}): Promise<T> {
+  const { url, tokenSource, gateKey, accept, init, options, read } = args;
   const parentSignal = options.signal;
   const transport = options.transport ?? globalThis.fetch.bind(globalThis);
 
@@ -167,7 +175,7 @@ async function requestGraphJson<T>(args: {
   // against the chat, traded for not re-queueing behind unrelated pages.
   const send = (signal: AbortSignal) => {
     const call = () =>
-      graphFetch(url, tokenSource, "application/json", signal, transport, init);
+      graphFetch(url, tokenSource, accept, signal, transport, init);
     return gateKey ? runGatedByChat(gateKey, signal, call) : call();
   };
 
@@ -185,11 +193,7 @@ async function requestGraphJson<T>(args: {
             response = await send(signal);
           }
         }
-        if (!response.ok) {
-          return { ok: false, status: response.status, payload: null };
-        }
-        const payload = (await response.json()) as T;
-        return { ok: true, status: response.status, payload };
+        return read(response);
       },
     );
   } catch (error) {
@@ -197,8 +201,63 @@ async function requestGraphJson<T>(args: {
       throw parentSignal.reason ?? error;
     }
     console.warn("[teamsChatGraph] request failed:", url, error);
-    return { ok: false, status: 0, payload: null };
+    return args.fallback;
   }
+}
+
+export async function requestGraphJson<T>(args: {
+  url: string;
+  tokenSource: GraphTokenSource;
+  gateKey?: string | null;
+  init?: GraphInit;
+  options: TeamsGraphCallOptions;
+}): Promise<GraphJsonResult<T>> {
+  return requestGraph<GraphJsonResult<T>>({
+    ...args,
+    accept: "application/json",
+    fallback: { ok: false, status: 0, payload: null },
+    read: async (response) => {
+      if (!response.ok) {
+        return { ok: false, status: response.status, payload: null };
+      }
+      const payload = (await response.json()) as T;
+      return { ok: true, status: response.status, payload };
+    },
+  });
+}
+
+export interface TeamsHostedContent {
+  bytes: ArrayBuffer;
+  contentType: string;
+}
+
+/**
+ * Bytes of a hosted content — a pasted image — by the absolute URL the message
+ * body carries. Reads the same conversation as the message fetches, so it
+ * shares their gate.
+ */
+export async function fetchTeamsHostedContent(
+  url: string,
+  gateKey: string,
+  tokenSource: GraphTokenSource,
+  options: TeamsGraphCallOptions = {},
+): Promise<TeamsHostedContent | null> {
+  return requestGraph<TeamsHostedContent | null>({
+    url,
+    tokenSource,
+    gateKey,
+    accept: "*/*",
+    options,
+    fallback: null,
+    read: async (response) => {
+      if (!response.ok) return null;
+      return {
+        bytes: await response.arrayBuffer(),
+        contentType:
+          response.headers.get("Content-Type") ?? "application/octet-stream",
+      };
+    },
+  });
 }
 
 export interface ListTeamsChatsResult {

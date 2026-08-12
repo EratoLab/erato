@@ -1,4 +1,4 @@
-import { useFileUploadStore } from "@erato/frontend/library";
+import { useFeatureConfig, useFileUploadStore } from "@erato/frontend/library";
 import {
   createContext,
   useCallback,
@@ -15,6 +15,7 @@ import { useTeamsChannelList } from "../hooks/useTeamsChannelList";
 import { useTeamsChatFetcher } from "../hooks/useTeamsChatFetcher";
 import { useTeamsChatList } from "../hooks/useTeamsChatList";
 import { useTeamsDevProbe } from "../hooks/useTeamsDevProbe";
+import { useTeamsFileFetcher } from "../hooks/useTeamsFileFetcher";
 import { useTeamsTranscriptBuild } from "../hooks/useTeamsTranscriptBuild";
 import {
   DEFAULT_CHAT_MESSAGE_LIMIT,
@@ -39,6 +40,7 @@ import type {
 import type {
   TeamsChannelFetcher,
   TeamsChatFetcher,
+  TeamsFileFetcher,
 } from "../utils/teamsChatFetcher";
 import type { TeamsChatSelection } from "../utils/teamsChatSelection";
 import type { ReactNode } from "react";
@@ -58,6 +60,10 @@ export interface TeamsChatPickerContextValue {
   fetcher: TeamsChatFetcher | null;
   /** Null when the channel scopes were not granted — the picker shows chats only. */
   channelFetcher: TeamsChannelFetcher | null;
+  /** Null when `Files.Read.All` was not granted. */
+  fileFetcher: TeamsFileFetcher | null;
+  /** The deployment's upload limit; also caps chip-preview downloads. */
+  maxFileBytes: number;
   self: TeamsSelfIdentity | undefined;
   chatList: UseTeamsChatListResult;
   channelList: UseTeamsChannelListResult;
@@ -112,6 +118,8 @@ const CLOSED_PICKER: TeamsChatPickerContextValue = {
   close: () => {},
   fetcher: null,
   channelFetcher: null,
+  fileFetcher: null,
+  maxFileBytes: 0,
   self: undefined,
   chatList: EMPTY_CHAT_LIST,
   channelList: EMPTY_CHANNEL_LIST,
@@ -153,6 +161,9 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
   const { userPrincipalName, userId } = useTeams();
   const { fetcher } = useTeamsChatFetcher();
   const { fetcher: channelFetcher } = useTeamsChannelFetcher();
+  const { fetcher: fileFetcher } = useTeamsFileFetcher();
+  // Shared-file downloads cap at what the deployment's upload limit accepts.
+  const maxFileBytes = useFeatureConfig().upload.maxSizeBytes;
   useTeamsDevProbe();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -169,9 +180,7 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
 
   const handoffRef = useRef<((files: File[]) => Promise<void>) | null>(null);
   const cancelledRef = useRef(false);
-  const lastBuildRef = useRef<{ key: string; file: File } | null>(null);
-  const selectionRef = useRef(selection);
-  selectionRef.current = selection;
+  const lastBuildRef = useRef<{ key: string; files: File[] } | null>(null);
 
   // The object id is the reliable match; the login hint can differ from a
   // member's primary SMTP address, which would leave the viewer in their own
@@ -188,16 +197,9 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
   const channelList = useTeamsChannelList(
     hasEverOpened ? channelFetcher : null,
   );
-  const channelsByKeyRef = useRef(channelList.channelsByKey);
-  channelsByKeyRef.current = channelList.channelsByKey;
-  const chatsByIdRef = useRef(chatList.chatsById);
-  chatsByIdRef.current = chatList.chatsById;
 
   const { build, progress, isBuilding, cancel, reset } =
-    useTeamsTranscriptBuild(fetcher, channelFetcher);
-
-  const messageLimitRef = useRef(messageLimit);
-  messageLimitRef.current = messageLimit;
+    useTeamsTranscriptBuild(fetcher, channelFetcher, fileFetcher);
 
   const open = useCallback(
     (onSelectFiles: (files: File[]) => Promise<void>) => {
@@ -266,10 +268,10 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
    * walking Graph again, which is tens of seconds.
    */
   const deliver = useCallback(
-    async (file: File, retryKey?: string): Promise<boolean> => {
+    async (files: File[], retryKey?: string): Promise<boolean> => {
       const handoff = handoffRef.current;
       const fail = () => {
-        if (retryKey) lastBuildRef.current = { key: retryKey, file };
+        if (retryKey) lastBuildRef.current = { key: retryKey, files };
         setAttachError("upload-failed");
         return false;
       };
@@ -277,7 +279,7 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
         return fail();
       }
       try {
-        await handoff([file]);
+        await handoff(files);
       } catch (error) {
         console.warn(
           "[TeamsChatPicker] attaching the transcript failed",
@@ -295,25 +297,26 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
   );
 
   const attach = useCallback(async () => {
-    const selections = [...selectionRef.current.values()];
+    const selections = [...selection.values()];
     if (selections.length === 0) return;
     cancelledRef.current = false;
     setAttachError(null);
     setPartialOutcome(null);
 
-    const key = teamsSelectionDedupeKey(selections, messageLimitRef.current);
+    const key = teamsSelectionDedupeKey(selections, messageLimit);
     const built = lastBuildRef.current;
     if (built?.key === key) {
-      await deliver(built.file, key);
+      await deliver(built.files, key);
       return;
     }
 
     const outcome = await build({
       selections,
-      knownChats: chatsByIdRef.current,
-      knownChannels: channelsByKeyRef.current,
+      knownChats: chatList.chatsById,
+      knownChannels: channelList.channelsByKey,
       self,
-      limit: messageLimitRef.current,
+      limit: messageLimit,
+      maxFileBytes,
     });
     // A user-initiated cancel is not a failure to report.
     if (cancelledRef.current) return;
@@ -325,8 +328,17 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
       setPartialOutcome(outcome);
       return;
     }
-    await deliver(outcome.file, key);
-  }, [build, deliver, self]);
+    await deliver([outcome.file, ...outcome.assets], key);
+  }, [
+    build,
+    chatList.chatsById,
+    channelList.channelsByKey,
+    deliver,
+    maxFileBytes,
+    messageLimit,
+    selection,
+    self,
+  ]);
 
   const attachPartial = useCallback(async () => {
     const outcome = partialOutcome;
@@ -334,7 +346,9 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
     setPartialOutcome(null);
     // Put the offer back if the composer never took it — the partial
     // transcript is the only copy of a walk that already ran.
-    if (!(await deliver(outcome.file))) setPartialOutcome(outcome);
+    if (!(await deliver([outcome.file, ...outcome.assets]))) {
+      setPartialOutcome(outcome);
+    }
   }, [deliver, partialOutcome]);
 
   const value = useMemo<TeamsChatPickerContextValue>(
@@ -344,6 +358,8 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
       close,
       fetcher,
       channelFetcher,
+      fileFetcher,
+      maxFileBytes,
       self,
       chatList,
       channelList,
@@ -373,10 +389,12 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
       chatList,
       close,
       fetcher,
+      fileFetcher,
       isBuilding,
       isMessageSelectionFull,
       isOpen,
       isSelected,
+      maxFileBytes,
       messageLimit,
       open,
       partialOutcome,

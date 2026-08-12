@@ -2,7 +2,17 @@ import { useEffect } from "react";
 
 import { GRAPH_TEAMS_CHANNEL_SCOPES } from "./useTeamsChannelFetcher";
 import { GRAPH_TEAMS_CHAT_SCOPES } from "./useTeamsChatFetcher";
+import { GRAPH_TEAMS_FILE_SCOPES } from "./useTeamsFileFetcher";
 import { useGraphTokenOptional } from "../../core/auth/GraphTokenProvider";
+import { makeGraphTokenSource } from "../../utils/graph/graphClient";
+import {
+  downloadTeamsSharedFile,
+  shareTokenForUrl,
+} from "../utils/teamsSharedFilesGraph";
+import {
+  MAX_SHARED_FILE_BYTES,
+  MAX_IMAGE_BYTES,
+} from "../utils/teamsTranscriptAssets";
 
 const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
 
@@ -112,12 +122,64 @@ export function useTeamsDevProbe(): void {
           GRAPH_TEAMS_CHANNEL_SCOPES,
         ),
       joinedTeams: () => raw("/me/joinedTeams", {}, GRAPH_TEAMS_CHANNEL_SCOPES),
+      /** Is `Files.Read.All` actually in the token this tenant hands out? */
+      fileScopes: async () => {
+        const token = await graph
+          .acquireToken(GRAPH_TEAMS_FILE_SCOPES)
+          .catch((error: unknown) => `FAILED: ${String(error)}`);
+        return token.startsWith("FAILED")
+          ? { requested: GRAPH_TEAMS_FILE_SCOPES.join(" "), granted: token }
+          : {
+              requested: GRAPH_TEAMS_FILE_SCOPES.join(" "),
+              granted: decodeScopes(token),
+            };
+      },
+      /** The `/shares` metadata leg alone — does the driveItem resolve? */
+      share: (contentUrl: string) =>
+        raw(
+          `/shares/${shareTokenForUrl(contentUrl)}/driveItem`,
+          {},
+          GRAPH_TEAMS_FILE_SCOPES,
+        ),
+      /** The full download — the decisive CORS test for the tempauth URL. */
+      download: async (contentUrl: string) => {
+        const result = await downloadTeamsSharedFile(
+          contentUrl,
+          MAX_SHARED_FILE_BYTES,
+          makeGraphTokenSource((options) =>
+            graph.acquireToken(GRAPH_TEAMS_FILE_SCOPES, options),
+          ),
+        );
+        return result.state === "ok"
+          ? {
+              state: result.state,
+              byteLength: result.content.bytes.byteLength,
+              contentType: result.content.contentType,
+            }
+          : result;
+      },
+      /** A hosted image by its body URL; pass channel scopes for channels. */
+      image: async (url: string, scopes?: string[]) => {
+        const token = await graph.acquireToken(
+          scopes ?? GRAPH_TEAMS_CHAT_SCOPES,
+        );
+        const response = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const bytes = response.ok ? await response.arrayBuffer() : null;
+        return {
+          status: response.status,
+          byteLength: bytes?.byteLength ?? null,
+          contentType: response.headers.get("Content-Type"),
+          overCap: (bytes?.byteLength ?? 0) > MAX_IMAGE_BYTES,
+        };
+      },
       raw,
     };
 
     (globalThis as unknown as { __eratoTeams?: unknown }).__eratoTeams = probe;
     console.log(
-      "[erato] __eratoTeams ready: scopes() | search(q) | joinedTeams() | channelMessage(teamId, channelId, id)",
+      "[erato] __eratoTeams ready: scopes() | fileScopes() | search(q) | joinedTeams() | channelMessage(teamId, channelId, id) | share(contentUrl) | download(contentUrl) | image(url, scopes?)",
     );
 
     return () => {

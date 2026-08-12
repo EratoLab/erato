@@ -18,6 +18,10 @@ import {
 } from "./teamsChatPager";
 import { groupSelectionsByConversation } from "./teamsChatSelection";
 import { conversationKey } from "./teamsConversationRef";
+import {
+  collectTeamsMessageAssets,
+  planTeamsAssetFetches,
+} from "./teamsTranscriptAssets";
 import { runWithConcurrency } from "../../utils/graph/graphClient";
 
 import type { TeamsTranscriptSection } from "./buildTeamsTranscriptFile";
@@ -27,7 +31,11 @@ import type {
   ParsedTeamsMessage,
   TeamsSelfIdentity,
 } from "./parsedTeamsChat";
-import type { TeamsChannelFetcher, TeamsChatFetcher } from "./teamsChatFetcher";
+import type {
+  TeamsChannelFetcher,
+  TeamsChatFetcher,
+  TeamsFileFetcher,
+} from "./teamsChatFetcher";
 import type { GraphChatMessage, TeamsFetchState } from "./teamsChatGraph";
 import type {
   TeamsChatSelection,
@@ -60,6 +68,8 @@ export interface CollectTeamsTranscriptResult {
   skippedCount: number;
   chatsTotal: number;
   chatsCompleted: number;
+  /** Image files fetched from the messages, to upload beside the transcript. */
+  assetFiles: File[];
 }
 
 export interface CollectTeamsTranscriptArgs {
@@ -69,6 +79,10 @@ export interface CollectTeamsTranscriptArgs {
   knownChats?: ReadonlyMap<string, ParsedTeamsChat>;
   /** Present only where the channel scopes were granted. */
   channelFetcher?: TeamsChannelFetcher | null;
+  /** Present only where `Files.Read.All` was granted. */
+  fileFetcher?: TeamsFileFetcher | null;
+  /** The deployment's configured upload limit, as the per-file cap. */
+  maxFileBytes?: number;
   /** Channel metadata from the browse cache, keyed by `teamId/channelId`. */
   knownChannels?: ReadonlyMap<string, ParsedTeamsChannel>;
   self?: TeamsSelfIdentity;
@@ -83,6 +97,7 @@ export async function collectTeamsTranscript(
   const {
     fetcher,
     channelFetcher,
+    fileFetcher,
     selections,
     knownChats,
     knownChannels,
@@ -100,7 +115,9 @@ export async function collectTeamsTranscript(
       ? wholeChatRequests
       : group.messages.filter((entry) => entry.message === null).length,
   );
-  const requestsTotal = groupRequests.reduce((sum, count) => sum + count, 0);
+  // Grows once when the image phase starts: how many images a selection holds
+  // is unknowable before its messages are fetched.
+  let requestsTotal = groupRequests.reduce((sum, count) => sum + count, 0);
 
   let requestsCompleted = 0;
   let chatsCompleted = 0;
@@ -278,10 +295,46 @@ export async function collectTeamsTranscript(
   emit();
   await runWithConcurrency(tasks, TEAMS_CHAT_CONCURRENCY);
 
-  const present = sections.filter(
+  let present = sections.filter(
     (section): section is TeamsTranscriptSection =>
       section !== null && section.messages.length > 0,
   );
+
+  let assetFiles: File[] = [];
+  const plannedAssets = signal?.aborted
+    ? 0
+    : planTeamsAssetFetches(present, fileFetcher != null);
+  if (plannedAssets > 0) {
+    requestsTotal += plannedAssets;
+    emit();
+    const assets = await collectTeamsMessageAssets({
+      sections: present,
+      fetchImage: (section, url) =>
+        section.kind === "chat"
+          ? fetcher.getHostedContent(section.chat.chatId, url, { signal })
+          : (channelFetcher?.getHostedContent(
+              section.channel.teamId,
+              section.channel.channelId,
+              url,
+              { signal },
+            ) ?? Promise.resolve(null)),
+      downloadFile: fileFetcher
+        ? (ref, maxBytes) =>
+            fileFetcher.downloadSharedFile(ref.contentUrl, maxBytes, {
+              signal,
+            })
+        : null,
+      maxFileBytes: args.maxFileBytes,
+      onFetched: () => {
+        requestsCompleted += 1;
+        emit();
+      },
+      signal,
+    });
+    present = assets.sections;
+    assetFiles = assets.files;
+  }
+
   return {
     sections: present,
     state: overallState(outcomes, present.length),
@@ -292,6 +345,7 @@ export async function collectTeamsTranscript(
     skippedCount,
     chatsTotal: groups.length,
     chatsCompleted,
+    assetFiles,
   };
 }
 

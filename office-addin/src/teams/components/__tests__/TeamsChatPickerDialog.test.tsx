@@ -7,6 +7,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -27,6 +28,7 @@ import type { ParsedTeamsChat } from "../../utils/parsedTeamsChat";
 import type {
   TeamsChannelFetcher,
   TeamsChatFetcher,
+  TeamsFileFetcher,
 } from "../../utils/teamsChatFetcher";
 import type { PageChatMessagesResult } from "../../utils/teamsChatPager";
 import type { ReactNode } from "react";
@@ -118,9 +120,33 @@ vi.mock("@erato/frontend/library", () => ({
   ArrowLeftIcon: () => null,
   CloseIcon: () => null,
   FolderIcon: () => null,
+  PageIcon: () => null,
   SearchIcon: () => null,
+  SpinnerIcon: () => null,
+  FilePreviewModal: ({
+    isOpen,
+    file,
+  }: {
+    isOpen: boolean;
+    file: { filename: string; preview_url?: string | null } | null;
+  }) =>
+    isOpen && file ? (
+      <div role="dialog" aria-label={`Preview ${file.filename}`}>
+        {file.preview_url}
+      </div>
+    ) : null,
   FILE_PREVIEW_STYLES: { progress: { container: "", bar: "" } },
   useFileUploadStore: { getState: () => hooks.uploadStore },
+  useFeatureConfig: () => ({ upload: { maxSizeBytes: 10 * 1024 * 1024 } }),
+  // Tag-stripping stand-in; the real block handling has its own unit tests.
+  htmlToPlainText: (html: string) => {
+    let text = html;
+    for (let previous = ""; text !== previous; ) {
+      previous = text;
+      text = text.replace(/<[^>]+>/g, "");
+    }
+    return text;
+  },
 }));
 
 function omitStyleProps(props: Record<string, unknown>) {
@@ -135,6 +161,7 @@ function omitStyleProps(props: Record<string, unknown>) {
 const hooks = vi.hoisted(() => ({
   fetcher: null as TeamsChatFetcher | null,
   channelFetcher: null as TeamsChannelFetcher | null,
+  fileFetcher: null as TeamsFileFetcher | null,
   chatList: null as UseTeamsChatListResult | null,
   channelList: null as UseTeamsChannelListResult | null,
   messages: null as UseTeamsChatMessagesResult | null,
@@ -160,6 +187,12 @@ vi.mock("../../hooks/useTeamsChannelFetcher", () => ({
   useTeamsChannelFetcher: () => ({
     fetcher: hooks.channelFetcher,
     unavailableReason: hooks.channelFetcher ? null : "graph-unavailable",
+  }),
+}));
+vi.mock("../../hooks/useTeamsFileFetcher", () => ({
+  useTeamsFileFetcher: () => ({
+    fetcher: hooks.fileFetcher,
+    unavailableReason: hooks.fileFetcher ? null : "graph-unavailable",
   }),
 }));
 vi.mock("../../hooks/useTeamsChannelList", () => ({
@@ -309,6 +342,7 @@ function fakeFetcher(
       });
     },
     getMessage: () => Promise.resolve(NEWEST),
+    getHostedContent: () => Promise.resolve(null),
   };
 }
 
@@ -321,6 +355,7 @@ function fakeChannelFetcher(
     listMessagesPage: () =>
       Promise.resolve({ messages: [], nextLink: null, status: 200, ok: true }),
     probeMessage: () => Promise.resolve({ message: null, status: 404 }),
+    getHostedContent: () => Promise.resolve(null),
     getReply: () => Promise.resolve(null),
     pageChannelBackwards: () =>
       Promise.resolve({
@@ -388,10 +423,14 @@ function Opener() {
 }
 
 function renderPicker() {
+  // StrictMode on purpose: the app runs under it, and its double-mount is what
+  // exposed the alive-ref arming bug the plain renderer never would.
   const view = render(
-    <TeamsChatPickerProvider>
-      <Opener />
-    </TeamsChatPickerProvider>,
+    <StrictMode>
+      <TeamsChatPickerProvider>
+        <Opener />
+      </TeamsChatPickerProvider>
+    </StrictMode>,
   );
   fireEvent.click(screen.getByText("open picker"));
   return view;
@@ -409,6 +448,7 @@ describe("TeamsChatPickerDialog", () => {
     hooks.uploadStore = { isUploading: false, error: null };
     hooks.fetcher = fakeFetcher();
     hooks.channelFetcher = null;
+    hooks.fileFetcher = null;
     hooks.chatList = chatListResult();
     hooks.channelList = channelListResult();
     hooks.messages = messagesResult();
@@ -931,6 +971,8 @@ describe("TeamsChatPickerDialog", () => {
           editedAt: null,
           text: "Works for me.",
           markers: [],
+          sharedFiles: [],
+          imageUrls: [],
           replyToId: null,
           deepLink: "https://example.invalid/m",
         },
@@ -952,6 +994,199 @@ describe("TeamsChatPickerDialog", () => {
     expect(getMessage).not.toHaveBeenCalled();
     const text = await uploads[0][0].text();
     expect(text).toContain("Works for me.");
+  });
+
+  it("shows a shared file as a chip that opens the SharePoint preview", () => {
+    hooks.messages = messagesResult({
+      messages: [
+        {
+          chatId: MOCK_CHAT_ID,
+          messageId: "1754000000000",
+          senderName: "Max Token",
+          createdAt: "2026-08-10T09:15:00Z",
+          editedAt: null,
+          text: "check this PDF guys [attachment: multipage-test.pdf]",
+          markers: [],
+          replyToId: null,
+          deepLink: "https://example.invalid/m",
+          sharedFiles: [
+            {
+              attachmentId: "att-1",
+              name: "multipage-test.pdf",
+              contentUrl: "https://contoso.sharepoint.com/multipage-test.pdf",
+            },
+          ],
+          imageUrls: [],
+        },
+      ],
+    });
+    const openSpy = vi
+      .spyOn(window, "open")
+      .mockReturnValue(null) as unknown as ReturnType<typeof vi.fn>;
+    renderPicker();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Product sync" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open multipage-test.pdf" }),
+    );
+
+    expect(openSpy).toHaveBeenCalledWith(
+      "https://contoso.sharepoint.com/multipage-test.pdf",
+      "_blank",
+      "noopener,noreferrer",
+    );
+  });
+
+  it("previews a shared file through our own token when the grant exists", async () => {
+    const downloadSharedFile = vi.fn(() =>
+      Promise.resolve({
+        state: "ok" as const,
+        content: {
+          bytes: new TextEncoder().encode("pdf").buffer,
+          contentType: "application/pdf",
+        },
+      }),
+    );
+    hooks.fileFetcher = { downloadSharedFile };
+    hooks.messages = messagesResult({
+      messages: [
+        {
+          chatId: MOCK_CHAT_ID,
+          messageId: "1754000000000",
+          senderName: "Max Token",
+          createdAt: "2026-08-10T09:15:00Z",
+          editedAt: null,
+          text: "check this PDF guys",
+          markers: ["[attachment: multipage-test.pdf]"],
+          replyToId: null,
+          deepLink: "https://example.invalid/m",
+          sharedFiles: [
+            {
+              attachmentId: "att-1",
+              name: "multipage-test.pdf",
+              contentUrl: "https://contoso.sharepoint.com/multipage-test.pdf",
+            },
+          ],
+          imageUrls: [],
+        },
+      ],
+    });
+    // spyOn returns the previous test's spy when one exists; drop its calls.
+    const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
+    openSpy.mockClear();
+    URL.createObjectURL = vi.fn(() => "blob:preview");
+    renderPicker();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Product sync" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open multipage-test.pdf" }),
+    );
+
+    // The in-app preview modal takes the bytes; no tab, no SharePoint login.
+    const preview = await screen.findByRole("dialog", {
+      name: "Preview multipage-test.pdf",
+    });
+    expect(preview).toHaveTextContent("blob:preview");
+    expect(downloadSharedFile).toHaveBeenCalledWith(
+      "https://contoso.sharepoint.com/multipage-test.pdf",
+      10 * 1024 * 1024,
+      // Closing the dialog must be able to abort the transfer.
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(openSpy).not.toHaveBeenCalled();
+  });
+
+  it("revokes the preview's blob url when the picker unmounts around it", async () => {
+    const downloadSharedFile = vi.fn(() =>
+      Promise.resolve({
+        state: "ok" as const,
+        content: {
+          bytes: new TextEncoder().encode("pdf").buffer,
+          contentType: "application/pdf",
+        },
+      }),
+    );
+    hooks.fileFetcher = { downloadSharedFile };
+    hooks.messages = messagesResult({
+      messages: [
+        {
+          chatId: MOCK_CHAT_ID,
+          messageId: "1754000000000",
+          senderName: "Max Token",
+          createdAt: "2026-08-10T09:15:00Z",
+          editedAt: null,
+          text: "check this PDF guys",
+          markers: [],
+          replyToId: null,
+          deepLink: "https://example.invalid/m",
+          sharedFiles: [
+            {
+              attachmentId: "att-1",
+              name: "multipage-test.pdf",
+              contentUrl: "https://contoso.sharepoint.com/multipage-test.pdf",
+            },
+          ],
+          imageUrls: [],
+        },
+      ],
+    });
+    URL.createObjectURL = vi.fn(() => "blob:preview");
+    const revoke = vi.fn();
+    URL.revokeObjectURL = revoke;
+    const view = renderPicker();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Product sync" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open multipage-test.pdf" }),
+    );
+    await screen.findByRole("dialog", { name: "Preview multipage-test.pdf" });
+
+    view.unmount();
+    expect(revoke).toHaveBeenCalledWith("blob:preview");
+  });
+
+  it("uploads pasted images beside the transcript", async () => {
+    const hosted = `https://graph.microsoft.com/v1.0/chats/x/messages/1/hostedContents/aWQ9/$value`;
+    const base = fakeFetcher();
+    hooks.fetcher = {
+      ...base,
+      pageChatBackwards: () =>
+        Promise.resolve({
+          messages: [
+            mockGraphChatMessage({
+              id: "a",
+              body: {
+                contentType: "html",
+                content: `<p>see this</p><img src="${hosted}">`,
+              },
+            }),
+          ],
+          nextLink: null,
+          truncated: false,
+          oldestCreatedDateTime: "2026-03-03T09:14:00Z",
+          state: "ok",
+        }),
+      getHostedContent: () =>
+        Promise.resolve({
+          bytes: new TextEncoder().encode("png-bytes").buffer,
+          contentType: "image/png",
+        }),
+    };
+    renderPicker();
+    fireEvent.click(selectChat());
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+    });
+    await waitFor(() => expect(uploads).toHaveLength(1));
+
+    expect(uploads[0]).toHaveLength(2);
+    const [transcript, image] = uploads[0];
+    expect(transcript.name).toBe("teams-Product_sync.md");
+    expect(image.name).toMatch(/^teams-img-[0-9a-f]{16}\.png$/);
+    await expect(transcript.text()).resolves.toContain(
+      `[image: attached as ${image.name}]`,
+    );
   });
 
   it("never uploads an empty transcript", async () => {
