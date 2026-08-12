@@ -425,6 +425,17 @@ function Opener() {
   );
 }
 
+/** Surfaces what the composer's preview reads back off the context. */
+function AttachedProbe() {
+  const { attachedTranscript } = useTeamsChatPicker();
+  if (!attachedTranscript) return null;
+  return (
+    <div data-testid="attached-transcript">
+      {attachedTranscript.fileName}:{attachedTranscript.sections.length}
+    </div>
+  );
+}
+
 function renderPicker() {
   // StrictMode on purpose: the app runs under it, and its double-mount is what
   // exposed the alive-ref arming bug the plain renderer never would.
@@ -432,6 +443,7 @@ function renderPicker() {
     <StrictMode>
       <TeamsChatPickerProvider>
         <Opener />
+        <AttachedProbe />
       </TeamsChatPickerProvider>
     </StrictMode>,
   );
@@ -557,6 +569,20 @@ describe("TeamsChatPickerDialog", () => {
     expect(text).toContain("Works for me.");
     // Dialog closes on a clean attach.
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("keeps the delivered transcript's sections for the composer preview", async () => {
+    renderPicker();
+    fireEvent.click(selectChat());
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+    });
+    await waitFor(() => expect(uploads).toHaveLength(1));
+
+    expect(screen.getByTestId("attached-transcript")).toHaveTextContent(
+      "teams-Product_sync.md:1",
+    );
   });
 
   it("records the window that was actually fetched in the transcript", async () => {

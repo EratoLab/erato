@@ -1410,6 +1410,36 @@ msgid "officeAddin.teams.picker.wholeChatBound"
 msgstr "Les conversations entières ajoutent les {messageLimit} derniers messages."
 
 #. js-lingui-explicit-id
+#: src/teams/utils/teamsAttachmentGroups.ts
+msgid "officeAddin.teams.preview.allMessages"
+msgstr "{count, plural, one {Tous les # message} other {Tous les # messages}}"
+
+#. js-lingui-explicit-id
+#: src/teams/utils/teamsAttachmentGroups.ts
+msgid "officeAddin.teams.preview.lastMessages"
+msgstr "{count, plural, one {# dernier message — les messages plus anciens ne sont pas inclus} other {# derniers messages — les messages plus anciens ne sont pas inclus}}"
+
+#. js-lingui-explicit-id
+#: src/teams/utils/teamsAttachmentGroups.ts
+msgid "officeAddin.teams.preview.messageCount"
+msgstr "{count, plural, one {# message} other {# messages}}"
+
+#. js-lingui-explicit-id
+#: src/teams/utils/teamsAttachmentGroups.ts
+msgid "officeAddin.teams.preview.selectedMessages"
+msgstr "{count, plural, one {# message sélectionné} other {# messages sélectionnés}}"
+
+#. js-lingui-explicit-id
+#: src/teams/utils/teamsAttachmentGroups.ts
+msgid "officeAddin.teams.preview.skipped"
+msgstr "{skipped, plural, one {# n'a pas pu être chargé} other {# n'ont pas pu être chargés}}"
+
+#. js-lingui-explicit-id
+#: src/teams/utils/teamsAttachmentGroups.ts
+msgid "officeAddin.teams.preview.transcriptLabel"
+msgstr "Conversation Teams"
+
+#. js-lingui-explicit-id
 #: src/teams/providers/TeamsAuthProvider.tsx
 msgid "officeAddin.teams.signedIn.title"
 msgstr "Connecté. Essayez à nouveau d'ajouter la conversation."

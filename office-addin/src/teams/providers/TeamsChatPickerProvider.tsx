@@ -31,12 +31,14 @@ import {
 import type { UseTeamsChannelListResult } from "../hooks/useTeamsChannelList";
 import type { UseTeamsChatListResult } from "../hooks/useTeamsChatList";
 import type { TeamsTranscriptBuildOutcome } from "../hooks/useTeamsTranscriptBuild";
+import type { TeamsTranscriptSection } from "../utils/buildTeamsTranscriptFile";
 import type { TeamsTranscriptProgress } from "../utils/collectTeamsTranscript";
 import type { ParsedTeamsChannel } from "../utils/parsedTeamsChannel";
 import type {
   ParsedTeamsChat,
   TeamsSelfIdentity,
 } from "../utils/parsedTeamsChat";
+import type { TeamsAttachedTranscript } from "../utils/teamsAttachmentGroups";
 import type {
   TeamsChannelFetcher,
   TeamsChatFetcher,
@@ -89,6 +91,13 @@ export interface TeamsChatPickerContextValue {
   progress: TeamsTranscriptProgress | null;
   partialOutcome: TeamsTranscriptBuildOutcome | null;
   attachError: TeamsAttachFailure | null;
+
+  /**
+   * The transcript this session last handed to the composer, or null when it
+   * never did. Survives closing the dialog — the composer previews it for as
+   * long as the upload stays attached.
+   */
+  attachedTranscript: TeamsAttachedTranscript | null;
 }
 
 const EMPTY_CHAT_LIST: UseTeamsChatListResult = {
@@ -138,6 +147,7 @@ const CLOSED_PICKER: TeamsChatPickerContextValue = {
   progress: null,
   partialOutcome: null,
   attachError: null,
+  attachedTranscript: null,
 };
 
 const TeamsChatPickerContext =
@@ -178,9 +188,16 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
   const [partialOutcome, setPartialOutcome] =
     useState<TeamsTranscriptBuildOutcome | null>(null);
 
+  const [attachedTranscript, setAttachedTranscript] =
+    useState<TeamsAttachedTranscript | null>(null);
+
   const handoffRef = useRef<((files: File[]) => Promise<void>) | null>(null);
   const cancelledRef = useRef(false);
-  const lastBuildRef = useRef<{ key: string; files: File[] } | null>(null);
+  const lastBuildRef = useRef<{
+    key: string;
+    files: File[];
+    sections: TeamsTranscriptSection[];
+  } | null>(null);
 
   // The object id is the reliable match; the login hint can differ from a
   // member's primary SMTP address, which would leave the viewer in their own
@@ -268,10 +285,14 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
    * walking Graph again, which is tens of seconds.
    */
   const deliver = useCallback(
-    async (files: File[], retryKey?: string): Promise<boolean> => {
+    async (
+      files: File[],
+      sections: TeamsTranscriptSection[],
+      retryKey?: string,
+    ): Promise<boolean> => {
       const handoff = handoffRef.current;
       const fail = () => {
-        if (retryKey) lastBuildRef.current = { key: retryKey, files };
+        if (retryKey) lastBuildRef.current = { key: retryKey, files, sections };
         setAttachError("upload-failed");
         return false;
       };
@@ -290,6 +311,12 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
       if (useFileUploadStore.getState().error) {
         return fail();
       }
+      // The transcript leads, its assets follow — the order every caller
+      // hands over, and the order the preview joins back together.
+      const [transcript] = files;
+      if (transcript) {
+        setAttachedTranscript({ fileName: transcript.name, sections });
+      }
       close();
       return true;
     },
@@ -306,7 +333,7 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
     const key = teamsSelectionDedupeKey(selections, messageLimit);
     const built = lastBuildRef.current;
     if (built?.key === key) {
-      await deliver(built.files, key);
+      await deliver(built.files, built.sections, key);
       return;
     }
 
@@ -328,7 +355,7 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
       setPartialOutcome(outcome);
       return;
     }
-    await deliver([outcome.file, ...outcome.assets], key);
+    await deliver([outcome.file, ...outcome.assets], outcome.sections, key);
   }, [
     build,
     chatList.chatsById,
@@ -346,7 +373,7 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
     setPartialOutcome(null);
     // Put the offer back if the composer never took it — the partial
     // transcript is the only copy of a walk that already ran.
-    if (!(await deliver([outcome.file, ...outcome.assets]))) {
+    if (!(await deliver([outcome.file, ...outcome.assets], outcome.sections))) {
       setPartialOutcome(outcome);
     }
   }, [deliver, partialOutcome]);
@@ -378,10 +405,12 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
       progress,
       partialOutcome,
       attachError,
+      attachedTranscript,
     }),
     [
       attach,
       attachError,
+      attachedTranscript,
       attachPartial,
       cancelBuild,
       channelFetcher,
