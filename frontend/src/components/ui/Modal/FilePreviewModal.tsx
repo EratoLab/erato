@@ -59,6 +59,13 @@ interface FilePreviewModalProps {
   isOpen: boolean;
   onClose: () => void;
   file: FileUploadItem | null;
+  /**
+   * Replaces the "not previewable" body when the caller knows why no preview
+   * source exists. Callers that withhold a preview URL for reasons other than
+   * the file type — a size refusal, a failed fetch — would otherwise show a
+   * wrong explanation.
+   */
+  notPreviewableReason?: string;
 }
 
 /**
@@ -68,6 +75,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
   isOpen,
   onClose,
   file,
+  notPreviewableReason,
 }) => {
   if (!file) {
     return null;
@@ -122,7 +130,8 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
     return (
       <div className="text-center">
         <Alert type="info" className="mb-4">
-          {t`Preview is not available for this file type.`}
+          {notPreviewableReason ??
+            t`Preview is not available for this file type.`}
         </Alert>
         {actionButtons}
       </div>

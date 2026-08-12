@@ -7,6 +7,14 @@ import { EmlPreview } from "./EmlPreview";
 
 import type React from "react";
 
+// PDFium needs a worker and WebAssembly, neither of which jsdom provides. The
+// stub keeps the URL the router handed the viewer observable.
+vi.mock("./PdfPreview", () => ({
+  PdfPreview: ({ url }: { url: string }) => (
+    <div data-testid="file-preview-pdf" data-url={url} />
+  ),
+}));
+
 const renderEml = (ui: React.ReactElement) =>
   render(<ThemeProvider>{ui}</ThemeProvider>);
 
@@ -416,7 +424,7 @@ describe("EmlPreview", () => {
     fireEvent.click(attachmentButton);
 
     expect(screen.getByTestId("eml-attachment-preview")).toBeInTheDocument();
-    expect(screen.getByTestId("file-preview-pdf")).toBeInTheDocument();
+    expect(await screen.findByTestId("file-preview-pdf")).toBeInTheDocument();
 
     const backButton = screen.getByRole("button", { name: /back to email/i });
     fireEvent.click(backButton);
@@ -454,9 +462,9 @@ describe("EmlPreview", () => {
     fireEvent.click(attachmentButton);
 
     expect(screen.getByTestId("eml-attachment-preview")).toBeInTheDocument();
-    // FilePreviewContent should route to the PDF iframe, not the
+    // FilePreviewContent should route to the PDF viewer, not the
     // "preview unavailable" fallback.
-    expect(screen.getByTestId("file-preview-pdf")).toBeInTheDocument();
+    expect(await screen.findByTestId("file-preview-pdf")).toBeInTheDocument();
   });
 
   it("recovers the MIME type of an octet-stream PDF attached to a nested thread message", async () => {
@@ -470,7 +478,9 @@ describe("EmlPreview", () => {
 
     // Assert on the blob the viewer was actually handed: an octet-stream URL
     // here is what makes the browser download a UUID instead of previewing.
-    const blobUrl = screen.getByTestId("file-preview-pdf").getAttribute("src");
+    const blobUrl = (
+      await screen.findByTestId("file-preview-pdf")
+    ).getAttribute("data-url");
     expect(blobUrlContent.get(blobUrl ?? "")?.type).toBe("application/pdf");
   });
 });

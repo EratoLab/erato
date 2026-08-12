@@ -35,7 +35,11 @@ import {
   MultiplePages,
   Search,
   NavArrowDown,
+  NavArrowLeft,
   NavArrowRight,
+  RotateCameraRight,
+  ZoomIn,
+  ZoomOut,
   Folder,
   ShareIos,
   GridXmark,
@@ -272,6 +276,22 @@ export const ArrowLeftIcon = ({ className, ...props }: IconProps) => (
 
 export const ChevronRightIcon = ({ className, ...props }: IconProps) => (
   <NavArrowRight className={className} {...props} />
+);
+
+export const ChevronLeftIcon = ({ className, ...props }: IconProps) => (
+  <NavArrowLeft className={className} {...props} />
+);
+
+export const ZoomInIcon = ({ className, ...props }: IconProps) => (
+  <ZoomIn className={className} {...props} />
+);
+
+export const ZoomOutIcon = ({ className, ...props }: IconProps) => (
+  <ZoomOut className={className} {...props} />
+);
+
+export const RotateClockwiseIcon = ({ className, ...props }: IconProps) => (
+  <RotateCameraRight className={className} {...props} />
 );
 
 export const ChevronDownIcon = ({ className, ...props }: IconProps) => (

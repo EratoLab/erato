@@ -62,6 +62,8 @@ interface SharedFilePreview {
   url: string | null;
   mimeType: string | null;
   contentUrl: string;
+  /** Why the bytes are missing, when they are. */
+  refusal: "too-large" | "error" | null;
 }
 
 type FilePreviewModalFile = NonNullable<
@@ -74,6 +76,25 @@ type FilePreviewModalFile = NonNullable<
  * A null `url` takes the modal's "not previewable" path, whose Download
  * button then opens SharePoint from a user gesture — no popup blocking.
  */
+function previewRefusalMessage(
+  refusal: SharedFilePreview["refusal"],
+): string | undefined {
+  switch (refusal) {
+    case "too-large":
+      return t({
+        id: "officeAddin.teams.picker.filePreviewTooLarge",
+        message: "This file is too large to preview here.",
+      });
+    case "error":
+      return t({
+        id: "officeAddin.teams.picker.filePreviewFailed",
+        message: "This file could not be loaded for preview.",
+      });
+    default:
+      return undefined;
+  }
+}
+
 function previewModalFile(preview: SharedFilePreview): FilePreviewModalFile {
   return {
     id: "teams-shared-file",
@@ -233,12 +254,14 @@ function TeamsChatPickerDialogBody({
                 ),
                 mimeType: result.content.contentType,
                 contentUrl: file.contentUrl,
+                refusal: null,
               }
             : {
                 name: file.name,
                 url: null,
                 mimeType: null,
                 contentUrl: file.contentUrl,
+                refusal: result.state === "too-large" ? "too-large" : "error",
               },
         );
       })
@@ -332,6 +355,11 @@ function TeamsChatPickerDialogBody({
         isOpen={sharedFilePreview !== null}
         onClose={closeSharedFilePreview}
         file={sharedFilePreview ? previewModalFile(sharedFilePreview) : null}
+        notPreviewableReason={
+          sharedFilePreview
+            ? previewRefusalMessage(sharedFilePreview.refusal)
+            : undefined
+        }
       />
     </>
   );

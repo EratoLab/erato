@@ -2265,6 +2265,48 @@ msgid "filePreview.docxTheme.useLight"
 msgstr "Helles Dokumentdesign verwenden"
 
 #. js-lingui-explicit-id
+#: src/components/ui/FilePreview/PdfPreview.tsx
+msgid "filePreview.pdf.nextPage"
+msgstr "Nächste Seite"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/PdfPreview.tsx
+msgid "filePreview.pdf.pageIndicator"
+msgstr "Seite {currentPage} von {totalPages}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/PdfPreview.tsx
+msgid "filePreview.pdf.previousPage"
+msgstr "Vorherige Seite"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/PdfPreview.tsx
+msgid "filePreview.pdf.rotate"
+msgstr "Im Uhrzeigersinn drehen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/PdfPreview.tsx
+msgid "filePreview.pdf.zoomIn"
+msgstr "Vergrößern"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/PdfPreview.tsx
+msgid "filePreview.pdf.zoomOut"
+msgstr "Verkleinern"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/FilePreviewContent.tsx
+#: src/components/ui/FilePreview/PdfPreview.tsx
+msgid "filePreview.pdfLoading"
+msgstr "Dokumentvorschau wird geladen..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FilePreview/FilePreviewContent.tsx
+#: src/components/ui/FilePreview/PdfPreview.tsx
+msgid "filePreview.pdfPreviewUnavailable"
+msgstr "Vorschau nicht verfügbar: Dieses Dokument konnte nicht geladen werden."
+
+#. js-lingui-explicit-id
 #: src/components/ui/FilePreview/PptxPreview.tsx
 msgid "filePreview.pptxEmpty"
 msgstr "Die Präsentationsvorschau ist leer."

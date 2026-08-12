@@ -1198,6 +1198,16 @@ msgstr "Nic do pokazania na tej stronie — wczytaj więcej, aby szukać dalej."
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.filePreviewFailed"
+msgstr "Nie udało się wczytać tego pliku do podglądu."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.filePreviewTooLarge"
+msgstr "Ten plik jest zbyt duży, aby wyświetlić podgląd."
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.includeEarlier"
 msgstr "Uwzględnij wcześniejsze"
 

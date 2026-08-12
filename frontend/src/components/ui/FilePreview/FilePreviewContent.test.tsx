@@ -16,6 +16,13 @@ const useDocxModelMock = vi.hoisted(() =>
 );
 const setWasmSourceMock = vi.hoisted(() => vi.fn());
 
+// PDFium needs a worker and WebAssembly, neither of which jsdom provides.
+vi.mock("./PdfPreview", () => ({
+  PdfPreview: ({ url }: { url: string }) => (
+    <div data-testid="file-preview-pdf" data-url={url} />
+  ),
+}));
+
 vi.mock("@extend-ai/react-docx", () => ({
   ReactDocxViewer: ({ model }: { model?: unknown }) => (
     <div data-testid="mock-react-docx-viewer">
@@ -95,6 +102,36 @@ const mockFetchBuffer = () => {
 };
 
 describe("FilePreviewContent", () => {
+  it("renders PDF files through the client-side PDF viewer", async () => {
+    renderWithTheme(
+      <FilePreviewContent
+        filename="report.pdf"
+        url="https://files.example.com/download/report.pdf"
+      />,
+    );
+
+    // A native <iframe> is spec-blocked inside the sandboxed frame Teams hosts
+    // tabs in, so this must stay a component rather than a browser viewer.
+    const preview = await screen.findByTestId("file-preview-pdf");
+    expect(preview.tagName).not.toBe("IFRAME");
+    expect(preview).toHaveAttribute(
+      "data-url",
+      "https://files.example.com/download/report.pdf",
+    );
+  });
+
+  it("uses the PDF viewer when the MIME type identifies a PDF", async () => {
+    renderWithTheme(
+      <FilePreviewContent
+        filename="download"
+        url="https://files.example.com/download/report"
+        mimeType="application/pdf"
+      />,
+    );
+
+    expect(await screen.findByTestId("file-preview-pdf")).toBeInTheDocument();
+  });
+
   it("renders DOCX files through the DOCX viewer", async () => {
     mockFetchBuffer();
 
