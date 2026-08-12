@@ -18,6 +18,7 @@ on:
       - 'e2e-tests/**'
       - 'infrastructure/charts/**'
       - 'infrastructure/k3d/**'
+      - 'infrastructure/vind/**'
       - 'Dockerfile.combined'
       - '.hadolint.yaml'
       - '**/Dockerfile'
@@ -34,13 +35,13 @@ on:
       - 'e2e-tests/**'
       - 'infrastructure/charts/**'
       - 'infrastructure/k3d/**'
+      - 'infrastructure/vind/**'
       - 'Dockerfile.combined'
       - '.hadolint.yaml'
       - '**/Dockerfile'
       - '**/Dockerfile.*'
 
 env:
-  K3D_VERSION: v5.9.0
   REGISTRY: registry.eratolabs.com
   BACKEND_IMAGE_NAME: erato/backend
   MOCK_LLM_SERVER_IMAGE_NAME: erato/mock-llm-server
@@ -512,12 +513,12 @@ jobs:
           username: ${{ secrets.ERATOLABS_REGISTRY_USERNAME }}
           password: ${{ secrets.ERATOLABS_REGISTRY_PASSWORD }}
 
-      - name: Install k3d
-        run: |
-          curl --fail --silent --show-error --location \
-            "https://raw.githubusercontent.com/k3d-io/k3d/${K3D_VERSION}/install.sh" |
-            TAG="${K3D_VERSION}" bash
-          k3d version
+      - name: Spin up vind cluster for tests
+        uses: loft-sh/setup-vind@v1
+        with:
+          version: v0.36.1
+          name: erato-dev
+          config: infrastructure/vind/cluster-config.yaml
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -538,7 +539,7 @@ jobs:
           # Verify secrets are configured correctly
           ../../../scripts/setup-e2e-secrets check
 
-      - name: Spin up k3d cluster for tests
+      - name: Deploy Erato to vind cluster
         working-directory: ./infrastructure
         run: |
           ./scripts/setup-dev --wait --chart-dep-update \

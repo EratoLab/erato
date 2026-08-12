@@ -29,7 +29,11 @@ erato:
     enabled: true
     host: app.erato.internal
     className: nginx
+    tls:
+      enabled: true
+      secretName: erato-local-tls
     annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
       nginx.ingress.kubernetes.io/proxy-buffer-size: 8k
       nginx.ingress.kubernetes.io/proxy-buffers-number: '4'
       nginx.ingress.kubernetes.io/proxy-body-size: 0
@@ -90,13 +94,13 @@ erato:
       scope="openid profile email groups offline_access"
       email_domains = ["*"]
       cookie_secret = "0123456789abcdef0123456789abcdef"  # Replace in production
-      cookie_secure = false
+      cookie_secure = true
       provider = "oidc"
       client_id = "erato-app"
       client_secret = "ZXJhdG8tc2VjcmV0"  # Replace in production
       skip_oidc_discovery = true
       oidc_issuer_url = "http://erato-local-dex.erato-local-ns.svc.cluster.local:5556"
-      login_url = "http://dex.erato.internal/auth"
+      login_url = "https://dex.erato.internal/auth"
       redeem_url = "http://erato-local-dex.erato-local-ns.svc.cluster.local:5556/token"
       oidc_jwks_url = "http://erato-local-dex.erato-local-ns.svc.cluster.local:5556/keys"
       redirect_url = "https://app.erato.internal/oauth2/callback"
@@ -168,9 +172,12 @@ dex:
     enabled: true
     host: dex.erato.internal
     className: nginx
+    tls:
+      enabled: true
+      secretName: erato-local-tls
   
   config: |
-    issuer: http://dex.erato.internal
+    issuer: https://dex.erato.internal
     storage:
       type: memory
     oauth2:
@@ -284,10 +291,11 @@ nginxAuth:
     enabled: true
     host: app.erato.internal
     className: nginx
-    annotations: {}
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
     tls:
-      enabled: false
-      secretName: ""
+      enabled: true
+      secretName: erato-local-tls
 
   resources:
     requests:
@@ -314,10 +322,11 @@ nginxAuth:
       enabled: true
       host: embedded-host.erato.internal
       className: nginx
-      annotations: {}
+      annotations:
+        nginx.ingress.kubernetes.io/ssl-redirect: "true"
       tls:
-        enabled: false
-        secretName: ""
+        enabled: true
+        secretName: erato-local-tls
 
     resources:
       requests:

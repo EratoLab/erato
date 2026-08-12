@@ -6,8 +6,16 @@ metadata:
   labels:
     app.kubernetes.io/name: {{ .Release.Name }}-dex
     app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
 spec:
   ingressClassName: {{ .Values.dex.ingress.className }}
+  {{- if .Values.dex.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.dex.ingress.host }}
+      secretName: {{ .Values.dex.ingress.tls.secretName }}
+  {{- end }}
   rules:
     - host: {{ .Values.dex.ingress.host }}
       http:
@@ -19,4 +27,4 @@ spec:
                 name: {{ .Release.Name }}-dex
                 port:
                   name: http
-{{- end }} 
+{{- end }}

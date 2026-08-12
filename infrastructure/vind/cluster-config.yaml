@@ -1,0 +1,20 @@
+# Configuration for the vind (vCluster Docker driver) development/CI cluster.
+# The Docker driver runs the Kubernetes nodes as Docker containers.
+experimental:
+  docker:
+    loadBalancer:
+      enabled: true
+      forwardPorts: true
+
+controlPlane:
+  distro:
+    k8s:
+      version: "v1.35.0"
+  standalone:
+    joinNode:
+      nodeRegistration:
+        kubeletExtraArgs:
+          - name: eviction-hard
+            value: "imagefs.available<0.5%,nodefs.available<0.5%,memory.available<100Mi"
+          - name: eviction-minimum-reclaim
+            value: "imagefs.available=0.5%,nodefs.available=0.5%"

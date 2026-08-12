@@ -8,15 +8,17 @@
 # ///
 
 import argparse
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 from pydantic import BaseModel, Field
 
-# Import shared k3d utilities
+# Import shared test scenario utilities
 from k3d_common import get_helm_scenario_args, validate_scenario, VALID_SCENARIOS
 
 
@@ -36,16 +38,17 @@ class ScriptConfig(BaseModel):
 
 
 class ClusterConfig(BaseModel):
-    """Configuration for the k3d cluster."""
+    """Configuration for the vind cluster."""
     cluster_name: str = "erato-dev"
     erato_chart_path: Path = Path("./charts/erato")
     chart_path: Path = Path("./k3d/erato-local")
+    cluster_config_path: Path = Path("./vind/cluster-config.yaml")
     app_host: str = "app.erato.internal"
     dex_host: str = "dex.erato.internal"
 
 
 class ClusterStatus(BaseModel):
-    """Status of a k3d cluster."""
+    """Status of a vind cluster."""
     exists: bool
     running: bool
 
@@ -95,7 +98,7 @@ def run_command(cmd: list[str], check: bool = True, capture_output: bool = False
 
 def check_prerequisites():
     """Check if required commands are available."""
-    required_commands = ["k3d", "kubectl", "helm"]
+    required_commands = ["docker", "vcluster", "kubectl", "helm", "openssl"]
     for cmd in required_commands:
         result = run_command(["which", cmd], check=False, capture_output=True)
         if result.returncode != 0:
@@ -163,51 +166,40 @@ def fetch_latest_main_commit() -> str:
 
 
 def get_cluster_status(cluster_name: str) -> ClusterStatus:
-    """Check if a k3d cluster exists and if it's running."""
-    import json
-    
-    result = run_command(["k3d", "cluster", "list", "--output", "json"], capture_output=True)
-    
-    try:
-        clusters = json.loads(result.stdout)
-        for cluster in clusters:
-            if cluster.get("name") == cluster_name:
-                # Check if all expected nodes are running
-                servers_running = cluster.get("serversRunning", 0)
-                servers_count = cluster.get("serversCount", 0)
-                agents_running = cluster.get("agentsRunning", 0)
-                agents_count = cluster.get("agentsCount", 0)
-                
-                # Cluster is running if all servers and agents are running
-                is_running = (servers_running == servers_count and 
-                            agents_running == agents_count and 
-                            servers_count > 0)
-                
-                return ClusterStatus(exists=True, running=is_running)
-        
-        return ClusterStatus(exists=False, running=False)
-    except json.JSONDecodeError:
-        # Fallback if JSON parsing fails
-        print("Warning: Could not parse k3d cluster list output", file=sys.stderr)
-        return ClusterStatus(exists=False, running=False)
+    """Check whether a vind cluster exists."""
+    result = run_command(
+        ["vcluster", "describe", cluster_name],
+        check=False,
+        capture_output=True,
+    )
+    return ClusterStatus(exists=result.returncode == 0, running=result.returncode == 0)
 
 
 def create_or_use_cluster(cluster_config: ClusterConfig):
-    """Create k3d cluster if it doesn't exist, start it if stopped, otherwise use existing."""
+    """Create a vind cluster if needed and connect kubectl to it."""
+    run_command(["vcluster", "use", "driver", "docker"])
     status = get_cluster_status(cluster_config.cluster_name)
     
     if not status.exists:
-        print(f"Creating k3d cluster '{cluster_config.cluster_name}'...")
+        print(f"Creating vind cluster '{cluster_config.cluster_name}' with sudo...")
+        vcluster_path = shutil.which("vcluster") or "vcluster"
         run_command([
-            "k3d", "cluster", "create",
-            cluster_config.cluster_name,
-            "--config", "k3d/cluster-config.yaml"
+            "sudo", vcluster_path, "create", cluster_config.cluster_name,
+            "-f", str(cluster_config.cluster_config_path),
+            "--connect=false",
         ])
-    elif not status.running:
-        print(f"Starting existing cluster '{cluster_config.cluster_name}'...")
-        run_command(["k3d", "cluster", "start", cluster_config.cluster_name])
+        # Keep kubeconfig and CLI state owned by the invoking user.
+        run_command(["vcluster", "connect", cluster_config.cluster_name])
     else:
-        print(f"Using existing cluster '{cluster_config.cluster_name}'...")
+        print(f"Using existing vind cluster '{cluster_config.cluster_name}'...")
+        # Resume is a no-op for a running cluster. It also makes rerunning the
+        # setup script work after a developer paused the cluster.
+        run_command(
+            ["vcluster", "resume", cluster_config.cluster_name],
+            check=False,
+            capture_output=True,
+        )
+        run_command(["vcluster", "connect", cluster_config.cluster_name])
 
 
 def wait_for_cluster():
@@ -354,19 +346,21 @@ def perform_local_build(config: ScriptConfig) -> list[str]:
         derive_sqitch_migrator_repository(repo_base).split("/")[1:]
     )
     
+    local_registry = "registry.eratolabs.com"
     build_config = BuildConfig(
         project_root=project_root,
         build_tag=build_tag,
+        local_registry=local_registry,
         repo_base=repo_base,
         tag_base=tag_base,
         backend_image_repo=backend_image_repo,
         base_backend_image=base_backend_image,
         combined_image_path=combined_image_path,
         sqitch_migrator_image_path=sqitch_migrator_image_path,
-        local_frontend_image=f"registry.eratolabs.com/erato/frontend:{build_tag}",
-        local_combined_image=f"k3d-registry.localhost:5000/{combined_image_path}:{build_tag}",
+        local_frontend_image=f"{local_registry}/erato/frontend:{build_tag}",
+        local_combined_image=f"{local_registry}/{combined_image_path}:{build_tag}",
         local_sqitch_migrator_image=(
-            f"k3d-registry.localhost:5000/{sqitch_migrator_image_path}:{build_tag}"
+            f"{local_registry}/{sqitch_migrator_image_path}:{build_tag}"
         ),
         backend_image_for_build_arg="/".join(base_backend_image.split("/")[1:])
     )
@@ -405,12 +399,12 @@ def perform_local_build(config: ScriptConfig) -> list[str]:
     run_command(["docker", "push", build_config.local_sqitch_migrator_image])
     
     return [
-        "--set", f"erato.backend.image.repository=k3d-registry.localhost:5000/{build_config.combined_image_path}",
+        "--set", f"erato.backend.image.repository={build_config.local_registry}/{build_config.combined_image_path}",
         "--set", f"erato.backend.image.tag={build_config.build_tag}",
         "--set",
         (
             "erato.backend.migrations.image.repository="
-            f"k3d-registry.localhost:5000/{build_config.sqitch_migrator_image_path}"
+            f"{build_config.local_registry}/{build_config.sqitch_migrator_image_path}"
         ),
         "--set", f"erato.backend.migrations.image.tag={build_config.build_tag}"
     ]
@@ -550,6 +544,44 @@ def ensure_kubernetes_namespace(namespace: str) -> None:
         run_command(["kubectl", "create", "namespace", namespace])
 
 
+def ensure_tls_secret(namespace: str, secret_name: str, hosts: list[str]) -> None:
+    """Create the self-signed TLS secret used by local ingresses if needed."""
+    existing = run_command(
+        ["kubectl", "get", "secret", secret_name, "--namespace", namespace],
+        check=False,
+        capture_output=True,
+    )
+    if existing.returncode == 0:
+        print(f"Using existing local TLS certificate {namespace}/{secret_name}.")
+        return
+
+    print(f"Ensuring local TLS certificate for {', '.join(hosts)}...")
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        key_path = temp_path / "tls.key"
+        cert_path = temp_path / "tls.crt"
+        san_list = ",".join(f"DNS:{host}" for host in hosts)
+
+        run_command([
+            "openssl", "req", "-x509", "-nodes", "-newkey", "rsa:2048",
+            "-keyout", str(key_path),
+            "-out", str(cert_path),
+            "-days", "365",
+            "-subj", f"/CN={hosts[0]}",
+            "-addext", f"subjectAltName={san_list}",
+        ])
+
+        secret_manifest = run_command([
+            "kubectl", "create", "secret", "tls", secret_name,
+            "--namespace", namespace,
+            "--cert", str(cert_path),
+            "--key", str(key_path),
+            "--dry-run=client", "-o", "yaml",
+        ], capture_output=True).stdout
+        run_command(["kubectl", "apply", "-f", "-"], input=secret_manifest)
+
+
 def stop_kubernetes_event_stream(event_stream: subprocess.Popen) -> None:
     """Stop the namespace event stream after the chart command finishes."""
     if event_stream.poll() is not None:
@@ -659,12 +691,26 @@ def install_erato_chart(config: ScriptConfig, cluster_config: ClusterConfig, hel
         sys.exit(result.returncode)
 
 
+def get_ingress_address() -> str:
+    """Return the address exposed by the ingress LoadBalancer."""
+    result = run_command(
+        [
+            "kubectl", "get", "service", "ingress-nginx-controller",
+            "--namespace", "ingress-nginx",
+            "-o", "jsonpath={.status.loadBalancer.ingress[0].ip}",
+        ],
+        check=False,
+        capture_output=True,
+    )
+    address = result.stdout.strip()
+    return address or "127.0.0.1"
+
+
 def ensure_hosts_entries(cluster_config: ClusterConfig):
-    """Ensure local DNS entries exist in /etc/hosts."""
+    """Ensure local DNS entries point at the ingress LoadBalancer."""
     hosts = [
         cluster_config.app_host,
         cluster_config.dex_host,
-        "k3d-registry.localhost"
     ]
     
     try:
@@ -674,19 +720,38 @@ def ensure_hosts_entries(cluster_config: ClusterConfig):
         print("Warning: Cannot read /etc/hosts. You may need to add entries manually.", file=sys.stderr)
         return
     
-    for host in hosts:
-        if host not in hosts_content:
-            print(f"Adding {host} to /etc/hosts...")
-            entry = f"127.0.0.1 {host}\n"
-            try:
-                result = run_command(
-                    ["sudo", "tee", "-a", "/etc/hosts"],
-                    capture_output=True,
-                    input=entry
-                )
-            except Exception as e:
-                print(f"Warning: Could not add {host} to /etc/hosts: {e}", file=sys.stderr)
-                print(f"Please manually add: 127.0.0.1 {host}", file=sys.stderr)
+    ingress_address = get_ingress_address()
+    host_set = set(hosts)
+    updated_lines = []
+    changed = False
+
+    for line in hosts_content.splitlines(keepends=True):
+        line_hosts = line.split("#", 1)[0].split()[1:]
+        if host_set.intersection(line_hosts):
+            remaining_hosts = [host for host in line_hosts if host not in host_set]
+            if remaining_hosts:
+                updated_lines.append(f"{line.split()[0]} {' '.join(remaining_hosts)}\n")
+            changed = True
+        else:
+            updated_lines.append(line)
+
+    updated_lines.append(f"{ingress_address} {' '.join(hosts)}\n")
+    changed = True
+
+    if changed:
+        print(f"Mapping {', '.join(hosts)} to ingress address {ingress_address}...")
+        try:
+            run_command(
+                ["sudo", "tee", "/etc/hosts"],
+                capture_output=True,
+                input="".join(updated_lines),
+            )
+        except Exception as e:
+            print(f"Warning: Could not update /etc/hosts: {e}", file=sys.stderr)
+            print(
+                f"Please manually add: {ingress_address} {' '.join(hosts)}",
+                file=sys.stderr,
+            )
 
 
 def print_completion_message(cluster_config: ClusterConfig, config: ScriptConfig = None):
@@ -710,7 +775,7 @@ def print_completion_message(cluster_config: ClusterConfig, config: ScriptConfig
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Setup local k3d development environment for Erato",
+        description="Setup local vind development environment for Erato",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     
@@ -827,9 +892,6 @@ def main():
 
     create_or_use_cluster(cluster_config)
     
-    # Switch kubectl context
-    run_command(["kubectl", "config", "use-context", f"k3d-{cluster_config.cluster_name}"])
-    
     wait_for_cluster()
     wait_for_coredns()
     
@@ -838,6 +900,17 @@ def main():
     
     # Configure Helm arguments
     helm_args = configure_helm_args(config)
+
+    ensure_kubernetes_namespace("erato-local-ns")
+    ensure_tls_secret(
+        "erato-local-ns",
+        "erato-local-tls",
+        [
+            "app.erato.internal",
+            "dex.erato.internal",
+            "embedded-host.erato.internal",
+        ],
+    )
     
     # Handle local build if requested
     if config.build_local:
