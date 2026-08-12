@@ -63,6 +63,15 @@ fn compile_po_catalog_to_json(po_contents: &str) -> Result<Vec<u8>, String> {
         } else {
             generate_message_id(&entry.msgid, entry.msgctxt.as_deref())
         };
+
+        // For explicit IDs, the msgid is the stable translation key rather
+        // than the source-language message. If the translation is empty,
+        // including the entry would make Lingui render that key instead of
+        // using the call site's fallback message.
+        if is_explicit_id && entry.msgstr.is_empty() {
+            continue;
+        }
+
         let message = if entry.msgstr.is_empty() {
             entry.msgid.as_str()
         } else {
@@ -454,6 +463,10 @@ mod tests {
 msgid "about.title"
 msgstr "About"
 
+#. js-lingui-explicit-id
+msgid "navigation.page.new_chat"
+msgstr ""
+
 #: src/pages/SharedChatPage.tsx
 msgid "Shared Chat - {effectiveSharedChatTitle}"
 msgstr ""
@@ -461,6 +474,7 @@ msgstr ""
         let compiled = compile_po_catalog_to_json(po).unwrap();
         let value: Value = serde_json::from_slice(&compiled).unwrap();
         assert_eq!(value["messages"]["about.title"], json!(["About"]));
+        assert!(value["messages"].get("navigation.page.new_chat").is_none());
         assert_eq!(
             value["messages"]["gNNfb4"],
             json!(["Shared Chat - ", ["effectiveSharedChatTitle"]])
@@ -476,6 +490,7 @@ msgstr ""
         let value: Value = serde_json::from_slice(&compiled).unwrap();
 
         assert_eq!(value["messages"]["about.title"], json!(["Über uns"]));
+        assert!(value["messages"].get("navigation.page.new_chat").is_none());
         assert_eq!(
             value["messages"]["5FapVx"],
             json!(["Abtastrate: ", ["sampleRate"], " Hz"])
