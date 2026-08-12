@@ -49,6 +49,8 @@ import {
   LinkSlash,
   Mail,
   OpenNewWindow,
+  Pin,
+  PinSlash,
 } from "iconoir-react";
 
 // Define our own IconProps interface based on common SVG props
@@ -346,6 +348,14 @@ export const LockIcon = ({ className, ...props }: IconProps) => (
   <Lock className={className} {...props} />
 );
 
+export const PinIcon = ({ className, ...props }: IconProps) => (
+  <Pin className={className} {...props} />
+);
+
+export const PinSlashIcon = ({ className, ...props }: IconProps) => (
+  <PinSlash className={className} {...props} />
+);
+
 // Direct re-exports for convenience (maintaining Iconoir naming)
 export {
   Copy,
@@ -377,6 +387,8 @@ export {
   MultiplePages,
   Search,
   GridXmark,
+  Pin,
+  PinSlash,
 };
 
 // Export the IconProps type for use in other components

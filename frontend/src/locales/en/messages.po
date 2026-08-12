@@ -1329,6 +1329,11 @@ msgstr "Pin"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.history.menu.pinLimitReached"
+msgstr "Pin limit reached"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.menu.rename"
 msgstr "Rename"

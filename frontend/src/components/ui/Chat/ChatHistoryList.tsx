@@ -17,6 +17,8 @@ import {
   LogOutIcon,
   ResolvedIcon,
   MultiplePagesIcon,
+  PinIcon,
+  PinSlashIcon,
   ShareIcon,
 } from "../icons";
 
@@ -142,6 +144,8 @@ export interface ChatHistoryListProps {
   onSessionEditTitle?: (sessionId: string) => void;
   onSessionShare?: (sessionId: string) => void;
   onSessionPin?: (sessionId: string, isPinned: boolean) => void;
+  pinnedChatsCount?: number;
+  pinnedChatsLimit?: number;
   onShowDetails?: (sessionId: string) => void;
   className?: string;
   /**
@@ -174,6 +178,8 @@ const ChatHistoryListItem = memo<{
   onShare?: () => void;
   onPin?: () => void;
   isPinned?: boolean;
+  pinnedChatsCount: number;
+  pinnedChatsLimit: number;
   canEdit?: boolean;
   onShowDetails?: () => void;
   showTimestamps?: boolean;
@@ -188,12 +194,29 @@ const ChatHistoryListItem = memo<{
     onShare,
     onPin,
     isPinned = false,
+    pinnedChatsCount,
+    pinnedChatsLimit,
     canEdit = true,
     onShowDetails,
     showTimestamps = true,
   }) => {
     const generationStatus = useRowGenerationStatus(session.id);
     const rowTitle = useRowTitle(session);
+    const isPinLimitReached = !isPinned && pinnedChatsCount >= pinnedChatsLimit;
+    const pinMenuLabel = isPinLimitReached
+      ? t({
+          id: "chat.history.menu.pinLimitReached",
+          message: "Pin limit reached",
+        })
+      : isPinned
+        ? t({
+            id: "chat.history.menu.unpin",
+            message: "Unpin",
+          })
+        : t({
+            id: "chat.history.menu.pin",
+            message: "Pin",
+          });
     return (
       <a
         href={getChatUrl(session.id, session.assistantId)}
@@ -247,17 +270,14 @@ const ChatHistoryListItem = memo<{
                   ...(onPin
                     ? [
                         {
-                          label: isPinned
-                            ? t({
-                                id: "chat.history.menu.unpin",
-                                message: "Unpin",
-                              })
-                            : t({
-                                id: "chat.history.menu.pin",
-                                message: "Pin",
-                              }),
+                          label: pinMenuLabel,
+                          icon: isPinned ? (
+                            <PinSlashIcon className="size-4" />
+                          ) : (
+                            <PinIcon className="size-4" />
+                          ),
                           onClick: onPin,
-                          disabled: !canEdit,
+                          disabled: !canEdit || isPinLimitReached,
                         },
                       ]
                     : []),
@@ -348,6 +368,8 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
     onSessionEditTitle,
     onSessionShare,
     onSessionPin,
+    pinnedChatsCount = 0,
+    pinnedChatsLimit = 5,
     onShowDetails,
     className,
     layout = "default",
@@ -438,6 +460,8 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
                 : undefined
             }
             isPinned={session.isPinned}
+            pinnedChatsCount={pinnedChatsCount}
+            pinnedChatsLimit={pinnedChatsLimit}
             canEdit={session.canEdit}
             onShowDetails={
               onShowDetails ? () => onShowDetails(session.id) : undefined

@@ -11,6 +11,7 @@ import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
 
 import type { ChatSession } from "@/types/chat";
 import type { Messages } from "@lingui/core";
+import type { ReactNode } from "react";
 
 vi.mock("@/components/ui", () => ({
   MessageTimestamp: ({ createdAt }: { createdAt: Date }) => (
@@ -23,7 +24,24 @@ vi.mock("@/hooks/ui", () => ({
 }));
 
 vi.mock("../Controls/DropdownMenu", () => ({
-  DropdownMenu: () => <div data-testid="row-menu" />,
+  DropdownMenu: ({
+    items,
+  }: {
+    items: Array<{
+      label: ReactNode;
+      icon?: ReactNode;
+      disabled?: boolean;
+    }>;
+  }) => (
+    <div data-testid="row-menu">
+      {items.map((item) => (
+        <button key={String(item.label)} disabled={item.disabled} type="button">
+          {item.icon}
+          {item.label}
+        </button>
+      ))}
+    </div>
+  ),
 }));
 
 const sessions: ChatSession[] = [
@@ -57,6 +75,49 @@ describe("ChatHistoryList", () => {
       currentChatId: null,
     });
     useConfirmationRegistryStore.setState({ pendingIdsByChatId: {} });
+  });
+
+  it("adds pin icons and disables pinning when the limit is reached", async () => {
+    const { i18n } = await import("@lingui/core");
+    render(
+      <I18nProvider i18n={i18n}>
+        <ChatHistoryList
+          sessions={sessions}
+          currentSessionId={null}
+          onSessionSelect={vi.fn()}
+          onSessionPin={vi.fn()}
+          pinnedChatsCount={1}
+          pinnedChatsLimit={1}
+        />
+      </I18nProvider>,
+    );
+
+    const pinItems = screen.getAllByRole("button", {
+      name: "Pin limit reached",
+    });
+    expect(pinItems).toHaveLength(2);
+    expect(pinItems[0]).toBeDisabled();
+    expect(pinItems[0].querySelector("svg")).toBeInTheDocument();
+  });
+
+  it("shows an enabled unpin action with its icon for pinned chats", async () => {
+    const { i18n } = await import("@lingui/core");
+    render(
+      <I18nProvider i18n={i18n}>
+        <ChatHistoryList
+          sessions={[{ ...sessions[0], isPinned: true }]}
+          currentSessionId={null}
+          onSessionSelect={vi.fn()}
+          onSessionPin={vi.fn()}
+          pinnedChatsCount={1}
+          pinnedChatsLimit={1}
+        />
+      </I18nProvider>,
+    );
+
+    const unpinItem = screen.getByRole("button", { name: "Unpin" });
+    expect(unpinItem).toBeEnabled();
+    expect(unpinItem.querySelector("svg")).toBeInTheDocument();
   });
 
   it("uses the sidebar token surface for active history rows", async () => {

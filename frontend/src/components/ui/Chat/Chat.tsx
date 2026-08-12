@@ -271,7 +271,8 @@ export const Chat = ({
 
   const { profile } = useProfile();
   const { enabled: chatSharingEnabled } = useChatSharingFeature();
-  const { enabled: pinnedChatsEnabled } = usePinnedChatsFeature();
+  const { enabled: pinnedChatsEnabled, maxItems: pinnedChatsLimit } =
+    usePinnedChatsFeature();
 
   // Get sidebar feature configuration
   const { chatHistoryShowMetadata } = useSidebarFeature();
@@ -740,6 +741,7 @@ export const Chat = ({
           onSessionArchive={handleArchiveSession}
           onSessionEditTitle={handleEditTitleSession}
           pinnedSessions={pinnedSessions}
+          pinnedChatsLimit={pinnedChatsLimit}
           onSessionPin={
             pinnedChatsEnabled
               ? (sessionId, isPinned) => {
