@@ -465,6 +465,7 @@ async function resolveChat(
       chatId,
       title: fallbackTitle,
       participants: [],
+      selfDisplayName: null,
       participantsTruncated: false,
       chatType: "unknown",
       lastActivityAt: null,

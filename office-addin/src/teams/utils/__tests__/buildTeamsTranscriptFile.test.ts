@@ -15,6 +15,7 @@ const chat: ParsedTeamsChat = {
   chatId: MOCK_CHAT_ID,
   title: "Product sync",
   participants: ["Ada Lovelace", "Grace Hopper"],
+  selfDisplayName: null,
   participantsTruncated: false,
   chatType: "group",
   lastActivityAt: "2026-08-10T09:15:00Z",
@@ -239,6 +240,26 @@ describe("buildTeamsTranscriptMarkdown", () => {
     );
   });
 
+  it("names the viewer beside the participants of a 1:1", () => {
+    const markdown = render([
+      section({
+        chat: {
+          ...chat,
+          chatType: "oneOnOne",
+          title: "Ada Lovelace",
+          participants: ["Ada Lovelace"],
+          selfDisplayName: "Grace Hopper",
+        },
+      }),
+    ]);
+    expect(markdown).toContain("Participants: Ada Lovelace");
+    expect(markdown).toContain("Viewer: Grace Hopper (the signed-in user).");
+  });
+
+  it("omits the viewer legend when the roster never matched the signed-in user", () => {
+    expect(render([section()])).not.toContain("Viewer:");
+  });
+
   it("repeats a full section per chat", () => {
     const markdown = render([
       section(),
@@ -362,6 +383,10 @@ describe("channel sections", () => {
   it("titles the section with the channel and its team", () => {
     const markdown = render([channelSection([message()])]);
     expect(markdown).toContain("# Teams channel: Test Channel 1 · Contoso");
+  });
+
+  it("names no viewer, a channel having no member roster to match against", () => {
+    expect(render([channelSection([message()])])).not.toContain("Viewer:");
   });
 
   it("links a picked channel message by Graph's own url", () => {

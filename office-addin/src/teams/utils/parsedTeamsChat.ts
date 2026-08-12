@@ -29,6 +29,12 @@ export interface ParsedTeamsChat {
   title: string;
   /** Member display names, excluding the signed-in user. */
   participants: string[];
+  /**
+   * The signed-in user's own name as the roster spells it — the same Graph
+   * field messages are attributed with, so it matches `senderName` exactly.
+   * Null when no member could be matched against `self`.
+   */
+  selfDisplayName: string | null;
   /** True when `$expand=members` may have truncated the roster. */
   participantsTruncated: boolean;
   chatType: string;
@@ -79,7 +85,7 @@ export function chatDisplayTitle(
   const topic = chat.topic?.trim();
   if (topic) return topic;
 
-  const names = otherMemberNames(chat.members ?? [], self);
+  const names = splitMemberNames(chat.members ?? [], self).others;
   if (names.length === 0) return UNTITLED_CHAT;
   if (chat.chatType === "oneOnOne") return names[0];
 
@@ -114,10 +120,12 @@ export function parseTeamsChat(
 ): ParsedTeamsChat | null {
   if (!chat.id) return null;
   const members = chat.members ?? [];
+  const names = splitMemberNames(members, self);
   return {
     chatId: chat.id,
     title: chatDisplayTitle(chat, self),
-    participants: otherMemberNames(members, self),
+    participants: names.others,
+    selfDisplayName: names.self,
     participantsTruncated: members.length >= CHAT_MEMBER_EXPAND_CAP,
     chatType: chat.chatType ?? "unknown",
     lastActivityAt:
@@ -203,17 +211,22 @@ function unreferencedAttachmentMarkers(message: GraphChatMessage): string[] {
   return markers;
 }
 
-function otherMemberNames(
+/** The roster is the only place the signed-in user's display name appears. */
+function splitMemberNames(
   members: GraphChatMember[],
   self?: TeamsSelfIdentity,
-): string[] {
-  const names: string[] = [];
+): { others: string[]; self: string | null } {
+  const others: string[] = [];
+  let own: string | null = null;
   for (const member of members) {
-    if (isSelf(member, self)) continue;
     const name = member.displayName?.trim();
-    if (name) names.push(name);
+    if (isSelf(member, self)) {
+      if (name) own = name;
+      continue;
+    }
+    if (name) others.push(name);
   }
-  return names;
+  return { others, self: own };
 }
 
 function isSelf(member: GraphChatMember, self?: TeamsSelfIdentity): boolean {

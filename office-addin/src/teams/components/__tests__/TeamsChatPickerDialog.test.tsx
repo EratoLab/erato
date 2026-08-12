@@ -220,6 +220,7 @@ const PRODUCT_SYNC: ParsedTeamsChat = {
   chatId: MOCK_CHAT_ID,
   title: "Product sync",
   participants: ["Ada Lovelace", "Grace Hopper"],
+  selfDisplayName: null,
   participantsTruncated: false,
   chatType: "group",
   lastActivityAt: "2026-08-10T09:15:00Z",
