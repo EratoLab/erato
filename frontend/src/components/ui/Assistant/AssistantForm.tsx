@@ -14,9 +14,12 @@ import {
   FileAttachmentsPreview,
   AssistantFileUploadSelector,
 } from "@/components/ui/FileUpload";
-import { FormField } from "@/components/ui/Input/FormField";
-import { Input } from "@/components/ui/Input/Input";
-import { Textarea } from "@/components/ui/Input/Textarea";
+import {
+  FormField,
+  Input,
+  MarkdownPreviewInput,
+  Textarea,
+} from "@/components/ui/Input";
 import { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
 import { useTokenUsageEstimation } from "@/hooks/chat/useTokenUsageEstimation";
 import { useFilePreviewModal } from "@/hooks/ui";
@@ -645,7 +648,7 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
           })}
           htmlFor="assistant-description"
         >
-          <Textarea
+          <MarkdownPreviewInput
             id="assistant-description"
             value={formData.description}
             onChange={(e) => handleFieldChange("description", e.target.value)}
@@ -657,6 +660,22 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
             rows={3}
             error={touched.description ? errors.description : undefined}
             disabled={isSubmitting}
+            tablistLabel={t({
+              id: "common.markdownEditor",
+              message: "Markdown editor",
+            })}
+            markdownTabLabel={t({
+              id: "common.markdown",
+              message: "Markdown",
+            })}
+            previewTabLabel={t({
+              id: "common.preview",
+              message: "Preview",
+            })}
+            emptyPreviewMessage={t({
+              id: "common.markdownPreviewEmpty",
+              message: "Nothing to preview yet.",
+            })}
           />
         </FormField>
 

@@ -4,3 +4,5 @@ export { Textarea } from "./Textarea";
 export type { TextareaProps } from "./Textarea";
 export { FormField } from "./FormField";
 export type { FormFieldProps } from "./FormField";
+export { MarkdownPreviewInput } from "./MarkdownPreviewInput";
+export type { MarkdownPreviewInputProps } from "./MarkdownPreviewInput";

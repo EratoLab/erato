@@ -7,7 +7,12 @@ import { useNavigate, useParams } from "react-router-dom";
 import { PageHeader } from "@/components/ui/Container/PageHeader";
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
-import { FormField, Input, Textarea } from "@/components/ui/Input";
+import {
+  FormField,
+  Input,
+  MarkdownPreviewInput,
+  Textarea,
+} from "@/components/ui/Input";
 import { SubjectSelector } from "@/components/ui/Sharing/SubjectSelector";
 import { usePageAlignment } from "@/hooks/ui";
 import {
@@ -417,11 +422,27 @@ export default function AssistantHubSubmitPage() {
                   htmlFor="assistant-hub-long-description"
                   required
                 >
-                  <Textarea
+                  <MarkdownPreviewInput
                     id="assistant-hub-long-description"
                     value={longDescription}
                     rows={5}
                     onChange={(event) => setLongDescription(event.target.value)}
+                    tablistLabel={t({
+                      id: "common.markdownEditor",
+                      message: "Markdown editor",
+                    })}
+                    markdownTabLabel={t({
+                      id: "common.markdown",
+                      message: "Markdown",
+                    })}
+                    previewTabLabel={t({
+                      id: "common.preview",
+                      message: "Preview",
+                    })}
+                    emptyPreviewMessage={t({
+                      id: "common.markdownPreviewEmpty",
+                      message: "Nothing to preview yet.",
+                    })}
                   />
                 </FormField>
 
@@ -505,11 +526,27 @@ export default function AssistantHubSubmitPage() {
                       "Explain what changed in this version for users browsing the Assistant Hub.",
                   })}
                 >
-                  <Textarea
+                  <MarkdownPreviewInput
                     id="assistant-hub-version-comment"
                     value={versionComment}
                     rows={3}
                     onChange={(event) => setVersionComment(event.target.value)}
+                    tablistLabel={t({
+                      id: "common.markdownEditor",
+                      message: "Markdown editor",
+                    })}
+                    markdownTabLabel={t({
+                      id: "common.markdown",
+                      message: "Markdown",
+                    })}
+                    previewTabLabel={t({
+                      id: "common.preview",
+                      message: "Preview",
+                    })}
+                    emptyPreviewMessage={t({
+                      id: "common.markdownPreviewEmpty",
+                      message: "Nothing to preview yet.",
+                    })}
                   />
                 </FormField>
 
