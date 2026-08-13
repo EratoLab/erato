@@ -271,10 +271,8 @@ describe("buildTeamsAttachmentGroups", () => {
               message({
                 messageId: "m1",
                 createdAt: "2026-03-01T08:00:00Z",
-                text: "Here it is [image: attached as teams-img-abc.png]",
-                markers: [
-                  "[attachment: report.pdf — attached as teams-file-abc-report.pdf]",
-                ],
+                text: "Here it is [image: teams-img-abc.png]",
+                markers: ["[attachment: teams-file-abc-report.pdf]"],
               }),
               message({ messageId: "m2", createdAt: "2026-03-02T08:00:00Z" }),
             ],
@@ -298,6 +296,26 @@ describe("buildTeamsAttachmentGroups", () => {
     ]);
   });
 
+  it("ignores a bare marker that happens to name one of the user's own files", () => {
+    const own = upload("report.pdf", "upload-own");
+    const preview = buildTeamsAttachmentGroups(
+      {
+        fileName: TRANSCRIPT.filename,
+        sections: [
+          chatSection({
+            selection: "messages",
+            // Never fetched, so the marker still carries the Teams-side name.
+            messages: [message({ markers: ["[attachment: report.pdf]"] })],
+          }),
+        ],
+      },
+      [TRANSCRIPT, own],
+    );
+
+    expect(threadRows(preview!.groups[0])[0].attachments).toEqual([]);
+    expect([...preview!.claimedFileIds]).toEqual([TRANSCRIPT.id]);
+  });
+
   it("lists a whole conversation's uploads beside its summary row", () => {
     const image = upload("teams-img-abc.png", "upload-image");
     const preview = buildTeamsAttachmentGroups(
@@ -307,12 +325,12 @@ describe("buildTeamsAttachmentGroups", () => {
           chatSection({
             messages: [
               message({
-                text: "Screenshot [image: attached as teams-img-abc.png]",
+                text: "Screenshot [image: teams-img-abc.png]",
               }),
               // The same asset in a second message must not double up.
               message({
                 messageId: "m2",
-                text: "Again [image: attached as teams-img-abc.png]",
+                text: "Again [image: teams-img-abc.png]",
               }),
             ],
           }),

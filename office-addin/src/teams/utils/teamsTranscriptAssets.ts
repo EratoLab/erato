@@ -1,8 +1,10 @@
 /**
  * Turns what selected Teams messages carry — pasted images, shared files —
- * into upload files, and stamps each message's marker with the uploaded name.
+ * into upload files, and rewrites each message's marker to the uploaded name.
  * That name is how the model joins file ↔ message: the backend keys parsed
- * uploads by filename and the marker sits at the exact message position.
+ * uploads by filename and the marker sits at the exact message position. It
+ * replaces the original name rather than joining it, because a marker naming
+ * the file twice costs tokens for a name the uploaded one already ends with.
  *
  * Everything degrades to the bare marker: a failed fetch, a missing file
  * grant or the caps leave `[image]` / `[attachment: …]` exactly as they read
@@ -31,6 +33,18 @@ export const MAX_SHARED_FILE_BYTES = 10 * 1024 * 1024;
 export const MAX_TOTAL_FILE_BYTES = 25 * 1024 * 1024;
 /** Same-conversation fetches serialize on the gate anyway. */
 const ASSET_FETCH_CONCURRENCY = 3;
+
+const IMAGE_UPLOAD_PREFIX = "teams-img-";
+const FILE_UPLOAD_PREFIX = "teams-file-";
+/**
+ * A marker naming an upload minted here. Anchored on those prefixes so the
+ * bare marker of a file that was never fetched — which still carries its
+ * Teams-side name — is not read as an upload.
+ */
+const UPLOADED_ASSET_MARKER = new RegExp(
+  `\\[(?:image|attachment): ((?:${IMAGE_UPLOAD_PREFIX}|${FILE_UPLOAD_PREFIX})[^\\]]+)\\]`,
+  "g",
+);
 
 export type FetchTeamsImage = (
   section: TeamsTranscriptSection,
@@ -92,7 +106,7 @@ export async function collectTeamsMessageAssets(args: {
         if (!file) {
           file = new File(
             [content.bytes],
-            `teams-img-${hash}.${imageExtension(content.contentType)}`,
+            `${IMAGE_UPLOAD_PREFIX}${hash}.${imageExtension(content.contentType)}`,
             { type: content.contentType },
           );
           filesByHash.set(hash, file);
@@ -131,7 +145,7 @@ export async function collectTeamsMessageAssets(args: {
           if (!file) {
             file = new File(
               [result.content.bytes],
-              `teams-file-${hash.slice(0, 8)}-${fileNameSlug(ref.name)}`,
+              `${FILE_UPLOAD_PREFIX}${hash.slice(0, 8)}-${fileNameSlug(ref.name)}`,
               { type: result.content.contentType },
             );
             filesByHash.set(hash, file);
@@ -177,8 +191,22 @@ export function stampImageMarkers(
   return text.replaceAll("[image]", (marker) => {
     const name = names[index] ?? null;
     index += 1;
-    return name ? `[image: attached as ${name}]` : marker;
+    return name ? `[image: ${name}]` : marker;
   });
+}
+
+/**
+ * The uploads a message names, in marker order — how anything downstream of
+ * the transcript joins a file back to the message it rode in on.
+ */
+export function uploadedAssetNames(sources: readonly string[]): string[] {
+  const names: string[] = [];
+  for (const source of sources) {
+    for (const match of source.matchAll(UPLOADED_ASSET_MARKER)) {
+      names.push(match[1]);
+    }
+  }
+  return names;
 }
 
 interface PlannedImage {
@@ -244,7 +272,7 @@ function stampMessageFiles(
 ): ParsedTeamsMessage {
   const stampFor = (ref: TeamsSharedFileRef): string | null => {
     const uploaded = uploadedByUrl.get(ref.contentUrl);
-    if (uploaded) return `[attachment: ${ref.name} — attached as ${uploaded}]`;
+    if (uploaded) return `[attachment: ${uploaded}]`;
     if (tooLargeUrls.has(ref.contentUrl)) {
       return `[attachment: ${ref.name} — too large to attach]`;
     }

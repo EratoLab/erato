@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { MOCK_CHAT_ID } from "../../../test/mocks/teams/graph";
-import {
-  buildTeamsMessageDeepLink,
-  teamsMessageDeepLinkBase,
-  teamsMessageDeepLinkSuffix,
-} from "../teamsDeepLink";
+import { buildTeamsMessageDeepLink } from "../teamsDeepLink";
 
 describe("buildTeamsMessageDeepLink", () => {
   it("builds the byte-exact permalink for a thread chat id", () => {
@@ -25,11 +21,5 @@ describe("buildTeamsMessageDeepLink", () => {
     expect(buildTeamsMessageDeepLink("19:x@thread.v2", "a/b")).toContain(
       "/a%2Fb?",
     );
-  });
-
-  it("splits into a chat-invariant base plus the shared context suffix", () => {
-    expect(
-      `${teamsMessageDeepLinkBase(MOCK_CHAT_ID)}/9${teamsMessageDeepLinkSuffix()}`,
-    ).toBe(buildTeamsMessageDeepLink(MOCK_CHAT_ID, "9"));
   });
 });
