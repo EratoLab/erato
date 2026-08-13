@@ -33,6 +33,7 @@ import {
   useUploadFeature,
 } from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
+import { DEFAULT_MAX_FILES_PER_MESSAGE } from "@/utils/fileUploadLimits";
 
 import type { AddMenuActionItem } from "@/components/ui/Chat/ChatInputAddMenu";
 import type { CloudFilePickerModalProps } from "@/components/ui/FileUpload/CloudFilePickerModal";
@@ -103,7 +104,7 @@ export function useChatFileSources({
   uploadError: externalUploadError = null,
   acceptedFileTypes = [],
   multiple = false,
-  maxFiles = 5,
+  maxFiles = DEFAULT_MAX_FILES_PER_MESSAGE,
   disabled = false,
   onProcessingChange,
 }: UseChatFileSourcesParams): UseChatFileSourcesResult {

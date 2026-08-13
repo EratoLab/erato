@@ -7,6 +7,10 @@ import {
   DEFAULT_ERROR_REPORT_TEMPLATE,
   ERROR_REPORT_NONE_PLACEHOLDER,
 } from "@/utils/errorReport";
+import {
+  DEFAULT_MAX_ASSISTANT_FILES,
+  DEFAULT_MAX_FILES_PER_MESSAGE,
+} from "@/utils/fileUploadLimits";
 
 import type { ReactNode } from "react";
 
@@ -32,6 +36,8 @@ interface ChatInputFeatureConfig {
   emptyStateLayout: "bottom" | "centered";
   /** Whether to show the AI usage advisory below the chat input */
   showUsageAdvisory: boolean;
+  /** Maximum number of files that can be attached to a message */
+  maxFiles: number;
 }
 
 /** Configuration for audio transcription features */
@@ -90,6 +96,8 @@ interface AssistantsFeatureConfig {
   contextFileContributorThreshold: number;
   /** Maximum number of characters allowed in the system prompt, or null if no limit is configured */
   maxSystemPromptLength: number | null;
+  /** Maximum number of files that can be associated with an assistant */
+  maxFiles: number;
 }
 
 interface StarterPromptsFeatureConfig {
@@ -239,6 +247,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
     autofocus: true,
     emptyStateLayout: "bottom",
     showUsageAdvisory: true,
+    maxFiles: DEFAULT_MAX_FILES_PER_MESSAGE,
   },
   audioTranscription: {
     enabled: false,
@@ -264,6 +273,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
     contextWarningThreshold: 0.5,
     contextFileContributorThreshold: 0.05,
     maxSystemPromptLength: null,
+    maxFiles: DEFAULT_MAX_ASSISTANT_FILES,
   },
   starterPrompts: {
     enabled: false,
@@ -341,6 +351,7 @@ function createFeatureConfig(
       autofocus: !environment.disableChatInputAutofocus,
       emptyStateLayout: environment.chatInputEmptyStateLayout,
       showUsageAdvisory: true,
+      maxFiles: environment.maxFilesPerMessage ?? DEFAULT_MAX_FILES_PER_MESSAGE,
     },
     audioTranscription: {
       enabled: Boolean(environment.audioTranscriptionEnabled),
@@ -373,6 +384,7 @@ function createFeatureConfig(
       contextFileContributorThreshold:
         environment.assistantContextFileContributorThreshold,
       maxSystemPromptLength: environment.assistantsMaxSystemPromptLength,
+      maxFiles: environment.assistantsMaxFiles ?? DEFAULT_MAX_ASSISTANT_FILES,
     },
     starterPrompts: {
       enabled: environment.starterPromptsEnabled,

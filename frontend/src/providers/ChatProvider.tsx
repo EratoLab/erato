@@ -13,7 +13,10 @@ import { useFileDropzone, useFileUploadStore } from "@/hooks/files";
 import { mapMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 import { getSupportedFileTypes } from "@/utils/capabilitiesToFileTypes";
 
-import { usePinnedChatsFeature } from "./FeatureConfigProvider";
+import {
+  useChatInputFeature,
+  usePinnedChatsFeature,
+} from "./FeatureConfigProvider";
 import { useFileCapabilitiesContext } from "./FileCapabilitiesProvider";
 
 import type {
@@ -151,6 +154,7 @@ export function ChatProvider({
 
   const { enabled: pinnedChatsEnabled, maxItems: pinnedChatsLimit } =
     usePinnedChatsFeature();
+  const { maxFiles: maxFilesPerMessage } = useChatInputFeature();
 
   // Get the chat history functionality
   const {
@@ -242,6 +246,7 @@ export function ChatProvider({
   } = useFileDropzone({
     acceptedFileTypes,
     multiple: true,
+    maxFiles: maxFilesPerMessage,
     chatId: currentChatId,
     onSilentChatCreated: () => {
       // Callback no longer needed for explicit navigation

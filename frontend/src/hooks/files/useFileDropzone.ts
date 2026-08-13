@@ -15,6 +15,7 @@ import { useFileCapabilitiesContext } from "@/providers/FileCapabilitiesProvider
 import { createLogger } from "@/utils/debugLogger";
 import { validateFiles } from "@/utils/fileCapabilities";
 import { FileTypeUtil, FILE_TYPES } from "@/utils/fileTypes";
+import { DEFAULT_MAX_FILES_PER_MESSAGE } from "@/utils/fileUploadLimits";
 
 import {
   UploadTooLargeError,
@@ -136,7 +137,7 @@ interface UseFileDropzoneResult {
 export function useFileDropzone({
   acceptedFileTypes = [],
   multiple = false,
-  maxFiles = 5,
+  maxFiles = DEFAULT_MAX_FILES_PER_MESSAGE,
   disabled = false,
   onFilesUploaded,
   chatId = null,

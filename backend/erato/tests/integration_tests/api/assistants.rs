@@ -777,6 +777,37 @@ async fn test_create_assistant_endpoint(pool: Pool<Postgres>) {
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_create_assistant_rejects_too_many_files(pool: Pool<Postgres>) {
+    let (mut app_config, _server) = setup_mock_llm_server(None).await;
+    app_config.assistants.max_files = 1;
+    let app_state = test_app_state(app_config, pool).await;
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let response = server
+        .post("/api/v1beta/assistants")
+        .json(&json!({
+            "name": "Too Many Files",
+            "prompt": "You are a test assistant.",
+            "file_ids": [
+                "00000000-0000-0000-0000-000000000001",
+                "00000000-0000-0000-0000-000000000002"
+            ]
+        }))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+
+    assert_eq!(
+        response.status_code(),
+        http::StatusCode::UNPROCESSABLE_ENTITY
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_create_assistant_rejects_unauthorized_mcp_server(pool: Pool<Postgres>) {
     let mut app_config = hermetic_app_config(None, None);
     app_config.mcp_servers.insert(

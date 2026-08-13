@@ -14,6 +14,7 @@ import { useCloudData } from "@/hooks/cloud/useCloudData";
 import { useCloudNavigation } from "@/hooks/cloud/useCloudNavigation";
 import { useCloudSelection } from "@/hooks/cloud/useCloudSelection";
 import { useCloudProvidersFeature } from "@/providers/FeatureConfigProvider";
+import { DEFAULT_MAX_FILES_PER_MESSAGE } from "@/utils/fileUploadLimits";
 
 import { CloudDriveList } from "./CloudDriveList";
 import { CloudItemBrowser } from "./CloudItemBrowser";
@@ -55,7 +56,7 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
     onClose,
     onFilesSelected,
     multiple = false,
-    maxFiles = 5,
+    maxFiles = DEFAULT_MAX_FILES_PER_MESSAGE,
     acceptedFileTypes = [],
     chatId,
   }) => {

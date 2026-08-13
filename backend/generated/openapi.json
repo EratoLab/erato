@@ -1795,7 +1795,7 @@
             "description": "Invalid file upload"
           },
           "413": {
-            "description": "Uploaded file exceeds size limit"
+            "description": "Uploaded file exceeds size or file-count limit"
           },
           "500": {
             "description": "Server error"
