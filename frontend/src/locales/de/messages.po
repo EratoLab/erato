@@ -1987,6 +1987,24 @@ msgid "common.loadingEllipsis"
 msgstr "Laden..."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+#: src/pages/AssistantHubSubmitPage.tsx
+msgid "common.markdown"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+#: src/pages/AssistantHubSubmitPage.tsx
+msgid "common.markdownEditor"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+#: src/pages/AssistantHubSubmitPage.tsx
+msgid "common.markdownPreviewEmpty"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/pages/assistantHubUtils.tsx
 msgid "common.no"
 msgstr "Nein"
@@ -2000,6 +2018,12 @@ msgstr "Keine"
 #: src/pages/assistantHubUtils.tsx
 msgid "common.notSet"
 msgstr "Nicht festgelegt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+#: src/pages/AssistantHubSubmitPage.tsx
+msgid "common.preview"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/assistantHubUtils.tsx
