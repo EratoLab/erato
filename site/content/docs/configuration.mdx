@@ -191,6 +191,23 @@ Whether to disable file upload functionality in the UI. This is useful for embed
 disable_upload = true
 ```
 
+#### `frontend.max_files`
+
+{/* erato_toml_config_key: frontend.max_files */}
+
+Maximum number of files that can be attached to one chat message. The backend enforces this limit for message submit/edit requests and multipart chat uploads; the frontend uses it to limit file selection.
+
+**Default value:** `5`
+
+**Type:** `integer` (greater than 0)
+
+**Example:**
+
+```toml
+[frontend]
+max_files = 10
+```
+
 #### `frontend.disable_chat_input_autofocus`
 
 {/* erato_toml_config_key: frontend.disable_chat_input_autofocus */}
@@ -1379,11 +1396,11 @@ A human-readable name to display in the UI for this storage provider.
 
 {/* erato_toml_config_key: file_storage_providers.<provider-id>.max_upload_size_kb */}
 
-The maximum file size that may be uploaded in kilobytes. This limit is enforced by the backend.
+The maximum individual file size that may be uploaded in kilobytes. This limit is enforced by the backend. When multiple storage providers configure this value, the effective global limit is the maximum configured value across providers.
 
 **Type:** `number | None`
 
-**Default:** No limit (system default applies)
+**Default:** `20480` KB (20 MB) when no provider configures a limit
 
 **Example:** `102400` (100 MB), `10240` (10 MB)
 
@@ -3360,6 +3377,23 @@ Maximum number of characters allowed in an assistant system prompt. When not set
 ```toml
 [assistants]
 max_system_prompt_length = 5000
+```
+
+#### `assistants.max_files`
+
+{/* erato_toml_config_key: assistants.max_files */}
+
+Maximum number of files that can be associated with an assistant. The backend enforces this limit for assistant create/update requests and standalone multipart uploads; the frontend uses it to limit file selection.
+
+**Default value:** `5`
+
+**Type:** `integer` (greater than 0)
+
+**Example:**
+
+```toml
+[assistants]
+max_files = 10
 ```
 
 ### `assistant_hub`

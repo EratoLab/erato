@@ -890,6 +890,10 @@ impl AppConfig {
             panic!("Invalid generation configuration: {}", e);
         }
 
+        if let Err(e) = config.frontend.validate() {
+            panic!("Invalid frontend configuration: {}", e);
+        }
+
         // Migrate single chat_provider to new chat_providers structure and handle Azure OpenAI migration
         config = config.migrate_chat_providers();
         config.action_facets.inject_builtin_ms_office_addin_facets();
@@ -2403,7 +2407,7 @@ pub enum McpToolApprovalPreset {
     Restrictive,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct FrontendConfig {
     // Where to find the static web frontend files to serve.
     // Defaults to `./public`
@@ -2445,6 +2449,14 @@ pub struct FrontendConfig {
     // Defaults to `false`.
     #[serde(default)]
     pub disable_upload: bool,
+
+    // Maximum number of files that can be attached to a chat message.
+    // Defaults to `5`.
+    #[serde(
+        default = "default_max_files_per_message",
+        alias = "max_files_per_message"
+    )]
+    pub max_files: usize,
 
     // Whether to disable automatic focusing of the chat input field.
     // This prevents unwanted scrolling behavior when navigating to pages with embedded chat.
@@ -2524,6 +2536,50 @@ pub struct FrontendConfig {
     // Defaults to `false`.
     #[serde(default)]
     pub allow_any_frame_ancestor: bool,
+}
+
+impl Default for FrontendConfig {
+    fn default() -> Self {
+        Self {
+            web_frontend_bundle_path: default_web_frontend_bundle_path(),
+            translation_po_compilation_mode: Default::default(),
+            theme: None,
+            additional_environment: HashMap::new(),
+            component_kits: Default::default(),
+            error_report: Default::default(),
+            disable_upload: false,
+            max_files: default_max_files_per_message(),
+            disable_chat_input_autofocus: false,
+            chat_input_empty_state_layout: default_chat_input_empty_state_layout(),
+            disable_logout: false,
+            enable_message_feedback: false,
+            enable_message_feedback_comments: false,
+            message_feedback_edit_time_limit_seconds: None,
+            sidebar_collapsed_mode: default_sidebar_collapsed_mode(),
+            sidebar_logo_path: None,
+            sidebar_logo_dark_path: None,
+            sidebar_chat_history_show_metadata: default_sidebar_chat_history_show_metadata(),
+            enable_pinned_chats: false,
+            pinned_chats_limit: default_pinned_chats_limit(),
+            mask_reasoning_trace_text: false,
+            extra_frame_ancestors: Vec::new(),
+            allow_any_frame_ancestor: false,
+        }
+    }
+}
+
+fn default_max_files_per_message() -> usize {
+    5
+}
+
+impl FrontendConfig {
+    pub fn validate(&self) -> Result<(), Report> {
+        if self.max_files == 0 {
+            return Err(eyre!("frontend.max_files must be greater than 0"));
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
@@ -2668,6 +2724,11 @@ pub struct AssistantsConfig {
     // back to its built-in default of 5000 characters for UI validation.
     #[serde(default)]
     pub max_system_prompt_length: Option<usize>,
+
+    // Maximum number of files that can be associated with an assistant.
+    // Defaults to `5`.
+    #[serde(default = "default_max_assistant_files")]
+    pub max_files: usize,
 }
 
 impl Default for AssistantsConfig {
@@ -2681,6 +2742,7 @@ impl Default for AssistantsConfig {
             context_file_contributor_threshold:
                 default_assistant_context_file_contributor_threshold(),
             max_system_prompt_length: None,
+            max_files: default_max_assistant_files(),
         }
     }
 }
@@ -2697,8 +2759,16 @@ fn default_assistant_context_file_contributor_threshold() -> f64 {
     0.05
 }
 
+fn default_max_assistant_files() -> usize {
+    5
+}
+
 impl AssistantsConfig {
     pub fn validate(&self) -> Result<(), Report> {
+        if self.max_files == 0 {
+            return Err(eyre!("assistants.max_files must be greater than 0"));
+        }
+
         if !(0.0..=1.0).contains(&self.context_warning_threshold) {
             return Err(eyre!(
                 "context_warning_threshold must be between 0.0 and 1.0, got: {}",

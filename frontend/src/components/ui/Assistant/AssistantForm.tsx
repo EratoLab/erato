@@ -173,6 +173,7 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
     contextWarningThreshold,
     contextFileContributorThreshold,
     maxSystemPromptLength,
+    maxFiles,
   } = useAssistantsFeature();
   const {
     estimateTokenUsageFromParts,
@@ -340,12 +341,15 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
   );
 
   // File handling
-  const handleFilesUploaded = useCallback((files: FileUploadItem[]) => {
-    setFormData((prev) => ({
-      ...prev,
-      files: mergeUniqueFilesById(prev.files, files),
-    }));
-  }, []);
+  const handleFilesUploaded = useCallback(
+    (files: FileUploadItem[]) => {
+      setFormData((prev) => ({
+        ...prev,
+        files: mergeUniqueFilesById(prev.files, files).slice(0, maxFiles),
+      }));
+    },
+    [maxFiles],
+  );
 
   const handleFileRemove = useCallback((fileId: string) => {
     setFormData((prev) => ({
@@ -833,12 +837,12 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
             <AssistantFileUploadSelector
               onFilesUploaded={handleFilesUploaded}
               disabled={isSubmitting}
-              maxFiles={5}
+              maxFiles={maxFiles}
             />
             {formData.files.length > 0 && (
               <FileAttachmentsPreview
                 attachedFiles={formData.files}
-                maxFiles={5}
+                maxFiles={maxFiles}
                 onRemoveFile={handleFileRemove}
                 onRemoveAllFiles={() =>
                   setFormData((prev) => ({ ...prev, files: [] }))

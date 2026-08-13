@@ -7,6 +7,7 @@
 import { useCallback, useState } from "react";
 
 import { FileTypeUtil } from "@/utils/fileTypes";
+import { DEFAULT_MAX_FILES_PER_MESSAGE } from "@/utils/fileUploadLimits";
 
 import type {
   CloudItem,
@@ -41,7 +42,7 @@ interface UseCloudSelectionResult {
 
 export function useCloudSelection({
   multiple = false,
-  maxFiles = 5,
+  maxFiles = DEFAULT_MAX_FILES_PER_MESSAGE,
   acceptedFileTypes = [],
 }: UseCloudSelectionOptions = {}): UseCloudSelectionResult {
   const [selectedFiles, setSelectedFiles] = useState<SelectedCloudFile[]>([]);

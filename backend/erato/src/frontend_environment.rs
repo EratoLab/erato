@@ -26,6 +26,7 @@ const FRONTEND_ENV_KEY_FRONTEND_PUBLIC_BASE_PATH: &str = "FRONTEND_PUBLIC_BASE_P
 const FRONTEND_ENV_KEY_COMMON_PUBLIC_BASE_PATH: &str = "COMMON_PUBLIC_BASE_PATH";
 const FRONTEND_ENV_KEY_THEME_CUSTOMER_NAME: &str = "THEME_CUSTOMER_NAME";
 const FRONTEND_ENV_KEY_DISABLE_UPLOAD: &str = "DISABLE_UPLOAD";
+const FRONTEND_ENV_KEY_MAX_FILES_PER_MESSAGE: &str = "MAX_FILES_PER_MESSAGE";
 const FRONTEND_ENV_KEY_DISABLE_CHAT_INPUT_AUTOFOCUS: &str = "DISABLE_CHAT_INPUT_AUTOFOCUS";
 const FRONTEND_ENV_KEY_CHAT_INPUT_EMPTY_STATE_LAYOUT: &str = "CHAT_INPUT_EMPTY_STATE_LAYOUT";
 const FRONTEND_ENV_KEY_DISABLE_LOGOUT: &str = "DISABLE_LOGOUT";
@@ -40,6 +41,7 @@ const FRONTEND_ENV_KEY_ASSISTANTS_CONTEXT_FILE_CONTRIBUTOR_THRESHOLD: &str =
     "ASSISTANTS_CONTEXT_FILE_CONTRIBUTOR_THRESHOLD";
 const FRONTEND_ENV_KEY_ASSISTANTS_MAX_SYSTEM_PROMPT_LENGTH: &str =
     "ASSISTANTS_MAX_SYSTEM_PROMPT_LENGTH";
+const FRONTEND_ENV_KEY_ASSISTANTS_MAX_FILES: &str = "ASSISTANTS_MAX_FILES";
 const FRONTEND_ENV_KEY_STARTER_PROMPTS_ENABLED: &str = "STARTER_PROMPTS_ENABLED";
 const FRONTEND_ENV_KEY_PROMPT_OPTIMIZER_ENABLED: &str = "PROMPT_OPTIMIZER_ENABLED";
 const FRONTEND_ENV_KEY_USER_PREFERENCES_ENABLED: &str = "USER_PREFERENCES_ENABLED";
@@ -759,6 +761,10 @@ fn build_frontend_environment(
         Value::Bool(config.frontend.disable_upload),
     );
     env.additional_environment.insert(
+        FRONTEND_ENV_KEY_MAX_FILES_PER_MESSAGE.to_string(),
+        Value::Number(config.frontend.max_files.into()),
+    );
+    env.additional_environment.insert(
         FRONTEND_ENV_KEY_DISABLE_CHAT_INPUT_AUTOFOCUS.to_string(),
         Value::Bool(config.frontend.disable_chat_input_autofocus),
     );
@@ -793,6 +799,10 @@ fn build_frontend_environment(
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_ASSISTANTS_CONTEXT_FILE_CONTRIBUTOR_THRESHOLD.to_string(),
         Value::from(config.assistants.context_file_contributor_threshold),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_ASSISTANTS_MAX_FILES.to_string(),
+        Value::Number(config.assistants.max_files.into()),
     );
     if let Some(max_length) = config.assistants.max_system_prompt_length {
         env.additional_environment.insert(
@@ -1655,6 +1665,28 @@ mod tests {
             key == FRONTEND_ENV_KEY_ERROR_REPORT_ENVIRONMENT
                 && value == &Value::String("test-environment".to_string())
         }));
+    }
+
+    #[test]
+    fn file_count_limits_are_exposed_to_the_frontend() {
+        let mut config = AppConfig::default();
+        config.frontend.max_files = 7;
+        config.assistants.max_files = 9;
+
+        let environment = build_frontend_environment(&config, FrontendKind::Web);
+
+        assert_eq!(
+            environment
+                .additional_environment
+                .get(FRONTEND_ENV_KEY_MAX_FILES_PER_MESSAGE),
+            Some(&Value::Number(7.into()))
+        );
+        assert_eq!(
+            environment
+                .additional_environment
+                .get(FRONTEND_ENV_KEY_ASSISTANTS_MAX_FILES),
+            Some(&Value::Number(9.into()))
+        );
     }
 
     #[test]

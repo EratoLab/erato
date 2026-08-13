@@ -1577,7 +1577,7 @@ pub struct PromptOptimizerResponse {
     responses(
         (status = OK, body = FileUploadResponse),
         (status = BAD_REQUEST, description = "Invalid file upload"),
-        (status = PAYLOAD_TOO_LARGE, description = "Uploaded file exceeds size limit"),
+        (status = PAYLOAD_TOO_LARGE, description = "Uploaded file exceeds size or file-count limit"),
         (status = INTERNAL_SERVER_ERROR, description = "Server error"),
     )
 )]
@@ -1602,6 +1602,11 @@ pub async fn upload_file(
         })?)
     } else {
         None
+    };
+    let max_files = if chat_id.is_some() {
+        app_state.config.frontend.max_files
+    } else {
+        app_state.config.assistants.max_files
     };
 
     // Determine if any available model supports image understanding or audio input
@@ -1631,6 +1636,15 @@ pub async fn upload_file(
         tracing::error!("Failed to process multipart form: {}", e);
         StatusCode::BAD_REQUEST
     })? {
+        if uploaded_files.len() >= max_files {
+            tracing::warn!(
+                "User {} attempted to upload more than {} files in one request",
+                me_user.id,
+                max_files
+            );
+            return Err(StatusCode::PAYLOAD_TOO_LARGE);
+        }
+
         // Read the field's contents
         let filename = field
             .file_name()

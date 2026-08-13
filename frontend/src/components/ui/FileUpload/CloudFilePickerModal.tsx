@@ -7,6 +7,8 @@
 
 import { memo, useMemo } from "react";
 
+import { DEFAULT_MAX_FILES_PER_MESSAGE } from "@/utils/fileUploadLimits";
+
 import { CloudFilePicker } from "../CloudFilePicker/CloudFilePicker";
 
 import type {
@@ -47,7 +49,7 @@ export const CloudFilePickerModal = memo<CloudFilePickerModalProps>(
     provider,
     acceptedFileTypes = [],
     multiple = false,
-    maxFiles = 5,
+    maxFiles = DEFAULT_MAX_FILES_PER_MESSAGE,
     onFilesSelected,
     chatId,
   }) => {

@@ -52,6 +52,7 @@ import { resolveChatSendErrorMessage } from "@/utils/chatSendErrorMessage";
 import { createLogger } from "@/utils/debugLogger";
 import { disambiguatePastedImageFileNames } from "@/utils/file/disambiguatePastedImageFileNames";
 import { mergeUniqueFilesById } from "@/utils/file/mergeUniqueFilesById";
+import { DEFAULT_MAX_FILES_PER_MESSAGE } from "@/utils/fileUploadLimits";
 
 import {
   ArrowUpIcon,
@@ -315,7 +316,7 @@ export const ChatInput = ({
   className = "",
   placeholder = t`Type a message...`,
   showControls = true,
-  maxFiles = 5,
+  maxFiles = DEFAULT_MAX_FILES_PER_MESSAGE,
   acceptedFileTypes = [],
   initialFiles = [],
   virtualFiles,

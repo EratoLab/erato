@@ -8,6 +8,7 @@ import { t } from "@lingui/core/macro";
 
 import { componentRegistry } from "@/config/componentRegistry";
 import { useChatFileSources } from "@/hooks/files/useChatFileSources";
+import { DEFAULT_MAX_FILES_PER_MESSAGE } from "@/utils/fileUploadLimits";
 
 import { CloudFilePickerModal } from "./CloudFilePickerModal";
 import { FileSourceSelector } from "./FileSourceSelector";
@@ -71,7 +72,7 @@ export function FileUploadWithTokenCheck({
   multiple = false,
   label = t({ id: "fileUpload.uploadFiles", message: "Upload Files" }),
   iconOnly = false,
-  maxFiles = 5,
+  maxFiles = DEFAULT_MAX_FILES_PER_MESSAGE,
   className = "",
   disabled = false,
   onProcessingChange,

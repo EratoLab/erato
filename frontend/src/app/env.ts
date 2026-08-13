@@ -2,6 +2,10 @@ import {
   DEFAULT_ERROR_REPORT_TEMPLATE,
   ERROR_REPORT_NONE_PLACEHOLDER,
 } from "@/utils/errorReport";
+import {
+  DEFAULT_MAX_ASSISTANT_FILES,
+  DEFAULT_MAX_FILES_PER_MESSAGE,
+} from "@/utils/fileUploadLimits";
 
 export type Env = {
   apiRootUrl: string;
@@ -15,6 +19,7 @@ export type Env = {
   themeLogoDarkPath: string | null;
   themeAssistantAvatarPath: string | null;
   disableUpload: boolean;
+  maxFilesPerMessage?: number;
   disableChatInputAutofocus: boolean;
   chatInputEmptyStateLayout: "bottom" | "centered";
   disableLogout: boolean;
@@ -25,6 +30,7 @@ export type Env = {
   assistantContextWarningThreshold: number;
   assistantContextFileContributorThreshold: number;
   assistantsMaxSystemPromptLength: number | null;
+  assistantsMaxFiles?: number;
   starterPromptsEnabled: boolean;
   promptOptimizerEnabled: boolean;
   userPreferencesEnabled: boolean;
@@ -73,6 +79,7 @@ declare global {
     THEME_LOGO_DARK_PATH?: string;
     THEME_ASSISTANT_AVATAR_PATH?: string;
     DISABLE_UPLOAD?: boolean;
+    MAX_FILES_PER_MESSAGE?: number;
     DISABLE_CHAT_INPUT_AUTOFOCUS?: boolean;
     CHAT_INPUT_EMPTY_STATE_LAYOUT?: string;
     DISABLE_LOGOUT?: boolean;
@@ -83,6 +90,7 @@ declare global {
     ASSISTANTS_CONTEXT_WARNING_THRESHOLD?: number;
     ASSISTANTS_CONTEXT_FILE_CONTRIBUTOR_THRESHOLD?: number;
     ASSISTANTS_MAX_SYSTEM_PROMPT_LENGTH?: number;
+    ASSISTANTS_MAX_FILES?: number;
     STARTER_PROMPTS_ENABLED?: boolean;
     PROMPT_OPTIMIZER_ENABLED?: boolean;
     USER_PREFERENCES_ENABLED?: boolean;
@@ -194,6 +202,9 @@ export const env = (): Env => {
     import.meta.env.VITE_DISABLE_UPLOAD === "true"
       ? true
       : (window.DISABLE_UPLOAD ?? false);
+  const maxFilesPerMessage = import.meta.env.VITE_MAX_FILES_PER_MESSAGE
+    ? Number(import.meta.env.VITE_MAX_FILES_PER_MESSAGE)
+    : (window.MAX_FILES_PER_MESSAGE ?? DEFAULT_MAX_FILES_PER_MESSAGE);
   const disableChatInputAutofocus =
     import.meta.env.VITE_DISABLE_CHAT_INPUT_AUTOFOCUS === "true"
       ? true
@@ -235,6 +246,9 @@ export const env = (): Env => {
     .VITE_ASSISTANTS_MAX_SYSTEM_PROMPT_LENGTH
     ? Number(import.meta.env.VITE_ASSISTANTS_MAX_SYSTEM_PROMPT_LENGTH)
     : (window.ASSISTANTS_MAX_SYSTEM_PROMPT_LENGTH ?? null);
+  const assistantsMaxFiles = import.meta.env.VITE_ASSISTANTS_MAX_FILES
+    ? Number(import.meta.env.VITE_ASSISTANTS_MAX_FILES)
+    : (window.ASSISTANTS_MAX_FILES ?? DEFAULT_MAX_ASSISTANT_FILES);
   const starterPromptsEnabled =
     import.meta.env.VITE_STARTER_PROMPTS_ENABLED === "true"
       ? true
@@ -385,6 +399,7 @@ export const env = (): Env => {
     themeLogoDarkPath,
     themeAssistantAvatarPath,
     disableUpload,
+    maxFilesPerMessage,
     disableChatInputAutofocus,
     chatInputEmptyStateLayout,
     disableLogout,
@@ -395,6 +410,7 @@ export const env = (): Env => {
     assistantContextWarningThreshold,
     assistantContextFileContributorThreshold,
     assistantsMaxSystemPromptLength,
+    assistantsMaxFiles,
     starterPromptsEnabled,
     promptOptimizerEnabled,
     userPreferencesEnabled,

@@ -15,6 +15,7 @@ import { useStandaloneFileUpload } from "@/hooks/files/useStandaloneFileUpload";
 import { fetchLinkFile } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useCloudProvidersFeature } from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
+import { DEFAULT_MAX_ASSISTANT_FILES } from "@/utils/fileUploadLimits";
 
 import { CloudFilePickerModal } from "./CloudFilePickerModal";
 import { FileSourceSelector } from "./FileSourceSelector";
@@ -67,7 +68,7 @@ export const AssistantFileUploadSelector: React.FC<
   multiple = true,
   label = t({ id: "fileUpload.uploadFiles", message: "Upload Files" }),
   iconOnly = false,
-  maxFiles = 5,
+  maxFiles = DEFAULT_MAX_ASSISTANT_FILES,
   className = "",
   disabled = false,
   isUploading: externalIsUploading = false,

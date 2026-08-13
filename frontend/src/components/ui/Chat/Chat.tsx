@@ -257,6 +257,7 @@ export const Chat = ({
     useActiveModelSelection({
       initialModel: initialModelOverride ?? currentChatLastModel,
     });
+  const { emptyStateLayout, maxFiles } = useChatInputFeature();
 
   const { uploadFiles, uploadError, isUploading } = useFileUploadWithTokenCheck(
     {
@@ -266,6 +267,7 @@ export const Chat = ({
       chatProviderId: selectedModel?.chat_provider_id ?? undefined,
       acceptedFileTypes,
       multiple: true,
+      maxFiles,
     },
   );
 
@@ -276,7 +278,6 @@ export const Chat = ({
 
   // Get sidebar feature configuration
   const { chatHistoryShowMetadata } = useSidebarFeature();
-  const { emptyStateLayout } = useChatInputFeature();
 
   // Convert the chat history data to the format expected by the sidebar
   const sessions: ChatSession[] = useMemo(
@@ -706,6 +707,7 @@ export const Chat = ({
       className="p-2 sm:p-4"
       isLoading={chatLoading}
       showControls
+      maxFiles={maxFiles}
       onRegenerate={onRegenerate}
       showFileTypes={true}
       initialModel={initialModelOverride ?? currentChatLastModel}

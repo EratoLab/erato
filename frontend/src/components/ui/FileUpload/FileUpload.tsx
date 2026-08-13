@@ -3,6 +3,7 @@ import { useCallback, memo, useEffect } from "react";
 
 import { useFileDropzone } from "@/hooks/files";
 import { FILE_TYPES } from "@/utils/fileTypes";
+import { DEFAULT_MAX_FILES_PER_MESSAGE } from "@/utils/fileUploadLimits";
 
 import { FilePreviewButton } from "./FilePreviewButton";
 import { FileUploadButton } from "./FileUploadButton";
@@ -70,7 +71,7 @@ export const FileUpload = memo<FileUploadProps>(
     dropZoneText = t`Drag files here or click to upload`,
     className = "",
     disabled = false,
-    maxFiles = 5,
+    maxFiles = DEFAULT_MAX_FILES_PER_MESSAGE,
     buttonOnly = false,
     showProgress = true,
     buttonClassName = "",

@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useRef } from "react";
 
 import { createLogger } from "@/utils/debugLogger";
+import { DEFAULT_MAX_FILES_PER_MESSAGE } from "@/utils/fileUploadLimits";
 
 import { useFileDropzone } from "./useFileDropzone";
 
@@ -66,7 +67,7 @@ export function useFileUploadWithTokenCheck({
   onFilesUploaded,
   acceptedFileTypes = [],
   multiple = false,
-  maxFiles = 5,
+  maxFiles = DEFAULT_MAX_FILES_PER_MESSAGE,
   disabled = false,
 }: UseFileUploadWithTokenCheckOptions): UseFileUploadWithTokenCheckResult {
   // Use the file upload hook

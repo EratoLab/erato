@@ -134,6 +134,7 @@ describe("FeatureConfigProvider", () => {
           autofocus: true,
           emptyStateLayout: "bottom",
           showUsageAdvisory: true,
+          maxFiles: 5,
         },
         audioTranscription: {
           enabled: false,
@@ -162,6 +163,7 @@ describe("FeatureConfigProvider", () => {
           contextWarningThreshold: 0.5,
           contextFileContributorThreshold: 0.05,
           maxSystemPromptLength: null,
+          maxFiles: 5,
         },
         starterPrompts: {
           enabled: false,
@@ -251,6 +253,7 @@ describe("FeatureConfigProvider", () => {
         themeLogoDarkPath: null,
         themeAssistantAvatarPath: null,
         disableUpload: false,
+        maxFilesPerMessage: 7,
         disableChatInputAutofocus: true, // Disabled
         disableLogout: false,
         assistantsEnabled: false,
@@ -276,6 +279,7 @@ describe("FeatureConfigProvider", () => {
       expect(result.current.upload.enabled).toBe(true);
       expect(result.current.chatInput.autofocus).toBe(false);
       expect(result.current.chatInput.showUsageAdvisory).toBe(true);
+      expect(result.current.chatInput.maxFiles).toBe(7);
       expect(result.current.auth.showLogout).toBe(true);
     });
 
@@ -290,6 +294,7 @@ describe("FeatureConfigProvider", () => {
         autofocus: true,
         emptyStateLayout: "bottom",
         showUsageAdvisory: false,
+        maxFiles: 5,
       });
     });
 
@@ -585,6 +590,7 @@ describe("FeatureConfigProvider", () => {
         autofocus: true,
         emptyStateLayout: "bottom",
         showUsageAdvisory: true,
+        maxFiles: 5,
       });
     });
 
@@ -838,6 +844,7 @@ describe("FeatureConfigProvider", () => {
         contextWarningThreshold: 0.5,
         contextFileContributorThreshold: 0.05,
         maxSystemPromptLength: null,
+        maxFiles: 5,
       });
     });
 
@@ -859,6 +866,7 @@ describe("FeatureConfigProvider", () => {
         assistantContextWarningThreshold: 0.1,
         assistantContextFileContributorThreshold: 0.02,
         assistantsMaxSystemPromptLength: 10000,
+        assistantsMaxFiles: 9,
         sharepointEnabled: false,
         sharepointShowDisclaimer: false,
         messageFeedbackEnabled: false,
@@ -884,6 +892,7 @@ describe("FeatureConfigProvider", () => {
         contextWarningThreshold: 0.1,
         contextFileContributorThreshold: 0.02,
         maxSystemPromptLength: 10000,
+        maxFiles: 9,
       });
     });
   });

@@ -6334,6 +6334,17 @@ async fn validate_file_uploads_for_message_submit(
     me_user: &MeProfile,
     input_file_ids: &[Uuid],
 ) -> Result<(), (axum::http::StatusCode, String)> {
+    let max_files = app_state.config.frontend.max_files;
+    if input_file_ids.len() > max_files {
+        return Err((
+            axum::http::StatusCode::UNPROCESSABLE_ENTITY,
+            format!(
+                "A message can include at most {} file attachments.",
+                max_files
+            ),
+        ));
+    }
+
     let mut audio_attachment_count = 0usize;
 
     for file_upload_id in input_file_ids {

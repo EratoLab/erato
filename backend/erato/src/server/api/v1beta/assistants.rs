@@ -442,6 +442,12 @@ pub async fn create_assistant(
         return Err(StatusCode::UNPROCESSABLE_ENTITY);
     }
 
+    if let Some(file_ids) = request.file_ids.as_ref()
+        && file_ids.len() > app_state.config.assistants.max_files
+    {
+        return Err(StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
     // Create the assistant
     let created_assistant = assistant::create_assistant(
         &app_state.db,
@@ -832,6 +838,12 @@ pub async fn update_assistant(
     if let Some(max_prompt_length) = app_state.config.assistants.max_system_prompt_length
         && let Some(prompt) = &request.prompt
         && prompt.len() > max_prompt_length
+    {
+        return Err(StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    if let Some(Some(file_ids)) = request.file_ids.as_ref()
+        && file_ids.len() > app_state.config.assistants.max_files
     {
         return Err(StatusCode::UNPROCESSABLE_ENTITY);
     }
