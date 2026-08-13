@@ -86,6 +86,8 @@ export interface GraphChatMessage {
   lastEditedDateTime?: string | null;
   deletedDateTime?: string | null;
   from?: GraphChatMessageFrom | null;
+  /** Thread title on a channel post; rare on a chat message, often empty. */
+  subject?: string | null;
   body?: GraphChatMessageBody;
   attachments?: GraphChatMessageAttachment[];
   /** Set on channel replies; the root message they hang under. */

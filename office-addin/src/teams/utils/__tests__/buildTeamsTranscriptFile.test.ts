@@ -31,6 +31,7 @@ function message(
     senderName: "Ada Lovelace",
     createdAt: "2026-03-03T09:14:00Z",
     editedAt: null,
+    subject: null,
     text: "Can we move the sync to Thursday?",
     markers: [],
     sharedFiles: [],
@@ -198,6 +199,19 @@ describe("buildTeamsTranscriptMarkdown", () => {
       section({ messages: [message({ editedAt: "2026-03-03T09:20:00Z" })] }),
     ]);
     expect(markdown).toContain("**Ada Lovelace** — 09:14 (edited) ·");
+  });
+
+  it("carries a chat message's subject in its heading", () => {
+    const markdown = render([
+      section({ messages: [message({ subject: "Thursday sync" })] }),
+    ]);
+    expect(markdown).toContain(
+      "**Ada Lovelace** — 09:14 · Subject: Thursday sync · id 1741000000000",
+    );
+  });
+
+  it("emits nothing at all when a message has no subject", () => {
+    expect(render([section()])).not.toContain("Subject");
   });
 
   it("keeps attachment markers on their own line", () => {
@@ -368,6 +382,30 @@ describe("channel sections", () => {
     expect(markdown).toContain(`· ${webUrl}`);
     // The team/channel pair is not a chat id, so nothing may address it as one.
     expect(markdown).not.toContain("team-1%2Fchan-1");
+  });
+
+  it("carries a channel post's subject and leaves its subjectless replies bare", () => {
+    const markdown = render([
+      channelSection([
+        message({
+          messageId: "root-a",
+          createdAt: "2026-08-01T09:00:00Z",
+          subject: "Release checklist",
+          text: "opener",
+        }),
+        message({
+          messageId: "reply-a1",
+          createdAt: "2026-08-01T09:05:00Z",
+          replyToId: "root-a",
+          text: "answer",
+        }),
+      ]),
+    ]);
+    expect(markdown).toContain(
+      "**Ada Lovelace** — 09:00 · Subject: Release checklist · id root-a",
+    );
+    expect(markdown).toContain("**Ada Lovelace** — 09:05 · id reply-a1");
+    expect(markdown.match(/Subject:/g)).toHaveLength(1);
   });
 
   it("says the ids are not links when the whole channel is ingested", () => {
