@@ -91,7 +91,14 @@ export interface TeamsTranscriptIndex {
   messages: TeamsTranscriptIndexMessage[];
 }
 
-const INDEX_BLOCK = /<!--\s*erato:teams-transcript\s+v\d+\s+([\s\S]*?)-->/g;
+/**
+ * Exactly one separator before the payload, not `\s+`: a repeated whitespace
+ * class butted against `[\s\S]*?` gives the engine a fresh split to try for
+ * every space, so a near-miss block in an otherwise ordinary file costs
+ * quadratic time. The payload group absorbs any further whitespace, and
+ * `JSON.parse` ignores it, so this reads no less than the greedy form did.
+ */
+const INDEX_BLOCK = /<!--\s*erato:teams-transcript\s+v\d+\s([\s\S]*?)-->/g;
 
 /**
  * Null for anything but an intact block of a version this build understands.
