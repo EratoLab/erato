@@ -69,7 +69,7 @@ const attached: TeamsAttachedTranscript = {
           createdAt: "2026-03-01T08:00:00Z",
           editedAt: null,
           subject: null,
-          text: "Screenshot [image: attached as teams-img-abc.png]",
+          text: "Screenshot [image: teams-img-abc.png]",
           markers: [],
           sharedFiles: [],
           imageUrls: [],

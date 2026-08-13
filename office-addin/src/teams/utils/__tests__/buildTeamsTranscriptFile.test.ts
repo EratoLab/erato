@@ -85,6 +85,19 @@ const exportedAt = new Date("2026-08-10T14:03:00Z");
 const render = (sections: TeamsTranscriptSection[]) =>
   buildTeamsTranscriptMarkdown({ sections, exportedAt, timeZone: "UTC" }) ?? "";
 
+const ordinalsOf = (markdown: string): number[] =>
+  [...markdown.matchAll(/^\[(\d+)\] /gm)].map((match) => Number(match[1]));
+
+/** What the model reads carries no way to address a message but its ordinal. */
+function expectNoIdentifiers(markdown: string, messageIds: string[]): void {
+  expect(markdown).not.toContain("teams.microsoft.com");
+  expect(markdown).not.toContain(MOCK_CHAT_ID);
+  expect(markdown).not.toContain(encodeURIComponent(MOCK_CHAT_ID));
+  for (const messageId of messageIds) {
+    expect(markdown).not.toContain(messageId);
+  }
+}
+
 describe("buildTeamsTranscriptFile", () => {
   it("builds a slugged markdown file", async () => {
     const file = buildTeamsTranscriptFile({
@@ -144,32 +157,57 @@ describe("buildTeamsTranscriptMarkdown", () => {
     );
   });
 
-  it("emits the chat-invariant link base once for a whole-chat ingest", () => {
+  it("cites messages by ordinal in a whole-chat ingest, never by id or link", () => {
     const markdown = render([
       section({
-        messages: [message({ messageId: "a" }), message({ messageId: "b" })],
+        messages: [
+          message({ messageId: "1754983230123" }),
+          message({ messageId: "1754983321123" }),
+        ],
       }),
     ]);
-    expect(markdown).toContain(
-      "Message links: https://teams.microsoft.com/l/message/19%3Aabc123%40thread.v2/{id}" +
-        "?context=%7B%22contextType%22%3A%22chat%22%7D",
-    );
-    expect(markdown).toContain("· id a");
-    expect(markdown).toContain("· id b");
-    // The encoded chat id repeated per message is the transcript's biggest
-    // avoidable token cost.
-    expect(markdown.match(/19%3Aabc123%40thread\.v2/g)).toHaveLength(1);
+    expect(markdown).toContain("[1] Ada Lovelace (09:14):");
+    expect(markdown).toContain("[2] Ada Lovelace (09:14):");
+    expectNoIdentifiers(markdown, ["1754983230123", "1754983321123"]);
   });
 
-  it("emits a full deep link per explicitly selected message", () => {
+  it("cites hand-picked messages by ordinal, never by deep link", () => {
     const markdown = render([
       section({
         selection: "messages",
-        messages: [message({ messageId: "z" })],
+        messages: [message({ messageId: "1754983230123" })],
       }),
     ]);
-    expect(markdown).toContain(buildTeamsMessageDeepLink(MOCK_CHAT_ID, "z"));
+    expect(markdown).toContain("[1] Ada Lovelace (09:14):");
     expect(markdown).toContain("Included: 1 selected message.");
+    expectNoIdentifiers(markdown, ["1754983230123"]);
+  });
+
+  it("numbers messages contiguously from 1 across every section", () => {
+    const markdown = render([
+      section({
+        messages: [message({ messageId: "b" }), message({ messageId: "a" })],
+      }),
+      section({
+        selection: "messages",
+        chat: { ...chat, chatId: "19:other@thread.v2", title: "Other" },
+        messages: [message({ messageId: "c" })],
+      }),
+    ]);
+    expect(ordinalsOf(markdown)).toEqual([1, 2, 3]);
+  });
+
+  it("assigns the same ordinals when the same input is rendered again", () => {
+    const sections = () => [
+      section({
+        messages: [
+          message({ messageId: "b", createdAt: "2026-03-04T10:00:00Z" }),
+          message({ messageId: "a", createdAt: "2026-03-03T09:14:00Z" }),
+        ],
+      }),
+    ];
+    expect(render(sections())).toBe(render(sections()));
+    expect(ordinalsOf(render(sections()))).toEqual([1, 2]);
   });
 
   it("groups messages under day headings, oldest first", () => {
@@ -199,7 +237,7 @@ describe("buildTeamsTranscriptMarkdown", () => {
     const markdown = render([
       section({ messages: [message({ editedAt: "2026-03-03T09:20:00Z" })] }),
     ]);
-    expect(markdown).toContain("**Ada Lovelace** — 09:14 (edited) ·");
+    expect(markdown).toContain("[1] Ada Lovelace (09:14, edited):");
   });
 
   it("carries a chat message's subject in its heading", () => {
@@ -207,7 +245,7 @@ describe("buildTeamsTranscriptMarkdown", () => {
       section({ messages: [message({ subject: "Thursday sync" })] }),
     ]);
     expect(markdown).toContain(
-      "**Ada Lovelace** — 09:14 · Subject: Thursday sync · id 1741000000000",
+      "[1] Ada Lovelace (09:14, Subject: Thursday sync):",
     );
   });
 
@@ -353,7 +391,7 @@ describe("channel sections", () => {
     );
     expect(markdown).not.toContain("## 10 August 2026");
     // The reply's own day is disclosed inline instead.
-    expect(markdown).toContain("**Ada Lovelace** — 10 August 2026, 10:30");
+    expect(markdown).toContain("[2] Ada Lovelace (10 August 2026, 10:30):");
   });
 
   it("anchors a reply whose root is absent at its own timestamp", () => {
@@ -389,24 +427,24 @@ describe("channel sections", () => {
     expect(render([channelSection([message()])])).not.toContain("Viewer:");
   });
 
-  it("links a picked channel message by Graph's own url", () => {
-    const webUrl =
-      "https://teams.microsoft.com/l/message/19%3Achan%40thread.tacv2/1741000000000" +
-      "?tenantId=t1&groupId=g1&parentMessageId=1741000000000";
+  it("cites a picked channel message by ordinal, dropping Graph's own url", () => {
     const markdown = render([
       channelSection(
         [
           message({
             chatId: "team-1/chan-1",
-            deepLink: webUrl,
+            messageId: "1741000000000",
+            deepLink:
+              "https://teams.microsoft.com/l/message/19%3Achan%40thread.tacv2/1741000000000" +
+              "?tenantId=t1&groupId=g1&parentMessageId=1741000000000",
           }),
         ],
         { selection: "messages", limit: undefined },
       ),
     ]);
-    expect(markdown).toContain(`· ${webUrl}`);
-    // The team/channel pair is not a chat id, so nothing may address it as one.
-    expect(markdown).not.toContain("team-1%2Fchan-1");
+    expect(markdown).toContain("[1] Ada Lovelace (09:14):");
+    expectNoIdentifiers(markdown, ["1741000000000"]);
+    expect(markdown).not.toContain("team-1");
   });
 
   it("carries a channel post's subject and leaves its subjectless replies bare", () => {
@@ -427,17 +465,18 @@ describe("channel sections", () => {
       ]),
     ]);
     expect(markdown).toContain(
-      "**Ada Lovelace** — 09:00 · Subject: Release checklist · id root-a",
+      "[1] Ada Lovelace (09:00, Subject: Release checklist):",
     );
-    expect(markdown).toContain("**Ada Lovelace** — 09:05 · id reply-a1");
+    expect(markdown).toContain("[2] Ada Lovelace (09:05):");
     expect(markdown.match(/Subject:/g)).toHaveLength(1);
   });
 
-  it("says the ids are not links when the whole channel is ingested", () => {
-    const markdown = render([channelSection([message({ messageId: "a" })])]);
-    expect(markdown).toContain(
-      "Message links: not reconstructible for a whole channel — each message shows its Teams message id instead.",
-    );
-    expect(markdown).toContain("· id a");
+  it("shows no id and no link when the whole channel is ingested", () => {
+    const markdown = render([
+      channelSection([message({ messageId: "1741000000000" })]),
+    ]);
+    expect(markdown).toContain("[1] Ada Lovelace (09:14):");
+    expect(markdown).not.toContain("Message links");
+    expectNoIdentifiers(markdown, ["1741000000000"]);
   });
 });

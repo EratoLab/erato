@@ -15,6 +15,8 @@
 
 import { plural, t } from "@lingui/core/macro";
 
+import { uploadedAssetNames } from "./teamsTranscriptAssets";
+
 import type { TeamsTranscriptSection } from "./buildTeamsTranscriptFile";
 import type { ParsedTeamsMessage } from "./parsedTeamsChat";
 import type {
@@ -226,13 +228,10 @@ function messageAssetFiles(
   message: ParsedTeamsMessage,
   claim: (name: string) => FileUploadItem | null,
 ): FileUploadItem[] {
-  const stamp = /attached as ([^\]]+)\]/g;
   const files: FileUploadItem[] = [];
-  for (const source of [message.text, ...message.markers]) {
-    for (const match of source.matchAll(stamp)) {
-      const file = claim(match[1].trim());
-      if (file) files.push(file);
-    }
+  for (const name of uploadedAssetNames([message.text, ...message.markers])) {
+    const file = claim(name);
+    if (file) files.push(file);
   }
   return files;
 }

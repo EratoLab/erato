@@ -1,7 +1,12 @@
 /**
  * Turns fetched Teams messages into the single markdown `File` handed to the
- * composer's `onSelectFiles`. Pure and synchronous, so the File shown in the
- * preview is byte-identical to the one uploaded.
+ * composer's `onSelectFiles`. Pure and synchronous, so one call produces both
+ * what is previewed and what is uploaded.
+ *
+ * Only what the model reads goes in: who said what, when, and the message
+ * text. Message ids and Teams permalinks stay out — they exist for rendering
+ * and back-linking, and everything that needs them reads the parsed sections
+ * instead — so each message is cited by the ordinal in its heading.
  *
  * Formatting is fixed English/ISO rather than locale-dependent: the transcript
  * is read by the model, and a deterministic rendering is what makes it
@@ -9,10 +14,6 @@
  */
 
 import { isRestrictedChannel } from "./parsedTeamsChannel";
-import {
-  teamsMessageDeepLinkBase,
-  teamsMessageDeepLinkSuffix,
-} from "./teamsDeepLink";
 
 import type { ParsedTeamsChannel } from "./parsedTeamsChannel";
 import type { ParsedTeamsChat, ParsedTeamsMessage } from "./parsedTeamsChat";
@@ -91,9 +92,12 @@ export function buildTeamsTranscriptMarkdown(
   input: TeamsTranscriptInput,
 ): string | null {
   const timeZone = input.timeZone ?? "UTC";
+  // Ordinals run across the whole transcript, not per section: a selection can
+  // span several conversations, and a citation has to name exactly one message.
+  const ordinals = { next: 1 };
   const rendered = input.sections
     .filter((section) => section.messages.length > 0)
-    .map((section) => renderSection(section, input, timeZone));
+    .map((section) => renderSection(section, input, timeZone, ordinals));
   if (rendered.length === 0) return null;
   return `${rendered.join("\n\n")}\n`;
 }
@@ -102,6 +106,7 @@ function renderSection(
   section: TeamsTranscriptSection,
   input: TeamsTranscriptInput,
   timeZone: string,
+  ordinals: { next: number },
 ): string {
   const lines: string[] = [];
   if (section.kind === "channel") {
@@ -135,25 +140,15 @@ function renderSection(
     `Exported: ${formatDateTime(input.exportedAt ?? new Date(), timeZone)}`,
   );
   lines.push(includedLine(section, timeZone));
-  // A whole conversation repeats the link on every message, so a chat emits the
-  // invariant prefix once and bare ids after it. A channel permalink carries
-  // groupId, tenantId and parentMessageId, none of which factor out that way —
-  // so a whole channel keeps the ids and says they are not links.
-  const idOnly = section.selection === "whole-chat";
-  if (idOnly) {
-    lines.push(
-      section.kind === "chat"
-        ? `Message links: ${teamsMessageDeepLinkBase(section.chat.chatId)}/{id}${teamsMessageDeepLinkSuffix()} — substitute the id shown on each message.`
-        : "Message links: not reconstructible for a whole channel — each message shows its Teams message id instead.",
-    );
-  }
 
   let currentDay: string | null = null;
   const pushMessage = (
     message: ParsedTeamsMessage,
     dateLabel: string | null,
   ) => {
-    lines.push("", renderMessageHeading(message, idOnly, timeZone, dateLabel));
+    const ordinal = ordinals.next;
+    ordinals.next += 1;
+    lines.push("", renderMessageHeading(message, ordinal, timeZone, dateLabel));
     if (message.text.length > 0) lines.push(message.text);
     for (const marker of message.markers) lines.push(marker);
   };
@@ -232,24 +227,27 @@ function byCreatedAsc(a: ParsedTeamsMessage, b: ParsedTeamsMessage): number {
   return createdAtMs(a) - createdAtMs(b);
 }
 
+/**
+ * `[7] Ada Lovelace (09:14, edited):` — the ordinal is the message's whole
+ * address, so everything else in the parentheses is what a reader of the
+ * conversation would ask for. Only the time is always there: the day comes
+ * from the heading above, except for a channel reply that landed on a later
+ * day than its thread.
+ */
 function renderMessageHeading(
   message: ParsedTeamsMessage,
-  idOnly: boolean,
+  ordinal: number,
   timeZone: string,
   dateLabel: string | null,
 ): string {
   const time = formatTime(message.createdAt, timeZone);
-  const edited = message.editedAt ? " (edited)" : "";
-  // The parsed link, never a rebuilt one: a channel message is addressed by
-  // Graph's own `webUrl`, and building one from `chatId` would encode the
-  // team/channel pair as if it were a chat id.
-  const link = idOnly ? `id ${message.messageId}` : message.deepLink;
-  const when = dateLabel ? `${dateLabel}, ${time}` : time;
+  const meta = [dateLabel ? `${dateLabel}, ${time}` : time];
+  if (message.editedAt) meta.push("edited");
   // Most chat messages carry no subject at all, so the label is emitted only
   // when there is one — an empty field on every heading would cost more tokens
   // than the subjects it exists to carry.
-  const subject = message.subject ? ` · Subject: ${message.subject}` : "";
-  return `**${message.senderName}** — ${when}${edited}${subject} · ${link}`;
+  if (message.subject) meta.push(`Subject: ${message.subject}`);
+  return `[${ordinal}] ${message.senderName} (${meta.join(", ")}):`;
 }
 
 function includedLine(

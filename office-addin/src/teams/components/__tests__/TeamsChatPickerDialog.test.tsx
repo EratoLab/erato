@@ -1264,7 +1264,7 @@ describe("TeamsChatPickerDialog", () => {
     expect(transcript.name).toBe("teams-Product_sync.md");
     expect(image.name).toMatch(/^teams-img-[0-9a-f]{16}\.png$/);
     await expect(transcript.text()).resolves.toContain(
-      `[image: attached as ${image.name}]`,
+      `[image: ${image.name}]`,
     );
   });
 

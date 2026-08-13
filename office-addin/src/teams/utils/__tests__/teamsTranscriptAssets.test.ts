@@ -57,7 +57,7 @@ describe("stampImageMarkers", () => {
   it("replaces markers by occurrence index and leaves unfetched ones", () => {
     expect(
       stampImageMarkers("a [image] b [image] c", [null, "teams-img-1.png"]),
-    ).toBe("a [image] b [image: attached as teams-img-1.png] c");
+    ).toBe("a [image] b [image: teams-img-1.png] c");
   });
 
   it("returns the text unchanged with nothing to stamp", () => {
@@ -111,7 +111,7 @@ describe("collectTeamsMessageAssets", () => {
     const name = result.files[0].name;
     expect(name).toMatch(/^teams-img-[0-9a-f]{16}\.jpg$/);
     for (const stamped of result.sections[0].messages) {
-      expect(stamped.text).toBe(`[image: attached as ${name}]`);
+      expect(stamped.text).toBe(`[image: ${name}]`);
     }
   });
 
@@ -202,11 +202,13 @@ describe("shared files", () => {
     expect(result.files).toHaveLength(1);
     const name = result.files[0].name;
     expect(name).toMatch(/^teams-file-[0-9a-f]{8}-Q3_Plan\.docx$/);
+    // The uploaded name replaces the Teams-side one: it ends with the same
+    // filename, and the backend joins the parsed upload by it.
     expect(result.sections[0].messages[0].text).toBe(
-      `see [attachment: Q3 Plan.docx — attached as ${name}]`,
+      `see [attachment: ${name}]`,
     );
     expect(result.sections[0].messages[1].markers).toEqual([
-      `[attachment: notes.pdf — attached as ${name}]`,
+      `[attachment: ${name}]`,
     ]);
   });
 

@@ -342,9 +342,7 @@ describe("collectTeamsTranscript", () => {
     expect(result.assetFiles).toHaveLength(1);
     const name = result.assetFiles[0].name;
     expect(name).toMatch(/^teams-img-[0-9a-f]{16}\.png$/);
-    expect(result.sections[0].messages[0].text).toContain(
-      `[image: attached as ${name}]`,
-    );
+    expect(result.sections[0].messages[0].text).toContain(`[image: ${name}]`);
     // The denominator grows by the image fetch once its count is known.
     expect(Math.max(...totals)).toBe(Math.min(...totals) + 1);
   });
@@ -404,7 +402,7 @@ describe("collectTeamsTranscript", () => {
     const name = result.assetFiles[0].name;
     expect(name).toMatch(/^teams-file-[0-9a-f]{8}-Q3_Plan\.docx$/);
     expect(result.sections[0].messages[0].markers).toEqual([
-      `[attachment: Q3 Plan.docx — attached as ${name}]`,
+      `[attachment: ${name}]`,
     ]);
   });
 
