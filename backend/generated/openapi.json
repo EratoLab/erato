@@ -4206,6 +4206,7 @@
           "created_at",
           "updated_at",
           "review_count",
+          "audience_grants",
           "assistant",
           "creator"
         ],
@@ -4215,6 +4216,12 @@
           },
           "assistant_id": {
             "type": "string"
+          },
+          "audience_grants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShareGrant"
+            }
           },
           "category_ids": {
             "type": "array",

@@ -214,7 +214,7 @@ async fn fetch_group_profiles(
     profiles
 }
 
-async fn fetch_profiles_for_grants(
+pub(crate) async fn fetch_profiles_for_grants(
     app_state: &AppState,
     me_user: &MeProfile,
     grants: &[share_grants::Model],

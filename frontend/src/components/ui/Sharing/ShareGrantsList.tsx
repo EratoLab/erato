@@ -9,7 +9,7 @@ import type { OrganizationMember } from "@/types/sharing";
 
 interface ShareGrantsListProps {
   grants: ShareGrant[];
-  onRemove: (grantId: string) => void;
+  onRemove?: (grantId: string) => void;
   canManage: boolean;
   isLoading?: boolean;
   className?: string;
@@ -90,7 +90,7 @@ ShareGrantsList.displayName = "ShareGrantsList";
 // Individual grant row component
 interface GrantRowProps {
   grant: ShareGrant;
-  onRemove: (grantId: string) => void;
+  onRemove?: (grantId: string) => void;
   canManage: boolean;
   subjectLookup: Map<string, string>;
 }
@@ -142,7 +142,7 @@ const GrantRow = memo<GrantRowProps>(
         </div>
 
         {/* Remove button */}
-        {canManage && (
+        {canManage && onRemove && (
           <Button
             variant="danger"
             size="sm"
