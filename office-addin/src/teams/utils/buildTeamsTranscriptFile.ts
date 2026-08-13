@@ -3,10 +3,11 @@
  * composer's `onSelectFiles`. Pure and synchronous, so one call produces both
  * what is previewed and what is uploaded.
  *
- * Only what the model reads goes in: who said what, when, and the message
- * text. Message ids and Teams permalinks stay out — they exist for rendering
- * and back-linking, and everything that needs them reads the parsed sections
- * instead — so each message is cited by the ordinal in its heading.
+ * Only what the model reads goes in the prose: who said what, when, and the
+ * message text. Message ids and Teams permalinks stay out — they exist for
+ * rendering and back-linking — so each message is cited by the ordinal in its
+ * heading, and the identifiers ride in the trailing index block that the
+ * backend strips before the file reaches a model.
  *
  * Formatting is fixed English/ISO rather than locale-dependent: the transcript
  * is read by the model, and a deterministic rendering is what makes it
@@ -14,9 +15,21 @@
  */
 
 import { isRestrictedChannel } from "./parsedTeamsChannel";
+import { channelRef, chatRef, messageRef } from "./teamsConversationRef";
+import { uploadedAssetNames } from "./teamsTranscriptAssets";
+import {
+  TEAMS_TRANSCRIPT_INDEX_VERSION,
+  serializeTeamsTranscriptIndex,
+} from "./teamsTranscriptIndex";
 
 import type { ParsedTeamsChannel } from "./parsedTeamsChannel";
 import type { ParsedTeamsChat, ParsedTeamsMessage } from "./parsedTeamsChat";
+import type { TeamsConversationRef } from "./teamsConversationRef";
+import type {
+  TeamsTranscriptIndex,
+  TeamsTranscriptIndexMessage,
+  TeamsTranscriptIndexSection,
+} from "./teamsTranscriptIndex";
 
 interface TeamsTranscriptSectionBase {
   /**
@@ -88,26 +101,68 @@ export function buildTeamsTranscriptFilename(
   return `teams-${slug}.md`;
 }
 
+export interface TeamsTranscriptDocument {
+  markdown: string;
+  index: TeamsTranscriptIndex;
+}
+
 export function buildTeamsTranscriptMarkdown(
   input: TeamsTranscriptInput,
 ): string | null {
+  return buildTeamsTranscriptDocument(input)?.markdown ?? null;
+}
+
+/**
+ * The prose and the index it ships with, built in one pass so the ordinals the
+ * prose cites and the ones the index records cannot disagree.
+ *
+ * The index goes last so the conversation leads the file — content first and
+ * the question at the end is what measures best — and a trailing block is also
+ * the one position that can be cut without disturbing the prose above it.
+ */
+export function buildTeamsTranscriptDocument(
+  input: TeamsTranscriptInput,
+): TeamsTranscriptDocument | null {
   const timeZone = input.timeZone ?? "UTC";
+  const exportedAt = input.exportedAt ?? new Date();
+  const sections = input.sections.filter(
+    (section) => section.messages.length > 0,
+  );
+  if (sections.length === 0) return null;
+
   // Ordinals run across the whole transcript, not per section: a selection can
   // span several conversations, and a citation has to name exactly one message.
-  const ordinals = { next: 1 };
-  const rendered = input.sections
-    .filter((section) => section.messages.length > 0)
-    .map((section) => renderSection(section, input, timeZone, ordinals));
-  if (rendered.length === 0) return null;
-  return `${rendered.join("\n\n")}\n`;
+  const messages: TeamsTranscriptIndexMessage[] = [];
+  const rendered = sections.map((section, position) =>
+    renderSection(section, { exportedAt, timeZone, position, messages }),
+  );
+  const index: TeamsTranscriptIndex = {
+    version: TEAMS_TRANSCRIPT_INDEX_VERSION,
+    exportedAt: exportedAt.toISOString(),
+    timeZone,
+    sections: sections.map(indexSection),
+    messages,
+  };
+  return {
+    markdown: `${rendered.join("\n\n")}\n\n${serializeTeamsTranscriptIndex(index)}\n`,
+    index,
+  };
+}
+
+interface RenderContext {
+  exportedAt: Date;
+  timeZone: string;
+  /** Position of the section being rendered, as the index records it. */
+  position: number;
+  /** Collected as the prose is written, so ordinals are assigned once. */
+  messages: TeamsTranscriptIndexMessage[];
 }
 
 function renderSection(
   section: TeamsTranscriptSection,
-  input: TeamsTranscriptInput,
-  timeZone: string,
-  ordinals: { next: number },
+  context: RenderContext,
 ): string {
+  const { timeZone } = context;
   const lines: string[] = [];
   if (section.kind === "channel") {
     lines.push(
@@ -136,9 +191,7 @@ function renderSection(
       );
     }
   }
-  lines.push(
-    `Exported: ${formatDateTime(input.exportedAt ?? new Date(), timeZone)}`,
-  );
+  lines.push(`Exported: ${formatDateTime(context.exportedAt, timeZone)}`);
   lines.push(includedLine(section, timeZone));
 
   let currentDay: string | null = null;
@@ -146,8 +199,8 @@ function renderSection(
     message: ParsedTeamsMessage,
     dateLabel: string | null,
   ) => {
-    const ordinal = ordinals.next;
-    ordinals.next += 1;
+    const ordinal = context.messages.length + 1;
+    context.messages.push(indexMessage(message, ordinal, section, context));
     lines.push("", renderMessageHeading(message, ordinal, timeZone, dateLabel));
     if (message.text.length > 0) lines.push(message.text);
     for (const marker of message.markers) lines.push(marker);
@@ -184,6 +237,62 @@ function renderSection(
     pushMessage(message, null);
   }
   return lines.join("\n");
+}
+
+function conversationRefOf(
+  section: TeamsTranscriptSection,
+): TeamsConversationRef {
+  return section.kind === "chat"
+    ? chatRef(section.chat.chatId)
+    : channelRef(section.channel.teamId, section.channel.channelId);
+}
+
+function indexSection(
+  section: TeamsTranscriptSection,
+): TeamsTranscriptIndexSection {
+  return {
+    kind: section.kind,
+    ref: conversationRefOf(section),
+    title: section.kind === "chat" ? section.chat.title : section.channel.name,
+    teamName: section.kind === "chat" ? null : section.channel.teamName,
+    selection: section.selection,
+    limit: section.limit ?? null,
+    truncated: section.truncated ?? false,
+    skippedCount: section.skippedCount ?? 0,
+    window: {
+      from: oldestCreatedAt(section.messages),
+      to: newestCreatedAt(section.messages),
+    },
+    participants: section.kind === "chat" ? section.chat.participants : [],
+    viewer: section.kind === "chat" ? section.chat.selfDisplayName : null,
+  };
+}
+
+function indexMessage(
+  message: ParsedTeamsMessage,
+  ordinal: number,
+  section: TeamsTranscriptSection,
+  context: RenderContext,
+): TeamsTranscriptIndexMessage {
+  const body = [message.text, ...message.markers].filter(
+    (part) => part.length > 0,
+  );
+  return {
+    ordinal,
+    section: context.position,
+    ref: messageRef(
+      conversationRefOf(section),
+      message.messageId,
+      message.replyToId,
+    ),
+    sender: message.senderName,
+    createdAt: message.createdAt,
+    editedAt: message.editedAt,
+    subject: message.subject,
+    deepLink: message.deepLink,
+    text: body.join("\n"),
+    assets: uploadedAssetNames(body),
+  };
 }
 
 /**

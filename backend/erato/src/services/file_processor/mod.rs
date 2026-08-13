@@ -1288,6 +1288,56 @@ fn strip_empty_markdown_table_rows(text: &str) -> String {
     output.join("\n")
 }
 
+/// Names the machine-readable index the Teams add-in appends to a transcript.
+const TRANSCRIPT_INDEX_MARKER: &str = "erato:teams-transcript";
+
+/// Removes that index from the extracted text.
+///
+/// It carries message ids, deep links and the file-to-message join: rendering
+/// data that costs tokens and tells a model nothing. It travels inside the
+/// transcript so the two share one lifetime, and this is where the two part
+/// ways — every consumer of a file's text reaches it through `parse_file`.
+///
+/// The span is bounded by the comment delimiters when they survived extraction
+/// and by the line otherwise, because a markdown renderer may have escaped them
+/// (`\<!--`) or dropped them; anything left on that line is payload either way.
+fn strip_transcript_index(content: &str) -> String {
+    if !content.contains(TRANSCRIPT_INDEX_MARKER) {
+        return content.to_string();
+    }
+
+    let mut kept = String::with_capacity(content.len());
+    let mut rest = content;
+    while let Some(found) = rest.find(TRANSCRIPT_INDEX_MARKER) {
+        let line_start = rest[..found].rfind('\n').map_or(0, |index| index + 1);
+        let mut start = rest[line_start..found]
+            .rfind("<!--")
+            .map_or(line_start, |index| line_start + index);
+        // A markdown renderer escapes the delimiters rather than emitting them.
+        if rest[..start].ends_with('\\') {
+            start -= 1;
+        }
+        let line_end = rest[found..]
+            .find('\n')
+            .map_or(rest.len(), |index| found + index);
+        let end = ["-->", "--\\>"]
+            .iter()
+            .filter_map(|terminator| {
+                rest[found..]
+                    .find(terminator)
+                    .map(|index| found + index + terminator.len())
+            })
+            .min()
+            .unwrap_or(line_end);
+        kept.push_str(&rest[..start]);
+        rest = &rest[end..];
+    }
+    kept.push_str(rest);
+    // The index is the last thing in the file, so removing it leaves the blank
+    // line that separated it from the prose.
+    kept.trim_end().to_string()
+}
+
 fn append_email_plain_text_if_missing(content: &mut String, plain_text: Option<String>) {
     let Some(plain_text) = plain_text else {
         return;
@@ -1830,6 +1880,8 @@ impl FileProcessor for XbergProcessor {
                         "Email final cleanup stats"
                     );
                 }
+
+                content = strip_transcript_index(&content);
 
                 let total_elapsed = total_timer.finish();
                 tracing::debug!(
@@ -3014,5 +3066,97 @@ Content-Type: text/html; charset=utf-8
             !extracted.contains("R0lGODlhAQABA"),
             "pasted base64 blob leaked:\n{extracted}"
         );
+    }
+
+    /// The prose half of a Teams transcript, as the add-in writes it.
+    const TRANSCRIPT_PROSE: &str = "# Teams chat: Product sync\n\
+        Participants: Ada Lovelace, Grace Hopper\n\
+        Exported: 10 August 2026 14:03 (UTC)\n\
+        Included: all 2 messages, 3 March 2026.\n\
+        \n\
+        ## 3 March 2026\n\
+        \n\
+        [1] Ada Lovelace (09:14):\n\
+        Can we move the sync to Thursday?\n\
+        \n\
+        [2] Grace Hopper (09:16):\n\
+        Thursday works.\n";
+
+    /// The index block, carrying exactly what the prose refuses to show.
+    const TRANSCRIPT_INDEX_BLOCK: &str = "<!-- erato:teams-transcript v1 \
+        {\"version\":1,\"exportedAt\":\"2026-08-10T14:03:00.000Z\",\"timeZone\":\"UTC\",\
+        \"sections\":[{\"kind\":\"chat\",\"ref\":{\"kind\":\"chat\",\
+        \"chatId\":\"19:abc123@thread.v2\"},\"title\":\"Product sync\"}],\
+        \"messages\":[{\"ordinal\":1,\"section\":0,\"ref\":{\"conversation\":{\"kind\":\"chat\",\
+        \"chatId\":\"19:abc123@thread.v2\"},\"messageId\":\"1754983230123\",\
+        \"parentMessageId\":null},\"sender\":\"Ada Lovelace\",\
+        \"deepLink\":\"https://teams.microsoft.com/l/message/19%3Aabc123%40thread.v2/1754983230123\",\
+        \"text\":\"Can we move the sync to Thursday?\",\"assets\":[]}]} -->";
+
+    #[tokio::test]
+    async fn test_xberg_strips_teams_transcript_index_block() {
+        // Non-negotiable: the index exists for the UI, and a single path that lets it through
+        // silently spends the prose's whole token diet on rendering data.
+        let transcript = format!("{TRANSCRIPT_PROSE}\n{TRANSCRIPT_INDEX_BLOCK}\n");
+        let processor = XbergProcessor;
+        let extracted = processor
+            .parse_file(transcript.into_bytes(), Some("text/plain"))
+            .await
+            .expect("transcript should extract");
+
+        assert!(
+            !extracted.contains("erato:teams-transcript"),
+            "index marker survived extraction:\n{extracted}"
+        );
+        assert!(
+            !extracted.contains("1754983230123"),
+            "message id survived extraction:\n{extracted}"
+        );
+        assert!(
+            !extracted.contains("19:abc123@thread.v2"),
+            "chat id survived extraction:\n{extracted}"
+        );
+        assert!(
+            !extracted.contains("teams.microsoft.com"),
+            "deep link survived extraction:\n{extracted}"
+        );
+        assert!(
+            extracted.contains("[1] Ada Lovelace (09:14):")
+                && extracted.contains("Thursday works."),
+            "conversation lost with the index:\n{extracted}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_xberg_leaves_transcript_prose_unchanged_by_the_index() {
+        // The block must be invisible to the model in the strong sense: a transcript with one
+        // extracts to what the same transcript without one does.
+        let processor = XbergProcessor;
+        let with_index = processor
+            .parse_file(
+                format!("{TRANSCRIPT_PROSE}\n{TRANSCRIPT_INDEX_BLOCK}\n").into_bytes(),
+                Some("text/plain"),
+            )
+            .await
+            .expect("transcript with index should extract");
+        let without_index = processor
+            .parse_file(TRANSCRIPT_PROSE.as_bytes().to_vec(), Some("text/plain"))
+            .await
+            .expect("transcript without index should extract");
+
+        assert_eq!(with_index.trim(), without_index.trim());
+    }
+
+    #[test]
+    fn strip_transcript_index_handles_escaped_delimiters_and_leaves_other_text() {
+        let escaped = "prose\n\n\\<!-- erato:teams-transcript v1 {\"version\":1} --\\>\n";
+        assert_eq!(strip_transcript_index(escaped), "prose");
+
+        // A comment that never opened: the line it sits on is still all payload.
+        let bare = "prose\n\nerato:teams-transcript v1 {\"version\":1}\n";
+        assert_eq!(strip_transcript_index(bare), "prose");
+
+        let untouched = "prose with <!-- an ordinary comment --> in it\n";
+        assert_eq!(strip_transcript_index(untouched), untouched);
     }
 }

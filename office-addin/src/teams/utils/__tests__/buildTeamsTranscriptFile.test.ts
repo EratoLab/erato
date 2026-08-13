@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { MOCK_CHAT_ID } from "../../../test/mocks/teams/graph";
 import {
+  buildTeamsTranscriptDocument,
   buildTeamsTranscriptFile,
   buildTeamsTranscriptMarkdown,
 } from "../buildTeamsTranscriptFile";
 import { buildTeamsMessageDeepLink } from "../teamsDeepLink";
+import { parseTeamsTranscriptIndex } from "../teamsTranscriptIndex";
 
 import type { TeamsTranscriptSection } from "../buildTeamsTranscriptFile";
 import type { ParsedTeamsChannel } from "../parsedTeamsChannel";
@@ -88,13 +90,18 @@ const render = (sections: TeamsTranscriptSection[]) =>
 const ordinalsOf = (markdown: string): number[] =>
   [...markdown.matchAll(/^\[(\d+)\] /gm)].map((match) => Number(match[1]));
 
+/** The transcript minus its index block — what the backend leaves for the model. */
+const proseOf = (markdown: string): string =>
+  markdown.slice(0, markdown.lastIndexOf("<!--"));
+
 /** What the model reads carries no way to address a message but its ordinal. */
 function expectNoIdentifiers(markdown: string, messageIds: string[]): void {
-  expect(markdown).not.toContain("teams.microsoft.com");
-  expect(markdown).not.toContain(MOCK_CHAT_ID);
-  expect(markdown).not.toContain(encodeURIComponent(MOCK_CHAT_ID));
+  const prose = proseOf(markdown);
+  expect(prose).not.toContain("teams.microsoft.com");
+  expect(prose).not.toContain(MOCK_CHAT_ID);
+  expect(prose).not.toContain(encodeURIComponent(MOCK_CHAT_ID));
   for (const messageId of messageIds) {
-    expect(markdown).not.toContain(messageId);
+    expect(prose).not.toContain(messageId);
   }
 }
 
@@ -316,6 +323,186 @@ describe("buildTeamsTranscriptMarkdown", () => {
   });
 });
 
+describe("transcript index block", () => {
+  const build = (sections: TeamsTranscriptSection[]) => {
+    const document = buildTeamsTranscriptDocument({
+      sections,
+      exportedAt,
+      timeZone: "UTC",
+    });
+    if (!document) throw new Error("expected a transcript");
+    return document;
+  };
+
+  it("recovers the index it serialized", () => {
+    const { markdown, index } = build([
+      section({
+        messages: [
+          message({ messageId: "b", createdAt: "2026-03-04T10:00:00Z" }),
+          message({ messageId: "a", subject: "Thursday sync" }),
+        ],
+      }),
+      channelSection([message({ messageId: "c", chatId: "team-1/chan-1" })], {
+        selection: "messages",
+        limit: undefined,
+        skippedCount: 1,
+      }),
+    ]);
+    expect(parseTeamsTranscriptIndex(markdown)).toEqual(index);
+  });
+
+  it("sits at the end of the file, on one line", () => {
+    const { markdown } = build([section()]);
+    const block = markdown.slice(markdown.lastIndexOf("<!--")).trimEnd();
+    expect(block.startsWith("<!-- erato:teams-transcript v1 ")).toBe(true);
+    expect(block.endsWith("-->")).toBe(true);
+    expect(block).not.toContain("\n");
+  });
+
+  it("carries the identifiers the prose drops", () => {
+    const { index } = build([
+      section({
+        messages: [message({ messageId: "1754983230123" })],
+      }),
+    ]);
+    expect(index.sections[0].ref).toEqual({
+      kind: "chat",
+      chatId: MOCK_CHAT_ID,
+    });
+    expect(index.messages[0].ref).toEqual({
+      conversation: { kind: "chat", chatId: MOCK_CHAT_ID },
+      messageId: "1754983230123",
+      parentMessageId: null,
+    });
+    expect(index.messages[0].deepLink).toContain("teams.microsoft.com");
+  });
+
+  it("addresses a channel reply by team, channel and its root", () => {
+    const { index } = build([
+      channelSection([
+        message({ messageId: "root-a", createdAt: "2026-08-01T09:00:00Z" }),
+        message({
+          messageId: "reply-a1",
+          createdAt: "2026-08-01T09:05:00Z",
+          replyToId: "root-a",
+        }),
+      ]),
+    ]);
+    expect(index.messages[1].ref).toEqual({
+      conversation: { kind: "channel", teamId: "team-1", channelId: "chan-1" },
+      messageId: "reply-a1",
+      parentMessageId: "root-a",
+    });
+  });
+
+  it("numbers the index entries as the prose cites them", () => {
+    const { markdown, index } = build([
+      channelSection([
+        message({
+          messageId: "root-new",
+          createdAt: "2026-08-09T08:00:00Z",
+          text: "newer opener",
+        }),
+        message({
+          messageId: "root-old",
+          createdAt: "2026-08-01T09:00:00Z",
+          text: "older opener",
+        }),
+      ]),
+    ]);
+    // Threads are rendered oldest-opener-first, so the index must agree.
+    expect(index.messages.map((entry) => entry.ordinal)).toEqual([1, 2]);
+    expect(index.messages.map((entry) => entry.text)).toEqual([
+      "older opener",
+      "newer opener",
+    ]);
+    expect(ordinalsOf(proseOf(markdown))).toEqual([1, 2]);
+  });
+
+  it("names the uploads a message carries", () => {
+    const { index } = build([
+      section({
+        messages: [
+          message({
+            text: "see [image: teams-img-0123456789abcdef.png]",
+            markers: ["[attachment: teams-file-0123abcd-agenda.docx]"],
+          }),
+        ],
+      }),
+    ]);
+    expect(index.messages[0].assets).toEqual([
+      "teams-img-0123456789abcdef.png",
+      "teams-file-0123abcd-agenda.docx",
+    ]);
+    expect(index.messages[0].text).toContain("[attachment: teams-file-");
+  });
+
+  it("describes what each section contributed", () => {
+    const { index } = build([
+      section({
+        truncated: true,
+        messages: [
+          message({ messageId: "b", createdAt: "2026-08-10T08:00:00Z" }),
+          message({ messageId: "a", createdAt: "2026-03-03T09:14:00Z" }),
+        ],
+      }),
+      channelSection([message({ messageId: "c" })]),
+    ]);
+    expect(index.sections[0]).toMatchObject({
+      kind: "chat",
+      title: "Product sync",
+      selection: "whole-chat",
+      limit: 200,
+      truncated: true,
+      skippedCount: 0,
+      window: { from: "2026-03-03T09:14:00Z", to: "2026-08-10T08:00:00Z" },
+      participants: ["Ada Lovelace", "Grace Hopper"],
+      viewer: null,
+    });
+    expect(index.sections[1]).toMatchObject({
+      kind: "channel",
+      title: "Test Channel 1",
+      teamName: "Contoso",
+    });
+    expect(index.messages.map((entry) => entry.section)).toEqual([0, 0, 1]);
+  });
+
+  it("survives a message whose text would close the comment", () => {
+    const text = "cases: a --> b, c --- d, and <!-- not a block -->";
+    const { markdown, index } = build([
+      section({ messages: [message({ text })] }),
+    ]);
+    expect(parseTeamsTranscriptIndex(markdown)).toEqual(index);
+    expect(parseTeamsTranscriptIndex(markdown)?.messages[0].text).toBe(text);
+  });
+
+  it("reads no index out of a file that has none, and never throws", () => {
+    expect(
+      parseTeamsTranscriptIndex("# Teams chat: Product sync\n"),
+    ).toBeNull();
+    expect(parseTeamsTranscriptIndex("")).toBeNull();
+  });
+
+  it("refuses a malformed or unknown-version block", () => {
+    const { markdown } = build([section()]);
+    const payload = markdown.slice(markdown.lastIndexOf("<!--"));
+    expect(
+      parseTeamsTranscriptIndex("<!-- erato:teams-transcript v1 {oops -->"),
+    ).toBeNull();
+    expect(
+      parseTeamsTranscriptIndex('<!-- erato:teams-transcript v1 "text" -->'),
+    ).toBeNull();
+    expect(
+      parseTeamsTranscriptIndex(payload.replace('"version":1', '"version":2')),
+    ).toBeNull();
+    expect(
+      parseTeamsTranscriptIndex(
+        payload.replace('"ordinal":1', '"ordinal":"1"'),
+      ),
+    ).toBeNull();
+  });
+});
+
 describe("channel sections", () => {
   // Wire order: newest root first, each root followed by its replies
   // oldest-first — the flattened shape the channel pager returns.
@@ -444,7 +631,7 @@ describe("channel sections", () => {
     ]);
     expect(markdown).toContain("[1] Ada Lovelace (09:14):");
     expectNoIdentifiers(markdown, ["1741000000000"]);
-    expect(markdown).not.toContain("team-1");
+    expect(proseOf(markdown)).not.toContain("team-1");
   });
 
   it("carries a channel post's subject and leaves its subjectless replies bare", () => {
