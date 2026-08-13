@@ -89,33 +89,16 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
 
     // Group filtered subjects by type (only needed for "all" view)
     const { users, groups } = useMemo(() => {
-      const organizationTargets =
-        subjectTypeFilter !== "user" &&
-        !grantedSubjectIds.has(organizationTarget.id)
-          ? [organizationTarget]
-          : [];
-
       if (subjectTypeFilter !== "all") {
         // When filtered, all subjects are the same type
         return subjectTypeFilter === "user"
           ? { users: filteredSubjects, groups: [] }
-          : {
-              users: [],
-              groups: [...organizationTargets, ...filteredSubjects],
-            };
+          : { users: [], groups: filteredSubjects };
       }
       const usersList = filteredSubjects.filter((s) => s.type === "user");
       const groupsList = filteredSubjects.filter((s) => s.type === "group");
-      return {
-        users: usersList,
-        groups: [...organizationTargets, ...groupsList],
-      };
-    }, [
-      filteredSubjects,
-      grantedSubjectIds,
-      organizationTarget,
-      subjectTypeFilter,
-    ]);
+      return { users: usersList, groups: groupsList };
+    }, [filteredSubjects, subjectTypeFilter]);
 
     const hasAvailableOrganizationTarget =
       subjectTypeFilter !== "user" &&
@@ -208,6 +191,16 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
                 {t({ id: "sharing.loading", message: "Loading..." })}
               </p>
             </div>
+          )}
+
+          {/* Keep the whole-organization target at the top of the list. */}
+          {hasAvailableOrganizationTarget && (
+            <SubjectRow
+              subject={organizationTarget}
+              isSelected={selectedIds.includes(organizationTarget.id)}
+              onToggle={onToggleSubject}
+              disabled={disabled}
+            />
           )}
 
           {/* Empty search results */}

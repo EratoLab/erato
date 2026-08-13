@@ -2730,6 +2730,12 @@ pub struct AssistantHubConfig {
     #[serde(default = "default_assistant_hub_rating_mode")]
     pub rating_mode: String,
 
+    // Whether to pre-select the whole organization as the audience for a new
+    // assistant hub submission.
+    // Defaults to `true`.
+    #[serde(default = "default_assistant_hub_share_with_whole_organization")]
+    pub default_share_with_whole_organization: bool,
+
     // Configured reviewer rules.
     #[serde(default)]
     pub reviewers: AssistantHubReviewerPermissionsConfig,
@@ -2745,11 +2751,17 @@ fn default_assistant_hub_rating_mode() -> String {
     "10_stars".to_string()
 }
 
+fn default_assistant_hub_share_with_whole_organization() -> bool {
+    true
+}
+
 impl Default for AssistantHubConfig {
     fn default() -> Self {
         Self {
             enabled: false,
             rating_mode: default_assistant_hub_rating_mode(),
+            default_share_with_whole_organization:
+                default_assistant_hub_share_with_whole_organization(),
             reviewers: AssistantHubReviewerPermissionsConfig::default(),
             categories: HashMap::new(),
         }
