@@ -1415,6 +1415,11 @@ msgid "officeAddin.teams.preview.allMessages"
 msgstr "{count, plural, one {All # message} other {All # messages}}"
 
 #. js-lingui-explicit-id
+#: src/teams/components/TeamsAttachmentsPreview.tsx
+msgid "officeAddin.teams.preview.conversationRegion"
+msgstr "Teams conversation preview"
+
+#. js-lingui-explicit-id
 #: src/teams/utils/teamsAttachmentGroups.ts
 msgid "officeAddin.teams.preview.lastMessages"
 msgstr "{count, plural, one {Last # message — older messages not included} other {Last # messages — older messages not included}}"
