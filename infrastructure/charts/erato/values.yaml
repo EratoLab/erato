@@ -69,7 +69,7 @@ oauth2Proxy:
     # -- OAuth2 Proxy image repository
     repository: registry.eratolabs.com/erato/oauth2-proxy
     # -- OAuth2 Proxy image tag
-    tag: v7.15.2-erato.3
+    tag: v7.15.2-erato.4
     # -- OAuth2 Proxy image pull policy
     pullPolicy: IfNotPresent
     # -- OAuth2 Proxy image pull secrets
