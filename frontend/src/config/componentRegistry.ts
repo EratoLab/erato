@@ -28,6 +28,7 @@ import type { ChatHistoryListProps } from "@/components/ui/Chat/ChatHistoryList"
 import type { ChatMessageProps } from "@/components/ui/Chat/ChatMessage";
 import type { ChatTopLeftAccessoryProps } from "@/components/ui/Chat/ChatTopLeftAccessory";
 import type { StarterPromptsRendererProps } from "@/components/ui/Chat/StarterPromptsSection";
+import type { FileAttachmentsPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";
 import type { FileSourceSelectorProps } from "@/components/ui/FileUpload/FileSourceSelector";
 import type { GroupedFileAttachmentsPreviewProps } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
 import type { WelcomeScreenProps } from "@/components/ui/WelcomeScreen";
@@ -102,6 +103,18 @@ export interface ComponentRegistry {
    * Used to render custom attachment chips/thumbnails inside the chat input shell.
    */
   ChatInputAttachmentPreview: ComponentType<ChatInputAttachmentPreviewProps> | null;
+
+  /**
+   * Override for the attachments region the composer renders above the chat
+   * input shell. It receives exactly the props the default flat preview gets,
+   * so a replacement can render its own layout (e.g. grouped cards) and still
+   * handle removal and preview.
+   *
+   * When null, the default `FileAttachmentsPreview` renders. Ignored while
+   * `ChatInputAttachmentPreview` is set — that override moves the preview
+   * inside the shell instead of replacing this region.
+   */
+  ChatAttachmentsPreview: ComponentType<FileAttachmentsPreviewProps> | null;
 
   /**
    * Override for the grouped attachments preview.
@@ -229,6 +242,7 @@ const emptyComponentRegistry = (): ComponentRegistry => ({
   ChatFileSourceSelector: null,
   ChatAddMenuExtraContent: null,
   ChatInputAttachmentPreview: null,
+  ChatAttachmentsPreview: null,
   ChatGroupedAttachmentsPreview: null,
   ChatHistoryList: null,
   ChatWelcomeScreen: null,

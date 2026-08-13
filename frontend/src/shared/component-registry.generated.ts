@@ -32,6 +32,7 @@ export type { CollapseProps } from "@/components/ui/Controls/Collapse";
 export { DropdownMenu } from "@/components/ui/Controls/DropdownMenu";
 export type { DropdownMenuItem } from "@/components/ui/Controls/DropdownMenu";
 export type { DropdownMenuProps } from "@/components/ui/Controls/DropdownMenu";
+export { Tooltip } from "@/components/ui/Controls/Tooltip";
 export { Alert } from "@/components/ui/Feedback/Alert";
 export type { AlertType } from "@/components/ui/Feedback/Alert";
 export { Avatar } from "@/components/ui/Feedback/Avatar";
@@ -41,6 +42,8 @@ export type { CopyErrorButtonProps } from "@/components/ui/Feedback/CopyErrorBut
 export { LoadingIndicator } from "@/components/ui/Feedback/LoadingIndicator";
 export type { LoadingState } from "@/components/ui/Feedback/LoadingIndicator";
 export { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
+export { FileAttachmentsPreview } from "@/components/ui/FileUpload/FileAttachmentsPreview";
+export type { FileAttachmentsPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";
 export { FilePreviewBase } from "@/components/ui/FileUpload/FilePreviewBase";
 export { formatFileSize } from "@/components/ui/FileUpload/FilePreviewBase";
 export { getFileName } from "@/components/ui/FileUpload/FilePreviewBase";
