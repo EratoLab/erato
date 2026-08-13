@@ -39,6 +39,38 @@ describe("teamsMessageBodyToText", () => {
     ).toBe("see\n\n```\nnpm run test\n```");
   });
 
+  it("keeps indentation and blank lines inside a fenced code block", () => {
+    const code = "def f(x):\n    if x:\n\n        return 1\n    return 0";
+    expect(teamsMessageBodyToText(html(`<codeblock>${code}</codeblock>`))).toBe(
+      `\`\`\`\n${code}\n\`\`\``,
+    );
+  });
+
+  it("keeps the indentation of a code block's first line", () => {
+    expect(
+      teamsMessageBodyToText(
+        html("<pre>\n    steps:\n      - run: build\n</pre>"),
+      ),
+    ).toBe("```\n    steps:\n      - run: build\n```");
+  });
+
+  it("keeps a blank-line run inside a fence in a text body", () => {
+    const code = "```\nheader = 1\n\n\nfooter = 2\n```";
+    expect(teamsMessageBodyToText({ contentType: "text", content: code })).toBe(
+      code,
+    );
+  });
+
+  it("keeps table cells apart", () => {
+    expect(
+      teamsMessageBodyToText(
+        html(
+          "<table><tr><th>Item</th><th>Price</th></tr><tr><td>Bolt</td><td>40</td></tr></table>",
+        ),
+      ),
+    ).toBe("Item | Price\n\nBolt | 40");
+  });
+
   it("backticks inline code", () => {
     expect(teamsMessageBodyToText(html("<p>run <code>ls</code> now</p>"))).toBe(
       "run `ls` now",
