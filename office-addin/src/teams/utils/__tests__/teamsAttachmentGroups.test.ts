@@ -261,13 +261,38 @@ describe("buildTeamsAttachmentGroups", () => {
   it("keeps one group per conversation across chats and channels", () => {
     const preview = buildTeamsAttachmentGroups(
       attach([
-        chatSection({ selection: "messages" }),
+        chatSection({
+          selection: "messages",
+          // Newest first, as Graph hands chat messages back; rendered oldest first.
+          messages: [
+            message({
+              messageId: "k2",
+              senderName: "Grace Hopper",
+              createdAt: "2026-03-03T09:05:00Z",
+            }),
+            message({
+              messageId: "k1",
+              senderName: "Ada Lovelace",
+              createdAt: "2026-03-03T09:00:00Z",
+            }),
+          ],
+        }),
         {
           kind: "channel",
           channel,
-          messages: [message({ messageId: "c1" })],
-          selection: "whole-chat",
-          limit: 200,
+          messages: [
+            message({
+              messageId: "c1",
+              senderName: "Tom Weber",
+              createdAt: "2026-03-04T10:00:00Z",
+            }),
+            message({
+              messageId: "c2",
+              senderName: "Anna Roth",
+              createdAt: "2026-03-04T10:20:00Z",
+            }),
+          ],
+          selection: "messages",
         },
       ]),
       [TRANSCRIPT],
@@ -278,6 +303,19 @@ describe("buildTeamsAttachmentGroups", () => {
       "Product sync",
       "Releases · Contoso",
     ]);
+    // The index is one flat array tagged by section, so a wrong partition
+    // silently merges every conversation into every card. Assert membership,
+    // not just the group count.
+    expect(threadRows(preview!.groups[0]).map((row) => row.label)).toEqual([
+      "Ada Lovelace",
+      "Grace Hopper",
+    ]);
+    expect(threadRows(preview!.groups[1]).map((row) => row.label)).toEqual([
+      "Tom Weber",
+      "Anna Roth",
+    ]);
+    expect(preview!.groups[0].metaLabel).toContain("2 messages");
+    expect(preview!.groups[1].metaLabel).toContain("2 messages");
     // Both cards stand for slices of the same upload.
     for (const group of preview!.groups) {
       expect(transcriptRow(group).file).toMatchObject({ id: TRANSCRIPT.id });

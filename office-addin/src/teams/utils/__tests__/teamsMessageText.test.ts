@@ -68,7 +68,17 @@ describe("teamsMessageBodyToText", () => {
           "<table><tr><th>Item</th><th>Price</th></tr><tr><td>Bolt</td><td>40</td></tr></table>",
         ),
       ),
-    ).toBe("Item | Price\n\nBolt | 40");
+    ).toBe("Item | Price\nBolt | 40");
+  });
+
+  it("keeps a row whose first cell is empty on its own line", () => {
+    expect(
+      teamsMessageBodyToText(
+        html(
+          "<table><tr><th>Item</th><th>Qty</th></tr><tr><td></td><td>7</td></tr></table>",
+        ),
+      ),
+    ).toBe("Item | Qty\n| 7");
   });
 
   it("backticks inline code", () => {
