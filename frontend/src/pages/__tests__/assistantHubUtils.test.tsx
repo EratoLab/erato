@@ -27,6 +27,7 @@ const acceptedVersion: AssistantHubVersion = {
     updated_at: "2026-01-02T00:00:00Z",
   },
   assistant_id: "assistant-snapshot",
+  audience_grants: [],
   category_ids: ["marketing"],
   created_at: "2026-01-01T00:00:00Z",
   creator: {

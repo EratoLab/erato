@@ -1,9 +1,12 @@
+use crate::db::entity::prelude::ShareGrants;
+use crate::db::entity::share_grants;
 use crate::models::assistant_hub;
 use crate::models::assistant_hub::{
     HubAudienceGrantInput, HubReviewInput, HubReviewRecord, HubSubmissionProfile, HubVersionRecord,
 };
 use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
+use crate::server::api::v1beta::share_grants::{ShareGrant, fetch_profiles_for_grants};
 use crate::services::ms_graph::MsGraphService;
 use crate::services::sentry::log_internal_server_error;
 use crate::state::AppState;
@@ -11,6 +14,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::{Extension, Json};
 use chrono::{DateTime, FixedOffset};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use sqlx::types::Uuid;
@@ -109,6 +113,7 @@ pub struct AssistantHubVersion {
     pub updated_at: DateTime<FixedOffset>,
     pub review_average_score: Option<f64>,
     pub review_count: u64,
+    pub audience_grants: Vec<ShareGrant>,
     pub assistant: AssistantHubAssistantSnapshot,
     pub creator: AssistantHubCreator,
 }
@@ -325,6 +330,7 @@ async fn records_to_response(
     app_state: &AppState,
     me_user: &MeProfile,
     records: Vec<HubVersionRecord>,
+    include_audience_grants: bool,
 ) -> Vec<AssistantHubVersion> {
     let creator_display_names = resolve_creator_display_names(app_state, me_user, &records).await;
     let hub_assistant_ids: Vec<Uuid> = records
@@ -347,6 +353,12 @@ async fn records_to_response(
         }
     };
 
+    let mut audience_grants_by_assistant_id = if include_audience_grants {
+        audience_grants_by_assistant_id(app_state, me_user, &records).await
+    } else {
+        HashMap::new()
+    };
+
     records
         .into_iter()
         .map(|record| {
@@ -354,15 +366,93 @@ async fn records_to_response(
                 .get(&record.creator.id.to_string())
                 .cloned();
             let review_summary = review_summaries.get(&record.hub_assistant.id);
-            record_to_response(record, creator_display_name, review_summary)
+            let audience_grants = audience_grants_by_assistant_id
+                .remove(&record.version.assistant_id.to_string())
+                .unwrap_or_default();
+            record_to_response(
+                record,
+                creator_display_name,
+                review_summary,
+                audience_grants,
+            )
         })
         .collect()
+}
+
+async fn audience_grants_by_assistant_id(
+    app_state: &AppState,
+    me_user: &MeProfile,
+    records: &[HubVersionRecord],
+) -> HashMap<String, Vec<ShareGrant>> {
+    let assistant_ids: Vec<String> = records
+        .iter()
+        .map(|record| record.version.assistant_id.to_string())
+        .collect();
+    if assistant_ids.is_empty() {
+        return HashMap::new();
+    }
+
+    let grants = match ShareGrants::find()
+        .filter(share_grants::Column::ResourceType.eq("assistant"))
+        .filter(share_grants::Column::ResourceId.is_in(assistant_ids))
+        .all(&app_state.db)
+        .await
+    {
+        Ok(grants) => grants,
+        Err(error) => {
+            tracing::warn!(
+                "Failed to load assistant hub audience grants for response: {:?}",
+                error
+            );
+            return HashMap::new();
+        }
+    };
+
+    let (user_profiles, group_profiles) =
+        fetch_profiles_for_grants(app_state, me_user, &grants).await;
+    let mut result: HashMap<String, Vec<ShareGrant>> = HashMap::new();
+
+    for grant in grants {
+        let user_profile =
+            if grant.subject_type == "user" && grant.subject_id_type == "organization_user_id" {
+                user_profiles.get(&grant.subject_id).cloned()
+            } else {
+                None
+            };
+        let group_profile = if grant.subject_type == "organization_group"
+            && grant.subject_id_type == "organization_group_id"
+        {
+            group_profiles.get(&grant.subject_id).cloned()
+        } else {
+            None
+        };
+
+        result
+            .entry(grant.resource_id.clone())
+            .or_default()
+            .push(ShareGrant {
+                id: grant.id.to_string(),
+                resource_type: grant.resource_type,
+                resource_id: grant.resource_id,
+                subject_type: grant.subject_type,
+                subject_id_type: grant.subject_id_type,
+                subject_id: grant.subject_id,
+                role: grant.role,
+                created_at: grant.created_at,
+                updated_at: grant.updated_at,
+                user_profile,
+                group_profile,
+            });
+    }
+
+    result
 }
 
 fn record_to_response(
     record: HubVersionRecord,
     creator_display_name: Option<String>,
     review_summary: Option<&assistant_hub::HubReviewSummary>,
+    audience_grants: Vec<ShareGrant>,
 ) -> AssistantHubVersion {
     let creator_id = record.creator.id.to_string();
     let creator_email = record.creator.email.clone();
@@ -393,6 +483,7 @@ fn record_to_response(
         updated_at: record.version.updated_at,
         review_average_score: review_summary.and_then(|summary| summary.average_score),
         review_count: review_summary.map_or(0, |summary| summary.review_count as u64),
+        audience_grants,
         assistant: AssistantHubAssistantSnapshot {
             id: record.assistant.id.to_string(),
             name: record.assistant.name,
@@ -579,7 +670,7 @@ pub async fn submit_assistant_hub_version(
     Ok((
         StatusCode::CREATED,
         Json(AssistantHubVersionResponse {
-            version: records_to_response(&app_state, &me_user, vec![record])
+            version: records_to_response(&app_state, &me_user, vec![record], false)
                 .await
                 .into_iter()
                 .next()
@@ -612,7 +703,7 @@ pub async fn list_assistant_hub_assistants(
     .map_err(model_error_to_status)?;
 
     Ok(Json(AssistantHubVersionsResponse {
-        versions: records_to_response(&app_state, &me_user, records).await,
+        versions: records_to_response(&app_state, &me_user, records, false).await,
     }))
 }
 
@@ -645,7 +736,7 @@ pub async fn get_assistant_hub_assistant(
     .map_err(model_error_to_status)?;
 
     Ok(Json(AssistantHubVersionResponse {
-        version: records_to_response(&app_state, &me_user, vec![record])
+        version: records_to_response(&app_state, &me_user, vec![record], false)
             .await
             .into_iter()
             .next()
@@ -775,7 +866,7 @@ pub async fn list_my_assistant_hub_versions(
     .map_err(model_error_to_status)?;
 
     Ok(Json(AssistantHubVersionsResponse {
-        versions: records_to_response(&app_state, &me_user, records).await,
+        versions: records_to_response(&app_state, &me_user, records, false).await,
     }))
 }
 
@@ -804,7 +895,7 @@ pub async fn list_review_assistant_hub_versions(
     .map_err(model_error_to_status)?;
 
     Ok(Json(AssistantHubVersionsResponse {
-        versions: records_to_response(&app_state, &me_user, records).await,
+        versions: records_to_response(&app_state, &me_user, records, true).await,
     }))
 }
 
@@ -843,7 +934,7 @@ pub async fn review_assistant_hub_version(
     app_state.global_policy_engine.invalidate_data().await;
 
     Ok(Json(AssistantHubVersionResponse {
-        version: records_to_response(&app_state, &me_user, vec![record])
+        version: records_to_response(&app_state, &me_user, vec![record], false)
             .await
             .into_iter()
             .next()
@@ -882,7 +973,7 @@ pub async fn withdraw_assistant_hub_version(
     app_state.global_policy_engine.invalidate_data().await;
 
     Ok(Json(AssistantHubVersionResponse {
-        version: records_to_response(&app_state, &me_user, vec![record])
+        version: records_to_response(&app_state, &me_user, vec![record], false)
             .await
             .into_iter()
             .next()
@@ -925,7 +1016,7 @@ pub async fn set_assistant_hub_version_published(
     app_state.global_policy_engine.invalidate_data().await;
 
     Ok(Json(AssistantHubVersionResponse {
-        version: records_to_response(&app_state, &me_user, vec![record])
+        version: records_to_response(&app_state, &me_user, vec![record], false)
             .await
             .into_iter()
             .next()
@@ -965,7 +1056,7 @@ pub async fn set_assistant_hub_version_current(
     app_state.global_policy_engine.invalidate_data().await;
 
     Ok(Json(AssistantHubVersionResponse {
-        version: records_to_response(&app_state, &me_user, vec![record])
+        version: records_to_response(&app_state, &me_user, vec![record], false)
             .await
             .into_iter()
             .next()
@@ -1005,7 +1096,7 @@ pub async fn set_assistant_hub_version_featured(
     .map_err(model_error_to_status)?;
 
     Ok(Json(AssistantHubVersionResponse {
-        version: records_to_response(&app_state, &me_user, vec![record])
+        version: records_to_response(&app_state, &me_user, vec![record], false)
             .await
             .into_iter()
             .next()

@@ -634,6 +634,16 @@ msgstr "Akzeptieren"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
+msgid "assistantHub.review.audience"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubReviewPage.tsx
+msgid "assistantHub.review.audienceHelp"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubReviewPage.tsx
 msgid "assistantHub.review.comment"
 msgstr "Reviewer-Kommentar"
 

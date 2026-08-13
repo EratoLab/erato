@@ -7,6 +7,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { Textarea } from "@/components/ui/Input";
+import { ShareGrantsList } from "@/components/ui/Sharing/ShareGrantsList";
 import { ArrowLeftIcon } from "@/components/ui/icons";
 import { usePageAlignment } from "@/hooks/ui";
 import {
@@ -310,6 +311,26 @@ export default function AssistantHubReviewPage() {
                 version={selectedVersion}
                 assistantDetails={assistantDetails}
               />
+
+              <section className="rounded-lg border border-theme-border bg-theme-bg-primary p-6">
+                <h2 className="mb-2 text-lg font-semibold text-theme-fg-primary">
+                  {t({
+                    id: "assistantHub.review.audience",
+                    message: "Sharing audience",
+                  })}
+                </h2>
+                <p className="mb-4 text-sm text-theme-fg-secondary">
+                  {t({
+                    id: "assistantHub.review.audienceHelp",
+                    message:
+                      "This assistant was shared with the following people and groups.",
+                  })}
+                </p>
+                <ShareGrantsList
+                  grants={selectedVersion.audience_grants}
+                  canManage={false}
+                />
+              </section>
 
               <section className="rounded-lg border border-theme-border bg-theme-bg-primary p-6">
                 <div className="mb-5">

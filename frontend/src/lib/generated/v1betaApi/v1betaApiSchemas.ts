@@ -353,6 +353,7 @@ export type AssistantHubUserReviewsResponse = {
 export type AssistantHubVersion = {
   assistant: AssistantHubAssistantSnapshot;
   assistant_id: string;
+  audience_grants: ShareGrant[];
   category_ids: string[];
   /**
    * @format date-time

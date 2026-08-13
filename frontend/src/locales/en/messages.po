@@ -634,6 +634,16 @@ msgstr "Accept"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
+msgid "assistantHub.review.audience"
+msgstr "Sharing audience"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubReviewPage.tsx
+msgid "assistantHub.review.audienceHelp"
+msgstr "This assistant was shared with the following people and groups."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubReviewPage.tsx
 msgid "assistantHub.review.comment"
 msgstr "Reviewer comment"
 
