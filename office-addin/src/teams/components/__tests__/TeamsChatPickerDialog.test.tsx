@@ -548,7 +548,7 @@ describe("TeamsChatPickerDialog", () => {
     expect(uploads[0]).toHaveLength(1);
     const file = uploads[0][0];
     expect(file.name).toBe("teams-Product_sync.md");
-    expect(file.type).toBe("text/markdown");
+    expect(file.type).toBe("text/plain");
 
     const text = await file.text();
     expect(text).toContain("# Teams chat: Product sync");

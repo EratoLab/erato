@@ -59,8 +59,12 @@ export function buildTeamsTranscriptFile(
 ): File | null {
   const markdown = buildTeamsTranscriptMarkdown(input);
   if (markdown === null) return null;
+  // The `.md` name and the plain-text MIME serve different readers: the extension
+  // gets the UI to render the transcript richly, while `text/plain` picks the
+  // extractor that hands the model the bytes verbatim instead of reserialising
+  // them through a markdown parser.
   return new File([markdown], buildTeamsTranscriptFilename(input.sections), {
-    type: "text/markdown",
+    type: "text/plain",
   });
 }
 

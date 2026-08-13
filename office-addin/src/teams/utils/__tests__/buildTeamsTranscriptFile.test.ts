@@ -91,8 +91,17 @@ describe("buildTeamsTranscriptFile", () => {
       timeZone: "UTC",
     });
     expect(file?.name).toBe("teams-Product_sync.md");
-    expect(file?.type).toBe("text/markdown");
     await expect(file?.text()).resolves.toContain("# Teams chat: Product sync");
+  });
+
+  it("keeps the .md name but uploads as plain text", () => {
+    const file = buildTeamsTranscriptFile({
+      sections: [section()],
+      exportedAt,
+      timeZone: "UTC",
+    });
+    expect(file?.name.endsWith(".md")).toBe(true);
+    expect(file?.type).toBe("text/plain");
   });
 
   it("names a multi-chat export by its chat count", () => {
