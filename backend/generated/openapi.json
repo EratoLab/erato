@@ -3936,6 +3936,7 @@
           "enabled",
           "can_review",
           "rating_mode",
+          "default_share_with_whole_organization",
           "categories"
         ],
         "properties": {
@@ -3947,6 +3948,9 @@
             "items": {
               "$ref": "#/components/schemas/AssistantHubCategory"
             }
+          },
+          "default_share_with_whole_organization": {
+            "type": "boolean"
           },
           "enabled": {
             "type": "boolean"

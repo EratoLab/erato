@@ -3374,6 +3374,7 @@ msgstr "Seleccionar {name}"
 #. js-lingui-explicit-id
 #: src/components/ui/Sharing/ShareGrantsList.tsx
 #: src/components/ui/Sharing/SubjectSelector.tsx
+#: src/pages/AssistantHubSubmitPage.tsx
 msgid "sharing.target.fullOrganization"
 msgstr "Organización completa"
 

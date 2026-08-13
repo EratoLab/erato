@@ -14,17 +14,23 @@ import {
   useAssistantHubConfig,
   useGetAssistant,
   useListMyAssistantHubVersions,
+  useListShareGrants,
   usePreviewAssistantHubSubmissionDiff,
   useSubmitAssistantHubVersion,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import {
+  ORGANIZATION_SUBJECT_ID,
+  ORGANIZATION_SUBJECT_ID_TYPE,
+  type OrganizationMember,
+} from "@/types/sharing";
 
 import { AssistantHubDiff } from "./assistantHubUtils";
 
 import type {
   AssistantHubAudienceGrantInput,
   AssistantHubSubmissionRequest,
+  ShareGrant,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
-import type { OrganizationMember } from "@/types/sharing";
 
 const toKeywordList = (value: string) =>
   value
@@ -33,7 +39,7 @@ const toKeywordList = (value: string) =>
     .filter(Boolean);
 
 const toAudienceGrantInput = (
-  subject: OrganizationMember,
+  subject: OrganizationMember & { shareRole?: string },
 ): AssistantHubAudienceGrantInput => ({
   subject_type:
     subject.type === "user"
@@ -44,8 +50,43 @@ const toAudienceGrantInput = (
           "organization_group",
   subject_id_type: subject.subject_type_id,
   subject_id: subject.id,
-  role: "viewer",
+  role: subject.shareRole ?? "viewer",
 });
+
+type AudienceSubject = OrganizationMember & { shareRole?: string };
+
+const toAudienceSubject = (grant: ShareGrant): AudienceSubject => {
+  if (grant.subject_type === "organization") {
+    return {
+      id: ORGANIZATION_SUBJECT_ID,
+      display_name: t({
+        id: "sharing.target.fullOrganization",
+        message: "Full organization",
+      }),
+      subject_type_id: ORGANIZATION_SUBJECT_ID_TYPE,
+      type: "organization",
+      shareRole: grant.role,
+    };
+  }
+
+  if (grant.subject_type === "organization_group") {
+    return {
+      id: grant.subject_id,
+      display_name: grant.group_profile?.display_name ?? grant.subject_id,
+      subject_type_id: grant.subject_id_type,
+      type: "group",
+      shareRole: grant.role,
+    };
+  }
+
+  return {
+    id: grant.subject_id,
+    display_name: grant.user_profile?.display_name ?? grant.subject_id,
+    subject_type_id: grant.subject_id_type,
+    type: "user",
+    shareRole: grant.role,
+  };
+};
 
 const incrementVersionNumber = (versionNumber: string) => {
   const trimmedVersionNumber = versionNumber.trim();
@@ -110,9 +151,9 @@ export default function AssistantHubSubmitPage() {
   const [creatorReviewComment, setCreatorReviewComment] = useState("");
   const [keywords, setKeywords] = useState("");
   const [categoryIds, setCategoryIds] = useState<string[]>([]);
-  const [selectedAudience, setSelectedAudience] = useState<
-    OrganizationMember[]
-  >([]);
+  const [selectedAudience, setSelectedAudience] = useState<AudienceSubject[]>(
+    [],
+  );
   const [errorMessage, setErrorMessage] = useState("");
   const [prefilledFromVersionId, setPrefilledFromVersionId] = useState<
     string | null
@@ -121,6 +162,8 @@ export default function AssistantHubSubmitPage() {
     prefilledVersionNumberForSourceId,
     setPrefilledVersionNumberForSourceId,
   ] = useState<string | null>(null);
+  const [prefilledAudienceForVersionId, setPrefilledAudienceForVersionId] =
+    useState<string | null>(null);
 
   const sourceVersions = useMemo(() => {
     if (!sourceAssistantId || !myVersions) return undefined;
@@ -134,6 +177,17 @@ export default function AssistantHubSubmitPage() {
       );
   }, [myVersions, sourceAssistantId]);
   const latestSubmittedVersion = sourceVersions?.[0];
+  const { data: previousShareGrants, isLoading: isLoadingPreviousShareGrants } =
+    useListShareGrants(
+      latestSubmittedVersion
+        ? {
+            queryParams: {
+              resource_type: "assistant",
+              resource_id: latestSubmittedVersion.assistant_id,
+            },
+          }
+        : skipToken,
+    );
   const currentPublishedVersion = useMemo(() => {
     return sourceVersions?.find(
       (version) => version.is_published && version.is_current_published_version,
@@ -210,6 +264,50 @@ export default function AssistantHubSubmitPage() {
   }, [latestSubmittedVersion, prefilledFromVersionId]);
 
   useEffect(() => {
+    if (prefilledAudienceForVersionId !== null) {
+      return;
+    }
+
+    if (latestSubmittedVersion) {
+      if (isLoadingPreviousShareGrants || !previousShareGrants) {
+        return;
+      }
+
+      setSelectedAudience(previousShareGrants.grants.map(toAudienceSubject));
+      setPrefilledAudienceForVersionId(latestSubmittedVersion.version_id);
+      return;
+    }
+
+    if (isLoadingConfig || !config) {
+      return;
+    }
+
+    setSelectedAudience(
+      config.default_share_with_whole_organization
+        ? [
+            {
+              id: ORGANIZATION_SUBJECT_ID,
+              display_name: t({
+                id: "sharing.target.fullOrganization",
+                message: "Full organization",
+              }),
+              subject_type_id: ORGANIZATION_SUBJECT_ID_TYPE,
+              type: "organization",
+            },
+          ]
+        : [],
+    );
+    setPrefilledAudienceForVersionId("new");
+  }, [
+    config,
+    isLoadingConfig,
+    isLoadingPreviousShareGrants,
+    latestSubmittedVersion,
+    prefilledAudienceForVersionId,
+    previousShareGrants,
+  ]);
+
+  useEffect(() => {
     if (
       isLoadingMyVersions ||
       !sourceVersions ||
@@ -268,7 +366,7 @@ export default function AssistantHubSubmitPage() {
     setSelectedAudience((current) =>
       current.some((item) => item.id === subject.id)
         ? current.filter((item) => item.id !== subject.id)
-        : [...current, subject],
+        : [...current, { ...subject, shareRole: "viewer" }],
     );
   };
 
@@ -325,7 +423,10 @@ export default function AssistantHubSubmitPage() {
   };
 
   const isLoading =
-    isLoadingConfig || isLoadingAssistant || isLoadingMyVersions;
+    isLoadingConfig ||
+    isLoadingAssistant ||
+    isLoadingMyVersions ||
+    isLoadingPreviousShareGrants;
 
   return (
     <div className="flex h-full flex-col bg-theme-bg-secondary">

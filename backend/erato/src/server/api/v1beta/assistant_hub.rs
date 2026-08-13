@@ -29,6 +29,7 @@ pub struct AssistantHubConfigResponse {
     pub enabled: bool,
     pub can_review: bool,
     pub rating_mode: String,
+    pub default_share_with_whole_organization: bool,
     pub categories: Vec<AssistantHubCategory>,
 }
 
@@ -493,6 +494,10 @@ pub async fn assistant_hub_config(
         enabled: app_state.config.assistant_hub.enabled,
         can_review: app_state.config.assistant_hub.can_review(&me_user.groups),
         rating_mode: app_state.config.assistant_hub.rating_mode.clone(),
+        default_share_with_whole_organization: app_state
+            .config
+            .assistant_hub
+            .default_share_with_whole_organization,
         categories,
     }))
 }

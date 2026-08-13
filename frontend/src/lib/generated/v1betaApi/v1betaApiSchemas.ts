@@ -270,6 +270,7 @@ export type AssistantHubCategory = {
 export type AssistantHubConfigResponse = {
   can_review: boolean;
   categories: AssistantHubCategory[];
+  default_share_with_whole_organization: boolean;
   enabled: boolean;
   rating_mode: string;
 };
