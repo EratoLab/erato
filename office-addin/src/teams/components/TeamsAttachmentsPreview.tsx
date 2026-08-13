@@ -1,15 +1,21 @@
 import {
   FileAttachmentsPreview,
   GroupedFileAttachmentsPreview,
+  ModalBase,
+  TeamsConversationView,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { useTeamsTranscriptIndex } from "../hooks/useTeamsTranscriptIndex";
 import { useTeamsChatPicker } from "../providers/TeamsChatPickerProvider";
 import { buildTeamsAttachmentGroups } from "../utils/teamsAttachmentGroups";
 
-import type { FileAttachmentsPreviewProps } from "@erato/frontend/library";
+import type {
+  FileAttachmentsPreviewProps,
+  TeamsTranscriptIndexAsset,
+  TeamsTranscriptIndexMessage,
+} from "@erato/frontend/library";
 
 /**
  * The composer's attachment region in the Teams tab: an attached transcript is
@@ -27,6 +33,7 @@ export function TeamsAttachmentsPreview(props: FileAttachmentsPreviewProps) {
   const { attachedTranscript } = useTeamsChatPicker();
   const { index, isReading } = useTeamsTranscriptIndex(attachedTranscript);
   const { attachedFiles } = props;
+  const [openSection, setOpenSection] = useState<number | null>(null);
   const preview = useMemo(
     () =>
       buildTeamsAttachmentGroups(
@@ -34,9 +41,22 @@ export function TeamsAttachmentsPreview(props: FileAttachmentsPreviewProps) {
           ? { fileName: attachedTranscript.name, index }
           : null,
         attachedFiles,
+        setOpenSection,
       ),
     [attachedTranscript, index, attachedFiles],
   );
+
+  // The composer already holds every upload the transcript names, so the view
+  // never fetches: it is handed the file that is sitting in the same state.
+  const resolveAsset = useCallback(
+    (asset: TeamsTranscriptIndexAsset) =>
+      attachedFiles.find((file) => file.filename === asset.name) ?? null,
+    [attachedFiles],
+  );
+
+  const openInTeams = useCallback((message: TeamsTranscriptIndexMessage) => {
+    window.open(message.deepLink, "_blank", "noopener,noreferrer");
+  }, []);
 
   if (!preview) {
     // Reading an in-memory file settles within a frame or two. Leaving the
@@ -49,6 +69,14 @@ export function TeamsAttachmentsPreview(props: FileAttachmentsPreviewProps) {
   const rest = attachedFiles.filter(
     (file) => !preview.claimedFileIds.has(file.id),
   );
+  const openTitle =
+    openSection === null
+      ? ""
+      : (index?.sections[openSection]?.title ??
+        t({
+          id: "officeAddin.teams.preview.conversationTitle",
+          message: "Teams conversation",
+        }));
 
   return (
     <>
@@ -75,6 +103,20 @@ export function TeamsAttachmentsPreview(props: FileAttachmentsPreviewProps) {
         />
       </div>
       <FileAttachmentsPreview {...props} attachedFiles={rest} />
+      {index && openSection !== null && (
+        <ModalBase
+          isOpen={true}
+          onClose={() => setOpenSection(null)}
+          title={openTitle}
+        >
+          <TeamsConversationView
+            index={index}
+            sectionIndex={openSection}
+            onOpenInTeams={openInTeams}
+            resolveAsset={resolveAsset}
+          />
+        </ModalBase>
+      )}
     </>
   );
 }

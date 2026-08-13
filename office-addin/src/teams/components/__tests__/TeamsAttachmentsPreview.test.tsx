@@ -1,5 +1,7 @@
+import { ThemeProvider } from "@erato/frontend/library";
 import { i18n } from "@lingui/core";
-import { cleanup, render, screen } from "@testing-library/react";
+import { I18nProvider } from "@lingui/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { buildTeamsTranscriptFile } from "../../utils/buildTeamsTranscriptFile";
@@ -8,37 +10,14 @@ import { TeamsAttachmentsPreview } from "../TeamsAttachmentsPreview";
 import type { TeamsTranscriptSection } from "../../utils/buildTeamsTranscriptFile";
 import type { ParsedTeamsMessage } from "../../utils/parsedTeamsChat";
 import type {
-  FileAttachmentGroup,
   FileAttachmentsPreviewProps,
   FileUploadItem,
-  GroupedFileAttachmentsPreviewProps,
 } from "@erato/frontend/library";
 
 const state = vi.hoisted(() => ({
   attachedTranscript: null as File | null,
 }));
 
-vi.mock("@erato/frontend/library", () => ({
-  FileAttachmentsPreview: ({ attachedFiles }: FileAttachmentsPreviewProps) => (
-    <div data-testid="flat-preview">
-      {attachedFiles.map((file) => file.filename).join(",")}
-    </div>
-  ),
-  GroupedFileAttachmentsPreview: ({
-    groups,
-  }: GroupedFileAttachmentsPreviewProps) => (
-    <div data-testid="grouped-preview">
-      {groups.map((group: FileAttachmentGroup) => (
-        <div key={group.id} data-testid="group">
-          {group.label}
-          <span data-testid="group-items">
-            {group.items.map((item) => item.kind).join(",")}
-          </span>
-        </div>
-      ))}
-    </div>
-  ),
-}));
 vi.mock("../../providers/TeamsChatPickerProvider", () => ({
   useTeamsChatPicker: () => ({ attachedTranscript: state.attachedTranscript }),
 }));
@@ -49,6 +28,7 @@ function upload(filename: string, id = filename): FileUploadItem {
 
 const transcript = upload("teams-Product_sync.md", "upload-transcript");
 const image = upload("teams-img-abc.png", "upload-image");
+const report = upload("teams-file-abc12345-Q3_report.pdf", "upload-report");
 const unrelated = upload("holiday.pdf", "upload-holiday");
 
 function message(
@@ -78,6 +58,7 @@ function message(
  */
 function transcriptFile(
   selection: TeamsTranscriptSection["selection"] = "messages",
+  messages: ParsedTeamsMessage[] = [message()],
 ): File {
   const file = buildTeamsTranscriptFile({
     sections: [
@@ -93,7 +74,7 @@ function transcriptFile(
           lastActivityAt: null,
           previewText: "",
         },
-        messages: [message()],
+        messages,
         selection,
       },
     ],
@@ -108,18 +89,29 @@ function renderPreview(
   overrides: Partial<FileAttachmentsPreviewProps> = {},
 ) {
   return render(
-    <TeamsAttachmentsPreview
-      attachedFiles={attachedFiles}
-      maxFiles={50}
-      onRemoveFile={() => {}}
-      onRemoveAllFiles={() => {}}
-      {...overrides}
-    />,
+    <I18nProvider i18n={i18n}>
+      <ThemeProvider
+        enableCustomTheme={false}
+        initialThemeMode="light"
+        persistThemeMode={false}
+      >
+        <TeamsAttachmentsPreview
+          attachedFiles={attachedFiles}
+          maxFiles={50}
+          onRemoveFile={() => {}}
+          onRemoveAllFiles={() => {}}
+          {...overrides}
+        />
+      </ThemeProvider>
+    </I18nProvider>,
   );
 }
 
+const groupHeader = () => screen.getByRole("button", { name: /product sync/i });
+
 describe("TeamsAttachmentsPreview", () => {
   beforeEach(() => {
+    i18n.load("en", {});
     i18n.activate("en");
     state.attachedTranscript = null;
   });
@@ -128,50 +120,64 @@ describe("TeamsAttachmentsPreview", () => {
   it("renders the composer's flat chips when no transcript is attached", () => {
     renderPreview([unrelated]);
 
-    expect(screen.queryByTestId("grouped-preview")).toBeNull();
-    expect(screen.getByTestId("flat-preview")).toHaveTextContent("holiday.pdf");
+    expect(screen.queryByRole("button", { name: /product sync/i })).toBeNull();
+    expect(screen.getByText("holiday")).toBeVisible();
   });
 
   it("renders the conversation out of the transcript's own index block", async () => {
     state.attachedTranscript = transcriptFile();
     renderPreview([transcript, image, unrelated]);
 
-    expect(await screen.findByTestId("group")).toHaveTextContent(
-      "Product sync",
-    );
-    expect(screen.getByTestId("flat-preview")).toHaveTextContent("holiday.pdf");
-    expect(screen.getByTestId("flat-preview")).not.toHaveTextContent(
-      "teams-img-abc.png",
-    );
+    expect(await screen.findByText("Product sync")).toBeVisible();
+    // The upload the transcript names is claimed by the conversation card; only
+    // the unrelated file is left to the flat chips.
+    expect(screen.getByText("holiday")).toBeVisible();
   });
 
-  it("waits for the block rather than flashing the flat chips first", async () => {
-    state.attachedTranscript = transcriptFile();
-    renderPreview([transcript, image, unrelated]);
-
-    expect(screen.queryByTestId("flat-preview")).toBeNull();
-    expect(screen.queryByTestId("grouped-preview")).toBeNull();
-    await screen.findByTestId("grouped-preview");
-  });
-
-  it("expands hand-picked messages into a row each", async () => {
-    state.attachedTranscript = transcriptFile("messages");
-    renderPreview([transcript, image]);
-
-    expect(await screen.findByTestId("group-items")).toHaveTextContent(
-      "attachment,threadMessageGroup",
-    );
-  });
-
-  it("collapses a whole conversation to its summary row", async () => {
+  it("keeps a whole conversation collapsed so the composer stays reachable", async () => {
     state.attachedTranscript = transcriptFile("whole-chat");
     renderPreview([transcript, image]);
 
-    // The transcript row, then the image that rode along with the messages it
-    // stands for — no per-message rows.
-    expect(await screen.findByTestId("group-items")).toHaveTextContent(
-      "attachment,attachment",
-    );
+    await screen.findByText("Product sync");
+    expect(groupHeader()).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("opens the conversation from the summary row", async () => {
+    state.attachedTranscript = transcriptFile("whole-chat");
+    renderPreview([transcript, image]);
+
+    await screen.findByText("Product sync");
+    fireEvent.click(groupHeader());
+    // Matched on the row's own name, not the translated verb: this suite runs
+    // without a message catalogue.
+    fireEvent.click(screen.getByRole("button", { name: /all messages/i }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Ada Lovelace");
+    expect(dialog).toHaveTextContent("Screenshot");
+  });
+
+  it("names a shared file as Teams named it, never by its upload name", async () => {
+    state.attachedTranscript = transcriptFile("whole-chat", [
+      message({
+        text: "Numbers attached",
+        markers: ["[attachment: teams-file-abc12345-Q3_report.pdf]"],
+        sharedFiles: [
+          {
+            attachmentId: "a1",
+            name: "Q3 report.pdf",
+            contentUrl: "https://contoso.sharepoint.com/Q3.pdf",
+          },
+        ],
+      }),
+    ]);
+    renderPreview([transcript, report]);
+
+    await screen.findByText("Product sync");
+    fireEvent.click(groupHeader());
+
+    expect(screen.getByText(/Q3 report/)).toBeVisible();
+    expect(screen.queryByText(/teams-file-abc12345/)).toBeNull();
   });
 
   it("falls back to flat chips for a transcript with no index block", async () => {
@@ -182,10 +188,8 @@ describe("TeamsAttachmentsPreview", () => {
     );
     renderPreview([transcript, image, unrelated]);
 
-    expect(await screen.findByTestId("flat-preview")).toHaveTextContent(
-      "teams-Product_sync.md,teams-img-abc.png,holiday.pdf",
-    );
-    expect(screen.queryByTestId("grouped-preview")).toBeNull();
+    expect(await screen.findByText("holiday")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /product sync/i })).toBeNull();
   });
 
   it("falls back to flat chips when the index block is unreadable", async () => {
@@ -196,9 +200,7 @@ describe("TeamsAttachmentsPreview", () => {
     );
     renderPreview([transcript, image, unrelated]);
 
-    expect(await screen.findByTestId("flat-preview")).toHaveTextContent(
-      "teams-Product_sync.md,teams-img-abc.png,holiday.pdf",
-    );
-    expect(screen.queryByTestId("grouped-preview")).toBeNull();
+    expect(await screen.findByText("holiday")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /product sync/i })).toBeNull();
   });
 });

@@ -14,13 +14,12 @@
  * testable.
  */
 
+import { TEAMS_TRANSCRIPT_INDEX_VERSION } from "@erato/frontend/library";
+
 import { isRestrictedChannel } from "./parsedTeamsChannel";
 import { channelRef, chatRef, messageRef } from "./teamsConversationRef";
-import { uploadedAssetNames } from "./teamsTranscriptAssets";
-import {
-  TEAMS_TRANSCRIPT_INDEX_VERSION,
-  serializeTeamsTranscriptIndex,
-} from "./teamsTranscriptIndex";
+import { uploadedAssets } from "./teamsTranscriptAssets";
+import { serializeTeamsTranscriptIndex } from "./teamsTranscriptIndex";
 
 import type { ParsedTeamsChannel } from "./parsedTeamsChannel";
 import type { ParsedTeamsChat, ParsedTeamsMessage } from "./parsedTeamsChat";
@@ -29,7 +28,7 @@ import type {
   TeamsTranscriptIndex,
   TeamsTranscriptIndexMessage,
   TeamsTranscriptIndexSection,
-} from "./teamsTranscriptIndex";
+} from "@erato/frontend/library";
 
 interface TeamsTranscriptSectionBase {
   /**
@@ -291,7 +290,7 @@ function indexMessage(
     subject: message.subject,
     deepLink: message.deepLink,
     text: body.join("\n"),
-    assets: uploadedAssetNames(body),
+    assets: uploadedAssets(body, message.sharedFiles),
   };
 }
 

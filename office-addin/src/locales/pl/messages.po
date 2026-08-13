@@ -1412,7 +1412,22 @@ msgstr "Całe czaty dodają ostatnie {messageLimit} wiadomości."
 #. js-lingui-explicit-id
 #: src/teams/utils/teamsAttachmentGroups.ts
 msgid "officeAddin.teams.preview.allMessages"
-msgstr "{count, plural, one {Wszystkie # wiadomość} few {Wszystkie # wiadomości} many {Wszystkie # wiadomości} other {Wszystkie # wiadomości}}"
+msgstr "Wszystkie wiadomości"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsAttachmentsPreview.tsx
+msgid "officeAddin.teams.preview.conversationRegion"
+msgstr "Podgląd konwersacji Teams"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsAttachmentsPreview.tsx
+msgid "officeAddin.teams.preview.conversationTitle"
+msgstr "Konwersacja Teams"
+
+#. js-lingui-explicit-id
+#: src/teams/utils/teamsAttachmentGroups.ts
+msgid "officeAddin.teams.preview.image"
+msgstr "Obraz"
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsAttachmentsPreview.tsx
@@ -1421,8 +1436,8 @@ msgstr "Podgląd konwersacji w usłudze Teams"
 
 #. js-lingui-explicit-id
 #: src/teams/utils/teamsAttachmentGroups.ts
-msgid "officeAddin.teams.preview.lastMessages"
-msgstr "{count, plural, one {Ostatnia # wiadomość — starsze wiadomości nie są uwzględnione} few {Ostatnie # wiadomości — starsze wiadomości nie są uwzględnione} many {Ostatnich # wiadomości — starsze wiadomości nie są uwzględnione} other {Ostatnich # wiadomości — starsze wiadomości nie są uwzględnione}}"
+#~ msgid "officeAddin.teams.preview.lastMessages"
+#~ msgstr "{count, plural, one {Ostatnia # wiadomość — starsze wiadomości nie są uwzględnione} few {Ostatnie # wiadomości — starsze wiadomości nie są uwzględnione} many {Ostatnich # wiadomości — starsze wiadomości nie są uwzględnione} other {Ostatnich # wiadomości — starsze wiadomości nie są uwzględnione}}"
 
 #. js-lingui-explicit-id
 #: src/teams/utils/teamsAttachmentGroups.ts
@@ -1431,8 +1446,13 @@ msgstr "{count, plural, one {# wiadomość} few {# wiadomości} many {# wiadomo�
 
 #. js-lingui-explicit-id
 #: src/teams/utils/teamsAttachmentGroups.ts
+msgid "officeAddin.teams.preview.recentMessages"
+msgstr "Nowsze wiadomości — starsze nie są uwzględnione"
+
+#. js-lingui-explicit-id
+#: src/teams/utils/teamsAttachmentGroups.ts
 msgid "officeAddin.teams.preview.selectedMessages"
-msgstr "{count, plural, one {# wybrana wiadomość} few {# wybrane wiadomości} many {# wybranych wiadomości} other {# wybranych wiadomości}}"
+msgstr "Wybrane wiadomości"
 
 #. js-lingui-explicit-id
 #. placeholder {0}: section.skippedCount

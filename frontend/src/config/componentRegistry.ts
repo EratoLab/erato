@@ -31,6 +31,7 @@ import type { StarterPromptsRendererProps } from "@/components/ui/Chat/StarterPr
 import type { FileAttachmentsPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";
 import type { FileSourceSelectorProps } from "@/components/ui/FileUpload/FileSourceSelector";
 import type { GroupedFileAttachmentsPreviewProps } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
+import type { TeamsConversationViewProps } from "@/components/ui/Teams/TeamsConversationView";
 import type { WelcomeScreenProps } from "@/components/ui/WelcomeScreen";
 import type { ChatInputAttachmentPreviewProps } from "@/types/chat-input-attachment-preview";
 import type { MessageControlsProps } from "@/types/message-controls";
@@ -115,6 +116,14 @@ export interface ComponentRegistry {
    * inside the shell instead of replacing this region.
    */
   ChatAttachmentsPreview: ComponentType<FileAttachmentsPreviewProps> | null;
+
+  /**
+   * Override for the renderer that shows an attached Teams transcript as a
+   * conversation. Customer-visible wherever a transcript is previewed — the
+   * composer before sending, the file preview afterwards — so it is one
+   * extension point rather than one per surface.
+   */
+  TeamsConversationView: ComponentType<TeamsConversationViewProps> | null;
 
   /**
    * Override for the grouped attachments preview.
@@ -243,6 +252,7 @@ const emptyComponentRegistry = (): ComponentRegistry => ({
   ChatAddMenuExtraContent: null,
   ChatInputAttachmentPreview: null,
   ChatAttachmentsPreview: null,
+  TeamsConversationView: null,
   ChatGroupedAttachmentsPreview: null,
   ChatHistoryList: null,
   ChatWelcomeScreen: null,

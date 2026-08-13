@@ -36,6 +36,13 @@ import type { ReactNode } from "react";
 /* --------------------------------------------------------------- library */
 
 vi.mock("@erato/frontend/library", () => ({
+  // The transcript this dialog builds is stamped with the index-block header.
+  // Restated here rather than imported because the factory is hoisted above the
+  // test environment, and pulling the real library in evaluates a bundle that
+  // wants a `document`. The round trip in buildTeamsTranscriptFile.test.ts runs
+  // against the real constants, so a drift between them is caught there.
+  TEAMS_TRANSCRIPT_INDEX_MARKER: "erato:teams-transcript",
+  TEAMS_TRANSCRIPT_INDEX_VERSION: 1,
   ModalBase: ({
     children,
     isOpen,
@@ -147,7 +154,7 @@ vi.mock("@erato/frontend/library", () => ({
   // Tag-stripping stand-in; the real block handling has its own unit tests.
   htmlToPlainText: (html: string) => {
     let text = html;
-    for (let previous = ""; text !== previous; ) {
+    for (let previous = ""; text !== previous;) {
       previous = text;
       text = text.replace(/<[^>]+>/g, "");
     }

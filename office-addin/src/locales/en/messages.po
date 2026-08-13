@@ -1412,7 +1412,17 @@ msgstr "Whole chats add the last {messageLimit} messages."
 #. js-lingui-explicit-id
 #: src/teams/utils/teamsAttachmentGroups.ts
 msgid "officeAddin.teams.preview.allMessages"
-msgstr "{count, plural, one {All # message} other {All # messages}}"
+msgstr "All messages"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsAttachmentsPreview.tsx
+msgid "officeAddin.teams.preview.conversationRegion"
+msgstr "Teams conversation preview"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsAttachmentsPreview.tsx
+msgid "officeAddin.teams.preview.conversationTitle"
+msgstr "Teams conversation"
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsAttachmentsPreview.tsx
@@ -1421,8 +1431,13 @@ msgstr "Teams conversation preview"
 
 #. js-lingui-explicit-id
 #: src/teams/utils/teamsAttachmentGroups.ts
-msgid "officeAddin.teams.preview.lastMessages"
-msgstr "{count, plural, one {Last # message — older messages not included} other {Last # messages — older messages not included}}"
+msgid "officeAddin.teams.preview.image"
+msgstr "Image"
+
+#. js-lingui-explicit-id
+#: src/teams/utils/teamsAttachmentGroups.ts
+#~ msgid "officeAddin.teams.preview.lastMessages"
+#~ msgstr "{count, plural, one {Last # message — older messages not included} other {Last # messages — older messages not included}}"
 
 #. js-lingui-explicit-id
 #: src/teams/utils/teamsAttachmentGroups.ts
@@ -1431,8 +1446,13 @@ msgstr "{count, plural, one {# message} other {# messages}}"
 
 #. js-lingui-explicit-id
 #: src/teams/utils/teamsAttachmentGroups.ts
+msgid "officeAddin.teams.preview.recentMessages"
+msgstr "Recent messages — older ones not included"
+
+#. js-lingui-explicit-id
+#: src/teams/utils/teamsAttachmentGroups.ts
 msgid "officeAddin.teams.preview.selectedMessages"
-msgstr "{count, plural, one {# selected message} other {# selected messages}}"
+msgstr "Selected messages"
 
 #. js-lingui-explicit-id
 #. placeholder {0}: section.skippedCount

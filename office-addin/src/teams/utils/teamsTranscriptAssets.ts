@@ -18,6 +18,7 @@ import type { TeamsTranscriptSection } from "./buildTeamsTranscriptFile";
 import type { ParsedTeamsMessage, TeamsSharedFileRef } from "./parsedTeamsChat";
 import type { TeamsHostedContent } from "./teamsChatGraph";
 import type { TeamsSharedFileDownload } from "./teamsSharedFilesGraph";
+import type { TeamsTranscriptIndexAsset } from "@erato/frontend/library";
 
 /** Vision input is expensive; a transcript is an excerpt, not an album. */
 export const MAX_TRANSCRIPT_IMAGES = 10;
@@ -42,7 +43,7 @@ const FILE_UPLOAD_PREFIX = "teams-file-";
  * Teams-side name — is not read as an upload.
  */
 const UPLOADED_ASSET_MARKER = new RegExp(
-  `\\[(?:image|attachment): ((?:${IMAGE_UPLOAD_PREFIX}|${FILE_UPLOAD_PREFIX})[^\\]]+)\\]`,
+  `\\[(image|attachment): ((?:${IMAGE_UPLOAD_PREFIX}|${FILE_UPLOAD_PREFIX})[^\\]]+)\\]`,
   "g",
 );
 
@@ -198,15 +199,43 @@ export function stampImageMarkers(
 /**
  * The uploads a message names, in marker order — how anything downstream of
  * the transcript joins a file back to the message it rode in on.
+ *
+ * The minted name is the join key and stays unreadable; the name Teams gave
+ * the file travels beside it so a reader never has to show the hash. Both
+ * halves are produced here, by the same slug rule, so the join cannot drift.
  */
-export function uploadedAssetNames(sources: readonly string[]): string[] {
-  const names: string[] = [];
+export function uploadedAssets(
+  sources: readonly string[],
+  sharedFiles: readonly TeamsSharedFileRef[],
+): TeamsTranscriptIndexAsset[] {
+  const assets: TeamsTranscriptIndexAsset[] = [];
   for (const source of sources) {
     for (const match of source.matchAll(UPLOADED_ASSET_MARKER)) {
-      names.push(match[1]);
+      const name = match[2];
+      assets.push({
+        name,
+        kind: match[1] === "image" ? "image" : "file",
+        displayName: sharedFileDisplayName(name, sharedFiles),
+      });
     }
   }
-  return names;
+  return assets;
+}
+
+/**
+ * Null for a pasted image, which never had a name, and for the rare upload
+ * minted from another message's identical bytes — the hash dedupes across the
+ * whole transcript, so its name can belong to a ref this message never held.
+ */
+function sharedFileDisplayName(
+  uploadName: string,
+  sharedFiles: readonly TeamsSharedFileRef[],
+): string | null {
+  if (!uploadName.startsWith(FILE_UPLOAD_PREFIX)) return null;
+  const ref = sharedFiles.find((candidate) =>
+    uploadName.endsWith(`-${fileNameSlug(candidate.name)}`),
+  );
+  return ref?.name ?? null;
 }
 
 interface PlannedImage {

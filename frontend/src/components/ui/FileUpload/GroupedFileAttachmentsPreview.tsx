@@ -46,6 +46,12 @@ export type FileAttachmentGroupItem =
       id: string;
       file: FileResource;
       labelOverride?: string;
+      /**
+       * Opens something the file alone does not show — the conversation behind
+       * a Teams transcript, say. Takes precedence over `onFilePreview`, which
+       * can only ever offer the raw file.
+       */
+      onOpen?: () => void;
     }
   | {
       kind: "selectableAttachment";
@@ -654,17 +660,25 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
                     />
                   );
 
-                  if (!onFilePreview) {
+                  const onOpen =
+                    item.kind === "attachment" ? item.onOpen : undefined;
+                  const activate =
+                    onOpen ??
+                    (onFilePreview
+                      ? () => onFilePreview(item.file)
+                      : undefined);
+
+                  if (!activate) {
                     return <div key={getFileKey(item)}>{content}</div>;
                   }
 
                   return (
                     <InteractiveContainer
                       key={getFileKey(item)}
-                      onClick={() => onFilePreview(item.file)}
+                      onClick={activate}
                       useDiv={true}
                       className="w-full cursor-pointer hover:bg-theme-bg-accent"
-                      aria-label={`${t`Preview attachment`} ${getFileName(item.file)}`}
+                      aria-label={`${onOpen ? t`Open` : t`Preview attachment`} ${getFileName(item.file)}`}
                     >
                       {content}
                     </InteractiveContainer>

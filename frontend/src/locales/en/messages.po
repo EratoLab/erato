@@ -3589,6 +3589,11 @@ msgstr "{0, plural, one {# attachment ready to send} other {# attachments ready 
 #~ msgid "{0} items"
 #~ msgstr "{0} items"
 
+#. placeholder {0}: section.skippedCount
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "{0} messages could not be loaded."
+msgstr "{0} messages could not be loaded."
+
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "{attachmentCount} files"
 msgstr "{attachmentCount} files"
@@ -3634,6 +3639,10 @@ msgstr "1 file"
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "1 item"
 msgstr "1 item"
+
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "1 message could not be loaded."
+msgstr "1 message could not be loaded."
 
 #: src/components/ui/FileUpload/FileUpload.tsx
 msgid "Accepted types:"
@@ -4176,6 +4185,10 @@ msgstr "Edit queued message"
 #~ msgid "Edit your message..."
 #~ msgstr "Edit your message..."
 
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "Edited"
+msgstr "Edited"
+
 #: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "Email"
 msgstr "Email"
@@ -4301,9 +4314,9 @@ msgstr "Hide details"
 msgid "How to Test:"
 msgstr "How to Test:"
 
-#: src/components/ui/Message/MessageContent.tsx
-#~ msgid "Image"
-#~ msgstr "Image"
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "Image"
+msgstr "Image"
 
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "In Progress"
@@ -4473,9 +4486,17 @@ msgstr "No files"
 msgid "No messages yet"
 msgstr "No messages yet"
 
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "No messages."
+msgstr "No messages."
+
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "No microphone is available. Connect or enable a microphone and try again."
 msgstr "No microphone is available. Connect or enable a microphone and try again."
+
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "No text."
+msgstr "No text."
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 #~ msgid "noise suppression: {0}"
@@ -4497,9 +4518,21 @@ msgstr "noise suppression: {noiseSuppression}"
 msgid "of"
 msgstr "of"
 
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "Older messages are not included."
+msgstr "Older messages are not included."
+
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Only one message can be queued. Replacing discards the message you queued earlier."
 msgstr "Only one message can be queued. Replacing discards the message you queued earlier."
+
+#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+msgid "Open"
+msgstr "Open"
+
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "Open in Teams"
+msgstr "Open in Teams"
 
 #: src/components/ui/Controls/DropdownMenu.tsx
 msgid "Open menu"
@@ -4988,6 +5021,10 @@ msgstr "Type a message..."
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Unable to retry this transcription because the source audio is not available."
 msgstr "Unable to retry this transcription because the source audio is not available."
+
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "Unknown date"
+msgstr "Unknown date"
 
 #: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "Unknown sender"

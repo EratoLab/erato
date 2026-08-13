@@ -3589,6 +3589,11 @@ msgstr "{0, plural, one {# Anhang bereit zum Senden} other {# Anhänge bereit zu
 #~ msgid "{0} items"
 #~ msgstr ""
 
+#. placeholder {0}: section.skippedCount
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "{0} messages could not be loaded."
+msgstr "{0} Nachrichten konnten nicht geladen werden."
+
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "{attachmentCount} files"
 msgstr ""
@@ -3634,6 +3639,10 @@ msgstr "1 Datei"
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "1 item"
 msgstr "1 Element"
+
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "1 message could not be loaded."
+msgstr "1 Nachricht konnte nicht geladen werden."
 
 #: src/components/ui/FileUpload/FileUpload.tsx
 msgid "Accepted types:"
@@ -4176,6 +4185,10 @@ msgstr "Wartende Nachricht bearbeiten"
 #~ msgid "Edit your message..."
 #~ msgstr "Bearbeiten Sie Ihre Nachricht..."
 
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "Edited"
+msgstr "Bearbeitet"
+
 #: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "Email"
 msgstr ""
@@ -4301,9 +4314,9 @@ msgstr "Details ausblenden"
 msgid "How to Test:"
 msgstr "So testen Sie:"
 
-#: src/components/ui/Message/MessageContent.tsx
-#~ msgid "Image"
-#~ msgstr ""
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "Image"
+msgstr "Bild"
 
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "In Progress"
@@ -4473,9 +4486,17 @@ msgstr ""
 msgid "No messages yet"
 msgstr "Noch keine Nachrichten"
 
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "No messages."
+msgstr "Keine Nachrichten."
+
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "No microphone is available. Connect or enable a microphone and try again."
 msgstr ""
+
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "No text."
+msgstr "Kein Text."
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 #~ msgid "noise suppression: {0}"
@@ -4497,9 +4518,21 @@ msgstr "Rauschunterdrückung: {noiseSuppression}"
 msgid "of"
 msgstr "von"
 
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "Older messages are not included."
+msgstr "Ältere Nachrichten sind nicht enthalten."
+
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Only one message can be queued. Replacing discards the message you queued earlier."
 msgstr "Es kann nur eine Nachricht in die Warteschlange gestellt werden. Beim Ersetzen wird die zuvor eingereihte Nachricht verworfen."
+
+#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+msgid "Open"
+msgstr "Öffnen"
+
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "Open in Teams"
+msgstr "In Teams öffnen"
 
 #: src/components/ui/Controls/DropdownMenu.tsx
 msgid "Open menu"
@@ -4988,6 +5021,10 @@ msgstr "Nachricht eingeben..."
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Unable to retry this transcription because the source audio is not available."
 msgstr ""
+
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "Unknown date"
+msgstr "Unbekanntes Datum"
 
 #: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "Unknown sender"
