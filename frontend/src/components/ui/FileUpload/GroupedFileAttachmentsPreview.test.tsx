@@ -263,6 +263,39 @@ describe("GroupedFileAttachmentsPreview", () => {
     expect(screen.queryByRole("button", { name: /remove/i })).toBeNull();
   });
 
+  it("renders a thread message without checkboxes when it cannot be toggled", async () => {
+    await renderWithI18n(
+      <GroupedFileAttachmentsPreview
+        groups={[
+          {
+            id: "group-conversation",
+            label: "Project Alpha",
+            items: [
+              {
+                kind: "threadMessageGroup",
+                id: "message-1",
+                label: "Anna Schmidt",
+                sublabel: "5 August 2026, 14:22",
+                defaultCollapsed: false,
+                attachments: [
+                  {
+                    id: "file-1",
+                    file: { id: "file-1", filename: "invoice.pdf", size: 2048 },
+                  },
+                ],
+              },
+            ],
+          },
+        ]}
+        onRemoveFile={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("Anna Schmidt")).toBeVisible();
+    expect(screen.getByText("invoice")).toBeVisible();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+  });
+
   it("forwards file removal through item ids", async () => {
     const onRemoveFile = vi.fn();
 

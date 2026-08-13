@@ -1410,6 +1410,41 @@ msgid "officeAddin.teams.picker.wholeChatBound"
 msgstr "Całe czaty dodają ostatnie {messageLimit} wiadomości."
 
 #. js-lingui-explicit-id
+#: src/teams/utils/teamsAttachmentGroups.ts
+msgid "officeAddin.teams.preview.allMessages"
+msgstr "{count, plural, one {Wszystkie # wiadomość} few {Wszystkie # wiadomości} many {Wszystkie # wiadomości} other {Wszystkie # wiadomości}}"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsAttachmentsPreview.tsx
+msgid "officeAddin.teams.preview.conversationRegion"
+msgstr "Podgląd konwersacji w usłudze Teams"
+
+#. js-lingui-explicit-id
+#: src/teams/utils/teamsAttachmentGroups.ts
+msgid "officeAddin.teams.preview.lastMessages"
+msgstr "{count, plural, one {Ostatnia # wiadomość — starsze wiadomości nie są uwzględnione} few {Ostatnie # wiadomości — starsze wiadomości nie są uwzględnione} many {Ostatnich # wiadomości — starsze wiadomości nie są uwzględnione} other {Ostatnich # wiadomości — starsze wiadomości nie są uwzględnione}}"
+
+#. js-lingui-explicit-id
+#: src/teams/utils/teamsAttachmentGroups.ts
+msgid "officeAddin.teams.preview.messageCount"
+msgstr "{count, plural, one {# wiadomość} few {# wiadomości} many {# wiadomości} other {# wiadomości}}"
+
+#. js-lingui-explicit-id
+#: src/teams/utils/teamsAttachmentGroups.ts
+msgid "officeAddin.teams.preview.selectedMessages"
+msgstr "{count, plural, one {# wybrana wiadomość} few {# wybrane wiadomości} many {# wybranych wiadomości} other {# wybranych wiadomości}}"
+
+#. js-lingui-explicit-id
+#: src/teams/utils/teamsAttachmentGroups.ts
+msgid "officeAddin.teams.preview.skipped"
+msgstr "{skipped, plural, one {# nie mogła zostać wczytana} few {# nie mogły zostać wczytane} many {# nie mogło zostać wczytanych} other {# nie mogło zostać wczytanych}}"
+
+#. js-lingui-explicit-id
+#: src/teams/utils/teamsAttachmentGroups.ts
+msgid "officeAddin.teams.preview.transcriptLabel"
+msgstr "Konwersacja w usłudze Teams"
+
+#. js-lingui-explicit-id
 #: src/teams/providers/TeamsAuthProvider.tsx
 msgid "officeAddin.teams.signedIn.title"
 msgstr "Zalogowano. Spróbuj ponownie dodać czat."

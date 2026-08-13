@@ -5,6 +5,7 @@ import { buildTeamsTranscriptFile } from "../utils/buildTeamsTranscriptFile";
 import { collectTeamsTranscript } from "../utils/collectTeamsTranscript";
 import { TEAMS_GRAPH_TRANSCRIPT_TIMEOUT_MS } from "../utils/teamsGraphTimeouts";
 
+import type { TeamsTranscriptSection } from "../utils/buildTeamsTranscriptFile";
 import type { TeamsTranscriptProgress } from "../utils/collectTeamsTranscript";
 import type { ParsedTeamsChannel } from "../utils/parsedTeamsChannel";
 import type {
@@ -24,6 +25,12 @@ export interface TeamsTranscriptBuildOutcome {
   file: File | null;
   /** Images fetched from the messages, uploaded beside the transcript. */
   assets: File[];
+  /**
+   * The conversations behind `file`, in the order it renders them. Carried out
+   * of the build so the composer can preview the transcript as a conversation
+   * instead of as one opaque markdown chip.
+   */
+  sections: TeamsTranscriptSection[];
   state: TeamsFetchState;
   messageCount: number;
   skippedCount: number;
@@ -49,6 +56,7 @@ export interface UseTeamsTranscriptBuildResult {
 const ABORTED_OUTCOME: TeamsTranscriptBuildOutcome = {
   file: null,
   assets: [],
+  sections: [],
   state: "error",
   messageCount: 0,
   skippedCount: 0,
@@ -134,6 +142,7 @@ export function useTeamsTranscriptBuild(
             timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           }),
           assets: collected.assetFiles,
+          sections: collected.sections,
           state: collected.state,
           messageCount: collected.messageCount,
           skippedCount: collected.skippedCount,

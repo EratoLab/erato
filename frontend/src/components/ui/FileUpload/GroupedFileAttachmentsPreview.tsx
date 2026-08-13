@@ -99,8 +99,13 @@ export type FileAttachmentGroupItem =
       /** Secondary line, typically date + subject. */
       sublabel?: string;
       /** Whether the whole message is included. Drives the header checkbox. */
-      selected: boolean;
-      onToggle: () => void;
+      selected?: boolean;
+      /**
+       * Omit where inclusion is fixed: the card and its attachment rows then
+       * render read-only. A checkbox that cannot change anything reads as
+       * broken.
+       */
+      onToggle?: () => void;
       /** Initially collapsed when true. Default: true. */
       defaultCollapsed?: boolean;
       attachments: ThreadMessageAttachmentItem[];
@@ -109,8 +114,9 @@ export type FileAttachmentGroupItem =
 export interface ThreadMessageAttachmentItem {
   id: string;
   file: FileResource;
-  selected: boolean;
-  onToggle: () => void;
+  selected?: boolean;
+  /** Omit to render the attachment read-only, without a checkbox. */
+  onToggle?: () => void;
   validation?: { ok: boolean; reason?: string };
 }
 
@@ -165,8 +171,8 @@ function getFileId(item: ItemWithFile): string {
 
 interface SelectableAttachmentRowProps {
   file: FileResource;
-  selected: boolean;
-  onToggle: () => void;
+  selected?: boolean;
+  onToggle?: () => void;
   disabled: boolean;
   showFileType: boolean;
   showSize: boolean;
@@ -174,9 +180,12 @@ interface SelectableAttachmentRowProps {
   validation?: { ok: boolean; reason?: string };
 }
 
+const SELECTABLE_ROW_CLASS =
+  "flex w-full items-center gap-2 rounded-[var(--theme-radius-base)] border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-2";
+
 const SelectableAttachmentRow: React.FC<SelectableAttachmentRowProps> = ({
   file,
-  selected,
+  selected = true,
   onToggle,
   disabled,
   showFileType,
@@ -186,13 +195,36 @@ const SelectableAttachmentRow: React.FC<SelectableAttachmentRowProps> = ({
 }) => {
   const filename = getFileName(file);
   const invalid = validation?.ok === false;
-  return (
-    <label
-      className={clsx(
-        "flex w-full items-center gap-2 rounded-[var(--theme-radius-base)] border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-2",
-        !selected && "opacity-50",
+  const body = (
+    <div className="min-w-0 flex-1">
+      <FilePreviewBase
+        file={file}
+        onRemove={() => onToggle?.()}
+        disabled={disabled}
+        showRemoveButton={false}
+        showSize={showSize}
+        showFileType={showFileType}
+        filenameTruncateLength={filenameTruncateLength}
+        filenameClassName="max-w-full"
+        chromeless
+      />
+      {invalid && validation.reason && (
+        <p className="mt-0.5 text-xs text-[var(--theme-error-fg)]">
+          {validation.reason}
+        </p>
       )}
-    >
+    </div>
+  );
+  const className = clsx(SELECTABLE_ROW_CLASS, !selected && "opacity-50");
+
+  // Without a toggle there is nothing to label, so the row is a plain
+  // container rather than a `label` pointing at a control that isn't there.
+  if (!onToggle) {
+    return <div className={className}>{body}</div>;
+  }
+
+  return (
+    <label className={className}>
       <input
         type="checkbox"
         checked={selected}
@@ -201,24 +233,7 @@ const SelectableAttachmentRow: React.FC<SelectableAttachmentRowProps> = ({
         className="size-4 shrink-0 rounded border-theme-border text-theme-fg-accent focus:ring-theme-focus disabled:cursor-not-allowed"
         aria-label={`${t`Include`} ${filename}`}
       />
-      <div className="min-w-0 flex-1">
-        <FilePreviewBase
-          file={file}
-          onRemove={() => onToggle()}
-          disabled={disabled}
-          showRemoveButton={false}
-          showSize={showSize}
-          showFileType={showFileType}
-          filenameTruncateLength={filenameTruncateLength}
-          filenameClassName="max-w-full"
-          chromeless
-        />
-        {invalid && validation.reason && (
-          <p className="mt-0.5 text-xs text-[var(--theme-error-fg)]">
-            {validation.reason}
-          </p>
-        )}
-      </div>
+      {body}
     </label>
   );
 };
@@ -226,8 +241,8 @@ const SelectableAttachmentRow: React.FC<SelectableAttachmentRowProps> = ({
 interface ThreadMessageGroupSectionProps {
   label: string;
   sublabel?: string;
-  selected: boolean;
-  onToggle: () => void;
+  selected?: boolean;
+  onToggle?: () => void;
   attachments: ThreadMessageAttachmentItem[];
   defaultCollapsed?: boolean;
   disabled: boolean;
@@ -264,7 +279,7 @@ const ThreadMessageHeaderText: React.FC<{
 const ThreadMessageGroupSection: React.FC<ThreadMessageGroupSectionProps> = ({
   label,
   sublabel,
-  selected,
+  selected = true,
   onToggle,
   attachments,
   defaultCollapsed = true,
@@ -307,15 +322,17 @@ const ThreadMessageGroupSection: React.FC<ThreadMessageGroupSectionProps> = ({
         ) : (
           <span className="size-4 shrink-0" aria-hidden="true" />
         )}
-        <input
-          type="checkbox"
-          checked={selected}
-          onChange={onToggle}
-          disabled={disabled}
-          className="size-4 shrink-0 rounded border-theme-border text-theme-fg-accent focus:ring-theme-focus disabled:cursor-not-allowed"
-          aria-label={`${t`Include message`} ${label}`}
-          onClick={(event) => event.stopPropagation()}
-        />
+        {onToggle && (
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggle}
+            disabled={disabled}
+            className="size-4 shrink-0 rounded border-theme-border text-theme-fg-accent focus:ring-theme-focus disabled:cursor-not-allowed"
+            aria-label={`${t`Include message`} ${label}`}
+            onClick={(event) => event.stopPropagation()}
+          />
+        )}
         {hasAttachments ? (
           <button
             type="button"
