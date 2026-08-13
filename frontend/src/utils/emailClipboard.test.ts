@@ -62,6 +62,28 @@ describe("htmlToPlainText", () => {
   it("collapses excess blank lines from pretty-printed markup", () => {
     expect(htmlToPlainText("<p>A</p>\n\n  <p>B</p>")).toBe("A\n\nB");
   });
+
+  it("separates table cells", () => {
+    expect(
+      htmlToPlainText(
+        "<table><tr><td>Price</td><td>40</td></tr><tr><td>Tax</td><td>5</td></tr></table>",
+      ),
+    ).toBe("Price | 40\n\nTax | 5");
+  });
+
+  it("separates header cells and cells holding block content", () => {
+    expect(
+      htmlToPlainText(
+        "<table>\n  <tr>\n    <th>Item</th>\n    <th>Qty</th>\n  </tr>\n  <tr>\n    <td><p>Bolt</p></td>\n    <td>7</td>\n  </tr>\n</table>",
+      ),
+    ).toBe("Item | Qty\n\nBolt | 7");
+  });
+
+  it("keeps indentation and blank lines inside a code fence", () => {
+    const code =
+      "```\ndef f(x):\n    if x:\n\n        return 1\n    return 0\n```";
+    expect(htmlToPlainText(`<div>${code}</div>`)).toBe(code);
+  });
 });
 
 describe("transformEmailFencesForCopy", () => {

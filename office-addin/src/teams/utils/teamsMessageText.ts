@@ -10,7 +10,7 @@
  * and blank-line collapsing. The result is a string that never becomes DOM.
  */
 
-import { htmlToPlainText } from "@erato/frontend/library";
+import { htmlToPlainText, mapOutsideCodeFences } from "@erato/frontend/library";
 
 import type {
   GraphChatMessageAttachment,
@@ -109,7 +109,12 @@ function rewriteTeamsElements(
     element.replaceWith(pre);
   }
   for (const element of Array.from(root.querySelectorAll("pre"))) {
-    element.textContent = `\n\`\`\`\n${(element.textContent ?? "").trim()}\n\`\`\`\n`;
+    // Blank edges only: a trim would take the indentation of the first line
+    // with it whenever the whole block is indented.
+    const code = (element.textContent ?? "")
+      .replace(/^(?:[ \t]*\n)+/, "")
+      .replace(/\s+$/, "");
+    element.textContent = `\n\`\`\`\n${code}\n\`\`\`\n`;
   }
   replaceWithText(
     root,
@@ -173,9 +178,7 @@ function unwrapSafeLink(href: string): string {
 }
 
 function normalizeText(text: string): string {
-  return text
-    .replace(/\r\n?/g, "\n")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  return mapOutsideCodeFences(text.replace(/\r\n?/g, "\n"), (segment) =>
+    segment.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n"),
+  ).trim();
 }

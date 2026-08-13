@@ -1,3 +1,4 @@
+import { mapOutsideCodeFences } from "./codeFences";
 import { sanitizeHtmlPreview } from "./sanitizeHtmlPreview";
 
 const SKIPPED_TAGS = new Set(["SCRIPT", "STYLE", "TEMPLATE"]);
@@ -36,10 +37,21 @@ const BLOCK_TAGS = new Set([
 ]);
 
 /**
+ * Marks the boundary between two cells of a row while the tree is walked. A
+ * literal " | " cannot be pushed there: markup around the boundary — layout
+ * whitespace, a block element inside the cell — still contributes newlines that
+ * would tear the row apart again, so the separator is resolved only once the
+ * whole text is assembled. The parser turns any NUL in the source into U+FFFD,
+ * so the marker cannot collide with document text.
+ */
+const CELL_BREAK = "\u0000";
+const CELL_BREAK_RUN = new RegExp(`[ \\t\\n]*${CELL_BREAK}[ \\t\\n]*`, "g");
+
+/**
  * Converts an HTML fragment to readable plain text. Unlike bare
  * `textContent` (which fuses `<p>Hi</p><p>Bye</p>` into "HiBye"), this emits
- * newlines at `<br>` and block-element boundaries and skips style/script
- * content.
+ * newlines at `<br>` and block-element boundaries, separates table cells and
+ * skips style/script content.
  */
 export function htmlToPlainText(html: string): string {
   const doc = new DOMParser().parseFromString(html, "text/html");
@@ -60,6 +72,13 @@ export function htmlToPlainText(html: string): string {
       parts.push("\n");
       return;
     }
+    if (tag === "TD" || tag === "TH") {
+      if (isCell((node as Element).previousElementSibling)) {
+        parts.push(CELL_BREAK);
+      }
+      node.childNodes.forEach(visit);
+      return;
+    }
     const isBlock = BLOCK_TAGS.has(tag);
     if (isBlock) {
       parts.push("\n");
@@ -70,11 +89,14 @@ export function htmlToPlainText(html: string): string {
     }
   };
   doc.body.childNodes.forEach(visit);
-  return parts
-    .join("")
-    .replace(/[ \t]*\n[ \t]*/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  const text = parts.join("").replace(CELL_BREAK_RUN, " | ");
+  return mapOutsideCodeFences(text, (segment) =>
+    segment.replace(/[ \t]*\n[ \t]*/g, "\n").replace(/\n{3,}/g, "\n\n"),
+  ).trim();
+}
+
+function isCell(element: Element | null): boolean {
+  return element?.tagName === "TD" || element?.tagName === "TH";
 }
 
 const EMAIL_FENCE_RE =

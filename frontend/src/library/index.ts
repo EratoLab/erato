@@ -289,6 +289,7 @@ export {
   htmlToPlainText,
   transformEmailFencesForCopy,
 } from "@/utils/emailClipboard";
+export { mapOutsideCodeFences } from "@/utils/codeFences";
 export { sanitizeHtmlPreview } from "@/utils/sanitizeHtmlPreview";
 export {
   extractTextFromContent,
