@@ -14,6 +14,7 @@ FROM chef AS builder
 ARG ERATO_FEATURES=""
 COPY --from=planner /app/recipe.json recipe.json
 RUN cargo auditable chef cook --bin erato --release --recipe-path recipe.json
+RUN cargo install --locked cargo-about --version 0.9.1 --features cli
 
 # Build application (only erato binary)
 COPY . .
@@ -22,6 +23,7 @@ RUN if [ -n "$ERATO_FEATURES" ]; then \
     else \
       cargo auditable build --release -p erato --bin erato; \
     fi
+RUN mkdir -p /app/sbom && cargo about generate --manifest-path erato/Cargo.toml --config about.toml --locked about.hbs > /app/sbom/backend.txt
 
 # Pinned for security & build performance reasons
 FROM registry.eratolabs.com/erato/chainguard-glibc-dynamic:2026-06-25-dev
@@ -30,6 +32,7 @@ WORKDIR /app
 
 # Copy the binary from builder
 COPY --from=builder /app/target/release/erato /app/erato
+COPY --from=builder /app/sbom /app/sbom
 
 EXPOSE 3130
 

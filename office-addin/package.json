@@ -49,6 +49,7 @@
     "scheduler": "^0.27.0"
   },
   "devDependencies": {
+    "@quantco/pnpm-licenses": "2.4.1",
     "@eslint/eslintrc": "^3",
     "@eslint/js": "^9.28.0",
     "@lingui/babel-plugin-lingui-macro": "5.9.4",

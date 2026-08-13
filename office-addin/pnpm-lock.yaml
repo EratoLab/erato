@@ -70,6 +70,9 @@ importers:
         specifier: ^0.27.0
         version: 0.27.0
     devDependencies:
+      '@quantco/pnpm-licenses':
+        specifier: 2.4.1
+        version: 2.4.1
       '@eslint/eslintrc':
         specifier: ^3
         version: 3.3.5
@@ -150,6 +153,10 @@ importers:
         version: 4.1.9(@types/node@25.9.3)(jsdom@29.1.1)(vite@6.4.3(@types/node@25.9.3)(jiti@2.7.0))
 
 packages:
+
+  '@quantco/pnpm-licenses@2.4.1':
+    resolution: {integrity: sha512-+Jc670YHuQ1OY/xTAAFGjTHU3Hx/GqP/XTY/6L0YaUaQuY54FGhIlBzPsfabW67FfmueC5NOSDfiFywiwSmTFQ==}
+    hasBin: true
 
   '@adobe/css-tools@4.5.0':
     resolution: {integrity: sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q==}
@@ -1680,6 +1687,14 @@ packages:
   array-buffer-byte-length@1.0.2:
     resolution: {integrity: sha512-LHE+8BuR7RYGDKvnrmcuSq3tDcKv9OFEXQt/HpbZhY7V6h0zlUXutnAD82GiFx9rdieCMjkvtcsPqBwgUl1Iiw==}
     engines: {node: '>= 0.4'}
+
+  array-differ@4.0.0:
+    resolution: {integrity: sha512-Q6VPTLMsmXZ47ENG3V+wQyZS1ZxXMxFyYzA+Z/GMrJ6yIutAIEf9wTyroTzmGjNfox9/h3GdGBCVh43GVFx4Uw==}
+    engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
+
+  array-union@3.0.1:
+    resolution: {integrity: sha512-1OvF9IbWwaeiM9VhzYXVQacMibxpXOMYVNIvMtKRyX9SImBXpKcFr8XvFDeEslCyuH/t6KRt7HEO94AlP8Iatw==}
+    engines: {node: '>=12'}
 
   array-includes@3.1.9:
     resolution: {integrity: sha512-FmeCCAenzH0KH381SPT5FZmiA/TmpndpcaShhfgEN9eCVjnFBqq3l1xrI42y8+PPLI6hypzou4GXw00WHmPBLQ==}
@@ -4324,6 +4339,14 @@ packages:
 
 snapshots:
 
+  '@quantco/pnpm-licenses@2.4.1':
+    dependencies:
+      minimist: 1.2.8
+      multimatch: 8.0.0
+      remove-markdown: 0.5.5
+      spdx-license-list: 6.12.0
+      zod: 4.4.3
+
   '@adobe/css-tools@4.5.0': {}
 
   '@antfu/install-pkg@1.1.0':
@@ -5946,6 +5969,10 @@ snapshots:
     dependencies:
       call-bound: 1.0.4
       is-array-buffer: 3.0.5
+
+  array-differ@4.0.0: {}
+
+  array-union@3.0.1: {}
 
   array-includes@3.1.9:
     dependencies:
