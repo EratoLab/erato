@@ -83,6 +83,24 @@ describe("parseTeamsChat", () => {
     );
   });
 
+  it("keeps the signed-in user's own roster name", () => {
+    const chat = mockGraphChat({
+      chatType: "oneOnOne",
+      members: [
+        { id: "m0", displayName: "Grace Hopper", userId: "me-1" },
+        { id: "m1", displayName: "Ada Lovelace", userId: "u1" },
+      ],
+    });
+    const parsed = parseTeamsChat(chat, me);
+    expect(parsed?.selfDisplayName).toBe("Grace Hopper");
+    expect(parsed?.participants).toEqual(["Ada Lovelace"]);
+  });
+
+  it("leaves the self name null when no member matches", () => {
+    expect(parseTeamsChat(mockGraphChat(), me)?.selfDisplayName).toBeNull();
+    expect(parseTeamsChat(mockGraphChat())?.selfDisplayName).toBeNull();
+  });
+
   it("returns null for a chat with no id", () => {
     expect(parseTeamsChat(mockGraphChat({ id: undefined }))).toBeNull();
   });

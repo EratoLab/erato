@@ -121,6 +121,15 @@ function renderSection(
         `Participants: ${participants}${section.chat.participantsTruncated ? " (and possibly others)" : ""}`,
       );
     }
+    // Without this the model cannot tell "you" from "them" in a 1:1. The name
+    // comes from the member roster, so a channel — which has none — says
+    // nothing rather than guessing, as does a chat whose roster never matched
+    // the signed-in user.
+    if (section.chat.selfDisplayName) {
+      lines.push(
+        `Viewer: ${section.chat.selfDisplayName} (the signed-in user).`,
+      );
+    }
   }
   lines.push(
     `Exported: ${formatDateTime(input.exportedAt ?? new Date(), timeZone)}`,

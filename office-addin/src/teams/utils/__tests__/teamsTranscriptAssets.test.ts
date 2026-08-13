@@ -17,6 +17,7 @@ const chat: ParsedTeamsChat = {
   chatId: MOCK_CHAT_ID,
   title: "Product sync",
   participants: [],
+  selfDisplayName: null,
   participantsTruncated: false,
   chatType: "group",
   lastActivityAt: null,

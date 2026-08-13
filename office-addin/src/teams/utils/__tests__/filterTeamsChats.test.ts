@@ -9,6 +9,7 @@ function chat(overrides: Partial<ParsedTeamsChat>): ParsedTeamsChat {
     chatId: "c1",
     title: "Untitled",
     participants: [],
+    selfDisplayName: null,
     participantsTruncated: false,
     chatType: "group",
     previewText: null,
