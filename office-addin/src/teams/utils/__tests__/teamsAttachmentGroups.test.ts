@@ -2,12 +2,18 @@ import { i18n } from "@lingui/core";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { MOCK_CHAT_ID } from "../../../test/mocks/teams/graph";
+import { buildTeamsTranscriptDocument } from "../buildTeamsTranscriptFile";
 import { buildTeamsAttachmentGroups } from "../teamsAttachmentGroups";
 import { buildTeamsMessageDeepLink } from "../teamsDeepLink";
+import {
+  TEAMS_TRANSCRIPT_INDEX_VERSION,
+  parseTeamsTranscriptIndex,
+} from "../teamsTranscriptIndex";
 
 import type { TeamsTranscriptSection } from "../buildTeamsTranscriptFile";
 import type { ParsedTeamsChannel } from "../parsedTeamsChannel";
 import type { ParsedTeamsChat, ParsedTeamsMessage } from "../parsedTeamsChat";
+import type { TeamsAttachedTranscript } from "../teamsAttachmentGroups";
 import type {
   FileAttachmentGroup,
   FileAttachmentGroupItem,
@@ -75,6 +81,18 @@ function chatSection(
   };
 }
 
+/**
+ * The preview's real input: the index block as it survives a round trip
+ * through the transcript the composer holds.
+ */
+function attach(sections: TeamsTranscriptSection[]): TeamsAttachedTranscript {
+  const document = buildTeamsTranscriptDocument({ sections, timeZone: "UTC" });
+  if (!document) throw new Error("expected a transcript");
+  const index = parseTeamsTranscriptIndex(document.markdown);
+  if (!index) throw new Error("expected an index block");
+  return { fileName: TRANSCRIPT.filename, index };
+}
+
 function itemKinds(group: FileAttachmentGroup): string[] {
   return group.items.map((item) => item.kind);
 }
@@ -103,11 +121,20 @@ describe("buildTeamsAttachmentGroups", () => {
     i18n.activate("en");
   });
 
-  it("falls back to flat chips when the sections are unavailable", () => {
+  it("falls back to flat chips when the index is unavailable", () => {
     expect(buildTeamsAttachmentGroups(null, [TRANSCRIPT])).toBeNull();
     expect(
       buildTeamsAttachmentGroups(
-        { fileName: TRANSCRIPT.filename, sections: [] },
+        {
+          fileName: TRANSCRIPT.filename,
+          index: {
+            version: TEAMS_TRANSCRIPT_INDEX_VERSION,
+            exportedAt: "2026-03-03T10:00:00Z",
+            timeZone: "UTC",
+            sections: [],
+            messages: [],
+          },
+        },
         [TRANSCRIPT],
       ),
     ).toBeNull();
@@ -115,25 +142,21 @@ describe("buildTeamsAttachmentGroups", () => {
 
   it("falls back to flat chips when the transcript is no longer attached", () => {
     expect(
-      buildTeamsAttachmentGroups(
-        { fileName: TRANSCRIPT.filename, sections: [chatSection()] },
-        [upload("holiday.pdf")],
-      ),
+      buildTeamsAttachmentGroups(attach([chatSection()]), [
+        upload("holiday.pdf"),
+      ]),
     ).toBeNull();
   });
 
   it("summarises a whole conversation instead of listing its messages", () => {
     const messages = [
-      message({ messageId: "m1", createdAt: "2026-03-01T08:00:00Z" }),
       message({ messageId: "m2", createdAt: "2026-03-03T09:14:00Z" }),
+      message({ messageId: "m1", createdAt: "2026-03-01T08:00:00Z" }),
     ];
     const preview = buildTeamsAttachmentGroups(
-      {
-        fileName: TRANSCRIPT.filename,
-        sections: [
-          chatSection({ messages, selection: "whole-chat", truncated: true }),
-        ],
-      },
+      attach([
+        chatSection({ messages, selection: "whole-chat", truncated: true }),
+      ]),
       [TRANSCRIPT],
     );
 
@@ -151,7 +174,8 @@ describe("buildTeamsAttachmentGroups", () => {
     });
   });
 
-  it("renders one card per hand-picked message, oldest first", () => {
+  it("renders one card per hand-picked message, in transcript order", () => {
+    // Newest first, as Graph hands chat messages back.
     const messages = [
       message({
         messageId: "m2",
@@ -165,12 +189,9 @@ describe("buildTeamsAttachmentGroups", () => {
       }),
     ];
     const preview = buildTeamsAttachmentGroups(
-      {
-        fileName: TRANSCRIPT.filename,
-        sections: [
-          chatSection({ messages, selection: "messages", limit: undefined }),
-        ],
-      },
+      attach([
+        chatSection({ messages, selection: "messages", limit: undefined }),
+      ]),
       [TRANSCRIPT],
     );
 
@@ -192,14 +213,19 @@ describe("buildTeamsAttachmentGroups", () => {
 
   it("shows an excerpt so two messages from one sender are distinguishable", () => {
     const messages = [
-      message({ messageId: "m1", text: "Can we move the sync to Thursday?" }),
-      message({ messageId: "m2", text: "Actually Friday works better." }),
+      message({
+        messageId: "m2",
+        createdAt: "2026-03-03T09:14:00Z",
+        text: "Actually Friday works better.",
+      }),
+      message({
+        messageId: "m1",
+        createdAt: "2026-03-01T08:00:00Z",
+        text: "Can we move the sync to Thursday?",
+      }),
     ];
     const preview = buildTeamsAttachmentGroups(
-      {
-        fileName: TRANSCRIPT.filename,
-        sections: [chatSection({ messages, selection: "messages" })],
-      },
+      attach([chatSection({ messages, selection: "messages" })]),
       [TRANSCRIPT],
     );
 
@@ -210,14 +236,19 @@ describe("buildTeamsAttachmentGroups", () => {
 
   it("truncates a long excerpt and flattens its whitespace", () => {
     const messages = [
-      message({ messageId: "m1", text: `A${"b".repeat(200)}` }),
-      message({ messageId: "m2", text: "line one\n\n  line two" }),
+      message({
+        messageId: "m2",
+        createdAt: "2026-03-03T09:14:00Z",
+        text: "line one\n\n  line two",
+      }),
+      message({
+        messageId: "m1",
+        createdAt: "2026-03-01T08:00:00Z",
+        text: `A${"b".repeat(200)}`,
+      }),
     ];
     const preview = buildTeamsAttachmentGroups(
-      {
-        fileName: TRANSCRIPT.filename,
-        sections: [chatSection({ messages, selection: "messages" })],
-      },
+      attach([chatSection({ messages, selection: "messages" })]),
       [TRANSCRIPT],
     );
 
@@ -229,19 +260,16 @@ describe("buildTeamsAttachmentGroups", () => {
 
   it("keeps one group per conversation across chats and channels", () => {
     const preview = buildTeamsAttachmentGroups(
-      {
-        fileName: TRANSCRIPT.filename,
-        sections: [
-          chatSection({ selection: "messages" }),
-          {
-            kind: "channel",
-            channel,
-            messages: [message({ messageId: "c1" })],
-            selection: "whole-chat",
-            limit: 200,
-          },
-        ],
-      },
+      attach([
+        chatSection({ selection: "messages" }),
+        {
+          kind: "channel",
+          channel,
+          messages: [message({ messageId: "c1" })],
+          selection: "whole-chat",
+          limit: 200,
+        },
+      ]),
       [TRANSCRIPT],
     );
 
@@ -262,23 +290,20 @@ describe("buildTeamsAttachmentGroups", () => {
     const shared = upload("teams-file-abc-report.pdf", "upload-report");
     const unrelated = upload("holiday.pdf", "upload-holiday");
     const preview = buildTeamsAttachmentGroups(
-      {
-        fileName: TRANSCRIPT.filename,
-        sections: [
-          chatSection({
-            selection: "messages",
-            messages: [
-              message({
-                messageId: "m1",
-                createdAt: "2026-03-01T08:00:00Z",
-                text: "Here it is [image: teams-img-abc.png]",
-                markers: ["[attachment: teams-file-abc-report.pdf]"],
-              }),
-              message({ messageId: "m2", createdAt: "2026-03-02T08:00:00Z" }),
-            ],
-          }),
-        ],
-      },
+      attach([
+        chatSection({
+          selection: "messages",
+          messages: [
+            message({ messageId: "m2", createdAt: "2026-03-02T08:00:00Z" }),
+            message({
+              messageId: "m1",
+              createdAt: "2026-03-01T08:00:00Z",
+              text: "Here it is [image: teams-img-abc.png]",
+              markers: ["[attachment: teams-file-abc-report.pdf]"],
+            }),
+          ],
+        }),
+      ]),
       [TRANSCRIPT, image, shared, unrelated],
     );
 
@@ -299,16 +324,13 @@ describe("buildTeamsAttachmentGroups", () => {
   it("ignores a bare marker that happens to name one of the user's own files", () => {
     const own = upload("report.pdf", "upload-own");
     const preview = buildTeamsAttachmentGroups(
-      {
-        fileName: TRANSCRIPT.filename,
-        sections: [
-          chatSection({
-            selection: "messages",
-            // Never fetched, so the marker still carries the Teams-side name.
-            messages: [message({ markers: ["[attachment: report.pdf]"] })],
-          }),
-        ],
-      },
+      attach([
+        chatSection({
+          selection: "messages",
+          // Never fetched, so the marker still carries the Teams-side name.
+          messages: [message({ markers: ["[attachment: report.pdf]"] })],
+        }),
+      ]),
       [TRANSCRIPT, own],
     );
 
@@ -319,23 +341,20 @@ describe("buildTeamsAttachmentGroups", () => {
   it("lists a whole conversation's uploads beside its summary row", () => {
     const image = upload("teams-img-abc.png", "upload-image");
     const preview = buildTeamsAttachmentGroups(
-      {
-        fileName: TRANSCRIPT.filename,
-        sections: [
-          chatSection({
-            messages: [
-              message({
-                text: "Screenshot [image: teams-img-abc.png]",
-              }),
-              // The same asset in a second message must not double up.
-              message({
-                messageId: "m2",
-                text: "Again [image: teams-img-abc.png]",
-              }),
-            ],
-          }),
-        ],
-      },
+      attach([
+        chatSection({
+          messages: [
+            message({
+              text: "Screenshot [image: teams-img-abc.png]",
+            }),
+            // The same asset in a second message must not double up.
+            message({
+              messageId: "m2",
+              text: "Again [image: teams-img-abc.png]",
+            }),
+          ],
+        }),
+      ]),
       [TRANSCRIPT, image],
     );
 
@@ -346,10 +365,7 @@ describe("buildTeamsAttachmentGroups", () => {
 
   it("reports how many messages could not be loaded", () => {
     const preview = buildTeamsAttachmentGroups(
-      {
-        fileName: TRANSCRIPT.filename,
-        sections: [chatSection({ selection: "messages", skippedCount: 2 })],
-      },
+      attach([chatSection({ selection: "messages", skippedCount: 2 })]),
       [TRANSCRIPT],
     );
 
