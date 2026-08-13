@@ -11,12 +11,20 @@ use std::sync::Mutex;
 const EXPLICIT_ID_FLAG: &str = "js-lingui-explicit-id";
 const UNIT_SEPARATOR: char = '\u{1f}';
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct TranslationPoCache {
     entries: Mutex<HashMap<PathBuf, Vec<u8>>>,
+    fallback_locale: String,
 }
 
 impl TranslationPoCache {
+    pub fn new(fallback_locale: impl Into<String>) -> Self {
+        Self {
+            entries: Mutex::new(HashMap::new()),
+            fallback_locale: fallback_locale.into(),
+        }
+    }
+
     pub fn compile_messages_json(&self, po_path: &Path) -> io::Result<Vec<u8>> {
         let po_path = po_path.canonicalize()?;
         if let Some(cached) = self
@@ -30,12 +38,29 @@ impl TranslationPoCache {
         }
 
         let po_contents = fs::read_to_string(&po_path)?;
-        let compiled = compile_po_catalog_to_json(&po_contents).map_err(|err| {
+        let fallback_messages = fallback_po_path(&po_path, &self.fallback_locale)
+            .filter(|fallback_path| fallback_path != &po_path)
+            .map(|fallback_path| {
+                fs::read_to_string(&fallback_path).and_then(|contents| {
+                    compile_po_catalog_to_messages(&contents).map_err(|err| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            format!("failed to compile {}: {err}", fallback_path.display()),
+                        )
+                    })
+                })
+            })
+            .transpose()?
+            .unwrap_or_default();
+        let mut messages = fallback_messages;
+        messages.extend(compile_po_catalog_to_messages(&po_contents).map_err(|err| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("failed to compile {}: {err}", po_path.display()),
             )
-        })?;
+        })?);
+        let compiled = serde_json::to_vec(&json!({ "messages": messages }))
+            .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
 
         self.entries
             .lock()
@@ -45,7 +70,20 @@ impl TranslationPoCache {
     }
 }
 
-fn compile_po_catalog_to_json(po_contents: &str) -> Result<Vec<u8>, String> {
+impl Default for TranslationPoCache {
+    fn default() -> Self {
+        Self::new("en")
+    }
+}
+
+fn fallback_po_path(po_path: &Path, fallback_locale: &str) -> Option<PathBuf> {
+    let locale_dir = po_path.parent()?;
+    let locales_dir = locale_dir.parent()?;
+    let fallback_path = locales_dir.join(fallback_locale).join("messages.po");
+    fallback_path.is_file().then_some(fallback_path)
+}
+
+fn compile_po_catalog_to_messages(po_contents: &str) -> Result<Map<String, Value>, String> {
     let entries = parse_po_catalog(po_contents)?;
     let mut messages = Map::new();
 
@@ -81,6 +119,12 @@ fn compile_po_catalog_to_json(po_contents: &str) -> Result<Vec<u8>, String> {
         messages.insert(id, compile_message(message)?);
     }
 
+    Ok(messages)
+}
+
+#[cfg(test)]
+fn compile_po_catalog_to_json(po_contents: &str) -> Result<Vec<u8>, String> {
+    let messages = compile_po_catalog_to_messages(po_contents)?;
     serde_json::to_vec(&json!({ "messages": messages })).map_err(|err| err.to_string())
 }
 
@@ -507,5 +551,59 @@ msgstr ""
                 }
             ]])
         );
+    }
+
+    #[test]
+    fn jit_catalog_includes_default_locale_messages_for_missing_translations() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let locales_dir = tempdir.path().join("locales");
+        let en_dir = locales_dir.join("en");
+        let de_dir = locales_dir.join("de");
+        std::fs::create_dir_all(&en_dir).unwrap();
+        std::fs::create_dir_all(&de_dir).unwrap();
+
+        std::fs::write(
+            en_dir.join("messages.po"),
+            r#"
+#. js-lingui-explicit-id
+msgid "navigation.page.new_chat"
+msgstr "New chat"
+
+#. js-lingui-explicit-id
+msgid "common.cancel"
+msgstr "Cancel"
+
+#. js-lingui-explicit-id
+msgid "common.close"
+msgstr "Close"
+"#,
+        )
+        .unwrap();
+        let de_path = de_dir.join("messages.po");
+        std::fs::write(
+            &de_path,
+            r#"
+#. js-lingui-explicit-id
+msgid "navigation.page.new_chat"
+msgstr ""
+
+#. js-lingui-explicit-id
+msgid "common.cancel"
+msgstr "Abbrechen"
+"#,
+        )
+        .unwrap();
+
+        let compiled = TranslationPoCache::new("en")
+            .compile_messages_json(&de_path)
+            .unwrap();
+        let value: Value = serde_json::from_slice(&compiled).unwrap();
+
+        assert_eq!(
+            value["messages"]["navigation.page.new_chat"],
+            json!(["New chat"])
+        );
+        assert_eq!(value["messages"]["common.cancel"], json!(["Abbrechen"]));
+        assert_eq!(value["messages"]["common.close"], json!(["Close"]));
     }
 }

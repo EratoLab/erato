@@ -412,7 +412,9 @@ pub fn build_frontend_registry(config: &AppConfig) -> FrontendRegistry {
     FrontendRegistry {
         frontends,
         translation_po_compilation_mode: config.frontend.translation_po_compilation_mode,
-        translation_po_cache: Arc::new(TranslationPoCache::default()),
+        translation_po_cache: Arc::new(TranslationPoCache::new(
+            config.i18n.language.default_language.clone(),
+        )),
     }
 }
 
