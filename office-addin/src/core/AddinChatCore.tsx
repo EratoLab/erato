@@ -21,10 +21,12 @@ import {
   useConversationDropzone,
   useFileCapabilitiesContext,
   useFilePreviewModal,
+  useFileUploadStore,
   useFileUploadWithTokenCheck,
   useMessageFeedback,
   useProfile,
   useStandardMessageActions,
+  useUploadFeature,
   type ActionFacetRequest,
   type ChatInputControlsHandle,
   type ChatMessageProps,
@@ -430,11 +432,16 @@ function useAddinChatController({
 type ConversationDropzone = ReturnType<typeof useConversationDropzone>;
 
 function NeutralAddinChatHost({ controller }: AddinChatHostProps) {
+  const { maxSizeBytes, maxSizeFormatted } = useUploadFeature();
+  const { setError: setUploadError } = useFileUploadStore();
   const dropzone = useConversationDropzone({
     uploadFiles: controller.uploadFiles,
     onUploaded: (files) => controller.chatInputControls.addUploadedFiles(files),
     acceptedFileTypes: controller.acceptedFileTypes,
     isUploading: controller.isUploading,
+    maxSize: maxSizeBytes,
+    maxSizeFormatted,
+    onError: setUploadError,
   });
 
   return (

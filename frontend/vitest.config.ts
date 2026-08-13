@@ -30,6 +30,10 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": resolve(__dirname, "./src"),
+      "@erato/desktop-sidecar-protocol": resolve(
+        __dirname,
+        "./src/__mocks__/desktop-sidecar-protocol.ts",
+      ),
     },
   },
 });

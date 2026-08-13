@@ -1,6 +1,8 @@
 import {
   useConversationDropzone,
+  useFileUploadStore,
   usePersistedState,
+  useUploadFeature,
   type FileUploadItem,
   type PersistedStateOptions,
 } from "@erato/frontend/library";
@@ -192,6 +194,8 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
     ],
   );
   const emailDropMimeTypes = messageFetcher ? EMAIL_MIME_TYPES : EML_MIME_TYPES;
+  const { maxSizeBytes, maxSizeFormatted } = useUploadFeature();
+  const { setError: setUploadError } = useFileUploadStore();
   const dropzone = useConversationDropzone({
     uploadFiles: uploadFilesWithEmailExpansion,
     onUploaded: (uploaded: FileUploadItem[]) =>
@@ -199,6 +203,9 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
     acceptedFileTypes: controller.acceptedFileTypes,
     extraAcceptMimeTypes: emailDropMimeTypes,
     isUploading: controller.isUploading,
+    maxSize: maxSizeBytes,
+    maxSizeFormatted,
+    onError: setUploadError,
   });
 
   const handleOutlookMailListDrop = useCallback(

@@ -33,6 +33,7 @@ import {
   useUploadFeature,
 } from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
+import { validateFileSizes } from "@/utils/validateFileSizes";
 
 import type { AddMenuActionItem } from "@/components/ui/Chat/ChatInputAddMenu";
 import type { CloudFilePickerModalProps } from "@/components/ui/FileUpload/CloudFilePickerModal";
@@ -154,6 +155,15 @@ export function useChatFileSources({
         return;
       }
 
+      // Preflight: reject the entire batch if any file exceeds the configured
+      // per-file limit. This covers the `onSelectFiles` path used by
+      // host/custom components that supply already-resolved File objects.
+      const sizeValidation = validateFileSizes(files, maxSizeBytes);
+      if (!sizeValidation.valid) {
+        setError(new UploadTooLargeError(maxSizeFormatted));
+        return;
+      }
+
       const uploadedFiles = await performDiskUpload(files);
       if (
         !externalPerformFileUpload &&
@@ -163,7 +173,14 @@ export function useChatFileSources({
         onFilesUploaded?.(uploadedFiles);
       }
     },
-    [externalPerformFileUpload, onFilesUploaded, performDiskUpload],
+    [
+      externalPerformFileUpload,
+      maxSizeBytes,
+      maxSizeFormatted,
+      onFilesUploaded,
+      performDiskUpload,
+      setError,
+    ],
   );
 
   const {
