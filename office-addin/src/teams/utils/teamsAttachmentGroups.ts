@@ -275,11 +275,16 @@ function assetResource({ asset, file }: ClaimedAsset): LocalFilePreviewItem {
   return {
     id: file.id,
     filename: file.filename,
+    // Never `file.filename`: that is the minted name, and falling back to it
+    // shows the content hash this whole indirection exists to hide.
     displayName:
       asset.displayName ??
       (asset.kind === "image"
         ? t({ id: "officeAddin.teams.preview.image", message: "Image" })
-        : file.filename),
+        : t({
+            id: "officeAddin.teams.preview.attachment",
+            message: "Attachment",
+          })),
   };
 }
 

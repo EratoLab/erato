@@ -97,13 +97,23 @@ describe("parseTeamsTranscriptIndex", () => {
     expect(parseTeamsTranscriptIndex(block(orphaned))).toBeNull();
   });
 
-  it("settles promptly on a block that never closes", () => {
-    // A quadratic pattern here would stall on the whitespace run; the parser
-    // has to stay linear because it reads whatever file the composer holds.
-    const nearMiss = `<!-- ${TEAMS_TRANSCRIPT_INDEX_MARKER} v1 ${" ".repeat(60_000)}`;
-    const started = Date.now();
+  it(
+    "settles promptly on a block that never closes",
+    { timeout: 30_000 },
+    () => {
+      // Sized so the two implementations are unmistakable: the quadratic
+      // pattern takes ~8s over this run, the linear one ~0ms. Shorter runs do
+      // not separate them — 60k characters costs the bad version under 200ms,
+      // which would sit comfortably inside any budget worth asserting.
+      //
+      // The explicit timeout matters: the regex is synchronous, so a regression
+      // blocks the worker and would otherwise surface as a vitest timeout
+      // rather than as this assertion.
+      const nearMiss = `<!-- ${TEAMS_TRANSCRIPT_INDEX_MARKER} v1 ${" ".repeat(400_000)}`;
+      const started = Date.now();
 
-    expect(parseTeamsTranscriptIndex(nearMiss)).toBeNull();
-    expect(Date.now() - started).toBeLessThan(1_000);
-  });
+      expect(parseTeamsTranscriptIndex(nearMiss)).toBeNull();
+      expect(Date.now() - started).toBeLessThan(1_000);
+    },
+  );
 });

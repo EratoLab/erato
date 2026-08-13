@@ -1,0 +1,289 @@
+# Local replica of the CI `many-models` e2e scenario, for benchmarking the
+# e2e suite against the local dev stack (`just dev` + mock servers).
+# Loaded after erato.toml via *.auto.erato.toml auto-discovery; keys here
+# override the personal dev config. In-cluster hostnames are swapped to
+# localhost. The non-mock providers carry dummy keys — tests only ever chat
+# with the Mock-LLM providers; the rest exist to populate the model menu.
+#
+# Sources mirrored:
+# - infrastructure/scripts/setup-e2e-secrets (many-models provider roster)
+# - infrastructure/k3d/erato-local/config/erato.scenario-many-models.toml
+# - infrastructure/k3d/erato-local/config/erato.toml (starter prompts, facets)
+
+[chat_providers]
+priority_order = ["gemini-2-5-flash", "gemini-2-5-pro", "gpt-4-1", "gpt-4-1-mini", "gpt-4o-mini", "gpt-5", "gpt-4-1-no-image", "mock-llm-openai", "mock-llm-100k", "mock-llm-200k"]
+
+# Summaries via the mock so the benchmark makes no real API calls.
+[chat_providers.summary]
+summary_chat_provider_id = "mock-llm-openai"
+
+[chat_providers.providers.gemini-2-5-flash]
+provider_kind = "vertex_ai"
+model_name = "gemini-2.5-flash"
+model_display_name = "Gemini 2.5-flash"
+api_key = "dummy-not-used"
+region = "europe-west3"
+base_url = "http://localhost:44320/base-vertex/v1/publishers/google/"
+
+[chat_providers.providers.gemini-2-5-flash.model_capabilities]
+supports_reasoning = true
+
+[chat_providers.providers.gemini-2-5-flash.model_settings]
+reasoning_effort = "minimal"
+
+[chat_providers.providers.gemini-2-5-pro]
+provider_kind = "vertex_ai"
+model_name = "gemini-2.5-pro"
+model_display_name = "Gemini 2.5-pro"
+api_key = "dummy-not-used"
+region = "europe-west4"
+base_url = "http://localhost:44320/base-vertex/v1/publishers/google/"
+
+[chat_providers.providers.gemini-2-5-pro.model_capabilities]
+supports_reasoning = true
+
+[chat_providers.providers.gemini-2-5-pro.model_settings]
+reasoning_effort = "minimal"
+
+[chat_providers.providers.gpt-4-1]
+provider_kind = "openai"
+model_name = "gpt-4.1"
+model_display_name = "GPT-4.1"
+api_key = "dummy-not-used"
+base_url = "http://localhost:44320/base-openai/v1/placeholder"
+
+[chat_providers.providers.gpt-4-1.model_capabilities]
+supports_image_understanding = true
+
+[chat_providers.providers.gpt-4-1-mini]
+provider_kind = "openai"
+model_name = "gpt-4.1-mini"
+model_display_name = "GPT-4.1 Mini"
+api_key = "dummy-not-used"
+base_url = "http://localhost:44320/base-openai/v1/placeholder"
+
+[chat_providers.providers.gpt-4-1-mini.model_capabilities]
+supports_image_understanding = true
+
+[chat_providers.providers.gpt-4o-mini]
+provider_kind = "openai"
+model_name = "gpt-4o-mini"
+model_display_name = "GPT-4o Mini"
+api_key = "dummy-not-used"
+base_url = "http://localhost:44320/base-openai/v1/placeholder"
+
+[chat_providers.providers.gpt-4o-mini.model_capabilities]
+supports_image_understanding = true
+
+[chat_providers.providers.gpt-5]
+provider_kind = "openai_responses"
+model_name = "gpt-5"
+model_display_name = "GPT-5"
+api_key = "dummy-not-used"
+base_url = "http://localhost:44320/base-openai/v1/placeholder"
+
+[chat_providers.providers.gpt-5.model_capabilities]
+supports_image_understanding = true
+supports_reasoning = true
+
+[chat_providers.providers.gpt-5.model_settings]
+reasoning_effort = "minimal"
+
+[chat_providers.providers.gpt-4-1-no-image]
+provider_kind = "openai"
+model_name = "gpt-4.1"
+model_display_name = "no-image"
+api_key = "dummy-not-used"
+base_url = "http://localhost:44320/base-openai/v1/placeholder"
+
+[chat_providers.providers.gpt-4-1-no-image.model_capabilities]
+supports_image_understanding = false
+
+[chat_providers.providers.mock-llm-openai]
+provider_kind = "openai"
+model_name = "placeholder"
+model_display_name = "Mock-LLM"
+base_url = "http://localhost:44320/base-openai/v1/placeholder"
+
+[chat_providers.providers.mock-llm-openai.model_capabilities]
+supports_image_understanding = false
+supports_audio_input = true
+
+[chat_providers.providers.mock-llm-openai.hallucination_suppression]
+enabled = true
+whitespace_delta_threshold = 3
+
+[chat_providers.providers.mock-llm-openai.guardrails.filter_input_prompt_injection]
+enabled = true
+filter_pattern_ids = ["ignore_previous_instructions"]
+filter_pattern_tags = []
+
+[chat_providers.providers.mock-llm-100k]
+provider_kind = "openai"
+model_name = "placeholder"
+model_display_name = "Mock-LLM 100k"
+base_url = "http://localhost:44320/base-openai/v1/placeholder"
+
+[chat_providers.providers.mock-llm-100k.model_capabilities]
+supports_image_understanding = false
+context_size_tokens = 100000
+
+[chat_providers.providers.mock-llm-200k]
+provider_kind = "openai"
+model_name = "placeholder"
+model_display_name = "Mock-LLM 200k"
+base_url = "http://localhost:44320/base-openai/v1/placeholder"
+
+[chat_providers.providers.mock-llm-200k.model_capabilities]
+supports_image_understanding = false
+context_size_tokens = 200000
+
+[guardrails.prompt_patterns.ignore_previous_instructions]
+type = "fixed"
+pattern = "ignore all previous instructions"
+language = "en"
+tags = ["input", "prompt_injection"]
+
+[model_permissions.rules.allow-e2e-many-models]
+rule_type = "allow-all"
+chat_provider_ids = ["gemini-2-5-flash", "gemini-2-5-pro", "gpt-4-1", "gpt-4-1-mini", "gpt-4o-mini", "gpt-5", "gpt-4-1-no-image", "mock-llm-openai", "mock-llm-100k", "mock-llm-200k"]
+
+[audio_transcription]
+enabled = true
+chat_provider_id = "mock-llm-openai"
+max_recording_duration_seconds = 1200
+chunk_duration_seconds = 30
+max_attempts = 3
+initial_backoff_ms = 10
+max_backoff_ms = 50
+
+[audio_dictation]
+enabled = true
+chat_provider_id = "mock-llm-openai"
+max_recording_duration_seconds = 1200
+chunk_duration_seconds = 30
+max_attempts = 3
+initial_backoff_ms = 10
+max_backoff_ms = 50
+
+[audio_conversational]
+enabled = true
+chat_provider_id = "mock-llm-openai"
+max_recording_duration_seconds = 1200
+chunk_duration_seconds = 30
+max_attempts = 3
+initial_backoff_ms = 10
+max_backoff_ms = 50
+
+[mcp_servers_global]
+max_session_idle_seconds = 3600
+
+[mcp_servers.mock_mcp_progress]
+transport_type = "streamable_http"
+url = "http://127.0.0.1:44321/mcp/progress"
+
+[mcp_servers.mock_mcp_auth_none]
+transport_type = "streamable_http"
+url = "http://127.0.0.1:44321/mcp/auth-none"
+
+[mcp_servers.mock_mcp_auth_none.authentication]
+mode = "none"
+
+[mcp_servers.mock_mcp_auth_forwarded_access]
+transport_type = "streamable_http"
+url = "http://127.0.0.1:44321/mcp/auth-forwarded-access"
+
+[mcp_servers.mock_mcp_auth_forwarded_access.authentication]
+mode = "forwarded"
+
+[mcp_servers.mock_mcp_auth_forwarded_access.authentication.forwarded]
+credential = "access_token"
+
+[mcp_servers.mock_mcp_auth_forwarded_oidc]
+transport_type = "streamable_http"
+url = "http://127.0.0.1:44321/mcp/auth-forwarded-oidc"
+
+[mcp_servers.mock_mcp_auth_forwarded_oidc.authentication]
+mode = "forwarded"
+
+[mcp_servers.mock_mcp_auth_forwarded_oidc.authentication.forwarded]
+credential = "oidc_id_token"
+
+[mcp_servers.mock_mcp_auth_fixed]
+transport_type = "streamable_http"
+url = "http://127.0.0.1:44321/mcp/auth-fixed"
+
+[mcp_servers.mock_mcp_auth_fixed.authentication]
+mode = "fixed"
+
+[mcp_servers.mock_mcp_auth_fixed.authentication.fixed]
+api_key = "fixed-api-key-secret"
+
+[mcp_servers.mock_mcp_unavailable_500]
+transport_type = "streamable_http"
+url = "http://127.0.0.1:44321/mcp/list-tools-500"
+
+[mcp_server_permissions.rules.allow_mock_mcp_progress_for_all]
+rule_type = "allow-all"
+mcp_server_ids = ["mock_mcp_progress"]
+
+[mcp_server_permissions.rules.allow_mock_mcp_auth_none_for_group]
+rule_type = "allow-for-group-members"
+mcp_server_ids = ["mock_mcp_auth_none"]
+groups = ["mcp-auth-none"]
+
+[mcp_server_permissions.rules.allow_mock_mcp_auth_fixed_for_group]
+rule_type = "allow-for-group-members"
+mcp_server_ids = ["mock_mcp_auth_fixed"]
+groups = ["mcp-auth-fixed"]
+
+[mcp_server_permissions.rules.allow_mock_mcp_auth_forwarded_access_for_group]
+rule_type = "allow-for-group-members"
+mcp_server_ids = ["mock_mcp_auth_forwarded_access"]
+groups = ["mcp-auth-forwarded-access"]
+
+[mcp_server_permissions.rules.allow_mock_mcp_auth_forwarded_oidc_for_group]
+rule_type = "allow-for-group-members"
+mcp_server_ids = ["mock_mcp_auth_forwarded_oidc"]
+groups = ["mcp-auth-forwarded-oidc"]
+
+[mcp_server_permissions.rules.allow_mock_mcp_unavailable_500_for_group]
+rule_type = "allow-for-group-members"
+mcp_server_ids = ["mock_mcp_unavailable_500"]
+groups = ["mcp-unavailable-resilience"]
+
+[starter_prompts]
+enabled = true
+priority_order = ["research_topic", "draft_email", "summarize_notes"]
+
+[starter_prompts.prompts.research_topic]
+title = "Research a topic"
+subtitle = "Prefill a research request with web search selected"
+icon = "iconoir-globe"
+prompt = "Research this topic and summarize the most important findings."
+selected_facets = ["web_search"]
+chat_provider = "mock-llm-200k"
+
+[starter_prompts.prompts.draft_email]
+title = "Draft an email"
+subtitle = "Write a concise and professional reply"
+icon = "iconoir-mail"
+prompt = "Draft a concise and professional reply to this email."
+
+[starter_prompts.prompts.summarize_notes]
+title = "Summarize notes"
+subtitle = "Turn rough notes into a structured summary"
+icon = "iconoir-page"
+prompt = "Summarize these notes into clear action items and decisions."
+
+[experimental_facets]
+only_single_facet = false
+show_facet_indicator_with_display_name = false
+priority_order = ["web_search"]
+default_selected_facets = []
+
+[experimental_facets.facets.web_search]
+display_name = "Web search"
+icon = "iconoir-globe"
+tool_call_allowlist = ["web-search-mcp/*", "web-access-mcp/*"]
+additional_system_prompt = "Please execute one or multiple web searches to answer the user's question."

@@ -3589,10 +3589,9 @@ msgstr "{0, plural, one {# Anhang bereit zum Senden} other {# Anhänge bereit zu
 #~ msgid "{0} items"
 #~ msgstr ""
 
-#. placeholder {0}: section.skippedCount
 #: src/components/ui/Teams/TeamsConversationView.tsx
-msgid "{0} messages could not be loaded."
-msgstr "{0} Nachrichten konnten nicht geladen werden."
+#~ msgid "{0} messages could not be loaded."
+#~ msgstr "{0} Nachrichten konnten nicht geladen werden."
 
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "{attachmentCount} files"
@@ -3609,6 +3608,10 @@ msgstr "{fileName}: {filePercentage}%"
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "{itemCount} items"
 msgstr "{itemCount} Elemente"
+
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "{skipped} messages could not be loaded."
+msgstr ""
 
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "• Change browser language in settings and refresh"
@@ -3717,6 +3720,10 @@ msgstr "Datei anhängen"
 #: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "attachment"
 msgstr ""
+
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "Attachment"
+msgstr "Anhang"
 
 #: src/components/ui/Chat/ChatInput.tsx
 #~ msgid "Attachment ready to send"
@@ -4557,6 +4564,7 @@ msgstr ""
 
 #: src/components/ui/FileUpload/FileAttachmentsPreview.tsx
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+#: src/components/ui/Teams/TeamsConversationView.tsx
 msgid "Preview attachment"
 msgstr "Anhang anzeigen"
 

@@ -8,6 +8,7 @@ import {
   collectTeamsMessageAssets,
   planTeamsAssetFetches,
   stampImageMarkers,
+  uploadedAssets,
 } from "../teamsTranscriptAssets";
 
 import type { TeamsTranscriptSection } from "../buildTeamsTranscriptFile";
@@ -296,5 +297,66 @@ describe("shared files", () => {
     });
 
     expect(downloadFile).toHaveBeenCalledTimes(MAX_TRANSCRIPT_FILES);
+  });
+});
+
+describe("uploadedAssets", () => {
+  const marker = (name: string) => `[attachment: ${name}]`;
+  const ref = (name: string) => ({
+    attachmentId: name,
+    name,
+    contentUrl: `https://contoso.sharepoint.com/${name}`,
+  });
+
+  it("names a shared file by the ref its own slug was minted from", () => {
+    // `-` survives the slug, so `report.pdf` is a suffix of `Q3-report.pdf`.
+    // Matching on the tail rather than the whole slug labels one as the other.
+    const assets = uploadedAssets(
+      [marker("teams-file-bbbbbbbb-Q3-report.pdf")],
+      [ref("report.pdf"), ref("Q3-report.pdf")],
+    );
+
+    expect(assets).toEqual([
+      {
+        name: "teams-file-bbbbbbbb-Q3-report.pdf",
+        displayName: "Q3-report.pdf",
+        kind: "file",
+      },
+    ]);
+  });
+
+  it("restores the spaces the slug replaced", () => {
+    const assets = uploadedAssets(
+      [marker("teams-file-abcd1234-Q3_report.pdf")],
+      [ref("Q3 report.pdf")],
+    );
+
+    expect(assets[0].displayName).toBe("Q3 report.pdf");
+  });
+
+  it("says nothing rather than a neighbour's name when no slug matches", () => {
+    // What a hash-deduped upload looks like from the far message: its name was
+    // minted from a ref this message never carried.
+    const assets = uploadedAssets(
+      [marker("teams-file-abcd1234-agreement.pdf")],
+      [ref("contract.pdf")],
+    );
+
+    expect(assets[0].displayName).toBeNull();
+  });
+
+  it("never names a pasted image, which never had one", () => {
+    const assets = uploadedAssets(
+      ["[image: teams-img-0123456789abcdef.png]"],
+      [ref("agenda.docx")],
+    );
+
+    expect(assets).toEqual([
+      {
+        name: "teams-img-0123456789abcdef.png",
+        displayName: null,
+        kind: "image",
+      },
+    ]);
   });
 });

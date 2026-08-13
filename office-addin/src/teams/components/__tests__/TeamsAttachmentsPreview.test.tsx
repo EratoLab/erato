@@ -1,7 +1,13 @@
 import { ThemeProvider } from "@erato/frontend/library";
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { buildTeamsTranscriptFile } from "../../utils/buildTeamsTranscriptFile";
@@ -109,6 +115,19 @@ function renderPreview(
 
 const groupHeader = () => screen.getByRole("button", { name: /product sync/i });
 
+/** Carries a shared file, so its chip has a real name rather than a macro. */
+const sharedFileMessage = message({
+  text: "Numbers attached",
+  markers: ["[attachment: teams-file-abc12345-Q3_report.pdf]"],
+  sharedFiles: [
+    {
+      attachmentId: "a1",
+      name: "Q3 report.pdf",
+      contentUrl: "https://contoso.sharepoint.com/Q3.pdf",
+    },
+  ],
+});
+
 describe("TeamsAttachmentsPreview", () => {
   beforeEach(() => {
     i18n.load("en", {});
@@ -126,12 +145,16 @@ describe("TeamsAttachmentsPreview", () => {
 
   it("renders the conversation out of the transcript's own index block", async () => {
     state.attachedTranscript = transcriptFile();
+    // Nothing is mounted until the block parses: showing the flat chips first
+    // and pulling them back out a frame later is worse than a blank region.
+    expect(screen.queryByText("holiday")).toBeNull();
     renderPreview([transcript, image, unrelated]);
 
     expect(await screen.findByText("Product sync")).toBeVisible();
     // The upload the transcript names is claimed by the conversation card; only
     // the unrelated file is left to the flat chips.
     expect(screen.getByText("holiday")).toBeVisible();
+    expect(screen.queryByText("teams-img-abc")).toBeNull();
   });
 
   it("keeps a whole conversation collapsed so the composer stays reachable", async () => {
@@ -155,6 +178,28 @@ describe("TeamsAttachmentsPreview", () => {
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent("Ada Lovelace");
     expect(dialog).toHaveTextContent("Screenshot");
+    // The marker the model reads is stripped, and the modal names the
+    // conversation once — the view inside it does not repeat the heading.
+    expect(dialog).not.toHaveTextContent("teams-img-abc");
+    expect(dialog.querySelectorAll("h2")).toHaveLength(1);
+  });
+
+  it("previews an attachment from inside the conversation", async () => {
+    const onFilePreview = vi.fn();
+    state.attachedTranscript = transcriptFile("whole-chat", [
+      sharedFileMessage,
+    ]);
+    renderPreview([transcript, report], { onFilePreview });
+
+    await screen.findByText("Product sync");
+    fireEvent.click(groupHeader());
+    fireEvent.click(screen.getByRole("button", { name: /all messages/i }));
+
+    // Matched on the file's own name: the surrounding "Preview attachment" is a
+    // library string, and this suite runs without a catalogue.
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /Q3 report/ }));
+    expect(onFilePreview).toHaveBeenCalledWith(report);
   });
 
   it("names a shared file as Teams named it, never by its upload name", async () => {
@@ -189,6 +234,7 @@ describe("TeamsAttachmentsPreview", () => {
     renderPreview([transcript, image, unrelated]);
 
     expect(await screen.findByText("holiday")).toBeVisible();
+    expect(screen.getByText("teams-Product_sync")).toBeVisible();
     expect(screen.queryByRole("button", { name: /product sync/i })).toBeNull();
   });
 
@@ -201,6 +247,7 @@ describe("TeamsAttachmentsPreview", () => {
     renderPreview([transcript, image, unrelated]);
 
     expect(await screen.findByText("holiday")).toBeVisible();
+    expect(screen.getByText("teams-Product_sync")).toBeVisible();
     expect(screen.queryByRole("button", { name: /product sync/i })).toBeNull();
   });
 });

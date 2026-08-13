@@ -1415,6 +1415,11 @@ msgid "officeAddin.teams.preview.allMessages"
 msgstr "Tous les messages"
 
 #. js-lingui-explicit-id
+#: src/teams/utils/teamsAttachmentGroups.ts
+msgid "officeAddin.teams.preview.attachment"
+msgstr "Pièce jointe"
+
+#. js-lingui-explicit-id
 #: src/teams/components/TeamsAttachmentsPreview.tsx
 msgid "officeAddin.teams.preview.conversationRegion"
 msgstr "Aperçu de la conversation Teams"

@@ -350,10 +350,12 @@ describe("buildTeamsAttachmentGroups", () => {
     // of its own, and the shared file keeps the one the transcript recorded.
     expect(rows[0].attachments.map((item) => item.file)).toEqual([
       { id: image.id, filename: image.filename, displayName: "Image" },
+      // No shared-file ref carried this upload's slug, so the transcript never
+      // recorded a name for it — a neutral label, never the minted one.
       {
         id: shared.id,
         filename: shared.filename,
-        displayName: shared.filename,
+        displayName: "Attachment",
       },
     ]);
     expect(rows[1].attachments).toEqual([]);
@@ -404,7 +406,17 @@ describe("buildTeamsAttachmentGroups", () => {
 
     const [group] = preview!.groups;
     expect(itemKinds(group)).toEqual(["attachment", "attachment"]);
-    expect(group.items[1]).toMatchObject({ id: image.id, file: image });
+    // `toEqual`, not `toMatchObject`: the whole point is the name the chip
+    // shows, and a partial match would pass while it read the minted one.
+    expect(group.items[1]).toEqual({
+      kind: "attachment",
+      id: image.id,
+      file: {
+        id: image.id,
+        filename: image.filename,
+        displayName: "Image",
+      },
+    });
   });
 
   it("reports how many messages could not be loaded", () => {

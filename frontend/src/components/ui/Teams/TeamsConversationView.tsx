@@ -3,7 +3,9 @@ import clsx from "clsx";
 
 import { componentRegistry } from "@/config/componentRegistry";
 
+import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { FilePreviewBase } from "../FileUpload/FilePreviewBase";
+import { MessageTimestamp } from "../Message/MessageTimestamp";
 import { OpenNewWindowIcon } from "../icons";
 
 import type {
@@ -36,6 +38,12 @@ export interface TeamsConversationViewProps {
   index: TeamsTranscriptIndex;
   /** Render one conversation; omit for every section in the index. */
   sectionIndex?: number;
+  /**
+   * Set false where the host already names the conversation — a modal titled
+   * with it, say. The window and participants still render; only the heading
+   * goes, so the name is not painted twice.
+   */
+  showTitle?: boolean;
   /** Omit to render the per-message Teams link inert. */
   onOpenInTeams?: (message: TeamsTranscriptIndexMessage) => void;
   onFilePreview?: (file: FileResource) => void;
@@ -45,6 +53,13 @@ export interface TeamsConversationViewProps {
    */
   resolveAsset?: (asset: TeamsTranscriptIndexAsset) => FileResource | null;
   className?: string;
+}
+
+/** Threaded down to every level that can act on a message or its uploads. */
+interface ConversationCallbacks {
+  onOpenInTeams?: (message: TeamsTranscriptIndexMessage) => void;
+  onFilePreview?: (file: FileResource) => void;
+  resolveAsset?: (asset: TeamsTranscriptIndexAsset) => FileResource | null;
 }
 
 /** Consecutive messages from one speaker, within one day. */
@@ -66,6 +81,7 @@ export const DefaultTeamsConversationView: React.FC<
 > = ({
   index,
   sectionIndex,
+  showTitle = true,
   onOpenInTeams,
   onFilePreview,
   resolveAsset,
@@ -85,6 +101,7 @@ export const DefaultTeamsConversationView: React.FC<
           <ConversationSection
             key={position}
             section={section}
+            showTitle={showTitle}
             messages={index.messages.filter(
               (message) => message.section === position,
             )}
@@ -98,13 +115,20 @@ export const DefaultTeamsConversationView: React.FC<
   );
 };
 
-const ConversationSection: React.FC<{
-  section: TeamsTranscriptIndexSection;
-  messages: TeamsTranscriptIndexMessage[];
-  onOpenInTeams?: (message: TeamsTranscriptIndexMessage) => void;
-  onFilePreview?: (file: FileResource) => void;
-  resolveAsset?: (asset: TeamsTranscriptIndexAsset) => FileResource | null;
-}> = ({ section, messages, onOpenInTeams, onFilePreview, resolveAsset }) => {
+const ConversationSection: React.FC<
+  ConversationCallbacks & {
+    section: TeamsTranscriptIndexSection;
+    messages: TeamsTranscriptIndexMessage[];
+    showTitle: boolean;
+  }
+> = ({
+  section,
+  messages,
+  showTitle,
+  onOpenInTeams,
+  onFilePreview,
+  resolveAsset,
+}) => {
   const title = section.teamName
     ? `${section.title} · ${section.teamName}`
     : section.title;
@@ -115,12 +139,14 @@ const ConversationSection: React.FC<{
   return (
     <section className="flex flex-col gap-2">
       <header className="flex flex-col gap-0.5 border-b border-theme-border pb-2">
-        <h2
-          className="truncate text-sm font-semibold text-theme-fg-primary"
-          title={title}
-        >
-          {title}
-        </h2>
+        {showTitle && (
+          <h2
+            className="truncate text-sm font-semibold text-theme-fg-primary"
+            title={title}
+          >
+            {title}
+          </h2>
+        )}
         {window && <p className="text-xs text-theme-fg-muted">{window}</p>}
         {participants && (
           <p className="text-xs text-theme-fg-muted" title={participants}>
@@ -190,15 +216,14 @@ const ConversationSection: React.FC<{
   );
 };
 
-const MessageBlock: React.FC<{
-  message: TeamsTranscriptIndexMessage;
-  isViewer: boolean;
-  onOpenInTeams?: (message: TeamsTranscriptIndexMessage) => void;
-  onFilePreview?: (file: FileResource) => void;
-  resolveAsset?: (asset: TeamsTranscriptIndexAsset) => FileResource | null;
-}> = ({ message, isViewer, onOpenInTeams, onFilePreview, resolveAsset }) => {
+const MessageBlock: React.FC<
+  ConversationCallbacks & {
+    message: TeamsTranscriptIndexMessage;
+    isViewer: boolean;
+  }
+> = ({ message, isViewer, onOpenInTeams, onFilePreview, resolveAsset }) => {
   const body = bodyWithoutAssetMarkers(message);
-  const time = shortTime(message.createdAt);
+  const createdAt = toDate(message.createdAt);
 
   return (
     <div
@@ -226,16 +251,18 @@ const MessageBlock: React.FC<{
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          {time && (
-            <span className="text-xs tabular-nums text-theme-fg-muted">
-              {time}
-            </span>
+          {createdAt && (
+            <MessageTimestamp
+              createdAt={createdAt}
+              displayStyle="time"
+              className="shrink-0 text-xs tabular-nums text-theme-fg-muted"
+            />
           )}
           {onOpenInTeams && message.deepLink && (
             <button
               type="button"
               onClick={() => onOpenInTeams(message)}
-              className="inline-flex size-5 items-center justify-center rounded text-theme-fg-muted hover:text-theme-fg-primary focus:outline-none focus:ring-2 focus:ring-theme-focus"
+              className="focus-ring-tight inline-flex size-5 items-center justify-center rounded-[var(--theme-radius-base)] text-theme-fg-muted hover:text-theme-fg-primary"
               aria-label={t`Open in Teams`}
               title={t`Open in Teams`}
             >
@@ -249,9 +276,11 @@ const MessageBlock: React.FC<{
       )}
       {message.assets.length > 0 && (
         <div className="mt-1.5 flex flex-col gap-1">
-          {message.assets.map((asset) => (
+          {/* Position, not name: hash dedupe lets one message name the same
+              upload twice — a quoted reply carrying the original image. */}
+          {message.assets.map((asset, position) => (
             <AssetRow
-              key={asset.name}
+              key={`${asset.name}:${position}`}
               asset={asset}
               onFilePreview={onFilePreview}
               resolveAsset={resolveAsset}
@@ -267,15 +296,20 @@ const MessageBlock: React.FC<{
  * The chip is named from the index, never from the upload: the minted filename
  * is a join key carrying a content hash, and no reader should have to see it.
  */
-const AssetRow: React.FC<{
-  asset: TeamsTranscriptIndexAsset;
-  onFilePreview?: (file: FileResource) => void;
-  resolveAsset?: (asset: TeamsTranscriptIndexAsset) => FileResource | null;
-}> = ({ asset, onFilePreview, resolveAsset }) => {
+const AssetRow: React.FC<
+  Pick<ConversationCallbacks, "onFilePreview" | "resolveAsset"> & {
+    asset: TeamsTranscriptIndexAsset;
+  }
+> = ({ asset, onFilePreview, resolveAsset }) => {
+  // Never fall through to `asset.name`: an empty displayName is falsy, so
+  // `getFileName` would reach for the filename and print the content hash the
+  // whole index exists to keep out of sight.
+  const label =
+    asset.displayName ?? (asset.kind === "image" ? t`Image` : t`Attachment`);
   const shown: LocalFilePreviewItem = {
     id: asset.name,
     filename: asset.name,
-    displayName: asset.displayName ?? (asset.kind === "image" ? t`Image` : ""),
+    displayName: label,
   };
   const resolved = resolveAsset?.(asset) ?? null;
   const preview =
@@ -297,13 +331,14 @@ const AssetRow: React.FC<{
   }
 
   return (
-    <button
-      type="button"
+    <InteractiveContainer
       onClick={preview}
-      className="min-w-0 rounded text-left hover:bg-theme-bg-hover focus:outline-none focus:ring-2 focus:ring-theme-focus"
+      fullWidth={false}
+      className="min-w-0 rounded-[var(--theme-radius-base)] text-left hover:bg-theme-bg-accent"
+      aria-label={`${t`Preview attachment`} ${label}`}
     >
       {chip}
-    </button>
+    </InteractiveContainer>
   );
 };
 
@@ -321,7 +356,12 @@ function bodyWithoutAssetMarkers(message: TeamsTranscriptIndexMessage): string {
     const marker = asset.kind === "image" ? "image" : "attachment";
     text = text.split(`[${marker}: ${asset.name}]`).join("");
   }
-  return text.replace(/\n{3,}/g, "\n\n").trim();
+  // A marker lifted out of mid-sentence leaves the spaces that surrounded it
+  // on either side, and the body renders `whitespace-pre-wrap`.
+  return text
+    .replace(/[^\S\n]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function groupByDay(
@@ -363,16 +403,6 @@ function dayLabel(iso: string | null): string {
     month: "short",
     year: "numeric",
   });
-}
-
-function shortTime(iso: string | null): string {
-  const date = toDate(iso);
-  return date
-    ? date.toLocaleTimeString(undefined, {
-        hour: "2-digit", // eslint-disable-line lingui/no-unlocalized-strings
-        minute: "2-digit", // eslint-disable-line lingui/no-unlocalized-strings
-      })
-    : "";
 }
 
 function dateRange(from: string | null, to: string | null): string {

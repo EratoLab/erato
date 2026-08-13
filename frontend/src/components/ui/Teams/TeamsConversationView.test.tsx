@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
-import { DefaultTeamsConversationView } from "./TeamsConversationView";
+import { TeamsConversationView } from "./TeamsConversationView";
 
 import type {
   TeamsTranscriptIndex,
@@ -92,9 +92,7 @@ function index(
 
 describe("TeamsConversationView", () => {
   it("shows the conversation header, participants and window", async () => {
-    await renderView(
-      <DefaultTeamsConversationView index={index([message(1)])} />,
-    );
+    await renderView(<TeamsConversationView index={index([message(1)])} />);
 
     expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent(
       "Product sync",
@@ -104,7 +102,7 @@ describe("TeamsConversationView", () => {
 
   it("collapses a run of messages from one speaker under a single name", async () => {
     await renderView(
-      <DefaultTeamsConversationView
+      <TeamsConversationView
         index={index([
           message(1),
           message(2),
@@ -123,7 +121,7 @@ describe("TeamsConversationView", () => {
 
   it("splits speaker runs across a day divider", async () => {
     await renderView(
-      <DefaultTeamsConversationView
+      <TeamsConversationView
         index={index([
           message(1),
           message(2, { createdAt: "2026-03-04T09:00:00Z" }),
@@ -137,7 +135,7 @@ describe("TeamsConversationView", () => {
 
   it("names assets from the index instead of the minted upload name", async () => {
     await renderView(
-      <DefaultTeamsConversationView
+      <TeamsConversationView
         index={index([
           message(1, {
             text: "Here you go [attachment: teams-file-d72e2945-report.pdf]",
@@ -161,7 +159,7 @@ describe("TeamsConversationView", () => {
 
   it("labels a pasted image that never had a name", async () => {
     await renderView(
-      <DefaultTeamsConversationView
+      <TeamsConversationView
         index={index([
           message(1, {
             text: "[image: teams-img-abc123.png]",
@@ -184,7 +182,7 @@ describe("TeamsConversationView", () => {
   it("opens a message in Teams through the callback", async () => {
     const onOpenInTeams = vi.fn();
     await renderView(
-      <DefaultTeamsConversationView
+      <TeamsConversationView
         index={index([message(1)])}
         onOpenInTeams={onOpenInTeams}
       />,
@@ -197,16 +195,14 @@ describe("TeamsConversationView", () => {
   });
 
   it("renders no Teams link when the caller cannot follow one", async () => {
-    await renderView(
-      <DefaultTeamsConversationView index={index([message(1)])} />,
-    );
+    await renderView(<TeamsConversationView index={index([message(1)])} />);
 
     expect(screen.queryByRole("button", { name: /open in teams/i })).toBeNull();
   });
 
   it("leaves an asset inert while the caller cannot resolve it", async () => {
     await renderView(
-      <DefaultTeamsConversationView
+      <TeamsConversationView
         index={index([message(1, { assets: [REPORT_ASSET] })])}
         onFilePreview={vi.fn()}
       />,
@@ -224,7 +220,7 @@ describe("TeamsConversationView", () => {
     };
 
     await renderView(
-      <DefaultTeamsConversationView
+      <TeamsConversationView
         index={index([message(1, { assets: [REPORT_ASSET] })])}
         onFilePreview={onFilePreview}
         resolveAsset={() => resolved}
@@ -245,7 +241,7 @@ describe("TeamsConversationView", () => {
     };
 
     await renderView(
-      <DefaultTeamsConversationView index={twoSections} sectionIndex={1} />,
+      <TeamsConversationView index={twoSections} sectionIndex={1} />,
     );
 
     expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent(
@@ -257,7 +253,7 @@ describe("TeamsConversationView", () => {
 
   it("says when history was cut short or messages were lost", async () => {
     await renderView(
-      <DefaultTeamsConversationView
+      <TeamsConversationView
         index={index([message(1)], { truncated: true, skippedCount: 2 })}
       />,
     );
@@ -274,5 +270,56 @@ describe("TeamsConversationView", () => {
         /2 messages could not be loaded/i,
       ),
     ).toBeVisible();
+  });
+
+  it("labels a file whose Teams name was lost, never with its upload name", async () => {
+    // A hash-deduped upload can carry a name minted from another message's ref,
+    // so the index honestly says nothing. Falling through to the filename would
+    // print the content hash the whole index exists to keep out of sight.
+    await renderView(
+      <TeamsConversationView
+        index={index([
+          message(1, {
+            text: "Signed [attachment: teams-file-d72e2945-agreement.pdf]",
+            assets: [
+              {
+                name: "teams-file-d72e2945-agreement.pdf",
+                displayName: null,
+                kind: "file",
+              },
+            ],
+          }),
+        ])}
+      />,
+    );
+
+    expect(screen.queryByText(/teams-file-d72e2945/)).toBeNull();
+    expect(screen.getByText("Signed")).toBeVisible();
+  });
+
+  it("marks the viewer's own messages apart from everyone else's", async () => {
+    await renderView(
+      <TeamsConversationView
+        index={index([message(1), message(2, { sender: "Grace Hopper" })])}
+      />,
+    );
+
+    // `viewer` is Grace, so her run header carries the accent and Ada's does not.
+    expect(screen.getByText("Grace Hopper")).toHaveClass(
+      "text-theme-fg-accent",
+    );
+    expect(screen.getByText("Ada Lovelace")).not.toHaveClass(
+      "text-theme-fg-accent",
+    );
+  });
+
+  it("drops the heading when the host already names the conversation", async () => {
+    await renderView(
+      <TeamsConversationView index={index([message(1)])} showTitle={false} />,
+    );
+
+    expect(screen.queryByRole("heading")).toBeNull();
+    // The window and participants still carry, only the name goes.
+    expect(screen.getByText("Ada Lovelace, Grace Hopper")).toBeVisible();
   });
 });

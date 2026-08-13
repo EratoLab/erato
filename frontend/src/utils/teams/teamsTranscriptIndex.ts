@@ -98,7 +98,10 @@ export interface TeamsTranscriptIndex {
  * quadratic time. The payload group absorbs any further whitespace, and
  * `JSON.parse` ignores it, so this reads no less than the greedy form did.
  */
-const INDEX_BLOCK = /<!--\s*erato:teams-transcript\s+v\d+\s([\s\S]*?)-->/g;
+const INDEX_BLOCK = new RegExp(
+  `<!--\\s*${TEAMS_TRANSCRIPT_INDEX_MARKER}\\s+v\\d+\\s([\\s\\S]*?)-->`,
+  "g",
+);
 
 /**
  * Null for anything but an intact block of a version this build understands.
