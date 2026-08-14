@@ -4394,6 +4394,10 @@ msgstr "Ładowanie"
 msgid "Loading attachment..."
 msgstr ""
 
+#: src/components/ui/FilePreview/TeamsTranscriptPreview.tsx
+msgid "Loading conversation…"
+msgstr "Wczytywanie konwersacji…"
+
 #: src/components/ui/FileUpload/FilePreviewLoading.tsx
 msgid "Loading file..."
 msgstr ""
@@ -4945,6 +4949,14 @@ msgstr "Myślę"
 #: src/components/ui/Trace/TraceThinkingPlaceholder.tsx
 #~ msgid "Thinking…"
 #~ msgstr "Myślę…"
+
+#: src/components/ui/FilePreview/TeamsTranscriptPreview.tsx
+msgid "This conversation could not be loaded."
+msgstr "Nie udało się wczytać tej konwersacji."
+
+#: src/components/ui/FilePreview/TeamsTranscriptPreview.tsx
+msgid "This file carries no conversation data, so it is shown as text."
+msgstr "Ten plik nie zawiera danych konwersacji, więc jest wyświetlany jako tekst."
 
 #: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
 msgid "This message exceeds the token limit of {maxTokensFormatted}. Please reduce the message length or remove attached files."

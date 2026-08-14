@@ -4394,6 +4394,10 @@ msgstr "Cargando"
 msgid "Loading attachment..."
 msgstr ""
 
+#: src/components/ui/FilePreview/TeamsTranscriptPreview.tsx
+msgid "Loading conversation…"
+msgstr "Cargando la conversación…"
+
 #: src/components/ui/FileUpload/FilePreviewLoading.tsx
 msgid "Loading file..."
 msgstr ""
@@ -4945,6 +4949,14 @@ msgstr "Pensando"
 #: src/components/ui/Trace/TraceThinkingPlaceholder.tsx
 #~ msgid "Thinking…"
 #~ msgstr "Pensando…"
+
+#: src/components/ui/FilePreview/TeamsTranscriptPreview.tsx
+msgid "This conversation could not be loaded."
+msgstr "No se pudo cargar esta conversación."
+
+#: src/components/ui/FilePreview/TeamsTranscriptPreview.tsx
+msgid "This file carries no conversation data, so it is shown as text."
+msgstr "Este archivo no contiene datos de conversación, por lo que se muestra como texto."
 
 #: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
 msgid "This message exceeds the token limit of {maxTokensFormatted}. Please reduce the message length or remove attached files."

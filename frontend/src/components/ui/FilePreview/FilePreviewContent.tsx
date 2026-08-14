@@ -8,6 +8,7 @@ import { FilePreviewLoading } from "@/components/ui/FileUpload/FilePreviewLoadin
 import { DocxPreview } from "./DocxPreview";
 import { EmlPreview } from "./EmlPreview";
 import { PptxPreview } from "./PptxPreview";
+import { TeamsTranscriptPreview } from "./TeamsTranscriptPreview";
 import { XlsxPreview } from "./XlsxPreview";
 
 import type React from "react";
@@ -100,6 +101,11 @@ export const FilePreviewContent: React.FC<FilePreviewContentProps> = ({
     mimeType === PPT_MIME_TYPE ||
     mimeType === PPTX_MIME_TYPE;
   const isXlsx = extension === "xlsx" || mimeType === XLSX_MIME_TYPE;
+  // Routed on the extension alone: the preview endpoint types `.md` as
+  // `application/octet-stream`, so the mime says nothing. Whether this really
+  // is a transcript is settled by sniffing the fetched bytes, and a plain
+  // markdown file still renders as text — better than the dead end below.
+  const isMarkdown = extension === "md" || mimeType === "text/markdown";
 
   if (isImage) {
     return (
@@ -151,6 +157,10 @@ export const FilePreviewContent: React.FC<FilePreviewContentProps> = ({
 
   if (isXlsx) {
     return <XlsxPreview filename={filename} url={url} />;
+  }
+
+  if (isMarkdown) {
+    return <TeamsTranscriptPreview filename={filename} url={url} />;
   }
 
   return (
