@@ -11,7 +11,10 @@ import { parseTeamsTranscriptIndex } from "@/utils/teams/teamsTranscriptIndex";
 import { FilePreviewContent } from "./FilePreviewContent";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
-import type { TeamsTranscriptIndex } from "@/utils/teams/teamsTranscriptIndex";
+import type {
+  TeamsTranscriptIndex,
+  TeamsTranscriptIndexAsset,
+} from "@/utils/teams/teamsTranscriptIndex";
 
 const logger = createLogger("UI", "TeamsTranscriptPreview");
 
@@ -19,13 +22,23 @@ interface TeamsTranscriptPreviewProps {
   filename: string;
   url: string;
   /**
-   * The other uploads that arrived with this one. A transcript records only
-   * the filenames of what rode along, so the bytes have to be found among the
-   * chat's own files; without them the chips still name what was shared, they
-   * just cannot be opened.
+   * Uploads this one can be resolved against — in practice every file the chat
+   * knows about, not only the message's own. A transcript records the filenames
+   * of what rode along but not the bytes, so they have to be found among them;
+   * without any, the chips still name what was shared, they just cannot open.
+   *
+   * A wider set is harmless here: the names are content-hashed, so a match from
+   * another message is the same bytes under the same name.
    */
   relatedFiles?: readonly FileUploadItem[];
 }
+
+type LoadState =
+  | { kind: "loading" }
+  | { kind: "unreachable" }
+  | { kind: "conversation"; index: TeamsTranscriptIndex }
+  /** Readable, but carrying no block this build understands. */
+  | { kind: "markdown"; text: string };
 
 /**
  * A stored Teams transcript, opened as the conversation it was taken from.
@@ -42,13 +55,6 @@ interface TeamsTranscriptPreviewProps {
  * markdown worth reading, so it renders as text; only a fetch that never
  * lands has nothing to show.
  */
-type LoadState =
-  | { kind: "loading" }
-  | { kind: "unreachable" }
-  | { kind: "conversation"; index: TeamsTranscriptIndex }
-  /** Readable, but carrying no block this build understands. */
-  | { kind: "markdown"; text: string };
-
 export const TeamsTranscriptPreview: React.FC<TeamsTranscriptPreviewProps> = ({
   url,
   relatedFiles,
@@ -59,7 +65,7 @@ export const TeamsTranscriptPreview: React.FC<TeamsTranscriptPreviewProps> = ({
   // The minted upload name is the join key the transcript recorded, and it is
   // exactly the filename the upload was stored under.
   const resolveAsset = useCallback(
-    (asset: { name: string }) =>
+    (asset: TeamsTranscriptIndexAsset) =>
       relatedFiles?.find((file) => file.filename === asset.name) ?? null,
     [relatedFiles],
   );

@@ -75,8 +75,8 @@ interface FilePreviewModalProps {
    */
   notPreviewableReason?: string;
   /**
-   * The files this one arrived with. Forwarded to viewers that reference their
-   * siblings by name rather than carrying their bytes.
+   * Files the previewed one can be resolved against. Forwarded to viewers that
+   * reference other uploads by name rather than carrying their bytes.
    */
   relatedFiles?: readonly FileUploadItem[];
 }

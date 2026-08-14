@@ -76,9 +76,9 @@ export interface FilePreviewContentProps {
    */
   mimeType?: string;
   /**
-   * Other files available beside this one. Only viewers that reference their
-   * siblings by name use it — a Teams transcript names the uploads that rode
-   * along with it but does not carry their bytes.
+   * Other files the viewer may resolve against. Only viewers that reference
+   * uploads by name use it — a Teams transcript names what rode along with it
+   * but does not carry the bytes.
    */
   relatedFiles?: readonly FileUploadItem[];
 }
