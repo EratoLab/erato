@@ -1430,11 +1430,6 @@ msgid "officeAddin.teams.preview.conversationTitle"
 msgstr "Conversation Teams"
 
 #. js-lingui-explicit-id
-#: src/teams/components/TeamsAttachmentsPreview.tsx
-msgid "officeAddin.teams.preview.conversationRegion"
-msgstr "Aperçu de la conversation Teams"
-
-#. js-lingui-explicit-id
 #: src/teams/utils/teamsAttachmentGroups.ts
 msgid "officeAddin.teams.preview.image"
 msgstr "Image"

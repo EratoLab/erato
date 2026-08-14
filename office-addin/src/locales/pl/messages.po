@@ -1422,7 +1422,7 @@ msgstr "Załącznik"
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsAttachmentsPreview.tsx
 msgid "officeAddin.teams.preview.conversationRegion"
-msgstr "Podgląd konwersacji Teams"
+msgstr "Podgląd konwersacji w usłudze Teams"
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsAttachmentsPreview.tsx
@@ -1433,11 +1433,6 @@ msgstr "Konwersacja Teams"
 #: src/teams/utils/teamsAttachmentGroups.ts
 msgid "officeAddin.teams.preview.image"
 msgstr "Obraz"
-
-#. js-lingui-explicit-id
-#: src/teams/components/TeamsAttachmentsPreview.tsx
-msgid "officeAddin.teams.preview.conversationRegion"
-msgstr "Podgląd konwersacji w usłudze Teams"
 
 #. js-lingui-explicit-id
 #: src/teams/utils/teamsAttachmentGroups.ts
