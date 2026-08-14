@@ -1,0 +1,16 @@
+# Backend third-party licenses
+
+This file is generated from the locked backend dependency graph by cargo-about.
+
+{{#each licenses}}
+================================================================================
+{{name}} ({{id}})
+
+Used by:
+{{#each used_by}}
+- {{crate.name}} {{crate.version}}
+{{/each}}
+
+{{{text}}}
+
+{{/each}}

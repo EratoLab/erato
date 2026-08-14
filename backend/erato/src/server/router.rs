@@ -456,6 +456,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
 
     let router = OpenApiRouter::new()
         .route("/health", get(health).head(health))
+        .route(
+            "/api/licenses",
+            get(crate::server::license_notices::license_notices),
+        )
         .route("/favicon.ico", get(favicon_ico))
         .route("/favicon.svg", get(favicon_svg))
         .route("/office-addin/manifest.xml", get(office_addin_manifest))
@@ -478,7 +482,12 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(health, office_addin_manifest, office_addin_exchange_server_manifest),
+    paths(
+        health,
+        office_addin_manifest,
+        office_addin_exchange_server_manifest,
+        crate::server::license_notices::license_notices
+    ),
     nest(
         (path = "api/v1beta", api = ApiV1ApiDoc)
     )

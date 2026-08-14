@@ -119,6 +119,7 @@
   "devDependencies": {
     "@babel/core": "^7.26.10",
     "@chromatic-com/storybook": "^3.2.4",
+    "@quantco/pnpm-licenses": "2.4.1",
     "@eslint/eslintrc": "^3",
     "@eslint/js": "^9.28.0",
     "@faker-js/faker": "^10.4.0",

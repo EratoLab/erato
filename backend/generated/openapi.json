@@ -6,6 +6,34 @@
     "version": ""
   },
   "paths": {
+    "/api/licenses": {
+      "get": {
+        "tags": [
+          "crate::server::license_notices"
+        ],
+        "operationId": "license_notices",
+        "responses": {
+          "200": {
+            "description": "Combined third-party license notices by distribution package",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "500": {
+            "description": "Failed to read license notices",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1beta/assistant-hub/assistants": {
       "get": {
         "tags": [

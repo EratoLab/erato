@@ -65,6 +65,12 @@ sbom:
     mkdir -p tmp
     pnpm sbom --sbom-format cyclonedx --sbom-spec-version 1.7 > tmp/frontend.cdx.json
 
+licenses:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p tmp
+    pnpm licenses list --prod --json | node ../scripts/normalize-pnpm-license-json.mjs | ./node_modules/.bin/pnpm-licenses generate-disclaimer --json-input --output-file=tmp/frontend.txt
+
 format:
     pnpm exec prettier . --write
 
