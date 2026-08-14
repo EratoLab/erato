@@ -3,8 +3,8 @@
  * `tsc -p tsconfig.lib.json` and the component-kit-host build write into the
  * same `dist-library` tree — so nothing ever removes the hashed chunks of
  * previous builds. Left alone the directory grows without bound (measured at
- * 480 MB / 1886 chunks for ERMAIN-565), which inflates `pnpm pack`, the
- * recursive watch and every cold dev-server scan.
+ * 480 MB / 1886 chunks), which inflates `pnpm pack`, the recursive watch and
+ * every cold dev-server scan.
  *
  * Only output that the current configs regenerate wholesale is removed, and
  * only between builds — never while one is running, since a loaded page still

@@ -150,8 +150,8 @@ function packageLibrary() {
 }
 
 // In watch mode a failed pack is retried on the next change instead of ending
-// the process: this script is one child of scripts/watch-library.mjs, and its
-// exit used to take the whole dev stack — add-in dev server included — with it.
+// the process: this script is one child of scripts/watch-library.mjs, and an
+// exit here would burn its restart budget on a full rebuild for nothing.
 function failPack(reason) {
   if (!watchMode) {
     console.error(`[pack-library] ${reason}`);
