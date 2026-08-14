@@ -1435,6 +1435,7 @@ msgid "officeAddin.teams.preview.selectedMessages"
 msgstr "{count, plural, one {# selected message} other {# selected messages}}"
 
 #. js-lingui-explicit-id
+#. placeholder {0}: section.skippedCount
 #: src/teams/utils/teamsAttachmentGroups.ts
 msgid "officeAddin.teams.preview.skipped"
 msgstr "{skipped, plural, one {# could not be loaded} other {# could not be loaded}}"
