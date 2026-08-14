@@ -125,6 +125,7 @@ type BuildStatusPluginLike = {
   name: string;
   buildStart(): void;
   buildEnd(error?: unknown): void;
+  renderError(): void;
   writeBundle(): void;
 };
 
@@ -160,6 +161,11 @@ export const libraryBuildStatusPlugin = (options: {
       if (error) {
         writeStatus(statusPath, "failed");
       }
+    },
+    // Output-phase errors (renderChunk, generateBundle) never reach buildEnd —
+    // rollup reports them here instead.
+    renderError() {
+      writeStatus(statusPath, "failed");
     },
     writeBundle() {
       writeStatus(statusPath, "ready");

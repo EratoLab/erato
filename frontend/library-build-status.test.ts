@@ -183,6 +183,28 @@ describe("libraryBuildStatusPlugin", () => {
     ).toBe(false);
   });
 
+  it("reports failed when output generation errors after a clean build phase", () => {
+    const distLibraryDir = createDistLibraryDir();
+    const plugin = libraryBuildStatusPlugin({
+      distLibraryDir,
+      key: "library",
+    });
+
+    plugin.buildStart();
+    plugin.buildEnd();
+    plugin.renderError();
+
+    expect(readLibraryBuildStatus(distLibraryDir, "library")?.state).toBe(
+      "failed",
+    );
+    expect(
+      isLibraryBuildInFlight(
+        readLibraryBuildStatuses(distLibraryDir),
+        Date.now(),
+      ),
+    ).toBe(false);
+  });
+
   it("creates the output directory it reports into", () => {
     const distLibraryDir = path.join(createDistLibraryDir(), "dist-library");
     libraryBuildStatusPlugin({ distLibraryDir, key: "library" }).buildStart();
