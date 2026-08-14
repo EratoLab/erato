@@ -5,7 +5,8 @@
   "packageManager": "pnpm@11.8.0",
   "files": [
     "component-kit",
-    "dist-library"
+    "dist-library",
+    "!dist-library/.build-status.*.json"
   ],
   "exports": {
     "./library": {
