@@ -19,6 +19,11 @@ const componentKitHostManifestPath = path.join(
 const watchMode = process.argv.includes("--watch");
 const debounceMs = 500;
 const maxWaitForBundleMs = 10000;
+// Matches the status files written by library-build-status.ts. Packing tars
+// the whole tree, so a build that is still writing chunks (or emptying
+// component-kit-host/) makes files vanish mid-tar and pnpm exits non-zero.
+const buildStatusFilePattern = /^\.build-status\..*\.json$/;
+const buildStatusStaleAfterMs = 120000;
 
 let isPacking = false;
 let settleTimer = null;
@@ -61,6 +66,32 @@ function getBundleStamp() {
   );
 }
 
+function isLibraryBuildInFlight() {
+  if (!fs.existsSync(distLibraryDir)) {
+    return false;
+  }
+
+  const now = Date.now();
+  return fs
+    .readdirSync(distLibraryDir)
+    .filter((entry) => buildStatusFilePattern.test(entry))
+    .some((entry) => {
+      let status;
+      try {
+        status = JSON.parse(
+          fs.readFileSync(path.join(distLibraryDir, entry), "utf8"),
+        );
+      } catch {
+        return false;
+      }
+
+      return (
+        status?.state === "building" &&
+        now - status.updatedAt < buildStatusStaleAfterMs
+      );
+    });
+}
+
 function listPackFiles() {
   if (!fs.existsSync(tempPackDir)) {
     return [];
@@ -74,7 +105,7 @@ function listPackFiles() {
 
 function packageLibrary() {
   if (!fs.existsSync(bundleEntrypointPath)) {
-    return;
+    return false;
   }
 
   fs.mkdirSync(tempPackDir, { recursive: true });
@@ -101,13 +132,12 @@ function packageLibrary() {
     if (result.stderr) {
       process.stderr.write(result.stderr);
     }
-    process.exit(result.status ?? 1);
+    return failPack(`pnpm pack exited with code ${result.status}`);
   }
 
   const packFiles = listPackFiles();
   if (packFiles.length !== 1) {
-    console.error("[pack-library] expected exactly one tarball output");
-    process.exit(1);
+    return failPack("expected exactly one tarball output");
   }
 
   fs.copyFileSync(packFiles[0], outputTarballPath);
@@ -116,9 +146,25 @@ function packageLibrary() {
   console.log(
     `[pack-library] wrote ${path.relative(rootDir, outputTarballPath)}`,
   );
+  return true;
 }
 
-packageLibrary();
+// In watch mode a failed pack is retried on the next change instead of ending
+// the process: this script is one child of scripts/watch-library.mjs, and its
+// exit used to take the whole dev stack — add-in dev server included — with it.
+function failPack(reason) {
+  if (!watchMode) {
+    console.error(`[pack-library] ${reason}`);
+    process.exit(1);
+  }
+
+  console.error(`[pack-library] ${reason}; retrying after the next change`);
+  return false;
+}
+
+if (!watchMode || !isLibraryBuildInFlight()) {
+  packageLibrary();
+}
 
 if (watchMode) {
   fs.mkdirSync(distLibraryDir, { recursive: true });
@@ -147,6 +193,11 @@ if (watchMode) {
     const idleMs = now - lastEventAt;
     if (idleMs < debounceMs) {
       settleTimer = setTimeout(runScheduledPack, debounceMs - idleMs);
+      return;
+    }
+
+    if (isLibraryBuildInFlight()) {
+      settleTimer = setTimeout(runScheduledPack, debounceMs);
       return;
     }
 

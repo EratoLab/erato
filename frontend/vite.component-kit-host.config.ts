@@ -4,6 +4,7 @@ import { lingui } from "@lingui/vite-plugin";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 
+import { libraryBuildStatusPlugin } from "./library-build-status";
 import {
   IMPORT_MAP_MANIFEST_FILE_NAME,
   SHARED_MODULES,
@@ -63,6 +64,10 @@ export default defineConfig({
     lingui(),
     browserOnlyBuildPlugin(),
     componentKitHostManifestPlugin(),
+    libraryBuildStatusPlugin({
+      distLibraryDir: path.resolve(__dirname, "dist-library"),
+      key: "component-kit-host",
+    }),
   ],
   resolve: {
     alias: {

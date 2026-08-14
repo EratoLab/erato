@@ -36,8 +36,15 @@ FRONTEND_TARBALL_PATH = FRONTEND_DIR / "dist-package" / "erato-frontend.tgz"
 FRONTEND_PACKAGE_STATE_PATH = (
     FRONTEND_DIR / "dist-package" / "erato-frontend.state.json"
 )
-FRONTEND_LIBRARY_ENTRY_PATH = FRONTEND_DIR / "dist-library" / "library.mjs"
-FRONTEND_LIBRARY_CSS_PATH = FRONTEND_DIR / "dist-library" / "style.css"
+FRONTEND_DIST_LIBRARY_DIR = FRONTEND_DIR / "dist-library"
+FRONTEND_LIBRARY_ENTRY_PATH = FRONTEND_DIST_LIBRARY_DIR / "library.mjs"
+FRONTEND_LIBRARY_CSS_PATH = FRONTEND_DIST_LIBRARY_DIR / "style.css"
+# Written by frontend/library-build-status.ts; keep the names in sync.
+LIBRARY_BUILD_STATUS_FILE_NAMES = (
+    ".build-status.library.json",
+    ".build-status.component-kit-host.json",
+)
+LINKED_LIBRARY_BUILD_TIMEOUT_SECONDS = 180
 FRONTEND_APP_BUILD_WATCH_POLL_SECONDS = 1.0
 FRONTEND_APP_BUILD_WATCH_FILES = (
     FRONTEND_DIR / "lingui.config.ts",
@@ -700,23 +707,69 @@ def wait_for_packaged_frontend(
     )
 
 
+def read_library_build_states(since_ms: float) -> dict[str, str | None]:
+    """Build state per status file, ignoring anything written before the cutoff.
+
+    The cutoff is what distinguishes this session's build from the previous
+    one's leftovers, so linked mode never starts against a stale library.
+    """
+    states: dict[str, str | None] = {}
+    for file_name in LIBRARY_BUILD_STATUS_FILE_NAMES:
+        try:
+            status = json.loads(
+                (FRONTEND_DIST_LIBRARY_DIR / file_name).read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError):
+            states[file_name] = None
+            continue
+
+        updated_at = status.get("updatedAt")
+        state = status.get("state")
+        if not isinstance(updated_at, (int, float)) or updated_at < since_ms:
+            states[file_name] = None
+            continue
+
+        states[file_name] = state if isinstance(state, str) else None
+
+    return states
+
+
 def wait_for_linked_frontend(
     frontend_watch: subprocess.Popen[str],
-    timeout_seconds: int = 60,
+    since_ms: float,
+    timeout_seconds: int = LINKED_LIBRARY_BUILD_TIMEOUT_SECONDS,
 ) -> None:
-    wait_for_generated_path(
-        FRONTEND_LIBRARY_ENTRY_PATH,
-        frontend_watch,
-        timeout_seconds=timeout_seconds,
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        states = read_library_build_states(since_ms)
+        if any(state == "failed" for state in states.values()):
+            print(
+                "Frontend library build failed; see the build output above",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        if all(state == "ready" for state in states.values()):
+            return
+
+        return_code = frontend_watch.poll()
+        if return_code is not None:
+            print(
+                f"Process exited with code {return_code}: {frontend_watch.args}",
+                file=sys.stderr,
+            )
+            sys.exit(return_code or 1)
+
+        time.sleep(0.5)
+
+    print(
+        "Timed out waiting for the frontend library build to complete",
+        file=sys.stderr,
     )
-    wait_for_generated_path(
-        FRONTEND_LIBRARY_CSS_PATH,
-        frontend_watch,
-        timeout_seconds=timeout_seconds,
-    )
+    sys.exit(1)
 
 
-def clear_frontend_watch_outputs() -> None:
+def clear_packaged_frontend_outputs() -> None:
     FRONTEND_LIBRARY_ENTRY_PATH.unlink(missing_ok=True)
     FRONTEND_LIBRARY_CSS_PATH.unlink(missing_ok=True)
     FRONTEND_PACKAGE_STATE_PATH.unlink(missing_ok=True)
@@ -859,9 +912,14 @@ class FrontendAppBuildWatcher:
             baseline_snapshot = snapshot_after_build
 
 
-def spawn_frontend_watch() -> subprocess.Popen[str]:
+def spawn_frontend_watch(mode: str) -> subprocess.Popen[str]:
+    command = ["node", "scripts/watch-library.mjs"]
+    # Linked mode imports dist-library directly and never reads the tarball.
+    if mode == "linked":
+        command.append("--no-pack")
+
     return subprocess.Popen(
-        ["node", "scripts/watch-library.mjs"],
+        command,
         cwd=FRONTEND_DIR,
         text=True,
         start_new_session=True,
@@ -942,6 +1000,16 @@ def print_linked_watch_mode_ready() -> None:
     )
 
 
+def print_frontend_watch_loss(return_code: int) -> None:
+    print(
+        f"\nFrontend library watcher exited with code {return_code}.\n"
+        "The add-in dev server stays up, so loaded pages keep working, but the "
+        "frontend library is no longer rebuilt.\n"
+        "Restart `just dev-linked` to resume library rebuilds.\n",
+        file=sys.stderr,
+    )
+
+
 def terminate_process(process: subprocess.Popen[str]) -> None:
     if process.poll() is not None:
         return
@@ -975,16 +1043,27 @@ def wait_for_processes(
     if initial_package_state is not None:
         current_package_sha = initial_package_state.get("sha256")
 
+    frontend_watch_loss_reported = False
+
     try:
         while True:
             frontend_return_code = frontend_watch.poll()
             if frontend_return_code is not None:
-                if frontend_return_code != 0:
-                    print(
-                        f"Process exited with code {frontend_return_code}: {frontend_watch.args}",
-                        file=sys.stderr,
-                    )
-                return frontend_return_code
+                # Linked mode serves dist-library straight from disk, so the
+                # add-in dev server is what lets a browser recover on its own
+                # once the library builds again — losing the watcher must not
+                # take it down with it.
+                if mode == "linked":
+                    if not frontend_watch_loss_reported:
+                        frontend_watch_loss_reported = True
+                        print_frontend_watch_loss(frontend_return_code)
+                else:
+                    if frontend_return_code != 0:
+                        print(
+                            f"Process exited with code {frontend_return_code}: {frontend_watch.args}",
+                            file=sys.stderr,
+                        )
+                    return frontend_return_code
 
             if mode == "packaged":
                 package_state = read_package_state()
@@ -1079,9 +1158,9 @@ def main() -> int:
     signal.signal(signal.SIGTERM, handle_signal)
 
     try:
-        clear_frontend_watch_outputs()
         if args.mode == "packaged":
-            frontend_watch = spawn_frontend_watch()
+            clear_packaged_frontend_outputs()
+            frontend_watch = spawn_frontend_watch(args.mode)
             wait_for_packaged_frontend(frontend_watch)
             install_packaged_frontend()
             clear_vite_cache()
@@ -1092,8 +1171,9 @@ def main() -> int:
             app_dev = spawn_app_dev(args.mode, force_optimize=True)
         else:
             build_frontend_app()
-            frontend_watch = spawn_frontend_watch()
-            wait_for_linked_frontend(frontend_watch)
+            frontend_watch_started_at_ms = time.time() * 1000
+            frontend_watch = spawn_frontend_watch(args.mode)
+            wait_for_linked_frontend(frontend_watch, frontend_watch_started_at_ms)
             frontend_app_build_watcher = FrontendAppBuildWatcher()
             frontend_app_build_watcher.start()
             print_linked_long_running_processes()
