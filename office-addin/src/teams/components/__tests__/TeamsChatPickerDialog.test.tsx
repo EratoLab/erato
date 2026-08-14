@@ -36,6 +36,17 @@ import type { ReactNode } from "react";
 /* --------------------------------------------------------------- library */
 
 vi.mock("@erato/frontend/library", () => ({
+  // The transcript this dialog builds is stamped with the index-block header.
+  // Restated rather than imported because a mock factory is hoisted above the
+  // file's imports, so the only way to reach the real constants from in here is
+  // to load the library bundle inside the factory — which runs before the test
+  // environment exists and dies on a missing `document`.
+  //
+  // Nothing in this file asserts on either value; they exist so the production
+  // path does not stamp `undefined`. A drift shows up in
+  // buildTeamsTranscriptFile.test.ts, which pins the header literal directly.
+  TEAMS_TRANSCRIPT_INDEX_MARKER: "erato:teams-transcript",
+  TEAMS_TRANSCRIPT_INDEX_VERSION: 1,
   ModalBase: ({
     children,
     isOpen,

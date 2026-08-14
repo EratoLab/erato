@@ -18,6 +18,7 @@ import type { TeamsTranscriptSection } from "./buildTeamsTranscriptFile";
 import type { ParsedTeamsMessage, TeamsSharedFileRef } from "./parsedTeamsChat";
 import type { TeamsHostedContent } from "./teamsChatGraph";
 import type { TeamsSharedFileDownload } from "./teamsSharedFilesGraph";
+import type { TeamsTranscriptIndexAsset } from "@erato/frontend/library";
 
 /** Vision input is expensive; a transcript is an excerpt, not an album. */
 export const MAX_TRANSCRIPT_IMAGES = 10;
@@ -36,13 +37,15 @@ const ASSET_FETCH_CONCURRENCY = 3;
 
 const IMAGE_UPLOAD_PREFIX = "teams-img-";
 const FILE_UPLOAD_PREFIX = "teams-file-";
+/** Hash characters a minted file name carries, between prefix and slug. */
+const FILE_HASH_LENGTH = 8;
 /**
  * A marker naming an upload minted here. Anchored on those prefixes so the
  * bare marker of a file that was never fetched — which still carries its
  * Teams-side name — is not read as an upload.
  */
 const UPLOADED_ASSET_MARKER = new RegExp(
-  `\\[(?:image|attachment): ((?:${IMAGE_UPLOAD_PREFIX}|${FILE_UPLOAD_PREFIX})[^\\]]+)\\]`,
+  `\\[(image|attachment): ((?:${IMAGE_UPLOAD_PREFIX}|${FILE_UPLOAD_PREFIX})[^\\]]+)\\]`,
   "g",
 );
 
@@ -145,7 +148,7 @@ export async function collectTeamsMessageAssets(args: {
           if (!file) {
             file = new File(
               [result.content.bytes],
-              `${FILE_UPLOAD_PREFIX}${hash.slice(0, 8)}-${fileNameSlug(ref.name)}`,
+              `${FILE_UPLOAD_PREFIX}${hash.slice(0, FILE_HASH_LENGTH)}-${fileNameSlug(ref.name)}`,
               { type: result.content.contentType },
             );
             filesByHash.set(hash, file);
@@ -198,15 +201,50 @@ export function stampImageMarkers(
 /**
  * The uploads a message names, in marker order — how anything downstream of
  * the transcript joins a file back to the message it rode in on.
+ *
+ * The minted name is the join key and stays unreadable; the name Teams gave
+ * the file travels beside it so a reader never has to show the hash. Both
+ * halves are produced here, by the same slug rule, so the join cannot drift.
  */
-export function uploadedAssetNames(sources: readonly string[]): string[] {
-  const names: string[] = [];
+export function uploadedAssets(
+  sources: readonly string[],
+  sharedFiles: readonly TeamsSharedFileRef[],
+): TeamsTranscriptIndexAsset[] {
+  const assets: TeamsTranscriptIndexAsset[] = [];
   for (const source of sources) {
     for (const match of source.matchAll(UPLOADED_ASSET_MARKER)) {
-      names.push(match[1]);
+      const name = match[2];
+      assets.push({
+        name,
+        kind: match[1] === "image" ? "image" : "file",
+        displayName: sharedFileDisplayName(name, sharedFiles),
+      });
     }
   }
-  return names;
+  return assets;
+}
+
+/**
+ * Null for a pasted image, which never had a name, and for the rare upload
+ * minted from another message's identical bytes — the hash dedupes across the
+ * whole transcript, so its name can belong to a ref this message never held.
+ *
+ * The slug is matched whole, never as a suffix: `-` survives `fileNameSlug`, so
+ * `report.pdf` is a suffix of `Q3-report.pdf` and a suffix test would label one
+ * file with the other's name.
+ */
+function sharedFileDisplayName(
+  uploadName: string,
+  sharedFiles: readonly TeamsSharedFileRef[],
+): string | null {
+  if (!uploadName.startsWith(FILE_UPLOAD_PREFIX)) return null;
+  const slug = uploadName.slice(
+    FILE_UPLOAD_PREFIX.length + FILE_HASH_LENGTH + 1,
+  );
+  const ref = sharedFiles.find(
+    (candidate) => fileNameSlug(candidate.name) === slug,
+  );
+  return ref?.name ?? null;
 }
 
 interface PlannedImage {
@@ -328,8 +366,11 @@ function fileNameSlug(name: string): string {
   const dot = name.lastIndexOf(".");
   const stem = dot > 0 ? name.slice(0, dot) : name;
   const extension = dot > 0 ? name.slice(dot + 1) : "";
+  // Brackets go too: the marker that names this file is `[attachment: …]`, and
+  // a `]` inside the name would end the marker early, breaking the join that
+  // ties the upload back to its message.
   const clean = (value: string) =>
-    value.replace(/[\\/:*?"<>|\s]+/g, "_").replace(/^_+|_+$/g, "");
+    value.replace(/[\\/:*?"<>|[\]\s]+/g, "_").replace(/^_+|_+$/g, "");
   const cleanStem = clean(stem).slice(0, MAX_FILE_SLUG_LENGTH) || "file";
   const cleanExtension = clean(extension);
   return cleanExtension ? `${cleanStem}.${cleanExtension}` : cleanStem;

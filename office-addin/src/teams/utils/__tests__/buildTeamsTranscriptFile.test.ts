@@ -1,3 +1,4 @@
+import { parseTeamsTranscriptIndex } from "@erato/frontend/library";
 import { describe, expect, it } from "vitest";
 
 import { MOCK_CHAT_ID } from "../../../test/mocks/teams/graph";
@@ -7,7 +8,6 @@ import {
   buildTeamsTranscriptMarkdown,
 } from "../buildTeamsTranscriptFile";
 import { buildTeamsMessageDeepLink } from "../teamsDeepLink";
-import { parseTeamsTranscriptIndex } from "../teamsTranscriptIndex";
 
 import type { TeamsTranscriptSection } from "../buildTeamsTranscriptFile";
 import type { ParsedTeamsChannel } from "../parsedTeamsChannel";
@@ -426,13 +426,31 @@ describe("transcript index block", () => {
           message({
             text: "see [image: teams-img-0123456789abcdef.png]",
             markers: ["[attachment: teams-file-0123abcd-agenda.docx]"],
+            sharedFiles: [
+              {
+                attachmentId: "a1",
+                name: "agenda.docx",
+                contentUrl: "https://contoso.sharepoint.com/agenda.docx",
+              },
+            ],
           }),
         ],
       }),
     ]);
+    // The minted name is the join key; the name Teams gave the file rides
+    // beside it so no reader has to show a content hash. A pasted image never
+    // had a name of its own.
     expect(index.messages[0].assets).toEqual([
-      "teams-img-0123456789abcdef.png",
-      "teams-file-0123abcd-agenda.docx",
+      {
+        name: "teams-img-0123456789abcdef.png",
+        displayName: null,
+        kind: "image",
+      },
+      {
+        name: "teams-file-0123abcd-agenda.docx",
+        displayName: "agenda.docx",
+        kind: "file",
+      },
     ]);
     expect(index.messages[0].text).toContain("[attachment: teams-file-");
   });

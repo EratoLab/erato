@@ -290,6 +290,27 @@ export {
   transformEmailFencesForCopy,
 } from "@/utils/emailClipboard";
 export { mapOutsideCodeFences } from "@/utils/codeFences";
+export type {
+  TeamsChannelConversationRef,
+  TeamsChatConversationRef,
+  TeamsConversationRef,
+  TeamsMessageRef,
+} from "@/utils/teams/teamsConversationRef";
+export {
+  TEAMS_TRANSCRIPT_INDEX_MARKER,
+  TEAMS_TRANSCRIPT_INDEX_VERSION,
+  parseTeamsTranscriptIndex,
+  type TeamsTranscriptIndex,
+  type TeamsTranscriptIndexAsset,
+  type TeamsTranscriptIndexMessage,
+  type TeamsTranscriptIndexSection,
+  type TeamsTranscriptIndexWindow,
+} from "@/utils/teams/teamsTranscriptIndex";
+export {
+  TeamsConversationView,
+  DefaultTeamsConversationView,
+  type TeamsConversationViewProps,
+} from "@/components/ui/Teams/TeamsConversationView";
 export { sanitizeHtmlPreview } from "@/utils/sanitizeHtmlPreview";
 export {
   extractTextFromContent,

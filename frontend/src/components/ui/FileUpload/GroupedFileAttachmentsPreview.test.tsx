@@ -201,6 +201,82 @@ describe("GroupedFileAttachmentsPreview", () => {
     expect(screen.getByText("invoice")).toBeVisible();
   });
 
+  it("keeps each group at its own default when several are shown at once", async () => {
+    const group = (id: string, defaultCollapsed: boolean) => ({
+      id,
+      label: id,
+      collapsible: true,
+      defaultCollapsed,
+      items: [
+        {
+          kind: "attachment" as const,
+          id: `${id}-file`,
+          file: { id: `${id}-file`, filename: "invoice.pdf", size: 2048 },
+        },
+      ],
+    });
+
+    await renderWithI18n(
+      <GroupedFileAttachmentsPreview
+        groups={[
+          group("closed-a", true),
+          group("open-b", false),
+          group("closed-c", true),
+        ]}
+        onRemoveFile={() => {}}
+        defaultVisibleItems={10}
+        stickyGroupHeaders={true}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /closed-a/ })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.getByRole("button", { name: /open-b/ })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: /closed-c/ })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+  });
+
+  it("opens a row through onOpen instead of previewing its file", async () => {
+    const onOpen = vi.fn();
+    const onFilePreview = vi.fn();
+
+    await renderWithI18n(
+      <GroupedFileAttachmentsPreview
+        groups={[
+          {
+            id: "group-teams",
+            label: "Product sync",
+            items: [
+              {
+                kind: "attachment",
+                id: "transcript",
+                file: {
+                  id: "transcript",
+                  filename: "teams-Product_sync.md",
+                  displayName: "All messages",
+                },
+                onOpen,
+              },
+            ],
+          },
+        ]}
+        onRemoveFile={() => {}}
+        onFilePreview={onFilePreview}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /open all messages/i }));
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(onFilePreview).not.toHaveBeenCalled();
+  });
+
   it("can keep group headers sticky inside a bounded scroll pane", async () => {
     await renderWithI18n(
       <GroupedFileAttachmentsPreview

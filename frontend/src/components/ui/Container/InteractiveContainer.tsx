@@ -60,6 +60,14 @@ export const InteractiveContainer = ({
         return;
       }
 
+      // Only the container's own key presses activate it. A keydown bubbling up
+      // from a control inside — a chip's remove button, say — belongs to that
+      // control, and handling it here both fires the wrong action and cancels
+      // the right one.
+      if (e.target !== e.currentTarget) {
+        return;
+      }
+
       if (isClickable && (e.key === "Enter" || e.key === " ")) {
         e.preventDefault();
         onClick(e as unknown as React.MouseEvent<HTMLDivElement>);

@@ -1,3 +1,7 @@
+import {
+  TEAMS_TRANSCRIPT_INDEX_VERSION,
+  parseTeamsTranscriptIndex,
+} from "@erato/frontend/library";
 import { i18n } from "@lingui/core";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -5,10 +9,6 @@ import { MOCK_CHAT_ID } from "../../../test/mocks/teams/graph";
 import { buildTeamsTranscriptDocument } from "../buildTeamsTranscriptFile";
 import { buildTeamsAttachmentGroups } from "../teamsAttachmentGroups";
 import { buildTeamsMessageDeepLink } from "../teamsDeepLink";
-import {
-  TEAMS_TRANSCRIPT_INDEX_VERSION,
-  parseTeamsTranscriptIndex,
-} from "../teamsTranscriptIndex";
 
 import type { TeamsTranscriptSection } from "../buildTeamsTranscriptFile";
 import type { ParsedTeamsChannel } from "../parsedTeamsChannel";
@@ -170,7 +170,7 @@ describe("buildTeamsAttachmentGroups", () => {
     const row = transcriptRow(group);
     expect(row.file).toMatchObject({
       id: TRANSCRIPT.id,
-      displayName: "Last 2 messages — older messages not included",
+      displayName: "Recent messages — older ones not included",
     });
   });
 
@@ -198,7 +198,7 @@ describe("buildTeamsAttachmentGroups", () => {
     const [group] = preview!.groups;
     expect(group.defaultCollapsed).toBe(false);
     expect(transcriptRow(group).file).toMatchObject({
-      displayName: "2 selected messages",
+      displayName: "Selected messages",
     });
     expect(threadRows(group).map((row) => row.label)).toEqual([
       "Ada Lovelace",
@@ -346,9 +346,17 @@ describe("buildTeamsAttachmentGroups", () => {
     );
 
     const rows = threadRows(preview!.groups[0]);
+    // Named for a reader, not by the minted upload name: the image has no name
+    // of its own, and the shared file keeps the one the transcript recorded.
     expect(rows[0].attachments.map((item) => item.file)).toEqual([
-      image,
-      shared,
+      { id: image.id, filename: image.filename, displayName: "Image" },
+      // No shared-file ref carried this upload's slug, so the transcript never
+      // recorded a name for it — a neutral label, never the minted one.
+      {
+        id: shared.id,
+        filename: shared.filename,
+        displayName: "Attachment",
+      },
     ]);
     expect(rows[1].attachments).toEqual([]);
     // The unrelated upload stays a flat chip, the joined ones do not.
@@ -398,7 +406,17 @@ describe("buildTeamsAttachmentGroups", () => {
 
     const [group] = preview!.groups;
     expect(itemKinds(group)).toEqual(["attachment", "attachment"]);
-    expect(group.items[1]).toMatchObject({ id: image.id, file: image });
+    // `toEqual`, not `toMatchObject`: the whole point is the name the chip
+    // shows, and a partial match would pass while it read the minted one.
+    expect(group.items[1]).toEqual({
+      kind: "attachment",
+      id: image.id,
+      file: {
+        id: image.id,
+        filename: image.filename,
+        displayName: "Image",
+      },
+    });
   });
 
   it("reports how many messages could not be loaded", () => {
@@ -408,7 +426,7 @@ describe("buildTeamsAttachmentGroups", () => {
     );
 
     expect(transcriptRow(preview!.groups[0]).file).toMatchObject({
-      displayName: "1 selected message · 2 could not be loaded",
+      displayName: "Selected messages · 2 could not be loaded",
     });
   });
 });

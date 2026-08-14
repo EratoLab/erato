@@ -22,15 +22,15 @@ import { plural, t } from "@lingui/core/macro";
 import { conversationKey } from "./teamsConversationRef";
 
 import type {
-  TeamsTranscriptIndex,
-  TeamsTranscriptIndexMessage,
-  TeamsTranscriptIndexSection,
-  TeamsTranscriptIndexWindow,
-} from "./teamsTranscriptIndex";
-import type {
   FileAttachmentGroup,
   FileAttachmentGroupItem,
   FileUploadItem,
+  LocalFilePreviewItem,
+  TeamsTranscriptIndex,
+  TeamsTranscriptIndexAsset,
+  TeamsTranscriptIndexMessage,
+  TeamsTranscriptIndexSection,
+  TeamsTranscriptIndexWindow,
 } from "@erato/frontend/library";
 
 /**
@@ -52,6 +52,8 @@ export interface TeamsAttachmentPreviewGroups {
 export function buildTeamsAttachmentGroups(
   attached: TeamsAttachedTranscript | null,
   attachedFiles: readonly FileUploadItem[],
+  /** Makes the summary row the way into the conversation it stands for. */
+  onOpenSection?: (sectionIndex: number) => void,
 ): TeamsAttachmentPreviewGroups | null {
   if (!attached || attached.index.sections.length === 0) return null;
 
@@ -92,12 +94,17 @@ export function buildTeamsAttachmentGroups(
           file: {
             id: transcript.id,
             filename: transcript.filename,
-            displayName: includedSummary(section, messages.length),
+            displayName: includedSummary(section),
           },
           labelOverride: t({
             id: "officeAddin.teams.preview.transcriptLabel",
             message: "Teams conversation",
           }),
+          onOpen: onOpenSection
+            ? () => {
+                onOpenSection(position);
+              }
+            : undefined,
         },
       ];
 
@@ -109,9 +116,9 @@ export function buildTeamsAttachmentGroups(
             label: message.sender,
             sublabel: messageSublabel(message),
             defaultCollapsed: false,
-            attachments: claimAssets(message, claim).map((file) => ({
-              id: file.id,
-              file,
+            attachments: claimAssets(message, claim).map((claimed) => ({
+              id: claimed.file.id,
+              file: assetResource(claimed),
             })),
           });
         }
@@ -119,8 +126,12 @@ export function buildTeamsAttachmentGroups(
         // The summary row stands for the messages; the files that rode along
         // with them still get a row each, so nothing is attached invisibly.
         for (const message of messages) {
-          for (const file of claimAssets(message, claim)) {
-            items.push({ kind: "attachment", id: file.id, file });
+          for (const claimed of claimAssets(message, claim)) {
+            items.push({
+              kind: "attachment",
+              id: claimed.file.id,
+              file: assetResource(claimed),
+            });
           }
         }
       }
@@ -172,36 +183,25 @@ function sectionMeta(
 }
 
 /**
- * Mirrors the transcript's own "Included:" line, minus the date range the
- * group header already carries.
+ * What the row stands for, never how much of it: the group header above it
+ * already carries the message count and the date range, and a row that repeats
+ * them says nothing while crowding out the part only it knows.
  */
-function includedSummary(
-  section: TeamsTranscriptIndexSection,
-  count: number,
-): string {
+function includedSummary(section: TeamsTranscriptIndexSection): string {
   const parts = [
     section.selection === "messages"
       ? t({
           id: "officeAddin.teams.preview.selectedMessages",
-          message: plural(count, {
-            one: "# selected message",
-            other: "# selected messages",
-          }),
+          message: "Selected messages",
         })
       : section.truncated
         ? t({
-            id: "officeAddin.teams.preview.lastMessages",
-            message: plural(count, {
-              one: "Last # message — older messages not included",
-              other: "Last # messages — older messages not included",
-            }),
+            id: "officeAddin.teams.preview.recentMessages",
+            message: "Recent messages — older ones not included",
           })
         : t({
             id: "officeAddin.teams.preview.allMessages",
-            message: plural(count, {
-              one: "All # message",
-              other: "All # messages",
-            }),
+            message: "All messages",
           }),
   ];
   if (section.skippedCount > 0) {
@@ -245,6 +245,11 @@ function excerpt(text: string): string {
     : flat;
 }
 
+interface ClaimedAsset {
+  asset: TeamsTranscriptIndexAsset;
+  file: FileUploadItem;
+}
+
 /**
  * The uploads a message carries, joined by the filename the asset collector
  * stamped into its markers — the same key the backend keys parsed uploads by.
@@ -252,13 +257,35 @@ function excerpt(text: string): string {
 function claimAssets(
   message: TeamsTranscriptIndexMessage,
   claim: (name: string) => FileUploadItem | null,
-): FileUploadItem[] {
-  const files: FileUploadItem[] = [];
-  for (const name of message.assets) {
-    const file = claim(name);
-    if (file) files.push(file);
+): ClaimedAsset[] {
+  const claimed: ClaimedAsset[] = [];
+  for (const asset of message.assets) {
+    const file = claim(asset.name);
+    if (file) claimed.push({ asset, file });
   }
-  return files;
+  return claimed;
+}
+
+/**
+ * The upload's own name is a content hash minted to join file to message; it
+ * is not something to put in front of a user. The index carries the name Teams
+ * gave the file, and a pasted image — which never had one — is simply an image.
+ */
+function assetResource({ asset, file }: ClaimedAsset): LocalFilePreviewItem {
+  return {
+    id: file.id,
+    filename: file.filename,
+    // Never `file.filename`: that is the minted name, and falling back to it
+    // shows the content hash this whole indirection exists to hide.
+    displayName:
+      asset.displayName ??
+      (asset.kind === "image"
+        ? t({ id: "officeAddin.teams.preview.image", message: "Image" })
+        : t({
+            id: "officeAddin.teams.preview.attachment",
+            message: "Attachment",
+          })),
+  };
 }
 
 function dateRange(window: TeamsTranscriptIndexWindow): string {

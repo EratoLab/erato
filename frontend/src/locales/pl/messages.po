@@ -3589,6 +3589,10 @@ msgstr ""
 #~ msgid "{0} items"
 #~ msgstr ""
 
+#: src/components/ui/Teams/TeamsConversationView.tsx
+#~ msgid "{0} messages could not be loaded."
+#~ msgstr "Nie udało się wczytać {0} wiadomości."
+
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "{attachmentCount} files"
 msgstr ""
@@ -3604,6 +3608,10 @@ msgstr "{fileName}: {filePercentage}%"
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "{itemCount} items"
 msgstr "{itemCount} elementów"
+
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "{skipped} messages could not be loaded."
+msgstr ""
 
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "• Change browser language in settings and refresh"
@@ -3634,6 +3642,10 @@ msgstr "1 plik"
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "1 item"
 msgstr "1 element"
+
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "1 message could not be loaded."
+msgstr "Nie udało się wczytać 1 wiadomości."
 
 #: src/components/ui/FileUpload/FileUpload.tsx
 msgid "Accepted types:"
@@ -3708,6 +3720,10 @@ msgstr "Dołącz plik"
 #: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "attachment"
 msgstr ""
+
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "Attachment"
+msgstr "Załącznik"
 
 #: src/components/ui/Chat/ChatInput.tsx
 #~ msgid "Attachment ready to send"
@@ -4176,6 +4192,10 @@ msgstr ""
 #~ msgid "Edit your message..."
 #~ msgstr ""
 
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "Edited"
+msgstr "Edytowano"
+
 #: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "Email"
 msgstr ""
@@ -4301,9 +4321,9 @@ msgstr "Ukryj szczegóły"
 msgid "How to Test:"
 msgstr "Jak testować:"
 
-#: src/components/ui/Message/MessageContent.tsx
-#~ msgid "Image"
-#~ msgstr ""
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "Image"
+msgstr "Obraz"
 
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "In Progress"
@@ -4473,9 +4493,17 @@ msgstr ""
 msgid "No messages yet"
 msgstr "Brak wiadomości"
 
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "No messages."
+msgstr "Brak wiadomości."
+
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "No microphone is available. Connect or enable a microphone and try again."
 msgstr ""
+
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "No text."
+msgstr "Brak tekstu."
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 #~ msgid "noise suppression: {0}"
@@ -4497,9 +4525,21 @@ msgstr "redukcja szumów: {noiseSuppression}"
 msgid "of"
 msgstr "z"
 
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "Older messages are not included."
+msgstr "Starsze wiadomości nie są uwzględnione."
+
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Only one message can be queued. Replacing discards the message you queued earlier."
 msgstr ""
+
+#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+msgid "Open"
+msgstr "Otwórz"
+
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "Open in Teams"
+msgstr "Otwórz w usłudze Teams"
 
 #: src/components/ui/Controls/DropdownMenu.tsx
 msgid "Open menu"
@@ -4524,6 +4564,7 @@ msgstr ""
 
 #: src/components/ui/FileUpload/FileAttachmentsPreview.tsx
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+#: src/components/ui/Teams/TeamsConversationView.tsx
 msgid "Preview attachment"
 msgstr "Podgląd załącznika"
 
@@ -4988,6 +5029,10 @@ msgstr "Napisz wiadomość..."
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Unable to retry this transcription because the source audio is not available."
 msgstr ""
+
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "Unknown date"
+msgstr "Nieznana data"
 
 #: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "Unknown sender"

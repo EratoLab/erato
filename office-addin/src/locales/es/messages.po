@@ -1412,7 +1412,12 @@ msgstr "Los chats completos añaden los últimos {messageLimit} mensajes."
 #. js-lingui-explicit-id
 #: src/teams/utils/teamsAttachmentGroups.ts
 msgid "officeAddin.teams.preview.allMessages"
-msgstr "{count, plural, one {Todos los # mensaje} other {Todos los # mensajes}}"
+msgstr "Todos los mensajes"
+
+#. js-lingui-explicit-id
+#: src/teams/utils/teamsAttachmentGroups.ts
+msgid "officeAddin.teams.preview.attachment"
+msgstr "Archivo adjunto"
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsAttachmentsPreview.tsx
@@ -1420,9 +1425,19 @@ msgid "officeAddin.teams.preview.conversationRegion"
 msgstr "Vista previa de la conversación de Teams"
 
 #. js-lingui-explicit-id
+#: src/teams/components/TeamsAttachmentsPreview.tsx
+msgid "officeAddin.teams.preview.conversationTitle"
+msgstr "Conversación de Teams"
+
+#. js-lingui-explicit-id
 #: src/teams/utils/teamsAttachmentGroups.ts
-msgid "officeAddin.teams.preview.lastMessages"
-msgstr "{count, plural, one {Último # mensaje — los mensajes anteriores no se incluyen} other {Últimos # mensajes — los mensajes anteriores no se incluyen}}"
+msgid "officeAddin.teams.preview.image"
+msgstr "Imagen"
+
+#. js-lingui-explicit-id
+#: src/teams/utils/teamsAttachmentGroups.ts
+#~ msgid "officeAddin.teams.preview.lastMessages"
+#~ msgstr "{count, plural, one {Último # mensaje — los mensajes anteriores no se incluyen} other {Últimos # mensajes — los mensajes anteriores no se incluyen}}"
 
 #. js-lingui-explicit-id
 #: src/teams/utils/teamsAttachmentGroups.ts
@@ -1431,8 +1446,13 @@ msgstr "{count, plural, one {# mensaje} other {# mensajes}}"
 
 #. js-lingui-explicit-id
 #: src/teams/utils/teamsAttachmentGroups.ts
+msgid "officeAddin.teams.preview.recentMessages"
+msgstr "Mensajes recientes: los anteriores no se incluyen"
+
+#. js-lingui-explicit-id
+#: src/teams/utils/teamsAttachmentGroups.ts
 msgid "officeAddin.teams.preview.selectedMessages"
-msgstr "{count, plural, one {# mensaje seleccionado} other {# mensajes seleccionados}}"
+msgstr "Mensajes seleccionados"
 
 #. js-lingui-explicit-id
 #. placeholder {0}: section.skippedCount

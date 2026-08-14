@@ -1,15 +1,22 @@
 import {
   FileAttachmentsPreview,
   GroupedFileAttachmentsPreview,
+  ModalBase,
+  TeamsConversationView,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useTeamsTranscriptIndex } from "../hooks/useTeamsTranscriptIndex";
 import { useTeamsChatPicker } from "../providers/TeamsChatPickerProvider";
 import { buildTeamsAttachmentGroups } from "../utils/teamsAttachmentGroups";
 
-import type { FileAttachmentsPreviewProps } from "@erato/frontend/library";
+import type {
+  FileAttachmentsPreviewProps,
+  FileResource,
+  TeamsTranscriptIndexAsset,
+  TeamsTranscriptIndexMessage,
+} from "@erato/frontend/library";
 
 /**
  * The composer's attachment region in the Teams tab: an attached transcript is
@@ -26,7 +33,13 @@ import type { FileAttachmentsPreviewProps } from "@erato/frontend/library";
 export function TeamsAttachmentsPreview(props: FileAttachmentsPreviewProps) {
   const { attachedTranscript } = useTeamsChatPicker();
   const { index, isReading } = useTeamsTranscriptIndex(attachedTranscript);
-  const { attachedFiles } = props;
+  const { attachedFiles, onFilePreview } = props;
+  const [openSection, setOpenSection] = useState<number | null>(null);
+
+  // Section positions only mean anything against the index they came from, so a
+  // different transcript closes whatever was open rather than reopening it at a
+  // position that now points somewhere else, or nowhere.
+  useEffect(() => setOpenSection(null), [attachedTranscript]);
   const preview = useMemo(
     () =>
       buildTeamsAttachmentGroups(
@@ -34,9 +47,41 @@ export function TeamsAttachmentsPreview(props: FileAttachmentsPreviewProps) {
           ? { fileName: attachedTranscript.name, index }
           : null,
         attachedFiles,
+        setOpenSection,
       ),
     [attachedTranscript, index, attachedFiles],
   );
+
+  // The composer already holds every upload the transcript names, so the view
+  // never fetches: it is handed the file that is sitting in the same state.
+  const resolveAsset = useCallback(
+    (asset: TeamsTranscriptIndexAsset) =>
+      attachedFiles.find((file) => file.filename === asset.name) ?? null,
+    [attachedFiles],
+  );
+
+  // `resolveAsset` only ever hands back an upload out of this same list, so
+  // matching on identity narrows it to the composer's own file type.
+  const previewAsset = useMemo(
+    () =>
+      onFilePreview
+        ? (file: FileResource) => {
+            const upload = attachedFiles.find(
+              (candidate) => candidate === file,
+            );
+            if (upload) onFilePreview(upload);
+          }
+        : undefined,
+    [attachedFiles, onFilePreview],
+  );
+
+  const openInTeams = useCallback((message: TeamsTranscriptIndexMessage) => {
+    window.open(message.deepLink, "_blank", "noopener,noreferrer");
+  }, []);
+
+  // Stable, so the modal's focus-on-open effect does not re-run and pull focus
+  // off whatever the reader had it on every time the composer re-renders.
+  const closeConversation = useCallback(() => setOpenSection(null), []);
 
   if (!preview) {
     // Reading an in-memory file settles within a frame or two. Leaving the
@@ -49,6 +94,18 @@ export function TeamsAttachmentsPreview(props: FileAttachmentsPreviewProps) {
   const rest = attachedFiles.filter(
     (file) => !preview.claimedFileIds.has(file.id),
   );
+  // The modal names the conversation, so the view inside it does not — see
+  // `showTitle` below.
+  const openSectionData =
+    openSection === null ? undefined : index?.sections[openSection];
+  const openTitle = openSectionData
+    ? [openSectionData.title, openSectionData.teamName]
+        .filter((part) => part)
+        .join(" · ")
+    : t({
+        id: "officeAddin.teams.preview.conversationTitle",
+        message: "Teams conversation",
+      });
 
   return (
     <>
@@ -75,6 +132,18 @@ export function TeamsAttachmentsPreview(props: FileAttachmentsPreviewProps) {
         />
       </div>
       <FileAttachmentsPreview {...props} attachedFiles={rest} />
+      {index && openSection !== null && (
+        <ModalBase isOpen={true} onClose={closeConversation} title={openTitle}>
+          <TeamsConversationView
+            index={index}
+            sectionIndex={openSection}
+            showTitle={false}
+            onOpenInTeams={openInTeams}
+            onFilePreview={previewAsset}
+            resolveAsset={resolveAsset}
+          />
+        </ModalBase>
+      )}
     </>
   );
 }

@@ -1,0 +1,29 @@
+# Local overlay for manually testing MCP tool-call approval (ERMAIN-277
+# branch). Loaded after erato.toml via *.auto.erato.toml auto-discovery.
+# Requires the branch's mock MCP server running on :44321 (`just run_mock_mcp`
+# in backend/ — the /mcp/approval-policy route only exists on the branch) and
+# the mock LLM on :44320 (`just run_mock_llm`).
+#
+# Trigger in chat with the Mock-LLM model: "mcp approval probe"
+#
+# To turn this overlay off after testing, rename the file to *.disabled.
+
+[mcp_servers_global]
+# Shows the "MCP servers" tab in the web settings dialog (revocation UI test).
+show_frontend_tab = true
+
+[mcp_servers_global.approval]
+enabled = true
+# restrictive: open-world tools like publish_approval_probe always need approval.
+preset = "restrictive"
+# For Test 4 (greyed-out "Always allow" with lock reason): set this to false
+# and restart the backend. Flip back to true afterwards.
+allow_always = true
+
+[mcp_servers.mock_mcp_approval]
+transport_type = "streamable_http"
+url = "http://127.0.0.1:44321/mcp/approval-policy"
+
+[mcp_server_permissions.rules.allow_mock_mcp_approval_for_all]
+rule_type = "allow-all"
+mcp_server_ids = ["mock_mcp_approval"]
