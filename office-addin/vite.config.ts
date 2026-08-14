@@ -12,6 +12,14 @@ import {
   sharedModulesImportMapPlugin,
 } from "../frontend/component-kit-host.plugins";
 import {
+  isLibraryBuildInFlight,
+  LIBRARY_BUILD_KEYS,
+  LIBRARY_BUILD_STALE_AFTER_MS,
+  libraryBuildStatusFingerprint,
+  libraryBuildStatusPath,
+  readLibraryBuildStatuses,
+} from "../frontend/library-build-status";
+import {
   SHARED_MODULES,
   type SharedModuleEntry,
 } from "../frontend/shared-modules.config";
@@ -547,6 +555,205 @@ const watchLinkedFrontendPublicOutputPlugin = (enabled: boolean) => {
   };
 };
 
+const LINKED_LIBRARY_RELOAD_DEBOUNCE_MS = 200;
+const LINKED_LIBRARY_REQUEST_POLL_MS = 50;
+// A held request never outlives the staleness window: past it,
+// isLibraryBuildInFlight treats the build as abandoned anyway.
+const LINKED_LIBRARY_REQUEST_MAX_WAIT_MS = LIBRARY_BUILD_STALE_AFTER_MS;
+const LINKED_LIBRARY_HOLD_LOG_INTERVAL_MS = 2_000;
+
+/**
+ * Keeps linked mode consistent with the library build that produces the files
+ * it aliases.
+ *
+ * `vite build --watch` rewrites `dist-library` in place over ~20 s. Reacting to
+ * those file events reloads the page mid-write, and `library.mjs` carries its
+ * entire named-export block in its last few percent: a truncated read is still
+ * valid JS with zero exports, so the module link fails and nothing recovers it
+ * — worst in the Teams tab, which is an iframe with no reload affordance and no
+ * React boundary that could catch a link-time error.
+ *
+ * So file events under `dist-library` are swallowed, and the build's own
+ * completion status drives both halves instead: reloads wait for it, and reads
+ * of those files are held while a build is in flight (which also covers a
+ * manual refresh, and `component-kit-host`'s `emptyOutDir` window). Without a
+ * status file — an older frontend build — everything falls back to the
+ * unguarded behaviour rather than going quiet.
+ */
+const linkedFrontendLibraryPlugin = (enabled: boolean): Plugin => {
+  if (!enabled) {
+    return { name: "linked-frontend-library" };
+  }
+
+  const distLibraryDir = path.resolve(__dirname, "../frontend/dist-library");
+  const statusPaths = LIBRARY_BUILD_KEYS.map((key) =>
+    libraryBuildStatusPath(distLibraryDir, key),
+  );
+
+  const isDistLibraryFile = (filePath: string): boolean => {
+    const resolved = path.resolve(filePath);
+    return (
+      resolved === distLibraryDir ||
+      resolved.startsWith(`${distLibraryDir}${path.sep}`)
+    );
+  };
+
+  const hasBuildStatus = (): boolean => statusPaths.some(fs.existsSync);
+
+  const requestTargetsDistLibrary = (url: string): boolean => {
+    const pathname = url.split("?")[0].split("#")[0];
+    const fsIndex = pathname.indexOf("/@fs/");
+    if (fsIndex === -1) {
+      return false;
+    }
+
+    try {
+      return isDistLibraryFile(
+        decodeURIComponent(pathname.slice(fsIndex + "/@fs".length)),
+      );
+    } catch {
+      return false;
+    }
+  };
+
+  const buildInFlight = (): boolean =>
+    isLibraryBuildInFlight(
+      readLibraryBuildStatuses(distLibraryDir),
+      Date.now(),
+    );
+
+  let lastFingerprint = "";
+  let reloadTimer: ReturnType<typeof setTimeout> | undefined;
+  let lastHoldLogAt = 0;
+
+  return {
+    name: "linked-frontend-library",
+    // The legacy handleHotUpdate hook runs only for update events in vite 6;
+    // component-kit-host's emptyOutDir deletes loaded files at each rebuild's
+    // BUNDLE_START, and those delete events must be swallowed too.
+    hotUpdate(ctx) {
+      if (hasBuildStatus() && isDistLibraryFile(ctx.file)) {
+        return [];
+      }
+    },
+    configureServer(server: ViteDevServer) {
+      lastFingerprint = libraryBuildStatusFingerprint(
+        readLibraryBuildStatuses(distLibraryDir),
+      );
+
+      if (!hasBuildStatus()) {
+        server.config.logger.warn(
+          "[linked-frontend-library] no build status in ../frontend/dist-library; " +
+            "library rebuilds fall back to unguarded reloads. Run `pnpm --dir ../frontend build:lib`.",
+        );
+      }
+
+      const invalidateDistLibraryModules = (): number => {
+        let invalidated = 0;
+        for (const [file, modules] of server.moduleGraph.fileToModulesMap) {
+          if (!isDistLibraryFile(file)) {
+            continue;
+          }
+
+          for (const module of modules) {
+            server.moduleGraph.invalidateModule(module);
+            invalidated += 1;
+          }
+        }
+
+        return invalidated;
+      };
+
+      const scheduleReload = (): void => {
+        if (reloadTimer) {
+          clearTimeout(reloadTimer);
+        }
+
+        reloadTimer = setTimeout(() => {
+          reloadTimer = undefined;
+          if (buildInFlight()) {
+            scheduleReload();
+            return;
+          }
+
+          const statuses = readLibraryBuildStatuses(distLibraryDir);
+          const fingerprint = libraryBuildStatusFingerprint(statuses);
+          if (fingerprint === lastFingerprint) {
+            return;
+          }
+          lastFingerprint = fingerprint;
+
+          const failed = Object.entries(statuses).filter(
+            ([, status]) => status.state === "failed",
+          );
+          if (failed.length > 0) {
+            server.config.logger.warn(
+              `[linked-frontend-library] ${failed
+                .map(([key]) => key)
+                .join(", ")} build failed; keeping the current bundle loaded`,
+            );
+            return;
+          }
+
+          console.log(
+            `[linked-frontend-library] library rebuild complete (${invalidateDistLibraryModules()} modules invalidated); reloading add-in clients`,
+          );
+          server.ws.send({ type: "full-reload" });
+        }, LINKED_LIBRARY_RELOAD_DEBOUNCE_MS);
+      };
+
+      const onStatusChange = (filePath: string) => {
+        if (statusPaths.includes(path.resolve(filePath))) {
+          scheduleReload();
+        }
+      };
+
+      server.watcher.add(statusPaths);
+      server.watcher.on("add", onStatusChange);
+      server.watcher.on("change", onStatusChange);
+
+      server.middlewares.use((request, _response, next) => {
+        if (
+          !request.url ||
+          !requestTargetsDistLibrary(request.url) ||
+          !buildInFlight()
+        ) {
+          next();
+          return;
+        }
+
+        const now = Date.now();
+        if (now - lastHoldLogAt > LINKED_LIBRARY_HOLD_LOG_INTERVAL_MS) {
+          lastHoldLogAt = now;
+          console.log(
+            "[linked-frontend-library] library build in progress; holding dist-library requests until it completes",
+          );
+        }
+
+        const deadline = now + LINKED_LIBRARY_REQUEST_MAX_WAIT_MS;
+        const poll = () => {
+          if (!buildInFlight()) {
+            next();
+            return;
+          }
+
+          if (Date.now() >= deadline) {
+            server.config.logger.warn(
+              "[linked-frontend-library] library build still running; serving dist-library as-is",
+            );
+            next();
+            return;
+          }
+
+          setTimeout(poll, LINKED_LIBRARY_REQUEST_POLL_MS);
+        };
+
+        setTimeout(poll, LINKED_LIBRARY_REQUEST_POLL_MS);
+      });
+    },
+  };
+};
+
 export default defineConfig(({ mode }) => {
   const env = loadOfficeAddinEnv(mode);
   const apiRootUrl = env.VITE_API_ROOT_URL;
@@ -597,6 +804,7 @@ export default defineConfig(({ mode }) => {
       stageFrontendVoiceRuntimeAssetsPlugin(),
       rewriteLibraryWorkerUrlsPlugin(isDevServer),
       watchLinkedFrontendPublicOutputPlugin(linkedFrontend),
+      linkedFrontendLibraryPlugin(linkedFrontend && isDevServer),
       // Build: emits the manifest the backend injects (add-in mount path).
       // Linked dev: injects the map itself, resolving specifiers through the
       // built library's manifest so kit and app share module instances. The

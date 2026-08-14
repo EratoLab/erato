@@ -3,8 +3,11 @@ import react from "@vitejs/plugin-react";
 import { lingui } from "@lingui/vite-plugin";
 import path from "node:path";
 
+import { libraryBuildStatusPlugin } from "./library-build-status";
 import { browserOnlyBuildPlugin } from "./vite.browser-only-build";
 import { createVoiceRuntimePackageAssetsPlugin } from "./vite.voice-runtime-assets";
+
+const DIST_LIBRARY_DIR = path.resolve(__dirname, "dist-library");
 
 export default defineConfig(({ mode }) => {
   const isLibraryDevBuild = mode === "library-dev";
@@ -23,6 +26,10 @@ export default defineConfig(({ mode }) => {
         outputBasePath: "voice-runtime",
       }),
       browserOnlyBuildPlugin(),
+      libraryBuildStatusPlugin({
+        distLibraryDir: DIST_LIBRARY_DIR,
+        key: "library",
+      }),
     ],
     resolve: {
       alias: {
