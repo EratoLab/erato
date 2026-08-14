@@ -68,7 +68,7 @@ describe("htmlToPlainText", () => {
       htmlToPlainText(
         "<table><tr><td>Price</td><td>40</td></tr><tr><td>Tax</td><td>5</td></tr></table>",
       ),
-    ).toBe("Price | 40\n\nTax | 5");
+    ).toBe("Price | 40\nTax | 5");
   });
 
   it("separates header cells and cells holding block content", () => {
@@ -76,7 +76,33 @@ describe("htmlToPlainText", () => {
       htmlToPlainText(
         "<table>\n  <tr>\n    <th>Item</th>\n    <th>Qty</th>\n  </tr>\n  <tr>\n    <td><p>Bolt</p></td>\n    <td>7</td>\n  </tr>\n</table>",
       ),
-    ).toBe("Item | Qty\n\nBolt | 7");
+    ).toBe("Item | Qty\nBolt | 7");
+  });
+
+  it("keeps a row whose first cell is empty on its own line", () => {
+    // The ordinary shape of a pasted cross-tab. The empty cell must hold its
+    // column rather than letting the next one weld onto the row above.
+    expect(
+      htmlToPlainText(
+        "<table><tr><th>Name</th><th>Qty</th></tr><tr><td></td><td>7</td></tr><tr><td>Nut</td><td>9</td></tr></table>",
+      ),
+    ).toBe("Name | Qty\n| 7\nNut | 9");
+  });
+
+  it("does not weld prose onto a following table cell", () => {
+    expect(
+      htmlToPlainText(
+        "<p>Summary</p><table><tr><td></td><td>X</td></tr></table>",
+      ),
+    ).toBe("Summary\n| X");
+  });
+
+  it("keeps adjacent tables apart", () => {
+    expect(
+      htmlToPlainText(
+        "<table><tr><td>a</td><td>b</td></tr></table><table><tr><td></td><td>c</td></tr></table>",
+      ),
+    ).toBe("a | b\n| c");
   });
 
   it("keeps indentation and blank lines inside a code fence", () => {

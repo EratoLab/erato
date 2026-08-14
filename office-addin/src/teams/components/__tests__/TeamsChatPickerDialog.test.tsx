@@ -433,11 +433,7 @@ function Opener() {
 function AttachedProbe() {
   const { attachedTranscript } = useTeamsChatPicker();
   if (!attachedTranscript) return null;
-  return (
-    <div data-testid="attached-transcript">
-      {attachedTranscript.fileName}:{attachedTranscript.sections.length}
-    </div>
-  );
+  return <div data-testid="attached-transcript">{attachedTranscript.name}</div>;
 }
 
 function renderPicker() {
@@ -575,7 +571,7 @@ describe("TeamsChatPickerDialog", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("keeps the delivered transcript's sections for the composer preview", async () => {
+  it("keeps the delivered transcript file for the composer preview", async () => {
     renderPicker();
     fireEvent.click(selectChat());
 
@@ -585,7 +581,7 @@ describe("TeamsChatPickerDialog", () => {
     await waitFor(() => expect(uploads).toHaveLength(1));
 
     expect(screen.getByTestId("attached-transcript")).toHaveTextContent(
-      "teams-Product_sync.md:1",
+      "teams-Product_sync.md",
     );
   });
 

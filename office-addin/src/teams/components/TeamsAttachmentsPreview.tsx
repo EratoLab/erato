@@ -5,6 +5,7 @@ import {
 import { t } from "@lingui/core/macro";
 import { useMemo } from "react";
 
+import { useTeamsTranscriptIndex } from "../hooks/useTeamsTranscriptIndex";
 import { useTeamsChatPicker } from "../providers/TeamsChatPickerProvider";
 import { buildTeamsAttachmentGroups } from "../utils/teamsAttachmentGroups";
 
@@ -15,19 +16,33 @@ import type { FileAttachmentsPreviewProps } from "@erato/frontend/library";
  * shown as the conversation it came from, with its images and shared files
  * sitting under the messages they arrived with.
  *
+ * The conversation is read out of the transcript file itself, which is the one
+ * description of it that outlives this session.
+ *
  * Anything the picker did not produce — a file added by another route, or a
- * transcript whose sections this session no longer holds — keeps the ordinary
- * flat chips underneath.
+ * transcript whose index block cannot be read — keeps the ordinary flat chips
+ * underneath.
  */
 export function TeamsAttachmentsPreview(props: FileAttachmentsPreviewProps) {
   const { attachedTranscript } = useTeamsChatPicker();
+  const { index, isReading } = useTeamsTranscriptIndex(attachedTranscript);
   const { attachedFiles } = props;
   const preview = useMemo(
-    () => buildTeamsAttachmentGroups(attachedTranscript, attachedFiles),
-    [attachedTranscript, attachedFiles],
+    () =>
+      buildTeamsAttachmentGroups(
+        attachedTranscript && index
+          ? { fileName: attachedTranscript.name, index }
+          : null,
+        attachedFiles,
+      ),
+    [attachedTranscript, index, attachedFiles],
   );
 
   if (!preview) {
+    // Reading an in-memory file settles within a frame or two. Leaving the
+    // region empty for that long beats mounting the flat chips and pulling them
+    // straight back out from under the user the moment the block parses.
+    if (isReading) return null;
     return <FileAttachmentsPreview {...props} />;
   }
 

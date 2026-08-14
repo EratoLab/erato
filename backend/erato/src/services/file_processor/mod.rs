@@ -1291,6 +1291,15 @@ fn strip_empty_markdown_table_rows(text: &str) -> String {
 /// Names the machine-readable index the Teams add-in appends to a transcript.
 const TRANSCRIPT_INDEX_MARKER: &str = "erato:teams-transcript";
 
+/// Whether text beginning at the marker opens a real index block, i.e. the
+/// marker is followed by the serializer's `v<n>` version token.
+fn starts_index_block(from_marker: &str) -> bool {
+    let mut after = from_marker[TRANSCRIPT_INDEX_MARKER.len()..]
+        .trim_start()
+        .chars();
+    after.next() == Some('v') && after.next().is_some_and(|char| char.is_ascii_digit())
+}
+
 /// Removes that index from the extracted text.
 ///
 /// It carries message ids, deep links and the file-to-message join: rendering
@@ -1298,9 +1307,14 @@ const TRANSCRIPT_INDEX_MARKER: &str = "erato:teams-transcript";
 /// transcript so the two share one lifetime, and this is where the two part
 /// ways — every consumer of a file's text reaches it through `parse_file`.
 ///
-/// The span is bounded by the comment delimiters when they survived extraction
-/// and by the line otherwise, because a markdown renderer may have escaped them
-/// (`\<!--`) or dropped them; anything left on that line is payload either way.
+/// The span never leaves the line the marker sits on. The serializer writes the
+/// block as one line and JSON-escapes its payload, so a legitimate block cannot
+/// span two — while a message that merely names the marker would otherwise
+/// swallow every line up to the real block's terminator at the end of the file.
+///
+/// Within that line the span is bounded by the comment delimiters when they
+/// survived extraction and by the line otherwise, because a markdown renderer
+/// may have escaped them (`\<!--`) or dropped them.
 fn strip_transcript_index(content: &str) -> String {
     if !content.contains(TRANSCRIPT_INDEX_MARKER) {
         return content.to_string();
@@ -1309,6 +1323,18 @@ fn strip_transcript_index(content: &str) -> String {
     let mut kept = String::with_capacity(content.len());
     let mut rest = content;
     while let Some(found) = rest.find(TRANSCRIPT_INDEX_MARKER) {
+        let line_end = rest[found..]
+            .find('\n')
+            .map_or(rest.len(), |index| found + index);
+
+        // Prose that names the marker keeps its line; only the serializer's own
+        // `<marker> v<n>` head identifies a block worth removing.
+        if !starts_index_block(&rest[found..line_end]) {
+            kept.push_str(&rest[..line_end]);
+            rest = &rest[line_end..];
+            continue;
+        }
+
         let line_start = rest[..found].rfind('\n').map_or(0, |index| index + 1);
         let mut start = rest[line_start..found]
             .rfind("<!--")
@@ -1317,13 +1343,10 @@ fn strip_transcript_index(content: &str) -> String {
         if rest[..start].ends_with('\\') {
             start -= 1;
         }
-        let line_end = rest[found..]
-            .find('\n')
-            .map_or(rest.len(), |index| found + index);
         let end = ["-->", "--\\>"]
             .iter()
             .filter_map(|terminator| {
-                rest[found..]
+                rest[found..line_end]
                     .find(terminator)
                     .map(|index| found + index + terminator.len())
             })
@@ -3158,5 +3181,40 @@ Content-Type: text/html; charset=utf-8
 
         let untouched = "prose with <!-- an ordinary comment --> in it\n";
         assert_eq!(strip_transcript_index(untouched), untouched);
+    }
+
+    #[test]
+    fn strip_transcript_index_keeps_prose_that_only_names_the_marker() {
+        // A message discussing the format, followed by a real block. The block's
+        // terminator must not reach backwards and swallow the conversation.
+        let content = concat!(
+            "[1] Ada Lovelace (09:14):\n",
+            "We should name the block erato:teams-transcript I think.\n",
+            "\n",
+            "[2] Grace Hopper (09:16):\n",
+            "Sounds good, ship it.\n",
+            "\n",
+            "<!-- erato:teams-transcript v1 {\"version\":1} -->\n",
+        );
+
+        let stripped = strip_transcript_index(content);
+
+        assert!(stripped.contains("We should name the block"));
+        assert!(stripped.contains("Sounds good, ship it."));
+        assert!(!stripped.contains("{\"version\":1}"));
+        assert_eq!(stripped.matches("[2] Grace Hopper").count(), 1);
+    }
+
+    #[test]
+    fn strip_transcript_index_never_crosses_a_line() {
+        // Marker without a terminator on its own line: only that line goes, even
+        // though a later line closes a comment.
+        let content = "keep me\nerato:teams-transcript v1 {\"version\":1}\nalso keep -->\ntail\n";
+        let stripped = strip_transcript_index(content);
+
+        assert!(stripped.contains("keep me"));
+        assert!(stripped.contains("also keep"));
+        assert!(stripped.contains("tail"));
+        assert!(!stripped.contains("{\"version\":1}"));
     }
 }

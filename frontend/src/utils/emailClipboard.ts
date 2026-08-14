@@ -31,10 +31,10 @@ const BLOCK_TAGS = new Set([
   "P",
   "PRE",
   "SECTION",
-  "TABLE",
-  "TR",
   "UL",
 ]);
+
+const ROW_TAGS = new Set(["TABLE", "TR"]);
 
 /**
  * Marks the boundary between two cells of a row while the tree is walked. A
@@ -46,6 +46,19 @@ const BLOCK_TAGS = new Set([
  */
 const CELL_BREAK = "\u0000";
 const CELL_BREAK_RUN = new RegExp(`[ \\t\\n]*${CELL_BREAK}[ \\t\\n]*`, "g");
+
+/**
+ * Marks a row or table boundary. A plain newline cannot stand in: the cell-break
+ * run absorbs the whitespace around it, so a row whose first cell is empty — the
+ * ordinary shape of a pasted cross-tab — would let the following cell reach back
+ * across the boundary and weld itself onto the previous row. Resolved to a
+ * newline only after the cell breaks are, so absorption can never cross it.
+ */
+const ROW_BREAK = "\u0001";
+const ROW_BREAK_RUN = new RegExp(
+  `[ \\t\\n${ROW_BREAK}]*${ROW_BREAK}[ \\t\\n${ROW_BREAK}]*`,
+  "g",
+);
 
 /**
  * Converts an HTML fragment to readable plain text. Unlike bare
@@ -72,6 +85,12 @@ export function htmlToPlainText(html: string): string {
       parts.push("\n");
       return;
     }
+    if (ROW_TAGS.has(tag)) {
+      parts.push(ROW_BREAK);
+      node.childNodes.forEach(visit);
+      parts.push(ROW_BREAK);
+      return;
+    }
     if (tag === "TD" || tag === "TH") {
       if (isCell((node as Element).previousElementSibling)) {
         parts.push(CELL_BREAK);
@@ -89,7 +108,11 @@ export function htmlToPlainText(html: string): string {
     }
   };
   doc.body.childNodes.forEach(visit);
-  const text = parts.join("").replace(CELL_BREAK_RUN, " | ");
+  // Cell breaks first: they may absorb whitespace, but never a row boundary.
+  const text = parts
+    .join("")
+    .replace(CELL_BREAK_RUN, " | ")
+    .replace(ROW_BREAK_RUN, "\n");
   return mapOutsideCodeFences(text, (segment) =>
     segment.replace(/[ \t]*\n[ \t]*/g, "\n").replace(/\n{3,}/g, "\n\n"),
   ).trim();
