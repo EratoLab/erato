@@ -74,6 +74,11 @@ interface FilePreviewModalProps {
    * wrong explanation.
    */
   notPreviewableReason?: string;
+  /**
+   * The files this one arrived with. Forwarded to viewers that reference their
+   * siblings by name rather than carrying their bytes.
+   */
+  relatedFiles?: readonly FileUploadItem[];
 }
 
 /**
@@ -84,6 +89,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
   onClose,
   file,
   notPreviewableReason,
+  relatedFiles,
 }) => {
   if (!file) {
     return null;
@@ -129,6 +135,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
             filename={file.filename}
             url={url}
             mimeType={file.file_capability.mime_types[0]}
+            relatedFiles={relatedFiles}
           />
           {actionButtons}
         </>

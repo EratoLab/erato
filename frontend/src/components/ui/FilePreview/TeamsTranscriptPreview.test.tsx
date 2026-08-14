@@ -1,5 +1,5 @@
 import { I18nProvider } from "@lingui/react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
@@ -11,6 +11,7 @@ import {
 
 import { TeamsTranscriptPreview } from "./TeamsTranscriptPreview";
 
+import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { TeamsTranscriptIndex } from "@/utils/teams/teamsTranscriptIndex";
 import type { Messages } from "@lingui/core";
 import type React from "react";
@@ -100,6 +101,12 @@ function respondWith(body: string, ok = true) {
   );
 }
 
+vi.mock("./PdfPreview", () => ({
+  PdfPreview: ({ url }: { url: string }) => (
+    <div data-testid="file-preview-pdf" data-url={url} />
+  ),
+}));
+
 describe("TeamsTranscriptPreview", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -124,12 +131,41 @@ describe("TeamsTranscriptPreview", () => {
     expect(screen.queryByText(/teams-file-abcd1234/)).toBeNull();
   });
 
-  it("leaves the chips inert, since the modal holds only this one file", async () => {
+  it("leaves the chips inert when the caller has no sibling files", async () => {
     respondWith(transcript());
     await renderPreview(<TeamsTranscriptPreview {...FILE} />);
 
     await screen.findByText(/Q3 plan/);
     expect(screen.queryByRole("button", { name: /Q3 plan/ })).toBeNull();
+  });
+
+  it("opens an upload the transcript names, joined by filename", async () => {
+    // The transcript records only names; the bytes live in the sibling upload,
+    // so the chip is clickable exactly when the caller supplies it.
+    const upload = {
+      id: "upload-1",
+      filename: "teams-file-abcd1234-plan.pdf",
+      download_url: "https://files.example.com/download/plan.pdf",
+      preview_url: "https://files.example.com/preview/plan.pdf",
+      file_capability: { mime_types: ["application/pdf"] },
+    } as unknown as FileUploadItem;
+
+    respondWith(transcript());
+    await renderPreview(
+      <TeamsTranscriptPreview {...FILE} relatedFiles={[upload]} />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /Q3 plan/ }));
+
+    // Navigates in place, as the email preview does, with a way back.
+    expect(
+      screen.getByRole("button", { name: /back to conversation/i }),
+    ).toBeVisible();
+    // The PDF viewer is lazy-loaded behind Suspense.
+    expect(await screen.findByTestId("file-preview-pdf")).toHaveAttribute(
+      "data-url",
+      "https://files.example.com/preview/plan.pdf",
+    );
   });
 
   it("falls back to the markdown when the file carries no block", async () => {

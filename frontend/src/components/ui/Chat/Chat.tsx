@@ -578,6 +578,7 @@ export const Chat = ({
   const {
     isPreviewModalOpen,
     fileToPreview,
+    relatedFiles: previewRelatedFiles,
     openPreviewModal,
     closePreviewModal,
   } = useFilePreviewModal();
@@ -903,6 +904,7 @@ export const Chat = ({
           isOpen={isPreviewModalOpen}
           onClose={closePreviewModal}
           file={fileToPreview}
+          relatedFiles={previewRelatedFiles}
         />
 
         {/* Render the Feedback View Dialog */}

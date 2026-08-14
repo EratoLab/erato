@@ -1,12 +1,16 @@
 import { t } from "@lingui/core/macro";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
+import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { TeamsConversationView } from "@/components/ui/Teams/TeamsConversationView";
-import { LoadingIcon } from "@/components/ui/icons";
+import { ArrowLeftIcon, LoadingIcon } from "@/components/ui/icons";
 import { createLogger } from "@/utils/debugLogger";
 import { parseTeamsTranscriptIndex } from "@/utils/teams/teamsTranscriptIndex";
 
+import { FilePreviewContent } from "./FilePreviewContent";
+
+import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { TeamsTranscriptIndex } from "@/utils/teams/teamsTranscriptIndex";
 
 const logger = createLogger("UI", "TeamsTranscriptPreview");
@@ -14,6 +18,13 @@ const logger = createLogger("UI", "TeamsTranscriptPreview");
 interface TeamsTranscriptPreviewProps {
   filename: string;
   url: string;
+  /**
+   * The other uploads that arrived with this one. A transcript records only
+   * the filenames of what rode along, so the bytes have to be found among the
+   * chat's own files; without them the chips still name what was shared, they
+   * just cannot be opened.
+   */
+  relatedFiles?: readonly FileUploadItem[];
 }
 
 /**
@@ -40,8 +51,18 @@ type LoadState =
 
 export const TeamsTranscriptPreview: React.FC<TeamsTranscriptPreviewProps> = ({
   url,
+  relatedFiles,
 }) => {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
+  const [selected, setSelected] = useState<FileUploadItem | null>(null);
+
+  // The minted upload name is the join key the transcript recorded, and it is
+  // exactly the filename the upload was stored under.
+  const resolveAsset = useCallback(
+    (asset: { name: string }) =>
+      relatedFiles?.find((file) => file.filename === asset.name) ?? null,
+    [relatedFiles],
+  );
 
   useEffect(() => {
     let aborted = false;
@@ -70,6 +91,31 @@ export const TeamsTranscriptPreview: React.FC<TeamsTranscriptPreviewProps> = ({
       aborted = true;
     };
   }, [url]);
+
+  if (selected) {
+    return (
+      <div className="flex flex-col gap-3">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          icon={<ArrowLeftIcon className="size-4" aria-hidden="true" />}
+          onClick={() => setSelected(null)}
+          className="w-fit"
+        >
+          {t`Back to conversation`}
+        </Button>
+        <div className="truncate text-sm text-theme-fg-muted">
+          {selected.filename}
+        </div>
+        <FilePreviewContent
+          filename={selected.filename}
+          url={selected.preview_url ?? selected.download_url}
+          mimeType={selected.file_capability.mime_types[0]}
+        />
+      </div>
+    );
+  }
 
   if (state.kind === "loading") {
     return (
@@ -102,9 +148,13 @@ export const TeamsTranscriptPreview: React.FC<TeamsTranscriptPreviewProps> = ({
   return (
     <TeamsConversationView
       index={state.index}
-      // Nothing here holds the uploads a message carried — the modal is showing
-      // one stored file, not the set it arrived with — so the chips name what
-      // rode along without offering to open it.
+      resolveAsset={resolveAsset}
+      // `resolveAsset` only ever returns a member of this list, so matching on
+      // identity narrows back to the upload without asserting a type.
+      onFilePreview={(file) => {
+        const upload = relatedFiles?.find((candidate) => candidate === file);
+        if (upload) setSelected(upload);
+      }}
       onOpenInTeams={(message) => {
         window.open(message.deepLink, "_blank", "noopener,noreferrer"); // eslint-disable-line lingui/no-unlocalized-strings
       }}

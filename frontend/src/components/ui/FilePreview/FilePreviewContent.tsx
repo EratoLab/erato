@@ -11,6 +11,7 @@ import { PptxPreview } from "./PptxPreview";
 import { TeamsTranscriptPreview } from "./TeamsTranscriptPreview";
 import { XlsxPreview } from "./XlsxPreview";
 
+import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type React from "react";
 
 // PDFium and its plugin graph are the heaviest viewer in this bundle, and the
@@ -74,6 +75,12 @@ export interface FilePreviewContentProps {
    * `message/rfc822`). When absent, routing falls back to extension alone.
    */
   mimeType?: string;
+  /**
+   * Other files available beside this one. Only viewers that reference their
+   * siblings by name use it — a Teams transcript names the uploads that rode
+   * along with it but does not carry their bytes.
+   */
+  relatedFiles?: readonly FileUploadItem[];
 }
 
 /**
@@ -87,6 +94,7 @@ export const FilePreviewContent: React.FC<FilePreviewContentProps> = ({
   filename,
   url,
   mimeType,
+  relatedFiles,
 }) => {
   const extension = getExtension(filename);
   const isImage =
@@ -160,7 +168,13 @@ export const FilePreviewContent: React.FC<FilePreviewContentProps> = ({
   }
 
   if (isMarkdown) {
-    return <TeamsTranscriptPreview filename={filename} url={url} />;
+    return (
+      <TeamsTranscriptPreview
+        filename={filename}
+        url={url}
+        relatedFiles={relatedFiles}
+      />
+    );
   }
 
   return (

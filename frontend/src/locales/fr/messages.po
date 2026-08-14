@@ -3848,6 +3848,10 @@ msgstr "gain automatique : {autoGainControl}"
 #~ msgid "Back to Assistants"
 #~ msgstr ""
 
+#: src/components/ui/FilePreview/TeamsTranscriptPreview.tsx
+msgid "Back to conversation"
+msgstr "Retour à la conversation"
+
 #: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "Back to email"
 msgstr ""
