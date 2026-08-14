@@ -620,16 +620,40 @@ def clear_vite_cache() -> None:
     shutil.rmtree(VITE_CACHE_DIR, ignore_errors=True)
 
 
+def find_listener_on_port(port: int) -> str | None:
+    """Loopback address already serving `port`, checking both families.
+
+    A process bound only to [::1] does not collide with vite's own
+    `strictPort` (which binds `*`), yet macOS resolves `localhost` to ::1
+    first — so it silently shadows the add-in for anything using the
+    hostname, including the browser. Checking IPv4 alone calls such a port
+    free.
+    """
+    for family, address in (
+        (socket.AF_INET, "127.0.0.1"),
+        (socket.AF_INET6, "::1"),
+    ):
+        try:
+            with socket.socket(family, socket.SOCK_STREAM) as connection:
+                connection.settimeout(0.2)
+                if connection.connect_ex((address, port)) == 0:
+                    return address
+        except OSError:
+            continue
+
+    return None
+
+
 def can_connect_to_port(port: int) -> bool:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as connection:
-        connection.settimeout(0.2)
-        return connection.connect_ex(("127.0.0.1", port)) == 0
+    return find_listener_on_port(port) is not None
 
 
 def ensure_port_is_free(port: int, *, label: str) -> None:
-    if can_connect_to_port(port):
+    address = find_listener_on_port(port)
+    if address is not None:
         print(
-            f"{label} port {port} is already in use; stop the existing process and retry",
+            f"{label} port {port} is already in use on {address}; "
+            "stop the existing process and retry",
             file=sys.stderr,
         )
         sys.exit(1)

@@ -17,6 +17,25 @@ const RESTART_BACKOFF_RESET_MS = 30_000;
 // keeps the add-in dev server running in linked mode.
 const RESTART_MAX_CONSECUTIVE = 3;
 
+// The library bundle peaks just above node's default ~4 GB old-space while
+// rendering chunks, so the watch build dies of heap exhaustion on a default
+// heap. .github/workflows/docker-build.yml raises it the same way for the same
+// build; an inherited NODE_OPTIONS still wins.
+const DEFAULT_MAX_OLD_SPACE_SIZE_MB = 8192;
+
+const childEnv = () => {
+  const nodeOptions = process.env.NODE_OPTIONS ?? "";
+  if (nodeOptions.includes("max-old-space-size")) {
+    return process.env;
+  }
+
+  return {
+    ...process.env,
+    NODE_OPTIONS:
+      `${nodeOptions} --max-old-space-size=${DEFAULT_MAX_OLD_SPACE_SIZE_MB}`.trim(),
+  };
+};
+
 const supervisors = [];
 const suppressedWarnings = new Set();
 let shuttingDown = false;
@@ -122,7 +141,7 @@ function start(supervisor) {
   const startedAt = Date.now();
   const child = spawn(supervisor.command, supervisor.args, {
     cwd: process.cwd(),
-    env: process.env,
+    env: childEnv(),
     stdio: ["ignore", "pipe", "pipe"],
   });
 
