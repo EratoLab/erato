@@ -140,6 +140,44 @@ describe("FilePreviewModal", () => {
     );
   });
 
+  it("reaches the transcript renderer for a stored .md", () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve("# not a transcript\n"),
+      } as unknown as Response),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    // Regression: this modal keeps its own allow-list, separate from
+    // FilePreviewContent's routing. A type the renderer can draw but this gate
+    // omits never reaches it — the user gets "not available" instead.
+    renderWithTheme(
+      <FilePreviewModal
+        isOpen={true}
+        onClose={vi.fn()}
+        file={makeFile({
+          filename: "teams-chats-2.md",
+          download_url: "https://files.example.com/download/teams-chats-2.md",
+          preview_url: "https://files.example.com/preview/teams-chats-2.md",
+          file_capability:
+            FileTypeUtil.createMockFileCapability("teams-chats-2.md"),
+        })}
+      />,
+    );
+
+    // The transcript renderer fetches the file; that request is the proof it
+    // was reached. (The Download button renders in both branches, so its
+    // presence says nothing either way.)
+    expect(
+      screen.queryByText(/Preview is not available for this file type/i),
+    ).toBeNull();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://files.example.com/preview/teams-chats-2.md",
+    );
+  });
+
   it("previews XLSX files from the preview URL", () => {
     renderWithTheme(
       <FilePreviewModal

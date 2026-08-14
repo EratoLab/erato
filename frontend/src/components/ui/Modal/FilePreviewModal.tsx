@@ -22,6 +22,9 @@ const PPTX_MIME_TYPE =
 const XLSX_MIME_TYPE =
   // eslint-disable-next-line lingui/no-unlocalized-strings
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const MARKDOWN_MIME_TYPE =
+  // eslint-disable-next-line lingui/no-unlocalized-strings
+  "text/markdown";
 
 const getExtension = (filename: string): string =>
   filename.split(".").pop()?.toLowerCase() ?? "";
@@ -45,10 +48,15 @@ const resolvePreviewSource = (
     extension === "ppt" ||
     extension === "pptx" ||
     extension === "xlsx" ||
+    // Kept in step with FilePreviewContent's routing below: this gate decides
+    // whether that renderer is reached at all, so a type it can draw but this
+    // list omits shows the "not available" body instead.
+    extension === "md" ||
     mimeType === DOCX_MIME_TYPE ||
     mimeType === PPT_MIME_TYPE ||
     mimeType === PPTX_MIME_TYPE ||
-    mimeType === XLSX_MIME_TYPE
+    mimeType === XLSX_MIME_TYPE ||
+    mimeType === MARKDOWN_MIME_TYPE
   ) {
     return { url: previewUrl ?? "", canPreview: Boolean(previewUrl) };
   }
