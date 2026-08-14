@@ -99,12 +99,33 @@ EXPECTED_OAUTH2_PROXY_UPSTREAMS = """upstreams = [
 ]"""
 
 
+# The frontend builds peak within a few hundred MB of node's default old-space
+# ceiling, so they die of heap exhaustion on some runs and not others. The
+# frontend package scripts and scripts/watch-library.mjs raise it the same way;
+# this covers the app build dev.py invokes directly, bypassing those scripts.
+# An inherited value still wins.
+DEFAULT_MAX_OLD_SPACE_SIZE_MB = 8192
+
+
+def node_build_env() -> dict[str, str]:
+    env = dict(os.environ)
+    node_options = env.get("NODE_OPTIONS", "")
+    if "max-old-space-size" in node_options:
+        return env
+
+    env["NODE_OPTIONS"] = (
+        f"{node_options} --max-old-space-size={DEFAULT_MAX_OLD_SPACE_SIZE_MB}".strip()
+    )
+    return env
+
+
 def run_command(
     command: list[str],
     *,
     cwd: Path | None = None,
     capture_output: bool = False,
     check: bool = True,
+    env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         command,
@@ -112,6 +133,7 @@ def run_command(
         check=check,
         capture_output=capture_output,
         text=True,
+        env=env,
     )
 
 
@@ -131,12 +153,14 @@ def run_quiet_command(
     success_message: str | None = None,
     print_stdout_on_success: bool = False,
     print_stderr_on_success: bool = True,
+    env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     result = run_command(
         command,
         cwd=cwd,
         capture_output=True,
         check=False,
+        env=env,
     )
 
     if result.returncode != 0:
@@ -840,6 +864,7 @@ def build_frontend_app() -> None:
         print_stdout_on_success=False,
         print_stderr_on_success=True,
         success_message="Frontend app output ready",
+        env=node_build_env(),
     )
 
 

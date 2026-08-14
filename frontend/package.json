@@ -33,7 +33,7 @@
   "scripts": {
     "dev": "pnpm i18n:compile && vite",
     "build": "pnpm build:app",
-    "build:app": "pnpm generate:component-registry-shared && pnpm i18n:compile && tsc && vite build",
+    "build:app": "pnpm generate:component-registry-shared && pnpm i18n:compile && tsc && NODE_OPTIONS=\"${NODE_OPTIONS:---max-old-space-size=8192}\" vite build",
     "build:lib": "node scripts/prune-dist-library.mjs && pnpm generate:component-registry-shared && tsc -p tsconfig.lib.json && node scripts/rewrite-library-dts-paths.mjs && NODE_OPTIONS=\"${NODE_OPTIONS:---max-old-space-size=8192}\" vite build --config vite.library.config.ts --mode library && vite build --config vite.component-kit-host.config.ts && node scripts/pack-library.mjs",
     "build:lib:dev": "node scripts/prune-dist-library.mjs && pnpm generate:component-registry-shared && NODE_OPTIONS=\"${NODE_OPTIONS:---max-old-space-size=8192}\" vite build --config vite.library.config.ts --mode library-dev && vite build --config vite.component-kit-host.config.ts",
     "build:lib:watch": "node scripts/watch-library.mjs",
