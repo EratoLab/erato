@@ -131,11 +131,17 @@ function pipeOutput(name, stream) {
   rl.on("line", (line) => emitLine(name, line));
 }
 
+// SIGTERM/SIGINT reach children directly during an intentional teardown —
+// office-addin/scripts/dev.py kills the whole process group — possibly before
+// this process's own signal handler has set `shuttingDown`. Anything else
+// (SIGABRT from a heap-exhausted build, SIGKILL) is a crash like any other.
+const TEARDOWN_SIGNALS = new Set(["SIGTERM", "SIGINT"]);
+
 /**
  * None of these children is expected to exit — they are all watchers — so any
  * exit is a failure and gets restarted with backoff. Taking the whole stack
- * down instead (as this did) also killed the add-in dev server, which is the
- * one process that lets a browser recover on its own once the build is fixed.
+ * down instead would also kill the add-in dev server, which is the one
+ * process that lets a browser recover on its own once the build is fixed.
  */
 function start(supervisor) {
   const startedAt = Date.now();
@@ -151,7 +157,7 @@ function start(supervisor) {
 
   child.on("exit", (code, signal) => {
     supervisor.child = null;
-    if (shuttingDown || signal) {
+    if (shuttingDown || (signal && TEARDOWN_SIGNALS.has(signal))) {
       return;
     }
 
@@ -160,10 +166,11 @@ function start(supervisor) {
       supervisor.consecutiveFailures = 0;
     }
 
+    const exitDescription = signal ? `signal ${signal}` : `code ${code}`;
     supervisor.consecutiveFailures += 1;
     if (supervisor.consecutiveFailures > RESTART_MAX_CONSECUTIVE) {
       console.error(
-        `[watch-library] ${supervisor.name} failed ${supervisor.consecutiveFailures} times in a row (last code ${code}); giving up`,
+        `[watch-library] ${supervisor.name} failed ${supervisor.consecutiveFailures} times in a row (last exit ${exitDescription}); giving up`,
       );
       shutdown(code ?? 1);
       return;
@@ -171,7 +178,7 @@ function start(supervisor) {
 
     const delayMs = supervisor.restartDelayMs;
     console.error(
-      `[watch-library] ${supervisor.name} exited with code ${code}; restarting in ${delayMs / 1000}s`,
+      `[watch-library] ${supervisor.name} exited with ${exitDescription}; restarting in ${delayMs / 1000}s`,
     );
     supervisor.restartDelayMs = Math.min(delayMs * 2, RESTART_MAX_DELAY_MS);
     supervisor.restartTimer = setTimeout(() => {
