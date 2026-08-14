@@ -14,6 +14,7 @@ import {
 import {
   isLibraryBuildInFlight,
   LIBRARY_BUILD_KEYS,
+  LIBRARY_BUILD_STALE_AFTER_MS,
   libraryBuildStatusFingerprint,
   libraryBuildStatusPath,
   readLibraryBuildStatuses,
@@ -556,7 +557,9 @@ const watchLinkedFrontendPublicOutputPlugin = (enabled: boolean) => {
 
 const LINKED_LIBRARY_RELOAD_DEBOUNCE_MS = 200;
 const LINKED_LIBRARY_REQUEST_POLL_MS = 50;
-const LINKED_LIBRARY_REQUEST_MAX_WAIT_MS = 30_000;
+// A held request never outlives the staleness window: past it,
+// isLibraryBuildInFlight treats the build as abandoned anyway.
+const LINKED_LIBRARY_REQUEST_MAX_WAIT_MS = LIBRARY_BUILD_STALE_AFTER_MS;
 const LINKED_LIBRARY_HOLD_LOG_INTERVAL_MS = 2_000;
 
 /**
@@ -625,7 +628,10 @@ const linkedFrontendLibraryPlugin = (enabled: boolean): Plugin => {
 
   return {
     name: "linked-frontend-library",
-    handleHotUpdate(ctx) {
+    // The legacy handleHotUpdate hook runs only for update events in vite 6;
+    // component-kit-host's emptyOutDir deletes loaded files at each rebuild's
+    // BUNDLE_START, and those delete events must be swallowed too.
+    hotUpdate(ctx) {
       if (hasBuildStatus() && isDistLibraryFile(ctx.file)) {
         return [];
       }
