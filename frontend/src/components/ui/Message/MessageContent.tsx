@@ -427,6 +427,17 @@ const MARKDOWN_IMAGE_STYLE = {
 } as const;
 const UNRESOLVED_IMAGE_ANCHOR = "#unresolved-link";
 
+/** A deep-link anchor, accepted as either "?page=4" or the "#page=4" form. */
+const getAnchorParam = (urlObj: URL, name: string): string | null => {
+  const query = urlObj.searchParams.get(name);
+  if (query) {
+    return query;
+  }
+  // eslint-disable-next-line lingui/no-unlocalized-strings
+  const hashMatch = urlObj.hash.match(new RegExp(`^#${name}=(\\d+)$`));
+  return hashMatch ? hashMatch[1] : null;
+};
+
 const getEratoFileIdFromUrl = (url: string): string | null => {
   // eslint-disable-next-line lingui/no-unlocalized-strings
   if (!url.startsWith("erato-file://")) {
@@ -536,23 +547,27 @@ export const MessageContent = memo(function MessageContent({
           return null;
         }
 
-        let pageParam = urlObj.searchParams.get("page");
-        if (!pageParam && urlObj.hash) {
-          const hashMatch = urlObj.hash.match(/^#page=(\d+)$/);
-          if (hashMatch) {
-            pageParam = hashMatch[1];
-          }
-        }
+        // Which anchor the file's viewer honours: PDFs jump to a page, Teams
+        // transcripts to the message ordinal a citation names.
+        const filename = file.filename.toLowerCase();
+        const anchorName = filename.endsWith(".pdf")
+          ? "page"
+          : filename.endsWith(".md")
+            ? "msg"
+            : null;
+        const anchorValue = anchorName
+          ? getAnchorParam(urlObj, anchorName)
+          : null;
 
         const resolvedHref =
-          pageParam && previewUrl
-            ? `${previewUrl}#page=${pageParam}`
+          anchorValue && previewUrl
+            ? `${previewUrl}#${anchorName}=${anchorValue}`
             : (previewUrl ?? "#");
 
         return {
           resolvedHref,
           previewFile:
-            pageParam && file.filename.toLowerCase().endsWith(".pdf")
+            anchorValue && previewUrl
               ? {
                   ...file,
                   preview_url: resolvedHref,

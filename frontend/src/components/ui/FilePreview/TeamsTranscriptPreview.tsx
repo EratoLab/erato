@@ -40,6 +40,20 @@ type LoadState =
   /** Readable, but carrying no block this build understands. */
   | { kind: "markdown"; text: string };
 
+const MESSAGE_ANCHOR = "#msg=";
+
+/**
+ * Citations deep-link into a transcript as "…teams-chat.md#msg=7" (see the
+ * erato-file:// handling in MessageContent). The fragment never reaches the
+ * server — fetch strips it — so it only has to be read out here.
+ */
+const parseMessageAnchor = (url: string): number | null => {
+  const anchorAt = url.lastIndexOf(MESSAGE_ANCHOR);
+  if (anchorAt === -1) return null;
+  const ordinal = Number(url.slice(anchorAt + MESSAGE_ANCHOR.length));
+  return Number.isInteger(ordinal) && ordinal > 0 ? ordinal : null;
+};
+
 /**
  * A stored Teams transcript, opened as the conversation it was taken from.
  *
@@ -154,6 +168,7 @@ export const TeamsTranscriptPreview: React.FC<TeamsTranscriptPreviewProps> = ({
   return (
     <TeamsConversationView
       index={state.index}
+      focusOrdinal={parseMessageAnchor(url)}
       resolveAsset={resolveAsset}
       // `resolveAsset` only ever returns a member of this list, so matching on
       // identity narrows back to the upload without asserting a type.

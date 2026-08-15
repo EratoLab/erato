@@ -495,6 +495,37 @@ describe("MessageContent", () => {
     );
   });
 
+  it("passes Teams message anchors through to the preview callback for erato-file links", () => {
+    const onFileLinkPreview = vi.fn();
+    const file = makeFile({
+      filename: "teams-Product_sync.md",
+      download_url: "https://files.example.com/teams-Product_sync.md",
+      preview_url: "https://files.example.com/preview/teams-Product_sync.md",
+      file_capability: FileTypeUtil.createMockFileCapability(
+        "teams-Product_sync.md",
+      ),
+    });
+
+    renderWithTheme(
+      <MessageContent
+        content={textContent("[3](erato-file://file_123#msg=3)")}
+        filesById={{ [file.id]: file }}
+        onFileLinkPreview={onFileLinkPreview}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("3"));
+
+    expect(onFileLinkPreview).toHaveBeenCalledTimes(1);
+    expect(onFileLinkPreview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "file_123",
+        preview_url:
+          "https://files.example.com/preview/teams-Product_sync.md#msg=3",
+      }),
+    );
+  });
+
   it("resolves preview-only erato-file links without requiring a download url", () => {
     const onFileLinkPreview = vi.fn();
     const file = makeFile({

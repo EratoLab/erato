@@ -313,6 +313,33 @@ describe("TeamsConversationView", () => {
     );
   });
 
+  it("reveals and highlights the cited message", async () => {
+    const scrollIntoView = vi.spyOn(Element.prototype, "scrollIntoView");
+    const { container } = await renderView(
+      <TeamsConversationView
+        index={index([message(1), message(2), message(3)])}
+        focusOrdinal={2}
+      />,
+    );
+
+    const cited = container.querySelector('[data-ordinal="2"]');
+    expect(cited).toHaveClass("ring-2");
+    expect(container.querySelector('[data-ordinal="1"]')).not.toHaveClass(
+      "ring-2",
+    );
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "center" });
+    scrollIntoView.mockRestore();
+  });
+
+  it("scrolls nowhere when no message is cited", async () => {
+    const scrollIntoView = vi.spyOn(Element.prototype, "scrollIntoView");
+    await renderView(<TeamsConversationView index={index([message(1)])} />);
+
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    scrollIntoView.mockRestore();
+  });
+
   it("drops the heading when the host already names the conversation", async () => {
     await renderView(
       <TeamsConversationView index={index([message(1)])} showTitle={false} />,

@@ -168,6 +168,18 @@ describe("TeamsTranscriptPreview", () => {
     );
   });
 
+  it("reveals the message a citation's #msg anchor names", async () => {
+    const scrollIntoView = vi.spyOn(Element.prototype, "scrollIntoView");
+    respondWith(transcript());
+    const { container } = await renderPreview(
+      <TeamsTranscriptPreview {...FILE} url={`${FILE.url}#msg=1`} />,
+    );
+
+    await screen.findByText("Product sync");
+    expect(container.querySelector('[data-ordinal="1"]')).toHaveClass("ring-2");
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+  });
+
   it("falls back to the markdown when the file carries no block", async () => {
     // The dead end this replaces was "Preview is not available"; plain text
     // beats it even for a file that was never a transcript.
