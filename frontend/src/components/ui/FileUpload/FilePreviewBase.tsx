@@ -58,7 +58,11 @@ export function getFileName(file: FileResource): string {
     return file.name;
   }
 
-  if (isLocalFilePreviewItem(file) && file.displayName) {
+  // Any resource may carry a friendlier name, not only an un-uploaded one: a
+  // stored upload can have a minted filename that is a join key rather than
+  // something to read. The API type has no `displayName`, so this only ever
+  // fires where a caller deliberately supplied one.
+  if ("displayName" in file && file.displayName) {
     return file.displayName;
   }
 

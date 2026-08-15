@@ -8,8 +8,10 @@ import { FilePreviewLoading } from "@/components/ui/FileUpload/FilePreviewLoadin
 import { DocxPreview } from "./DocxPreview";
 import { EmlPreview } from "./EmlPreview";
 import { PptxPreview } from "./PptxPreview";
+import { TeamsTranscriptPreview } from "./TeamsTranscriptPreview";
 import { XlsxPreview } from "./XlsxPreview";
 
+import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type React from "react";
 
 // PDFium and its plugin graph are the heaviest viewer in this bundle, and the
@@ -59,9 +61,61 @@ const PPTX_MIME_TYPE =
 const XLSX_MIME_TYPE =
   // eslint-disable-next-line lingui/no-unlocalized-strings
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const MARKDOWN_MIME_TYPE =
+  // eslint-disable-next-line lingui/no-unlocalized-strings
+  "text/markdown";
 
 function isImageMime(mimeType: string | undefined): boolean {
   return mimeType?.startsWith(IMAGE_MIME_PREFIX) ?? false;
+}
+
+/** Which inline viewer draws a file; null when none can. */
+export type PreviewKind =
+  | "image"
+  | "pdf"
+  | "eml"
+  | "docx"
+  | "pptx"
+  | "xlsx"
+  | "markdown";
+
+/**
+ * The single answer to "can this be previewed, and by what".
+ *
+ * Both readers of it need the same answer for different reasons: the modal
+ * decides whether to offer a preview at all, this component decides which
+ * viewer to mount. They used to hold separate lists, which drifted the moment
+ * a type was added to one — a file the renderer could draw was refused
+ * upstream and the user got "not available" with no way to tell why.
+ */
+export function resolvePreviewKind(
+  filename: string,
+  mimeType?: string,
+): PreviewKind | null {
+  const extension = getExtension(filename);
+  if (
+    IMAGE_EXTENSIONS.includes(extension as (typeof IMAGE_EXTENSIONS)[number]) ||
+    isImageMime(mimeType)
+  ) {
+    return "image";
+  }
+  if (extension === "pdf" || mimeType === "application/pdf") return "pdf";
+  if (extension === "eml" || mimeType === "message/rfc822") return "eml";
+  if (extension === "docx" || mimeType === DOCX_MIME_TYPE) return "docx";
+  if (
+    extension === "ppt" ||
+    extension === "pptx" ||
+    mimeType === PPT_MIME_TYPE ||
+    mimeType === PPTX_MIME_TYPE
+  ) {
+    return "pptx";
+  }
+  if (extension === "xlsx" || mimeType === XLSX_MIME_TYPE) return "xlsx";
+  // The preview endpoint types `.md` as application/octet-stream, so only the
+  // extension identifies it; whether it is really a transcript is settled by
+  // sniffing the bytes, and plain markdown still renders as text.
+  if (extension === "md" || mimeType === MARKDOWN_MIME_TYPE) return "markdown";
+  return null;
 }
 
 export interface FilePreviewContentProps {
@@ -73,6 +127,12 @@ export interface FilePreviewContentProps {
    * `message/rfc822`). When absent, routing falls back to extension alone.
    */
   mimeType?: string;
+  /**
+   * Other files the viewer may resolve against. Only viewers that reference
+   * uploads by name use it — a Teams transcript names what rode along with it
+   * but does not carry the bytes.
+   */
+  relatedFiles?: readonly FileUploadItem[];
 }
 
 /**
@@ -86,22 +146,11 @@ export const FilePreviewContent: React.FC<FilePreviewContentProps> = ({
   filename,
   url,
   mimeType,
+  relatedFiles,
 }) => {
-  const extension = getExtension(filename);
-  const isImage =
-    IMAGE_EXTENSIONS.includes(extension as (typeof IMAGE_EXTENSIONS)[number]) ||
-    isImageMime(mimeType);
-  const isPdf = extension === "pdf" || mimeType === "application/pdf";
-  const isEml = extension === "eml" || mimeType === "message/rfc822";
-  const isDocx = extension === "docx" || mimeType === DOCX_MIME_TYPE;
-  const isPptx =
-    extension === "ppt" ||
-    extension === "pptx" ||
-    mimeType === PPT_MIME_TYPE ||
-    mimeType === PPTX_MIME_TYPE;
-  const isXlsx = extension === "xlsx" || mimeType === XLSX_MIME_TYPE;
+  const kind = resolvePreviewKind(filename, mimeType);
 
-  if (isImage) {
+  if (kind === "image") {
     return (
       <img
         src={url}
@@ -111,7 +160,7 @@ export const FilePreviewContent: React.FC<FilePreviewContentProps> = ({
     );
   }
 
-  if (isPdf) {
+  if (kind === "pdf") {
     return (
       // Nothing above this renders a boundary — not Chat, not the add-in shell
       // — so a rejected chunk import (a deploy rotated the hash under an open
@@ -137,20 +186,30 @@ export const FilePreviewContent: React.FC<FilePreviewContentProps> = ({
     );
   }
 
-  if (isEml) {
+  if (kind === "eml") {
     return <EmlPreview filename={filename} url={url} />;
   }
 
-  if (isDocx) {
+  if (kind === "docx") {
     return <DocxPreview url={url} />;
   }
 
-  if (isPptx) {
+  if (kind === "pptx") {
     return <PptxPreview url={url} />;
   }
 
-  if (isXlsx) {
+  if (kind === "xlsx") {
     return <XlsxPreview filename={filename} url={url} />;
+  }
+
+  if (kind === "markdown") {
+    return (
+      <TeamsTranscriptPreview
+        filename={filename}
+        url={url}
+        relatedFiles={relatedFiles}
+      />
+    );
   }
 
   return (

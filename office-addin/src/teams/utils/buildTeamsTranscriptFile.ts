@@ -14,7 +14,7 @@
  * testable.
  */
 
-import { TEAMS_TRANSCRIPT_INDEX_VERSION } from "@erato/frontend/library";
+import { TEAMS_TRANSCRIPT_INDEX_VERSION } from "@erato/frontend/teams";
 
 import { isRestrictedChannel } from "./parsedTeamsChannel";
 import { channelRef, chatRef, messageRef } from "./teamsConversationRef";

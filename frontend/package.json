@@ -18,6 +18,10 @@
       "types": "./dist-library/shared/index.d.ts",
       "import": "./dist-library/shared.mjs"
     },
+    "./teams": {
+      "types": "./dist-library/utils/teams/index.d.ts",
+      "import": "./dist-library/teams.mjs"
+    },
     "./shared-runtime/*": {
       "import": "./dist-library/component-kit-host/shared-*.mjs"
     },

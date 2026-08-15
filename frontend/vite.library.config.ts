@@ -57,6 +57,11 @@ export default defineConfig(({ mode }) => {
         entry: {
           library: path.resolve(__dirname, "./src/library/index.ts"),
           shared: path.resolve(__dirname, "./src/shared/index.ts"),
+          // `teams` is the transcript format contract (@erato/frontend/teams):
+          // data with no React or DOM behind it, so a producer that only reads
+          // or writes the format does not pull the component barrel in to get
+          // at a constant.
+          teams: path.resolve(__dirname, "./src/utils/teams/index.ts"),
         },
         formats: ["es"],
         fileName: (_format, entryName) =>

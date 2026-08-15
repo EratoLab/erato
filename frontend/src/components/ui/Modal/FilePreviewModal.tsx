@@ -2,57 +2,39 @@ import { t } from "@lingui/core/macro";
 
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
-import { FilePreviewContent } from "@/components/ui/FilePreview/FilePreviewContent";
+import {
+  FilePreviewContent,
+  resolvePreviewKind,
+} from "@/components/ui/FilePreview/FilePreviewContent";
 
 import { ModalBase } from "./ModalBase";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type React from "react";
 
-const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp"];
-const DOCX_MIME_TYPE =
-  // eslint-disable-next-line lingui/no-unlocalized-strings
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-const PPT_MIME_TYPE =
-  // eslint-disable-next-line lingui/no-unlocalized-strings
-  "application/vnd.ms-powerpoint";
-const PPTX_MIME_TYPE =
-  // eslint-disable-next-line lingui/no-unlocalized-strings
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation";
-const XLSX_MIME_TYPE =
-  // eslint-disable-next-line lingui/no-unlocalized-strings
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-
-const getExtension = (filename: string): string =>
-  filename.split(".").pop()?.toLowerCase() ?? "";
-
 const getPreviewUrl = (
   file: Pick<FileUploadItem, "preview_url">,
 ): string | undefined =>
   typeof file.preview_url === "string" ? file.preview_url : undefined;
 
+/**
+ * Asks the renderer itself what it can draw, rather than keeping a second list
+ * beside it. The two used to be maintained separately and drifted: a type the
+ * renderer handled was refused here, and the user saw "not available" for a
+ * file that was perfectly previewable.
+ */
 const resolvePreviewSource = (
   file: FileUploadItem,
 ): { url: string; canPreview: boolean } => {
-  const extension = getExtension(file.filename);
   const previewUrl = getPreviewUrl(file);
-  const mimeType = file.file_capability.mime_types[0];
-  if (
-    IMAGE_EXTENSIONS.includes(extension) ||
-    extension === "pdf" ||
-    extension === "eml" ||
-    extension === "docx" ||
-    extension === "ppt" ||
-    extension === "pptx" ||
-    extension === "xlsx" ||
-    mimeType === DOCX_MIME_TYPE ||
-    mimeType === PPT_MIME_TYPE ||
-    mimeType === PPTX_MIME_TYPE ||
-    mimeType === XLSX_MIME_TYPE
-  ) {
-    return { url: previewUrl ?? "", canPreview: Boolean(previewUrl) };
+  const kind = resolvePreviewKind(
+    file.filename,
+    file.file_capability.mime_types[0],
+  );
+  if (kind === null) {
+    return { url: "", canPreview: false };
   }
-  return { url: "", canPreview: false };
+  return { url: previewUrl ?? "", canPreview: Boolean(previewUrl) };
 };
 
 interface FilePreviewModalProps {
@@ -66,6 +48,11 @@ interface FilePreviewModalProps {
    * wrong explanation.
    */
   notPreviewableReason?: string;
+  /**
+   * Files the previewed one can be resolved against. Forwarded to viewers that
+   * reference other uploads by name rather than carrying their bytes.
+   */
+  relatedFiles?: readonly FileUploadItem[];
 }
 
 /**
@@ -76,6 +63,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
   onClose,
   file,
   notPreviewableReason,
+  relatedFiles,
 }) => {
   if (!file) {
     return null;
@@ -121,6 +109,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
             filename={file.filename}
             url={url}
             mimeType={file.file_capability.mime_types[0]}
+            relatedFiles={relatedFiles}
           />
           {actionButtons}
         </>

@@ -92,6 +92,11 @@ export {
   type FileSourceSelectorProps,
 } from "@/components/ui/FileUpload/FileSourceSelector";
 export {
+  TeamsConversationView,
+  DefaultTeamsConversationView,
+  type TeamsConversationViewProps,
+} from "@/components/ui/Teams/TeamsConversationView";
+export {
   DefaultGroupedFileAttachmentsPreview,
   GroupedFileAttachmentsPreview,
 } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
@@ -306,11 +311,6 @@ export {
   type TeamsTranscriptIndexSection,
   type TeamsTranscriptIndexWindow,
 } from "@/utils/teams/teamsTranscriptIndex";
-export {
-  TeamsConversationView,
-  DefaultTeamsConversationView,
-  type TeamsConversationViewProps,
-} from "@/components/ui/Teams/TeamsConversationView";
 export { sanitizeHtmlPreview } from "@/utils/sanitizeHtmlPreview";
 export {
   extractTextFromContent,

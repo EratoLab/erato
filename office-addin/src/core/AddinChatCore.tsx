@@ -123,6 +123,7 @@ export interface AddinChatController {
   handleSendMessage: AddinChatInputRenderProps["onSendMessage"];
   isPreviewModalOpen: boolean;
   fileToPreview: ReturnType<typeof useFilePreviewModal>["fileToPreview"];
+  relatedFiles: ReturnType<typeof useFilePreviewModal>["relatedFiles"];
   openPreviewModal: ReturnType<typeof useFilePreviewModal>["openPreviewModal"];
   closePreviewModal: ReturnType<
     typeof useFilePreviewModal
@@ -414,6 +415,7 @@ function useAddinChatController({
     handleSendMessage,
     isPreviewModalOpen: preview.isPreviewModalOpen,
     fileToPreview: preview.fileToPreview,
+    relatedFiles: preview.relatedFiles,
     openPreviewModal: preview.openPreviewModal,
     closePreviewModal: preview.closePreviewModal,
     controlsContext,
@@ -585,6 +587,7 @@ export function AddinChatCoreView({
           isOpen={controller.isPreviewModalOpen}
           onClose={controller.closePreviewModal}
           file={controller.fileToPreview}
+          relatedFiles={controller.relatedFiles}
         />
         <FeedbackViewDialog
           isOpen={feedback.feedbackViewDialogState.isOpen}

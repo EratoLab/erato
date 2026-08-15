@@ -1,9 +1,13 @@
 import { t } from "@lingui/core/macro";
 import { Trans } from "@lingui/react/macro";
 import clsx from "clsx";
-import { memo, useCallback, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 
 import { InteractiveContainer } from "@/components/ui/Container/InteractiveContainer";
+import {
+  getFileName,
+  type FileResource,
+} from "@/components/ui/FileUpload/FilePreviewBase";
 import { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton";
 import { useImageLightbox } from "@/hooks/ui/useImageLightbox";
 import { useGetFile } from "@/lib/generated/v1betaApi/v1betaApiComponents";
@@ -13,6 +17,7 @@ import {
 } from "@/providers/FeatureConfigProvider";
 import { hasToolCalls as messageHasToolCalls } from "@/utils/adapters/toolCallAdapter";
 import { isImageFile } from "@/utils/file/fileTypeUtils";
+import { teamsUploadDisplayName } from "@/utils/teams/teamsUploadName";
 
 import { Alert } from "../Feedback/Alert";
 import { Avatar } from "../Feedback/Avatar";
@@ -85,7 +90,10 @@ export interface ChatMessageProps {
   onMessageAction: (action: MessageAction) => Promise<boolean>;
   userProfile?: UserProfile;
   userDisplayNameOverride?: string;
-  onFilePreview?: (file: FileUploadItem) => void;
+  onFilePreview?: (
+    file: FileUploadItem,
+    relatedFiles?: readonly FileUploadItem[],
+  ) => void;
   onViewFeedback?: (messageId: string, feedback: MessageFeedback) => void;
   /** Map of all files from the entire conversation keyed by file ID */
   allFilesById?: Record<string, FileUploadItem>;
@@ -143,6 +151,12 @@ export const ChatMessage = memo(function ChatMessage({
   // Use the provided allFilesById from parent
   // This allows erato-file:// links to reference files from any message in the conversation
   const filesById = allFilesById;
+  // Every file the chat knows about, so a viewer can resolve one its own
+  // artifact only names — the transcript's uploads are the case in point.
+  const siblingFiles = useMemo(
+    () => Object.values(allFilesById),
+    [allFilesById],
+  );
 
   // Content validation
   if (message.content.length === 0 && !message.loading && !message.error) {
@@ -241,6 +255,7 @@ export const ChatMessage = memo(function ChatMessage({
                 <AttachedFile
                   key={fileId}
                   fileId={fileId}
+                  relatedFiles={siblingFiles}
                   onFilePreview={onFilePreview}
                 />
               ))}
@@ -481,10 +496,15 @@ const formatFilterLabel = (value: string) =>
 // Helper component to fetch and display a single attached file
 const AttachedFile = ({
   fileId,
+  relatedFiles,
   onFilePreview,
 }: {
   fileId: string;
-  onFilePreview?: (file: FileUploadItem) => void;
+  relatedFiles: readonly FileUploadItem[];
+  onFilePreview?: (
+    file: FileUploadItem,
+    relatedFiles?: readonly FileUploadItem[],
+  ) => void;
 }) => {
   const {
     data: fileData,
@@ -516,6 +536,14 @@ const AttachedFile = ({
   }
 
   const previewUrl = getPreviewUrl(fileData);
+  // A Teams upload is named after its bytes so the backend can join it to the
+  // message that carried it. That name is a key, not something to read; the
+  // transcript's own index holds the exact one, and this recovers the readable
+  // part for a chip that has only the upload.
+  const readableName = teamsUploadDisplayName(fileData.filename);
+  const shownFile: FileResource = readableName
+    ? { ...fileData, displayName: readableName }
+    : fileData;
 
   // Check if it's an image using centralized utility
   if (isImageFile(fileData.filename) && previewUrl) {
@@ -528,7 +556,7 @@ const AttachedFile = ({
         onClick={() => {
           // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
           if (onFilePreview && fileData) {
-            onFilePreview(fileData);
+            onFilePreview(fileData, relatedFiles);
           } else if (previewUrl) {
             window.open(previewUrl, "_blank", "noopener,noreferrer"); // eslint-disable-line lingui/no-unlocalized-strings
           }
@@ -540,7 +568,7 @@ const AttachedFile = ({
           className="size-24 rounded-lg border border-theme-border-primary object-cover transition-transform hover:scale-105"
         />
         <div className="mt-1 max-w-[96px] truncate text-xs text-theme-fg-muted">
-          {fileData.filename}
+          {getFileName(shownFile)}
         </div>
       </InteractiveContainer>
     );
@@ -552,7 +580,7 @@ const AttachedFile = ({
       onClick={() => {
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         if (onFilePreview && fileData) {
-          onFilePreview(fileData);
+          onFilePreview(fileData, relatedFiles);
         } else if (previewUrl) {
           window.open(previewUrl, "_blank", "noopener,noreferrer"); // eslint-disable-line lingui/no-unlocalized-strings
         }
@@ -562,7 +590,7 @@ const AttachedFile = ({
       useDiv={true}
     >
       <FilePreviewButton
-        file={fileData}
+        file={shownFile}
         onRemove={() => {}}
         disabled={true}
         showFileType={true}

@@ -1,7 +1,10 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 
-import { componentRegistry } from "@/config/componentRegistry";
+import {
+  componentRegistry,
+  resolveComponentOverride,
+} from "@/config/componentRegistry";
 
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { FilePreviewBase } from "../FileUpload/FilePreviewBase";
@@ -423,9 +426,9 @@ function toDate(iso: string | null): Date | null {
 export const TeamsConversationView: React.FC<TeamsConversationViewProps> = (
   props,
 ) => {
-  const Override = componentRegistry.TeamsConversationView;
-  if (Override) {
-    return <Override {...props} />;
-  }
-  return <DefaultTeamsConversationView {...props} />;
+  const Rendered = resolveComponentOverride(
+    componentRegistry.TeamsConversationView,
+    DefaultTeamsConversationView,
+  );
+  return <Rendered {...props} />;
 };

@@ -3848,6 +3848,10 @@ msgstr "automatische Verstärkung: {autoGainControl}"
 #~ msgid "Back to Assistants"
 #~ msgstr ""
 
+#: src/components/ui/FilePreview/TeamsTranscriptPreview.tsx
+msgid "Back to conversation"
+msgstr "Zurück zur Unterhaltung"
+
 #: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "Back to email"
 msgstr ""
@@ -4393,6 +4397,10 @@ msgstr "Laden"
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "Loading attachment..."
 msgstr ""
+
+#: src/components/ui/FilePreview/TeamsTranscriptPreview.tsx
+msgid "Loading conversation…"
+msgstr "Unterhaltung wird geladen …"
 
 #: src/components/ui/FileUpload/FilePreviewLoading.tsx
 msgid "Loading file..."
@@ -4945,6 +4953,14 @@ msgstr "Denkt nach"
 #: src/components/ui/Trace/TraceThinkingPlaceholder.tsx
 #~ msgid "Thinking…"
 #~ msgstr "Denkt nach…"
+
+#: src/components/ui/FilePreview/TeamsTranscriptPreview.tsx
+msgid "This conversation could not be loaded."
+msgstr "Diese Unterhaltung konnte nicht geladen werden."
+
+#: src/components/ui/FilePreview/TeamsTranscriptPreview.tsx
+msgid "This file carries no conversation data, so it is shown as text."
+msgstr "Diese Datei enthält keine Unterhaltungsdaten und wird daher als Text angezeigt."
 
 #: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
 msgid "This message exceeds the token limit of {maxTokensFormatted}. Please reduce the message length or remove attached files."
