@@ -148,6 +148,48 @@ describe("ChatHistoryFilterMenu", () => {
     }
   });
 
+  it("closes only the flyout on Escape, then the menu on a second Escape", () => {
+    renderMenu();
+    openMenu();
+    const row = screen.getByTestId("chat-history-filter-menu-row-status");
+    fireEvent.click(row);
+    const option = screen.getByTestId(
+      "chat-history-filter-menu-option-status-all",
+    );
+
+    fireEvent.keyDown(option, { key: "Escape" });
+
+    expect(
+      screen.queryByTestId("chat-history-filter-menu-submenu"),
+    ).not.toBeInTheDocument();
+    // The menu itself survived the first Escape and focus is back on the row.
+    expect(
+      screen.getByTestId("chat-history-filter-menu-row-status"),
+    ).toBeInTheDocument();
+    expect(row).toHaveFocus();
+
+    fireEvent.keyDown(row, { key: "Escape" });
+
+    expect(
+      screen.queryByTestId("chat-history-filter-menu-row-status"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the active-filters dot only when values differ from the defaults", () => {
+    const { unmount } = renderMenu();
+    expect(
+      screen.queryByTestId("chat-history-filter-menu-active-indicator"),
+    ).not.toBeInTheDocument();
+    unmount();
+
+    useChatHistoryFilterStore.getState().setStatusFilter("all");
+    renderMenu();
+
+    expect(
+      screen.getByTestId("chat-history-filter-menu-active-indicator"),
+    ).toBeInTheDocument();
+  });
+
   it("resets to defaults and closes", () => {
     useChatHistoryFilterStore.getState().setStatusFilter("all");
     useChatHistoryFilterStore.getState().setGroupBy("none");

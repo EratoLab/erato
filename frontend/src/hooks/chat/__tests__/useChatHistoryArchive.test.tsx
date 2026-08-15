@@ -111,6 +111,17 @@ describe("useChatHistory archiveChat optimistic removal", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
+  it("cancels in-flight list fetches before the optimistic removal", async () => {
+    const cancelSpy = vi.spyOn(queryClient, "cancelQueries");
+    const { result } = renderHook(() => useChatHistory(), { wrapper });
+
+    await act(async () => {
+      await result.current.archiveChat("chat5");
+    });
+
+    expect(cancelSpy).toHaveBeenCalledWith({ queryKey: ["recentChats"] });
+  });
+
   it("does not refetch the list (no invalidate)", async () => {
     const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
     const { result } = renderHook(() => useChatHistory(), { wrapper });

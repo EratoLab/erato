@@ -451,5 +451,36 @@ describe("ChatHistorySidebar", () => {
     ).toBeNull();
     expect(screen.getAllByTestId("history-list")).toHaveLength(1);
     expect(historyListProps[0].sessions).toEqual([]);
+    expect(
+      screen.queryByTestId("chat-history-no-filter-matches"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the no-matches row when non-default filters leave the list empty", async () => {
+    mockedAssistantsEnabled = true;
+    const { useChatHistoryFilterStore } = await import(
+      "@/hooks/chat/store/chatHistoryFilterStore"
+    );
+    useChatHistoryFilterStore.setState({ typeFilter: "assistant" });
+
+    const { i18n } = await import("@lingui/core");
+    render(
+      <MemoryRouter>
+        <I18nProvider i18n={i18n}>
+          <ChatHistorySidebar
+            sessions={[]}
+            currentSessionId={null}
+            onSessionSelect={vi.fn()}
+            onSessionArchive={vi.fn()}
+            isLoading={false}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByTestId("chat-history-no-filter-matches"),
+    ).toHaveTextContent("No chats match the current filters");
+    expect(screen.queryByTestId("history-list")).not.toBeInTheDocument();
   });
 });

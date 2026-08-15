@@ -25,6 +25,37 @@ export const CHAT_HISTORY_FILTER_DEFAULTS: ChatHistoryFilterValues = {
   groupBy: "date",
 };
 
+const TYPE_FILTER_VALUES: readonly ChatHistoryTypeFilter[] = [
+  "all",
+  "chat",
+  "assistant",
+];
+const STATUS_FILTER_VALUES: readonly ChatHistoryStatusFilter[] = [
+  "active",
+  "all",
+];
+const GROUP_BY_VALUES: readonly ChatHistoryGroupBy[] = [
+  "date",
+  "type",
+  "unread",
+  "none",
+];
+
+const coerceToUnion = <T extends string>(
+  value: unknown,
+  allowed: readonly T[],
+  fallback: T,
+): T => (allowed.includes(value as T) ? (value as T) : fallback);
+
+/** Whether `values` are exactly the out-of-the-box filter configuration. */
+export function isDefaultFilters(values: ChatHistoryFilterValues): boolean {
+  return (
+    values.typeFilter === CHAT_HISTORY_FILTER_DEFAULTS.typeFilter &&
+    values.statusFilter === CHAT_HISTORY_FILTER_DEFAULTS.statusFilter &&
+    values.groupBy === CHAT_HISTORY_FILTER_DEFAULTS.groupBy
+  );
+}
+
 /**
  * Sidebar chat-list filter/sort preferences, persisted per browser so the
  * list comes back the way the user left it.
@@ -58,6 +89,32 @@ export const useChatHistoryFilterStore = create<ChatHistoryFilterStore>()(
           statusFilter: state.statusFilter,
           groupBy: state.groupBy,
         }),
+        // localStorage is user-editable, so each rehydrated field must be
+        // coerced back into its union; an out-of-union value would otherwise
+        // flow unchecked into query params and the grouping switch.
+        merge: (persisted, current) => {
+          const stored = (persisted ?? {}) as Partial<
+            Record<keyof ChatHistoryFilterValues, unknown>
+          >;
+          return {
+            ...current,
+            typeFilter: coerceToUnion(
+              stored.typeFilter,
+              TYPE_FILTER_VALUES,
+              CHAT_HISTORY_FILTER_DEFAULTS.typeFilter,
+            ),
+            statusFilter: coerceToUnion(
+              stored.statusFilter,
+              STATUS_FILTER_VALUES,
+              CHAT_HISTORY_FILTER_DEFAULTS.statusFilter,
+            ),
+            groupBy: coerceToUnion(
+              stored.groupBy,
+              GROUP_BY_VALUES,
+              CHAT_HISTORY_FILTER_DEFAULTS.groupBy,
+            ),
+          };
+        },
       },
     ),
     {

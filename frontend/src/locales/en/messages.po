@@ -1217,7 +1217,7 @@ msgid "branding.assistant_name"
 msgstr "Assistant"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
 #: src/pages/AssistantChatSpacePage.tsx
 #: src/pages/AssistantCreatePage.tsx
 #: src/pages/AssistantEditPage.tsx
@@ -1321,6 +1321,11 @@ msgstr "Type"
 #: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
 msgid "chat.history.filterMenu.groupBy.unread"
 msgstr "Unread"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+msgid "chat.history.filterMenu.noMatches"
+msgstr "No chats match the current filters"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryFilterMenu.tsx

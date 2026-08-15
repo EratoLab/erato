@@ -1217,7 +1217,7 @@ msgid "branding.assistant_name"
 msgstr "Assistant"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
 #: src/pages/AssistantChatSpacePage.tsx
 #: src/pages/AssistantCreatePage.tsx
 #: src/pages/AssistantEditPage.tsx
@@ -1300,72 +1300,77 @@ msgstr "Déposez pour téléverser"
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
 msgid "chat.history.filterMenu.groupBy"
-msgstr ""
+msgstr "Regrouper par"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
 msgid "chat.history.filterMenu.groupBy.date"
-msgstr ""
+msgstr "Date"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
 msgid "chat.history.filterMenu.groupBy.none"
-msgstr ""
+msgstr "Aucun"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
 msgid "chat.history.filterMenu.groupBy.type"
-msgstr ""
+msgstr "Type"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
 msgid "chat.history.filterMenu.groupBy.unread"
-msgstr ""
+msgstr "Non lus"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+msgid "chat.history.filterMenu.noMatches"
+msgstr "Aucun chat ne correspond aux filtres actuels"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
 msgid "chat.history.filterMenu.reset"
-msgstr ""
+msgstr "Réinitialiser les valeurs par défaut"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
 msgid "chat.history.filterMenu.status"
-msgstr ""
+msgstr "Statut"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
 msgid "chat.history.filterMenu.status.active"
-msgstr ""
+msgstr "Actifs"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
 msgid "chat.history.filterMenu.status.all"
-msgstr ""
+msgstr "Tous"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
 msgid "chat.history.filterMenu.trigger"
-msgstr ""
+msgstr "Filtrer et trier les chats"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
 msgid "chat.history.filterMenu.type"
-msgstr ""
+msgstr "Type"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
 msgid "chat.history.filterMenu.type.all"
-msgstr ""
+msgstr "Tous"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
 msgid "chat.history.filterMenu.type.assistant"
-msgstr ""
+msgstr "Assistant"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
 msgid "chat.history.filterMenu.type.chat"
-msgstr ""
+msgstr "Chat"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
@@ -1405,27 +1410,27 @@ msgstr "En cours"
 #. js-lingui-explicit-id
 #: src/utils/chatHistoryGrouping.ts
 msgid "chat.history.group.assistants"
-msgstr ""
+msgstr "Assistants"
 
 #. js-lingui-explicit-id
 #: src/utils/chatHistoryGrouping.ts
 msgid "chat.history.group.chats"
-msgstr ""
+msgstr "Chats"
 
 #. js-lingui-explicit-id
 #: src/utils/chatHistoryGrouping.ts
 msgid "chat.history.group.older"
-msgstr ""
+msgstr "Plus anciens"
 
 #. js-lingui-explicit-id
 #: src/utils/chatHistoryGrouping.ts
 msgid "chat.history.group.other"
-msgstr ""
+msgstr "Autres"
 
 #. js-lingui-explicit-id
 #: src/utils/chatHistoryGrouping.ts
 msgid "chat.history.group.unread"
-msgstr ""
+msgstr "Non lus"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx

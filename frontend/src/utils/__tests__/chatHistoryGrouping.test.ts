@@ -8,6 +8,7 @@ import {
   type GroupChatSessionsDeps,
 } from "@/utils/chatHistoryGrouping";
 
+import type { ChatHistoryGroupBy } from "@/hooks/chat/store/chatHistoryFilterStore";
 import type { ChatGenerationStatus } from "@/hooks/chat/store/generationStatusStore";
 import type { ChatSession } from "@/types/chat";
 
@@ -261,5 +262,13 @@ describe("groupChatSessions", () => {
         { key: "all", label: null, sessions },
       ]);
     });
+  });
+
+  it("degrades an out-of-union groupBy to the single unlabeled bucket", () => {
+    const sessions = [session("a", localIso(2026, 7, 14))];
+
+    expect(
+      groupChatSessions(sessions, "bogus" as ChatHistoryGroupBy, deps()),
+    ).toEqual([{ key: "all", label: null, sessions }]);
   });
 });

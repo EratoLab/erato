@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import {
+  isDefaultFilters,
   sanitizeChatHistoryFilters,
   useChatHistoryFilterStore,
 } from "@/hooks/chat/store/chatHistoryFilterStore";
@@ -275,8 +276,14 @@ export function ChatHistoryFilterMenu({
         }
         return;
       }
-      if (event.key === "ArrowLeft" && openSubmenu) {
+      if (
+        (event.key === "ArrowLeft" || event.key === "Escape") &&
+        openSubmenu
+      ) {
         event.preventDefault();
+        // For Escape this also halts the native event at React's delegation
+        // root (the portal container), so AnchoredPopover's document-level
+        // Escape listener never fires and the menu itself stays open.
         event.stopPropagation();
         const rowElement = rowRefs.current[openSubmenu];
         closeSubmenu();
@@ -442,11 +449,20 @@ export function ChatHistoryFilterMenu({
           })}
           data-testid="chat-history-filter-menu-trigger"
           className={clsx(
+            "relative",
             isOpen && "bg-theme-bg-hover text-theme-fg-primary",
             className,
           )}
           icon={<FilterSortIcon className="size-4" />}
-        />
+        >
+          {!isDefaultFilters(filters) && (
+            <span
+              aria-hidden="true"
+              data-testid="chat-history-filter-menu-active-indicator"
+              className="absolute right-0.5 top-0.5 size-1.5 rounded-full bg-theme-action-primary-bg"
+            />
+          )}
+        </Button>
       )}
     >
       {/* Single wrapper around rows AND flyout so keydown from either bubbles

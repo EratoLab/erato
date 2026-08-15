@@ -15,6 +15,7 @@ import {
 } from "@/config/componentRegistry";
 import { defaultThemeConfig } from "@/config/themeConfig";
 import {
+  isDefaultFilters,
   sanitizeChatHistoryFilters,
   useChatHistoryFilterStore,
   useSanitizedChatHistoryFilters,
@@ -1111,7 +1112,18 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                         />
                       }
                     >
-                      {recentChatGroups.length === 0 ? (
+                      {recentChatGroups.length === 0 &&
+                      !isDefaultFilters(chatHistoryFilters) ? (
+                        <p
+                          className="px-3 py-2 text-xs text-theme-fg-muted"
+                          data-testid="chat-history-no-filter-matches"
+                        >
+                          {t({
+                            id: "chat.history.filterMenu.noMatches",
+                            message: "No chats match the current filters",
+                          })}
+                        </p>
+                      ) : recentChatGroups.length === 0 ? (
                         <ResolvedChatHistoryList
                           sessions={sessions}
                           currentSessionId={currentSessionId}

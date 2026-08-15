@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   CHAT_HISTORY_FILTER_DEFAULTS,
+  isDefaultFilters,
   sanitizeChatHistoryFilters,
   useChatHistoryFilterStore,
 } from "../chatHistoryFilterStore";
@@ -66,6 +67,67 @@ describe("chatHistoryFilterStore", () => {
       statusFilter: "all",
       groupBy: "unread",
     });
+  });
+
+  it("coerces garbage persisted values back to the defaults", async () => {
+    localStorage.setItem(
+      "erato.sidebar.chatHistoryFilters",
+      JSON.stringify({
+        state: { typeFilter: "bogus", statusFilter: 42, groupBy: { a: 1 } },
+        version: 0,
+      }),
+    );
+
+    await useChatHistoryFilterStore.persist.rehydrate();
+
+    expect(store()).toMatchObject(CHAT_HISTORY_FILTER_DEFAULTS);
+  });
+
+  it("keeps valid persisted values while coercing invalid ones", async () => {
+    localStorage.setItem(
+      "erato.sidebar.chatHistoryFilters",
+      JSON.stringify({
+        state: { typeFilter: "chat", statusFilter: "nope", groupBy: "unread" },
+        version: 0,
+      }),
+    );
+
+    await useChatHistoryFilterStore.persist.rehydrate();
+
+    expect(store()).toMatchObject({
+      typeFilter: "chat",
+      statusFilter: "active",
+      groupBy: "unread",
+    });
+  });
+
+  it("survives a persisted state that is not an object", async () => {
+    localStorage.setItem(
+      "erato.sidebar.chatHistoryFilters",
+      JSON.stringify({ state: "garbage", version: 0 }),
+    );
+
+    await useChatHistoryFilterStore.persist.rehydrate();
+
+    expect(store()).toMatchObject(CHAT_HISTORY_FILTER_DEFAULTS);
+  });
+});
+
+describe("isDefaultFilters", () => {
+  it("is true only for the exact default combination", () => {
+    expect(isDefaultFilters(CHAT_HISTORY_FILTER_DEFAULTS)).toBe(true);
+    expect(
+      isDefaultFilters({ ...CHAT_HISTORY_FILTER_DEFAULTS, typeFilter: "chat" }),
+    ).toBe(false);
+    expect(
+      isDefaultFilters({
+        ...CHAT_HISTORY_FILTER_DEFAULTS,
+        statusFilter: "all",
+      }),
+    ).toBe(false);
+    expect(
+      isDefaultFilters({ ...CHAT_HISTORY_FILTER_DEFAULTS, groupBy: "none" }),
+    ).toBe(false);
   });
 });
 

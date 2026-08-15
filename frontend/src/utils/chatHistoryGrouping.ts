@@ -163,6 +163,9 @@ export function groupChatSessions(
         },
       ]);
     case "none":
+    default:
+      // `groupBy` is rehydrated from user-editable storage, so an out-of-union
+      // value can still arrive here and must degrade to the ungrouped view.
       return [{ key: "all", label: null, sessions }];
   }
 }

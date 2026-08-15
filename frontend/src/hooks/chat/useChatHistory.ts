@@ -559,14 +559,23 @@ export function useChatHistory({
         clearPendingChat(chatId);
         useGenerationStatusStore.getState().clearStatus(chatId);
         useChatHistoryStore.getState().clearTitleHint(chatId);
-        await queryClient.invalidateQueries({
-          queryKey: recentChatsQuery({}).queryKey,
-        });
         if (currentChatId === chatId) {
           navigate("/chat/new", { replace: true });
         }
+        // Not awaited: navigation away from the archived chat must not wait
+        // for every list variant to refetch page by page.
+        void queryClient.invalidateQueries({
+          queryKey: recentChatsQuery({}).queryKey,
+        });
         return;
       }
+
+      // Settle in-flight list fetches first (e.g. a focus refetch): one
+      // resolving after the snapshot below would overwrite the optimistic
+      // removal and resurrect the archived row.
+      await queryClient.cancelQueries({
+        queryKey: recentChatsQuery({}).queryKey,
+      });
 
       // Snapshot every recent-chats cache entry and the pending placeholder so
       // a failed mutation can roll them all back.
