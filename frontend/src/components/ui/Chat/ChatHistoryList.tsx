@@ -8,6 +8,7 @@ import { useHasPendingConfirmation } from "@/hooks/chat/store/confirmationRegist
 import { useGenerationStatusFor } from "@/hooks/chat/store/generationStatusStore";
 import { useChatHistoryStore } from "@/hooks/chat/useChatHistory";
 import { useThemedIcon } from "@/hooks/ui";
+import { UNTITLED_BACKEND_SENTINEL } from "@/utils/chat/recentChatSession";
 import { getChatUrl } from "@/utils/chat/urlUtils";
 import { resolveChatAttentionStatus } from "@/utils/chatHistoryGrouping";
 import { createLogger } from "@/utils/debugLogger";
@@ -29,10 +30,6 @@ import type { ChatAttentionStatus } from "@/utils/chatHistoryGrouping";
 const logger = createLogger("UI", "ChatHistoryList");
 const sidebarRowLinkClassName =
   "focus-ring-tight block rounded-[var(--theme-radius-shell)]";
-
-/** `title_resolved` sentinel the backend returns while a chat has no title. */
-// eslint-disable-next-line lingui/no-unlocalized-strings -- backend sentinel, not user-facing text
-const UNTITLED_BACKEND_SENTINEL = "Untitled Chat";
 
 /**
  * Row title: a real backend title, else the recorded user-message hint, else
@@ -373,25 +370,7 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
     onLoadMore,
     showTimestamps = true,
   }) => {
-    const currentSession = sessions.find((s) => s.id === currentSessionId);
-    const currentTitleHint = useChatHistoryStore((state) =>
-      currentSessionId ? state.titleHintByChatId[currentSessionId] : undefined,
-    );
-    const rawCurrentTitle =
-      currentSession?.titleResolved ?? currentSession?.title;
-    const currentSessionTitle =
-      rawCurrentTitle && rawCurrentTitle !== UNTITLED_BACKEND_SENTINEL
-        ? rawCurrentTitle
-        : (currentTitleHint ?? currentSession?.title);
     const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
-
-    useEffect(() => {
-      if (typeof currentSessionTitle === "undefined") {
-        return;
-      }
-      const pageTitle = t({ id: "branding.page_title_suffix" });
-      document.title = `${currentSessionTitle} - ${pageTitle}`;
-    }, [currentSessionTitle]);
 
     useEffect(() => {
       const sentinel = loadMoreSentinelRef.current;

@@ -9,6 +9,9 @@ import { t } from "@lingui/core/macro";
 import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
 
+/** `title_resolved` sentinel the backend returns while a chat has no title. */
+export const UNTITLED_BACKEND_SENTINEL = "Untitled Chat";
+
 export function mapRecentChatToSession(chat: RecentChat): ChatSession {
   return {
     id: chat.id,

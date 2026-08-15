@@ -25,6 +25,7 @@ import {
   selectRunningCount,
   useGenerationStatusStore,
 } from "@/hooks/chat/store/generationStatusStore";
+import { useChatHistoryStore } from "@/hooks/chat/useChatHistory";
 import { useResponsiveCollapsedMode, useThemedIcon } from "@/hooks/ui";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { useAssistantHubConfig } from "@/lib/generated/v1betaApi/v1betaApiComponents";
@@ -32,6 +33,7 @@ import {
   useAssistantsFeature,
   useSidebarFeature,
 } from "@/providers/FeatureConfigProvider";
+import { UNTITLED_BACKEND_SENTINEL } from "@/utils/chat/recentChatSession";
 import {
   groupChatSessions,
   resolveChatAttentionStatus,
@@ -749,6 +751,35 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
         pendingConfirmationIdsByChatId,
       ],
     );
+
+    // Tab title is owned here rather than by ChatHistoryList: several list
+    // instances render at once (pinned + one per group), and an instance not
+    // containing the current chat cannot tell "not mine" from "no title yet".
+    const currentTitleHint = useChatHistoryStore((state) =>
+      currentSessionId ? state.titleHintByChatId[currentSessionId] : undefined,
+    );
+    const currentSession = useMemo(
+      () =>
+        currentSessionId
+          ? (sessions.find((s) => s.id === currentSessionId) ??
+            pinnedSessions.find((s) => s.id === currentSessionId))
+          : undefined,
+      [sessions, pinnedSessions, currentSessionId],
+    );
+    const rawCurrentTitle =
+      currentSession?.titleResolved ?? currentSession?.title;
+    const currentSessionTitle =
+      rawCurrentTitle && rawCurrentTitle !== UNTITLED_BACKEND_SENTINEL
+        ? rawCurrentTitle
+        : (currentTitleHint ?? currentSession?.title);
+
+    useEffect(() => {
+      if (typeof currentSessionTitle === "undefined") {
+        return;
+      }
+      const pageTitle = t({ id: "branding.page_title_suffix" });
+      document.title = `${currentSessionTitle} - ${pageTitle}`;
+    }, [currentSessionTitle]);
 
     // Screen-reader summary of generation activity, excluding the chat the
     // user is viewing.
