@@ -35,6 +35,7 @@ import {
   usePinnedChatsFeature,
   useSidebarFeature,
 } from "@/providers/FeatureConfigProvider";
+import { mapRecentChatToSession } from "@/utils/chat/recentChatSession";
 import { createLogger } from "@/utils/debugLogger";
 
 import { ChatHistorySidebar } from "./ChatHistorySidebar";
@@ -282,57 +283,11 @@ export const Chat = ({
   // Convert the chat history data to the format expected by the sidebar
   const sessions: ChatSession[] = useMemo(
     () =>
-      Array.isArray(chatHistory)
-        ? chatHistory.map((chat) => ({
-            id: chat.id,
-            title:
-              chat.title_resolved ||
-              t({ id: "chat.newChat.title", message: "New Chat" }),
-            titleResolved: chat.title_resolved,
-            titleBySummary:
-              (chat.title_by_summary as string | null | undefined) ?? null,
-            titleByUserProvided:
-              (chat.title_by_user_provided as string | null | undefined) ??
-              null,
-            canEdit: chat.can_edit,
-            isPinned: chat.is_pinned,
-            updatedAt: chat.last_message_at || new Date().toISOString(),
-            messages: [],
-            metadata: {
-              lastMessage: {
-                content: chat.title_resolved || "",
-                timestamp: chat.last_message_at || new Date().toISOString(),
-              },
-              fileCount: chat.file_uploads.length,
-            },
-          }))
-        : [],
+      Array.isArray(chatHistory) ? chatHistory.map(mapRecentChatToSession) : [],
     [chatHistory],
   );
   const pinnedSessions: ChatSession[] = useMemo(
-    () =>
-      pinnedChatHistory.map((chat) => ({
-        id: chat.id,
-        title:
-          chat.title_resolved ||
-          t({ id: "chat.newChat.title", message: "New Chat" }),
-        titleResolved: chat.title_resolved,
-        titleBySummary:
-          (chat.title_by_summary as string | null | undefined) ?? null,
-        titleByUserProvided:
-          (chat.title_by_user_provided as string | null | undefined) ?? null,
-        canEdit: chat.can_edit,
-        isPinned: chat.is_pinned,
-        updatedAt: chat.last_message_at || new Date().toISOString(),
-        messages: [],
-        metadata: {
-          lastMessage: {
-            content: chat.title_resolved || "",
-            timestamp: chat.last_message_at || new Date().toISOString(),
-          },
-          fileCount: chat.file_uploads.length,
-        },
-      })),
+    () => pinnedChatHistory.map(mapRecentChatToSession),
     [pinnedChatHistory],
   );
 

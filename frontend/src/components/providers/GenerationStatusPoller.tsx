@@ -6,8 +6,10 @@ import {
   useGenerationStatusStore,
   type ChatGenerationStatus,
 } from "@/hooks/chat/store/generationStatusStore";
-import { buildInfiniteChatsQueryKey } from "@/hooks/chat/useChatHistory";
-import { useGeneratingChats } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import {
+  recentChatsQuery,
+  useGeneratingChats,
+} from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 import type {
   GeneratingChat,
@@ -42,12 +44,14 @@ const pollInterval = (): number | false => {
 };
 
 /**
- * Patches terminal chats into the cached recent-chats list: the generated
+ * Patches terminal chats into the cached recent-chats lists: the generated
  * title lands in the same commit as the Finished badge, and the running
  * marker is removed so a remount cannot re-seed a finished generation.
+ * Prefix-targeted, because the list is cached under one key per filter/pinned
+ * variant and a chat may sit in several of them.
  */
 const patchTerminalChats = (
-  setQueryData: ReturnType<typeof useQueryClient>["setQueryData"],
+  queryClient: ReturnType<typeof useQueryClient>,
   entries: GeneratingChat[],
 ) => {
   const terminal = new Map<string, GeneratingChat>();
@@ -60,10 +64,12 @@ const patchTerminalChats = (
   if (terminal.size === 0) {
     return;
   }
-  setQueryData<InfiniteData<RecentChatsResponse>>(
-    buildInfiniteChatsQueryKey(),
+  queryClient.setQueriesData<InfiniteData<RecentChatsResponse>>(
+    { queryKey: recentChatsQuery({}).queryKey },
     (current) => {
-      if (!current) return current;
+      // The prefix also matches non-paginated recent-chats caches, which have
+      // no `pages` to patch.
+      if (!current || !Array.isArray(current.pages)) return current;
       const pages = current.pages.map((page) => {
         const chats = page.chats.map((chat) => {
           const entry = terminal.get(chat.id);
@@ -127,7 +133,7 @@ export function GenerationStatusPoller() {
       return;
     }
     useGenerationStatusStore.getState().applyPollSnapshot(data.chats);
-    patchTerminalChats(queryClient.setQueryData.bind(queryClient), data.chats);
+    patchTerminalChats(queryClient, data.chats);
   }, [data, dataUpdatedAt, queryClient]);
 
   return null;

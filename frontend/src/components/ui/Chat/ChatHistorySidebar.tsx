@@ -1,6 +1,7 @@
 "use client";
 
 import { plural, t } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react";
 import clsx from "clsx";
 import { memo, useRef, useState, useEffect, useCallback, useMemo } from "react";
 import { ErrorBoundary } from "react-error-boundary";
@@ -13,6 +14,11 @@ import {
   resolveComponentOverride,
 } from "@/config/componentRegistry";
 import { defaultThemeConfig } from "@/config/themeConfig";
+import {
+  sanitizeChatHistoryFilters,
+  useChatHistoryFilterStore,
+  useSanitizedChatHistoryFilters,
+} from "@/hooks/chat/store/chatHistoryFilterStore";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import {
   selectAttentionCount,
@@ -26,9 +32,14 @@ import {
   useAssistantsFeature,
   useSidebarFeature,
 } from "@/providers/FeatureConfigProvider";
+import {
+  groupChatSessions,
+  resolveChatAttentionStatus,
+} from "@/utils/chatHistoryGrouping";
 import { createLogger } from "@/utils/debugLogger";
 import { checkFileExists } from "@/utils/themeUtils";
 
+import { ChatHistoryFilterMenu } from "./ChatHistoryFilterMenu";
 import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
 import { FrequentAssistantsList } from "./FrequentAssistantsList";
 import { InteractiveContainer } from "../Container/InteractiveContainer";
@@ -515,6 +526,9 @@ const CollapsibleSection = memo<{
   defaultExpanded?: boolean;
   expanded?: boolean;
   onExpandedChange?: (expanded: boolean) => void;
+  /** Right-aligned header controls; a sibling of the collapse toggle so they
+   * never sit inside its click target. */
+  actions?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
 }>(
@@ -523,6 +537,7 @@ const CollapsibleSection = memo<{
     defaultExpanded = true,
     expanded,
     onExpandedChange,
+    actions,
     children,
     className,
   }) => {
@@ -533,27 +548,32 @@ const CollapsibleSection = memo<{
 
     return (
       <div className={className}>
-        <div className="px-2 py-1">
+        <div className="group flex items-center gap-1 px-2 py-1">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="theme-transition flex w-full items-center justify-between px-3 py-2 text-left hover:bg-[var(--theme-shell-sidebar-hover)]"
+            className="group/toggle theme-transition flex min-w-0 flex-1 items-center gap-1.5 px-3 py-2 text-left hover:bg-[var(--theme-shell-sidebar-hover)]"
             style={sidebarItemStyle}
             aria-expanded={isExpanded}
             aria-label={isExpanded ? t`Collapse ${title}` : t`Expand ${title}`}
             type="button"
           >
-            <span className="flex min-w-0 items-center gap-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-theme-fg-muted">
-                {title}
-              </h3>
-            </span>
+            <h3 className="truncate text-xs font-semibold uppercase tracking-wide text-theme-fg-muted">
+              {title}
+            </h3>
             <ChevronRightIcon
               className={clsx(
-                "size-3 text-theme-fg-muted transition-transform",
+                "theme-transition size-3 shrink-0 text-theme-fg-muted",
+                "opacity-0 group-hover:opacity-100 group-focus-visible/toggle:opacity-100",
+                // Touch devices get no hover reveal, so the non-default
+                // collapsed state must stay visible on its own.
+                !isExpanded && "opacity-100",
                 isExpanded ? "rotate-90" : "rotate-0",
               )}
             />
           </button>
+          {actions != null && (
+            <div className="flex shrink-0 items-center">{actions}</div>
+          )}
         </div>
         {isExpanded && <div>{children}</div>}
       </div>
@@ -686,6 +706,48 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
 
     const generationStatusByChatId = useGenerationStatusStore(
       (state) => state.statusByChatId,
+    );
+
+    // Fold assistant-scoped filter values back to their defaults in the store
+    // itself: the recent-chats query (and any other reader) consumes the raw
+    // persisted values, so sanitizing only at render would let a stale
+    // persisted value keep filtering the request invisibly.
+    useEffect(() => {
+      if (assistantsEnabled) return;
+      const store = useChatHistoryFilterStore.getState();
+      const sanitized = sanitizeChatHistoryFilters(store, false);
+      if (sanitized.typeFilter !== store.typeFilter) {
+        store.setTypeFilter(sanitized.typeFilter);
+      }
+      if (sanitized.groupBy !== store.groupBy) {
+        store.setGroupBy(sanitized.groupBy);
+      }
+    }, [assistantsEnabled]);
+
+    const chatHistoryFilters =
+      useSanitizedChatHistoryFilters(assistantsEnabled);
+    const pendingConfirmationIdsByChatId = useConfirmationRegistryStore(
+      (state) => state.pendingIdsByChatId,
+    );
+    const { i18n } = useLingui();
+    const recentChatGroups = useMemo(
+      () =>
+        groupChatSessions(sessions, chatHistoryFilters.groupBy, {
+          now: new Date(),
+          locale: i18n.locale,
+          needsAttention: (session) =>
+            resolveChatAttentionStatus(
+              generationStatusByChatId[session.id],
+              (pendingConfirmationIdsByChatId[session.id]?.length ?? 0) > 0,
+            ) !== null,
+        }),
+      [
+        sessions,
+        chatHistoryFilters.groupBy,
+        i18n.locale,
+        generationStatusByChatId,
+        pendingConfirmationIdsByChatId,
+      ],
     );
 
     // Screen-reader summary of generation activity, excluding the chat the
@@ -1012,22 +1074,67 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                       defaultExpanded={true}
                       expanded={isRecentChatsExpanded}
                       onExpandedChange={setIsRecentChatsExpanded}
+                      actions={
+                        <ChatHistoryFilterMenu
+                          assistantsEnabled={assistantsEnabled}
+                        />
+                      }
                     >
-                      <ResolvedChatHistoryList
-                        sessions={sessions}
-                        currentSessionId={currentSessionId}
-                        onSessionSelect={onSessionSelect}
-                        onSessionArchive={onSessionArchive}
-                        onSessionEditTitle={onSessionEditTitle}
-                        onSessionShare={onSessionShare}
-                        onSessionPin={onSessionPin}
-                        pinnedChatsCount={pinnedSessions.length}
-                        pinnedChatsLimit={pinnedChatsLimit}
-                        showTimestamps={showTimestamps}
-                        hasMore={hasMoreSessions}
-                        isLoadingMore={isLoadingMoreSessions}
-                        onLoadMore={onLoadMoreSessions}
-                      />
+                      {recentChatGroups.length === 0 ? (
+                        <ResolvedChatHistoryList
+                          sessions={sessions}
+                          currentSessionId={currentSessionId}
+                          onSessionSelect={onSessionSelect}
+                          onSessionArchive={onSessionArchive}
+                          onSessionEditTitle={onSessionEditTitle}
+                          onSessionShare={onSessionShare}
+                          onSessionPin={onSessionPin}
+                          pinnedChatsCount={pinnedSessions.length}
+                          pinnedChatsLimit={pinnedChatsLimit}
+                          showTimestamps={showTimestamps}
+                          hasMore={hasMoreSessions}
+                          isLoadingMore={isLoadingMoreSessions}
+                          onLoadMore={onLoadMoreSessions}
+                        />
+                      ) : (
+                        recentChatGroups.map((group, index) => {
+                          // Only the last list gets the infinite-scroll props,
+                          // so exactly one load-more sentinel exists.
+                          const isLastGroup =
+                            index === recentChatGroups.length - 1;
+                          return (
+                            <div key={group.key} data-ui="chat-history-group">
+                              {group.label !== null && (
+                                <h4
+                                  className="truncate px-3 pb-1 pt-2 text-xs font-medium text-theme-fg-muted"
+                                  data-ui="chat-history-group-header"
+                                >
+                                  {group.label}
+                                </h4>
+                              )}
+                              <ResolvedChatHistoryList
+                                sessions={group.sessions}
+                                currentSessionId={currentSessionId}
+                                onSessionSelect={onSessionSelect}
+                                onSessionArchive={onSessionArchive}
+                                onSessionEditTitle={onSessionEditTitle}
+                                onSessionShare={onSessionShare}
+                                onSessionPin={onSessionPin}
+                                pinnedChatsCount={pinnedSessions.length}
+                                pinnedChatsLimit={pinnedChatsLimit}
+                                showTimestamps={showTimestamps}
+                                hasMore={isLastGroup ? hasMoreSessions : false}
+                                isLoadingMore={
+                                  isLastGroup ? isLoadingMoreSessions : false
+                                }
+                                onLoadMore={
+                                  isLastGroup ? onLoadMoreSessions : undefined
+                                }
+                              />
+                            </div>
+                          );
+                        })
+                      )}
                     </CollapsibleSection>
                   </>
                 )}

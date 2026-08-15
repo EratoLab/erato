@@ -1298,6 +1298,76 @@ msgid "chat.fileDrop.overlay.label"
 msgstr "Upuść, aby przesłać"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.groupBy"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.groupBy.date"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.groupBy.none"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.groupBy.type"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.groupBy.unread"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.reset"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.status"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.status.active"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.status.all"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.trigger"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.type"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.type.all"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.type.assistant"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.type.chat"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
 msgid "chat.history.generation.actionRequired"
 msgstr "Wymagane działanie"
@@ -1331,6 +1401,31 @@ msgstr "{running, plural, one {# czat generuje odpowiedź} few {# czaty generuj�
 #: src/components/ui/Chat/ChatHistoryList.tsx
 msgid "chat.history.generation.running"
 msgstr "Trwa"
+
+#. js-lingui-explicit-id
+#: src/utils/chatHistoryGrouping.ts
+msgid "chat.history.group.assistants"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/utils/chatHistoryGrouping.ts
+msgid "chat.history.group.chats"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/utils/chatHistoryGrouping.ts
+msgid "chat.history.group.older"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/utils/chatHistoryGrouping.ts
+msgid "chat.history.group.other"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/utils/chatHistoryGrouping.ts
+msgid "chat.history.group.unread"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
@@ -1638,7 +1733,7 @@ msgid "chat.messageEditor.submit"
 msgstr "Wyślij"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/Chat.tsx
+#: src/utils/chat/recentChatSession.ts
 msgid "chat.newChat.title"
 msgstr "Nowy Czat"
 

@@ -21,11 +21,17 @@ import {
   recentChatsQuery,
   chatMessagesQuery,
   type RecentChatsError,
+  type RecentChatsQueryParams,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext";
 import { getChatUrl } from "@/utils/chat/urlUtils";
 import { createLogger } from "@/utils/debugLogger";
 
+import {
+  CHAT_HISTORY_FILTER_DEFAULTS,
+  useChatHistoryFilterStore,
+  type ChatHistoryFilterValues,
+} from "./store/chatHistoryFilterStore";
 import { useGenerationStatusStore } from "./store/generationStatusStore";
 import { getStreamKey, useMessagingStore } from "./store/messagingStore";
 
@@ -191,18 +197,56 @@ export function deriveTitleHint(text: string): string | null {
   return `${stem.trimEnd()}…`;
 }
 
+/** The filter-store values that reach the recent-chats request. */
+export type RecentChatsListFilters = Pick<
+  ChatHistoryFilterValues,
+  "typeFilter" | "statusFilter"
+>;
+
+/**
+ * Query params the sidebar filters add to a recent-chats list request. Key
+ * builders and the query itself must agree on these, so both go through here.
+ */
+export function buildRecentChatsFilterParams(
+  filters: RecentChatsListFilters,
+): Pick<RecentChatsQueryParams, "type" | "include_archived"> {
+  return {
+    ...(filters.typeFilter === "all" ? {} : { type: filters.typeFilter }),
+    ...(filters.statusFilter === "all" ? { include_archived: true } : {}),
+  };
+}
+
 /**
  * Query key of the infinite recent-chats list; cache edits must target the
  * same key as the query itself.
  */
-export function buildInfiniteChatsQueryKey(pinnedChatsEnabled = false) {
+export function buildInfiniteChatsQueryKey(
+  pinnedChatsEnabled = false,
+  filters: RecentChatsListFilters = CHAT_HISTORY_FILTER_DEFAULTS,
+) {
   return [
     ...recentChatsQuery({
-      queryParams: pinnedChatsEnabled ? { pinned: false } : {},
+      queryParams: {
+        ...(pinnedChatsEnabled ? { pinned: false } : {}),
+        ...buildRecentChatsFilterParams(filters),
+      },
     }).queryKey,
     "infinite",
     { limit: CHAT_HISTORY_PAGE_SIZE },
   ];
+}
+
+/**
+ * Whether a recent-chats cache key belongs to an archived-inclusive list
+ * variant, i.e. one whose rows legitimately keep an archived chat.
+ */
+function queryKeyIncludesArchived(queryKey: readonly unknown[]): boolean {
+  return queryKey.some(
+    (part) =>
+      typeof part === "object" &&
+      part !== null &&
+      (part as { include_archived?: boolean }).include_archived === true,
+  );
 }
 
 export interface ChatHistoryOptions {
@@ -241,11 +285,21 @@ export function useChatHistory({
   const pendingChat = useChatHistoryStore((state) => state.pendingChat);
   const setPendingChat = useChatHistoryStore((state) => state.setPendingChat);
 
+  // Raw persisted values on purpose: every mounted copy of this hook must
+  // derive the same query key, and the sidebar folds feature-gated values back
+  // to their defaults in the store itself.
+  const typeFilter = useChatHistoryFilterStore((state) => state.typeFilter);
+  const statusFilter = useChatHistoryFilterStore((state) => state.statusFilter);
+  const listFilters = useMemo<RecentChatsListFilters>(
+    () => ({ typeFilter, statusFilter }),
+    [typeFilter, statusFilter],
+  );
+
   // Stable query key for the infinite recent-chats list. Reused for both the
   // query itself and for cache mutations (e.g. optimistic archive removal).
   const infiniteChatsQueryKey = useMemo(
-    () => buildInfiniteChatsQueryKey(pinnedChatsEnabled),
-    [pinnedChatsEnabled],
+    () => buildInfiniteChatsQueryKey(pinnedChatsEnabled, listFilters),
+    [pinnedChatsEnabled, listFilters],
   );
   const pinnedChatsQueryKey = useMemo(
     () =>
@@ -278,6 +332,7 @@ export function useChatHistory({
             limit: CHAT_HISTORY_PAGE_SIZE,
             offset,
             ...(pinnedChatsEnabled ? { pinned: false } : {}),
+            ...buildRecentChatsFilterParams(listFilters),
           },
         },
         signal,
@@ -347,6 +402,15 @@ export function useChatHistory({
     if (!pendingChat || isPendingChatListed) {
       return listedChats;
     }
+    // A placeholder the active type filter excludes must not render: the
+    // filtered list will never contain the chat, so the listing effect below
+    // could never clear it and the row would linger as a ghost.
+    if (
+      (typeFilter === "assistant" && !pendingChat.assistantId) ||
+      (typeFilter === "chat" && pendingChat.assistantId)
+    ) {
+      return listedChats;
+    }
     // Everything the sidebar renders, plus `assistant_id` so selecting the row
     // stays on the assistant route. `last_selected_facets` and `last_model` are
     // deliberately undefined: consumers treat a present value as authoritative
@@ -372,7 +436,7 @@ export function useChatHistory({
       pending_tool_approval_at: undefined,
     };
     return [placeholder, ...listedChats];
-  }, [listedChats, pendingChat, isPendingChatListed]);
+  }, [listedChats, pendingChat, isPendingChatListed, typeFilter]);
 
   // Seed the status store from the backend's running and pending-approval
   // markers, so generations started (or parked) elsewhere get an indicator
@@ -486,13 +550,29 @@ export function useChatHistory({
   // Archive a chat
   const archiveChat = useCallback(
     async (chatId: string) => {
-      // Snapshot the cache and pending placeholder so a failed mutation can
-      // roll both back.
-      const previousData = queryClient.getQueryData<InfiniteRecentChats>(
-        infiniteChatsQueryKey,
-      );
-      const previousPinnedData =
-        queryClient.getQueryData<InfiniteRecentChats>(pinnedChatsQueryKey);
+      // With the status filter on "all" the archived chat legitimately stays
+      // listed, so removing its row would be wrong — and a plain refetch is
+      // safe here precisely because the include_archived result set does not
+      // shrink, which is what makes removal-driven offset skew impossible.
+      if (statusFilter === "all") {
+        await archiveChatMutation({ pathParams: { chatId }, body: {} });
+        clearPendingChat(chatId);
+        useGenerationStatusStore.getState().clearStatus(chatId);
+        useChatHistoryStore.getState().clearTitleHint(chatId);
+        await queryClient.invalidateQueries({
+          queryKey: recentChatsQuery({}).queryKey,
+        });
+        if (currentChatId === chatId) {
+          navigate("/chat/new", { replace: true });
+        }
+        return;
+      }
+
+      // Snapshot every recent-chats cache entry and the pending placeholder so
+      // a failed mutation can roll them all back.
+      const previousEntries = queryClient.getQueriesData<InfiniteRecentChats>({
+        queryKey: recentChatsQuery({}).queryKey,
+      });
       const previousPendingChat = useChatHistoryStore.getState().pendingChat;
 
       // The archived row may be the pending-chat placeholder, which lives
@@ -503,20 +583,27 @@ export function useChatHistory({
       useGenerationStatusStore.getState().clearStatus(chatId);
       useChatHistoryStore.getState().clearTitleHint(chatId);
 
-      // Optimistically remove the archived row from every loaded page.
+      // Optimistically remove the archived row from every loaded page of every
+      // cached list variant — the row must not resurface when the user
+      // switches to a sibling filter combination whose cache is still fresh.
       //
-      // We deliberately mutate the cache in place rather than invalidating and
-      // refetching every page. A full refetch re-derives each page's offset
-      // from getNextPageParam (current_offset + returned_count); once the
-      // archive shrinks the server-side result set, every page boundary past
-      // the archived row shifts by one, so the refetch silently skips the chat
-      // that straddled the boundary (ERMAIN-474). Editing the cache keeps the
-      // list stable and makes the row disappear immediately, without waiting
-      // for a round trip.
-      queryClient.setQueryData<InfiniteRecentChats>(
-        infiniteChatsQueryKey,
+      // We deliberately mutate the caches in place rather than invalidating
+      // and refetching every page. A full refetch re-derives each page's
+      // offset from getNextPageParam (current_offset + returned_count); once
+      // the archive shrinks the server-side result set, every page boundary
+      // past the archived row shifts by one, so the refetch silently skips the
+      // chat that straddled the boundary (ERMAIN-474). Editing the cache keeps
+      // the list stable and makes the row disappear immediately, without
+      // waiting for a round trip.
+      queryClient.setQueriesData<InfiniteRecentChats>(
+        {
+          queryKey: recentChatsQuery({}).queryKey,
+          predicate: (query) => !queryKeyIncludesArchived(query.queryKey),
+        },
         (current) => {
-          if (!current) return current;
+          // The prefix also matches non-paginated recent-chats caches, which
+          // have no `pages` to edit.
+          if (!current || !Array.isArray(current.pages)) return current;
           return {
             ...current,
             pages: current.pages.map((page) => {
@@ -539,32 +626,19 @@ export function useChatHistory({
           };
         },
       );
-      queryClient.setQueryData<InfiniteRecentChats>(
-        pinnedChatsQueryKey,
-        (current) => {
-          if (!current) return current;
-          return {
-            ...current,
-            pages: current.pages.map((page) => {
-              const chats = page.chats.filter((chat) => chat.id !== chatId);
-              if (chats.length === page.chats.length) return page;
-              const removed = page.chats.length - chats.length;
-              return {
-                ...page,
-                chats,
-                stats: {
-                  ...page.stats,
-                  returned_count: Math.max(
-                    0,
-                    page.stats.returned_count - removed,
-                  ),
-                  total_count: Math.max(0, page.stats.total_count - removed),
-                },
-              };
-            }),
-          };
-        },
+      // Archived-inclusive variants legitimately keep the row, but its
+      // archived_at changed; mark them stale so they refetch on next mount
+      // (never refetching a mounted paginated list, per the skew above).
+      const hasArchivedListVariant = previousEntries.some(([queryKey]) =>
+        queryKeyIncludesArchived(queryKey),
       );
+      if (hasArchivedListVariant) {
+        void queryClient.invalidateQueries({
+          queryKey: recentChatsQuery({}).queryKey,
+          predicate: (query) => queryKeyIncludesArchived(query.queryKey),
+          refetchType: "none",
+        });
+      }
 
       try {
         // Call the mutation
@@ -581,11 +655,10 @@ export function useChatHistory({
       } catch (error) {
         logger.log(`Failed to archive chat ${chatId}:`, error);
         // Roll back the optimistic removal so the rows reappear.
-        if (previousData) {
-          queryClient.setQueryData(infiniteChatsQueryKey, previousData);
-        }
-        if (previousPinnedData) {
-          queryClient.setQueryData(pinnedChatsQueryKey, previousPinnedData);
+        for (const [queryKey, previousData] of previousEntries) {
+          if (previousData) {
+            queryClient.setQueryData(queryKey, previousData);
+          }
         }
         if (previousPendingChat?.id === chatId) {
           useChatHistoryStore.getState().setPendingChat(previousPendingChat);
@@ -593,14 +666,7 @@ export function useChatHistory({
         throw error; // Re-throw error for potential handling upstream
       }
     },
-    [
-      archiveChatMutation,
-      queryClient,
-      currentChatId,
-      navigate,
-      infiniteChatsQueryKey,
-      pinnedChatsQueryKey,
-    ],
+    [archiveChatMutation, queryClient, currentChatId, navigate, statusFilter],
   );
 
   // Update chat title_by_user_provided
