@@ -153,6 +153,18 @@ const schemaStringFieldFixes = [
     from: "show_tray_icon?: null | undefined;",
     to: "show_tray_icon?: boolean | null | undefined;",
   },
+  {
+    from: "is_pinned?: null | undefined;",
+    to: "is_pinned?: boolean | null | undefined;",
+  },
+  {
+    from: "title_by_summary?: null | undefined;",
+    to: "title_by_summary?: string | null | undefined;",
+  },
+  {
+    from: "title_by_user_provided?: null | undefined;",
+    to: "title_by_user_provided?: string | null | undefined;",
+  },
   // Keep the two-space indent: it pins the match to LinkFileRequest.chat_id and
   // avoids the substring collision with `existing_chat_id?: null | undefined;`
   // (which other, unindented entries would also rewrite via replaceAll).
