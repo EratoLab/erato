@@ -1,5 +1,6 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
+import { useCallback } from "react";
 
 import {
   componentRegistry,
@@ -55,6 +56,11 @@ export interface TeamsConversationViewProps {
    * chip is not clickable — a message still says what rode along with it.
    */
   resolveAsset?: (asset: TeamsTranscriptIndexAsset) => FileResource | null;
+  /**
+   * Ordinal of a cited message: scrolled into view on mount and kept
+   * highlighted, so a citation lands on the message it names.
+   */
+  focusOrdinal?: number | null;
   className?: string;
 }
 
@@ -88,6 +94,7 @@ export const DefaultTeamsConversationView: React.FC<
   onOpenInTeams,
   onFilePreview,
   resolveAsset,
+  focusOrdinal,
   className,
 }) => {
   const positions =
@@ -111,6 +118,7 @@ export const DefaultTeamsConversationView: React.FC<
             onOpenInTeams={onOpenInTeams}
             onFilePreview={onFilePreview}
             resolveAsset={resolveAsset}
+            focusOrdinal={focusOrdinal ?? null}
           />
         );
       })}
@@ -123,6 +131,7 @@ const ConversationSection: React.FC<
     section: TeamsTranscriptIndexSection;
     messages: TeamsTranscriptIndexMessage[];
     showTitle: boolean;
+    focusOrdinal: number | null;
   }
 > = ({
   section,
@@ -131,6 +140,7 @@ const ConversationSection: React.FC<
   onOpenInTeams,
   onFilePreview,
   resolveAsset,
+  focusOrdinal,
 }) => {
   const title = section.teamName
     ? `${section.title} · ${section.teamName}`
@@ -205,6 +215,7 @@ const ConversationSection: React.FC<
                     key={message.ordinal}
                     message={message}
                     isViewer={run.isViewer}
+                    isFocused={message.ordinal === focusOrdinal}
                     onOpenInTeams={onOpenInTeams}
                     onFilePreview={onFilePreview}
                     resolveAsset={resolveAsset}
@@ -223,18 +234,34 @@ const MessageBlock: React.FC<
   ConversationCallbacks & {
     message: TeamsTranscriptIndexMessage;
     isViewer: boolean;
+    isFocused: boolean;
   }
-> = ({ message, isViewer, onOpenInTeams, onFilePreview, resolveAsset }) => {
+> = ({
+  message,
+  isViewer,
+  isFocused,
+  onOpenInTeams,
+  onFilePreview,
+  resolveAsset,
+}) => {
   const body = bodyWithoutAssetMarkers(message);
   const createdAt = toDate(message.createdAt);
+  // A callback ref rather than an effect: it fires exactly once, when the
+  // cited message's node exists, which is the only moment the jump can happen.
+  const revealOnMount = useCallback((node: HTMLDivElement | null) => {
+    node?.scrollIntoView({ block: "center" });
+  }, []);
 
   return (
     <div
+      ref={isFocused ? revealOnMount : undefined}
+      data-ordinal={message.ordinal}
       className={clsx(
         "rounded-[var(--theme-radius-message)] border px-2 py-1.5",
         isViewer
           ? "border-theme-border-strong bg-theme-bg-accent"
           : "border-theme-border bg-theme-bg-secondary",
+        isFocused && "ring-2 ring-theme-focus",
       )}
     >
       <div className="flex items-start gap-2">

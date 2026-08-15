@@ -190,6 +190,27 @@ describe("buildTeamsTranscriptMarkdown", () => {
     expectNoIdentifiers(markdown, ["1754983230123"]);
   });
 
+  it("teaches the citation link form once, whatever the section count", () => {
+    const markdown = render([
+      section(),
+      section({
+        selection: "messages",
+        chat: { ...chat, chatId: "19:other@thread.v2", title: "Other" },
+        messages: [message({ messageId: "c" })],
+      }),
+    ]);
+    const prose = proseOf(markdown);
+    expect(
+      prose.match(
+        /link its ordinal as \[n\]\(erato-file:\/\/<file_id>#msg=n\)/g,
+      ),
+    ).toHaveLength(1);
+    // The lesson closes the prose, after every conversation it applies to.
+    expect(prose.indexOf("To cite a message above")).toBeGreaterThan(
+      prose.indexOf("# Teams chat: Other"),
+    );
+  });
+
   it("numbers messages contiguously from 1 across every section", () => {
     const markdown = render([
       section({

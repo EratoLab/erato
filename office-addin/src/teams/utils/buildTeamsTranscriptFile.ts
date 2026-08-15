@@ -7,7 +7,8 @@
  * message text. Message ids and Teams permalinks stay out — they exist for
  * rendering and back-linking — so each message is cited by the ordinal in its
  * heading, and the identifiers ride in the trailing index block that the
- * backend strips before the file reaches a model.
+ * backend strips before the file reaches a model. A closing line teaches the
+ * link form that turns an ordinal into a citation the renderer can resolve.
  *
  * Formatting is fixed English/ISO rather than locale-dependent: the transcript
  * is read by the model, and a deterministic rendering is what makes it
@@ -65,6 +66,15 @@ export interface TeamsTranscriptInput {
 }
 
 const MAX_FILENAME_SLUG_LENGTH = 80;
+
+/**
+ * Teaches the model the citation form the renderer resolves into a jump back
+ * to the message. The file id it names is deliberately absent here — the
+ * backend prints it as `erato_file_id` in the header it wraps every attached
+ * file with, so the model joins the two at read time.
+ */
+const CITATION_LINE =
+  "To cite a message above, link its ordinal as [n](erato-file://<file_id>#msg=n), where <file_id> is this file's erato_file_id.";
 
 /** Null when nothing renderable survived — an empty file is never uploaded. */
 export function buildTeamsTranscriptFile(
@@ -143,7 +153,7 @@ export function buildTeamsTranscriptDocument(
     messages,
   };
   return {
-    markdown: `${rendered.join("\n\n")}\n\n${serializeTeamsTranscriptIndex(index)}\n`,
+    markdown: `${rendered.join("\n\n")}\n\n${CITATION_LINE}\n\n${serializeTeamsTranscriptIndex(index)}\n`,
     index,
   };
 }
