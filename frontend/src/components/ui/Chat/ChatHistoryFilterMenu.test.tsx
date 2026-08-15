@@ -30,6 +30,13 @@ describe("ChatHistoryFilterMenu", () => {
     fireEvent.click(screen.getByTestId("chat-history-filter-menu-trigger"));
   }
 
+  // Selecting closes after the same short delay DropdownMenu uses; flush it.
+  function flushCloseDelay() {
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+  }
+
   it("opens from the trigger and shows the current value on each row", () => {
     renderMenu();
     openMenu();
@@ -59,22 +66,30 @@ describe("ChatHistoryFilterMenu", () => {
   });
 
   it("applies a submenu option to the store and closes the whole menu", () => {
-    renderMenu();
-    openMenu();
-    fireEvent.click(screen.getByTestId("chat-history-filter-menu-row-status"));
+    vi.useFakeTimers();
+    try {
+      renderMenu();
+      openMenu();
+      fireEvent.click(
+        screen.getByTestId("chat-history-filter-menu-row-status"),
+      );
 
-    const option = screen.getByTestId(
-      "chat-history-filter-menu-option-status-all",
-    );
-    expect(option).toHaveAttribute("role", "menuitemradio");
-    expect(option).toHaveAttribute("aria-checked", "false");
+      const option = screen.getByTestId(
+        "chat-history-filter-menu-option-status-all",
+      );
+      expect(option).toHaveAttribute("role", "menuitemradio");
+      expect(option).toHaveAttribute("aria-checked", "false");
 
-    fireEvent.click(option);
+      fireEvent.click(option);
 
-    expect(useChatHistoryFilterStore.getState().statusFilter).toBe("all");
-    expect(
-      screen.queryByTestId("chat-history-filter-menu-row-status"),
-    ).not.toBeInTheDocument();
+      expect(useChatHistoryFilterStore.getState().statusFilter).toBe("all");
+      flushCloseDelay();
+      expect(
+        screen.queryByTestId("chat-history-filter-menu-row-status"),
+      ).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("checks the currently selected option in the submenu", () => {
@@ -191,20 +206,56 @@ describe("ChatHistoryFilterMenu", () => {
   });
 
   it("resets to defaults and closes", () => {
-    useChatHistoryFilterStore.getState().setStatusFilter("all");
-    useChatHistoryFilterStore.getState().setGroupBy("none");
+    vi.useFakeTimers();
+    try {
+      useChatHistoryFilterStore.getState().setStatusFilter("all");
+      useChatHistoryFilterStore.getState().setGroupBy("none");
+      renderMenu();
+      openMenu();
+
+      fireEvent.click(screen.getByTestId("chat-history-filter-menu-reset"));
+
+      expect(useChatHistoryFilterStore.getState()).toMatchObject({
+        typeFilter: "all",
+        statusFilter: "active",
+        groupBy: "date",
+      });
+      flushCloseDelay();
+      expect(
+        screen.queryByTestId("chat-history-filter-menu-reset"),
+      ).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("derives panel and row styling from the shared dropdown theme channel", () => {
     renderMenu();
     openMenu();
 
-    fireEvent.click(screen.getByTestId("chat-history-filter-menu-reset"));
-
-    expect(useChatHistoryFilterStore.getState()).toMatchObject({
-      typeFilter: "all",
-      statusFilter: "active",
-      groupBy: "date",
+    const panel = document.querySelector(
+      '[data-ui="chat-history-filter-menu"]',
+    );
+    expect(panel).toHaveClass("anchored-popover-skin");
+    expect(panel).toHaveClass("w-[var(--theme-layout-dropdown-min-width)]");
+    expect(panel).toHaveStyle({
+      minWidth: "var(--theme-layout-dropdown-min-width)",
     });
+
+    const content = document.querySelector(
+      '[data-ui="chat-history-filter-menu-content"]',
+    );
+    expect(content).toHaveClass("dropdown-panel-chrome-geometry");
+
+    const row = screen.getByTestId("chat-history-filter-menu-row-status");
+    expect(row).toHaveClass("dropdown-item-geometry");
+
+    fireEvent.click(row);
+    const submenu = screen.getByTestId("chat-history-filter-menu-submenu");
+    expect(submenu).toHaveClass("anchored-popover-skin");
+    expect(submenu).toHaveClass("dropdown-panel-chrome-geometry");
     expect(
-      screen.queryByTestId("chat-history-filter-menu-reset"),
-    ).not.toBeInTheDocument();
+      screen.getByTestId("chat-history-filter-menu-option-status-all"),
+    ).toHaveClass("dropdown-item-geometry");
   });
 });

@@ -58,15 +58,18 @@ const SUBMENU_HOVER_DELAY_MS = 150;
 // The flyout overlaps the parent panel so the pointer never crosses a gap on
 // its way in (a gap would fire the row's pointerleave and close the flyout).
 const SUBMENU_OVERLAP_PX = 4;
-// Both the panel and the flyout carry `p-1`, so shifting the flyout up by that
-// padding aligns its first option with the anchor row.
-const PANEL_PADDING_PX = 4;
 const VIEWPORT_PADDING_PX = 8;
+// Same delayed close as DropdownMenu's item click, so a selection stays
+// visible for a beat (checkmark moves) before the menu dismisses.
+const CLOSE_ON_SELECT_DELAY_MS = 100;
 
 const sectionDivider = "my-1 h-px bg-theme-border";
 
+// Rows and flyout options share DropdownMenu's item channel — geometry class,
+// typography and hover/focus colors — so customer themes retune every menu
+// surface together.
 const rowClassName =
-  "flex w-full items-center gap-2 rounded-[var(--theme-radius-control)] px-3 py-2 text-left text-sm text-theme-fg-primary transition-colors hover:bg-theme-bg-hover focus:bg-theme-bg-hover focus:outline-none focus:ring-1 focus:ring-inset focus:ring-theme-border-dropdown";
+  "dropdown-item-geometry theme-transition flex w-full items-center gap-2 rounded-[var(--theme-radius-control)] text-left text-sm text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary focus:bg-theme-bg-hover focus:text-theme-fg-primary focus:outline-none focus:ring-1 focus:ring-inset focus:ring-theme-border-dropdown";
 
 function buildRow<V extends string>(
   key: SubmenuKey,
@@ -105,6 +108,10 @@ export function ChatHistoryFilterMenu({
   const [submenuTop, setSubmenuTop] = useState(0);
   const [submenuSide, setSubmenuSide] = useState<"right" | "left">("right");
   const [submenuMaxTop, setSubmenuMaxTop] = useState<number | null>(null);
+  // The flyout shifts up by its own top padding so its first option aligns
+  // with the anchor row; measured (before paint) because that padding is the
+  // themable dropdown chrome token, not a constant.
+  const [submenuPadTop, setSubmenuPadTop] = useState(0);
 
   const panelRef = useRef<HTMLDivElement>(null);
   const submenuRef = useRef<HTMLDivElement>(null);
@@ -113,6 +120,7 @@ export function ChatHistoryFilterMenu({
   );
   const hoverOpenTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const hoverCloseTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const selectCloseTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const focusSubmenuOnOpenRef = useRef(false);
   // A click on the row of a hover-opened flyout must keep it open (the usual
   // "hover, read, then click" gesture), not toggle it away.
@@ -202,7 +210,13 @@ export function ChatHistoryFilterMenu({
     scheduleSubmenuClose();
   }, [scheduleSubmenuClose]);
 
-  useEffect(() => clearHoverTimers, [clearHoverTimers]);
+  useEffect(
+    () => () => {
+      clearHoverTimers();
+      clearTimeout(selectCloseTimerRef.current);
+    },
+    [clearHoverTimers],
+  );
 
   useRovingMenuFocus({
     containerRef: panelRef,
@@ -224,6 +238,10 @@ export function ChatHistoryFilterMenu({
     }
 
     const panelRect = panelElement.getBoundingClientRect();
+    setSubmenuPadTop(
+      Number.parseFloat(window.getComputedStyle(submenuElement).paddingTop) ||
+        0,
+    );
     const submenuWidth = submenuElement.offsetWidth;
     const overflowsRight =
       panelRect.right - SUBMENU_OVERLAP_PX + submenuWidth >
@@ -257,7 +275,11 @@ export function ChatHistoryFilterMenu({
   const applyAndClose = useCallback(
     (apply: () => void) => {
       apply();
-      setIsOpen(false);
+      clearTimeout(selectCloseTimerRef.current);
+      selectCloseTimerRef.current = setTimeout(
+        () => setIsOpen(false),
+        CLOSE_ON_SELECT_DELAY_MS,
+      );
     },
     [setIsOpen],
   );
@@ -416,7 +438,7 @@ export function ChatHistoryFilterMenu({
       onPointerLeave={handleSubmenuHoverAway}
       className={clsx(
         rowClassName,
-        openSubmenu === row.key && "bg-theme-bg-hover",
+        openSubmenu === row.key && "bg-theme-bg-hover text-theme-fg-primary",
       )}
     >
       <span className="min-w-0 flex-1 truncate">{row.label}</span>
@@ -436,7 +458,13 @@ export function ChatHistoryFilterMenu({
       ariaHasPopup="menu"
       preferredOrientation={{ vertical: "bottom", horizontal: "right" }}
       initialFocusSelector={ROW_SELECTOR}
-      panelClassName="w-56 p-1"
+      panelStyle={{
+        maxWidth:
+          "calc(100vw - (var(--theme-layout-dropdown-viewport-margin) * 2))",
+        minWidth: "var(--theme-layout-dropdown-min-width)",
+      }}
+      panelClassName="flex w-[var(--theme-layout-dropdown-min-width)] flex-col"
+      viewportPadding="var(--theme-layout-dropdown-viewport-margin)"
       dataUi="chat-history-filter-menu"
       trigger={(triggerProps) => (
         <Button
@@ -469,7 +497,7 @@ export function ChatHistoryFilterMenu({
           here; it stays unpositioned so the flyout's absolute coordinates
           resolve against the popover panel, matching the rows' offsetTop. */}
       <div
-        className="flex flex-col"
+        className="dropdown-panel-chrome-geometry flex flex-col"
         role="none"
         onKeyDown={handlePanelKeyDown}
         data-ui="chat-history-filter-menu-content"
@@ -504,10 +532,10 @@ export function ChatHistoryFilterMenu({
             aria-label={activeRow.label}
             data-testid="chat-history-filter-menu-submenu"
             data-ui="chat-history-filter-menu-submenu"
-            className="anchored-popover-skin theme-transition absolute z-10 w-44 border p-1"
+            className="anchored-popover-skin dropdown-panel-chrome-geometry theme-transition absolute z-10 w-max border"
             style={{
               top: Math.min(
-                Math.max(0, submenuTop - PANEL_PADDING_PX),
+                Math.max(0, submenuTop - submenuPadTop),
                 submenuMaxTop ?? Number.MAX_SAFE_INTEGER,
               ),
               ...(submenuSide === "right"
@@ -532,7 +560,7 @@ export function ChatHistoryFilterMenu({
                 <span className="min-w-0 flex-1 truncate">{option.label}</span>
                 <CheckIcon
                   className={clsx(
-                    "size-4 shrink-0",
+                    "size-4 shrink-0 text-theme-fg-primary",
                     option.selected ? "opacity-100" : "opacity-0",
                   )}
                 />
