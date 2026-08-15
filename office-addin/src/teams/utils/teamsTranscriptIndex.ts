@@ -4,9 +4,9 @@
  * Teams picker ever produces one, so only the serializer lives here.
  */
 
-import { TEAMS_TRANSCRIPT_INDEX_MARKER } from "@erato/frontend/library";
+import { TEAMS_TRANSCRIPT_INDEX_MARKER } from "@erato/frontend/teams";
 
-import type { TeamsTranscriptIndex } from "@erato/frontend/library";
+import type { TeamsTranscriptIndex } from "@erato/frontend/teams";
 
 /** The single line appended to the transcript. */
 export function serializeTeamsTranscriptIndex(

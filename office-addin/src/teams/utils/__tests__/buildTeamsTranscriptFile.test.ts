@@ -1,4 +1,4 @@
-import { parseTeamsTranscriptIndex } from "@erato/frontend/library";
+import { parseTeamsTranscriptIndex } from "@erato/frontend/teams";
 import { describe, expect, it } from "vitest";
 
 import { MOCK_CHAT_ID } from "../../../test/mocks/teams/graph";

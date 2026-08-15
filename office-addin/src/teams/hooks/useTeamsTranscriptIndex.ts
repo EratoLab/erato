@@ -1,7 +1,7 @@
-import { parseTeamsTranscriptIndex } from "@erato/frontend/library";
+import { parseTeamsTranscriptIndex } from "@erato/frontend/teams";
 import { useEffect, useReducer } from "react";
 
-import type { TeamsTranscriptIndex } from "@erato/frontend/library";
+import type { TeamsTranscriptIndex } from "@erato/frontend/teams";
 
 /**
  * Reads a transcript's index block back out of the file, so a caller renders

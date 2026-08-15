@@ -4,6 +4,10 @@ import clsx from "clsx";
 import { memo, useCallback, useMemo, useState } from "react";
 
 import { InteractiveContainer } from "@/components/ui/Container/InteractiveContainer";
+import {
+  getFileName,
+  type FileResource,
+} from "@/components/ui/FileUpload/FilePreviewBase";
 import { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton";
 import { useImageLightbox } from "@/hooks/ui/useImageLightbox";
 import { useGetFile } from "@/lib/generated/v1betaApi/v1betaApiComponents";
@@ -13,6 +17,7 @@ import {
 } from "@/providers/FeatureConfigProvider";
 import { hasToolCalls as messageHasToolCalls } from "@/utils/adapters/toolCallAdapter";
 import { isImageFile } from "@/utils/file/fileTypeUtils";
+import { teamsUploadDisplayName } from "@/utils/teams/teamsUploadName";
 
 import { Alert } from "../Feedback/Alert";
 import { Avatar } from "../Feedback/Avatar";
@@ -531,6 +536,14 @@ const AttachedFile = ({
   }
 
   const previewUrl = getPreviewUrl(fileData);
+  // A Teams upload is named after its bytes so the backend can join it to the
+  // message that carried it. That name is a key, not something to read; the
+  // transcript's own index holds the exact one, and this recovers the readable
+  // part for a chip that has only the upload.
+  const readableName = teamsUploadDisplayName(fileData.filename);
+  const shownFile: FileResource = readableName
+    ? { ...fileData, displayName: readableName }
+    : fileData;
 
   // Check if it's an image using centralized utility
   if (isImageFile(fileData.filename) && previewUrl) {
@@ -555,7 +568,7 @@ const AttachedFile = ({
           className="size-24 rounded-lg border border-theme-border-primary object-cover transition-transform hover:scale-105"
         />
         <div className="mt-1 max-w-[96px] truncate text-xs text-theme-fg-muted">
-          {fileData.filename}
+          {getFileName(shownFile)}
         </div>
       </InteractiveContainer>
     );
@@ -577,7 +590,7 @@ const AttachedFile = ({
       useDiv={true}
     >
       <FilePreviewButton
-        file={fileData}
+        file={shownFile}
         onRemove={() => {}}
         disabled={true}
         showFileType={true}
