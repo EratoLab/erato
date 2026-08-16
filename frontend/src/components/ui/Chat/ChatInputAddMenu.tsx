@@ -1,6 +1,13 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import { Fragment, useId, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
 
 import { useRovingMenuFocus } from "@/hooks/ui/useRovingMenuFocus";
 
@@ -83,10 +90,16 @@ export interface ChatInputAddMenuProps {
   className?: string;
 }
 
+// Same delayed close as DropdownMenu's item click, so a selection stays
+// visible for a beat before the menu dismisses.
+const CLOSE_ON_SELECT_DELAY_MS = 100;
+
 const sectionDivider = "my-1 h-px bg-theme-border";
 
+// Rows share DropdownMenu's item channel — geometry class, typography and
+// hover/focus colors — so customer themes retune every menu surface together.
 const rowClassName =
-  "flex w-full items-center gap-3 rounded-[var(--theme-radius-control)] px-3 py-2 text-left text-sm text-theme-fg-primary transition-colors hover:bg-theme-bg-hover";
+  "dropdown-item-geometry theme-transition flex w-full items-center gap-2 rounded-[var(--theme-radius-control)] text-left text-sm text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary focus:bg-theme-bg-hover focus:text-theme-fg-primary focus:outline-none focus:ring-1 focus:ring-inset focus:ring-theme-border-dropdown";
 
 // CSS selector for the menu's navigable rows; natively-disabled rows are
 // excluded from roving focus (aria-disabled tool rows stay reachable).
@@ -103,7 +116,7 @@ function SectionHeader({
   return (
     <div
       id={id}
-      className="px-3 pb-1 pt-2 text-xs font-medium uppercase tracking-wide text-theme-fg-muted"
+      className="px-[var(--theme-spacing-dropdown-padding-x)] pb-1 pt-2 text-xs font-medium uppercase tracking-wide text-theme-fg-muted"
     >
       {children}
     </div>
@@ -129,6 +142,7 @@ export function ChatInputAddMenu({
 }: ChatInputAddMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const baseId = useId();
   // eslint-disable-next-line lingui/no-unlocalized-strings -- internal DOM id suffix
   const toolsHeaderId = `${baseId}-tools`;
@@ -147,6 +161,42 @@ export function ChatInputAddMenu({
     itemSelector: NAVIGABLE_ITEM_SELECTOR,
   });
 
+  const cancelPendingClose = useCallback(() => {
+    clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = undefined;
+  }, []);
+
+  const closeAfterSelect = useCallback(() => {
+    clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = setTimeout(() => {
+      closeTimerRef.current = undefined;
+      setIsOpen(false);
+    }, CLOSE_ON_SELECT_DELAY_MS);
+  }, []);
+
+  // Host content closes immediately: hosts open dialogs (or finish an async
+  // upload) on selection, and AnchoredPopover focus-returns to the trigger on
+  // close — delaying past the dialog's own focus grab would steal focus from
+  // an open aria-modal. Same convention as DropdownMenu's confirm dialogs.
+  const closeNow = useCallback(() => {
+    cancelPendingClose();
+    setIsOpen(false);
+  }, [cancelPendingClose]);
+
+  // A close scheduled by a selection must not survive a dismiss-and-reopen —
+  // without this, the stale timer closes the freshly reopened menu.
+  const handleOpenChange = useCallback(
+    (open: boolean) => {
+      if (open) {
+        cancelPendingClose();
+      }
+      setIsOpen(open);
+    },
+    [cancelPendingClose],
+  );
+
+  useEffect(() => () => clearTimeout(closeTimerRef.current), []);
+
   const renderActionRow = (item: AddMenuActionItem, testId: string) => (
     <button
       key={item.id}
@@ -155,8 +205,13 @@ export function ChatInputAddMenu({
       tabIndex={-1}
       data-add-menu-item=""
       onClick={() => {
+        // A pending close means a selection already ran; the row stays
+        // mounted through the close delay, so swallow re-activations.
+        if (closeTimerRef.current !== undefined) {
+          return;
+        }
         item.onSelect();
-        setIsOpen(false);
+        closeAfterSelect();
       }}
       disabled={isBusy || item.disabled}
       data-testid={testId}
@@ -166,7 +221,10 @@ export function ChatInputAddMenu({
       )}
     >
       {item.icon && (
-        <span className="flex size-5 shrink-0 items-center justify-center text-theme-fg-secondary">
+        <span
+          className="flex size-5 shrink-0 items-center justify-center"
+          aria-hidden="true"
+        >
           {item.icon}
         </span>
       )}
@@ -222,9 +280,7 @@ export function ChatInputAddMenu({
     blocks.push({
       key: "extra-content",
       node: (
-        <div className="flex flex-col">
-          {extraContent({ close: () => setIsOpen(false) })}
-        </div>
+        <div className="flex flex-col">{extraContent({ close: closeNow })}</div>
       ),
     });
   }
@@ -271,14 +327,17 @@ export function ChatInputAddMenu({
                 )}
               >
                 {tool.icon && (
-                  <span className="flex size-5 shrink-0 items-center justify-center text-theme-fg-secondary">
+                  <span
+                    className="flex size-5 shrink-0 items-center justify-center"
+                    aria-hidden="true"
+                  >
                     {tool.icon}
                   </span>
                 )}
                 <span className="min-w-0 flex-1 truncate">{tool.label}</span>
                 <CheckIcon
                   className={clsx(
-                    "size-4 shrink-0 text-theme-fg-accent transition-opacity",
+                    "size-4 shrink-0 text-theme-fg-primary transition-opacity",
                     tool.checked ? "opacity-100" : "opacity-0",
                   )}
                 />
@@ -302,13 +361,19 @@ export function ChatInputAddMenu({
   return (
     <AnchoredPopover
       isOpen={isOpen}
-      onOpenChange={setIsOpen}
+      onOpenChange={handleOpenChange}
       panelRef={panelRef}
       ariaHasPopup="menu"
       role="menu"
       preferredOrientation={{ vertical: "top", horizontal: "left" }}
       initialFocusSelector={NAVIGABLE_ITEM_SELECTOR}
-      panelClassName="w-[min(20rem,calc(100vw-16px))] overflow-y-auto p-1"
+      panelStyle={{
+        maxWidth:
+          "calc(100vw - (var(--theme-layout-dropdown-viewport-margin) * 2))",
+        minWidth: "var(--theme-layout-dropdown-min-width)",
+      }}
+      panelClassName="flex w-80 flex-col"
+      viewportPadding="var(--theme-layout-dropdown-viewport-margin)"
       dataUi="chat-input-add-menu"
       // `relative` is the only styling this needs beyond the shared Button:
       // it anchors the absolutely-positioned count badge. Size, radius, hover
@@ -345,7 +410,11 @@ export function ChatInputAddMenu({
         </Button>
       )}
     >
-      <div className="flex flex-col" data-ui="chat-input-add-menu-content">
+      <div
+        className="dropdown-panel-chrome-geometry flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain"
+        role="none"
+        data-ui="chat-input-add-menu-content"
+      >
         {blocks.map((block, index) => (
           <Fragment key={block.key}>
             {index > 0 && <div className={sectionDivider} />}

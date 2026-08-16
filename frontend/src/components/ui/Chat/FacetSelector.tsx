@@ -5,7 +5,7 @@ import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Controls/Button";
 
 import { DropdownMenu } from "../Controls/DropdownMenu";
-import { ResolvedIcon, ToolsIcon } from "../icons";
+import { ChevronDownIcon, ResolvedIcon, ToolsIcon } from "../icons";
 
 import type { DropdownMenuItem } from "../Controls/DropdownMenu";
 import type { FacetInfo } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -123,22 +123,12 @@ export const FacetSelector = ({
             <div className="flex items-center gap-1 px-2">
               <ToolsIcon className="size-4" />
               <span className="text-sm font-medium">{t`Tools`}</span>
-              <svg
+              <ChevronDownIcon
                 className={clsx(
                   "size-3 shrink-0 text-[var(--theme-fg-secondary)] transition-transform duration-200",
                   isDropdownOpen && "rotate-180",
                 )}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
+              />
             </div>
           }
           id="facet-selector-dropdown"
