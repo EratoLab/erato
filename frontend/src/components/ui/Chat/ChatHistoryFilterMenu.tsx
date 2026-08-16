@@ -9,7 +9,7 @@ import {
 } from "react";
 
 import {
-  isDefaultFilters,
+  hasActiveFilters,
   sanitizeChatHistoryFilters,
   useChatHistoryFilterStore,
 } from "@/hooks/chat/store/chatHistoryFilterStore";
@@ -483,7 +483,7 @@ export function ChatHistoryFilterMenu({
           )}
           icon={<FilterSortIcon className="size-4" />}
         >
-          {!isDefaultFilters(filters) && (
+          {hasActiveFilters(filters) && (
             <span
               aria-hidden="true"
               data-testid="chat-history-filter-menu-active-indicator"

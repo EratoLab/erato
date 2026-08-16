@@ -190,13 +190,30 @@ describe("ChatHistoryFilterMenu", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows the active-filters dot only when values differ from the defaults", () => {
-    const { unmount } = renderMenu();
+  it("shows the active-filters dot for type and status but never for grouping", () => {
+    const defaults = renderMenu();
     expect(
       screen.queryByTestId("chat-history-filter-menu-active-indicator"),
     ).not.toBeInTheDocument();
-    unmount();
+    defaults.unmount();
 
+    // Grouping is a view preference, not a filter, so it leaves the dot off.
+    useChatHistoryFilterStore.getState().setGroupBy("none");
+    const groupedOnly = renderMenu();
+    expect(
+      screen.queryByTestId("chat-history-filter-menu-active-indicator"),
+    ).not.toBeInTheDocument();
+    groupedOnly.unmount();
+
+    useChatHistoryFilterStore.getState().resetToDefaults();
+    useChatHistoryFilterStore.getState().setTypeFilter("chat");
+    const typeOnly = renderMenu();
+    expect(
+      screen.getByTestId("chat-history-filter-menu-active-indicator"),
+    ).toBeInTheDocument();
+    typeOnly.unmount();
+
+    useChatHistoryFilterStore.getState().resetToDefaults();
     useChatHistoryFilterStore.getState().setStatusFilter("all");
     renderMenu();
 

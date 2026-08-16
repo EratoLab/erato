@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   CHAT_HISTORY_FILTER_DEFAULTS,
+  hasActiveFilters,
   isDefaultFilters,
   sanitizeChatHistoryFilters,
   useChatHistoryFilterStore,
@@ -128,6 +129,24 @@ describe("isDefaultFilters", () => {
     expect(
       isDefaultFilters({ ...CHAT_HISTORY_FILTER_DEFAULTS, groupBy: "none" }),
     ).toBe(false);
+  });
+});
+
+describe("hasActiveFilters", () => {
+  it("counts type and status deviations but ignores grouping", () => {
+    expect(hasActiveFilters(CHAT_HISTORY_FILTER_DEFAULTS)).toBe(false);
+    expect(
+      hasActiveFilters({ ...CHAT_HISTORY_FILTER_DEFAULTS, groupBy: "none" }),
+    ).toBe(false);
+    expect(
+      hasActiveFilters({ ...CHAT_HISTORY_FILTER_DEFAULTS, typeFilter: "chat" }),
+    ).toBe(true);
+    expect(
+      hasActiveFilters({
+        ...CHAT_HISTORY_FILTER_DEFAULTS,
+        statusFilter: "all",
+      }),
+    ).toBe(true);
   });
 });
 

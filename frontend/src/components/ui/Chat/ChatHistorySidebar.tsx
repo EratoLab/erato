@@ -15,7 +15,7 @@ import {
 } from "@/config/componentRegistry";
 import { defaultThemeConfig } from "@/config/themeConfig";
 import {
-  isDefaultFilters,
+  hasActiveFilters,
   sanitizeChatHistoryFilters,
   useChatHistoryFilterStore,
   useSanitizedChatHistoryFilters,
@@ -604,6 +604,18 @@ const ChatHistoryFooter = memo<{
 // eslint-disable-next-line lingui/no-unlocalized-strings
 ChatHistoryFooter.displayName = "ChatHistoryFooter";
 
+const NoFilterMatchesRow = () => (
+  <p
+    className="px-3 py-2 text-xs text-theme-fg-muted"
+    data-testid="chat-history-no-filter-matches"
+  >
+    {t({
+      id: "chat.history.filterMenu.noMatches",
+      message: "No chats match the current filters",
+    })}
+  </p>
+);
+
 const ErrorDisplay = ({ error }: { error: Error }) => (
   <div className="flex flex-col items-center justify-center p-4 text-theme-error-fg">
     <p className="font-medium">{t`Something went wrong`}</p>
@@ -729,6 +741,22 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
 
     const chatHistoryFilters =
       useSanitizedChatHistoryFilters(assistantsEnabled);
+    // Grouped-mode collapse state is per-mount on purpose: date-bucket keys
+    // churn daily, so persisting them would accumulate stale entries.
+    const [collapsedGroupKeys, setCollapsedGroupKeys] = useState<
+      ReadonlySet<string>
+    >(() => new Set());
+    const setGroupExpanded = useCallback((key: string, expanded: boolean) => {
+      setCollapsedGroupKeys((previous) => {
+        const next = new Set(previous);
+        if (expanded) {
+          next.delete(key);
+        } else {
+          next.add(key);
+        }
+        return next;
+      });
+    }, []);
     const pendingConfirmationIdsByChatId = useConfirmationRegistryStore(
       (state) => state.pendingIdsByChatId,
     );
@@ -751,6 +779,16 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
         generationStatusByChatId,
         pendingConfirmationIdsByChatId,
       ],
+    );
+
+    // The infinite-scroll sentinel must sit inside a visible list, so it
+    // follows the last still-expanded group rather than simply the last one.
+    // With every group collapsed there is no sentinel at all.
+    const lastExpandedGroupKey = useMemo(
+      () =>
+        recentChatGroups.findLast((group) => !collapsedGroupKeys.has(group.key))
+          ?.key ?? null,
+      [recentChatGroups, collapsedGroupKeys],
     );
 
     // Tab title is owned here rather than by ChatHistoryList: several list
@@ -1098,63 +1136,78 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                         />
                       </CollapsibleSection>
                     )}
-                    <CollapsibleSection
-                      title={t({
-                        id: "chat.history.recent",
-                        message: "Recent",
-                      })}
-                      defaultExpanded={true}
-                      expanded={isRecentChatsExpanded}
-                      onExpandedChange={setIsRecentChatsExpanded}
-                      actions={
-                        <ChatHistoryFilterMenu
-                          assistantsEnabled={assistantsEnabled}
-                        />
-                      }
-                    >
-                      {recentChatGroups.length === 0 &&
-                      !isDefaultFilters(chatHistoryFilters) ? (
-                        <p
-                          className="px-3 py-2 text-xs text-theme-fg-muted"
-                          data-testid="chat-history-no-filter-matches"
+                    {chatHistoryFilters.groupBy === "none" ? (
+                      <CollapsibleSection
+                        title={t({
+                          id: "chat.history.recent",
+                          message: "Recent",
+                        })}
+                        defaultExpanded={true}
+                        expanded={isRecentChatsExpanded}
+                        onExpandedChange={setIsRecentChatsExpanded}
+                        actions={
+                          <ChatHistoryFilterMenu
+                            assistantsEnabled={assistantsEnabled}
+                          />
+                        }
+                      >
+                        {sessions.length === 0 &&
+                        hasActiveFilters(chatHistoryFilters) ? (
+                          <NoFilterMatchesRow />
+                        ) : (
+                          <ResolvedChatHistoryList
+                            sessions={sessions}
+                            currentSessionId={currentSessionId}
+                            onSessionSelect={onSessionSelect}
+                            onSessionArchive={onSessionArchive}
+                            onSessionEditTitle={onSessionEditTitle}
+                            onSessionShare={onSessionShare}
+                            onSessionPin={onSessionPin}
+                            pinnedChatsCount={pinnedSessions.length}
+                            pinnedChatsLimit={pinnedChatsLimit}
+                            showTimestamps={showTimestamps}
+                            hasMore={hasMoreSessions}
+                            isLoadingMore={isLoadingMoreSessions}
+                            onLoadMore={onLoadMoreSessions}
+                          />
+                        )}
+                      </CollapsibleSection>
+                    ) : recentChatGroups.length === 0 ? (
+                      // No group headers exist to host the filter menu, so a
+                      // bare header row keeps its trigger reachable.
+                      <>
+                        <div
+                          className="flex items-center justify-end px-2 py-1"
+                          data-ui="chat-history-filter-row"
                         >
-                          {t({
-                            id: "chat.history.filterMenu.noMatches",
-                            message: "No chats match the current filters",
-                          })}
-                        </p>
-                      ) : recentChatGroups.length === 0 ? (
-                        <ResolvedChatHistoryList
-                          sessions={sessions}
-                          currentSessionId={currentSessionId}
-                          onSessionSelect={onSessionSelect}
-                          onSessionArchive={onSessionArchive}
-                          onSessionEditTitle={onSessionEditTitle}
-                          onSessionShare={onSessionShare}
-                          onSessionPin={onSessionPin}
-                          pinnedChatsCount={pinnedSessions.length}
-                          pinnedChatsLimit={pinnedChatsLimit}
-                          showTimestamps={showTimestamps}
-                          hasMore={hasMoreSessions}
-                          isLoadingMore={isLoadingMoreSessions}
-                          onLoadMore={onLoadMoreSessions}
-                        />
-                      ) : (
-                        recentChatGroups.map((group, index) => {
-                          // Only the last list gets the infinite-scroll props,
-                          // so exactly one load-more sentinel exists.
-                          const isLastGroup =
-                            index === recentChatGroups.length - 1;
-                          return (
-                            <div key={group.key} data-ui="chat-history-group">
-                              {group.label !== null && (
-                                <h4
-                                  className="truncate px-3 pb-1 pt-2 text-xs font-medium text-theme-fg-muted"
-                                  data-ui="chat-history-group-header"
-                                >
-                                  {group.label}
-                                </h4>
-                              )}
+                          <ChatHistoryFilterMenu
+                            assistantsEnabled={assistantsEnabled}
+                          />
+                        </div>
+                        {hasActiveFilters(chatHistoryFilters) && (
+                          <NoFilterMatchesRow />
+                        )}
+                      </>
+                    ) : (
+                      recentChatGroups.map((group, index) => {
+                        const carriesLoadMore =
+                          group.key === lastExpandedGroupKey;
+                        return (
+                          <div key={group.key} data-ui="chat-history-group">
+                            <CollapsibleSection
+                              title={group.label ?? ""}
+                              expanded={!collapsedGroupKeys.has(group.key)}
+                              onExpandedChange={(expanded) =>
+                                setGroupExpanded(group.key, expanded)
+                              }
+                              actions={
+                                index === 0 ? (
+                                  <ChatHistoryFilterMenu
+                                    assistantsEnabled={assistantsEnabled}
+                                  />
+                                ) : undefined
+                              }
+                            >
                               <ResolvedChatHistoryList
                                 sessions={group.sessions}
                                 currentSessionId={currentSessionId}
@@ -1166,19 +1219,25 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                                 pinnedChatsCount={pinnedSessions.length}
                                 pinnedChatsLimit={pinnedChatsLimit}
                                 showTimestamps={showTimestamps}
-                                hasMore={isLastGroup ? hasMoreSessions : false}
+                                hasMore={
+                                  carriesLoadMore ? hasMoreSessions : false
+                                }
                                 isLoadingMore={
-                                  isLastGroup ? isLoadingMoreSessions : false
+                                  carriesLoadMore
+                                    ? isLoadingMoreSessions
+                                    : false
                                 }
                                 onLoadMore={
-                                  isLastGroup ? onLoadMoreSessions : undefined
+                                  carriesLoadMore
+                                    ? onLoadMoreSessions
+                                    : undefined
                                 }
                               />
-                            </div>
-                          );
-                        })
-                      )}
-                    </CollapsibleSection>
+                            </CollapsibleSection>
+                          </div>
+                        );
+                      })
+                    )}
                   </>
                 )}
               </div>

@@ -57,6 +57,17 @@ export function isDefaultFilters(values: ChatHistoryFilterValues): boolean {
 }
 
 /**
+ * Whether a filter that can exclude chats from the list is active. Grouping
+ * only rearranges the same rows, so it deliberately does not count.
+ */
+export function hasActiveFilters(values: ChatHistoryFilterValues): boolean {
+  return (
+    values.typeFilter !== CHAT_HISTORY_FILTER_DEFAULTS.typeFilter ||
+    values.statusFilter !== CHAT_HISTORY_FILTER_DEFAULTS.statusFilter
+  );
+}
+
+/**
  * Sidebar chat-list filter/sort preferences, persisted per browser so the
  * list comes back the way the user left it.
  */
