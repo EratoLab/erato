@@ -457,6 +457,11 @@ export async function listTeamChannels(
  * a series of openers with every answer missing. Expanding costs nothing extra
  * against the per-channel ceiling; fetching replies per post would cost one
  * gated request each.
+ *
+ * Unlike the chat endpoint this one supports no `$orderby`, and its fixed
+ * order is by the reply chain's last activity — so a reply or reaction on an
+ * old thread pulls the whole thread into the newest-N window. Unfixable
+ * server-side; the renderer re-sorts openers chronologically.
  */
 export async function listChannelMessagesPage(
   teamId: string,

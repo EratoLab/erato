@@ -79,6 +79,34 @@ describe("runAtChatMetadataRate", () => {
     }
   });
 
+  it("admits the next start while a slow call is still in flight", async () => {
+    vi.useFakeTimers();
+    const startedAt: number[] = [];
+    let finishFirst: () => void = () => undefined;
+
+    const first = runAtChatMetadataRate(undefined, () => {
+      startedAt.push(Date.now());
+      return new Promise<void>((resolve) => {
+        finishFirst = resolve;
+      });
+    });
+    const second = runAtChatMetadataRate(undefined, async () => {
+      startedAt.push(Date.now());
+    });
+
+    // The second start must not wait for the first request to COMPLETE —
+    // Graph's ceiling counts starts, and completion-chaining would serialize
+    // the whole metadata family at one request per round-trip.
+    await vi.advanceTimersByTimeAsync(MIN_CHAT_METADATA_START_INTERVAL_MS);
+    expect(startedAt).toHaveLength(2);
+
+    finishFirst();
+    await Promise.all([first, second]);
+    expect(startedAt[1] - startedAt[0]).toBeGreaterThanOrEqual(
+      MIN_CHAT_METADATA_START_INTERVAL_MS,
+    );
+  });
+
   it("keeps pacing when a call rejects", async () => {
     vi.useFakeTimers();
     const startedAt: number[] = [];
