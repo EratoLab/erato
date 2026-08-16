@@ -21,7 +21,8 @@ const AssistantItem = memo<{
   name: string;
   onSelect: () => void;
 }>(({ name, onSelect }) => (
-  <div className="px-2 py-1">
+  // Horizontal inset comes from the sidebar's shared wrapper, not from here.
+  <div className="py-1">
     <InteractiveContainer
       useDiv={true}
       onClick={onSelect}
@@ -85,7 +86,7 @@ export const FrequentAssistantsList = memo<FrequentAssistantsListProps>(
       <>
         {/* Loading state */}
         {isLoading && (
-          <div className="flex justify-center px-2 py-4">
+          <div className="flex justify-center py-4">
             <div className="size-5 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
           </div>
         )}
@@ -104,7 +105,7 @@ export const FrequentAssistantsList = memo<FrequentAssistantsListProps>(
         )}
 
         {showBottomDivider && (
-          <div className="mx-2 my-1 border-t border-theme-border transition-opacity duration-200" />
+          <div className="my-1 border-t border-theme-border transition-opacity duration-200" />
         )}
       </>
     );

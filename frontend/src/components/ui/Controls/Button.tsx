@@ -210,7 +210,11 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       validateProps(props);
     }, [props]);
 
-    const usesIconGeometry = variant === "icon-only" || geometry === "icon";
+    // sidebar-icon buttons are always icon-only, so they take icon geometry.
+    const usesIconGeometry =
+      variant === "icon-only" ||
+      variant === "sidebar-icon" ||
+      geometry === "icon";
 
     const buttonClasses = useMemo(
       () =>

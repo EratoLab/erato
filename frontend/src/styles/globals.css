@@ -687,11 +687,60 @@ body {
     var(--theme-spacing-shell-compact-padding-x);
 }
 
-/* Spacing rather than surface, but blocked the same way: held inline it made
-   [data-ui="chat-history-list"] padding unoverridable. */
-.chat-history-list-geometry {
-  padding: calc(var(--theme-spacing-shell-padding-y) / 2)
-    calc(var(--theme-spacing-shell-padding-x) / 2);
+/* One horizontal inset for every sidebar row surface: nav-row wrappers,
+   section headers, the nav divider and the chat-list wrappers all read this
+   token (header and footer read it through .sidebar-section-skin), so the
+   sidebar's left edges move together when a theme changes it. */
+.sidebar-inset-geometry {
+  padding-inline: var(--theme-spacing-shell-compact-padding-x);
+}
+
+/* Header and footer bands: height derives from the largest control the bands
+   host (the sm icon control, or the 2rem footer avatar when a theme shrinks
+   controls below it) plus the band's own padding, so the two bands stay equal
+   for any token values instead of pinning separate min-height literals. */
+.sidebar-band-geometry {
+  /* border-box: the 1px band divider is part of the height, so it is part of
+     the formula — otherwise the band whose content exactly fills the minimum
+     ends up 1px taller than the other. */
+  min-height: calc(
+    max(var(--theme-spacing-control-min-height) - 0.25rem, 2rem) + 2 *
+      var(--theme-spacing-shell-compact-padding-y) + 1px
+  );
+}
+
+/* Places a square icon control on the sidebar's icon column: the control is
+   control-min-height sized with its content centered, while the column is
+   defined by the row padding the nav rows use — so the margin solves for
+   "content left edge = inset + control-padding-x" from the same tokens.
+   --sidebar-icon-col-content is the rendered content width (size-5 icon by
+   default; the footer avatar overrides it). Slim mode centers via flexbox
+   instead, so the rail zeroes the margin. */
+.sidebar-icon-col-geometry {
+  --sidebar-icon-col-content: 1.25rem;
+  /* The control box never renders smaller than its content (the avatar
+     variant enforces that via min sizes), so the effective box is the max. */
+  margin-left: calc(
+    var(--theme-spacing-control-padding-x) -
+      (
+        max(
+            var(--theme-spacing-control-min-height) - 0.25rem,
+            var(--sidebar-icon-col-content)
+          ) -
+          var(--sidebar-icon-col-content)
+      ) /
+      2
+  );
+}
+
+.sidebar-icon-col-geometry-avatar {
+  --sidebar-icon-col-content: 2rem;
+  min-width: var(--sidebar-icon-col-content);
+  min-height: var(--sidebar-icon-col-content);
+}
+
+[data-ui="sidebar"][data-sidebar-mode="slim"] .sidebar-icon-col-geometry {
+  margin-left: 0;
 }
 
 /* Sidebar chat rows. Same reasoning as .anchored-popover-skin: held inline,
@@ -706,6 +755,41 @@ body {
 
 .sidebar-row-selected {
   background-color: var(--theme-shell-sidebar-selected);
+}
+
+/* Drag affordance on the expanded sidebar's right edge. The cursor is
+   iconoir's HorizontalSplit serialized as a data URI (SVG cursors don't
+   inherit CSS color, so the stroke is baked per theme); the ew-resize keyword
+   covers engines with unreliable SVG-cursor support (Safari). */
+:root {
+  --sidebar-resize-cursor:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23374151' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 12H2M2 12L5.5 8.5M2 12L5.5 15.5'/%3E%3Cpath d='M14 12H22M22 12L18.5 8.5M22 12L18.5 15.5'/%3E%3Cpath d='M10 21L10 3'/%3E%3Cpath d='M14 21L14 3'/%3E%3C/svg%3E")
+      12 12,
+    ew-resize;
+}
+
+:root[data-theme="dark"] {
+  --sidebar-resize-cursor:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23d1d5db' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 12H2M2 12L5.5 8.5M2 12L5.5 15.5'/%3E%3Cpath d='M14 12H22M22 12L18.5 8.5M22 12L18.5 15.5'/%3E%3Cpath d='M10 21L10 3'/%3E%3Cpath d='M14 21L14 3'/%3E%3C/svg%3E")
+      12 12,
+    ew-resize;
+}
+
+.sidebar-resize-handle {
+  cursor: var(--sidebar-resize-cursor);
+}
+
+/* While a drag is in flight: keep the resize cursor everywhere, freeze the
+   width/margin transitions that would otherwise rubber-band behind the
+   pointer, and suppress accidental text selection. */
+:root[data-sidebar-resizing] * {
+  cursor: var(--sidebar-resize-cursor) !important;
+  transition: none !important;
+  user-select: none !important;
+}
+
+:root[data-sidebar-resizing] .sidebar-resize-handle {
+  background-color: var(--theme-border-divider);
 }
 
 /* Surface for AnchoredPopover panels (dropdown menus, the chat "+" menu).

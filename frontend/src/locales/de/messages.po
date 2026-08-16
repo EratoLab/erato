@@ -4796,6 +4796,10 @@ msgstr "Wartende Nachricht ersetzen?"
 msgid "Reset to Browser Detection"
 msgstr ""
 
+#: src/components/ui/Chat/SidebarResizeHandle.tsx
+msgid "Resize sidebar"
+msgstr ""
+
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Retry transcription"
 msgstr "Transkription erneut versuchen"

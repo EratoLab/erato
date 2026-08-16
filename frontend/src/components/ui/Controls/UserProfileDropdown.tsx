@@ -88,11 +88,13 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
     ];
 
     return (
-      <div className={clsx("flex min-h-[40px] items-center", className)}>
+      <div className={clsx("flex items-center", className)}>
         <DropdownMenu
           items={dropdownItems}
           align="left"
           data-testid="user-profile-dropdown"
+          triggerButtonGeometry="icon"
+          triggerButtonClassName="sidebar-icon-col-geometry sidebar-icon-col-geometry-avatar"
           triggerIcon={
             <Avatar
               userProfile={userProfile}

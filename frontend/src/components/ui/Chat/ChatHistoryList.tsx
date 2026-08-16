@@ -468,13 +468,15 @@ export const ChatHistoryListSkeleton = ({
 }) => (
   <div
     data-testid="chat-history-skeleton"
-    className="chat-history-list-geometry flex w-full min-w-0 flex-col gap-1 overflow-y-auto bg-[var(--theme-shell-sidebar)]"
+    className="flex w-full min-w-0 flex-col gap-1"
   >
+    {/* Container and row geometry mirror the real list exactly (inset comes
+        from the host wrapper) so nothing shifts when loading finishes. */}
     {Array.from({ length: 5 }, (_, i) => (
       <div
         key={i}
         data-testid="chat-history-skeleton-item"
-        className="sidebar-row-geometry sidebar-row-selected w-full px-4 py-3"
+        className="sidebar-row-geometry sidebar-row-selected w-full px-3 py-1.5 pb-3.5 pr-1.5"
       >
         <div className="flex w-full items-center justify-between gap-2">
           <div className="h-5 w-2/3 animate-pulse rounded bg-theme-bg-accent" />
