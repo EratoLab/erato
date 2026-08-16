@@ -43,8 +43,15 @@ export interface SlimMeasurement {
 
 export const forceSlimCollapsedMode = async (page: Page) => {
   await page.addInitScript(() => {
-    (window as { SIDEBAR_COLLAPSED_MODE?: string }).SIDEBAR_COLLAPSED_MODE =
-      "slim";
+    // A plain assignment gets clobbered in CI: the backend rewrites
+    // index.html with a head script that unconditionally assigns the
+    // configured SIDEBAR_COLLAPSED_MODE ("hidden" by default) AFTER init
+    // scripts run. A getter with a no-op setter survives that write.
+    Object.defineProperty(window, "SIDEBAR_COLLAPSED_MODE", {
+      get: () => "slim",
+      set: () => {},
+      configurable: true,
+    });
   });
 };
 
@@ -200,7 +207,9 @@ export const measureExpanded = (page: Page): Promise<ExpandedMeasurement> =>
       divider: toBox(aside.querySelector('[data-ui="sidebar-nav-divider"]')),
       chatRows: requireBoxes(chatRowEls),
       chatTitles: requireBoxes(
-        chatRowEls.map((el) => el.querySelector("span[title]")),
+        // Not bare `span[title]`: the generation-status dot renders before
+        // the title span and also carries a title attribute.
+        chatRowEls.map((el) => el.querySelector("span.truncate[title]")),
       ),
       chatScrollbarWidth: scroller
         ? scroller.offsetWidth - scroller.clientWidth
@@ -379,8 +388,9 @@ export const recordToggleTrajectory = async (
   await page.evaluate(() => {
     const trace: {
       frames: Record<string, { x: number; y: number } | null>[];
+      widths: number[];
       done: boolean;
-    } = { frames: [], done: false };
+    } = { frames: [], widths: [], done: false };
     (window as unknown as { __geoTrace: typeof trace }).__geoTrace = trace;
     const pick = (sel: string) => {
       const el = document.querySelector(sel);
@@ -392,6 +402,10 @@ export const recordToggleTrajectory = async (
       };
     };
     const capture = () => {
+      const aside = document.querySelector('[data-ui="sidebar"]');
+      trace.widths.push(
+        aside ? Math.round(aside.getBoundingClientRect().width * 10) / 10 : 0,
+      );
       trace.frames.push({
         toggle: pick('[data-ui="sidebar-header"] button'),
         newChat: pick('div[aria-label="New Chat"] svg'),
@@ -425,16 +439,34 @@ export const recordToggleTrajectory = async (
       { timeout: 5000 },
     )
     .toBe(true);
-  const frames = await page.evaluate(
-    () =>
-      (
-        window as unknown as {
-          __geoTrace: {
-            frames: Record<string, { x: number; y: number } | null>[];
-          };
-        }
-      ).__geoTrace.frames,
-  );
+  const { frames, widths } = await page.evaluate(() => {
+    const trace = (
+      window as unknown as {
+        __geoTrace: {
+          frames: Record<string, { x: number; y: number } | null>[];
+          widths: number[];
+        };
+      }
+    ).__geoTrace;
+    return { frames: trace.frames, widths: trace.widths };
+  });
+
+  // Guard against a vacuous pass: if the click stalls past the recording
+  // window, the frames show only the resting state and every motion
+  // threshold passes trivially. The recording must have observed the full
+  // width sweep, and the settled width must match the last recorded frame.
+  await settleSidebar(page);
+  const settledWidth = await page
+    .locator('[data-ui="sidebar"]')
+    .evaluate((el) => el.getBoundingClientRect().width);
+  expect(
+    Math.abs(widths[widths.length - 1] - widths[0]),
+    `recording observed the width sweep (${widths[0]} -> ${widths[widths.length - 1]})`,
+  ).toBeGreaterThan(50);
+  expect(
+    Math.abs(widths[widths.length - 1] - settledWidth),
+    `recording covered the animation end (last frame ${widths[widths.length - 1]}, settled ${settledWidth})`,
+  ).toBeLessThanOrEqual(1);
 
   const labels = ["toggle", "newChat", "search", "avatar"];
   return labels.map((label) => {

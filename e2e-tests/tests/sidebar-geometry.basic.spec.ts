@@ -281,12 +281,34 @@ test.describe("sidebar resize", () => {
       .locator('[data-ui="sidebar"]')
       .evaluate((el) => el.getBoundingClientRect().width);
 
+  const dragEngaged = (page: Page) =>
+    page.evaluate(() =>
+      document.documentElement.hasAttribute("data-sidebar-resizing"),
+    );
+
   const dragHandleBy = async (page: Page, dx: number) => {
     const box = (await handle(page).boundingBox())!;
     const startX = box.x + box.width / 2;
     const startY = box.y + box.height / 2;
-    await page.mouse.move(startX, startY);
-    await page.mouse.down();
+    // The 6px strip occasionally misses the pointerdown on a cold first
+    // attempt under CI contention; verify the handler engaged (it sets the
+    // root data-sidebar-resizing attribute) and retry the press once.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await page.mouse.move(startX, startY);
+      await page.mouse.down();
+      let engaged = false;
+      for (let i = 0; i < 20 && !engaged; i++) {
+        engaged = await dragEngaged(page);
+        if (!engaged) {
+          await page.evaluate(
+            () => new Promise((resolve) => setTimeout(resolve, 50)),
+          );
+        }
+      }
+      if (engaged) break;
+      await page.mouse.up();
+    }
+    expect(await dragEngaged(page), "resize drag engaged").toBe(true);
     await page.mouse.move(startX + dx, startY, { steps: 8 });
     await page.mouse.up();
   };
