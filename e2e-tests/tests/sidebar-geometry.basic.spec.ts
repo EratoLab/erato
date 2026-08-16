@@ -89,6 +89,47 @@ test.describe("sidebar geometry contract", () => {
   );
 
   test(
+    "logo rail plate keeps bands equal and sections still (I1, I5)",
+    { tag: TAG_CI },
+    async ({ page }) => {
+      // Runtime logo channel: the app resolves window.SIDEBAR_LOGO_PATH when
+      // no build-time value is set, and the app serves its own favicon.
+      await page.addInitScript(() => {
+        (window as { SIDEBAR_LOGO_PATH?: string }).SIDEBAR_LOGO_PATH =
+          "/favicon.svg";
+      });
+      await page.goto("/");
+      await chatIsReadyToChat(page);
+      await expandSidebar(page);
+
+      const expanded = await measureExpanded(page);
+      expectAligned(
+        [expanded.headerHeight, expanded.footerHeight],
+        "bands with a logo configured",
+      );
+
+      assertStationaryTrajectory(
+        await recordToggleTrajectory(page, "collapse"),
+      );
+      expect(await sidebarMode(page)).toBe("slim");
+
+      // The slim header hosts the logo plate; it must stay centered on the
+      // rail and must not grow the band past the expanded state's height.
+      const slim = await measureSlim(page);
+      assertSlimInvariants(slim);
+      await expect(
+        page.locator('[data-ui="sidebar-header"] button img'),
+      ).toBeVisible();
+      expectAligned(
+        [slim.headerHeight, expanded.headerHeight],
+        "slim vs expanded header band with a logo",
+      );
+
+      assertStationaryTrajectory(await recordToggleTrajectory(page, "expand"));
+    },
+  );
+
+  test(
     "skeleton rows share the real rows' inset and padding (I3)",
     { tag: TAG_CI },
     async ({ page }) => {

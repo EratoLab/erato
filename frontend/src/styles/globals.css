@@ -751,14 +751,16 @@ body {
   );
 }
 
-.sidebar-icon-col-geometry-avatar {
+/* 2rem content floor: the footer avatar and the slim logo image (max 2rem)
+   must never render larger than their control box, and the box must never
+   exceed what the band formula accounts for — a fixed oversize plate would
+   grow the slim header past the expanded one and everything below would jump
+   vertically on toggle. */
+.sidebar-icon-col-geometry-avatar,
+.sidebar-icon-col-geometry-logo {
   --sidebar-icon-col-content: 2rem;
   min-width: var(--sidebar-icon-col-content);
   min-height: var(--sidebar-icon-col-content);
-}
-
-.sidebar-icon-col-geometry-logo {
-  --sidebar-icon-col-content: 2.5rem;
 }
 
 /* Sidebar chat rows. Same reasoning as .anchored-popover-skin: held inline,

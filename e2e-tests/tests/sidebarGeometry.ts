@@ -37,6 +37,7 @@ export interface ExpandedMeasurement {
 
 export interface SlimMeasurement {
   asideWidth: number;
+  headerHeight: number;
   railCenters: { label: string; center: number }[];
 }
 
@@ -250,6 +251,12 @@ export const measureSlim = (page: Page): Promise<SlimMeasurement> =>
 
     return {
       asideWidth: Math.round(asideRect.width * 10) / 10,
+      headerHeight: (() => {
+        const header = aside.querySelector('[data-ui="sidebar-header"]');
+        return header
+          ? Math.round(header.getBoundingClientRect().height * 10) / 10
+          : 0;
+      })(),
       railCenters,
     };
   });
@@ -352,14 +359,18 @@ export interface TrajectoryElementReport {
   label: string;
   startX: number;
   endX: number;
-  maxFrameDelta: number;
-  totalPath: number;
+  maxFrameDeltaX: number;
+  totalPathX: number;
+  startY: number;
+  endY: number;
+  maxFrameDeltaY: number;
 }
 
 /**
- * Toggle the sidebar while sampling icon x-positions every animation frame,
- * then report per-element motion. Under rail-column geometry the icons must
- * not move at all while the width animates.
+ * Toggle the sidebar while sampling icon center positions every animation
+ * frame, then report per-element motion. Under rail-column geometry the icons
+ * must not move horizontally at all while the width animates, and the bands
+ * must not resize — so nothing may move vertically either.
  */
 export const recordToggleTrajectory = async (
   page: Page,
@@ -367,7 +378,7 @@ export const recordToggleTrajectory = async (
 ): Promise<TrajectoryElementReport[]> => {
   await page.evaluate(() => {
     const trace: {
-      frames: Record<string, number | null>[];
+      frames: Record<string, { x: number; y: number } | null>[];
       done: boolean;
     } = { frames: [], done: false };
     (window as unknown as { __geoTrace: typeof trace }).__geoTrace = trace;
@@ -375,7 +386,10 @@ export const recordToggleTrajectory = async (
       const el = document.querySelector(sel);
       if (!el) return null;
       const r = el.getBoundingClientRect();
-      return Math.round((r.x + r.width / 2) * 10) / 10;
+      return {
+        x: Math.round((r.x + r.width / 2) * 10) / 10,
+        y: Math.round((r.y + r.height / 2) * 10) / 10,
+      };
     };
     const capture = () => {
       trace.frames.push({
@@ -415,30 +429,40 @@ export const recordToggleTrajectory = async (
     () =>
       (
         window as unknown as {
-          __geoTrace: { frames: Record<string, number | null>[] };
+          __geoTrace: {
+            frames: Record<string, { x: number; y: number } | null>[];
+          };
         }
       ).__geoTrace.frames,
   );
 
   const labels = ["toggle", "newChat", "search", "avatar"];
   return labels.map((label) => {
-    const xs = frames
+    const points = frames
       .map((frame) => frame[label])
-      .filter((x): x is number => x !== null);
-    expect(xs.length, `${label}: sampled frames`).toBeGreaterThan(10);
-    let maxFrameDelta = 0;
-    let totalPath = 0;
-    for (let i = 1; i < xs.length; i++) {
-      const delta = Math.abs(xs[i] - xs[i - 1]);
-      maxFrameDelta = Math.max(maxFrameDelta, delta);
-      totalPath += delta;
+      .filter((p): p is { x: number; y: number } => p !== null);
+    expect(points.length, `${label}: sampled frames`).toBeGreaterThan(10);
+    let maxFrameDeltaX = 0;
+    let totalPathX = 0;
+    let maxFrameDeltaY = 0;
+    for (let i = 1; i < points.length; i++) {
+      const deltaX = Math.abs(points[i].x - points[i - 1].x);
+      maxFrameDeltaX = Math.max(maxFrameDeltaX, deltaX);
+      totalPathX += deltaX;
+      maxFrameDeltaY = Math.max(
+        maxFrameDeltaY,
+        Math.abs(points[i].y - points[i - 1].y),
+      );
     }
     return {
       label,
-      startX: xs[0],
-      endX: xs[xs.length - 1],
-      maxFrameDelta,
-      totalPath,
+      startX: points[0].x,
+      endX: points[points.length - 1].x,
+      maxFrameDeltaX,
+      totalPathX,
+      startY: points[0].y,
+      endY: points[points.length - 1].y,
+      maxFrameDeltaY,
     };
   });
 };
@@ -449,18 +473,30 @@ export const assertStationaryTrajectory = (
   for (const report of reports) {
     expect
       .soft(
-        report.maxFrameDelta,
-        `${report.label} max per-frame movement (start ${report.startX}, end ${report.endX})`,
+        report.maxFrameDeltaX,
+        `${report.label} max per-frame x movement (start ${report.startX}, end ${report.endX})`,
       )
       .toBeLessThanOrEqual(1);
     expect
       .soft(
         Math.abs(report.endX - report.startX),
-        `${report.label} resting shift between states`,
+        `${report.label} resting x shift between states`,
       )
       .toBeLessThanOrEqual(0.5);
     expect
-      .soft(report.totalPath, `${report.label} total horizontal path`)
+      .soft(report.totalPathX, `${report.label} total horizontal path`)
       .toBeLessThanOrEqual(2);
+    expect
+      .soft(
+        report.maxFrameDeltaY,
+        `${report.label} max per-frame y movement (start ${report.startY}, end ${report.endY})`,
+      )
+      .toBeLessThanOrEqual(1);
+    expect
+      .soft(
+        Math.abs(report.endY - report.startY),
+        `${report.label} resting y shift between states`,
+      )
+      .toBeLessThanOrEqual(0.5);
   }
 };

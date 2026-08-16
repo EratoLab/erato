@@ -206,7 +206,7 @@ const SidebarLogo = memo<{
       variant="sidebar-icon"
       aria-label={t`expand sidebar`}
       aria-expanded="false"
-      className="sidebar-icon-col-geometry sidebar-icon-col-geometry-logo relative size-10 p-0"
+      className="sidebar-icon-col-geometry sidebar-icon-col-geometry-logo relative"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
