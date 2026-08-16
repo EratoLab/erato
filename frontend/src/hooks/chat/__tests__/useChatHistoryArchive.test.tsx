@@ -19,7 +19,11 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   fetchRecentChats: vi.fn(),
   useArchiveChatEndpoint: () => ({ mutateAsync: mockArchiveMutation }),
   useUpdateChat: () => ({ mutateAsync: vi.fn() }),
-  recentChatsQuery: () => ({ queryKey: ["recentChats"] }),
+  // Mirrors the generated queryKeyFn: queryParams become a key segment when
+  // present, so each filter combination gets its own cache entry.
+  recentChatsQuery: (v: { queryParams?: Record<string, unknown> }) => ({
+    queryKey: v.queryParams ? ["recentChats", v.queryParams] : ["recentChats"],
+  }),
   chatMessagesQuery: (v: { pathParams: { chatId: string } }) => ({
     queryKey: ["chatMessages", { chatId: v.pathParams.chatId }],
   }),
@@ -29,10 +33,26 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiContext", () => ({
   useV1betaApiContext: () => ({ fetcherOptions: {} }),
 }));
 
+import {
+  CHAT_HISTORY_FILTER_DEFAULTS,
+  useChatHistoryFilterStore,
+} from "@/hooks/chat/store/chatHistoryFilterStore";
+
 import { useChatHistory } from "../useChatHistory";
 
 const CHAT_HISTORY_PAGE_SIZE = 30;
-const queryKey = ["recentChats", "infinite", { limit: CHAT_HISTORY_PAGE_SIZE }];
+const queryKey = [
+  "recentChats",
+  {},
+  "infinite",
+  { limit: CHAT_HISTORY_PAGE_SIZE },
+];
+const archivedInclusiveQueryKey = [
+  "recentChats",
+  { include_archived: true },
+  "infinite",
+  { limit: CHAT_HISTORY_PAGE_SIZE },
+];
 
 function makePage(offset: number, ids: string[], hasMore: boolean) {
   return {
@@ -54,6 +74,7 @@ const wrapper = ({ children }: { children: ReactNode }) =>
 describe("useChatHistory archiveChat optimistic removal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useChatHistoryFilterStore.setState({ ...CHAT_HISTORY_FILTER_DEFAULTS });
     mockArchiveMutation.mockResolvedValue(undefined);
     queryClient = new QueryClient({
       defaultOptions: {
@@ -90,6 +111,17 @@ describe("useChatHistory archiveChat optimistic removal", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
+  it("cancels in-flight list fetches before the optimistic removal", async () => {
+    const cancelSpy = vi.spyOn(queryClient, "cancelQueries");
+    const { result } = renderHook(() => useChatHistory(), { wrapper });
+
+    await act(async () => {
+      await result.current.archiveChat("chat5");
+    });
+
+    expect(cancelSpy).toHaveBeenCalledWith({ queryKey: ["recentChats"] });
+  });
+
   it("does not refetch the list (no invalidate)", async () => {
     const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
     const { result } = renderHook(() => useChatHistory(), { wrapper });
@@ -99,6 +131,67 @@ describe("useChatHistory archiveChat optimistic removal", () => {
     });
 
     expect(invalidateSpy).not.toHaveBeenCalled();
+  });
+
+  it("keeps the row and refetches instead when archived chats are shown", async () => {
+    useChatHistoryFilterStore.setState({ statusFilter: "all" });
+    queryClient.setQueryData(archivedInclusiveQueryKey, {
+      pageParams: [0],
+      pages: [makePage(0, ["chat5", "chat6"], false)],
+    });
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const { result } = renderHook(() => useChatHistory(), { wrapper });
+
+    await act(async () => {
+      await result.current.archiveChat("chat5");
+    });
+
+    expect(mockArchiveMutation).toHaveBeenCalledWith({
+      pathParams: { chatId: "chat5" },
+      body: {},
+    });
+    // The archived chat legitimately stays listed under this filter; the
+    // refetch (not cache surgery) delivers its archived state.
+    expect(result.current.chats.map((c) => c.id)).toContain("chat5");
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["recentChats"] });
+  });
+
+  it("removes the row from sibling filter variants and marks archived-inclusive ones stale", async () => {
+    const typeChatQueryKey = [
+      "recentChats",
+      { type: "chat" },
+      "infinite",
+      { limit: CHAT_HISTORY_PAGE_SIZE },
+    ];
+    queryClient.setQueryData(typeChatQueryKey, {
+      pageParams: [0],
+      pages: [makePage(0, ["chat5", "chat6"], false)],
+    });
+    queryClient.setQueryData(archivedInclusiveQueryKey, {
+      pageParams: [0],
+      pages: [makePage(0, ["chat5", "chat6"], false)],
+    });
+    const { result } = renderHook(() => useChatHistory(), { wrapper });
+
+    await act(async () => {
+      await result.current.archiveChat("chat5");
+    });
+
+    type CachedList = { pages: { chats: { id: string }[] }[] };
+    const typeChatData = queryClient.getQueryData<CachedList>(typeChatQueryKey);
+    expect(typeChatData?.pages[0].chats.map((c) => c.id)).toEqual(["chat6"]);
+    // The archived-inclusive variant legitimately keeps the row; it only
+    // becomes stale so its next mount refetches the archived state.
+    const archivedData = queryClient.getQueryData<CachedList>(
+      archivedInclusiveQueryKey,
+    );
+    expect(archivedData?.pages[0].chats.map((c) => c.id)).toEqual([
+      "chat5",
+      "chat6",
+    ]);
+    expect(
+      queryClient.getQueryState(archivedInclusiveQueryKey)?.isInvalidated,
+    ).toBe(true);
   });
 
   it("rolls back the removal if the mutation fails", async () => {

@@ -55,8 +55,17 @@ vi.mock("@/utils/themeUtils", () => ({
   checkFileExists: vi.fn(async () => false),
 }));
 
+const historyListProps = vi.hoisted(
+  () => [] as { sessions: { id: string }[]; hasMore?: boolean }[],
+);
 vi.mock("./ChatHistoryList", () => ({
-  ChatHistoryList: () => <div data-testid="history-list" />,
+  ChatHistoryList: (props: {
+    sessions: { id: string }[];
+    hasMore?: boolean;
+  }) => {
+    historyListProps.push(props);
+    return <div data-testid="history-list" />;
+  },
   ChatHistoryListSkeleton: () => <div data-testid="history-skeleton" />,
 }));
 
@@ -83,6 +92,10 @@ describe("ChatHistorySidebar", () => {
     mockedAssistantsEnabled = false;
     mockedAssistantHubEnabled = false;
     localStorage.clear();
+    historyListProps.length = 0;
+    const { CHAT_HISTORY_FILTER_DEFAULTS, useChatHistoryFilterStore } =
+      await import("@/hooks/chat/store/chatHistoryFilterStore");
+    useChatHistoryFilterStore.setState({ ...CHAT_HISTORY_FILTER_DEFAULTS });
     const { i18n } = await import("@lingui/core");
     i18n.load("en", enMessages as unknown as Messages);
     i18n.activate("en");
@@ -184,6 +197,12 @@ describe("ChatHistorySidebar", () => {
   });
 
   it("persists the recent chats section collapsed state across remounts", async () => {
+    // The Recent section only exists in the ungrouped view.
+    const { useChatHistoryFilterStore } = await import(
+      "@/hooks/chat/store/chatHistoryFilterStore"
+    );
+    useChatHistoryFilterStore.setState({ groupBy: "none" });
+
     const { i18n } = await import("@lingui/core");
     const sidebarProps = {
       sessions,
@@ -314,5 +333,282 @@ describe("ChatHistorySidebar", () => {
       backgroundColor: "var(--theme-shell-sidebar-selected)",
     });
     expect(assistantsItem?.closest("a")).toBeNull();
+  });
+
+  it("hosts the filter menu in the first group header in grouped mode", async () => {
+    const today = new Date();
+    const daySessions: ChatSession[] = [
+      { ...sessions[0], id: "chat-today", updatedAt: today.toISOString() },
+      {
+        ...sessions[0],
+        id: "chat-old",
+        updatedAt: new Date("2020-01-01").toISOString(),
+      },
+    ];
+
+    const { i18n } = await import("@lingui/core");
+    render(
+      <MemoryRouter>
+        <I18nProvider i18n={i18n}>
+          <ChatHistorySidebar
+            sessions={daySessions}
+            pinnedSessions={sessions}
+            onSessionPin={vi.fn()}
+            currentSessionId="chat-today"
+            onSessionSelect={vi.fn()}
+            onSessionArchive={vi.fn()}
+            isLoading={false}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+
+    const triggers = screen.getAllByTestId("chat-history-filter-menu-trigger");
+    expect(triggers).toHaveLength(1);
+
+    const todayLabel = new Intl.DateTimeFormat("en", {
+      month: "short",
+      day: "numeric",
+    }).format(today);
+    const firstToggle = screen.getByRole("button", {
+      name: `Collapse ${todayLabel}`,
+    });
+    // A sibling of the first group's collapse toggle, never nested inside it.
+    expect(firstToggle).not.toContainElement(triggers[0]);
+    expect(firstToggle.parentElement).toContainElement(triggers[0]);
+  });
+
+  it("replaces the Recent section with per-group collapsible sections in grouped mode", async () => {
+    const today = new Date();
+    const daySessions: ChatSession[] = [
+      { ...sessions[0], id: "chat-today", updatedAt: today.toISOString() },
+      {
+        ...sessions[0],
+        id: "chat-old",
+        updatedAt: new Date("2020-01-01").toISOString(),
+      },
+    ];
+
+    const { i18n } = await import("@lingui/core");
+    const { container } = render(
+      <MemoryRouter>
+        <I18nProvider i18n={i18n}>
+          <ChatHistorySidebar
+            sessions={daySessions}
+            currentSessionId="chat-today"
+            onSessionSelect={vi.fn()}
+            onSessionArchive={vi.fn()}
+            isLoading={false}
+            hasMoreSessions={true}
+            onLoadMoreSessions={vi.fn()}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByText("Recent")).not.toBeInTheDocument();
+    expect(
+      container.querySelector('[data-ui="chat-history-group-header"]'),
+    ).toBeNull();
+
+    const todayLabel = new Intl.DateTimeFormat("en", {
+      month: "short",
+      day: "numeric",
+    }).format(today);
+    expect(
+      screen.getByRole("button", { name: `Collapse ${todayLabel}` }),
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByRole("button", { name: "Collapse Older" }),
+    ).toHaveAttribute("aria-expanded", "true");
+
+    expect(historyListProps).toHaveLength(2);
+    expect(historyListProps[0].sessions.map((s) => s.id)).toEqual([
+      "chat-today",
+    ]);
+    expect(historyListProps[0].hasMore).toBe(false);
+    expect(historyListProps[1].sessions.map((s) => s.id)).toEqual(["chat-old"]);
+    expect(historyListProps[1].hasMore).toBe(true);
+  });
+
+  it("collapses groups individually and moves load-more to the last expanded group", async () => {
+    const today = new Date();
+    const daySessions: ChatSession[] = [
+      { ...sessions[0], id: "chat-today", updatedAt: today.toISOString() },
+      {
+        ...sessions[0],
+        id: "chat-old",
+        updatedAt: new Date("2020-01-01").toISOString(),
+      },
+    ];
+    const todayLabel = new Intl.DateTimeFormat("en", {
+      month: "short",
+      day: "numeric",
+    }).format(today);
+
+    const { i18n } = await import("@lingui/core");
+    render(
+      <MemoryRouter>
+        <I18nProvider i18n={i18n}>
+          <ChatHistorySidebar
+            sessions={daySessions}
+            currentSessionId="chat-today"
+            onSessionSelect={vi.fn()}
+            onSessionArchive={vi.fn()}
+            isLoading={false}
+            hasMoreSessions={true}
+            onLoadMoreSessions={vi.fn()}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+
+    historyListProps.length = 0;
+    fireEvent.click(screen.getByRole("button", { name: "Collapse Older" }));
+
+    // Only today's rows remain, and the load-more sentinel moved to them.
+    expect(screen.getAllByTestId("history-list")).toHaveLength(1);
+    expect(historyListProps).toHaveLength(1);
+    expect(historyListProps[0].sessions.map((s) => s.id)).toEqual([
+      "chat-today",
+    ]);
+    expect(historyListProps[0].hasMore).toBe(true);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: `Collapse ${todayLabel}` }),
+    );
+
+    // All groups collapsed: no list, hence no sentinel anywhere.
+    expect(screen.queryByTestId("history-list")).not.toBeInTheDocument();
+
+    historyListProps.length = 0;
+    fireEvent.click(screen.getByRole("button", { name: "Expand Older" }));
+
+    expect(historyListProps).toHaveLength(1);
+    expect(historyListProps[0].sessions.map((s) => s.id)).toEqual(["chat-old"]);
+    expect(historyListProps[0].hasMore).toBe(true);
+  });
+
+  it("renders the Recent section with a single unlabeled list when grouping is off", async () => {
+    const { useChatHistoryFilterStore } = await import(
+      "@/hooks/chat/store/chatHistoryFilterStore"
+    );
+    useChatHistoryFilterStore.setState({ groupBy: "none" });
+
+    const { i18n } = await import("@lingui/core");
+    const { container } = render(
+      <MemoryRouter>
+        <I18nProvider i18n={i18n}>
+          <ChatHistorySidebar
+            sessions={sessions}
+            currentSessionId="chat-1"
+            onSessionSelect={vi.fn()}
+            onSessionArchive={vi.fn()}
+            isLoading={false}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+
+    expect(
+      container.querySelector('[data-ui="chat-history-group"]'),
+    ).toBeNull();
+    expect(screen.getAllByTestId("history-list")).toHaveLength(1);
+
+    const recentToggle = screen.getByRole("button", {
+      name: "Collapse Recent",
+    });
+    const triggers = screen.getAllByTestId("chat-history-filter-menu-trigger");
+    expect(triggers).toHaveLength(1);
+    expect(recentToggle).not.toContainElement(triggers[0]);
+  });
+
+  it("keeps the filter trigger reachable when grouped mode has no sessions", async () => {
+    const { i18n } = await import("@lingui/core");
+    const { container } = render(
+      <MemoryRouter>
+        <I18nProvider i18n={i18n}>
+          <ChatHistorySidebar
+            sessions={[]}
+            currentSessionId={null}
+            onSessionSelect={vi.fn()}
+            onSessionArchive={vi.fn()}
+            isLoading={false}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+
+    const filterRow = container.querySelector(
+      '[data-ui="chat-history-filter-row"]',
+    );
+    expect(filterRow).toContainElement(
+      screen.getByTestId("chat-history-filter-menu-trigger"),
+    );
+    expect(screen.queryByText("Recent")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("history-list")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("chat-history-no-filter-matches"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the no-matches row when non-default filters leave the list empty", async () => {
+    mockedAssistantsEnabled = true;
+    const { useChatHistoryFilterStore } = await import(
+      "@/hooks/chat/store/chatHistoryFilterStore"
+    );
+    useChatHistoryFilterStore.setState({ typeFilter: "assistant" });
+
+    const { i18n } = await import("@lingui/core");
+    render(
+      <MemoryRouter>
+        <I18nProvider i18n={i18n}>
+          <ChatHistorySidebar
+            sessions={[]}
+            currentSessionId={null}
+            onSessionSelect={vi.fn()}
+            onSessionArchive={vi.fn()}
+            isLoading={false}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByTestId("chat-history-no-filter-matches"),
+    ).toHaveTextContent("No chats match the current filters");
+    expect(
+      screen.getByTestId("chat-history-filter-menu-trigger"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("history-list")).not.toBeInTheDocument();
+  });
+
+  it("keeps the empty ungrouped list without the no-matches row when only grouping changed", async () => {
+    const { useChatHistoryFilterStore } = await import(
+      "@/hooks/chat/store/chatHistoryFilterStore"
+    );
+    useChatHistoryFilterStore.setState({ groupBy: "none" });
+
+    const { i18n } = await import("@lingui/core");
+    render(
+      <MemoryRouter>
+        <I18nProvider i18n={i18n}>
+          <ChatHistorySidebar
+            sessions={[]}
+            currentSessionId={null}
+            onSessionSelect={vi.fn()}
+            onSessionArchive={vi.fn()}
+            isLoading={false}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+
+    // Grouping alone cannot exclude chats, so an empty list is just empty.
+    expect(
+      screen.queryByTestId("chat-history-no-filter-matches"),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByTestId("history-list")).toHaveLength(1);
+    expect(historyListProps[0].sessions).toEqual([]);
   });
 });

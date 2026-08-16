@@ -22,7 +22,7 @@ use crate::db::entity_ext::{chats, messages};
 use crate::models;
 use crate::models::assistant::create_standalone_file_upload;
 use crate::models::chat::{
-    RecentChatsFilter, archive_all_unarchived_chats_for_owner, archive_chat,
+    RecentChatTypeFilter, RecentChatsFilter, archive_all_unarchived_chats_for_owner, archive_chat,
     get_frequent_assistants, get_generating_chats, get_or_create_chat, get_recent_chats,
     resolve_chat_display_name, update_chat_is_pinned, update_chat_title_by_user_provided,
 };
@@ -456,6 +456,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         ChatMessageStats,
         ChatMessagesResponse,
         RecentChatStats,
+        RecentChatTypeFilter,
         RecentChatsResponse,
         GenerationChatState,
         GeneratingChat,
@@ -2546,7 +2547,8 @@ async fn assemble_chat_messages_response(
         ("offset" = Option<u64>, Query, description = "Number of chats to skip for pagination. Defaults to 0 if not provided."),
         ("include_archived" = Option<bool>, Query, description = "Whether to include archived chats in results. Defaults to false if not provided."),
         ("q" = Option<String>, Query, description = "Optional full-text search query for chat titles. User-provided titles take precedence over generated summary titles. Empty values are treated like an unfiltered recent chats list."),
-        ("pinned" = Option<bool>, Query, description = "If provided, filter chats by their pinned state.")
+        ("pinned" = Option<bool>, Query, description = "If provided, filter chats by their pinned state."),
+        ("type" = Option<RecentChatTypeFilter>, Query, description = "If provided, only return chats of the given kind: `chat` for chats without an assistant, `assistant` for assistant-based chats.")
     ),
     responses(
         (status = OK, body = RecentChatsResponse, description = "Successfully retrieved chats with pagination metadata"),
@@ -2577,6 +2579,11 @@ pub async fn recent_chats(
         .unwrap_or(false);
     let search_query = params.get("q").map(String::as_str);
     let pinned = params.get("pinned").and_then(|p| p.parse::<bool>().ok());
+    let chat_type = params.get("type").and_then(|t| match t.as_str() {
+        "chat" => Some(RecentChatTypeFilter::Chat),
+        "assistant" => Some(RecentChatTypeFilter::Assistant),
+        _ => None,
+    });
 
     policy
         .rebuild_data_if_needed(&app_state.db, &app_state.config)
@@ -2600,6 +2607,7 @@ pub async fn recent_chats(
             offset,
             include_archived,
             pinned,
+            chat_type,
             search_query,
         },
         app_state.config.generation_status.stale_after_secs,

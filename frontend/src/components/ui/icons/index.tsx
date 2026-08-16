@@ -13,6 +13,7 @@ import {
   HalfMoon,
   Computer,
   Plus,
+  CandlestickChart,
   Check,
   RefreshCircle,
   Xmark,
@@ -354,6 +355,12 @@ export const PinIcon = ({ className, ...props }: IconProps) => (
 
 export const PinSlashIcon = ({ className, ...props }: IconProps) => (
   <PinSlash className={className} {...props} />
+);
+
+// Iconoir has no "sliders" glyph; CandlestickChart is its vertical-sliders
+// lookalike and is used here purely as a filter/sort affordance.
+export const FilterSortIcon = ({ className, ...props }: IconProps) => (
+  <CandlestickChart className={className} {...props} />
 );
 
 // Direct re-exports for convenience (maintaining Iconoir naming)

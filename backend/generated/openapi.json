@@ -2791,6 +2791,15 @@
             "schema": {
               "type": "boolean"
             }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "description": "If provided, only return chats of the given kind: `chat` for chats without an assistant, `assistant` for assistant-based chats.",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/RecentChatTypeFilter"
+            }
           }
         ],
         "responses": {
@@ -7391,6 +7400,14 @@
             "description": "Total number of chats available"
           }
         }
+      },
+      "RecentChatTypeFilter": {
+        "type": "string",
+        "description": "Kind of chat to restrict a recent chat listing to.",
+        "enum": [
+          "chat",
+          "assistant"
+        ]
       },
       "RecentChatsResponse": {
         "type": "object",

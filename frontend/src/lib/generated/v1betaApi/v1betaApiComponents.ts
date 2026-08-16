@@ -18,6 +18,84 @@ type QueryFnOptions = {
   signal?: AbortController["signal"];
 };
 
+export type LicenseNoticesError = Fetcher.ErrorWrapper<undefined>;
+
+export type LicenseNoticesVariables = V1betaApiContext["fetcherOptions"];
+
+export const fetchLicenseNotices = (
+  variables: LicenseNoticesVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<void, LicenseNoticesError, undefined, {}, {}, {}>({
+    url: "/api/licenses",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function licenseNoticesQuery(variables: LicenseNoticesVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<void>;
+};
+
+export function licenseNoticesQuery(
+  variables: LicenseNoticesVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: ((options: QueryFnOptions) => Promise<void>) | reactQuery.SkipToken;
+};
+
+export function licenseNoticesQuery(
+  variables: LicenseNoticesVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/licenses",
+      operationId: "licenseNotices",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchLicenseNotices(variables, signal),
+  };
+}
+
+export const useSuspenseLicenseNotices = <TData = void,>(
+  variables: LicenseNoticesVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<void, LicenseNoticesError, TData>,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<void, LicenseNoticesError, TData>({
+    ...licenseNoticesQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useLicenseNotices = <TData = void,>(
+  variables: LicenseNoticesVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<void, LicenseNoticesError, TData>,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<void, LicenseNoticesError, TData>({
+    ...licenseNoticesQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type ListAssistantHubAssistantsError = Fetcher.ErrorWrapper<undefined>;
 
 export type ListAssistantHubAssistantsVariables =
@@ -2975,7 +3053,7 @@ export type UpdateChatVariables = {
 } & V1betaApiContext["fetcherOptions"];
 
 /**
- * Currently supports updating only `title_by_user_provided`.
+ * Supports updating the user-provided title and pin state.
  */
 export const fetchUpdateChat = (
   variables: UpdateChatVariables,
@@ -2996,7 +3074,7 @@ export const fetchUpdateChat = (
   });
 
 /**
- * Currently supports updating only `title_by_user_provided`.
+ * Supports updating the user-provided title and pin state.
  */
 export const useUpdateChat = (
   options?: Omit<
@@ -5173,6 +5251,7 @@ export type RecentChatsQueryParams = {
    * If provided, filter chats by their pinned state.
    */
   pinned?: boolean;
+  type?: Schemas.RecentChatTypeFilter;
 };
 
 export type RecentChatsError = Fetcher.ErrorWrapper<undefined>;
@@ -6576,6 +6655,11 @@ export const useOfficeAddinManifest = <TData = undefined,>(
 };
 
 export type QueryOperation =
+  | {
+      path: "/api/licenses";
+      operationId: "licenseNotices";
+      variables: LicenseNoticesVariables | reactQuery.SkipToken;
+    }
   | {
       path: "/api/v1beta/assistant-hub/assistants";
       operationId: "listAssistantHubAssistants";

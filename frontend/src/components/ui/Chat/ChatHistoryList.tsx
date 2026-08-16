@@ -8,7 +8,9 @@ import { useHasPendingConfirmation } from "@/hooks/chat/store/confirmationRegist
 import { useGenerationStatusFor } from "@/hooks/chat/store/generationStatusStore";
 import { useChatHistoryStore } from "@/hooks/chat/useChatHistory";
 import { useThemedIcon } from "@/hooks/ui";
+import { UNTITLED_BACKEND_SENTINEL } from "@/utils/chat/recentChatSession";
 import { getChatUrl } from "@/utils/chat/urlUtils";
+import { resolveChatAttentionStatus } from "@/utils/chatHistoryGrouping";
 import { createLogger } from "@/utils/debugLogger";
 
 import { InteractiveContainer } from "../Container/InteractiveContainer";
@@ -23,14 +25,11 @@ import {
 } from "../icons";
 
 import type { ChatSession } from "@/types/chat";
+import type { ChatAttentionStatus } from "@/utils/chatHistoryGrouping";
 
 const logger = createLogger("UI", "ChatHistoryList");
 const sidebarRowLinkClassName =
   "focus-ring-tight block rounded-[var(--theme-radius-shell)]";
-
-/** `title_resolved` sentinel the backend returns while a chat has no title. */
-// eslint-disable-next-line lingui/no-unlocalized-strings -- backend sentinel, not user-facing text
-const UNTITLED_BACKEND_SENTINEL = "Untitled Chat";
 
 /**
  * Row title: a real backend title, else the recorded user-message hint, else
@@ -68,21 +67,13 @@ const ChatItemIcon = memo(() => {
 // eslint-disable-next-line lingui/no-unlocalized-strings -- Component display name, not user-facing text
 ChatItemIcon.displayName = "ChatItemIcon";
 
-type RowGenerationStatus = "running" | "finished" | "error" | "action_required";
-
-/**
- * Resolves a row's generation indicator; an unresolved tool confirmation
- * outranks the generation state.
- */
-const useRowGenerationStatus = (chatId: string): RowGenerationStatus | null => {
+const useRowGenerationStatus = (chatId: string): ChatAttentionStatus | null => {
   const status = useGenerationStatusFor(chatId);
   const hasPendingConfirmation = useHasPendingConfirmation(chatId);
-  // eslint-disable-next-line lingui/no-unlocalized-strings -- status token, not user-facing text
-  if (hasPendingConfirmation) return "action_required";
-  return status?.kind ?? null;
+  return resolveChatAttentionStatus(status, hasPendingConfirmation);
 };
 
-const rowGenerationStatusLabel = (status: RowGenerationStatus): string => {
+const rowGenerationStatusLabel = (status: ChatAttentionStatus): string => {
   switch (status) {
     case "running":
       return t({ id: "chat.history.generation.running", message: "Running" });
@@ -98,7 +89,7 @@ const rowGenerationStatusLabel = (status: RowGenerationStatus): string => {
   }
 };
 
-const rowGenerationStatusTextClass: Record<RowGenerationStatus, string> = {
+const rowGenerationStatusTextClass: Record<ChatAttentionStatus, string> = {
   running: "text-theme-fg-muted",
   finished: "text-theme-success-fg",
   error: "text-theme-error-fg",
@@ -379,25 +370,7 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
     onLoadMore,
     showTimestamps = true,
   }) => {
-    const currentSession = sessions.find((s) => s.id === currentSessionId);
-    const currentTitleHint = useChatHistoryStore((state) =>
-      currentSessionId ? state.titleHintByChatId[currentSessionId] : undefined,
-    );
-    const rawCurrentTitle =
-      currentSession?.titleResolved ?? currentSession?.title;
-    const currentSessionTitle =
-      rawCurrentTitle && rawCurrentTitle !== UNTITLED_BACKEND_SENTINEL
-        ? rawCurrentTitle
-        : (currentTitleHint ?? currentSession?.title);
     const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
-
-    useEffect(() => {
-      if (typeof currentSessionTitle === "undefined") {
-        return;
-      }
-      const pageTitle = t({ id: "branding.page_title_suffix" });
-      document.title = `${currentSessionTitle} - ${pageTitle}`;
-    }, [currentSessionTitle]);
 
     useEffect(() => {
       const sentinel = loadMoreSentinelRef.current;

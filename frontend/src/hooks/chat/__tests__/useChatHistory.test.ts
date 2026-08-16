@@ -2,11 +2,17 @@ import { renderHook, act } from "@testing-library/react";
 import { vi, describe, it, expect, beforeEach } from "vitest";
 
 import {
+  CHAT_HISTORY_FILTER_DEFAULTS,
+  useChatHistoryFilterStore,
+} from "@/hooks/chat/store/chatHistoryFilterStore";
+import {
+  fetchRecentChats,
   useArchiveChatEndpoint,
   useUpdateChat,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 import {
+  buildRecentChatsFilterParams,
   useChatHistory,
   useChatHistoryStore,
   clearPendingChat,
@@ -215,5 +221,126 @@ describe("deriveTitleHint", () => {
 
   it("hard-cuts a single overlong word", () => {
     expect(deriveTitleHint("a".repeat(60))).toBe(`${"a".repeat(40)}…`);
+  });
+});
+
+describe("recent-chats filter wiring", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockLocation = { pathname: "/chat" };
+    mockParams = {};
+    useChatHistoryStore.setState({
+      pendingChat: null,
+      isNewChatPending: false,
+    });
+    useChatHistoryFilterStore.setState({ ...CHAT_HISTORY_FILTER_DEFAULTS });
+    setListedChats([listedChat("listed-1")]);
+    vi.mocked(useArchiveChatEndpoint).mockReturnValue({
+      mutateAsync: vi.fn().mockResolvedValue({}),
+    } as unknown as ReturnType<typeof useArchiveChatEndpoint>);
+    vi.mocked(useUpdateChat).mockReturnValue({
+      mutateAsync: vi.fn().mockResolvedValue({}),
+    } as unknown as ReturnType<typeof useUpdateChat>);
+  });
+
+  it("maps the store values onto recent-chats query params", () => {
+    expect(
+      buildRecentChatsFilterParams({
+        typeFilter: "all",
+        statusFilter: "active",
+      }),
+    ).toEqual({});
+    expect(
+      buildRecentChatsFilterParams({
+        typeFilter: "chat",
+        statusFilter: "active",
+      }),
+    ).toEqual({ type: "chat" });
+    expect(
+      buildRecentChatsFilterParams({
+        typeFilter: "assistant",
+        statusFilter: "all",
+      }),
+    ).toEqual({ type: "assistant", include_archived: true });
+  });
+
+  it("fetches the list with the active filter params", () => {
+    useChatHistoryFilterStore.setState({
+      typeFilter: "assistant",
+      statusFilter: "all",
+    });
+
+    renderHook(() => useChatHistory());
+
+    const listQueryOptions = mockUseInfiniteQuery.mock.calls[0][0] as {
+      queryFn: (context: { pageParam: number }) => unknown;
+    };
+    listQueryOptions.queryFn({ pageParam: 0 });
+
+    expect(vi.mocked(fetchRecentChats)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queryParams: expect.objectContaining({
+          type: "assistant",
+          include_archived: true,
+        }),
+      }),
+      undefined,
+    );
+  });
+
+  it("keeps the pinned query unfiltered", () => {
+    useChatHistoryFilterStore.setState({
+      typeFilter: "assistant",
+      statusFilter: "all",
+    });
+
+    renderHook(() => useChatHistory({ pinnedChatsEnabled: true }));
+
+    const pinnedQueryOptions = mockUseInfiniteQuery.mock.calls[1][0] as {
+      queryFn: (context: { pageParam: number }) => unknown;
+    };
+    pinnedQueryOptions.queryFn({ pageParam: 0 });
+
+    expect(vi.mocked(fetchRecentChats)).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        queryParams: { limit: 5, pinned: true },
+      }),
+      undefined,
+    );
+  });
+
+  it("hides the pending placeholder when the type filter excludes it", () => {
+    const { result, rerender } = renderHook(() => useChatHistory());
+
+    act(() => {
+      useChatHistoryStore.getState().setPendingChat(pending);
+    });
+    expect(result.current.chats.map((chat) => chat.id)).toEqual([
+      PENDING_ID,
+      "listed-1",
+    ]);
+
+    act(() => {
+      useChatHistoryFilterStore.setState({ typeFilter: "assistant" });
+    });
+    rerender();
+    expect(result.current.chats.map((chat) => chat.id)).toEqual(["listed-1"]);
+
+    act(() => {
+      useChatHistoryStore
+        .getState()
+        .setPendingChat({ ...pending, assistantId: "assistant-7" });
+    });
+    rerender();
+    expect(result.current.chats.map((chat) => chat.id)).toEqual([
+      PENDING_ID,
+      "listed-1",
+    ]);
+
+    act(() => {
+      useChatHistoryFilterStore.setState({ typeFilter: "chat" });
+    });
+    rerender();
+    expect(result.current.chats.map((chat) => chat.id)).toEqual(["listed-1"]);
   });
 });

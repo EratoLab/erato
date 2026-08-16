@@ -18,6 +18,7 @@ use sea_orm::{
 use serde::{Deserialize, Serialize};
 use sqlx::types::chrono::Utc;
 use tracing::instrument;
+use utoipa::ToSchema;
 
 /// Configuration for a chat that is based on an assistant
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -249,6 +250,16 @@ struct ChatWithLatestMessage {
     latest_message_at: DateTimeWithTimeZone,
 }
 
+/// Kind of chat to restrict a recent chat listing to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum RecentChatTypeFilter {
+    /// Chats that are not based on an assistant.
+    Chat,
+    /// Chats that are based on an assistant.
+    Assistant,
+}
+
 /// Filtering and pagination options for recent chat listing.
 #[derive(Debug, Clone, Copy)]
 pub struct RecentChatsFilter<'a> {
@@ -260,6 +271,8 @@ pub struct RecentChatsFilter<'a> {
     pub include_archived: bool,
     /// If set, only chats with the matching pinned state are returned.
     pub pinned: Option<bool>,
+    /// If set, only chats of the matching kind are returned.
+    pub chat_type: Option<RecentChatTypeFilter>,
     /// Optional full-text search query for chat titles.
     pub search_query: Option<&'a str>,
 }
@@ -291,6 +304,11 @@ pub async fn get_recent_chats(
     let pinned_condition = match filter.pinned {
         Some(true) => "AND \"chats\".\"is_pinned\" = TRUE",
         Some(false) => "AND \"chats\".\"is_pinned\" = FALSE",
+        None => "",
+    };
+    let chat_type_condition = match filter.chat_type {
+        Some(RecentChatTypeFilter::Chat) => "AND \"chats\".\"assistant_id\" IS NULL",
+        Some(RecentChatTypeFilter::Assistant) => "AND \"chats\".\"assistant_id\" IS NOT NULL",
         None => "",
     };
     let resolved_title_search_vector = r#"to_tsvector(
@@ -349,13 +367,15 @@ pub async fn get_recent_chats(
             {}
             {}
             {}
+            {}
         ORDER BY latest_msg.created_at DESC
         LIMIT $2
         OFFSET $3
         "#,
         archived_condition,
         search_condition(4),
-        pinned_condition
+        pinned_condition,
+        chat_type_condition
     );
 
     let mut query_values = vec![
@@ -400,11 +420,13 @@ pub async fn get_recent_chats(
                         {}
                         {}
                         {}
+                        {}
                 ) AS sub_query
                 "#,
                 archived_condition,
                 search_condition(2),
-                pinned_condition
+                pinned_condition,
+                chat_type_condition
             );
 
             #[derive(Debug, FromQueryResult)]
