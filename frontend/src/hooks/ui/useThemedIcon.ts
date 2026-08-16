@@ -25,7 +25,7 @@ const DEFAULT_ICONS = {
   },
   navigation: {
     assistants: "GridXmark",
-    newChat: "EditPencil",
+    newChat: "Plus",
     search: "Search",
   },
 } as const;

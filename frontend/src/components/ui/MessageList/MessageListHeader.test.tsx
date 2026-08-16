@@ -11,7 +11,6 @@ describe("MessageListHeader", () => {
         handleLoadMore={vi.fn()}
         isPending={false}
         showBeginningIndicator={false}
-        paginationStats={{ displayed: 0, total: 0 }}
       />,
     );
 

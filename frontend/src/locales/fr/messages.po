@@ -3664,8 +3664,8 @@ msgstr "Type(s) de fichier non pris en charge : {filenames}"
 # Unstable IDs
 # ==============================
 #: src/components/ui/MessageList/MessageListHeader.tsx
-msgid " (more available)"
-msgstr " (plus disponibles)"
+#~ msgid " (more available)"
+#~ msgstr " (plus disponibles)"
 
 #: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
 msgid " File attachments account for {fileTokensFormatted} tokens."
@@ -4528,8 +4528,8 @@ msgid "Message exceeds token limit. Please reduce length or remove files."
 msgstr "Le message dépasse la limite de tokens. Veuillez réduire la longueur ou supprimer des fichiers."
 
 #: src/components/ui/MessageList/MessageListHeader.tsx
-msgid "messages"
-msgstr "messages"
+#~ msgid "messages"
+#~ msgstr "messages"
 
 #: src/hooks/audio/useAudioInputDevicePreference.ts
 #~ msgid "Microphone {0}"
@@ -4630,8 +4630,8 @@ msgstr "réduction du bruit : {noiseSuppression}"
 #~ msgstr ""
 
 #: src/components/ui/MessageList/MessageListHeader.tsx
-msgid "of"
-msgstr "sur"
+#~ msgid "of"
+#~ msgstr "sur"
 
 #: src/components/ui/Teams/TeamsConversationView.tsx
 msgid "Older messages are not included."
@@ -4889,8 +4889,8 @@ msgid "Show tool calls"
 msgstr "Afficher les appels d'outils"
 
 #: src/components/ui/MessageList/MessageListHeader.tsx
-msgid "Showing"
-msgstr "Affichage de"
+#~ msgid "Showing"
+#~ msgstr "Affichage de"
 
 #: src/pages/SearchPage.tsx
 msgid "Showing {resultsCount} recent chats"

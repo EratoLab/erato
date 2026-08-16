@@ -16,12 +16,13 @@ import { createLogger } from "@/utils/debugLogger";
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { DropdownMenu } from "../Controls/DropdownMenu";
 import {
-  LogOutIcon,
+  EditIcon,
   ResolvedIcon,
   MultiplePagesIcon,
   PinIcon,
   PinSlashIcon,
   ShareIcon,
+  Trash,
 } from "../icons";
 
 import type { ChatSession } from "@/types/chat";
@@ -292,7 +293,7 @@ const ChatHistoryListItem = memo<{
                             id: "chat.history.menu.rename",
                             message: "Rename",
                           }),
-                          icon: <MultiplePagesIcon className="size-4" />,
+                          icon: <EditIcon className="size-4" />,
                           onClick: onEditTitle,
                           disabled: !canEdit,
                         },
@@ -300,7 +301,8 @@ const ChatHistoryListItem = memo<{
                     : []),
                   {
                     label: t`Remove`,
-                    icon: <LogOutIcon className="size-4" />,
+                    icon: <Trash className="size-4" />,
+                    variant: "danger",
                     onClick: onArchive ?? (() => {}),
                     confirmAction: true,
                     confirmTitle: t`Confirm Removal`,

@@ -1,5 +1,5 @@
 import { I18nProvider } from "@lingui/react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -239,7 +239,10 @@ describe("ChatHistorySidebar", () => {
     fireEvent.click(recentToggle);
 
     expect(recentToggle).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByTestId("history-list")).not.toBeInTheDocument();
+    // The list leaves the DOM once the collapse transition has played out.
+    await waitFor(() =>
+      expect(screen.queryByTestId("history-list")).not.toBeInTheDocument(),
+    );
     expect(
       localStorage.getItem("erato.sidebar.recentChatsSectionExpanded"),
     ).toBe("false");
@@ -478,20 +481,27 @@ describe("ChatHistorySidebar", () => {
     historyListProps.length = 0;
     fireEvent.click(screen.getByRole("button", { name: "Collapse Older" }));
 
-    // Only today's rows remain, and the load-more sentinel moved to them.
-    expect(screen.getAllByTestId("history-list")).toHaveLength(1);
-    expect(historyListProps).toHaveLength(1);
+    // The load-more sentinel moves to today's rows immediately; the collapsed
+    // list itself only leaves the DOM after the collapse transition.
+    expect(historyListProps).toHaveLength(2);
     expect(historyListProps[0].sessions.map((s) => s.id)).toEqual([
       "chat-today",
     ]);
     expect(historyListProps[0].hasMore).toBe(true);
+    expect(historyListProps[1].sessions.map((s) => s.id)).toEqual(["chat-old"]);
+    expect(historyListProps[1].hasMore).toBe(false);
+    await waitFor(() =>
+      expect(screen.getAllByTestId("history-list")).toHaveLength(1),
+    );
 
     fireEvent.click(
       screen.getByRole("button", { name: `Collapse ${todayLabel}` }),
     );
 
     // All groups collapsed: no list, hence no sentinel anywhere.
-    expect(screen.queryByTestId("history-list")).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByTestId("history-list")).not.toBeInTheDocument(),
+    );
 
     historyListProps.length = 0;
     fireEvent.click(screen.getByRole("button", { name: "Expand Older" }));
