@@ -72,7 +72,7 @@ describe("TeamsChatAddMenuExtraContent", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("disables the row while the composer is busy or has no upload path", () => {
+  it("disables the row while the composer is busy, full, or has no upload path", () => {
     const { rerender } = render(
       <TeamsChatAddMenuExtraContent onClose={() => {}} />,
     );
@@ -92,6 +92,17 @@ describe("TeamsChatAddMenuExtraContent", () => {
         onSelectFiles={onSelectFiles}
         onClose={() => {}}
         disabled
+      />,
+    );
+    expect(screen.getByRole("menuitem")).toBeDisabled();
+
+    // At the attachment limit a picked conversation would be silently
+    // truncated by the composer merge, so the row must not open the picker.
+    rerender(
+      <TeamsChatAddMenuExtraContent
+        onSelectFiles={onSelectFiles}
+        onClose={() => {}}
+        uploadDisabled
       />,
     );
     expect(screen.getByRole("menuitem")).toBeDisabled();

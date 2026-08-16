@@ -65,6 +65,12 @@ export interface ChatAddMenuExtraContentProps {
   onClose: () => void;
   /** Whether the composer is disabled. */
   disabled?: boolean;
+  /**
+   * The composer cannot take more files (e.g. the attachment limit is
+   * reached). Rows that add files must disable on this — overflow past the
+   * limit is silently discarded, not rejected.
+   */
+  uploadDisabled?: boolean;
   /** Whether an upload/link is currently in flight. */
   isProcessing?: boolean;
 }

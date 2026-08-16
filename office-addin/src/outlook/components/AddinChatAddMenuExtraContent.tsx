@@ -42,6 +42,7 @@ export function AddinChatAddMenuExtraContent({
   onSelectFiles,
   onClose,
   disabled = false,
+  uploadDisabled = false,
   isProcessing = false,
 }: ChatAddMenuExtraContentProps) {
   const { host } = useOffice();
@@ -64,6 +65,10 @@ export function AddinChatAddMenuExtraContent({
     host === "Outlook" && currentChatId === null && messageOrder.length === 0;
 
   const isBusy = disabled || isProcessing || isUploadingEmailContent;
+  // Restores only clear a dismissal and ride a separate send-time upload
+  // outside the composer's file slots, so the attachment limit gates only
+  // genuine uploads.
+  const isUploadBlocked = uploadDisabled && !isSuggestionEligible;
   const canUploadEmailContent = !!onSelectFiles;
   const selectableAttachments = useMemo(
     () => attachments.filter((attachment) => !attachment.isInline),
@@ -188,7 +193,12 @@ export function AddinChatAddMenuExtraContent({
               tabIndex={-1}
               data-add-menu-item=""
               onClick={handleSelectEmailBody}
-              disabled={isBusy || !canUploadEmailContent || isAlreadyAdded}
+              disabled={
+                isBusy ||
+                isUploadBlocked ||
+                !canUploadEmailContent ||
+                isAlreadyAdded
+              }
               title={emailBodyFile.name}
               data-testid="addin-add-menu-email-thread"
               className={rowClassName}
@@ -247,6 +257,7 @@ export function AddinChatAddMenuExtraContent({
             onClick={() => handleSelectAttachment(attachment.id)}
             disabled={
               isBusy ||
+              isUploadBlocked ||
               !canUploadEmailContent ||
               isCloudAttachment ||
               isAlreadyAdded

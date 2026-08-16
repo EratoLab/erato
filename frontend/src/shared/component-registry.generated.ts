@@ -99,6 +99,7 @@ export { EditIcon } from "@/components/ui/icons/index";
 export { EditPencil } from "@/components/ui/icons/index";
 export { ErrorIcon } from "@/components/ui/icons/index";
 export { FileTextIcon } from "@/components/ui/icons/index";
+export { FilterSortIcon } from "@/components/ui/icons/index";
 export { FolderIcon } from "@/components/ui/icons/index";
 export { GridXmark } from "@/components/ui/icons/index";
 export { GridXmarkIcon } from "@/components/ui/icons/index";

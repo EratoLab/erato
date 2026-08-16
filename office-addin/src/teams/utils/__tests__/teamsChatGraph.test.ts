@@ -8,14 +8,30 @@ import {
 import { makeGraphTokenSource } from "../../../utils/graph/graphClient";
 import {
   getChatMessage,
+  getTeamsChat,
   listChatMessagesPage,
   listTeamsChatsPage,
   searchChatMessages,
   splitSearchSummaryHighlights,
 } from "../teamsChatGraph";
-import { resetTeamsChatRateGates } from "../teamsChatRateGate";
+import {
+  resetTeamsChatRateGates,
+  runAtChatMetadataRate,
+} from "../teamsChatRateGate";
 
 import type { GraphTransport } from "../../../utils/graph/graphClient";
+import type * as teamsChatRateGateModule from "../teamsChatRateGate";
+
+// Pass-through spy on the metadata pacer: the wiring (`metadataRate: true` on
+// exactly the List/Get chat calls) is otherwise invisible to tests, because a
+// freshly reset gate never sleeps on its first call.
+vi.mock("../teamsChatRateGate", async (importOriginal) => {
+  const actual = await importOriginal<typeof teamsChatRateGateModule>();
+  return {
+    ...actual,
+    runAtChatMetadataRate: vi.fn(actual.runAtChatMetadataRate),
+  };
+});
 
 const tokenSource = () => makeGraphTokenSource(async () => "token");
 
@@ -29,10 +45,29 @@ function transportReturning(
 
 beforeEach(() => {
   resetTeamsChatRateGates();
+  vi.mocked(runAtChatMetadataRate).mockClear();
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
+});
+
+describe("chat metadata rate wiring", () => {
+  it("paces List chats and Get chat, but not message pages", async () => {
+    const transport = transportReturning(() => jsonResponse({ value: [] }));
+
+    await listTeamsChatsPage(tokenSource(), { transport });
+    expect(runAtChatMetadataRate).toHaveBeenCalledTimes(1);
+
+    // Reset between calls so real-timer gate waits don't slow the test.
+    resetTeamsChatRateGates();
+    await getTeamsChat(MOCK_CHAT_ID, tokenSource(), { transport });
+    expect(runAtChatMetadataRate).toHaveBeenCalledTimes(2);
+
+    resetTeamsChatRateGates();
+    await listChatMessagesPage(MOCK_CHAT_ID, tokenSource(), { transport });
+    expect(runAtChatMetadataRate).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("listTeamsChatsPage", () => {
@@ -65,7 +100,10 @@ describe("listTeamsChatsPage", () => {
 });
 
 describe("listChatMessagesPage", () => {
-  it("requests the documented maximum page size and surfaces the nextLink", async () => {
+  // The $orderby pins the window to creation time: Graph's default is
+  // lastModifiedDateTime, which moves on edits and reactions and would pull
+  // ancient messages into the newest-N window.
+  it("requests the maximum page size ordered by creation time and surfaces the nextLink", async () => {
     const transport = transportReturning(() =>
       jsonResponse({
         value: [mockGraphChatMessage()],
@@ -77,7 +115,7 @@ describe("listChatMessagesPage", () => {
     });
 
     expect(transport.mock.calls[0][0]).toBe(
-      "https://graph.microsoft.com/v1.0/chats/19%3Aabc123%40thread.v2/messages?$top=50",
+      "https://graph.microsoft.com/v1.0/chats/19%3Aabc123%40thread.v2/messages?$top=50&$orderby=createdDateTime%20desc",
     );
     expect(page.messages).toHaveLength(1);
     expect(page.nextLink).toBe("https://graph.microsoft.com/v1.0/next");

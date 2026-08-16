@@ -13,17 +13,37 @@ import { sleep } from "../../utils/graph/graphClient";
 /** 1 rps plus headroom for clock skew and in-flight request overlap. */
 export const MIN_CHAT_REQUEST_INTERVAL_MS = 1100;
 
+/**
+ * Graph's List chats / Get chat ceiling is 5 request STARTS per second per
+ * user. A concurrency cap alone cannot honour that — fast responses hand
+ * slots on faster than 5/s — so starts are paced instead: 200ms plus headroom.
+ */
+export const MIN_CHAT_METADATA_START_INTERVAL_MS = 220;
+
 interface ChatGate {
-  /** Resolves once the currently queued request has started. */
+  /**
+   * Resolves when the next entrant may proceed: at request START for the
+   * metadata gate (starts are what Graph's 5 rps ceiling counts, so requests
+   * may overlap), at COMPLETION for the per-chat gate (deliberate — 1 rps
+   * plus headroom for in-flight overlap).
+   */
   tail: Promise<void>;
   lastStartedAt: number;
 }
 
+function freshGate(): ChatGate {
+  return { tail: Promise.resolve(), lastStartedAt: Number.NEGATIVE_INFINITY };
+}
+
 const gates = new Map<string, ChatGate>();
+
+/** All chats share one metadata gate — the 5 rps ceiling is per user. */
+let metadataGate = freshGate();
 
 /** Test seam — production code never resets the module-level gates. */
 export function resetTeamsChatRateGates(): void {
   gates.clear();
+  metadataGate = freshGate();
   inFlightSlots = 0;
   waitingForSlot.length = 0;
 }
@@ -57,17 +77,13 @@ export async function runWithChatReadSlot<T>(
   }
 }
 
-export async function runGatedByChat<T>(
-  chatId: string,
+async function runPaced<T>(
+  gate: ChatGate,
+  intervalMs: number,
+  releaseOnStart: boolean,
   signal: AbortSignal | undefined,
   run: () => Promise<T>,
 ): Promise<T> {
-  const gate = gates.get(chatId) ?? {
-    tail: Promise.resolve(),
-    lastStartedAt: Number.NEGATIVE_INFINITY,
-  };
-  gates.set(chatId, gate);
-
   const previous = gate.tail;
   let release: () => void = () => undefined;
   gate.tail = new Promise<void>((resolve) => {
@@ -76,14 +92,40 @@ export async function runGatedByChat<T>(
 
   try {
     await previous;
-    const waitMs =
-      gate.lastStartedAt + MIN_CHAT_REQUEST_INTERVAL_MS - Date.now();
+    const waitMs = gate.lastStartedAt + intervalMs - Date.now();
     if (Number.isFinite(waitMs) && waitMs > 0) {
       await sleep(waitMs, signal);
     }
     gate.lastStartedAt = Date.now();
+    if (releaseOnStart) release();
     return await run();
   } finally {
+    // Resolving twice is a no-op, so for a start-released gate this is only
+    // the abort path: an entrant that dies queued must still free the tail.
     release();
   }
+}
+
+export async function runGatedByChat<T>(
+  chatId: string,
+  signal: AbortSignal | undefined,
+  run: () => Promise<T>,
+): Promise<T> {
+  const gate = gates.get(chatId) ?? freshGate();
+  gates.set(chatId, gate);
+  return runPaced(gate, MIN_CHAT_REQUEST_INTERVAL_MS, false, signal, run);
+}
+
+/** Paces the start of a List chats / Get chat call under the per-user ceiling. */
+export async function runAtChatMetadataRate<T>(
+  signal: AbortSignal | undefined,
+  run: () => Promise<T>,
+): Promise<T> {
+  return runPaced(
+    metadataGate,
+    MIN_CHAT_METADATA_START_INTERVAL_MS,
+    true,
+    signal,
+    run,
+  );
 }

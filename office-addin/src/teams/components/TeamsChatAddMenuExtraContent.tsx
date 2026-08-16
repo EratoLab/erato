@@ -23,6 +23,7 @@ export function TeamsChatAddMenuExtraContent({
   onSelectFiles,
   onClose,
   disabled = false,
+  uploadDisabled = false,
   isProcessing = false,
 }: ChatAddMenuExtraContentProps) {
   const { unavailableReason } = useTeamsChatFetcher();
@@ -37,7 +38,11 @@ export function TeamsChatAddMenuExtraContent({
 
   const supportsMarkdown = getSupportedFileTypes(capabilities).includes("text");
   const isDisabled =
-    disabled || isProcessing || !onSelectFiles || !supportsMarkdown;
+    disabled ||
+    uploadDisabled ||
+    isProcessing ||
+    !onSelectFiles ||
+    !supportsMarkdown;
 
   return (
     <>
