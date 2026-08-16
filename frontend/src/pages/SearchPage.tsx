@@ -8,14 +8,16 @@ import { useDebounce } from "use-debounce";
 import { ChatShareDialog } from "@/components/ui/Chat/ChatShareDialog";
 import { EditChatTitleDialog } from "@/components/ui/Chat/EditChatTitleDialog";
 import { PageHeader } from "@/components/ui/Container/PageHeader";
+import { Button } from "@/components/ui/Controls/Button";
 import { DropdownMenu } from "@/components/ui/Controls/DropdownMenu";
+import { Input } from "@/components/ui/Input/Input";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 import {
   SearchIcon,
   CloseIcon,
-  LogOutIcon,
-  MultiplePagesIcon,
+  EditIcon,
   ShareIcon,
+  Trash,
 } from "@/components/ui/icons";
 import { usePageAlignment } from "@/hooks/ui";
 import {
@@ -236,11 +238,14 @@ export default function SearchPage() {
       >
         {/* Match search input width to results width */}
         <div className={clsx("w-full", contentContainerClasses)}>
-          <div className="relative">
-            <SearchIcon className="absolute left-4 top-1/2 size-5 -translate-y-1/2 text-theme-fg-muted" />
-            <input
+          <div className="flex items-center gap-2">
+            <SearchIcon
+              className="size-5 shrink-0 text-theme-fg-muted"
+              aria-hidden="true"
+            />
+            <Input
               data-ui="search-input"
-              type="text"
+              type="search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => {
@@ -249,18 +254,17 @@ export default function SearchPage() {
                 }
               }}
               placeholder={t`Search chat titles...`}
+              aria-label={t`Search chat titles...`}
               autoFocus={shouldAutofocus} // eslint-disable-line jsx-a11y/no-autofocus -- Controlled by feature config to prevent unwanted scrolling
-              className="w-full rounded-xl border border-theme-border bg-theme-bg-secondary px-12 py-4 text-lg text-theme-fg-primary placeholder:text-theme-fg-muted focus:border-theme-border-focus focus:outline-none focus:ring-2 focus:ring-theme-focus"
             />
             {searchQuery && (
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                geometry="icon"
+                icon={<CloseIcon className="size-4" />}
                 onClick={clearSearch}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-theme-fg-muted hover:text-theme-fg-primary"
                 aria-label={t`Clear search`}
-              >
-                <CloseIcon className="size-5" />
-              </button>
+              />
             )}
           </div>
         </div>
@@ -364,14 +368,15 @@ export default function SearchPage() {
                                 id: "chat.history.menu.rename",
                                 message: "Rename",
                               }),
-                              icon: <MultiplePagesIcon className="size-4" />,
+                              icon: <EditIcon className="size-4" />,
                               onClick: () =>
                                 setTitleDialogChatId(result.chatId),
                               disabled: !result.canEdit,
                             },
                             {
                               label: t`Remove`,
-                              icon: <LogOutIcon className="size-4" />,
+                              icon: <Trash className="size-4" />,
+                              variant: "danger",
                               onClick: () => {
                                 void handleArchiveResult(result.chatId);
                               },

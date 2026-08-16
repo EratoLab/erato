@@ -51,12 +51,14 @@ import {
 } from "./SidebarResizeHandle";
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { Button } from "../Controls/Button";
+import { Collapse, COLLAPSE_DURATION_MS } from "../Controls/Collapse";
 import { UserProfileThemeDropdown } from "../Controls/UserProfileThemeDropdown";
 import { CopyErrorButton } from "../Feedback/CopyErrorButton";
 import {
   SidebarToggleIcon,
   SearchIcon,
   EditIcon,
+  PlusIcon,
   ResolvedIcon,
   ChevronRightIcon,
 } from "../icons";
@@ -321,7 +323,7 @@ const NewChatItem = memo<{
       >
         <ResolvedIcon
           iconId={newChatIconId}
-          fallbackIcon={EditIcon}
+          fallbackIcon={PlusIcon}
           className="size-4 shrink-0 text-theme-fg-secondary"
         />
         <span
@@ -547,6 +549,24 @@ const CollapsibleSection = memo<{
       useState(defaultExpanded);
     const isExpanded = expanded ?? uncontrolledExpanded;
     const setIsExpanded = onExpandedChange ?? setUncontrolledExpanded;
+    // Collapsed children must leave the DOM (the load-more sentinel may not
+    // linger inside a zero-height clip box), but only after the height
+    // transition has landed — an immediate unmount would snap the section
+    // closed with nothing to animate.
+    const [renderCollapsedChildren, setRenderCollapsedChildren] =
+      useState(isExpanded);
+
+    useEffect(() => {
+      if (isExpanded) {
+        setRenderCollapsedChildren(true);
+        return;
+      }
+      const timeout = setTimeout(
+        () => setRenderCollapsedChildren(false),
+        COLLAPSE_DURATION_MS,
+      );
+      return () => clearTimeout(timeout);
+    }, [isExpanded]);
 
     return (
       <div className={className}>
@@ -587,7 +607,11 @@ const CollapsibleSection = memo<{
         {/* The chat-list inset lives on this host-owned wrapper rather than
             inside ChatHistoryList, which customers replace wholesale via the
             registry slot. */}
-        {isExpanded && <div className={sidebarInsetClassName}>{children}</div>}
+        <Collapse isOpen={isExpanded}>
+          {(isExpanded || renderCollapsedChildren) && (
+            <div className={sidebarInsetClassName}>{children}</div>
+          )}
+        </Collapse>
       </div>
     );
   },

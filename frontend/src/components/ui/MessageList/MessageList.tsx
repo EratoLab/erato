@@ -637,14 +637,13 @@ export const MessageList = memo<MessageListProps>(
     });
 
     // Set up pagination for message data
-    const { visibleData, hasMore, loadMore, isNewlyLoaded, paginationStats } =
-      usePaginatedData({
-        data: messageOrder,
-        initialCount: pageSize,
-        pageSize: pageSize,
-        enabled: hasOlderMessages,
-        direction: "backward", // Use backward pagination for chat (older messages first)
-      });
+    const { visibleData, hasMore, loadMore, isNewlyLoaded } = usePaginatedData({
+      data: messageOrder,
+      initialCount: pageSize,
+      pageSize: pageSize,
+      enabled: hasOlderMessages,
+      direction: "backward", // Use backward pagination for chat (older messages first)
+    });
 
     // Add a message when user scrolls back down to new messages
     useEffect(() => {
@@ -784,7 +783,6 @@ export const MessageList = memo<MessageListProps>(
           handleLoadMore={handleLoadMore}
           isPending={isPending}
           showBeginningIndicator={showBeginningIndicator}
-          paginationStats={paginationStats}
         />
       );
     }, [
@@ -793,7 +791,6 @@ export const MessageList = memo<MessageListProps>(
       isPending,
       messageOrder.length,
       handleLoadMore,
-      paginationStats,
     ]);
 
     // Add optimized container class based on state
