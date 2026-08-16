@@ -917,7 +917,7 @@ export const AddinChatInput = forwardRef<
       {shouldShowEmailSourcePreview && (
         <div className="mx-auto w-full max-w-[var(--theme-layout-chat-input-max-width)] overflow-hidden overscroll-none px-2 pb-1 sm:px-4">
           <div
-            className="max-h-[40vh] overflow-y-auto overscroll-none pr-1 focus:outline-none focus:ring-2 focus:ring-theme-focus"
+            className="max-h-[40vh] overflow-y-auto overscroll-none pr-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus"
             role="region"
             // The attachment preview is a bounded scroll area in the task pane;
             // keyboard users need a focus target before arrow/page scrolling.

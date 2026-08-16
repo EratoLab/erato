@@ -457,17 +457,19 @@ body {
   letter-spacing: var(--theme-letter-spacing-base, 0em);
 }
 
-/* Add global helper classes */
+/* Add global helper classes.
+   Rings are keyed to :focus-visible only, so mouse clicks never leave a
+   lingering ring; keyboard navigation still gets the full indicator. */
 .focus-ring {
-  @apply focus:outline-none focus:ring-2 focus:ring-theme-focus focus:ring-offset-2 focus-visible:ring-2 focus-visible:ring-theme-focus focus-visible:ring-offset-2;
+  @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus focus-visible:ring-offset-2;
 }
 
 .focus-ring-tight {
-  @apply focus:outline-none focus:ring-2 focus:ring-theme-focus focus-visible:ring-2 focus-visible:ring-theme-focus;
+  @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus;
 }
 
 .focus-ring-inset {
-  @apply focus:outline-none focus:ring-2 focus:ring-inset focus:ring-theme-focus focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-theme-focus;
+  @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-theme-focus;
 }
 
 /* Geometry classes for controls — placed in @layer components so

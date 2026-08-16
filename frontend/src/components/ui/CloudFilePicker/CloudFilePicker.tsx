@@ -209,7 +209,7 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
         onKeyDown={handleKeyDown}
         tabIndex={-1}
       >
-        <div className="theme-transition flex max-h-[90vh] w-full max-w-4xl flex-col rounded-lg bg-theme-bg-primary shadow-xl focus:outline-none focus:ring-2 focus:ring-theme-focus focus:ring-offset-2 sm:max-h-[80vh]">
+        <div className="theme-transition flex max-h-[90vh] w-full max-w-4xl flex-col rounded-lg bg-theme-bg-primary shadow-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus focus-visible:ring-offset-2 sm:max-h-[80vh]">
           {/* Header */}
           <div className="flex items-center justify-between border-b border-theme-border px-4 py-3 sm:px-6 sm:py-4">
             <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">

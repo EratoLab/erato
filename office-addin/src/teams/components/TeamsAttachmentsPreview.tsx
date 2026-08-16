@@ -110,7 +110,7 @@ export function TeamsAttachmentsPreview(props: FileAttachmentsPreviewProps) {
   return (
     <>
       <div
-        className="max-h-[40vh] overflow-y-auto overscroll-none pr-1 focus:outline-none focus:ring-2 focus:ring-theme-focus"
+        className="max-h-[40vh] overflow-y-auto overscroll-none pr-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus"
         role="region"
         // A bounded scroll area needs a focus target before a keyboard user can
         // arrow or page through it.
