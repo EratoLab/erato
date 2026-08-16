@@ -12,7 +12,7 @@
  *     hydration alike, so the gate cannot live in any one of them.
  */
 
-import { runGatedByChat } from "./teamsChatRateGate";
+import { runAtChatMetadataRate, runGatedByChat } from "./teamsChatRateGate";
 import { channelRef, chatRef } from "./teamsConversationRef";
 import {
   GRAPH_BASE,
@@ -162,23 +162,32 @@ async function requestGraph<T>(args: {
   url: string;
   tokenSource: GraphTokenSource;
   gateKey?: string | null;
+  /** Pace the request start under the 5 rps List/Get chat per-user ceiling. */
+  metadataRate?: boolean;
   accept: string;
   init?: GraphInit;
   options: TeamsGraphCallOptions;
   read: (response: Response) => Promise<T>;
   fallback: T;
 }): Promise<T> {
-  const { url, tokenSource, gateKey, accept, init, options, read } = args;
+  const { url, tokenSource, gateKey, metadataRate, accept, init, options } =
+    args;
+  const { read } = args;
   const parentSignal = options.signal;
   const transport = options.transport ?? globalThis.fetch.bind(globalThis);
 
   // The gate wraps `graphFetch`, so its 401 force-refresh replay rides inside
   // one slot rather than waiting out another interval — a rare extra request
   // against the chat, traded for not re-queueing behind unrelated pages.
+  // The metadata pacer sits innermost for the same reason: it must space the
+  // actual request starts, not admissions into an outer queue.
   const send = (signal: AbortSignal) => {
     const call = () =>
       graphFetch(url, tokenSource, accept, signal, transport, init);
-    return gateKey ? runGatedByChat(gateKey, signal, call) : call();
+    const paced = metadataRate
+      ? () => runAtChatMetadataRate(signal, call)
+      : call;
+    return gateKey ? runGatedByChat(gateKey, signal, paced) : paced();
   };
 
   try {
@@ -211,6 +220,7 @@ export async function requestGraphJson<T>(args: {
   url: string;
   tokenSource: GraphTokenSource;
   gateKey?: string | null;
+  metadataRate?: boolean;
   init?: GraphInit;
   options: TeamsGraphCallOptions;
 }): Promise<GraphJsonResult<T>> {
@@ -283,7 +293,7 @@ export async function listTeamsChatsPage(
   const result = await requestGraphJson<{
     value?: GraphChat[];
     "@odata.nextLink"?: string;
-  }>({ url, tokenSource, options });
+  }>({ url, tokenSource, metadataRate: true, options });
   if (!result.ok || !result.payload) {
     return { chats: [], nextLink: null, state: "error" };
   }
@@ -305,6 +315,7 @@ export async function getTeamsChat(
     url,
     tokenSource,
     gateKey: chatId,
+    metadataRate: true,
     options,
   });
   return result.ok ? (result.payload ?? null) : null;
@@ -320,6 +331,10 @@ export interface ListChatMessagesPageResult {
 /**
  * One page of a chat's messages, newest first. Chat messages sort descending
  * only, so following `@odata.nextLink` *is* paging backwards through history.
+ *
+ * The `$orderby` is load-bearing: Graph's default is `lastModifiedDateTime`,
+ * which moves on edits AND reactions, so without it a thumbs-up on an
+ * ancient message pulls that message into the newest-N window.
  */
 export async function listChatMessagesPage(
   chatId: string,
@@ -328,7 +343,7 @@ export async function listChatMessagesPage(
 ): Promise<ListChatMessagesPageResult> {
   const url =
     options.nextLink ??
-    `${GRAPH_BASE}/chats/${encodeURIComponent(chatId)}/messages?$top=${CHAT_MESSAGE_PAGE_SIZE}`;
+    `${GRAPH_BASE}/chats/${encodeURIComponent(chatId)}/messages?$top=${CHAT_MESSAGE_PAGE_SIZE}&$orderby=createdDateTime%20desc`;
   const result = await requestGraphJson<{
     value?: GraphChatMessage[];
     "@odata.nextLink"?: string;

@@ -112,6 +112,7 @@ export function ChatInputAddControls({
                   onSelectFiles={onSelectFiles}
                   onClose={close}
                   disabled={disabled}
+                  uploadDisabled={uploadDisabled}
                   isProcessing={isProcessing}
                 />
               )

@@ -42,6 +42,7 @@ export function AddinChatAddMenuExtraContent({
   onSelectFiles,
   onClose,
   disabled = false,
+  uploadDisabled = false,
   isProcessing = false,
 }: ChatAddMenuExtraContentProps) {
   const { host } = useOffice();
@@ -63,7 +64,8 @@ export function AddinChatAddMenuExtraContent({
   const isSuggestionEligible =
     host === "Outlook" && currentChatId === null && messageOrder.length === 0;
 
-  const isBusy = disabled || isProcessing || isUploadingEmailContent;
+  const isBusy =
+    disabled || uploadDisabled || isProcessing || isUploadingEmailContent;
   const canUploadEmailContent = !!onSelectFiles;
   const selectableAttachments = useMemo(
     () => attachments.filter((attachment) => !attachment.isInline),

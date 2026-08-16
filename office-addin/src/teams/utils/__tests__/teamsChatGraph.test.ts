@@ -65,7 +65,10 @@ describe("listTeamsChatsPage", () => {
 });
 
 describe("listChatMessagesPage", () => {
-  it("requests the documented maximum page size and surfaces the nextLink", async () => {
+  // The $orderby pins the window to creation time: Graph's default is
+  // lastModifiedDateTime, which moves on edits and reactions and would pull
+  // ancient messages into the newest-N window.
+  it("requests the maximum page size ordered by creation time and surfaces the nextLink", async () => {
     const transport = transportReturning(() =>
       jsonResponse({
         value: [mockGraphChatMessage()],
@@ -77,7 +80,7 @@ describe("listChatMessagesPage", () => {
     });
 
     expect(transport.mock.calls[0][0]).toBe(
-      "https://graph.microsoft.com/v1.0/chats/19%3Aabc123%40thread.v2/messages?$top=50",
+      "https://graph.microsoft.com/v1.0/chats/19%3Aabc123%40thread.v2/messages?$top=50&$orderby=createdDateTime%20desc",
     );
     expect(page.messages).toHaveLength(1);
     expect(page.nextLink).toBe("https://graph.microsoft.com/v1.0/next");
