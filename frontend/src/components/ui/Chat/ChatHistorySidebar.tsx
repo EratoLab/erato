@@ -584,7 +584,9 @@ const CollapsibleSection = memo<{
             />
           </button>
           {actions != null && (
-            <div className="flex shrink-0 items-center">{actions}</div>
+            <div className="sidebar-trailing-col-geometry flex shrink-0 items-center">
+              {actions}
+            </div>
           )}
         </div>
         {/* The chat-list inset lives on this host-owned wrapper rather than
@@ -1199,7 +1201,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                         <div
                           className={clsx(
                             sidebarInsetClassName,
-                            "flex items-center justify-end py-1",
+                            "sidebar-trailing-col-geometry flex items-center justify-end py-1",
                           )}
                           data-ui="chat-history-filter-row"
                         >

@@ -738,6 +738,15 @@ body {
   );
 }
 
+/* Trailing-control column: chat rows and section headers host the same
+   sm icon control on their right edge (the "⋮" row menu, the filter/sort
+   trigger). They share this padding — and the control its geometry — so the
+   controls sit on one vertical centerline; the padding also keeps the control
+   box clear of the row's --theme-radius-shell corner rounding. */
+.sidebar-trailing-col-geometry {
+  padding-right: 0.375rem;
+}
+
 /* Square icon controls (header toggle, slim logo, footer avatar trigger):
    the margin puts the control box's center on the rail line. The box never
    renders smaller than its content (--sidebar-icon-col-content; the avatar

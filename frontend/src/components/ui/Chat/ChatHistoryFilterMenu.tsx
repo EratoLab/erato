@@ -469,7 +469,7 @@ export function ChatHistoryFilterMenu({
       trigger={(triggerProps) => (
         <Button
           {...triggerProps}
-          variant="icon-only"
+          variant="sidebar-icon"
           size="sm"
           aria-label={t({
             id: "chat.history.filterMenu.trigger",
@@ -478,7 +478,8 @@ export function ChatHistoryFilterMenu({
           data-testid="chat-history-filter-menu-trigger"
           className={clsx(
             "relative",
-            isOpen && "bg-theme-bg-hover text-theme-fg-primary",
+            isOpen &&
+              "bg-[var(--theme-shell-sidebar-hover)] text-theme-fg-primary",
             className,
           )}
           icon={<FilterSortIcon className="size-4" />}

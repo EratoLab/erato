@@ -234,7 +234,7 @@ const ChatHistoryListItem = memo<{
           useDiv={true}
           showFocusRing={false}
           className={clsx(
-            "sidebar-content-col-geometry sidebar-row-geometry theme-transition flex flex-col py-1.5 pb-3.5 pr-1.5 text-left",
+            "sidebar-content-col-geometry sidebar-trailing-col-geometry sidebar-row-geometry theme-transition flex flex-col py-1.5 pb-3.5 text-left",
             isActive
               ? "sidebar-row-selected"
               : "hover:bg-[var(--theme-shell-sidebar-hover)]",
@@ -259,6 +259,7 @@ const ChatHistoryListItem = memo<{
               }}
             >
               <DropdownMenu
+                triggerButtonVariant="sidebar-icon"
                 items={[
                   ...(onPin
                     ? [
