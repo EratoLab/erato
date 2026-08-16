@@ -28,8 +28,10 @@ import type { ChatSession } from "@/types/chat";
 import type { ChatAttentionStatus } from "@/utils/chatHistoryGrouping";
 
 const logger = createLogger("UI", "ChatHistoryList");
+// Inset ring: the outside-drawn variant gets clipped by the sidebar
+// scrollport whenever the themeable row inset is below the ring width.
 const sidebarRowLinkClassName =
-  "focus-ring-tight block rounded-[var(--theme-radius-shell)]";
+  "focus-ring-inset block rounded-[var(--theme-radius-shell)]";
 
 /**
  * Row title: a real backend title, else the recorded user-message hint, else
