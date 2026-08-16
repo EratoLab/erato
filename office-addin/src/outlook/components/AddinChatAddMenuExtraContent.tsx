@@ -9,9 +9,12 @@ import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
 import type { ChatAddMenuExtraContentProps } from "@erato/frontend/library";
 
 const headerClassName =
-  "px-3 pb-1 pt-2 text-xs font-medium uppercase tracking-wide text-theme-fg-muted";
+  "px-[var(--theme-spacing-dropdown-padding-x)] pb-1 pt-2 text-xs font-medium uppercase tracking-wide text-theme-fg-muted";
+// Same row recipe as the shared "+" menu / DropdownMenu item channel, so
+// customer themes retune these injected rows together with every other menu.
 const rowClassName =
-  "flex w-full items-start justify-between gap-3 rounded-[var(--theme-radius-control)] px-3 py-2 text-left transition-colors hover:bg-theme-bg-hover disabled:cursor-not-allowed disabled:opacity-50";
+  "dropdown-item-geometry theme-transition flex w-full items-start justify-between gap-2 rounded-[var(--theme-radius-control)] text-left text-sm text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary focus:bg-theme-bg-hover focus:text-theme-fg-primary focus:outline-none focus:ring-1 focus:ring-inset focus:ring-theme-border-dropdown disabled:cursor-not-allowed disabled:opacity-50";
+const infoRowClassName = "dropdown-item-geometry text-xs";
 
 function formatFileSize(size: number): string {
   if (!Number.isFinite(size) || size <= 0) {
@@ -160,7 +163,7 @@ export function AddinChatAddMenuExtraContent({
       </div>
 
       {isLoadingEmailBody && (
-        <div className="px-3 py-2 text-xs text-theme-fg-muted">
+        <div className={`${infoRowClassName} text-theme-fg-muted`}>
           {t({
             id: "officeAddin.fileSource.loadingEmailThread",
             message: "Loading email thread...",
@@ -169,7 +172,7 @@ export function AddinChatAddMenuExtraContent({
       )}
 
       {!isLoadingEmailBody && emailThreadLoadError && (
-        <div className="px-3 py-2 text-xs text-theme-error-fg">
+        <div className={`${infoRowClassName} text-theme-error-fg`}>
           {t({
             id: "officeAddin.fileSource.emailThreadLoadError",
             message:
@@ -194,7 +197,7 @@ export function AddinChatAddMenuExtraContent({
               className={rowClassName}
             >
               <div className="min-w-0">
-                <div className="truncate text-sm font-medium text-theme-fg-primary">
+                <div className="truncate text-sm font-medium">
                   {t({
                     id: "officeAddin.fileSource.emailThread",
                     message: "Email thread",
@@ -222,7 +225,7 @@ export function AddinChatAddMenuExtraContent({
         })()}
 
       {isLoadingAttachments && (
-        <div className="px-3 py-2 text-xs text-theme-fg-muted">
+        <div className={`${infoRowClassName} text-theme-fg-muted`}>
           {t({
             id: "officeAddin.fileSource.loadingAttachments",
             message: "Loading attachments...",
@@ -256,7 +259,7 @@ export function AddinChatAddMenuExtraContent({
             className={rowClassName}
           >
             <div className="min-w-0">
-              <div className="truncate text-sm font-medium text-theme-fg-primary">
+              <div className="truncate text-sm font-medium">
                 {attachment.name}
               </div>
               <div className="truncate text-xs text-theme-fg-muted">

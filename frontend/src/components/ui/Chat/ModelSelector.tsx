@@ -8,7 +8,7 @@ import { t } from "@lingui/core/macro";
 import { useMemo, useState } from "react";
 
 import { DropdownMenu } from "../Controls/DropdownMenu";
-import { ResolvedIcon } from "../icons";
+import { ChevronDownIcon, ResolvedIcon } from "../icons";
 
 import type { DropdownMenuItem } from "../Controls/DropdownMenu";
 import type { ChatModel } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -202,21 +202,11 @@ export const ModelSelector = ({
             >
               {displayName}
             </span>
-            <svg
+            <ChevronDownIcon
               className={`size-3 shrink-0 text-[var(--theme-fg-secondary)] transition-transform duration-200 ${
                 isDropdownOpen ? "rotate-180" : ""
               }`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19 9l-7 7-7-7"
-              />
-            </svg>
+            />
           </div>
         }
         className={`${disabled ? "cursor-not-allowed opacity-50" : ""}`}
