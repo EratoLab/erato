@@ -10,7 +10,7 @@ import { Button } from "./Button";
 import { ConfirmationDialog } from "../Modal/ConfirmationDialog";
 import { MoreVertical, CheckIcon } from "../icons";
 
-import type { ButtonVariant } from "./Button";
+import type { ButtonGeometry, ButtonVariant } from "./Button";
 import type React from "react";
 
 export interface DropdownMenuItem {
@@ -35,7 +35,7 @@ export interface DropdownMenuProps {
   triggerIcon?: React.ReactNode;
   triggerButtonVariant?: ButtonVariant;
   /** Geometry of the trigger button; "icon" yields a square, centered control. */
-  triggerButtonGeometry?: "control" | "icon";
+  triggerButtonGeometry?: ButtonGeometry;
   triggerButtonClassName?: string;
   id?: string;
   preferredOrientation?: {

@@ -146,11 +146,6 @@ export interface ChatHistorySidebarProps {
    * @default false
    */
   collapsed?: boolean;
-  /**
-   * Minimum width of the sidebar when expanded
-   * @default theme layout token
-   */
-  minWidth?: number;
   onNewChat?: () => void;
   onToggleCollapse?: () => void;
   showTitle?: boolean;
@@ -647,7 +642,6 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
   ({
     className,
     collapsed = false,
-    minWidth,
     onNewChat,
     onToggleCollapse,
     showTitle = false,
@@ -967,26 +961,18 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       navigate(assistantsLandingRoute);
     }, [assistantsLandingRoute, navigate]);
 
-    const expandedSidebarWidth = useMemo(
-      () =>
-        typeof minWidth === "number"
-          ? `${minWidth}px`
-          : // The override variable carries a user-dragged width; the theme
-            // token stays untouched because the theme pipeline clears root
-            // inline values for every --theme-* variable when it applies.
-            "var(--sidebar-width-override, var(--theme-layout-sidebar-width))",
-      [minWidth],
-    );
-
     // Width is runtime state (slim vs expanded); the surface lives in
-    // .sidebar-skin so [data-ui="sidebar"] stays themeable.
+    // .sidebar-skin so [data-ui="sidebar"] stays themeable. The override
+    // variable carries a user-dragged width; the theme token stays untouched
+    // because the theme pipeline clears root inline values for every
+    // --theme-* variable when it applies.
     const sidebarShellStyle = useMemo(
       () => ({
         width: isSlimMode
           ? "var(--theme-layout-sidebar-slim-width)"
-          : expandedSidebarWidth,
+          : "var(--sidebar-width-override, var(--theme-layout-sidebar-width))",
       }),
-      [expandedSidebarWidth, isSlimMode],
+      [isSlimMode],
     );
 
     const hiddenToggleStyle = useMemo(

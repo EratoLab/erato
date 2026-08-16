@@ -32,7 +32,7 @@ type ButtonShape = "default" | "pill";
 // padding) whatever its colour is — before this existed, the only way to get
 // icon geometry was `variant="icon-only"`, which also forces a transparent
 // ghost look, so filled icon buttons were stuck with text-button geometry.
-type ButtonGeometry = "control" | "icon";
+export type ButtonGeometry = "control" | "icon";
 
 interface ButtonProps
   extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "aria-checked"> {

@@ -713,7 +713,10 @@ body {
    derives from the slim rail's centerline (slim-width / 2) — in BOTH the
    expanded and the slim state. Because the two states share one x position,
    nothing moves horizontally while the width animates, and the slim rail is
-   exactly centered by construction for any token values. */
+   exactly centered by construction. Valid token domain: slim-width must be at
+   least 2 × (compact-padding-x + half the widest control box); outside it the
+   paddings below clamp at the inset while the control margins keep the
+   centerline, so the columns drift apart instead of failing loudly. */
 
 /* Level-0 content column: nav icons, chat-row text and section titles start
    where a 1rem icon centered on the rail line begins. Applied inside the

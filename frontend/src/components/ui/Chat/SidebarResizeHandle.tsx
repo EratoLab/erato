@@ -3,6 +3,7 @@
 import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { useTheme } from "@/components/providers/ThemeProvider";
 import { useUIStore } from "@/state/uiStore";
 
 /**
@@ -16,6 +17,10 @@ const THEME_SIDEBAR_WIDTH_VAR = "--theme-layout-sidebar-width";
 /** The sidebar can grow to at most this multiple of the theme's own width. */
 const MAX_WIDTH_FACTOR = 2;
 const KEYBOARD_STEP_PX = 16;
+/** Fallback when a theme ships an unparseable width (probe measures 0). */
+const FALLBACK_MIN_WIDTH_PX = 280;
+/** Pointer travel below this is a click, not a resize drag. */
+const DRAG_SLOP_PX = 4;
 
 const clampWidth = (width: number, min: number) =>
   Math.min(Math.max(width, min), min * MAX_WIDTH_FACTOR);
@@ -30,7 +35,33 @@ const measureThemeSidebarWidth = (): number => {
   document.body.appendChild(probe);
   const width = probe.getBoundingClientRect().width;
   probe.remove();
-  return width;
+  return Number.isFinite(width) && width > 0 ? width : FALLBACK_MIN_WIDTH_PX;
+};
+
+/**
+ * A persisted width can exceed a small viewport (it is clamped against the
+ * theme width, which itself may be wider than the window), so the override
+ * never renders past the viewport edge.
+ */
+const setOverride = (width: number) => {
+  document.documentElement.style.setProperty(
+    SIDEBAR_WIDTH_OVERRIDE_VAR,
+    // eslint-disable-next-line lingui/no-unlocalized-strings -- CSS length
+    `min(${width}px, 100vw)`,
+  );
+};
+
+const removeOverride = () => {
+  document.documentElement.style.removeProperty(SIDEBAR_WIDTH_OVERRIDE_VAR);
+};
+
+/** Re-derive the override from the persisted width (or clear it). */
+const syncOverrideFromStore = (sidebarWidth: number | null) => {
+  if (sidebarWidth == null) {
+    removeOverride();
+    return;
+  }
+  setOverride(clampWidth(sidebarWidth, measureThemeSidebarWidth()));
 };
 
 /**
@@ -40,20 +71,17 @@ const measureThemeSidebarWidth = (): number => {
  */
 export const useApplySidebarWidth = () => {
   const sidebarWidth = useUIStore((state) => state.sidebarWidth);
+  // The customer theme (and its sidebar width) lands asynchronously after
+  // mount; re-clamping on theme identity keeps the override from staying
+  // pinned to the built-in width's bounds.
+  const { effectiveTheme, customThemeName } = useTheme();
 
   // No unmount cleanup: the override is app-global state, and sidebar
   // instances can overlap during route transitions — a departing instance's
   // cleanup would wipe the value the arriving instance just applied.
   useEffect(() => {
-    const root = document.documentElement;
-    if (sidebarWidth == null) {
-      root.style.removeProperty(SIDEBAR_WIDTH_OVERRIDE_VAR);
-      return;
-    }
-    const themeWidth = measureThemeSidebarWidth();
-    const clamped = clampWidth(sidebarWidth, themeWidth);
-    root.style.setProperty(SIDEBAR_WIDTH_OVERRIDE_VAR, `${clamped}px`);
-  }, [sidebarWidth]);
+    syncOverrideFromStore(sidebarWidth);
+  }, [sidebarWidth, effectiveTheme, customThemeName]);
 };
 
 interface DragState {
@@ -61,6 +89,7 @@ interface DragState {
   startX: number;
   startWidth: number;
   min: number;
+  moved: boolean;
 }
 
 /**
@@ -69,9 +98,9 @@ interface DragState {
  * data-sidebar-resizing attribute) and persists the result on release.
  */
 export const SidebarResizeHandle = () => {
-  const sidebarWidth = useUIStore((state) => state.sidebarWidth);
   const setSidebarWidth = useUIStore((state) => state.setSidebarWidth);
   const dragState = useRef<DragState | null>(null);
+  const lastDragMovedRef = useRef(false);
   const [range, setRange] = useState<{
     min: number;
     max: number;
@@ -85,31 +114,42 @@ export const SidebarResizeHandle = () => {
       : measureThemeSidebarWidth();
   }, []);
 
-  const refreshRange = useCallback(
-    (handle: HTMLElement) => {
-      const min = measureThemeSidebarWidth();
-      setRange({
-        min: Math.round(min),
-        max: Math.round(min * MAX_WIDTH_FACTOR),
-        now: Math.round(measureCurrentWidth(handle)),
-      });
-    },
-    [measureCurrentWidth],
-  );
+  // aria values derive from the persisted target, not the DOM: the width
+  // animates 300ms, so DOM reads would announce the previous width (or a
+  // mid-transition one) to screen readers.
+  const refreshRange = useCallback(() => {
+    const min = measureThemeSidebarWidth();
+    const stored = useUIStore.getState().sidebarWidth;
+    setRange({
+      min: Math.round(min),
+      max: Math.round(min * MAX_WIDTH_FACTOR),
+      now: Math.round(clampWidth(stored ?? min, min)),
+    });
+  }, []);
 
-  const handleRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    if (handleRef.current) {
-      refreshRange(handleRef.current);
-    }
+    refreshRange();
   }, [refreshRange]);
+
+  // The handle can unmount mid-drag (collapse via keyboard or a second touch
+  // pointer); without this cleanup the root attribute — and with it the
+  // app-wide transition/cursor/selection suppression — would stay stuck until
+  // some later drag completes.
+  useEffect(
+    () => () => {
+      if (!dragState.current) return;
+      dragState.current = null;
+      document.documentElement.removeAttribute("data-sidebar-resizing");
+      syncOverrideFromStore(useUIStore.getState().sidebarWidth);
+    },
+    [],
+  );
 
   const endDrag = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       const drag = dragState.current;
       if (drag?.pointerId !== e.pointerId) return;
       dragState.current = null;
-      e.currentTarget.releasePointerCapture(drag.pointerId);
       document.documentElement.removeAttribute("data-sidebar-resizing");
       // The release position is authoritative: intermediate pointermoves may
       // be coalesced away, but the up event always carries the final point.
@@ -119,13 +159,23 @@ export const SidebarResizeHandle = () => {
         e.type === "pointercancel"
           ? clampWidth(measureCurrentWidth(e.currentTarget), drag.min)
           : clampWidth(drag.startWidth + (e.clientX - drag.startX), drag.min);
-      document.documentElement.style.setProperty(
-        SIDEBAR_WIDTH_OVERRIDE_VAR,
-        `${width}px`,
-      );
+      lastDragMovedRef.current =
+        drag.moved || Math.abs(e.clientX - drag.startX) > DRAG_SLOP_PX;
       // Back at the theme's own width means "no override".
-      setSidebarWidth(width > drag.min ? Math.round(width) : null);
-      refreshRange(e.currentTarget);
+      if (width > drag.min) {
+        setOverride(width);
+        setSidebarWidth(Math.round(width));
+      } else {
+        removeOverride();
+        setSidebarWidth(null);
+      }
+      refreshRange();
+      // Last: a throwing release must not skip the cleanup above.
+      try {
+        e.currentTarget.releasePointerCapture(drag.pointerId);
+      } catch {
+        // Inactive pointer — capture is already gone.
+      }
     },
     [measureCurrentWidth, refreshRange, setSidebarWidth],
   );
@@ -142,6 +192,7 @@ export const SidebarResizeHandle = () => {
         startX: e.clientX,
         startWidth: measureCurrentWidth(e.currentTarget),
         min: measureThemeSidebarWidth(),
+        moved: false,
       };
       e.currentTarget.setPointerCapture(e.pointerId);
       document.documentElement.setAttribute("data-sidebar-resizing", "");
@@ -153,26 +204,27 @@ export const SidebarResizeHandle = () => {
     (e: React.PointerEvent<HTMLDivElement>) => {
       const drag = dragState.current;
       if (drag?.pointerId !== e.pointerId) return;
-      const width = clampWidth(
-        drag.startWidth + (e.clientX - drag.startX),
-        drag.min,
-      );
-      document.documentElement.style.setProperty(
-        SIDEBAR_WIDTH_OVERRIDE_VAR,
-        `${width}px`,
+      if (Math.abs(e.clientX - drag.startX) > DRAG_SLOP_PX) {
+        drag.moved = true;
+      }
+      setOverride(
+        clampWidth(drag.startWidth + (e.clientX - drag.startX), drag.min),
       );
     },
     [],
   );
 
-  const handleDoubleClick = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      setSidebarWidth(null);
-      document.documentElement.style.removeProperty(SIDEBAR_WIDTH_OVERRIDE_VAR);
-      refreshRange(e.currentTarget);
-    },
-    [refreshRange, setSidebarWidth],
-  );
+  const handleDoubleClick = useCallback(() => {
+    // A double-press whose presses actually dragged is two resize gestures,
+    // not a reset request — resetting would discard the width just set.
+    if (lastDragMovedRef.current) {
+      lastDragMovedRef.current = false;
+      return;
+    }
+    setSidebarWidth(null);
+    removeOverride();
+    refreshRange();
+  }, [refreshRange, setSidebarWidth]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -180,7 +232,10 @@ export const SidebarResizeHandle = () => {
       // The stored width is the base, not the DOM width: the width change
       // animates, so mid-transition DOM reads would make repeated key
       // presses compound incorrectly.
-      const current = clampWidth(sidebarWidth ?? min, min);
+      const current = clampWidth(
+        useUIStore.getState().sidebarWidth ?? min,
+        min,
+      );
       let next: number | null;
       switch (e.key) {
         case "ArrowRight":
@@ -200,9 +255,9 @@ export const SidebarResizeHandle = () => {
       }
       e.preventDefault();
       setSidebarWidth(next > min ? Math.round(next) : null);
-      refreshRange(e.currentTarget);
+      refreshRange();
     },
-    [refreshRange, setSidebarWidth, sidebarWidth],
+    [refreshRange, setSidebarWidth],
   );
 
   /* eslint-disable jsx-a11y/no-noninteractive-element-interactions,
@@ -211,7 +266,6 @@ export const SidebarResizeHandle = () => {
      jsx-a11y cannot infer from the role. */
   return (
     <div
-      ref={handleRef}
       role="separator"
       tabIndex={0}
       aria-orientation="vertical"
