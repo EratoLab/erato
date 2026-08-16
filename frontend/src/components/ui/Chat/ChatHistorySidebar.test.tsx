@@ -172,7 +172,7 @@ describe("ChatHistorySidebar", () => {
     expect(searchItem?.classList.contains("opacity-50")).toBe(false);
   });
 
-  it("centers slim-mode nav items instead of padding them", async () => {
+  it("keeps nav rows on the rail column in slim mode", async () => {
     mockedCollapsedMode = "slim";
 
     const { i18n } = await import("@lingui/core");
@@ -195,12 +195,15 @@ describe("ChatHistorySidebar", () => {
       '[data-ui="sidebar-search-item"]',
     );
 
+    // Rail-column geometry: the same token-derived column in both modes, so
+    // the icon does not move when the width animates.
     expect(searchItem).toHaveClass(
-      "justify-center",
+      "sidebar-content-col-geometry",
       "py-2",
       "sidebar-row-geometry",
       "sidebar-row-selected",
     );
+    expect(searchItem).not.toHaveClass("justify-center");
     expect(searchItem).not.toHaveClass("px-3");
   });
 

@@ -193,6 +193,7 @@ const SidebarLogo = memo<{
         onClick={onToggle}
         variant="sidebar-icon"
         icon={<SidebarToggleIcon />}
+        className="sidebar-icon-col-geometry"
         aria-label={t`expand sidebar`}
         aria-expanded="false"
       />
@@ -205,7 +206,7 @@ const SidebarLogo = memo<{
       variant="sidebar-icon"
       aria-label={t`expand sidebar`}
       aria-expanded="false"
-      className="relative size-10 p-0"
+      className="sidebar-icon-col-geometry sidebar-icon-col-geometry-logo relative size-10 p-0"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -244,7 +245,7 @@ const ChatHistoryHeader = memo<{
     >
       {/* In slim mode, show logo with hover toggle or just toggle button */}
       {isSlimMode && (
-        <div className="flex w-full items-center justify-center">
+        <div className="flex w-full items-center">
           <div className="relative">
             {sidebarLogoPath ? (
               <SidebarLogo
@@ -256,6 +257,7 @@ const ChatHistoryHeader = memo<{
                 onClick={onToggleCollapse}
                 variant="sidebar-icon"
                 icon={<SidebarToggleIcon />}
+                className="sidebar-icon-col-geometry"
                 aria-label={t`expand sidebar`}
                 aria-expanded="false"
               />
@@ -317,7 +319,7 @@ const NewChatItem = memo<{
         className={clsx(
           sidebarItemClassName,
           "theme-transition flex items-center text-left hover:bg-[var(--theme-shell-sidebar-hover)]",
-          isSlimMode ? "justify-center py-2" : "gap-3 px-3 py-2",
+          "sidebar-content-col-geometry gap-3 py-2 pr-3",
         )}
         aria-label={t`New Chat`}
         title={isSlimMode ? t`New Chat` : undefined}
@@ -361,7 +363,7 @@ const SearchNavigationItem = memo<{
           className={clsx(
             activeSidebarItemClassName,
             "flex items-center text-left",
-            isSlimMode ? "justify-center py-2" : "gap-3 px-3 py-2",
+            "sidebar-content-col-geometry gap-3 py-2 pr-3",
           )}
           aria-label={t`Search`}
           title={isSlimMode ? t`Search` : undefined}
@@ -406,7 +408,7 @@ const SearchNavigationItem = memo<{
             className={clsx(
               sidebarItemClassName,
               "theme-transition flex items-center text-left hover:bg-[var(--theme-shell-sidebar-hover)]",
-              isSlimMode ? "justify-center py-2" : "gap-3 px-3 py-2",
+              "sidebar-content-col-geometry gap-3 py-2 pr-3",
             )}
             data-ui="sidebar-search-item"
           >
@@ -452,7 +454,7 @@ const AssistantsNavigationItem = memo<{
           className={clsx(
             activeSidebarItemClassName,
             "flex items-center text-left",
-            isSlimMode ? "justify-center py-2" : "gap-3 px-3 py-2",
+            "sidebar-content-col-geometry gap-3 py-2 pr-3",
           )}
           aria-label={t`Assistants`}
           title={isSlimMode ? t`Assistants` : undefined}
@@ -497,7 +499,7 @@ const AssistantsNavigationItem = memo<{
             className={clsx(
               sidebarItemClassName,
               "theme-transition flex items-center text-left hover:bg-[var(--theme-shell-sidebar-hover)]",
-              isSlimMode ? "justify-center py-2" : "gap-3 px-3 py-2",
+              "sidebar-content-col-geometry gap-3 py-2 pr-3",
             )}
             data-ui="sidebar-assistants-item"
           >
@@ -563,7 +565,7 @@ const CollapsibleSection = memo<{
             onClick={() => setIsExpanded(!isExpanded)}
             className={clsx(
               sidebarItemClassName,
-              "group/toggle flex min-w-0 flex-1 items-center gap-1.5 px-3 py-2 text-left",
+              "sidebar-content-col-geometry group/toggle flex min-w-0 flex-1 items-center gap-1.5 py-2 pr-3 text-left",
             )}
             aria-expanded={isExpanded}
             aria-label={isExpanded ? t`Collapse ${title}` : t`Expand ${title}`}
@@ -603,18 +605,17 @@ const ChatHistoryFooter = memo<{
   userProfile?: UserProfile;
   onSignOut: () => void;
   isSlimMode?: boolean;
-}>(({ userProfile, onSignOut, isSlimMode = false }) => (
+}>(({ userProfile, onSignOut }) => (
   <div
     className="sidebar-section-skin sidebar-band-geometry flex items-center border-t"
     data-ui="sidebar-footer"
   >
+    {/* The trigger's rail-column margin holds in both modes, so the slim
+        rail needs no extra centering here. */}
     <UserProfileThemeDropdown
       userProfile={userProfile}
       onSignOut={onSignOut}
-      className={clsx(
-        "flex w-full items-center",
-        isSlimMode && "justify-center",
-      )}
+      className="flex w-full items-center"
     />
   </div>
 ));
@@ -624,7 +625,7 @@ ChatHistoryFooter.displayName = "ChatHistoryFooter";
 
 const NoFilterMatchesRow = () => (
   <p
-    className="px-3 py-2 text-xs text-theme-fg-muted"
+    className="sidebar-content-col-geometry py-2 pr-3 text-xs text-theme-fg-muted"
     data-testid="chat-history-no-filter-matches"
   >
     {t({

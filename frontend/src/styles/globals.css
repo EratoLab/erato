@@ -709,25 +709,43 @@ body {
   );
 }
 
-/* Places a square icon control on the sidebar's icon column: the control is
-   control-min-height sized with its content centered, while the column is
-   defined by the row padding the nav rows use — so the margin solves for
-   "content left edge = inset + control-padding-x" from the same tokens.
-   --sidebar-icon-col-content is the rendered content width (size-5 icon by
-   default; the footer avatar overrides it). Slim mode centers via flexbox
-   instead, so the rail zeroes the margin. */
+/* Rail-column geometry: every sidebar icon control and level-0 content column
+   derives from the slim rail's centerline (slim-width / 2) — in BOTH the
+   expanded and the slim state. Because the two states share one x position,
+   nothing moves horizontally while the width animates, and the slim rail is
+   exactly centered by construction for any token values. */
+
+/* Level-0 content column: nav icons, chat-row text and section titles start
+   where a 1rem icon centered on the rail line begins. Applied inside the
+   .sidebar-inset-geometry wrappers, so the inset is subtracted here. */
+.sidebar-content-col-geometry {
+  padding-left: calc(
+    var(--theme-layout-sidebar-slim-width) / 2 -
+      var(--theme-spacing-shell-compact-padding-x) - 0.5rem
+  );
+}
+
+/* Label/nested column: content column + 1rem icon + 0.75rem gap. */
+.sidebar-label-col-geometry {
+  padding-left: calc(
+    var(--theme-layout-sidebar-slim-width) / 2 -
+      var(--theme-spacing-shell-compact-padding-x) + 1.25rem
+  );
+}
+
+/* Square icon controls (header toggle, slim logo, footer avatar trigger):
+   the margin puts the control box's center on the rail line. The box never
+   renders smaller than its content (--sidebar-icon-col-content; the avatar
+   and logo variants raise it and enforce it via min sizes), so the effective
+   box is the max of the control size and the content. */
 .sidebar-icon-col-geometry {
   --sidebar-icon-col-content: 1.25rem;
-  /* The control box never renders smaller than its content (the avatar
-     variant enforces that via min sizes), so the effective box is the max. */
   margin-left: calc(
-    var(--theme-spacing-control-padding-x) -
-      (
-        max(
-            var(--theme-spacing-control-min-height) - 0.25rem,
-            var(--sidebar-icon-col-content)
-          ) -
-          var(--sidebar-icon-col-content)
+    var(--theme-layout-sidebar-slim-width) / 2 -
+      var(--theme-spacing-shell-compact-padding-x) -
+      max(
+        var(--theme-spacing-control-min-height) - 0.25rem,
+        var(--sidebar-icon-col-content)
       ) /
       2
   );
@@ -739,8 +757,8 @@ body {
   min-height: var(--sidebar-icon-col-content);
 }
 
-[data-ui="sidebar"][data-sidebar-mode="slim"] .sidebar-icon-col-geometry {
-  margin-left: 0;
+.sidebar-icon-col-geometry-logo {
+  --sidebar-icon-col-content: 2.5rem;
 }
 
 /* Sidebar chat rows. Same reasoning as .anchored-popover-skin: held inline,

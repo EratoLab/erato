@@ -232,7 +232,7 @@ const ChatHistoryListItem = memo<{
           useDiv={true}
           showFocusRing={false}
           className={clsx(
-            "sidebar-row-geometry theme-transition flex flex-col px-3 py-1.5 pb-3.5 pr-1.5 text-left",
+            "sidebar-content-col-geometry sidebar-row-geometry theme-transition flex flex-col py-1.5 pb-3.5 pr-1.5 text-left",
             isActive
               ? "sidebar-row-selected"
               : "hover:bg-[var(--theme-shell-sidebar-hover)]",
@@ -476,7 +476,7 @@ export const ChatHistoryListSkeleton = ({
       <div
         key={i}
         data-testid="chat-history-skeleton-item"
-        className="sidebar-row-geometry sidebar-row-selected w-full px-3 py-1.5 pb-3.5 pr-1.5"
+        className="sidebar-content-col-geometry sidebar-row-geometry sidebar-row-selected w-full py-1.5 pb-3.5 pr-1.5"
       >
         <div className="flex w-full items-center justify-between gap-2">
           <div className="h-5 w-2/3 animate-pulse rounded bg-theme-bg-accent" />

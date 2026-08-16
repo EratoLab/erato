@@ -1,326 +1,39 @@
 import { test, expect, type Page } from "@playwright/test";
 
-import { chatIsReadyToChat, sendFirstMessage } from "./shared";
+import { chatIsReadyToChat } from "./shared";
+import {
+  assertExpandedInvariants,
+  assertSlimInvariants,
+  assertStationaryTrajectory,
+  collapseSidebar,
+  ensureAChatExists,
+  expandSidebar,
+  expectAligned,
+  forceSlimCollapsedMode,
+  measureExpanded,
+  measureRailWidth,
+  measureSlim,
+  recordToggleTrajectory,
+  settleSidebar,
+  setThemeVars,
+  sidebarMode,
+} from "./sidebarGeometry";
 import { TAG_CI } from "./tags";
 
 /**
- * Sidebar geometry contract (ERMAIN-608).
- *
- * The invariants are relational, not pixel-absolute: they must hold for ANY
- * theme-token values, so every stage re-asserts the same relations after
- * runtime token perturbation.
+ * Sidebar geometry contract (ERMAIN-608). Measurement helpers and invariant
+ * definitions live in ./sidebarGeometry.ts:
  *
  * I1 expanded: nav rows, chat rows, section headers and the divider share one
  *    left inset; chat text, nav icons and section titles share one column;
- *    the header toggle icon sits on that column; header band == footer band.
+ *    icon controls share the rail centerline; header band == footer band.
  * I2 slim: every rail item is centered on the rail.
  * I3 skeleton rows carry the same container inset + row padding as real rows.
  * I4 nav-row and chat-row hover surfaces have equal width (modulo the chat
  *    scroller's scrollbar gutter, which is measured, not guessed).
+ * I5 rail-column: icons keep one x position across expanded/slim, so nothing
+ *    moves horizontally while the width animates.
  */
-
-/**
- * Wait until the sidebar's width has stopped changing (the width/margin
- * transitions run 300ms); a 150ms two-sample window inside the page avoids
- * a fixed sleep.
- */
-const settleSidebar = async (page: Page) => {
-  await expect
-    .poll(
-      () =>
-        page.evaluate(
-          () =>
-            new Promise<number>((resolve) => {
-              const aside = document.querySelector('[data-ui="sidebar"]');
-              if (!aside) {
-                resolve(Number.NaN);
-                return;
-              }
-              const before = aside.getBoundingClientRect().width;
-              setTimeout(() => {
-                resolve(Math.abs(aside.getBoundingClientRect().width - before));
-              }, 150);
-            }),
-        ),
-      { timeout: 5000 },
-    )
-    .toBeLessThan(0.1);
-};
-
-interface Box {
-  left: number;
-  right: number;
-  width: number;
-  center: number;
-}
-
-interface ExpandedMeasurement {
-  asideWidth: number;
-  headerHeight: number;
-  footerHeight: number;
-  headerIconBox: Box | null;
-  navRows: Box[];
-  navIcons: Box[];
-  navLabels: Box[];
-  sectionButtons: Box[];
-  sectionTitles: Box[];
-  divider: Box | null;
-  chatRows: Box[];
-  chatTitles: Box[];
-  chatScrollbarWidth: number;
-  footerTrigger: Box | null;
-}
-
-interface SlimMeasurement {
-  asideWidth: number;
-  railCenters: { label: string; center: number }[];
-}
-
-const forceSlimCollapsedMode = async (page: Page) => {
-  await page.addInitScript(() => {
-    (window as { SIDEBAR_COLLAPSED_MODE?: string }).SIDEBAR_COLLAPSED_MODE =
-      "slim";
-  });
-};
-
-const sidebarMode = (page: Page) =>
-  page.locator('[data-ui="sidebar"]').getAttribute("data-sidebar-mode");
-
-const expandSidebar = async (page: Page) => {
-  await expect(page.locator('[data-ui="sidebar"]')).toBeVisible();
-  if ((await sidebarMode(page)) !== "expanded") {
-    await page.getByLabel("expand sidebar").click();
-    await settleSidebar(page);
-  }
-  expect(await sidebarMode(page)).toBe("expanded");
-};
-
-const collapseSidebar = async (page: Page) => {
-  await expect(page.locator('[data-ui="sidebar"]')).toBeVisible();
-  if ((await sidebarMode(page)) === "expanded") {
-    await page.getByLabel("collapse sidebar").click();
-    await settleSidebar(page);
-  }
-};
-
-/** At least one chat row must exist for the chat-column invariants. */
-const ensureAChatExists = async (page: Page) => {
-  if ((await page.locator('[data-ui="chat-history-item"]').count()) > 0) {
-    return;
-  }
-  await sendFirstMessage(page, "Sidebar geometry probe chat");
-  await chatIsReadyToChat(page, { expectAssistantResponse: true });
-  await expect(
-    page.locator('[data-ui="chat-history-item"]').first(),
-  ).toBeVisible();
-};
-
-const setThemeVars = async (
-  page: Page,
-  vars: Record<string, string | null>,
-) => {
-  await page.evaluate((entries) => {
-    for (const [name, value] of Object.entries(entries)) {
-      if (value === null) {
-        document.documentElement.style.removeProperty(name);
-      } else {
-        document.documentElement.style.setProperty(name, value);
-      }
-    }
-  }, vars);
-  await settleSidebar(page);
-};
-
-const measureExpanded = (page: Page): Promise<ExpandedMeasurement> =>
-  page.evaluate(() => {
-    const aside = document.querySelector('[data-ui="sidebar"]');
-    if (!aside) throw new Error("sidebar not found");
-    const asideRect = aside.getBoundingClientRect();
-    const toBox = (el: Element | null | undefined) => {
-      if (!el) return null;
-      const r = el.getBoundingClientRect();
-      const round = (v: number) => Math.round(v * 10) / 10;
-      return {
-        left: round(r.x - asideRect.x),
-        right: round(r.x + r.width - asideRect.x),
-        width: round(r.width),
-        center: round(r.x + r.width / 2 - asideRect.x),
-      };
-    };
-    const requireBoxes = (els: (Element | null)[]) =>
-      els.filter((el): el is Element => el !== null).map((el) => toBox(el)!);
-
-    // The nav "New Chat" item is a div (InteractiveContainer); untitled chat
-    // rows can carry the same aria-label on their <a>, hence the tag prefix.
-    const navRowEls = [
-      'div[aria-label="New Chat"]',
-      '[data-ui="sidebar-search-item"]',
-      '[data-ui="sidebar-assistants-item"]',
-    ]
-      .map((sel) => aside.querySelector(sel))
-      .filter((el): el is Element => el !== null);
-
-    const sectionButtons = Array.from(
-      aside.querySelectorAll("button[aria-expanded]"),
-    ).filter((b) => b.querySelector("h3"));
-
-    const chatRowEls = Array.from(
-      aside.querySelectorAll('[data-ui="chat-history-item"]'),
-    );
-    const scroller = chatRowEls[0]?.closest<HTMLElement>(".overflow-y-auto");
-
-    const header = aside.querySelector('[data-ui="sidebar-header"]');
-    const headerButton = header?.querySelector("button");
-    const footer = aside.querySelector('[data-ui="sidebar-footer"]');
-
-    return {
-      asideWidth: Math.round(asideRect.width * 10) / 10,
-      headerHeight: header
-        ? Math.round(header.getBoundingClientRect().height * 10) / 10
-        : 0,
-      footerHeight: footer
-        ? Math.round(footer.getBoundingClientRect().height * 10) / 10
-        : 0,
-      headerIconBox: toBox(
-        headerButton?.querySelector('[aria-hidden="true"]') ??
-          headerButton?.querySelector("svg"),
-      ),
-      navRows: requireBoxes(navRowEls),
-      navIcons: requireBoxes(navRowEls.map((el) => el.querySelector("svg"))),
-      navLabels: requireBoxes(navRowEls.map((el) => el.querySelector("span"))),
-      sectionButtons: requireBoxes(sectionButtons),
-      sectionTitles: requireBoxes(
-        sectionButtons.map((b) => b.querySelector("h3")),
-      ),
-      divider: toBox(aside.querySelector('[data-ui="sidebar-nav-divider"]')),
-      chatRows: requireBoxes(chatRowEls),
-      chatTitles: requireBoxes(
-        chatRowEls.map((el) => el.querySelector("span[title]")),
-      ),
-      chatScrollbarWidth: scroller
-        ? scroller.offsetWidth - scroller.clientWidth
-        : 0,
-      footerTrigger: toBox(
-        footer?.querySelector('button[aria-haspopup="menu"]'),
-      ),
-    };
-  });
-
-const measureSlim = (page: Page): Promise<SlimMeasurement> =>
-  page.evaluate(() => {
-    const aside = document.querySelector('[data-ui="sidebar"]');
-    if (!aside) throw new Error("sidebar not found");
-    const asideRect = aside.getBoundingClientRect();
-    const center = (el: Element) => {
-      const r = el.getBoundingClientRect();
-      return Math.round((r.x + r.width / 2 - asideRect.x) * 10) / 10;
-    };
-
-    const railCenters: { label: string; center: number }[] = [];
-    const headerButton = aside.querySelector(
-      '[data-ui="sidebar-header"] button',
-    );
-    if (headerButton) {
-      railCenters.push({
-        label: "header-toggle",
-        center: center(headerButton),
-      });
-    }
-    for (const sel of [
-      'div[aria-label="New Chat"]',
-      '[data-ui="sidebar-search-item"]',
-      '[data-ui="sidebar-assistants-item"]',
-    ]) {
-      const icon = aside.querySelector(`${sel} svg`);
-      if (icon) railCenters.push({ label: sel, center: center(icon) });
-    }
-    const footerTrigger = aside.querySelector(
-      '[data-ui="sidebar-footer"] button[aria-haspopup="menu"]',
-    );
-    if (footerTrigger) {
-      railCenters.push({
-        label: "footer-avatar",
-        center: center(footerTrigger),
-      });
-    }
-
-    return {
-      asideWidth: Math.round(asideRect.width * 10) / 10,
-      railCenters,
-    };
-  });
-
-const expectAligned = (values: number[], label: string, tolerance = 0.5) => {
-  const [first, ...rest] = values;
-  for (const value of rest) {
-    expect
-      .soft(Math.abs(value - first), `${label}: ${values.join(", ")}`)
-      .toBeLessThanOrEqual(tolerance);
-  }
-};
-
-const assertExpandedInvariants = (m: ExpandedMeasurement) => {
-  expect(m.navRows.length).toBeGreaterThanOrEqual(2);
-  expect(m.sectionButtons.length).toBeGreaterThanOrEqual(1);
-  expect(m.chatRows.length).toBeGreaterThanOrEqual(1);
-
-  // I1: one left inset for every row surface (and the divider).
-  expectAligned(
-    [
-      ...m.navRows.map((b) => b.left),
-      ...m.sectionButtons.map((b) => b.left),
-      ...m.chatRows.map((b) => b.left),
-      ...(m.divider ? [m.divider.left] : []),
-    ],
-    "row-surface left edges",
-  );
-
-  // I1: one content column for chat text, nav icons and section titles.
-  expectAligned(
-    [
-      ...m.navIcons.map((b) => b.left),
-      ...m.sectionTitles.map((b) => b.left),
-      ...m.chatTitles.map((b) => b.left),
-    ],
-    "content column left edges",
-  );
-
-  // I1: the header toggle icon sits on the nav icon column.
-  expect(m.headerIconBox).not.toBeNull();
-  expectAligned(
-    [m.headerIconBox!.left, m.navIcons[0].left],
-    "header toggle icon vs nav icon column",
-  );
-
-  // I1: header band == footer band.
-  expectAligned([m.headerHeight, m.footerHeight], "header vs footer band");
-
-  // I4: equal hover surfaces; the chat scroller may reserve a scrollbar
-  // gutter, which is measured and accounted for exactly.
-  expectAligned(
-    [m.navRows[0].width, m.chatRows[0].width + m.chatScrollbarWidth],
-    "nav-row vs chat-row surface width",
-  );
-
-  // Nav labels sit at icon + gap, one shared column.
-  expectAligned(
-    m.navLabels.map((b) => b.left),
-    "nav label column",
-  );
-};
-
-const assertSlimInvariants = (m: SlimMeasurement) => {
-  expect(m.railCenters.length).toBeGreaterThanOrEqual(4);
-  const railCenter = m.asideWidth / 2;
-  for (const item of m.railCenters) {
-    expect
-      .soft(
-        Math.abs(item.center - railCenter),
-        `${item.label} center ${item.center} vs rail center ${railCenter}`,
-      )
-      .toBeLessThanOrEqual(0.5);
-  }
-};
 
 test.describe("sidebar geometry contract", () => {
   test.beforeEach(async ({ page }) => {
@@ -336,7 +49,10 @@ test.describe("sidebar geometry contract", () => {
       await ensureAChatExists(page);
       await expandSidebar(page);
 
-      assertExpandedInvariants(await measureExpanded(page));
+      assertExpandedInvariants(
+        await measureExpanded(page),
+        await measureRailWidth(page),
+      );
     },
   );
 
@@ -351,6 +67,24 @@ test.describe("sidebar geometry contract", () => {
       expect(await sidebarMode(page)).toBe("slim");
 
       assertSlimInvariants(await measureSlim(page));
+    },
+  );
+
+  test(
+    "icons do not move horizontally while the width animates (I5)",
+    { tag: TAG_CI },
+    async ({ page }) => {
+      await page.goto("/");
+      await chatIsReadyToChat(page);
+      await expandSidebar(page);
+
+      assertStationaryTrajectory(
+        await recordToggleTrajectory(page, "collapse"),
+      );
+      expect(await sidebarMode(page)).toBe("slim");
+
+      assertStationaryTrajectory(await recordToggleTrajectory(page, "expand"));
+      expect(await sidebarMode(page)).toBe("expanded");
     },
   );
 
@@ -414,12 +148,16 @@ test.describe("sidebar geometry contract", () => {
         { "--theme-spacing-shell-compact-padding-x": "0.625rem" },
         { "--theme-spacing-shell-compact-padding-x": "1.5rem" },
         { "--theme-layout-sidebar-width": "22rem" },
+        { "--theme-layout-sidebar-slim-width": "5rem" },
         { "--theme-spacing-control-min-height": "2rem" },
       ];
       for (const vars of expandedPerturbations) {
         await setThemeVars(page, vars);
         await test.step(`expanded with ${JSON.stringify(vars)}`, async () => {
-          assertExpandedInvariants(await measureExpanded(page));
+          assertExpandedInvariants(
+            await measureExpanded(page),
+            await measureRailWidth(page),
+          );
         });
         await setThemeVars(
           page,
@@ -594,7 +332,7 @@ test.describe("sidebar resize", () => {
       expect(await asideWidth(page)).toBeCloseTo(themeWidth * 2, 0);
 
       const m = await measureExpanded(page);
-      assertExpandedInvariants(m);
+      assertExpandedInvariants(m, await measureRailWidth(page));
       expect(m.asideWidth).toBeCloseTo(themeWidth * 2, 0);
     },
   );
