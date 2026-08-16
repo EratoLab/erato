@@ -554,18 +554,18 @@ const CollapsibleSection = memo<{
         <div className="group flex items-center gap-1 px-2 py-1">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="group/toggle theme-transition flex min-w-0 flex-1 items-center gap-1.5 px-3 py-2 text-left hover:bg-[var(--theme-shell-sidebar-hover)]"
+            className="group/toggle flex min-w-0 flex-1 items-center gap-1.5 px-3 py-2 text-left"
             style={sidebarItemStyle}
             aria-expanded={isExpanded}
             aria-label={isExpanded ? t`Collapse ${title}` : t`Expand ${title}`}
             type="button"
           >
-            <h3 className="truncate text-xs font-semibold uppercase tracking-wide text-theme-fg-muted">
+            <h3 className="theme-transition truncate text-xs font-semibold uppercase tracking-wide text-theme-fg-muted group-hover/toggle:text-theme-fg-primary group-focus-visible/toggle:text-theme-fg-primary">
               {title}
             </h3>
             <ChevronRightIcon
               className={clsx(
-                "theme-transition size-3 shrink-0 text-theme-fg-muted",
+                "theme-transition size-3 shrink-0 text-theme-fg-muted group-hover/toggle:text-theme-fg-primary group-focus-visible/toggle:text-theme-fg-primary",
                 "opacity-0 group-hover:opacity-100 group-focus-visible/toggle:opacity-100",
                 // Touch devices get no hover reveal, so the non-default
                 // collapsed state must stay visible on its own.
