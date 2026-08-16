@@ -731,8 +731,9 @@ export const Chat = ({
               // Add left margin based on sidebar state to prevent overlap with fixed sidebar
               // Transition margin to match sidebar animation (300ms)
               "transition-[margin] duration-300 ease-in-out motion-reduce:transition-none",
-              // When expanded: full width (320px)
-              !sidebarCollapsed && "sm:ml-[var(--theme-layout-sidebar-width)]",
+              // When expanded: the user-resize override, else the theme width
+              !sidebarCollapsed &&
+                "sm:ml-[var(--sidebar-width-override,var(--theme-layout-sidebar-width))]",
               // When collapsed in slim mode: narrow width (64px)
               sidebarCollapsed &&
                 collapsedMode === "slim" &&

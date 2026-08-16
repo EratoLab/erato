@@ -10,7 +10,7 @@ import { Button } from "./Button";
 import { ConfirmationDialog } from "../Modal/ConfirmationDialog";
 import { MoreVertical, CheckIcon } from "../icons";
 
-import type { ButtonVariant } from "./Button";
+import type { ButtonGeometry, ButtonVariant } from "./Button";
 import type React from "react";
 
 export interface DropdownMenuItem {
@@ -34,6 +34,8 @@ export interface DropdownMenuProps {
   align?: "left" | "right";
   triggerIcon?: React.ReactNode;
   triggerButtonVariant?: ButtonVariant;
+  /** Geometry of the trigger button; "icon" yields a square, centered control. */
+  triggerButtonGeometry?: ButtonGeometry;
   triggerButtonClassName?: string;
   id?: string;
   preferredOrientation?: {
@@ -117,6 +119,7 @@ export const DropdownMenu = memo(
     align = "right",
     triggerIcon = <MoreVertical className="size-4" />,
     triggerButtonVariant = "ghost",
+    triggerButtonGeometry,
     triggerButtonClassName,
     id,
     preferredOrientation,
@@ -250,6 +253,7 @@ export const DropdownMenu = memo(
               type={triggerProps.type}
               size="sm"
               variant={triggerButtonVariant}
+              geometry={triggerButtonGeometry}
               onClick={triggerProps.onClick}
               onKeyDown={triggerProps.onKeyDown}
               className={clsx(

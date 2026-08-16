@@ -4796,6 +4796,10 @@ msgstr "Replace the queued message?"
 msgid "Reset to Browser Detection"
 msgstr "Reset to Browser Detection"
 
+#: src/components/ui/Chat/SidebarResizeHandle.tsx
+msgid "Resize sidebar"
+msgstr "Resize sidebar"
+
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Retry transcription"
 msgstr "Retry transcription"

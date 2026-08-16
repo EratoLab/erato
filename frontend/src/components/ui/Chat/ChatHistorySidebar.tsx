@@ -45,6 +45,10 @@ import { checkFileExists } from "@/utils/themeUtils";
 import { ChatHistoryFilterMenu } from "./ChatHistoryFilterMenu";
 import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
 import { FrequentAssistantsList } from "./FrequentAssistantsList";
+import {
+  SidebarResizeHandle,
+  useApplySidebarWidth,
+} from "./SidebarResizeHandle";
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { Button } from "../Controls/Button";
 import { UserProfileThemeDropdown } from "../Controls/UserProfileThemeDropdown";
@@ -62,14 +66,12 @@ import type { ChatSession } from "@/types/chat";
 
 // Create logger for this component
 const logger = createLogger("UI", "ChatHistorySidebar");
-const sidebarItemStyle = {
-  minHeight: "var(--theme-spacing-sidebar-row-height)",
-  borderRadius: "var(--theme-radius-shell)",
-} as const;
-const activeSidebarItemStyle = {
-  ...sidebarItemStyle,
-  backgroundColor: "var(--theme-shell-sidebar-selected)",
-} as const;
+// Nav rows and chat rows share one themeable geometry class so a single
+// theme.css channel reaches both row families.
+const sidebarItemClassName = "sidebar-row-geometry";
+const activeSidebarItemClassName = "sidebar-row-geometry sidebar-row-selected";
+// Horizontal inset for every row surface; see .sidebar-inset-geometry.
+const sidebarInsetClassName = "sidebar-inset-geometry";
 const sidebarLinkClassName =
   "focus-ring-tight block rounded-[var(--theme-radius-shell)]";
 
@@ -144,11 +146,6 @@ export interface ChatHistorySidebarProps {
    * @default false
    */
   collapsed?: boolean;
-  /**
-   * Minimum width of the sidebar when expanded
-   * @default theme layout token
-   */
-  minWidth?: number;
   onNewChat?: () => void;
   onToggleCollapse?: () => void;
   showTitle?: boolean;
@@ -191,6 +188,7 @@ const SidebarLogo = memo<{
         onClick={onToggle}
         variant="sidebar-icon"
         icon={<SidebarToggleIcon />}
+        className="sidebar-icon-col-geometry"
         aria-label={t`expand sidebar`}
         aria-expanded="false"
       />
@@ -203,7 +201,7 @@ const SidebarLogo = memo<{
       variant="sidebar-icon"
       aria-label={t`expand sidebar`}
       aria-expanded="false"
-      className="relative size-10 p-0"
+      className="sidebar-icon-col-geometry sidebar-icon-col-geometry-logo relative"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -237,27 +235,30 @@ const ChatHistoryHeader = memo<{
 }>(
   ({ collapsed, isSlimMode, onToggleCollapse, showTitle, sidebarLogoPath }) => (
     <div
-      className="sidebar-section-skin flex min-h-[60px] border-b"
+      className="sidebar-section-skin sidebar-band-geometry flex border-b"
       data-ui="sidebar-header"
     >
       {/* In slim mode, show logo with hover toggle or just toggle button */}
       {isSlimMode && (
-        <div className="relative flex w-12">
-          {sidebarLogoPath ? (
-            <SidebarLogo
-              logoPath={sidebarLogoPath}
-              onToggle={onToggleCollapse}
-            />
-          ) : (
-            <Button
-              onClick={onToggleCollapse}
-              variant="sidebar-icon"
-              icon={<SidebarToggleIcon />}
-              aria-label={t`expand sidebar`}
-              aria-expanded="false"
-            />
-          )}
-          <GenerationRailBadge />
+        <div className="flex w-full items-center">
+          <div className="relative">
+            {sidebarLogoPath ? (
+              <SidebarLogo
+                logoPath={sidebarLogoPath}
+                onToggle={onToggleCollapse}
+              />
+            ) : (
+              <Button
+                onClick={onToggleCollapse}
+                variant="sidebar-icon"
+                icon={<SidebarToggleIcon />}
+                className="sidebar-icon-col-geometry"
+                aria-label={t`expand sidebar`}
+                aria-expanded="false"
+              />
+            )}
+            <GenerationRailBadge />
+          </div>
         </div>
       )}
       {/* In expanded mode, show toggle button and title */}
@@ -266,21 +267,19 @@ const ChatHistoryHeader = memo<{
       {!isSlimMode && (
         <div
           className={clsx(
-            "flex w-full transition-opacity duration-300",
+            "flex w-full items-center transition-opacity duration-300",
             collapsed ? "pointer-events-none opacity-0" : "opacity-100",
           )}
         >
-          <div className="flex w-12 justify-center">
-            <Button
-              onClick={onToggleCollapse}
-              variant="sidebar-icon"
-              icon={<SidebarToggleIcon />}
-              className="rotate-180"
-              aria-label={t`collapse sidebar`}
-              aria-expanded="true"
-              tabIndex={collapsed ? -1 : 0}
-            />
-          </div>
+          <Button
+            onClick={onToggleCollapse}
+            variant="sidebar-icon"
+            icon={<SidebarToggleIcon />}
+            className="sidebar-icon-col-geometry rotate-180"
+            aria-label={t`collapse sidebar`}
+            aria-expanded="true"
+            tabIndex={collapsed ? -1 : 0}
+          />
           <div className="flex flex-1 items-center">
             {showTitle && (
               <h2 className="font-semibold text-theme-fg-primary">
@@ -305,7 +304,7 @@ const NewChatItem = memo<{
   const newChatIconId = useThemedIcon("navigation", "newChat");
 
   return (
-    <div className="px-2 py-1">
+    <div className={clsx(sidebarInsetClassName, "py-1")}>
       <InteractiveContainer
         useDiv={true}
         onClick={() => {
@@ -313,10 +312,10 @@ const NewChatItem = memo<{
           onNewChat?.();
         }}
         className={clsx(
+          sidebarItemClassName,
           "theme-transition flex items-center text-left hover:bg-[var(--theme-shell-sidebar-hover)]",
-          isSlimMode ? "min-w-[44px] px-3 py-2" : "gap-3 px-3 py-2",
+          "sidebar-content-col-geometry gap-3 py-2 pr-3",
         )}
-        style={sidebarItemStyle}
         aria-label={t`New Chat`}
         title={isSlimMode ? t`New Chat` : undefined}
       >
@@ -351,16 +350,16 @@ const SearchNavigationItem = memo<{
   const searchIconId = useThemedIcon("navigation", "search");
 
   return (
-    <div className="px-2 py-1">
+    <div className={clsx(sidebarInsetClassName, "py-1")}>
       {isOnSearchPage ? (
         <InteractiveContainer
           useDiv={true}
           interactive={false}
           className={clsx(
+            activeSidebarItemClassName,
             "flex items-center text-left",
-            isSlimMode ? "min-w-[44px] px-3 py-2" : "gap-3 px-3 py-2",
+            "sidebar-content-col-geometry gap-3 py-2 pr-3",
           )}
-          style={activeSidebarItemStyle}
           aria-label={t`Search`}
           title={isSlimMode ? t`Search` : undefined}
           data-ui="sidebar-search-item"
@@ -402,10 +401,10 @@ const SearchNavigationItem = memo<{
             useDiv={true}
             showFocusRing={false}
             className={clsx(
+              sidebarItemClassName,
               "theme-transition flex items-center text-left hover:bg-[var(--theme-shell-sidebar-hover)]",
-              isSlimMode ? "min-w-[44px] px-3 py-2" : "gap-3 px-3 py-2",
+              "sidebar-content-col-geometry gap-3 py-2 pr-3",
             )}
-            style={sidebarItemStyle}
             data-ui="sidebar-search-item"
           >
             <ResolvedIcon
@@ -442,16 +441,16 @@ const AssistantsNavigationItem = memo<{
   const assistantsIconId = useThemedIcon("navigation", "assistants");
 
   return (
-    <div className="px-2 py-1">
+    <div className={clsx(sidebarInsetClassName, "py-1")}>
       {isOnAssistantsPage ? (
         <InteractiveContainer
           useDiv={true}
           interactive={false}
           className={clsx(
+            activeSidebarItemClassName,
             "flex items-center text-left",
-            isSlimMode ? "min-w-[44px] px-3 py-2" : "gap-3 px-3 py-2",
+            "sidebar-content-col-geometry gap-3 py-2 pr-3",
           )}
-          style={activeSidebarItemStyle}
           aria-label={t`Assistants`}
           title={isSlimMode ? t`Assistants` : undefined}
           data-ui="sidebar-assistants-item"
@@ -493,10 +492,10 @@ const AssistantsNavigationItem = memo<{
             useDiv={true}
             showFocusRing={false}
             className={clsx(
+              sidebarItemClassName,
               "theme-transition flex items-center text-left hover:bg-[var(--theme-shell-sidebar-hover)]",
-              isSlimMode ? "min-w-[44px] px-3 py-2" : "gap-3 px-3 py-2",
+              "sidebar-content-col-geometry gap-3 py-2 pr-3",
             )}
-            style={sidebarItemStyle}
             data-ui="sidebar-assistants-item"
           >
             <ResolvedIcon
@@ -551,11 +550,18 @@ const CollapsibleSection = memo<{
 
     return (
       <div className={className}>
-        <div className="group flex items-center gap-1 px-2 py-1">
+        <div
+          className={clsx(
+            sidebarInsetClassName,
+            "group flex items-center gap-1 py-1",
+          )}
+        >
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="group/toggle flex min-w-0 flex-1 items-center gap-1.5 px-3 py-2 text-left"
-            style={sidebarItemStyle}
+            className={clsx(
+              sidebarItemClassName,
+              "sidebar-content-col-geometry group/toggle flex min-w-0 flex-1 items-center gap-1.5 py-2 pr-3 text-left",
+            )}
             aria-expanded={isExpanded}
             aria-label={isExpanded ? t`Collapse ${title}` : t`Expand ${title}`}
             type="button"
@@ -578,7 +584,10 @@ const CollapsibleSection = memo<{
             <div className="flex shrink-0 items-center">{actions}</div>
           )}
         </div>
-        {isExpanded && <div>{children}</div>}
+        {/* The chat-list inset lives on this host-owned wrapper rather than
+            inside ChatHistoryList, which customers replace wholesale via the
+            registry slot. */}
+        {isExpanded && <div className={sidebarInsetClassName}>{children}</div>}
       </div>
     );
   },
@@ -592,7 +601,12 @@ const ChatHistoryFooter = memo<{
   onSignOut: () => void;
   isSlimMode?: boolean;
 }>(({ userProfile, onSignOut }) => (
-  <div className="sidebar-section-skin border-t" data-ui="sidebar-footer">
+  <div
+    className="sidebar-section-skin sidebar-band-geometry flex items-center border-t"
+    data-ui="sidebar-footer"
+  >
+    {/* The trigger's rail-column margin holds in both modes, so the slim
+        rail needs no extra centering here. */}
     <UserProfileThemeDropdown
       userProfile={userProfile}
       onSignOut={onSignOut}
@@ -606,7 +620,7 @@ ChatHistoryFooter.displayName = "ChatHistoryFooter";
 
 const NoFilterMatchesRow = () => (
   <p
-    className="px-3 py-2 text-xs text-theme-fg-muted"
+    className="sidebar-content-col-geometry py-2 pr-3 text-xs text-theme-fg-muted"
     data-testid="chat-history-no-filter-matches"
   >
     {t({
@@ -628,7 +642,6 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
   ({
     className,
     collapsed = false,
-    minWidth,
     onNewChat,
     onToggleCollapse,
     showTitle = false,
@@ -684,6 +697,9 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
 
     // Get theme information
     const { effectiveTheme, customThemeName } = useTheme();
+
+    // Apply any user-dragged sidebar width as the width-token override.
+    useApplySidebarWidth();
 
     // Get assistants feature flag
     const {
@@ -945,23 +961,18 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       navigate(assistantsLandingRoute);
     }, [assistantsLandingRoute, navigate]);
 
-    const expandedSidebarWidth = useMemo(
-      () =>
-        typeof minWidth === "number"
-          ? `${minWidth}px`
-          : "var(--theme-layout-sidebar-width)",
-      [minWidth],
-    );
-
     // Width is runtime state (slim vs expanded); the surface lives in
-    // .sidebar-skin so [data-ui="sidebar"] stays themeable.
+    // .sidebar-skin so [data-ui="sidebar"] stays themeable. The override
+    // variable carries a user-dragged width; the theme token stays untouched
+    // because the theme pipeline clears root inline values for every
+    // --theme-* variable when it applies.
     const sidebarShellStyle = useMemo(
       () => ({
         width: isSlimMode
           ? "var(--theme-layout-sidebar-slim-width)"
-          : expandedSidebarWidth,
+          : "var(--sidebar-width-override, var(--theme-layout-sidebar-width))",
       }),
-      [expandedSidebarWidth, isSlimMode],
+      [isSlimMode],
     );
 
     const hiddenToggleStyle = useMemo(
@@ -1024,6 +1035,9 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
             )}
             style={sidebarShellStyle}
             data-ui="sidebar"
+            data-sidebar-mode={
+              isHiddenMode ? "hidden" : isSlimMode ? "slim" : "expanded"
+            }
           >
             <ChatHistoryHeader
               collapsed={collapsed}
@@ -1055,7 +1069,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
               {/* Divider separating navigation items from content lists */}
               <div
                 className={clsx(
-                  "mx-2 my-1 border-t border-[var(--theme-border-divider)] transition-opacity duration-200",
+                  "mx-[var(--theme-spacing-shell-compact-padding-x)] my-1 border-t border-[var(--theme-border-divider)] transition-opacity duration-200",
                   isSlimMode && "pointer-events-none opacity-0",
                 )}
                 data-ui="sidebar-nav-divider"
@@ -1085,6 +1099,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                 ) : (
                   <div
                     className={clsx(
+                      sidebarInsetClassName,
                       "transition-opacity duration-200",
                       isSlimMode &&
                         "pointer-events-none overflow-hidden opacity-0",
@@ -1109,7 +1124,9 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                 {error ? (
                   <ErrorDisplay error={error} />
                 ) : isLoading ? (
-                  <ChatHistoryListSkeleton />
+                  <div className={sidebarInsetClassName}>
+                    <ChatHistoryListSkeleton />
+                  </div>
                 ) : (
                   <>
                     {pinnedSessions.length > 0 && onSessionPin && (
@@ -1177,7 +1194,10 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                       // bare header row keeps its trigger reachable.
                       <>
                         <div
-                          className="flex items-center justify-end px-2 py-1"
+                          className={clsx(
+                            sidebarInsetClassName,
+                            "flex items-center justify-end py-1",
+                          )}
                           data-ui="chat-history-filter-row"
                         >
                           <ChatHistoryFilterMenu
@@ -1185,7 +1205,9 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                           />
                         </div>
                         {hasActiveFilters(chatHistoryFilters) && (
-                          <NoFilterMatchesRow />
+                          <div className={sidebarInsetClassName}>
+                            <NoFilterMatchesRow />
+                          </div>
                         )}
                       </>
                     ) : (
@@ -1247,6 +1269,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
               onSignOut={handleSignOut}
               isSlimMode={isSlimMode}
             />
+            {!collapsed && <SidebarResizeHandle />}
           </aside>
         </div>
       </ErrorBoundary>

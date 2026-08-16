@@ -123,7 +123,7 @@ describe("ChatHistorySidebar", () => {
     // width stays inline.
     expect(sidebar).toHaveClass("sidebar-skin");
     expect(sidebar).toHaveStyle({
-      width: "var(--theme-layout-sidebar-width)",
+      width: "var(--sidebar-width-override, var(--theme-layout-sidebar-width))",
     });
     for (const property of ["background-color", "box-shadow"]) {
       expect(sidebar?.getAttribute("style") ?? "").not.toContain(property);
@@ -157,15 +157,22 @@ describe("ChatHistorySidebar", () => {
       '[data-ui="sidebar-search-item"]',
     );
 
-    expect(searchItem).toHaveStyle({
-      backgroundColor: "var(--theme-shell-sidebar-selected)",
-      minHeight: "var(--theme-spacing-sidebar-row-height)",
-      borderRadius: "var(--theme-radius-shell)",
-    });
+    // One themeable geometry channel shared with chat rows — no inline styles.
+    expect(searchItem).toHaveClass(
+      "sidebar-row-geometry",
+      "sidebar-row-selected",
+    );
+    for (const property of [
+      "min-height",
+      "border-radius",
+      "background-color",
+    ]) {
+      expect(searchItem?.getAttribute("style") ?? "").not.toContain(property);
+    }
     expect(searchItem?.classList.contains("opacity-50")).toBe(false);
   });
 
-  it("uses the original slim-mode row geometry for nav items", async () => {
+  it("keeps nav rows on the rail column in slim mode", async () => {
     mockedCollapsedMode = "slim";
 
     const { i18n } = await import("@lingui/core");
@@ -188,12 +195,16 @@ describe("ChatHistorySidebar", () => {
       '[data-ui="sidebar-search-item"]',
     );
 
-    expect(searchItem).toHaveClass("min-w-[44px]", "px-3", "py-2");
-    expect(searchItem).toHaveStyle({
-      backgroundColor: "var(--theme-shell-sidebar-selected)",
-      minHeight: "var(--theme-spacing-sidebar-row-height)",
-      borderRadius: "var(--theme-radius-shell)",
-    });
+    // Rail-column geometry: the same token-derived column in both modes, so
+    // the icon does not move when the width animates.
+    expect(searchItem).toHaveClass(
+      "sidebar-content-col-geometry",
+      "py-2",
+      "sidebar-row-geometry",
+      "sidebar-row-selected",
+    );
+    expect(searchItem).not.toHaveClass("justify-center");
+    expect(searchItem).not.toHaveClass("px-3");
   });
 
   it("persists the recent chats section collapsed state across remounts", async () => {
@@ -329,9 +340,10 @@ describe("ChatHistorySidebar", () => {
       '[data-ui="sidebar-assistants-item"]',
     );
 
-    expect(assistantsItem).toHaveStyle({
-      backgroundColor: "var(--theme-shell-sidebar-selected)",
-    });
+    expect(assistantsItem).toHaveClass(
+      "sidebar-row-geometry",
+      "sidebar-row-selected",
+    );
     expect(assistantsItem?.closest("a")).toBeNull();
   });
 

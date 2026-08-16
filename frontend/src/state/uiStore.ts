@@ -15,6 +15,13 @@ export interface UIState {
   isSidebarOpen: boolean;
 
   /**
+   * User-dragged width of the expanded sidebar in px; null means the theme's
+   * own width. Clamped against the active theme's [width, 2×width] when
+   * applied, since the theme may have changed between sessions.
+   */
+  sidebarWidth: number | null;
+
+  /**
    * Toggle the sidebar open/closed state
    */
   toggleSidebar: () => void;
@@ -23,6 +30,11 @@ export interface UIState {
    * Set the sidebar open/closed state explicitly
    */
   setSidebarOpen: (isOpen: boolean) => void;
+
+  /**
+   * Set the expanded sidebar width in px, or null to restore the theme width
+   */
+  setSidebarWidth: (width: number | null) => void;
 }
 
 /**
@@ -34,6 +46,7 @@ export const useUIStore = create<UIState>()(
     persist(
       (set) => ({
         isSidebarOpen: true,
+        sidebarWidth: null,
 
         toggleSidebar: () =>
           set(
@@ -52,10 +65,22 @@ export const useUIStore = create<UIState>()(
             false,
             "ui/setSidebarOpen",
           ),
+
+        setSidebarWidth: (width: number | null) =>
+          set(
+            {
+              sidebarWidth: width,
+            },
+            false,
+            "ui/setSidebarWidth",
+          ),
       }),
       {
         name: "ui-store",
-        partialize: (state) => ({ isSidebarOpen: state.isSidebarOpen }),
+        partialize: (state) => ({
+          isSidebarOpen: state.isSidebarOpen,
+          sidebarWidth: state.sidebarWidth,
+        }),
       },
     ),
     {

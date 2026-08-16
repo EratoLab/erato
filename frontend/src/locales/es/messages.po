@@ -4796,6 +4796,10 @@ msgstr ""
 msgid "Reset to Browser Detection"
 msgstr "Restablecer a detección del navegador"
 
+#: src/components/ui/Chat/SidebarResizeHandle.tsx
+msgid "Resize sidebar"
+msgstr ""
+
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Retry transcription"
 msgstr "Reintentar transcripción"
