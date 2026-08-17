@@ -211,6 +211,46 @@ pub async fn get_or_create_chat_by_previous_message_id(
     }
 }
 
+/// True when the chat is a delegated run (provenance kind `delegation`).
+/// Unparseable configurations count as not delegated; they fail loudly on the
+/// paths that need the assistant itself.
+pub fn chat_is_delegated_run(chat: &chats::Model) -> bool {
+    parse_assistant_configuration(chat)
+        .ok()
+        .flatten()
+        .and_then(|configuration| configuration.provenance)
+        .is_some_and(|provenance| provenance.kind == ChatProvenanceKind::Delegation)
+}
+
+/// Create a chat owned by `owner_user_id`, bound to `assistant_id`, carrying a
+/// provenance envelope. The caller must have access-checked the assistant (the
+/// `POST /me/chats` pattern) — this function only authorizes chat creation.
+pub async fn create_delegated_chat(
+    conn: &DatabaseConnection,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    owner_user_id: &str,
+    assistant_id: Uuid,
+    provenance: ChatProvenance,
+    title: String,
+) -> Result<chats::Model, Report> {
+    authorize!(policy, subject, &Resource::ChatSingleton, Action::Create)?;
+
+    let configuration = AssistantConfiguration {
+        assistant_id,
+        provenance: Some(provenance),
+    };
+    let new_chat = chats::ActiveModel {
+        owner_user_id: ActiveValue::Set(owner_user_id.to_owned()),
+        assistant_configuration: ActiveValue::Set(Some(configuration.to_json()?)),
+        title_by_user_provided: ActiveValue::Set(Some(title)),
+        ..Default::default()
+    };
+    Ok(chats::Entity::insert(new_chat)
+        .exec_with_returning(conn)
+        .await?)
+}
+
 /// Counts reported by [`seed_chat_lineage`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SeedStats {
