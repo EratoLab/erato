@@ -2077,6 +2077,323 @@ async fn test_delegation_abort_forwarding_cancels_child(pool: Pool<Postgres>) {
     );
 }
 
+async fn rebuilt_policy(app_state: &erato::state::AppState) -> erato::policy::engine::PolicyEngine {
+    let policy = erato::policy::engine::PolicyEngine::new();
+    policy
+        .rebuild_data_if_needed(&app_state.db, &app_state.config)
+        .await
+        .expect("policy rebuild");
+    policy
+}
+
+async fn recent_chats(server: &TestServer, query: &str) -> Value {
+    let response = server
+        .get(&format!("/api/v1beta/me/recent_chats{query}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    response.assert_status_ok();
+    response.json::<Value>()
+}
+
+fn listed_chat_ids(listing: &Value) -> Vec<String> {
+    listing["chats"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|chat| chat["id"].as_str().unwrap().to_string())
+        .collect()
+}
+
+/// Listing matrix: delegated runs are hidden everywhere by default, visible
+/// with `include_delegated=true` (carrying provenance fields), tolerate a
+/// deleted origin, and compose with the type filter. Delegated runs do not
+/// inflate the frequent-assistants ranking.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_listing_hides_delegated_runs_and_exposes_provenance(pool: Pool<Postgres>) {
+    let app_state = test_app_state(delegation_enabled_config(), pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+
+    let assistant = create_assistant(&server, "Listing Assistant", "prompt").await;
+    let assistant_id = Uuid::parse_str(&assistant).unwrap();
+
+    // A regular assistant chat (the origin) and a plain chat.
+    let origin_chat = create_chat(&server, Some(&assistant)).await;
+    let origin_chat_id = Uuid::parse_str(&origin_chat).unwrap();
+    let plain_chat = create_chat(&server, None).await;
+
+    // Three delegated runs against the same assistant, spawned from the
+    // origin chat, via the model layer.
+    let mut delegated_ids = Vec::new();
+    for index in 0..3 {
+        let child = erato::models::chat::create_delegated_chat(
+            &app_state.db,
+            &rebuilt_policy(&app_state).await,
+            &erato::policy::types::Subject::User(me.id.to_string()),
+            &me.id.to_string(),
+            assistant_id,
+            ChatProvenance {
+                kind: ChatProvenanceKind::Delegation,
+                origin_chat_id: Some(origin_chat_id),
+                origin_message_id: None,
+                origin_assistant_id: Some(assistant_id),
+                rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
+                depth: 1,
+            },
+            format!("Delegated run {index}"),
+        )
+        .await
+        .unwrap();
+        // Listings join the latest message, so each chat needs one.
+        erato::models::message::submit_message(
+            &app_state.db,
+            &rebuilt_policy(&app_state).await,
+            &erato::policy::types::Subject::User(me.id.to_string()),
+            &child.id,
+            json!({
+                "role": "user",
+                "content": [{"content_type": "text", "text": format!("task {index}")}],
+                "name": me.id.to_string(),
+            }),
+            None,
+            None,
+            None,
+            &[],
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        delegated_ids.push(child.id.to_string());
+    }
+    app_state.global_policy_engine.invalidate_data().await;
+    // Give the non-delegated chats messages too so they are listable.
+    for chat in [&origin_chat, &plain_chat] {
+        erato::models::message::submit_message(
+            &app_state.db,
+            &rebuilt_policy(&app_state).await,
+            &erato::policy::types::Subject::User(me.id.to_string()),
+            &Uuid::parse_str(chat).unwrap(),
+            json!({
+                "role": "user",
+                "content": [{"content_type": "text", "text": "hello"}],
+                "name": me.id.to_string(),
+            }),
+            None,
+            None,
+            None,
+            &[],
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    }
+
+    // Hidden by default.
+    let listing = recent_chats(&server, "").await;
+    let ids = listed_chat_ids(&listing);
+    assert!(ids.contains(&origin_chat));
+    assert!(ids.contains(&plain_chat));
+    for delegated in &delegated_ids {
+        assert!(
+            !ids.contains(delegated),
+            "delegated run leaked into listing"
+        );
+    }
+
+    // Visible on demand, with provenance fields.
+    let listing = recent_chats(&server, "?include_delegated=true").await;
+    let ids = listed_chat_ids(&listing);
+    for delegated in &delegated_ids {
+        assert!(ids.contains(delegated));
+    }
+    let delegated_entry = listing["chats"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|chat| chat["id"] == delegated_ids[0].as_str())
+        .unwrap();
+    assert_eq!(delegated_entry["provenance_kind"], "delegation");
+    assert_eq!(delegated_entry["origin_chat_id"], origin_chat.as_str());
+    assert_eq!(delegated_entry["origin_assistant_id"], assistant.as_str());
+    assert!(
+        delegated_entry["origin_chat_title"]
+            .as_str()
+            .is_some_and(|title| !title.is_empty())
+    );
+
+    // Composes with the type filter: delegated runs are assistant-bound.
+    let listing = recent_chats(&server, "?include_delegated=true&type=assistant").await;
+    let ids = listed_chat_ids(&listing);
+    for delegated in &delegated_ids {
+        assert!(ids.contains(delegated));
+    }
+    assert!(!ids.contains(&plain_chat));
+    let listing = recent_chats(&server, "?type=assistant").await;
+    let ids = listed_chat_ids(&listing);
+    assert!(ids.contains(&origin_chat));
+    for delegated in &delegated_ids {
+        assert!(!ids.contains(delegated));
+    }
+
+    // Origin deleted: dangling ids tolerated, title absent.
+    erato::db::entity::messages::Entity::delete_many()
+        .filter(erato::db::entity::messages::Column::ChatId.eq(origin_chat_id))
+        .exec(&app_state.db)
+        .await
+        .unwrap();
+    erato::db::entity::chats::Entity::delete_by_id(origin_chat_id)
+        .exec(&app_state.db)
+        .await
+        .unwrap();
+    let listing = recent_chats(&server, "?include_delegated=true").await;
+    let delegated_entry = listing["chats"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|chat| chat["id"] == delegated_ids[0].as_str())
+        .unwrap();
+    assert_eq!(delegated_entry["provenance_kind"], "delegation");
+    assert!(delegated_entry["origin_chat_title"].is_null());
+
+    // Frequent assistants: the three delegated runs must not count. The
+    // origin chat is deleted by now, so the assistant must not rank at all.
+    let response = server
+        .get("/api/v1beta/me/frequent_assistants")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    response.assert_status_ok();
+    let frequent = response.json::<Value>();
+    let usage: Option<i64> = frequent["assistants"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == assistant.as_str())
+        .and_then(|item| item["usage_count"].as_i64());
+    assert_eq!(usage, None, "delegated runs must not feed the ranking");
+}
+
+/// A delegated chat parked in `awaiting_approval` still surfaces through
+/// `/me/generating` and carries `pending_tool_approval_at` when listed —
+/// hiding delegated runs must never make a stranded child unreachable.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_parked_delegated_chat_stays_reachable(pool: Pool<Postgres>) {
+    let app_state = test_app_state(delegation_enabled_config(), pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+
+    let assistant = create_assistant(&server, "Parked Assistant", "prompt").await;
+    let origin_chat = create_chat(&server, Some(&assistant)).await;
+    let child = erato::models::chat::create_delegated_chat(
+        &app_state.db,
+        &rebuilt_policy(&app_state).await,
+        &erato::policy::types::Subject::User(me.id.to_string()),
+        &me.id.to_string(),
+        Uuid::parse_str(&assistant).unwrap(),
+        ChatProvenance {
+            kind: ChatProvenanceKind::Delegation,
+            origin_chat_id: Some(Uuid::parse_str(&origin_chat).unwrap()),
+            origin_message_id: None,
+            origin_assistant_id: None,
+            rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
+            depth: 1,
+        },
+        "Parked delegated run".to_string(),
+    )
+    .await
+    .unwrap();
+    app_state.global_policy_engine.invalidate_data().await;
+    erato::models::message::submit_message(
+        &app_state.db,
+        &rebuilt_policy(&app_state).await,
+        &erato::policy::types::Subject::User(me.id.to_string()),
+        &child.id,
+        json!({
+            "role": "user",
+            "content": [{"content_type": "text", "text": "parked task"}],
+            "name": me.id.to_string(),
+        }),
+        None,
+        None,
+        None,
+        &[],
+        None,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+
+    // Park the child the way the durable stop does.
+    use sea_orm::{ConnectionTrait, Statement};
+    app_state
+        .db
+        .execute_raw(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            r#"UPDATE chats
+               SET generation_state = 'awaiting_approval',
+                   generation_started_at = now() - interval '1 minute',
+                   generation_ended_at = now()
+               WHERE id = $1"#,
+            [child.id.into()],
+        ))
+        .await
+        .unwrap();
+
+    // Reachable via /me/generating despite listings hiding it.
+    let response = server
+        .get("/api/v1beta/me/generating")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    response.assert_status_ok();
+    let generating = response.json::<Value>();
+    let entry = generating["chats"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|chat| chat["chat_id"] == child.id.to_string())
+        .expect("parked delegated chat must appear in /me/generating");
+    assert_eq!(entry["state"], "action_required");
+
+    // Hidden from the default listing, but the opted-in listing carries the
+    // pending approval timestamp.
+    let listing = recent_chats(&server, "").await;
+    assert!(!listed_chat_ids(&listing).contains(&child.id.to_string()));
+    let listing = recent_chats(&server, "?include_delegated=true").await;
+    let entry = listing["chats"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|chat| chat["id"] == child.id.to_string())
+        .expect("delegated chat listed with include_delegated");
+    assert!(entry["pending_tool_approval_at"].is_string());
+}
+
 /// A child answer longer than `result_max_chars` is truncated and flagged.
 ///
 /// # Test Categories

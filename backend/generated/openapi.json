@@ -2800,6 +2800,15 @@
             "schema": {
               "$ref": "#/components/schemas/RecentChatTypeFilter"
             }
+          },
+          {
+            "name": "include_delegated",
+            "in": "query",
+            "description": "Whether to include delegated runs (chats spawned by in-chat delegation). Defaults to false; delegated runs are hidden from listings unless requested.",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -7360,10 +7369,26 @@
             },
             "description": "The facets selected for the most recent message"
           },
+          "origin_assistant_id": {
+            "type": "string",
+            "description": "The assistant bound to the origin chat at spawn time, if any."
+          },
+          "origin_chat_id": {
+            "type": "string",
+            "description": "The origin chat this chat was spawned from, if any. May reference a\ndeleted chat."
+          },
+          "origin_chat_title": {
+            "type": "string",
+            "description": "Resolved display title of the origin chat; absent when the origin no\nlonger exists."
+          },
           "pending_tool_approval_at": {
             "type": "string",
             "format": "date-time",
             "description": "Present while the chat's generation is stopped on an MCP tool approval\nawaiting the user's decision"
+          },
+          "provenance_kind": {
+            "type": "string",
+            "description": "Provenance kind when the chat was spawned from another chat (e.g.\n`delegation` for a delegated run). Clients derive \"is delegated run\"\nfrom this value."
           },
           "title_by_summary": {
             "type": [
