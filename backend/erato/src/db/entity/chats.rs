@@ -17,6 +17,7 @@ pub struct Model {
     #[sea_orm(column_type = "JsonBinary", nullable)]
     pub assistant_configuration: Option<Json>,
     pub assistant_id: Option<Uuid>,
+    pub origin_chat_id: Option<Uuid>,
     #[sea_orm(column_type = "Text", nullable)]
     pub title_by_user_provided: Option<String>,
     pub is_pinned: bool,

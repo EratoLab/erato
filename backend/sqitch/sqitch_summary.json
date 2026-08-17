@@ -34,7 +34,8 @@
     "deploy/0032_add_runtime_configuration_source_type.sql",
     "deploy/0033_add_shared_generation_streaming_state.sql",
     "deploy/0034_add_user_tool_approval_settings.sql",
-    "deploy/0035_add_pinned_chats.sql"
+    "deploy/0035_add_pinned_chats.sql",
+    "deploy/0036_add_chat_provenance.sql"
   ],
-  "latest_change": "a0d8f91c5aff83f23c1bfaf943a2a492760395d9"
+  "latest_change": "8eccba6908a03b1661e7a46e7544044096b29ab9"
 }

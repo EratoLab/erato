@@ -25,12 +25,55 @@ use utoipa::ToSchema;
 pub struct AssistantConfiguration {
     /// The ID of the assistant this chat is based on
     pub assistant_id: Uuid,
+    /// How this chat came to exist relative to another chat, when it was
+    /// spawned from one (delegation, handoff). Absent for chats the user
+    /// started directly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<ChatProvenance>,
+}
+
+/// The relationship kind between a spawned chat and its origin chat.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChatProvenanceKind {
+    HandoffBranch,
+    HandoffMove,
+    Delegation,
+}
+
+/// Provenance envelope stored inside `assistant_configuration` for chats
+/// spawned from another chat. One envelope serves every kind; the ids are
+/// plain values, never foreign keys — the origin chat may be deleted
+/// independently and dangling ids are tolerated.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ChatProvenance {
+    pub kind: ChatProvenanceKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin_chat_id: Option<Uuid>,
+    /// The message in the origin chat this chat was spawned from (for
+    /// delegation: the turn's user message the tool call belongs to).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin_message_id: Option<Uuid>,
+    /// The assistant bound to the origin chat at spawn time, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin_assistant_id: Option<Uuid>,
+    /// History before this instant belongs to a different assistant context:
+    /// when the replay anchor predates it, prompt composition re-injects the
+    /// current assistant's head and strips the replayed system plane.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rebase_cutoff: Option<DateTimeWithTimeZone>,
+    /// Spawn depth relative to a user-started chat (which has depth 0).
+    #[serde(default)]
+    pub depth: u32,
 }
 
 impl AssistantConfiguration {
     /// Create a new assistant configuration
     pub fn new(assistant_id: Uuid) -> Self {
-        Self { assistant_id }
+        Self {
+            assistant_id,
+            provenance: None,
+        }
     }
 
     /// Parse assistant configuration from a JSONB value
@@ -166,6 +209,103 @@ pub async fn get_or_create_chat_by_previous_message_id(
         )
         .await
     }
+}
+
+/// Counts reported by [`seed_chat_lineage`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SeedStats {
+    pub messages_copied: usize,
+    pub files_linked: usize,
+}
+
+/// Copies the message lineage from `source_message_id` back to its root into
+/// an existing chat, as that chat's linear history.
+///
+/// The copies get fresh ids, are rewired to each other via
+/// `previous_message_id`, form no sibling groups, and are all part of the
+/// active thread. Payload columns (`raw_message`, snapshots, parameters,
+/// metadata, file-upload ids) are copied verbatim and timestamps are
+/// preserved, so the copied history reads identically to the original. Each
+/// distinct file id referenced by the copied messages gets a
+/// `chat_file_uploads` row on the target chat so file resolution works there.
+///
+/// Deliberately narrow: does not create the target chat, does not check
+/// authorization, and does not write provenance — those are the caller's
+/// responsibilities.
+pub async fn seed_chat_lineage(
+    conn: &impl sea_orm::ConnectionTrait,
+    target_chat_id: &Uuid,
+    source_message_id: &Uuid,
+) -> Result<SeedStats, Report> {
+    // Walk source -> root, guarding against cycles.
+    let mut lineage: Vec<messages::Model> = Vec::new();
+    let mut visited: std::collections::HashSet<Uuid> = std::collections::HashSet::new();
+    let mut current_id = Some(*source_message_id);
+    while let Some(message_id) = current_id {
+        if !visited.insert(message_id) {
+            break;
+        }
+        let message = Messages::find_by_id(message_id)
+            .one(conn)
+            .await?
+            .ok_or_else(|| eyre!("Message with ID {} not found", message_id))?;
+        current_id = message.previous_message_id;
+        lineage.push(message);
+    }
+    lineage.reverse();
+
+    let mut file_ids: std::collections::BTreeSet<Uuid> = std::collections::BTreeSet::new();
+    let mut previous_new_id: Option<Uuid> = None;
+    for message in &lineage {
+        let copy = messages::ActiveModel {
+            chat_id: ActiveValue::Set(*target_chat_id),
+            raw_message: ActiveValue::Set(message.raw_message.clone()),
+            created_at: ActiveValue::Set(message.created_at),
+            updated_at: ActiveValue::Set(message.updated_at),
+            previous_message_id: ActiveValue::Set(previous_new_id),
+            sibling_message_id: ActiveValue::Set(None),
+            is_message_in_active_thread: ActiveValue::Set(true),
+            generation_input_messages: ActiveValue::Set(message.generation_input_messages.clone()),
+            input_file_uploads: ActiveValue::Set(message.input_file_uploads.clone()),
+            generation_parameters: ActiveValue::Set(message.generation_parameters.clone()),
+            generation_metadata: ActiveValue::Set(message.generation_metadata.clone()),
+            input_parameters: ActiveValue::Set(message.input_parameters.clone()),
+            ..Default::default()
+        };
+        let inserted = messages::Entity::insert(copy)
+            .exec_with_returning(conn)
+            .await?;
+        previous_new_id = Some(inserted.id);
+
+        if let Some(ids) = &message.input_file_uploads {
+            file_ids.extend(ids.iter().copied());
+        }
+    }
+
+    let mut files_linked = 0;
+    for file_id in &file_ids {
+        let existing =
+            crate::db::entity::chat_file_uploads::Entity::find_by_id((*target_chat_id, *file_id))
+                .one(conn)
+                .await?;
+        if existing.is_some() {
+            continue;
+        }
+        let join_row = crate::db::entity::chat_file_uploads::ActiveModel {
+            chat_id: ActiveValue::Set(*target_chat_id),
+            file_upload_id: ActiveValue::Set(*file_id),
+            ..Default::default()
+        };
+        crate::db::entity::chat_file_uploads::Entity::insert(join_row)
+            .exec(conn)
+            .await?;
+        files_linked += 1;
+    }
+
+    Ok(SeedStats {
+        messages_copied: lineage.len(),
+        files_linked,
+    })
 }
 
 pub fn resolve_chat_display_name(
