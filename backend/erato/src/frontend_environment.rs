@@ -42,6 +42,7 @@ const FRONTEND_ENV_KEY_ASSISTANTS_CONTEXT_FILE_CONTRIBUTOR_THRESHOLD: &str =
 const FRONTEND_ENV_KEY_ASSISTANTS_MAX_SYSTEM_PROMPT_LENGTH: &str =
     "ASSISTANTS_MAX_SYSTEM_PROMPT_LENGTH";
 const FRONTEND_ENV_KEY_ASSISTANTS_MAX_FILES: &str = "ASSISTANTS_MAX_FILES";
+const FRONTEND_ENV_KEY_ASSISTANTS_DELEGATION_ENABLED: &str = "ASSISTANTS_DELEGATION_ENABLED";
 const FRONTEND_ENV_KEY_STARTER_PROMPTS_ENABLED: &str = "STARTER_PROMPTS_ENABLED";
 const FRONTEND_ENV_KEY_PROMPT_OPTIMIZER_ENABLED: &str = "PROMPT_OPTIMIZER_ENABLED";
 const FRONTEND_ENV_KEY_USER_PREFERENCES_ENABLED: &str = "USER_PREFERENCES_ENABLED";
@@ -812,6 +813,10 @@ fn build_frontend_environment(
             Value::Number(max_length.into()),
         );
     }
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_ASSISTANTS_DELEGATION_ENABLED.to_string(),
+        Value::Bool(config.assistants.delegation.enabled),
+    );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_STARTER_PROMPTS_ENABLED.to_string(),
         Value::Bool(config.starter_prompts.enabled),
@@ -1689,6 +1694,23 @@ mod tests {
                 .get(FRONTEND_ENV_KEY_ASSISTANTS_MAX_FILES),
             Some(&Value::Number(9.into()))
         );
+    }
+
+    #[test]
+    fn assistants_delegation_enabled_is_injected_for_both_frontends() {
+        let mut config = AppConfig::default();
+        config.assistants.enabled = true;
+        config.assistants.delegation.enabled = true;
+
+        for frontend_kind in [FrontendKind::Web, FrontendKind::OfficeAddin] {
+            let environment = build_frontend_environment(&config, frontend_kind);
+            assert_eq!(
+                environment
+                    .additional_environment
+                    .get(FRONTEND_ENV_KEY_ASSISTANTS_DELEGATION_ENABLED),
+                Some(&Value::Bool(true))
+            );
+        }
     }
 
     #[test]
