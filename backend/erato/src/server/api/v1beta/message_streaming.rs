@@ -651,6 +651,11 @@ pub struct MessageSubmitRequest {
     selected_facet_ids: Vec<String>,
     /// Optional action facet to apply during this generation.
     action_facet: Option<ActionFacetRequest>,
+    /// Assistants the user @-mentioned in this message as delegation targets.
+    /// Validated server-side; requires `assistants.delegation.enabled`.
+    #[serde(default)]
+    #[schema(nullable = false)]
+    mentioned_assistant_ids: Option<Vec<Uuid>>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -1187,6 +1192,11 @@ pub struct RegenerateMessageRequest {
     selected_facet_ids: Vec<String>,
     /// Optional action facet to apply during this generation.
     action_facet: Option<ActionFacetRequest>,
+    /// Assistants the user @-mentioned in this message as delegation targets.
+    /// Validated server-side; requires `assistants.delegation.enabled`.
+    #[serde(default)]
+    #[schema(nullable = false)]
+    mentioned_assistant_ids: Option<Vec<Uuid>>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -1323,6 +1333,11 @@ pub struct EditMessageRequest {
     selected_facet_ids: Vec<String>,
     /// Optional action facet to apply during this generation.
     action_facet: Option<ActionFacetRequest>,
+    /// Assistants the user @-mentioned in this message as delegation targets.
+    /// Validated server-side; requires `assistants.delegation.enabled`.
+    #[serde(default)]
+    #[schema(nullable = false)]
+    mentioned_assistant_ids: Option<Vec<Uuid>>,
 }
 
 #[derive(serde::Deserialize, ToSchema)]
@@ -6442,77 +6457,89 @@ pub async fn message_submit_sse(
     validate_action_facet(&app_state.config, request.action_facet.as_ref(), platform)?;
 
     // Determine the chat_id first so we can use it as the background task key
-    let (chat_id, chat_was_created) = if let Some(existing_chat_id) = request.existing_chat_id {
-        let (chat, _) = get_or_create_chat(
-            &app_state.db,
-            &policy,
-            &me_user.to_subject(),
-            Some(&existing_chat_id),
-            &me_user.id,
-            None,
-            None,
-        )
-        .await
-        .map_err(|e| {
-            let s = e.to_string();
-            if s.contains("not found")
-                || s.contains("Access denied")
-                || s.contains("not authorized")
-            {
-                (
-                    axum::http::StatusCode::NOT_FOUND,
-                    "Chat not found".to_string(),
-                )
-            } else {
-                (
-                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                    "Failed to load chat".to_string(),
-                )
+    let (chat_id, chat_was_created, chat_assistant_id) =
+        if let Some(existing_chat_id) = request.existing_chat_id {
+            let (chat, _) = get_or_create_chat(
+                &app_state.db,
+                &policy,
+                &me_user.to_subject(),
+                Some(&existing_chat_id),
+                &me_user.id,
+                None,
+                None,
+            )
+            .await
+            .map_err(|e| {
+                let s = e.to_string();
+                if s.contains("not found")
+                    || s.contains("Access denied")
+                    || s.contains("not authorized")
+                {
+                    (
+                        axum::http::StatusCode::NOT_FOUND,
+                        "Chat not found".to_string(),
+                    )
+                } else {
+                    (
+                        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                        "Failed to load chat".to_string(),
+                    )
+                }
+            })?;
+            reject_if_archived(&chat)?;
+            (existing_chat_id, false, chat.assistant_id)
+        } else {
+            // Need to get or create chat to determine the chat_id
+            let (chat, chat_status) = get_or_create_chat_by_previous_message_id(
+                &app_state.db,
+                &policy,
+                &me_user.to_subject(),
+                request.previous_message_id.as_ref(),
+                &me_user.id,
+                request.assistant_id.as_ref(),
+                request.title_by_user_provided.clone(),
+            )
+            .await
+            .map_err(|e| {
+                let s = e.to_string();
+                if s.contains("not found")
+                    || s.contains("Access denied")
+                    || s.contains("not authorized")
+                {
+                    (
+                        axum::http::StatusCode::NOT_FOUND,
+                        "Chat or previous message not found".to_string(),
+                    )
+                } else {
+                    (
+                        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                        "Failed to get or create chat".to_string(),
+                    )
+                }
+            })?;
+
+            // A brand-new chat has archived_at = None, so new-chat creation is
+            // unaffected; only writes resolved onto an existing archived chat 409.
+            reject_if_archived(&chat)?;
+
+            let was_created = chat_status == ChatCreationStatus::Created;
+            if was_created {
+                app_state.global_policy_engine.invalidate_data().await;
             }
-        })?;
-        reject_if_archived(&chat)?;
-        (existing_chat_id, false)
-    } else {
-        // Need to get or create chat to determine the chat_id
-        let (chat, chat_status) = get_or_create_chat_by_previous_message_id(
-            &app_state.db,
-            &policy,
-            &me_user.to_subject(),
-            request.previous_message_id.as_ref(),
-            &me_user.id,
-            request.assistant_id.as_ref(),
-            request.title_by_user_provided.clone(),
-        )
-        .await
-        .map_err(|e| {
-            let s = e.to_string();
-            if s.contains("not found")
-                || s.contains("Access denied")
-                || s.contains("not authorized")
-            {
-                (
-                    axum::http::StatusCode::NOT_FOUND,
-                    "Chat or previous message not found".to_string(),
-                )
-            } else {
-                (
-                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                    "Failed to get or create chat".to_string(),
-                )
-            }
-        })?;
 
-        // A brand-new chat has archived_at = None, so new-chat creation is
-        // unaffected; only writes resolved onto an existing archived chat 409.
-        reject_if_archived(&chat)?;
+            (chat.id, was_created, chat.assistant_id)
+        };
 
-        let was_created = chat_status == ChatCreationStatus::Created;
-        if was_created {
-            app_state.global_policy_engine.invalidate_data().await;
-        }
-
-        (chat.id, was_created)
-    };
+    // Validate assistant mentions before spawning (returns HTTP 400 on failure).
+    // The validated targets feed the delegation tool offer.
+    let _delegation_targets = crate::services::delegation::validate_mentioned_assistants(
+        &app_state,
+        &policy,
+        &me_user.to_subject(),
+        request.mentioned_assistant_ids.as_deref(),
+        chat_assistant_id,
+    )
+    .await?;
 
     // Start or get background task for this chat
     let (broadcast_rx, task) = app_state
@@ -7490,14 +7517,26 @@ async fn run_message_submit_task(
 
     // Save user message
     tracing::info!("Saving user message");
+    let mentioned_assistant_ids_for_persistence = request
+        .mentioned_assistant_ids
+        .as_ref()
+        .filter(|ids| !ids.is_empty())
+        .map(|ids| {
+            crate::services::delegation::dedupe_mentions(ids)
+                .iter()
+                .map(|id| id.to_string())
+                .collect::<Vec<_>>()
+        });
     let user_input_parameters =
-        request
-            .action_facet
-            .as_ref()
-            .map(|af| crate::models::message::InputParameters {
-                action_facet_id: Some(af.id.clone()),
-                action_facet_args: Some(af.args.clone()),
-            });
+        if request.action_facet.is_some() || mentioned_assistant_ids_for_persistence.is_some() {
+            Some(crate::models::message::InputParameters {
+                action_facet_id: request.action_facet.as_ref().map(|af| af.id.clone()),
+                action_facet_args: request.action_facet.as_ref().map(|af| af.args.clone()),
+                mentioned_assistant_ids: mentioned_assistant_ids_for_persistence,
+            })
+        } else {
+            None
+        };
     let saved_user_message = bg_stream_save_user_message(
         task,
         app_state,
@@ -7831,6 +7870,40 @@ pub async fn regenerate_message_sse(
         }
     })?;
     reject_if_archived(&chat)?;
+
+    // Assistant mentions: an explicit request value is validated hard (400);
+    // absent, fall back to the mentions persisted on the turn's user message,
+    // re-validated softly for replay stability. The resolved targets feed the
+    // delegation tool offer.
+    let _delegation_targets = match request.mentioned_assistant_ids.clone() {
+        Some(ids) => {
+            crate::services::delegation::validate_mentioned_assistants(
+                &app_state,
+                &policy,
+                &me_user.to_subject(),
+                Some(&ids),
+                chat.assistant_id,
+            )
+            .await?
+        }
+        None => {
+            let persisted = crate::models::message::get_input_mentioned_assistant_ids_from_message(
+                &validation_result.previous_message,
+            )
+            .unwrap_or_else(|error| {
+                warn_and_capture_error("read regenerate fallback assistant mentions", &error);
+                None
+            });
+            crate::services::delegation::resolve_persisted_mentions(
+                &app_state,
+                &policy,
+                &me_user.to_subject(),
+                persisted.as_deref(),
+                chat.assistant_id,
+            )
+            .await
+        }
+    };
 
     // Create a channel for sending events
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
@@ -8189,6 +8262,52 @@ pub async fn edit_message_sse(
     })?;
     reject_if_archived(&chat)?;
 
+    // Assistant mentions follow the same edit contract as the action facet:
+    // an explicit request value is validated hard (400), an absent one falls
+    // back to the mentions the original user message stored, re-validated
+    // softly so mentions that no longer validate are dropped rather than
+    // failing the edit. The resolved value is persisted onto the new sibling
+    // row and feeds the delegation tool offer.
+    let resolved_mentioned_assistant_ids: Option<Vec<Uuid>> = match request
+        .mentioned_assistant_ids
+        .clone()
+    {
+        Some(ids) => {
+            crate::services::delegation::validate_mentioned_assistants(
+                &app_state,
+                &policy,
+                &me_user.to_subject(),
+                Some(&ids),
+                chat.assistant_id,
+            )
+            .await?;
+            Some(crate::services::delegation::dedupe_mentions(&ids))
+        }
+        None => {
+            let persisted = crate::models::message::get_input_mentioned_assistant_ids_from_message(
+                &message_to_edit,
+            )
+            .unwrap_or_else(|error| {
+                warn_and_capture_error("read edit fallback assistant mentions", &error);
+                None
+            });
+            match persisted {
+                Some(ids) => {
+                    let targets = crate::services::delegation::resolve_persisted_mentions(
+                        &app_state,
+                        &policy,
+                        &me_user.to_subject(),
+                        Some(&ids),
+                        chat.assistant_id,
+                    )
+                    .await;
+                    (!targets.is_empty()).then(|| targets.iter().map(|target| target.id).collect())
+                }
+                None => None,
+            }
+        }
+    };
+
     // Create a channel for sending events
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
     let (_abort_rx, task) = app_state
@@ -8235,12 +8354,18 @@ pub async fn edit_message_sse(
         ),
     };
     let edit_input_parameters =
-        resolved_action_facet
-            .as_ref()
-            .map(|af| crate::models::message::InputParameters {
-                action_facet_id: Some(af.id.clone()),
-                action_facet_args: Some(af.args.clone()),
-            });
+        if resolved_action_facet.is_some() || resolved_mentioned_assistant_ids.is_some() {
+            Some(crate::models::message::InputParameters {
+                action_facet_id: resolved_action_facet.as_ref().map(|af| af.id.clone()),
+                action_facet_args: resolved_action_facet.as_ref().map(|af| af.args.clone()),
+                mentioned_assistant_ids: resolved_mentioned_assistant_ids
+                    .as_ref()
+                    .filter(|ids| !ids.is_empty())
+                    .map(|ids| ids.iter().map(|id| id.to_string()).collect()),
+            })
+        } else {
+            None
+        };
     let task_for_stream = task.clone();
     let app_state_for_cleanup = app_state.clone();
     let chat_id_for_cleanup = chat.id;

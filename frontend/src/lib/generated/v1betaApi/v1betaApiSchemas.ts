@@ -1155,6 +1155,11 @@ export type EditMessageRequest = {
    */
   chat_provider_id?: string;
   /**
+   * Assistants the user @-mentioned in this message as delegation targets.
+   * Validated server-side; requires `assistants.delegation.enabled`.
+   */
+  mentioned_assistant_ids?: string[];
+  /**
    * The ID of the message that should be edited with a new response. It will be considered a sibling message to the new message.
    *
    * @format uuid
@@ -1571,6 +1576,11 @@ export type MessageSubmitRequest = {
    */
   input_files_ids?: string[];
   /**
+   * Assistants the user @-mentioned in this message as delegation targets.
+   * Validated server-side; requires `assistants.delegation.enabled`.
+   */
+  mentioned_assistant_ids?: string[];
+  /**
    * The ID of the message that this message is a response to. If this is the first message in the chat, this should be empty.
    *
    * @format uuid
@@ -1970,6 +1980,11 @@ export type RegenerateMessageRequest = {
    * @example 00000000-0000-0000-0000-000000000000
    */
   current_message_id: string;
+  /**
+   * Assistants the user @-mentioned in this message as delegation targets.
+   * Validated server-side; requires `assistants.delegation.enabled`.
+   */
+  mentioned_assistant_ids?: string[];
   /**
    * IDs of facets selected by the user for this generation.
    */
