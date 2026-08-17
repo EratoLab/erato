@@ -703,7 +703,10 @@ pub async fn get_recent_chats(
     };
 
     // Batch query: resolved display titles of origin chats. Provenance ids are
-    // not foreign keys, so a deleted origin simply yields no title.
+    // not foreign keys, so a deleted origin simply yields no title. The owner
+    // filter is a guard for future provenance kinds: delegation guarantees
+    // child owner == origin owner, but a cross-user handoff must not turn
+    // this lookup into a title leak.
     let origin_chat_ids: Vec<Uuid> = authorized_chats
         .iter()
         .filter_map(|c| c.origin_chat_id)
@@ -711,6 +714,7 @@ pub async fn get_recent_chats(
     let origin_titles_map: HashMap<Uuid, String> = if !origin_chat_ids.is_empty() {
         Chats::find()
             .filter(chats::Column::Id.is_in(origin_chat_ids))
+            .filter(chats::Column::OwnerUserId.eq(owner_user_id))
             .all(conn)
             .await?
             .into_iter()

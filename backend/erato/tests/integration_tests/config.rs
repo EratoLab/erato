@@ -4095,3 +4095,99 @@ async fn test_assistants_delegation_flag_readable_from_app_state(pool: Pool<Post
         600
     );
 }
+
+#[test]
+fn test_delegation_template_block_matches_rust_defaults() {
+    // The commented [assistants.delegation] reference block in
+    // erato.template.toml duplicates the Rust defaults by hand. Uncomment it,
+    // parse it through the real config machinery, and require exact equality
+    // so the two can never drift apart silently.
+    let template = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../erato.template.toml"
+    ))
+    .expect("read erato.template.toml");
+    let start = template
+        .find("# [assistants.delegation]")
+        .expect("template contains the delegation block");
+    let end = template[start..]
+        .find("\n\n")
+        .map(|offset| start + offset)
+        .expect("delegation block is terminated by a blank line");
+    let uncommented: String = template[start..end]
+        .lines()
+        .map(|line| {
+            line.strip_prefix("# ")
+                .or_else(|| line.strip_prefix("#"))
+                .unwrap_or(line)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    temp_file
+        .write_all(
+            format!(
+                r#"
+[assistants]
+enabled = true
+
+{uncommented}
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#
+            )
+            .as_bytes(),
+        )
+        .expect("Failed to write configuration");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let mut builder = AppConfig::config_schema_builder(
+        Some(vec![temp_file.path().to_string_lossy().into_owned()]),
+        false,
+    )
+    .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+    let config: AppConfig = builder
+        .build()
+        .expect("Failed to build config schema")
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    assert_eq!(
+        config.assistants.delegation,
+        erato_config::config::AssistantsDelegationConfig::default(),
+        "erato.template.toml's delegation block drifted from the Rust defaults"
+    );
+}
+
+#[test]
+#[should_panic(expected = "is reserved")]
+fn test_client_tool_named_delegate_to_assistant_is_rejected() {
+    build_and_migrate_delegation_config(
+        r#"
+[assistants]
+enabled = true
+
+[client_tools.tools.bad]
+name = "delegate_to_assistant"
+description = "reserved-name probe"
+parameters = "{\"type\":\"object\",\"properties\":{}}"
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+}

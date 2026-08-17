@@ -141,6 +141,7 @@ pub async fn validate_mentioned_assistants(
     subject: &Subject,
     mentioned_assistant_ids: Option<&[Uuid]>,
     chat_bound_assistant_id: Option<Uuid>,
+    chat_is_delegated_run: bool,
 ) -> Result<Vec<DelegationTarget>, (StatusCode, String)> {
     let Some(ids) = mentioned_assistant_ids else {
         return Ok(Vec::new());
@@ -154,6 +155,16 @@ pub async fn validate_mentioned_assistants(
         return Err((
             StatusCode::BAD_REQUEST,
             "Assistant delegation is not enabled".to_string(),
+        ));
+    }
+
+    // Depth stays at one: a delegated run never offers the tool, so mentions
+    // inside one would validate and then silently do nothing. Reject them
+    // explicitly instead.
+    if chat_is_delegated_run {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Assistants cannot be mentioned inside a delegated run".to_string(),
         ));
     }
 
@@ -215,6 +226,7 @@ pub async fn resolve_persisted_mentions(
     subject: &Subject,
     persisted_ids: Option<&[Uuid]>,
     chat_bound_assistant_id: Option<Uuid>,
+    chat_is_delegated_run: bool,
 ) -> Vec<DelegationTarget> {
     match validate_mentioned_assistants(
         app_state,
@@ -222,6 +234,7 @@ pub async fn resolve_persisted_mentions(
         subject,
         persisted_ids,
         chat_bound_assistant_id,
+        chat_is_delegated_run,
     )
     .await
     {
@@ -260,8 +273,8 @@ impl DelegationResultEnvelope {
     pub fn model_response_text(&self) -> String {
         serde_json::to_string(self).unwrap_or_else(|_| {
             format!(
-                "{{\"status\":\"{:?}\",\"delegate_chat_id\":\"{}\"}}",
-                self.status, self.delegate_chat_id
+                "{{\"status\":\"failed\",\"delegate_chat_id\":\"{}\"}}",
+                self.delegate_chat_id
             )
         })
     }
@@ -368,6 +381,11 @@ fn run_delegated_child(
         let generation_failed = result.is_err();
         if let Err(error) = &result {
             tracing::warn!(child_chat_id = %chat_id, error = ?error, "Delegated child run failed");
+            let _ = child_task
+                .send_event(crate::services::background_tasks::StreamingEvent::Error {
+                    error: crate::server::api::v1beta::message_streaming::delegated_run_failure_error_value(),
+                })
+                .await;
         }
         let _ = child_task
             .send_event(crate::services::background_tasks::StreamingEvent::StreamEnd)
@@ -386,32 +404,41 @@ fn run_delegated_child(
 /// Reads the delegate's final answer and builds the result envelope. The
 /// requested status is downgraded to `failed` when the child produced no
 /// answer, errored, or — defensively — stopped on an approval request.
+#[allow(clippy::too_many_arguments)]
 async fn build_result_envelope(
     app_state: &AppState,
     child_chat_id: Uuid,
+    child_assistant_message_id: Uuid,
+    spawned_at: sea_orm::prelude::DateTimeWithTimeZone,
     assistant_id: Uuid,
     assistant_name: String,
     requested_status: DelegationRunStatus,
     result_max_chars: usize,
 ) -> DelegationResultEnvelope {
-    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
+    use sea_orm::EntityTrait;
 
     let mut status = requested_status;
     let mut result_text: Option<String> = None;
     let mut truncated = false;
 
-    let rows = crate::db::entity::messages::Entity::find()
-        .filter(crate::db::entity::messages::Column::ChatId.eq(child_chat_id))
-        .order_by_desc(crate::db::entity::messages::Column::CreatedAt)
-        .all(&app_state.db)
+    // The answer is the assistant message the child's own generation wrote —
+    // identified by the id recorded on its streaming task, never by
+    // newest-row scanning, so neither seeded parent copies nor a concurrent
+    // interloping run on the child chat can masquerade as the delegate's
+    // result. Rows predating the spawn are seeded copies by construction.
+    let assistant_row = crate::db::entity::messages::Entity::find_by_id(child_assistant_message_id)
+        .one(&app_state.db)
         .await
-        .unwrap_or_default();
-    let assistant_row = rows.iter().find(|row| {
-        row.raw_message
-            .get("role")
-            .and_then(|role| role.as_str())
-            .is_some_and(|role| role == "assistant")
-    });
+        .ok()
+        .flatten()
+        .filter(|row| row.chat_id == child_chat_id && row.created_at > spawned_at)
+        .filter(|row| {
+            row.raw_message
+                .get("role")
+                .and_then(|role| role.as_str())
+                .is_some_and(|role| role == "assistant")
+        });
+    let assistant_row = assistant_row.as_ref();
 
     if let Some(row) = assistant_row {
         let content = row
@@ -532,7 +559,10 @@ pub(crate) async fn dispatch_delegate_tool_call(
     }
 
     // Re-resolve the target access-checked (revocation or archiving between
-    // submit-time validation and dispatch), as the origin chat's owner.
+    // submit-time validation and dispatch), as the origin chat's owner. Every
+    // generation path requires chat ownership, so owner == requester; if a
+    // non-owner path to generation is ever added, this subject choice becomes
+    // an escalation and must switch to the requester.
     let owner_subject = Subject::User(context.origin_chat.owner_user_id.clone());
     let assistant = crate::models::assistant::get_assistant_by_id(
         &app_state.db,
@@ -552,12 +582,13 @@ pub(crate) async fn dispatch_delegate_tool_call(
         .and_then(|configuration| configuration.provenance)
         .map(|provenance| provenance.depth)
         .unwrap_or(0);
+    let spawned_at: sea_orm::prelude::DateTimeWithTimeZone = sqlx::types::chrono::Utc::now().into();
     let provenance = crate::models::chat::ChatProvenance {
         kind: crate::models::chat::ChatProvenanceKind::Delegation,
         origin_chat_id: Some(context.origin_chat.id),
         origin_message_id: Some(context.origin_user_message_id),
         origin_assistant_id: context.origin_chat.assistant_id,
-        rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
+        rebase_cutoff: Some(spawned_at),
         depth: parent_depth + 1,
     };
     let child_chat = crate::models::chat::create_delegated_chat(
@@ -668,14 +699,25 @@ pub(crate) async fn dispatch_delegate_tool_call(
         _ = parent_abort_signal(parent_task) => {
             child_task.request_abort();
             if tokio::time::timeout(CHILD_ABORT_GRACE, &mut handle).await.is_err() {
-                handle.abort();
+                // Never hard-cancel: the child's cleanup tail (stream end,
+                // outcome persistence, task removal) must run, or its command
+                // listener and lease leak. The cooperative abort stops the run
+                // at the next stream chunk or turn boundary; until then it
+                // winds down detached.
+                tracing::warn!(
+                    child_chat_id = %child_chat.id,
+                    "Delegated child did not stop within the abort grace; detaching"
+                );
             }
             DelegationRunStatus::Cancelled
         },
         _ = tokio::time::sleep(std::time::Duration::from_secs(config.run_timeout_seconds)) => {
             child_task.request_abort();
             if tokio::time::timeout(CHILD_ABORT_GRACE, &mut handle).await.is_err() {
-                handle.abort();
+                tracing::warn!(
+                    child_chat_id = %child_chat.id,
+                    "Delegated child did not stop within the timeout grace; detaching"
+                );
             }
             DelegationRunStatus::Timeout
         }
@@ -684,6 +726,8 @@ pub(crate) async fn dispatch_delegate_tool_call(
     Ok(build_result_envelope(
         app_state,
         child_chat.id,
+        child_task.message_id(),
+        spawned_at,
         assistant_id,
         assistant.name,
         status,

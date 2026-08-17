@@ -1632,6 +1632,19 @@ impl PreparedChatRequest {
     }
 }
 
+/// The generic error frame a delegated child run broadcasts on failure, so a
+/// user watching the child chat resolves instead of seeing a silent end —
+/// same shape as the submit wrapper's failure broadcast.
+pub(crate) fn delegated_run_failure_error_value() -> Option<JsonValue> {
+    let error_event = MessageSubmitStreamingResponseError {
+        message_id: None,
+        error: GenerationErrorType::InternalError {
+            error_description: "The message could not be generated.".to_string(),
+        },
+    };
+    serde_json::to_value(MessageSubmitStreamingResponseMessage::Error(error_event)).ok()
+}
+
 impl MessageSubmitRequest {
     /// Synthetic request driving a delegated child run through the same task
     /// machinery as a user submit.
@@ -6707,7 +6720,7 @@ pub async fn message_submit_sse(
     validate_action_facet(&app_state.config, request.action_facet.as_ref(), platform)?;
 
     // Determine the chat_id first so we can use it as the background task key
-    let (chat_id, chat_was_created, chat_assistant_id) =
+    let (chat_id, chat_was_created, chat_assistant_id, chat_is_delegated) =
         if let Some(existing_chat_id) = request.existing_chat_id {
             let (chat, _) = get_or_create_chat(
                 &app_state.db,
@@ -6737,7 +6750,12 @@ pub async fn message_submit_sse(
                 }
             })?;
             reject_if_archived(&chat)?;
-            (existing_chat_id, false, chat.assistant_id)
+            (
+                existing_chat_id,
+                false,
+                chat.assistant_id,
+                crate::models::chat::chat_is_delegated_run(&chat),
+            )
         } else {
             // Need to get or create chat to determine the chat_id
             let (chat, chat_status) = get_or_create_chat_by_previous_message_id(
@@ -6777,7 +6795,7 @@ pub async fn message_submit_sse(
                 app_state.global_policy_engine.invalidate_data().await;
             }
 
-            (chat.id, was_created, chat.assistant_id)
+            (chat.id, was_created, chat.assistant_id, false)
         };
 
     // Validate assistant mentions before spawning (returns HTTP 400 on failure).
@@ -6788,6 +6806,7 @@ pub async fn message_submit_sse(
         &me_user.to_subject(),
         request.mentioned_assistant_ids.as_deref(),
         chat_assistant_id,
+        chat_is_delegated,
     )
     .await?;
 
@@ -8140,6 +8159,7 @@ pub async fn regenerate_message_sse(
     // absent, fall back to the mentions persisted on the turn's user message,
     // re-validated softly for replay stability. The resolved targets feed the
     // delegation tool offer.
+    let chat_is_delegated = crate::models::chat::chat_is_delegated_run(&chat);
     let delegation_targets_for_offer = match request.mentioned_assistant_ids.clone() {
         Some(ids) => {
             crate::services::delegation::validate_mentioned_assistants(
@@ -8148,6 +8168,7 @@ pub async fn regenerate_message_sse(
                 &me_user.to_subject(),
                 Some(&ids),
                 chat.assistant_id,
+                chat_is_delegated,
             )
             .await?
         }
@@ -8165,6 +8186,7 @@ pub async fn regenerate_message_sse(
                 &me_user.to_subject(),
                 persisted.as_deref(),
                 chat.assistant_id,
+                chat_is_delegated,
             )
             .await
         }
@@ -8555,6 +8577,7 @@ pub async fn edit_message_sse(
                 &me_user.to_subject(),
                 Some(&ids),
                 chat.assistant_id,
+                crate::models::chat::chat_is_delegated_run(&chat),
             )
             .await?;
             (
@@ -8578,6 +8601,7 @@ pub async fn edit_message_sse(
                         &me_user.to_subject(),
                         Some(&ids),
                         chat.assistant_id,
+                        crate::models::chat::chat_is_delegated_run(&chat),
                     )
                     .await;
                     let resolved_ids = (!targets.is_empty())
