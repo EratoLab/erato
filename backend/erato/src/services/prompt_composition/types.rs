@@ -29,6 +29,11 @@ pub struct PromptCompositionUserInput {
 
     /// Optional action facet requested by the user for this generation.
     pub action_facet: Option<ActionFacetUserInput>,
+
+    /// Validated delegation targets from the user's assistant mentions.
+    /// Non-empty only on mention-carrying turns; drives the request-scoped
+    /// `delegate_to_assistant` tool offer.
+    pub delegation_targets: Vec<crate::services::delegation::DelegationTarget>,
 }
 
 /// Action facet input for prompt composition.

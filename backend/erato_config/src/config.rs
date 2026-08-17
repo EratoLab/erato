@@ -19,6 +19,9 @@ use crate::startup_log;
 /// Name reserved for the synthetic client-action tool exposed by the backend.
 pub const CLIENT_ACTION_TOOL_NAME: &str = "propose_client_action";
 
+/// Name reserved for the synthetic assistant-delegation tool exposed by the backend.
+pub const DELEGATE_TO_ASSISTANT_TOOL_NAME: &str = "delegate_to_assistant";
+
 const DEFAULT_PROMPT_OPTIMIZER_PROMPT: &str = r#"
 You are Lyra, a master-level AI prompt optimization specialist.
 Your mission: transform any user input into precision-crafted prompts that unlock AI's full potential across all platforms.
@@ -1040,7 +1043,7 @@ impl AppConfig {
                     tool.name
                 );
             }
-            if name == CLIENT_ACTION_TOOL_NAME {
+            if name == CLIENT_ACTION_TOOL_NAME || name == DELEGATE_TO_ASSISTANT_TOOL_NAME {
                 panic!("Client tool named '{}' is reserved.", name);
             }
             let namespace = tool.namespace_or_default();

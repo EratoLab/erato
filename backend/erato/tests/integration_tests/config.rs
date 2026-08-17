@@ -4169,3 +4169,25 @@ model_name = "gpt-4o"
         "erato.template.toml's delegation block drifted from the Rust defaults"
     );
 }
+
+#[test]
+#[should_panic(expected = "is reserved")]
+fn test_client_tool_named_delegate_to_assistant_is_rejected() {
+    build_and_migrate_delegation_config(
+        r#"
+[assistants]
+enabled = true
+
+[client_tools.tools.bad]
+name = "delegate_to_assistant"
+description = "reserved-name probe"
+parameters = "{\"type\":\"object\",\"properties\":{}}"
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+}
