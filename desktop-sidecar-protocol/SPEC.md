@@ -255,6 +255,13 @@ unchanged. Implementations SHOULD derive it from a versioned hash of normalized
 profile, address, source, and private store identity. Clients MUST NOT parse the
 ID or use it after current ready data becomes stale.
 
+A search result MAY include a `trace` object: the sidecar's own on-device
+step log for that request, with the metadata-only content and append-only
+event-log semantics defined in §14. The complete log always arrives with the
+result, and a client MAY additionally observe the same log mid-flight by
+polling `sidecar.progress.v1` with the search request's ID (§14); applying
+steps by `sequence` makes both deliveries render identically.
+
 `outlook.list_emails.v1` returns at most 50 of the newest locally indexed
 messages for the selected mailbox. Results are metadata summaries; neither
 action returns message bodies or attachments. Implementations MUST use

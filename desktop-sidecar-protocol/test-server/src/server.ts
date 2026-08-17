@@ -19,6 +19,7 @@ import {
   validateOutlookGetConversationV1Params,
   validateOutlookListEmailsV1Params,
   validateOutlookListMailboxesV1Params,
+  validateOutlookSearchEmailsV1Params,
   validateSidecarConfigureV1Params,
   validateSidecarProgressV1Params,
   validateSidecarRestartV1Params,
@@ -37,6 +38,7 @@ export interface MockSidecarOptions {
   catalogueDigestOverride?: string;
   echoDelayMs?: number;
   echoResultOverride?: unknown;
+  searchDelayMs?: number;
   /**
    * Method names this mock pretends not to know: they are removed from the
    * advertised catalogue and answered with -32601, simulating a previously
@@ -132,7 +134,12 @@ export class MockSidecar {
   readonly #options: Required<
     Pick<
       MockSidecarOptions,
-      "host" | "port" | "path" | "supportedProtocolVersions" | "echoDelayMs"
+      | "host"
+      | "port"
+      | "path"
+      | "supportedProtocolVersions"
+      | "echoDelayMs"
+      | "searchDelayMs"
     >
   > &
     MockSidecarOptions;
@@ -168,6 +175,7 @@ export class MockSidecar {
       path: options.path ?? "/erato/sidecar/rpc",
       supportedProtocolVersions: options.supportedProtocolVersions ?? ["1.0"],
       echoDelayMs: options.echoDelayMs ?? 0,
+      searchDelayMs: options.searchDelayMs ?? 0,
     };
     this.#allowedOrigins = new Set(options.allowedOrigins.map(normalizeOrigin));
     this.#capabilityAvailability = options.capabilityAvailability ?? "enabled";
@@ -458,6 +466,122 @@ export class MockSidecar {
         mailbox: MOCK_OUTLOOK_MAILBOX,
         emails: [MOCK_OUTLOOK_EMAIL],
       });
+    }
+
+    if (message.method === "outlook.search_emails.v1") {
+      if (!validateOutlookSearchEmailsV1Params(message.params)) {
+        return rpcError(message.id, -32602, "Invalid method parameters.");
+      }
+      if (
+        (message.params as { mailboxId: string }).mailboxId !==
+        MOCK_OUTLOOK_MAILBOX.id
+      ) {
+        return rpcError(message.id, -32602, "Unknown Outlook mailbox.");
+      }
+      const key = requestKey(origin, message.id);
+      if (this.#inFlight.has(key)) {
+        return rpcError(message.id, -32600, "Duplicate pending request ID.");
+      }
+      const controller = new AbortController();
+      this.#inFlight.set(key, controller);
+      const halfDelayMs = this.#options.searchDelayMs / 2;
+      const startedAt = Date.now();
+      const progress: MockProgressEntry = {
+        state: "running",
+        steps: [
+          {
+            sequence: 0,
+            id: "buildIndex",
+            status: "ok",
+            cacheHit: false,
+            counts: { messagesScanned: 42 },
+          },
+          {
+            sequence: 1,
+            id: "expandQuery",
+            status: "running",
+            model: "mock-local-model",
+          },
+        ],
+      };
+      this.#recordProgress(key, progress);
+      const answerCancelled = (): unknown => {
+        progress.steps = progress.steps.map((step) =>
+          step.status === "running"
+            ? { ...step, status: "skipped", detail: "cancelled" }
+            : step,
+        );
+        return rpcError(message.id, -32014, "The request was cancelled.", {
+          kind: "request_cancelled",
+          requestId: message.id,
+        });
+      };
+      try {
+        if (halfDelayMs > 0) {
+          await abortableDelay(halfDelayMs, controller.signal);
+        }
+        if (controller.signal.aborted) return answerCancelled();
+        progress.steps = [
+          ...progress.steps.slice(0, -1),
+          {
+            sequence: 1,
+            id: "expandQuery",
+            status: "ok",
+            model: "mock-local-model",
+            counts: { keywordsIn: 2, keywordsOut: 5 },
+          },
+          {
+            sequence: 2,
+            id: "match",
+            status: "ok",
+            counts: { matched: 3, hitsReturned: 1 },
+          },
+          {
+            sequence: 3,
+            id: "summarize",
+            status: "running",
+            model: "mock-local-model",
+          },
+        ];
+        if (halfDelayMs > 0) {
+          await abortableDelay(halfDelayMs, controller.signal);
+        }
+        if (controller.signal.aborted) return answerCancelled();
+        progress.steps = progress.steps.map((step) =>
+          step.status === "running" ? { ...step, status: "ok" } : step,
+        );
+        progress.totalDurationMs = Date.now() - startedAt;
+        const query = (message.params as { query: string }).query.toLowerCase();
+        const matches = (MOCK_OUTLOOK_EMAIL.subject ?? "")
+          .toLowerCase()
+          .includes(query);
+        return rpcResult(message.id, {
+          mailbox: MOCK_OUTLOOK_MAILBOX,
+          hits: matches
+            ? [
+                {
+                  email: MOCK_OUTLOOK_EMAIL,
+                  snippet: "Mock Outlook message body.",
+                  matchedIn: ["subject"],
+                },
+              ]
+            : [],
+          totalMatched: matches ? 1 : 0,
+          trace: {
+            steps: progress.steps.map((step) => ({ ...step })),
+            totalDurationMs: progress.totalDurationMs,
+          },
+          summary: matches
+            ? "One mock Outlook message matched the query."
+            : undefined,
+          summaryModel: matches ? "mock-local-model" : undefined,
+          warnings: [],
+        });
+      } finally {
+        progress.state = "finished";
+        progress.totalDurationMs ??= Date.now() - startedAt;
+        this.#inFlight.delete(key);
+      }
     }
 
     if (message.method === "outlook.get_conversation.v1") {

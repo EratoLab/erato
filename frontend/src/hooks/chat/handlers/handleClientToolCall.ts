@@ -2,6 +2,8 @@ import {
   getClientToolExecutor,
   hasClientToolCallBeenAnswered,
   markClientToolCallAnswered,
+  releaseClientToolCallAbort,
+  trackClientToolCallAbort,
   unmarkClientToolCallAnswered,
 } from "../clientToolExecutors";
 
@@ -53,8 +55,16 @@ export async function handleClientToolCall(
       error: `No client-tool executor registered for "${tool_name}"`,
     };
   } else {
+    // Tracked so the user stop pathway can abort the execution mid-flight;
+    // an aborted executor settles like any failure and POSTs its error.
+    const signal = trackClientToolCallAbort(tool_call_id, chatId);
     try {
-      const outcome = await executor(input ?? null);
+      const outcome = await executor(input ?? null, {
+        toolCallId: tool_call_id,
+        messageId: message_id,
+        chatId,
+        signal,
+      });
       body = outcome.ok
         ? // Coalesce to explicit null so an empty success is delivered as a
           // result, not treated by the backend as "no result → tool error".
@@ -65,6 +75,8 @@ export async function handleClientToolCall(
         ...base,
         error: error instanceof Error ? error.message : String(error),
       };
+    } finally {
+      releaseClientToolCallAbort(tool_call_id);
     }
   }
 

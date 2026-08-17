@@ -3606,11 +3606,13 @@ msgid "trace.tool.denied"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
 #: src/components/ui/Trace/steps/ToolUseStep.tsx
 msgid "trace.tool.failed"
 msgstr "Niepowodzenie"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
 #: src/components/ui/Trace/steps/ToolUseStep.tsx
 msgid "trace.tool.running"
 msgstr "W toku"
@@ -3713,6 +3715,34 @@ msgstr "{itemCount} elementów"
 msgid "{skipped} messages could not be loaded."
 msgstr ""
 
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "{stepCount, plural, one {# step} other {# steps}}"
+msgstr "{stepCount, plural, one {# krok} few {# kroki} many {# kroków} other {# kroku}}"
+
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+#~ msgid "{stepCount} steps"
+#~ msgstr ""
+
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "{value} matched"
+msgstr "{value} dopasowanych"
+
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "{value} messages"
+msgstr "{value} wiadomości"
+
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "{value} returned"
+msgstr "{value} zwróconych"
+
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "{value} terms in"
+msgstr "{value} terminów na wejściu"
+
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "{value} terms out"
+msgstr "{value} terminów na wyjściu"
+
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "• Change browser language in settings and refresh"
 msgstr "• Zmień język przeglądarki w ustawieniach i odśwież"
@@ -3747,6 +3777,10 @@ msgstr "1 element"
 msgid "1 message could not be loaded."
 msgstr "Nie udało się wczytać 1 wiadomości."
 
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+#~ msgid "1 step"
+#~ msgstr ""
+
 #: src/components/ui/FileUpload/FileUpload.tsx
 msgid "Accepted types:"
 msgstr "Akceptowane typy plików:"
@@ -3762,6 +3796,10 @@ msgstr "Wszystkie typy plików akceptowane"
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "And"
 msgstr ""
+
+#: src/components/ui/DesktopSidecar/SidecarLocalAnswerPanel.tsx
+msgid "Answer from this device"
+msgstr "Odpowiedź z tego urządzenia"
 
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
 msgid "Approaching Budget Limit"
@@ -3995,6 +4033,10 @@ msgstr ""
 msgid "Canceled"
 msgstr ""
 
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "Cancelled"
+msgstr "Anulowano"
+
 #: src/components/ui/Chat/ChatInput.tsx
 #~ msgid "Cannot send: Audio transcription in progress"
 #~ msgstr ""
@@ -4223,6 +4265,10 @@ msgstr "Domyslne narzedzia"
 msgid "Define how the assistant should behave and respond"
 msgstr ""
 
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "Degraded"
+msgstr "Ograniczony"
+
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Description"
 msgstr ""
@@ -4234,6 +4280,10 @@ msgstr "szczegóły dla"
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Detected Locale:"
 msgstr "Wykryty język:"
+
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "Diagnostic delay"
+msgstr "Opóźnienie diagnostyczne"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Dictating audio"
@@ -4344,6 +4394,10 @@ msgstr ""
 msgid "Expand by default"
 msgstr "Rozwiń domyślnie"
 
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "Expand query on device"
+msgstr "Rozszerzenie zapytania na urządzeniu"
+
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
 msgid "expand sidebar"
 msgstr "rozwiń pasek boczny"
@@ -4412,6 +4466,18 @@ msgstr ""
 #: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "From"
 msgstr ""
+
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "from cache"
+msgstr "z pamięci podręcznej"
+
+#: src/components/ui/DesktopSidecar/SidecarLocalAnswerPanel.tsx
+msgid "Generated on this device by {model}. It was not shared — it never left this device and is not part of the chat."
+msgstr "Wygenerowana na tym urządzeniu przez {model}. Nie została udostępniona — nigdy nie opuściła tego urządzenia i nie jest częścią czatu."
+
+#: src/components/ui/DesktopSidecar/SidecarLocalAnswerPanel.tsx
+msgid "Generated on this device. It was not shared — it never left this device and is not part of the chat."
+msgstr "Wygenerowana na tym urządzeniu. Nie została udostępniona — nigdy nie opuściła tego urządzenia i nie jest częścią czatu."
 
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Hide"
@@ -4522,6 +4588,10 @@ msgstr "Test wykrywania języka"
 #: src/components/ui/Logo.tsx
 msgid "Logo"
 msgstr "Logo"
+
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "Match messages and attachments"
+msgstr "Dopasowanie wiadomości i załączników"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Message exceeds token limit. Please reduce length or remove files."
@@ -4637,6 +4707,10 @@ msgstr "redukcja szumów: {noiseSuppression}"
 msgid "Older messages are not included."
 msgstr "Starsze wiadomości nie są uwzględnione."
 
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "On this device: {headline}"
+msgstr "Na tym urządzeniu: {headline}"
+
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Only one message can be queued. Replacing discards the message you queued earlier."
 msgstr ""
@@ -4716,6 +4790,10 @@ msgstr "W kolejce — zostanie wysłane, gdy odpowiesz na potwierdzenie"
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Queued — sends when response finishes"
 msgstr ""
+
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "Read local mailbox"
+msgstr "Odczyt lokalnej skrzynki pocztowej"
 
 #: src/components/ui/Message/MessageContent.tsx
 #~ msgid "Reasoning"
@@ -4900,6 +4978,10 @@ msgstr "Wyświetlanie {resultsCount} ostatnich czatów"
 msgid "Sign out"
 msgstr "Wyloguj"
 
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "Skipped"
+msgstr "Pominięto"
+
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 #~ msgid "Some default files are inaccessible due to missing permissions."
 #~ msgstr ""
@@ -4990,6 +5072,10 @@ msgstr "Sukces"
 #: src/components/ui/ToolCall/ToolCallDisplay.tsx
 #~ msgid "successful"
 #~ msgstr "udane"
+
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "Summarize on device"
+msgstr "Podsumowanie na urządzeniu"
 
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Supported Locales:"
@@ -5237,6 +5323,10 @@ msgstr "Używam narzędzi"
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
 msgid "You are using {percentUsed}% of your budget ({formattedSpending} of {formattedLimit})."
 msgstr ""
+
+#: src/components/ui/DesktopSidecar/SidecarLocalAnswerPanel.tsx
+msgid "You asked: {query}"
+msgstr "Twoje pytanie: {query}"
 
 #: src/pages/AssistantEditPage.tsx
 #~ msgid "You don't have permission to edit this assistant. Only the owner can modify assistant settings."

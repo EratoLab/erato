@@ -11,6 +11,8 @@ import {
   validateOutlookListEmailsV1Result,
   validateOutlookListMailboxesV1Params,
   validateOutlookListMailboxesV1Result,
+  validateOutlookSearchEmailsV1Params,
+  validateOutlookSearchEmailsV1Result,
   validateSidecarProgressV1Params,
   validateSidecarProgressV1Result,
   validateSidecarRestartV1Params,
@@ -33,6 +35,8 @@ import type {
   OutlookListEmailsV1Result,
   OutlookListMailboxesV1Params,
   OutlookListMailboxesV1Result,
+  OutlookSearchEmailsV1Params,
+  OutlookSearchEmailsV1Result,
   SidecarProgressV1Params,
   SidecarProgressV1Result,
   SidecarRestartV1Params,
@@ -157,6 +161,10 @@ const builtInContracts: Readonly<Record<string, SidecarMethodContract>> = {
     validateParams: validateOutlookGetConversationV1Params,
     validateResult: validateOutlookGetConversationV1Result,
   },
+  "outlook.search_emails.v1": {
+    validateParams: validateOutlookSearchEmailsV1Params,
+    validateResult: validateOutlookSearchEmailsV1Result,
+  },
   "sidecar.progress.v1": {
     validateParams: validateSidecarProgressV1Params,
     validateResult: validateSidecarProgressV1Result,
@@ -258,6 +266,11 @@ export class DesktopSidecarClient {
     params: OutlookGetConversationV1Params,
     options?: InvokeOptions,
   ): Promise<OutlookGetConversationV1Result>;
+  async invoke(
+    method: "outlook.search_emails.v1",
+    params: OutlookSearchEmailsV1Params,
+    options?: InvokeOptions,
+  ): Promise<OutlookSearchEmailsV1Result>;
   async invoke(
     method: "sidecar.progress.v1",
     params: SidecarProgressV1Params,

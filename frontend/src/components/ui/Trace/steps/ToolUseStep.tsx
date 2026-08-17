@@ -2,7 +2,9 @@ import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 
 import { ToolCallInput, ToolCallOutput } from "@/components/ui/ToolCall";
+import { useSidecarLocalTrace } from "@/lib/desktopSidecar/localTraceStore";
 
+import { SidecarLocalTraceSubtree } from "../SidecarLocalTraceSubtree";
 import { TraceStep } from "../TraceStep";
 import { railIconFor } from "../icons";
 
@@ -54,6 +56,15 @@ export const ToolUseStep = ({
   const resolvedStatus = part.status;
   const isRunning = status === "running" && isStreaming;
   const toolName = part.tool_name ?? "";
+  const toolCallId = part.tool_call_id;
+
+  // The sidecar's on-device steps are the step's body: rows like the main
+  // line, each with its own toggle for its own details. This step's toggle
+  // folds and unfolds them, open by default so they stream in visibly. A
+  // trace-bearing call shows no tool-level payload JSON at all — real input
+  // and output only ever belong to an individual step.
+  const hasTrace =
+    useSidecarLocalTrace(toolCallId, toolName, part.output) !== undefined;
   const titleSlot = approvalStatus ? (
     <span
       className={clsx(
@@ -74,6 +85,22 @@ export const ToolUseStep = ({
     </span>
   ) : null;
 
+  const body =
+    toolCallId && hasTrace ? (
+      <SidecarLocalTraceSubtree
+        toolCallId={toolCallId}
+        toolName={toolName}
+        output={part.output}
+      />
+    ) : part.input != null || part.output != null ? (
+      <div className="space-y-3 py-2">
+        {part.input != null && <ToolCallInput input={part.input} />}
+        {part.output != null && (
+          <ToolCallOutput output={part.output} isError={status === "error"} />
+        )}
+      </div>
+    ) : undefined;
+
   return (
     // The `data-testid`/`data-tool-name`/`data-tool-status` attributes on the
     // wrapper expose a stable, mode-agnostic test handle. Tests can target a
@@ -90,16 +117,12 @@ export const ToolUseStep = ({
         hasTrailingRailLine={!isLastStep}
         title={toolName}
         titleSlot={titleSlot}
-        defaultOpen={false}
+        defaultOpen={hasTrace}
+        autoExpand={hasTrace}
         autoCollapse={isCollapsed}
         isActive={isRunning}
       >
-        <div className="space-y-3 py-2">
-          {part.input != null && <ToolCallInput input={part.input} />}
-          {part.output != null && (
-            <ToolCallOutput output={part.output} isError={status === "error"} />
-          )}
-        </div>
+        {body}
       </TraceStep>
     </div>
   );

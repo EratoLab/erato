@@ -152,6 +152,13 @@ export interface GroupedFileAttachmentsPreviewProps {
   filenameTruncateLength?: number;
   defaultVisibleItems?: number;
   stickyGroupHeaders?: boolean;
+  /**
+   * Optional per-group action row (keyed by group id), rendered at the end of
+   * the group's items area — so it collapses with the group. Lets a caller add
+   * a group-scoped control (e.g. "Attach to chat" on a found-email group)
+   * without breaking out of the shared chip conventions.
+   */
+  groupActions?: Partial<Record<string, React.ReactNode>>;
 }
 
 type ItemWithFile = Extract<
@@ -184,6 +191,12 @@ interface SelectableAttachmentRowProps {
   showSize: boolean;
   filenameTruncateLength: number;
   validation?: { ok: boolean; reason?: string };
+  /**
+   * When present, the chip body becomes a click-to-preview target (the same
+   * mechanic as plain attachment items) while the checkbox stays a separate
+   * control. Without it, the whole row is one toggle label as before.
+   */
+  onPreview?: () => void;
 }
 
 const SELECTABLE_ROW_CLASS =
@@ -198,10 +211,12 @@ const SelectableAttachmentRow: React.FC<SelectableAttachmentRowProps> = ({
   showSize,
   filenameTruncateLength,
   validation,
+  onPreview,
 }) => {
   const filename = getFileName(file);
   const invalid = validation?.ok === false;
-  const body = (
+  const rowClassName = clsx(SELECTABLE_ROW_CLASS, !selected && "opacity-50");
+  const chip = (
     <div className="min-w-0 flex-1">
       <FilePreviewBase
         file={file}
@@ -221,25 +236,43 @@ const SelectableAttachmentRow: React.FC<SelectableAttachmentRowProps> = ({
       )}
     </div>
   );
-  const className = clsx(SELECTABLE_ROW_CLASS, !selected && "opacity-50");
+  const checkbox = onToggle ? (
+    <input
+      type="checkbox"
+      checked={selected}
+      onChange={onToggle}
+      disabled={disabled}
+      className="size-4 shrink-0 rounded border-theme-border text-theme-fg-accent focus:ring-theme-focus disabled:cursor-not-allowed"
+      aria-label={`${t`Include`} ${filename}`}
+    />
+  ) : null;
+
+  if (onPreview) {
+    return (
+      <div className={rowClassName}>
+        {checkbox}
+        <InteractiveContainer
+          onClick={onPreview}
+          useDiv={true}
+          className="min-w-0 flex-1 cursor-pointer rounded-[var(--theme-radius-base)] hover:bg-theme-bg-accent"
+          aria-label={`${t`Preview attachment`} ${filename}`}
+        >
+          {chip}
+        </InteractiveContainer>
+      </div>
+    );
+  }
 
   // Without a toggle there is nothing to label, so the row is a plain
   // container rather than a `label` pointing at a control that isn't there.
   if (!onToggle) {
-    return <div className={className}>{body}</div>;
+    return <div className={rowClassName}>{chip}</div>;
   }
 
   return (
-    <label className={className}>
-      <input
-        type="checkbox"
-        checked={selected}
-        onChange={onToggle}
-        disabled={disabled}
-        className="size-4 shrink-0 rounded border-theme-border text-theme-fg-accent focus:ring-theme-focus disabled:cursor-not-allowed"
-        aria-label={`${t`Include`} ${filename}`}
-      />
-      {body}
+    <label className={rowClassName}>
+      {checkbox}
+      {chip}
     </label>
   );
 };
@@ -255,6 +288,7 @@ interface ThreadMessageGroupSectionProps {
   showFileType: boolean;
   showSize: boolean;
   filenameTruncateLength: number;
+  onFilePreview?: (file: FileResource) => void;
 }
 
 const ThreadMessageHeaderText: React.FC<{
@@ -293,6 +327,7 @@ const ThreadMessageGroupSection: React.FC<ThreadMessageGroupSectionProps> = ({
   showFileType,
   showSize,
   filenameTruncateLength,
+  onFilePreview,
 }) => {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const panelId = useId();
@@ -377,6 +412,11 @@ const ThreadMessageGroupSection: React.FC<ThreadMessageGroupSectionProps> = ({
               showSize={showSize}
               filenameTruncateLength={filenameTruncateLength}
               validation={attachment.validation}
+              onPreview={
+                onFilePreview && "id" in attachment.file
+                  ? () => onFilePreview(attachment.file)
+                  : undefined
+              }
             />
           ))}
         </div>
@@ -444,6 +484,7 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
   filenameTruncateLength = 25,
   defaultVisibleItems = 3,
   stickyGroupHeaders = false,
+  groupActions,
 }) => {
   const [expandedGroupIds, setExpandedGroupIds] = useState<string[]>([]);
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<
@@ -627,6 +668,7 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
                         showFileType={showFileTypes}
                         showSize={showFileSizes}
                         filenameTruncateLength={filenameTruncateLength}
+                        onFilePreview={onFilePreview}
                       />
                     );
                   }
@@ -647,18 +689,33 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
                     );
                   }
 
-                  const content = (
-                    <FilePreviewButton
-                      file={item.file}
-                      onRemove={() => onRemoveFile(getFileId(item))}
-                      disabled={disabled}
-                      className="w-full"
-                      showFileType={showFileTypes}
-                      showSize={showFileSizes}
-                      filenameTruncateLength={filenameTruncateLength}
-                      filenameClassName="max-w-full"
-                    />
-                  );
+                  // `context` chips are read-only by contract — no remove
+                  // affordance (there is nothing staged to remove).
+                  const content =
+                    item.kind === "context" ? (
+                      <FilePreviewBase
+                        file={item.file}
+                        onRemove={() => {}}
+                        disabled={disabled}
+                        className="w-full"
+                        showRemoveButton={false}
+                        showFileType={showFileTypes}
+                        showSize={showFileSizes}
+                        filenameTruncateLength={filenameTruncateLength}
+                        filenameClassName="max-w-full"
+                      />
+                    ) : (
+                      <FilePreviewButton
+                        file={item.file}
+                        onRemove={() => onRemoveFile(getFileId(item))}
+                        disabled={disabled}
+                        className="w-full"
+                        showFileType={showFileTypes}
+                        showSize={showFileSizes}
+                        filenameTruncateLength={filenameTruncateLength}
+                        filenameClassName="max-w-full"
+                      />
+                    );
 
                   const onOpen =
                     item.kind === "attachment" ? item.onOpen : undefined;
@@ -698,6 +755,8 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
                       : t`Show ${hiddenCount} more items`}
                   </Button>
                 )}
+
+                {!isCollapsed && groupActions?.[group.id]}
               </div>
             )}
           </section>

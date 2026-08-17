@@ -182,6 +182,21 @@ const typeTargets = [
     "sidecar-progress-v1-result.ts",
     "SidecarProgressV1Result",
   ],
+  [
+    "schemas/outlook/search-hit.schema.json",
+    "outlook-search-hit.ts",
+    "OutlookSearchHit",
+  ],
+  [
+    "schemas/methods/outlook-search-emails-v1-params.schema.json",
+    "outlook-search-emails-v1-params.ts",
+    "OutlookSearchEmailsV1Params",
+  ],
+  [
+    "schemas/methods/outlook-search-emails-v1-result.schema.json",
+    "outlook-search-emails-v1-result.ts",
+    "OutlookSearchEmailsV1Result",
+  ],
 ];
 
 const validatorTargets = {
@@ -225,6 +240,10 @@ const validatorTargets = {
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-progress-v1-params.schema.json",
   validateSidecarProgressV1Result:
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-progress-v1-result.schema.json",
+  validateOutlookSearchEmailsV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-search-emails-v1-params.schema.json",
+  validateOutlookSearchEmailsV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-search-emails-v1-result.schema.json",
 };
 
 await rm(outputDirectory, { recursive: true, force: true });

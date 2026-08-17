@@ -399,6 +399,66 @@ describe("DesktopSidecarClient", () => {
     expect(client.getSnapshot().state).toBe("ready");
   });
 
+  it("streams search progress while the mock search runs", async () => {
+    const { client } = await setup({ searchDelayMs: 300 });
+    await client.discover();
+
+    const observations: SidecarProgressV1Result[] = [];
+    const result = await client.invoke(
+      "outlook.search_emails.v1",
+      { mailboxId: "8b7d2f4a6c9e1035d8a1b2c3e4f50617", query: "mock" },
+      {
+        progress: {
+          intervalMs: 50,
+          onProgress: (progress) => observations.push(progress),
+        },
+      },
+    );
+
+    const running = observations.find(
+      (observation) => observation.state === "running",
+    );
+    expect(running?.trace?.steps).toContainEqual(
+      expect.objectContaining({
+        sequence: 1,
+        id: "expandQuery",
+        status: "running",
+        model: "mock-local-model",
+      }),
+    );
+    expect(observations.at(-1)).toMatchObject({ state: "finished" });
+    expect(observations.at(-1)?.trace?.steps).toContainEqual(
+      expect.objectContaining({ sequence: 3, id: "summarize", status: "ok" }),
+    );
+    expect(result.trace?.steps).toEqual(observations.at(-1)?.trace?.steps);
+  });
+
+  it("cancels a mock search mid-flight", async () => {
+    const { client } = await setup({ searchDelayMs: 5000 });
+    await client.discover();
+
+    const observations: SidecarProgressV1Result[] = [];
+    await expect(
+      client.invoke(
+        "outlook.search_emails.v1",
+        { mailboxId: "8b7d2f4a6c9e1035d8a1b2c3e4f50617", query: "mock" },
+        {
+          timeoutMs: 150,
+          progress: {
+            intervalMs: 50,
+            onProgress: (progress) => observations.push(progress),
+          },
+        },
+      ),
+    ).rejects.toMatchObject({ kind: "timeout" });
+
+    expect(observations.at(-1)).toMatchObject({ state: "finished" });
+    expect(observations.at(-1)?.trace?.steps).toContainEqual(
+      expect.objectContaining({ status: "skipped", detail: "cancelled" }),
+    );
+    expect(client.getSnapshot().state).toBe("ready");
+  });
+
   it("completes a call untouched when the sidecar predates sidecar.progress.v1", async () => {
     const { client } = await setup({ omitMethods: ["sidecar.progress.v1"] });
     await client.discover();

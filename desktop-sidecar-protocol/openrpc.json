@@ -186,6 +186,39 @@
       }
     },
     {
+      "name": "outlook.search_emails.v1",
+      "summary": "Search locally stored emails of a selected Outlook mailbox, including locally extractable attachment text, with an optional locally generated summary of the hits.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/outlook-search-emails-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/outlook-search-emails-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        { "$ref": "#/components/errors/CapabilityUnavailable" },
+        { "$ref": "#/components/errors/InvalidParams" },
+        { "$ref": "#/components/errors/PermissionDenied" },
+        { "$ref": "#/components/errors/RequestCancelled" },
+        { "$ref": "#/components/errors/Timeout" },
+        { "$ref": "#/components/errors/SidecarInternal" }
+      ],
+      "x-erato-capability": {
+        "id": "outlook.search_emails",
+        "major": 1,
+        "method": "outlook.search_emails.v1",
+        "availability": { "state": "enabled" }
+      }
+    },
+    {
       "name": "sidecar.progress.v1",
       "summary": "Report a pending request's point-in-time progress as the sidecar's on-device step log.",
       "params": [
@@ -316,7 +349,7 @@
     }
   },
   "x-erato-catalogue": {
-    "revision": "7",
-    "digest": "sha256:c0fcd17ff72b25c516bc69a6405897a76d11695b26eec188fc782f4707af5af4"
+    "revision": "8",
+    "digest": "sha256:276656ac4710aacb333326150d7e26d967bfa6b35cbcf033b6467645557dd094"
   }
 }

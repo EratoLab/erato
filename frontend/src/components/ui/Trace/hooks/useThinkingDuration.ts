@@ -40,6 +40,19 @@ export const formatThinkingDuration = (ms: number | null): string | null => {
 };
 
 /**
+ * Millisecond-precision variant for short on-device steps, where
+ * `formatThinkingDuration`'s whole-second rounding would collapse everything
+ * to "less than a second" (e.g. "420 ms", "4.3 s").
+ */
+export const formatStepDuration = (
+  ms: number | null | undefined,
+): string | null => {
+  if (ms == null || !Number.isFinite(ms) || ms < 0) return null;
+  if (ms < MS_PER_SECOND) return `${ms} ms`;
+  return `${(ms / MS_PER_SECOND).toFixed(1)} s`;
+};
+
+/**
  * Compute the duration in milliseconds between two ISO-8601 timestamps, or
  * `null` if either is missing or unparseable.
  */

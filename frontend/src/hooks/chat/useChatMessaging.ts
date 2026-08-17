@@ -36,6 +36,7 @@ import {
 import { createLogger } from "@/utils/debugLogger";
 import { createSSEConnection, type SSEEvent } from "@/utils/sse/sseClient";
 
+import { abortClientToolCalls } from "./clientToolExecutors";
 import { handleAssistantMessageStarted } from "./handlers/handleAssistantMessageStarted";
 import { handleChatCreated } from "./handlers/handleChatCreated";
 import { handleClientToolCall } from "./handlers/handleClientToolCall";
@@ -708,6 +709,12 @@ export function useChatMessaging(
       setSubmittingForKey(streamKey, false);
       return;
     }
+
+    // The POST below stops the backend turn; this stops any client-tool
+    // execution still running on this device for it (e.g. a sidecar search).
+    // Only this user-initiated pathway aborts executions — SSE cleanup never
+    // does, because a dropped connection resumes and the result still lands.
+    abortClientToolCalls(effectiveChatId);
 
     void fetch("/api/v1beta/me/messages/abortstream", {
       method: "POST",

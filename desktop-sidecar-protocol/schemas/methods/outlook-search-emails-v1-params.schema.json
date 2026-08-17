@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-search-emails-v1-params.schema.json",
+  "title": "OutlookSearchEmailsV1Params",
+  "type": "object",
+  "required": ["mailboxId", "query"],
+  "properties": {
+    "mailboxId": {
+      "description": "Short opaque identifier returned by outlook.list_mailboxes.v1.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "query": {
+      "description": "Natural-language or keyword query. The sidecar may expand it into additional local search terms.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "limit": {
+      "description": "Maximum number of hits to return. Defaults to 10.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50
+    },
+    "includeAttachments": {
+      "description": "Also match against attachment file names and locally extractable attachment text. Defaults to true.",
+      "type": "boolean"
+    },
+    "summarize": {
+      "description": "Produce a locally generated plain-text summary of the hits when a local model is configured. Defaults to true.",
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": true
+}

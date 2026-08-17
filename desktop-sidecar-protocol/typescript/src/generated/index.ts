@@ -32,3 +32,6 @@ export type { SidecarLocalTraceStep } from "./sidecar-local-trace-step.js";
 export type { SidecarLocalTrace } from "./sidecar-local-trace.js";
 export type { SidecarProgressV1Params } from "./sidecar-progress-v1-params.js";
 export type { SidecarProgressV1Result } from "./sidecar-progress-v1-result.js";
+export type { OutlookSearchHit } from "./outlook-search-hit.js";
+export type { OutlookSearchEmailsV1Params } from "./outlook-search-emails-v1-params.js";
+export type { OutlookSearchEmailsV1Result } from "./outlook-search-emails-v1-result.js";
