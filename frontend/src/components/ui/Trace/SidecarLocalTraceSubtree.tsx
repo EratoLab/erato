@@ -1,11 +1,4 @@
-import { useSyncExternalStore } from "react";
-
-import {
-  getSidecarLocalTrace,
-  isSidecarTraceResultTool,
-  persistedSidecarLocalTrace,
-  subscribeSidecarLocalTraces,
-} from "@/lib/desktopSidecar/localTraceStore";
+import { useSidecarLocalTrace } from "@/lib/desktopSidecar/localTraceStore";
 
 import { SidecarLocalTraceView } from "./SidecarLocalTraceView";
 
@@ -24,27 +17,15 @@ export interface SidecarLocalTraceSubtreeProps {
 /**
  * The nested on-device trace of a sidecar-backed tool call, rendered under
  * its tool step in the trace the way a subagent's steps render inside an
- * agent step.
- *
- * The session store is tool-agnostic: it renders whatever our own executors
- * recorded for this tool call. Persisted results are gated by tool name and
- * sanitized, because that payload is whatever the tool returned. Resolution
- * order is persisted result first (survives reloads once the user consented
- * to sharing), then this session's store (covers the in-flight and declined
- * cases, where no result reached the backend).
+ * agent step. Which trace renders — the sanitized persisted one or this
+ * session's — is `useSidecarLocalTrace`'s call.
  */
 export const SidecarLocalTraceSubtree = ({
   toolCallId,
   toolName,
   output,
 }: SidecarLocalTraceSubtreeProps) => {
-  const ephemeral = useSyncExternalStore(subscribeSidecarLocalTraces, () =>
-    getSidecarLocalTrace(toolCallId),
-  );
-  const persisted = isSidecarTraceResultTool(toolName)
-    ? persistedSidecarLocalTrace(output)
-    : undefined;
-  const trace = persisted ?? ephemeral;
+  const trace = useSidecarLocalTrace(toolCallId, toolName, output);
   if (!trace) {
     return null;
   }

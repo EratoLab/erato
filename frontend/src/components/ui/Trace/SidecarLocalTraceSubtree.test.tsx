@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   recordSidecarLocalTrace,
-  resetSidecarLocalTracesForTests,
+  useSidecarLocalTraceStore,
 } from "@/lib/desktopSidecar/localTraceStore";
 
 import { SidecarLocalTraceSubtree } from "./SidecarLocalTraceSubtree";
@@ -31,7 +31,7 @@ const TRACE = {
 };
 
 describe("SidecarLocalTraceSubtree", () => {
-  afterEach(() => resetSidecarLocalTracesForTests());
+  afterEach(() => useSidecarLocalTraceStore.setState({ traces: {} }));
 
   it("renders nothing for a tool call without a trace", () => {
     const { container } = render(

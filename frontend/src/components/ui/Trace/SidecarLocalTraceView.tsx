@@ -1,37 +1,18 @@
 import { plural, t } from "@lingui/core/macro";
 
 import {
-  CheckCircleIcon,
-  ErrorIcon,
-  HourglassIcon,
-} from "@/components/ui/icons";
-import {
   isSidecarStepRunning,
   sidecarTraceRows,
 } from "@/lib/desktopSidecar/traceEvents";
 
 import { TraceStep } from "./TraceStep";
+import { formatStepDuration } from "./hooks/useThinkingDuration";
+import { railIconForSidecarStatus } from "./icons";
 
 import type {
   SidecarLocalTrace,
   SidecarLocalTraceStep,
 } from "@erato/desktop-sidecar-protocol";
-
-const ICON_CLASS = "size-4";
-
-/** Same rail vocabulary as the surrounding trace: done / failed / waiting. */
-const railIconForStatus = (status: string) => {
-  switch (status) {
-    case "ok":
-      return <CheckCircleIcon className={ICON_CLASS} />;
-    case "degraded":
-    case "error":
-      return <ErrorIcon className={ICON_CLASS} />;
-    default:
-      // `running` and anything unknown: work not (yet) reported as finished.
-      return <HourglassIcon className={ICON_CLASS} />;
-  }
-};
 
 const stepLabel = (id: string): string => {
   switch (id) {
@@ -70,9 +51,29 @@ const countLabel = (key: string, value: number): string => {
   }
 };
 
+/**
+ * Localized labels for the known step statuses, matching the tool step's
+ * status vocabulary; unknown tokens render raw, so a newer sidecar is never
+ * blank.
+ */
+const statusLabel = (status: string): string => {
+  switch (status) {
+    case "running":
+      return t({ id: "trace.tool.running", message: "Running" });
+    case "error":
+      return t({ id: "trace.tool.failed", message: "Failed" });
+    case "degraded":
+      return t`Degraded`;
+    case "skipped":
+      return t`Skipped`;
+    default:
+      return status;
+  }
+};
+
 /** Short always-visible summary next to the step title, main-line style. */
 function stepTitleMeta(step: SidecarLocalTraceStep): string {
-  return [step.model, formatDuration(step.durationMs)]
+  return [step.model, formatStepDuration(step.durationMs)]
     .filter((part): part is string => Boolean(part))
     .join(" · ");
 }
@@ -88,20 +89,11 @@ function stepDetails(step: SidecarLocalTraceStep): string[] {
       : `${key}: ${String(value)}`,
   );
   return [
-    step.status === "ok" ? null : step.status,
+    step.status === "ok" ? null : statusLabel(step.status),
     step.cacheHit === true ? t`from cache` : null,
     ...counts,
     step.detail,
   ].filter((part): part is string => Boolean(part));
-}
-
-function formatDuration(durationMs: number | undefined): string | null {
-  if (durationMs === undefined) {
-    return null;
-  }
-  return durationMs < 1000
-    ? `${durationMs} ms`
-    : `${(durationMs / 1000).toFixed(1)} s`;
 }
 
 export interface SidecarLocalTraceViewProps {
@@ -126,7 +118,7 @@ export const SidecarLocalTraceView = ({
   }
   const steps = rows.map((row) => row.step);
   const model = steps.find((step) => typeof step.model === "string")?.model;
-  const total = formatDuration(trace.totalDurationMs);
+  const total = formatStepDuration(trace.totalDurationMs);
   const stepCount = steps.length;
   const headline = [
     plural(stepCount, {
@@ -163,7 +155,7 @@ export const SidecarLocalTraceView = ({
             }
           >
             <TraceStep
-              railIcon={railIconForStatus(step.status)}
+              railIcon={railIconForSidecarStatus(step.status)}
               hasTrailingRailLine={index < rows.length - 1}
               title={stepLabel(step.id)}
               titleSlot={

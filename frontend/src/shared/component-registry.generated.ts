@@ -210,11 +210,13 @@ export type { ReasoningSegment } from "@/components/ui/Trace/hooks/useReasoningS
 export { durationBetween } from "@/components/ui/Trace/hooks/useThinkingDuration";
 export { durationFromTraceParts } from "@/components/ui/Trace/hooks/useThinkingDuration";
 export { durationFromTracePartsOrLegacyMessageTimestamps } from "@/components/ui/Trace/hooks/useThinkingDuration";
+export { formatStepDuration } from "@/components/ui/Trace/hooks/useThinkingDuration";
 export { formatThinkingDuration } from "@/components/ui/Trace/hooks/useThinkingDuration";
 export { useDurationBetween } from "@/components/ui/Trace/hooks/useThinkingDuration";
 export { useThinkingGap } from "@/components/ui/Trace/hooks/useThinkingGap";
 export { stepStatus } from "@/components/ui/Trace/hooks/useTraceState";
 export { railIconFor } from "@/components/ui/Trace/icons";
+export { railIconForSidecarStatus } from "@/components/ui/Trace/icons";
 export { SidecarLocalTraceSubtree } from "@/components/ui/Trace/SidecarLocalTraceSubtree";
 export type { SidecarLocalTraceSubtreeProps } from "@/components/ui/Trace/SidecarLocalTraceSubtree";
 export { SidecarLocalTraceView } from "@/components/ui/Trace/SidecarLocalTraceView";

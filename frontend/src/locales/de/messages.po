@@ -3606,11 +3606,13 @@ msgid "trace.tool.denied"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
 #: src/components/ui/Trace/steps/ToolUseStep.tsx
 msgid "trace.tool.failed"
 msgstr "Fehlgeschlagen"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
 #: src/components/ui/Trace/steps/ToolUseStep.tsx
 msgid "trace.tool.running"
 msgstr "Wird ausgeführt"
@@ -4262,6 +4264,10 @@ msgstr "Standard-Tools"
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Define how the assistant should behave and respond"
 msgstr "Legen Sie fest, wie der Assistent sich verhalten und antworten soll"
+
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "Degraded"
+msgstr "Eingeschränkt"
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Description"
@@ -4971,6 +4977,10 @@ msgstr "Zeigt {resultsCount} aktuelle Chats"
 #: src/components/ui/Controls/UserProfileDropdown.tsx
 msgid "Sign out"
 msgstr "Abmelden"
+
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "Skipped"
+msgstr "Übersprungen"
 
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 #~ msgid "Some default files are inaccessible due to missing permissions."

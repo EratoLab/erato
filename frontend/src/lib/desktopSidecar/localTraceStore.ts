@@ -20,6 +20,10 @@
  * strings.
  */
 
+import { useMemo } from "react";
+import { create } from "zustand";
+import { devtools } from "zustand/middleware";
+
 import { isSidecarStepRunning, mergeSidecarTraces } from "./traceEvents";
 
 import type {
@@ -32,9 +36,6 @@ const MAX_ENTRIES = 50;
 const MAX_STEPS = 32;
 const MAX_COUNT_ENTRIES = 16;
 const MAX_COUNT_KEY_CHARS = 64;
-
-const traces = new Map<string, SidecarLocalTrace>();
-const listeners = new Set<() => void>();
 
 /**
  * Tools whose persisted results may carry a trustworthy `localTrace`. The
@@ -49,12 +50,6 @@ export function isSidecarTraceResultTool(
   toolName: string | undefined,
 ): boolean {
   return toolName !== undefined && SIDECAR_TRACE_RESULT_TOOLS.has(toolName);
-}
-
-function emit(): void {
-  for (const listener of [...listeners]) {
-    listener();
-  }
 }
 
 function boundedString(value: unknown, maxChars: number): string | undefined {
@@ -157,31 +152,113 @@ export function sanitizeSidecarLocalTrace(
   return trace;
 }
 
+/* eslint-disable lingui/no-unlocalized-strings -- devtools action names */
+const ACTION = {
+  record: "sidecarLocalTrace/record",
+  clear: "sidecarLocalTrace/clear",
+  markStopped: "sidecarLocalTrace/markStopped",
+} as const;
+/* eslint-enable lingui/no-unlocalized-strings */
+
+interface SidecarLocalTraceStore {
+  /**
+   * Traces keyed by tool call. Key insertion order doubles as the recency
+   * order (tool call ids are never integer-like, so the engine preserves
+   * it): recording re-inserts the key, and eviction above MAX_ENTRIES drops
+   * the first key — so an actively streaming trace is never the victim.
+   */
+  traces: Partial<Record<string, SidecarLocalTrace>>;
+  record: (toolCallId: string, trace: SidecarLocalTrace) => void;
+  clear: (toolCallId: string) => void;
+  markStopped: (toolCallId: string) => void;
+}
+
+export const useSidecarLocalTraceStore = create<SidecarLocalTraceStore>()(
+  devtools(
+    (set) => ({
+      traces: {},
+
+      // Steps merge by sequence rather than replacing the log, so recording
+      // the same result twice is a no-op and a partial delivery simply
+      // extends what is already shown.
+      record: (toolCallId, trace) =>
+        set(
+          (prev) => {
+            const clean = sanitizeSidecarLocalTrace(trace);
+            if (!clean) {
+              return prev;
+            }
+            const merged = mergeSidecarTraces(prev.traces[toolCallId], clean);
+            const { [toolCallId]: _replaced, ...rest } = prev.traces;
+            const traces: SidecarLocalTraceStore["traces"] = {
+              ...rest,
+              [toolCallId]: merged,
+            };
+            const keys = Object.keys(traces);
+            if (keys.length > MAX_ENTRIES) {
+              delete traces[keys[0]];
+            }
+            return { traces };
+          },
+          false,
+          ACTION.record,
+        ),
+
+      clear: (toolCallId) =>
+        set(
+          (prev) => {
+            if (prev.traces[toolCallId] === undefined) {
+              return prev;
+            }
+            const { [toolCallId]: _removed, ...traces } = prev.traces;
+            return { traces };
+          },
+          false,
+          ACTION.clear,
+        ),
+
+      // Settle steps still marked running as `skipped · cancelled`, the same
+      // vocabulary the sidecar itself uses for work stopped by cancellation.
+      // Without this, an aborted call would show a spinning step forever.
+      markStopped: (toolCallId) =>
+        set(
+          (prev) => {
+            const trace = prev.traces[toolCallId];
+            if (
+              !trace?.steps.some((step) => isSidecarStepRunning(step.status))
+            ) {
+              return prev;
+            }
+            const steps = trace.steps.map((step) =>
+              isSidecarStepRunning(step.status)
+                ? {
+                    ...step,
+                    status: "skipped",
+                    detail: step.detail ?? "cancelled",
+                  }
+                : step,
+            );
+            return {
+              traces: { ...prev.traces, [toolCallId]: { ...trace, steps } },
+            };
+          },
+          false,
+          ACTION.markStopped,
+        ),
+    }),
+    { name: "sidecarLocalTraceStore" },
+  ),
+);
+
 /**
- * Record what the sidecar reported. Steps merge by sequence rather than
- * replacing the log, so recording the same result twice is a no-op and a
- * partial delivery simply extends what is already shown. Recording touches
- * the entry's recency, so an actively streaming trace is never the eviction
- * victim.
+ * Imperative surface for executors and hosts running outside React — the
+ * same store the trace subtree renders from.
  */
 export function recordSidecarLocalTrace(
   toolCallId: string,
   trace: SidecarLocalTrace,
 ): void {
-  const clean = sanitizeSidecarLocalTrace(trace);
-  if (!clean) {
-    return;
-  }
-  const merged = mergeSidecarTraces(traces.get(toolCallId), clean);
-  traces.delete(toolCallId);
-  traces.set(toolCallId, merged);
-  if (traces.size > MAX_ENTRIES) {
-    const oldest = traces.keys().next().value;
-    if (oldest !== undefined) {
-      traces.delete(oldest);
-    }
-  }
-  emit();
+  useSidecarLocalTraceStore.getState().record(toolCallId, trace);
 }
 
 /**
@@ -191,43 +268,21 @@ export function recordSidecarLocalTrace(
  * one chimera log.
  */
 export function clearSidecarLocalTrace(toolCallId: string): void {
-  if (traces.delete(toolCallId)) {
-    emit();
-  }
+  useSidecarLocalTraceStore.getState().clear(toolCallId);
 }
 
 /**
  * Settle a trace whose request ended without a final observation (abort,
- * timeout, transport loss): steps still marked running become
- * `skipped · cancelled`, the same vocabulary the sidecar itself uses for
- * work stopped by cancellation. Without this, an aborted call would show a
- * spinning step forever.
+ * timeout, transport loss).
  */
 export function markSidecarLocalTraceStopped(toolCallId: string): void {
-  const trace = traces.get(toolCallId);
-  if (!trace?.steps.some((step) => isSidecarStepRunning(step.status))) {
-    return;
-  }
-  const steps = trace.steps.map((step) =>
-    isSidecarStepRunning(step.status)
-      ? { ...step, status: "skipped", detail: step.detail ?? "cancelled" }
-      : step,
-  );
-  traces.set(toolCallId, { ...trace, steps });
-  emit();
+  useSidecarLocalTraceStore.getState().markStopped(toolCallId);
 }
 
 export function getSidecarLocalTrace(
   toolCallId: string,
 ): SidecarLocalTrace | undefined {
-  return traces.get(toolCallId);
-}
-
-export function subscribeSidecarLocalTraces(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
+  return useSidecarLocalTraceStore.getState().traces[toolCallId];
 }
 
 /**
@@ -251,7 +306,27 @@ export function persistedSidecarLocalTrace(
   );
 }
 
-export function resetSidecarLocalTracesForTests(): void {
-  traces.clear();
-  listeners.clear();
+/**
+ * The trace to render for one tool call — the single home of the resolution
+ * order shared by the tool step and the subtree: the persisted result's
+ * trace when the tool is allowlisted to carry one (survives reloads once the
+ * user consented to sharing), else this session's store entry (covers the
+ * in-flight and declined cases, where no result reached the backend).
+ */
+export function useSidecarLocalTrace(
+  toolCallId: string | undefined,
+  toolName: string | undefined,
+  output: unknown,
+): SidecarLocalTrace | undefined {
+  const ephemeral = useSidecarLocalTraceStore((state) =>
+    toolCallId ? state.traces[toolCallId] : undefined,
+  );
+  const persisted = useMemo(
+    () =>
+      isSidecarTraceResultTool(toolName)
+        ? persistedSidecarLocalTrace(output)
+        : undefined,
+    [toolName, output],
+  );
+  return persisted ?? ephemeral;
 }

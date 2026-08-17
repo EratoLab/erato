@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   recordSidecarLocalTrace,
-  resetSidecarLocalTracesForTests,
+  useSidecarLocalTraceStore,
 } from "@/lib/desktopSidecar/localTraceStore";
 
 import { ToolUseStep } from "./ToolUseStep";
@@ -35,7 +35,7 @@ const isFolded = (node: HTMLElement): boolean =>
   node.closest('div[style*="0fr"]') !== null;
 
 describe("ToolUseStep sidecar trace", () => {
-  afterEach(() => resetSidecarLocalTracesForTests());
+  afterEach(() => useSidecarLocalTraceStore.setState({ traces: {} }));
 
   it("streams on-device steps in as visible rows, without tool-level payload JSON", () => {
     renderRunningStep();

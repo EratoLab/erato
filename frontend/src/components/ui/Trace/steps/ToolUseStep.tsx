@@ -1,14 +1,8 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import { useSyncExternalStore } from "react";
 
 import { ToolCallInput, ToolCallOutput } from "@/components/ui/ToolCall";
-import {
-  getSidecarLocalTrace,
-  isSidecarTraceResultTool,
-  persistedSidecarLocalTrace,
-  subscribeSidecarLocalTraces,
-} from "@/lib/desktopSidecar/localTraceStore";
+import { useSidecarLocalTrace } from "@/lib/desktopSidecar/localTraceStore";
 
 import { SidecarLocalTraceSubtree } from "../SidecarLocalTraceSubtree";
 import { TraceStep } from "../TraceStep";
@@ -69,14 +63,8 @@ export const ToolUseStep = ({
   // folds and unfolds them, open by default so they stream in visibly. A
   // trace-bearing call shows no tool-level payload JSON at all — real input
   // and output only ever belong to an individual step.
-  const ephemeralTrace = useSyncExternalStore(
-    subscribeSidecarLocalTraces,
-    () => (toolCallId ? getSidecarLocalTrace(toolCallId) : undefined),
-  );
   const hasTrace =
-    ephemeralTrace !== undefined ||
-    (isSidecarTraceResultTool(toolName) &&
-      persistedSidecarLocalTrace(part.output) !== undefined);
+    useSidecarLocalTrace(toolCallId, toolName, part.output) !== undefined;
   const titleSlot = approvalStatus ? (
     <span
       className={clsx(

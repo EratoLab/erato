@@ -36,3 +36,21 @@ export const railIconFor = (
       return <HourglassIcon className={ICON_CLASS} />;
   }
 };
+
+/**
+ * Rail icon for a sidecar local-trace step. The sidecar status vocabulary
+ * (running/ok/skipped/degraded/error, unknown treated as running) differs
+ * from `TraceStepStatus`, but the rail glyphs are the shared trace language:
+ * done / failed / waiting.
+ */
+export const railIconForSidecarStatus = (status: string): React.ReactNode => {
+  switch (status) {
+    case "ok":
+      return <CheckCircleIcon className={ICON_CLASS} />;
+    case "degraded":
+    case "error":
+      return <ErrorIcon className={ICON_CLASS} />;
+    default:
+      return <HourglassIcon className={ICON_CLASS} />;
+  }
+};

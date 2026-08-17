@@ -16,6 +16,7 @@ export {
   durationBetween,
   durationFromTraceParts,
   durationFromTracePartsOrLegacyMessageTimestamps,
+  formatStepDuration,
   formatThinkingDuration,
   useDurationBetween,
 } from "./hooks/useThinkingDuration";

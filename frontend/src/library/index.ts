@@ -166,7 +166,6 @@ export {
   persistedSidecarLocalTrace,
   recordSidecarLocalTrace,
   sanitizeSidecarLocalTrace,
-  subscribeSidecarLocalTraces,
 } from "@/lib/desktopSidecar/localTraceStore";
 export {
   applySidecarTraceSteps,

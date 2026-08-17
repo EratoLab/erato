@@ -6,8 +6,8 @@ import {
   markSidecarLocalTraceStopped,
   persistedSidecarLocalTrace,
   recordSidecarLocalTrace,
-  resetSidecarLocalTracesForTests,
   sanitizeSidecarLocalTrace,
+  useSidecarLocalTraceStore,
 } from "./localTraceStore";
 
 const step = (sequence: number, status: string, extra: object = {}) => ({
@@ -83,7 +83,7 @@ describe("sanitizeSidecarLocalTrace", () => {
 });
 
 describe("localTraceStore", () => {
-  afterEach(() => resetSidecarLocalTracesForTests());
+  afterEach(() => useSidecarLocalTraceStore.setState({ traces: {} }));
 
   it("refuses to record something that is not a trace", () => {
     recordSidecarLocalTrace("call-1", { steps: undefined } as never);
