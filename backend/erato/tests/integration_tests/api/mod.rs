@@ -4,6 +4,7 @@ pub mod assistant_hub;
 pub mod assistants;
 pub mod auth;
 pub mod chats;
+pub mod delegation;
 pub mod edit;
 pub mod entra_id;
 pub mod facets;

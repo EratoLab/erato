@@ -305,6 +305,7 @@ mod test_cases {
             is_pinned: false,
             assistant_configuration: None,
             assistant_id: None,
+            origin_chat_id: None,
             active_generation_id: None,
             generation_state: None,
             generation_started_at: None,
