@@ -191,7 +191,7 @@ describe("ChatHistoryList", () => {
       '[data-chat-id="chat-1"]',
     ) as HTMLElement;
 
-    expect(firstSessionLink).toHaveClass("focus-ring-tight");
+    expect(firstSessionLink).toHaveClass("focus-ring-inset");
     expect(firstSessionLink).toHaveAttribute("aria-current", "page");
     expect(firstSessionItem).not.toHaveAttribute("role");
     expect(firstSessionItem).not.toHaveAttribute("tabindex");

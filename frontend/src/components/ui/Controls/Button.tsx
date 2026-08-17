@@ -74,8 +74,11 @@ const VARIANT_STYLES = {
     "text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary theme-transition",
   danger:
     "border border-theme-error-border bg-theme-error-bg text-theme-error-fg hover:brightness-95 theme-transition",
+  // Hovers with the sidebar's own hover token: the generic --theme-bg-hover
+  // can equal the sidebar background (it does in the default theme), which
+  // makes the hover state invisible on sidebar surfaces.
   "sidebar-icon":
-    "text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary theme-transition",
+    "text-theme-fg-secondary hover:bg-[var(--theme-shell-sidebar-hover)] hover:text-theme-fg-primary theme-transition",
   "list-item":
     "w-full text-sm text-left text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary theme-transition",
   "icon-only":

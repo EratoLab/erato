@@ -74,8 +74,10 @@ const sidebarItemClassName = "sidebar-row-geometry";
 const activeSidebarItemClassName = "sidebar-row-geometry sidebar-row-selected";
 // Horizontal inset for every row surface; see .sidebar-inset-geometry.
 const sidebarInsetClassName = "sidebar-inset-geometry";
+// Inset ring for the same reason as the chat rows: the row inset is
+// themeable and can be narrower than an outside-drawn ring.
 const sidebarLinkClassName =
-  "focus-ring-tight block rounded-[var(--theme-radius-shell)]";
+  "focus-ring-inset block rounded-[var(--theme-radius-shell)]";
 
 const RECENT_CHATS_SECTION_EXPANDED_STORAGE_KEY =
   "erato.sidebar.recentChatsSectionExpanded";
@@ -309,13 +311,14 @@ const NewChatItem = memo<{
     <div className={clsx(sidebarInsetClassName, "py-1")}>
       <InteractiveContainer
         useDiv={true}
+        showFocusRing={false}
         onClick={() => {
           logger.log("[CHAT_FLOW] New chat item clicked");
           onNewChat?.();
         }}
         className={clsx(
           sidebarItemClassName,
-          "theme-transition flex items-center text-left hover:bg-[var(--theme-shell-sidebar-hover)]",
+          "focus-ring-inset theme-transition flex items-center text-left hover:bg-[var(--theme-shell-sidebar-hover)]",
           "sidebar-content-col-geometry gap-3 py-2 pr-3",
         )}
         aria-label={t`New Chat`}
@@ -601,7 +604,9 @@ const CollapsibleSection = memo<{
             />
           </button>
           {actions != null && (
-            <div className="flex shrink-0 items-center">{actions}</div>
+            <div className="sidebar-trailing-col-geometry flex shrink-0 items-center">
+              {actions}
+            </div>
           )}
         </div>
         {/* The chat-list inset lives on this host-owned wrapper rather than
@@ -1220,7 +1225,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                         <div
                           className={clsx(
                             sidebarInsetClassName,
-                            "flex items-center justify-end py-1",
+                            "sidebar-trailing-col-geometry flex items-center justify-end py-1",
                           )}
                           data-ui="chat-history-filter-row"
                         >

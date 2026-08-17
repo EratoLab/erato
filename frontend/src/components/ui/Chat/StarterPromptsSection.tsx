@@ -44,7 +44,7 @@ export function DefaultStarterPromptsSection({
             "group rounded-2xl border p-4 text-center",
             "[background:var(--theme-starter-prompt-bg)] [border-color:var(--theme-starter-prompt-border)]",
             "transition-colors hover:[background:var(--theme-starter-prompt-hover-bg)] hover:[border-color:var(--theme-starter-prompt-hover-border)]",
-            "focus:outline-none focus:ring-2 focus:ring-[var(--theme-starter-prompt-focus-ring)] focus:ring-offset-2 focus:ring-offset-[var(--theme-starter-prompt-focus-offset)]",
+            "focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-starter-prompt-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--theme-starter-prompt-focus-offset)]",
           )}
           data-testid={`starter-prompt-${starterPrompt.id}`}
         >

@@ -29,8 +29,10 @@ import type { ChatSession } from "@/types/chat";
 import type { ChatAttentionStatus } from "@/utils/chatHistoryGrouping";
 
 const logger = createLogger("UI", "ChatHistoryList");
+// Inset ring: the outside-drawn variant gets clipped by the sidebar
+// scrollport whenever the themeable row inset is below the ring width.
 const sidebarRowLinkClassName =
-  "focus-ring-tight block rounded-[var(--theme-radius-shell)]";
+  "focus-ring-inset block rounded-[var(--theme-radius-shell)]";
 
 /**
  * Row title: a real backend title, else the recorded user-message hint, else
@@ -233,7 +235,7 @@ const ChatHistoryListItem = memo<{
           useDiv={true}
           showFocusRing={false}
           className={clsx(
-            "sidebar-content-col-geometry sidebar-row-geometry theme-transition flex flex-col py-1.5 pb-3.5 pr-1.5 text-left",
+            "sidebar-content-col-geometry sidebar-trailing-col-geometry sidebar-row-geometry theme-transition flex flex-col py-1.5 pb-3.5 text-left",
             isActive
               ? "sidebar-row-selected"
               : "hover:bg-[var(--theme-shell-sidebar-hover)]",
@@ -258,6 +260,7 @@ const ChatHistoryListItem = memo<{
               }}
             >
               <DropdownMenu
+                triggerButtonVariant="sidebar-icon"
                 items={[
                   ...(onPin
                     ? [
