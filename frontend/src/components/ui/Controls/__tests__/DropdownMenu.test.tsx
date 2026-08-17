@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { DropdownMenu } from "../DropdownMenu";
@@ -245,6 +251,59 @@ describe("DropdownMenu", () => {
       expect(document.querySelector('[data-ui="dropdown-panel"]')).toBeNull();
     });
     expect(trigger).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("exposes a section header as the label of a menu group", async () => {
+    render(
+      <DropdownMenu
+        items={[
+          { id: "tool", label: "Web search", onClick: vi.fn() },
+          {
+            id: "researcher",
+            label: "Researcher",
+            onClick: vi.fn(),
+            sectionHeader: "Assistants",
+          },
+          { id: "browse", label: "Browse assistants…", onClick: vi.fn() },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
+
+    const group = await screen.findByRole("group", { name: "Assistants" });
+    expect(
+      within(group)
+        .getAllByRole("menuitem")
+        .map((item) => item.textContent),
+    ).toEqual(["Researcher", "Browse assistants…"]);
+    expect(screen.getByRole("separator")).toBeInTheDocument();
+  });
+
+  it("closes without the select delay for a row that opens a dialog", async () => {
+    const onClick = vi.fn();
+    render(
+      <DropdownMenu
+        items={[
+          {
+            id: "browse",
+            label: "Browse assistants…",
+            onClick,
+            closesImmediately: true,
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Browse assistants…" }),
+    );
+
+    expect(onClick).toHaveBeenCalledTimes(1);
+    // A dialog opened by the row focuses itself immediately; a delayed close
+    // would take that focus back to the trigger.
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
   it("takes its geometry from the shared control token, not a caller override", () => {

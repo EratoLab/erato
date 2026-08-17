@@ -81,6 +81,7 @@ export { ArchiveIcon } from "@/components/ui/icons/index";
 export { ArrowLeftIcon } from "@/components/ui/icons/index";
 export { ArrowUp } from "@/components/ui/icons/index";
 export { ArrowUpIcon } from "@/components/ui/icons/index";
+export { AtSignIcon } from "@/components/ui/icons/index";
 export { BrainIcon } from "@/components/ui/icons/index";
 export { Check } from "@/components/ui/icons/index";
 export { CheckCircle } from "@/components/ui/icons/index";

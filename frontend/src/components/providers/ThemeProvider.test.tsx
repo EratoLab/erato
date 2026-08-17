@@ -32,6 +32,7 @@ const createMockEnv = (overrides: Partial<Env> = {}): Env => ({
   chatInputEmptyStateLayout: "bottom",
   disableLogout: false,
   assistantsEnabled: false,
+  assistantsDelegationEnabled: false,
   assistantsShowRecentItems: false,
   assistantsShowRecentItemsCollapsible: false,
   assistantContextWarningThreshold: 0.5,

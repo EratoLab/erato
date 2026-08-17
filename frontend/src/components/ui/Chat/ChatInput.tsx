@@ -33,6 +33,10 @@ import {
   useComposeSession,
   type ComposeDraftState,
 } from "@/hooks/chat/useComposeSession";
+import {
+  useMentionableAssistants,
+  MENTION_SUGGESTION_LIMIT,
+} from "@/hooks/chat/useMentionableAssistants";
 import { UnsupportedFileTypeError } from "@/hooks/files/errors";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { useOptionalTranslation } from "@/hooks/i18n";
@@ -51,6 +55,12 @@ import {
   useAudioDictationFeature,
   useAudioConversationalFeature,
 } from "@/providers/FeatureConfigProvider";
+import {
+  applyMentionSelection,
+  detectMentionTrigger,
+  pruneTrackedMentions,
+  resolveMentionedAssistantIds,
+} from "@/utils/chat/assistantMentions";
 import { resolveChatSendErrorMessage } from "@/utils/chatSendErrorMessage";
 import { createLogger } from "@/utils/debugLogger";
 import { disambiguatePastedImageFileNames } from "@/utils/file/disambiguatePastedImageFileNames";
@@ -65,25 +75,34 @@ import {
   StopIcon,
   VoiceIcon,
 } from "../icons";
+import { AssistantBrowserModal } from "./AssistantBrowserModal";
+import { AssistantMentionPopover } from "./AssistantMentionPopover";
 import { ChatInputAddControls } from "./ChatInputAddControls";
 import { ChatInputAudioModeButton } from "./ChatInputAudioModeButton";
 import { ChatInputTokenUsage } from "./ChatInputTokenUsage";
 import { FacetSelector } from "./FacetSelector";
 import { ModelSelector } from "./ModelSelector";
 import { WaveformButton } from "./WaveformButton";
+import { buildAssistantMentionSection } from "./assistantMentionSection";
 import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";
 import { BudgetWarning } from "../Feedback/ChatWarnings/BudgetWarning";
 import { CopyErrorButton } from "../Feedback/CopyErrorButton";
 import { toast } from "../Toast/toast";
 
+import type { AssistantMentionPopoverHandle } from "./AssistantMentionPopover";
 import type { ChatInputControlsHandle } from "./ChatInputControlsContext";
 import type { ToastAction } from "../Toast/types";
 import type { AudioDictationTranscriptChunk } from "@/hooks/audio/useAudioDictationRecorder";
+import type { MentionableAssistant } from "@/hooks/chat/useMentionableAssistants";
 import type {
   FileUploadItem,
   ChatModel,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  AssistantMention,
+  MentionTrigger,
+} from "@/utils/chat/assistantMentions";
 import type { FileType } from "@/utils/fileTypes";
 import type { ClipboardEvent as ReactClipboardEvent, Ref } from "react";
 
@@ -204,6 +223,7 @@ interface ChatInputProps {
     inputFileIds?: string[],
     modelId?: string,
     selectedFacetIds?: string[],
+    mentionedAssistantIds?: string[],
   ) => void;
   onRegenerate?: () => void;
   handleFileAttachments?: (files: FileUploadItem[]) => void;
@@ -294,12 +314,21 @@ function mergeComposeDrafts(
       : primaryHasText
         ? primary.message
         : secondary.message;
+  const mentionedIds = new Set(
+    primary.mentionedAssistants.map((mention) => mention.id),
+  );
   return {
     message,
     attachedFiles: mergeUniqueFilesById(
       primary.attachedFiles,
       secondary.attachedFiles,
     ),
+    mentionedAssistants: [
+      ...primary.mentionedAssistants,
+      ...secondary.mentionedAssistants.filter(
+        (mention) => !mentionedIds.has(mention.id),
+      ),
+    ],
   };
 }
 
@@ -611,6 +640,27 @@ export const ChatInput = ({
 
   const [selectedFacetIds, setSelectedFacetIds] = useState<string[]>([]);
 
+  // --- Assistant @-mentions ------------------------------------------------
+  // The message text is the source of truth: this list only remembers which id
+  // each `@Name` token stands for, and a token the user deletes stops counting.
+  const [mentionedAssistants, setMentionedAssistants] = useState<
+    AssistantMention[]
+  >([]);
+  const [mentionTrigger, setMentionTrigger] = useState<MentionTrigger | null>(
+    null,
+  );
+  const dismissedMentionRef = useRef<{
+    startIndex: number;
+    text: string;
+  } | null>(null);
+  const [isAssistantBrowserOpen, setIsAssistantBrowserOpen] = useState(false);
+  const mentionPopoverRef = useRef<AssistantMentionPopoverHandle>(null);
+  const {
+    isAvailable: canMentionAssistants,
+    suggested: suggestedAssistants,
+    all: mentionableAssistants,
+  } = useMentionableAssistants(assistantId);
+
   // --- Queue-the-next-message (ERMAIN-470) ---------------------------------
   // The queued payload lives in the messageQueueStore keyed by the stable
   // compose session (so it survives the new-chat null->real-id rename and stays
@@ -663,6 +713,10 @@ export const ChatInput = ({
     setQueuedBySessionId(composeSessionId, {
       message: trimmedMessage,
       attachedFiles,
+      mentionedAssistants: pruneTrackedMentions(
+        trimmedMessage,
+        mentionedAssistants,
+      ),
     });
     setMessage("");
     handleRemoveAllFiles();
@@ -676,6 +730,7 @@ export const ChatInput = ({
     isCapturingAudio,
     message,
     attachedFiles,
+    mentionedAssistants,
     getQueuedBySessionId,
     setQueuedBySessionId,
     composeSessionId,
@@ -690,6 +745,10 @@ export const ChatInput = ({
       setQueuedBySessionId(composeSessionId, {
         message: trimmedMessage,
         attachedFiles,
+        mentionedAssistants: pruneTrackedMentions(
+          trimmedMessage,
+          mentionedAssistants,
+        ),
       });
       setMessage("");
       handleRemoveAllFiles();
@@ -698,6 +757,7 @@ export const ChatInput = ({
   }, [
     message,
     attachedFiles,
+    mentionedAssistants,
     setQueuedBySessionId,
     composeSessionId,
     handleRemoveAllFiles,
@@ -707,9 +767,14 @@ export const ChatInput = ({
   // merging with whatever the user has typed since so nothing is lost.
   const restoreQueuedToComposer = useCallback(
     (queued: ComposeDraftState) => {
-      const merged = mergeComposeDrafts(queued, { message, attachedFiles });
+      const merged = mergeComposeDrafts(queued, {
+        message,
+        attachedFiles,
+        mentionedAssistants,
+      });
       setMessage(merged.message);
       setAttachedFiles(merged.attachedFiles.slice(0, maxFiles));
+      setMentionedAssistants(merged.mentionedAssistants);
       clearQueuedBySessionId(composeSessionId);
       setIsDrainArmed(false);
       setQueueReplacePending(false);
@@ -717,6 +782,7 @@ export const ChatInput = ({
     [
       message,
       attachedFiles,
+      mentionedAssistants,
       maxFiles,
       setAttachedFiles,
       clearQueuedBySessionId,
@@ -923,8 +989,14 @@ export const ChatInput = ({
     saveComposeDraftBySessionId(activeComposeSessionIdRef.current, {
       message,
       attachedFiles,
+      mentionedAssistants,
     });
-  }, [message, attachedFiles, saveComposeDraftBySessionId]);
+  }, [
+    message,
+    attachedFiles,
+    mentionedAssistants,
+    saveComposeDraftBySessionId,
+  ]);
 
   // Seed the composer from this session's stored draft, so a remount (New Chat
   // bumping ChatProvider's mountKey, or the empty-state → messages layout flip)
@@ -939,6 +1011,9 @@ export const ChatInput = ({
     }
     if (draft.attachedFiles.length) {
       setAttachedFiles(draft.attachedFiles);
+    }
+    if (draft.mentionedAssistants.length) {
+      setMentionedAssistants(draft.mentionedAssistants);
     }
     // Mount-only: later session switches are handled by the switch effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -982,9 +1057,14 @@ export const ChatInput = ({
     // chat (ERMAIN-470): it never auto-sends in the background and reappears in
     // the composer when the user returns.
     const outgoingQueued = getQueuedBySessionId(previousSessionId);
+    const outgoingComposer = {
+      message,
+      attachedFiles,
+      mentionedAssistants,
+    };
     const outgoingDraft = outgoingQueued
-      ? mergeComposeDrafts(outgoingQueued, { message, attachedFiles })
-      : { message, attachedFiles };
+      ? mergeComposeDrafts(outgoingQueued, outgoingComposer)
+      : outgoingComposer;
     saveComposeDraftBySessionId(previousSessionId, outgoingDraft);
     if (outgoingQueued) {
       clearQueuedBySessionId(previousSessionId);
@@ -995,16 +1075,37 @@ export const ChatInput = ({
     activeComposeSessionIdRef.current = composeSessionId;
     setMessage(incoming.message);
     setAttachedFiles(incoming.attachedFiles);
+    setMentionedAssistants(incoming.mentionedAssistants);
   }, [
     composeSessionId,
     message,
     attachedFiles,
+    mentionedAssistants,
     getComposeDraftBySessionId,
     saveComposeDraftBySessionId,
     getQueuedBySessionId,
     clearQueuedBySessionId,
     setAttachedFiles,
   ]);
+
+  const hasReconciledMentionsRef = useRef(false);
+
+  // Deleting a token drops the mention: reconcile against the text on every
+  // change. `pruneTrackedMentions` returns the same array when nothing was
+  // dropped, so this settles in one pass.
+  useEffect(() => {
+    // The mount run still closes over the pre-seed empty text while the seed
+    // above has already restored the draft's mentions, so it would prune every
+    // one of them. The seed changes `message`, which re-runs this in the same
+    // flush against the text they belong to.
+    if (!hasReconciledMentionsRef.current) {
+      hasReconciledMentionsRef.current = true;
+      return;
+    }
+    setMentionedAssistants((tracked) =>
+      tracked.length === 0 ? tracked : pruneTrackedMentions(message, tracked),
+    );
+  }, [message]);
 
   useEffect(() => {
     if (availableFacets.length === 0) {
@@ -1219,6 +1320,11 @@ export const ChatInput = ({
         return;
       }
 
+      const mentionedAssistantIds = resolveMentionedAssistantIds(
+        messageContent,
+        mentionedAssistants,
+      );
+
       logger.log("Submit:", {
         messagePreview:
           messageContent.substring(0, 20) +
@@ -1226,12 +1332,14 @@ export const ChatInput = ({
         files: inputFileIds,
         model: selectedModel?.chat_provider_id,
         selectedFacetIds,
+        mentionedAssistantIds,
       });
       onSendMessage(
         messageContent,
         inputFileIds,
         selectedModel?.chat_provider_id,
         selectedFacetIds,
+        mentionedAssistantIds,
       );
     },
     isLoading ||
@@ -1335,6 +1443,7 @@ export const ChatInput = ({
       setQueueReplacePending(false);
       // Model/facets are read live (not snapshotted at enqueue) so a selection
       // the user changes while the message waits applies to the sent message.
+      // Mentions are the exception: they are part of the queued text.
       onSendMessage(
         stillQueued.message,
         stillQueued.attachedFiles.length > 0
@@ -1342,6 +1451,10 @@ export const ChatInput = ({
           : undefined,
         selectedModel?.chat_provider_id,
         selectedFacetIds,
+        resolveMentionedAssistantIds(
+          stillQueued.message,
+          stillQueued.mentionedAssistants,
+        ),
       );
     }, 0);
     return () => clearTimeout(timer);
@@ -1427,6 +1540,115 @@ export const ChatInput = ({
     ],
   );
 
+  // Keep the caret-derived trigger current: typing moves it, and so does a
+  // plain caret move, which can leave or re-enter a half-typed mention.
+  const syncMentionTrigger = useCallback(
+    (element: HTMLTextAreaElement) => {
+      if (!canMentionAssistants) {
+        return;
+      }
+      const trigger = detectMentionTrigger(
+        element.value.slice(0, element.selectionStart),
+      );
+      const dismissed = dismissedMentionRef.current;
+      const isDismissed =
+        trigger !== null &&
+        dismissed !== null &&
+        dismissed.startIndex === trigger.startIndex &&
+        dismissed.text === element.value;
+      setMentionTrigger(isDismissed ? null : trigger);
+    },
+    [canMentionAssistants],
+  );
+
+  // Escape and click-outside dismiss the picker for one fragment. Without
+  // remembering which, the keyup of that very Escape — or any later caret move
+  // over the same untouched text — re-detects it and pops the picker back.
+  const dismissMentionTrigger = useCallback(() => {
+    dismissedMentionRef.current = mentionTrigger
+      ? { startIndex: mentionTrigger.startIndex, text: message }
+      : null;
+    setMentionTrigger(null);
+  }, [mentionTrigger, message]);
+
+  const insertAssistantMention = useCallback(
+    (assistant: MentionableAssistant) => {
+      // Without a live trigger the mention was picked from a menu rather than
+      // typed, so it lands at the end of the draft instead of at the caret.
+      const hasTrigger = mentionTrigger !== null;
+      const text =
+        hasTrigger || message.length === 0 || /\s$/.test(message)
+          ? message
+          : `${message} `;
+      const caret = hasTrigger
+        ? (textareaRef.current?.selectionStart ?? text.length)
+        : text.length;
+      const trigger = mentionTrigger ?? { query: "", startIndex: text.length };
+      const next = applyMentionSelection(text, caret, trigger, assistant.name);
+
+      setMessage(next.text);
+      setMentionedAssistants((tracked) =>
+        tracked.some(
+          (mention) =>
+            mention.id === assistant.id && mention.name === assistant.name,
+        )
+          ? tracked
+          : [...tracked, { id: assistant.id, name: assistant.name }],
+      );
+      setMentionTrigger(null);
+      requestAnimationFrame(() => {
+        const textarea = textareaRef.current;
+        if (!textarea) {
+          return;
+        }
+        textarea.focus();
+        textarea.setSelectionRange(next.caret, next.caret);
+      });
+    },
+    [message, mentionTrigger],
+  );
+
+  // A typed query searches everything accessible; an empty one shows the
+  // suggestions, which is what the menus offer too.
+  const mentionMatches = useMemo(() => {
+    if (!mentionTrigger) {
+      return [];
+    }
+    const query = mentionTrigger.query.toLowerCase();
+    if (!query) {
+      return suggestedAssistants;
+    }
+    return mentionableAssistants
+      .filter((assistant) => assistant.name.toLowerCase().includes(query))
+      .slice(0, MENTION_SUGGESTION_LIMIT);
+  }, [mentionTrigger, mentionableAssistants, suggestedAssistants]);
+
+  // The browse dialog is opened from the picker and keeps the in-progress
+  // trigger alive, so that a pick there still replaces the typed fragment.
+  const isMentionPickerOpen =
+    canMentionAssistants &&
+    !composeLocked &&
+    !isAssistantBrowserOpen &&
+    mentionMatches.length > 0;
+
+  const assistantMentionSection = useMemo(
+    () =>
+      canMentionAssistants
+        ? buildAssistantMentionSection({
+            assistants: suggestedAssistants,
+            onSelect: insertAssistantMention,
+            onBrowse: () => setIsAssistantBrowserOpen(true),
+            disabled: composeLocked,
+          })
+        : undefined,
+    [
+      canMentionAssistants,
+      composeLocked,
+      insertAssistantMention,
+      suggestedAssistants,
+    ],
+  );
+
   // Collapse the file-upload button and the Tools dropdown into a single "+"
   // menu (ChatInputAddControls): on mobile, or whenever a host registers extra
   // add-menu content (e.g. the Outlook add-in's email-content sources, which
@@ -1440,7 +1662,10 @@ export const ChatInput = ({
   const useUnifiedMobileMenu =
     (isMobile || hasAddMenuExtraContent) &&
     componentRegistry.ChatFileSourceSelector == null &&
-    (canUploadFiles || hasFacets || hasAddMenuExtraContent);
+    (canUploadFiles ||
+      hasFacets ||
+      hasAddMenuExtraContent ||
+      canMentionAssistants);
 
   // Add token limit exceeded to disabled state for the send button
   const isSendDisabled =
@@ -2232,9 +2457,23 @@ export const ChatInput = ({
           confirmButtonVariant="danger"
         />
 
+        {canMentionAssistants && (
+          <AssistantBrowserModal
+            isOpen={isAssistantBrowserOpen}
+            onClose={() => {
+              setIsAssistantBrowserOpen(false);
+              // Dismissing the dialog leaves focus nowhere; a pick lands the
+              // caret after the inserted token instead.
+              focusInput();
+            }}
+            assistants={mentionableAssistants}
+            onSelect={insertAssistantMention}
+          />
+        )}
+
         <div
           className={clsx(
-            "w-full",
+            "relative w-full",
             "border border-[var(--theme-border-chat-input)]",
             "theme-transition focus-within:border-[var(--theme-border-chat-input-focus)]",
             "flex flex-col",
@@ -2243,6 +2482,43 @@ export const ChatInput = ({
           )}
           data-ui="chat-input-shell"
         >
+          {/* Out of flow on purpose: the shell is a gapped flex column, so an
+              in-flow anchor would add a row of spacing to every composer. */}
+          {canMentionAssistants && (
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-0">
+              <AssistantMentionPopover
+                ref={mentionPopoverRef}
+                isOpen={isMentionPickerOpen}
+                onOpenChange={(open) => {
+                  if (!open) {
+                    dismissMentionTrigger();
+                  }
+                }}
+                assistants={mentionMatches}
+                onSelect={insertAssistantMention}
+                onBrowse={() => setIsAssistantBrowserOpen(true)}
+                onRestoreFocus={focusInput}
+              />
+            </div>
+          )}
+
+          {/* The picker leaves the caret in the textarea, so nothing else tells
+              a screen reader it opened or that Enter now inserts instead of
+              sending. Mounted unconditionally because a live region only
+              announces content that changes after it exists, and deliberately
+              countless so filtering does not re-announce on every keystroke. */}
+          {canMentionAssistants && (
+            <div className="sr-only" role="status" aria-live="polite">
+              {isMentionPickerOpen
+                ? t({
+                    id: "chatInput.mentions.pickerAnnouncement",
+                    message:
+                      "Assistant suggestions available. Press the down arrow to browse them, or Enter to mention the first.",
+                  })
+                : ""}
+            </div>
+          )}
+
           {ChatInputAttachmentPreview && (
             <ChatInputAttachmentPreview
               attachedFiles={attachedFiles}
@@ -2259,9 +2535,20 @@ export const ChatInput = ({
             <textarea
               ref={textareaRef}
               value={message}
-              onChange={(e) => setMessage(e.target.value)}
+              onChange={(e) => {
+                setMessage(e.target.value);
+                syncMentionTrigger(e.target);
+              }}
+              onSelect={(e) => syncMentionTrigger(e.currentTarget)}
+              onClick={(e) => syncMentionTrigger(e.currentTarget)}
+              onKeyUp={(e) => syncMentionTrigger(e.currentTarget)}
               onPaste={handleTextareaPaste}
               onKeyDown={(e) => {
+                // The open picker owns Enter, Tab and the arrows — it has to
+                // run before Enter reaches send/queue.
+                if (mentionPopoverRef.current?.handleComposerKeyDown(e)) {
+                  return;
+                }
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   // While a turn is generating, Enter queues the draft to
@@ -2328,6 +2615,7 @@ export const ChatInput = ({
                     facets={availableFacets}
                     selectedFacetIds={selectedFacetIds}
                     onToggleFacet={toggleFacetId}
+                    assistantSection={assistantMentionSection}
                     disabled={composeLocked}
                     uploadDisabled={attachedFiles.length >= maxFiles}
                     toolsDisabled={enforceSelectedFacetIds}
@@ -2361,10 +2649,12 @@ export const ChatInput = ({
                         }
                       />
                     )}
-                    {availableFacets.length > 0 && (
+                    {(availableFacets.length > 0 ||
+                      assistantMentionSection) && (
                       <FacetSelector
                         facets={availableFacets}
                         selectedFacetIds={selectedFacetIds}
+                        assistantSection={assistantMentionSection}
                         onSelectionChange={(nextSelectedFacetIds) => {
                           userSelectedFacetsSessionRef.current =
                             composeSessionId;
@@ -2378,7 +2668,8 @@ export const ChatInput = ({
                           globalFacetSettings?.show_facet_indicator_with_display_name ??
                           false
                         }
-                        disabled={composeLocked || enforceSelectedFacetIds}
+                        disabled={composeLocked}
+                        toolsDisabled={enforceSelectedFacetIds}
                       />
                     )}
                   </>

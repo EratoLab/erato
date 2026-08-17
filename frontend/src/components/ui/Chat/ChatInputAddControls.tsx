@@ -9,7 +9,7 @@ import { ResolvedIcon } from "../icons";
 import { ChatInputAddMenu } from "./ChatInputAddMenu";
 import { getFacetDisplayName } from "./FacetSelector";
 
-import type { AddMenuToolItem } from "./ChatInputAddMenu";
+import type { AddMenuSection, AddMenuToolItem } from "./ChatInputAddMenu";
 import type { UseChatFileSourcesParams } from "@/hooks/files/useChatFileSources";
 import type { FacetInfo } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
@@ -28,6 +28,12 @@ export interface ChatInputAddControlsProps {
   facets: FacetInfo[];
   selectedFacetIds: string[];
   onToggleFacet: (facetId: string) => void;
+
+  /**
+   * Extra group appended below the tools — the same section the desktop tool
+   * dropdown renders, so both hosts offer identical assistant rows.
+   */
+  assistantSection?: AddMenuSection;
 
   /** Disable the whole control (general composer-disabled state). */
   disabled?: boolean;
@@ -49,6 +55,7 @@ export function ChatInputAddControls({
   facets,
   selectedFacetIds,
   onToggleFacet,
+  assistantSection,
   disabled = false,
   uploadDisabled = false,
   toolsDisabled = false,
@@ -105,6 +112,7 @@ export function ChatInputAddControls({
       <ChatInputAddMenu
         fileSources={canUpload ? fileSourceItems : []}
         tools={tools}
+        extraSections={assistantSection ? [assistantSection] : undefined}
         extraContent={
           ExtraContent
             ? ({ close }) => (

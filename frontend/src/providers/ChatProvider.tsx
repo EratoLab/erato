@@ -82,6 +82,7 @@ export interface ChatContextValue {
     assistantId?: string,
     selectedFacetIds?: string[],
     actionFacet?: { id: string; args?: Record<string, string> },
+    mentionedAssistantIds?: string[],
   ) => Promise<string | undefined>;
   editMessage: (
     messageId: string,

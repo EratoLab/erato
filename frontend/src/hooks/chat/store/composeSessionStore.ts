@@ -25,6 +25,7 @@ interface ComposeSessionStore {
 export const EMPTY_COMPOSE_DRAFT: ComposeDraftState = Object.freeze({
   message: "",
   attachedFiles: [],
+  mentionedAssistants: [],
 });
 
 export const useComposeSessionStore = create<ComposeSessionStore>()(

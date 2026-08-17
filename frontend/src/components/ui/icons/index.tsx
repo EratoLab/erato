@@ -1,4 +1,5 @@
 import {
+  AtSign,
   Copy,
   EditPencil,
   ThumbsUp,
@@ -355,6 +356,10 @@ export const PinIcon = ({ className, ...props }: IconProps) => (
 
 export const PinSlashIcon = ({ className, ...props }: IconProps) => (
   <PinSlash className={className} {...props} />
+);
+
+export const AtSignIcon = ({ className, ...props }: IconProps) => (
+  <AtSign className={className} {...props} />
 );
 
 // Iconoir has no "sliders" glyph; CandlestickChart is its vertical-sliders

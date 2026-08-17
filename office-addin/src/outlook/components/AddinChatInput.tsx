@@ -83,6 +83,7 @@ interface AddinChatInputProps {
      * (the completion's artifact is treated as stale, never unguarded).
      */
     sendItemIdentity?: string | null,
+    mentionedAssistantIds?: string[],
   ) => void;
   handleFileAttachments?: (files: FileUploadItem[]) => void;
   isLoading?: boolean;
@@ -662,6 +663,7 @@ export const AddinChatInput = forwardRef<
       inputFileIds?: string[],
       modelId?: string,
       selectedFacetIds?: string[],
+      mentionedAssistantIds?: string[],
     ) => {
       // Capture the item identity BEFORE any await: the uploads below can
       // take long enough for the user to switch emails, and the wrong-item
@@ -810,6 +812,7 @@ export const AddinChatInput = forwardRef<
           selectedFacetIds,
           actionFacet,
           sendItemIdentity,
+          mentionedAssistantIds,
         );
         return;
       }
@@ -832,6 +835,7 @@ export const AddinChatInput = forwardRef<
             selectedFacetIds,
             actionFacet,
             sendItemIdentity,
+            mentionedAssistantIds,
           );
           // No upload was attempted (e.g. only dismissed drops remain) and
           // nothing failed, so the staged drops are safe to clear.
@@ -872,6 +876,7 @@ export const AddinChatInput = forwardRef<
         selectedFacetIds,
         actionFacet,
         sendItemIdentity,
+        mentionedAssistantIds,
       );
 
       // Clear the drops only when their files actually uploaded. On a failed
@@ -1027,12 +1032,19 @@ export const AddinChatInput = forwardRef<
         ref={ref}
         chatId={chatId}
         {...chatInputProps}
-        onSendMessage={(message, inputFileIds, modelId, selectedFacetIds) => {
+        onSendMessage={(
+          message,
+          inputFileIds,
+          modelId,
+          selectedFacetIds,
+          mentionedAssistantIds,
+        ) => {
           void wrappedOnSendMessage(
             message,
             inputFileIds,
             modelId,
             selectedFacetIds,
+            mentionedAssistantIds,
           );
         }}
         disabled={

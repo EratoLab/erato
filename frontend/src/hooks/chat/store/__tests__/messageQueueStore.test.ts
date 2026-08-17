@@ -14,10 +14,15 @@ describe("messageQueueStore", () => {
   });
 
   it("stores, reads, and clears a queued message per session", () => {
-    store().setQueued("session-a", { message: "queued", attachedFiles: [] });
+    store().setQueued("session-a", {
+      message: "queued",
+      attachedFiles: [],
+      mentionedAssistants: [],
+    });
     expect(store().getQueued("session-a")).toEqual({
       message: "queued",
       attachedFiles: [],
+      mentionedAssistants: [],
     });
 
     store().clearQueued("session-a");
@@ -25,7 +30,11 @@ describe("messageQueueStore", () => {
   });
 
   it("isolates queues per session", () => {
-    store().setQueued("session-a", { message: "a", attachedFiles: [] });
+    store().setQueued("session-a", {
+      message: "a",
+      attachedFiles: [],
+      mentionedAssistants: [],
+    });
     expect(store().getQueued("session-b")).toBeNull();
     expect(store().getQueued("session-a")?.message).toBe("a");
   });

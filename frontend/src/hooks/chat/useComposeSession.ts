@@ -3,10 +3,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useComposeSessionStore } from "@/hooks/chat/store/composeSessionStore";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { AssistantMention } from "@/utils/chat/assistantMentions";
 
 export interface ComposeDraftState {
   message: string;
   attachedFiles: FileUploadItem[];
+  /**
+   * Unlike the model and facet selections — read live at send time — mentions
+   * are part of the text they were typed into, so they travel with it.
+   */
+  mentionedAssistants: AssistantMention[];
 }
 
 // eslint-disable-next-line lingui/no-unlocalized-strings -- internal sentinel key, never user-facing

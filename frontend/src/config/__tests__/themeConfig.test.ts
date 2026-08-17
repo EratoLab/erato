@@ -45,6 +45,7 @@ describe("themeConfig", () => {
     chatInputEmptyStateLayout: "bottom",
     disableLogout: false,
     assistantsEnabled: false,
+    assistantsDelegationEnabled: false,
     assistantsShowRecentItems: false,
     assistantsShowRecentItemsCollapsible: false,
     assistantContextWarningThreshold: 0.5,

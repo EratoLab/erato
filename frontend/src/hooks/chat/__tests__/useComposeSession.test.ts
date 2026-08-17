@@ -72,6 +72,7 @@ describe("useComposeSession", () => {
     result.current.saveDraft(sessionA, {
       message: "unsent draft",
       attachedFiles: [],
+      mentionedAssistants: [],
     });
 
     // Leaving via the New Chat button parks us on the sentinel before we
@@ -83,6 +84,7 @@ describe("useComposeSession", () => {
     expect(result.current.getDraft(result.current.sessionId)).toEqual({
       message: "unsent draft",
       attachedFiles: [],
+      mentionedAssistants: [],
     });
   });
 
@@ -95,11 +97,13 @@ describe("useComposeSession", () => {
     result.current.saveDraft(id, {
       message: "hello",
       attachedFiles: [],
+      mentionedAssistants: [],
     });
 
     expect(result.current.getDraft(id)).toEqual({
       message: "hello",
       attachedFiles: [],
+      mentionedAssistants: [],
     });
   });
 
@@ -111,6 +115,7 @@ describe("useComposeSession", () => {
     expect(result.current.getDraft("never-saved")).toEqual({
       message: "",
       attachedFiles: [],
+      mentionedAssistants: [],
     });
   });
 

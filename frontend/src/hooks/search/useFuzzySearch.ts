@@ -18,6 +18,11 @@ export interface FuzzySearchOptions<T> {
   query: string;
   /** Match threshold: 0 (exact) to 1 (match anything). Default: 0.3 */
   threshold?: number;
+  /**
+   * Shortest pattern fuse will match. Queries below it match nothing at all,
+   * so lists meant to be narrowed one keystroke at a time want 1. Default: 2
+   */
+  minMatchCharLength?: number;
   /** Custom sort function to apply after fuzzy search (should be memoized in parent) */
   sortFn?: (a: T, b: T) => number;
 }
@@ -39,6 +44,7 @@ export function useFuzzySearch<T>({
   keys,
   query,
   threshold = 0.3,
+  minMatchCharLength = 2,
   sortFn,
 }: FuzzySearchOptions<T>): T[] {
   // Create fuse instance
@@ -48,9 +54,9 @@ export function useFuzzySearch<T>({
         keys,
         threshold,
         ignoreLocation: true, // Don't care where in string the match occurs
-        minMatchCharLength: 2, // Need at least 2 characters to match
+        minMatchCharLength,
       }),
-    [items, keys, threshold],
+    [items, keys, threshold, minMatchCharLength],
   );
 
   // Perform search and apply custom sorting if provided
