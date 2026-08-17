@@ -5252,6 +5252,10 @@ export type RecentChatsQueryParams = {
    */
   pinned?: boolean;
   type?: Schemas.RecentChatTypeFilter;
+  /**
+   * Whether to include delegated runs (chats spawned by in-chat delegation). Defaults to false; delegated runs are hidden from listings unless requested.
+   */
+  include_delegated?: boolean;
 };
 
 export type RecentChatsError = Fetcher.ErrorWrapper<undefined>;

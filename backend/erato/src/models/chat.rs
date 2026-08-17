@@ -389,6 +389,17 @@ pub struct RecentChat {
     /// Present while the chat's generation is stopped on an MCP tool approval
     /// awaiting the user's decision.
     pub pending_tool_approval_at: Option<DateTimeWithTimeZone>,
+    /// Provenance kind when the chat was spawned from another chat
+    /// (`delegation`, handoff kinds).
+    pub provenance_kind: Option<String>,
+    /// The origin chat this chat was spawned from, if any. Dangling after the
+    /// origin is deleted.
+    pub origin_chat_id: Option<Uuid>,
+    /// Resolved display title of the origin chat; None when the origin no
+    /// longer exists.
+    pub origin_chat_title: Option<String>,
+    /// The assistant bound to the origin chat at spawn time, if any.
+    pub origin_assistant_id: Option<Uuid>,
 }
 
 /// Statistics for a list of chats
@@ -426,6 +437,9 @@ struct ChatWithLatestMessage {
     assistant_id: Option<Uuid>,
     active_generation_started_at: Option<DateTimeWithTimeZone>,
     pending_tool_approval_at: Option<DateTimeWithTimeZone>,
+    provenance_kind: Option<String>,
+    origin_chat_id: Option<Uuid>,
+    origin_assistant_id: Option<Uuid>,
     // Latest message fields
     latest_message_at: DateTimeWithTimeZone,
 }
@@ -455,6 +469,9 @@ pub struct RecentChatsFilter<'a> {
     pub chat_type: Option<RecentChatTypeFilter>,
     /// Optional full-text search query for chat titles.
     pub search_query: Option<&'a str>,
+    /// Whether delegated runs (provenance kind `delegation`) are included.
+    /// They are hidden from listings by default.
+    pub include_delegated: bool,
 }
 
 /// Get the most recent chats for a user.
@@ -490,6 +507,11 @@ pub async fn get_recent_chats(
         Some(RecentChatTypeFilter::Chat) => "AND \"chats\".\"assistant_id\" IS NULL",
         Some(RecentChatTypeFilter::Assistant) => "AND \"chats\".\"assistant_id\" IS NOT NULL",
         None => "",
+    };
+    let delegated_condition = if !filter.include_delegated {
+        "AND (\"chats\".\"assistant_configuration\" #>> '{provenance,kind}') IS DISTINCT FROM 'delegation'"
+    } else {
+        ""
     };
     let resolved_title_search_vector = r#"to_tsvector(
                 'simple'::regconfig,
@@ -534,6 +556,9 @@ pub async fn get_recent_chats(
                 WHEN "chats"."generation_state" = 'awaiting_approval'
                 THEN "chats"."generation_ended_at"
             END AS "pending_tool_approval_at",
+            ("chats"."assistant_configuration" #>> '{{provenance,kind}}') AS "provenance_kind",
+            "chats"."origin_chat_id",
+            (("chats"."assistant_configuration" #>> '{{provenance,origin_assistant_id}}'))::uuid AS "origin_assistant_id",
             "latest_msg"."created_at" AS "latest_message_at"
         FROM "chats"
         INNER JOIN LATERAL (
@@ -548,6 +573,7 @@ pub async fn get_recent_chats(
             {}
             {}
             {}
+            {}
         ORDER BY latest_msg.created_at DESC
         LIMIT $2
         OFFSET $3
@@ -555,7 +581,8 @@ pub async fn get_recent_chats(
         archived_condition,
         search_condition(4),
         pinned_condition,
-        chat_type_condition
+        chat_type_condition,
+        delegated_condition
     );
 
     let mut query_values = vec![
@@ -601,12 +628,14 @@ pub async fn get_recent_chats(
                         {}
                         {}
                         {}
+                        {}
                 ) AS sub_query
                 "#,
                 archived_condition,
                 search_condition(2),
                 pinned_condition,
-                chat_type_condition
+                chat_type_condition,
+                delegated_condition
             );
 
             #[derive(Debug, FromQueryResult)]
@@ -668,6 +697,30 @@ pub async fn get_recent_chats(
             .await?
             .into_iter()
             .map(|a| (a.id, a.name))
+            .collect()
+    } else {
+        HashMap::new()
+    };
+
+    // Batch query: resolved display titles of origin chats. Provenance ids are
+    // not foreign keys, so a deleted origin simply yields no title.
+    let origin_chat_ids: Vec<Uuid> = authorized_chats
+        .iter()
+        .filter_map(|c| c.origin_chat_id)
+        .collect();
+    let origin_titles_map: HashMap<Uuid, String> = if !origin_chat_ids.is_empty() {
+        Chats::find()
+            .filter(chats::Column::Id.is_in(origin_chat_ids))
+            .all(conn)
+            .await?
+            .into_iter()
+            .map(|origin| {
+                let title = resolve_chat_display_name(
+                    origin.title_by_user_provided.as_deref(),
+                    origin.title_by_summary.as_deref(),
+                );
+                (origin.id, title)
+            })
             .collect()
     } else {
         HashMap::new()
@@ -755,6 +808,12 @@ pub async fn get_recent_chats(
                 assistant_name,
                 active_generation_started_at: chat_with_msg.active_generation_started_at,
                 pending_tool_approval_at: chat_with_msg.pending_tool_approval_at,
+                provenance_kind: chat_with_msg.provenance_kind.clone(),
+                origin_chat_id: chat_with_msg.origin_chat_id,
+                origin_chat_title: chat_with_msg
+                    .origin_chat_id
+                    .and_then(|origin_id| origin_titles_map.get(&origin_id).cloned()),
+                origin_assistant_id: chat_with_msg.origin_assistant_id,
             }
         })
         .collect();
@@ -772,6 +831,11 @@ pub async fn get_recent_chats(
 
 /// A chat with a running or recently ended generation, or one stopped on a
 /// pending tool approval.
+///
+/// Deliberately does NOT filter delegated runs: listings hide them by
+/// default, but a delegated chat that is running or parked awaiting approval
+/// must stay reachable through `/me/generating` — a stranded child would
+/// otherwise be invisible everywhere.
 #[derive(Debug, FromQueryResult)]
 pub struct GeneratingChatRow {
     pub id: Uuid,
@@ -881,6 +945,7 @@ pub async fn get_frequent_assistants(
                 WHERE owner_user_id = $1
                     AND assistant_configuration IS NOT NULL
                     AND assistant_configuration->>'assistant_id' IS NOT NULL
+                    AND (assistant_configuration #>> '{provenance,kind}') IS DISTINCT FROM 'delegation'
                     AND created_at >= $2
                 GROUP BY assistant_configuration->>'assistant_id'
                 ORDER BY usage_count DESC
