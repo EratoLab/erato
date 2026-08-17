@@ -608,3 +608,316 @@ async fn test_provenance_generated_column_and_legacy_rows(pool: Pool<Postgres>) 
     assert_eq!(provenance.origin_chat_id, Some(plain_chat_id));
     assert_eq!(provenance.depth, 1);
 }
+async fn submit_with_mentions(
+    server: &TestServer,
+    chat_id: Option<&str>,
+    text: &str,
+    mentioned_assistant_ids: &[&str],
+) -> axum_test::TestResponse {
+    let mut body = json!({
+        "user_message": text,
+        "mentioned_assistant_ids": mentioned_assistant_ids,
+    });
+    if let Some(chat_id) = chat_id {
+        body["existing_chat_id"] = json!(chat_id);
+    }
+    server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&body)
+        .await
+}
+
+fn delegation_enabled_config() -> erato::config::AppConfig {
+    let mut app_config = crate::test_utils::hermetic_app_config(None, None);
+    app_config.assistants.delegation.enabled = true;
+    app_config
+}
+
+async fn delegation_enabled_state_with_llm(
+    pool: Pool<Postgres>,
+) -> (erato::state::AppState, mocktail::server::MockServer) {
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post().path("/v1/chat/completions");
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["mentioned answer"]),
+        );
+    });
+    let (mut app_config, server) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.assistants.delegation.enabled = true;
+    let app_state = test_app_state(app_config, pool).await;
+    erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    (app_state, server)
+}
+
+/// Validation matrix for `mentioned_assistant_ids`: server-side gate, mention
+/// cap, archived target, self-mention, and inaccessible target all 400.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_mention_validation_matrix(pool: Pool<Postgres>) {
+    let app_state = test_app_state(delegation_enabled_config(), pool).await;
+    erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+
+    // Over the default cap of 3.
+    let mut many = Vec::new();
+    for index in 0..4 {
+        many.push(create_assistant(&server, &format!("Cap Assistant {index}"), "prompt").await);
+    }
+    let many_refs: Vec<&str> = many.iter().map(String::as_str).collect();
+    let response = submit_with_mentions(&server, None, "over cap", &many_refs).await;
+    response.assert_status(axum::http::StatusCode::BAD_REQUEST);
+
+    // Archived target.
+    let archived = create_assistant(&server, "Archived Assistant", "prompt").await;
+    server
+        .post(&format!("/api/v1beta/assistants/{archived}/archive"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({}))
+        .await
+        .assert_status_ok();
+    let response = submit_with_mentions(&server, None, "archived", &[&archived]).await;
+    response.assert_status(axum::http::StatusCode::BAD_REQUEST);
+
+    // Self-mention on an assistant-bound chat.
+    let bound = create_assistant(&server, "Bound Assistant", "prompt").await;
+    let bound_chat = create_chat(&server, Some(&bound)).await;
+    let response = submit_with_mentions(&server, Some(&bound_chat), "self", &[&bound]).await;
+    response.assert_status(axum::http::StatusCode::BAD_REQUEST);
+
+    // Inaccessible target (another user's assistant, no grant).
+    let other_user = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        "delegation-other-user",
+        None,
+    )
+    .await
+    .unwrap();
+    let foreign = erato::models::assistant::create_assistant(
+        &app_state.db,
+        &erato::policy::engine::PolicyEngine::new(),
+        &erato::policy::types::Subject::User(other_user.id.to_string()),
+        "Foreign Assistant".to_string(),
+        None,
+        "foreign prompt".to_string(),
+        None,
+        None,
+        None,
+        false,
+    )
+    .await
+    .unwrap();
+    let response = submit_with_mentions(&server, None, "foreign", &[&foreign.id.to_string()]).await;
+    response.assert_status(axum::http::StatusCode::BAD_REQUEST);
+
+    // Unknown id.
+    let response = submit_with_mentions(
+        &server,
+        None,
+        "unknown",
+        &["00000000-0000-0000-0000-00000000dead"],
+    )
+    .await;
+    response.assert_status(axum::http::StatusCode::BAD_REQUEST);
+}
+
+/// With the delegation gate off, a submit carrying mentions is rejected even
+/// when the mentioned assistant would otherwise be valid.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_mentions_rejected_when_delegation_disabled(pool: Pool<Postgres>) {
+    let app_state = test_app_state(crate::test_utils::hermetic_app_config(None, None), pool).await;
+    erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+
+    let assistant = create_assistant(&server, "Gated Assistant", "prompt").await;
+    let response = submit_with_mentions(&server, None, "gate off", &[&assistant]).await;
+    response.assert_status(axum::http::StatusCode::BAD_REQUEST);
+
+    // Regenerate with an explicit mention field is gated the same way.
+    let regenerate_response = server
+        .post("/api/v1beta/me/messages/regeneratestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "current_message_id": Uuid::new_v4(),
+            "mentioned_assistant_ids": [assistant],
+        }))
+        .await;
+    // The unknown message id 400s first; the point is the request shape parses.
+    regenerate_response.assert_status(axum::http::StatusCode::BAD_REQUEST);
+}
+
+/// A shared assistant (viewer grant) is an accepted mention; the mentions
+/// round-trip into the user message's `input_parameters`, deduplicated.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_shared_viewer_mention_accepted_and_persisted(pool: Pool<Postgres>) {
+    let (app_state, _llm) = delegation_enabled_state_with_llm(pool).await;
+    let server = app_server(app_state.clone());
+
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let other_user = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        "delegation-sharing-owner",
+        None,
+    )
+    .await
+    .unwrap();
+    let shared = erato::models::assistant::create_assistant(
+        &app_state.db,
+        &erato::policy::engine::PolicyEngine::new(),
+        &erato::policy::types::Subject::User(other_user.id.to_string()),
+        "Shared Assistant".to_string(),
+        None,
+        "shared prompt".to_string(),
+        None,
+        None,
+        None,
+        false,
+    )
+    .await
+    .unwrap();
+    erato::models::share_grant::create_share_grant(
+        &app_state.db,
+        &erato::policy::engine::PolicyEngine::new(),
+        &erato::policy::types::Subject::User(other_user.id.to_string()),
+        "assistant".to_string(),
+        shared.id.to_string(),
+        "user".to_string(),
+        "id".to_string(),
+        me.id.to_string(),
+        "viewer".to_string(),
+    )
+    .await
+    .unwrap();
+
+    let shared_id = shared.id.to_string();
+    // Duplicate mention: accepted and persisted deduplicated.
+    let response =
+        submit_with_mentions(&server, None, "shared mention", &[&shared_id, &shared_id]).await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    let chat_id = crate::test_utils::extract_chat_id(&events).unwrap();
+
+    let rows = chat_messages_by_created_at(&app_state.db, Uuid::parse_str(&chat_id).unwrap()).await;
+    let user_row = rows
+        .iter()
+        .find(|row| row.raw_message["role"] == "user")
+        .expect("user message row");
+    let persisted =
+        erato::models::message::get_input_mentioned_assistant_ids_from_message(user_row)
+            .unwrap()
+            .expect("mentions persisted");
+    assert_eq!(persisted, vec![shared.id]);
+}
+
+/// Regenerate without the field re-reads the persisted mentions; edit without
+/// the field carries them onto the new sibling row.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_regenerate_and_edit_replay_persisted_mentions(pool: Pool<Postgres>) {
+    let (app_state, _llm) = delegation_enabled_state_with_llm(pool).await;
+    let server = app_server(app_state.clone());
+
+    let target = create_assistant(&server, "Replay Target", "prompt").await;
+    let response = submit_with_mentions(&server, None, "mention on submit", &[&target]).await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    let chat_id = crate::test_utils::extract_chat_id(&events).unwrap();
+    let assistant_message_id = assistant_message_id_from_events(&events);
+
+    // Regenerate without the field: the persisted mentions replay (200).
+    let regenerate_response = server
+        .post("/api/v1beta/me/messages/regeneratestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "current_message_id": assistant_message_id }))
+        .await;
+    regenerate_response.assert_status_ok();
+
+    // Edit without the field: mentions carry onto the new sibling row.
+    let rows = chat_messages_by_created_at(&app_state.db, Uuid::parse_str(&chat_id).unwrap()).await;
+    let original_user_row = rows
+        .iter()
+        .find(|row| row.raw_message["role"] == "user")
+        .expect("user message row");
+    let edit_response = server
+        .post("/api/v1beta/me/messages/editstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": original_user_row.id,
+            "replace_user_message": "edited mention message",
+        }))
+        .await;
+    edit_response.assert_status_ok();
+
+    let rows = chat_messages_by_created_at(&app_state.db, Uuid::parse_str(&chat_id).unwrap()).await;
+    let edited_row = rows
+        .iter()
+        .find(|row| row.raw_message["content"][0]["text"] == "edited mention message")
+        .expect("edited sibling row");
+    let persisted =
+        erato::models::message::get_input_mentioned_assistant_ids_from_message(edited_row)
+            .unwrap()
+            .expect("mentions carried onto the edited row");
+    assert_eq!(persisted, vec![Uuid::parse_str(&target).unwrap()]);
+
+    // Edit with an explicit invalid mention still 400s.
+    let bad_edit = server
+        .post("/api/v1beta/me/messages/editstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": original_user_row.id,
+            "replace_user_message": "bad mention",
+            "mentioned_assistant_ids": ["00000000-0000-0000-0000-00000000dead"],
+        }))
+        .await;
+    bad_edit.assert_status(axum::http::StatusCode::BAD_REQUEST);
+}

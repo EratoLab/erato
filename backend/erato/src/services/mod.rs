@@ -3,6 +3,7 @@ pub mod client_actions;
 pub mod client_tools;
 pub mod config_redaction;
 pub mod configuration_reload_listener;
+pub mod delegation;
 pub mod desktop_sidecar_distribution;
 pub mod file_parsing;
 pub mod file_processing_cached;
