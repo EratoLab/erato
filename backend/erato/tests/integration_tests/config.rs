@@ -3847,3 +3847,251 @@ async fn test_app_state_encrypt_decrypt_round_trip(pool: Pool<Postgres>) {
     assert_ne!(encrypted, "secret-value");
     assert!(encrypted.starts_with("enc-v1:"));
 }
+
+#[test]
+fn test_assistants_delegation_defaults() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    temp_file
+        .write_all(
+            br#"
+[assistants]
+enabled = true
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+        )
+        .expect("Failed to write configuration");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let mut builder = AppConfig::config_schema_builder(
+        Some(vec![temp_file.path().to_string_lossy().into_owned()]),
+        false,
+    )
+    .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config: AppConfig = builder
+        .build()
+        .expect("Failed to build config schema")
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    let delegation = &config.assistants.delegation;
+    assert!(!delegation.enabled);
+    assert_eq!(delegation.run_timeout_seconds, 600);
+    assert_eq!(delegation.max_mentions_per_message, 3);
+    assert_eq!(delegation.result_max_chars, 16000);
+    assert!(delegation.preamble.contains("delegated"));
+    assert!(delegation.preamble.contains("{{expected_output_section}}"));
+    assert!(delegation.preamble.contains("{{constraints_section}}"));
+
+    let _ = config.migrate();
+}
+
+#[test]
+fn test_assistants_delegation_config_can_be_configured() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    temp_file
+        .write_all(
+            br#"
+[assistants]
+enabled = true
+
+[assistants.delegation]
+enabled = true
+run_timeout_seconds = 120
+max_mentions_per_message = 5
+result_max_chars = 2000
+preamble = """
+Line one of the delegation directive.
+
+Line two with placeholders.
+{{expected_output_section}}{{constraints_section}}"""
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+        )
+        .expect("Failed to write configuration");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let mut builder = AppConfig::config_schema_builder(
+        Some(vec![temp_file.path().to_string_lossy().into_owned()]),
+        false,
+    )
+    .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config: AppConfig = builder
+        .build()
+        .expect("Failed to build config schema")
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    let delegation = &config.assistants.delegation;
+    assert!(delegation.enabled);
+    assert_eq!(delegation.run_timeout_seconds, 120);
+    assert_eq!(delegation.max_mentions_per_message, 5);
+    assert_eq!(delegation.result_max_chars, 2000);
+    assert_eq!(
+        delegation.preamble,
+        "Line one of the delegation directive.\n\nLine two with placeholders.\n{{expected_output_section}}{{constraints_section}}"
+    );
+
+    let _ = config.migrate();
+}
+
+fn build_and_migrate_delegation_config(delegation_toml: &str) {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    temp_file
+        .write_all(delegation_toml.as_bytes())
+        .expect("Failed to write configuration");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let mut builder = AppConfig::config_schema_builder(
+        Some(vec![temp_file.path().to_string_lossy().into_owned()]),
+        false,
+    )
+    .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config: AppConfig = builder
+        .build()
+        .expect("Failed to build config schema")
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+    let _ = config.migrate();
+}
+
+#[test]
+#[should_panic(expected = "assistants.delegation.enabled requires assistants.enabled")]
+fn test_assistants_delegation_enabled_requires_assistants_enabled() {
+    build_and_migrate_delegation_config(
+        r#"
+[assistants.delegation]
+enabled = true
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "assistants.delegation.run_timeout_seconds must be greater than 0")]
+fn test_assistants_delegation_zero_run_timeout_is_invalid() {
+    build_and_migrate_delegation_config(
+        r#"
+[assistants]
+enabled = true
+
+[assistants.delegation]
+run_timeout_seconds = 0
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "assistants.delegation.max_mentions_per_message must be at least 1")]
+fn test_assistants_delegation_zero_mentions_cap_is_invalid() {
+    build_and_migrate_delegation_config(
+        r#"
+[assistants]
+enabled = true
+
+[assistants.delegation]
+max_mentions_per_message = 0
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "assistants.delegation.result_max_chars must be greater than 0")]
+fn test_assistants_delegation_zero_result_cap_is_invalid() {
+    build_and_migrate_delegation_config(
+        r#"
+[assistants]
+enabled = true
+
+[assistants.delegation]
+result_max_chars = 0
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "assistants.delegation.preamble cannot be empty")]
+fn test_assistants_delegation_empty_preamble_is_invalid() {
+    build_and_migrate_delegation_config(
+        r#"
+[assistants]
+enabled = true
+
+[assistants.delegation]
+preamble = "  "
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+}
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_assistants_delegation_flag_readable_from_app_state(pool: Pool<Postgres>) {
+    let mut app_config = hermetic_app_config(None, None);
+    app_config.assistants.delegation.enabled = true;
+
+    let app_state = test_app_state(app_config, pool).await;
+
+    assert!(app_state.config.assistants.delegation.enabled);
+    assert_eq!(
+        app_state.config.assistants.delegation.run_timeout_seconds,
+        600
+    );
+}
