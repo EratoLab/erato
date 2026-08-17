@@ -30,6 +30,14 @@ pub static MALLOC_CONF: &[u8] = b"prof:true,prof_active:true,lg_prof_sample:19\0
 const ENV_WORKER_THREADS: &str = "TOKIO_WORKER_THREADS";
 const MIN_TOKIO_WORKER_THREADS: usize = 4;
 
+/// Worker stack size. Tokio's 2 MiB default is not enough for the message
+/// streaming handler's very large futures in unoptimized builds: polling them
+/// overflows the worker stack the moment a message is submitted (observed once
+/// the client-tool offering path became active on every turn). The reservation
+/// is virtual — pages are only committed as touched — so a generous value
+/// costs nothing in practice.
+const TOKIO_WORKER_STACK_BYTES: usize = 16 * 1024 * 1024;
+
 /// Similar to the normal worker thread detection mechanism, but adds a minimum value to the auto-detection,
 /// as we've seen problems with 1 worker thread, and that value will likely often be inferred
 /// when running containerized in Kubernetes with small resource sizing.
@@ -64,6 +72,7 @@ fn main() -> Result<(), Report> {
     let worker_threads = configured_tokio_worker_threads();
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(worker_threads)
+        .thread_stack_size(TOKIO_WORKER_STACK_BYTES)
         .enable_all()
         .build()
         .wrap_err("Failed to build Tokio runtime")?;

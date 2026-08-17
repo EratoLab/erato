@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/outlook/search-hit.schema.json",
+  "title": "OutlookSearchHit",
+  "description": "One locally matched email for an outlook.search_emails.v1 query.",
+  "type": "object",
+  "required": ["email"],
+  "properties": {
+    "email": {
+      "$ref": "../outlook/email-summary.schema.json"
+    },
+    "snippet": {
+      "description": "Short plain-text excerpt around the strongest match. Never a full message body.",
+      "type": "string",
+      "maxLength": 2048
+    },
+    "matchedIn": {
+      "description": "Fields the query matched. Known values include subject, body, sender, attachmentName, and attachmentContent. Receivers ignore unknown values.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "maxItems": 16
+    },
+    "matchedAttachmentNames": {
+      "description": "File names of attachments whose name or extracted text matched the query.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024
+      },
+      "maxItems": 64
+    }
+  },
+  "additionalProperties": true
+}

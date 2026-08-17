@@ -10,8 +10,28 @@ export type ClientToolExecutionResult =
   | { ok: true; result: unknown }
   | { ok: false; error: string };
 
+/**
+ * Identifiers of the call being executed. Additive second parameter: existing
+ * one-parameter executors stay assignable, and hosts that need to correlate
+ * (e.g. keying an on-device trace by tool call, or a consent by chat) opt in.
+ */
+export interface ClientToolCallContext {
+  toolCallId: string;
+  messageId: string;
+  chatId: string | null;
+  /**
+   * Fires when the user aborts the turn (the stop action behind the
+   * abortstream POST) — deliberately NOT on SSE transport loss, which resumes
+   * and replays, so an executor that kept running still delivers its result.
+   * Executors doing long on-device work should forward it (e.g. as a sidecar
+   * invoke's `signal`) so a stopped turn stops the device too.
+   */
+  signal?: AbortSignal;
+}
+
 export type ClientToolExecutor = (
   input: unknown,
+  context?: ClientToolCallContext,
 ) => Promise<ClientToolExecutionResult>;
 
 const executors = new Map<string, ClientToolExecutor>();
@@ -57,7 +77,45 @@ export function hasClientToolCallBeenAnswered(toolCallId: string): boolean {
   return answeredToolCallIds.has(toolCallId);
 }
 
+// One controller per running execution, grouped by chat, so the stop action
+// cancels exactly that turn's on-device work.
+const abortControllers = new Map<
+  string,
+  { chatId: string; controller: AbortController }
+>();
+
+/** Track a starting execution; the returned signal goes into its context. */
+export function trackClientToolCallAbort(
+  toolCallId: string,
+  chatId: string,
+): AbortSignal {
+  const controller = new AbortController();
+  abortControllers.set(toolCallId, { chatId, controller });
+  return controller.signal;
+}
+
+/** Drop the controller once the execution settles, whatever the outcome. */
+export function releaseClientToolCallAbort(toolCallId: string): void {
+  abortControllers.delete(toolCallId);
+}
+
+/**
+ * Fire the signal of every execution still running for `chatId`. Called from
+ * the user stop pathway only (`cancelMessage`, next to the abortstream POST)
+ * — never from SSE cleanup, so a dropped connection cannot kill an execution
+ * that could still deliver on resume.
+ */
+export function abortClientToolCalls(chatId: string): void {
+  for (const [toolCallId, tracked] of abortControllers) {
+    if (tracked.chatId === chatId) {
+      abortControllers.delete(toolCallId);
+      tracked.controller.abort();
+    }
+  }
+}
+
 export function resetClientToolRegistryForTests(): void {
   executors.clear();
   answeredToolCallIds.clear();
+  abortControllers.clear();
 }

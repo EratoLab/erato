@@ -3713,6 +3713,34 @@ msgstr "{itemCount} Elemente"
 msgid "{skipped} messages could not be loaded."
 msgstr ""
 
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "{stepCount, plural, one {# step} other {# steps}}"
+msgstr "{stepCount, plural, one {# Schritt} other {# Schritte}}"
+
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+#~ msgid "{stepCount} steps"
+#~ msgstr ""
+
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "{value} matched"
+msgstr "{value} Treffer"
+
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "{value} messages"
+msgstr "{value} Nachrichten"
+
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "{value} returned"
+msgstr "{value} zurückgegeben"
+
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "{value} terms in"
+msgstr "{value} Begriffe ein"
+
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "{value} terms out"
+msgstr "{value} Begriffe aus"
+
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "• Change browser language in settings and refresh"
 msgstr "• Browsersprache in den Einstellungen ändern und neu laden"
@@ -3747,6 +3775,10 @@ msgstr "1 Element"
 msgid "1 message could not be loaded."
 msgstr "1 Nachricht konnte nicht geladen werden."
 
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+#~ msgid "1 step"
+#~ msgstr ""
+
 #: src/components/ui/FileUpload/FileUpload.tsx
 msgid "Accepted types:"
 msgstr "Akzeptierte Dateitypen:"
@@ -3762,6 +3794,10 @@ msgstr "Alle Dateitypen akzeptiert"
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "And"
 msgstr "Und"
+
+#: src/components/ui/DesktopSidecar/SidecarLocalAnswerPanel.tsx
+msgid "Answer from this device"
+msgstr "Antwort von diesem Gerät"
 
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
 msgid "Approaching Budget Limit"
@@ -3994,6 +4030,10 @@ msgstr "Wartende Nachricht abbrechen"
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Canceled"
 msgstr ""
+
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "Cancelled"
+msgstr "Abgebrochen"
 
 #: src/components/ui/Chat/ChatInput.tsx
 #~ msgid "Cannot send: Audio transcription in progress"
@@ -4235,6 +4275,10 @@ msgstr "Details für"
 msgid "Detected Locale:"
 msgstr "Erkannte Sprache:"
 
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "Diagnostic delay"
+msgstr "Diagnose-Verzögerung"
+
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Dictating audio"
 msgstr "Audiodiktat läuft"
@@ -4344,6 +4388,10 @@ msgstr ""
 msgid "Expand by default"
 msgstr "Standardmäßig erweitern"
 
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "Expand query on device"
+msgstr "Suchanfrage auf dem Gerät erweitern"
+
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
 msgid "expand sidebar"
 msgstr "Seitenleiste erweitern"
@@ -4412,6 +4460,18 @@ msgstr "{resultsCount} Ergebnisse gefunden"
 #: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "From"
 msgstr ""
+
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "from cache"
+msgstr "aus dem Cache"
+
+#: src/components/ui/DesktopSidecar/SidecarLocalAnswerPanel.tsx
+msgid "Generated on this device by {model}. It was not shared — it never left this device and is not part of the chat."
+msgstr "Auf diesem Gerät von {model} erstellt. Sie wurde nicht geteilt — sie hat dieses Gerät nie verlassen und ist nicht Teil des Chats."
+
+#: src/components/ui/DesktopSidecar/SidecarLocalAnswerPanel.tsx
+msgid "Generated on this device. It was not shared — it never left this device and is not part of the chat."
+msgstr "Auf diesem Gerät erstellt. Sie wurde nicht geteilt — sie hat dieses Gerät nie verlassen und ist nicht Teil des Chats."
 
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Hide"
@@ -4522,6 +4582,10 @@ msgstr ""
 #: src/components/ui/Logo.tsx
 msgid "Logo"
 msgstr "Logo"
+
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "Match messages and attachments"
+msgstr "Nachrichten und Anhänge abgleichen"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Message exceeds token limit. Please reduce length or remove files."
@@ -4637,6 +4701,10 @@ msgstr "Rauschunterdrückung: {noiseSuppression}"
 msgid "Older messages are not included."
 msgstr "Ältere Nachrichten sind nicht enthalten."
 
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "On this device: {headline}"
+msgstr "Auf diesem Gerät: {headline}"
+
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Only one message can be queued. Replacing discards the message you queued earlier."
 msgstr "Es kann nur eine Nachricht in die Warteschlange gestellt werden. Beim Ersetzen wird die zuvor eingereihte Nachricht verworfen."
@@ -4716,6 +4784,10 @@ msgstr "In Warteschlange – wird nach Ihrer Antwort auf die Bestätigung gesend
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Queued — sends when response finishes"
 msgstr "In Warteschlange – wird nach der Antwort gesendet"
+
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "Read local mailbox"
+msgstr "Lokales Postfach lesen"
 
 #: src/components/ui/Message/MessageContent.tsx
 #~ msgid "Reasoning"
@@ -4991,6 +5063,10 @@ msgstr "Erfolgreich"
 #~ msgid "successful"
 #~ msgstr "erfolgreich"
 
+#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+msgid "Summarize on device"
+msgstr "Auf dem Gerät zusammenfassen"
+
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Supported Locales:"
 msgstr ""
@@ -5237,6 +5313,10 @@ msgstr "Tools werden verwendet"
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
 msgid "You are using {percentUsed}% of your budget ({formattedSpending} of {formattedLimit})."
 msgstr ""
+
+#: src/components/ui/DesktopSidecar/SidecarLocalAnswerPanel.tsx
+msgid "You asked: {query}"
+msgstr "Ihre Frage: {query}"
 
 #: src/pages/AssistantEditPage.tsx
 #~ msgid "You don't have permission to edit this assistant. Only the owner can modify assistant settings."

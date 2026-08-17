@@ -151,9 +151,55 @@ export type {
   OutlookMessageBody,
   OutlookMessageRecipient,
   SidecarClientInfo,
+  SidecarLocalTrace,
+  SidecarLocalTraceStep,
+  SidecarProgressV1Result,
 } from "@erato/desktop-sidecar-protocol";
 // Host compositions build their sidecar identity with this.
 export { createBrowserClientInfo } from "@erato/desktop-sidecar-protocol";
+// On-device trace of sidecar-backed tool calls: hosts record what the sidecar
+// reported, the trace subtree under the tool step renders it.
+export {
+  clearSidecarLocalTrace,
+  getSidecarLocalTrace,
+  markSidecarLocalTraceStopped,
+  persistedSidecarLocalTrace,
+  recordSidecarLocalTrace,
+  sanitizeSidecarLocalTrace,
+  subscribeSidecarLocalTraces,
+} from "@/lib/desktopSidecar/localTraceStore";
+export {
+  applySidecarTraceSteps,
+  mergeSidecarTraces,
+  sidecarTraceRows,
+  type SidecarTraceRow,
+} from "@/lib/desktopSidecar/traceEvents";
+export {
+  SidecarLocalTraceView,
+  type SidecarLocalTraceViewProps,
+} from "@/components/ui/Trace/SidecarLocalTraceView";
+export {
+  SidecarLocalTraceSubtree,
+  type SidecarLocalTraceSubtreeProps,
+} from "@/components/ui/Trace/SidecarLocalTraceSubtree";
+// On-device answers the user declined to share: kept on the device that made
+// them, rendered outside the transcript.
+export {
+  NEW_CHAT_LOCAL_ANSWER_KEY,
+  SIDECAR_LOCAL_ANSWERS_KEY,
+  addSidecarLocalAnswer,
+  dismissSidecarLocalAnswer,
+  parseSidecarLocalAnswers,
+  rekeySidecarLocalAnswers,
+  removeMatchingSidecarLocalAnswer,
+  sidecarLocalAnswersForChat,
+  sidecarLocalAnswersPersistedOptions,
+  type SidecarLocalAnswer,
+} from "@/lib/desktopSidecar/localAnswers";
+export {
+  SidecarLocalAnswerPanel,
+  type SidecarLocalAnswerPanelProps,
+} from "@/components/ui/DesktopSidecar/SidecarLocalAnswerPanel";
 export {
   FileCapabilitiesProvider,
   useFileCapabilitiesContext,
@@ -287,6 +333,7 @@ export {
   registerClientToolExecutor,
   type ClientToolExecutor,
   type ClientToolExecutionResult,
+  type ClientToolCallContext,
 } from "@/hooks/chat/clientToolExecutors";
 export { createLogger } from "@/utils/debugLogger";
 export {

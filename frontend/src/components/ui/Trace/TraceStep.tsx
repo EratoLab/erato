@@ -17,10 +17,19 @@ interface TraceStepProps {
   title: ReactNode;
   /** Optional inline node next to the title (e.g. a tool status pill). */
   titleSlot?: ReactNode;
-  /** Body content — collapsed by default after streaming finishes. */
-  children: ReactNode;
+  /**
+   * Body content — collapsed by default after streaming finishes. A step
+   * without body content renders as a plain row: no chevron, no toggle.
+   */
+  children?: ReactNode;
   /** Default-open state. Pass `true` for the live (still-streaming) step. */
   defaultOpen?: boolean;
+  /**
+   * One-shot expand on transition to `true` — for body content that appears
+   * after mount and should be seen without a click (e.g. a nested step log
+   * streaming in). The user's manual toggle stays authoritative afterwards.
+   */
+  autoExpand?: boolean;
   /**
    * Auto-collapse trigger: when this transitions from `false` → `true` the
    * step collapses (because a later step appeared and stole the focus). The
@@ -49,13 +58,21 @@ export const TraceStep = ({
   titleSlot,
   children,
   defaultOpen = false,
+  autoExpand = false,
   autoCollapse = false,
   isActive = false,
 }: TraceStepProps) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
 
+  useEffect(() => {
+    if (autoExpand) {
+      setIsOpen(true);
+    }
+  }, [autoExpand]);
+
   // One-shot auto-collapse on transition: when later content appears, fold
-  // up. Doesn't lock the state — clicking afterwards expands again.
+  // up. Doesn't lock the state — clicking afterwards expands again. Ordered
+  // after auto-expand so a tie folds rather than opens.
   useEffect(() => {
     if (autoCollapse) {
       setIsOpen(false);
@@ -70,31 +87,40 @@ export const TraceStep = ({
         isActive={isActive}
       />
       <div className="min-w-0 flex-1">
-        <button
-          type="button"
-          aria-expanded={isOpen}
-          onClick={() => setIsOpen((prev) => !prev)}
-          className={clsx(
-            "flex w-full items-center gap-2 py-1 pl-2.5 text-left text-sm text-theme-fg-secondary",
-            "cursor-pointer transition-colors hover:text-theme-fg-primary",
-            "min-w-0",
-          )}
-        >
-          <span className="truncate font-medium">{title}</span>
-          {titleSlot}
-          <ChevronRightIcon
-            aria-hidden="true"
-            className={clsx(
-              "ml-auto size-3 shrink-0 text-theme-fg-muted transition-transform",
-              isOpen ? "rotate-90" : "rotate-0",
-            )}
-          />
-        </button>
-        <TraceCollapse isOpen={isOpen}>
-          <div className="pl-2.5 pt-0.5 text-sm text-theme-fg-primary">
-            {children}
+        {children == null ? (
+          <div className="flex w-full min-w-0 items-center gap-2 py-1 pl-2.5 text-left text-sm text-theme-fg-secondary">
+            <span className="truncate font-medium">{title}</span>
+            {titleSlot}
           </div>
-        </TraceCollapse>
+        ) : (
+          <button
+            type="button"
+            aria-expanded={isOpen}
+            onClick={() => setIsOpen((prev) => !prev)}
+            className={clsx(
+              "flex w-full items-center gap-2 py-1 pl-2.5 text-left text-sm text-theme-fg-secondary",
+              "cursor-pointer transition-colors hover:text-theme-fg-primary",
+              "min-w-0",
+            )}
+          >
+            <span className="truncate font-medium">{title}</span>
+            {titleSlot}
+            <ChevronRightIcon
+              aria-hidden="true"
+              className={clsx(
+                "ml-auto size-3 shrink-0 text-theme-fg-muted transition-transform",
+                isOpen ? "rotate-90" : "rotate-0",
+              )}
+            />
+          </button>
+        )}
+        {children != null && (
+          <TraceCollapse isOpen={isOpen}>
+            <div className="pl-2.5 pt-0.5 text-sm text-theme-fg-primary">
+              {children}
+            </div>
+          </TraceCollapse>
+        )}
       </div>
     </div>
   );

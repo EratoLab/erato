@@ -30,8 +30,12 @@
         }
       },
       "errors": [
-        { "$ref": "#/components/errors/IncompatibleProtocol" },
-        { "$ref": "#/components/errors/InvalidParams" }
+        {
+          "$ref": "#/components/errors/IncompatibleProtocol"
+        },
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        }
       ]
     },
     {
@@ -72,18 +76,32 @@
         }
       },
       "errors": [
-        { "$ref": "#/components/errors/CapabilityUnavailable" },
-        { "$ref": "#/components/errors/InvalidParams" },
-        { "$ref": "#/components/errors/PermissionDenied" },
-        { "$ref": "#/components/errors/RequestCancelled" },
-        { "$ref": "#/components/errors/Timeout" },
-        { "$ref": "#/components/errors/SidecarInternal" }
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/PermissionDenied"
+        },
+        {
+          "$ref": "#/components/errors/RequestCancelled"
+        },
+        {
+          "$ref": "#/components/errors/Timeout"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
       ],
       "x-erato-capability": {
         "id": "diagnostics.echo",
         "major": 1,
         "method": "diagnostics.echo.v1",
-        "availability": { "state": "enabled" }
+        "availability": {
+          "state": "enabled"
+        }
       }
     },
     {
@@ -105,18 +123,32 @@
         }
       },
       "errors": [
-        { "$ref": "#/components/errors/CapabilityUnavailable" },
-        { "$ref": "#/components/errors/InvalidParams" },
-        { "$ref": "#/components/errors/PermissionDenied" },
-        { "$ref": "#/components/errors/RequestCancelled" },
-        { "$ref": "#/components/errors/Timeout" },
-        { "$ref": "#/components/errors/SidecarInternal" }
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/PermissionDenied"
+        },
+        {
+          "$ref": "#/components/errors/RequestCancelled"
+        },
+        {
+          "$ref": "#/components/errors/Timeout"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
       ],
       "x-erato-capability": {
         "id": "outlook.list_mailboxes",
         "major": 1,
         "method": "outlook.list_mailboxes.v1",
-        "availability": { "state": "enabled" }
+        "availability": {
+          "state": "enabled"
+        }
       }
     },
     {
@@ -138,18 +170,32 @@
         }
       },
       "errors": [
-        { "$ref": "#/components/errors/CapabilityUnavailable" },
-        { "$ref": "#/components/errors/InvalidParams" },
-        { "$ref": "#/components/errors/PermissionDenied" },
-        { "$ref": "#/components/errors/RequestCancelled" },
-        { "$ref": "#/components/errors/Timeout" },
-        { "$ref": "#/components/errors/SidecarInternal" }
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/PermissionDenied"
+        },
+        {
+          "$ref": "#/components/errors/RequestCancelled"
+        },
+        {
+          "$ref": "#/components/errors/Timeout"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
       ],
       "x-erato-capability": {
         "id": "outlook.list_emails",
         "major": 1,
         "method": "outlook.list_emails.v1",
-        "availability": { "state": "enabled" }
+        "availability": {
+          "state": "enabled"
+        }
       }
     },
     {
@@ -171,18 +217,79 @@
         }
       },
       "errors": [
-        { "$ref": "#/components/errors/CapabilityUnavailable" },
-        { "$ref": "#/components/errors/InvalidParams" },
-        { "$ref": "#/components/errors/PermissionDenied" },
-        { "$ref": "#/components/errors/RequestCancelled" },
-        { "$ref": "#/components/errors/Timeout" },
-        { "$ref": "#/components/errors/SidecarInternal" }
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/PermissionDenied"
+        },
+        {
+          "$ref": "#/components/errors/RequestCancelled"
+        },
+        {
+          "$ref": "#/components/errors/Timeout"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
       ],
       "x-erato-capability": {
         "id": "outlook.get_conversation",
         "major": 1,
         "method": "outlook.get_conversation.v1",
-        "availability": { "state": "enabled" }
+        "availability": {
+          "state": "enabled"
+        }
+      }
+    },
+    {
+      "name": "outlook.search_emails.v1",
+      "summary": "Search locally stored emails of a selected Outlook mailbox, including locally extractable attachment text, with an optional locally generated summary of the hits.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/outlook-search-emails-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/outlook-search-emails-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/PermissionDenied"
+        },
+        {
+          "$ref": "#/components/errors/RequestCancelled"
+        },
+        {
+          "$ref": "#/components/errors/Timeout"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ],
+      "x-erato-capability": {
+        "id": "outlook.search_emails",
+        "major": 1,
+        "method": "outlook.search_emails.v1",
+        "availability": {
+          "state": "enabled"
+        }
       }
     },
     {
@@ -234,15 +341,23 @@
         }
       },
       "errors": [
-        { "$ref": "#/components/errors/CapabilityUnavailable" },
-        { "$ref": "#/components/errors/InvalidParams" },
-        { "$ref": "#/components/errors/SidecarInternal" }
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
       ],
       "x-erato-capability": {
         "id": "sidecar.configure",
         "major": 1,
         "method": "sidecar.configure.v1",
-        "availability": { "state": "enabled" }
+        "availability": {
+          "state": "enabled"
+        }
       }
     },
     {
@@ -264,16 +379,26 @@
         }
       },
       "errors": [
-        { "$ref": "#/components/errors/CapabilityUnavailable" },
-        { "$ref": "#/components/errors/InvalidParams" },
-        { "$ref": "#/components/errors/PermissionDenied" },
-        { "$ref": "#/components/errors/SidecarInternal" }
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/PermissionDenied"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
       ],
       "x-erato-capability": {
         "id": "sidecar.restart",
         "major": 1,
         "method": "sidecar.restart.v1",
-        "availability": { "state": "enabled" }
+        "availability": {
+          "state": "enabled"
+        }
       }
     }
   ],
@@ -282,32 +407,44 @@
       "IncompatibleProtocol": {
         "code": -32010,
         "message": "No mutually supported protocol version.",
-        "data": { "kind": "incompatible_protocol" }
+        "data": {
+          "kind": "incompatible_protocol"
+        }
       },
       "CapabilityUnavailable": {
         "code": -32011,
         "message": "The requested capability is unavailable.",
-        "data": { "kind": "capability_unavailable" }
+        "data": {
+          "kind": "capability_unavailable"
+        }
       },
       "PermissionDenied": {
         "code": -32013,
         "message": "Permission was denied.",
-        "data": { "kind": "permission_denied" }
+        "data": {
+          "kind": "permission_denied"
+        }
       },
       "RequestCancelled": {
         "code": -32014,
         "message": "The request was cancelled.",
-        "data": { "kind": "request_cancelled" }
+        "data": {
+          "kind": "request_cancelled"
+        }
       },
       "Timeout": {
         "code": -32015,
         "message": "The request timed out.",
-        "data": { "kind": "timeout" }
+        "data": {
+          "kind": "timeout"
+        }
       },
       "SidecarInternal": {
         "code": -32016,
         "message": "The sidecar could not complete the request.",
-        "data": { "kind": "sidecar_internal" }
+        "data": {
+          "kind": "sidecar_internal"
+        }
       },
       "InvalidParams": {
         "code": -32602,
@@ -316,7 +453,7 @@
     }
   },
   "x-erato-catalogue": {
-    "revision": "7",
-    "digest": "sha256:c0fcd17ff72b25c516bc69a6405897a76d11695b26eec188fc782f4707af5af4"
+    "revision": "8",
+    "digest": "sha256:276656ac4710aacb333326150d7e26d967bfa6b35cbcf033b6467645557dd094"
   }
 }

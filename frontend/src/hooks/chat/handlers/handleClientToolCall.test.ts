@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { handleClientToolCall } from "./handleClientToolCall";
 import {
+  abortClientToolCalls,
   registerClientToolExecutor,
   resetClientToolRegistryForTests,
 } from "../clientToolExecutors";
@@ -150,6 +151,66 @@ describe("handleClientToolCall", () => {
     await handleClientToolCall(makeEvent(), deps);
     expect(executor).toHaveBeenCalledTimes(2);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("fires the context signal when the user aborts the turn's chat", async () => {
+    let seenSignal: AbortSignal | undefined;
+    registerClientToolExecutor(
+      "fetch_availability",
+      (_input, context) =>
+        new Promise((resolve) => {
+          seenSignal = context?.signal;
+          context?.signal?.addEventListener("abort", () =>
+            resolve({ ok: false, error: "stopped" }),
+          );
+        }),
+    );
+
+    const pending = handleClientToolCall(makeEvent(), deps);
+    expect(seenSignal).toBeDefined();
+    expect(seenSignal?.aborted).toBe(false);
+
+    abortClientToolCalls("chat-1");
+    await pending;
+
+    expect(seenSignal?.aborted).toBe(true);
+    expect(lastPostBody(fetchMock)).toMatchObject({ error: "stopped" });
+  });
+
+  it("scopes the abort to the chat: other chats keep running", async () => {
+    let seenSignal: AbortSignal | undefined;
+    registerClientToolExecutor(
+      "fetch_availability",
+      async (_input, context) => {
+        seenSignal = context?.signal;
+        return { ok: true as const, result: 1 };
+      },
+    );
+
+    const pending = handleClientToolCall(makeEvent(), deps);
+    abortClientToolCalls("chat-other");
+    await pending;
+
+    expect(seenSignal?.aborted).toBe(false);
+    expect(lastPostBody(fetchMock)).toMatchObject({ result: 1 });
+  });
+
+  it("releases the controller once the execution settles", async () => {
+    let seenSignal: AbortSignal | undefined;
+    registerClientToolExecutor(
+      "fetch_availability",
+      async (_input, context) => {
+        seenSignal = context?.signal;
+        return { ok: true as const, result: 1 };
+      },
+    );
+
+    await handleClientToolCall(makeEvent(), deps);
+    // The settled execution's controller is gone, so a later stop of the same
+    // chat must not fire its (already delivered) signal.
+    abortClientToolCalls("chat-1");
+
+    expect(seenSignal?.aborted).toBe(false);
   });
 
   it("delivers an empty success as an explicit null result", async () => {
