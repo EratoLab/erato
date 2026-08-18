@@ -68,6 +68,20 @@ impl TranslationPoCache {
             .insert(po_path, compiled.clone());
         Ok(compiled)
     }
+
+    /// Compile an in-memory PO catalog. Runtime catalogs are loaded from the
+    /// database rather than from the frontend bundle, so they cannot use the
+    /// filesystem-backed cache above.
+    pub fn compile_messages_json_from_contents(&self, po_contents: &str) -> io::Result<Vec<u8>> {
+        let messages = compile_po_catalog_to_messages(po_contents).map_err(|error| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("failed to compile runtime translation catalog: {error}"),
+            )
+        })?;
+        serde_json::to_vec(&json!({ "messages": messages }))
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
+    }
 }
 
 impl Default for TranslationPoCache {
@@ -605,5 +619,22 @@ msgstr "Abbrechen"
         );
         assert_eq!(value["messages"]["common.cancel"], json!(["Abbrechen"]));
         assert_eq!(value["messages"]["common.close"], json!(["Close"]));
+    }
+
+    #[test]
+    fn compiles_runtime_catalog_from_memory_without_fallback_messages() {
+        let compiled = TranslationPoCache::default()
+            .compile_messages_json_from_contents(
+                r#"
+#. js-lingui-explicit-id
+msgid "common.cancel"
+msgstr "Abbrechen"
+"#,
+            )
+            .unwrap();
+        let value: Value = serde_json::from_slice(&compiled).unwrap();
+
+        assert_eq!(value["messages"]["common.cancel"], json!(["Abbrechen"]));
+        assert_eq!(value["messages"].as_object().unwrap().len(), 1);
     }
 }

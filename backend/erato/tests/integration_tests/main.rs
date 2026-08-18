@@ -7,6 +7,7 @@
 
 use ctor::ctor;
 use erato::config::{AppConfig, LangfuseConfig};
+use erato::distribution::runtime::ReloadableAppState;
 use erato::services::background_tasks::BackgroundTaskManager;
 use erato::services::file_storage::{FileStorage, SHAREPOINT_PROVIDER_ID};
 use erato::services::langfuse::LangfuseClient;
@@ -18,7 +19,7 @@ use std::collections::HashMap;
 use std::default::Default;
 use std::sync::Arc;
 use test_log::test;
-use tokio::sync::Semaphore;
+use tokio::sync::{RwLock, Semaphore};
 
 mod actors;
 mod api;
@@ -182,6 +183,7 @@ async fn test_app_state_internal(
             erato::services::template_rendering::consumers::system_prompt::SystemPromptRenderer::new(
             ),
         distribution,
+        reloadable: Arc::new(RwLock::new(ReloadableAppState::default())),
         genai_client_override: None,
         file_bytes_cache,
         file_contents_cache,

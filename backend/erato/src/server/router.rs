@@ -1,11 +1,14 @@
 use super::api::v1beta::ApiV1ApiDoc;
 use crate::config::MsOfficeAddinManifestConfig;
+use crate::distribution::runtime::translation_filename;
 use crate::frontend_environment::DeploymentVersion;
 #[cfg(all(feature = "profiling", target_os = "linux"))]
 use crate::profiling::{memory_profile_flamegraph, memory_profile_pprof};
 use crate::state::AppState;
+use crate::translation_po::TranslationPoCache;
 use axum::Extension;
-use axum::extract::{Query, State};
+use axum::Json;
+use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
@@ -414,6 +417,55 @@ async fn favicon_svg(State(app_state): State<AppState>) -> Response {
     favicon(State(app_state), "favicon.svg").await
 }
 
+async fn runtime_translation(
+    State(app_state): State<AppState>,
+    Path(locale_path): Path<String>,
+) -> Response {
+    let Some(locale) = locale_path.strip_suffix(".json") else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let Ok(filename) = translation_filename(locale) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+
+    let reloadable = app_state.reloadable.read().await;
+    let Some(file) = reloadable.distribution_bundle.file(&filename) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+
+    let body =
+        match TranslationPoCache::default().compile_messages_json_from_contents(&file.contents) {
+            Ok(body) => body,
+            Err(error) => {
+                tracing::error!(locale, %error, "Failed to compile runtime translation catalog");
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        };
+
+    (
+        [
+            (
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("application/json"),
+            ),
+            (header::CACHE_CONTROL, HeaderValue::from_static("no-cache")),
+        ],
+        body,
+    )
+        .into_response()
+}
+
+async fn runtime_translation_index(State(app_state): State<AppState>) -> Response {
+    let reloadable = app_state.reloadable.read().await;
+    (
+        [(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"))],
+        Json(serde_json::json!({
+            "locales": reloadable.distribution_bundle.translation_locales(),
+        })),
+    )
+        .into_response()
+}
+
 pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
     // build our application with a route
 
@@ -425,6 +477,14 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         )
         .route("/favicon.ico", get(favicon_ico))
         .route("/favicon.svg", get(favicon_svg))
+        .route(
+            "/public/common/overrides/index.json",
+            get(runtime_translation_index),
+        )
+        .route(
+            "/public/common/overrides/{locale}",
+            get(runtime_translation),
+        )
         .route("/office-addin/manifest.xml", get(office_addin_manifest))
         .route(
             "/office-addin/manifest-exchange-server.xml",

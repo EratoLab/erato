@@ -1,3 +1,5 @@
+use crate::distribution::runtime::ReloadableAppState;
+use crate::state::AppState;
 use sqlx::postgres::PgListener;
 use std::time::Duration;
 use tokio::task::JoinHandle;
@@ -7,10 +9,6 @@ const INITIAL_RETRY_DELAY: Duration = Duration::from_secs(1);
 const MAX_RETRY_DELAY: Duration = Duration::from_secs(60);
 
 /// Listens for configuration changes published by other Erato services.
-///
-/// The listener is deliberately independent from configuration loading for now. A
-/// notification only produces an info log; handling the reload will be added in a
-/// follow-up.
 #[derive(Debug)]
 pub struct ConfigurationReloadListener {
     task: JoinHandle<()>,
@@ -18,9 +16,9 @@ pub struct ConfigurationReloadListener {
 
 impl ConfigurationReloadListener {
     /// Start the listener in a resilient background task.
-    pub fn spawn(database_url: String) -> Self {
+    pub fn spawn(database_url: String, app_state: AppState) -> Self {
         let task = tokio::spawn(async move {
-            run_with_retries(database_url).await;
+            run_with_retries(database_url, app_state).await;
         });
 
         Self { task }
@@ -33,11 +31,11 @@ impl Drop for ConfigurationReloadListener {
     }
 }
 
-async fn run_with_retries(database_url: String) {
+async fn run_with_retries(database_url: String, app_state: AppState) {
     let mut retry_delay = INITIAL_RETRY_DELAY;
 
     loop {
-        match listen_for_configuration_changes(&database_url).await {
+        match listen_for_configuration_changes(&database_url, &app_state).await {
             Ok(()) => {
                 tracing::warn!(
                     channel = CONFIGURATION_CHANGED_CHANNEL,
@@ -63,7 +61,10 @@ async fn run_with_retries(database_url: String) {
     }
 }
 
-async fn listen_for_configuration_changes(database_url: &str) -> Result<(), sqlx::Error> {
+async fn listen_for_configuration_changes(
+    database_url: &str,
+    app_state: &AppState,
+) -> Result<(), sqlx::Error> {
     let mut listener = PgListener::connect(database_url).await?;
     listener.listen(CONFIGURATION_CHANGED_CHANNEL).await?;
 
@@ -76,7 +77,17 @@ async fn listen_for_configuration_changes(database_url: &str) -> Result<(), sqlx
         let notification = listener.recv().await?;
         tracing::info!(
             channel = notification.channel(),
-            "Received configuration reload notification; reload is not implemented yet"
+            "Received configuration reload notification"
         );
+
+        match ReloadableAppState::load(app_state).await {
+            Ok(next_state) => {
+                *app_state.reloadable.write().await = next_state;
+                tracing::info!("Reloaded runtime distribution");
+            }
+            Err(error) => {
+                tracing::error!(%error, "Failed to reload runtime distribution; keeping the previous state");
+            }
+        }
     }
 }
