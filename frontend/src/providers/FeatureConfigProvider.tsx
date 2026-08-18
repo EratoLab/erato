@@ -84,6 +84,8 @@ interface AuthFeatureConfig {
 interface AssistantsFeatureConfig {
   /** Whether the assistants feature is enabled */
   enabled: boolean;
+  /** Whether a message may delegate to other assistants via @-mentions */
+  delegationEnabled: boolean;
   /** Whether assistants may be shared with edit access */
   enableEditSharing: boolean;
   /** Whether recent assistants should be shown in the sidebar */
@@ -267,6 +269,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
   },
   assistants: {
     enabled: false,
+    delegationEnabled: false,
     enableEditSharing: true,
     showRecentItems: false,
     showRecentItemsCollapsible: false,
@@ -376,6 +379,7 @@ function createFeatureConfig(
     },
     assistants: {
       enabled: environment.assistantsEnabled,
+      delegationEnabled: Boolean(environment.assistantsDelegationEnabled),
       enableEditSharing: environment.assistantsEnableEditSharing ?? true,
       showRecentItems: environment.assistantsShowRecentItems,
       showRecentItemsCollapsible:

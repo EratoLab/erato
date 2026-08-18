@@ -1,5 +1,9 @@
 import { I18nProvider } from "@lingui/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  QueryClient,
+  QueryClientProvider,
+  skipToken,
+} from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,6 +17,7 @@ import { messages as enMessages } from "@/locales/en/messages.json";
 import { ChatInput } from "./ChatInput";
 import { useToastStore } from "../Toast/toastStore";
 
+import type { AddMenuSection } from "./ChatInputAddMenu";
 import type { FileAttachmentsPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatContextValue } from "@/providers/ChatProvider";
@@ -30,6 +35,9 @@ const mockUseChatInputFeature = vi.fn();
 const mockUseAudioTranscriptionFeature = vi.fn();
 const mockUseAudioDictationFeature = vi.fn();
 const mockUseAudioConversationalFeature = vi.fn();
+const mockUseAssistantsFeature = vi.fn();
+const mockUseListAssistants = vi.fn();
+const mockUseFrequentAssistants = vi.fn();
 const mockUseOptionalTranslation = vi.fn();
 const mockUseActiveModelSelection = vi.fn();
 const mockUseTokenManagement = vi.fn();
@@ -42,6 +50,8 @@ const mockFacetSelector = vi.fn();
 const mockFileUploadControl = vi.fn();
 const mockUseAudioDictationRecorder = vi.fn();
 const mockUseAudioTranscriptionRecorder = vi.fn();
+const mockUseIsMobile = vi.fn();
+const mockChatInputAddControls = vi.fn();
 
 vi.mock("@/providers/ChatProvider", () => ({
   useChatContext: () => mockUseChatContext(),
@@ -53,6 +63,7 @@ vi.mock("@/providers/FeatureConfigProvider", () => ({
   useAudioTranscriptionFeature: () => mockUseAudioTranscriptionFeature(),
   useAudioDictationFeature: () => mockUseAudioDictationFeature(),
   useAudioConversationalFeature: () => mockUseAudioConversationalFeature(),
+  useAssistantsFeature: () => mockUseAssistantsFeature(),
   useErrorReportFeature: () => ({
     showVerboseAssistantErrors: false,
     showCopyErrorReport: false,
@@ -90,6 +101,9 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   fetchGetFile: (...args: unknown[]) => mockFetchGetFile(...args),
   useCreateChat: (...args: unknown[]) => mockUseCreateChat(...args),
   useFacets: (...args: unknown[]) => mockUseFacets(...args),
+  useListAssistants: (...args: unknown[]) => mockUseListAssistants(...args),
+  useFrequentAssistants: (...args: unknown[]) =>
+    mockUseFrequentAssistants(...args),
 }));
 
 vi.mock("@/components/ui/FileUpload", () => ({
@@ -142,6 +156,19 @@ vi.mock("./ChatInputTokenUsage", () => ({
   ChatInputTokenUsage: (props: unknown) => {
     mockChatInputTokenUsage(props);
     return null;
+  },
+}));
+
+vi.mock("@/hooks/useResponsive", () => ({
+  useIsMobile: () => mockUseIsMobile(),
+}));
+
+// The "+" menu's own rendering of the section is covered against the real
+// component in ChatInputAddControls.test.tsx; here only the wiring matters.
+vi.mock("./ChatInputAddControls", () => ({
+  ChatInputAddControls: (props: unknown) => {
+    mockChatInputAddControls(props);
+    return <div data-testid="chat-input-add-controls" />;
   },
 }));
 
@@ -232,7 +259,14 @@ describe("ChatInput", () => {
       cancelMessage: vi.fn(),
     });
 
+    mockUseIsMobile.mockReturnValue(false);
     mockUseUploadFeature.mockReturnValue({ enabled: false });
+    mockUseAssistantsFeature.mockReturnValue({
+      enabled: false,
+      delegationEnabled: false,
+    });
+    mockUseListAssistants.mockReturnValue({ data: undefined });
+    mockUseFrequentAssistants.mockReturnValue({ data: undefined });
     mockUseAudioTranscriptionFeature.mockReturnValue({ enabled: false });
     mockUseAudioDictationFeature.mockReturnValue({ enabled: false });
     mockUseAudioConversationalFeature.mockReturnValue({ enabled: false });
@@ -2597,6 +2631,7 @@ describe("ChatInput", () => {
         undefined,
         undefined,
         [],
+        [],
       );
       expect(
         mockUseAudioDictationRecorder.mock.calls.at(-1)?.[0],
@@ -2714,6 +2749,7 @@ describe("ChatInput", () => {
         "hello after pause",
         undefined,
         undefined,
+        [],
         [],
       );
       requestSubmitSpy.mockRestore();
@@ -3512,6 +3548,7 @@ describe("ChatInput", () => {
         undefined,
         undefined,
         [],
+        [],
       );
       expect(
         screen.queryByTestId("chat-input-queued-message"),
@@ -3623,7 +3660,11 @@ describe("ChatInput", () => {
       )[0];
       expect(
         useComposeSessionStore.getState().draftsBySessionId[sessionId!],
-      ).toEqual({ message: "next message", attachedFiles: [] });
+      ).toEqual({
+        message: "next message",
+        attachedFiles: [],
+        mentionedAssistants: [],
+      });
       expect(useMessageQueueStore.getState().queuedBySessionId).toEqual({});
 
       rerender({ isPendingResponse: false }, { remountKey: 2 });
@@ -3756,6 +3797,7 @@ describe("ChatInput", () => {
         undefined,
         undefined,
         [],
+        [],
       );
     });
 
@@ -3831,6 +3873,7 @@ describe("ChatInput", () => {
         "with attachment",
         ["file-1"],
         undefined,
+        [],
         [],
       );
     });
@@ -3961,6 +4004,597 @@ describe("ChatInput", () => {
         screen.getByTestId("chat-input-queued-message-edit"),
       ).toHaveTextContent("first");
       expect(textarea).toHaveValue("second");
+    });
+  });
+
+  describe("assistant @-mentions (ERMAIN-618)", () => {
+    const RESEARCHER = {
+      id: "assistant-research",
+      name: "Researcher",
+      description: "Finds and cites sources",
+      owner_email: "research@example.com",
+    };
+    const EDITOR = {
+      id: "assistant-editor",
+      name: "Editor",
+      description: "Tightens prose",
+      owner_email: "editor@example.com",
+    };
+
+    const submitHandlerThatSends =
+      (
+        message: string,
+        attachedFiles: FileUploadItem[],
+        innerOnSendMessage: (message: string, inputFileIds?: string[]) => void,
+        isLoading: boolean,
+        disabled: boolean,
+        resetMessage: () => void,
+      ) =>
+      (event: FormEvent) => {
+        event.preventDefault();
+        if (isLoading || disabled) return;
+        const trimmed = message.trim();
+        const fileIds = attachedFiles.map((file) => file.id);
+        if (trimmed || fileIds.length > 0) {
+          innerOnSendMessage(trimmed, fileIds.length > 0 ? fileIds : undefined);
+          resetMessage();
+        }
+      };
+
+    const enableDelegation = () => {
+      mockUseAssistantsFeature.mockReturnValue({
+        enabled: true,
+        delegationEnabled: true,
+      });
+      mockUseListAssistants.mockReturnValue({ data: [RESEARCHER, EDITOR] });
+      mockUseFrequentAssistants.mockReturnValue({
+        data: { assistants: [RESEARCHER, EDITOR] },
+      });
+      mockUseChatInputHandlers.mockReturnValue({
+        attachedFiles: [],
+        fileError: null,
+        setFileError: vi.fn(),
+        handleFilesUploaded: vi.fn(),
+        handleRemoveFile: vi.fn(),
+        handleRemoveAllFiles: vi.fn(),
+        setAttachedFiles: vi.fn(),
+        createSubmitHandler: submitHandlerThatSends,
+      });
+    };
+
+    const renderComposer = async (
+      onSendMessage: () => void,
+      props: { enforceSelectedFacetIds?: boolean } = {},
+    ) => {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      const { i18n } = await import("@lingui/core");
+      render(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput
+              onSendMessage={onSendMessage}
+              chatId="chat-1"
+              {...props}
+            />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+      return screen.getByPlaceholderText("Type a message...");
+    };
+
+    // The popover primitive places focus one frame after opening, so anything
+    // asserting where the caret ended up has to let that frame run.
+    const flushFrame = async () => {
+      await act(async () => {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      });
+    };
+
+    const typeWithCaretAtEnd = (textarea: HTMLElement, value: string) => {
+      fireEvent.change(textarea, { target: { value } });
+      (textarea as HTMLTextAreaElement).setSelectionRange(
+        value.length,
+        value.length,
+      );
+      fireEvent.select(textarea);
+    };
+
+    beforeEach(() => {
+      useMessageQueueStore.setState({ queuedBySessionId: {} });
+    });
+
+    it("issues no assistant queries and offers no mention surface while delegation is off", async () => {
+      const textarea = await renderComposer(vi.fn());
+
+      expect(mockUseListAssistants).toHaveBeenCalledWith(skipToken);
+      expect(mockUseFrequentAssistants).toHaveBeenCalledWith(skipToken);
+
+      typeWithCaretAtEnd(textarea, "@Res");
+
+      expect(
+        screen.queryByTestId("chat-input-mention-anchor"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("chat-input-mention-option-assistant-research"),
+      ).not.toBeInTheDocument();
+      expect(mockFacetSelector).not.toHaveBeenCalled();
+    });
+
+    it("opens the picker on a typed @ and inserts the token on selection", async () => {
+      enableDelegation();
+      const textarea = await renderComposer(vi.fn());
+
+      typeWithCaretAtEnd(textarea, "@Res");
+
+      const option = screen.getByTestId(
+        "chat-input-mention-option-assistant-research",
+      );
+      expect(option).toHaveTextContent("Researcher");
+      expect(option).toHaveTextContent("Finds and cites sources");
+      expect(
+        screen.queryByTestId("chat-input-mention-option-assistant-editor"),
+      ).not.toBeInTheDocument();
+
+      fireEvent.click(option);
+
+      expect(textarea).toHaveValue("@Researcher ");
+      expect(
+        screen.queryByTestId("chat-input-mention-option-assistant-research"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("announces the open picker to a screen reader without repeating per keystroke", async () => {
+      enableDelegation();
+      const textarea = await renderComposer(vi.fn());
+
+      const liveRegion = screen.getByRole("status");
+      expect(liveRegion).toHaveTextContent("");
+
+      typeWithCaretAtEnd(textarea, "@Res");
+      expect(liveRegion).toHaveTextContent(/down arrow to browse/i);
+
+      const announced = liveRegion.textContent;
+      typeWithCaretAtEnd(textarea, "@Resea");
+      expect(liveRegion.textContent).toBe(announced);
+
+      typeWithCaretAtEnd(textarea, "@Researcher zzz");
+      expect(liveRegion).toHaveTextContent("");
+    });
+
+    it("does not open the picker for an address-like @", async () => {
+      enableDelegation();
+      const textarea = await renderComposer(vi.fn());
+
+      typeWithCaretAtEnd(textarea, "mail me at research@ex");
+
+      expect(
+        screen.queryByTestId("chat-input-mention-option-assistant-research"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("selects the top match on Enter instead of sending", async () => {
+      enableDelegation();
+      const onSendMessage = vi.fn();
+      const textarea = await renderComposer(onSendMessage);
+
+      typeWithCaretAtEnd(textarea, "@Res");
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      expect(onSendMessage).not.toHaveBeenCalled();
+      expect(textarea).toHaveValue("@Researcher ");
+    });
+
+    it("moves into the picker with the arrows and selects with Enter", async () => {
+      enableDelegation();
+      const onSendMessage = vi.fn();
+      const textarea = await renderComposer(onSendMessage);
+
+      typeWithCaretAtEnd(textarea, "@");
+      fireEvent.keyDown(textarea, { key: "ArrowDown" });
+      expect(
+        screen.getByTestId("chat-input-mention-option-assistant-research"),
+      ).toHaveFocus();
+
+      fireEvent.keyDown(document.activeElement as HTMLElement, {
+        key: "ArrowDown",
+      });
+      const editorRow = screen.getByTestId(
+        "chat-input-mention-option-assistant-editor",
+      );
+      expect(editorRow).toHaveFocus();
+
+      fireEvent.click(editorRow);
+      expect(textarea).toHaveValue("@Editor ");
+      expect(onSendMessage).not.toHaveBeenCalled();
+    });
+
+    it("leaves the caret in the composer while the picker is open", async () => {
+      enableDelegation();
+      const textarea = await renderComposer(vi.fn());
+      textarea.focus();
+
+      typeWithCaretAtEnd(textarea, "@Res");
+      await flushFrame();
+
+      expect(
+        screen.getByTestId("chat-input-mention-option-assistant-research"),
+      ).toBeInTheDocument();
+      expect(textarea).toHaveFocus();
+    });
+
+    it("closes on Escape and hands focus back to the composer", async () => {
+      enableDelegation();
+      const textarea = await renderComposer(vi.fn());
+
+      typeWithCaretAtEnd(textarea, "@");
+      expect(
+        screen.getByTestId("chat-input-mention-option-assistant-research"),
+      ).toBeInTheDocument();
+
+      fireEvent.keyDown(textarea, { key: "ArrowDown" });
+      fireEvent.keyDown(document.activeElement as HTMLElement, {
+        key: "Escape",
+      });
+
+      expect(
+        screen.queryByTestId("chat-input-mention-option-assistant-research"),
+      ).not.toBeInTheDocument();
+      expect(textarea).toHaveFocus();
+    });
+
+    // The keyup of the dismissing Escape re-reads the same text and caret, so
+    // without a dismissal latch the picker is back before the key is released.
+    it("stays dismissed for the rest of the key press and lets Enter send", async () => {
+      enableDelegation();
+      const onSendMessage = vi.fn();
+      const textarea = await renderComposer(onSendMessage);
+
+      typeWithCaretAtEnd(textarea, "ping @Res");
+      fireEvent.keyDown(textarea, { key: "Escape" });
+      fireEvent.keyUp(textarea, { key: "Escape" });
+      fireEvent.select(textarea);
+      await flushFrame();
+
+      expect(
+        screen.queryByTestId("chat-input-mention-option-assistant-research"),
+      ).not.toBeInTheDocument();
+
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "ping @Res",
+        undefined,
+        undefined,
+        [],
+        [],
+      );
+    });
+
+    it("re-arms the picker once the fragment is edited again", async () => {
+      enableDelegation();
+      const textarea = await renderComposer(vi.fn());
+
+      typeWithCaretAtEnd(textarea, "ping @Res");
+      fireEvent.keyDown(textarea, { key: "Escape" });
+      fireEvent.keyUp(textarea, { key: "Escape" });
+      typeWithCaretAtEnd(textarea, "ping @Rese");
+
+      expect(
+        screen.getByTestId("chat-input-mention-option-assistant-research"),
+      ).toBeInTheDocument();
+    });
+
+    it("sends the mentioned ids resolved from the text", async () => {
+      enableDelegation();
+      const onSendMessage = vi.fn();
+      const textarea = await renderComposer(onSendMessage);
+
+      typeWithCaretAtEnd(textarea, "@Res");
+      fireEvent.click(
+        screen.getByTestId("chat-input-mention-option-assistant-research"),
+      );
+      typeWithCaretAtEnd(textarea, "@Researcher please summarize");
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "@Researcher please summarize",
+        undefined,
+        undefined,
+        [],
+        ["assistant-research"],
+      );
+    });
+
+    it("drops the mention when its token is deleted from the text", async () => {
+      enableDelegation();
+      const onSendMessage = vi.fn();
+      const textarea = await renderComposer(onSendMessage);
+
+      typeWithCaretAtEnd(textarea, "@Res");
+      fireEvent.click(
+        screen.getByTestId("chat-input-mention-option-assistant-research"),
+      );
+      typeWithCaretAtEnd(textarea, "please summarize");
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "please summarize",
+        undefined,
+        undefined,
+        [],
+        [],
+      );
+    });
+
+    it("carries the queued message's mentions through the drain", async () => {
+      enableDelegation();
+      const onSendMessage = vi.fn();
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      const { i18n } = await import("@lingui/core");
+      const ui = (isPendingResponse: boolean) => {
+        mockUseChatContext.mockReturnValue({
+          isPendingResponse,
+          isMessagingLoading: false,
+          isUploading: false,
+          cancelMessage: vi.fn(),
+          messagingError: null,
+        });
+        return (
+          <QueryClientProvider client={queryClient}>
+            <I18nProvider i18n={i18n}>
+              <ChatInput onSendMessage={onSendMessage} chatId="chat-1" />
+            </I18nProvider>
+          </QueryClientProvider>
+        );
+      };
+      const { rerender } = render(ui(true));
+
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      typeWithCaretAtEnd(textarea, "@Res");
+      fireEvent.click(
+        screen.getByTestId("chat-input-mention-option-assistant-research"),
+      );
+      typeWithCaretAtEnd(textarea, "@Researcher take over");
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+      expect(textarea).toHaveValue("");
+
+      rerender(ui(false));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      });
+
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "@Researcher take over",
+        undefined,
+        undefined,
+        [],
+        ["assistant-research"],
+      );
+    });
+
+    // The seeded draft carries its mentions; a remount that keeps only the text
+    // would submit an ordinary run behind an unchanged @token.
+    it("keeps a draft's mentions across a remount", async () => {
+      enableDelegation();
+      const onSendMessage = vi.fn();
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      const { i18n } = await import("@lingui/core");
+      const ui = (mountKey: number) => (
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput
+              key={mountKey}
+              onSendMessage={onSendMessage}
+              chatId="chat-1"
+            />
+          </I18nProvider>
+        </QueryClientProvider>
+      );
+      const { rerender } = render(ui(1));
+
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      typeWithCaretAtEnd(textarea, "@Res");
+      fireEvent.click(
+        screen.getByTestId("chat-input-mention-option-assistant-research"),
+      );
+      typeWithCaretAtEnd(textarea, "@Researcher hello");
+
+      rerender(ui(2));
+
+      const remounted = screen.getByPlaceholderText("Type a message...");
+      expect(remounted).toHaveValue("@Researcher hello");
+      fireEvent.keyDown(remounted, { key: "Enter", shiftKey: false });
+
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "@Researcher hello",
+        undefined,
+        undefined,
+        [],
+        ["assistant-research"],
+      );
+    });
+
+    it("inserts a mention picked from the browse dialog", async () => {
+      enableDelegation();
+      const textarea = await renderComposer(vi.fn());
+
+      typeWithCaretAtEnd(textarea, "@");
+      fireEvent.click(screen.getByTestId("chat-input-mention-browse"));
+
+      fireEvent.change(screen.getByTestId("chat-input-mention-browse-search"), {
+        target: { value: "Editor" },
+      });
+      expect(
+        screen.queryByTestId(
+          "chat-input-mention-browse-option-assistant-research",
+        ),
+      ).not.toBeInTheDocument();
+
+      fireEvent.click(
+        screen.getByTestId("chat-input-mention-browse-option-assistant-editor"),
+      );
+
+      expect(textarea).toHaveValue("@Editor ");
+      expect(
+        screen.queryByTestId("chat-input-mention-browse-search"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("browses the whole accessible list and filters on one character", async () => {
+      enableDelegation();
+      const archivist = {
+        id: "assistant-archivist",
+        name: "Archivist",
+        description: "Keeps the record",
+      };
+      mockUseListAssistants.mockReturnValue({
+        data: [
+          RESEARCHER,
+          EDITOR,
+          ...Array.from({ length: 4 }, (_, index) => ({
+            id: `assistant-extra-${index}`,
+            name: `Extra ${index}`,
+          })),
+          archivist,
+        ],
+      });
+      const textarea = await renderComposer(vi.fn());
+
+      typeWithCaretAtEnd(textarea, "@");
+      // Only the frequent handful is suggested inline.
+      expect(
+        screen.queryByTestId("chat-input-mention-option-assistant-archivist"),
+      ).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByTestId("chat-input-mention-browse"));
+      await flushFrame();
+
+      const search = screen.getByTestId("chat-input-mention-browse-search");
+      expect(search).toHaveFocus();
+      expect(
+        screen.getByTestId(
+          "chat-input-mention-browse-option-assistant-archivist",
+        ),
+      ).toBeInTheDocument();
+
+      fireEvent.change(search, { target: { value: "A" } });
+      fireEvent.click(
+        screen.getByTestId(
+          "chat-input-mention-browse-option-assistant-archivist",
+        ),
+      );
+
+      expect(textarea).toHaveValue("@Archivist ");
+    });
+
+    it("clears the browse filter when the dialog is dismissed", async () => {
+      enableDelegation();
+      const textarea = await renderComposer(vi.fn());
+
+      typeWithCaretAtEnd(textarea, "@");
+      fireEvent.click(screen.getByTestId("chat-input-mention-browse"));
+      fireEvent.change(screen.getByTestId("chat-input-mention-browse-search"), {
+        target: { value: "Editor" },
+      });
+      fireEvent.keyDown(document, { key: "Escape" });
+
+      expect(textarea).toHaveFocus();
+
+      typeWithCaretAtEnd(textarea, "@ ");
+      typeWithCaretAtEnd(textarea, "@");
+      fireEvent.click(screen.getByTestId("chat-input-mention-browse"));
+
+      expect(
+        screen.getByTestId("chat-input-mention-browse-search"),
+      ).toHaveValue("");
+      expect(
+        screen.getByTestId(
+          "chat-input-mention-browse-option-assistant-research",
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it("feeds the same assistants section into the mobile add menu", async () => {
+      enableDelegation();
+      mockUseIsMobile.mockReturnValue(true);
+      await renderComposer(vi.fn());
+
+      // Neither uploads nor facets are available here: the assistants alone
+      // are what puts the "+" menu on screen.
+      expect(screen.getByTestId("chat-input-add-controls")).toBeInTheDocument();
+      const props = mockChatInputAddControls.mock.calls.at(-1)?.[0] as {
+        assistantSection: AddMenuSection;
+      };
+      expect(props.assistantSection.header).toBe("Assistants");
+      expect(props.assistantSection.items.map((item) => item.label)).toEqual([
+        "Researcher",
+        "Editor",
+        "Browse assistants…",
+      ]);
+    });
+
+    it("gives the desktop tool surface the same assistants section", async () => {
+      enableDelegation();
+      mockUseFacets.mockReturnValue({
+        data: {
+          facets: [{ id: "facet-1", name: "Tool", default_enabled: false }],
+          global_facet_settings: undefined,
+        },
+        error: null,
+      });
+      await renderComposer(vi.fn());
+
+      const section = mockFacetSelector.mock.calls.at(-1)?.[0]
+        .assistantSection as AddMenuSection;
+      expect(section.header).toBe("Assistants");
+      expect(section.items.map((item) => item.label)).toEqual([
+        "Researcher",
+        "Editor",
+        "Browse assistants…",
+      ]);
+    });
+
+    it("keeps the desktop tool surface mounted for assistants when no facet exists", async () => {
+      enableDelegation();
+      await renderComposer(vi.fn());
+
+      expect(screen.getByTestId("facet-selector")).toBeInTheDocument();
+      expect(mockFacetSelector.mock.calls.at(-1)?.[0].facets).toEqual([]);
+    });
+
+    // Enforced facet settings lock the tools; delegating out of that chat is
+    // still allowed, so the gate must not take the whole control down with it.
+    it("locks only the tools when facet settings are enforced", async () => {
+      enableDelegation();
+      mockUseFacets.mockReturnValue({
+        data: {
+          facets: [
+            { id: "facet-1", display_name: "Tool", default_enabled: false },
+          ],
+          global_facet_settings: undefined,
+        },
+        error: null,
+      });
+      await renderComposer(vi.fn(), { enforceSelectedFacetIds: true });
+
+      const props = mockFacetSelector.mock.calls.at(-1)?.[0];
+      expect(props.disabled).toBe(false);
+      expect(props.toolsDisabled).toBe(true);
     });
   });
 });

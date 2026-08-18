@@ -13,6 +13,7 @@ export interface AddinChatInputCoreProps {
     inputFileIds?: string[],
     modelId?: string,
     selectedFacetIds?: string[],
+    mentionedAssistantIds?: string[],
   ) => void;
   handleFileAttachments?: (files: FileUploadItem[]) => void;
   isLoading?: boolean;

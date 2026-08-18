@@ -114,6 +114,7 @@ export interface SubmitStreamRequestBody {
   assistant_id?: string;
   selected_facet_ids?: string[];
   action_facet?: ActionFacetRequest;
+  mentioned_assistant_ids?: string[];
 }
 
 /**
@@ -124,6 +125,7 @@ export interface SubmitStreamRequestBody {
  * @param currentChatId Optional existing chat ID (could be active or silent chat ID).
  * @param modelId Optional chat provider ID for model selection.
  * @param assistantId Optional assistant ID to associate with the chat.
+ * @param mentionedAssistantIds Optional assistants to delegate this turn to.
  * @returns The request body object.
  */
 export function constructSubmitStreamRequestBody(
@@ -135,6 +137,7 @@ export function constructSubmitStreamRequestBody(
   assistantId?: string,
   selectedFacetIds?: string[],
   actionFacet?: ActionFacetRequest,
+  mentionedAssistantIds?: string[],
 ): SubmitStreamRequestBody {
   const body: SubmitStreamRequestBody = {
     user_message: userMessageContent,
@@ -160,6 +163,9 @@ export function constructSubmitStreamRequestBody(
   }
   if (actionFacet) {
     body.action_facet = actionFacet;
+  }
+  if (mentionedAssistantIds && mentionedAssistantIds.length > 0) {
+    body.mentioned_assistant_ids = mentionedAssistantIds;
   }
 
   return body;

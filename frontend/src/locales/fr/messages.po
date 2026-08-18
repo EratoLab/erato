@@ -1856,6 +1856,43 @@ msgid "chatInput.addMenu.trigger"
 msgstr "Ajouter des fichiers et des outils"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/AssistantMentionPopover.tsx
+#: src/components/ui/Chat/assistantMentionSection.ts
+msgid "chatInput.mentions.browse"
+msgstr "Parcourir les assistants…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/AssistantBrowserModal.tsx
+msgid "chatInput.mentions.browseTitle"
+msgstr "Mentionner un assistant"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/AssistantBrowserModal.tsx
+msgid "chatInput.mentions.noResults"
+msgstr "Aucun assistant correspondant"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chatInput.mentions.pickerAnnouncement"
+msgstr "Suggestions d’assistants disponibles. Appuyez sur la flèche vers le bas pour les parcourir, ou sur Entrée pour mentionner le premier."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/AssistantMentionPopover.tsx
+msgid "chatInput.mentions.pickerLabel"
+msgstr "Suggestions d'assistants"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/AssistantBrowserModal.tsx
+msgid "chatInput.mentions.searchPlaceholder"
+msgstr "Rechercher des assistants..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/assistantMentionSection.ts
+#: src/components/ui/Chat/FacetSelector.tsx
+msgid "chatInput.mentions.sectionHeader"
+msgstr "Assistants"
+
+#. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudDriveList.tsx
 msgid "cloudDriveList.driveKind.businessLibrary"
 msgstr ""

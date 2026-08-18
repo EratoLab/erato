@@ -32,6 +32,12 @@ export interface AddMenuItemBase {
 export interface AddMenuActionItem extends AddMenuItemBase {
   /** Optional secondary line (e.g. file size, provider hint). */
   description?: React.ReactNode;
+  /**
+   * Skip the close delay. Required of any row that opens a dialog: the delayed
+   * close returns focus to the trigger *after* the dialog has focused itself,
+   * pulling focus out from under the overlay.
+   */
+  closesImmediately?: boolean;
   onSelect: () => void;
 }
 
@@ -94,7 +100,7 @@ export interface ChatInputAddMenuProps {
 // visible for a beat before the menu dismisses.
 const CLOSE_ON_SELECT_DELAY_MS = 100;
 
-const sectionDivider = "my-1 h-px bg-theme-border";
+export const addMenuSectionDividerClassName = "my-1 h-px bg-theme-border";
 
 // Rows share DropdownMenu's item channel — geometry class, typography and
 // hover/focus colors — so customer themes retune every menu surface together.
@@ -104,7 +110,64 @@ const rowClassName =
 // CSS selector for the menu's navigable rows; natively-disabled rows are
 // excluded from roving focus (aria-disabled tool rows stay reachable).
 // eslint-disable-next-line lingui/no-unlocalized-strings -- CSS selector, not user-facing
-const NAVIGABLE_ITEM_SELECTOR = "[data-add-menu-item]:not([disabled])";
+export const ADD_MENU_ITEM_SELECTOR = "[data-add-menu-item]:not([disabled])";
+
+export interface AddMenuActionRowProps {
+  label: React.ReactNode;
+  /** Optional secondary line (e.g. file size, assistant description). */
+  description?: React.ReactNode;
+  icon?: React.ReactNode;
+  disabled?: boolean;
+  testId?: string;
+  onActivate: () => void;
+}
+
+/**
+ * One activatable menu row. Exported so surfaces outside this menu — the
+ * composer's mention picker — present identical rows without re-deriving the
+ * item channel or the roving-focus contract.
+ */
+export function AddMenuActionRow({
+  label,
+  description,
+  icon,
+  disabled = false,
+  testId,
+  onActivate,
+}: AddMenuActionRowProps) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      tabIndex={-1}
+      data-add-menu-item=""
+      onClick={onActivate}
+      disabled={disabled}
+      data-testid={testId}
+      className={clsx(
+        rowClassName,
+        "disabled:cursor-not-allowed disabled:opacity-50",
+      )}
+    >
+      {icon && (
+        <span
+          className="flex size-5 shrink-0 items-center justify-center"
+          aria-hidden="true"
+        >
+          {icon}
+        </span>
+      )}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate">{label}</span>
+        {description && (
+          <span className="block truncate text-xs text-theme-fg-muted">
+            {description}
+          </span>
+        )}
+      </span>
+    </button>
+  );
+}
 
 function SectionHeader({
   id,
@@ -158,7 +221,7 @@ export function ChatInputAddMenu({
   useRovingMenuFocus({
     containerRef: panelRef,
     enabled: isOpen,
-    itemSelector: NAVIGABLE_ITEM_SELECTOR,
+    itemSelector: ADD_MENU_ITEM_SELECTOR,
   });
 
   const cancelPendingClose = useCallback(() => {
@@ -198,45 +261,27 @@ export function ChatInputAddMenu({
   useEffect(() => () => clearTimeout(closeTimerRef.current), []);
 
   const renderActionRow = (item: AddMenuActionItem, testId: string) => (
-    <button
+    <AddMenuActionRow
       key={item.id}
-      type="button"
-      role="menuitem"
-      tabIndex={-1}
-      data-add-menu-item=""
-      onClick={() => {
+      label={item.label}
+      description={item.description}
+      icon={item.icon}
+      disabled={isBusy || item.disabled}
+      testId={testId}
+      onActivate={() => {
         // A pending close means a selection already ran; the row stays
         // mounted through the close delay, so swallow re-activations.
         if (closeTimerRef.current !== undefined) {
           return;
         }
         item.onSelect();
+        if (item.closesImmediately) {
+          closeNow();
+          return;
+        }
         closeAfterSelect();
       }}
-      disabled={isBusy || item.disabled}
-      data-testid={testId}
-      className={clsx(
-        rowClassName,
-        "disabled:cursor-not-allowed disabled:opacity-50",
-      )}
-    >
-      {item.icon && (
-        <span
-          className="flex size-5 shrink-0 items-center justify-center"
-          aria-hidden="true"
-        >
-          {item.icon}
-        </span>
-      )}
-      <span className="min-w-0 flex-1">
-        <span className="block truncate">{item.label}</span>
-        {item.description && (
-          <span className="block truncate text-xs text-theme-fg-muted">
-            {item.description}
-          </span>
-        )}
-      </span>
-    </button>
+    />
   );
 
   const renderExtraSection = (section: AddMenuSection) => {
@@ -366,7 +411,7 @@ export function ChatInputAddMenu({
       ariaHasPopup="menu"
       role="menu"
       preferredOrientation={{ vertical: "top", horizontal: "left" }}
-      initialFocusSelector={NAVIGABLE_ITEM_SELECTOR}
+      initialFocusSelector={ADD_MENU_ITEM_SELECTOR}
       panelStyle={{
         maxWidth:
           "calc(100vw - (var(--theme-layout-dropdown-viewport-margin) * 2))",
@@ -417,7 +462,7 @@ export function ChatInputAddMenu({
       >
         {blocks.map((block, index) => (
           <Fragment key={block.key}>
-            {index > 0 && <div className={sectionDivider} />}
+            {index > 0 && <div className={addMenuSectionDividerClassName} />}
             {block.node}
           </Fragment>
         ))}

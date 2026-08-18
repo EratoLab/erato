@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 
-import { collectSupersededMessageIds } from "./messageUtils";
+import {
+  collectSupersededMessageIds,
+  constructSubmitStreamRequestBody,
+} from "./messageUtils";
 
 import type { Message } from "@/types/chat";
 
@@ -57,5 +60,46 @@ describe("collectSupersededMessageIds", () => {
     expect(
       collectSupersededMessageIds(conversation(), "temp-user-999"),
     ).toEqual(["temp-user-999"]);
+  });
+});
+
+describe("constructSubmitStreamRequestBody", () => {
+  it("carries mentioned assistants", () => {
+    const body = constructSubmitStreamRequestBody(
+      "ask @Researcher",
+      undefined,
+      undefined,
+      "chat-1",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      ["assistant-1", "assistant-2"],
+    );
+
+    expect(body.mentioned_assistant_ids).toEqual([
+      "assistant-1",
+      "assistant-2",
+    ]);
+  });
+
+  it("omits the field when there are no mentions", () => {
+    expect(constructSubmitStreamRequestBody("plain")).not.toHaveProperty(
+      "mentioned_assistant_ids",
+    );
+
+    expect(
+      constructSubmitStreamRequestBody(
+        "plain",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        [],
+      ),
+    ).not.toHaveProperty("mentioned_assistant_ids");
   });
 });

@@ -63,6 +63,7 @@ export interface AddinChatInputRenderProps {
     selectedFacetIds?: string[],
     actionFacet?: ActionFacetRequest,
     hostContextIdentity?: string | null,
+    mentionedAssistantIds?: string[],
   ) => void;
   onFilePreview: (file: FileUploadItem) => void;
   handleFileAttachments: (files: FileUploadItem[]) => void;
@@ -235,6 +236,7 @@ function useAddinChatController({
       selectedFacetIds,
       actionFacet,
       hostContextIdentity,
+      mentionedAssistantIds,
     ) => {
       hostCallbacksRef.current.beforeSend?.(hostContextIdentity);
       void chat
@@ -245,6 +247,7 @@ function useAddinChatController({
           assistantId,
           selectedFacetIds,
           actionFacet,
+          mentionedAssistantIds,
         )
         .then(() => chat.refetchHistory());
     },
@@ -444,7 +447,28 @@ function NeutralAddinChatHost({ controller }: AddinChatHostProps) {
       controller={controller}
       dropzone={dropzone}
       showDropOverlay={dropzone.isDragActive && dropzone.isDragAccept}
-      renderInput={(props) => <AddinChatInputCore {...props} />}
+      renderInput={(props) => (
+        <AddinChatInputCore
+          {...props}
+          onSendMessage={(
+            message,
+            inputFileIds,
+            modelId,
+            selectedFacetIds,
+            mentionedAssistantIds,
+          ) =>
+            props.onSendMessage(
+              message,
+              inputFileIds,
+              modelId,
+              selectedFacetIds,
+              undefined,
+              undefined,
+              mentionedAssistantIds,
+            )
+          }
+        />
+      )}
       renderSettings={(props) => <AddinSettingsDialogCore {...props} />}
     />
   );

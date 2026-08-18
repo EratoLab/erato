@@ -46,6 +46,15 @@ export interface AnchoredPopoverProps {
   ariaHasPopup?: AnchoredPopoverTriggerProps["aria-haspopup"];
   preferredOrientation?: Orientation;
   initialFocusSelector?: string;
+  /**
+   * Focus-on-open and focus-return-on-close assume the open was initiated at
+   * the trigger. A popover opened from elsewhere — a typeahead driven by the
+   * caret, say — must set this false and place focus itself, or the panel steals
+   * the caret out of whatever the user is typing into.
+   */
+  manageFocus?: boolean;
+  /** Panel accessible name, for triggers that carry none. */
+  ariaLabel?: string;
   dataUi?: string;
 }
 
@@ -94,6 +103,8 @@ export function AnchoredPopover({
   ariaHasPopup,
   preferredOrientation,
   initialFocusSelector,
+  manageFocus = true,
+  ariaLabel,
   dataUi = "anchored-popover-panel",
 }: AnchoredPopoverProps) {
   const reactId = useId();
@@ -274,7 +285,7 @@ export function AnchoredPopover({
   }, [getPanelElement, isOpen, onOpenChange]);
 
   useEffect(() => {
-    if (!isOpen) {
+    if (!isOpen || !manageFocus) {
       return;
     }
 
@@ -298,15 +309,15 @@ export function AnchoredPopover({
         focusTarget.focus();
       }
     });
-  }, [getPanelElement, initialFocusSelector, isOpen]);
+  }, [getPanelElement, initialFocusSelector, isOpen, manageFocus]);
 
   useEffect(() => {
-    if (wasOpenRef.current && !isOpen) {
+    if (manageFocus && wasOpenRef.current && !isOpen) {
       triggerRef.current?.focus();
     }
 
     wasOpenRef.current = isOpen;
-  }, [isOpen]);
+  }, [isOpen, manageFocus]);
 
   const triggerProps: AnchoredPopoverTriggerProps = {
     ref: triggerRef,
@@ -356,7 +367,8 @@ export function AnchoredPopover({
         visibility: isPositioned ? "visible" : "hidden",
       }}
       role={role}
-      aria-labelledby={triggerId}
+      aria-label={ariaLabel}
+      aria-labelledby={ariaLabel ? undefined : triggerId}
       data-ui={dataUi}
     >
       {children}

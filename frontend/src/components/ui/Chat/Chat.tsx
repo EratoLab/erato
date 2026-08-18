@@ -347,12 +347,14 @@ export const Chat = ({
       inputFileIds?: string[],
       modelId?: string,
       selectedFacetIds?: string[],
+      mentionedAssistantIds?: string[],
     ) => {
       logger.log("[CHAT_FLOW] Chat - handleSendMessage called", {
         files: inputFileIds,
         model: modelId,
         assistantId,
         selectedFacetIds,
+        mentionedAssistantIds,
       });
 
       baseHandleSendMessage(
@@ -361,6 +363,7 @@ export const Chat = ({
         modelId,
         assistantId,
         selectedFacetIds,
+        mentionedAssistantIds,
       ).catch((error) => {
         logger.log("[CHAT_FLOW] Error sending message:", error);
       });

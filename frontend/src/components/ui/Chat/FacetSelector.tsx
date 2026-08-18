@@ -5,8 +5,9 @@ import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Controls/Button";
 
 import { DropdownMenu } from "../Controls/DropdownMenu";
-import { ChevronDownIcon, ResolvedIcon, ToolsIcon } from "../icons";
+import { AtSignIcon, ChevronDownIcon, ResolvedIcon, ToolsIcon } from "../icons";
 
+import type { AddMenuSection } from "./ChatInputAddMenu";
 import type { DropdownMenuItem } from "../Controls/DropdownMenu";
 import type { FacetInfo } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
@@ -16,7 +17,19 @@ interface FacetSelectorProps {
   onSelectionChange: (selectedFacetIds: string[]) => void;
   onlySingleFacet: boolean;
   showFacetIndicatorWithDisplayName: boolean;
+  /**
+   * Extra group appended below the tools — the same section the mobile "+"
+   * menu renders, so both hosts offer identical assistant rows.
+   */
+  assistantSection?: AddMenuSection;
+  /** Disable the whole control (composer lock). */
   disabled?: boolean;
+  /**
+   * Extra gate for the facet rows alone (enforced facet settings). The
+   * assistants group stays live: a chat whose tools are locked may still
+   * delegate.
+   */
+  toolsDisabled?: boolean;
   className?: string;
 }
 
@@ -37,7 +50,9 @@ export const FacetSelector = ({
   onSelectionChange,
   onlySingleFacet,
   showFacetIndicatorWithDisplayName,
+  assistantSection,
   disabled = false,
+  toolsDisabled = false,
   className = "",
 }: FacetSelectorProps) => {
   // Keep this! Meant as placeholder for docs.
@@ -55,7 +70,7 @@ export const FacetSelector = ({
 
   const toggleFacetSelection = useCallback(
     (facetId: string) => {
-      if (disabled) {
+      if (disabled || toolsDisabled) {
         return;
       }
 
@@ -81,6 +96,7 @@ export const FacetSelector = ({
     },
     [
       disabled,
+      toolsDisabled,
       facets,
       onSelectionChange,
       onlySingleFacet,
@@ -90,29 +106,65 @@ export const FacetSelector = ({
   );
 
   const dropdownItems: DropdownMenuItem[] = useMemo(() => {
-    return facets.map((facet) => {
+    const facetItems = facets.map((facet) => {
       return {
+        id: facet.id,
         label: getFacetDisplayName(facet),
         icon: <ResolvedIcon iconId={facet.icon} className="size-4" />,
         onClick: () => toggleFacetSelection(facet.id),
         checked: selectedFacetIdsSet.has(facet.id),
+        disabled: toolsDisabled,
       };
     });
-  }, [facets, selectedFacetIdsSet, toggleFacetSelection]);
 
-  if (facets.length === 0) {
+    if (!assistantSection) {
+      return facetItems;
+    }
+
+    // The group label is only worth a row when there is something above it to
+    // separate the assistants from.
+    return [
+      ...facetItems,
+      ...assistantSection.items.map((item, index) => ({
+        id: item.id,
+        label: item.label,
+        onClick: item.onSelect,
+        disabled: item.disabled,
+        closesImmediately: item.closesImmediately,
+        sectionHeader:
+          index === 0 && facetItems.length > 0
+            ? assistantSection.header
+            : undefined,
+      })),
+    ];
+  }, [
+    assistantSection,
+    facets,
+    selectedFacetIdsSet,
+    toggleFacetSelection,
+    toolsDisabled,
+  ]);
+
+  if (facets.length === 0 && !assistantSection) {
     return null;
   }
+
+  // Without facets the control carries assistants alone, so the trigger has to
+  // say so — the delegation surface must stay reachable on a facet-less deployment.
+  const isAssistantsOnly = facets.length === 0;
+  // Locked tools leave the menu worth opening only for the assistants; with no
+  // assistants group every row is dead, so the trigger goes inert instead.
+  const isMenuInert = disabled || (toolsDisabled && !assistantSection);
 
   return (
     <div
       className={clsx(
         "flex items-center gap-1",
-        disabled && "cursor-not-allowed opacity-50",
+        isMenuInert && "cursor-not-allowed opacity-50",
         className,
       )}
     >
-      <div className={clsx(disabled && "pointer-events-none")}>
+      <div className={clsx(isMenuInert && "pointer-events-none")}>
         <DropdownMenu
           items={dropdownItems}
           align="right"
@@ -121,8 +173,19 @@ export const FacetSelector = ({
           noWrapItems
           triggerIcon={
             <div className="flex items-center gap-1 px-2">
-              <ToolsIcon className="size-4" />
-              <span className="text-sm font-medium">{t`Tools`}</span>
+              {isAssistantsOnly ? (
+                <AtSignIcon className="size-4" />
+              ) : (
+                <ToolsIcon className="size-4" />
+              )}
+              <span className="text-sm font-medium">
+                {isAssistantsOnly
+                  ? t({
+                      id: "chatInput.mentions.sectionHeader",
+                      message: "Assistants",
+                    })
+                  : t`Tools`}
+              </span>
               <ChevronDownIcon
                 className={clsx(
                   "size-3 shrink-0 text-[var(--theme-fg-secondary)] transition-transform duration-200",
@@ -145,7 +208,7 @@ export const FacetSelector = ({
               type="button"
               variant="ghost"
               size="sm"
-              disabled={disabled}
+              disabled={disabled || toolsDisabled}
               onClick={() => toggleFacetSelection(facet.id)}
               icon={<ResolvedIcon iconId={facet.icon} className="size-4" />}
               data-testid={`selected-facet-${facet.id}`}

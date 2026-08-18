@@ -1373,6 +1373,7 @@ export function useChatMessaging(
       assistantId?: string,
       selectedFacetIds?: string[],
       actionFacet?: ActionFacetRequest,
+      mentionedAssistantIds?: string[],
     ): Promise<string | undefined> => {
       // Prevent duplicate submissions
       if (isSubmittingForKey(streamKey)) {
@@ -1487,6 +1488,7 @@ export function useChatMessaging(
           assistantId,
           selectedFacetIds,
           actionFacet,
+          mentionedAssistantIds,
         );
 
         logger.log("[DEBUG_STREAMING] sendMessage: Sending requestBody:", {

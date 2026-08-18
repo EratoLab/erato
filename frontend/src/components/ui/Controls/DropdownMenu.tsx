@@ -1,6 +1,15 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import { useState, useRef, useCallback, memo, useEffect } from "react";
+import {
+  useState,
+  useRef,
+  useCallback,
+  useId,
+  useMemo,
+  memo,
+  useEffect,
+  Fragment,
+} from "react";
 
 import { useRovingMenuFocus } from "@/hooks/ui/useRovingMenuFocus";
 import { useKeyboard } from "@/hooks/useKeyboard";
@@ -26,6 +35,14 @@ export interface DropdownMenuItem {
   confirmMessage?: string;
   confirmButtonVariant?: ButtonVariant;
   checked?: boolean;
+  /**
+   * Skip the close delay. Required of any row that opens a dialog: the delayed
+   * close returns focus to the trigger *after* the dialog has focused itself,
+   * pulling focus out from under the overlay.
+   */
+  closesImmediately?: boolean;
+  /** Group label rendered above this row, opening a new section. */
+  sectionHeader?: React.ReactNode;
 }
 
 export interface DropdownMenuProps {
@@ -141,6 +158,7 @@ export const DropdownMenu = memo(
     const [isProcessingClick, setIsProcessingClick] = useState(false);
     const clickTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
     const menuRef = useRef<HTMLDivElement>(null);
+    const baseId = useId();
     const [confirmingItem, setConfirmingItem] =
       useState<DropdownMenuItem | null>(null);
 
@@ -158,6 +176,12 @@ export const DropdownMenu = memo(
         if (item.confirmAction) {
           setConfirmingItem(item);
           setIsOpen(false); // Close the dropdown immediately
+          return;
+        }
+
+        if (item.closesImmediately) {
+          setIsOpen(false);
+          item.onClick();
           return;
         }
 
@@ -192,6 +216,26 @@ export const DropdownMenu = memo(
     const handleCancelConfirm = useCallback(() => {
       setConfirmingItem(null); // Just close the confirmation dialog
     }, []);
+
+    const sections = useMemo(() => {
+      const grouped: {
+        key: string;
+        header?: React.ReactNode;
+        items: { item: DropdownMenuItem; index: number }[];
+      }[] = [];
+      items.forEach((item, index) => {
+        const isNewSection = grouped.length === 0 || item.sectionHeader != null;
+        if (isNewSection) {
+          grouped.push({
+            key: item.id ?? String(index),
+            header: item.sectionHeader,
+            items: [],
+          });
+        }
+        grouped[grouped.length - 1].items.push({ item, index });
+      });
+      return grouped;
+    }, [items]);
 
     // ArrowUp/Down/Home/End roving nav across enabled items (WAI-ARIA
     // menu-button pattern). Escape-close + focus-return live in AnchoredPopover;
@@ -273,14 +317,47 @@ export const DropdownMenu = memo(
             className="dropdown-panel-chrome-geometry min-h-0 flex-1 overflow-y-auto overscroll-contain"
             role="none"
           >
-            {items.map((item, index) => (
-              <MenuItem
-                key={item.id ?? String(index)}
-                item={item}
-                noWrap={noWrapItems}
-                onSelect={(e: React.MouseEvent) => handleMenuItemClick(item, e)}
-              />
-            ))}
+            {sections.map((section, sectionIndex) => {
+              const rows = section.items.map(({ item, index }) => (
+                <MenuItem
+                  key={item.id ?? String(index)}
+                  item={item}
+                  noWrap={noWrapItems}
+                  onSelect={(e: React.MouseEvent) =>
+                    handleMenuItemClick(item, e)
+                  }
+                />
+              ));
+
+              if (section.header == null) {
+                return <Fragment key={section.key}>{rows}</Fragment>;
+              }
+
+              // A labelled run is a group, not just a styled line: without the
+              // wrapper the label is orphan text a menu reader never reaches.
+              // eslint-disable-next-line lingui/no-unlocalized-strings -- internal DOM id suffix
+              const headerId = `${baseId}-section-${sectionIndex}`;
+              return (
+                <Fragment key={section.key}>
+                  {sectionIndex > 0 && (
+                    <div
+                      role="separator"
+                      className="my-1 h-px bg-theme-border"
+                    />
+                  )}
+                  <div role="group" aria-labelledby={headerId}>
+                    <div
+                      id={headerId}
+                      role="presentation"
+                      className="px-[var(--theme-spacing-dropdown-padding-x)] pb-1 pt-2 text-xs font-medium uppercase tracking-wide text-theme-fg-muted"
+                    >
+                      {section.header}
+                    </div>
+                    {rows}
+                  </div>
+                </Fragment>
+              );
+            })}
           </div>
         </AnchoredPopover>
 
