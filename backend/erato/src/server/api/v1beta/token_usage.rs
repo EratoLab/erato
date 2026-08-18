@@ -582,6 +582,7 @@ pub async fn token_usage_estimate(
                     args: af.args.clone(),
                 }
             }),
+            delegation_targets: Vec::new(),
         };
         let me_profile_input = MeProfileChatRequestInput::from_me_profile(&me_user);
 
