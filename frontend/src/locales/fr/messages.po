@@ -1433,12 +1433,16 @@ msgid "chat.history.group.unread"
 msgstr "Non lus"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/pages/SearchPage.tsx
 msgid "chat.history.menu.pin"
 msgstr "Épingler"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/pages/SearchPage.tsx
 msgid "chat.history.menu.pinLimitReached"
 msgstr "Limite d’épingles atteinte"
 
@@ -1449,7 +1453,9 @@ msgid "chat.history.menu.rename"
 msgstr "Renommer"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/pages/SearchPage.tsx
 msgid "chat.history.menu.unpin"
 msgstr "Désépingler"
 

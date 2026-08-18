@@ -4,10 +4,11 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/Controls/Button";
+import { DropdownMenu } from "@/components/ui/Controls/DropdownMenu";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 import { ModalBase } from "@/components/ui/Modal/ModalBase";
-import { EditIcon } from "@/components/ui/icons";
+import { EditIcon, PinIcon, PinSlashIcon } from "@/components/ui/icons";
 import { usePageAlignment } from "@/hooks/ui/usePageAlignment";
 import { getChatUrl } from "@/utils/chat/urlUtils";
 
@@ -23,6 +24,12 @@ export interface AssistantWelcomeScreenProps {
   isLoadingChats?: boolean;
   /** Additional CSS classes */
   className?: string;
+  /** Optional pin action for the past conversation cards */
+  onChatPin?: (chatId: string, isPinned: boolean) => void;
+  /** Number of currently pinned chats */
+  pinnedChatsCount?: number;
+  /** Maximum number of pinned chats */
+  pinnedChatsLimit?: number;
 }
 
 /**
@@ -44,6 +51,9 @@ export function AssistantWelcomeScreen({
   pastChats = [],
   isLoadingChats = false,
   className = "",
+  onChatPin,
+  pinnedChatsCount = 0,
+  pinnedChatsLimit = 5,
 }: AssistantWelcomeScreenProps) {
   const navigate = useNavigate();
   const [isConfigurationOpen, setIsConfigurationOpen] = useState(false);
@@ -258,6 +268,47 @@ export function AssistantWelcomeScreen({
                         />
                       )}
                     </div>
+                    {onChatPin && (
+                      // eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent anchor navigation from menu clicks
+                      <div
+                        className="shrink-0"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                      >
+                        <DropdownMenu
+                          items={[
+                            {
+                              label: chat.isPinned
+                                ? t({
+                                    id: "chat.history.menu.unpin",
+                                    message: "Unpin",
+                                  })
+                                : pinnedChatsCount >= pinnedChatsLimit
+                                  ? t({
+                                      id: "chat.history.menu.pinLimitReached",
+                                      message: "Pin limit reached",
+                                    })
+                                  : t({
+                                      id: "chat.history.menu.pin",
+                                      message: "Pin",
+                                    }),
+                              icon: chat.isPinned ? (
+                                <PinSlashIcon className="size-4" />
+                              ) : (
+                                <PinIcon className="size-4" />
+                              ),
+                              onClick: () => onChatPin(chat.id, !chat.isPinned),
+                              disabled:
+                                !chat.canEdit ||
+                                (!chat.isPinned &&
+                                  pinnedChatsCount >= pinnedChatsLimit),
+                            },
+                          ]}
+                        />
+                      </div>
+                    )}
                   </div>
                 </a>
               ))}

@@ -1433,12 +1433,16 @@ msgid "chat.history.group.unread"
 msgstr "Ungelesen"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/pages/SearchPage.tsx
 msgid "chat.history.menu.pin"
 msgstr "Anheften"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/pages/SearchPage.tsx
 msgid "chat.history.menu.pinLimitReached"
 msgstr "Anheftlimit erreicht"
 
@@ -1449,7 +1453,9 @@ msgid "chat.history.menu.rename"
 msgstr "Umbenennen"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/pages/SearchPage.tsx
 msgid "chat.history.menu.unpin"
 msgstr "Lösen"
 

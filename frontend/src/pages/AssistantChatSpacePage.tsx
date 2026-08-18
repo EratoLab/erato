@@ -11,7 +11,9 @@ import {
   useGetAssistant,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useChatContext } from "@/providers/ChatProvider";
+import { usePinnedChatsFeature } from "@/providers/FeatureConfigProvider";
 import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
+import { mapRecentChatToSession } from "@/utils/chat/recentChatSession";
 import { createLogger } from "@/utils/debugLogger";
 import { transformEmailFencesForCopy } from "@/utils/emailClipboard";
 
@@ -19,7 +21,6 @@ import type {
   AssistantFile,
   FileUploadItem,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
-import type { ChatSession } from "@/types/chat";
 import type { MessageAction } from "@/types/message-controls";
 
 const logger = createLogger("UI", "AssistantChatSpacePage");
@@ -77,7 +78,11 @@ export default function AssistantChatSpacePage() {
     chats: chatHistory,
     currentChatId,
     mountKey,
+    pinChat,
+    pinnedChats,
   } = useChatContext();
+  const { enabled: pinnedChatsEnabled, maxItems: pinnedChatsLimit } =
+    usePinnedChatsFeature();
 
   // Use chatId from URL if available, otherwise use currentChatId from context
   const effectiveChatId = chatId ?? currentChatId;
@@ -117,22 +122,7 @@ export default function AssistantChatSpacePage() {
       .filter(
         (chat) => (chat.assistant_id as unknown as string) === assistantId,
       )
-      .map(
-        (chat): ChatSession => ({
-          id: chat.id,
-          title: chat.title_resolved,
-          updatedAt: chat.last_message_at,
-          messages: [],
-          metadata: {
-            lastMessage: {
-              content: chat.title_resolved,
-              timestamp: chat.last_message_at,
-            },
-            fileCount: chat.file_uploads.length,
-          },
-          assistantId: chat.assistant_id,
-        }),
-      )
+      .map(mapRecentChatToSession)
       .sort(
         (a, b) =>
           new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
@@ -227,6 +217,15 @@ export default function AssistantChatSpacePage() {
               assistant={assistant}
               pastChats={assistantChats}
               isLoadingChats={false}
+              onChatPin={
+                pinnedChatsEnabled
+                  ? (chatId, isPinned) => {
+                      void pinChat(chatId, isPinned);
+                    }
+                  : undefined
+              }
+              pinnedChatsCount={pinnedChats.length}
+              pinnedChatsLimit={pinnedChatsLimit}
             />
           ) : (
             <ChatEmptyState variant="chat" />

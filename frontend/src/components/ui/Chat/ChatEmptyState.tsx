@@ -21,6 +21,9 @@ type ChatEmptyStateProps =
       assistant: AssistantWithFiles;
       pastChats?: ChatSession[];
       isLoadingChats?: boolean;
+      onChatPin?: (chatId: string, isPinned: boolean) => void;
+      pinnedChatsCount?: number;
+      pinnedChatsLimit?: number;
     });
 
 export function ChatEmptyState(props: ChatEmptyStateProps) {
@@ -35,6 +38,9 @@ export function ChatEmptyState(props: ChatEmptyStateProps) {
         assistant={props.assistant}
         pastChats={props.pastChats}
         isLoadingChats={props.isLoadingChats}
+        onChatPin={props.onChatPin}
+        pinnedChatsCount={props.pinnedChatsCount}
+        pinnedChatsLimit={props.pinnedChatsLimit}
         className={props.className}
       />
     );

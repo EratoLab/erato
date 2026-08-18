@@ -10,8 +10,10 @@ import { useProfile } from "@/hooks/useProfile";
 import { useChatContext } from "@/providers/ChatProvider";
 import {
   useChatSharingFeature,
+  usePinnedChatsFeature,
   useSidebarFeature,
 } from "@/providers/FeatureConfigProvider";
+import { mapRecentChatToSession } from "@/utils/chat/recentChatSession";
 import { createLogger } from "@/utils/debugLogger";
 
 import type { ChatSession } from "@/types/chat";
@@ -30,6 +32,8 @@ export default function AssistantsPageStructure({
     archiveChat,
     createNewChat: createChat,
     updateChatTitle,
+    pinChat,
+    pinnedChats: pinnedChatHistory,
     fetchNextHistoryPage,
     hasNextHistoryPage,
     isFetchingNextHistoryPage,
@@ -45,6 +49,8 @@ export default function AssistantsPageStructure({
   } = useSidebar();
   const { chatHistoryShowMetadata } = useSidebarFeature();
   const { enabled: chatSharingEnabled } = useChatSharingFeature();
+  const { enabled: pinnedChatsEnabled, maxItems: pinnedChatsLimit } =
+    usePinnedChatsFeature();
 
   const location = useLocation();
   const pathname = location.pathname;
@@ -62,27 +68,12 @@ export default function AssistantsPageStructure({
   // Convert the chat history data to the format expected by the sidebar
   const sessions = useMemo<ChatSession[]>(
     () =>
-      Array.isArray(chatHistory)
-        ? chatHistory.map((chat) => ({
-            id: chat.id,
-            title: chat.title_resolved,
-            titleResolved: chat.title_resolved,
-            titleBySummary: chat.title_by_summary,
-            titleByUserProvided: chat.title_by_user_provided,
-            updatedAt: chat.last_message_at,
-            messages: [],
-            metadata: {
-              lastMessage: {
-                content: chat.title_resolved,
-                timestamp: chat.last_message_at,
-              },
-              fileCount: chat.file_uploads.length,
-            },
-            assistantId: chat.assistant_id,
-            canEdit: chat.can_edit,
-          }))
-        : [],
+      Array.isArray(chatHistory) ? chatHistory.map(mapRecentChatToSession) : [],
     [chatHistory],
+  );
+  const pinnedSessions = useMemo(
+    () => pinnedChatHistory.map(mapRecentChatToSession),
+    [pinnedChatHistory],
   );
 
   // Handle session select
@@ -97,6 +88,13 @@ export default function AssistantsPageStructure({
   const handleArchiveSession = (sessionId: string) => {
     void archiveChat(sessionId);
   };
+
+  const handlePinSession = useCallback(
+    (sessionId: string, isPinned: boolean) => {
+      void pinChat(sessionId, isPinned);
+    },
+    [pinChat],
+  );
 
   const [titleDialogChatId, setTitleDialogChatId] = useState<string | null>(
     null,
@@ -174,6 +172,9 @@ export default function AssistantsPageStructure({
         onSessionArchive={handleArchiveSession}
         onSessionEditTitle={handleEditTitleSession}
         onSessionShare={chatSharingEnabled ? handleOpenShareDialog : undefined}
+        pinnedSessions={pinnedSessions}
+        pinnedChatsLimit={pinnedChatsLimit}
+        onSessionPin={pinnedChatsEnabled ? handlePinSession : undefined}
         showTimestamps={chatHistoryShowMetadata}
         isLoading={chatHistoryLoading}
         hasMoreSessions={hasNextHistoryPage}
