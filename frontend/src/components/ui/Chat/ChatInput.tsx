@@ -76,6 +76,7 @@ import {
   VoiceIcon,
 } from "../icons";
 import { AssistantBrowserModal } from "./AssistantBrowserModal";
+import { AssistantMentionBackdrop } from "./AssistantMentionBackdrop";
 import { AssistantMentionPopover } from "./AssistantMentionPopover";
 import { ChatInputAddControls } from "./ChatInputAddControls";
 import { ChatInputAudioModeButton } from "./ChatInputAudioModeButton";
@@ -2532,57 +2533,73 @@ export const ChatInput = ({
           )}
 
           {!isAudioMode && (
-            <textarea
-              ref={textareaRef}
-              value={message}
-              onChange={(e) => {
-                setMessage(e.target.value);
-                syncMentionTrigger(e.target);
-              }}
-              onSelect={(e) => syncMentionTrigger(e.currentTarget)}
-              onClick={(e) => syncMentionTrigger(e.currentTarget)}
-              onKeyUp={(e) => syncMentionTrigger(e.currentTarget)}
-              onPaste={handleTextareaPaste}
-              onKeyDown={(e) => {
-                // The open picker owns Enter, Tab and the arrows — it has to
-                // run before Enter reaches send/queue.
-                if (mentionPopoverRef.current?.handleComposerKeyDown(e)) {
-                  return;
-                }
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  // While a turn is generating, Enter queues the draft to
-                  // auto-send when the turn finishes (ERMAIN-470); otherwise it
-                  // submits normally.
-                  if (enqueueCurrentMessage()) {
+            // isolate keeps the backdrop's negative layer above the shell's own
+            // background instead of behind it; flex keeps the textarea from
+            // gaining an inline-block descender now that it is wrapped.
+            <div className="relative isolate flex w-full">
+              {/* Gated on the tracked list, not on the mention affordances: the
+                  list is restored from the draft and outlives the assistant
+                  query, and whatever it holds is what submit delegates to. */}
+              {mentionedAssistants.length > 0 && (
+                <AssistantMentionBackdrop
+                  text={message}
+                  tracked={mentionedAssistants}
+                  textareaRef={textareaRef}
+                  dimmed={composeLocked}
+                />
+              )}
+              <textarea
+                ref={textareaRef}
+                value={message}
+                onChange={(e) => {
+                  setMessage(e.target.value);
+                  syncMentionTrigger(e.target);
+                }}
+                onSelect={(e) => syncMentionTrigger(e.currentTarget)}
+                onClick={(e) => syncMentionTrigger(e.currentTarget)}
+                onKeyUp={(e) => syncMentionTrigger(e.currentTarget)}
+                onPaste={handleTextareaPaste}
+                onKeyDown={(e) => {
+                  // The open picker owns Enter, Tab and the arrows — it has to
+                  // run before Enter reaches send/queue.
+                  if (mentionPopoverRef.current?.handleComposerKeyDown(e)) {
                     return;
                   }
-                  handleSubmit(e);
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    // While a turn is generating, Enter queues the draft to
+                    // auto-send when the turn finishes (ERMAIN-470); otherwise it
+                    // submits normally.
+                    if (enqueueCurrentMessage()) {
+                      return;
+                    }
+                    handleSubmit(e);
+                  }
+                }}
+                placeholder={
+                  isAnyTokenLimitExceeded
+                    ? t`Message exceeds token limit. Please reduce length or remove files.`
+                    : placeholder
                 }
-              }}
-              placeholder={
-                isAnyTokenLimitExceeded
-                  ? t`Message exceeds token limit. Please reduce length or remove files.`
-                  : placeholder
-              }
-              rows={1}
-              disabled={composeLocked}
-              tabIndex={0}
-              autoFocus={shouldAutofocus} // eslint-disable-line jsx-a11y/no-autofocus -- Controlled by feature config to prevent unwanted scrolling
-              className={clsx(
-                "w-full resize-none overflow-y-auto",
-                "chat-input-textarea-geometry",
-                "bg-transparent",
-                "text-[var(--theme-fg-primary)] placeholder:text-[var(--theme-fg-muted)]",
-                "focus:outline-none",
-                "disabled:cursor-not-allowed disabled:opacity-50",
-                "max-h-[200px]",
-                "text-base",
-                "scrollbar-auto-hide",
-                isAnyTokenLimitExceeded &&
-                  "border-[var(--theme-error)] placeholder:text-[var(--theme-error-fg)]",
-              )}
-            />
+                rows={1}
+                disabled={composeLocked}
+                tabIndex={0}
+                autoFocus={shouldAutofocus} // eslint-disable-line jsx-a11y/no-autofocus -- Controlled by feature config to prevent unwanted scrolling
+                className={clsx(
+                  "w-full resize-none overflow-y-auto",
+                  "chat-input-textarea-geometry",
+                  "bg-transparent",
+                  "text-[var(--theme-fg-primary)] placeholder:text-[var(--theme-fg-muted)]",
+                  "focus:outline-none",
+                  "disabled:cursor-not-allowed disabled:opacity-50",
+                  "max-h-[200px]",
+                  "text-base",
+                  "scrollbar-auto-hide",
+                  isAnyTokenLimitExceeded &&
+                    "border-[var(--theme-error)] placeholder:text-[var(--theme-error-fg)]",
+                )}
+              />
+            </div>
           )}
 
           <div

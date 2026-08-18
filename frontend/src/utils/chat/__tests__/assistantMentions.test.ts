@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
   applyMentionSelection,
   detectMentionTrigger,
+  findMentionRanges,
   mentionToken,
   pruneTrackedMentions,
   resolveMentionedAssistantIds,
@@ -100,6 +101,81 @@ describe("applyMentionSelection", () => {
       text: "hello @Data ",
       caret: 12,
     });
+  });
+});
+
+describe("findMentionRanges", () => {
+  it("finds nothing for a name nobody tracked", () => {
+    expect(findMentionRanges("@Researcher please", [])).toEqual([]);
+  });
+
+  it("finds a mention at the very start", () => {
+    expect(findMentionRanges("@Data now", [dataAssistant])).toEqual([
+      { start: 0, end: 5, id: "a2", name: "Data" },
+    ]);
+  });
+
+  it("finds a mention mid-sentence", () => {
+    expect(findMentionRanges("please ask @Data now", [dataAssistant])).toEqual([
+      { start: 11, end: 16, id: "a2", name: "Data" },
+    ]);
+  });
+
+  it("skips an address-like @", () => {
+    expect(findMentionRanges("mail me@Data now", [dataAssistant])).toEqual([]);
+  });
+
+  it("returns one range per repetition", () => {
+    expect(
+      findMentionRanges("@Data and @Data", [dataAssistant]).map(
+        (range) => range.start,
+      ),
+    ).toEqual([0, 10]);
+  });
+
+  it("spans a name with spaces", () => {
+    expect(findMentionRanges("@Data Analyst please", [dataAnalyst])).toEqual([
+      { start: 0, end: 13, id: "a3", name: "Data Analyst" },
+    ]);
+  });
+
+  it("gives an overlapping span to the longer name", () => {
+    expect(
+      findMentionRanges("@Data Analyst please", [dataAssistant, dataAnalyst]),
+    ).toEqual([{ start: 0, end: 13, id: "a3", name: "Data Analyst" }]);
+  });
+
+  it("treats regex metacharacters in a name literally", () => {
+    expect(findMentionRanges("ping @C++ (v1.0)", [regexName])).toEqual([
+      { start: 5, end: 16, id: "a4", name: "C++ (v1.0)" },
+    ]);
+    expect(findMentionRanges("ping @Cxx (v1x0)", [regexName])).toEqual([]);
+  });
+
+  it("orders ranges by position rather than by tracked order", () => {
+    expect(
+      findMentionRanges("@Data then @Researcher", [
+        researcher,
+        dataAssistant,
+      ]).map((range) => range.id),
+    ).toEqual(["a2", "a1"]);
+  });
+
+  it("bounds every range to exactly its token", () => {
+    const text = "ask @Data Analyst and @Researcher.";
+    expect(
+      findMentionRanges(text, [researcher, dataAssistant, dataAnalyst]).map(
+        (range) => text.slice(range.start, range.end),
+      ),
+    ).toEqual(["@Data Analyst", "@Researcher"]);
+  });
+
+  it("agrees with the ids the composer submits", () => {
+    const text = "@Data and @Data Analyst and @Researcher";
+    const tracked = [researcher, dataAssistant, dataAnalyst];
+    expect(new Set(findMentionRanges(text, tracked).map((r) => r.id))).toEqual(
+      new Set(resolveMentionedAssistantIds(text, tracked)),
+    );
   });
 });
 
