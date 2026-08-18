@@ -123,4 +123,17 @@ describe("FacetSelector", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "Researcher" }));
     expect(onSelect).toHaveBeenCalledWith(RESEARCHER);
   });
+
+  // Without delegation there is nothing left to pick, so enforcement keeps the
+  // whole control inert rather than opening a menu of dead rows.
+  it("locks the trigger when the tools are locked and no assistant is offered", () => {
+    renderSelector({
+      facets: [WEB_SEARCH],
+      toolsDisabled: true,
+      withAssistants: false,
+    });
+
+    const trigger = screen.getByRole("button", { name: "Open menu" });
+    expect(trigger.closest(".pointer-events-none")).not.toBeNull();
+  });
 });

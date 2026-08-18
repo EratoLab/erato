@@ -152,16 +152,19 @@ export const FacetSelector = ({
   // Without facets the control carries assistants alone, so the trigger has to
   // say so — the delegation surface must stay reachable on a facet-less deployment.
   const isAssistantsOnly = facets.length === 0;
+  // Locked tools leave the menu worth opening only for the assistants; with no
+  // assistants group every row is dead, so the trigger goes inert instead.
+  const isMenuInert = disabled || (toolsDisabled && !assistantSection);
 
   return (
     <div
       className={clsx(
         "flex items-center gap-1",
-        disabled && "cursor-not-allowed opacity-50",
+        isMenuInert && "cursor-not-allowed opacity-50",
         className,
       )}
     >
-      <div className={clsx(disabled && "pointer-events-none")}>
+      <div className={clsx(isMenuInert && "pointer-events-none")}>
         <DropdownMenu
           items={dropdownItems}
           align="right"
