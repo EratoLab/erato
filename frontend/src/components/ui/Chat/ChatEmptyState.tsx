@@ -20,6 +20,8 @@ type ChatEmptyStateProps =
       variant: "assistant";
       assistant: AssistantWithFiles;
       pastChats?: ChatSession[];
+      delegatedRuns?: ChatSession[];
+      delegationEnabled?: boolean;
       isLoadingChats?: boolean;
       onChatPin?: (chatId: string, isPinned: boolean) => void;
       pinnedChatsCount?: number;
@@ -37,6 +39,8 @@ export function ChatEmptyState(props: ChatEmptyStateProps) {
       <AssistantWelcomeScreenComponent
         assistant={props.assistant}
         pastChats={props.pastChats}
+        delegatedRuns={props.delegatedRuns}
+        delegationEnabled={props.delegationEnabled}
         isLoadingChats={props.isLoadingChats}
         onChatPin={props.onChatPin}
         pinnedChatsCount={props.pinnedChatsCount}

@@ -1,36 +1,130 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/Controls/Button";
 import { DropdownMenu } from "@/components/ui/Controls/DropdownMenu";
+import { SegmentedControl } from "@/components/ui/Controls/SegmentedControl";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 import { ModalBase } from "@/components/ui/Modal/ModalBase";
 import { EditIcon, PinIcon, PinSlashIcon } from "@/components/ui/icons";
+import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
+import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { usePageAlignment } from "@/hooks/ui/usePageAlignment";
+import {
+  DELEGATION_PROVENANCE_KIND,
+  UNTITLED_BACKEND_SENTINEL,
+} from "@/utils/chat/recentChatSession";
 import { getChatUrl } from "@/utils/chat/urlUtils";
+import {
+  chatAttentionStatusLabel,
+  chatAttentionStatusToneClass,
+  mostUrgentAttentionStatus,
+  resolveChatAttentionStatus,
+} from "@/utils/chatHistoryGrouping";
 
+import type { SegmentedControlOption } from "@/components/ui/Controls/SegmentedControl";
 import type { AssistantWithFiles } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
+import type { ChatAttentionStatus } from "@/utils/chatHistoryGrouping";
 
 export interface AssistantWelcomeScreenProps {
   /** The assistant this chat space is for */
   assistant: AssistantWithFiles;
   /** Past chats with this assistant */
   pastChats?: ChatSession[];
+  /** Runs this assistant carried out on behalf of another chat */
+  delegatedRuns?: ChatSession[];
+  /**
+   * Whether delegation is available at all. Keeps the delegated segment
+   * reachable before the assistant has ever been delegated to.
+   */
+  delegationEnabled?: boolean;
   /** Whether past chats are loading */
   isLoadingChats?: boolean;
-  /** Additional CSS classes */
-  className?: string;
   /** Optional pin action for the past conversation cards */
   onChatPin?: (chatId: string, isPinned: boolean) => void;
   /** Number of currently pinned chats */
   pinnedChatsCount?: number;
   /** Maximum number of pinned chats */
   pinnedChatsLimit?: number;
+  /** Additional CSS classes */
+  className?: string;
 }
+
+type AssistantChatSegment = "chats" | "delegated";
+
+const PAST_CHAT_PREVIEW_COUNT = 5;
+
+/**
+ * The screen unmounts as soon as a conversation is opened, so the selected
+ * segment has to survive in the URL to still be there on the way back.
+ */
+const SEGMENT_SEARCH_PARAM = "segment";
+
+/** The status a single indicator has to stand for across a set of rows. */
+const useSessionsAttentionStatus = (
+  sessions: ChatSession[],
+): ChatAttentionStatus | null => {
+  const statusByChatId = useGenerationStatusStore(
+    (state) => state.statusByChatId,
+  );
+  const pendingIdsByChatId = useConfirmationRegistryStore(
+    (state) => state.pendingIdsByChatId,
+  );
+  return useMemo(
+    () =>
+      mostUrgentAttentionStatus(
+        sessions.flatMap((session) => {
+          const status = resolveChatAttentionStatus(
+            statusByChatId[session.id],
+            (pendingIdsByChatId[session.id]?.length ?? 0) > 0,
+          );
+          return status ? [status] : [];
+        }),
+      ),
+    [sessions, statusByChatId, pendingIdsByChatId],
+  );
+};
+
+const originLabel = ({
+  provenanceKind,
+  originChatId,
+  originChatTitle,
+}: ChatSession): string | null => {
+  if (provenanceKind !== DELEGATION_PROVENANCE_KIND) {
+    return null;
+  }
+  if (originChatTitle === UNTITLED_BACKEND_SENTINEL) {
+    return t({
+      id: "assistant.welcome.delegated.origin.untitled",
+      message: "From an untitled conversation",
+    });
+  }
+  if (originChatTitle) {
+    return t({
+      id: "assistant.welcome.delegated.origin",
+      message: `From ${originChatTitle}`,
+    });
+  }
+  if (originChatId) {
+    return t({
+      id: "assistant.welcome.delegated.origin.deleted",
+      message: "From a conversation that no longer exists",
+    });
+  }
+  return null;
+};
+
+/** The mappers' localized fallback still lets the backend sentinel through. */
+const rowTitle = ({ title, titleResolved }: ChatSession): string => {
+  const backendTitle = titleResolved ?? title;
+  return backendTitle && backendTitle !== UNTITLED_BACKEND_SENTINEL
+    ? backendTitle
+    : t({ id: "chat.newChat.title", message: "New Chat" });
+};
 
 /**
  * AssistantWelcomeScreen component
@@ -49,17 +143,34 @@ export interface AssistantWelcomeScreenProps {
 export function AssistantWelcomeScreen({
   assistant,
   pastChats = [],
+  delegatedRuns = [],
+  delegationEnabled = false,
   isLoadingChats = false,
-  className = "",
   onChatPin,
   pinnedChatsCount = 0,
   pinnedChatsLimit = 5,
+  className = "",
 }: AssistantWelcomeScreenProps) {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [isConfigurationOpen, setIsConfigurationOpen] = useState(false);
+  const selectedSegment: AssistantChatSegment =
+    searchParams.get(SEGMENT_SEARCH_PARAM) === "delegated"
+      ? "delegated"
+      : "chats";
+  const selectSegment = (next: AssistantChatSegment) => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (next === "delegated") {
+      nextParams.set(SEGMENT_SEARCH_PARAM, next);
+    } else {
+      nextParams.delete(SEGMENT_SEARCH_PARAM);
+    }
+    setSearchParams(nextParams, { replace: true });
+  };
   const {
     containerClasses: contentContainerClasses,
     textAlignment: contentTextAlignment,
+    justifyAlignment: contentJustifyAlignment,
     horizontalPadding: contentHorizontalPadding,
   } = usePageAlignment("assistants");
   const {
@@ -89,6 +200,34 @@ export function AssistantWelcomeScreen({
     id: "assistant.welcome.configuration.open",
     message: "View assistant configuration",
   });
+
+  const delegatedAttention = useSessionsAttentionStatus(delegatedRuns);
+  // An empty second segment is noise unless delegation can still fill it.
+  const showSegments = delegatedRuns.length > 0 || delegationEnabled;
+  const segment = showSegments ? selectedSegment : "chats";
+  const visibleChats = segment === "delegated" ? delegatedRuns : pastChats;
+  const segmentOptions: SegmentedControlOption<AssistantChatSegment>[] = [
+    {
+      value: "chats",
+      label: t({ id: "assistant.welcome.segment.chats", message: "Chats" }),
+    },
+    {
+      value: "delegated",
+      label: t({
+        id: "assistant.welcome.segment.delegated",
+        message: "Delegated runs",
+      }),
+      ...(delegatedAttention
+        ? {
+            attention: {
+              label: chatAttentionStatusLabel(delegatedAttention),
+              toneClassName: chatAttentionStatusToneClass[delegatedAttention],
+              pulse: delegatedAttention === "running",
+            },
+          }
+        : {}),
+    },
+  ];
 
   return (
     <div
@@ -234,98 +373,152 @@ export function AssistantWelcomeScreen({
         </ModalBase>
 
         {/* Past Conversations Section */}
-        {!isLoadingChats && pastChats.length > 0 && (
-          <div className="w-full">
-            <h2
-              className={clsx(
-                "mb-4 text-lg font-semibold text-theme-fg-primary",
-                contentTextAlignment,
-              )}
-            >
-              {t`Your conversations with this assistant`}
-            </h2>
-            <div className="space-y-2">
-              {pastChats.slice(0, 5).map((chat) => (
-                <a
-                  key={chat.id}
-                  href={getChatUrl(chat.id, assistant.id)}
-                  onClick={(e) => {
-                    if (e.metaKey || e.ctrlKey) return;
-                    e.preventDefault();
-                    handleChatSelect(chat.id);
-                  }}
-                  data-ui="assistant-past-chat-card"
-                  className="block rounded-[var(--theme-radius-shell)] bg-theme-bg-primary p-4 text-left transition-all hover:bg-theme-bg-hover"
-                >
-                  <div className="flex items-center justify-between gap-4">
-                    <h3 className="flex-1 truncate font-medium text-theme-fg-primary">
-                      {chat.title || t`Untitled Chat`}
-                    </h3>
-                    <div className="shrink-0 text-xs text-theme-fg-muted">
-                      {chat.updatedAt && (
-                        <MessageTimestamp
-                          createdAt={new Date(chat.updatedAt)}
-                        />
-                      )}
-                    </div>
-                    {onChatPin && (
-                      // eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent anchor navigation from menu clicks
-                      <div
-                        className="shrink-0"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                        }}
-                      >
-                        <DropdownMenu
-                          items={[
-                            {
-                              label: chat.isPinned
-                                ? t({
-                                    id: "chat.history.menu.unpin",
-                                    message: "Unpin",
-                                  })
-                                : pinnedChatsCount >= pinnedChatsLimit
-                                  ? t({
-                                      id: "chat.history.menu.pinLimitReached",
-                                      message: "Pin limit reached",
-                                    })
-                                  : t({
-                                      id: "chat.history.menu.pin",
-                                      message: "Pin",
-                                    }),
-                              icon: chat.isPinned ? (
-                                <PinSlashIcon className="size-4" />
-                              ) : (
-                                <PinIcon className="size-4" />
-                              ),
-                              onClick: () => onChatPin(chat.id, !chat.isPinned),
-                              disabled:
-                                !chat.canEdit ||
-                                (!chat.isPinned &&
-                                  pinnedChatsCount >= pinnedChatsLimit),
-                            },
-                          ]}
-                        />
-                      </div>
-                    )}
-                  </div>
-                </a>
-              ))}
-            </div>
-
-            {pastChats.length > 5 && (
-              <p
+        {!isLoadingChats &&
+          (pastChats.length > 0 || delegatedRuns.length > 0) && (
+            <div className="w-full">
+              <div
                 className={clsx(
-                  "mt-4 text-sm text-theme-fg-muted",
-                  contentTextAlignment,
+                  "mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4",
+                  contentJustifyAlignment,
                 )}
               >
-                {t`And`} {pastChats.length - 5} {t`more conversations...`}
-              </p>
-            )}
-          </div>
-        )}
+                <h2
+                  className={clsx(
+                    "text-lg font-semibold text-theme-fg-primary",
+                    contentTextAlignment,
+                  )}
+                >
+                  {t`Your conversations with this assistant`}
+                </h2>
+                {showSegments && (
+                  <SegmentedControl
+                    options={segmentOptions}
+                    value={segment}
+                    onChange={selectSegment}
+                    aria-label={t({
+                      id: "assistant.welcome.segment.aria",
+                      message: "Filter conversations",
+                    })}
+                  />
+                )}
+              </div>
+              {visibleChats.length === 0 && (
+                <p
+                  className={clsx(
+                    "text-sm text-theme-fg-muted",
+                    contentTextAlignment,
+                  )}
+                >
+                  {segment === "delegated"
+                    ? t({
+                        id: "assistant.welcome.delegated.empty",
+                        message: "No delegated runs yet.",
+                      })
+                    : t({
+                        id: "assistant.welcome.chats.empty",
+                        message: "No direct conversations yet.",
+                      })}
+                </p>
+              )}
+              {visibleChats.length > 0 && (
+                <div className="space-y-2">
+                  {visibleChats
+                    .slice(0, PAST_CHAT_PREVIEW_COUNT)
+                    .map((chat) => {
+                      const origin = originLabel(chat);
+                      return (
+                        <a
+                          key={chat.id}
+                          href={getChatUrl(chat.id, assistant.id)}
+                          onClick={(e) => {
+                            if (e.metaKey || e.ctrlKey) return;
+                            e.preventDefault();
+                            handleChatSelect(chat.id);
+                          }}
+                          data-ui="assistant-past-chat-card"
+                          className="block rounded-[var(--theme-radius-shell)] bg-theme-bg-primary p-4 text-left transition-all hover:bg-theme-bg-hover"
+                        >
+                          <div className="flex items-center justify-between gap-4">
+                            <h3 className="flex-1 truncate font-medium text-theme-fg-primary">
+                              {rowTitle(chat)}
+                            </h3>
+                            <div className="shrink-0 text-xs text-theme-fg-muted">
+                              {chat.updatedAt && (
+                                <MessageTimestamp
+                                  createdAt={new Date(chat.updatedAt)}
+                                />
+                              )}
+                            </div>
+                            {onChatPin && (
+                              // eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent anchor navigation from menu clicks
+                              <div
+                                className="shrink-0"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                }}
+                              >
+                                <DropdownMenu
+                                  items={[
+                                    {
+                                      label: chat.isPinned
+                                        ? t({
+                                            id: "chat.history.menu.unpin",
+                                            message: "Unpin",
+                                          })
+                                        : pinnedChatsCount >= pinnedChatsLimit
+                                          ? t({
+                                              id: "chat.history.menu.pinLimitReached",
+                                              message: "Pin limit reached",
+                                            })
+                                          : t({
+                                              id: "chat.history.menu.pin",
+                                              message: "Pin",
+                                            }),
+                                      icon: chat.isPinned ? (
+                                        <PinSlashIcon className="size-4" />
+                                      ) : (
+                                        <PinIcon className="size-4" />
+                                      ),
+                                      onClick: () =>
+                                        onChatPin(chat.id, !chat.isPinned),
+                                      disabled:
+                                        !chat.canEdit ||
+                                        (!chat.isPinned &&
+                                          pinnedChatsCount >= pinnedChatsLimit),
+                                    },
+                                  ]}
+                                />
+                              </div>
+                            )}
+                          </div>
+                          {origin && (
+                            <p
+                              className="mt-1 truncate text-xs text-theme-fg-muted"
+                              data-ui="assistant-delegated-run-origin"
+                            >
+                              {origin}
+                            </p>
+                          )}
+                        </a>
+                      );
+                    })}
+                </div>
+              )}
+
+              {visibleChats.length > PAST_CHAT_PREVIEW_COUNT && (
+                <p
+                  className={clsx(
+                    "mt-4 text-sm text-theme-fg-muted",
+                    contentTextAlignment,
+                  )}
+                >
+                  {t`And`} {visibleChats.length - PAST_CHAT_PREVIEW_COUNT}{" "}
+                  {t`more conversations...`}
+                </p>
+              )}
+            </div>
+          )}
 
         {/* Loading State */}
         {isLoadingChats && (

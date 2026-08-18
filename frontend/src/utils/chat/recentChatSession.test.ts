@@ -2,7 +2,10 @@ import { i18n, type Messages } from "@lingui/core";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import enMessages from "@/locales/en/messages.json";
-import { mapRecentChatToSession } from "@/utils/chat/recentChatSession";
+import {
+  isDelegatedRun,
+  mapRecentChatToSession,
+} from "@/utils/chat/recentChatSession";
 import { groupChatSessions } from "@/utils/chatHistoryGrouping";
 
 import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -74,5 +77,29 @@ describe("mapRecentChatToSession", () => {
       updatedAt: "2026-08-14T10:00:00.000Z",
     });
     expect(session.metadata?.fileCount).toBe(0);
+  });
+
+  it("carries the provenance envelope onto the session row model", () => {
+    const session = mapRecentChatToSession({
+      ...recentChat("c1"),
+      provenance_kind: "delegation",
+      origin_chat_id: "origin-1",
+      origin_chat_title: "Quarterly planning",
+    });
+
+    expect(session).toMatchObject({
+      provenanceKind: "delegation",
+      originChatId: "origin-1",
+      originChatTitle: "Quarterly planning",
+    });
+  });
+});
+
+describe("isDelegatedRun", () => {
+  it("recognises only the delegation provenance kind", () => {
+    expect(isDelegatedRun({ provenance_kind: "delegation" })).toBe(true);
+    expect(isDelegatedRun({ provenance_kind: "handoff_branch" })).toBe(false);
+    expect(isDelegatedRun({ provenance_kind: "handoff_move" })).toBe(false);
+    expect(isDelegatedRun({})).toBe(false);
   });
 });

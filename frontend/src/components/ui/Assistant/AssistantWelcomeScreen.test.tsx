@@ -1,16 +1,18 @@
 import { i18n, type Messages } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { messages as enMessages } from "@/locales/en/messages.json";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { AssistantWelcomeScreen } from "./AssistantWelcomeScreen";
 
 import type { AssistantWithFiles } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { ChatSession } from "@/types/chat";
 
 i18n.load("en", enMessages as unknown as Messages);
 i18n.activate("en");
@@ -187,5 +189,289 @@ describe("AssistantWelcomeScreen", () => {
     expect(
       screen.getByRole("link", { name: "owner@example.com" }),
     ).toHaveAttribute("href", "mailto:owner@example.com");
+  });
+
+  it("keeps the conversations heading on the theme's page alignment", () => {
+    const assistant: AssistantWithFiles = {
+      id: "assistant-1",
+      name: "Budget Assistant",
+      description: "Helps with finance questions",
+      prompt: "Use the supplied policy docs to answer questions.",
+      created_at: "2026-03-23T08:00:00.000Z",
+      facet_ids: [],
+      enforce_facet_settings: false,
+      mcp_server_ids: [],
+      updated_at: "2026-03-23T09:00:00.000Z",
+      files: [],
+      can_edit: false,
+    };
+
+    render(
+      <ThemeProvider>
+        <I18nProvider i18n={i18n}>
+          <MemoryRouter>
+            <AssistantWelcomeScreen
+              assistant={assistant}
+              pastChats={[
+                {
+                  id: "chat-1",
+                  title: "chat-1",
+                  updatedAt: "2026-03-23T09:00:00.000Z",
+                  messages: [],
+                },
+              ]}
+            />
+          </MemoryRouter>
+        </I18nProvider>
+      </ThemeProvider>,
+    );
+
+    const heading = screen.getByRole("heading", {
+      level: 2,
+      name: "Your conversations with this assistant",
+    });
+    expect(heading).toHaveClass("text-left");
+    expect(heading.parentElement).toHaveClass("justify-start");
+  });
+
+  describe("delegated runs segment", () => {
+    const assistant: AssistantWithFiles = {
+      id: "assistant-1",
+      name: "Budget Assistant",
+      description: "Helps with finance questions",
+      prompt: "Use the supplied policy docs to answer questions.",
+      created_at: "2026-03-23T08:00:00.000Z",
+      facet_ids: [],
+      enforce_facet_settings: false,
+      mcp_server_ids: [],
+      updated_at: "2026-03-23T09:00:00.000Z",
+      files: [],
+      can_edit: false,
+    };
+
+    const session = (overrides: Partial<ChatSession> & { id: string }) => ({
+      title: overrides.id,
+      updatedAt: "2026-03-23T09:00:00.000Z",
+      messages: [],
+      ...overrides,
+    });
+
+    const renderScreen = (
+      props: Partial<React.ComponentProps<typeof AssistantWelcomeScreen>>,
+    ) =>
+      render(
+        <ThemeProvider>
+          <I18nProvider i18n={i18n}>
+            <MemoryRouter>
+              <AssistantWelcomeScreen assistant={assistant} {...props} />
+            </MemoryRouter>
+          </I18nProvider>
+        </ThemeProvider>,
+      );
+
+    beforeEach(() => {
+      useGenerationStatusStore.getState().reset();
+    });
+
+    it("explains an empty chats segment instead of showing a bare tab strip", () => {
+      renderScreen({ delegatedRuns: [session({ id: "run-1" })] });
+
+      expect(screen.getByRole("tablist")).toBeInTheDocument();
+      expect(
+        screen.getByText("No direct conversations yet."),
+      ).toBeInTheDocument();
+    });
+
+    it("keeps the chosen segment when the screen is unmounted and comes back", () => {
+      // Opening a conversation swaps the welcome screen out of the tree while
+      // the router stays mounted.
+      const tree = (conversationOpen: boolean) => (
+        <ThemeProvider>
+          <I18nProvider i18n={i18n}>
+            <MemoryRouter>
+              {conversationOpen ? (
+                <div />
+              ) : (
+                <AssistantWelcomeScreen
+                  assistant={assistant}
+                  pastChats={[session({ id: "chat-1" })]}
+                  delegatedRuns={[session({ id: "run-1" })]}
+                />
+              )}
+            </MemoryRouter>
+          </I18nProvider>
+        </ThemeProvider>
+      );
+      const { rerender } = render(tree(false));
+
+      fireEvent.click(screen.getByRole("tab", { name: "Delegated runs" }));
+      expect(screen.getByText("run-1")).toBeInTheDocument();
+
+      rerender(tree(true));
+      rerender(tree(false));
+
+      expect(
+        screen.getByRole("tab", { name: "Delegated runs" }),
+      ).toHaveAttribute("aria-selected", "true");
+      expect(screen.getByText("run-1")).toBeInTheDocument();
+    });
+
+    it("hides the segmented control when nothing was delegated and delegation is off", () => {
+      renderScreen({ pastChats: [session({ id: "chat-1" })] });
+
+      expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+      expect(screen.getByText("chat-1")).toBeInTheDocument();
+    });
+
+    it("offers the segment while delegation is on but nothing has been delegated", () => {
+      renderScreen({
+        pastChats: [session({ id: "chat-1" })],
+        delegationEnabled: true,
+      });
+
+      fireEvent.click(screen.getByRole("tab", { name: "Delegated runs" }));
+
+      expect(screen.getByText("No delegated runs yet.")).toBeInTheDocument();
+      expect(screen.queryByText("chat-1")).not.toBeInTheDocument();
+    });
+
+    it("offers the segment for existing delegated runs even with delegation off", () => {
+      renderScreen({
+        pastChats: [session({ id: "chat-1" })],
+        delegatedRuns: [session({ id: "run-1" })],
+      });
+
+      expect(screen.queryByText("run-1")).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("tab", { name: "Delegated runs" }));
+
+      expect(screen.getByText("run-1")).toBeInTheDocument();
+      expect(screen.queryByText("chat-1")).not.toBeInTheDocument();
+    });
+
+    it("names the origin chat a delegated run was spawned from", () => {
+      renderScreen({
+        delegatedRuns: [
+          session({
+            id: "run-1",
+            title: "Summarise the vendor contract",
+            provenanceKind: "delegation",
+            originChatId: "origin-1",
+            originChatTitle: "Quarterly planning",
+          }),
+        ],
+      });
+
+      fireEvent.click(screen.getByRole("tab", { name: "Delegated runs" }));
+
+      expect(screen.getByText("From Quarterly planning")).toBeInTheDocument();
+    });
+
+    it("does not repeat the backend's untitled sentinel in the origin hint", () => {
+      renderScreen({
+        delegatedRuns: [
+          session({
+            id: "run-1",
+            title: "Summarise the vendor contract",
+            provenanceKind: "delegation",
+            originChatId: "origin-1",
+            originChatTitle: "Untitled Chat",
+          }),
+        ],
+      });
+
+      fireEvent.click(screen.getByRole("tab", { name: "Delegated runs" }));
+
+      expect(
+        screen.getByText("From an untitled conversation"),
+      ).toBeInTheDocument();
+      expect(screen.queryByText("From Untitled Chat")).not.toBeInTheDocument();
+    });
+
+    it("localizes the row title of a chat the backend left untitled", () => {
+      renderScreen({
+        pastChats: [
+          session({
+            id: "chat-1",
+            title: "Untitled Chat",
+            titleResolved: "Untitled Chat",
+          }),
+        ],
+      });
+
+      expect(screen.getByText("New Chat")).toBeInTheDocument();
+      expect(screen.queryByText("Untitled Chat")).not.toBeInTheDocument();
+    });
+
+    it("keeps the origin hint off chats that were not delegated", () => {
+      renderScreen({
+        pastChats: [
+          session({
+            id: "chat-1",
+            provenanceKind: "handoff_branch",
+            originChatId: "origin-1",
+            originChatTitle: "Quarterly planning",
+          }),
+        ],
+      });
+
+      expect(
+        screen.queryByText("From Quarterly planning"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("labels a deleted origin instead of linking to it", () => {
+      renderScreen({
+        delegatedRuns: [
+          session({
+            id: "run-1",
+            title: "Summarise the vendor contract",
+            provenanceKind: "delegation",
+            originChatId: "origin-gone",
+          }),
+        ],
+      });
+
+      fireEvent.click(screen.getByRole("tab", { name: "Delegated runs" }));
+
+      expect(
+        screen.getByText("From a conversation that no longer exists"),
+      ).toBeInTheDocument();
+      const links = screen.getAllByRole("link");
+      expect(links).toHaveLength(1);
+      expect(links[0]).toHaveAttribute("href", "/a/assistant-1/run-1");
+    });
+
+    it("flags the segment when a delegated run is waiting on the user", () => {
+      useGenerationStatusStore
+        .getState()
+        .seedActionRequired("run-1", "2026-03-23T09:05:00.000Z");
+
+      renderScreen({
+        pastChats: [session({ id: "chat-1" })],
+        delegatedRuns: [session({ id: "run-1" })],
+      });
+
+      const tab = screen.getByRole("tab", { name: /Delegated runs/ });
+      expect(
+        within(tab).getByTestId("segmented-control-attention"),
+      ).toHaveTextContent("Action required");
+      expect(tab).toHaveAccessibleName("Delegated runs Action required");
+    });
+
+    it("leaves the segment unflagged while no delegated run needs anything", () => {
+      useGenerationStatusStore
+        .getState()
+        .seedRunning("chat-1", "2026-03-23T09:05:00.000Z");
+
+      renderScreen({
+        pastChats: [session({ id: "chat-1" })],
+        delegatedRuns: [session({ id: "run-1" })],
+      });
+
+      expect(
+        screen.queryByTestId("segmented-control-attention"),
+      ).not.toBeInTheDocument();
+    });
   });
 });

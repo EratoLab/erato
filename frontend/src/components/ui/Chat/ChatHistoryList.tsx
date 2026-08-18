@@ -10,7 +10,11 @@ import { useChatHistoryStore } from "@/hooks/chat/useChatHistory";
 import { useThemedIcon } from "@/hooks/ui";
 import { UNTITLED_BACKEND_SENTINEL } from "@/utils/chat/recentChatSession";
 import { getChatUrl } from "@/utils/chat/urlUtils";
-import { resolveChatAttentionStatus } from "@/utils/chatHistoryGrouping";
+import {
+  chatAttentionStatusLabel,
+  chatAttentionStatusToneClass,
+  resolveChatAttentionStatus,
+} from "@/utils/chatHistoryGrouping";
 import { createLogger } from "@/utils/debugLogger";
 
 import { InteractiveContainer } from "../Container/InteractiveContainer";
@@ -76,29 +80,6 @@ const useRowGenerationStatus = (chatId: string): ChatAttentionStatus | null => {
   return resolveChatAttentionStatus(status, hasPendingConfirmation);
 };
 
-const rowGenerationStatusLabel = (status: ChatAttentionStatus): string => {
-  switch (status) {
-    case "running":
-      return t({ id: "chat.history.generation.running", message: "Running" });
-    case "finished":
-      return t({ id: "chat.history.generation.finished", message: "Finished" });
-    case "error":
-      return t({ id: "chat.history.generation.error", message: "Error" });
-    case "action_required":
-      return t({
-        id: "chat.history.generation.actionRequired",
-        message: "Action required",
-      });
-  }
-};
-
-const rowGenerationStatusTextClass: Record<ChatAttentionStatus, string> = {
-  running: "text-theme-fg-muted",
-  finished: "text-theme-success-fg",
-  error: "text-theme-error-fg",
-  action_required: "text-theme-warning-fg",
-};
-
 const GenerationStatusIndicator = memo<{ chatId: string }>(({ chatId }) => {
   const status = useRowGenerationStatus(chatId);
 
@@ -109,9 +90,9 @@ const GenerationStatusIndicator = memo<{ chatId: string }>(({ chatId }) => {
     <span
       className={clsx(
         "flex shrink-0 items-center",
-        rowGenerationStatusTextClass[status],
+        chatAttentionStatusToneClass[status],
       )}
-      title={rowGenerationStatusLabel(status)}
+      title={chatAttentionStatusLabel(status)}
       data-ui="chat-history-generation-status"
       data-testid="chat-generation-status"
       data-status={status}
@@ -226,7 +207,7 @@ const ChatHistoryListItem = memo<{
         className={sidebarRowLinkClassName}
         aria-label={
           generationStatus
-            ? `${rowTitle}, ${rowGenerationStatusLabel(generationStatus)}`
+            ? `${rowTitle}, ${chatAttentionStatusLabel(generationStatus)}`
             : rowTitle
         }
         aria-current={isActive ? "page" : undefined}

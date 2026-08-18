@@ -12,10 +12,22 @@ import type { ChatSession } from "@/types/chat";
 /** `title_resolved` sentinel the backend returns while a chat has no title. */
 export const UNTITLED_BACKEND_SENTINEL = "Untitled Chat";
 
+/** `provenance_kind` of a chat spawned by in-chat delegation. */
+export const DELEGATION_PROVENANCE_KIND = "delegation";
+
+export function isDelegatedRun(
+  chat: Pick<RecentChat, "provenance_kind">,
+): boolean {
+  return chat.provenance_kind === DELEGATION_PROVENANCE_KIND;
+}
+
 export function mapRecentChatToSession(chat: RecentChat): ChatSession {
   return {
     id: chat.id,
     assistantId: chat.assistant_id,
+    provenanceKind: chat.provenance_kind,
+    originChatId: chat.origin_chat_id,
+    originChatTitle: chat.origin_chat_title,
     title:
       chat.title_resolved ||
       t({ id: "chat.newChat.title", message: "New Chat" }),
