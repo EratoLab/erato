@@ -1,10 +1,11 @@
 use crate::image_data;
 use crate::matcher::{
-    CiteFilesResponseConfig, ErrorResponseConfig, ImageMock, LongRunningResponseConfig, MatchRule,
-    MatchRuleAnyMessageContainsAudioContent, MatchRuleAnySystemMessageWithPattern,
-    MatchRuleAnyUserMessageInCurrentTurnWithPattern, MatchRuleLastMessageIsUserWithPattern,
-    MatchRuleUserMessagePattern, Mock, RandomOneLinerResponseConfig, ResponseConfig,
-    StaticResponseConfig, ToolCallDef, ToolCallResponseConfig, ToolCallsResponseConfig,
+    CiteFilesResponseConfig, DelegateToAssistantResponseConfig, ErrorResponseConfig, ImageMock,
+    LongRunningResponseConfig, MatchRule, MatchRuleAnyMessageContainsAudioContent,
+    MatchRuleAnySystemMessageWithPattern, MatchRuleAnyUserMessageInCurrentTurnWithPattern,
+    MatchRuleLastMessageIsUserWithPattern, MatchRuleUserMessagePattern, Mock,
+    RandomOneLinerResponseConfig, ResponseConfig, StaticResponseConfig, ToolCallDef,
+    ToolCallResponseConfig, ToolCallsResponseConfig,
 };
 use rand::Rng;
 use serde_json::json;
@@ -384,6 +385,36 @@ fn build_submitstream_replay_chunks() -> Vec<String> {
     .collect()
 }
 
+/// Typed into the origin chat next to an `@` mention by the delegation e2e.
+const DELEGATION_PARENT_PROMPT: &str = "delegate to the probe assistant";
+
+/// Handed to the delegate as the task brief, which makes it the one thing
+/// present in every delegated turn and absent from every origin turn.
+const DELEGATION_CHILD_BRIEF: &str =
+    "Delegation probe child brief: list the available mock files and report how many there are.";
+
+fn build_delegation_child_answer_chunks() -> Vec<String> {
+    [
+        "CHILD-ANSWER",
+        ":",
+        " the",
+        " delegate",
+        " listed",
+        " the",
+        " mock",
+        " files",
+        " and",
+        " reported",
+        " the",
+        " count",
+        " back",
+        ".",
+    ]
+    .into_iter()
+    .map(str::to_string)
+    .collect()
+}
+
 /// Get the default set of configured mocks
 pub fn get_default_mocks() -> Vec<Mock> {
     vec![
@@ -403,6 +434,76 @@ pub fn get_default_mocks() -> Vec<Mock> {
             response: ResponseConfig::Static(StaticResponseConfig {
                 chunks: vec!["Mock Summary Title".to_string()],
                 delay_ms: 10,
+                ..Default::default()
+            }),
+        },
+        // The four delegation mocks must all precede ToolResultResponse: the
+        // delegate's post-tool turn ends in a tool result too, and the
+        // catch-all would answer it instead of the delegate. Among
+        // themselves, order decides the turn: the brief is the last user
+        // message only on the delegate's first turn, so the tool-call mocks
+        // have to come before the answer mocks that match the same brief
+        // anywhere in the conversation.
+        Mock {
+            name: "DelegationParentToolCall".to_string(),
+            description: "Delegates to the assistant the request offers as a mention target"
+                .to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: DELEGATION_PARENT_PROMPT.to_string(),
+                },
+            )],
+            response: ResponseConfig::DelegateToAssistant(DelegateToAssistantResponseConfig {
+                task: DELEGATION_CHILD_BRIEF.to_string(),
+                delay_ms: 100,
+            }),
+        },
+        Mock {
+            name: "DelegationChildToolCall".to_string(),
+            description: "Returns the delegate's tool call on the turn that carries the brief"
+                .to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: DELEGATION_CHILD_BRIEF.to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCall(ToolCallResponseConfig {
+                tool_name: "list_files".to_string(),
+                arguments: "{}".to_string(),
+                delay_ms: 200,
+            }),
+        },
+        Mock {
+            name: "DelegationChildAnswer".to_string(),
+            description: "Returns the delegate's final answer once its tool call resolved"
+                .to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: DELEGATION_CHILD_BRIEF.to_string(),
+            })],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: build_delegation_child_answer_chunks(),
+                delay_ms: 300,
+                ..Default::default()
+            }),
+        },
+        Mock {
+            name: "DelegationParentAnswer".to_string(),
+            description: "Returns the origin chat's answer once the delegation result is in"
+                .to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: DELEGATION_PARENT_PROMPT.to_string(),
+            })],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec![
+                    "The".to_string(),
+                    " delegate".to_string(),
+                    " finished".to_string(),
+                    " the".to_string(),
+                    " probe".to_string(),
+                    " task".to_string(),
+                    ".".to_string(),
+                ],
+                delay_ms: 50,
                 ..Default::default()
             }),
         },
@@ -1054,6 +1155,142 @@ mod tests {
                 assert_eq!(config.body["error"]["code"], "content_filter");
             }
             _ => panic!("Expected Error response"),
+        }
+    }
+
+    const DELEGATE_ASSISTANT_ID: &str = "0192f4ad-8f37-7bd6-9d47-3b0a4c2f1e55";
+
+    /// The delegation tool offer erato builds for the mentioned assistants;
+    /// the `assistant_id` enum is the only place a runtime id reaches a mock.
+    fn delegation_tool_offer() -> serde_json::Value {
+        serde_json::json!([{
+            "type": "function",
+            "function": {
+                "name": "delegate_to_assistant",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "assistant_id": {"type": "string", "enum": [DELEGATE_ASSISTANT_ID]},
+                        "task": {"type": "string"},
+                    },
+                },
+            },
+        }])
+    }
+
+    /// Erato wraps the brief in the configured delegation preamble before it
+    /// becomes the delegate's first user message.
+    fn delegate_first_user_message() -> String {
+        format!(
+            "{DELEGATION_CHILD_BRIEF}\n\n<system-reminder>\nYou are working on a task that another conversation delegated to you. Your final message is returned to the delegating conversation as the result of this task; it is not shown to a person directly.\n</system-reminder>"
+        )
+    }
+
+    fn match_default_mocks(
+        messages: serde_json::Value,
+        tools: Option<serde_json::Value>,
+    ) -> ResponseConfig {
+        use crate::matcher::{ChatCompletionRequest, Matcher};
+
+        let mut body = serde_json::json!({ "messages": messages });
+        if let Some(tools) = tools {
+            body["tools"] = tools;
+        }
+        let request: ChatCompletionRequest = serde_json::from_value(body).unwrap();
+        Matcher::new(get_default_mocks()).match_request(&request, "delegation")
+    }
+
+    #[test]
+    fn delegation_turns_match_their_own_mocks_before_the_tool_result_catch_all() {
+        use serde_json::json;
+
+        let origin_prompt = format!("@DelegationProbe-a1b2c3 {DELEGATION_PARENT_PROMPT}");
+        let origin_system = "You are a helpful assistant";
+        let delegate_system = "Answer the delegated probe task.";
+        let delegation_result = json!({
+            "status": "completed",
+            "assistant_id": DELEGATE_ASSISTANT_ID,
+            "delegate_chat_id": "0192f4ad-9002-7c11-8f6e-4d1b7a55c081",
+            "result": "CHILD-ANSWER: the delegate listed the mock files and reported the count back.",
+            "truncated": false,
+        })
+        .to_string();
+
+        let origin_turn = match_default_mocks(
+            json!([
+                {"role": "system", "content": origin_system},
+                {"role": "user", "content": origin_prompt},
+            ]),
+            Some(delegation_tool_offer()),
+        );
+        match origin_turn {
+            ResponseConfig::ToolCall(config) => {
+                assert_eq!(config.tool_name, "delegate_to_assistant");
+                assert!(config.arguments.contains(DELEGATE_ASSISTANT_ID));
+                assert!(config.arguments.contains(DELEGATION_CHILD_BRIEF));
+            }
+            other => panic!("origin turn matched {other:?}"),
+        }
+
+        let delegate_turn = match_default_mocks(
+            json!([
+                {"role": "system", "content": delegate_system},
+                {"role": "user", "content": delegate_first_user_message()},
+            ]),
+            None,
+        );
+        match delegate_turn {
+            ResponseConfig::ToolCall(config) => assert_eq!(config.tool_name, "list_files"),
+            other => panic!("delegate turn matched {other:?}"),
+        }
+
+        let delegate_after_tool = match_default_mocks(
+            json!([
+                {"role": "system", "content": delegate_system},
+                {"role": "user", "content": delegate_first_user_message()},
+                {"role": "assistant", "content": null},
+                {"role": "tool", "content": "{\"files\":[\"secret.txt\",\"secret2.txt\"]}"},
+            ]),
+            None,
+        );
+        match delegate_after_tool {
+            ResponseConfig::Static(config) => {
+                assert!(config.chunks.join("").starts_with("CHILD-ANSWER"))
+            }
+            other => panic!("delegate answer turn matched {other:?}"),
+        }
+
+        let origin_after_delegation = match_default_mocks(
+            json!([
+                {"role": "system", "content": origin_system},
+                {"role": "user", "content": origin_prompt},
+                {"role": "assistant", "content": null},
+                {"role": "tool", "content": delegation_result},
+            ]),
+            Some(delegation_tool_offer()),
+        );
+        match origin_after_delegation {
+            ResponseConfig::Static(config) => assert_eq!(
+                config.chunks.join(""),
+                "The delegate finished the probe task."
+            ),
+            other => panic!("origin answer turn matched {other:?}"),
+        }
+    }
+
+    #[test]
+    fn delegation_falls_back_to_text_when_no_assistant_is_offered() {
+        use serde_json::json;
+
+        let response = match_default_mocks(
+            json!([{"role": "user", "content": DELEGATION_PARENT_PROMPT}]),
+            None,
+        );
+        match response {
+            ResponseConfig::Static(config) => {
+                assert!(config.chunks.join("").contains("delegate_to_assistant"))
+            }
+            other => panic!("unoffered delegation matched {other:?}"),
         }
     }
 

@@ -3,5 +3,31 @@
 [assistants]
 enabled = true
 
+[assistants.delegation]
+enabled = true
+run_timeout_seconds = 120
+
+# A delegated child run carries no provider of its own, so the first entry here
+# is what both the origin chat and its delegate talk to; the mock server is the
+# only one that answers the scripted delegation turns.
+[chat_providers]
+priority_order = ["mock-llm-openai"]
+
+[chat_providers.summary]
+summary_chat_provider_id = "mock-llm-openai"
+
+[chat_providers.providers.mock-llm-openai]
+provider_kind = "openai"
+model_name = "placeholder"
+model_display_name = "Mock-LLM"
+base_url = "http://erato-local-mock-llm-server:44320/base-openai/v1/placeholder"
+
+# The delegate needs a tool of its own, or a delegated run has no nested steps
+# to render. No permission rule: with no `mcp_server_permissions.rules` at all,
+# every configured server is readable by any logged-in user.
+[mcp_servers.mock_mcp_file]
+transport_type = "streamable_http"
+url = "http://erato-local-mock-mcp-server:44321/mcp/file"
+
 [frontend.additional_environment]
 K3D_TEST_SCENARIO = "assistants"

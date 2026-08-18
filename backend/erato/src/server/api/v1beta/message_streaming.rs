@@ -607,7 +607,11 @@ fn content_parts_json_or_log(content: &[ContentPart], context: &'static str) -> 
     }
 }
 
-async fn send_background_event(task: &StreamingTask, event: StreamingEvent, context: &'static str) {
+pub(crate) async fn send_background_event(
+    task: &StreamingTask,
+    event: StreamingEvent,
+    context: &'static str,
+) {
     if let Err(error) = task.send_event(event).await {
         let error = Report::msg(error).wrap_err(context);
         warn_and_capture_error(context, &error);
@@ -3209,7 +3213,13 @@ async fn stream_generate_chat_completion<
                             policy,
                             context,
                             &unfinished_tool_call,
-                            streaming_task,
+                            streaming_task.map(|task| {
+                                crate::services::delegation::DelegationParentStream {
+                                    task,
+                                    message_id: assistant_message_id,
+                                    content_index: current_message_content.len(),
+                                }
+                            }),
                         )
                         .await
                     }
@@ -3217,10 +3227,10 @@ async fn stream_generate_chat_completion<
                 };
                 let (status, bg_status, message_status, output_value, response_text) = match outcome
                 {
-                    Ok(envelope) => {
+                    Ok(outcome) => {
+                        let envelope = outcome.envelope;
                         let response_text = envelope.model_response_text();
-                        let output_value = serde_json::to_value(&envelope)
-                            .unwrap_or_else(|_| json!({ "status": "failed" }));
+                        let output_value = envelope.output_value(&outcome.trace);
                         if envelope.status
                             == crate::services::delegation::DelegationRunStatus::Completed
                         {

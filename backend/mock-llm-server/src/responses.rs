@@ -409,6 +409,11 @@ pub async fn stream_response(
         ResponseConfig::RandomOneLiner(_) => {
             unreachable!("RandomOneLiner responses should be resolved into Static in matcher")
         }
+        ResponseConfig::DelegateToAssistant(_) => {
+            unreachable!(
+                "DelegateToAssistant responses should be resolved into ToolCall in matcher"
+            )
+        }
     };
 
     futures::stream::iter(actions).then(|action| async move {

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   clearSidecarLocalTrace,
   getSidecarLocalTrace,
+  isSidecarTraceResultTool,
   markSidecarLocalTraceStopped,
   persistedSidecarLocalTrace,
   recordSidecarLocalTrace,
@@ -140,5 +141,31 @@ describe("persistedSidecarLocalTrace", () => {
       },
     });
     expect(trace?.steps[0]?.detail).toHaveLength(512);
+  });
+
+  it("reads a trace next to a result that is not an object", () => {
+    const trace = persistedSidecarLocalTrace({
+      status: "completed",
+      result: "the delegate's answer",
+      localTrace: { steps: [step(0, "ok")] },
+    });
+    expect(trace?.steps).toEqual([step(0, "ok")]);
+  });
+
+  it("prefers the result's own trace over one beside it", () => {
+    const trace = persistedSidecarLocalTrace({
+      result: { localTrace: { steps: [step(0, "ok")] } },
+      localTrace: { steps: [step(1, "error")] },
+    });
+    expect(trace?.steps).toEqual([step(0, "ok")]);
+  });
+});
+
+describe("isSidecarTraceResultTool", () => {
+  it("admits only the tools trusted to carry their own trace", () => {
+    expect(isSidecarTraceResultTool("search_sidecar_mailbox")).toBe(true);
+    expect(isSidecarTraceResultTool("delegate_to_assistant")).toBe(true);
+    expect(isSidecarTraceResultTool("some_server_tool")).toBe(false);
+    expect(isSidecarTraceResultTool(undefined)).toBe(false);
   });
 });

@@ -859,6 +859,21 @@ pub fn build_openai_tool_calls_streaming_response(
     actions
 }
 
+/// Builds an OpenAI-compatible SSE stream for an assistant turn that says what
+/// it is about to do before it does it: `preamble` text, then the tool calls.
+pub fn build_openai_narrated_tool_calls_streaming_response(
+    preamble: &str,
+    tool_calls: &[(&str, &str, Value)],
+) -> Vec<BodyAction> {
+    let mut actions = build_openai_tool_calls_streaming_response(tool_calls);
+    // The role chunk stays first.
+    actions.insert(
+        1,
+        BodyAction::Bytes(build_openai_chat_chunk(preamble, None).into()),
+    );
+    actions
+}
+
 /// Builds an OpenAI-compatible SSE stream for a plain text assistant turn.
 pub fn build_openai_text_streaming_response(chunks: &[&str]) -> Vec<BodyAction> {
     build_delayed_streaming_response(chunks.to_vec(), 0)

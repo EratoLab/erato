@@ -975,17 +975,58 @@ async fn insert_fixed_delegate_assistant(
     id
 }
 
+/// The terminal `tool_call_update` for a tool; in-progress frames carry the
+/// live trace, never the result.
 fn find_tool_call_update_output(events: &[Event], tool_name: &str) -> Value {
     events
         .iter()
         .filter_map(|event| serde_json::from_str::<Value>(&event.data).ok())
-        .find(|json| json["message_type"] == "tool_call_update" && json["tool_name"] == tool_name)
+        .find(|json| {
+            json["message_type"] == "tool_call_update"
+                && json["tool_name"] == tool_name
+                && json["status"] != "in_progress"
+        })
         .map(|json| json["output"].clone())
-        .expect("expected a tool_call_update for the tool")
+        .expect("expected a terminal tool_call_update for the tool")
 }
 
 fn extract_full_text_answer(events: &[Event]) -> String {
     crate::test_utils::extract_full_text(events)
+}
+
+/// The live frames the delegated child's progress produced on the parent's
+/// tool part, oldest first.
+fn delegation_progress_frames(events: &[Event]) -> Vec<Value> {
+    events
+        .iter()
+        .filter_map(|event| serde_json::from_str::<Value>(&event.data).ok())
+        .filter(|json| {
+            json["message_type"] == "tool_call_update"
+                && json["tool_name"] == "delegate_to_assistant"
+                && json["status"] == "in_progress"
+        })
+        .collect()
+}
+
+/// `sequence` is both identity and ordering: every frame carries the whole
+/// trace, and a sequence keeps its step across frames rather than being
+/// renumbered.
+fn assert_trace_sequences_stable(traces: &[Value]) {
+    let mut id_by_sequence: std::collections::HashMap<u64, String> =
+        std::collections::HashMap::new();
+    let mut previous_len = 0;
+    for trace in traces {
+        let steps = trace["steps"].as_array().expect("localTrace.steps");
+        assert!(steps.len() >= previous_len, "frames must be cumulative");
+        previous_len = steps.len();
+        for (index, step) in steps.iter().enumerate() {
+            let sequence = step["sequence"].as_u64().expect("step sequence");
+            assert_eq!(sequence as usize, index, "sequences are dense and ordered");
+            let id = step["id"].as_str().expect("step id").to_string();
+            let known = id_by_sequence.entry(sequence).or_insert_with(|| id.clone());
+            assert_eq!(*known, id, "sequence {sequence} changed step");
+        }
+    }
 }
 
 async fn delegated_child_chat(
@@ -1133,6 +1174,52 @@ async fn test_delegation_happy_path_runs_child_and_returns_envelope(pool: Pool<P
     );
     let delegate_chat_id = Uuid::parse_str(output["delegate_chat_id"].as_str().unwrap()).unwrap();
 
+    // The child streamed its progress onto the parent's tool part while it
+    // ran: cumulative frames, no terminal status, then the same trace on the
+    // terminal frame.
+    let progress_frames = delegation_progress_frames(&events);
+    assert!(
+        !progress_frames.is_empty(),
+        "expected live delegation progress frames"
+    );
+    let mut traces: Vec<Value> = progress_frames
+        .iter()
+        .map(|frame| {
+            let frame_output = &frame["output"];
+            assert_eq!(
+                frame_output["delegate_chat_id"],
+                delegate_chat_id.to_string()
+            );
+            assert_eq!(frame_output["assistant_name"], "Fixed Delegate");
+            assert!(
+                frame_output.get("status").is_none(),
+                "the running shape carries no status"
+            );
+            let trace = frame_output["localTrace"].clone();
+            assert!(!trace["steps"].as_array().unwrap().is_empty());
+            trace
+        })
+        .collect();
+    traces.push(output["localTrace"].clone());
+    assert_trace_sequences_stable(&traces);
+
+    let answer_step = output["localTrace"]["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|step| step["id"] == "answer")
+        .expect("the delegate's answer step");
+    assert_eq!(answer_step["status"], "ok");
+    assert!(answer_step["durationMs"].is_number());
+    assert!(answer_step["startedAtOffsetMs"].is_number());
+    assert!(output["localTrace"]["totalDurationMs"].is_number());
+    assert!(
+        !serde_json::to_string(&output["localTrace"])
+            .unwrap()
+            .contains("CHILD-ANSWER"),
+        "the trace must not carry the delegate's text"
+    );
+
     // The parent's final answer reacted to the result.
     assert!(extract_full_text_answer(&events).contains("PARENT-FINAL-ANSWER"));
 
@@ -1163,6 +1250,7 @@ async fn test_delegation_happy_path_runs_child_and_returns_envelope(pool: Pool<P
         tool_use["output"]["delegate_chat_id"],
         delegate_chat_id.to_string()
     );
+    assert_eq!(tool_use["output"]["localTrace"], output["localTrace"]);
 
     // Child chat: bound to the delegate, full provenance, title = brief.
     let child_chat =
@@ -1220,6 +1308,28 @@ async fn test_delegation_happy_path_runs_child_and_returns_envelope(pool: Pool<P
     assert!(!child_bodies[0].contains("probe_client_tool"));
     // The delegation tool itself is never offered to the child.
     assert!(!child_bodies[0].contains("delegate_to_assistant"));
+
+    // The trace is UI-only. A follow-up turn replays the stored tool part, so
+    // it is the request that would expose the trace to the origin model.
+    let follow_up_events = submit_message(
+        &server,
+        &parent_chat,
+        Some(&assistant_message_id),
+        "parent follow-up question",
+        vec![],
+    )
+    .await;
+    assert!(extract_full_text_answer(&follow_up_events).contains("PARENT-FINAL-ANSWER"));
+    for body in parent_final_recorder.bodies() {
+        assert!(
+            body.contains("delegate_chat_id"),
+            "the model does see the compact envelope"
+        );
+        assert!(
+            !body.contains("localTrace"),
+            "the trace must never reach the origin model"
+        );
+    }
 }
 
 /// A call naming an assistant that was not offered refuses the call and the
@@ -1682,7 +1792,7 @@ async fn test_delegation_refuses_approval_gated_mcp_in_child(pool: Pool<Postgres
             ]),
         );
     });
-    // Child turn 1: call the approval-gated MCP tool.
+    // Child turn 1: narrate, then call the approval-gated MCP tool.
     mocks.mock(|when, then| {
         when.post()
             .path("/v1/chat/completions")
@@ -1692,11 +1802,10 @@ async fn test_delegation_refuses_approval_gated_mcp_in_child(pool: Pool<Postgres
             ));
         mock_llm_sse_response(
             then,
-            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
-                "call_probe",
-                "publish_approval_probe",
-                json!({}),
-            )]),
+            crate::test_utils::build_openai_narrated_tool_calls_streaming_response(
+                "Let me publish the probe.",
+                &[("call_probe", "publish_approval_probe", json!({}))],
+            ),
         );
     });
     // Parent final turn.
@@ -1792,6 +1901,20 @@ async fn test_delegation_refuses_approval_gated_mcp_in_child(pool: Pool<Postgres
             .contains("CHILD-MCP-DONE")
     );
     assert!(extract_full_text_answer(&events).contains("PARENT-MCP-FINAL"));
+
+    // The child's tool call is a step of its own, named after the tool. The
+    // text announcing it is not a step: the answer is the run that ends the
+    // generation, so it comes last and starts after the work it reports on.
+    let steps = output["localTrace"]["steps"].as_array().unwrap();
+    assert_eq!(steps.len(), 2);
+    assert_eq!(steps[0]["id"], "publish_approval_probe");
+    assert_eq!(steps[1]["id"], "answer");
+    assert_eq!(steps[1]["status"], "ok");
+    assert!(steps.iter().all(|step| step["status"] != "running"));
+    assert!(
+        steps[1]["startedAtOffsetMs"].as_u64().unwrap()
+            >= steps[0]["startedAtOffsetMs"].as_u64().unwrap()
+    );
 
     let chat_id = crate::test_utils::extract_chat_id(&events).unwrap();
     let child_chat = delegated_child_chat(&app_state.db, Uuid::parse_str(&chat_id).unwrap()).await;
@@ -1927,6 +2050,143 @@ async fn test_delegation_timeout_aborts_child_and_parent_completes(pool: Pool<Po
                 row.generation_state.as_deref(),
                 Some("completed") | Some("errored")
             ));
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    panic!("child chat still running after timeout");
+}
+
+/// A child that gets somewhere before it stalls still hands the parent the
+/// trace of how far it got: the step it was on settles as `degraded` and both
+/// the terminal frame and the persisted part carry it.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_delegation_timeout_persists_partial_trace(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    // Child: answer a first chunk, then stall past the run timeout.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["CHILD-PARTIAL-TASK"],
+                &["delegate_chat_id"],
+            ));
+        let mut actions =
+            crate::test_utils::build_openai_text_streaming_response(&["CHILD-PARTIAL-TEXT"]);
+        actions.insert(2, BodyAction::Delay(std::time::Duration::from_secs(30)));
+        mock_llm_sse_response(then, actions);
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&["delegate_chat_id"], &[]));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["PARENT-PARTIAL-FINAL"]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["partial delegation question"],
+                &["CHILD-PARTIAL-TASK", "delegate_chat_id"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_delegate_partial",
+                "delegate_to_assistant",
+                json!({
+                    "assistant_id": DELEGATE_ASSISTANT_FIXED_ID,
+                    "task": "CHILD-PARTIAL-TASK start and stall",
+                }),
+            )]),
+        );
+    });
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.assistants.delegation.enabled = true;
+    app_config.assistants.delegation.run_timeout_seconds = 1;
+    let app_state = test_app_state(app_config, pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    insert_fixed_delegate_assistant(&app_state.db, me.id, "stalling delegate", None).await;
+    let server = app_server(app_state.clone());
+
+    let response = submit_with_mentions(
+        &server,
+        None,
+        "partial delegation question",
+        &[DELEGATE_ASSISTANT_FIXED_ID],
+    )
+    .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+
+    let progress_frames = delegation_progress_frames(&events);
+    assert!(
+        progress_frames.iter().any(|frame| {
+            frame["output"]["localTrace"]["steps"][0]["status"] == "running"
+                && frame["output"]["localTrace"]["steps"][0]["id"] == "answer"
+        }),
+        "the open step must have been streamed while it was still open"
+    );
+
+    let output = find_tool_call_update_output(&events, "delegate_to_assistant");
+    assert_eq!(output["status"], "timeout");
+    let steps = output["localTrace"]["steps"].as_array().unwrap();
+    assert_eq!(steps.len(), 1);
+    assert_eq!(steps[0]["id"], "answer");
+    assert!(steps[0]["startedAtOffsetMs"].is_number());
+    assert_ne!(
+        steps[0]["status"], "running",
+        "a closed trace never leaves a step spinning"
+    );
+    assert!(output["localTrace"]["totalDurationMs"].is_number());
+    assert!(extract_full_text_answer(&events).contains("PARENT-PARTIAL-FINAL"));
+
+    let assistant_message_id = assistant_message_id_from_events(&events);
+    let chat_id = crate::test_utils::extract_chat_id(&events).unwrap();
+    let messages_response = server
+        .get(&format!("/api/v1beta/chats/{chat_id}/messages"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    messages_response.assert_status_ok();
+    let tool_use = messages_response.json::<Value>()["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| message["id"] == assistant_message_id.as_str())
+        .expect("parent assistant message")["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|part| part["content_type"] == "tool_use")
+        .expect("tool_use part")
+        .clone();
+    assert_eq!(tool_use["output"]["localTrace"], output["localTrace"]);
+
+    let child_chat = delegated_child_chat(&app_state.db, Uuid::parse_str(&chat_id).unwrap()).await;
+    for _ in 0..50 {
+        let row = erato::db::entity::chats::Entity::find_by_id(child_chat.id)
+            .one(&app_state.db)
+            .await
+            .unwrap()
+            .unwrap();
+        if row.generation_state.as_deref() != Some("running") {
             return;
         }
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
