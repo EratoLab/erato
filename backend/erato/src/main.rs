@@ -6,6 +6,7 @@ use utoipa_scalar::{Scalar, Servable as ScalarServable};
 
 use erato::config::AppConfig;
 use erato::deployment_identity::DeploymentIdentity;
+use erato::distribution::runtime::ReloadableAppState;
 use erato::frontend_environment::{
     DeploymentVersion, build_frontend_registry, serve_files_with_script,
 };
@@ -109,10 +110,6 @@ async fn async_main(worker_threads: usize) -> Result<(), Report> {
     // Verify that the database has been migrated to the latest version
     models::ensure_latest_migration(&state.db).await?;
 
-    let _configuration_reload_listener = config.runtime_configuration.enabled.then(|| {
-        ConfigurationReloadListener::spawn(config.database_url.expose_secret().to_owned())
-    });
-
     if config.runtime_configuration.enabled {
         models::runtime_configuration::mirror_erato_backend_sources_with_translation_pos(
             &state,
@@ -120,7 +117,16 @@ async fn async_main(worker_threads: usize) -> Result<(), Report> {
             state.distribution.translations.sources(),
         )
         .await?;
+
+        *state.reloadable.write().await = ReloadableAppState::load(&state).await?;
     }
+
+    let _configuration_reload_listener = config.runtime_configuration.enabled.then(|| {
+        ConfigurationReloadListener::spawn(
+            config.database_url.expose_secret().to_owned(),
+            state.clone(),
+        )
+    });
 
     let (router, _api) = server::router::router(state.clone()).split_for_parts();
 

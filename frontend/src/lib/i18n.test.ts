@@ -254,6 +254,46 @@ describe("i18n Component Kit Catalogs", () => {
       },
     });
   });
+
+  it("loads runtime translation overrides with highest precedence", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      const responses: Partial<
+        Record<string, { messages: Record<string, string> }>
+      > = {
+        "/public/common/locales/en/messages.json": {
+          messages: { "shared.label": "Bundled" },
+        },
+        "/public/common/overrides/en.json": {
+          messages: { "shared.label": "Runtime override" },
+        },
+      };
+
+      if (url === "/public/common/overrides/index.json") {
+        return {
+          ok: true,
+          json: async () => ({ locales: ["en"] }),
+        } as Response;
+      }
+
+      const response = responses[url];
+      return {
+        ok: !!response,
+        json: async () => response ?? { messages: {} },
+      } as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const loadAndActivateSpy = vi.spyOn(i18n, "loadAndActivate");
+
+    await dynamicActivate("en");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/public/common/overrides/index.json",
+    );
+    expect(loadAndActivateSpy).toHaveBeenLastCalledWith({
+      locale: "en",
+      messages: { "shared.label": "Runtime override" },
+    });
+  });
 });
 
 // Additional test to verify the module exports are correct

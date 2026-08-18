@@ -131,12 +131,44 @@ async function loadMergedMessages({
         ]
       : []),
     ...(await loadComponentKitMessages(locale)),
+    await loadRuntimeTranslationMessages(commonPublicBasePath, locale),
   ];
 
   return messageLayers.reduce<Messages>(
     (merged, messages) => (messages ? { ...merged, ...messages } : merged),
     {},
   );
+}
+
+async function loadRuntimeTranslationMessages(
+  commonPublicBasePath: string,
+  locale: string,
+): Promise<Messages | null> {
+  try {
+    const indexResponse = await fetch(
+      `${commonPublicBasePath}/overrides/index.json`,
+    );
+    if (!indexResponse.ok) {
+      return null;
+    }
+
+    const index = (await indexResponse.json()) as { locales?: unknown };
+    if (
+      !Array.isArray(index.locales) ||
+      !index.locales.every(
+        (entry): entry is string => typeof entry === "string",
+      ) ||
+      !index.locales.includes(locale)
+    ) {
+      return null;
+    }
+
+    return loadOptionalMessages(
+      `${commonPublicBasePath}/overrides/${encodeURIComponent(locale)}.json`,
+    );
+  } catch {
+    return null;
+  }
 }
 
 function getRegisteredComponentKitNames(): string[] {

@@ -1,6 +1,7 @@
 use crate::actors::manager::ActorManager;
 use crate::config::{AppConfig, ChatProviderConfig, PromptSourceSpecification, SummaryConfig};
 use crate::distribution::Distribution;
+use crate::distribution::runtime::ReloadableAppState;
 use crate::policy::engine::{PolicyEngine, PolicyRebuildContext};
 use crate::policy::types::{Action, ResourceKind, Subject};
 use crate::query_metrics::install_postgres_query_metrics;
@@ -133,6 +134,7 @@ pub struct AppState {
     pub system_prompt_renderer: SystemPromptRenderer,
     /// Concrete, startup-discovered artifacts made available by this process.
     pub distribution: Arc<Distribution>,
+    pub reloadable: Arc<RwLock<ReloadableAppState>>,
     /// Optional inference client used instead of provider-specific clients built from config.
     /// This allows tests to inject deterministic responses and provider failures.
     pub genai_client_override: Option<Arc<dyn GenAIClient>>,
@@ -186,6 +188,7 @@ impl std::fmt::Debug for AppState {
             .field("background_tasks", &self.background_tasks)
             .field("system_prompt_renderer", &self.system_prompt_renderer)
             .field("distribution", &self.distribution)
+            .field("reloadable", &self.reloadable)
             .field(
                 "genai_client_override",
                 &self.genai_client_override.as_ref().map(|_| "<GenAIClient>"),
@@ -210,6 +213,7 @@ impl std::fmt::Debug for AppState {
 impl AppState {
     pub async fn new(config: AppConfig) -> Result<Self, Report> {
         let distribution = Arc::new(Distribution::load(&config));
+        let reloadable = Arc::new(RwLock::new(ReloadableAppState::default()));
 
         let db_connect_options = ConnectOptions::new(config.database_url.expose_secret());
         // TODO: Change level to Debug, but that also seems to deactivate some other logging (e.g. Errors during request?)
@@ -296,6 +300,7 @@ impl AppState {
             background_tasks,
             system_prompt_renderer,
             distribution,
+            reloadable,
             genai_client_override: None,
             file_bytes_cache,
             file_contents_cache,
