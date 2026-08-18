@@ -3890,6 +3890,7 @@ model_name = "gpt-4o"
     assert_eq!(delegation.run_timeout_seconds, 600);
     assert_eq!(delegation.max_mentions_per_message, 3);
     assert_eq!(delegation.result_max_chars, 16000);
+    assert_eq!(delegation.auto_archive_after_days, 7);
     assert!(delegation.preamble.contains("delegated"));
     assert!(delegation.preamble.contains("{{expected_output_section}}"));
     assert!(delegation.preamble.contains("{{constraints_section}}"));
@@ -3914,6 +3915,7 @@ enabled = true
 run_timeout_seconds = 120
 max_mentions_per_message = 5
 result_max_chars = 2000
+auto_archive_after_days = 14
 preamble = """
 Line one of the delegation directive.
 
@@ -3950,6 +3952,7 @@ model_name = "gpt-4o"
     assert_eq!(delegation.run_timeout_seconds, 120);
     assert_eq!(delegation.max_mentions_per_message, 5);
     assert_eq!(delegation.result_max_chars, 2000);
+    assert_eq!(delegation.auto_archive_after_days, 14);
     assert_eq!(
         delegation.preamble,
         "Line one of the delegation directive.\n\nLine two with placeholders.\n{{expected_output_section}}{{constraints_section}}"
@@ -3958,7 +3961,7 @@ model_name = "gpt-4o"
     let _ = config.migrate();
 }
 
-fn build_and_migrate_delegation_config(delegation_toml: &str) {
+fn build_and_migrate_delegation_config(delegation_toml: &str) -> AppConfig {
     let mut temp_file = Builder::new()
         .suffix(".toml")
         .tempfile()
@@ -3982,7 +3985,28 @@ fn build_and_migrate_delegation_config(delegation_toml: &str) {
         .expect("Failed to build config schema")
         .try_deserialize()
         .expect("Failed to deserialize config");
-    let _ = config.migrate();
+    config.migrate()
+}
+
+#[test]
+fn test_assistants_delegation_auto_archive_can_be_switched_off() {
+    let config = build_and_migrate_delegation_config(
+        r#"
+[assistants]
+enabled = true
+
+[assistants.delegation]
+auto_archive_after_days = 0
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+
+    assert_eq!(config.assistants.delegation.auto_archive_after_days, 0);
 }
 
 #[test]

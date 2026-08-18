@@ -2780,6 +2780,16 @@ pub struct AssistantsDelegationConfig {
     #[serde(default = "default_delegation_result_max_chars")]
     pub result_max_chars: usize,
 
+    // Number of days without activity after which a finished delegated run is
+    // archived, whether or not the chat that spawned it was ever archived.
+    // Archived runs are deleted by the cleanup worker after
+    // `cleanup_archived_max_age_days`, so this only has an effect if
+    // `cleanup_enabled` is `true`. `0` never archives a run automatically, and
+    // neither does a pin, an enabled share link, or a turn the user wrote into
+    // the run themselves. Defaults to `7`.
+    #[serde(default = "default_delegation_auto_archive_after_days")]
+    pub auto_archive_after_days: u32,
+
     // Directive rendered into the delegated chat's first turn, telling the
     // delegate it runs as a delegated worker and that its final message is
     // returned to the origin chat as the task result. `{{expected_output_section}}`
@@ -2797,6 +2807,7 @@ impl Default for AssistantsDelegationConfig {
             run_timeout_seconds: default_delegation_run_timeout_seconds(),
             max_mentions_per_message: default_delegation_max_mentions_per_message(),
             result_max_chars: default_delegation_result_max_chars(),
+            auto_archive_after_days: default_delegation_auto_archive_after_days(),
             preamble: default_delegation_preamble(),
         }
     }
@@ -2812,6 +2823,10 @@ fn default_delegation_max_mentions_per_message() -> usize {
 
 fn default_delegation_result_max_chars() -> usize {
     16000
+}
+
+fn default_delegation_auto_archive_after_days() -> u32 {
+    7
 }
 
 fn default_delegation_preamble() -> String {

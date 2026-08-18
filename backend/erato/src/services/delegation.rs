@@ -605,6 +605,101 @@ async fn build_result_envelope(
     }
 }
 
+/// Attaches the requested parent files to the freshly created child chat and,
+/// when context transfer was requested, seeds its history. Returns the message
+/// the child's own turn continues from.
+///
+/// Context transfer seeds from the origin turn's replay anchor — the history
+/// BEFORE the mention message. The mention message itself is represented by
+/// the task brief; a seeded user message after the last snapshot would be
+/// dropped by composition anyway.
+async fn prepare_delegated_chat(
+    app_state: &AppState,
+    context: &crate::server::api::v1beta::message_streaming::DelegationDispatchContext<'_>,
+    child_chat_id: Uuid,
+    file_ids: &[Uuid],
+    include_conversation_context: bool,
+) -> Result<Option<Uuid>, String> {
+    use sea_orm::{ActiveValue, ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
+
+    for file_id in file_ids {
+        let join_row = crate::db::entity::chat_file_uploads::ActiveModel {
+            chat_id: ActiveValue::Set(child_chat_id),
+            file_upload_id: ActiveValue::Set(*file_id),
+            ..Default::default()
+        };
+        if let Err(error) = crate::db::entity::chat_file_uploads::Entity::insert(join_row)
+            .exec(&app_state.db)
+            .await
+        {
+            tracing::warn!(%error, "Failed to attach file to delegated chat");
+            return Err("Failed to attach a file to the delegated chat.".to_string());
+        }
+    }
+
+    if !include_conversation_context {
+        return Ok(None);
+    }
+
+    let anchor_id = crate::db::entity::messages::Entity::find_by_id(context.origin_user_message_id)
+        .one(&app_state.db)
+        .await
+        .ok()
+        .flatten()
+        .and_then(|row| row.previous_message_id);
+    let Some(anchor_id) = anchor_id else {
+        return Ok(None);
+    };
+
+    crate::models::chat::seed_chat_lineage(&app_state.db, &child_chat_id, &anchor_id)
+        .await
+        .map_err(|error| {
+            tracing::warn!(%error, "Failed to seed delegated chat lineage");
+            "Failed to pass the conversation context to the delegate.".to_string()
+        })?;
+
+    Ok(crate::db::entity::messages::Entity::find()
+        .filter(crate::db::entity::messages::Column::ChatId.eq(child_chat_id))
+        .order_by_desc(crate::db::entity::messages::Column::CreatedAt)
+        .one(&app_state.db)
+        .await
+        .ok()
+        .flatten()
+        .map(|row| row.id))
+}
+
+/// Removes a delegated chat whose run never started. Dispatch creates the chat
+/// and claims its generation lease before the run, so a failure in between
+/// would otherwise strand an empty chat that never produces anything, held by
+/// a task nothing will ever finish.
+async fn discard_unstarted_delegated_chat(
+    app_state: &AppState,
+    child_task: &std::sync::Arc<crate::services::background_tasks::StreamingTask>,
+    child_chat_id: Uuid,
+) {
+    child_task.mark_completed();
+    app_state
+        .background_tasks
+        .remove_task(
+            &child_chat_id,
+            child_task.generation_id,
+            crate::services::background_tasks::TaskOutcome::Errored,
+        )
+        .await;
+
+    if let Err(error) =
+        crate::models::chat::delete_unstarted_delegated_chat(&app_state.db, &child_chat_id).await
+    {
+        tracing::warn!(
+            %error,
+            %child_chat_id,
+            "Failed to remove the delegated chat whose run never started"
+        );
+        return;
+    }
+    app_state.global_policy_engine.invalidate_data().await;
+}
+
 /// Dispatches a `delegate_to_assistant` call: validates the arguments against
 /// what this turn offered, creates the delegated child chat (owned by the
 /// origin user, full provenance envelope), runs the delegate as an awaited
@@ -618,7 +713,7 @@ pub(crate) async fn dispatch_delegate_tool_call(
     tool_call: &genai::chat::ToolCall,
     parent: Option<DelegationParentStream<'_>>,
 ) -> Result<DelegationDispatchOutcome, String> {
-    use sea_orm::{ActiveValue, EntityTrait, QueryOrder};
+    use sea_orm::EntityTrait;
 
     let dispatch_started = std::time::Instant::now();
     let parent_task = parent.map(|parent| parent.task);
@@ -701,6 +796,7 @@ pub(crate) async fn dispatch_delegate_tool_call(
         origin_assistant_id: context.origin_chat.assistant_id,
         rebase_cutoff: Some(spawned_at),
         depth: parent_depth + 1,
+        adopted_at: None,
     };
     let child_chat = crate::models::chat::create_delegated_chat(
         &app_state.db,
@@ -716,56 +812,31 @@ pub(crate) async fn dispatch_delegate_tool_call(
         tracing::warn!(%error, "Failed to create delegated chat");
         "Failed to create the delegated chat.".to_string()
     })?;
+
+    // The lease comes before any other pre-run work: the archive cascade spares
+    // a run whose generation has not finished, and seeding a long conversation
+    // into the child takes long enough for an archive to land in between.
+    let (mut child_rx, child_task) = app_state
+        .background_tasks
+        .start_task(child_chat.id, Uuid::new_v4())
+        .await;
     app_state.global_policy_engine.invalidate_data().await;
 
-    for file_id in &file_ids {
-        let join_row = crate::db::entity::chat_file_uploads::ActiveModel {
-            chat_id: ActiveValue::Set(child_chat.id),
-            file_upload_id: ActiveValue::Set(*file_id),
-            ..Default::default()
-        };
-        if let Err(error) = crate::db::entity::chat_file_uploads::Entity::insert(join_row)
-            .exec(&app_state.db)
-            .await
-        {
-            tracing::warn!(%error, "Failed to attach file to delegated chat");
-            return Err("Failed to attach a file to the delegated chat.".to_string());
+    let previous_message_id = match prepare_delegated_chat(
+        app_state,
+        context,
+        child_chat.id,
+        &file_ids,
+        args.include_conversation_context,
+    )
+    .await
+    {
+        Ok(previous_message_id) => previous_message_id,
+        Err(refusal) => {
+            discard_unstarted_delegated_chat(app_state, &child_task, child_chat.id).await;
+            return Err(refusal);
         }
-    }
-
-    // Context transfer seeds from the origin turn's replay anchor — the
-    // history BEFORE the mention message. The mention message itself is
-    // represented by the task brief; a seeded user message after the last
-    // snapshot would be dropped by composition anyway.
-    let mut previous_message_id: Option<Uuid> = None;
-    if args.include_conversation_context {
-        let anchor_id =
-            crate::db::entity::messages::Entity::find_by_id(context.origin_user_message_id)
-                .one(&app_state.db)
-                .await
-                .ok()
-                .flatten()
-                .and_then(|row| row.previous_message_id);
-        if let Some(anchor_id) = anchor_id {
-            crate::models::chat::seed_chat_lineage(&app_state.db, &child_chat.id, &anchor_id)
-                .await
-                .map_err(|error| {
-                    tracing::warn!(%error, "Failed to seed delegated chat lineage");
-                    "Failed to pass the conversation context to the delegate.".to_string()
-                })?;
-            previous_message_id = {
-                use sea_orm::{ColumnTrait, QueryFilter};
-                crate::db::entity::messages::Entity::find()
-                    .filter(crate::db::entity::messages::Column::ChatId.eq(child_chat.id))
-                    .order_by_desc(crate::db::entity::messages::Column::CreatedAt)
-                    .one(&app_state.db)
-                    .await
-                    .ok()
-                    .flatten()
-                    .map(|row| row.id)
-            };
-        }
-    }
+    };
 
     let preamble = render_delegation_preamble(
         &config.preamble,
@@ -778,10 +849,6 @@ pub(crate) async fn dispatch_delegate_tool_call(
         preamble.trim()
     );
 
-    let (mut child_rx, child_task) = app_state
-        .background_tasks
-        .start_task(child_chat.id, Uuid::new_v4())
-        .await;
     let child_request =
         crate::server::api::v1beta::message_streaming::MessageSubmitRequest::for_delegated_run(
             child_chat.id,

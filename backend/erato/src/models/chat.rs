@@ -2,8 +2,10 @@ use crate::db::entity::messages;
 use crate::db::entity_ext::chats;
 use crate::db::entity_ext::prelude::*;
 use crate::metrics_constants::{
-    POSTGRES_QUERY_COUNT_RECENT_CHATS, POSTGRES_QUERY_FREQUENT_ASSISTANTS,
-    POSTGRES_QUERY_LIST_GENERATING_CHATS, POSTGRES_QUERY_LIST_RECENT_CHATS,
+    POSTGRES_QUERY_ARCHIVE_DELEGATED_DESCENDANTS, POSTGRES_QUERY_ARCHIVE_STALE_DELEGATED_RUNS,
+    POSTGRES_QUERY_CHAT_GENERATION_IS_RUNNING, POSTGRES_QUERY_COUNT_RECENT_CHATS,
+    POSTGRES_QUERY_FREQUENT_ASSISTANTS, POSTGRES_QUERY_LIST_GENERATING_CHATS,
+    POSTGRES_QUERY_LIST_RECENT_CHATS,
 };
 use crate::models::message::GenerationParameters;
 use crate::models::pagination;
@@ -65,6 +67,11 @@ pub struct ChatProvenance {
     /// Spawn depth relative to a user-started chat (which has depth 0).
     #[serde(default)]
     pub depth: u32,
+    /// When the owner first wrote into the chat themselves. A run they took
+    /// over is more than the artifact of the dispatch that created it, so the
+    /// automatic retention pass leaves it alone from then on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub adopted_at: Option<DateTimeWithTimeZone>,
 }
 
 impl AssistantConfiguration {
@@ -1117,12 +1124,269 @@ pub async fn update_chat_is_pinned(
     Ok(chat_active.update(conn).await?)
 }
 
+/// True while a generation is actively writing to the chat: state `running`
+/// with a heartbeat inside the staleness window. A generation whose process
+/// died leaves the state behind but stops heartbeating, so it does not count.
+///
+/// The window is evaluated in the database because the heartbeat is written
+/// with the database clock: a pod clock running ahead of it by more than the
+/// window would read every live generation as dead.
+pub async fn chat_generation_is_running(
+    conn: &DatabaseConnection,
+    chat_id: &Uuid,
+    stale_after_secs: u64,
+) -> Result<bool, Report> {
+    #[derive(Debug, FromQueryResult)]
+    struct RunningRow {
+        running: bool,
+    }
+
+    let row = RunningRow::find_by_statement(named_statement_from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        POSTGRES_QUERY_CHAT_GENERATION_IS_RUNNING,
+        r#"
+        SELECT COALESCE(
+            "chats"."generation_state" = 'running'
+                AND "chats"."generation_heartbeat_at" > now() - make_interval(secs => $2::double precision),
+            FALSE
+        ) AS "running"
+        FROM "chats"
+        WHERE "chats"."id" = $1
+        "#,
+        [(*chat_id).into(), (stale_after_secs as f64).into()],
+    ))
+    .one(conn)
+    .await?;
+
+    Ok(row.is_some_and(|row| row.running))
+}
+
+/// SQL predicate for a chat whose generation has not finished: running with a
+/// fresh heartbeat, or stopped on a tool approval the user can still answer.
+/// `param_index` binds the staleness window in seconds.
+fn generation_unfinished_condition(alias: &str, param_index: u8) -> String {
+    format!(
+        r#"COALESCE(
+            {alias}."generation_state" = 'awaiting_approval'
+            OR (
+                {alias}."generation_state" = 'running'
+                AND {alias}."generation_heartbeat_at" > now() - make_interval(secs => ${param_index}::double precision)
+            ),
+            FALSE
+        )"#
+    )
+}
+
+/// Archive the delegated runs spawned from `chat_id`, and their delegated
+/// descendants in turn. A delegated run is an artifact of the conversation
+/// that spawned it, so hiding the conversation hides its artifacts — and the
+/// age-based deletion of archived chats then reaches them too.
+///
+/// A run whose generation has not finished is left alone: completing into an
+/// archived chat is a worse state than a late archive, because every write
+/// path into an archived chat — including the tool-approval continuation —
+/// then rejects. So is a run created within the staleness window that has no
+/// lease at all: dispatch creates the chat a moment before claiming the lease,
+/// and a run archived in between would complete into an archived chat too.
+/// Skipping a run also stops the walk there, keeping its own descendants
+/// reachable. [`auto_archive_stale_delegated_runs`] picks such runs up once
+/// they go quiet.
+///
+/// Scoped to `owner_user_id`: delegation guarantees child owner == origin
+/// owner, and a future provenance kind that crosses users must not let one
+/// user's archive reach another user's chats.
+///
+/// Returns the number of runs archived.
+pub async fn archive_delegated_descendants(
+    conn: &DatabaseConnection,
+    chat_id: &Uuid,
+    owner_user_id: &str,
+    generation_stale_after_secs: u64,
+) -> Result<u64, Report> {
+    use sea_orm::ConnectionTrait;
+
+    let sql = format!(
+        r#"
+        WITH RECURSIVE descendants AS (
+            SELECT $1::uuid AS id
+            UNION
+            SELECT "child"."id"
+            FROM "chats" AS "child"
+            JOIN descendants ON "child"."origin_chat_id" = descendants.id
+            WHERE "child"."owner_user_id" = $2
+                AND ("child"."assistant_configuration" #>> '{{provenance,kind}}') = 'delegation'
+                AND "child"."archived_at" IS NULL
+                AND NOT {unfinished}
+                AND NOT (
+                    "child"."generation_state" IS NULL
+                    AND "child"."created_at" > now() - make_interval(secs => $3::double precision)
+                )
+        )
+        UPDATE "chats"
+        SET "archived_at" = now()
+        WHERE "chats"."id" IN (SELECT id FROM descendants WHERE id <> $1::uuid)
+        "#,
+        unfinished = generation_unfinished_condition("\"child\"", 3)
+    );
+
+    let result = conn
+        .execute_raw(named_statement_from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            POSTGRES_QUERY_ARCHIVE_DELEGATED_DESCENDANTS,
+            sql,
+            [
+                (*chat_id).into(),
+                owner_user_id.into(),
+                (generation_stale_after_secs as f64).into(),
+            ],
+        ))
+        .await?;
+
+    Ok(result.rows_affected())
+}
+
+/// Archive delegated runs that have gone quiet, independently of whether the
+/// chat that spawned them was ever archived. Without this they accumulate
+/// forever: listings hide them, so no user ever archives one, so the age-based
+/// deletion of archived chats never reaches them.
+///
+/// Quiet means no unfinished generation, and neither a message nor the chat
+/// itself younger than `max_age_days` — continuing a delegated run pushes its
+/// retention out, while a run that never got a message ages from its creation,
+/// so a child stranded by a crashed dispatch is reached too. The chat's own age
+/// is a floor because seeded context keeps the timestamps of the conversation
+/// it was copied from, which are older than the run.
+///
+/// This path ends in deletion, so anything the user said about the run keeps
+/// it: a pin, an enabled share link, or a turn they wrote into it themselves.
+/// Those are the only signals available for a chat the listings hide.
+///
+/// `max_age_days` of 0 turns the pass off.
+///
+/// Returns the number of runs archived.
+pub async fn auto_archive_stale_delegated_runs(
+    conn: &DatabaseConnection,
+    max_age_days: u32,
+    generation_stale_after_secs: u64,
+) -> Result<u64, Report> {
+    use sea_orm::ConnectionTrait;
+
+    if max_age_days == 0 {
+        return Ok(0);
+    }
+
+    let sql = format!(
+        r#"
+        UPDATE "chats"
+        SET "archived_at" = now()
+        WHERE "chats"."archived_at" IS NULL
+            AND NOT "chats"."is_pinned"
+            AND ("chats"."assistant_configuration" #>> '{{provenance,kind}}') = 'delegation'
+            AND ("chats"."assistant_configuration" #>> '{{provenance,adopted_at}}') IS NULL
+            AND NOT {unfinished}
+            AND NOT EXISTS (
+                SELECT 1
+                FROM "share_links"
+                WHERE "share_links"."resource_type" = 'chat'
+                    AND "share_links"."resource_id" = "chats"."id"::text
+                    AND "share_links"."enabled"
+            )
+            AND GREATEST(
+                "chats"."created_at",
+                (
+                    SELECT MAX("m"."created_at")
+                    FROM "messages" AS "m"
+                    WHERE "m"."chat_id" = "chats"."id"
+                )
+            ) < now() - make_interval(secs => $2::double precision)
+        "#,
+        unfinished = generation_unfinished_condition("\"chats\"", 1)
+    );
+
+    let result = conn
+        .execute_raw(named_statement_from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            POSTGRES_QUERY_ARCHIVE_STALE_DELEGATED_RUNS,
+            sql,
+            [
+                (generation_stale_after_secs as f64).into(),
+                (max_age_days as f64 * 86_400.0).into(),
+            ],
+        ))
+        .await?;
+
+    Ok(result.rows_affected())
+}
+
+/// Record that the owner wrote into a delegated run themselves, which takes it
+/// out of [`auto_archive_stale_delegated_runs`] for good.
+///
+/// The run's own turns never come through here: they are driven by the
+/// dispatcher rather than by a request from the user.
+pub async fn mark_delegated_run_adopted(
+    conn: &DatabaseConnection,
+    chat: &chats::Model,
+) -> Result<(), Report> {
+    let Some(mut configuration) = parse_assistant_configuration(chat)? else {
+        return Ok(());
+    };
+    let Some(provenance) = configuration.provenance.as_mut() else {
+        return Ok(());
+    };
+    if provenance.kind != ChatProvenanceKind::Delegation || provenance.adopted_at.is_some() {
+        return Ok(());
+    }
+    provenance.adopted_at = Some(Utc::now().into());
+
+    let mut chat_active: chats::ActiveModel = chat.clone().into();
+    chat_active.assistant_configuration = ActiveValue::Set(Some(configuration.to_json()?));
+    chat_active.update(conn).await?;
+
+    Ok(())
+}
+
+/// Delete a delegated chat that was created but never got a run, along with
+/// whatever dispatch already wrote for it (seeded lineage, file join rows).
+///
+/// Only for the pre-run failure path, and refuses anything that is not a
+/// delegated run: an empty child that never ran is noise the user can neither
+/// see nor act on, but nothing else may be reached from here.
+pub async fn delete_unstarted_delegated_chat(
+    conn: &DatabaseConnection,
+    chat_id: &Uuid,
+) -> Result<(), Report> {
+    use sea_orm::TransactionTrait;
+
+    let chat = Chats::find_by_id(*chat_id)
+        .one(conn)
+        .await?
+        .ok_or_else(|| eyre!("Chat with ID {} not found", chat_id))?;
+    if !chat_is_delegated_run(&chat) {
+        return Err(eyre!("Chat {chat_id} is not a delegated run"));
+    }
+
+    let txn = conn.begin().await?;
+    crate::db::entity::chat_file_uploads::Entity::delete_many()
+        .filter(crate::db::entity::chat_file_uploads::Column::ChatId.eq(*chat_id))
+        .exec(&txn)
+        .await?;
+    messages::Entity::delete_many()
+        .filter(messages::Column::ChatId.eq(*chat_id))
+        .exec(&txn)
+        .await?;
+    Chats::delete_by_id(*chat_id).exec(&txn).await?;
+    txn.commit().await?;
+
+    Ok(())
+}
+
 /// Archive a chat by setting its archived_at timestamp
 pub async fn archive_chat(
     conn: &DatabaseConnection,
     policy: &PolicyEngine,
     subject: &Subject,
     chat_id: &Uuid,
+    generation_stale_after_secs: u64,
 ) -> Result<chats::Model, Report> {
     // Find the chat
     let chat = Chats::find_by_id(*chat_id)
@@ -1143,6 +1407,14 @@ pub async fn archive_chat(
     chat_active.archived_at = ActiveValue::Set(Some(Utc::now().into()));
 
     let updated_chat = chat_active.update(conn).await?;
+
+    archive_delegated_descendants(
+        conn,
+        &updated_chat.id,
+        &updated_chat.owner_user_id,
+        generation_stale_after_secs,
+    )
+    .await?;
 
     Ok(updated_chat)
 }

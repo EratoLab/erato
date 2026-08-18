@@ -25,6 +25,7 @@
   "assistant_hub.reviewers.rules.<rule-name>.rule_type": {},
   "assistants.context_file_contributor_threshold": {},
   "assistants.context_warning_threshold": {},
+  "assistants.delegation.auto_archive_after_days": {},
   "assistants.delegation.enabled": {},
   "assistants.delegation.max_mentions_per_message": {},
   "assistants.delegation.preamble": {},

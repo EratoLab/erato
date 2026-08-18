@@ -157,6 +157,7 @@ async fn write_delegation_provenance(
             origin_assistant_id,
             rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
             depth: 1,
+            adopted_at: None,
         }),
     };
     let chat = erato::db::entity::chats::Entity::find_by_id(chat_id)
@@ -2410,6 +2411,7 @@ async fn test_listing_hides_delegated_runs_and_exposes_provenance(pool: Pool<Pos
                 origin_assistant_id: Some(assistant_id),
                 rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
                 depth: 1,
+                adopted_at: None,
             },
             format!("Delegated run {index}"),
         )
@@ -2582,6 +2584,7 @@ async fn test_parked_delegated_chat_stays_reachable(pool: Pool<Postgres>) {
             origin_assistant_id: None,
             rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
             depth: 1,
+            adopted_at: None,
         },
         "Parked delegated run".to_string(),
     )
@@ -3128,4 +3131,548 @@ async fn test_delegation_dispatch_refuses_target_archived_after_validation(pool:
         .await
         .unwrap();
     assert!(children.is_empty(), "no child chat for a refused dispatch");
+}
+
+async fn spawn_delegated_run(
+    app_state: &erato::state::AppState,
+    owner_user_id: &str,
+    assistant_id: Uuid,
+    origin_chat_id: Uuid,
+    title: &str,
+) -> Uuid {
+    let child = erato::models::chat::create_delegated_chat(
+        &app_state.db,
+        &rebuilt_policy(app_state).await,
+        &erato::policy::types::Subject::User(owner_user_id.to_string()),
+        owner_user_id,
+        assistant_id,
+        ChatProvenance {
+            kind: ChatProvenanceKind::Delegation,
+            origin_chat_id: Some(origin_chat_id),
+            origin_message_id: None,
+            origin_assistant_id: None,
+            rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
+            depth: 1,
+            adopted_at: None,
+        },
+        title.to_string(),
+    )
+    .await
+    .expect("create delegated chat");
+    app_state.global_policy_engine.invalidate_data().await;
+    insert_chat_message(&app_state.db, child.id, title).await;
+    child.id
+}
+
+async fn spawn_handoff_branch(
+    app_state: &erato::state::AppState,
+    owner_user_id: &str,
+    assistant_id: Uuid,
+    origin_chat_id: Uuid,
+) -> Uuid {
+    let child = erato::models::chat::create_delegated_chat(
+        &app_state.db,
+        &rebuilt_policy(app_state).await,
+        &erato::policy::types::Subject::User(owner_user_id.to_string()),
+        owner_user_id,
+        assistant_id,
+        ChatProvenance {
+            kind: ChatProvenanceKind::HandoffBranch,
+            origin_chat_id: Some(origin_chat_id),
+            origin_message_id: None,
+            origin_assistant_id: None,
+            rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
+            depth: 1,
+            adopted_at: None,
+        },
+        "Handoff branch".to_string(),
+    )
+    .await
+    .expect("create handoff chat");
+    app_state.global_policy_engine.invalidate_data().await;
+    insert_chat_message(&app_state.db, child.id, "handoff branch").await;
+    child.id
+}
+
+async fn backdate_chat_creation(db: &sea_orm::DatabaseConnection, chat_id: Uuid, secs: i64) {
+    erato::db::entity::chats::ActiveModel {
+        id: ActiveValue::Unchanged(chat_id),
+        created_at: ActiveValue::Set(
+            (sqlx::types::chrono::Utc::now() - chrono::Duration::seconds(secs)).into(),
+        ),
+        ..Default::default()
+    }
+    .update(db)
+    .await
+    .expect("backdate chat");
+}
+
+async fn insert_chat_message(db: &sea_orm::DatabaseConnection, chat_id: Uuid, text: &str) {
+    let now: sea_orm::prelude::DateTimeWithTimeZone = sqlx::types::chrono::Utc::now().into();
+    erato::db::entity::messages::Entity::insert(erato::db::entity::messages::ActiveModel {
+        id: ActiveValue::Set(Uuid::new_v4()),
+        chat_id: ActiveValue::Set(chat_id),
+        raw_message: ActiveValue::Set(
+            json!({"role": "user", "content": [{"content_type": "text", "text": text}]}),
+        ),
+        created_at: ActiveValue::Set(now),
+        updated_at: ActiveValue::Set(now),
+        is_message_in_active_thread: ActiveValue::Set(true),
+        ..Default::default()
+    })
+    .exec(db)
+    .await
+    .expect("insert message");
+}
+
+async fn set_generation_lease(
+    db: &sea_orm::DatabaseConnection,
+    chat_id: Uuid,
+    state: Option<&str>,
+    heartbeat_age_secs: i64,
+) {
+    let now = sqlx::types::chrono::Utc::now();
+    erato::db::entity::chats::ActiveModel {
+        id: ActiveValue::Unchanged(chat_id),
+        generation_state: ActiveValue::Set(state.map(str::to_string)),
+        generation_started_at: ActiveValue::Set(state.map(|_| now.into())),
+        generation_heartbeat_at: ActiveValue::Set(
+            state.map(|_| (now - chrono::Duration::seconds(heartbeat_age_secs)).into()),
+        ),
+        ..Default::default()
+    }
+    .update(db)
+    .await
+    .expect("set generation lease");
+}
+
+async fn archived_at_of(db: &sea_orm::DatabaseConnection, chat_id: Uuid) -> Option<String> {
+    erato::db::entity::chats::Entity::find_by_id(chat_id)
+        .one(db)
+        .await
+        .unwrap()
+        .expect("chat should still exist")
+        .archived_at
+        .map(|value| value.to_string())
+}
+
+/// Archiving a chat archives the delegated runs it spawned and theirs in turn,
+/// but leaves alone a run whose generation has not finished or has not started
+/// yet, never leaves the owner, and never reaches another provenance kind. A
+/// run that survives its origin still reads with a dangling origin.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_archive_cascades_to_idle_delegated_runs(pool: Pool<Postgres>) {
+    let app_state = test_app_state(delegation_enabled_config(), pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let other = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        "delegation-archive-other",
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+
+    let assistant = create_assistant(&server, "Cascade Assistant", "prompt").await;
+    let assistant_id = Uuid::parse_str(&assistant).unwrap();
+    let parent = create_chat(&server, Some(&assistant)).await;
+    let parent_id = Uuid::parse_str(&parent).unwrap();
+    insert_chat_message(&app_state.db, parent_id, "parent question").await;
+
+    let me_id = me.id.to_string();
+    let idle = spawn_delegated_run(&app_state, &me_id, assistant_id, parent_id, "idle run").await;
+    let grandchild =
+        spawn_delegated_run(&app_state, &me_id, assistant_id, idle, "nested run").await;
+    for finished in [idle, grandchild] {
+        backdate_chat_creation(&app_state.db, finished, 600).await;
+    }
+    let handoff = spawn_handoff_branch(&app_state, &me_id, assistant_id, parent_id).await;
+    backdate_chat_creation(&app_state.db, handoff, 600).await;
+    // Dispatch creates the chat a moment before it claims the lease.
+    let dispatching = spawn_delegated_run(
+        &app_state,
+        &me_id,
+        assistant_id,
+        parent_id,
+        "dispatching run",
+    )
+    .await;
+    let running =
+        spawn_delegated_run(&app_state, &me_id, assistant_id, parent_id, "running run").await;
+    set_generation_lease(&app_state.db, running, Some("running"), 0).await;
+    let parked =
+        spawn_delegated_run(&app_state, &me_id, assistant_id, parent_id, "parked run").await;
+    set_generation_lease(&app_state.db, parked, Some("awaiting_approval"), 0).await;
+    let crashed =
+        spawn_delegated_run(&app_state, &me_id, assistant_id, parent_id, "crashed run").await;
+    set_generation_lease(&app_state.db, crashed, Some("running"), 600).await;
+    let foreign = spawn_delegated_run(
+        &app_state,
+        &other.id.to_string(),
+        assistant_id,
+        parent_id,
+        "foreign run",
+    )
+    .await;
+
+    server
+        .post(&format!("/api/v1beta/chats/{parent}/archive"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({}))
+        .await
+        .assert_status_ok();
+
+    for (label, id) in [
+        ("the archived chat", parent_id),
+        ("an idle delegated run", idle),
+        ("a nested delegated run", grandchild),
+        ("a run whose generation died", crashed),
+    ] {
+        assert!(
+            archived_at_of(&app_state.db, id).await.is_some(),
+            "{label} must be archived"
+        );
+    }
+    for (label, id) in [
+        ("a running delegated run", running),
+        ("a delegated run awaiting approval", parked),
+        (
+            "a delegated run that is still being dispatched",
+            dispatching,
+        ),
+        ("a chat spawned by a handoff", handoff),
+        ("another user's delegated run", foreign),
+    ] {
+        assert!(
+            archived_at_of(&app_state.db, id).await.is_none(),
+            "{label} must not be archived"
+        );
+    }
+
+    // The origin goes away — by the cleanup worker later, or as here — while
+    // the run that was still going survives it.
+    erato::db::entity::messages::Entity::delete_many()
+        .filter(erato::db::entity::messages::Column::ChatId.eq(parent_id))
+        .exec(&app_state.db)
+        .await
+        .unwrap();
+    erato::db::entity::chats::Entity::delete_by_id(parent_id)
+        .exec(&app_state.db)
+        .await
+        .unwrap();
+
+    let listing = recent_chats(&server, "?include_delegated=true").await;
+    let entry = listing["chats"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|chat| chat["id"] == running.to_string())
+        .expect("the surviving run stays listable");
+    assert_eq!(entry["provenance_kind"], "delegation");
+    assert_eq!(entry["origin_chat_id"], parent_id.to_string());
+    assert!(entry["origin_chat_title"].is_null());
+}
+
+/// A dispatch that fails after creating the child chat but before its run
+/// starts leaves nothing behind.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_pre_run_dispatch_failure_leaves_no_child_chat(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&["Delegation refused"], &[]));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["PARENT-RECOVERED"]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["seeding question"],
+                &["Delegation refused"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_delegate_seed",
+                "delegate_to_assistant",
+                json!({
+                    "assistant_id": DELEGATE_ASSISTANT_FIXED_ID,
+                    "task": "should never run",
+                    "include_conversation_context": true,
+                }),
+            )]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post().path("/v1/chat/completions");
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["first answer"]),
+        );
+    });
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.assistants.delegation.enabled = true;
+    let app_state = test_app_state(app_config, pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    insert_fixed_delegate_assistant(&app_state.db, me.id, "delegate prompt", None).await;
+    let server = app_server(app_state.clone());
+
+    let parent_chat = create_chat(&server, None).await;
+    let parent_chat_id = Uuid::parse_str(&parent_chat).unwrap();
+    let first_events = submit_message(&server, &parent_chat, None, "first question", vec![]).await;
+    let first_head = assistant_message_id_from_events(&first_events);
+
+    // Seeding copies the turn above, then links the files its messages name.
+    // Naming a file that does not exist makes that link fail, which is a
+    // dispatch failure after the child chat was created and before its run
+    // starts.
+    let user_row = chat_messages_by_created_at(&app_state.db, parent_chat_id)
+        .await
+        .into_iter()
+        .find(|row| row.raw_message["role"] == "user")
+        .expect("user message row");
+    let mut user_active: erato::db::entity::messages::ActiveModel = user_row.into();
+    user_active.input_file_uploads = ActiveValue::Set(Some(vec![Uuid::new_v4()]));
+    user_active
+        .update(&app_state.db)
+        .await
+        .expect("point the message at a missing file");
+
+    let response = submit_with_mentions_with_previous(
+        &server,
+        &parent_chat,
+        Some(&first_head),
+        "seeding question",
+        &[DELEGATE_ASSISTANT_FIXED_ID],
+    )
+    .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+
+    let output = find_tool_call_update_output(&events, "delegate_to_assistant");
+    assert_eq!(output["status"], "error");
+    assert!(
+        output["error"]
+            .as_str()
+            .unwrap()
+            .contains("conversation context")
+    );
+    assert!(extract_full_text_answer(&events).contains("PARENT-RECOVERED"));
+
+    let children = erato::db::entity::chats::Entity::find()
+        .filter(erato::db::entity::chats::Column::OriginChatId.eq(parent_chat_id))
+        .all(&app_state.db)
+        .await
+        .unwrap();
+    assert!(
+        children.is_empty(),
+        "the child chat must not be left behind"
+    );
+
+    let chat_ids: Vec<Uuid> = erato::db::entity::chats::Entity::find()
+        .all(&app_state.db)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|chat| chat.id)
+        .collect();
+    let orphaned = erato::db::entity::messages::Entity::find()
+        .filter(erato::db::entity::messages::Column::ChatId.is_not_in(chat_ids.clone()))
+        .all(&app_state.db)
+        .await
+        .unwrap();
+    assert!(
+        orphaned.is_empty(),
+        "seeded messages must not be left behind"
+    );
+
+    let running_tasks: Vec<Uuid> = app_state
+        .background_tasks
+        .tasks
+        .read()
+        .await
+        .keys()
+        .copied()
+        .collect();
+    assert!(
+        running_tasks
+            .iter()
+            .all(|chat_id| chat_ids.contains(chat_id)),
+        "the child's generation must not outlive its chat"
+    );
+}
+
+/// A write into a delegated run that is still going is rejected, whether the
+/// run is known from this process or only from the chat's generation lease, and
+/// whether it names the chat or a message in it. Once it has finished, the chat
+/// takes messages like any other, and taking it over is recorded.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_submit_into_live_delegated_run_conflicts(pool: Pool<Postgres>) {
+    let (app_state, _llm) = delegation_enabled_state_with_llm(pool).await;
+    let server = app_server(app_state.clone());
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+
+    let assistant = create_assistant(&server, "Live Run Assistant", "prompt").await;
+    let origin = create_chat(&server, Some(&assistant)).await;
+    let child = erato::models::chat::create_delegated_chat(
+        &app_state.db,
+        &rebuilt_policy(&app_state).await,
+        &erato::policy::types::Subject::User(me.id.to_string()),
+        &me.id.to_string(),
+        Uuid::parse_str(&assistant).unwrap(),
+        ChatProvenance {
+            kind: ChatProvenanceKind::Delegation,
+            origin_chat_id: Some(Uuid::parse_str(&origin).unwrap()),
+            origin_message_id: None,
+            origin_assistant_id: None,
+            rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
+            depth: 1,
+            adopted_at: None,
+        },
+        "Continuable run".to_string(),
+    )
+    .await
+    .unwrap();
+    app_state.global_policy_engine.invalidate_data().await;
+    let child_chat = child.id.to_string();
+
+    // The run has finished: continuing it is the whole point of the chat.
+    let events = submit_message(&server, &child_chat, None, "follow-up one", vec![]).await;
+    let assistant_message_id = assistant_message_id_from_events(&events);
+    let user_message_id = chat_messages_by_created_at(&app_state.db, child.id)
+        .await
+        .into_iter()
+        .find(|row| row.raw_message["role"] == "user")
+        .expect("user message row")
+        .id;
+
+    // The lease says a run is in flight, and every write path refuses.
+    set_generation_lease(&app_state.db, child.id, Some("running"), 0).await;
+    let conflict = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "existing_chat_id": child_chat, "user_message": "interloper" }))
+        .await;
+    conflict.assert_status(axum::http::StatusCode::CONFLICT);
+    let conflict = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "previous_message_id": assistant_message_id,
+            "user_message": "interloper",
+        }))
+        .await;
+    conflict.assert_status(axum::http::StatusCode::CONFLICT);
+    let conflict = server
+        .post("/api/v1beta/me/messages/regeneratestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "current_message_id": assistant_message_id }))
+        .await;
+    conflict.assert_status(axum::http::StatusCode::CONFLICT);
+    let conflict = server
+        .post("/api/v1beta/me/messages/editstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": user_message_id,
+            "replace_user_message": "interloping edit",
+        }))
+        .await;
+    conflict.assert_status(axum::http::StatusCode::CONFLICT);
+
+    // A run whose process died stops heartbeating, and stops holding the chat.
+    set_generation_lease(&app_state.db, child.id, Some("running"), 600).await;
+    let accepted = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "existing_chat_id": child_chat, "user_message": "after a dead run" }))
+        .await;
+    accepted.assert_status_ok();
+
+    // A run this process is driving is refused even without a lease to read.
+    set_generation_lease(&app_state.db, child.id, None, 0).await;
+    let (_receiver, task) = app_state
+        .background_tasks
+        .start_task(child.id, Uuid::new_v4())
+        .await;
+    set_generation_lease(&app_state.db, child.id, None, 0).await;
+    let conflict = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "existing_chat_id": child_chat, "user_message": "interloper" }))
+        .await;
+    conflict.assert_status(axum::http::StatusCode::CONFLICT);
+
+    task.mark_completed();
+    app_state
+        .background_tasks
+        .remove_task(
+            &child.id,
+            task.generation_id,
+            erato::services::background_tasks::TaskOutcome::Completed,
+        )
+        .await;
+    set_generation_lease(&app_state.db, child.id, None, 0).await;
+
+    let accepted = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "existing_chat_id": child_chat, "user_message": "follow-up two" }))
+        .await;
+    accepted.assert_status_ok();
+
+    let adopted_at = erato::db::entity::chats::Entity::find_by_id(child.id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("child chat")
+        .assistant_configuration
+        .expect("assistant configuration")["provenance"]["adopted_at"]
+        .clone();
+    assert!(
+        adopted_at.is_string(),
+        "a run the user wrote into is recorded as adopted"
+    );
 }

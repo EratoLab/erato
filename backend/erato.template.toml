@@ -352,6 +352,11 @@ chat_provider_ids = ["test-token-limit"]
 # # Maximum number of characters of a delegate's final message returned to the
 # # origin chat; longer results are truncated (default: 16000)
 # result_max_chars = 16000
+# # Days without activity after which a finished delegated run is archived,
+# # independently of the chat that spawned it. Archived runs are then deleted
+# # after cleanup_archived_max_age_days, so this requires cleanup_enabled.
+# # 0 never archives a run automatically (default: 7)
+# auto_archive_after_days = 7
 # # Directive rendered into the delegated chat's first turn. The delegate's own
 # # system prompt is untouched; this is additive. {{expected_output_section}} and
 # # {{constraints_section}} are replaced with formatted blocks when the origin
