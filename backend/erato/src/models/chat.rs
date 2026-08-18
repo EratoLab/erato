@@ -258,11 +258,14 @@ pub async fn create_delegated_chat(
         .await?)
 }
 
-/// Counts reported by [`seed_chat_lineage`].
+/// What [`seed_chat_lineage`] wrote.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SeedStats {
     pub messages_copied: usize,
     pub files_linked: usize,
+    /// Last copy written, i.e. the head the target chat's own turns continue
+    /// from. `None` when the lineage was empty.
+    pub lineage_tip_id: Option<Uuid>,
 }
 
 /// Copies the message lineage from `source_message_id` back to its root into
@@ -352,6 +355,7 @@ pub async fn seed_chat_lineage(
     Ok(SeedStats {
         messages_copied: lineage.len(),
         files_linked,
+        lineage_tip_id: previous_new_id,
     })
 }
 

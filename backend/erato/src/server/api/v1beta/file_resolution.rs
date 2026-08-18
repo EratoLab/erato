@@ -4,7 +4,7 @@ use crate::models::message::{ContentPart, ContentPartText, GenerationInputMessag
 use crate::server::api::v1beta::message_streaming::FileContent;
 use crate::services::file_processing_cached::get_file_cached;
 use crate::services::file_storage::{SharepointContext, is_missing_permissions_error};
-use crate::services::prompt_composition::transforms::render_action_facet_template;
+use crate::services::prompt_composition::transforms::render_placeholder_template;
 use crate::state::AppState;
 use eyre::Report;
 use sea_orm::EntityTrait;
@@ -151,7 +151,7 @@ pub(crate) fn resolve_action_facet_markers_in_generation_input(
                     );
                     return None;
                 };
-                let rendered = render_action_facet_template(&config.template, &marker.args);
+                let rendered = render_placeholder_template(&config.template, &marker.args);
                 if rendered.is_empty() {
                     return None;
                 }

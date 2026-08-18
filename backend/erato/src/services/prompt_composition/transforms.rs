@@ -804,11 +804,13 @@ fn detect_facet_toggle_states(
     FacetToggleStates { states }
 }
 
-/// Renders an action facet template by replacing `{{key}}` placeholders with argument values.
+/// Renders a configured template by replacing `{{key}}` placeholders with
+/// argument values. Used for action-facet templates and the delegation
+/// preamble.
 ///
 /// Uses single-pass replacement to guarantee that substituted values are never
 /// re-scanned for further `{{…}}` patterns, preventing injection via arg values.
-pub(crate) fn render_action_facet_template(
+pub(crate) fn render_placeholder_template(
     template: &str,
     args: &HashMap<String, String>,
 ) -> String {
