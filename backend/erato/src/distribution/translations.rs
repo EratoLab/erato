@@ -12,7 +12,7 @@ use crate::distribution::frontend_bundles::FrontendBundles;
 use crate::translation_po::TranslationPoCache;
 
 /// Translation sources and runtime compilation state shared by all served
-/// bundles. Only PO files with a compiled `messages.json` sibling are included.
+/// bundles.
 #[derive(Clone, Debug)]
 pub struct TranslationDistribution {
     sources: Vec<ConfigSourceFile>,
@@ -215,20 +215,14 @@ fn collect_translation_po_sources(
             continue;
         }
 
-        let compiled_path = path.with_extension("json");
-        if !compiled_path.is_file() {
-            tracing::debug!(
-                source_filename = %path.display(),
-                compiled_filename = %compiled_path.display(),
-                "Skipping translation PO catalog without a served compiled catalog"
-            );
-            continue;
-        }
-
         let canonical_path = path.canonicalize().unwrap_or(path);
         if !seen.insert(canonical_path.clone()) {
             continue;
         }
+        tracing::debug!(
+            source_filename = %canonical_path.display(),
+            "Found frontend translation PO catalog"
+        );
         match fs::read_to_string(&canonical_path) {
             Ok(contents) => sources.push(ConfigSourceFile {
                 source_filename: canonical_path.to_string_lossy().into_owned(),
@@ -276,9 +270,9 @@ mod tests {
             "public/common/custom-theme/unused/locales/de",
             "unused-theme-de",
         );
-        let excluded = web_root.join("public/common/locales/fr/messages.po");
-        fs::create_dir_all(excluded.parent().unwrap()).unwrap();
-        fs::write(excluded, "not-served").unwrap();
+        let uncompiled = web_root.join("public/common/locales/fr/messages.po");
+        fs::create_dir_all(uncompiled.parent().unwrap()).unwrap();
+        fs::write(uncompiled, "not-served").unwrap();
         write_catalog(&addin_root, "locales/pl", "addin-pl");
         let kit_root = kits_root.join("example");
         fs::create_dir_all(&kit_root).unwrap();
@@ -297,7 +291,7 @@ mod tests {
         let kits = ComponentKitDistribution::discover(kits_root);
         let translations = TranslationDistribution::discover(&config, &bundles, &kits);
 
-        assert_eq!(translations.sources().len(), 5);
+        assert_eq!(translations.sources().len(), 6);
         for expected in [
             "web-en",
             "theme-de",
@@ -316,8 +310,13 @@ mod tests {
             translations
                 .sources()
                 .iter()
-                .all(|source| !source.contents.contains("unused-theme-de")
-                    && !source.contents.contains("not-served"))
+                .all(|source| !source.contents.contains("unused-theme-de"))
+        );
+        assert!(
+            translations
+                .sources()
+                .iter()
+                .any(|source| source.contents == "not-served")
         );
     }
 
