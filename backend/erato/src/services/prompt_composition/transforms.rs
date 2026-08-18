@@ -124,11 +124,29 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
     let most_recent_history_message =
         most_recent_assistant_with_gen_input.or(most_recent_with_gen_input);
 
+    // ContextRebase: a chat spawned from another chat (delegation, handoff)
+    // carries a `rebase_cutoff` in its provenance. A replay anchor older than
+    // the cutoff was composed for a different assistant context, so the
+    // current assistant's head is injected fresh and `resolve_sequence` drops
+    // the replayed snapshot's system plane (a snapshot never contributes
+    // system messages once a new head exists). Self-retiring: the first
+    // generation after the cutoff persists its own snapshot, which post-dates
+    // the cutoff and replays normally.
+    let rebase_cutoff = crate::models::chat::parse_assistant_configuration(chat)?
+        .and_then(|config| config.provenance)
+        .and_then(|provenance| provenance.rebase_cutoff);
+    let anchor_predates_rebase_cutoff = matches!(
+        (most_recent_history_message, rebase_cutoff),
+        (Some(anchor), Some(cutoff)) if anchor.created_at < cutoff
+    );
+
     // 5. Check if we should add system prompts
     // System prompts should only be added if:
     // - This is the first message, OR
-    // - We didn't find any message with generation_input_messages
-    let should_add_system_prompts = is_first_message || most_recent_history_message.is_none();
+    // - We didn't find any message with generation_input_messages, OR
+    // - The replay anchor predates the provenance rebase cutoff
+    let should_add_system_prompts =
+        is_first_message || most_recent_history_message.is_none() || anchor_predates_rebase_cutoff;
 
     // 6. Get system prompt and add it, ONLY if first message
     if should_add_system_prompts {
@@ -188,9 +206,10 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
             },
         });
     }
-    // 9. Add assistant files if this is the first message
-    // This encapsulates the logic that was previously in prepare_chat_request
-    if is_first_message
+    // 9. Add assistant files if this is the first message (or the head is
+    // re-injected by a rebase — the replayed snapshot belongs to a different
+    // assistant, so the current assistant's files were never introduced)
+    if (is_first_message || anchor_predates_rebase_cutoff)
         && let Some(ref assistant) = assistant_config
         && !assistant.files.is_empty()
     {
