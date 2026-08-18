@@ -50,6 +50,10 @@ pub struct InputParameters {
     /// The action facet arguments supplied with this message, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub action_facet_args: Option<HashMap<String, String>>,
+    /// Assistants the user @-mentioned in this message (delegation targets),
+    /// if any. Persisted so edit and regenerate replay the mentions.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mentioned_assistant_ids: Option<Vec<String>>,
 }
 
 /// Request-scoped context captured for a generation request.
@@ -821,6 +825,41 @@ pub fn get_input_action_facet_from_message(
             .map(|id| (id, input_params.action_facet_args.unwrap_or_default())));
     }
     Ok(None)
+}
+
+/// The assistant mentions stored in a user message's input parameters, if any.
+/// Used by regenerate (and edit fallback) to replay the mentions the original
+/// message carried when the request doesn't re-send them. Entries that are not
+/// valid uuids are skipped.
+pub fn get_input_mentioned_assistant_ids_from_message(
+    message: &messages::Model,
+) -> Result<Option<Vec<Uuid>>, Report> {
+    let Some(input_params_json) = &message.input_parameters else {
+        return Ok(None);
+    };
+    let input_params: InputParameters =
+        serde_json::from_value(input_params_json.clone()).map_err(|e| {
+            eyre!(
+                "Failed to parse input parameters for message {}: {}",
+                message.id,
+                e
+            )
+        })?;
+    Ok(input_params.mentioned_assistant_ids.map(|ids| {
+        ids.iter()
+            .filter_map(|id| match Uuid::parse_str(id) {
+                Ok(parsed) => Some(parsed),
+                Err(_) => {
+                    tracing::warn!(
+                        message_id = %message.id,
+                        mentioned_assistant_id = %id,
+                        "Skipping unparseable mentioned assistant id"
+                    );
+                    None
+                }
+            })
+            .collect()
+    }))
 }
 
 /// Resolve a provider for a user message branch by checking the assistant response that follows
