@@ -2729,6 +2729,10 @@ pub struct AssistantsConfig {
     // Defaults to `5`.
     #[serde(default = "default_max_assistant_files")]
     pub max_files: usize,
+
+    // Configuration for in-chat delegation to @-mentioned assistants.
+    #[serde(default)]
+    pub delegation: AssistantsDelegationConfig,
 }
 
 impl Default for AssistantsConfig {
@@ -2743,7 +2747,103 @@ impl Default for AssistantsConfig {
                 default_assistant_context_file_contributor_threshold(),
             max_system_prompt_length: None,
             max_files: default_max_assistant_files(),
+            delegation: AssistantsDelegationConfig::default(),
         }
+    }
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct AssistantsDelegationConfig {
+    // Whether in-chat delegation to @-mentioned assistants is enabled.
+    // Requires `assistants.enabled` to also be enabled.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub enabled: bool,
+
+    // Maximum wall-clock duration in seconds a delegated child run may take
+    // before it is aborted and reported to the origin chat as timed out.
+    // Defaults to `600`.
+    #[serde(default = "default_delegation_run_timeout_seconds")]
+    pub run_timeout_seconds: u64,
+
+    // Maximum number of assistants that can be mentioned in a single message.
+    // Defaults to `3`.
+    #[serde(default = "default_delegation_max_mentions_per_message")]
+    pub max_mentions_per_message: usize,
+
+    // Maximum number of characters of a delegate's final message that are
+    // returned to the origin chat; longer results are truncated.
+    // Defaults to `16000`.
+    #[serde(default = "default_delegation_result_max_chars")]
+    pub result_max_chars: usize,
+
+    // Directive rendered into the delegated chat's first turn, telling the
+    // delegate it runs as a delegated worker and that its final message is
+    // returned to the origin chat as the task result. `{{expected_output_section}}`
+    // and `{{constraints_section}}` are replaced with formatted blocks when the
+    // origin model supplies the corresponding tool arguments, and with empty
+    // strings otherwise.
+    #[serde(default = "default_delegation_preamble")]
+    pub preamble: String,
+}
+
+impl Default for AssistantsDelegationConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            run_timeout_seconds: default_delegation_run_timeout_seconds(),
+            max_mentions_per_message: default_delegation_max_mentions_per_message(),
+            result_max_chars: default_delegation_result_max_chars(),
+            preamble: default_delegation_preamble(),
+        }
+    }
+}
+
+fn default_delegation_run_timeout_seconds() -> u64 {
+    600
+}
+
+fn default_delegation_max_mentions_per_message() -> usize {
+    3
+}
+
+fn default_delegation_result_max_chars() -> usize {
+    16000
+}
+
+fn default_delegation_preamble() -> String {
+    r#"You are working on a task that another conversation delegated to you. Your final message is returned to the delegating conversation as the result of this task; it is not shown to a person directly.
+
+Complete the task within this conversation: do not ask clarifying questions, do not defer work to a later turn, and do not address the end user. Finish with a final message that stands alone as the task result.
+{{expected_output_section}}{{constraints_section}}"#
+        .to_string()
+}
+
+impl AssistantsDelegationConfig {
+    pub fn validate(&self) -> Result<(), Report> {
+        if self.run_timeout_seconds == 0 {
+            return Err(eyre!(
+                "assistants.delegation.run_timeout_seconds must be greater than 0"
+            ));
+        }
+
+        if self.max_mentions_per_message == 0 {
+            return Err(eyre!(
+                "assistants.delegation.max_mentions_per_message must be at least 1"
+            ));
+        }
+
+        if self.result_max_chars == 0 {
+            return Err(eyre!(
+                "assistants.delegation.result_max_chars must be greater than 0"
+            ));
+        }
+
+        if self.preamble.trim().is_empty() {
+            return Err(eyre!("assistants.delegation.preamble cannot be empty"));
+        }
+
+        Ok(())
     }
 }
 
@@ -2782,6 +2882,14 @@ impl AssistantsConfig {
                 self.context_file_contributor_threshold
             ));
         }
+
+        if self.delegation.enabled && !self.enabled {
+            return Err(eyre!(
+                "assistants.delegation.enabled requires assistants.enabled to be enabled"
+            ));
+        }
+
+        self.delegation.validate()?;
 
         Ok(())
     }

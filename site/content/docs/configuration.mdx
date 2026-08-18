@@ -3396,6 +3396,93 @@ Maximum number of files that can be associated with an assistant. The backend en
 max_files = 10
 ```
 
+#### `assistants.delegation.enabled`
+
+{/* erato_toml_config_key: assistants.delegation.enabled */}
+
+Whether in-chat delegation to @-mentioned assistants is enabled. When enabled, users can mention other assistants in a chat message, and the model can delegate a task to the mentioned assistant as an awaited child chat run. Requires `assistants.enabled`.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+**Example:**
+
+```toml
+[assistants.delegation]
+enabled = true
+```
+
+#### `assistants.delegation.run_timeout_seconds`
+
+{/* erato_toml_config_key: assistants.delegation.run_timeout_seconds */}
+
+Maximum wall-clock duration in seconds a delegated child run may take before it is aborted and reported to the origin chat as timed out.
+
+**Default value:** `600`
+
+**Type:** `integer` (greater than 0)
+
+**Example:**
+
+```toml
+[assistants.delegation]
+run_timeout_seconds = 300
+```
+
+#### `assistants.delegation.max_mentions_per_message`
+
+{/* erato_toml_config_key: assistants.delegation.max_mentions_per_message */}
+
+Maximum number of assistants that can be mentioned in a single message.
+
+**Default value:** `3`
+
+**Type:** `integer` (at least 1)
+
+**Example:**
+
+```toml
+[assistants.delegation]
+max_mentions_per_message = 5
+```
+
+#### `assistants.delegation.result_max_chars`
+
+{/* erato_toml_config_key: assistants.delegation.result_max_chars */}
+
+Maximum number of characters of a delegate's final message that are returned to the origin chat. Longer results are truncated and marked as such in the tool result envelope.
+
+**Default value:** `16000`
+
+**Type:** `integer` (greater than 0)
+
+**Example:**
+
+```toml
+[assistants.delegation]
+result_max_chars = 8000
+```
+
+#### `assistants.delegation.preamble`
+
+{/* erato_toml_config_key: assistants.delegation.preamble */}
+
+Directive rendered into the delegated chat's first turn, telling the delegate it runs as a delegated worker and that its final message is returned to the origin chat as the task result. The delegate's own system prompt is untouched; the directive is additive. The placeholders `{{expected_output_section}}` and `{{constraints_section}}` are replaced with formatted blocks when the origin model supplies the corresponding tool arguments, and with empty strings otherwise.
+
+**Default value:** the built-in directive shown in the `erato.template.toml` reference block
+
+**Type:** `string` (non-empty)
+
+**Example:**
+
+```toml
+[assistants.delegation]
+preamble = """
+You act on a delegated task from another conversation. Your final message is returned as the result.
+{{expected_output_section}}{{constraints_section}}"""
+```
+
 ### `assistant_hub`
 
 {/* erato_toml_config_key: assistant_hub */}
