@@ -16,6 +16,8 @@ import {
   SearchIcon,
   CloseIcon,
   EditIcon,
+  PinIcon,
+  PinSlashIcon,
   ShareIcon,
   Trash,
 } from "@/components/ui/icons";
@@ -29,6 +31,7 @@ import { useChatContext } from "@/providers/ChatProvider";
 import {
   useChatInputFeature,
   useChatSharingFeature,
+  usePinnedChatsFeature,
 } from "@/providers/FeatureConfigProvider";
 import { getChatUrl } from "@/utils/chat/urlUtils";
 import { createLogger } from "@/utils/debugLogger";
@@ -44,6 +47,7 @@ interface SearchResult {
   titleBySummary?: string | null;
   titleByUserProvided?: string | null;
   canEdit: boolean;
+  isPinned: boolean;
   messageContent: string;
   timestamp: string;
   context?: string;
@@ -61,11 +65,14 @@ export default function SearchPage() {
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
   const { fetcherOptions } = useV1betaApiContext();
-  const { archiveChat, updateChatTitle, refetchHistory } = useChatContext();
+  const { archiveChat, updateChatTitle, refetchHistory, pinChat, pinnedChats } =
+    useChatContext();
 
   // Get feature configurations
   const { autofocus: shouldAutofocus } = useChatInputFeature();
   const { enabled: chatSharingEnabled } = useChatSharingFeature();
+  const { enabled: pinnedChatsEnabled, maxItems: pinnedChatsLimit } =
+    usePinnedChatsFeature();
 
   // Get alignment configuration for content
   const {
@@ -140,6 +147,7 @@ export default function SearchPage() {
           titleBySummary: chat.title_by_summary,
           titleByUserProvided: chat.title_by_user_provided,
           canEdit: chat.can_edit,
+          isPinned: chat.is_pinned,
           messageContent: chat.title_resolved,
           timestamp: chat.last_message_at,
         }),
@@ -193,6 +201,11 @@ export default function SearchPage() {
     await Promise.all([refetchHistory(), refetchSearchResults()]);
   };
 
+  const handlePinResult = async (chatId: string, isPinned: boolean) => {
+    await pinChat(chatId, isPinned);
+    await refetchSearchResults();
+  };
+
   const handleSubmitEditTitleDialog = async (title: string) => {
     if (!titleDialogChatId) {
       return;
@@ -224,6 +237,7 @@ export default function SearchPage() {
     ? searchResults.length
     : totalResultsCount;
   const showInitialLoading = isLoading && searchResults.length === 0;
+  const pinnedChatsCount = pinnedChats.length;
 
   return (
     <div className="flex h-full flex-col bg-theme-bg-primary">
@@ -349,6 +363,41 @@ export default function SearchPage() {
                       >
                         <DropdownMenu
                           items={[
+                            ...(pinnedChatsEnabled
+                              ? [
+                                  {
+                                    label: result.isPinned
+                                      ? t({
+                                          id: "chat.history.menu.unpin",
+                                          message: "Unpin",
+                                        })
+                                      : pinnedChatsCount >= pinnedChatsLimit
+                                        ? t({
+                                            id: "chat.history.menu.pinLimitReached",
+                                            message: "Pin limit reached",
+                                          })
+                                        : t({
+                                            id: "chat.history.menu.pin",
+                                            message: "Pin",
+                                          }),
+                                    icon: result.isPinned ? (
+                                      <PinSlashIcon className="size-4" />
+                                    ) : (
+                                      <PinIcon className="size-4" />
+                                    ),
+                                    onClick: () => {
+                                      void handlePinResult(
+                                        result.chatId,
+                                        !result.isPinned,
+                                      );
+                                    },
+                                    disabled:
+                                      !result.canEdit ||
+                                      (!result.isPinned &&
+                                        pinnedChatsCount >= pinnedChatsLimit),
+                                  },
+                                ]
+                              : []),
                             ...(chatSharingEnabled
                               ? [
                                   {

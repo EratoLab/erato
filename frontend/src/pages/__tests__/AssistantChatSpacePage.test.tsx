@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useGetAssistant } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { messages as enMessages } from "@/locales/en/messages.json";
 import { useChatContext } from "@/providers/ChatProvider";
+import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 
 import AssistantChatSpacePage from "../AssistantChatSpacePage";
 
@@ -77,14 +78,16 @@ const renderPage = (initialEntry: string) => {
   return render(
     <QueryClientProvider client={queryClient}>
       <I18nProvider i18n={i18n}>
-        <MemoryRouter initialEntries={[initialEntry]}>
-          <Routes>
-            <Route path="/a/:assistantId">
-              <Route index element={<AssistantChatSpacePage />} />
-              <Route path=":chatId" element={<AssistantChatSpacePage />} />
-            </Route>
-          </Routes>
-        </MemoryRouter>
+        <StaticFeatureConfigProvider>
+          <MemoryRouter initialEntries={[initialEntry]}>
+            <Routes>
+              <Route path="/a/:assistantId">
+                <Route index element={<AssistantChatSpacePage />} />
+                <Route path=":chatId" element={<AssistantChatSpacePage />} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </StaticFeatureConfigProvider>
       </I18nProvider>
     </QueryClientProvider>,
   );
@@ -100,6 +103,8 @@ describe("AssistantChatSpacePage", () => {
       chats: [],
       currentChatId: "chat-1",
       mountKey: "mount-key",
+      pinnedChats: [],
+      pinChat: vi.fn(),
     });
   });
 
