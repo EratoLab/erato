@@ -7,8 +7,7 @@ use utoipa_scalar::{Scalar, Servable as ScalarServable};
 use erato::config::AppConfig;
 use erato::deployment_identity::DeploymentIdentity;
 use erato::frontend_environment::{
-    DeploymentVersion, build_frontend_registry, discover_translation_po_sources,
-    serve_files_with_script,
+    DeploymentVersion, build_frontend_registry, serve_files_with_script,
 };
 use erato::models;
 use erato::services::configuration_reload_listener::ConfigurationReloadListener;
@@ -115,11 +114,10 @@ async fn async_main(worker_threads: usize) -> Result<(), Report> {
     });
 
     if config.runtime_configuration.enabled {
-        let translation_po_sources = discover_translation_po_sources(&config);
         models::runtime_configuration::mirror_erato_backend_sources_with_translation_pos(
             &state,
             &loaded_config.source_files,
-            &translation_po_sources,
+            state.distribution.translations.sources(),
         )
         .await?;
     }
@@ -144,7 +142,10 @@ async fn async_main(worker_threads: usize) -> Result<(), Report> {
             axum::routing::get(move || async move { axum::Json(spec.clone()) }),
         )
         .fallback_service(serve_files_with_script.into_service())
-        .layer(Extension(build_frontend_registry(&config)))
+        .layer(Extension(build_frontend_registry(
+            &config,
+            &state.distribution,
+        )))
         .layer(Extension(DeploymentVersion::from_env()))
         .layer(CorsLayer::very_permissive())
         .layer(SetResponseHeaderLayer::overriding(
