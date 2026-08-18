@@ -1249,6 +1249,26 @@ pub struct RecentChat {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pending_tool_approval_at: Option<DateTime<FixedOffset>>,
+    /// Provenance kind when the chat was spawned from another chat (e.g.
+    /// `delegation` for a delegated run). Clients derive "is delegated run"
+    /// from this value.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    provenance_kind: Option<String>,
+    /// The origin chat this chat was spawned from, if any. May reference a
+    /// deleted chat.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    origin_chat_id: Option<String>,
+    /// Resolved display title of the origin chat; absent when the origin no
+    /// longer exists.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    origin_chat_title: Option<String>,
+    /// The assistant bound to the origin chat at spawn time, if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    origin_assistant_id: Option<String>,
 }
 
 /// Sentiment for message feedback
@@ -2548,7 +2568,8 @@ async fn assemble_chat_messages_response(
         ("include_archived" = Option<bool>, Query, description = "Whether to include archived chats in results. Defaults to false if not provided."),
         ("q" = Option<String>, Query, description = "Optional full-text search query for chat titles. User-provided titles take precedence over generated summary titles. Empty values are treated like an unfiltered recent chats list."),
         ("pinned" = Option<bool>, Query, description = "If provided, filter chats by their pinned state."),
-        ("type" = Option<RecentChatTypeFilter>, Query, description = "If provided, only return chats of the given kind: `chat` for chats without an assistant, `assistant` for assistant-based chats.")
+        ("type" = Option<RecentChatTypeFilter>, Query, description = "If provided, only return chats of the given kind: `chat` for chats without an assistant, `assistant` for assistant-based chats."),
+        ("include_delegated" = Option<bool>, Query, description = "Whether to include delegated runs (chats spawned by in-chat delegation). Defaults to false; delegated runs are hidden from listings unless requested.")
     ),
     responses(
         (status = OK, body = RecentChatsResponse, description = "Successfully retrieved chats with pagination metadata"),
@@ -2584,6 +2605,10 @@ pub async fn recent_chats(
         "assistant" => Some(RecentChatTypeFilter::Assistant),
         _ => None,
     });
+    let include_delegated = params
+        .get("include_delegated")
+        .and_then(|value| value.parse::<bool>().ok())
+        .unwrap_or(false);
 
     policy
         .rebuild_data_if_needed(&app_state.db, &app_state.config)
@@ -2609,6 +2634,7 @@ pub async fn recent_chats(
             pinned,
             chat_type,
             search_query,
+            include_delegated,
         },
         app_state.config.generation_status.stale_after_secs,
     )
@@ -2832,6 +2858,10 @@ async fn extend_recent_chats_to_api_model(
             assistant_name: chat.assistant_name,
             active_generation_started_at: chat.active_generation_started_at,
             pending_tool_approval_at: chat.pending_tool_approval_at,
+            provenance_kind: chat.provenance_kind,
+            origin_chat_id: chat.origin_chat_id.map(|id| id.to_string()),
+            origin_chat_title: chat.origin_chat_title,
+            origin_assistant_id: chat.origin_assistant_id.map(|id| id.to_string()),
         });
     }
 
