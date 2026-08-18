@@ -11,6 +11,7 @@ pub use erato_config::config_facet_attrs;
 pub use erato_config::config_reference;
 pub mod db;
 pub mod deployment_identity;
+pub mod distribution;
 pub mod frontend_environment;
 pub mod metrics;
 pub mod metrics_constants;

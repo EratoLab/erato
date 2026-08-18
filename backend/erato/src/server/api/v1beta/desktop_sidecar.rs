@@ -1,11 +1,11 @@
 use crate::config::DesktopSidecarOrganizationConfiguration;
-use crate::policy::engine::{PolicyEngine, authorize};
-use crate::policy::types::{Action, Resource};
-use crate::server::api::v1beta::me_profile_middleware::MeProfile;
-use crate::services::desktop_sidecar_distribution::{
+use crate::distribution::desktop_sidecar::{
     BootstrapTransport, DesktopSidecarDistribution, DistributionArtifact, DistributionTarget,
     EMBEDDED_BOOTSTRAP_SLOT_CAPACITY, encode_executable_bootstrap_slot,
 };
+use crate::policy::engine::{PolicyEngine, authorize};
+use crate::policy::types::{Action, Resource};
+use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::services::file_storage::{ContentDispositionKind, build_content_disposition};
 use crate::state::AppState;
 use axum::body::Body;
@@ -151,7 +151,8 @@ pub async fn distribution(
     State(app_state): State<AppState>,
 ) -> Result<Json<DesktopSidecarDistributionResponse>, StatusCode> {
     app_state
-        .desktop_sidecar_distribution
+        .distribution
+        .desktop_sidecar
         .as_deref()
         .map(DesktopSidecarDistributionResponse::from)
         .map(Json)
@@ -172,7 +173,7 @@ pub async fn download_distribution_artifact(
     State(app_state): State<AppState>,
     Query(query): Query<DesktopSidecarDistributionDownloadQuery>,
 ) -> Result<Response, StatusCode> {
-    build_download_response(app_state.desktop_sidecar_distribution.as_deref(), query).await
+    build_download_response(app_state.distribution.desktop_sidecar.as_deref(), query).await
 }
 
 async fn build_download_response(

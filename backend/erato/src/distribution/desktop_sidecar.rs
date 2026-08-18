@@ -1,3 +1,5 @@
+//! Validated desktop-sidecar binary distribution and personalization support.
+
 use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};

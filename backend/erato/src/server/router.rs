@@ -11,7 +11,6 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use serde::Deserialize;
 use std::ffi::OsStr;
-use std::path::{Path, PathBuf};
 // use utoipa::openapi::OpenApiBuilder;
 use url::Url;
 use utoipa::{IntoParams, OpenApi};
@@ -248,10 +247,6 @@ fn render_office_addin_manifest(
         )
 }
 
-fn office_addin_manifest_path(frontend_bundle_path: &str, manifest_name: &str) -> PathBuf {
-    PathBuf::from(frontend_bundle_path).join(manifest_name)
-}
-
 async fn office_addin_manifest_response(
     app_state: AppState,
     deployment_version: DeploymentVersion,
@@ -259,7 +254,12 @@ async fn office_addin_manifest_response(
     query: OfficeAddinManifestQuery,
     manifest_name: &'static str,
 ) -> Response {
-    if !app_state.config.integrations.ms_office.addin.enabled {
+    if !app_state
+        .distribution
+        .frontend_bundles
+        .office_addin
+        .enabled()
+    {
         return (StatusCode::NOT_FOUND, "Office add-in is disabled").into_response();
     }
 
@@ -274,15 +274,11 @@ async fn office_addin_manifest_response(
         },
     };
 
-    let manifest_path = office_addin_manifest_path(
-        &app_state
-            .config
-            .integrations
-            .ms_office
-            .addin
-            .frontend_bundle_path,
-        manifest_name,
-    );
+    let manifest_path = app_state
+        .distribution
+        .frontend_bundles
+        .office_addin
+        .manifest_path(manifest_name);
     let manifest_template = match std::fs::read_to_string(&manifest_path) {
         Ok(contents) => contents,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -377,46 +373,13 @@ async fn office_addin_exchange_server_manifest(
     .await
 }
 
-fn favicon_candidate_paths(bundle_root: &Path, theme: Option<&str>, path: &str) -> Vec<PathBuf> {
-    let theme_favicon_names = match path {
-        "favicon.ico" => ["favicon.ico", "favicon.svg"],
-        "favicon.svg" => ["favicon.svg", "favicon.ico"],
-        _ => [path, path],
-    };
-    let mut candidate_paths = Vec::new();
-
-    if let Some(theme) = theme {
-        for favicon_name in theme_favicon_names {
-            candidate_paths.push(
-                bundle_root
-                    .join("custom-theme")
-                    .join(theme)
-                    .join(favicon_name),
-            );
-            candidate_paths.push(
-                bundle_root
-                    .join("public")
-                    .join("common")
-                    .join("custom-theme")
-                    .join(theme)
-                    .join(favicon_name),
-            );
-        }
-    }
-
-    candidate_paths.push(bundle_root.join(path));
-    candidate_paths.push(bundle_root.join("public").join(path));
-
-    candidate_paths
-}
-
 async fn favicon(State(app_state): State<AppState>, path: &'static str) -> Response {
-    let bundle_root = PathBuf::from(&app_state.config.frontend.web_frontend_bundle_path);
-    for candidate in favicon_candidate_paths(
-        &bundle_root,
-        app_state.config.frontend.theme.as_deref(),
-        path,
-    ) {
+    for candidate in app_state
+        .distribution
+        .frontend_bundles
+        .main
+        .favicon_candidates(app_state.config.frontend.theme.as_deref(), path)
+    {
         match std::fs::read(&candidate) {
             Ok(contents) => {
                 let content_type = match candidate.extension().and_then(OsStr::to_str) {
@@ -505,6 +468,7 @@ E.g. the chats route scoped under there will only list the chats created by the 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
     use tempfile::tempdir;
 
     fn manifest_version_prefix() -> (u16, u16, u16) {
@@ -672,8 +636,13 @@ mod tests {
     #[test]
     fn favicon_candidate_paths_prefer_runtime_theme_mounts() {
         let bundle_root = PathBuf::from("/app/public");
+        let mut config = crate::config::AppConfig::default();
+        config.frontend.web_frontend_bundle_path = bundle_root.to_string_lossy().into_owned();
+        let bundles = crate::distribution::frontend_bundles::FrontendBundles::from_config(&config);
 
-        let paths = favicon_candidate_paths(&bundle_root, Some("acme-test"), "favicon.ico");
+        let paths = bundles
+            .main
+            .favicon_candidates(Some("acme-test"), "favicon.ico");
 
         assert_eq!(
             paths,
@@ -699,8 +668,13 @@ mod tests {
         std::fs::create_dir_all(runtime_theme_path.parent().expect("parent should exist"))
             .expect("theme directory should be created");
         std::fs::write(&runtime_theme_path, b"runtime-favicon").expect("favicon should be written");
+        let mut config = crate::config::AppConfig::default();
+        config.frontend.web_frontend_bundle_path = temp_dir.path().to_string_lossy().into_owned();
+        let bundles = crate::distribution::frontend_bundles::FrontendBundles::from_config(&config);
 
-        let candidates = favicon_candidate_paths(temp_dir.path(), Some("acme-test"), "favicon.ico");
+        let candidates = bundles
+            .main
+            .favicon_candidates(Some("acme-test"), "favicon.ico");
 
         let resolved = candidates
             .into_iter()
@@ -712,8 +686,13 @@ mod tests {
     #[test]
     fn favicon_candidate_paths_allow_svg_theme_override_for_ico_request() {
         let bundle_root = PathBuf::from("/app/public");
+        let mut config = crate::config::AppConfig::default();
+        config.frontend.web_frontend_bundle_path = bundle_root.to_string_lossy().into_owned();
+        let bundles = crate::distribution::frontend_bundles::FrontendBundles::from_config(&config);
 
-        let paths = favicon_candidate_paths(&bundle_root, Some("acme-test"), "favicon.ico");
+        let paths = bundles
+            .main
+            .favicon_candidates(Some("acme-test"), "favicon.ico");
 
         assert_eq!(
             paths[0..4],

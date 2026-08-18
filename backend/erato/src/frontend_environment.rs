@@ -1,19 +1,20 @@
 //! Inlined version of the frontend-environment crate (to simplify dependency version alignment)
 pub use self::axum::serve_files_with_script;
-use crate::config::{AppConfig, ConfigSourceFile, TranslationPoCompilationMode};
-use crate::translation_po::TranslationPoCache;
+use crate::config::{AppConfig, TranslationPoCompilationMode};
+use crate::distribution::Distribution;
+use crate::distribution::component_kits::ComponentKit;
+use crate::distribution::frontend_bundles::{
+    FrontendRewrite, MAIN_FRONTEND_MOUNT_PATH, OFFICE_ADDIN_LEGACY_MOUNT_PATH,
+    OFFICE_ADDIN_MOUNT_PATH,
+};
+use crate::distribution::translations::TranslationDistribution;
 use ::axum::http::HeaderValue;
 use lol_html::html_content::ContentType;
 use lol_html::{HtmlRewriter, Settings, element};
 use ordered_multimap::ListOrderedMultimap;
-use serde::Deserialize;
 use serde_json::Value;
-use std::collections::HashSet;
 use std::fmt::Write;
-use std::fs;
 use std::io;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 // Default maximum body limit in bytes (20MB) - must match DEFAULT_MAX_BODY_LIMIT_BYTES in server/api/v1beta/mod.rs
 const DEFAULT_MAX_BODY_LIMIT_BYTES: u64 = 20 * 1024 * 1024;
@@ -82,7 +83,6 @@ const FRONTEND_ENV_KEY_MSAL_AUTHORITY: &str = "MSAL_AUTHORITY";
 const FRONTEND_ENV_KEY_MASK_REASONING_TRACE_TEXT: &str = "MASK_REASONING_TRACE_TEXT";
 const FRONTEND_ENV_KEY_DESKTOP_SIDECAR_SHOW_SETTINGS_TAB: &str =
     "DESKTOP_SIDECAR_SHOW_SETTINGS_TAB";
-const COMPONENT_KITS_PUBLIC_MOUNT_BASE: &str = "/public/component-kits";
 // Frontend bundles built before ERMAIN-460 used this stable runtime path.
 const LEGACY_COMPONENT_KIT_REACT_RUNTIME_SCRIPT_PATH: &str =
     "/public/common/assets/component-kit-react-runtime.js";
@@ -129,7 +129,8 @@ pub struct ServedFrontend {
     pub enabled: bool,
     pub fallback_to_404: bool,
     pub inject_environment: bool,
-    pub component_kit_assets: Vec<ComponentKitAsset>,
+    pub component_kits: Vec<ComponentKit>,
+    pub rewrites: Vec<FrontendRewrite>,
     pub content_security_policy: Option<HeaderValue>,
     /// Pre-serialized import map injected as the first `<head>` child so
     /// component kits resolve shared bare specifiers to app-bundle chunks.
@@ -140,17 +141,7 @@ pub struct ServedFrontend {
 #[derive(Debug, Clone)]
 pub struct FrontendRegistry {
     frontends: Vec<ServedFrontend>,
-    translation_po_compilation_mode: TranslationPoCompilationMode,
-    translation_po_cache: Arc<TranslationPoCache>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ComponentKitAsset {
-    pub name: String,
-    pub directory_path: String,
-    pub mount_path: String,
-    pub script_path: Option<String>,
-    pub stylesheet_path: Option<String>,
+    translations: TranslationDistribution,
 }
 
 impl FrontendRegistry {
@@ -170,179 +161,17 @@ impl FrontendRegistry {
     }
 }
 
-/// Finds the PO catalogs that can be served as `messages.json` by the
-/// configured frontend bundles. A catalog is considered served only when its
-/// compiled sibling exists, matching the JIT serving path.
-pub fn discover_translation_po_sources(config: &AppConfig) -> Vec<ConfigSourceFile> {
-    let web_frontend_bundle_path = PathBuf::from(&config.frontend.web_frontend_bundle_path);
-    let mut roots = vec![
-        (
-            "core frontend translations",
-            web_frontend_bundle_path.join("public/common/locales"),
-        ),
-        // Keep supporting bundles configured directly at the common public
-        // mount, as used by older local/dev layouts.
-        (
-            "core frontend translations (legacy)",
-            web_frontend_bundle_path.join("locales"),
-        ),
-    ];
-
-    if let Some(theme) = config.frontend.theme.as_deref() {
-        roots.push((
-            "active shared theme",
-            web_frontend_bundle_path
-                .join("public/common/custom-theme")
-                .join(theme),
-        ));
-        // Runtime theme mounts are placed directly below the bundle root in
-        // some deployments, rather than under the built public/common tree.
-        roots.push((
-            "active runtime theme",
-            web_frontend_bundle_path.join("custom-theme").join(theme),
-        ));
-    }
-
-    if config.integrations.ms_office.addin.enabled {
-        let addin_bundle_path =
-            PathBuf::from(&config.integrations.ms_office.addin.frontend_bundle_path);
-        roots.push((
-            "Office add-in translations",
-            addin_bundle_path.join("locales"),
-        ));
-        if let Some(theme) = config.frontend.theme.as_deref() {
-            roots.push((
-                "active Office add-in theme",
-                addin_bundle_path.join("custom-theme").join(theme),
-            ));
-        }
-    }
-
-    let component_kits_directory = Path::new(&config.frontend.component_kits.directory);
-    if let Ok(entries) = fs::read_dir(component_kits_directory) {
-        for entry in entries.flatten() {
-            if entry.file_type().is_ok_and(|file_type| file_type.is_dir()) {
-                let path = entry.path();
-                roots.push(("component kit", path));
-            }
-        }
-    }
-
-    let mut sources = Vec::new();
-    let mut seen = HashSet::new();
-    tracing::debug!(
-        root_count = roots.len(),
-        "Scanning frontend roots for translation PO catalogs"
-    );
-    for (root_kind, root) in roots {
-        let source_count_before = sources.len();
-        tracing::debug!(
-            root_kind,
-            root = %root.display(),
-            exists = root.exists(),
-            "Scanning translation PO source root"
-        );
-        collect_translation_po_sources(&root, &mut seen, &mut sources);
-        tracing::debug!(
-            root_kind,
-            root = %root.display(),
-            discovered = sources.len() - source_count_before,
-            "Finished scanning translation PO source root"
-        );
-    }
-    sources.sort_by(|left, right| left.source_filename.cmp(&right.source_filename));
-    tracing::debug!(
-        source_count = sources.len(),
-        "Finished scanning frontend roots for translation PO catalogs"
-    );
-    sources
-}
-
-fn collect_translation_po_sources(
-    directory: &Path,
-    seen: &mut HashSet<PathBuf>,
-    sources: &mut Vec<ConfigSourceFile>,
-) {
-    let mut entries = match fs::read_dir(directory) {
-        Ok(entries) => entries.flatten().collect::<Vec<_>>(),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return,
-        Err(error) => {
-            tracing::warn!(
-                directory = %directory.display(),
-                error = %error,
-                "Failed to scan frontend directory for translation PO catalogs"
-            );
-            return;
-        }
-    };
-    entries.sort_by_key(|entry| entry.path());
-
-    for entry in entries {
-        let path = entry.path();
-        let Ok(file_type) = entry.file_type() else {
-            continue;
-        };
-        if file_type.is_dir() {
-            collect_translation_po_sources(&path, seen, sources);
-            continue;
-        }
-
-        if !file_type.is_file()
-            || path.file_name().and_then(|name| name.to_str()) != Some("messages.po")
-            || path
-                .parent()
-                .and_then(|locale| locale.parent())
-                .and_then(|locales| locales.file_name())
-                != Some(std::ffi::OsStr::new("locales"))
-        {
-            continue;
-        }
-
-        let compiled_path = path.with_extension("json");
-        if !compiled_path.is_file() {
-            tracing::debug!(
-                source_filename = %path.display(),
-                compiled_filename = %compiled_path.display(),
-                "Skipping frontend translation PO catalog without a served compiled catalog"
-            );
-            continue;
-        }
-
-        let canonical_path = path.canonicalize().unwrap_or(path);
-        if !seen.insert(canonical_path.clone()) {
-            tracing::debug!(
-                source_filename = %canonical_path.display(),
-                "Skipping duplicate frontend translation PO catalog"
-            );
-            continue;
-        }
-        tracing::debug!(
-            source_filename = %canonical_path.display(),
-            compiled_filename = %compiled_path.display(),
-            "Found served frontend translation PO catalog"
-        );
-        match fs::read_to_string(&canonical_path) {
-            Ok(contents) => sources.push(ConfigSourceFile {
-                source_filename: canonical_path.to_string_lossy().into_owned(),
-                contents,
-            }),
-            Err(error) => tracing::warn!(
-                source_filename = %canonical_path.display(),
-                error = %error,
-                "Failed to read frontend translation PO catalog"
-            ),
-        }
-    }
-}
-
-pub fn build_frontend_registry(config: &AppConfig) -> FrontendRegistry {
-    let component_kit_assets = discover_component_kits(&config.frontend.component_kits.directory);
+pub fn build_frontend_registry(
+    config: &AppConfig,
+    distribution: &Distribution,
+) -> FrontendRegistry {
+    let component_kits = distribution.component_kits.kits().to_vec();
     let content_security_policy = build_content_security_policy(config);
-    let web_import_map_json = load_import_map_json(&config.frontend.web_frontend_bundle_path, "/");
-    let addin_import_map_json = load_import_map_json(
-        &config.integrations.ms_office.addin.frontend_bundle_path,
-        "/public/platform-office-addin",
-    );
+    let bundles = &distribution.frontend_bundles;
+    let addin_import_map_json = bundles
+        .office_addin
+        .import_map_json()
+        .map(ToOwned::to_owned);
     // The production bundle's module scripts always use Vite's canonical
     // `/public/platform-office-addin` base, even when the HTML document itself
     // is served from the legacy `/office-addin` route. Keep the import-map URLs
@@ -350,62 +179,56 @@ pub fn build_frontend_registry(config: &AppConfig) -> FrontendRegistry {
     // entries with the legacy route would create second React/Lingui instances.
     let addin_legacy_import_map_json = addin_import_map_json.clone();
     let mut frontends = vec![ServedFrontend {
-        bundle_path: config
-            .integrations
-            .ms_office
-            .addin
-            .frontend_bundle_path
-            .clone(),
+        bundle_path: bundles.office_addin.root().to_string_lossy().into_owned(),
         environment: build_frontend_environment(config, FrontendKind::OfficeAddin),
-        mount_path: "/public/platform-office-addin".to_string(),
-        enabled: config.integrations.ms_office.addin.enabled,
+        mount_path: OFFICE_ADDIN_MOUNT_PATH.to_string(),
+        enabled: bundles.office_addin.enabled(),
         fallback_to_404: true,
         inject_environment: true,
-        component_kit_assets: component_kit_assets.clone(),
+        component_kits: component_kits.clone(),
+        rewrites: bundles.office_addin.rewrites().to_vec(),
         content_security_policy: content_security_policy.clone(),
         import_map_json: addin_import_map_json,
     }];
 
-    if config.integrations.ms_office.addin.serve_bundle_legacy_path {
+    if bundles.office_addin.serve_legacy_path() {
         frontends.push(ServedFrontend {
-            bundle_path: config
-                .integrations
-                .ms_office
-                .addin
-                .frontend_bundle_path
-                .clone(),
+            bundle_path: bundles.office_addin.root().to_string_lossy().into_owned(),
             environment: build_frontend_environment(config, FrontendKind::OfficeAddin),
-            mount_path: "/office-addin".to_string(),
-            enabled: config.integrations.ms_office.addin.enabled,
+            mount_path: OFFICE_ADDIN_LEGACY_MOUNT_PATH.to_string(),
+            enabled: bundles.office_addin.enabled(),
             fallback_to_404: true,
             inject_environment: true,
-            component_kit_assets: component_kit_assets.clone(),
+            component_kits: component_kits.clone(),
+            rewrites: bundles.office_addin.rewrites().to_vec(),
             content_security_policy: content_security_policy.clone(),
             import_map_json: addin_legacy_import_map_json,
         });
     }
 
     frontends.push(ServedFrontend {
-        bundle_path: config.frontend.web_frontend_bundle_path.clone(),
+        bundle_path: bundles.main.root().to_string_lossy().into_owned(),
         environment: build_frontend_environment(config, FrontendKind::Web),
-        mount_path: "/".to_string(),
+        mount_path: MAIN_FRONTEND_MOUNT_PATH.to_string(),
         enabled: true,
         fallback_to_404: true,
         inject_environment: true,
-        component_kit_assets: component_kit_assets.clone(),
+        component_kits: component_kits.clone(),
+        rewrites: bundles.main.rewrites().to_vec(),
         content_security_policy: content_security_policy.clone(),
-        import_map_json: web_import_map_json,
+        import_map_json: bundles.main.import_map_json().map(ToOwned::to_owned),
     });
 
-    for component_kit in component_kit_assets {
+    for component_kit in component_kits {
         frontends.push(ServedFrontend {
-            bundle_path: component_kit.directory_path,
+            bundle_path: component_kit.root.to_string_lossy().into_owned(),
             environment: FrontedEnvironment::default(),
             mount_path: component_kit.mount_path,
             enabled: true,
             fallback_to_404: false,
             inject_environment: false,
-            component_kit_assets: Vec::new(),
+            component_kits: Vec::new(),
+            rewrites: Vec::new(),
             content_security_policy: content_security_policy.clone(),
             import_map_json: None,
         });
@@ -413,74 +236,8 @@ pub fn build_frontend_registry(config: &AppConfig) -> FrontendRegistry {
 
     FrontendRegistry {
         frontends,
-        translation_po_compilation_mode: config.frontend.translation_po_compilation_mode,
-        translation_po_cache: Arc::new(TranslationPoCache::new(
-            config.i18n.language.default_language.clone(),
-        )),
+        translations: distribution.translations.clone(),
     }
-}
-
-const IMPORT_MAP_MANIFEST_FILE_NAME: &str = "import-map.manifest.json";
-
-/// Loads the shared-module import map emitted by the web frontend build
-/// (`import-map.manifest.json`, specifier -> hashed chunk URL). Absent or
-/// invalid manifests disable injection rather than failing startup so older
-/// bundles keep serving.
-fn load_import_map_json(bundle_path: &str, mount_path: &str) -> Option<String> {
-    let manifest_path = Path::new(bundle_path).join(IMPORT_MAP_MANIFEST_FILE_NAME);
-    let contents = match fs::read_to_string(&manifest_path) {
-        Ok(contents) => contents,
-        Err(error) => {
-            tracing::info!(
-                manifest_path = %manifest_path.display(),
-                "No shared-module import map manifest found; skipping import map injection: {error}"
-            );
-            return None;
-        }
-    };
-    match serde_json::from_str::<serde_json::Value>(&contents) {
-        Ok(manifest) => match manifest.get("imports").and_then(|i| i.as_object()) {
-            Some(imports) => Some(serialize_import_map(imports, mount_path)),
-            None => {
-                tracing::warn!(
-                    manifest_path = %manifest_path.display(),
-                    "Import map manifest is missing an \"imports\" object; skipping injection"
-                );
-                None
-            }
-        },
-        Err(error) => {
-            tracing::warn!(
-                manifest_path = %manifest_path.display(),
-                "Failed to parse import map manifest; skipping injection: {error}"
-            );
-            None
-        }
-    }
-}
-
-/// Manifest entries are bundle-relative so one bundle can serve under any
-/// mount (the add-in bundle is mounted twice). Absolute entries pass through
-/// unchanged.
-fn serialize_import_map(
-    imports: &serde_json::Map<String, serde_json::Value>,
-    mount_path: &str,
-) -> String {
-    let mount_prefix = mount_path.trim_end_matches('/');
-    let prefixed: serde_json::Map<String, serde_json::Value> = imports
-        .iter()
-        .map(|(specifier, url)| {
-            let prefixed_url = match url.as_str() {
-                Some(url) if !url.starts_with('/') => {
-                    let relative = url.trim_start_matches("./");
-                    serde_json::Value::String(format!("{mount_prefix}/{relative}"))
-                }
-                _ => url.clone(),
-            };
-            (specifier.clone(), prefixed_url)
-        })
-        .collect();
-    serde_json::json!({ "imports": prefixed }).to_string()
 }
 
 fn build_content_security_policy(config: &AppConfig) -> Option<HeaderValue> {
@@ -512,214 +269,6 @@ fn build_content_security_policy(config: &AppConfig) -> Option<HeaderValue> {
         HeaderValue::from_str(&content_security_policy)
             .expect("generated Content-Security-Policy header should be valid"),
     )
-}
-
-fn is_valid_component_kit_name(name: &str) -> bool {
-    !name.is_empty()
-        && name
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'_'))
-        && name != "."
-        && name != ".."
-}
-
-fn is_valid_component_kit_asset_name(name: &str) -> bool {
-    !name.is_empty()
-        && name
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'_'))
-        && !name.starts_with('.')
-}
-
-fn sorted_root_files(directory: &Path) -> io::Result<Vec<PathBuf>> {
-    let mut files = Vec::new();
-    for entry in fs::read_dir(directory)? {
-        let entry = entry?;
-        let file_type = entry.file_type()?;
-        if file_type.is_file() {
-            files.push(entry.path());
-        }
-    }
-    files.sort();
-    Ok(files)
-}
-
-fn root_file_name(path: &Path) -> Option<String> {
-    path.file_name()
-        .and_then(|file_name| file_name.to_str())
-        .map(ToOwned::to_owned)
-}
-
-fn discover_component_kit_entrypoint(directory: &Path) -> io::Result<Option<String>> {
-    let entrypoints = sorted_root_files(directory)?
-        .into_iter()
-        .filter_map(|path| {
-            let file_name = root_file_name(&path)?;
-            (file_name.starts_with("index-")
-                && file_name.ends_with(".js")
-                && is_valid_component_kit_asset_name(&file_name))
-            .then_some(file_name)
-        })
-        .collect::<Vec<_>>();
-
-    if entrypoints.len() > 1 {
-        tracing::warn!(
-            component_kit_path = %directory.display(),
-            entrypoints = ?entrypoints,
-            selected_entrypoint = %entrypoints[0],
-            "Component kit has multiple root index-*.js entrypoints; using the first sorted entrypoint"
-        );
-    }
-
-    Ok(entrypoints.into_iter().next())
-}
-
-fn discover_component_kit_stylesheet(directory: &Path) -> io::Result<Option<String>> {
-    let stylesheets = sorted_root_files(directory)?
-        .into_iter()
-        .filter_map(|path| {
-            let file_name = root_file_name(&path)?;
-            (file_name.ends_with(".css") && is_valid_component_kit_asset_name(&file_name))
-                .then_some(file_name)
-        })
-        .collect::<Vec<_>>();
-
-    if stylesheets.len() > 1 {
-        tracing::warn!(
-            component_kit_path = %directory.display(),
-            stylesheets = ?stylesheets,
-            selected_stylesheet = %stylesheets[0],
-            "Component kit has multiple root .css files; using the first sorted stylesheet"
-        );
-    }
-
-    Ok(stylesheets.into_iter().next())
-}
-
-fn discover_component_kits(directory: &str) -> Vec<ComponentKitAsset> {
-    let component_kits_directory = Path::new(directory);
-    if !component_kits_directory.exists() {
-        tracing::debug!(
-            component_kits_directory = %component_kits_directory.display(),
-            "Component kits directory does not exist; no component kits loaded"
-        );
-        return Vec::new();
-    }
-
-    let mut directories = match fs::read_dir(component_kits_directory) {
-        Ok(entries) => entries
-            .filter_map(|entry| match entry {
-                Ok(entry) => Some(entry),
-                Err(err) => {
-                    tracing::warn!(
-                        component_kits_directory = %component_kits_directory.display(),
-                        error = %err,
-                        "Failed to read component kit directory entry"
-                    );
-                    None
-                }
-            })
-            .filter_map(|entry| match entry.file_type() {
-                Ok(file_type) if file_type.is_dir() => Some(entry.path()),
-                Ok(_) => None,
-                Err(err) => {
-                    tracing::warn!(
-                        component_kit_path = %entry.path().display(),
-                        error = %err,
-                        "Failed to inspect component kit directory entry"
-                    );
-                    None
-                }
-            })
-            .collect::<Vec<_>>(),
-        Err(err) => {
-            tracing::warn!(
-                component_kits_directory = %component_kits_directory.display(),
-                error = %err,
-                "Failed to read component kits directory"
-            );
-            return Vec::new();
-        }
-    };
-    directories.sort();
-
-    directories
-        .into_iter()
-        .filter_map(|directory| {
-            let Some(name) = root_file_name(&directory) else {
-                tracing::warn!(
-                    component_kit_path = %directory.display(),
-                    "Skipping component kit with non-Unicode directory name"
-                );
-                return None;
-            };
-
-            if !is_valid_component_kit_name(&name) {
-                tracing::warn!(
-                    component_kit = %name,
-                    component_kit_path = %directory.display(),
-                    "Skipping component kit with URL-unsafe directory name"
-                );
-                return None;
-            }
-
-            let script_path = match discover_component_kit_entrypoint(&directory) {
-                Ok(entrypoint) => entrypoint.map(|file_name| {
-                    format!("{COMPONENT_KITS_PUBLIC_MOUNT_BASE}/{name}/{file_name}")
-                }),
-                Err(err) => {
-                    tracing::warn!(
-                        component_kit = %name,
-                        component_kit_path = %directory.display(),
-                        error = %err,
-                        "Failed to inspect component kit entrypoint"
-                    );
-                    None
-                }
-            };
-
-            if script_path.is_none() {
-                tracing::warn!(
-                    component_kit = %name,
-                    component_kit_path = %directory.display(),
-                    "Component kit is missing a root index-<hash>.js entrypoint"
-                );
-            }
-
-            let stylesheet_path = match discover_component_kit_stylesheet(&directory) {
-                Ok(stylesheet) => stylesheet.map(|file_name| {
-                    format!("{COMPONENT_KITS_PUBLIC_MOUNT_BASE}/{name}/{file_name}")
-                }),
-                Err(err) => {
-                    tracing::warn!(
-                        component_kit = %name,
-                        component_kit_path = %directory.display(),
-                        error = %err,
-                        "Failed to inspect component kit stylesheet"
-                    );
-                    None
-                }
-            };
-
-            let mount_path = format!("{COMPONENT_KITS_PUBLIC_MOUNT_BASE}/{name}");
-            tracing::info!(
-                component_kit = %name,
-                component_kit_path = %directory.display(),
-                mount_path = %mount_path,
-                script_path = ?script_path,
-                stylesheet_path = ?stylesheet_path,
-                "Discovered component kit"
-            );
-
-            Some(ComponentKitAsset {
-                name,
-                directory_path: directory.to_string_lossy().into_owned(),
-                mount_path,
-                script_path,
-                stylesheet_path,
-            })
-        })
-        .collect()
 }
 
 fn build_frontend_environment(
@@ -1012,7 +561,7 @@ impl DeploymentVersion {
         self.0.as_ref().map(|version| {
             let etag_seed = if translation_po_compilation_mode
                 == TranslationPoCompilationMode::JustInTime
-                && is_i18n_messages_json(request_path)
+                && TranslationDistribution::is_messages_json_path(request_path)
             {
                 format!("{version}-{}", self.1)
             } else {
@@ -1032,17 +581,6 @@ fn random_hex_string() -> String {
     hex
 }
 
-#[derive(Debug, Deserialize)]
-struct ServerConfig {
-    rewrites: Vec<RewriteRule>,
-}
-
-#[derive(Debug, Deserialize)]
-struct RewriteRule {
-    source: String,
-    destination: String,
-}
-
 fn matches_mount_path(request_path: &str, mount_path: &str) -> bool {
     mount_path == "/"
         || request_path == mount_path
@@ -1057,82 +595,13 @@ fn is_component_kit_react_runtime_script_path(path: &str) -> bool {
             && path.ends_with(".js"))
 }
 
-fn load_server_config(bundle_path: String) -> Option<ServerConfig> {
-    let config_path = Path::new(&bundle_path).join("serve.json");
-    if !config_path.exists() {
-        return None;
-    }
-
-    match fs::read_to_string(config_path) {
-        Ok(contents) => serde_json::from_str(&contents).ok(),
-        Err(_) => None,
-    }
-}
-
-fn matches_rewrite_rule(path: &str, rule: &RewriteRule) -> bool {
-    // Dynamic SPA routes must not swallow requests for missing assets such as
-    // `/chat/missing.js`. Those requests need to remain real 404s so browsers,
-    // crawlers, and observability can distinguish them from page navigations.
-    if Path::new(path)
-        .extension()
-        .is_some_and(|extension| !extension.is_empty())
-    {
-        return false;
-    }
-
-    let pattern_parts: Vec<&str> = rule.source.split('/').collect();
-    let path_parts: Vec<&str> = path.split('/').collect();
-
-    if pattern_parts.len() != path_parts.len() {
-        return false;
-    }
-
-    for (pattern, path_part) in pattern_parts.iter().zip(path_parts.iter()) {
-        if pattern.starts_with(':') {
-            continue; // This is a parameter, it matches anything
-        }
-        if pattern != path_part {
-            return false;
-        }
-    }
-    true
-}
-
-fn is_i18n_messages_json(path: &str) -> bool {
-    path.ends_with("/messages.json") && path.contains("/locales/")
-}
-
-fn safe_request_file_path(bundle_dir_path: &Path, request_path: &str) -> Option<PathBuf> {
-    let mut file_path = bundle_dir_path.to_path_buf();
-    for segment in request_path.trim_start_matches('/').split('/') {
-        if segment.is_empty() || segment == "." || segment == ".." {
-            return None;
-        }
-        file_path.push(segment);
-    }
-    Some(file_path)
-}
-
-fn translation_po_path_for_messages_json(
-    bundle_dir_path: &Path,
-    request_path: &str,
-) -> Option<PathBuf> {
-    if !is_i18n_messages_json(request_path) {
-        return None;
-    }
-
-    let mut file_path = safe_request_file_path(bundle_dir_path, request_path)?;
-    file_path.set_extension("po");
-    file_path.exists().then_some(file_path)
-}
-
 /// Rewrites HTML to inject a `<script>` tag (which contains global JS variables that act like environment variables)
 /// into the `<head>` tag.
 pub fn inject_environment_script_tag(
     input: &[u8],
     output: &mut Vec<u8>,
     frontend_env: &FrontedEnvironment,
-    component_kit_assets: &[ComponentKitAsset],
+    component_kits: &[ComponentKit],
     import_map_json: Option<&str>,
 ) -> io::Result<()> {
     let mut script_tag = String::new();
@@ -1151,7 +620,7 @@ pub fn inject_environment_script_tag(
 
     let mut component_kit_styles = String::new();
     let mut component_kit_scripts = String::new();
-    for component_kit in component_kit_assets {
+    for component_kit in component_kits {
         if let Some(stylesheet_path) = &component_kit.stylesheet_path {
             write!(
                 component_kit_styles,
@@ -1348,7 +817,7 @@ pub mod axum {
     }
 
     fn cache_control_for_path(request_path: &str) -> &'static str {
-        if is_i18n_messages_json(request_path) {
+        if TranslationDistribution::is_messages_json_path(request_path) {
             "no-cache"
         } else {
             "public, max-age=3600, stale-while-revalidate=604800"
@@ -1395,7 +864,7 @@ pub mod axum {
         };
 
         let frontend_environment = frontend.environment.clone();
-        let component_kit_assets = frontend.component_kit_assets.clone();
+        let component_kits = frontend.component_kits.clone();
         let import_map_json = frontend.import_map_json.clone();
         let content_security_policy = frontend.content_security_policy.clone();
         let should_inject_environment = frontend.inject_environment;
@@ -1417,20 +886,16 @@ pub mod axum {
         let req = rewrite_request_path(req, &frontend.mount_path);
         let rewritten_request_path = req.uri().path().to_string();
 
-        if frontend_registry.translation_po_compilation_mode
-            == TranslationPoCompilationMode::JustInTime
-            && let Some(po_path) =
-                translation_po_path_for_messages_json(&bundle_dir_path, &rewritten_request_path)
+        if let Some((po_path, compilation)) = frontend_registry
+            .translations
+            .compile_messages_json_for_request(&bundle_dir_path, &rewritten_request_path)
         {
-            match frontend_registry
-                .translation_po_cache
-                .compile_messages_json(&po_path)
-            {
+            match compilation {
                 Ok(body) => {
                     let cache_control = cache_control_for_path(&request_path);
                     let etag_value = deployment_version.etag_value_for_path(
                         &request_path,
-                        frontend_registry.translation_po_compilation_mode,
+                        frontend_registry.translations.compilation_mode(),
                     );
                     if let Some(etag_value) = &etag_value
                         && client_etag_matches(client_etag.as_ref(), etag_value)
@@ -1464,19 +929,16 @@ pub mod axum {
             }
         }
 
-        let rewritten_path = if frontend.fallback_to_404 {
-            if let Some(server_config) = load_server_config(frontend.bundle_path.clone()) {
-                let matching_rule = server_config
+        let rewritten_path = frontend
+            .fallback_to_404
+            .then(|| {
+                frontend
                     .rewrites
                     .iter()
-                    .find(|rule| matches_rewrite_rule(&stripped_path, rule));
-                matching_rule.map(|rule| rule.destination.clone())
-            } else {
-                None
-            }
-        } else {
-            None
-        };
+                    .find_map(|rewrite| rewrite.destination_for(&stripped_path))
+                    .map(ToOwned::to_owned)
+            })
+            .flatten();
 
         // Create the static files service with the rewritten path if applicable
         let res = if let Some(rewritten_path) = rewritten_path {
@@ -1511,7 +973,7 @@ pub mod axum {
                     .map_frame(move |frame| {
                         frame.map_data({
                             let value = frontend_environment.clone();
-                            let component_kit_assets = component_kit_assets.clone();
+                            let component_kits = component_kits.clone();
                             let import_map_json = import_map_json.clone();
                             move |bytes| {
                                 let mut output = Vec::with_capacity(bytes.len() * 2);
@@ -1519,7 +981,7 @@ pub mod axum {
                                     bytes.as_ref(),
                                     &mut output,
                                     &value,
-                                    &component_kit_assets,
+                                    &component_kits,
                                     import_map_json.as_deref(),
                                 )
                                 .unwrap();
@@ -1550,7 +1012,7 @@ pub mod axum {
             let cache_control = cache_control_for_path(&request_path);
             let etag_value = deployment_version.etag_value_for_path(
                 &request_path,
-                frontend_registry.translation_po_compilation_mode,
+                frontend_registry.translations.compilation_mode(),
             );
 
             if let Some(etag_value) = &etag_value {
@@ -1575,6 +1037,7 @@ pub mod axum {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     fn served_frontend(mount_path: &str, enabled: bool) -> ServedFrontend {
         ServedFrontend {
@@ -1584,7 +1047,8 @@ mod tests {
             enabled,
             fallback_to_404: true,
             inject_environment: true,
-            component_kit_assets: Vec::new(),
+            component_kits: Vec::new(),
+            rewrites: Vec::new(),
             content_security_policy: Some(HeaderValue::from_static("frame-ancestors 'self'")),
             import_map_json: None,
         }
@@ -1732,14 +1196,14 @@ mod tests {
 
     #[test]
     fn specific_mount_path_matches_before_root() {
+        let distribution = Distribution::load(&AppConfig::default());
         let registry = FrontendRegistry {
             frontends: vec![
                 served_frontend("/public/platform-office-addin", true),
                 served_frontend("/office-addin", true),
                 served_frontend("/", true),
             ],
-            translation_po_compilation_mode: TranslationPoCompilationMode::Precompiled,
-            translation_po_cache: Arc::new(TranslationPoCache::default()),
+            translations: distribution.translations,
         };
 
         let frontend = registry
@@ -1750,13 +1214,13 @@ mod tests {
 
     #[test]
     fn disabled_specific_mount_path_does_not_fall_back_to_root() {
+        let distribution = Distribution::load(&AppConfig::default());
         let registry = FrontendRegistry {
             frontends: vec![
                 served_frontend("/office-addin", false),
                 served_frontend("/", true),
             ],
-            translation_po_compilation_mode: TranslationPoCompilationMode::Precompiled,
-            translation_po_cache: Arc::new(TranslationPoCache::default()),
+            translations: distribution.translations,
         };
 
         assert!(registry.resolve("/office-addin").is_none());
@@ -1779,42 +1243,10 @@ mod tests {
     }
 
     #[test]
-    fn dynamic_rewrite_rules_do_not_match_asset_paths() {
-        let rule = RewriteRule {
-            source: "/chat/:id".to_string(),
-            destination: "index.html".to_string(),
-        };
-
-        assert!(matches_rewrite_rule("/chat/some-chat", &rule));
-        assert!(!matches_rewrite_rule("/chat/missing.js", &rule));
-    }
-
-    #[test]
-    fn import_map_entries_are_prefixed_per_mount() {
-        let manifest: serde_json::Map<String, serde_json::Value> = serde_json::from_str(
-            r#"{"react":"assets/shared-react-x.mjs","@erato/frontend/shared":"./shared-erato-y.mjs","legacy":"/public/common/assets/abs.js"}"#,
-        )
-        .expect("manifest fixture should parse");
-
-        let web = serialize_import_map(&manifest, "/");
-        assert!(web.contains(r#""react":"/assets/shared-react-x.mjs""#));
-        assert!(web.contains(r#""@erato/frontend/shared":"/shared-erato-y.mjs""#));
-        assert!(web.contains(r#""legacy":"/public/common/assets/abs.js""#));
-
-        let addin = serialize_import_map(&manifest, "/public/platform-office-addin");
-        assert!(
-            addin.contains(r#""react":"/public/platform-office-addin/assets/shared-react-x.mjs""#)
-        );
-        assert!(addin.contains(
-            r#""@erato/frontend/shared":"/public/platform-office-addin/shared-erato-y.mjs""#
-        ));
-    }
-
-    #[test]
     fn legacy_office_addin_route_uses_canonical_import_map_urls() {
         let bundle_dir = tempfile::tempdir().expect("temporary bundle directory should be created");
         std::fs::write(
-            bundle_dir.path().join(IMPORT_MAP_MANIFEST_FILE_NAME),
+            bundle_dir.path().join("import-map.manifest.json"),
             r#"{"imports":{"react":"assets/shared-react-x.mjs","@lingui/core":"assets/shared-lingui-core-x.mjs","@erato/frontend/shared":"assets/shared-erato-x.mjs"}}"#,
         )
         .expect("import map manifest should be written");
@@ -1825,7 +1257,8 @@ mod tests {
         config.integrations.ms_office.addin.frontend_bundle_path =
             bundle_dir.path().to_string_lossy().into_owned();
 
-        let registry = build_frontend_registry(&config);
+        let distribution = Distribution::load(&config);
+        let registry = build_frontend_registry(&config, &distribution);
         let legacy_frontend = registry
             .frontends
             .iter()
@@ -1884,9 +1317,9 @@ mod tests {
             "API_ROOT_URL".to_string(),
             Value::String("/api/".to_string()),
         );
-        let component_kit_assets = vec![ComponentKitAsset {
+        let component_kit_assets = vec![ComponentKit {
             name: "example".to_string(),
-            directory_path: "/app/component-kits/example".to_string(),
+            root: PathBuf::from("/app/component-kits/example"),
             mount_path: "/public/component-kits/example".to_string(),
             script_path: Some("/public/component-kits/example/index-abc.js".to_string()),
             stylesheet_path: Some("/public/component-kits/example/style.css".to_string()),
@@ -1917,9 +1350,9 @@ mod tests {
 
     #[test]
     fn injects_component_kit_assets_after_hashed_react_runtime() {
-        let component_kit_assets = vec![ComponentKitAsset {
+        let component_kit_assets = vec![ComponentKit {
             name: "example".to_string(),
-            directory_path: "/app/component-kits/example".to_string(),
+            root: PathBuf::from("/app/component-kits/example"),
             mount_path: "/public/component-kits/example".to_string(),
             script_path: Some("/public/component-kits/example/index-abc.js".to_string()),
             stylesheet_path: None,
@@ -1953,9 +1386,9 @@ mod tests {
 
     #[test]
     fn injects_component_kit_scripts_after_react_runtime_when_marker_exists() {
-        let component_kit_assets = vec![ComponentKitAsset {
+        let component_kit_assets = vec![ComponentKit {
             name: "example".to_string(),
-            directory_path: "/app/component-kits/example".to_string(),
+            root: PathBuf::from("/app/component-kits/example"),
             mount_path: "/public/component-kits/example".to_string(),
             script_path: Some("/public/component-kits/example/index-abc.js".to_string()),
             stylesheet_path: None,
@@ -1986,147 +1419,6 @@ mod tests {
         assert!(runtime_script_index < kit_script_index);
         assert!(kit_script_index < main_script_index);
     }
-
-    #[test]
-    fn discovers_component_kits_from_root_directory() {
-        let tempdir = tempfile::tempdir().expect("tempdir should be created");
-        let kit_dir = tempdir.path().join("example");
-        std::fs::create_dir(&kit_dir).expect("kit dir should be created");
-        std::fs::write(kit_dir.join("index-abc123.js"), "").expect("entrypoint should be written");
-        std::fs::write(kit_dir.join("style.css"), "").expect("stylesheet should be written");
-
-        let component_kits = discover_component_kits(
-            tempdir
-                .path()
-                .to_str()
-                .expect("tempdir path should be unicode"),
-        );
-
-        assert_eq!(
-            component_kits,
-            vec![ComponentKitAsset {
-                name: "example".to_string(),
-                directory_path: kit_dir.to_string_lossy().into_owned(),
-                mount_path: "/public/component-kits/example".to_string(),
-                script_path: Some("/public/component-kits/example/index-abc123.js".to_string()),
-                stylesheet_path: Some("/public/component-kits/example/style.css".to_string()),
-            }]
-        );
-    }
-
-    #[test]
-    fn i18n_messages_json_is_detected_by_path() {
-        assert!(is_i18n_messages_json("/public/locales/en/messages.json"));
-        assert!(is_i18n_messages_json(
-            "/public/common/locales/de/messages.json"
-        ));
-        assert!(is_i18n_messages_json(
-            "/public/custom-theme/example/locales/fr/messages.json"
-        ));
-        assert!(is_i18n_messages_json(
-            "/public/component-kits/example/locales/en/messages.json"
-        ));
-        assert!(!is_i18n_messages_json("/assets/app.js"));
-        assert!(!is_i18n_messages_json("/public/locales/en/readme.txt"));
-    }
-
-    #[test]
-    fn translation_po_path_maps_messages_json_inside_bundle() {
-        let tempdir = tempfile::tempdir().expect("tempdir should be created");
-        let locale_dir = tempdir.path().join("public/common/locales/de");
-        std::fs::create_dir_all(&locale_dir).expect("locale dir should be created");
-        let po_path = locale_dir.join("messages.po");
-        std::fs::write(&po_path, "").expect("po file should be written");
-
-        assert_eq!(
-            translation_po_path_for_messages_json(
-                tempdir.path(),
-                "/public/common/locales/de/messages.json"
-            ),
-            Some(po_path)
-        );
-        assert_eq!(
-            translation_po_path_for_messages_json(
-                tempdir.path(),
-                "/public/common/locales/de/readme.json"
-            ),
-            None
-        );
-        assert_eq!(
-            translation_po_path_for_messages_json(
-                tempdir.path(),
-                "/public/common/locales/../messages.json"
-            ),
-            None
-        );
-    }
-
-    #[test]
-    fn discovers_translation_pos_from_served_frontend_roots() {
-        let tempdir = tempfile::tempdir().expect("tempdir should be created");
-        let web_root = tempdir.path().join("web");
-        let addin_root = tempdir.path().join("addin");
-        let kits_root = tempdir.path().join("kits");
-        let write_catalog = |root: &Path, relative: &str, contents: &str| {
-            let po_path = root.join(relative).join("messages.po");
-            std::fs::create_dir_all(po_path.parent().unwrap()).unwrap();
-            std::fs::write(&po_path, contents).unwrap();
-            std::fs::write(po_path.with_extension("json"), "{\"messages\":{}}").unwrap();
-        };
-
-        write_catalog(&web_root, "public/common/locales/en", "web-en");
-        write_catalog(
-            &web_root,
-            "public/common/custom-theme/acme/locales/de",
-            "theme-de",
-        );
-        write_catalog(
-            &web_root,
-            "custom-theme/acme/locales/fr",
-            "runtime-theme-fr",
-        );
-        write_catalog(
-            &web_root,
-            "public/common/custom-theme/unused/locales/de",
-            "unused-theme-de",
-        );
-        let excluded = web_root.join("public/common/locales/fr/messages.po");
-        std::fs::create_dir_all(excluded.parent().unwrap()).unwrap();
-        std::fs::write(excluded, "not-served").unwrap();
-        write_catalog(&addin_root, "locales/pl", "addin-pl");
-        write_catalog(&kits_root.join("example"), "locales/es", "kit-es");
-
-        let mut config = AppConfig::default();
-        config.frontend.web_frontend_bundle_path = web_root.to_string_lossy().into_owned();
-        config.frontend.theme = Some("acme".to_string());
-        config.integrations.ms_office.addin.enabled = true;
-        config.integrations.ms_office.addin.frontend_bundle_path =
-            addin_root.to_string_lossy().into_owned();
-        config.frontend.component_kits.directory = kits_root.to_string_lossy().into_owned();
-
-        let sources = discover_translation_po_sources(&config);
-        assert_eq!(sources.len(), 5);
-        assert!(sources.iter().any(|source| source.contents == "web-en"));
-        assert!(sources.iter().any(|source| source.contents == "theme-de"));
-        assert!(
-            sources
-                .iter()
-                .any(|source| source.contents == "runtime-theme-fr")
-        );
-        assert!(
-            sources
-                .iter()
-                .all(|source| !source.contents.contains("unused-theme-de"))
-        );
-        assert!(sources.iter().any(|source| source.contents == "addin-pl"));
-        assert!(sources.iter().any(|source| source.contents == "kit-es"));
-        assert!(
-            sources
-                .iter()
-                .all(|source| !source.contents.contains("not-served"))
-        );
-    }
-
     #[test]
     fn deployment_version_etag_for_jit_i18n_messages_json_uses_runtime_cache_buster() {
         let deployment_version =
